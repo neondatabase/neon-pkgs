@@ -60,9 +60,9 @@ The tool automatically detects which editors are installed on your system and yo
 -   Neon-specific features (branching, autoscaling, scale-to-zero)
 
 ### Installs Neon Agent Skills
-After configuring your editor, `neon-init` automatically installs Neon-specific agent skills using Vercel's [skills ecosystem](https://skills.sh). This enhances your agent with additional Neon capabilities and commands.
+After configuring your editor, `neon-init` automatically installs the `neon-postgres` skill using Vercel's [skills ecosystem](https://skills.sh). This enhances your agent with Neon-specific Postgres capabilities and commands.
 
--   Runs `npx skills add neondatabase/agent-skills` for each selected editor
+-   Runs `npx skills add neondatabase/agent-skills --skill neon-postgres` for each selected editor
 -   Auto-confirms installation with `-y` flag
 -   Maps editors to agent names: Cursor → `cursor`, VS Code → `github-copilot`, Claude CLI → `claude-code`
 

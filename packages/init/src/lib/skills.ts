@@ -50,6 +50,8 @@ export async function installAgentSkills(
 					"skills",
 					"add",
 					"neondatabase/agent-skills",
+					"--skill",
+					"neon-postgres",
 					"--agent",
 					agentName,
 					"-y",
@@ -74,7 +76,7 @@ export async function installAgentSkills(
 	if (anyFailed) {
 		skillsSpinner.stop("Agent skills installation completed with errors");
 		log.info(
-			"You can manually install skills by running: npx skills add neondatabase/agent-skills",
+			"You can manually install skills by running: npx skills add neondatabase/agent-skills --skill neon-postgres",
 		);
 		return false;
 	}
