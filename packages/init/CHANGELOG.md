@@ -1,5 +1,11 @@
 # neon-init
 
+## 0.12.1
+
+### Patch Changes
+
+- 9c45079: Install only the neon-postgres skill specifically using the --skill flag instead of installing all skills from neondatabase/agent-skills
+
 ## 0.12.0
 
 ### Minor Changes
