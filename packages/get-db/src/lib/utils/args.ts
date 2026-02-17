@@ -83,7 +83,7 @@ export function getArgs(): ParsedArgs | never {
 			description: "Referrer id",
 			defaultDescription: DEFAULTS.referrer,
 		})
-		.epilogue(`For more information: ${underline("https://instagres.com")}`)
+		.epilogue(`For more information: ${underline("https://pg.new")}`)
 		.parseSync();
 
 	const command = argv._[0]?.toString() || "create";
