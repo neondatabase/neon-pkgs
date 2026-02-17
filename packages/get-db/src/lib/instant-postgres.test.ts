@@ -73,7 +73,7 @@ describe("instantPostgres", () => {
 	test("generates valid claim URL with UUID", async () => {
 		const result = await instantPostgres({ referrer: "test-referrer" });
 
-		expect(result.claimUrl).toMatch(/^https:\/\/neon\.new\/database\//);
+		expect(result.claimUrl).toMatch(/^https:\/\/pg\.new\/database\//);
 		// Check that URL contains a valid UUID pattern
 		expect(result.claimUrl).toMatch(
 			/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/,
