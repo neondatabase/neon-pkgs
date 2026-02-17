@@ -48,7 +48,7 @@ describe("claim", () => {
 			const claimUrl = "https://pg.new/claim/abc123";
 
 			mockGetDotEnvContent.mockReturnValue({
-				MY_PREFIX_INSTAGRES_CLAIM_URL: claimUrl,
+				MY_PREFIX_POSTGRES_CLAIM_URL: claimUrl,
 			});
 			mockOpen.mockResolvedValue(undefined);
 
@@ -77,7 +77,7 @@ describe("claim", () => {
 
 			expect(mockGetDotEnvContent).toHaveBeenCalledWith(dotEnvPath);
 			expect(mockLog.error).toHaveBeenCalledWith(
-				`MY_PREFIX_INSTAGRES_CLAIM_URL not found in ${dotEnvPath}.`,
+				`MY_PREFIX_POSTGRES_CLAIM_URL not found in ${dotEnvPath}.`,
 			);
 			expect(mockOutro).toHaveBeenCalledWith(
 				"Use `get-db claim -p <prefix>` to override URL auto-detection.",
@@ -91,13 +91,13 @@ describe("claim", () => {
 			const envPrefix = "MY_PREFIX_";
 
 			mockGetDotEnvContent.mockReturnValue({
-				MY_PREFIX_INSTAGRES_CLAIM_URL: "",
+				MY_PREFIX_POSTGRES_CLAIM_URL: "",
 			});
 
 			await claim(dotEnvPath, envPrefix);
 
 			expect(mockLog.error).toHaveBeenCalledWith(
-				`MY_PREFIX_INSTAGRES_CLAIM_URL not found in ${dotEnvPath}.`,
+				`MY_PREFIX_POSTGRES_CLAIM_URL not found in ${dotEnvPath}.`,
 			);
 			expect(mockOpen).not.toHaveBeenCalled();
 			expect(process.exit).toHaveBeenCalledWith(1);
@@ -110,7 +110,7 @@ describe("claim", () => {
 			const claimUrl = "https://pg.new/claim/xyz789";
 
 			mockGetDotEnvContent.mockReturnValue({
-				PUBLIC_INSTAGRES_CLAIM_URL: claimUrl,
+				PUBLIC_POSTGRES_CLAIM_URL: claimUrl,
 			});
 			mockDetectClaimUrl.mockReturnValue(claimUrl);
 			mockOpen.mockResolvedValue(undefined);
@@ -119,7 +119,7 @@ describe("claim", () => {
 
 			expect(mockGetDotEnvContent).toHaveBeenCalledWith(dotEnvPath);
 			expect(mockDetectClaimUrl).toHaveBeenCalledWith(
-				{ PUBLIC_INSTAGRES_CLAIM_URL: claimUrl },
+				{ PUBLIC_POSTGRES_CLAIM_URL: claimUrl },
 				dotEnvPath,
 			);
 			expect(mockLog.success).toHaveBeenCalledWith(
@@ -159,7 +159,7 @@ describe("claim", () => {
 			const errorMessage = "Failed to open browser";
 
 			mockGetDotEnvContent.mockReturnValue({
-				PUBLIC_INSTAGRES_CLAIM_URL: claimUrl,
+				PUBLIC_POSTGRES_CLAIM_URL: claimUrl,
 			});
 			mockDetectClaimUrl.mockReturnValue(claimUrl);
 			mockOpen.mockRejectedValue(new Error(errorMessage));
@@ -179,7 +179,7 @@ describe("claim", () => {
 			const claimUrl = "https://pg.new/claim/abc123";
 
 			mockGetDotEnvContent.mockReturnValue({
-				PUBLIC_INSTAGRES_CLAIM_URL: claimUrl,
+				PUBLIC_POSTGRES_CLAIM_URL: claimUrl,
 			});
 			mockDetectClaimUrl.mockReturnValue(claimUrl);
 			mockOpen.mockRejectedValue("some error");
@@ -200,7 +200,7 @@ describe("claim", () => {
 			const claimUrl = "https://pg.new/claim/test";
 
 			mockGetDotEnvContent.mockReturnValue({
-				VITE_INSTAGRES_CLAIM_URL: claimUrl,
+				VITE_POSTGRES_CLAIM_URL: claimUrl,
 			});
 			mockOpen.mockResolvedValue(undefined);
 
@@ -215,7 +215,7 @@ describe("claim", () => {
 			const claimUrl = "https://pg.new/claim/prod";
 
 			mockGetDotEnvContent.mockReturnValue({
-				INSTAGRES_CLAIM_URL: claimUrl,
+				POSTGRES_CLAIM_URL: claimUrl,
 			});
 			mockDetectClaimUrl.mockReturnValue(claimUrl);
 			mockOpen.mockResolvedValue(undefined);
@@ -224,7 +224,7 @@ describe("claim", () => {
 
 			expect(mockGetDotEnvContent).toHaveBeenCalledWith(dotEnvPath);
 			expect(mockDetectClaimUrl).toHaveBeenCalledWith(
-				{ INSTAGRES_CLAIM_URL: claimUrl },
+				{ POSTGRES_CLAIM_URL: claimUrl },
 				dotEnvPath,
 			);
 			expect(process.exit).toHaveBeenCalledWith(0);

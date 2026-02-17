@@ -109,7 +109,7 @@ pnpm --filter get-db dry:run
 ### Key Implementation Details
 
 -   Both packages support SQL seeding via `--seed` flag (CLI) or `seed.path` option (plugin)
--   Databases are "claimable" with 7-day expiration URLs
+-   Databases are "claimable" with 72-hour expiration URLs
 -   Plugin writes both direct and pooled connection strings
 -   SDK provides `instantNeon()` function for programmatic usage
 -   Uses TypeScript with strict configuration

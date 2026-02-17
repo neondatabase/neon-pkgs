@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { createClaimableDatabase } from "./create-db.js";
-import { INSTAGRES_URLS } from "./urls.js";
+import { CLAIMABLE_POSTGRES_URLS } from "./urls.js";
 
 describe("createClaimableDatabase", () => {
 	const mockDbId = "test-db-id-123";
@@ -18,11 +18,12 @@ describe("createClaimableDatabase", () => {
 
 	test("creates database with referrer parameter in POST request", async () => {
 		const referrer = "npm:get-db|test-tool";
-		const expectedPostUrl = INSTAGRES_URLS.CREATE_DATABASE_POST(
+		const expectedPostUrl = CLAIMABLE_POSTGRES_URLS.CREATE_DATABASE_POST(
 			mockDbId,
 			referrer,
 		);
-		const expectedGetUrl = INSTAGRES_URLS.GET_DATABASE_DATA(mockDbId);
+		const expectedGetUrl =
+			CLAIMABLE_POSTGRES_URLS.GET_DATABASE_DATA(mockDbId);
 
 		const fetchCalls: Array<{ url: string; options?: RequestInit }> = [];
 		global.fetch = vi.fn(
@@ -68,7 +69,7 @@ describe("createClaimableDatabase", () => {
 
 	test("creates database without referrer parameter when referrer is empty string", async () => {
 		const referrer = "";
-		const expectedPostUrl = INSTAGRES_URLS.CREATE_DATABASE_POST(
+		const expectedPostUrl = CLAIMABLE_POSTGRES_URLS.CREATE_DATABASE_POST(
 			mockDbId,
 			referrer,
 		);
@@ -99,7 +100,7 @@ describe("createClaimableDatabase", () => {
 
 	test("creates database without referrer parameter when referrer is undefined", async () => {
 		const referrer = undefined as unknown as string;
-		const expectedPostUrl = INSTAGRES_URLS.CREATE_DATABASE_POST(
+		const expectedPostUrl = CLAIMABLE_POSTGRES_URLS.CREATE_DATABASE_POST(
 			mockDbId,
 			referrer,
 		);
@@ -131,7 +132,7 @@ describe("createClaimableDatabase", () => {
 	test("passes default CLI referrer from instantPostgres", async () => {
 		// This tests the format that comes from instantPostgres
 		const referrer = "npm:get-db|npm:get-db/cli";
-		const expectedPostUrl = INSTAGRES_URLS.CREATE_DATABASE_POST(
+		const expectedPostUrl = CLAIMABLE_POSTGRES_URLS.CREATE_DATABASE_POST(
 			mockDbId,
 			referrer,
 		);
@@ -164,7 +165,7 @@ describe("createClaimableDatabase", () => {
 
 	test("passes custom referrer with special characters", async () => {
 		const referrer = "npm:get-db|vite-plugin@1.0.0";
-		const expectedPostUrl = INSTAGRES_URLS.CREATE_DATABASE_POST(
+		const expectedPostUrl = CLAIMABLE_POSTGRES_URLS.CREATE_DATABASE_POST(
 			mockDbId,
 			referrer,
 		);

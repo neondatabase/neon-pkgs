@@ -55,7 +55,7 @@ export const messages = {
 		referrerIsRequired: {
 			message: "referrer parameter is required",
 			description:
-				"The referrer helps track usage for the Instagres Affiliates Program",
+				"The referrer helps track usage for the Open Source Program",
 			hint: "instantPostgres({ referrer: 'your-app-name' })",
 			docs: "For more information, visit: https://neon.com/docs/reference/instagres",
 		},

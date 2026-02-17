@@ -92,7 +92,7 @@ When you run `get-db`, the following environment variables are written to your `
 | -------------------------------- | -------------------------------------------------------- |
 | `DATABASE_URL`                   | The **pooler** connection string (default connection)    |
 | `DATABASE_URL_DIRECT`            | The direct connection string                             |
-| `{envPrefix}INSTAGRES_CLAIM_URL` | Claim URL (valid for 7 days) to take ownership of the DB |
+| `{envPrefix}POSTGRES_CLAIM_URL` | Claim URL (valid for 72 hours) to take ownership of the DB |
 
 > **Note:** The pooler connection is now the default for `DATABASE_URL` (as of the latest version). The pooler provides connection pooling and is recommended for most use cases, especially serverless environments.
 

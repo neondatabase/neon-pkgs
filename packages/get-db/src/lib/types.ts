@@ -4,7 +4,7 @@ export type SqlScript = {
 };
 
 /**
- * Parameters for configuring Instagres database connection
+ * Parameters for configuring Postgres database connection
  * @param {string} dotEnvFile - Path to the .env file where the connection string will be saved
  * @param {string} dotEnvKey - Environment variable name to store the connection string
  * @param {string} referrer - referrer name for tracking

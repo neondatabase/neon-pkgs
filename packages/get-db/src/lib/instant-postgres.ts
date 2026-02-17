@@ -6,10 +6,10 @@ import type { InstantPostgresParams } from "./types.js";
 import { createClaimableDatabase } from "./utils/create-db.js";
 import { getConnectionStrings } from "./utils/format.js";
 import { writeToEnv } from "./utils/fs.js";
-import { INSTAGRES_URLS } from "./utils/urls.js";
+import { CLAIMABLE_POSTGRES_URLS } from "./utils/urls.js";
 
 /**
- * Creates an instant Postgres connection string from Instagres by Neon
+ * Creates an instant Postgres connection string from Claimable Postgres by Neon
  * if not already set in the specified .env file.
  * Prompts the user to optionally generate a connection string,
  * saves it to the .env file, and returns the connection string.
@@ -37,7 +37,7 @@ export const instantPostgres = async ({
 
 	const dbId = randomUUID();
 	const claimExpiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
-	const claimUrl = new URL(INSTAGRES_URLS.CLAIM_DATABASE(dbId));
+	const claimUrl = new URL(CLAIMABLE_POSTGRES_URLS.CLAIM_DATABASE(dbId));
 
 	const connString = await createClaimableDatabase({
 		dbId,

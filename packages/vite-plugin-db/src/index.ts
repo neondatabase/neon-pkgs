@@ -33,7 +33,7 @@ function postgresPlugin(options: PostgresPluginOptions): Plugin {
 	if (!options?.referrer || options.referrer.trim() === "") {
 		throw new Error(
 			"vite-plugin-db: 'referrer' option is required.\n\n" +
-				"The referrer helps track usage for the Instagres Affiliates Program.\n\n" +
+				"The referrer helps track usage for the Open Source Program.\n\n" +
 				"Usage:\n" +
 				"  postgres({ referrer: 'your-app-name' })\n\n" +
 				"Examples:\n" +

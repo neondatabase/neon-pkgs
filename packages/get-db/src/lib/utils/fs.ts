@@ -100,7 +100,7 @@ export async function writeToEnv(
 ${dotEnvKey}_DIRECT=${connString}
 # Claimable DB expires at: ${claimExpiresAt.toUTCString()}
 # Claim it now to your account using the link below:
-${envPrefix}INSTAGRES_CLAIM_URL=${claimUrl.href}
+${envPrefix}POSTGRES_CLAIM_URL=${claimUrl.href}
 `,
 	);
 	closeSync(openedFile);

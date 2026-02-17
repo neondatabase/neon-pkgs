@@ -1,6 +1,6 @@
 const HOST = "https://pg.new";
 
-export const INSTAGRES_URLS = {
+export const CLAIMABLE_POSTGRES_URLS = {
 	GET_DATABASE_DATA: (dbId: string) => `${HOST}/api/v1/database/${dbId}`,
 	CREATE_CLAIMABLE_DATABASE: (dbId: string, referrer?: string) =>
 		`${HOST}/db?uuid=${dbId}${

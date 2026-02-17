@@ -1,4 +1,4 @@
-import { INSTAGRES_URLS } from "./urls.js";
+import { CLAIMABLE_POSTGRES_URLS } from "./urls.js";
 
 interface CreateClaimableDBParams {
 	dbId: string;
@@ -16,7 +16,7 @@ export async function createClaimableDatabase({
 	const { logicalReplication = false } = settings;
 
 	const dbCreation = await fetch(
-		INSTAGRES_URLS.CREATE_DATABASE_POST(dbId, referrer),
+		CLAIMABLE_POSTGRES_URLS.CREATE_DATABASE_POST(dbId, referrer),
 		{
 			method: "POST",
 			headers: {
@@ -33,7 +33,7 @@ export async function createClaimableDatabase({
 	}
 
 	const dbInfo: { connection_string: string } = await fetch(
-		INSTAGRES_URLS.GET_DATABASE_DATA(dbId),
+		CLAIMABLE_POSTGRES_URLS.GET_DATABASE_DATA(dbId),
 		{
 			method: "GET",
 			headers: {
