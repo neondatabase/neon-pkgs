@@ -1,6 +1,6 @@
 {
 	"name": "@neondatabase/vite-plugin-postgres",
-	"version": "0.6.1",
+	"version": "0.7.0",
 	"description": "[DEPRECATED] This package has been renamed to 'vite-plugin-db'. Please use 'vite-plugin-db' instead.",
 	"keywords": [
 		"neon",

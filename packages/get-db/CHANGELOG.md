@@ -1,5 +1,15 @@
 # get-db
 
+## 0.13.0
+
+### Minor Changes
+
+- 3d7aae9: Move app URL to `pg.new`
+
+### Patch Changes
+
+- 02444f4: Fix SQL seed parsing to handle dollar-quoted functions and other Postgres syntax.
+
 ## 0.12.1
 
 ### Patch Changes

@@ -1,5 +1,18 @@
 # @neondatabase/vite-plugin-postgres
 
+## 0.7.0
+
+### Minor Changes
+
+- 3d7aae9: Move app URL to `pg.new`
+
+### Patch Changes
+
+- 02444f4: Fix SQL seed parsing to handle dollar-quoted functions and other Postgres syntax.
+- Updated dependencies [02444f4]
+- Updated dependencies [3d7aae9]
+  - get-db@0.13.0
+
 ## 0.6.1
 
 ### Patch Changes

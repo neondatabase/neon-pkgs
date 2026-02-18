@@ -1,5 +1,17 @@
 # neondb
 
+## 0.13.0
+
+### Minor Changes
+
+- 3d7aae9: Move app URL to `pg.new`
+
+### Patch Changes
+
+- Updated dependencies [02444f4]
+- Updated dependencies [3d7aae9]
+  - get-db@0.13.0
+
 ## 0.12.1
 
 ### Patch Changes

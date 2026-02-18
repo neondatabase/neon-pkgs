@@ -1,5 +1,17 @@
 # @neondatabase/vite-plugin-postgres
 
+## 0.7.0
+
+### Minor Changes
+
+- 3d7aae9: Move app URL to `pg.new`
+
+### Patch Changes
+
+- Updated dependencies [02444f4]
+- Updated dependencies [3d7aae9]
+  - vite-plugin-db@0.7.0
+
 ## 0.6.1
 
 ### Patch Changes
