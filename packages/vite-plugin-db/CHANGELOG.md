@@ -1,4 +1,4 @@
-# @neondatabase/vite-plugin-postgres
+# vite-plugin-db
 
 ## 0.7.0
 
