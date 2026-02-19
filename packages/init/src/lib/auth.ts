@@ -8,17 +8,28 @@ import { execa } from "execa";
  * This will automatically start the OAuth flow if the user isn't already authenticated
  */
 export async function ensureNeonctlAuth(): Promise<boolean> {
+	// If already authenticated (e.g. ran in a terminal before), we can proceed
+	const existingToken = await getNeonctlAccessToken();
+	if (existingToken) return true;
+
 	try {
 		// Use execa to authenticate with neonctl
 		await execa("npx", ["-y", "neonctl", "me", "--no-analytics"], {
-			stdio: "inherit", // Shows OAuth URL and prompts to the user
+			// Shows OAuth URL and prompts to the user
+			stdio: "inherit",
+			// Unset CI so neonctl doesn't refuse to open the browser (e.g. when run from agent chat)
+			env: { ...process.env, CI: undefined },
 		});
-
 		return true;
 	} catch (error) {
-		log.error(
-			`Authentication failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-		);
+		const msg = error instanceof Error ? error.message : "Unknown error";
+		if (msg.includes("interactive auth") || msg.includes("CI")) {
+			log.error(
+				"Auth requires an interactive terminal. Run neon-init in your system terminal (outside the chat) to sign in.",
+			);
+		} else {
+			log.error(`Authentication failed: ${msg}`);
+		}
 		return false;
 	}
 }
