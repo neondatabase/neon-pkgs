@@ -1,5 +1,11 @@
 # neon-init
 
+## 0.13.0
+
+### Minor Changes
+
+- a57e18a: Add `--agent` / `-a` flag to configure a single agent without the editor selection prompt. Accepts `cursor`, `copilot`, or `claude` (and common aliases like `Cursor`, `VS Code`, `Claude CLI`).
+
 ## 0.12.1
 
 ### Patch Changes
