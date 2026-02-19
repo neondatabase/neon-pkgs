@@ -14,10 +14,15 @@ import { installNeon } from "./lib/install.js";
 import { installAgentSkills } from "./lib/skills.js";
 import type { Editor } from "./lib/types.js";
 
+export interface InitOptions {
+	/** When set, configures only this agent and skips the editor selection prompt. */
+	agent?: Editor;
+}
+
 /**
  * Initialize Neon projects with MCP Server
  */
-export async function init(): Promise<void> {
+export async function init(options?: InitOptions): Promise<void> {
 	intro("Adding Neon to your project");
 
 	// Get the home directory
@@ -31,51 +36,57 @@ export async function init(): Promise<void> {
 	// Get the current workspace directory
 	const workspaceDir = process.cwd();
 
-	// Detect available editors
-	const availableEditors = await detectAvailableEditors(homeDir);
+	let selectedEditors: Editor[];
 
-	// If no editors detected, offer to continue anyway
-	if (availableEditors.length === 0) {
-		log.warn("No supported editors detected on your system.");
-		log.info("Supported editors:");
-		log.info("  • VS Code (with Neon Local Connect extension)");
-		log.info("  • Cursor (with Neon Local Connect extension)");
-		log.info("  • Claude CLI (with MCP Server)");
+	if (options?.agent !== undefined) {
+		selectedEditors = [options.agent];
+	} else {
+		// Detect available editors
+		const availableEditors = await detectAvailableEditors(homeDir);
 
-		const continueAnyway = await confirm({
+		// If no editors detected, offer to continue anyway
+		if (availableEditors.length === 0) {
+			log.warn("No supported editors detected on your system.");
+			log.info("Supported editors:");
+			log.info("  • VS Code (with Neon Local Connect extension)");
+			log.info("  • Cursor (with Neon Local Connect extension)");
+			log.info("  • Claude CLI (with MCP Server)");
+
+			const continueAnyway = await confirm({
+				message:
+					"Would you like to configure Neon anyway? (You can manually select your editor)",
+				initialValue: true,
+			});
+
+			if (isCancel(continueAnyway) || !continueAnyway) {
+				outro("Installation cancelled");
+				process.exit(0);
+			}
+		}
+
+		// Determine which editors to configure
+		const response = await multiselect({
 			message:
-				"Would you like to configure Neon anyway? (You can manually select your editor)",
-			initialValue: true,
+				"Which editor(s) would you like to configure? (Space to toggle each option, Enter to confirm your selection)",
+			options: ["Cursor", "VS Code", "Claude CLI"].map((editor) => ({
+				value: editor,
+				label: editor,
+				hint:
+					editor === "Claude CLI"
+						? "MCP Server"
+						: "Neon Local Connect extension",
+			})),
+			initialValues: availableEditors, // Select detected editors by default
+			required: true,
 		});
 
-		if (isCancel(continueAnyway) || !continueAnyway) {
+		if (isCancel(response)) {
 			outro("Installation cancelled");
 			process.exit(0);
 		}
+
+		selectedEditors = response as Editor[];
 	}
-
-	// Determine which editors to configure
-	const response = await multiselect({
-		message:
-			"Which editor(s) would you like to configure? (Space to toggle each option, Enter to confirm your selection)",
-		options: ["Cursor", "VS Code", "Claude CLI"].map((editor) => ({
-			value: editor,
-			label: editor,
-			hint:
-				editor === "Claude CLI"
-					? "MCP Server"
-					: "Neon Local Connect extension",
-		})),
-		initialValues: availableEditors, // Select detected editors by default
-		required: true,
-	});
-
-	if (isCancel(response)) {
-		outro("Installation cancelled");
-		process.exit(0);
-	}
-
-	const selectedEditors = response as Editor[];
 
 	if (selectedEditors.length === 0) {
 		log.warn("No editors selected.");
