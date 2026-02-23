@@ -59,10 +59,6 @@ export async function installAgentSkills(
 				{
 					stdio: "pipe",
 					timeout: 10000,
-					env: {
-						...process.env,
-						DISABLE_TELEMETRY: "1",
-					},
 				},
 			);
 		} catch (error) {
