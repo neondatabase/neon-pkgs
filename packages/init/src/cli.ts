@@ -5,7 +5,7 @@ import { hideBin } from "yargs/helpers";
 import { init } from "./index.js";
 import type { Editor } from "./lib/types.js";
 
-const AGENT_FLAG_VALUES = ["cursor", "copilot", "code"] as const;
+const AGENT_FLAG_VALUES = ["cursor", "copilot", "claude"] as const;
 
 function parseAgentToEditor(value: string): Editor | null {
 	const normalized = value.trim().toLowerCase();
@@ -33,7 +33,7 @@ const argv = yargs(hideBin(process.argv))
 	.option("agent", {
 		alias: "a",
 		type: "string",
-		description: "Agent to configure (cursor, copilot, code).",
+		description: "Agent to configure (cursor, copilot, claude).",
 	})
 	.help()
 	.parseSync();

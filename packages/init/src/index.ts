@@ -23,9 +23,21 @@ export interface InitOptions {
  * Initialize Neon projects with MCP Server
  */
 export async function init(options?: InitOptions): Promise<void> {
-	intro(
-		"Adding Neon MCP server, extension (for VS Code and Cursor) and agent skills",
-	);
+	if (options?.agent !== undefined) {
+		if (usesExtension(options.agent)) {
+			intro(
+				`Adding Neon extension (includes MCP server) and agent skills for ${options.agent}`,
+			);
+		} else {
+			intro(
+				`Adding Neon MCP server and agent skills for ${options.agent}`,
+			);
+		}
+	} else {
+		intro(
+			"Adding Neon MCP server, extension (for VS Code and Cursor) and agent skills",
+		);
+	}
 
 	// Get the home directory
 	const homeDir = process.env.HOME || process.env.USERPROFILE;

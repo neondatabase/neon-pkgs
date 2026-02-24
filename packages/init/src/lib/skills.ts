@@ -29,7 +29,7 @@ export async function installAgentSkills(
 	}
 
 	const skillsSpinner = spinner();
-	skillsSpinner.start("Installing agent skills for Neon...");
+	skillsSpinner.start("Installing agent skills for Neon in this project...");
 
 	let anyFailed = false;
 
@@ -70,13 +70,15 @@ export async function installAgentSkills(
 	}
 
 	if (anyFailed) {
-		skillsSpinner.stop("Agent skills installation completed with errors");
+		skillsSpinner.stop(
+			"Agent skills installation for this project completed with errors",
+		);
 		log.info(
 			"You can manually install skills by running: npx skills add neondatabase/agent-skills --skill neon-postgres",
 		);
 		return false;
 	}
 
-	skillsSpinner.stop("Agent skills installed ✓");
+	skillsSpinner.stop("Agent skills installed for this project ✓");
 	return true;
 }
