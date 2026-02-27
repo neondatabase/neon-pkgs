@@ -1,14 +1,18 @@
 /**
- * Validates the path to the .env file - it can be dotfile or not.
+ * Validates the path to the .env file - accepts filenames and relative paths.
  * @param value - The path to the .env file
  * @returns An error if the path is invalid, otherwise undefined
  */
 function validateEnvPath(value: string) {
 	if (!value) return undefined;
 
-	if (!/^\.?[\w-]+(?:\.[\w-]+)*$/.test(value)) {
+	if (
+		!/^(?:\.\/)?(?:[\w-]+(?:\.[\w-]+)*\/)*\.?[\w-]+(?:\.[\w-]+)*$/.test(
+			value,
+		)
+	) {
 		return new Error(
-			"Please enter a valid file name (e.g.: .env or .env.local)",
+			"Please enter a valid file path (e.g.: .env, .env.local, or ./config/.env)",
 		);
 	}
 

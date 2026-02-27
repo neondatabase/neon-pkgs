@@ -13,12 +13,22 @@ describe("validateEnvPath", () => {
 		expect(validateEnvPath("env-local")).toBeUndefined();
 	});
 
+	it("returns undefined for valid relative paths", () => {
+		expect(validateEnvPath("./.env")).toBeUndefined();
+		expect(validateEnvPath("./.env.local")).toBeUndefined();
+		expect(validateEnvPath("./config/.env")).toBeUndefined();
+		expect(validateEnvPath("config/.env")).toBeUndefined();
+		expect(validateEnvPath("src/config/.env.local")).toBeUndefined();
+	});
+
 	it("returns undefined for empty string", () => {
 		expect(validateEnvPath("")).toBeUndefined();
 	});
 
 	it("returns error for invalid paths", () => {
-		expect(validateEnvPath(".env/local")).toBeInstanceOf(Error);
+		expect(validateEnvPath("../.env")).toBeInstanceOf(Error);
+		expect(validateEnvPath("/etc/.env")).toBeInstanceOf(Error);
+		expect(validateEnvPath(".env/")).toBeInstanceOf(Error);
 		expect(validateEnvPath("..env")).toBeInstanceOf(Error);
 		expect(validateEnvPath(".env..local")).toBeInstanceOf(Error);
 	});
