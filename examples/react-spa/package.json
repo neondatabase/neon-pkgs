@@ -13,7 +13,7 @@
 		"react-dom": "^19.1.1"
 	},
 	"devDependencies": {
-		"vite-plugin-db": "workspace:*",
+		"vite-plugin-neon-new": "workspace:*",
 		"@types/node": "catalog:",
 		"@types/react": "^19",
 		"@types/react-dom": "^19",

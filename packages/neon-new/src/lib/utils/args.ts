@@ -8,7 +8,7 @@ export const DEFAULTS: Defaults = {
 	dotEnvKey: "DATABASE_URL",
 	seed: undefined,
 	envPrefix: "PUBLIC_",
-	referrer: "npm:get-db/cli",
+	referrer: "npm:neon-new/cli",
 	settings: {
 		logicalReplication: false,
 	},
@@ -28,7 +28,7 @@ export interface ParsedArgs {
 
 export function getArgs(): ParsedArgs | never {
 	const argv = yargs(hideBin(process.argv))
-		.scriptName("get-db")
+		.scriptName("neon-new")
 		.usage("Usage: $0 [command] [options]")
 		.help()
 		.version(false)

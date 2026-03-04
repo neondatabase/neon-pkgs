@@ -23,7 +23,7 @@
     "vite-tsconfig-paths": "^5.1.4"
   },
   "devDependencies": {
-    "vite-plugin-db": "workspace:*",
+    "vite-plugin-neon-new": "workspace:*",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.2.0",
     "@types/node": "catalog:",

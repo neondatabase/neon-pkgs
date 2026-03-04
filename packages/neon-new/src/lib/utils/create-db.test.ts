@@ -17,7 +17,7 @@ describe("createClaimableDatabase", () => {
 	});
 
 	test("creates database with referrer parameter in POST request", async () => {
-		const referrer = "npm:get-db|test-tool";
+		const referrer = "npm:neon-new|test-tool";
 		const expectedPostUrl = CLAIMABLE_POSTGRES_URLS.CREATE_DATABASE_POST(
 			mockDbId,
 			referrer,
@@ -131,7 +131,7 @@ describe("createClaimableDatabase", () => {
 
 	test("passes default CLI referrer from instantPostgres", async () => {
 		// This tests the format that comes from instantPostgres
-		const referrer = "npm:get-db|npm:get-db/cli";
+		const referrer = "npm:neon-new|npm:neon-new/cli";
 		const expectedPostUrl = CLAIMABLE_POSTGRES_URLS.CREATE_DATABASE_POST(
 			mockDbId,
 			referrer,
@@ -164,7 +164,7 @@ describe("createClaimableDatabase", () => {
 	});
 
 	test("passes custom referrer with special characters", async () => {
-		const referrer = "npm:get-db|vite-plugin@1.0.0";
+		const referrer = "npm:neon-new|vite-plugin@1.0.0";
 		const expectedPostUrl = CLAIMABLE_POSTGRES_URLS.CREATE_DATABASE_POST(
 			mockDbId,
 			referrer,
@@ -197,7 +197,7 @@ describe("createClaimableDatabase", () => {
 	});
 
 	test("throws error when POST request fails", async () => {
-		const referrer = "npm:get-db|test-tool";
+		const referrer = "npm:neon-new|test-tool";
 
 		global.fetch = vi.fn(async (): Promise<Response> => {
 			return {
@@ -213,7 +213,7 @@ describe("createClaimableDatabase", () => {
 	});
 
 	test("verifies POST request is made before GET request", async () => {
-		const referrer = "npm:get-db|test-tool";
+		const referrer = "npm:neon-new|test-tool";
 		const fetchCalls: string[] = [];
 
 		global.fetch = vi.fn(async (url: string): Promise<Response> => {
@@ -243,7 +243,7 @@ describe("createClaimableDatabase", () => {
 	});
 
 	test("includes correct headers for both POST and GET requests", async () => {
-		const referrer = "npm:get-db|test-tool";
+		const referrer = "npm:neon-new|test-tool";
 		const requestConfigs: RequestInit[] = [];
 
 		global.fetch = vi.fn(
@@ -280,7 +280,7 @@ describe("createClaimableDatabase", () => {
 	});
 
 	test("returns connection string from GET request response", async () => {
-		const referrer = "npm:get-db|test-tool";
+		const referrer = "npm:neon-new|test-tool";
 		const expectedConnectionString =
 			"postgresql://custom:pass@example.com:5432/customdb";
 
@@ -310,7 +310,7 @@ describe("createClaimableDatabase", () => {
 	});
 
 	test("sends default settings with logical_replication false in POST body", async () => {
-		const referrer = "npm:get-db|test-tool";
+		const referrer = "npm:neon-new|test-tool";
 		const fetchCalls: Array<{ url: string; options?: RequestInit }> = [];
 
 		global.fetch = vi.fn(
@@ -340,7 +340,7 @@ describe("createClaimableDatabase", () => {
 	});
 
 	test("sends logical_replication true when enabled in settings", async () => {
-		const referrer = "npm:get-db|test-tool";
+		const referrer = "npm:neon-new|test-tool";
 		const fetchCalls: Array<{ url: string; options?: RequestInit }> = [];
 
 		global.fetch = vi.fn(
@@ -374,7 +374,7 @@ describe("createClaimableDatabase", () => {
 	});
 
 	test("sends logical_replication false when explicitly disabled in settings", async () => {
-		const referrer = "npm:get-db|test-tool";
+		const referrer = "npm:neon-new|test-tool";
 		const fetchCalls: Array<{ url: string; options?: RequestInit }> = [];
 
 		global.fetch = vi.fn(
@@ -408,7 +408,7 @@ describe("createClaimableDatabase", () => {
 	});
 
 	test("sends empty settings object when settings parameter is empty", async () => {
-		const referrer = "npm:get-db|test-tool";
+		const referrer = "npm:neon-new|test-tool";
 		const fetchCalls: Array<{ url: string; options?: RequestInit }> = [];
 
 		global.fetch = vi.fn(

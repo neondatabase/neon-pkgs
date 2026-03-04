@@ -5,7 +5,7 @@
 
 console.warn(
 	"\x1b[33m%s\x1b[0m",
-	'⚠️  DEPRECATION WARNING: The "neondb" package has been renamed to "neon-new".',
+	'⚠️  DEPRECATION WARNING: The "get-db" package has been renamed to "neon-new".',
 );
 console.warn(
 	"\x1b[33m%s\x1b[0m",

@@ -1,13 +1,12 @@
 {
-	"name": "vite-plugin-db",
+	"name": "vite-plugin-neon-new",
 	"version": "0.7.0",
-	"description": "[DEPRECATED] This package has been renamed to 'vite-plugin-neon-new'. Please use 'vite-plugin-neon-new' instead.",
 	"keywords": [
 		"neon",
 		"database",
 		"postgres",
 		"vite",
-		"deprecated"
+		"neon-new"
 	],
 	"type": "module",
 	"license": "Apache-2.0",
@@ -22,7 +21,9 @@
 		"build": "tsc --noEmit && tsdown",
 		"test": "vitest --passWithNoTests",
 		"test:ci": "vitest run --passWithNoTests",
-		"tsc": "tsc"
+		"tsc": "tsc",
+		"dry:run": "pnpm build && node dist/cli.js --yes",
+		"dry:run:prompt": "pnpm build && node dist/cli.js"
 	},
 	"devDependencies": {
 		"@types/node": "catalog:",
@@ -39,7 +40,7 @@
 		"access": "public"
 	},
 	"dependencies": {
-		"vite-plugin-neon-new": "workspace:*"
-	},
-	"deprecated": "This package has been renamed to 'vite-plugin-neon-new'. Please update your dependencies."
+		"@clack/prompts": "0.10.1",
+		"neon-new": "workspace:*"
+	}
 }

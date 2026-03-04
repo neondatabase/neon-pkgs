@@ -1,4 +1,4 @@
-import { postgres } from "vite-plugin-db";
+import { postgres } from "vite-plugin-neon-new";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 

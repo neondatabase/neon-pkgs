@@ -41,7 +41,7 @@ export const instantPostgres = async ({
 
 	const connString = await createClaimableDatabase({
 		dbId,
-		referrer: `npm:get-db|${referrer}`,
+		referrer: `npm:neon-new|${referrer}`,
 		settings: { logicalReplication },
 	});
 	const { pooler: poolerString, direct: directString } =

@@ -80,7 +80,7 @@ describe("claim", () => {
 				`MY_PREFIX_POSTGRES_CLAIM_URL not found in ${dotEnvPath}.`,
 			);
 			expect(mockOutro).toHaveBeenCalledWith(
-				"Use `get-db claim -p <prefix>` to override URL auto-detection.",
+				"Use `neon-new claim -p <prefix>` to override URL auto-detection.",
 			);
 			expect(mockOpen).not.toHaveBeenCalled();
 			expect(process.exit).toHaveBeenCalledWith(1);

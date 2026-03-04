@@ -1,7 +1,7 @@
 {
 	"name": "@neondatabase/vite-plugin-postgres",
 	"version": "0.7.0",
-	"description": "[DEPRECATED] This package has been renamed to 'vite-plugin-db'. Please use 'vite-plugin-db' instead.",
+	"description": "[DEPRECATED] This package has been renamed to 'vite-plugin-neon-new'. Please use 'vite-plugin-neon-new' instead.",
 	"keywords": [
 		"neon",
 		"database",
@@ -39,7 +39,7 @@
 		"access": "public"
 	},
 	"dependencies": {
-		"vite-plugin-db": "workspace:*"
+		"vite-plugin-neon-new": "workspace:*"
 	},
-	"deprecated": "This package has been renamed to 'vite-plugin-db'. Please update your dependencies."
+	"deprecated": "This package has been renamed to 'vite-plugin-neon-new'. Please update your dependencies."
 }

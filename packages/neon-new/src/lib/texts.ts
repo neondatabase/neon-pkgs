@@ -24,7 +24,7 @@ export const messages = {
 	 * @see https://github.com/bombshell-dev/clack/issues/132
 	 */
 	welcome: `Let's get you set with a Postgres database on ${bgBlack(greenBright(bold(" Neon ")))}.`,
-	nonInteractive: "`get-db --yes` for non-interactive flow with defaults.",
+	nonInteractive: "`neon-new --yes` for non-interactive flow with defaults.",
 	generating: "Generating your database... ",
 	envKeyExistsExit:
 		"Please try again or select a different key for your connection string.",

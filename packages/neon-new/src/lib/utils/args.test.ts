@@ -92,7 +92,7 @@ describe("getArgs", () => {
 			expect.stringContaining("Referrer id"),
 		);
 		expect(console.log).toHaveBeenCalledWith(
-			expect.stringContaining("[default: npm:get-db/cli]"),
+			expect.stringContaining("[default: npm:neon-new/cli]"),
 		);
 		expect(process.exit).toHaveBeenCalledWith(0);
 	});

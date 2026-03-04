@@ -1,4 +1,4 @@
-import { postgres } from "vite-plugin-db";
+import { postgres } from "vite-plugin-neon-new";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import { defineConfig } from "vite";

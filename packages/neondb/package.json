@@ -1,7 +1,7 @@
 {
 	"name": "neondb",
 	"version": "0.13.0",
-	"description": "[DEPRECATED] This package has been renamed to 'get-db'. Please use 'get-db' instead.",
+	"description": "[DEPRECATED] This package has been renamed to 'neon-new'. Please use 'neon-new' instead.",
 	"keywords": [
 		"neon",
 		"database",
@@ -59,7 +59,7 @@
 		"provenance": false
 	},
 	"dependencies": {
-		"get-db": "workspace:*"
+		"neon-new": "workspace:*"
 	},
-	"deprecated": "This package has been renamed to 'get-db'. Please update your dependencies."
+	"deprecated": "This package has been renamed to 'neon-new'. Please update your dependencies."
 }
