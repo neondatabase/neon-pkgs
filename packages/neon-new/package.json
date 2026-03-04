@@ -18,7 +18,8 @@
 		"url": "https://neon.com"
 	},
 	"type": "module",
-	"main": "dist/index.js",
+	"main": "dist/lib/instant-postgres.js",
+	"types": "dist/lib/instant-postgres.d.ts",
 	"bin": {
 		"neon-new": "dist/cli.js"
 	},

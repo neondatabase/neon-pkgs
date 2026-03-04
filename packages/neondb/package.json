@@ -20,10 +20,15 @@
 	},
 	"type": "module",
 	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
 	"bin": {
 		"neondb": "dist/cli.js"
 	},
 	"exports": {
+		".": {
+			"import": "./dist/index.js",
+			"types": "./dist/index.d.ts"
+		},
 		"./sdk": {
 			"import": "./dist/lib/index.js",
 			"types": "./dist/lib/index.d.ts"
