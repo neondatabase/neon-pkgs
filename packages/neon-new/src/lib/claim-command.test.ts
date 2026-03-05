@@ -45,7 +45,7 @@ describe("claim", () => {
 		it("should open claim URL when prefix and URL exist", async () => {
 			const dotEnvPath = ".env";
 			const envPrefix = "MY_PREFIX_";
-			const claimUrl = "https://pg.new/claim/abc123";
+			const claimUrl = "https://neon.new/claim/abc123";
 
 			mockGetDotEnvContent.mockReturnValue({
 				MY_PREFIX_POSTGRES_CLAIM_URL: claimUrl,
@@ -107,7 +107,7 @@ describe("claim", () => {
 	describe("without envPrefix (auto-detection)", () => {
 		it("should detect and open claim URL successfully", async () => {
 			const dotEnvPath = ".env";
-			const claimUrl = "https://pg.new/claim/xyz789";
+			const claimUrl = "https://neon.new/claim/xyz789";
 
 			mockGetDotEnvContent.mockReturnValue({
 				PUBLIC_POSTGRES_CLAIM_URL: claimUrl,
@@ -155,7 +155,7 @@ describe("claim", () => {
 	describe("openClaimUrl error handling", () => {
 		it("should handle open() failure with Error object", async () => {
 			const dotEnvPath = ".env";
-			const claimUrl = "https://pg.new/claim/abc123";
+			const claimUrl = "https://neon.new/claim/abc123";
 			const errorMessage = "Failed to open browser";
 
 			mockGetDotEnvContent.mockReturnValue({
@@ -176,7 +176,7 @@ describe("claim", () => {
 
 		it("should handle open() failure with non-Error object", async () => {
 			const dotEnvPath = ".env";
-			const claimUrl = "https://pg.new/claim/abc123";
+			const claimUrl = "https://neon.new/claim/abc123";
 
 			mockGetDotEnvContent.mockReturnValue({
 				PUBLIC_POSTGRES_CLAIM_URL: claimUrl,
@@ -197,7 +197,7 @@ describe("claim", () => {
 		it("should handle different prefix formats", async () => {
 			const dotEnvPath = ".env.local";
 			const envPrefix = "VITE_";
-			const claimUrl = "https://pg.new/claim/test";
+			const claimUrl = "https://neon.new/claim/test";
 
 			mockGetDotEnvContent.mockReturnValue({
 				VITE_POSTGRES_CLAIM_URL: claimUrl,
@@ -212,7 +212,7 @@ describe("claim", () => {
 
 		it("should work with custom dotEnvPath", async () => {
 			const dotEnvPath = ".env.production";
-			const claimUrl = "https://pg.new/claim/prod";
+			const claimUrl = "https://neon.new/claim/prod";
 
 			mockGetDotEnvContent.mockReturnValue({
 				POSTGRES_CLAIM_URL: claimUrl,

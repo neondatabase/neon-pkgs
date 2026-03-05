@@ -1,4 +1,4 @@
-const HOST = "https://pg.new";
+const HOST = "https://neon.new";
 
 export const CLAIMABLE_POSTGRES_URLS = {
 	GET_DATABASE_DATA: (dbId: string) => `${HOST}/api/v1/database/${dbId}`,
