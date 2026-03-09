@@ -9,12 +9,14 @@ Please update your dependencies to use the new package name:
 ### CLI Usage
 
 **Before:**
+
 ```bash
 npm install -g neondb
 neondb
 ```
 
 **After:**
+
 ```bash
 npm install -g get-db
 get-db
@@ -23,13 +25,15 @@ get-db
 ### Programmatic Usage
 
 **Before:**
+
 ```javascript
-import { instantNeon } from 'neondb/sdk';
+import { instantNeon } from "neondb/sdk";
 ```
 
 **After:**
+
 ```javascript
-import { instantNeon } from 'get-db/sdk';
+import { instantNeon } from "get-db/sdk";
 ```
 
 ### Vite Plugin
@@ -42,4 +46,4 @@ The package was renamed to `get-db` to better reflect its purpose and improve di
 
 ## Support
 
-For issues, questions, or contributions, please visit the [get-db repository](https://github.com/neondatabase/neondb-cli).
+For issues, questions, or contributions, please visit the [get-db repository](https://github.com/neondatabase/neon-pkgs).

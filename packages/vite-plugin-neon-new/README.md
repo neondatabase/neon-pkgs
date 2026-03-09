@@ -6,19 +6,19 @@ This Vite plugin instantly provisions a Postgres instance (via Neon) and injects
 
 ## How it works
 
--   On first `vite dev`, the plugin checks for a `DATABASE_URL` (or your configured key) in your `.env`.
--   If not found, it creates a claimable Neon database and writes the connection string to your `.env`.
--   The plugin is a noop in production builds.
+- On first `vite dev`, the plugin checks for a `DATABASE_URL` (or your configured key) in your `.env`.
+- If not found, it creates a claimable Neon database and writes the connection string to your `.env`.
+- The plugin is a noop in production builds.
 
 ## Installation
 
-| Package Manager | Command                               |
-| --------------- | ------------------------------------- |
-| **npm**         | `npm add -D vite-plugin-neon-new`     |
-| **pnpm**        | `pnpm add -D vite-plugin-neon-new`    |
-| **yarn**        | `yarn add -D vite-plugin-neon-new`    |
-| **bun**         | `bun add -D vite-plugin-neon-new`     |
-| **deno**        | `deno add -D npm:vite-plugin-neon-new`|
+| Package Manager | Command                                |
+| --------------- | -------------------------------------- |
+| **npm**         | `npm add -D vite-plugin-neon-new`      |
+| **pnpm**        | `pnpm add -D vite-plugin-neon-new`     |
+| **yarn**        | `yarn add -D vite-plugin-neon-new`     |
+| **bun**         | `bun add -D vite-plugin-neon-new`      |
+| **deno**        | `deno add -D npm:vite-plugin-neon-new` |
 
 ## Usage
 
@@ -72,9 +72,9 @@ postgres({
 
 ### settings Options
 
-| Property            | Type    | Description                | Default |
-| ------------------- | ------- | -------------------------- | ------- |
-| `logicalReplication`| boolean | Enable logical replication | `false` |
+| Property             | Type    | Description                | Default |
+| -------------------- | ------- | -------------------------- | ------- |
+| `logicalReplication` | boolean | Enable logical replication | `false` |
 
 ### seed Options
 
@@ -87,10 +87,10 @@ postgres({
 
 The plugin writes the following environment variables to your `.env`:
 
-| Variable                         | Description                                              |
-| -------------------------------- | -------------------------------------------------------- |
-| `DATABASE_URL`                   | The **pooler** connection string (default connection)    |
-| `DATABASE_URL_DIRECT`            | The direct connection string                             |
+| Variable                        | Description                                                |
+| ------------------------------- | ---------------------------------------------------------- |
+| `DATABASE_URL`                  | The **pooler** connection string (default connection)      |
+| `DATABASE_URL_DIRECT`           | The direct connection string                               |
 | `{envPrefix}POSTGRES_CLAIM_URL` | Claim URL (valid for 72 hours) to take ownership of the DB |
 
 > **Note:** The pooler connection is now the default for `DATABASE_URL` (as of the latest version). The pooler provides connection pooling and is recommended for most use cases, especially serverless environments.
@@ -141,6 +141,6 @@ Yes, this plugin is framework-agnostic. The example uses React, but you can use 
 
 ## Advanced
 
-If you want to generate claimable databases outside of Vite, use the [`neon-new`](https://github.com/neondatabase/neondb-cli/tree/main/packages/neon-new) library directly.
+If you want to generate claimable databases outside of Vite, use the [`neon-new`](https://github.com/neondatabase/neon-pkgs/tree/main/packages/neon-new) library directly.
 
 > See [documentation on Neon](https://neon.com/docs/reference/neon-launchpad) for more.

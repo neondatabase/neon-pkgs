@@ -9,6 +9,7 @@ Please update your dependencies to use the new package name:
 ### Installation
 
 **Before:**
+
 ```bash
 npm install @neondatabase/vite-plugin-postgres
 # or
@@ -16,6 +17,7 @@ pnpm add @neondatabase/vite-plugin-postgres
 ```
 
 **After:**
+
 ```bash
 npm install vite-plugin-db
 # or
@@ -25,20 +27,22 @@ pnpm add vite-plugin-db
 ### Usage in vite.config.ts
 
 **Before:**
+
 ```typescript
-import { postgres } from '@neondatabase/vite-plugin-postgres';
+import { postgres } from "@neondatabase/vite-plugin-postgres";
 
 export default defineConfig({
-  plugins: [postgres()],
+	plugins: [postgres()],
 });
 ```
 
 **After:**
+
 ```typescript
-import { postgres } from 'vite-plugin-db';
+import { postgres } from "vite-plugin-db";
 
 export default defineConfig({
-  plugins: [postgres()],
+	plugins: [postgres()],
 });
 ```
 
@@ -48,4 +52,4 @@ The package was renamed to `vite-plugin-db` to align with the CLI package rename
 
 ## Support
 
-For issues, questions, or contributions, please visit the [repository](https://github.com/neondatabase/neondb-cli).
+For issues, questions, or contributions, please visit the [repository](https://github.com/neondatabase/neon-pkgs).

@@ -18,4 +18,4 @@ And update your imports:
 
 This package will continue to work as an alias but will show deprecation warnings.
 
-For documentation, see the [`vite-plugin-neon-new` README](https://github.com/neondatabase/neondb-cli/tree/main/packages/vite-plugin-neon-new).
+For documentation, see the [`vite-plugin-neon-new` README](https://github.com/neondatabase/neon-pkgs/tree/main/packages/vite-plugin-neon-new).
