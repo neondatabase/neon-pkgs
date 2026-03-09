@@ -1,6 +1,6 @@
 {
 	"name": "get-db",
-	"version": "0.13.0",
+	"version": "0.14.0",
 	"description": "[DEPRECATED] This package has been renamed to 'neon-new'. Please use 'neon-new' instead.",
 	"keywords": [
 		"neon",
