@@ -13,14 +13,14 @@ import type { Editor, InstallStatus } from "./types.js";
 const NEON_MCP_SERVER_URL = "https://mcp.neon.tech/mcp";
 
 /**
- * Installs Neon MCP Server for the given editors via the add-mcp CLI.
+ * Installs Neon MCP Server for a single editor via the add-mcp CLI.
  * Uses API key authentication via the Authorization header.
  */
 async function installMCPServerViaAddMcp(
-	editors: Editor[],
+	editor: Editor,
 	apiKey: string,
 ): Promise<void> {
-	const agentFlags = editors.flatMap((e) => ["-a", getAddMcpAgentId(e)]);
+	const agentId = getAddMcpAgentId(editor);
 
 	await execa(
 		"npx",
@@ -34,7 +34,8 @@ async function installMCPServerViaAddMcp(
 			"-n",
 			"Neon",
 			"-y",
-			...agentFlags,
+			"-a",
+			agentId,
 		],
 		{
 			stdio: "pipe",
@@ -117,18 +118,33 @@ export async function installNeon(
 		const mcpSpinner = spinner();
 		mcpSpinner.start("Installing and configuring Neon MCP Server...");
 
-		try {
-			await installMCPServerViaAddMcp(mcpEditors, apiKey);
-			mcpSpinner.stop("Neon MCP Server configured ✓");
-			for (const editor of mcpEditors) {
+		let mcpSuccessCount = 0;
+		for (const editor of mcpEditors) {
+			try {
+				await installMCPServerViaAddMcp(editor, apiKey);
 				results.set(editor, "success");
-			}
-		} catch {
-			mcpSpinner.stop("Failed to configure Neon MCP Server");
-			for (const editor of mcpEditors) {
+				mcpSuccessCount++;
+			} catch (err) {
 				results.set(editor, "failed");
+				if (
+					err &&
+					typeof err === "object" &&
+					"stderr" in err &&
+					err.stderr
+				) {
+					log.error(
+						String(err.stderr).trim() ||
+							"failed to install MCP server via add-mcp",
+					);
+				}
 			}
 		}
+
+		mcpSpinner.stop(
+			mcpSuccessCount > 0
+				? "Neon MCP Server configuration complete ✓"
+				: "Failed to configure Neon MCP Server",
+		);
 	}
 
 	return results;
