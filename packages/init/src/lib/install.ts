@@ -123,7 +123,7 @@ export async function installNeon(
 			for (const editor of mcpEditors) {
 				results.set(editor, "success");
 			}
-		} catch (error) {
+		} catch {
 			mcpSpinner.stop("Failed to configure Neon MCP Server");
 			for (const editor of mcpEditors) {
 				results.set(editor, "failed");
