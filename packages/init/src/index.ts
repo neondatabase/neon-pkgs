@@ -1,13 +1,6 @@
-import {
-	confirm,
-	intro,
-	isCancel,
-	log,
-	multiselect,
-	note,
-	outro,
-} from "@clack/prompts";
+import { intro, isCancel, log, multiselect, note, outro } from "@clack/prompts";
 import { bold, cyan } from "yoctocolors";
+import { ALL_CONFIGURABLE_AGENTS } from "./lib/agents.js";
 import { detectAvailableEditors } from "./lib/editors.js";
 import { usesExtension } from "./lib/extension.js";
 import { installNeon } from "./lib/install.js";
@@ -47,9 +40,6 @@ export async function init(options?: InitOptions): Promise<void> {
 		process.exit(1);
 	}
 
-	// Get the current workspace directory
-	const workspaceDir = process.cwd();
-
 	let selectedEditors: Editor[];
 
 	if (options?.agent !== undefined) {
@@ -58,37 +48,14 @@ export async function init(options?: InitOptions): Promise<void> {
 		// Detect available editors
 		const availableEditors = await detectAvailableEditors(homeDir);
 
-		// If no editors detected, offer to continue anyway
-		if (availableEditors.length === 0) {
-			log.warn("No supported editors detected on your system.");
-			log.info("Supported editors:");
-			log.info("  • VS Code (with Neon Local Connect extension)");
-			log.info("  • Cursor (with Neon Local Connect extension)");
-			log.info("  • Claude CLI (with MCP Server)");
-
-			const continueAnyway = await confirm({
-				message:
-					"Would you like to configure Neon anyway? (You can manually select your editor)",
-				initialValue: true,
-			});
-
-			if (isCancel(continueAnyway) || !continueAnyway) {
-				outro("Installation cancelled");
-				process.exit(0);
-			}
-		}
-
 		// Determine which editors to configure
 		const response = await multiselect({
 			message:
 				"Which editor(s) would you like to configure? (Space to toggle each option, Enter to confirm your selection)",
-			options: ["Cursor", "VS Code", "Claude CLI"].map((editor) => ({
-				value: editor,
-				label: editor,
-				hint:
-					editor === "Claude CLI"
-						? "MCP Server"
-						: "Neon Local Connect extension",
+			options: ALL_CONFIGURABLE_AGENTS.map((agent) => ({
+				value: agent.editor,
+				label: agent.editor,
+				hint: agent.hint,
 			})),
 			initialValues: availableEditors, // Select detected editors by default
 			required: true,
@@ -109,7 +76,7 @@ export async function init(options?: InitOptions): Promise<void> {
 	}
 
 	// Install Neon for selected editors
-	const results = await installNeon(homeDir, workspaceDir, selectedEditors);
+	const results = await installNeon(selectedEditors);
 
 	const successful: Editor[] = [];
 	const failed: Editor[] = [];
@@ -168,6 +135,9 @@ export async function init(options?: InitOptions): Promise<void> {
 	if (failedMcpEditors.length > 0) {
 		log.error(
 			`Failed to configure MCP Server for ${failedMcpEditors.join(" / ")}`,
+		);
+		log.info(
+			"You can manually configure the MCP server by running: npx add-mcp https://mcp.neon.tech/mcp",
 		);
 	}
 

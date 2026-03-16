@@ -1,20 +1,17 @@
-export type Editor = "Cursor" | "VS Code" | "Claude CLI";
+export type Editor =
+	| "Cursor"
+	| "VS Code"
+	| "Claude CLI"
+	| "Claude Desktop"
+	| "Codex"
+	| "OpenCode"
+	| "Antigravity"
+	| "Cline"
+	| "Cline CLI"
+	| "Gemini CLI"
+	| "GitHub Copilot CLI"
+	| "Goose"
+	| "MCPorter"
+	| "Zed";
 
 export type InstallStatus = "success" | "failed";
-
-export interface MCPConfig {
-	mcpServers?: {
-		[key: string]: {
-			type?: string;
-			url: string;
-			headers?: Record<string, string>;
-		};
-	};
-	servers?: {
-		[key: string]: {
-			type?: string;
-			url: string;
-			headers?: Record<string, string>;
-		};
-	};
-}

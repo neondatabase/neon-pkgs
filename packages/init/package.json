@@ -50,6 +50,7 @@
 	},
 	"dependencies": {
 		"@clack/prompts": "0.10.1",
+		"add-mcp": "^1.5.1",
 		"execa": "^9.5.2",
 		"yargs": "^18.0.0",
 		"yoctocolors": "^2.1.2"

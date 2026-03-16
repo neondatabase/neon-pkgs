@@ -3,28 +3,46 @@ import { execa } from "execa";
 import type { Editor } from "./types.js";
 
 /**
- * Maps editor names to the corresponding agent names used by the skills CLI
+ * Maps editor names to the corresponding agent names used by the skills CLI.
  */
 function getSkillsAgentName(editor: Editor): string {
 	switch (editor) {
 		case "Cursor":
 			return "cursor";
 		case "VS Code":
+		case "GitHub Copilot CLI":
 			return "github-copilot";
 		case "Claude CLI":
 			return "claude-code";
+		case "Codex":
+			return "codex";
+		case "OpenCode":
+			return "opencode";
+		case "Antigravity":
+			return "antigravity";
+		case "Cline":
+		case "Cline CLI":
+			return "cline";
+		case "Gemini CLI":
+			return "gemini-cli";
+		case "Goose":
+			return "goose";
 		default:
 			return "";
 	}
 }
 
 /**
- * Installs Neon agent skills using Vercel's skills CLI
+ * Installs Neon agent skills using Vercel's skills CLI.
  */
 export async function installAgentSkills(
 	selectedEditors: Editor[],
 ): Promise<boolean> {
-	if (selectedEditors.length === 0) {
+	const editorsWithSkills = selectedEditors.filter(
+		(e) => getSkillsAgentName(e) !== "",
+	);
+
+	if (editorsWithSkills.length === 0) {
 		return true;
 	}
 
@@ -33,15 +51,8 @@ export async function installAgentSkills(
 
 	let anyFailed = false;
 
-	// Run skills add for each selected editor/agent
-	for (const editor of selectedEditors) {
+	for (const editor of editorsWithSkills) {
 		const agentName = getSkillsAgentName(editor);
-
-		if (agentName === "") {
-			log.error(`Unsupported editor: ${editor}`);
-			anyFailed = true;
-			continue;
-		}
 
 		try {
 			await execa(
