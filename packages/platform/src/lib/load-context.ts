@@ -14,8 +14,9 @@ export type BranchRef =
  */
 export interface LoadContextOptions {
 	/**
-	 * Explicit branch id or name. Takes precedence over `BRANCH_ID` and the context file.
-	 * Values starting with `br-` are treated as ids; everything else is treated as a name.
+	 * Explicit branch id or name. Takes precedence over `NEON_BRANCH_ID` and the context
+	 * file. Values starting with `br-` are treated as ids; everything else is treated as
+	 * a name.
 	 */
 	branch?: string;
 	/** Explicit project id. Takes precedence over the context file. */
@@ -25,7 +26,7 @@ export interface LoadContextOptions {
 	/** Starting directory for the project-context file search. Defaults to `process.cwd()`. */
 	cwd?: string;
 	/**
-	 * Override `process.env` for testing. Read keys: `BRANCH_ID`, `NEON_PROJECT_ID`,
+	 * Override `process.env` for testing. Read keys: `NEON_BRANCH_ID`, `NEON_PROJECT_ID`,
 	 * `NEON_ORG_ID`. Real callers should leave this undefined.
 	 */
 	env?: Record<string, string | undefined>;
@@ -49,7 +50,7 @@ export interface NeonContext {
  *
  * | Field      | 1st (call args)         | 2nd (env)           | 3rd (file)                  |
  * | ---------- | ----------------------- | ------------------- | --------------------------- |
- * | branch     | `options.branch`        | `BRANCH_ID`         | `branchId` in `.neon[/project.json]` |
+ * | branch     | `options.branch`        | `NEON_BRANCH_ID`    | `branchId` in `.neon[/project.json]` |
  * | projectId  | `options.projectId`     | `NEON_PROJECT_ID`   | `projectId` in `.neon[/project.json]` |
  * | orgId      | `options.orgId`         | `NEON_ORG_ID`       | `orgId` in `.neon[/project.json]`     |
  *
@@ -81,7 +82,7 @@ export function loadContext(options: LoadContextOptions = {}): NeonContext {
 
 	const branchRaw =
 		nonEmptyString(options.branch) ??
-		nonEmptyString(env.BRANCH_ID) ??
+		nonEmptyString(env.NEON_BRANCH_ID) ??
 		file?.branchId;
 
 	const ctx: NeonContext = { projectId };
@@ -105,7 +106,7 @@ export function loadContextWithBranch(
 		throw new MissingContextError(
 			[
 				"No Neon branch id or name could be resolved.",
-				"Pass `branch`, set BRANCH_ID, or add a `branchId` field to your `.neon/project.json` (or `.neon`) context file.",
+				"Pass `branch`, set NEON_BRANCH_ID, or add a `branchId` field to your `.neon/project.json` (or `.neon`) context file.",
 			].join(" "),
 		);
 	}

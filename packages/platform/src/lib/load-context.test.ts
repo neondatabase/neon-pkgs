@@ -95,7 +95,7 @@ describe("loadContext — branch resolution", () => {
 		const ctx = loadContext({
 			branch: "feature-x",
 			cwd: root,
-			env: { BRANCH_ID: "br-from-env" },
+			env: { NEON_BRANCH_ID: "br-from-env" },
 		});
 		expect(ctx.branch).toEqual({ kind: "name", value: "feature-x" });
 	});
@@ -111,7 +111,7 @@ describe("loadContext — branch resolution", () => {
 		expect(ctx.branch).toEqual({ kind: "id", value: "br-cool-snow-12345" });
 	});
 
-	test("falls back to BRANCH_ID env when no branch is passed", () => {
+	test("falls back to NEON_BRANCH_ID env when no branch is passed", () => {
 		const root = setup({
 			"package.json": "{}",
 			".neon/project.json": JSON.stringify({
@@ -121,7 +121,7 @@ describe("loadContext — branch resolution", () => {
 		});
 		const ctx = loadContext({
 			cwd: root,
-			env: { BRANCH_ID: "br-from-env" },
+			env: { NEON_BRANCH_ID: "br-from-env" },
 		});
 		expect(ctx.branch).toEqual({ kind: "id", value: "br-from-env" });
 	});
@@ -147,7 +147,7 @@ describe("loadContext — branch resolution", () => {
 		expect(ctx.branch).toBeUndefined();
 	});
 
-	test("treats BRANCH_ID with empty value as missing", () => {
+	test("treats NEON_BRANCH_ID with empty value as missing", () => {
 		const root = setup({
 			"package.json": "{}",
 			".neon/project.json": JSON.stringify({
@@ -157,7 +157,7 @@ describe("loadContext — branch resolution", () => {
 		});
 		const ctx = loadContext({
 			cwd: root,
-			env: { BRANCH_ID: "   " },
+			env: { NEON_BRANCH_ID: "   " },
 		});
 		expect(ctx.branch).toEqual({ kind: "id", value: "br-from-file" });
 	});

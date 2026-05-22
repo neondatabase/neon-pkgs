@@ -106,7 +106,7 @@ Resolves the Neon project and (optionally) branch this process should target. Pu
 
 | Field      | 1st (call args)         | 2nd (env)         | 3rd (file)                          |
 | ---------- | ----------------------- | ----------------- | ----------------------------------- |
-| `branch`   | `options.branch`        | `BRANCH_ID`       | `branchId` in `.neon[/project.json]` |
+| `branch`   | `options.branch`        | `NEON_BRANCH_ID`  | `branchId` in `.neon[/project.json]` |
 | `projectId`| `options.projectId`     | `NEON_PROJECT_ID` | `projectId` in `.neon[/project.json]`|
 | `orgId`    | `options.orgId`         | `NEON_ORG_ID`     | `orgId` in `.neon[/project.json]`   |
 
