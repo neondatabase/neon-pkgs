@@ -9,7 +9,7 @@ import { createRealNeonApi } from "../src/lib/neon-api-real.js";
  * `track(id)` to opt into the per-test cleanup hook. The suite-level
  * {@link sweepOrphans} additionally deletes leftovers from a previous failed run.
  */
-export const PROJECT_PREFIX = "neon-ts-e2e-";
+const PROJECT_PREFIX = "neon-ts-e2e-";
 
 /**
  * Default Neon region used by every e2e test that creates a project. Override per-test
@@ -41,7 +41,7 @@ export function makeRealApi(): NeonApi {
 }
 
 /** Lower-level Neon client. Used by cleanup and a few setup helpers. */
-export function makeRawClient(): ReturnType<typeof createApiClient> {
+function makeRawClient(): ReturnType<typeof createApiClient> {
 	return createApiClient({ apiKey: requireApiKey() });
 }
 
@@ -90,7 +90,7 @@ export async function detectApiKeyScope(): Promise<ApiKeyScope> {
  * delete anything that isn't prefixed with {@link PROJECT_PREFIX} so a mis-typed id can
  * never wipe an unrelated project.
  */
-export async function deleteProject(projectId: string): Promise<void> {
+async function deleteProject(projectId: string): Promise<void> {
 	const client = makeRawClient();
 	const project = await client.getProject(projectId).catch((err) => {
 		const status = (err as { response?: { status?: number } } | undefined)
@@ -184,6 +184,6 @@ export const e2eTest = test.extend<{
  * Some Neon operations are eventually consistent (notably branch creation finishing
  * `init` → `ready`). A small wait avoids racing on subsequent reads.
  */
-export function sleep(ms: number): Promise<void> {
+function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
