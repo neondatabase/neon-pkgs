@@ -245,6 +245,31 @@ Every wrapped HTTP error carries structured context in `err.details`:
 
 The package never creates, updates, or deletes files. In particular it does **not** write `.neon/project.json`. To bootstrap a project-context file, use `neon set-context` (which writes `.neon`) or any other tool of your choice. This package will happily read both layouts.
 
+## Authentication
+
+The package resolves the Bearer token sent to the Neon API through a 3-step chain (each entry wins over the next):
+
+| Step | Source                                                  | When to use                                                                                                  |
+| ---- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| 1    | `apiKey` SDK option / `--api-key` CLI flag              | One-off scripts; injecting a test fixture                                                                    |
+| 2    | `NEON_API_KEY` environment variable                     | Standard config — CI, `.env` files, shell env                                                                |
+| 3    | `access_token` in `~/.config/neonctl/credentials.json`  | Local dev — after running `npx neonctl auth` you get the SDK / CLI working with zero extra config            |
+
+The third step works the same way `neonctl` itself does: it reads the OAuth access token written by `npx neonctl auth` and uses it as a Bearer token for the management API. It also honours `NEONCTL_CONFIG_DIR` for picking up credentials from a non-default location, and falls back to `USERPROFILE` on Windows.
+
+Two things to know about the credentials-file fallback:
+
+- **OAuth tokens expire.** Unlike `napi_*` API keys, the access token in `credentials.json` has a TTL (refreshed in-process by `neonctl` on every invocation, but we don't run that refresh flow). When the token expires you'll get `PLATFORM_UNAUTHORIZED` from the next API call — the error message tells you to either rotate an API key or re-run `npx neonctl auth`.
+- **Token source is exposed.** `resolveApiKey()` returns `{ token, source: "option" | "env" | "neonctl" }` so callers can log / branch on where the token came from.
+
+```ts
+import { resolveApiKey } from "@neondatabase/platform/v1";
+
+const resolved = resolveApiKey();
+if (!resolved) throw new Error("set NEON_API_KEY or run `npx neonctl auth`");
+console.log(`using token from ${resolved.source}`);
+```
+
 ## API key scopes
 
 `@neondatabase/platform` supports both **organisation/user-scoped** and **project-scoped** Neon API keys:

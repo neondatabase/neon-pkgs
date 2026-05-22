@@ -99,16 +99,25 @@ describeIfBuilt("neon-ts CLI (e2e, spawns dist/cli.js)", () => {
 		expect(parsed.branch).toEqual({ kind: "id", value: "br-e2e" });
 	});
 
-	test("pull without an API key exits 1 with a helpful message", async () => {
+	test("pull without an API key + no neonctl credentials exits 1 with a helpful message", async () => {
 		const root = setup({
 			"package.json": "{}",
 			".neon/project.json": JSON.stringify({ projectId: "proj-e2e" }),
 		});
+		// Point HOME / USERPROFILE at an empty dir so the credentials.json fallback misses
+		// too (the runner's real $HOME might have a real ~/.config/neonctl/credentials.json).
+		const emptyHome = setup({ ".keep": "" });
 		const result = await runCli(["pull"], {
 			cwd: root,
-			env: { NEON_API_KEY: undefined },
+			env: {
+				NEON_API_KEY: undefined,
+				HOME: emptyHome,
+				USERPROFILE: emptyHome,
+				NEONCTL_CONFIG_DIR: undefined,
+			},
 		});
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain("NEON_API_KEY");
+		expect(result.stderr).toContain("neonctl auth");
 	});
 });

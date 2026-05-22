@@ -1,3 +1,4 @@
+import { resolveApiKey } from "../auth.js";
 import {
 	ConfigLoadError,
 	ErrorCode,
@@ -200,15 +201,19 @@ function resolveApi(
 	ctx: CommandEnv,
 ): NeonApi | string {
 	if (ctx.api) return ctx.api;
-	const apiKey = apiKeyOption ?? ctx.env.NEON_API_KEY;
-	if (!apiKey) {
+	const resolved = resolveApiKey({
+		...(apiKeyOption ? { apiKey: apiKeyOption } : {}),
+		env: ctx.env,
+	});
+	if (!resolved) {
 		return [
 			"Missing Neon API key.",
-			"Pass --api-key, set the NEON_API_KEY environment variable, or place it in a `.env` file.",
+			"Tried (in order): --api-key, NEON_API_KEY env, and ~/.config/neonctl/credentials.json.",
+			"Either pass --api-key, set NEON_API_KEY (or put it in a .env file), or run `npx neonctl auth` to populate the credentials file.",
 			"Generate a key at https://console.neon.tech/app/settings/api-keys.",
 		].join("\n");
 	}
-	return createRealNeonApi({ apiKey });
+	return createRealNeonApi({ apiKey: resolved.token });
 }
 
 /**

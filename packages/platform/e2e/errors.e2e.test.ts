@@ -16,10 +16,13 @@ describe("e2e — error wrapping against real Neon API", () => {
 				await api.listProjects({});
 			} catch (err) {
 				const p = err as PlatformError;
-				expect(p.message).toContain("API key is unauthorized");
+				expect(p.message).toContain(
+					"Bearer token sent to the Neon API was rejected",
+				);
 				expect(p.message).toContain(
 					"https://console.neon.tech/app/settings/api-keys",
 				);
+				expect(p.message).toContain("neonctl auth");
 			}
 		},
 	);

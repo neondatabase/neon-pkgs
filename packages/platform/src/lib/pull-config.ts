@@ -1,3 +1,4 @@
+import { resolveApiKey } from "./auth.js";
 import { defineConfig } from "./define-config.js";
 import { formatDurationSeconds } from "./duration.js";
 import { ErrorCode, PlatformError } from "./errors.js";
@@ -62,18 +63,21 @@ function resolveProjectId(options: PullConfigOptions): string {
 }
 
 function createApiFromOptions(options: PullConfigOptions): NeonApi {
-	const apiKey = options.apiKey ?? process.env.NEON_API_KEY;
-	if (!apiKey) {
+	const resolved = resolveApiKey({
+		...(options.apiKey ? { apiKey: options.apiKey } : {}),
+	});
+	if (!resolved) {
 		throw new PlatformError(
 			ErrorCode.MissingApiKey,
 			[
 				"pullConfig has no Neon API key to work with.",
-				"Either pass `apiKey` directly, set the NEON_API_KEY environment variable, or pass a custom `api` adapter (e.g. an in-memory fake for tests).",
+				"Tried (in order): `apiKey` option, NEON_API_KEY env, and `~/.config/neonctl/credentials.json`.",
+				"Either pass `apiKey` directly, set NEON_API_KEY, run `npx neonctl auth` to populate the credentials file, or pass a custom `api` adapter (e.g. an in-memory fake for tests).",
 				"Generate a key at https://console.neon.tech/app/settings/api-keys.",
 			].join(" "),
 		);
 	}
-	return createRealNeonApi({ apiKey });
+	return createRealNeonApi({ apiKey: resolved.token });
 }
 
 /**

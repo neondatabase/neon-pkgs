@@ -16,6 +16,11 @@
  * ```
  */
 
+export {
+	type NeonctlCredentials,
+	readNeonctlCredentials,
+	resolveApiKey,
+} from "./lib/auth.js";
 export { defineConfig } from "./lib/define-config.js";
 export {
 	ConfigLoadError,

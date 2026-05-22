@@ -60,12 +60,18 @@ describe("runPull", () => {
 	});
 
 	test("missing api key without injected api → exit 1 with helpful message", async () => {
+		// Point HOME at an empty temp dir so the neonctl credentials fallback also misses.
+		const emptyHome = setup({ ".config/neonctl/.keep": "" });
 		const result = await runPull(
 			{ projectId: "proj-x" },
-			{ cwd: process.cwd(), env: {} },
+			{
+				cwd: process.cwd(),
+				env: { HOME: emptyHome, USERPROFILE: emptyHome },
+			},
 		);
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain("NEON_API_KEY");
+		expect(result.stderr).toContain("neonctl auth");
 	});
 
 	test("missing context (no projectId, no .neon, no env) → exit 3", async () => {

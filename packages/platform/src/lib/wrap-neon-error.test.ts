@@ -16,7 +16,7 @@ function axiosLike(
 const CTX = { op: "getProject(proj-x)", projectId: "proj-x" } as const;
 
 describe("wrapNeonError — HTTP status mapping", () => {
-	test("401 → Unauthorized + rotate-key advice + request id", () => {
+	test("401 → Unauthorized + key + neonctl-auth advice + request id", () => {
 		const err = wrapNeonError(
 			axiosLike(401, { message: "Invalid API key", request_id: "req-1" }),
 			CTX,
@@ -24,10 +24,15 @@ describe("wrapNeonError — HTTP status mapping", () => {
 		expect(err).toBeInstanceOf(PlatformError);
 		const p = err as PlatformError;
 		expect(p.code).toBe(ErrorCode.Unauthorized);
-		expect(p.message).toContain("API key is unauthorized");
+		// Message now suggests both fix paths since we accept both API keys and the
+		// OAuth token written by `neonctl auth`.
+		expect(p.message).toContain(
+			"Bearer token sent to the Neon API was rejected",
+		);
 		expect(p.message).toContain(
 			"https://console.neon.tech/app/settings/api-keys",
 		);
+		expect(p.message).toContain("neonctl auth");
 		expect(p.message).toContain("req-1");
 		expect(p.details.status).toBe(401);
 		expect(p.details.requestId).toBe("req-1");

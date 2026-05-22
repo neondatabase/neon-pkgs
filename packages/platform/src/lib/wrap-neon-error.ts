@@ -53,9 +53,9 @@ export function wrapNeonError(
 			return new PlatformError(
 				ErrorCode.Unauthorized,
 				[
-					`${context.op} failed: API key is unauthorized.`,
+					`${context.op} failed: the Bearer token sent to the Neon API was rejected.`,
 					apiSummary + requestIdSuffix + ".",
-					"Generate or rotate your key at https://console.neon.tech/app/settings/api-keys and set NEON_API_KEY (or pass --api-key).",
+					"Either (a) generate or rotate an API key at https://console.neon.tech/app/settings/api-keys and set NEON_API_KEY / pass --api-key, or (b) re-run `npx neonctl auth` to refresh the OAuth token in `~/.config/neonctl/credentials.json` (OAuth tokens expire).",
 				].join(" "),
 				{ cause: err, details: httpDetails(context, httpInfo) },
 			);
