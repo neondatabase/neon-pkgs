@@ -133,21 +133,10 @@ describe("defineConfig", () => {
 		).toThrow(/pgVersion/);
 	});
 
-	test("rejects compute settings violating CU ranges", () => {
-		expect(() =>
-			defineConfig({
-				project: { name: "x" },
-				branchBlueprints: {
-					production: {
-						computeSettings: {
-							// @ts-expect-error — testing runtime validation rejects non-ComputeUnit values.
-							autoscalingLimitMinCu: 0.1,
-						},
-					},
-				},
-			}),
-		).toThrow(/autoscalingLimitMinCu/);
-
+	test("rejects compute settings violating cross-field invariants (min > max)", () => {
+		// Non-ComputeUnit values (e.g. 0.1, 3) are caught at compile time by the
+		// `ComputeUnit` literal type, then again at runtime by the schema — see
+		// `schema.test.ts` for the runtime-only assertions on `unknown` input.
 		expect(() =>
 			defineConfig({
 				project: { name: "x" },

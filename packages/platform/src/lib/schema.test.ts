@@ -130,3 +130,30 @@ describe("schema — computeSettings cross-field invariants", () => {
 		expect(issues[0]).toContain("suspendTimeout");
 	});
 });
+
+describe("schema — computeSettings runtime guards on untyped input", () => {
+	// These cases are caught at compile time by the `ComputeUnit` literal type
+	// (0.25 | 0.5 | 1 | 2 | 4 | 8), but `safeParse` takes `unknown`, so the
+	// schema also defends against callers that get an untyped value from
+	// somewhere TypeScript can't see (JSON.parse, plain JS, fetch responses).
+	test.each<[string, unknown]>([
+		[
+			"autoscalingLimitMinCu below the smallest CU",
+			{ autoscalingLimitMinCu: 0.1 },
+		],
+		[
+			"autoscalingLimitMinCu not in the CU set",
+			{ autoscalingLimitMinCu: 3 },
+		],
+		[
+			"autoscalingLimitMaxCu not in the CU set",
+			{ autoscalingLimitMaxCu: 16 },
+		],
+	])("rejects %s", (_label, untypedInput) => {
+		const result = computeSettingsSchema.safeParse(untypedInput);
+		expect(result.success).toBe(false);
+		if (result.success) return;
+		const issues = formatZodIssues(result.error);
+		expect(issues.join("\n")).toMatch(/autoscalingLimit(Min|Max)Cu/);
+	});
+});
