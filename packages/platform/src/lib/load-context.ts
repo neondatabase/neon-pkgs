@@ -70,7 +70,8 @@ export function loadContext(options: LoadContextOptions = {}): NeonContext {
 		throw new MissingContextError(
 			[
 				"No Neon project id could be resolved.",
-				"Pass `projectId`, set NEON_PROJECT_ID, or create a `.neon/project.json` (or `.neon`) with a `projectId` field.",
+				"loadContext checked three sources in order: (1) `options.projectId`, (2) the `NEON_PROJECT_ID` environment variable, and (3) the `projectId` field of `.neon/project.json` (or the neonctl `.neon` file) above the current directory.",
+				"Set any one of these to continue. For an interactive bootstrap, run `npx neonctl set-context --project-id <id>`.",
 			].join(" "),
 		);
 	}
@@ -106,7 +107,8 @@ export function loadContextWithBranch(
 		throw new MissingContextError(
 			[
 				"No Neon branch id or name could be resolved.",
-				"Pass `branch`, set NEON_BRANCH_ID, or add a `branchId` field to your `.neon/project.json` (or `.neon`) context file.",
+				"loadContextWithBranch checked three sources in order: (1) `options.branch`, (2) the `NEON_BRANCH_ID` environment variable, and (3) the `branchId` field of `.neon/project.json` (or the neonctl `.neon` file).",
+				"Set any one of these to continue.",
 			].join(" "),
 		);
 	}

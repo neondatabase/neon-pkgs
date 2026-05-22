@@ -1,5 +1,6 @@
 import {
 	ConfigLoadError,
+	ErrorCode,
 	MissingContextError,
 	PlatformError,
 	PushConflictError,
@@ -37,6 +38,12 @@ export interface CommandResult {
 	stdout: string;
 	/** Text intended for stderr (human-readable status / error messages). */
 	stderr: string;
+	/**
+	 * Optional structured debug payload — stack trace, request id, error code, …
+	 * Printed only when the user passes `--debug` to the CLI. Programmatic callers can
+	 * read it directly.
+	 */
+	debugInfo?: string;
 }
 
 // ───────────────────────── pull ─────────────────────────
@@ -195,28 +202,88 @@ function resolveApi(
 	if (ctx.api) return ctx.api;
 	const apiKey = apiKeyOption ?? ctx.env.NEON_API_KEY;
 	if (!apiKey) {
-		return "Missing Neon API key. Pass --api-key or set NEON_API_KEY.";
+		return [
+			"Missing Neon API key.",
+			"Pass --api-key, set the NEON_API_KEY environment variable, or place it in a `.env` file.",
+			"Generate a key at https://console.neon.tech/app/settings/api-keys.",
+		].join("\n");
 	}
 	return createRealNeonApi({ apiKey });
 }
 
+/**
+ * Map every error class / code to a stable exit code so shell pipelines and CI can branch
+ * on the specific failure mode without parsing free text. See README → "CLI" for the full
+ * table.
+ */
 function handleError(err: unknown): CommandResult {
-	if (err instanceof PushConflictError) {
-		return failure(err.message, 2);
-	}
-	if (err instanceof MissingContextError) {
-		return failure(`Missing context: ${err.message}`, 3);
-	}
-	if (err instanceof ConfigLoadError) {
-		return failure(`Failed to load config: ${err.message}`, 4);
-	}
+	if (err instanceof PushConflictError)
+		return errorResult(err, err.message, 2);
+	if (err instanceof MissingContextError)
+		return errorResult(err, `Missing context: ${err.message}`, 3);
+	if (err instanceof ConfigLoadError)
+		return errorResult(err, `Failed to load config: ${err.message}`, 4);
 	if (err instanceof PlatformError) {
-		return failure(`[${err.code}] ${err.message}`, 5);
+		// Specific exit codes for the most operationally interesting cases so callers can
+		// react (e.g. CI surfaces an "Unauthorized: rotate your key" panel on exit 6).
+		switch (err.code) {
+			case ErrorCode.MissingApiKey:
+				return errorResult(err, err.message, 1);
+			case ErrorCode.Unauthorized:
+				return errorResult(err, err.message, 6);
+			case ErrorCode.Forbidden:
+			case ErrorCode.InsufficientScope:
+				return errorResult(err, err.message, 7);
+			case ErrorCode.NotFound:
+				return errorResult(err, err.message, 8);
+			case ErrorCode.RateLimited:
+				return errorResult(err, err.message, 9);
+			case ErrorCode.NetworkError:
+				return errorResult(err, err.message, 10);
+			case ErrorCode.ServerError:
+			case ErrorCode.Locked:
+				return errorResult(err, err.message, 11);
+			case ErrorCode.InternalError:
+				return errorResult(err, err.message, 99);
+			default:
+				return errorResult(err, `[${err.code}] ${err.message}`, 5);
+		}
 	}
-	if (err instanceof Error) {
-		return failure(err.message, 1);
-	}
+	if (err instanceof Error) return errorResult(err, err.message, 1);
 	return failure(String(err), 1);
+}
+
+function errorResult(
+	err: unknown,
+	message: string,
+	exitCode: number,
+): CommandResult {
+	const result: CommandResult = {
+		exitCode,
+		stdout: "",
+		stderr: `${message}\n`,
+	};
+	const debug = buildDebugInfo(err);
+	if (debug) result.debugInfo = debug;
+	return result;
+}
+
+function buildDebugInfo(err: unknown): string | undefined {
+	if (!(err instanceof Error)) return undefined;
+	const lines: string[] = [];
+	if (err instanceof PlatformError) {
+		lines.push(`code     : ${err.code}`);
+		if (Object.keys(err.details).length > 0) {
+			lines.push(`details  : ${JSON.stringify(err.details, null, 2)}`);
+		}
+	}
+	if (err.cause instanceof Error) {
+		lines.push(`cause    : ${err.cause.name}: ${err.cause.message}`);
+	}
+	if (err.stack) {
+		lines.push(err.stack);
+	}
+	return lines.length > 0 ? lines.join("\n") : undefined;
 }
 
 function failure(message: string, exitCode = 1): CommandResult {

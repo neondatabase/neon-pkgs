@@ -14,7 +14,7 @@ import {
 	type ProjectListItem,
 	type ProjectUpdateRequest,
 } from "@neondatabase/api-client";
-import { PlatformError } from "./errors.js";
+import { ErrorCode, PlatformError } from "./errors.js";
 import type {
 	CreateBranchInput,
 	CreateProjectInput,
@@ -25,6 +25,7 @@ import type {
 	UpdateBranchInput,
 } from "./neon-api.js";
 import type { ComputeSettings } from "./types.js";
+import { wrapNeonError } from "./wrap-neon-error.js";
 
 type ApiClient = ReturnType<typeof createApiClient>;
 
@@ -49,8 +50,11 @@ export function createRealNeonApi(options: {
 }): NeonApi {
 	if (!options.apiKey || options.apiKey.trim() === "") {
 		throw new PlatformError(
-			"PLATFORM_MISSING_API_KEY",
-			"createRealNeonApi requires a non-empty `apiKey`.",
+			ErrorCode.MissingApiKey,
+			[
+				"createRealNeonApi requires a non-empty `apiKey`.",
+				"Generate one at https://console.neon.tech/app/settings/api-keys and pass it as { apiKey: process.env.NEON_API_KEY }.",
+			].join(" "),
 		);
 	}
 
@@ -121,29 +125,59 @@ class RealNeonApi implements NeonApi {
 		return retryOnLocked(fn, this.retryConfig);
 	}
 
+	private async call<T>(
+		op: string,
+		fn: () => Promise<T>,
+		options: { projectId?: string; mutating?: boolean } = {},
+	): Promise<T> {
+		try {
+			return options.mutating ? await this.retry(fn) : await fn();
+		} catch (err) {
+			const wrapped = wrapNeonError(
+				err,
+				options.projectId
+					? { op, projectId: options.projectId }
+					: { op },
+			);
+			throw wrapped;
+		}
+	}
+
 	async listProjects(filter: {
 		orgId?: string;
 	}): Promise<NeonProjectSnapshot[]> {
-		const projects: ProjectListItem[] = [];
-		let cursor: string | undefined;
-		while (true) {
-			const res = await this.client.listProjects({
-				...(filter.orgId ? { org_id: filter.orgId } : {}),
-				...(cursor ? { cursor } : {}),
-				limit: 100,
-			});
-			projects.push(...res.data.projects);
-			const next = (res.data as { pagination?: { next?: string } })
-				.pagination?.next;
-			if (!next || next === cursor) break;
-			cursor = next;
-		}
-		return projects.map(projectToSnapshot);
+		return this.call(
+			filter.orgId ? `listProjects(org=${filter.orgId})` : "listProjects",
+			async () => {
+				const projects: ProjectListItem[] = [];
+				let cursor: string | undefined;
+				while (true) {
+					const res = await this.client.listProjects({
+						...(filter.orgId ? { org_id: filter.orgId } : {}),
+						...(cursor ? { cursor } : {}),
+						limit: 100,
+					});
+					projects.push(...res.data.projects);
+					const next = (
+						res.data as { pagination?: { next?: string } }
+					).pagination?.next;
+					if (!next || next === cursor) break;
+					cursor = next;
+				}
+				return projects.map(projectToSnapshot);
+			},
+		);
 	}
 
 	async getProject(projectId: string): Promise<NeonProjectSnapshot> {
-		const res = await this.client.getProject(projectId);
-		return projectToSnapshot(res.data.project);
+		return this.call(
+			`getProject(${projectId})`,
+			async () => {
+				const res = await this.client.getProject(projectId);
+				return projectToSnapshot(res.data.project);
+			},
+			{ projectId },
+		);
 	}
 
 	async createProject(
@@ -170,8 +204,14 @@ class RealNeonApi implements NeonApi {
 					: {}),
 			},
 		};
-		const res = await this.retry(() => this.client.createProject(body));
-		return projectToSnapshot(res.data.project);
+		return this.call(
+			`createProject(${input.name})`,
+			async () => {
+				const res = await this.client.createProject(body);
+				return projectToSnapshot(res.data.project);
+			},
+			{ mutating: true },
+		);
 	}
 
 	async updateProject(
@@ -191,28 +231,39 @@ class RealNeonApi implements NeonApi {
 					: {}),
 			},
 		};
-		const res = await this.retry(() =>
-			this.client.updateProject(projectId, body),
+		return this.call(
+			`updateProject(${projectId})`,
+			async () => {
+				const res = await this.client.updateProject(projectId, body);
+				return projectToSnapshot(res.data.project);
+			},
+			{ projectId, mutating: true },
 		);
-		return projectToSnapshot(res.data.project);
 	}
 
 	async listBranches(projectId: string): Promise<NeonBranchSnapshot[]> {
-		const branches: Branch[] = [];
-		let cursor: string | undefined;
-		while (true) {
-			const res = await this.client.listProjectBranches({
-				projectId,
-				limit: 100,
-				...(cursor ? { cursor } : {}),
-			});
-			branches.push(...(res.data.branches as Branch[]));
-			const next = (res.data as { pagination?: { next?: string } })
-				.pagination?.next;
-			if (!next || next === cursor) break;
-			cursor = next;
-		}
-		return branches.map(branchToSnapshot);
+		return this.call(
+			`listBranches(${projectId})`,
+			async () => {
+				const branches: Branch[] = [];
+				let cursor: string | undefined;
+				while (true) {
+					const res = await this.client.listProjectBranches({
+						projectId,
+						limit: 100,
+						...(cursor ? { cursor } : {}),
+					});
+					branches.push(...(res.data.branches as Branch[]));
+					const next = (
+						res.data as { pagination?: { next?: string } }
+					).pagination?.next;
+					if (!next || next === cursor) break;
+					cursor = next;
+				}
+				return branches.map(branchToSnapshot);
+			},
+			{ projectId },
+		);
 	}
 
 	async createBranch(
@@ -240,13 +291,22 @@ class RealNeonApi implements NeonApi {
 			},
 			endpoints: [endpointOptions],
 		};
-		const res = await this.retry(() =>
-			this.client.createProjectBranch(projectId, body),
+		return this.call(
+			`createBranch(${projectId}/${input.name})`,
+			async () => {
+				const res = await this.client.createProjectBranch(
+					projectId,
+					body,
+				);
+				return {
+					branch: branchToSnapshot(res.data.branch),
+					endpoints: (res.data.endpoints ?? []).map(
+						endpointToSnapshot,
+					),
+				};
+			},
+			{ projectId, mutating: true },
 		);
-		return {
-			branch: branchToSnapshot(res.data.branch),
-			endpoints: (res.data.endpoints ?? []).map(endpointToSnapshot),
-		};
 	}
 
 	async updateBranch(
@@ -257,15 +317,31 @@ class RealNeonApi implements NeonApi {
 		const branch: BranchUpdateRequest["branch"] = {};
 		if (input.name !== undefined) branch.name = input.name;
 		if (input.expiresAt !== undefined) branch.expires_at = input.expiresAt;
-		const res = await this.retry(() =>
-			this.client.updateProjectBranch(projectId, branchId, { branch }),
+		return this.call(
+			`updateBranch(${projectId}/${branchId})`,
+			async () => {
+				const res = await this.client.updateProjectBranch(
+					projectId,
+					branchId,
+					{ branch },
+				);
+				return branchToSnapshot(res.data.branch);
+			},
+			{ projectId, mutating: true },
 		);
-		return branchToSnapshot(res.data.branch);
 	}
 
 	async listEndpoints(projectId: string): Promise<NeonEndpointSnapshot[]> {
-		const res = await this.client.listProjectEndpoints(projectId);
-		return (res.data.endpoints as Endpoint[]).map(endpointToSnapshot);
+		return this.call(
+			`listEndpoints(${projectId})`,
+			async () => {
+				const res = await this.client.listProjectEndpoints(projectId);
+				return (res.data.endpoints as Endpoint[]).map(
+					endpointToSnapshot,
+				);
+			},
+			{ projectId },
+		);
 	}
 
 	async updateEndpoint(
@@ -275,12 +351,18 @@ class RealNeonApi implements NeonApi {
 	): Promise<NeonEndpointSnapshot> {
 		const endpoint: EndpointUpdateRequest["endpoint"] =
 			computeSettingsToEndpointOptions(settings);
-		const res = await this.retry(() =>
-			this.client.updateProjectEndpoint(projectId, endpointId, {
-				endpoint,
-			}),
+		return this.call(
+			`updateEndpoint(${projectId}/${endpointId})`,
+			async () => {
+				const res = await this.client.updateProjectEndpoint(
+					projectId,
+					endpointId,
+					{ endpoint },
+				);
+				return endpointToSnapshot(res.data.endpoint);
+			},
+			{ projectId, mutating: true },
 		);
-		return endpointToSnapshot(res.data.endpoint);
 	}
 }
 

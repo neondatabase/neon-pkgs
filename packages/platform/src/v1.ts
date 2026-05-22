@@ -20,6 +20,7 @@ export { defineConfig } from "./lib/define-config.js";
 export {
 	ConfigLoadError,
 	ConfigValidationError,
+	ErrorCode,
 	MissingContextError,
 	PlatformError,
 	PushConflictError,

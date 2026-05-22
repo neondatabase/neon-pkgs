@@ -158,18 +158,60 @@ neon-platform push --apply-existing               # apply wildcard blueprints to
 neon-platform push --apply-changes                # force-apply, ignoring branch-level conflicts
 ```
 
-Exit codes:
+Exit codes (stable — branch on these in CI / shell pipelines):
 
-| Code | Meaning                                                                |
-| ---- | ---------------------------------------------------------------------- |
-| 0    | Success                                                                |
-| 1    | Generic error (e.g. missing `NEON_API_KEY`, transport-level failure)   |
-| 2    | `PushConflictError` (re-run with `--apply-changes` / `--update-existing`) |
-| 3    | `MissingContextError` (no project id resolvable)                       |
-| 4    | `ConfigLoadError` (couldn't find / load `neon.ts`)                     |
-| 5    | Other `PlatformError` (ambiguous project, missing region, …)           |
+| Code | Meaning                                                                              |
+| ---- | ------------------------------------------------------------------------------------ |
+| 0    | Success                                                                              |
+| 1    | Generic error / missing `NEON_API_KEY`                                               |
+| 2    | `PushConflictError` (re-run with `--apply-changes` / `--update-existing`)            |
+| 3    | `MissingContextError` (no project id resolvable from args, env, or `.neon[/project.json]`) |
+| 4    | `ConfigLoadError` (couldn't find / load `neon.ts`)                                   |
+| 5    | Other `PlatformError`                                                                |
+| 6    | `PLATFORM_UNAUTHORIZED` — bad / expired / revoked API key                            |
+| 7    | `PLATFORM_FORBIDDEN` or `PLATFORM_INSUFFICIENT_SCOPE` — key lacks required scope     |
+| 8    | `PLATFORM_NOT_FOUND` — project / branch / endpoint doesn't exist                     |
+| 9    | `PLATFORM_RATE_LIMITED` — back off and retry                                         |
+| 10   | `PLATFORM_NETWORK_ERROR` — could not reach the Neon API                              |
+| 11   | `PLATFORM_SERVER_ERROR` or `PLATFORM_LOCKED` — Neon returned 5xx, or still locked    |
+| 99   | `PLATFORM_INTERNAL_ERROR` — a bug in this package; please file an issue              |
+
+Pass `--debug` to any subcommand to print stack traces, error codes, and structured details (request ids, neon API messages) on stderr.
 
 All flags accept env-var fallbacks: `NEON_API_KEY`, `NEON_PROJECT_ID`, `NEON_ORG_ID`, `NEON_BRANCH_ID`.
+
+## Error reference
+
+Every error this package throws extends `PlatformError`. The `code` field is the stable identifier — match on it programmatically (`if (err instanceof PlatformError && err.code === ErrorCode.NotFound)`) rather than parsing free-text messages.
+
+| Code                              | When it fires                                                                   | What to do                                                                                                       |
+| --------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `PLATFORM_INVALID_CONFIG`         | `defineConfig` / the zod schema rejected your config                            | Read the aggregated issue list in `err.issues` and fix each one                                                  |
+| `PLATFORM_MISSING_CONTEXT`        | No project id resolvable from args, env, or context file                        | Pass `projectId` / `--project-id`, set `NEON_PROJECT_ID`, or run `npx neonctl set-context --project-id <id>`     |
+| `PLATFORM_PUSH_CONFLICT`          | Local config differs from remote (and you didn't opt into apply)                | The thrown `PushConflictError` lists each conflict with a `fix` hint. Most resolve via `updateExisting: true`    |
+| `PLATFORM_CONFIG_LOAD_FAILED`     | `neon.ts` is missing, has a syntax error, or doesn't `export default`           | Path is in the message. Run the file directly (`npx tsx neon.ts`) to reproduce the underlying error              |
+| `PLATFORM_MISSING_API_KEY`        | No API key in `apiKey` option or `NEON_API_KEY` env                             | Generate one at <https://console.neon.tech/app/settings/api-keys>                                                |
+| `PLATFORM_AMBIGUOUS_PROJECT`      | Multiple projects with the same name (org-/user-scoped key without `projectId`) | Pass `projectId` to pick one — the candidate ids are in `err.details.candidateProjectIds`                        |
+| `PLATFORM_REGION_REQUIRED`        | First-time create but `project.region` is missing                               | Add a region (e.g. `aws-us-east-1`) to your config                                                               |
+| `PLATFORM_INSUFFICIENT_SCOPE`     | Project-scoped key tried to list projects                                       | Pass `projectId` explicitly, or use an org/user-scoped key                                                       |
+| `PLATFORM_MISSING_PARENT_BRANCH`  | Push tried to create a branch whose parent doesn't exist on Neon                | Either define the parent as a blueprint too, or change the blueprint's `parent` to an existing branch           |
+| `PLATFORM_UNAUTHORIZED`           | Neon returned 401 — bad / expired key                                           | Rotate the key                                                                                                   |
+| `PLATFORM_FORBIDDEN`              | Neon returned 403 — key lacks the right scope for the operation                 | Use the appropriate key scope (org for listing, project for single-project ops)                                  |
+| `PLATFORM_NOT_FOUND`              | Neon returned 404 — the resource doesn't exist or your key can't see it         | Check the id in `err.message` / `err.details`                                                                    |
+| `PLATFORM_CONFLICT`               | Neon returned 409 — a conflicting resource already exists                       | Often a name collision; pull first to compare                                                                    |
+| `PLATFORM_RATE_LIMITED`           | Neon returned 429                                                               | Back off and retry; if persistent, contact support with `err.details.requestId`                                  |
+| `PLATFORM_LOCKED`                 | Neon returned 423 even after the built-in retry budget                          | Wait a few seconds and retry; raise `retryOnLocked.maxAttempts` if persistent                                    |
+| `PLATFORM_SERVER_ERROR`           | Neon returned 5xx                                                               | Usually transient; check <https://neonstatus.com> and the request id in `err.details.requestId`                  |
+| `PLATFORM_NETWORK_ERROR`          | Transport-level failure (DNS, refused, timeout, …)                              | Check your network connectivity to `https://console.neon.tech`                                                   |
+| `PLATFORM_INTERNAL_ERROR`         | An invariant in this package was violated                                       | Please file an issue at <https://github.com/neondatabase/neon-pkgs/issues>                                       |
+
+Every wrapped HTTP error carries structured context in `err.details`:
+
+- `op` — the SDK method that was attempted (`getProject(proj-foo)`, `createBranch(proj-foo/staging)`, …)
+- `status` — the HTTP status code
+- `projectId` — the project id when the operation is project-scoped
+- `requestId` — Neon's `X-Request-Id` for support tickets
+- `neonMessage` / `neonCode` — the raw error message and code from the Neon API response body
 
 ## Read-only filesystem contract
 

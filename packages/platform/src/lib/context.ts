@@ -75,12 +75,16 @@ export function requireProjectContext(
 	const ctx = findProjectContext(options);
 	if (ctx) return ctx;
 	const startDir = resolve(options.cwd ?? process.cwd());
+	const stopDir = resolve(options.stopAt ?? homedir());
 	throw new MissingContextError(
 		[
-			`No Neon project context found above ${startDir}.`,
-			"Looked for either `.neon/project.json` or `.neon` while walking up to the home directory.",
-			"Create one (e.g. via `neon set-context --project-id <id>`) or pass projectId/orgId explicitly.",
-		].join(" "),
+			`No Neon project context file found while walking up from ${startDir} to ${stopDir}.`,
+			"Looked for `.neon/project.json` (preferred) and `.neon` (neonctl convention) in every directory along the way.",
+			"To fix, either:",
+			"  - Create one with `npx neonctl set-context --project-id <id>` (writes a `.neon` file at the project root), or",
+			'  - Write `.neon/project.json` yourself with `{ "projectId": "…", "orgId": "…" }`, or',
+			"  - Pass `projectId` (and optionally `orgId`) directly to the SDK / CLI.",
+		].join("\n"),
 	);
 }
 

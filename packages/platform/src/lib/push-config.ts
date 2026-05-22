@@ -1,6 +1,8 @@
 import { normalizeRegion, resolveConfig } from "./define-config.js";
 import { diffConfig, type PlanStep, type RemoteState } from "./diff.js";
 import {
+	bugReportFooter,
+	ErrorCode,
 	MissingContextError,
 	PlatformError,
 	PushConflictError,
@@ -202,8 +204,12 @@ function createApiFromOptions(options: PushConfigOptions): NeonApi {
 	const apiKey = options.apiKey ?? process.env.NEON_API_KEY;
 	if (!apiKey) {
 		throw new PlatformError(
-			"PLATFORM_MISSING_API_KEY",
-			"pushConfig requires `apiKey` (or NEON_API_KEY env) unless a custom `api` is supplied.",
+			ErrorCode.MissingApiKey,
+			[
+				"pushConfig has no Neon API key to work with.",
+				"Either pass `apiKey` directly, set the NEON_API_KEY environment variable, or pass a custom `api` adapter (e.g. an in-memory fake for tests).",
+				"Generate a key at https://console.neon.tech/app/settings/api-keys.",
+			].join(" "),
 		);
 	}
 	return createRealNeonApi({ apiKey });
@@ -247,19 +253,25 @@ async function resolveOrCreateProject(
 	//
 	// Project-scoped API keys cannot list projects at all; surface that as a clear
 	// `PLATFORM_INSUFFICIENT_SCOPE` error so the user knows they need to pass `projectId`
-	// (or move to an org/user-scoped key).
+	// (or move to an org/user-scoped key). The adapter wraps the underlying 401/403 into a
+	// PlatformError already; we additionally rewrite it here because the listProjects
+	// failure is specifically about scope, not about a wrong endpoint.
 	let projects: Awaited<ReturnType<NeonApi["listProjects"]>>;
 	try {
 		projects = await api.listProjects(orgId ? { orgId } : {});
 	} catch (err) {
-		const status = readHttpStatus(err);
-		if (status === 401 || status === 403) {
+		if (isLikelyScopeError(err)) {
 			throw new PlatformError(
-				"PLATFORM_INSUFFICIENT_SCOPE",
+				ErrorCode.InsufficientScope,
 				[
-					"This API key can't list projects, which is expected for project-scoped keys.",
-					"Pass `projectId` (SDK) / `--project-id` (CLI), set `NEON_PROJECT_ID`, or commit a `.neon/project.json` so push knows which project to target.",
-				].join(" "),
+					"pushConfig could not list Neon projects with this API key.",
+					"This is expected for **project-scoped** keys, which can only operate on their own project.",
+					"Resolutions:",
+					"  - Pass `projectId` (SDK) / `--project-id` (CLI), or",
+					"  - Set `NEON_PROJECT_ID` in the environment, or",
+					"  - Commit a `.neon/project.json` (or `.neon`) with a `projectId` field, or",
+					"  - Switch to an organisation- or user-scoped API key.",
+				].join("\n"),
 				{ cause: err },
 			);
 		}
@@ -268,8 +280,18 @@ async function resolveOrCreateProject(
 	const matches = projects.filter((p) => p.name === config.project.name);
 	if (matches.length > 1) {
 		throw new PlatformError(
-			"PLATFORM_AMBIGUOUS_PROJECT",
-			`Multiple Neon projects${orgId ? ` in org ${orgId}` : ""} are named "${config.project.name}". Pass an explicit \`projectId\` to disambiguate.`,
+			ErrorCode.AmbiguousProject,
+			[
+				`Multiple Neon projects${orgId ? ` in org ${orgId}` : ""} are named "${config.project.name}":`,
+				...matches.map((p) => `  - ${p.id} (region ${p.regionId})`),
+				"Pass an explicit `projectId` (SDK), `--project-id` (CLI), or set `NEON_PROJECT_ID` to pick one.",
+			].join("\n"),
+			{
+				details: {
+					name: config.project.name,
+					candidateProjectIds: matches.map((p) => p.id),
+				},
+			},
 		);
 	}
 	if (matches.length === 1) {
@@ -278,8 +300,11 @@ async function resolveOrCreateProject(
 
 	if (!config.project.region) {
 		throw new PlatformError(
-			"PLATFORM_REGION_REQUIRED",
-			`No remote project named "${config.project.name}" exists${orgId ? ` in org ${orgId}` : ""} and the local config has no \`project.region\` to create one with.`,
+			ErrorCode.RegionRequired,
+			[
+				`No remote project named "${config.project.name}" exists${orgId ? ` in org ${orgId}` : ""}.`,
+				'Add a `region` to your config\'s `project` section so push can create the project on first run. Example: `region: "aws-us-east-1"`. See https://neon.com/docs/introduction/regions for valid identifiers.',
+			].join(" "),
 		);
 	}
 
@@ -302,12 +327,24 @@ async function resolveOrCreateProject(
 	return { project: created, projectCreated: true };
 }
 
-function readHttpStatus(err: unknown): number | undefined {
-	if (err === null || typeof err !== "object") return undefined;
-	const response = (err as { response?: unknown }).response;
-	if (response === null || typeof response !== "object") return undefined;
-	const status = (response as { status?: unknown }).status;
-	return typeof status === "number" ? status : undefined;
+function isLikelyScopeError(err: unknown): boolean {
+	if (err instanceof PlatformError) {
+		if (
+			err.code === ErrorCode.Unauthorized ||
+			err.code === ErrorCode.Forbidden
+		)
+			return true;
+	}
+	// Fall back to the raw HTTP status in case a custom adapter doesn't go through the
+	// wrapping layer.
+	if (err !== null && typeof err === "object") {
+		const response = (err as { response?: unknown }).response;
+		if (response !== null && typeof response === "object") {
+			const status = (response as { status?: unknown }).status;
+			if (status === 401 || status === 403) return true;
+		}
+	}
+	return false;
 }
 
 /**
@@ -341,16 +378,19 @@ async function applyStep(
 		case "create-project":
 		case "update-project": {
 			throw new PlatformError(
-				"PLATFORM_UNEXPECTED_PLAN_STEP",
-				`Plan step '${step.kind}' is handled by pushConfig directly and should not appear in the executor.`,
+				ErrorCode.InternalError,
+				`Plan step '${step.kind}' should never reach the executor — pushConfig handles project mutations directly.${bugReportFooter()}`,
 			);
 		}
 		case "create-branch": {
 			const parentBranch = ctx.branchByName.get(step.parentBranchName);
 			if (!parentBranch && step.parentBranchName !== step.branchName) {
 				throw new PlatformError(
-					"PLATFORM_MISSING_PARENT_BRANCH",
-					`Cannot create branch '${step.branchName}': parent '${step.parentBranchName}' was not found on the remote.`,
+					ErrorCode.MissingParentBranch,
+					[
+						`Cannot create branch '${step.branchName}': its parent '${step.parentBranchName}' does not exist on Neon.`,
+						"Either define a blueprint for the parent so it gets created first, or change this blueprint's `parent` to an existing branch.",
+					].join(" "),
 				);
 			}
 			const createInput: CreateBranchInput = { name: step.branchName };

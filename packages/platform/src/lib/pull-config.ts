@@ -1,6 +1,6 @@
 import { defineConfig } from "./define-config.js";
 import { formatDurationSeconds } from "./duration.js";
-import { PlatformError } from "./errors.js";
+import { ErrorCode, PlatformError } from "./errors.js";
 import { loadContext } from "./load-context.js";
 import type {
 	NeonApi,
@@ -65,8 +65,12 @@ function createApiFromOptions(options: PullConfigOptions): NeonApi {
 	const apiKey = options.apiKey ?? process.env.NEON_API_KEY;
 	if (!apiKey) {
 		throw new PlatformError(
-			"PLATFORM_MISSING_API_KEY",
-			"pullConfig requires `apiKey` (or NEON_API_KEY env) unless a custom `api` is supplied.",
+			ErrorCode.MissingApiKey,
+			[
+				"pullConfig has no Neon API key to work with.",
+				"Either pass `apiKey` directly, set the NEON_API_KEY environment variable, or pass a custom `api` adapter (e.g. an in-memory fake for tests).",
+				"Generate a key at https://console.neon.tech/app/settings/api-keys.",
+			].join(" "),
 		);
 	}
 	return createRealNeonApi({ apiKey });

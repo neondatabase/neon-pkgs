@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, test } from "vitest";
+import { ErrorCode, PlatformError } from "../errors.js";
 import { FakeNeonApi } from "../fake-neon-api.js";
+import type { NeonApi } from "../neon-api.js";
 import { makeTempRepo } from "../test-utils.js";
 import { runContext, runPull, runPush } from "./commands.js";
 
@@ -200,6 +202,75 @@ export default defineConfig({
 		const result = await runPush({}, { cwd: root, env: {}, api });
 		expect(result.exitCode).toBe(4);
 		expect(result.stderr).toContain("Failed to load config");
+	});
+});
+
+describe("runPull / runPush — per-code exit mapping", () => {
+	function apiThatThrows(err: unknown): NeonApi {
+		const reject = () => Promise.reject(err);
+		return {
+			listProjects: reject,
+			getProject: reject,
+			createProject: reject,
+			updateProject: reject,
+			listBranches: reject,
+			createBranch: reject,
+			updateBranch: reject,
+			listEndpoints: reject,
+			updateEndpoint: reject,
+		} as unknown as NeonApi;
+	}
+
+	test.each([
+		[ErrorCode.Unauthorized, 6],
+		[ErrorCode.Forbidden, 7],
+		[ErrorCode.InsufficientScope, 7],
+		[ErrorCode.NotFound, 8],
+		[ErrorCode.RateLimited, 9],
+		[ErrorCode.NetworkError, 10],
+		[ErrorCode.ServerError, 11],
+		[ErrorCode.Locked, 11],
+		[ErrorCode.InternalError, 99],
+	])("PlatformError(%s) maps to exit code %i", async (code, expectedExit) => {
+		const api = apiThatThrows(new PlatformError(code, `simulated ${code}`));
+		const result = await runPull(
+			{ projectId: "proj-test" },
+			{ cwd: process.cwd(), env: {}, api },
+		);
+		expect(result.exitCode).toBe(expectedExit);
+		expect(result.stderr).toContain(`simulated ${code}`);
+		expect(result.debugInfo).toContain(`code     : ${code}`);
+	});
+
+	test("non-PlatformError falls back to exit 1 and includes stack in debugInfo", async () => {
+		const api = apiThatThrows(new Error("kaboom"));
+		const result = await runPull(
+			{ projectId: "proj-test" },
+			{ cwd: process.cwd(), env: {}, api },
+		);
+		expect(result.exitCode).toBe(1);
+		expect(result.debugInfo).toBeDefined();
+		expect(result.debugInfo).toContain("kaboom");
+	});
+
+	test("push surfaces PushConflictError as exit 2 with the multi-line conflict report", async () => {
+		const { api, projectId } = seededFake();
+		const platformSrc = new URL("../../v1.ts", import.meta.url).pathname;
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({ projectId }),
+			"neon.ts": `
+import { defineConfig } from "${platformSrc}";
+export default defineConfig({
+  project: { name: "my-app", region: "aws-us-east-1" },
+  branchBlueprints: { production: { computeSettings: { autoscalingLimitMaxCu: 4 } } },
+});
+`,
+		});
+		const result = await runPush({}, { cwd: root, env: {}, api });
+		expect(result.exitCode).toBe(2);
+		expect(result.stderr).toContain("current :");
+		expect(result.stderr).toContain("fix     :");
 	});
 });
 

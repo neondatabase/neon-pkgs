@@ -17,6 +17,12 @@ const pkgVersion = readPackageVersion();
 const argv = yargs(hideBin(process.argv))
 	.scriptName("neon-platform")
 	.usage("$0 <command> [options]")
+	.option("debug", {
+		type: "boolean",
+		default: false,
+		describe:
+			"Print stack traces and structured error details when something fails",
+	})
 	.command(
 		"pull",
 		"Pull the live Neon project state and print it as `neon.ts` (or JSON).",
@@ -188,6 +194,9 @@ switch (command) {
 
 if (result.stdout) process.stdout.write(result.stdout);
 if (result.stderr) process.stderr.write(result.stderr);
+if (argv.debug && result.exitCode !== 0 && result.debugInfo) {
+	process.stderr.write(`\n--- debug ---\n${result.debugInfo}\n`);
+}
 process.exit(result.exitCode);
 
 function readPackageVersion(): string {

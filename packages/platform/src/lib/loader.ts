@@ -49,7 +49,11 @@ export async function loadConfigFromFile(
 
 	if (!resolvedPath) {
 		throw new ConfigLoadError(
-			`Could not find a Neon config file (looked for ${DEFAULT_CONFIG_FILENAMES.join(", ")}) in ${resolve(options.cwd ?? process.cwd())} or any parent directory.`,
+			[
+				`Could not find a Neon config file while walking up from ${resolve(options.cwd ?? process.cwd())}.`,
+				`Looked for: ${DEFAULT_CONFIG_FILENAMES.join(", ")} (stopping at the first directory with a \`package.json\` or \`.git\`).`,
+				`Create one at your project root, or pass an explicit \`configPath\` (SDK) / \`--config <path>\` (CLI).`,
+			].join("\n"),
 		);
 	}
 
@@ -58,17 +62,22 @@ export async function loadConfigFromFile(
 		mod = await importModule(resolvedPath);
 	} catch (cause) {
 		throw new ConfigLoadError(
-			`Failed to load ${resolvedPath}: ${(cause as Error)?.message ?? String(cause)}`,
-			{
-				cause,
-			},
+			[
+				`Failed to evaluate ${resolvedPath}.`,
+				`Underlying error: ${(cause as Error)?.message ?? String(cause)}`,
+				"This is usually a TypeScript syntax error, a missing dependency, or a runtime exception inside the config file. Run the file directly (e.g. `npx tsx neon.ts`) to reproduce.",
+			].join("\n"),
+			{ cause },
 		);
 	}
 
 	const exported = extractDefaultExport(mod);
 	if (exported === undefined) {
 		throw new ConfigLoadError(
-			`${resolvedPath} did not default-export a config. Export the result of \`defineConfig(...)\` as default.`,
+			[
+				`${resolvedPath} loaded successfully but did not default-export a config.`,
+				"Add `export default defineConfig({ ... })` at the bottom of the file. (Named exports are ignored.)",
+			].join("\n"),
 		);
 	}
 
@@ -81,11 +90,15 @@ function resolveExplicitPath(input: string, cwd?: string): string {
 	const base = resolve(cwd ?? process.cwd());
 	const abs = isAbsolute(input) ? input : resolve(base, input);
 	if (!existsSync(abs)) {
-		throw new ConfigLoadError(`Config file not found: ${abs}`);
+		throw new ConfigLoadError(
+			`Config file not found at ${abs}. The path was resolved from \`${input}\` against ${base}.`,
+		);
 	}
 	const s = statSync(abs);
 	if (!s.isFile()) {
-		throw new ConfigLoadError(`Config path is not a file: ${abs}`);
+		throw new ConfigLoadError(
+			`Config path ${abs} is a directory, not a file. Pass a path to the file itself (e.g. ./neon.ts).`,
+		);
 	}
 	return abs;
 }
@@ -131,7 +144,10 @@ async function importModule(absPath: string): Promise<unknown> {
 	const createJiti = extractCreateJiti(jitiModule);
 	if (!createJiti) {
 		throw new ConfigLoadError(
-			"jiti is required to load TypeScript config files but could not be initialized",
+			[
+				"jiti is required to load TypeScript config files but could not be initialised.",
+				"Reinstall the package dependencies (`pnpm install` / `npm install`) — jiti is a runtime dependency of @neondatabase/platform.",
+			].join(" "),
 		);
 	}
 	const jiti = createJiti(pathToFileURL(absPath).href, {

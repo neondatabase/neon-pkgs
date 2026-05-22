@@ -1,17 +1,84 @@
 import type { ConflictReport } from "./types.js";
 
 /**
+ * Every code a {@link PlatformError} can carry. Stable identifiers — consumers can rely on
+ * these for `instanceof PlatformError && err.code === ErrorCode.…` style checks instead of
+ * matching on free-text messages.
+ *
+ * Grouped by source:
+ * - `PLATFORM_INVALID_CONFIG` — `defineConfig` / `configSchema` rejected the input.
+ * - `PLATFORM_MISSING_CONTEXT` — no project / branch context could be resolved.
+ * - `PLATFORM_PUSH_CONFLICT` — local config conflicts with remote and the caller did not
+ *   opt in to apply.
+ * - `PLATFORM_CONFIG_LOAD_FAILED` — `neon.ts` could not be found or evaluated.
+ * - `PLATFORM_MISSING_API_KEY` — no `NEON_API_KEY` and no explicit `apiKey` was provided.
+ * - `PLATFORM_AMBIGUOUS_PROJECT` — multiple projects with the same name; need `projectId`.
+ * - `PLATFORM_REGION_REQUIRED` — first-time create needs `project.region`.
+ * - `PLATFORM_INSUFFICIENT_SCOPE` — project-scoped key can't list projects.
+ * - `PLATFORM_MISSING_PARENT_BRANCH` — push tried to create a child of a non-existent
+ *   branch.
+ * - `PLATFORM_UNAUTHORIZED` / `PLATFORM_FORBIDDEN` / `PLATFORM_NOT_FOUND` /
+ *   `PLATFORM_CONFLICT` / `PLATFORM_RATE_LIMITED` / `PLATFORM_LOCKED` /
+ *   `PLATFORM_SERVER_ERROR` — wrappings of Neon HTTP failures.
+ * - `PLATFORM_NETWORK_ERROR` — transport-level failure (no HTTP response at all).
+ * - `PLATFORM_INTERNAL_ERROR` — invariant violations. Should never happen in production;
+ *   if you see one, please open an issue.
+ */
+export const ErrorCode = {
+	InvalidConfig: "PLATFORM_INVALID_CONFIG",
+	MissingContext: "PLATFORM_MISSING_CONTEXT",
+	PushConflict: "PLATFORM_PUSH_CONFLICT",
+	ConfigLoadFailed: "PLATFORM_CONFIG_LOAD_FAILED",
+	MissingApiKey: "PLATFORM_MISSING_API_KEY",
+	AmbiguousProject: "PLATFORM_AMBIGUOUS_PROJECT",
+	RegionRequired: "PLATFORM_REGION_REQUIRED",
+	InsufficientScope: "PLATFORM_INSUFFICIENT_SCOPE",
+	MissingParentBranch: "PLATFORM_MISSING_PARENT_BRANCH",
+	Unauthorized: "PLATFORM_UNAUTHORIZED",
+	Forbidden: "PLATFORM_FORBIDDEN",
+	NotFound: "PLATFORM_NOT_FOUND",
+	Conflict: "PLATFORM_CONFLICT",
+	RateLimited: "PLATFORM_RATE_LIMITED",
+	Locked: "PLATFORM_LOCKED",
+	ServerError: "PLATFORM_SERVER_ERROR",
+	NetworkError: "PLATFORM_NETWORK_ERROR",
+	InternalError: "PLATFORM_INTERNAL_ERROR",
+} as const;
+export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
+
+const ISSUE_URL = "https://github.com/neondatabase/neon-pkgs/issues/new";
+
+/**
  * Base class for all errors thrown by `@neondatabase/platform`. Always extend this so callers
  * can catch every package-thrown error with a single `instanceof` check.
+ *
+ * Optional `details` carries structured context that the CLI prints under `--debug` and
+ * that programmatic consumers can read (e.g. `details.status` for HTTP wrappings,
+ * `details.requestId` for Neon API failures).
  */
 export class PlatformError extends Error {
 	override readonly name: string = "PlatformError";
 	readonly code: string;
+	readonly details: Readonly<Record<string, unknown>>;
 
-	constructor(code: string, message: string, options?: { cause?: unknown }) {
+	constructor(
+		code: string,
+		message: string,
+		options?: { cause?: unknown; details?: Record<string, unknown> },
+	) {
 		super(message, options);
 		this.code = code;
+		this.details = Object.freeze({ ...(options?.details ?? {}) });
 	}
+}
+
+/**
+ * Append a "report-a-bug" footer to an error message. Used only on truly unreachable
+ * internal errors — never on user-facing validation / configuration errors where the user
+ * is supposed to fix something on their end.
+ */
+export function bugReportFooter(): string {
+	return `\nThis indicates a bug in @neondatabase/platform. Please file an issue: ${ISSUE_URL}`;
 }
 
 /**
@@ -49,28 +116,87 @@ export class MissingContextError extends PlatformError {
 }
 
 /**
- * Thrown when {@link pushConfig} (without `applyChanges`) detects differences between the
- * local config and the remote project.
+ * Thrown by {@link pushConfig} (without `applyChanges`) when it detects differences between
+ * the local config and the remote project.
+ *
+ * The message lists every conflict with both the current and desired value plus a
+ * per-conflict hint — immutable Neon fields (`region`, Postgres major) cannot be patched
+ * at all, mutable branch fields just need `updateExisting: true`, etc.
  */
 export class PushConflictError extends PlatformError {
 	override readonly name = "PushConflictError";
 	readonly conflicts: readonly ConflictReport[];
 
 	constructor(conflicts: readonly ConflictReport[]) {
-		super(
-			"PLATFORM_PUSH_CONFLICT",
-			[
-				"pushConfig refused to apply because local config conflicts with remote state.",
-				"Pass `applyChanges: true` (SDK) or `--apply-changes` (CLI) to force-apply.",
-				"",
-				...conflicts.map(
-					(c) =>
-						`  - [${c.kind}:${c.identifier}] ${c.field}: ${c.reason} (current=${formatValue(c.current)}, desired=${formatValue(c.desired)})`,
-				),
-			].join("\n"),
+		const lines: string[] = [
+			"pushConfig refused to apply: local config conflicts with remote state.",
+			"",
+		];
+		for (const c of conflicts) {
+			lines.push(
+				`  - [${c.kind}:${c.identifier}] ${c.field}: ${c.reason}`,
+				`      current : ${formatValue(c.current)}`,
+				`      desired : ${formatValue(c.desired)}`,
+				`      fix     : ${suggestFix(c)}`,
+			);
+		}
+		const hasImmutable = conflicts.some(
+			(c) =>
+				c.kind === "project" &&
+				(c.field === "region" || c.field === "pgVersion"),
 		);
+		const hasMutableBranchDrift = conflicts.some(
+			(c) =>
+				c.kind === "branch" &&
+				(c.field === "computeSettings" || c.field === "ttl"),
+		);
+		lines.push("");
+		if (hasImmutable) {
+			lines.push(
+				"Some conflicts are immutable on Neon (region, Postgres major version). They cannot be applied — recreate the project or update your `neon.ts` to match the remote.",
+			);
+			if (hasMutableBranchDrift) {
+				lines.push(
+					"For the remaining mutable conflicts, pass `updateExisting: true` (SDK) / `--update-existing` (CLI).",
+				);
+			}
+		} else if (hasMutableBranchDrift) {
+			lines.push(
+				"Pass `updateExisting: true` (SDK) / `--update-existing` (CLI) to apply, or `applyChanges: true` to force-apply everything.",
+			);
+		} else {
+			lines.push(
+				"Pass `applyChanges: true` (SDK) / `--apply-changes` (CLI) to force-apply, or update your `neon.ts` to match the remote.",
+			);
+		}
+
+		super("PLATFORM_PUSH_CONFLICT", lines.join("\n"), {
+			details: { conflicts: conflicts.map((c) => ({ ...c })) },
+		});
 		this.conflicts = conflicts;
 	}
+}
+
+function suggestFix(c: ConflictReport): string {
+	if (
+		c.kind === "project" &&
+		(c.field === "region" || c.field === "pgVersion")
+	) {
+		return "immutable on Neon — recreate the project, or change your `neon.ts` to match the remote.";
+	}
+	if (c.kind === "project" && c.field === "name") {
+		return "rename via the Neon console, or pass `applyChanges: true` to let push rename it.";
+	}
+	if (
+		c.kind === "branch" &&
+		(c.field === "computeSettings" || c.field === "ttl")
+	) {
+		return "pass `updateExisting: true` (SDK) / `--update-existing` (CLI) to apply.";
+	}
+	if (c.kind === "branch" && c.field === "parent") {
+		return "create the parent branch on Neon first, or change the blueprint's `parent` to an existing branch.";
+	}
+	return "pass `applyChanges: true` (SDK) / `--apply-changes` (CLI) to force.";
 }
 
 /**
