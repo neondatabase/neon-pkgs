@@ -106,6 +106,44 @@ export default defineConfig({
 			`pushed config to project ${projectId}`,
 		);
 		expect(result.stdout).toContain("staging");
+		// Real changes are listed; project-level noop entries are filtered out.
+		expect(result.stdout).not.toContain("noop");
+	});
+
+	test("fully in-sync push prints a clear 'is already in sync' summary", async () => {
+		const api = new FakeNeonApi();
+		const projectId = "proj-sync";
+		api.seedProject({
+			project: {
+				id: projectId,
+				name: "cli-test",
+				regionId: "aws-us-east-1",
+				pgVersion: 17,
+				orgId: "org-sync",
+			},
+		});
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({ projectId }),
+			"neon.ts": `
+import { defineConfig } from "${PLATFORM_SRC}";
+export default defineConfig({
+  project: { name: "cli-test", region: "aws-us-east-1" },
+  branchBlueprints: { production: {} },
+});
+`,
+		});
+		const result = await runPush({}, { cwd: root, env: {}, api });
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain(
+			`project ${projectId} (org org-sync) is already in sync`,
+		);
+		expect(result.stdout).toContain("No changes needed");
+		expect(result.stdout).not.toContain("Applied:");
+		expect(result.stdout).not.toContain("noop");
+		// The bare "pushed config" wording is reserved for pushes that actually
+		// applied a change — using it for noop runs is misleading.
+		expect(result.stdout).not.toContain("pushed config");
 	});
 
 	test("conflict without --apply-changes → exit 2", async () => {

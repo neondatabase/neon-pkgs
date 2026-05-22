@@ -42,6 +42,7 @@
 	],
 	"scripts": {
 		"build": "tsc --noEmit && tsdown",
+		"prepare": "npm run build",
 		"test": "vitest --passWithNoTests",
 		"test:ci": "vitest run --passWithNoTests",
 		"test:e2e": "vitest run --config vitest.e2e.config.ts",

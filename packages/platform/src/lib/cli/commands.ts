@@ -122,16 +122,28 @@ export async function runPush(
 
 	try {
 		const result = await pushConfig(pushOptions);
-		const lines: string[] = [
-			`✓ pushed config to project ${result.projectId}${result.orgId ? ` (org ${result.orgId})` : ""}`,
-		];
-		if (result.applied.length > 0) {
-			lines.push("");
-			lines.push("Applied:");
-			for (const change of result.applied) {
-				lines.push(
-					`  - [${change.kind}:${change.identifier}] ${change.action}`,
-				);
+		const realChanges = result.applied.filter((c) => c.action !== "noop");
+		const projectLabel = `project ${result.projectId}${result.orgId ? ` (org ${result.orgId})` : ""}`;
+
+		const lines: string[] = [];
+		if (
+			realChanges.length === 0 &&
+			result.conflicts.length === 0 &&
+			result.skippedWildcardBranches.length === 0
+		) {
+			lines.push(
+				`✓ ${projectLabel} is already in sync. No changes needed.`,
+			);
+		} else {
+			lines.push(`✓ pushed config to ${projectLabel}`);
+			if (realChanges.length > 0) {
+				lines.push("");
+				lines.push("Applied:");
+				for (const change of realChanges) {
+					lines.push(
+						`  - [${change.kind}:${change.identifier}] ${change.action}`,
+					);
+				}
 			}
 		}
 		if (result.skippedWildcardBranches.length > 0) {
