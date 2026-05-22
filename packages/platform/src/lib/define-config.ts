@@ -1,6 +1,7 @@
 import { parseDuration } from "./duration.js";
 import { ConfigValidationError } from "./errors.js";
 import { isWildcardPattern, validatePattern } from "./patterns.js";
+import { configSchema, formatZodIssues } from "./schema.js";
 import type {
 	Config,
 	ResolvedBranchBlueprint,
@@ -11,7 +12,7 @@ const DEFAULT_PARENT_KEY = "production";
 const REGION_PREFIX = /^(aws|azure|gcp)-/;
 
 /**
- * Validate and freeze a Neon Platform config.
+ * Validate and freeze a Neon Platform config using the zod {@link configSchema}.
  *
  * Used at the top of `neon.ts`:
  * ```ts
@@ -26,56 +27,28 @@ const REGION_PREFIX = /^(aws|azure|gcp)-/;
  * });
  * ```
  *
- * Pure function — no I/O, no side effects. Throws {@link ConfigValidationError} for any
- * structural problem so the user sees every issue at once.
+ * Pure function — no I/O, no side effects. Aggregates every zod issue into one
+ * {@link ConfigValidationError} so users see every issue at once.
  */
 export function defineConfig(input: Config): Config {
-	const issues: string[] = [];
-
-	if (input === null || typeof input !== "object") {
-		throw new ConfigValidationError(["config must be an object"]);
+	const result = configSchema.safeParse(input);
+	if (!result.success) {
+		throw new ConfigValidationError(formatZodIssues(result.error));
 	}
 
-	if (input.project === null || typeof input.project !== "object") {
-		issues.push("project is required and must be an object");
-	} else {
-		validateProject(input.project, issues);
-	}
-
-	const blueprintsRaw = input.branchBlueprints;
-	if (blueprintsRaw !== undefined) {
-		if (
-			blueprintsRaw === null ||
-			typeof blueprintsRaw !== "object" ||
-			Array.isArray(blueprintsRaw)
-		) {
-			issues.push("branchBlueprints must be a plain object");
-		} else {
-			for (const [key, blueprint] of Object.entries(blueprintsRaw)) {
-				validateBlueprint(key, blueprint, blueprintsRaw, issues);
-			}
-		}
-	}
-
-	if (issues.length > 0) {
-		throw new ConfigValidationError(issues);
-	}
-
-	const frozen: Config = Object.freeze({
-		project: Object.freeze({ ...input.project }),
-		branchBlueprints: blueprintsRaw
+	const parsed = result.data as Config;
+	return Object.freeze({
+		project: Object.freeze({ ...parsed.project }),
+		branchBlueprints: parsed.branchBlueprints
 			? Object.freeze(
 					Object.fromEntries(
-						Object.entries(blueprintsRaw).map(([k, v]) => [
-							k,
-							Object.freeze({ ...v }),
-						]),
+						Object.entries(parsed.branchBlueprints).map(
+							([k, v]) => [k, Object.freeze({ ...v })],
+						),
 					),
 				)
 			: undefined,
 	}) as Config;
-
-	return frozen;
 }
 
 /**
@@ -156,208 +129,4 @@ export function resolveConfig(config: Config): ResolvedConfig {
 export function normalizeRegion(region: string): string {
 	if (REGION_PREFIX.test(region)) return region;
 	return `aws-${region}`;
-}
-
-function validateProject(project: unknown, issues: string[]): void {
-	const p = project as Record<string, unknown>;
-
-	if (typeof p.name !== "string") {
-		issues.push("project.name is required and must be a string");
-	} else {
-		const name = p.name.trim();
-		if (name === "") issues.push("project.name must not be empty");
-		else if (name.length > 256)
-			issues.push("project.name must be <= 256 characters");
-		else if (name !== p.name)
-			issues.push("project.name has leading or trailing whitespace");
-	}
-
-	if (p.region !== undefined) {
-		if (typeof p.region !== "string") {
-			issues.push("project.region must be a string when set");
-		} else if (p.region.trim() === "") {
-			issues.push("project.region must not be empty when set");
-		} else if (!/^[a-z0-9-]+$/.test(p.region)) {
-			issues.push(
-				`project.region must be lowercase letters, digits, and '-' (got ${JSON.stringify(p.region)})`,
-			);
-		}
-	}
-
-	if (p.pgVersion !== undefined) {
-		if (typeof p.pgVersion !== "number" || !Number.isInteger(p.pgVersion)) {
-			issues.push("project.pgVersion must be an integer");
-		} else if (p.pgVersion < 14 || p.pgVersion > 18) {
-			issues.push(
-				`project.pgVersion must be between 14 and 18 (got ${p.pgVersion})`,
-			);
-		}
-	}
-
-	for (const key of Object.keys(p)) {
-		if (key !== "name" && key !== "region" && key !== "pgVersion") {
-			issues.push(`project has unknown key: ${JSON.stringify(key)}`);
-		}
-	}
-}
-
-function validateBlueprint(
-	key: string,
-	blueprint: unknown,
-	allBlueprints: Record<string, unknown>,
-	issues: string[],
-): void {
-	if (
-		blueprint === null ||
-		typeof blueprint !== "object" ||
-		Array.isArray(blueprint)
-	) {
-		issues.push(`branchBlueprints.${key} must be an object`);
-		return;
-	}
-
-	const b = blueprint as Record<string, unknown>;
-	const pattern = (b.pattern as string | undefined) ?? key;
-
-	if (b.pattern !== undefined && typeof b.pattern !== "string") {
-		issues.push(
-			`branchBlueprints.${key}.pattern must be a string when set`,
-		);
-	} else {
-		const v = validatePattern(pattern);
-		if ("error" in v)
-			issues.push(`branchBlueprints.${key}.pattern: ${v.error}`);
-	}
-
-	if (b.ttl !== undefined) {
-		if (typeof b.ttl !== "string" && typeof b.ttl !== "number") {
-			issues.push(
-				`branchBlueprints.${key}.ttl must be a string or number`,
-			);
-		} else {
-			const parsed = parseDuration(b.ttl);
-			if ("error" in parsed)
-				issues.push(`branchBlueprints.${key}.ttl: ${parsed.error}`);
-		}
-	}
-
-	if (b.parent !== undefined) {
-		if (typeof b.parent !== "string") {
-			issues.push(`branchBlueprints.${key}.parent must be a string`);
-		} else if (b.parent === key) {
-			issues.push(
-				`branchBlueprints.${key}.parent must not reference itself`,
-			);
-		} else if (!(b.parent in allBlueprints)) {
-			const v = validatePattern(b.parent);
-			if ("error" in v) {
-				issues.push(`branchBlueprints.${key}.parent: ${v.error}`);
-			} else if (isWildcardPattern(b.parent)) {
-				issues.push(
-					`branchBlueprints.${key}.parent must be a concrete branch name (no wildcards), got "${b.parent}"`,
-				);
-			}
-		}
-	}
-
-	if (b.computeSettings !== undefined) {
-		validateComputeSettings(key, b.computeSettings, issues);
-	}
-
-	for (const k of Object.keys(b)) {
-		if (
-			k !== "pattern" &&
-			k !== "ttl" &&
-			k !== "parent" &&
-			k !== "computeSettings"
-		) {
-			issues.push(
-				`branchBlueprints.${key} has unknown key: ${JSON.stringify(k)}`,
-			);
-		}
-	}
-}
-
-function validateComputeSettings(
-	blueprintKey: string,
-	settings: unknown,
-	issues: string[],
-): void {
-	if (
-		settings === null ||
-		typeof settings !== "object" ||
-		Array.isArray(settings)
-	) {
-		issues.push(
-			`branchBlueprints.${blueprintKey}.computeSettings must be an object`,
-		);
-		return;
-	}
-	const s = settings as Record<string, unknown>;
-
-	const min = s.autoscalingLimitMinCu;
-	const max = s.autoscalingLimitMaxCu;
-	const suspend = s.suspendTimeoutSeconds;
-
-	if (min !== undefined) {
-		if (typeof min !== "number" || !Number.isFinite(min)) {
-			issues.push(
-				`branchBlueprints.${blueprintKey}.computeSettings.autoscalingLimitMinCu must be a finite number`,
-			);
-		} else if (min < 0.25) {
-			issues.push(
-				`branchBlueprints.${blueprintKey}.computeSettings.autoscalingLimitMinCu must be >= 0.25`,
-			);
-		}
-	}
-	if (max !== undefined) {
-		if (typeof max !== "number" || !Number.isFinite(max)) {
-			issues.push(
-				`branchBlueprints.${blueprintKey}.computeSettings.autoscalingLimitMaxCu must be a finite number`,
-			);
-		} else if (max < 0.25) {
-			issues.push(
-				`branchBlueprints.${blueprintKey}.computeSettings.autoscalingLimitMaxCu must be >= 0.25`,
-			);
-		}
-	}
-	if (
-		typeof min === "number" &&
-		typeof max === "number" &&
-		Number.isFinite(min) &&
-		Number.isFinite(max) &&
-		min > max
-	) {
-		issues.push(
-			`branchBlueprints.${blueprintKey}.computeSettings.autoscalingLimitMinCu (${min}) must be <= autoscalingLimitMaxCu (${max})`,
-		);
-	}
-
-	if (suspend !== undefined) {
-		if (typeof suspend !== "number" || !Number.isInteger(suspend)) {
-			issues.push(
-				`branchBlueprints.${blueprintKey}.computeSettings.suspendTimeoutSeconds must be an integer`,
-			);
-		} else if (suspend < -1 || suspend > 604_800) {
-			issues.push(
-				`branchBlueprints.${blueprintKey}.computeSettings.suspendTimeoutSeconds must be between -1 and 604800`,
-			);
-		} else if (suspend > 0 && suspend < 60) {
-			issues.push(
-				`branchBlueprints.${blueprintKey}.computeSettings.suspendTimeoutSeconds must be 0, -1, or between 60 and 604800`,
-			);
-		}
-	}
-
-	for (const k of Object.keys(s)) {
-		if (
-			k !== "autoscalingLimitMinCu" &&
-			k !== "autoscalingLimitMaxCu" &&
-			k !== "suspendTimeoutSeconds"
-		) {
-			issues.push(
-				`branchBlueprints.${blueprintKey}.computeSettings has unknown key: ${JSON.stringify(k)}`,
-			);
-		}
-	}
 }

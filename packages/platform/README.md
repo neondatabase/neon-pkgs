@@ -67,7 +67,21 @@ await pushConfig({
 
 ### `defineConfig(input: Config): Config`
 
-Validates and freezes a config. Throws `ConfigValidationError` (collecting every issue at once) when something is malformed. Pure function — no I/O.
+Validates and freezes a config using the zod-based {@link configSchema}. Throws `ConfigValidationError` (collecting every issue at once) when something is malformed. Pure function — no I/O.
+
+The underlying schema (and its sub-schemas) is also exported so you can compose it into your own validation pipeline:
+
+```ts
+import {
+  configSchema,
+  projectConfigSchema,
+  branchBlueprintSchema,
+  computeSettingsSchema,
+} from "@neondatabase/platform/v1";
+
+const parsed = configSchema.safeParse(unknownInput);
+if (!parsed.success) console.error(parsed.error.format());
+```
 
 ### `pullConfig(options?: PullConfigOptions): Promise<Config>`
 

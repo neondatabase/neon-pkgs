@@ -43,6 +43,12 @@ export type {
 export { createRealNeonApi } from "./lib/neon-api-real.js";
 export { type PullConfigOptions, pullConfig } from "./lib/pull-config.js";
 export { type PushConfigOptions, pushConfig } from "./lib/push-config.js";
+export {
+	branchBlueprintSchema,
+	computeSettingsSchema,
+	configSchema,
+	projectConfigSchema,
+} from "./lib/schema.js";
 export type {
 	AppliedChange,
 	BranchBlueprint,

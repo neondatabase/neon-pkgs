@@ -8,7 +8,7 @@ Define your Neon project, branch blueprints, TTLs, and compute settings in a sin
 
 Highlights:
 
-- `defineConfig(input)` — strict config validation, pure function.
+- `defineConfig(input)` — strict, zod-backed config validation that aggregates every issue into a single `ConfigValidationError`. The underlying `configSchema` / `projectConfigSchema` / `branchBlueprintSchema` / `computeSettingsSchema` are exported for direct use too.
 - `pullConfig(options?)` — read the live Neon project state into a `Config` object (filesystem read-only; never writes a `.neon` file).
 - `pushConfig(...)` — three overloads: `pushConfig()` auto-loads `neon.ts` and fails on conflict; `pushConfig(options)` toggles `applyChanges` / `updateExisting` / `applyExisting`; `pushConfig(config, options?)` operates on an already-validated `Config`.
 - `loadContext(options?)` — resolves project + branch context with a 3-step chain: call args → env vars (`NEON_BRANCH_ID`, `NEON_PROJECT_ID`, `NEON_ORG_ID`) → `.neon/project.json` (preferred) or `.neon` (interop with `neonctl set-context`).

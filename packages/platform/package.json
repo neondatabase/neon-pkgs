@@ -53,7 +53,8 @@
 	},
 	"dependencies": {
 		"@neondatabase/api-client": "^2.7.1",
-		"jiti": "^2.7.0"
+		"jiti": "^2.7.0",
+		"zod": "^4.4.3"
 	},
 	"packageManager": "pnpm@10.4.0",
 	"engines": {
