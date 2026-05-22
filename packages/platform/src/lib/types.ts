@@ -1,4 +1,10 @@
 /**
+ * Valid Neon Compute Unit values.
+ * Most plans support 0.25, 0.5, 1, 2, 4, 8. Higher values may be available on Business plans.
+ */
+export type ComputeUnit = 0.25 | 0.5 | 1 | 2 | 4 | 8;
+
+/**
  * Compute settings applied to the read/write endpoint of a branch.
  *
  * Mirrors the subset of {@link https://api-docs.neon.tech/reference/getting-started-with-neon-api Neon endpoint}
@@ -7,21 +13,31 @@
  */
 export interface ComputeSettings {
 	/**
-	 * Minimum number of Compute Units. Minimum legal value is 0.25.
+	 * Minimum number of Compute Units. Set to 0.25 for true scale-to-zero.
+	 * @example 0.25  // scale-to-zero
+	 * @example 1     // always-on with 1 CU minimum
 	 */
-	autoscalingLimitMinCu?: number;
+	autoscalingLimitMinCu?: ComputeUnit;
 	/**
-	 * Maximum number of Compute Units.
+	 * Maximum number of Compute Units for autoscaling.
+	 * @example 2
+	 * @example 8
 	 */
-	autoscalingLimitMaxCu?: number;
+	autoscalingLimitMaxCu?: ComputeUnit;
 	/**
-	 * Duration of inactivity in seconds before the compute is suspended.
+	 * How long to wait before suspending an idle compute.
 	 *
-	 * - `0` means use the Neon default (currently 300s).
-	 * - `-1` means never suspend.
-	 * - Any positive value between 60 and 604800 sets a custom suspend timeout.
+	 * - `false` — never suspend (always-on compute)
+	 * - `"5m"` — duration string (supports "30s", "5m", "1h", "7d", etc)
+	 * - `300` — custom timeout in seconds (60-604800)
+	 * - `undefined` — use Neon platform default (currently 300s / 5 minutes)
+	 *
+	 * @example false       // never suspend
+	 * @example "5m"        // 5 minutes
+	 * @example "1h"        // 1 hour
+	 * @example 300         // 5 minutes in seconds
 	 */
-	suspendTimeoutSeconds?: number;
+	suspendTimeout?: false | "5m" | "1h" | string | number;
 }
 
 /**

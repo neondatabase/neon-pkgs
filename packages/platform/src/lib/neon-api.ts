@@ -26,9 +26,9 @@ export interface NeonEndpointSnapshot {
 	id: string;
 	branchId: string;
 	type: "read_only" | "read_write";
-	autoscalingLimitMinCu: number;
-	autoscalingLimitMaxCu: number;
-	suspendTimeoutSeconds: number;
+	autoscalingLimitMinCu: ComputeSettings["autoscalingLimitMinCu"];
+	autoscalingLimitMaxCu: ComputeSettings["autoscalingLimitMaxCu"];
+	suspendTimeout: ComputeSettings["suspendTimeout"];
 }
 
 export interface CreateProjectInput {
@@ -58,9 +58,45 @@ export interface UpdateBranchInput {
 }
 
 /**
- * Narrow façade over the Neon management API. Both `pullConfig` and `pushConfig` depend on
- * this interface — *not* on `@neondatabase/api-client` directly — which lets us inject a
- * real in-memory fake during tests without resorting to module mocks.
+ * A role on a Neon branch (e.g. `neondb_owner`). Passwords are never returned by
+ * {@link NeonApi.listBranchRoles}; use {@link NeonApi.getConnectionUri} to fetch a URI
+ * with the role's password baked in.
+ */
+export interface NeonRoleSnapshot {
+	name: string;
+	branchId: string;
+	/** Whether the role is system-protected (cannot be deleted). */
+	protected: boolean;
+}
+
+/**
+ * A database on a Neon branch (e.g. `neondb`).
+ */
+export interface NeonDatabaseSnapshot {
+	name: string;
+	branchId: string;
+	/** The role that owns the database (one role can own multiple databases). */
+	ownerName: string;
+}
+
+/**
+ * Parameters accepted by {@link NeonApi.getConnectionUri}. `branchId` and `endpointId`
+ * are optional — when omitted, the API uses the project's default branch and that
+ * branch's read-write endpoint, respectively.
+ */
+export interface GetConnectionUriInput {
+	branchId?: string;
+	endpointId?: string;
+	databaseName: string;
+	roleName: string;
+	/** When `true`, returns the pooled (PgBouncer) URI instead of the direct URI. */
+	pooled?: boolean;
+}
+
+/**
+ * Narrow façade over the Neon management API. `pullConfig`, `pushConfig`, and `loadEnv`
+ * depend on this interface — *not* on `@neondatabase/api-client` directly — which lets us
+ * inject a real in-memory fake during tests without resorting to module mocks.
  */
 export interface NeonApi {
 	listProjects(filter: { orgId?: string }): Promise<NeonProjectSnapshot[]>;
@@ -91,4 +127,25 @@ export interface NeonApi {
 		endpointId: string,
 		settings: ComputeSettings,
 	): Promise<NeonEndpointSnapshot>;
+
+	/** List roles on a branch. Used by {@link loadEnv} to auto-pick the role when only one exists. */
+	listBranchRoles(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonRoleSnapshot[]>;
+
+	/** List databases on a branch. Used by {@link loadEnv} to auto-pick the database when only one exists. */
+	listBranchDatabases(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonDatabaseSnapshot[]>;
+
+	/**
+	 * Fetch a Postgres connection URI for the given role + database on a branch.
+	 * Returns the same string the Neon Console shows under "Connection Details".
+	 */
+	getConnectionUri(
+		projectId: string,
+		input: GetConnectionUriInput,
+	): Promise<{ uri: string }>;
 }

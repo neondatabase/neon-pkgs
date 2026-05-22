@@ -15,7 +15,7 @@ describe("pullConfig", () => {
 				defaultEndpointSettings: {
 					autoscalingLimitMinCu: 0.25,
 					autoscalingLimitMaxCu: 1,
-					suspendTimeoutSeconds: 300,
+					suspendTimeout: 300,
 				},
 			},
 			branches: [
@@ -36,7 +36,7 @@ describe("pullConfig", () => {
 					endpoint: {
 						autoscalingLimitMaxCu: 2,
 						autoscalingLimitMinCu: 0.25,
-						suspendTimeoutSeconds: 300,
+						suspendTimeout: 300,
 					},
 				},
 			],
@@ -103,7 +103,7 @@ describe("pullConfig", () => {
 				defaultEndpointSettings: {
 					autoscalingLimitMinCu: 0.25,
 					autoscalingLimitMaxCu: 0.25,
-					suspendTimeoutSeconds: 0,
+					suspendTimeout: 0,
 				},
 			},
 		});

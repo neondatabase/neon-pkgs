@@ -29,7 +29,7 @@ function makeRemote(args?: {
 			type: "read_write",
 			autoscalingLimitMinCu: 0.25,
 			autoscalingLimitMaxCu: 0.25,
-			suspendTimeoutSeconds: 0,
+			suspendTimeout: 0,
 		},
 	];
 	return { project, branches, endpoints };
@@ -237,7 +237,7 @@ describe("diffConfig — wildcard blueprint", () => {
 					type: "read_write",
 					autoscalingLimitMinCu: 0.25,
 					autoscalingLimitMaxCu: 0.25,
-					suspendTimeoutSeconds: 0,
+					suspendTimeout: 0,
 				},
 				{
 					id: "ep-p1",
@@ -245,7 +245,7 @@ describe("diffConfig — wildcard blueprint", () => {
 					type: "read_write",
 					autoscalingLimitMinCu: 0.25,
 					autoscalingLimitMaxCu: 0.25,
-					suspendTimeoutSeconds: 0,
+					suspendTimeout: 0,
 				},
 				{
 					id: "ep-p2",
@@ -253,7 +253,7 @@ describe("diffConfig — wildcard blueprint", () => {
 					type: "read_write",
 					autoscalingLimitMinCu: 0.25,
 					autoscalingLimitMaxCu: 0.25,
-					suspendTimeoutSeconds: 0,
+					suspendTimeout: 0,
 				},
 			],
 		});
@@ -302,7 +302,7 @@ describe("diffConfig — wildcard blueprint", () => {
 					type: "read_write",
 					autoscalingLimitMinCu: 0.25,
 					autoscalingLimitMaxCu: 0.25,
-					suspendTimeoutSeconds: 0,
+					suspendTimeout: 0,
 				},
 				{
 					id: "ep-p1",
@@ -310,7 +310,7 @@ describe("diffConfig — wildcard blueprint", () => {
 					type: "read_write",
 					autoscalingLimitMinCu: 0.25,
 					autoscalingLimitMaxCu: 0.25,
-					suspendTimeoutSeconds: 0,
+					suspendTimeout: 0,
 				},
 			],
 		});
@@ -359,7 +359,7 @@ describe("diffConfig — wildcard blueprint", () => {
 					type: "read_write",
 					autoscalingLimitMinCu: 0.25,
 					autoscalingLimitMaxCu: 0.25,
-					suspendTimeoutSeconds: 0,
+					suspendTimeout: 0,
 				},
 			],
 		});

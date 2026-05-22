@@ -120,13 +120,13 @@ describe("schema — computeSettings cross-field invariants", () => {
 		expect(issues[0]).toContain("<= autoscalingLimitMaxCu");
 	});
 
-	test("suspendTimeoutSeconds outside [60..604800] but not 0 / -1 is rejected", () => {
+	test("suspendTimeout outside [60..604800] but not 0 / -1 is rejected", () => {
 		const result = computeSettingsSchema.safeParse({
-			suspendTimeoutSeconds: 30,
+			suspendTimeout: 30,
 		});
 		expect(result.success).toBe(false);
 		if (result.success) return;
 		const issues = formatZodIssues(result.error);
-		expect(issues[0]).toContain("suspendTimeoutSeconds");
+		expect(issues[0]).toContain("suspendTimeout");
 	});
 });

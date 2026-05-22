@@ -4,6 +4,7 @@ import {
 	type BranchCreateRequestEndpointOptions,
 	type BranchUpdateRequest,
 	createApiClient,
+	type Database,
 	type DefaultEndpointSettings,
 	type Endpoint,
 	EndpointType,
@@ -13,15 +14,20 @@ import {
 	type ProjectCreateRequest,
 	type ProjectListItem,
 	type ProjectUpdateRequest,
+	type Role,
 } from "@neondatabase/api-client";
+import { formatSuspendTimeout, parseSuspendTimeout } from "./duration.js";
 import { ErrorCode, PlatformError } from "./errors.js";
 import type {
 	CreateBranchInput,
 	CreateProjectInput,
+	GetConnectionUriInput,
 	NeonApi,
 	NeonBranchSnapshot,
+	NeonDatabaseSnapshot,
 	NeonEndpointSnapshot,
 	NeonProjectSnapshot,
+	NeonRoleSnapshot,
 	UpdateBranchInput,
 } from "./neon-api.js";
 import type { ComputeSettings } from "./types.js";
@@ -364,6 +370,70 @@ class RealNeonApi implements NeonApi {
 			{ projectId, mutating: true },
 		);
 	}
+
+	async listBranchRoles(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonRoleSnapshot[]> {
+		return this.call(
+			`listBranchRoles(${projectId}/${branchId})`,
+			async () => {
+				const res = await this.client.listProjectBranchRoles(
+					projectId,
+					branchId,
+				);
+				return (res.data.roles as Role[]).map(roleToSnapshot);
+			},
+			{ projectId },
+		);
+	}
+
+	async listBranchDatabases(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonDatabaseSnapshot[]> {
+		return this.call(
+			`listBranchDatabases(${projectId}/${branchId})`,
+			async () => {
+				const res = await this.client.listProjectBranchDatabases(
+					projectId,
+					branchId,
+				);
+				return (res.data.databases as Database[]).map(
+					databaseToSnapshot,
+				);
+			},
+			{ projectId },
+		);
+	}
+
+	async getConnectionUri(
+		projectId: string,
+		input: GetConnectionUriInput,
+	): Promise<{ uri: string }> {
+		const op = `getConnectionUri(${projectId}/${input.databaseName}@${input.roleName}${input.pooled ? " pooled" : ""})`;
+		// Always send `pooled` explicitly. The Neon API has switched its default
+		// to returning the pooled URI when the parameter is omitted, so we have
+		// to be explicit to get the direct URI back.
+		const pooled = input.pooled === true;
+		return this.call(
+			op,
+			async () => {
+				const res = await this.client.getConnectionUri({
+					projectId,
+					database_name: input.databaseName,
+					role_name: input.roleName,
+					...(input.branchId ? { branch_id: input.branchId } : {}),
+					...(input.endpointId
+						? { endpoint_id: input.endpointId }
+						: {}),
+					pooled,
+				});
+				return { uri: res.data.uri };
+			},
+			{ projectId },
+		);
+	}
 }
 
 function projectToSnapshot(
@@ -403,9 +473,27 @@ function endpointToSnapshot(endpoint: Endpoint): NeonEndpointSnapshot {
 			endpoint.type === EndpointType.ReadOnly
 				? "read_only"
 				: "read_write",
-		autoscalingLimitMinCu: endpoint.autoscaling_limit_min_cu,
-		autoscalingLimitMaxCu: endpoint.autoscaling_limit_max_cu,
-		suspendTimeoutSeconds: endpoint.suspend_timeout_seconds,
+		autoscalingLimitMinCu:
+			endpoint.autoscaling_limit_min_cu as ComputeSettings["autoscalingLimitMinCu"],
+		autoscalingLimitMaxCu:
+			endpoint.autoscaling_limit_max_cu as ComputeSettings["autoscalingLimitMaxCu"],
+		suspendTimeout: formatSuspendTimeout(endpoint.suspend_timeout_seconds),
+	};
+}
+
+function roleToSnapshot(role: Role): NeonRoleSnapshot {
+	return {
+		name: role.name,
+		branchId: role.branch_id,
+		protected: role.protected ?? false,
+	};
+}
+
+function databaseToSnapshot(database: Database): NeonDatabaseSnapshot {
+	return {
+		name: database.name,
+		branchId: database.branch_id,
+		ownerName: database.owner_name,
 	};
 }
 
@@ -417,8 +505,16 @@ function computeSettingsToDefaults(
 		out.autoscaling_limit_min_cu = settings.autoscalingLimitMinCu;
 	if (settings.autoscalingLimitMaxCu !== undefined)
 		out.autoscaling_limit_max_cu = settings.autoscalingLimitMaxCu;
-	if (settings.suspendTimeoutSeconds !== undefined)
-		out.suspend_timeout_seconds = settings.suspendTimeoutSeconds;
+	if (settings.suspendTimeout !== undefined) {
+		const parsed = parseSuspendTimeout(settings.suspendTimeout);
+		if ("error" in parsed) {
+			throw new PlatformError(
+				ErrorCode.InvalidConfig,
+				`Invalid suspendTimeout: ${parsed.error}`,
+			);
+		}
+		out.suspend_timeout_seconds = parsed.seconds;
+	}
 	return out;
 }
 
@@ -436,8 +532,16 @@ function computeSettingsToEndpointOptions(settings: ComputeSettings): {
 		out.autoscaling_limit_min_cu = settings.autoscalingLimitMinCu;
 	if (settings.autoscalingLimitMaxCu !== undefined)
 		out.autoscaling_limit_max_cu = settings.autoscalingLimitMaxCu;
-	if (settings.suspendTimeoutSeconds !== undefined)
-		out.suspend_timeout_seconds = settings.suspendTimeoutSeconds;
+	if (settings.suspendTimeout !== undefined) {
+		const parsed = parseSuspendTimeout(settings.suspendTimeout);
+		if ("error" in parsed) {
+			throw new PlatformError(
+				ErrorCode.InvalidConfig,
+				`Invalid suspendTimeout: ${parsed.error}`,
+			);
+		}
+		out.suspend_timeout_seconds = parsed.seconds;
+	}
 	return out;
 }
 
@@ -446,10 +550,14 @@ function defaultsToComputeSettings(
 ): ComputeSettings | undefined {
 	const out: ComputeSettings = {};
 	if (defaults.autoscaling_limit_min_cu !== undefined)
-		out.autoscalingLimitMinCu = defaults.autoscaling_limit_min_cu;
+		out.autoscalingLimitMinCu =
+			defaults.autoscaling_limit_min_cu as ComputeSettings["autoscalingLimitMinCu"];
 	if (defaults.autoscaling_limit_max_cu !== undefined)
-		out.autoscalingLimitMaxCu = defaults.autoscaling_limit_max_cu;
+		out.autoscalingLimitMaxCu =
+			defaults.autoscaling_limit_max_cu as ComputeSettings["autoscalingLimitMaxCu"];
 	if (defaults.suspend_timeout_seconds !== undefined)
-		out.suspendTimeoutSeconds = defaults.suspend_timeout_seconds;
+		out.suspendTimeout = formatSuspendTimeout(
+			defaults.suspend_timeout_seconds,
+		);
 	return Object.keys(out).length > 0 ? out : undefined;
 }

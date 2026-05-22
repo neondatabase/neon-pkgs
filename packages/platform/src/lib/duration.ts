@@ -79,3 +79,69 @@ export function formatDurationSeconds(totalSeconds: number): string {
 	}
 	return `${totalSeconds}s`;
 }
+
+/**
+ * Parse a suspend timeout value into seconds for the Neon API.
+ *
+ * Accepted formats:
+ * - `false` → -1 (never suspend)
+ * - `undefined` → 0 (use platform default)
+ * - duration string → parsed seconds ("5m", "1h", "7d")
+ * - number → validated seconds (must be 60-604800 or -1/0)
+ *
+ * Returns `{ seconds }` on success or `{ error }` on failure. Pure function — never throws.
+ */
+export function parseSuspendTimeout(
+	input: false | string | number | undefined,
+): { seconds: number } | { error: string } {
+	// false means "never suspend"
+	if (input === false) return { seconds: -1 };
+
+	// undefined means "use platform default"
+	if (input === undefined) return { seconds: 0 };
+
+	// If it's a number, validate the range
+	if (typeof input === "number") {
+		if (!Number.isFinite(input))
+			return { error: `not a finite number: ${input}` };
+		if (!Number.isInteger(input))
+			return { error: `must be an integer: ${input}` };
+
+		// Allow special values: -1 (never), 0 (default)
+		if (input === -1 || input === 0) return { seconds: input };
+
+		// Validate range for custom timeout: 60s (1 min) to 604800s (1 week)
+		if (input < 60 || input > 604_800) {
+			return {
+				error: `suspend timeout must be between 60 and 604800 seconds (1 minute to 1 week), got ${input}`,
+			};
+		}
+		return { seconds: input };
+	}
+
+	// Parse duration string
+	const result = parseDuration(input);
+	if ("error" in result) return result;
+
+	// Validate the parsed duration is in the valid range
+	const { seconds } = result;
+	if (seconds < 60 || seconds > 604_800) {
+		return {
+			error: `suspend timeout must be between 60 and 604800 seconds (1 minute to 1 week), "${input}" = ${seconds}s`,
+		};
+	}
+
+	return { seconds };
+}
+
+/**
+ * Format a suspend timeout value from API seconds back to the user-facing type.
+ * Returns `false` for -1 (never suspend), `undefined` for 0 (default), or a duration string.
+ */
+export function formatSuspendTimeout(
+	seconds: number,
+): false | string | undefined {
+	if (seconds === -1) return false; // never suspend
+	if (seconds === 0) return undefined; // platform default
+	return formatDurationSeconds(seconds);
+}

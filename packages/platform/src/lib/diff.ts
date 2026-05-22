@@ -436,11 +436,11 @@ function computeDriftBetween(
 		drift = true;
 	}
 	if (
-		desired.suspendTimeoutSeconds !== undefined &&
-		desired.suspendTimeoutSeconds !== endpoint.suspendTimeoutSeconds
+		desired.suspendTimeout !== undefined &&
+		desired.suspendTimeout !== endpoint.suspendTimeout
 	) {
-		currentDrift.suspendTimeoutSeconds = endpoint.suspendTimeoutSeconds;
-		desiredDrift.suspendTimeoutSeconds = desired.suspendTimeoutSeconds;
+		currentDrift.suspendTimeout = endpoint.suspendTimeout;
+		desiredDrift.suspendTimeout = desired.suspendTimeout;
 		drift = true;
 	}
 	return drift ? { current: currentDrift, desired: desiredDrift } : null;

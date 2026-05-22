@@ -188,10 +188,10 @@ function endpointToComputeSettings(
 		out.autoscalingLimitMaxCu = endpoint.autoscalingLimitMaxCu;
 	}
 	if (
-		endpoint.suspendTimeoutSeconds !== undefined &&
-		endpoint.suspendTimeoutSeconds !== defaults?.suspendTimeoutSeconds
+		endpoint.suspendTimeout !== undefined &&
+		endpoint.suspendTimeout !== defaults?.suspendTimeout
 	) {
-		out.suspendTimeoutSeconds = endpoint.suspendTimeoutSeconds;
+		out.suspendTimeout = endpoint.suspendTimeout;
 	}
 	return Object.keys(out).length > 0 ? out : undefined;
 }

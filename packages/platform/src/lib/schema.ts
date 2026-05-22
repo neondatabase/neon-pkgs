@@ -1,42 +1,63 @@
 import { z } from "zod";
-import { parseDuration } from "./duration.js";
+import { parseDuration, parseSuspendTimeout } from "./duration.js";
 import { isWildcardPattern, validatePattern } from "./patterns.js";
 
 /**
  * Zod schema for {@link import("./types.js").ComputeSettings}.
  *
- * Numbers are validated against Neon's documented limits:
- * - CU values must be >= 0.25.
- * - `suspendTimeoutSeconds` must be -1 (never suspend), 0 (use platform default), or in
- *   `[60, 604800]` (any value below 60 seconds is rejected by the Neon API).
+ * - CU values must be one of: 0.25, 0.5, 1, 2, 4, 8
+ * - `suspendTimeout` can be:
+ *   - `false` (never suspend)
+ *   - duration string like "5m", "1h" (must be 60s-604800s when parsed)
+ *   - number in seconds (60-604800, or -1/0 for special values)
+ *   - `undefined` (use platform default)
  *
- * Cross-field invariants (min <= max, suspend bands) are enforced via `superRefine`.
+ * Cross-field invariants (min <= max) are enforced via `superRefine`.
  */
 export const computeSettingsSchema = z
 	.strictObject({
-		autoscalingLimitMinCu: z.number().min(0.25).optional(),
-		autoscalingLimitMaxCu: z.number().min(0.25).optional(),
-		suspendTimeoutSeconds: z.number().int().min(-1).max(604_800).optional(),
+		autoscalingLimitMinCu: z
+			.union([
+				z.literal(0.25),
+				z.literal(0.5),
+				z.literal(1),
+				z.literal(2),
+				z.literal(4),
+				z.literal(8),
+			])
+			.optional(),
+		autoscalingLimitMaxCu: z
+			.union([
+				z.literal(0.25),
+				z.literal(0.5),
+				z.literal(1),
+				z.literal(2),
+				z.literal(4),
+				z.literal(8),
+			])
+			.optional(),
+		suspendTimeout: z
+			.union([z.literal(false), z.string(), z.number()])
+			.optional()
+			.superRefine((value, ctx) => {
+				if (value === undefined) return; // undefined is valid (use platform default)
+				const result = parseSuspendTimeout(value);
+				if ("error" in result) {
+					ctx.addIssue({
+						code: "custom",
+						message: result.error,
+					});
+				}
+			}),
 	})
 	.superRefine((settings, ctx) => {
-		const {
-			autoscalingLimitMinCu: min,
-			autoscalingLimitMaxCu: max,
-			suspendTimeoutSeconds: suspend,
-		} = settings;
+		const { autoscalingLimitMinCu: min, autoscalingLimitMaxCu: max } =
+			settings;
 		if (min !== undefined && max !== undefined && min > max) {
 			ctx.addIssue({
 				code: "custom",
 				path: ["autoscalingLimitMinCu"],
 				message: `autoscalingLimitMinCu (${min}) must be <= autoscalingLimitMaxCu (${max})`,
-			});
-		}
-		if (suspend !== undefined && suspend > 0 && suspend < 60) {
-			ctx.addIssue({
-				code: "custom",
-				path: ["suspendTimeoutSeconds"],
-				message:
-					"suspendTimeoutSeconds must be 0, -1, or between 60 and 604800",
 			});
 		}
 	});

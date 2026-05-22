@@ -1,10 +1,13 @@
 import type {
 	CreateBranchInput,
 	CreateProjectInput,
+	GetConnectionUriInput,
 	NeonApi,
 	NeonBranchSnapshot,
+	NeonDatabaseSnapshot,
 	NeonEndpointSnapshot,
 	NeonProjectSnapshot,
+	NeonRoleSnapshot,
 	UpdateBranchInput,
 } from "./neon-api.js";
 import type { ComputeSettings } from "./types.js";
@@ -27,18 +30,26 @@ export class FakeNeonApi implements NeonApi {
 	private readonly projects = new Map<string, NeonProjectSnapshot>();
 	private readonly branches = new Map<string, NeonBranchSnapshot[]>();
 	private readonly endpoints = new Map<string, NeonEndpointSnapshot[]>();
+	private readonly roles = new Map<string, NeonRoleSnapshot[]>();
+	private readonly databases = new Map<string, NeonDatabaseSnapshot[]>();
 	readonly history: Array<{ method: string; args: unknown[] }> = [];
 
 	/**
 	 * Seed the fake with a fully-formed project (and optionally extra branches), bypassing
 	 * the public mutation API. Used by tests that want to assert on diff/update behaviour
 	 * without first calling `createProject`.
+	 *
+	 * Each branch is seeded with a default `neondb_owner` role and `neondb` database unless
+	 * overridden — matching what Neon's real `createProject` does. Pass `roles` / `databases`
+	 * on a branch entry to model non-default setups (custom roles, multiple databases).
 	 */
 	seedProject(input: {
 		project: NeonProjectSnapshot;
 		branches?: Array<{
 			branch: NeonBranchSnapshot;
 			endpoint?: Partial<NeonEndpointSnapshot>;
+			roles?: Array<Partial<NeonRoleSnapshot> & { name: string }>;
+			databases?: Array<Partial<NeonDatabaseSnapshot> & { name: string }>;
 		}>;
 	}): void {
 		const project = { ...input.project };
@@ -51,6 +62,7 @@ export class FakeNeonApi implements NeonApi {
 			endpoints.push(
 				this.makeEndpoint(entry.branch.id, entry.endpoint, project),
 			);
+			this.seedBranchAuth(entry.branch.id, entry.roles, entry.databases);
 		}
 
 		if (branches.length === 0) {
@@ -64,10 +76,35 @@ export class FakeNeonApi implements NeonApi {
 			endpoints.push(
 				this.makeEndpoint(defaultBranch.id, undefined, project),
 			);
+			this.seedBranchAuth(defaultBranch.id);
 		}
 
 		this.branches.set(project.id, branches);
 		this.endpoints.set(project.id, endpoints);
+	}
+
+	private seedBranchAuth(
+		branchId: string,
+		roles?: Array<Partial<NeonRoleSnapshot> & { name: string }>,
+		databases?: Array<Partial<NeonDatabaseSnapshot> & { name: string }>,
+	): void {
+		const resolvedRoles: NeonRoleSnapshot[] = (
+			roles ?? [{ name: "neondb_owner" }]
+		).map((r) => ({
+			name: r.name,
+			branchId,
+			protected: r.protected ?? false,
+		}));
+		this.roles.set(branchId, resolvedRoles);
+
+		const resolvedDatabases: NeonDatabaseSnapshot[] = (
+			databases ?? [{ name: "neondb" }]
+		).map((d) => ({
+			name: d.name,
+			branchId,
+			ownerName: d.ownerName ?? resolvedRoles[0]?.name ?? "neondb_owner",
+		}));
+		this.databases.set(branchId, resolvedDatabases);
 	}
 
 	async listProjects(filter: {
@@ -119,6 +156,7 @@ export class FakeNeonApi implements NeonApi {
 		);
 		this.branches.set(id, [defaultBranch]);
 		this.endpoints.set(id, [defaultEndpoint]);
+		this.seedBranchAuth(defaultBranch.id);
 
 		return clone(project);
 	}
@@ -193,6 +231,21 @@ export class FakeNeonApi implements NeonApi {
 		endpoints.push(endpoint);
 		this.endpoints.set(projectId, endpoints);
 
+		// Inherit the roles/databases from the parent branch — Neon does the same
+		// (every branch starts as a copy-on-write clone of its parent).
+		const parentRoles =
+			(branch.parentId ? this.roles.get(branch.parentId) : undefined) ??
+			[];
+		const parentDatabases =
+			(branch.parentId
+				? this.databases.get(branch.parentId)
+				: undefined) ?? [];
+		this.seedBranchAuth(
+			branch.id,
+			parentRoles.length > 0 ? parentRoles : undefined,
+			parentDatabases.length > 0 ? parentDatabases : undefined,
+		);
+
 		return { branch: clone(branch), endpoints: [clone(endpoint)] };
 	}
 
@@ -246,10 +299,95 @@ export class FakeNeonApi implements NeonApi {
 			updated.autoscalingLimitMinCu = settings.autoscalingLimitMinCu;
 		if (settings.autoscalingLimitMaxCu !== undefined)
 			updated.autoscalingLimitMaxCu = settings.autoscalingLimitMaxCu;
-		if (settings.suspendTimeoutSeconds !== undefined)
-			updated.suspendTimeoutSeconds = settings.suspendTimeoutSeconds;
+		if (settings.suspendTimeout !== undefined)
+			updated.suspendTimeout = settings.suspendTimeout;
 		endpoints[idx] = updated;
 		return clone(updated);
+	}
+
+	async listBranchRoles(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonRoleSnapshot[]> {
+		this.history.push({
+			method: "listBranchRoles",
+			args: [projectId, branchId],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		return (this.roles.get(branchId) ?? []).map(clone);
+	}
+
+	async listBranchDatabases(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonDatabaseSnapshot[]> {
+		this.history.push({
+			method: "listBranchDatabases",
+			args: [projectId, branchId],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		return (this.databases.get(branchId) ?? []).map(clone);
+	}
+
+	async getConnectionUri(
+		projectId: string,
+		input: GetConnectionUriInput,
+	): Promise<{ uri: string }> {
+		this.history.push({
+			method: "getConnectionUri",
+			args: [projectId, input],
+		});
+		this.requireProject(projectId);
+
+		const branchId = input.branchId ?? this.defaultBranchId(projectId);
+		if (!branchId) {
+			throw new Error(
+				`Fake Neon: project ${projectId} has no default branch`,
+			);
+		}
+		this.requireBranch(projectId, branchId);
+
+		const roles = this.roles.get(branchId) ?? [];
+		if (!roles.some((r) => r.name === input.roleName)) {
+			throw new Error(
+				`Fake Neon: role '${input.roleName}' not found on branch ${branchId}`,
+			);
+		}
+		const databases = this.databases.get(branchId) ?? [];
+		if (!databases.some((d) => d.name === input.databaseName)) {
+			throw new Error(
+				`Fake Neon: database '${input.databaseName}' not found on branch ${branchId}`,
+			);
+		}
+
+		const project = this.projects.get(projectId);
+		const region = project?.regionId ?? "aws-us-east-1";
+		const hostPart = input.pooled
+			? `${branchId}-pooler.${region}.fake.neon.tech`
+			: `${branchId}.${region}.fake.neon.tech`;
+		const uri = `postgresql://${input.roleName}:fake-password-for-${branchId}@${hostPart}/${input.databaseName}?sslmode=require`;
+		return { uri };
+	}
+
+	private requireProject(projectId: string): void {
+		if (!this.projects.has(projectId))
+			throw new Error(`Fake Neon: project ${projectId} not found`);
+	}
+
+	private requireBranch(projectId: string, branchId: string): void {
+		const branchList = this.branches.get(projectId) ?? [];
+		if (!branchList.some((b) => b.id === branchId)) {
+			throw new Error(
+				`Fake Neon: branch ${branchId} not found in project ${projectId}`,
+			);
+		}
+	}
+
+	private defaultBranchId(projectId: string): string | undefined {
+		const branchList = this.branches.get(projectId) ?? [];
+		return (branchList.find((b) => b.isDefault) ?? branchList[0])?.id;
 	}
 
 	private allocateId(prefix: string): string {
@@ -276,10 +414,10 @@ export class FakeNeonApi implements NeonApi {
 				override?.autoscalingLimitMaxCu ??
 				projectDefaults?.autoscalingLimitMaxCu ??
 				0.25,
-			suspendTimeoutSeconds:
-				override?.suspendTimeoutSeconds ??
-				projectDefaults?.suspendTimeoutSeconds ??
-				0,
+			suspendTimeout:
+				override?.suspendTimeout ??
+				projectDefaults?.suspendTimeout ??
+				undefined,
 		};
 	}
 }

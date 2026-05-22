@@ -139,7 +139,10 @@ describe("defineConfig", () => {
 				project: { name: "x" },
 				branchBlueprints: {
 					production: {
-						computeSettings: { autoscalingLimitMinCu: 0.1 },
+						computeSettings: {
+							// @ts-expect-error — testing runtime validation rejects non-ComputeUnit values.
+							autoscalingLimitMinCu: 0.1,
+						},
 					},
 				},
 			}),
@@ -160,37 +163,37 @@ describe("defineConfig", () => {
 		).toThrow(/<= autoscalingLimitMaxCu/);
 	});
 
-	test("rejects suspendTimeoutSeconds outside legal range", () => {
+	test("rejects suspendTimeout outside legal range", () => {
 		expect(() =>
 			defineConfig({
 				project: { name: "x" },
 				branchBlueprints: {
 					production: {
-						computeSettings: { suspendTimeoutSeconds: 30 },
+						computeSettings: { suspendTimeout: "30s" },
 					},
 				},
 			}),
-		).toThrow(/suspendTimeoutSeconds/);
+		).toThrow(/suspend timeout must be between 60 and 604800 seconds/);
 
 		expect(() =>
 			defineConfig({
 				project: { name: "x" },
 				branchBlueprints: {
 					production: {
-						computeSettings: { suspendTimeoutSeconds: 1_000_000 },
+						computeSettings: { suspendTimeout: 1_000_000 },
 					},
 				},
 			}),
-		).toThrow(/suspendTimeoutSeconds/);
+		).toThrow(/suspend timeout must be between 60 and 604800 seconds/);
 	});
 
-	test("accepts suspendTimeoutSeconds=0 (use platform default) and -1 (never)", () => {
+	test("accepts suspendTimeout=undefined (platform default) and false (never)", () => {
 		expect(() =>
 			defineConfig({
 				project: { name: "x" },
 				branchBlueprints: {
 					production: {
-						computeSettings: { suspendTimeoutSeconds: 0 },
+						computeSettings: { suspendTimeout: undefined },
 					},
 				},
 			}),
@@ -200,7 +203,17 @@ describe("defineConfig", () => {
 				project: { name: "x" },
 				branchBlueprints: {
 					production: {
-						computeSettings: { suspendTimeoutSeconds: -1 },
+						computeSettings: { suspendTimeout: false },
+					},
+				},
+			}),
+		).not.toThrow();
+		expect(() =>
+			defineConfig({
+				project: { name: "x" },
+				branchBlueprints: {
+					production: {
+						computeSettings: { suspendTimeout: "5m" },
 					},
 				},
 			}),

@@ -1,0 +1,351 @@
+import { resolveApiKey } from "./auth.js";
+import { ErrorCode, PlatformError } from "./errors.js";
+import { type BranchRef, loadContext } from "./load-context.js";
+import type {
+	NeonApi,
+	NeonBranchSnapshot,
+	NeonDatabaseSnapshot,
+	NeonRoleSnapshot,
+} from "./neon-api.js";
+import { createRealNeonApi } from "./neon-api-real.js";
+import type { Config } from "./types.js";
+
+/**
+ * Default env-var key for the pooled (PgBouncer) connection string. Matches the convention
+ * Neon's own integrations (Vercel, Cloudflare, Local Connect) write to `.env` files.
+ */
+export const DEFAULT_DATABASE_URL_KEY = "DATABASE_URL";
+/** Default env-var key for the direct (unpooled) connection string. */
+export const DEFAULT_DATABASE_URL_UNPOOLED_KEY = "DATABASE_URL_UNPOOLED";
+
+export interface LoadEnvOptions {
+	/**
+	 * Neon API key. Resolved via {@link resolveApiKey} when omitted (option → env →
+	 * `~/.config/neonctl/credentials.json`). Ignored when a custom `api` is supplied.
+	 */
+	apiKey?: string;
+	/**
+	 * Inject a custom NeonApi adapter. Primarily used by tests; production callers can rely
+	 * on the default real adapter built from `apiKey`.
+	 */
+	api?: NeonApi;
+	/** Explicit project id. Overrides `NEON_PROJECT_ID` and `.neon[/project.json]`. */
+	projectId?: string;
+	/** Explicit org id. Accepted for parity with the rest of the SDK. */
+	orgId?: string;
+	/**
+	 * Explicit branch id (`br-…`) or branch name. Resolution chain:
+	 * `options.branch` → `NEON_BRANCH_ID` env → context file → root blueprint key in
+	 * `config.branchBlueprints` (typically `"production"`) → project default branch.
+	 */
+	branch?: string;
+	/**
+	 * Role name to fetch credentials for. When omitted, the only role on the branch is
+	 * auto-picked; throws {@link PlatformError} with `PLATFORM_AMBIGUOUS_BRANCH_AUTH` if
+	 * the branch has more than one role.
+	 */
+	roleName?: string;
+	/**
+	 * Database name. When omitted, the only database on the branch is auto-picked; throws
+	 * {@link PlatformError} with `PLATFORM_AMBIGUOUS_BRANCH_AUTH` if the branch has more
+	 * than one database.
+	 */
+	databaseName?: string;
+	/**
+	 * Override the env-var key for the pooled connection string.
+	 * Default: `"DATABASE_URL"`.
+	 */
+	databaseUrlKey?: string;
+	/**
+	 * Override the env-var key for the direct (unpooled) connection string.
+	 * Default: `"DATABASE_URL_UNPOOLED"`.
+	 */
+	databaseUrlUnpooledKey?: string;
+	/** Starting directory for the context-file search. Defaults to `process.cwd()`. */
+	cwd?: string;
+	/**
+	 * Override `process.env` for testing. Read keys: `NEON_PROJECT_ID`, `NEON_BRANCH_ID`,
+	 * `NEON_ORG_ID`, `NEON_API_KEY`. Real callers should leave this undefined.
+	 */
+	env?: Record<string, string | undefined>;
+}
+
+/**
+ * Load Neon connection strings for the project + branch this process should target, using
+ * the live Neon API.
+ *
+ * Typical usage in an application bootstrap:
+ * ```ts
+ * import config from "../neon";
+ * import { loadEnv } from "@neondatabase/platform/v1";
+ *
+ * const env = await loadEnv(config);
+ * // → { DATABASE_URL: "postgres://…-pooler…", DATABASE_URL_UNPOOLED: "postgres://…" }
+ * Object.assign(process.env, env);
+ * ```
+ *
+ * Resolution chain (each entry wins over the next):
+ *
+ * | Field        | 1st (call args)         | 2nd (env)         | 3rd (file)                            | 4th (config)                    |
+ * | ------------ | ----------------------- | ----------------- | ------------------------------------- | ------------------------------- |
+ * | `projectId`  | `options.projectId`     | `NEON_PROJECT_ID` | `projectId` in `.neon[/project.json]` | — (throws if unresolved)        |
+ * | `branch`     | `options.branch`        | `NEON_BRANCH_ID`  | `branchId` in `.neon[/project.json]`  | first key in `branchBlueprints` |
+ * | `roleName`   | `options.roleName`      | —                 | —                                     | auto-pick if branch has one     |
+ * | `databaseName` | `options.databaseName`| —                 | —                                     | auto-pick if branch has one     |
+ *
+ * Returns a plain `Record<string, string>` keyed by `DATABASE_URL` and
+ * `DATABASE_URL_UNPOOLED` (rename via `databaseUrlKey` / `databaseUrlUnpooledKey`),
+ * ready to spread into `process.env` or write to a `.env` file. The package does **not**
+ * mutate `process.env` or the filesystem itself.
+ */
+export async function loadEnv(
+	config: Config,
+	options: LoadEnvOptions = {},
+): Promise<Record<string, string>> {
+	const api = options.api ?? createApiFromOptions(options);
+
+	const ctx = loadContext({
+		...(options.projectId ? { projectId: options.projectId } : {}),
+		...(options.orgId ? { orgId: options.orgId } : {}),
+		...(options.branch ? { branch: options.branch } : {}),
+		...(options.cwd ? { cwd: options.cwd } : {}),
+		...(options.env ? { env: options.env } : {}),
+	});
+
+	const branches = await api.listBranches(ctx.projectId);
+	if (branches.length === 0) {
+		throw new PlatformError(
+			ErrorCode.BranchNotFound,
+			[
+				`loadEnv: project ${ctx.projectId} has no branches.`,
+				"Either run `pushConfig()` (or `neon-ts push`) to provision the project from your `neon.ts`, or pick a different project id.",
+			].join(" "),
+			{ details: { projectId: ctx.projectId } },
+		);
+	}
+
+	const branch = resolveBranch(ctx.branch, branches, config);
+
+	const [roles, databases] = await Promise.all([
+		api.listBranchRoles(ctx.projectId, branch.id),
+		api.listBranchDatabases(ctx.projectId, branch.id),
+	]);
+
+	const roleName = pickRoleName(roles, branch, options.roleName);
+	const databaseName = pickDatabaseName(
+		databases,
+		branch,
+		roleName,
+		options.databaseName,
+	);
+
+	const [pooled, unpooled] = await Promise.all([
+		api.getConnectionUri(ctx.projectId, {
+			branchId: branch.id,
+			databaseName,
+			roleName,
+			pooled: true,
+		}),
+		api.getConnectionUri(ctx.projectId, {
+			branchId: branch.id,
+			databaseName,
+			roleName,
+			pooled: false,
+		}),
+	]);
+
+	const pooledKey = options.databaseUrlKey ?? DEFAULT_DATABASE_URL_KEY;
+	const unpooledKey =
+		options.databaseUrlUnpooledKey ?? DEFAULT_DATABASE_URL_UNPOOLED_KEY;
+
+	return {
+		[pooledKey]: pooled.uri,
+		[unpooledKey]: unpooled.uri,
+	};
+}
+
+function createApiFromOptions(options: LoadEnvOptions): NeonApi {
+	const resolved = resolveApiKey({
+		...(options.apiKey ? { apiKey: options.apiKey } : {}),
+		...(options.env ? { env: options.env } : {}),
+	});
+	if (!resolved) {
+		throw new PlatformError(
+			ErrorCode.MissingApiKey,
+			[
+				"loadEnv has no Neon API key to work with.",
+				"Tried (in order): `apiKey` option, NEON_API_KEY env, and `~/.config/neonctl/credentials.json`.",
+				"Either pass `apiKey` directly, set NEON_API_KEY, run `npx neonctl auth` to populate the credentials file, or pass a custom `api` adapter (e.g. an in-memory fake for tests).",
+				"Generate a key at https://console.neon.tech/app/settings/api-keys.",
+			].join(" "),
+		);
+	}
+	return createRealNeonApi({ apiKey: resolved.token });
+}
+
+function resolveBranch(
+	requested: BranchRef | undefined,
+	branches: NeonBranchSnapshot[],
+	config: Config,
+): NeonBranchSnapshot {
+	if (requested) {
+		const match = findBranch(branches, requested);
+		if (match) return match;
+		throw new PlatformError(
+			ErrorCode.BranchNotFound,
+			[
+				`loadEnv: branch ${describeRef(requested)} not found on project.`,
+				`Existing branches: ${branches.map((b) => `${b.name} (${b.id})`).join(", ")}.`,
+			].join(" "),
+			{
+				details: {
+					branch: requested,
+					available: branches.map((b) => b.name),
+				},
+			},
+		);
+	}
+
+	// Fall back to the first blueprint key (typically "production").
+	const blueprintKey = firstBlueprintKey(config);
+	if (blueprintKey) {
+		const named = branches.find((b) => b.name === blueprintKey);
+		if (named) return named;
+	}
+
+	const fallback = branches.find((b) => b.isDefault) ?? branches[0];
+	if (!fallback) {
+		// listBranches returned [], but the empty-list path above already throws.
+		// This is a belt-and-braces guard so the function is total.
+		throw new PlatformError(
+			ErrorCode.BranchNotFound,
+			"loadEnv: no branches available on the project.",
+		);
+	}
+	return fallback;
+}
+
+function findBranch(
+	branches: NeonBranchSnapshot[],
+	ref: BranchRef,
+): NeonBranchSnapshot | undefined {
+	if (ref.kind === "id") return branches.find((b) => b.id === ref.value);
+	return branches.find((b) => b.name === ref.value);
+}
+
+function describeRef(ref: BranchRef): string {
+	return `${ref.kind === "id" ? "id" : "name"}=${JSON.stringify(ref.value)}`;
+}
+
+function firstBlueprintKey(config: Config): string | undefined {
+	const blueprints = config.branchBlueprints;
+	if (!blueprints) return undefined;
+	const keys = Object.keys(blueprints);
+	return keys[0];
+}
+
+function pickRoleName(
+	roles: NeonRoleSnapshot[],
+	branch: NeonBranchSnapshot,
+	requested: string | undefined,
+): string {
+	if (requested) {
+		if (!roles.some((r) => r.name === requested)) {
+			throw new PlatformError(
+				ErrorCode.BranchNotFound,
+				[
+					`loadEnv: role "${requested}" not found on branch ${branch.name} (${branch.id}).`,
+					`Existing roles: ${roles.map((r) => r.name).join(", ") || "(none)"}.`,
+				].join(" "),
+				{
+					details: {
+						branchId: branch.id,
+						roleName: requested,
+						availableRoles: roles.map((r) => r.name),
+					},
+				},
+			);
+		}
+		return requested;
+	}
+	if (roles.length === 0) {
+		throw new PlatformError(
+			ErrorCode.BranchNotFound,
+			[
+				`loadEnv: branch ${branch.name} (${branch.id}) has no roles.`,
+				"Create one via the Neon console or pass `roleName` explicitly.",
+			].join(" "),
+			{ details: { branchId: branch.id } },
+		);
+	}
+	if (roles.length === 1) return roles[0].name;
+	throw new PlatformError(
+		ErrorCode.AmbiguousBranchAuth,
+		[
+			`loadEnv: branch ${branch.name} (${branch.id}) has ${roles.length} roles; cannot auto-pick.`,
+			`Pass \`roleName\` explicitly. Available: ${roles.map((r) => r.name).join(", ")}.`,
+		].join(" "),
+		{
+			details: {
+				branchId: branch.id,
+				availableRoles: roles.map((r) => r.name),
+			},
+		},
+	);
+}
+
+function pickDatabaseName(
+	databases: NeonDatabaseSnapshot[],
+	branch: NeonBranchSnapshot,
+	roleName: string,
+	requested: string | undefined,
+): string {
+	if (requested) {
+		if (!databases.some((d) => d.name === requested)) {
+			throw new PlatformError(
+				ErrorCode.BranchNotFound,
+				[
+					`loadEnv: database "${requested}" not found on branch ${branch.name} (${branch.id}).`,
+					`Existing databases: ${databases.map((d) => d.name).join(", ") || "(none)"}.`,
+				].join(" "),
+				{
+					details: {
+						branchId: branch.id,
+						databaseName: requested,
+						availableDatabases: databases.map((d) => d.name),
+					},
+				},
+			);
+		}
+		return requested;
+	}
+	if (databases.length === 0) {
+		throw new PlatformError(
+			ErrorCode.BranchNotFound,
+			[
+				`loadEnv: branch ${branch.name} (${branch.id}) has no databases.`,
+				"Create one via the Neon console or pass `databaseName` explicitly.",
+			].join(" "),
+			{ details: { branchId: branch.id } },
+		);
+	}
+	if (databases.length === 1) return databases[0].name;
+
+	// Prefer a database owned by the role we're connecting as.
+	const owned = databases.filter((d) => d.ownerName === roleName);
+	if (owned.length === 1) return owned[0].name;
+
+	throw new PlatformError(
+		ErrorCode.AmbiguousBranchAuth,
+		[
+			`loadEnv: branch ${branch.name} (${branch.id}) has ${databases.length} databases; cannot auto-pick.`,
+			`Pass \`databaseName\` explicitly. Available: ${databases.map((d) => d.name).join(", ")}.`,
+		].join(" "),
+		{
+			details: {
+				branchId: branch.id,
+				availableDatabases: databases.map((d) => d.name),
+			},
+		},
+	);
+}

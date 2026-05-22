@@ -38,6 +38,12 @@ export {
 	type NeonContext,
 } from "./lib/load-context.js";
 export {
+	DEFAULT_DATABASE_URL_KEY,
+	DEFAULT_DATABASE_URL_UNPOOLED_KEY,
+	type LoadEnvOptions,
+	loadEnv,
+} from "./lib/load-env.js";
+export {
 	DEFAULT_CONFIG_FILENAMES,
 	type LoadConfigOptions,
 	loadConfigFromFile,
@@ -45,10 +51,13 @@ export {
 export type {
 	CreateBranchInput,
 	CreateProjectInput,
+	GetConnectionUriInput,
 	NeonApi,
 	NeonBranchSnapshot,
+	NeonDatabaseSnapshot,
 	NeonEndpointSnapshot,
 	NeonProjectSnapshot,
+	NeonRoleSnapshot,
 	UpdateBranchInput,
 } from "./lib/neon-api.js";
 export { createRealNeonApi } from "./lib/neon-api-real.js";

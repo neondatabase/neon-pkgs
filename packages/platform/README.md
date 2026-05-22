@@ -31,7 +31,7 @@ export default defineConfig({
       computeSettings: {
         autoscalingLimitMinCu: 0.25,
         autoscalingLimitMaxCu: 2,
-        suspendTimeoutSeconds: 300,
+        suspendTimeout: "5m",
       },
     },
     preview: {
@@ -43,10 +43,11 @@ export default defineConfig({
 });
 ```
 
-Then either pull or push:
+Then either pull, push, or load connection strings:
 
 ```ts
-import { pullConfig, pushConfig } from "@neondatabase/platform/v1";
+import { loadEnv, pullConfig, pushConfig } from "@neondatabase/platform/v1";
+import config from "./neon";
 
 // pull the current Neon state into a Config object (read-only on disk)
 const remoteConfig = await pullConfig({ apiKey: process.env.NEON_API_KEY });
@@ -54,6 +55,10 @@ const remoteConfig = await pullConfig({ apiKey: process.env.NEON_API_KEY });
 // push your local neon.ts to Neon. With no arguments it auto-loads neon.ts and
 // refuses to apply if the local config conflicts with the remote project state.
 await pushConfig();
+
+// load DATABASE_URL + DATABASE_URL_UNPOOLED for the current branch
+const env = await loadEnv(config);
+Object.assign(process.env, env);
 
 // force-apply, including drift on existing branches and wildcard-matched ones
 await pushConfig({
@@ -113,6 +118,49 @@ Important options:
 | `applyExisting`   | `false` | When `true`, blueprints with wildcard patterns (e.g. `preview-*`) apply their settings/TTL to **every matching existing branch**.         |
 
 `pushConfig` will create a project if none exists in the resolved org/name combination and `project.region` is set. Region and Postgres major version are immutable on Neon — pushing a different value surfaces a `ConflictReport`.
+
+### `loadEnv(config: Config, options?: LoadEnvOptions): Promise<Record<string, string>>`
+
+Fetch Postgres connection strings for the project + branch this process should target, ready to spread into `process.env` or write to a `.env` file. Returns:
+
+```ts
+{ DATABASE_URL: "postgres://…-pooler…?sslmode=require",
+  DATABASE_URL_UNPOOLED: "postgres://…?sslmode=require" }
+```
+
+Typical usage at the top of an application bootstrap or build script:
+
+```ts
+import { loadEnv } from "@neondatabase/platform/v1";
+import config from "./neon";
+
+const env = await loadEnv(config);
+Object.assign(process.env, env);
+```
+
+Resolution chain — each entry wins over the next:
+
+| Field          | 1st (call args)        | 2nd (env)         | 3rd (file)                            | 4th (config)                       |
+| -------------- | ---------------------- | ----------------- | ------------------------------------- | ---------------------------------- |
+| `projectId`    | `options.projectId`    | `NEON_PROJECT_ID` | `projectId` in `.neon[/project.json]` | — (throws `MissingContextError`)   |
+| `branch`       | `options.branch`       | `NEON_BRANCH_ID`  | `branchId` in `.neon[/project.json]`  | first key in `branchBlueprints`    |
+| `roleName`     | `options.roleName`     | —                 | —                                     | auto-picked when branch has one    |
+| `databaseName` | `options.databaseName` | —                 | —                                     | auto-picked when branch has one[^1] |
+
+[^1]: When the branch has multiple databases but only one is owned by the resolved role, that one is auto-picked. Otherwise `loadEnv` throws `PLATFORM_AMBIGUOUS_BRANCH_AUTH` and you'll need to pass `databaseName` explicitly.
+
+Override the output env-var keys to match Vercel's / Cloudflare's conventions:
+
+```ts
+const env = await loadEnv(config, {
+  databaseUrlKey: "POSTGRES_URL",
+  databaseUrlUnpooledKey: "POSTGRES_URL_NON_POOLING",
+});
+```
+
+This call is **read-only**: it never mutates `process.env`, writes to disk, or modifies the remote Neon project. Two `getConnectionUri` API calls (pooled + direct) plus one `listBranches` and one each of `listBranchRoles` / `listBranchDatabases`.
+
+Throws `MissingContextError`, `PLATFORM_MISSING_API_KEY`, `PLATFORM_BRANCH_NOT_FOUND`, or `PLATFORM_AMBIGUOUS_BRANCH_AUTH` depending on what's underspecified — see [Error reference](#error-reference) below.
 
 ### `loadContext(options?: LoadContextOptions): NeonContext`
 
@@ -220,6 +268,8 @@ Every error this package throws extends `PlatformError`. The `code` field is the
 | `PLATFORM_CONFIG_LOAD_FAILED`     | `neon.ts` is missing, has a syntax error, or doesn't `export default`           | Path is in the message. Run the file directly (`npx tsx neon.ts`) to reproduce the underlying error              |
 | `PLATFORM_MISSING_API_KEY`        | No API key in `apiKey` option or `NEON_API_KEY` env                             | Generate one at <https://console.neon.tech/app/settings/api-keys>                                                |
 | `PLATFORM_AMBIGUOUS_PROJECT`      | Multiple projects with the same name (org-/user-scoped key without `projectId`) | Pass `projectId` to pick one — the candidate ids are in `err.details.candidateProjectIds`                        |
+| `PLATFORM_AMBIGUOUS_BRANCH_AUTH`  | `loadEnv` found multiple roles / databases on the branch and can't auto-pick    | Pass `roleName` / `databaseName` — available values are in `err.details.availableRoles` / `availableDatabases`   |
+| `PLATFORM_BRANCH_NOT_FOUND`       | `loadEnv` couldn't find the requested branch / role / database on the project   | Check the name; available values are in `err.details.available`                                                  |
 | `PLATFORM_REGION_REQUIRED`        | First-time create but `project.region` is missing                               | Add a region (e.g. `aws-us-east-1`) to your config                                                               |
 | `PLATFORM_INSUFFICIENT_SCOPE`     | Project-scoped key tried to list projects                                       | Pass `projectId` explicitly, or use an org/user-scoped key                                                       |
 | `PLATFORM_MISSING_PARENT_BRANCH`  | Push tried to create a branch whose parent doesn't exist on Neon                | Either define the parent as a blueprint too, or change the blueprint's `parent` to an existing branch           |

@@ -47,6 +47,7 @@ export function wrapNeonError(
 	const requestIdSuffix = httpInfo.requestId
 		? ` (request id ${httpInfo.requestId})`
 		: "";
+	const apiSummaryWithRequestId = `${apiSummary}${requestIdSuffix}.`;
 
 	switch (httpInfo.status) {
 		case 401:
@@ -54,7 +55,7 @@ export function wrapNeonError(
 				ErrorCode.Unauthorized,
 				[
 					`${context.op} failed: the Bearer token sent to the Neon API was rejected.`,
-					apiSummary + requestIdSuffix + ".",
+					apiSummaryWithRequestId,
 					"Either (a) generate or rotate an API key at https://console.neon.tech/app/settings/api-keys and set NEON_API_KEY / pass --api-key, or (b) re-run `npx neonctl auth` to refresh the OAuth token in `~/.config/neonctl/credentials.json` (OAuth tokens expire).",
 				].join(" "),
 				{ cause: err, details: httpDetails(context, httpInfo) },
@@ -64,7 +65,7 @@ export function wrapNeonError(
 				ErrorCode.Forbidden,
 				[
 					`${context.op} failed: this API key is not allowed to perform that operation.`,
-					apiSummary + requestIdSuffix + ".",
+					apiSummaryWithRequestId,
 					"Project-scoped keys can only operate on their own project; switch to an organisation/user-scoped key or pass `projectId` for an operation that doesn't need listing.",
 				].join(" "),
 				{ cause: err, details: httpDetails(context, httpInfo) },
@@ -74,7 +75,7 @@ export function wrapNeonError(
 				ErrorCode.NotFound,
 				[
 					`${context.op} failed: resource not found on Neon.`,
-					apiSummary + requestIdSuffix + ".",
+					apiSummaryWithRequestId,
 					context.projectId
 						? `Verify that project '${context.projectId}' exists in this account and that the API key has access to it.`
 						: "Verify that the resource id is correct and that the API key has access to it.",
@@ -86,7 +87,7 @@ export function wrapNeonError(
 				ErrorCode.Conflict,
 				[
 					`${context.op} failed: a conflicting resource already exists on Neon.`,
-					apiSummary + requestIdSuffix + ".",
+					apiSummaryWithRequestId,
 					"This is often a name collision (e.g. a branch with the same name already exists). Pull first to compare against the remote, or rename in your `neon.ts`.",
 				].join(" "),
 				{ cause: err, details: httpDetails(context, httpInfo) },
@@ -96,7 +97,7 @@ export function wrapNeonError(
 				ErrorCode.Locked,
 				[
 					`${context.op} failed: the resource is still being modified by a previous operation, and our built-in retries did not drain it in time.`,
-					apiSummary + requestIdSuffix + ".",
+					apiSummaryWithRequestId,
 					"Wait a few seconds and re-run, or raise `retryOnLocked.maxAttempts` when constructing the real Neon adapter.",
 				].join(" "),
 				{ cause: err, details: httpDetails(context, httpInfo) },
@@ -106,7 +107,7 @@ export function wrapNeonError(
 				ErrorCode.RateLimited,
 				[
 					`${context.op} failed: rate-limited by the Neon API.`,
-					apiSummary + requestIdSuffix + ".",
+					apiSummaryWithRequestId,
 					"Back off and retry; if this happens repeatedly, contact Neon support with the request id above.",
 				].join(" "),
 				{ cause: err, details: httpDetails(context, httpInfo) },
@@ -118,7 +119,7 @@ export function wrapNeonError(
 			ErrorCode.ServerError,
 			[
 				`${context.op} failed: the Neon API returned a server error (HTTP ${httpInfo.status}).`,
-				apiSummary + requestIdSuffix + ".",
+				apiSummaryWithRequestId,
 				"This is most likely transient. Retry shortly; if it persists, file an issue with the request id above and check https://neonstatus.com.",
 			].join(" "),
 			{ cause: err, details: httpDetails(context, httpInfo) },

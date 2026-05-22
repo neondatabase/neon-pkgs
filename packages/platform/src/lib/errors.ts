@@ -31,6 +31,8 @@ export const ErrorCode = {
 	ConfigLoadFailed: "PLATFORM_CONFIG_LOAD_FAILED",
 	MissingApiKey: "PLATFORM_MISSING_API_KEY",
 	AmbiguousProject: "PLATFORM_AMBIGUOUS_PROJECT",
+	AmbiguousBranchAuth: "PLATFORM_AMBIGUOUS_BRANCH_AUTH",
+	BranchNotFound: "PLATFORM_BRANCH_NOT_FOUND",
 	RegionRequired: "PLATFORM_REGION_REQUIRED",
 	InsufficientScope: "PLATFORM_INSUFFICIENT_SCOPE",
 	MissingParentBranch: "PLATFORM_MISSING_PARENT_BRANCH",
