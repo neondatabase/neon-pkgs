@@ -2,7 +2,7 @@
 
 IaC and Config-as-Code for the Neon Platform. Describe your project, branch blueprints, TTLs, and compute settings in a single `neon.ts` file at the root of your repo, then `pullConfig` / `pushConfig` to sync against the [Neon API](https://api-docs.neon.tech).
 
-> This package exposes the SDK only. The user-facing CLI surface lives in `neonctl` (`neonctl platform pull|push|branch`) and wraps these functions.
+> The user-facing CLI surface for end-users lives in [`neonctl`](https://github.com/neondatabase/neonctl) (`neon platform pull|push|branch`) and wraps the SDK exported here. This package also ships a thin standalone `neon-platform` CLI so the same commands can be exercised in isolation — see [CLI](#cli) below.
 
 ## Install
 
@@ -135,6 +135,41 @@ const ctx = loadContext({ branch: "preview-pr-42" });
 // ctx.branch             { kind: "name", value: "preview-pr-42" }
 // ctx.sourcePath         "/repo/.neon/project.json"
 ```
+
+## CLI
+
+The package ships a `neon-platform` binary (analogous to `neon-init`) that wraps the SDK so the same commands can be exercised in isolation before they are wired into `neonctl`.
+
+```bash
+# Once installed (locally or via npx):
+neon-platform --help
+
+# Print the resolved project + branch context as JSON
+neon-platform context
+
+# Pull the live state of the project into a neon.ts snippet (default) or JSON
+neon-platform pull
+neon-platform pull --format json --project-id proj-cool-snow-123
+
+# Push your local neon.ts to the resolved Neon project
+neon-platform push                                # fail on conflict
+neon-platform push --update-existing              # update existing specific-name branches
+neon-platform push --apply-existing               # apply wildcard blueprints to existing matching branches
+neon-platform push --apply-changes                # force-apply, ignoring branch-level conflicts
+```
+
+Exit codes:
+
+| Code | Meaning                                                                |
+| ---- | ---------------------------------------------------------------------- |
+| 0    | Success                                                                |
+| 1    | Generic error (e.g. missing `NEON_API_KEY`, transport-level failure)   |
+| 2    | `PushConflictError` (re-run with `--apply-changes` / `--update-existing`) |
+| 3    | `MissingContextError` (no project id resolvable)                       |
+| 4    | `ConfigLoadError` (couldn't find / load `neon.ts`)                     |
+| 5    | Other `PlatformError` (ambiguous project, missing region, …)           |
+
+All flags accept env-var fallbacks: `NEON_API_KEY`, `NEON_PROJECT_ID`, `NEON_ORG_ID`, `NEON_BRANCH_ID`.
 
 ## Read-only filesystem contract
 

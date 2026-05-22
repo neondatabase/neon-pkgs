@@ -8,6 +8,7 @@ export default defineConfig({
 	entry: [
 		"src/index.ts",
 		"src/v1.ts",
+		"src/cli.ts",
 		"src/lib/**/*.ts",
 		"!src/**/*.test.*",
 		"!src/lib/fake-neon-api.ts",
