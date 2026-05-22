@@ -4,6 +4,7 @@ import { makeTempRepo } from "./lib/test-utils.js";
 import {
 	type Config,
 	defineConfig,
+	loadConfigFromFile,
 	loadContext,
 	pullConfig,
 	pushConfig,
@@ -80,6 +81,25 @@ describe("v1 surface — full lifecycle", () => {
 		const endpoints = await api.listEndpoints(firstPush.projectId);
 		const prodEndpoint = endpoints.find((e) => e.branchId === prodBranchId);
 		expect(prodEndpoint?.autoscalingLimitMaxCu).toBe(2);
+	});
+
+	test("loadConfigFromFile is re-exported from v1 and loads + validates a real neon.ts", async () => {
+		const platformSrc = new URL("./v1.ts", import.meta.url).pathname;
+		const root = setup({
+			"package.json": "{}",
+			"neon.ts": `
+import { defineConfig } from "${platformSrc}";
+export default defineConfig({
+  project: { name: "loaded-from-v1", region: "aws-us-east-1" },
+  branchBlueprints: { production: {} },
+});
+`,
+		});
+		const { config, resolvedPath } = await loadConfigFromFile({
+			cwd: root,
+		});
+		expect(config.project.name).toBe("loaded-from-v1");
+		expect(resolvedPath.endsWith("/neon.ts")).toBe(true);
 	});
 
 	test("end-to-end with neon.ts + .neon/project.json driving project resolution", async () => {

@@ -32,6 +32,11 @@ export {
 	loadContextWithBranch,
 	type NeonContext,
 } from "./lib/load-context.js";
+export {
+	DEFAULT_CONFIG_FILENAMES,
+	type LoadConfigOptions,
+	loadConfigFromFile,
+} from "./lib/loader.js";
 export type {
 	CreateBranchInput,
 	CreateProjectInput,

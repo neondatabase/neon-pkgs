@@ -136,6 +136,34 @@ const ctx = loadContext({ branch: "preview-pr-42" });
 // ctx.sourcePath         "/repo/.neon/project.json"
 ```
 
+### `loadConfigFromFile(options?: LoadConfigOptions): Promise<{ config: Config; resolvedPath: string }>`
+
+Find and load a `neon.ts` (or `.mts` / `.js` / `.mjs`) from disk, validate it via `defineConfig`, and return both the parsed config and the absolute path it was loaded from.
+
+This is the same loader `pushConfig()` calls internally — exposed so callers can validate or inspect a config without pushing it (e.g. CI lint steps, custom CLIs, hand-rolled tooling).
+
+Resolution rules:
+
+- When `options.path` is set, that file is loaded directly. The path may be absolute or relative to `options.cwd ?? process.cwd()`.
+- When `options.path` is omitted, the loader walks up from `options.cwd ?? process.cwd()` looking for the first file matching `DEFAULT_CONFIG_FILENAMES` (`neon.ts`, `neon.mts`, `neon.js`, `neon.mjs`). The walk stops at the first directory containing a `package.json` or `.git`.
+
+`.ts` / `.mts` / `.cts` files are loaded via [`jiti`](https://github.com/unjs/jiti) (zero-config runtime TypeScript). `.js` / `.mjs` files use Node's native dynamic `import`. Either way, the file must `export default defineConfig(...)`. Module objects that look like a `Config` (have a `project` property) are also accepted as a convenience.
+
+```ts
+import { loadConfigFromFile } from "@neondatabase/platform/v1";
+
+// Walks up from cwd looking for neon.ts / .mts / .js / .mjs.
+const { config, resolvedPath } = await loadConfigFromFile();
+console.log(`loaded ${resolvedPath}: project=${config.project.name}`);
+
+// Or pass an explicit path:
+const { config: ciConfig } = await loadConfigFromFile({
+  path: "./configs/staging.neon.ts",
+});
+```
+
+Throws `ConfigLoadError` when the file can't be found / evaluated / lacks a default export, and `ConfigValidationError` when the loaded object fails schema validation. Both extend `PlatformError` — see the [Error reference](#error-reference) below.
+
 ## CLI
 
 The package ships a `neon-platform` binary (analogous to `neon-init`) that wraps the SDK so the same commands can be exercised in isolation before they are wired into `neonctl`.
