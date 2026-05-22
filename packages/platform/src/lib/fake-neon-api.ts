@@ -109,7 +109,7 @@ export class FakeNeonApi implements NeonApi {
 
 		const defaultBranch: NeonBranchSnapshot = {
 			id: this.allocateId("br"),
-			name: "production",
+			name: input.defaultBranchName ?? "main",
 			isDefault: true,
 		};
 		const defaultEndpoint = this.makeEndpoint(

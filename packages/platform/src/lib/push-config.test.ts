@@ -142,6 +142,62 @@ describe("pushConfig — additive operations", () => {
 	});
 });
 
+describe("pushConfig — API key scopes", () => {
+	test("works with a project-scoped key flow: getProject path is taken when projectId is supplied", async () => {
+		// Simulate a project-scoped key by giving the fake api a listProjects implementation
+		// that throws 403. The push must succeed because getProject is the only call needed
+		// when projectId is provided.
+		const { api, projectId } = seededFake();
+		const guarded = Object.create(api) as typeof api;
+		guarded.listProjects = async () => {
+			throw Object.assign(new Error("Forbidden"), {
+				response: { status: 403 },
+			});
+		};
+		const config = defineConfig({
+			project: { name: "my-app", region: "aws-us-east-1" },
+			branchBlueprints: {
+				production: {},
+				staging: { parent: "production" },
+			},
+		});
+		const result = await pushConfig(config, { api: guarded, projectId });
+		expect(result.applied.some((a) => a.identifier === "staging")).toBe(
+			true,
+		);
+	});
+
+	test("project-scoped key without projectId surfaces PLATFORM_INSUFFICIENT_SCOPE", async () => {
+		const guarded = {
+			listProjects: async () => {
+				throw Object.assign(new Error("Forbidden"), {
+					response: { status: 403 },
+				});
+			},
+			getProject: () => Promise.reject(new Error("not used")),
+			createProject: () => Promise.reject(new Error("not used")),
+			updateProject: () => Promise.reject(new Error("not used")),
+			listBranches: () => Promise.reject(new Error("not used")),
+			createBranch: () => Promise.reject(new Error("not used")),
+			updateBranch: () => Promise.reject(new Error("not used")),
+			listEndpoints: () => Promise.reject(new Error("not used")),
+			updateEndpoint: () => Promise.reject(new Error("not used")),
+		} as unknown as Parameters<typeof pushConfig>[1] extends infer T
+			? T extends { api?: infer A }
+				? A
+				: never
+			: never;
+		const config = defineConfig({
+			project: { name: "my-app", region: "aws-us-east-1" },
+		});
+		await expect(
+			pushConfig(config, { api: guarded }),
+		).rejects.toMatchObject({
+			code: "PLATFORM_INSUFFICIENT_SCOPE",
+		});
+	});
+});
+
 describe("pushConfig — conflict handling", () => {
 	test("by default, refuses to apply when there are conflicts", async () => {
 		const { api, projectId } = seededFake();

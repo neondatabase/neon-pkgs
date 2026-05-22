@@ -37,6 +37,12 @@ export interface CreateProjectInput {
 	pgVersion?: number;
 	orgId?: string;
 	defaultEndpointSettings?: ComputeSettings;
+	/**
+	 * Optional name for the project's auto-created default branch. When omitted, Neon
+	 * uses its own default (`main`). Set this to the root blueprint's pattern so push
+	 * can match the desired state without trying to create a sibling branch.
+	 */
+	defaultBranchName?: string;
 }
 
 export interface CreateBranchInput {

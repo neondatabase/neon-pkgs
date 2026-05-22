@@ -175,6 +175,30 @@ All flags accept env-var fallbacks: `NEON_API_KEY`, `NEON_PROJECT_ID`, `NEON_ORG
 
 The package never creates, updates, or deletes files. In particular it does **not** write `.neon/project.json`. To bootstrap a project-context file, use `neon set-context` (which writes `.neon`) or any other tool of your choice. This package will happily read both layouts.
 
+## API key scopes
+
+`@neondatabase/platform` supports both **organisation/user-scoped** and **project-scoped** Neon API keys:
+
+| Scope                | `pullConfig` | `pushConfig` (with `projectId`) | `pushConfig` (without `projectId`) |
+| -------------------- | ------------ | ------------------------------- | ---------------------------------- |
+| Org or user-scoped   | ✅            | ✅                               | ✅ (looks up by name, may create)   |
+| Project-scoped       | ✅            | ✅                               | ❌ — `PLATFORM_INSUFFICIENT_SCOPE`  |
+
+Project-scoped keys can only operate on a single project. Pass `projectId` explicitly (SDK), use `--project-id` (CLI), set `NEON_PROJECT_ID`, or commit a `.neon/project.json` so push knows where to apply.
+
+When using an org-scoped key, leave `orgId` unset — the API key implicitly scopes every request to its owning org.
+
+## Running e2e tests
+
+`pnpm --filter @neondatabase/platform test:e2e` spins up real Neon projects and tears them down. Requirements:
+
+1. Create `packages/platform/.env` (gitignored) from `.env.example` and put an **org-scoped** API key in `NEON_API_KEY`. The org should be empty (or at least not contain projects named `neon-platform-e2e-*`).
+2. The suite runs single-threaded with 120s per-test timeouts.
+3. A startup sweep deletes any orphaned `neon-platform-e2e-*` projects from a previous failed run.
+4. Each test names its project `neon-platform-e2e-<uuid>-<purpose>` and registers it for cleanup, even if the test fails mid-way.
+
+Tests skip the "create project" portions when only a project-scoped key is available; set `NEON_PROJECT_ID` in `.env` to point the bounded subset at an existing project.
+
 ## Testing your IaC
 
 Inject a custom `api` (any object implementing `NeonApi`) to test pull/push flows without hitting the real Neon API. The package ships its public `NeonApi` interface so you can build your own fakes — internally, the test suite uses an in-memory fake (not vendored to consumers) that exercises the same interface.

@@ -36,6 +36,16 @@ type ApiClient = ReturnType<typeof createApiClient>;
 export function createRealNeonApi(options: {
 	apiKey: string;
 	baseUrl?: string;
+	/**
+	 * Tuning knob for the built-in 423 retry. Defaults: ~30s of total wait spread across
+	 * 12 attempts with exponential backoff capped at 5s. Lowering this is mostly useful in
+	 * tests; raising it is rarely needed because Neon operations are usually sub-second.
+	 */
+	retryOnLocked?: {
+		maxAttempts?: number;
+		initialDelayMs?: number;
+		maxDelayMs?: number;
+	};
 }): NeonApi {
 	if (!options.apiKey || options.apiKey.trim() === "") {
 		throw new PlatformError(
@@ -49,11 +59,67 @@ export function createRealNeonApi(options: {
 		...(options.baseUrl ? { baseURL: options.baseUrl } : {}),
 	});
 
-	return new RealNeonApi(client);
+	return new RealNeonApi(client, {
+		maxAttempts: options.retryOnLocked?.maxAttempts ?? 12,
+		initialDelayMs: options.retryOnLocked?.initialDelayMs ?? 250,
+		maxDelayMs: options.retryOnLocked?.maxDelayMs ?? 5_000,
+	});
+}
+
+interface RetryConfig {
+	maxAttempts: number;
+	initialDelayMs: number;
+	maxDelayMs: number;
+}
+
+/**
+ * Retry a function whenever it throws an HTTP 423 (Locked) — Neon's signal that a prior
+ * mutation on the same resource is still in flight. Uses exponential backoff capped at
+ * `maxDelayMs`. Any other error (and the last attempt) propagates.
+ *
+ * Exported only for tests; production callers go through the wrapped {@link NeonApi}.
+ */
+export async function retryOnLocked<T>(
+	fn: () => Promise<T>,
+	config: RetryConfig,
+): Promise<T> {
+	let delay = config.initialDelayMs;
+	let lastError: unknown;
+	for (let attempt = 1; attempt <= config.maxAttempts; attempt++) {
+		try {
+			return await fn();
+		} catch (err) {
+			lastError = err;
+			const status = readHttpStatusFromError(err);
+			if (status !== 423 || attempt === config.maxAttempts) throw err;
+			await sleep(delay);
+			delay = Math.min(delay * 2, config.maxDelayMs);
+		}
+	}
+	throw lastError;
+}
+
+function readHttpStatusFromError(err: unknown): number | undefined {
+	if (err === null || typeof err !== "object") return undefined;
+	const response = (err as { response?: unknown }).response;
+	if (response === null || typeof response !== "object") return undefined;
+	const status = (response as { status?: unknown }).status;
+	return typeof status === "number" ? status : undefined;
+}
+
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 class RealNeonApi implements NeonApi {
-	constructor(private readonly client: ApiClient) {}
+	constructor(
+		private readonly client: ApiClient,
+		private readonly retryConfig: RetryConfig,
+	) {}
+
+	private retry<T>(fn: () => Promise<T>): Promise<T> {
+		return retryOnLocked(fn, this.retryConfig);
+	}
 
 	async listProjects(filter: {
 		orgId?: string;
@@ -99,9 +165,12 @@ class RealNeonApi implements NeonApi {
 								),
 						}
 					: {}),
+				...(input.defaultBranchName
+					? { branch: { name: input.defaultBranchName } }
+					: {}),
 			},
 		};
-		const res = await this.client.createProject(body);
+		const res = await this.retry(() => this.client.createProject(body));
 		return projectToSnapshot(res.data.project);
 	}
 
@@ -122,7 +191,9 @@ class RealNeonApi implements NeonApi {
 					: {}),
 			},
 		};
-		const res = await this.client.updateProject(projectId, body);
+		const res = await this.retry(() =>
+			this.client.updateProject(projectId, body),
+		);
 		return projectToSnapshot(res.data.project);
 	}
 
@@ -169,7 +240,9 @@ class RealNeonApi implements NeonApi {
 			},
 			endpoints: [endpointOptions],
 		};
-		const res = await this.client.createProjectBranch(projectId, body);
+		const res = await this.retry(() =>
+			this.client.createProjectBranch(projectId, body),
+		);
 		return {
 			branch: branchToSnapshot(res.data.branch),
 			endpoints: (res.data.endpoints ?? []).map(endpointToSnapshot),
@@ -184,9 +257,9 @@ class RealNeonApi implements NeonApi {
 		const branch: BranchUpdateRequest["branch"] = {};
 		if (input.name !== undefined) branch.name = input.name;
 		if (input.expiresAt !== undefined) branch.expires_at = input.expiresAt;
-		const res = await this.client.updateProjectBranch(projectId, branchId, {
-			branch,
-		});
+		const res = await this.retry(() =>
+			this.client.updateProjectBranch(projectId, branchId, { branch }),
+		);
 		return branchToSnapshot(res.data.branch);
 	}
 
@@ -202,10 +275,10 @@ class RealNeonApi implements NeonApi {
 	): Promise<NeonEndpointSnapshot> {
 		const endpoint: EndpointUpdateRequest["endpoint"] =
 			computeSettingsToEndpointOptions(settings);
-		const res = await this.client.updateProjectEndpoint(
-			projectId,
-			endpointId,
-			{ endpoint },
+		const res = await this.retry(() =>
+			this.client.updateProjectEndpoint(projectId, endpointId, {
+				endpoint,
+			}),
 		);
 		return endpointToSnapshot(res.data.endpoint);
 	}

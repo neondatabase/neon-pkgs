@@ -10,7 +10,9 @@ export default defineConfig({
 			exclude: ["src/**/*.test.ts", "src/lib/fake-neon-api.ts"],
 			reporter: ["html", "lcov"],
 		},
-		exclude: ["lib", "node_modules", "dist"],
+		// Skip e2e tests (which talk to the real Neon API) in the standard suite — they
+		// run via `pnpm test:e2e` against `vitest.e2e.config.ts`.
+		exclude: ["lib", "node_modules", "dist", "**/*.e2e.test.ts", "e2e/**"],
 		setupFiles: ["console-fail-test/setup"],
 	},
 });

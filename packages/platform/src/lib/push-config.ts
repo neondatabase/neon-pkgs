@@ -240,22 +240,36 @@ async function resolveOrCreateProject(
 		return { project, projectCreated: false };
 	}
 
-	// No explicit project id. Look for a project matching `config.project.name` in `orgId`.
-	if (!orgId) {
-		throw new MissingContextError(
-			[
-				`Cannot resolve a Neon project automatically: no \`projectId\` was supplied and no context file was found above ${cwd}.`,
-				"Pass `projectId` (and `orgId` to create a new project) or run `neon set-context` to write a `.neon` file.",
-			].join(" "),
-		);
+	// No explicit project id. Look for a project matching `config.project.name`. When
+	// `orgId` is undefined we rely on the API key's implicit scope (org-scoped keys see
+	// only their own org's projects; user-scoped keys see every project the user can
+	// access — duplicate-name detection below catches the ambiguous case).
+	//
+	// Project-scoped API keys cannot list projects at all; surface that as a clear
+	// `PLATFORM_INSUFFICIENT_SCOPE` error so the user knows they need to pass `projectId`
+	// (or move to an org/user-scoped key).
+	let projects: Awaited<ReturnType<NeonApi["listProjects"]>>;
+	try {
+		projects = await api.listProjects(orgId ? { orgId } : {});
+	} catch (err) {
+		const status = readHttpStatus(err);
+		if (status === 401 || status === 403) {
+			throw new PlatformError(
+				"PLATFORM_INSUFFICIENT_SCOPE",
+				[
+					"This API key can't list projects, which is expected for project-scoped keys.",
+					"Pass `projectId` (SDK) / `--project-id` (CLI), set `NEON_PROJECT_ID`, or commit a `.neon/project.json` so push knows which project to target.",
+				].join(" "),
+				{ cause: err },
+			);
+		}
+		throw err;
 	}
-
-	const projects = await api.listProjects({ orgId });
 	const matches = projects.filter((p) => p.name === config.project.name);
 	if (matches.length > 1) {
 		throw new PlatformError(
 			"PLATFORM_AMBIGUOUS_PROJECT",
-			`Multiple Neon projects in org ${orgId} are named "${config.project.name}". Pass an explicit \`projectId\` to disambiguate.`,
+			`Multiple Neon projects${orgId ? ` in org ${orgId}` : ""} are named "${config.project.name}". Pass an explicit \`projectId\` to disambiguate.`,
 		);
 	}
 	if (matches.length === 1) {
@@ -265,34 +279,51 @@ async function resolveOrCreateProject(
 	if (!config.project.region) {
 		throw new PlatformError(
 			"PLATFORM_REGION_REQUIRED",
-			`No remote project named "${config.project.name}" exists in org ${orgId} and the local config has no \`project.region\` to create one with.`,
+			`No remote project named "${config.project.name}" exists${orgId ? ` in org ${orgId}` : ""} and the local config has no \`project.region\` to create one with.`,
 		);
 	}
 
-	// On first-time create, seed the project's default endpoint settings from the root
-	// blueprint (the one named "production" or, failing that, the first non-wildcard one).
-	// This makes the freshly-auto-created `production` branch match the local config without
-	// requiring `updateExisting: true` on the very first push.
-	const seedSettings = pickProjectDefaultSettings(config);
+	// On first-time create, name the project's auto-created default branch after the
+	// root blueprint (e.g. `production`) so the diff matches without trying to create a
+	// sibling. Likewise seed the project's default endpoint settings from that blueprint
+	// so the auto-created endpoint matches the desired compute settings on the very first
+	// push, no `updateExisting` flag needed.
+	const root = findRootBlueprint(config);
 	const created = await api.createProject({
 		name: config.project.name,
 		regionId: normalizeRegion(config.project.region),
 		pgVersion: config.project.pgVersion,
-		orgId,
-		...(seedSettings ? { defaultEndpointSettings: seedSettings } : {}),
+		...(orgId ? { orgId } : {}),
+		...(root?.computeSettings
+			? { defaultEndpointSettings: root.computeSettings }
+			: {}),
+		...(root ? { defaultBranchName: root.pattern } : {}),
 	});
 	return { project: created, projectCreated: true };
 }
 
-function pickProjectDefaultSettings(config: ResolvedConfig) {
-	const explicit = config.branchBlueprints.find(
-		(b) => b.key === "production" && b.pattern === "production",
+function readHttpStatus(err: unknown): number | undefined {
+	if (err === null || typeof err !== "object") return undefined;
+	const response = (err as { response?: unknown }).response;
+	if (response === null || typeof response !== "object") return undefined;
+	const status = (response as { status?: unknown }).status;
+	return typeof status === "number" ? status : undefined;
+}
+
+/**
+ * Find the blueprint that should govern the project's default branch on first-time
+ * creation. The "root" blueprint is the specific-name (non-wildcard) blueprint with no
+ * parent — i.e. the top of the branch tree. By default this is whatever blueprint is
+ * named `production`; users can rename it by setting `parent` on the others.
+ */
+function findRootBlueprint(config: ResolvedConfig) {
+	const candidates = config.branchBlueprints.filter(
+		(b) => !b.pattern.includes("*") && b.parent === undefined,
 	);
-	if (explicit?.computeSettings) return explicit.computeSettings;
-	const firstSpecific = config.branchBlueprints.find(
-		(b) => !b.pattern.includes("*"),
-	);
-	return firstSpecific?.computeSettings;
+	if (candidates.length > 0) return candidates[0];
+	// Fallback: no clean root (every specific blueprint has a parent). Pick the first
+	// specific blueprint just so the auto-created default branch has a useful name.
+	return config.branchBlueprints.find((b) => !b.pattern.includes("*"));
 }
 
 interface ApplyContext {
