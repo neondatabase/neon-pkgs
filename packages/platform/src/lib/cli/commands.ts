@@ -217,6 +217,25 @@ function resolveApi(
 }
 
 /**
+ * Stable exit code per `PlatformError` code. Mirrors the table in README → "CLI" so shell
+ * pipelines and CI can branch on the specific failure mode without parsing free text. Any
+ * `PlatformError` whose code is not listed here falls through to exit 5 (generic
+ * `PlatformError`) with the code prepended to the message.
+ */
+const EXIT_CODE_BY_PLATFORM_ERROR_CODE: Readonly<Record<string, number>> = {
+	[ErrorCode.MissingApiKey]: 1,
+	[ErrorCode.Unauthorized]: 6,
+	[ErrorCode.Forbidden]: 7,
+	[ErrorCode.InsufficientScope]: 7,
+	[ErrorCode.NotFound]: 8,
+	[ErrorCode.RateLimited]: 9,
+	[ErrorCode.NetworkError]: 10,
+	[ErrorCode.ServerError]: 11,
+	[ErrorCode.Locked]: 11,
+	[ErrorCode.InternalError]: 99,
+};
+
+/**
  * Map every error class / code to a stable exit code so shell pipelines and CI can branch
  * on the specific failure mode without parsing free text. See README → "CLI" for the full
  * table.
@@ -229,30 +248,10 @@ function handleError(err: unknown): CommandResult {
 	if (err instanceof ConfigLoadError)
 		return errorResult(err, `Failed to load config: ${err.message}`, 4);
 	if (err instanceof PlatformError) {
-		// Specific exit codes for the most operationally interesting cases so callers can
-		// react (e.g. CI surfaces an "Unauthorized: rotate your key" panel on exit 6).
-		switch (err.code) {
-			case ErrorCode.MissingApiKey:
-				return errorResult(err, err.message, 1);
-			case ErrorCode.Unauthorized:
-				return errorResult(err, err.message, 6);
-			case ErrorCode.Forbidden:
-			case ErrorCode.InsufficientScope:
-				return errorResult(err, err.message, 7);
-			case ErrorCode.NotFound:
-				return errorResult(err, err.message, 8);
-			case ErrorCode.RateLimited:
-				return errorResult(err, err.message, 9);
-			case ErrorCode.NetworkError:
-				return errorResult(err, err.message, 10);
-			case ErrorCode.ServerError:
-			case ErrorCode.Locked:
-				return errorResult(err, err.message, 11);
-			case ErrorCode.InternalError:
-				return errorResult(err, err.message, 99);
-			default:
-				return errorResult(err, `[${err.code}] ${err.message}`, 5);
-		}
+		const exitCode = EXIT_CODE_BY_PLATFORM_ERROR_CODE[err.code];
+		if (exitCode !== undefined)
+			return errorResult(err, err.message, exitCode);
+		return errorResult(err, `[${err.code}] ${err.message}`, 5);
 	}
 	if (err instanceof Error) return errorResult(err, err.message, 1);
 	return failure(String(err), 1);
