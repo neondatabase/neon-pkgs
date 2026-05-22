@@ -6,7 +6,7 @@ import { detectApiKeyScope, sweepOrphans } from "./helpers.js";
  * 1. Probes the configured API key to detect its scope. We do this here so a misconfigured
  *    environment fails fast with a clear message rather than surfacing as cryptic 403s
  *    inside individual tests.
- * 2. When the key is org/user-scoped, sweep any orphaned `neon-platform-e2e-*` projects
+ * 2. When the key is org/user-scoped, sweep any orphaned `neon-ts-e2e-*` projects
  *    left over from a previous run.
  */
 beforeAll(async () => {

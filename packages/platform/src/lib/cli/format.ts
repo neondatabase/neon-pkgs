@@ -31,7 +31,7 @@ export function formatConfigAsJson(config: Config): string {
 }
 
 /**
- * Output formats supported by `neon-platform pull`.
+ * Output formats supported by `neon-ts pull`.
  */
 export type PullOutputFormat = "ts" | "json";
 

@@ -2,7 +2,7 @@
 
 IaC and Config-as-Code for the Neon Platform. Describe your project, branch blueprints, TTLs, and compute settings in a single `neon.ts` file at the root of your repo, then `pullConfig` / `pushConfig` to sync against the [Neon API](https://api-docs.neon.tech).
 
-> The user-facing CLI surface for end-users lives in [`neonctl`](https://github.com/neondatabase/neonctl) (`neon platform pull|push|branch`) and wraps the SDK exported here. This package also ships a thin standalone `neon-platform` CLI so the same commands can be exercised in isolation — see [CLI](#cli) below.
+> The user-facing CLI surface for end-users lives in [`neonctl`](https://github.com/neondatabase/neonctl) (`neon platform pull|push|branch`) and wraps the SDK exported here. This package also ships a thin standalone `neon-ts` CLI so the same commands can be exercised in isolation — see [CLI](#cli) below.
 
 ## Install
 
@@ -166,24 +166,24 @@ Throws `ConfigLoadError` when the file can't be found / evaluated / lacks a defa
 
 ## CLI
 
-The package ships a `neon-platform` binary (analogous to `neon-init`) that wraps the SDK so the same commands can be exercised in isolation before they are wired into `neonctl`.
+The package ships a `neon-ts` binary (analogous to `neon-init`) that wraps the SDK so the same commands can be exercised in isolation before they are wired into `neonctl`.
 
 ```bash
 # Once installed (locally or via npx):
-neon-platform --help
+neon-ts --help
 
 # Print the resolved project + branch context as JSON
-neon-platform context
+neon-ts context
 
 # Pull the live state of the project into a neon.ts snippet (default) or JSON
-neon-platform pull
-neon-platform pull --format json --project-id proj-cool-snow-123
+neon-ts pull
+neon-ts pull --format json --project-id proj-cool-snow-123
 
 # Push your local neon.ts to the resolved Neon project
-neon-platform push                                # fail on conflict
-neon-platform push --update-existing              # update existing specific-name branches
-neon-platform push --apply-existing               # apply wildcard blueprints to existing matching branches
-neon-platform push --apply-changes                # force-apply, ignoring branch-level conflicts
+neon-ts push                                # fail on conflict
+neon-ts push --update-existing              # update existing specific-name branches
+neon-ts push --apply-existing               # apply wildcard blueprints to existing matching branches
+neon-ts push --apply-changes                # force-apply, ignoring branch-level conflicts
 ```
 
 Exit codes (stable — branch on these in CI / shell pipelines):
@@ -262,10 +262,10 @@ When using an org-scoped key, leave `orgId` unset — the API key implicitly sco
 
 `pnpm --filter @neondatabase/platform test:e2e` spins up real Neon projects and tears them down. Requirements:
 
-1. Create `packages/platform/.env` (gitignored) from `.env.example` and put an **org-scoped** API key in `NEON_API_KEY`. The org should be empty (or at least not contain projects named `neon-platform-e2e-*`).
+1. Create `packages/platform/.env` (gitignored) from `.env.example` and put an **org-scoped** API key in `NEON_API_KEY`. The org should be empty (or at least not contain projects named `neon-ts-e2e-*`).
 2. The suite runs single-threaded with 120s per-test timeouts.
-3. A startup sweep deletes any orphaned `neon-platform-e2e-*` projects from a previous failed run.
-4. Each test names its project `neon-platform-e2e-<uuid>-<purpose>` and registers it for cleanup, even if the test fails mid-way.
+3. A startup sweep deletes any orphaned `neon-ts-e2e-*` projects from a previous failed run.
+4. Each test names its project `neon-ts-e2e-<uuid>-<purpose>` and registers it for cleanup, even if the test fails mid-way.
 
 Tests skip the "create project" portions when only a project-scoped key is available; set `NEON_PROJECT_ID` in `.env` to point the bounded subset at an existing project.
 

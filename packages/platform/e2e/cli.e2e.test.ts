@@ -54,9 +54,9 @@ async function runCli(
 	});
 }
 
-describe("e2e — neon-platform CLI against real Neon API", () => {
+describe("e2e — neon-ts CLI against real Neon API", () => {
 	e2eTest(
-		"`neon-platform pull --format json` prints a real Config from the live project",
+		"`neon-ts pull --format json` prints a real Config from the live project",
 		async ({ track }) => {
 			const scope = await detectApiKeyScope();
 			const api = makeRealApi();
@@ -94,7 +94,7 @@ describe("e2e — neon-platform CLI against real Neon API", () => {
 	);
 
 	e2eTest(
-		"`neon-platform push` end-to-end against a temp repo with .neon/project.json + neon.ts",
+		"`neon-ts push` end-to-end against a temp repo with .neon/project.json + neon.ts",
 		async ({ track }) => {
 			const scope = await detectApiKeyScope();
 			if (scope.kind !== "org-or-user") return;
@@ -149,7 +149,7 @@ export default defineConfig({
 	);
 
 	e2eTest(
-		"`neon-platform context` reads NEON_PROJECT_ID + NEON_BRANCH_ID from env",
+		"`neon-ts context` reads NEON_PROJECT_ID + NEON_BRANCH_ID from env",
 		async () => {
 			const repo = makeTempRepo({ "package.json": "{}" });
 			try {
@@ -175,7 +175,7 @@ export default defineConfig({
 	);
 
 	e2eTest(
-		"`neon-platform push` exits 2 (PushConflictError) when there's drift and no --apply-changes",
+		"`neon-ts push` exits 2 (PushConflictError) when there's drift and no --apply-changes",
 		async ({ track }) => {
 			const scope = await detectApiKeyScope();
 			if (scope.kind !== "org-or-user") return;

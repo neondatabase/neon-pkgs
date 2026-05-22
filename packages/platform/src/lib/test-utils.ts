@@ -15,7 +15,7 @@ export function makeTempRepo(files: Record<string, string | null>): {
 	root: string;
 	cleanup: () => void;
 } {
-	const root = mkdtempSync(join(tmpdir(), "neon-platform-test-"));
+	const root = mkdtempSync(join(tmpdir(), "neon-ts-test-"));
 	for (const [relPath, contents] of Object.entries(files)) {
 		const abs = join(root, relPath);
 		mkdirSync(dirname(abs), { recursive: true });

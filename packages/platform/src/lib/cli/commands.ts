@@ -56,7 +56,7 @@ export interface PullCommandOptions {
 }
 
 /**
- * Implementation of `neon-platform pull`. Pulls the live Neon project state and prints
+ * Implementation of `neon-ts pull`. Pulls the live Neon project state and prints
  * it either as a `neon.ts` snippet (default) or as JSON.
  */
 export async function runPull(
@@ -97,7 +97,7 @@ export interface PushCommandOptions {
 }
 
 /**
- * Implementation of `neon-platform push`. Loads `neon.ts` (or the path supplied via
+ * Implementation of `neon-ts push`. Loads `neon.ts` (or the path supplied via
  * `--config`), pushes against the resolved project, and prints a human-readable summary
  * of what changed (or what would change).
  */
@@ -168,7 +168,7 @@ export interface ContextCommandOptions {
 }
 
 /**
- * Implementation of `neon-platform context`. Prints the resolved project + branch context
+ * Implementation of `neon-ts context`. Prints the resolved project + branch context
  * as JSON. Pure read of {@link loadContext} — does not touch the Neon API.
  */
 export function runContext(

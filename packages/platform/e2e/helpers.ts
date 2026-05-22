@@ -5,11 +5,11 @@ import type { NeonApi } from "../src/lib/neon-api.js";
 import { createRealNeonApi } from "../src/lib/neon-api-real.js";
 
 /**
- * Every e2e-created project is named `neon-platform-e2e-<uuid>`. Tests can register
+ * Every e2e-created project is named `neon-ts-e2e-<uuid>`. Tests can register
  * `track(id)` to opt into the per-test cleanup hook. The suite-level
  * {@link sweepOrphans} additionally deletes leftovers from a previous failed run.
  */
-export const PROJECT_PREFIX = "neon-platform-e2e-";
+export const PROJECT_PREFIX = "neon-ts-e2e-";
 
 /**
  * Default Neon region used by every e2e test that creates a project. Override per-test

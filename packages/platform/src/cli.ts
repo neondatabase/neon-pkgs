@@ -15,7 +15,7 @@ import { isPullOutputFormat, type PullOutputFormat } from "./lib/cli/format.js";
 const pkgVersion = readPackageVersion();
 
 const argv = yargs(hideBin(process.argv))
-	.scriptName("neon-platform")
+	.scriptName("neon-ts")
 	.usage("$0 <command> [options]")
 	.option("debug", {
 		type: "boolean",
@@ -108,10 +108,7 @@ const argv = yargs(hideBin(process.argv))
 					describe: "Override the .neon/project.json orgId",
 				}),
 	)
-	.demandCommand(
-		1,
-		"Run `neon-platform --help` to see the available commands.",
-	)
+	.demandCommand(1, "Run `neon-ts --help` to see the available commands.")
 	.strict()
 	.help()
 	.version(pkgVersion)

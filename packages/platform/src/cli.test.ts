@@ -48,13 +48,13 @@ function runCli(
 }
 
 // These tests spawn the *built* dist/cli.js because that's what end-users actually invoke
-// via `npx neon-platform`. If dist/ isn't built yet, skip rather than fail noisily — the
+// via `npx neon-ts`. If dist/ isn't built yet, skip rather than fail noisily — the
 // monorepo build step covers it before publishing, and the handler-level commands.test.ts
 // already exercises the same logic with much faster iteration.
 const cliBuilt = existsSync(CLI_PATH);
 const describeIfBuilt = cliBuilt ? describe : describe.skip;
 
-describeIfBuilt("neon-platform CLI (e2e, spawns dist/cli.js)", () => {
+describeIfBuilt("neon-ts CLI (e2e, spawns dist/cli.js)", () => {
 	test("--help exits 0 and lists the three subcommands", async () => {
 		const result = await runCli(["--help"]);
 		expect(result.exitCode).toBe(0);
