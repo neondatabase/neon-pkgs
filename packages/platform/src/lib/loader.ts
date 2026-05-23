@@ -1,4 +1,5 @@
 import { existsSync, statSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { defineConfig } from "./define-config.js";
@@ -22,6 +23,12 @@ export interface LoadConfigOptions {
 	path?: string;
 	/** Starting directory for the upward search. Defaults to `process.cwd()`. */
 	cwd?: string;
+	/**
+	 * Hard ceiling for the upward walk — once `current === stopAt` the search returns
+	 * `null` even if no `.git` boundary was hit. Defaults to the OS home directory so
+	 * stray runs from outside any repo never leak into the user's `~` files.
+	 */
+	stopAt?: string;
 }
 
 /**
@@ -30,9 +37,11 @@ export interface LoadConfigOptions {
  * Behavior:
  * - When `path` is set, that file is loaded directly. The file must exist and must default-export
  *   a value produced by `defineConfig()`.
- * - When `path` is omitted, we walk up from `cwd` looking for the first file matching
- *   {@link DEFAULT_CONFIG_FILENAMES}. The walk stops at the same project-root markers as
- *   `findProjectContext` (`.git` or `package.json`).
+ * - When `path` is omitted, we walk up from `cwd` picking the **closest** file matching
+ *   {@link DEFAULT_CONFIG_FILENAMES}. The walk is monorepo-friendly: intermediate
+ *   `package.json` files do **not** stop it, so a single `neon.ts` lifted to the workspace
+ *   root keeps working when invoked from inside any sub-package. The walk terminates at the
+ *   first directory containing `.git`, at `stopAt`, or at the filesystem root.
  *
  * jiti is loaded lazily so that callers who pass an already-resolved `Config` to `pushConfig`
  * never pay the import cost.
@@ -45,14 +54,14 @@ export async function loadConfigFromFile(
 }> {
 	const resolvedPath = options.path
 		? resolveExplicitPath(options.path, options.cwd)
-		: findDefaultConfig(options.cwd);
+		: findDefaultConfig(options.cwd, options.stopAt);
 
 	if (!resolvedPath) {
 		throw new ConfigLoadError(
 			[
 				`Could not find a Neon config file while walking up from ${resolve(options.cwd ?? process.cwd())}.`,
-				`Looked for: ${DEFAULT_CONFIG_FILENAMES.join(", ")} (stopping at the first directory with a \`package.json\` or \`.git\`).`,
-				`Create one at your project root, or pass an explicit \`configPath\` (SDK) / \`--config <path>\` (CLI).`,
+				`Looked for: ${DEFAULT_CONFIG_FILENAMES.join(", ")} (stopping at the first directory with a \`.git\`).`,
+				`Create one at your repository root (or anywhere on the path from cwd up to .git), or pass an explicit \`configPath\` (SDK) / \`--config <path>\` (CLI).`,
 			].join("\n"),
 		);
 	}
@@ -103,8 +112,12 @@ function resolveExplicitPath(input: string, cwd?: string): string {
 	return abs;
 }
 
-function findDefaultConfig(cwd: string | undefined): string | null {
+function findDefaultConfig(
+	cwd: string | undefined,
+	stopAt: string | undefined,
+): string | null {
 	let current = resolve(cwd ?? process.cwd());
+	const stop = resolve(stopAt ?? homedir());
 	let lastSeen: string | null = null;
 
 	while (true) {
@@ -114,13 +127,10 @@ function findDefaultConfig(cwd: string | undefined): string | null {
 				return candidate;
 		}
 
-		if (
-			existsSync(resolve(current, ".git")) ||
-			existsSync(resolve(current, "package.json"))
-		) {
-			// Reached the project root without finding a config file.
-			return null;
-		}
+		// `.git` is the canonical repo-root marker. `package.json` is deliberately *not*
+		// a stop: monorepos lift `neon.ts` above sub-package package.jsons.
+		if (existsSync(resolve(current, ".git"))) return null;
+		if (current === stop) return null;
 
 		const parent = dirname(current);
 		if (parent === current || parent === lastSeen) return null;

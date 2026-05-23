@@ -74,6 +74,25 @@ describe("findProjectContext", () => {
 		expect(ctx?.projectId).toBe("proj-3");
 	});
 
+	test("walks past intermediate package.json files (monorepo workspace root)", () => {
+		// Simulate a pnpm/npm workspace: `.neon` lives at the repo root next to the root
+		// `package.json`, sub-packages have their own `package.json` but no `.neon`. The
+		// walker must not stop at the sub-package boundary.
+		const root = setup({
+			"package.json": JSON.stringify({ workspaces: ["apps/*"] }),
+			".neon/project.json": JSON.stringify({
+				projectId: "monorepo-root",
+			}),
+			"apps/web/package.json": "{}",
+			"apps/web/src/index.ts": "// hi",
+		});
+		const ctx = findProjectContext({
+			cwd: `${root}/apps/web/src`,
+			stopAt: root,
+		});
+		expect(ctx?.projectId).toBe("monorepo-root");
+	});
+
 	test("stops walking at .git boundary", () => {
 		const root = setup({
 			"package.json": "{}",

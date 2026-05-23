@@ -31,11 +31,12 @@ export interface ContextLoaderOptions {
  * 1. `<dir>/.neon/project.json` (this package's preferred convention)
  * 2. `<dir>/.neon` (neonctl's existing convention — a JSON file, not a directory)
  *
- * The walk stops at the first directory that contains a project-context file. If no context
- * file is encountered but the directory contains `.git` or `package.json`, the walk also
- * stops there (we treat that as the project root, and there's no context to find above it).
- * The walk additionally stops at `stopAt` (default: home directory) and at the filesystem
- * root.
+ * The walk picks the **closest** context file as we ascend. It is deliberately
+ * monorepo-friendly: intermediate `package.json` files do **not** stop the walk, so a
+ * `.neon` lifted to the workspace root keeps working when invoked from inside any
+ * sub-package. The walk terminates at the first directory that contains `.git` (the repo
+ * root), or at `stopAt` (default: home directory), or at the filesystem root — whichever
+ * comes first.
  *
  * Returns `null` when no context file is found. This function does **no** writes — per the
  * package's read-only-filesystem contract, callers that want to bootstrap a context file
@@ -55,7 +56,7 @@ export function findProjectContext(
 		if (result) return result;
 
 		if (current === stopAt) return null;
-		if (hasProjectRootMarker(current)) return null;
+		if (hasGitMarker(current)) return null;
 
 		const parent = dirname(current);
 		if (parent === current || parent === lastSeen) return null;
@@ -79,11 +80,11 @@ export function requireProjectContext(
 	throw new MissingContextError(
 		[
 			`No Neon project context file found while walking up from ${startDir} to ${stopDir}.`,
-			"Looked for `.neon/project.json` (preferred) and `.neon` (neonctl convention) in every directory along the way.",
+			"Looked for `.neon/project.json` (preferred) and `.neon` (neonctl convention) in every directory along the way (stopping at the first `.git`).",
 			"To fix, either:",
 			"  - Create one with `npx neonctl set-context --project-id <id>` (writes a `.neon` file at the project root), or",
 			'  - Write `.neon/project.json` yourself with `{ "projectId": "…", "orgId": "…" }`, or',
-			"  - Pass `projectId` (and optionally `orgId`) directly to the SDK / CLI.",
+			"  - Pass `projectId` (and optionally `orgId`) directly to the SDK / CLI, or set `NEON_PROJECT_ID` in `process.env`.",
 		].join("\n"),
 	);
 }
@@ -131,11 +132,8 @@ function parseContextFile(path: string): ProjectContext | null {
 	return ctx;
 }
 
-function hasProjectRootMarker(dir: string): boolean {
-	return (
-		existsPath(resolve(dir, ".git")) ||
-		existsPath(resolve(dir, "package.json"))
-	);
+function hasGitMarker(dir: string): boolean {
+	return existsPath(resolve(dir, ".git"));
 }
 
 function existsFile(path: string): boolean {

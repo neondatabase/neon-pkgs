@@ -74,6 +74,47 @@ export default defineConfig({ project: { name: "walked-up" } });
 		expect(config.project.name).toBe("walked-up");
 	});
 
+	test("walks past intermediate package.json files (monorepo workspace root)", async () => {
+		// `neon.ts` at the workspace root must be visible from a nested sub-package's cwd
+		// even though `apps/web/package.json` sits between them.
+		const root = setup({
+			"package.json": JSON.stringify({ workspaces: ["apps/*"] }),
+			"neon.ts": `
+import { defineConfig } from "${PLATFORM_SRC}";
+export default defineConfig({ project: { name: "monorepo-root" } });
+`,
+			"apps/web/package.json": "{}",
+			"apps/web/src/index.ts": "// hi",
+		});
+		const { config, resolvedPath } = await loadConfigFromFile({
+			cwd: `${root}/apps/web/src`,
+			stopAt: root,
+		});
+		expect(config.project.name).toBe("monorepo-root");
+		expect(resolvedPath).toBe(`${root}/neon.ts`);
+	});
+
+	test("nearer neon.ts wins over a workspace-root one", async () => {
+		// Sub-package has its own neon.ts — it should shadow the workspace-root config.
+		const root = setup({
+			"package.json": JSON.stringify({ workspaces: ["apps/*"] }),
+			"neon.ts": `
+import { defineConfig } from "${PLATFORM_SRC}";
+export default defineConfig({ project: { name: "outer" } });
+`,
+			"apps/web/package.json": "{}",
+			"apps/web/neon.ts": `
+import { defineConfig } from "${PLATFORM_SRC}";
+export default defineConfig({ project: { name: "inner" } });
+`,
+		});
+		const { config } = await loadConfigFromFile({
+			cwd: `${root}/apps/web`,
+			stopAt: root,
+		});
+		expect(config.project.name).toBe("inner");
+	});
+
 	test("throws ConfigLoadError when no file found", async () => {
 		const root = setup({ "package.json": "{}" });
 		await expect(loadConfigFromFile({ cwd: root })).rejects.toThrow(

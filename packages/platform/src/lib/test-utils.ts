@@ -10,13 +10,24 @@ import { dirname, join } from "node:path";
  *
  * `files` is a flat map of relative paths → contents; intermediate directories are created
  * automatically. Directories themselves can be created by passing `null` as the value.
+ *
+ * A `.git/HEAD` marker is seeded at the root by default so the platform's upward walkers
+ * (which stop at `.git`) don't escape the synthetic repo and read the developer's real
+ * `~/.neon`. Pass an explicit `.git` entry in `files` to override or position it elsewhere
+ * (e.g. for tests that exercise the boundary behaviour itself).
  */
 export function makeTempRepo(files: Record<string, string | null>): {
 	root: string;
 	cleanup: () => void;
 } {
 	const root = mkdtempSync(join(tmpdir(), "neon-ts-test-"));
-	for (const [relPath, contents] of Object.entries(files)) {
+	const callerSpecifiesGit = Object.keys(files).some(
+		(p) => p === ".git" || p.startsWith(".git/"),
+	);
+	const entries: Array<[string, string | null]> = callerSpecifiesGit
+		? Object.entries(files)
+		: [[".git/HEAD", "ref: refs/heads/main\n"], ...Object.entries(files)];
+	for (const [relPath, contents] of entries) {
 		const abs = join(root, relPath);
 		mkdirSync(dirname(abs), { recursive: true });
 		if (contents !== null) {
