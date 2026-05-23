@@ -317,36 +317,67 @@ async function resolveOrCreateProject(
 	cwd: string,
 	dryRun: boolean,
 ): Promise<ResolvedProjectResult> {
-	let projectId: string | undefined;
-	let orgId: string | undefined;
-	try {
-		const ctx = loadContext({
-			projectId: options.projectId,
-			orgId: options.orgId,
-			cwd,
-		});
-		projectId = ctx.projectId;
-		orgId = ctx.orgId;
-	} catch (cause) {
-		if (!(cause instanceof MissingContextError)) throw cause;
-		orgId = options.orgId ?? process.env.NEON_ORG_ID;
-	}
+	const { projectId, orgId } = resolveProjectContext(options, cwd);
 
 	if (projectId) {
 		const project = await api.getProject(projectId);
 		return { project, projectCreated: false };
 	}
 
-	// No explicit project id. Look for a project matching `config.project.name`. When
-	// `orgId` is undefined we rely on the API key's implicit scope (org-scoped keys see
-	// only their own org's projects; user-scoped keys see every project the user can
-	// access — duplicate-name detection below catches the ambiguous case).
-	//
-	// Project-scoped API keys cannot list projects at all; surface that as a clear
-	// `PLATFORM_INSUFFICIENT_SCOPE` error so the user knows they need to pass `projectId`
-	// (or move to an org/user-scoped key). The adapter wraps the underlying 401/403 into a
-	// PlatformError already; we additionally rewrite it here because the listProjects
-	// failure is specifically about scope, not about a wrong endpoint.
+	const byName = await findProjectByName(api, config, orgId);
+	if (byName) return { project: byName, projectCreated: false };
+
+	if (!config.project.region) {
+		throw new PlatformError(
+			ErrorCode.RegionRequired,
+			[
+				`No remote project named "${config.project.name}" exists${orgId ? ` in org ${orgId}` : ""}.`,
+				'Add a `region` to your config\'s `project` section so push can create the project on first run. Example: `region: "aws-us-east-1"`. See https://neon.com/docs/introduction/regions for valid identifiers.',
+			].join(" "),
+		);
+	}
+
+	return createProject(api, config, orgId, dryRun);
+}
+
+/**
+ * Resolve the project + org from the standard context chain (options → env →
+ * `.neon[/project.json]` walking up from `cwd`), treating "no project resolvable" as a
+ * non-fatal — the caller then falls back to lookup-by-name / create.
+ */
+function resolveProjectContext(
+	options: PushConfigOptions,
+	cwd: string,
+): { projectId: string | undefined; orgId: string | undefined } {
+	try {
+		const ctx = loadContext({
+			projectId: options.projectId,
+			orgId: options.orgId,
+			cwd,
+		});
+		return { projectId: ctx.projectId, orgId: ctx.orgId };
+	} catch (cause) {
+		if (!(cause instanceof MissingContextError)) throw cause;
+		return {
+			projectId: undefined,
+			orgId: options.orgId ?? process.env.NEON_ORG_ID,
+		};
+	}
+}
+
+/**
+ * Look for a project matching `config.project.name`. Returns the single match (caller
+ * then treats it as "reuse"), `null` if no project with that name exists (caller then
+ * creates), or throws `AmbiguousProject` when multiple share the name.
+ *
+ * Project-scoped API keys cannot list projects at all; that surfaces as
+ * `InsufficientScope` with a fix-hint pointing at the alternatives.
+ */
+async function findProjectByName(
+	api: NeonApi,
+	config: ResolvedConfig,
+	orgId: string | undefined,
+): Promise<NeonProjectSnapshot | null> {
 	let projects: Awaited<ReturnType<NeonApi["listProjects"]>>;
 	try {
 		projects = await api.listProjects(orgId ? { orgId } : {});
@@ -385,25 +416,27 @@ async function resolveOrCreateProject(
 			},
 		);
 	}
-	if (matches.length === 1) {
-		return { project: matches[0], projectCreated: false };
-	}
+	return matches.length === 1 ? matches[0] : null;
+}
 
+/**
+ * Create (or, in dry-run mode, synthesize) the project. The auto-created default branch
+ * is named after the root entry in `config.branches`, and its compute settings seed the
+ * project's `defaultEndpointSettings` so the resulting endpoint matches without a
+ * follow-up `updateExisting` pass.
+ */
+async function createProject(
+	api: NeonApi,
+	config: ResolvedConfig,
+	orgId: string | undefined,
+	dryRun: boolean,
+): Promise<ResolvedProjectResult> {
 	if (!config.project.region) {
 		throw new PlatformError(
-			ErrorCode.RegionRequired,
-			[
-				`No remote project named "${config.project.name}" exists${orgId ? ` in org ${orgId}` : ""}.`,
-				'Add a `region` to your config\'s `project` section so push can create the project on first run. Example: `region: "aws-us-east-1"`. See https://neon.com/docs/introduction/regions for valid identifiers.',
-			].join(" "),
+			ErrorCode.InternalError,
+			`createProject called without a region (caller should have caught this).${bugReportFooter()}`,
 		);
 	}
-
-	// On first-time create, name the project's auto-created default branch after the
-	// root branch (e.g. `production`) so the diff matches without trying to create a
-	// sibling. Likewise seed the project's default endpoint settings from that branch so
-	// the auto-created endpoint matches the desired compute settings on the very first
-	// push, no `updateExisting` flag needed.
 	const root = findRootBranch(config);
 	if (dryRun) {
 		// Return a placeholder project so the rest of the dry-run flow has something to

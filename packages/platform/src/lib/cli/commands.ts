@@ -98,31 +98,7 @@ export async function runPull(
 			};
 		}
 		const targetPath = join(ctx.cwd, NEON_CONFIG_FILENAME);
-		const existed = existsSync(targetPath);
-		try {
-			writeFileSync(
-				targetPath,
-				formatConfigAsTypeScript(config),
-				"utf-8",
-			);
-		} catch (writeErr) {
-			const message =
-				writeErr instanceof Error ? writeErr.message : String(writeErr);
-			return {
-				exitCode: 1,
-				stdout: "",
-				stderr: `Failed to write ${targetPath}: ${message}\n`,
-				...(writeErr instanceof Error && writeErr.stack
-					? { debugInfo: writeErr.stack }
-					: {}),
-			};
-		}
-		const verb = existed ? "Updated" : "Created";
-		return {
-			exitCode: 0,
-			stdout: `✓ ${verb} ${targetPath}\n`,
-			stderr: "",
-		};
+		return writeFileSafely(targetPath, formatConfigAsTypeScript(config));
 	} catch (err) {
 		return handleError(err);
 	}
@@ -475,45 +451,13 @@ export async function runEnvPull(
 	if (typeof api === "string") return failure(api);
 
 	try {
-		const { config } = await loadConfigFromFile({
-			...(options.configPath ? { path: options.configPath } : {}),
-			cwd: ctx.cwd,
-		});
-		const env = await fetchEnv(config, {
-			api,
-			cwd: ctx.cwd,
-			env: ctx.env,
-			...(options.projectId ? { projectId: options.projectId } : {}),
-			...(options.orgId ? { orgId: options.orgId } : {}),
-			...(options.branch ? { branch: options.branch } : {}),
-		});
+		const env = await loadConfigAndFetchEnv(options, ctx, api);
 		const targetPath = options.file
 			? options.file.startsWith("/")
 				? options.file
 				: join(ctx.cwd, options.file)
 			: join(ctx.cwd, DEFAULT_ENV_FILE);
-		const existed = existsSync(targetPath);
-		const body = formatEnvFile(env);
-		try {
-			writeFileSync(targetPath, body, "utf-8");
-		} catch (writeErr) {
-			const message =
-				writeErr instanceof Error ? writeErr.message : String(writeErr);
-			return {
-				exitCode: 1,
-				stdout: "",
-				stderr: `Failed to write ${targetPath}: ${message}\n`,
-				...(writeErr instanceof Error && writeErr.stack
-					? { debugInfo: writeErr.stack }
-					: {}),
-			};
-		}
-		const verb = existed ? "Updated" : "Created";
-		return {
-			exitCode: 0,
-			stdout: `✓ ${verb} ${targetPath}\n`,
-			stderr: "",
-		};
+		return writeFileSafely(targetPath, formatEnvFile(env));
 	} catch (err) {
 		return handleError(err);
 	}
@@ -585,18 +529,7 @@ export async function runEnvRun(
 
 	let injected: Record<string, string>;
 	try {
-		const { config } = await loadConfigFromFile({
-			...(options.configPath ? { path: options.configPath } : {}),
-			cwd: ctx.cwd,
-		});
-		const env = await fetchEnv(config, {
-			api,
-			cwd: ctx.cwd,
-			env: ctx.env,
-			...(options.projectId ? { projectId: options.projectId } : {}),
-			...(options.orgId ? { orgId: options.orgId } : {}),
-			...(options.branch ? { branch: options.branch } : {}),
-		});
+		const env = await loadConfigAndFetchEnv(options, ctx, api);
 		injected = neonEnvToProcessEnv(env);
 	} catch (err) {
 		return handleError(err);
@@ -650,6 +583,64 @@ function spawnAndWait(
 }
 
 // ───────────────────────── helpers ──────────────────────
+
+/**
+ * Shared preamble for `env pull` / `env run`: load `neon.ts`, then call `fetchEnv` with
+ * the standard option-passthrough shape. Extracts the boilerplate so each top-level
+ * handler stays focused on what to do with the env, not how to get it.
+ */
+async function loadConfigAndFetchEnv(
+	options: {
+		configPath?: string;
+		projectId?: string;
+		orgId?: string;
+		branch?: string;
+	},
+	ctx: CommandEnv,
+	api: NeonApi,
+): Promise<Awaited<ReturnType<typeof fetchEnv>>> {
+	const { config } = await loadConfigFromFile({
+		...(options.configPath ? { path: options.configPath } : {}),
+		cwd: ctx.cwd,
+	});
+	return fetchEnv(config, {
+		api,
+		cwd: ctx.cwd,
+		env: ctx.env,
+		...(options.projectId ? { projectId: options.projectId } : {}),
+		...(options.orgId ? { orgId: options.orgId } : {}),
+		...(options.branch ? { branch: options.branch } : {}),
+	});
+}
+
+/**
+ * Write `body` to `targetPath`, returning a `CommandResult` with `Created` or `Updated`
+ * status depending on whether the file already existed — or a clean exit-1 with a
+ * helpful message when the write failed (read-only FS, EACCES, missing parent dir).
+ */
+function writeFileSafely(targetPath: string, body: string): CommandResult {
+	const existed = existsSync(targetPath);
+	try {
+		writeFileSync(targetPath, body, "utf-8");
+	} catch (writeErr) {
+		const message =
+			writeErr instanceof Error ? writeErr.message : String(writeErr);
+		return {
+			exitCode: 1,
+			stdout: "",
+			stderr: `Failed to write ${targetPath}: ${message}\n`,
+			...(writeErr instanceof Error && writeErr.stack
+				? { debugInfo: writeErr.stack }
+				: {}),
+		};
+	}
+	const verb = existed ? "Updated" : "Created";
+	return {
+		exitCode: 0,
+		stdout: `✓ ${verb} ${targetPath}\n`,
+		stderr: "",
+	};
+}
 
 function resolveApi(
 	apiKeyOption: string | undefined,
