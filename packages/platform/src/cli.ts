@@ -8,6 +8,8 @@ import {
 	type CommandResult,
 	runBranch,
 	runContext,
+	runEnvPull,
+	runEnvRun,
 	runPull,
 	runPush,
 } from "./lib/cli/commands.js";
@@ -18,6 +20,7 @@ const pkgVersion = readPackageVersion();
 const argv = yargs(hideBin(process.argv))
 	.scriptName("neon-ts")
 	.usage("$0 <command> [options]")
+	.parserConfiguration({ "populate--": true })
 	.option("debug", {
 		type: "boolean",
 		default: false,
@@ -138,6 +141,76 @@ const argv = yargs(hideBin(process.argv))
 					describe: "Neon API key (defaults to NEON_API_KEY)",
 				}),
 	)
+	.command("env", "Pull or run with Neon env vars injected.", (env) =>
+		env
+			.command(
+				"pull [file]",
+				"Write Neon connection strings to a .env file (default: .env.local).",
+				(y) =>
+					y
+						.positional("file", {
+							type: "string",
+							describe:
+								"Target file path. Defaults to .env.local in the current directory.",
+						})
+						.option("config", {
+							type: "string",
+							describe:
+								"Path to neon.ts (defaults to walking up from cwd)",
+						})
+						.option("project-id", {
+							type: "string",
+							describe:
+								"Override the .neon/project.json projectId",
+						})
+						.option("org-id", {
+							type: "string",
+							describe: "Override the .neon/project.json orgId",
+						})
+						.option("branch", {
+							type: "string",
+							describe:
+								"Override the .neon/project.json branchId / NEON_BRANCH_ID",
+						})
+						.option("api-key", {
+							type: "string",
+							describe: "Neon API key (defaults to NEON_API_KEY)",
+						}),
+			)
+			.command(
+				"run",
+				"Run a command with Neon env vars injected into its environment. Use `--` to separate the command: `neon-ts env run -- npm run dev`.",
+				(y) =>
+					y
+						.option("config", {
+							type: "string",
+							describe:
+								"Path to neon.ts (defaults to walking up from cwd)",
+						})
+						.option("project-id", {
+							type: "string",
+							describe:
+								"Override the .neon/project.json projectId",
+						})
+						.option("org-id", {
+							type: "string",
+							describe: "Override the .neon/project.json orgId",
+						})
+						.option("branch", {
+							type: "string",
+							describe:
+								"Override the .neon/project.json branchId / NEON_BRANCH_ID",
+						})
+						.option("api-key", {
+							type: "string",
+							describe: "Neon API key (defaults to NEON_API_KEY)",
+						}),
+			)
+			.demandCommand(
+				1,
+				"Run `neon-ts env --help` to see the available subcommands.",
+			),
+	)
 	.demandCommand(1, "Run `neon-ts --help` to see the available commands.")
 	.strict()
 	.help()
@@ -145,6 +218,7 @@ const argv = yargs(hideBin(process.argv))
 	.parseSync();
 
 const command = String(argv._[0]);
+const subcommand = argv._[1] !== undefined ? String(argv._[1]) : undefined;
 const env: Record<string, string | undefined> = { ...process.env };
 const cwd = process.cwd();
 
@@ -232,6 +306,65 @@ switch (command) {
 			},
 			{ cwd, env },
 		);
+		break;
+	}
+	case "env": {
+		if (subcommand === "pull") {
+			result = await runEnvPull(
+				{
+					...(typeof argv.file === "string"
+						? { file: argv.file }
+						: {}),
+					...(typeof argv.config === "string"
+						? { configPath: argv.config }
+						: {}),
+					...(typeof argv["project-id"] === "string"
+						? { projectId: argv["project-id"] }
+						: {}),
+					...(typeof argv["org-id"] === "string"
+						? { orgId: argv["org-id"] }
+						: {}),
+					...(typeof argv.branch === "string"
+						? { branch: argv.branch }
+						: {}),
+					...(typeof argv["api-key"] === "string"
+						? { apiKey: argv["api-key"] }
+						: {}),
+				},
+				{ cwd, env },
+			);
+		} else if (subcommand === "run") {
+			const passthrough = Array.isArray(argv["--"])
+				? argv["--"].map(String)
+				: [];
+			result = await runEnvRun(
+				{
+					command: passthrough,
+					...(typeof argv.config === "string"
+						? { configPath: argv.config }
+						: {}),
+					...(typeof argv["project-id"] === "string"
+						? { projectId: argv["project-id"] }
+						: {}),
+					...(typeof argv["org-id"] === "string"
+						? { orgId: argv["org-id"] }
+						: {}),
+					...(typeof argv.branch === "string"
+						? { branch: argv.branch }
+						: {}),
+					...(typeof argv["api-key"] === "string"
+						? { apiKey: argv["api-key"] }
+						: {}),
+				},
+				{ cwd, env },
+			);
+		} else {
+			result = {
+				exitCode: 1,
+				stdout: "",
+				stderr: `Unknown env subcommand: ${subcommand ?? "(none)"}.\nRun \`neon-ts env --help\` to see the available subcommands.\n`,
+			};
+		}
 		break;
 	}
 	default:

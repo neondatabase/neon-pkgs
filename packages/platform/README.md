@@ -59,7 +59,7 @@ Listing the live branches currently on a project (including ephemeral ones) is *
 Then either pull, push, or load connection strings:
 
 ```ts
-import { loadEnv, pullConfig, pushConfig } from "@neondatabase/platform/v1";
+import { fetchEnv, parseEnv, pullConfig, pushConfig } from "@neondatabase/platform/v1";
 import config from "./neon";
 
 // pull the current Neon state into a Config object (read-only on disk)
@@ -69,9 +69,14 @@ const remoteConfig = await pullConfig({ apiKey: process.env.NEON_API_KEY });
 // refuses to apply if the local config conflicts with the remote project state.
 await pushConfig();
 
-// load DATABASE_URL + DATABASE_URL_UNPOOLED for the current branch
-const env = await loadEnv(config);
-Object.assign(process.env, env);
+// fetch live connection strings for the resolved branch (async, hits the API)
+const env = await fetchEnv(config);
+// env.postgres.databaseUrl           — pooled
+// env.postgres.databaseUrlUnpooled   — direct
+
+// or, if you've already injected the env vars via `neon-ts env pull` / `env run --`,
+// parse them synchronously (no I/O — safe inside `drizzle.config.ts`, etc.)
+const sameShape = parseEnv(config);
 
 // force-apply, including drift on existing branches and wildcard-matched ones
 await pushConfig({
@@ -88,7 +93,7 @@ await pushConfig({
 ```ts
 import {
   // Operations — what you use day-to-day
-  defineConfig, pullConfig, pushConfig, loadEnv, loadContext,
+  defineConfig, pullConfig, pushConfig, fetchEnv, parseEnv, loadContext,
   loadConfigFromFile, branch, createRealNeonApi, resolveApiKey,
 
   // Error primitives — for instanceof / code-based checks
@@ -102,9 +107,9 @@ import {
 import type {
   // Config (used in neon.ts) — Config, ProjectConfig, BranchConfig, BranchBlueprint, ComputeSettings
   // Operation options + results — BranchOptions / BranchResult / BranchContextFile,
-  //   PullConfigOptions, PushConfigOptions / PushResult, LoadEnvOptions, …
+  //   PullConfigOptions, PushConfigOptions / PushResult, FetchEnvOptions, ParseEnvOptions, NeonEnv, …
   // NeonApi types (for custom adapters) — NeonApi, NeonBranchSnapshot, CreateBranchInput, …
-  Config, BranchOptions, BranchResult, PushResult, NeonApi,
+  Config, BranchOptions, BranchResult, PushResult, NeonEnv, NeonApi,
 } from "@neondatabase/platform/v1";
 ```
 
@@ -120,7 +125,7 @@ Every SDK function and every CLI subcommand resolves `projectId`, `orgId`, and `
 | `orgId`     | `options.orgId` / `--org-id`           | `NEON_ORG_ID`     | `orgId`                    | `orgId`                |
 | `branchId`  | `options.branch` / `--branch`[^branch] | `NEON_BRANCH_ID`  | `branchId`                 | `branchId`             |
 
-[^branch]: Only commands that target a specific branch surface a `--branch` flag (`context`, `loadEnv`). `pull` / `push` are branch-agnostic; `branch` *creates* a branch and produces its id as output.
+[^branch]: Only commands that target a specific branch surface a `--branch` flag (`context`, `fetchEnv`). `pull` / `push` are branch-agnostic; `branch` *creates* a branch and produces its id as output.
 
 The file search walks up from `cwd` (default: `process.cwd()`) until it finds either file or hits a project-root marker (`.git`, `package.json`). `.neon/project.json` is preferred over `.neon` at every directory along the walk. If nothing resolves a `projectId`, callers receive `MissingContextError`.
 
@@ -168,9 +173,9 @@ Important options:
 
 `pushConfig` will create a project if none exists in the resolved org/name combination and `project.region` is set. Region and Postgres major version are immutable on Neon — pushing a different value surfaces a `ConflictReport`.
 
-### `loadEnv(config: Config, options?: LoadEnvOptions): Promise<NeonEnv>`
+### Env: `fetchEnv` / `parseEnv` / `NeonEnv`
 
-Resolve the project + branch this process should target, then fetch the live Neon connection strings for that branch. Returns a fixed-shape, namespaced, statically-typed {@link NeonEnv}:
+Both functions return the same fixed-shape, namespaced, statically-typed value — no `Record<string, string>` widening, no call-site or config-driven knobs for renaming keys:
 
 ```ts
 interface NeonEnv {
@@ -181,24 +186,40 @@ interface NeonEnv {
 }
 ```
 
-Typical usage at the top of an application bootstrap. **No `.env` entries for connection strings required** — run `neon-ts branch` / `neonctl link` once to write `.neon/project.json`, and `loadEnv` picks the branch up from there for every subsequent call:
+Pick whichever matches your runtime constraints:
+
+| Function | When | I/O | Notes |
+| -------- | ---- | --- | ----- |
+| `await fetchEnv(config)` | Build scripts, CLIs, anywhere top-level await is fine | Calls the Neon API every call | Resolves the branch via the standard chain; returns the live `NeonEnv` |
+| `parseEnv(config)`       | Application bootstrap, `drizzle.config.ts`, framework configs where async isn't allowed | None — reads `process.env` synchronously, validates with zod | Throws `PLATFORM_ENV_NOT_INJECTED` listing what's missing; pair with `neon-ts env pull` / `neon-ts env run` to inject the vars |
 
 ```ts
-import { drizzle } from "drizzle-orm/neon-http";
-import { neon } from "@neondatabase/serverless";
-import { loadEnv } from "@neondatabase/platform/v1";
+// drizzle.config.ts — no async allowed, so use parseEnv
+import { defineConfig } from "drizzle-kit";
+import { parseEnv } from "@neondatabase/platform/v1";
 import config from "./neon";
-import * as schema from "./schema";
 
-const env = await loadEnv(config);
+export default defineConfig({
+  dialect: "postgresql",
+  dbCredentials: { url: parseEnv(config).postgres.databaseUrlUnpooled },
+  schema: "./src/schema.ts",
+});
+```
+
+```ts
+// app bootstrap — async-friendly, fetch fresh from the API
+import { fetchEnv } from "@neondatabase/platform/v1";
+import config from "./neon";
+
+const env = await fetchEnv(config);
 const db = drizzle(neon(env.postgres.databaseUrl), { schema });
 ```
 
-`projectId`, `orgId`, and `branch` follow the standard [Project context resolution](#project-context-resolution) chain, with one extra fallback for `branch` only: when nothing resolves it, the first key in `config.branches` (typically `"production"`) is used.
+For `fetchEnv`: `projectId`, `orgId`, and `branch` follow the standard [Project context resolution](#project-context-resolution) chain, with one extra fallback for `branch` only — when nothing resolves it, the first key in `config.branches` (typically `"production"`) is used. `roleName` and `databaseName` are auto-picked when the branch has exactly one role / database; otherwise `fetchEnv` throws `PLATFORM_AMBIGUOUS_BRANCH_AUTH` and you'll need to pass `databaseName` explicitly.
 
-`roleName` and `databaseName` resolve to `options.roleName` / `options.databaseName` first; when omitted, the only role / database on the branch is auto-picked. When the branch has multiple databases but only one is owned by the resolved role, that one is auto-picked. Otherwise `loadEnv` throws `PLATFORM_AMBIGUOUS_BRANCH_AUTH` and you'll need to pass `databaseName` explicitly.
+For `parseEnv`: the OS-level env-var keys are exposed as `NEON_ENV_VAR_KEYS` for callers building their own pull/inject tooling. The current mapping is `postgres.databaseUrl → DATABASE_URL` and `postgres.databaseUrlUnpooled → DATABASE_URL_UNPOOLED`.
 
-The return shape is **fixed** — there are no call-site or config-driven knobs for renaming keys, on purpose. The point of `loadEnv` is to be a typed escape hatch from `.env` files: one `import config from "./neon"`, one `await loadEnv(config)`, and the rest of your app talks to `env.postgres.databaseUrl` directly. Future namespaces (`env.vector`, `env.s3`, …) can be added alongside `postgres` without breaking the existing surface.
+The return shape is **fixed** on purpose — the point of `fetchEnv`/`parseEnv` is to be a typed escape hatch from `.env` files: one `import config from "./neon"`, one `parseEnv(config)`, and the rest of your app talks to `env.postgres.databaseUrl` directly. Future namespaces (`env.vector`, `env.s3`, …) can be added alongside `postgres` without breaking the existing surface.
 
 This call is **read-only**: it never mutates `process.env`, writes to disk, or modifies the remote Neon project. Two `getConnectionUri` API calls (pooled + direct) plus one `listBranches` and one each of `listBranchRoles` / `listBranchDatabases`.
 
@@ -247,7 +268,7 @@ Behaviour:
    - just `<mini-id>` (6 hex chars) when not. Pass `gitBranch: null` to opt out of the git lookup explicitly, or `gitBranch: "my-name"` to inject one.
 5. On name **collision** with an existing branch the mini-id is re-rolled up to `maxAttempts` times (default 10).
 6. The branch is **created on Neon** with the blueprint's `parent`, `ttl`, and `computeSettings` applied. Parent branches must exist on Neon (run `pushConfig` first if not) — otherwise `PLATFORM_MISSING_PARENT_BRANCH`.
-7. The **project-context file is updated** (in place) so subsequent `loadEnv` / `pullConfig` calls target the new branch. The outcome is reported via `result.contextFile.status`:
+7. The **project-context file is updated** (in place) so subsequent `fetchEnv` / `pullConfig` calls target the new branch. The outcome is reported via `result.contextFile.status`:
 
    | `status`        | When                                                                  | Extra fields            |
    | --------------- | --------------------------------------------------------------------- | ----------------------- |
@@ -309,6 +330,19 @@ neon-ts push --apply-changes                # force-apply, ignoring branch-level
 # Create an ephemeral branch from a wildcard blueprint
 neon-ts branch preview                      # creates `preview-<git-branch>-<mini-id>`
 neon-ts branch preview --project-id proj-x  # override the resolved project id
+
+# Pull live connection strings into a .env file (default: .env.local). The file format
+# matches what frameworks like Next.js / Vite / Drizzle Kit auto-load. Run this once after
+# `neon-ts branch` or `neonctl link` and your app can read DATABASE_URL the normal way.
+neon-ts env pull                            # writes ./.env.local
+neon-ts env pull .env                       # write somewhere else
+neon-ts env pull --branch preview-andre     # override the resolved branch
+
+# Run a command with Neon env vars injected on top of the current `process.env`. Use `--`
+# to separate the wrapped command. The child inherits stdio so dev servers stay
+# interactive; the parent exits with the child's exit code.
+neon-ts env run -- npm run dev
+neon-ts env run --branch preview-andre -- pnpm test
 ```
 
 Exit codes (stable — branch on these in CI / shell pipelines):
@@ -356,13 +390,14 @@ The specific subclasses (`ConfigLoadError`, `ConfigValidationError`, `MissingCon
 | Code                              | When it fires                                                                   | What to do                                                                                                       |
 | --------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `PLATFORM_INVALID_CONFIG`         | `defineConfig` / the zod schema rejected your config, or `branch()` was called with the name of a concrete branch instead of a wildcard blueprint | Read the aggregated issue list in `err.issues` and fix each one                                                  |
+| `PLATFORM_ENV_NOT_INJECTED`       | `parseEnv` couldn't find the required Neon env vars in `process.env`            | Run `neon-ts env pull` to write `.env.local`, or wrap your dev command with `neon-ts env run -- <cmd>`. Or switch to `await fetchEnv(config)` if you can do async I/O. |
 | `PLATFORM_MISSING_CONTEXT`        | No project id resolvable from args, env, or context file                        | Pass `projectId` / `--project-id`, set `NEON_PROJECT_ID`, or run `npx neonctl set-context --project-id <id>`     |
 | `PLATFORM_PUSH_CONFLICT`          | Local config differs from remote (and you didn't opt into apply)                | The thrown `errors.PushConflictError` lists each conflict with a `fix` hint. Most resolve via `updateExisting: true` |
 | `PLATFORM_CONFIG_LOAD_FAILED`     | `neon.ts` is missing, has a syntax error, or doesn't `export default`           | Path is in the message. Run the file directly (`npx tsx neon.ts`) to reproduce the underlying error              |
 | `PLATFORM_MISSING_API_KEY`        | No API key in `apiKey` option or `NEON_API_KEY` env                             | Generate one at <https://console.neon.tech/app/settings/api-keys>                                                |
 | `PLATFORM_AMBIGUOUS_PROJECT`      | Multiple projects with the same name (org-/user-scoped key without `projectId`) | Pass `projectId` to pick one — the candidate ids are in `err.details.candidateProjectIds`                        |
-| `PLATFORM_AMBIGUOUS_BRANCH_AUTH`  | `loadEnv` found multiple roles / databases on the branch and can't auto-pick    | Pass `roleName` / `databaseName` — available values are in `err.details.availableRoles` / `availableDatabases`   |
-| `PLATFORM_BRANCH_NOT_FOUND`       | `loadEnv` couldn't find the requested branch / role / database on the project   | Check the name; available values are in `err.details.available`                                                  |
+| `PLATFORM_AMBIGUOUS_BRANCH_AUTH`  | `fetchEnv` found multiple roles / databases on the branch and can't auto-pick    | Pass `roleName` / `databaseName` — available values are in `err.details.availableRoles` / `availableDatabases`   |
+| `PLATFORM_BRANCH_NOT_FOUND`       | `fetchEnv` couldn't find the requested branch / role / database on the project   | Check the name; available values are in `err.details.available`                                                  |
 | `PLATFORM_REGION_REQUIRED`        | First-time create but `project.region` is missing                               | Add a region (e.g. `aws-us-east-1`) to your config                                                               |
 | `PLATFORM_INSUFFICIENT_SCOPE`     | Project-scoped key tried to list projects                                       | Pass `projectId` explicitly, or use an org/user-scoped key                                                       |
 | `PLATFORM_MISSING_PARENT_BRANCH`  | Push tried to create a branch whose parent doesn't exist on Neon                | Either define the parent as a blueprint too, or change the blueprint's `parent` to an existing branch           |
@@ -386,7 +421,7 @@ Every wrapped HTTP error carries structured context in `err.details`:
 
 ## Filesystem contract
 
-The **SDK** is filesystem-read-only with one exception: `branch()` updates an existing project-context file's `branchId` in place after creating an ephemeral branch (so subsequent `loadEnv` / `pullConfig` calls target it). The write is attempted *safely* — a read-only filesystem or permission error is reported as `contextFile.status === "write-failed"` rather than crashing the call, and the JSON payload is still returned so the user can apply it by hand. All other public SDK functions — `pullConfig`, `pushConfig`, `loadEnv`, `loadContext`, `loadConfigFromFile`, `defineConfig` — never touch disk.
+The **SDK** is filesystem-read-only with one exception: `branch()` updates an existing project-context file's `branchId` in place after creating an ephemeral branch (so subsequent `fetchEnv` / `pullConfig` calls target it). The write is attempted *safely* — a read-only filesystem or permission error is reported as `contextFile.status === "write-failed"` rather than crashing the call, and the JSON payload is still returned so the user can apply it by hand. All other public SDK functions — `pullConfig`, `pushConfig`, `fetchEnv`, `loadContext`, `loadConfigFromFile`, `defineConfig` — never touch disk.
 
 Project-context files (`.neon/project.json` or the neonctl `.neon` file) themselves are **never created** by the SDK; bootstrap one with `neon set-context` or any other tool of your choice before calling `branch()`.
 

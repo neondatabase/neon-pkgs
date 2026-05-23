@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { defineConfig } from "./define-config.js";
+import { fetchEnv, parseEnv } from "./env.js";
 import { ErrorCode, PlatformError } from "./errors.js";
 import { FakeNeonApi } from "./fake-neon-api.js";
-import { loadEnv } from "./load-env.js";
 import { makeTempRepo } from "./test-utils.js";
 
 const cleanups: Array<() => void> = [];
@@ -39,10 +39,10 @@ const minimalConfig = defineConfig({
 	branches: { production: {} },
 });
 
-describe("loadEnv — happy path", () => {
+describe("fetchEnv — happy path", () => {
 	test("returns env.postgres.databaseUrl + databaseUrlUnpooled for the resolved branch", async () => {
 		const { api, projectId } = seedSingleBranch();
-		const env = await loadEnv(minimalConfig, { api, projectId, env: {} });
+		const env = await fetchEnv(minimalConfig, { api, projectId, env: {} });
 
 		// Compile-time check: the shape is fixed and statically known.
 		({
@@ -75,13 +75,13 @@ describe("loadEnv — happy path", () => {
 			"package.json": "{}",
 			".neon/project.json": JSON.stringify({ projectId }),
 		});
-		const env = await loadEnv(minimalConfig, { api, cwd: root, env: {} });
+		const env = await fetchEnv(minimalConfig, { api, cwd: root, env: {} });
 		expect(env.postgres.databaseUrl).toContain("br-prod");
 	});
 
 	test("resolves project id from NEON_PROJECT_ID env", async () => {
 		const { api, projectId } = seedSingleBranch("proj-from-env");
-		const env = await loadEnv(minimalConfig, {
+		const env = await fetchEnv(minimalConfig, {
 			api,
 			env: { NEON_PROJECT_ID: projectId },
 		});
@@ -116,7 +116,7 @@ describe("loadEnv — happy path", () => {
 			],
 		});
 
-		const env = await loadEnv(minimalConfig, {
+		const env = await fetchEnv(minimalConfig, {
 			api,
 			projectId: "proj-multi",
 			env: { NEON_BRANCH_ID: "br-preview" },
@@ -152,7 +152,7 @@ describe("loadEnv — happy path", () => {
 			],
 		});
 
-		const env = await loadEnv(minimalConfig, {
+		const env = await fetchEnv(minimalConfig, {
 			api,
 			projectId: "proj-named",
 			branch: "preview-pr-9",
@@ -185,7 +185,7 @@ describe("loadEnv — happy path", () => {
 		});
 
 		// First key in blueprints is "production"; we expect it to win over isDefault.
-		const env = await loadEnv(minimalConfig, {
+		const env = await fetchEnv(minimalConfig, {
 			api,
 			projectId: "proj-fallback",
 			env: {},
@@ -217,7 +217,7 @@ describe("loadEnv — happy path", () => {
 			project: { name: "my-app", region: "aws-us-east-1" },
 			// No blueprints — should fall through to project's default branch.
 		});
-		const env = await loadEnv(config, {
+		const env = await fetchEnv(config, {
 			api,
 			projectId: "proj-nokey",
 			env: {},
@@ -226,11 +226,11 @@ describe("loadEnv — happy path", () => {
 	});
 });
 
-describe("loadEnv — error paths", () => {
+describe("fetchEnv — error paths", () => {
 	test("missing API key without injected api → PlatformError(MissingApiKey)", async () => {
 		const emptyHome = setup({ ".config/neonctl/.keep": "" });
 		await expect(
-			loadEnv(minimalConfig, {
+			fetchEnv(minimalConfig, {
 				projectId: "proj-x",
 				env: { HOME: emptyHome, USERPROFILE: emptyHome },
 			}),
@@ -243,7 +243,7 @@ describe("loadEnv — error paths", () => {
 		const { api } = seedSingleBranch();
 		const root = setup({ "package.json": "{}" });
 		await expect(
-			loadEnv(minimalConfig, { api, cwd: root, env: {} }),
+			fetchEnv(minimalConfig, { api, cwd: root, env: {} }),
 		).rejects.toMatchObject({
 			code: ErrorCode.MissingContext,
 		});
@@ -262,7 +262,7 @@ describe("loadEnv — error paths", () => {
 			},
 		});
 		await expect(
-			loadEnv(minimalConfig, {
+			fetchEnv(minimalConfig, {
 				api,
 				projectId: "proj-empty",
 				branch: "br-doesnt-exist",
@@ -276,7 +276,7 @@ describe("loadEnv — error paths", () => {
 	test("requested role not present on branch → PlatformError(BranchNotFound)", async () => {
 		const { api, projectId } = seedSingleBranch();
 		await expect(
-			loadEnv(minimalConfig, {
+			fetchEnv(minimalConfig, {
 				api,
 				projectId,
 				roleName: "nope_owner",
@@ -309,7 +309,7 @@ describe("loadEnv — error paths", () => {
 		});
 
 		await expect(
-			loadEnv(minimalConfig, {
+			fetchEnv(minimalConfig, {
 				api,
 				projectId: "proj-multi-role",
 				env: {},
@@ -345,7 +345,7 @@ describe("loadEnv — error paths", () => {
 		});
 
 		await expect(
-			loadEnv(minimalConfig, {
+			fetchEnv(minimalConfig, {
 				api,
 				projectId: "proj-multi-db",
 				env: {},
@@ -380,7 +380,7 @@ describe("loadEnv — error paths", () => {
 			],
 		});
 
-		const env = await loadEnv(minimalConfig, {
+		const env = await fetchEnv(minimalConfig, {
 			api,
 			projectId: "proj-owned",
 			env: {},
@@ -389,10 +389,10 @@ describe("loadEnv — error paths", () => {
 	});
 });
 
-describe("loadEnv — passes correct arguments to NeonApi", () => {
+describe("fetchEnv — passes correct arguments to NeonApi", () => {
 	test("calls getConnectionUri twice with pooled=true and pooled=false", async () => {
 		const { api, projectId } = seedSingleBranch();
-		await loadEnv(minimalConfig, { api, projectId, env: {} });
+		await fetchEnv(minimalConfig, { api, projectId, env: {} });
 		const calls = api.history.filter(
 			(h) => h.method === "getConnectionUri",
 		);
@@ -434,7 +434,7 @@ describe("loadEnv — passes correct arguments to NeonApi", () => {
 			],
 		});
 
-		const env = await loadEnv(minimalConfig, {
+		const env = await fetchEnv(minimalConfig, {
 			api,
 			projectId: "proj-explicit",
 			roleName: "app_user",
@@ -463,11 +463,69 @@ describe("loadEnv — passes correct arguments to NeonApi", () => {
 		});
 
 		await expect(
-			loadEnv(minimalConfig, {
+			fetchEnv(minimalConfig, {
 				api,
 				projectId: "proj-x",
 				env: {},
 			}),
 		).rejects.toMatchObject({ code: ErrorCode.Unauthorized });
+	});
+});
+
+describe("parseEnv", () => {
+	test("returns the same NeonEnv shape from process.env", () => {
+		const env = parseEnv(minimalConfig, {
+			env: {
+				DATABASE_URL: "postgres://pooled.example/db",
+				DATABASE_URL_UNPOOLED: "postgres://direct.example/db",
+			},
+		});
+		expect(env).toEqual({
+			postgres: {
+				databaseUrl: "postgres://pooled.example/db",
+				databaseUrlUnpooled: "postgres://direct.example/db",
+			},
+		});
+		// Compile-time check: shape is statically known, no Record<string, string> widening.
+		({
+			databaseUrl: env.postgres.databaseUrl,
+			databaseUrlUnpooled: env.postgres.databaseUrlUnpooled,
+		}) satisfies { databaseUrl: string; databaseUrlUnpooled: string };
+	});
+
+	test("throws EnvNotInjected when both vars are missing", () => {
+		expect(() => parseEnv(minimalConfig, { env: {} })).toThrow(
+			PlatformError,
+		);
+		try {
+			parseEnv(minimalConfig, { env: {} });
+		} catch (err) {
+			expect(err).toBeInstanceOf(PlatformError);
+			const e = err as PlatformError;
+			expect(e.code).toBe(ErrorCode.EnvNotInjected);
+			expect(e.message).toContain("DATABASE_URL is missing");
+			expect(e.message).toContain("DATABASE_URL_UNPOOLED is missing");
+			expect(e.message).toContain("neon-ts env pull");
+			expect(e.message).toContain("neon-ts env run");
+		}
+	});
+
+	test("throws EnvNotInjected when only one is set", () => {
+		expect(() =>
+			parseEnv(minimalConfig, {
+				env: { DATABASE_URL: "postgres://pooled" },
+			}),
+		).toThrow(/DATABASE_URL_UNPOOLED is missing/);
+	});
+
+	test("rejects empty-string values (e.g. unset .env entries)", () => {
+		expect(() =>
+			parseEnv(minimalConfig, {
+				env: {
+					DATABASE_URL: "",
+					DATABASE_URL_UNPOOLED: "postgres://direct",
+				},
+			}),
+		).toThrow(/must not be empty/);
 	});
 });

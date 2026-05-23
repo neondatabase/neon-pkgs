@@ -26,6 +26,7 @@ import type { ConflictReport } from "./types.js";
  */
 export const ErrorCode = {
 	InvalidConfig: "PLATFORM_INVALID_CONFIG",
+	EnvNotInjected: "PLATFORM_ENV_NOT_INJECTED",
 	MissingContext: "PLATFORM_MISSING_CONTEXT",
 	PushConflict: "PLATFORM_PUSH_CONFLICT",
 	ConfigLoadFailed: "PLATFORM_CONFIG_LOAD_FAILED",

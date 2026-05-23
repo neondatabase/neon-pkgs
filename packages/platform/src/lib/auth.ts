@@ -111,7 +111,7 @@ export function resolveApiKey(
  * `~/.config/neonctl/credentials.json`) and construct a real {@link NeonApi} adapter from
  * it, or throw a uniform `PLATFORM_MISSING_API_KEY` error if no key can be found.
  *
- * Used by `pullConfig`, `pushConfig`, `loadEnv`, and `branch` to build their default
+ * Used by `pullConfig`, `pushConfig`, `fetchEnv`, and `branch` to build their default
  * `NeonApi` when the caller doesn't inject one. `operation` is the calling function's
  * name (e.g. `"pushConfig"`, `"branch"`) — it's prepended to the error message so users
  * can tell which call surfaced the missing key.

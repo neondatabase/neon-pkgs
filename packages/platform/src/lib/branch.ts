@@ -154,7 +154,7 @@ export interface BranchResult {
  * 5. The branch is created on Neon (one `listBranches` call for context + parent lookup
  *    + collision detection, one `createBranch` mutation).
  * 6. When a context file already exists (`.neon/project.json` preferred, falling back to
- *    `.neon`), its `branchId` is updated in place so subsequent `loadEnv` / `pullConfig`
+ *    `.neon`), its `branchId` is updated in place so subsequent `fetchEnv` / `pullConfig`
  *    calls target the new branch. Other top-level keys are preserved. The write is
  *    attempted *safely* — a read-only filesystem or permission error is surfaced as
  *    `contextFile.status === "write-failed"` rather than crashing the call. New context

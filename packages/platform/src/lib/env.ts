@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { createNeonApiFromOptions } from "./auth.js";
 import { ErrorCode, PlatformError } from "./errors.js";
 import { type BranchRef, loadContext } from "./load-context.js";
@@ -10,9 +11,24 @@ import type {
 import type { Config } from "./types.js";
 
 /**
- * Static, namespaced shape of `loadEnv`'s return value. Fixed and known — there's no
- * call-site or config-driven configurability — so consumers can destructure with
- * autocomplete and zero `Record<string, string>` widening.
+ * Mapping between the {@link NeonEnv} property paths and the OS-level env-var keys used
+ * for cross-process transport (via `.env` files, `env run -- <cmd>`, or anything else
+ * that talks to `process.env`).
+ *
+ * The shape is fixed on purpose so the SDK, CLI, and consumer apps all agree on the wire
+ * format. Updating a key here is a breaking change for downstream `.env` files.
+ */
+export const NEON_ENV_VAR_KEYS = {
+	postgres: {
+		databaseUrl: "DATABASE_URL",
+		databaseUrlUnpooled: "DATABASE_URL_UNPOOLED",
+	},
+} as const;
+
+/**
+ * Static, namespaced shape of `fetchEnv` / `parseEnv`'s return value. Fixed and known —
+ * there's no call-site or config-driven configurability — so consumers can destructure
+ * with autocomplete and zero `Record<string, string>` widening.
  *
  * Future namespaces (e.g. `vector`, `s3`, …) can be added alongside `postgres` without
  * breaking the existing surface. Keep keys lowercase camelCase.
@@ -34,7 +50,7 @@ export interface NeonEnv {
 	};
 }
 
-export interface LoadEnvOptions {
+export interface FetchEnvOptions {
 	/**
 	 * Neon API key. Resolved via {@link resolveApiKey} when omitted (option → env →
 	 * `~/.config/neonctl/credentials.json`). Ignored when a custom `api` is supplied.
@@ -77,20 +93,21 @@ export interface LoadEnvOptions {
 }
 
 /**
- * Resolve the project + branch this process should target, then fetch the live Neon
- * connection strings for that branch. Returns a fixed-shape, statically-typed
- * {@link NeonEnv} — namespaced (`env.postgres.databaseUrl`, …) so future namespaces
- * (`vector`, `s3`, …) can be added without breaking the existing shape.
+ * Resolve the project + branch this process should target, then fetch live Neon
+ * connection strings for that branch over the network. Async — calls the Neon API.
  *
- * Typical usage in an application bootstrap (no `.env` entries for connection strings
- * required — `neon-ts` / `neonctl link` writes `.neon/project.json` once and `loadEnv`
- * picks it up from there):
+ * Use this from build scripts and the `neon-ts env pull` / `env run` commands, where
+ * top-level await is fine. For application code that needs a synchronous bootstrap (most
+ * frameworks: Drizzle config, Next.js, Vite, etc.), inject env vars via
+ * `neon-ts env run -- <cmd>` (or pull them into `.env.local` via `neon-ts env pull`) and
+ * use {@link parseEnv} instead — same {@link NeonEnv} shape, but a sync call against
+ * `process.env`.
  *
  * ```ts
  * import config from "../neon";
- * import { loadEnv } from "@neondatabase/platform/v1";
+ * import { fetchEnv } from "@neondatabase/platform/v1";
  *
- * const env = await loadEnv(config);
+ * const env = await fetchEnv(config);
  * const db = drizzle(neon(env.postgres.databaseUrl), { schema });
  * ```
  *
@@ -105,9 +122,9 @@ export interface LoadEnvOptions {
  *
  * The package does **not** mutate `process.env` or the filesystem itself.
  */
-export async function loadEnv(
+export async function fetchEnv(
 	config: Config,
-	options: LoadEnvOptions = {},
+	options: FetchEnvOptions = {},
 ): Promise<NeonEnv> {
 	const api = options.api ?? createApiFromOptions(options);
 
@@ -124,7 +141,7 @@ export async function loadEnv(
 		throw new PlatformError(
 			ErrorCode.BranchNotFound,
 			[
-				`loadEnv: project ${ctx.projectId} has no branches.`,
+				`fetchEnv: project ${ctx.projectId} has no branches.`,
 				"Either run `pushConfig()` (or `neon-ts push`) to provision the project from your `neon.ts`, or pick a different project id.",
 			].join(" "),
 			{ details: { projectId: ctx.projectId } },
@@ -169,8 +186,8 @@ export async function loadEnv(
 	};
 }
 
-function createApiFromOptions(options: LoadEnvOptions): NeonApi {
-	return createNeonApiFromOptions("loadEnv", {
+function createApiFromOptions(options: FetchEnvOptions): NeonApi {
+	return createNeonApiFromOptions("fetchEnv", {
 		...(options.apiKey ? { apiKey: options.apiKey } : {}),
 		...(options.env ? { env: options.env } : {}),
 	});
@@ -187,7 +204,7 @@ function resolveBranch(
 		throw new PlatformError(
 			ErrorCode.BranchNotFound,
 			[
-				`loadEnv: branch ${describeRef(requested)} not found on project.`,
+				`fetchEnv: branch ${describeRef(requested)} not found on project.`,
 				`Existing branches: ${branches.map((b) => `${b.name} (${b.id})`).join(", ")}.`,
 			].join(" "),
 			{
@@ -214,7 +231,7 @@ function resolveBranch(
 		// This is a belt-and-braces guard so the function is total.
 		throw new PlatformError(
 			ErrorCode.BranchNotFound,
-			"loadEnv: no branches available on the project.",
+			"fetchEnv: no branches available on the project.",
 		);
 	}
 	return fallback;
@@ -249,7 +266,7 @@ function pickRoleName(
 			throw new PlatformError(
 				ErrorCode.BranchNotFound,
 				[
-					`loadEnv: role "${requested}" not found on branch ${branch.name} (${branch.id}).`,
+					`fetchEnv: role "${requested}" not found on branch ${branch.name} (${branch.id}).`,
 					`Existing roles: ${roles.map((r) => r.name).join(", ") || "(none)"}.`,
 				].join(" "),
 				{
@@ -267,7 +284,7 @@ function pickRoleName(
 		throw new PlatformError(
 			ErrorCode.BranchNotFound,
 			[
-				`loadEnv: branch ${branch.name} (${branch.id}) has no roles.`,
+				`fetchEnv: branch ${branch.name} (${branch.id}) has no roles.`,
 				"Create one via the Neon console or pass `roleName` explicitly.",
 			].join(" "),
 			{ details: { branchId: branch.id } },
@@ -277,7 +294,7 @@ function pickRoleName(
 	throw new PlatformError(
 		ErrorCode.AmbiguousBranchAuth,
 		[
-			`loadEnv: branch ${branch.name} (${branch.id}) has ${roles.length} roles; cannot auto-pick.`,
+			`fetchEnv: branch ${branch.name} (${branch.id}) has ${roles.length} roles; cannot auto-pick.`,
 			`Pass \`roleName\` explicitly. Available: ${roles.map((r) => r.name).join(", ")}.`,
 		].join(" "),
 		{
@@ -300,7 +317,7 @@ function pickDatabaseName(
 			throw new PlatformError(
 				ErrorCode.BranchNotFound,
 				[
-					`loadEnv: database "${requested}" not found on branch ${branch.name} (${branch.id}).`,
+					`fetchEnv: database "${requested}" not found on branch ${branch.name} (${branch.id}).`,
 					`Existing databases: ${databases.map((d) => d.name).join(", ") || "(none)"}.`,
 				].join(" "),
 				{
@@ -318,7 +335,7 @@ function pickDatabaseName(
 		throw new PlatformError(
 			ErrorCode.BranchNotFound,
 			[
-				`loadEnv: branch ${branch.name} (${branch.id}) has no databases.`,
+				`fetchEnv: branch ${branch.name} (${branch.id}) has no databases.`,
 				"Create one via the Neon console or pass `databaseName` explicitly.",
 			].join(" "),
 			{ details: { branchId: branch.id } },
@@ -333,7 +350,7 @@ function pickDatabaseName(
 	throw new PlatformError(
 		ErrorCode.AmbiguousBranchAuth,
 		[
-			`loadEnv: branch ${branch.name} (${branch.id}) has ${databases.length} databases; cannot auto-pick.`,
+			`fetchEnv: branch ${branch.name} (${branch.id}) has ${databases.length} databases; cannot auto-pick.`,
 			`Pass \`databaseName\` explicitly. Available: ${databases.map((d) => d.name).join(", ")}.`,
 		].join(" "),
 		{
@@ -343,4 +360,110 @@ function pickDatabaseName(
 			},
 		},
 	);
+}
+
+// ───────────────────────── parseEnv ─────────────────────────
+
+export interface ParseEnvOptions {
+	/**
+	 * Override the env source. Defaults to `process.env`. Real callers should leave this
+	 * undefined; tests can pass a fixture object.
+	 */
+	env?: Record<string, string | undefined>;
+}
+
+/**
+ * Schema for the OS-level env vars `parseEnv` reads. Mirrors {@link NEON_ENV_VAR_KEYS} —
+ * if you add a key there, add it here too.
+ *
+ * `z.string().url()` would be tighter than `min(1)` but Postgres URIs that include
+ * URL-illegal characters in the password (rare but legal in Neon's own connection-string
+ * format) fail the WHATWG `URL` parse, so we settle for "non-empty string".
+ */
+const neonEnvSchema = z.object({
+	DATABASE_URL: z
+		.string({ message: "DATABASE_URL is missing" })
+		.min(1, "DATABASE_URL must not be empty"),
+	DATABASE_URL_UNPOOLED: z
+		.string({ message: "DATABASE_URL_UNPOOLED is missing" })
+		.min(1, "DATABASE_URL_UNPOOLED must not be empty"),
+});
+
+/**
+ * Synchronous, network-free counterpart to {@link fetchEnv}. Reads `process.env` (or
+ * `options.env`), validates the required Neon env vars with zod, and returns the same
+ * {@link NeonEnv} shape — so the rest of your app touches `env.postgres.databaseUrl`
+ * instead of stringly-typed `process.env.DATABASE_URL` lookups.
+ *
+ * Designed for the **"env-vars-already-injected"** path:
+ * - You ran `neon-ts env pull` to write `.env.local`, and your framework auto-loads it.
+ * - You wrapped your dev command with `neon-ts env run -- <cmd>`.
+ * - Your platform (Vercel, Fly, Railway, …) injected `DATABASE_URL` via its own
+ *   integration.
+ *
+ * Throws `PlatformError(EnvNotInjected)` listing every missing/invalid var when the env
+ * isn't fully populated, with a fix hint pointing back at `neon-ts env pull/run`.
+ *
+ * The `config` argument is currently unused at runtime — it exists for symmetry with
+ * `fetchEnv(config)` and so future namespaces (`vector`, `s3`, …) can hang off the same
+ * call site without breaking the API.
+ *
+ * ```ts
+ * import config from "../neon";
+ * import { parseEnv } from "@neondatabase/platform/v1";
+ *
+ * const env = parseEnv(config);
+ * const db = drizzle(neon(env.postgres.databaseUrl), { schema });
+ * ```
+ */
+export function parseEnv(
+	_config: Config,
+	options: ParseEnvOptions = {},
+): NeonEnv {
+	const source = options.env ?? process.env;
+	const result = neonEnvSchema.safeParse({
+		DATABASE_URL: source.DATABASE_URL,
+		DATABASE_URL_UNPOOLED: source.DATABASE_URL_UNPOOLED,
+	});
+	if (!result.success) {
+		const issues = result.error.issues.map((i) => `  - ${i.message}`);
+		throw new PlatformError(
+			ErrorCode.EnvNotInjected,
+			[
+				"parseEnv: the required Neon env variables are not present in process.env.",
+				...issues,
+				"Inject them via one of:",
+				"  - `neon-ts env pull` (writes them to .env.local, picked up by Next.js/Vite/etc.)",
+				"  - `neon-ts env run -- <your dev command>` (wraps the command with the vars injected)",
+				"  - your hosting platform's Neon integration (Vercel, Fly, Railway, …)",
+				"Or switch the call to `await fetchEnv(config)` if you're in a context that can do async I/O.",
+			].join("\n"),
+			{
+				details: {
+					missing: result.error.issues.map((i) => i.path.join(".")),
+				},
+			},
+		);
+	}
+	return {
+		postgres: {
+			databaseUrl: result.data.DATABASE_URL,
+			databaseUrlUnpooled: result.data.DATABASE_URL_UNPOOLED,
+		},
+	};
+}
+
+// ───────────────────────── env-var mapping helpers ─────────────────────────
+
+/**
+ * Project a fully-resolved {@link NeonEnv} into the OS-level `{ KEY: value }` pairs used
+ * for cross-process transport. Shared by `neon-ts env pull` (writes them to a file) and
+ * `neon-ts env run` (injects them into a subprocess's `process.env`).
+ */
+export function neonEnvToProcessEnv(env: NeonEnv): Record<string, string> {
+	return {
+		[NEON_ENV_VAR_KEYS.postgres.databaseUrl]: env.postgres.databaseUrl,
+		[NEON_ENV_VAR_KEYS.postgres.databaseUrlUnpooled]:
+			env.postgres.databaseUrlUnpooled,
+	};
 }

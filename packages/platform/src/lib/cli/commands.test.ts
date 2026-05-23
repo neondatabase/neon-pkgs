@@ -5,7 +5,14 @@ import { ErrorCode, PlatformError } from "../errors.js";
 import { FakeNeonApi } from "../fake-neon-api.js";
 import type { NeonApi } from "../neon-api.js";
 import { makeTempRepo } from "../test-utils.js";
-import { runBranch, runContext, runPull, runPush } from "./commands.js";
+import {
+	runBranch,
+	runContext,
+	runEnvPull,
+	runEnvRun,
+	runPull,
+	runPush,
+} from "./commands.js";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -586,5 +593,163 @@ export default defineConfig({
 		expect(result.stdout).toContain(`could not update ${filePath}`);
 		expect(result.stdout).toContain("apply this snippet by hand");
 		expect(result.stdout).toContain(`"projectId": "${projectId}"`);
+	});
+});
+
+describe("runEnvPull", () => {
+	function neonTsBody(): string {
+		return `
+import { defineConfig } from "${PLATFORM_SRC}";
+export default defineConfig({
+  project: { name: "cli-test", region: "aws-us-east-1" },
+  branches: { production: {} },
+});
+`;
+	}
+
+	test("writes .env.local with DATABASE_URL + DATABASE_URL_UNPOOLED by default", async () => {
+		const { api, projectId } = seededFake();
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({ projectId }),
+			"neon.ts": neonTsBody(),
+		});
+		const result = await runEnvPull({}, { cwd: root, env: {}, api });
+		expect(result.exitCode).toBe(0);
+		const targetPath = join(root, ".env.local");
+		expect(result.stdout).toContain(`Created ${targetPath}`);
+		const body = readFileSync(targetPath, "utf-8");
+		expect(body).toMatch(/^DATABASE_URL=/m);
+		expect(body).toMatch(/^DATABASE_URL_UNPOOLED=/m);
+		// The connection-string URL contains `?` (query string), so the value must be
+		// quoted to survive a standard .env parse.
+		expect(body).toMatch(/^DATABASE_URL=["']?postgres/m);
+	});
+
+	test("honours a positional [file] argument", async () => {
+		const { api, projectId } = seededFake();
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({ projectId }),
+			"neon.ts": neonTsBody(),
+		});
+		const result = await runEnvPull(
+			{ file: ".env" },
+			{ cwd: root, env: {}, api },
+		);
+		expect(result.exitCode).toBe(0);
+		expect(existsSync(join(root, ".env"))).toBe(true);
+		expect(existsSync(join(root, ".env.local"))).toBe(false);
+	});
+
+	test("reports Updated when the file already exists", async () => {
+		const { api, projectId } = seededFake();
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({ projectId }),
+			"neon.ts": neonTsBody(),
+			".env.local": "# stale\n",
+		});
+		const result = await runEnvPull({}, { cwd: root, env: {}, api });
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("Updated");
+		expect(readFileSync(join(root, ".env.local"), "utf-8")).not.toContain(
+			"# stale",
+		);
+	});
+
+	test("missing config file → exit 4 (ConfigLoadError)", async () => {
+		const { api, projectId } = seededFake();
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({ projectId }),
+		});
+		const result = await runEnvPull({}, { cwd: root, env: {}, api });
+		expect(result.exitCode).toBe(4);
+		expect(result.stderr).toContain("Failed to load config");
+	});
+});
+
+describe("runEnvRun", () => {
+	function neonTsBody(): string {
+		return `
+import { defineConfig } from "${PLATFORM_SRC}";
+export default defineConfig({
+  project: { name: "cli-test", region: "aws-us-east-1" },
+  branches: { production: {} },
+});
+`;
+	}
+
+	test("spawns the user command with DATABASE_URL / DATABASE_URL_UNPOOLED injected", async () => {
+		const { api, projectId } = seededFake();
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({ projectId }),
+			"neon.ts": neonTsBody(),
+			// Print both injected env vars and exit. The runner captures the child's
+			// stdout via stdio: "inherit" which routes through the parent — so we have
+			// to assert via the exit code (a successful run) plus a side-channel.
+			"check.mjs": [
+				'import fs from "node:fs";',
+				"fs.writeFileSync(",
+				"  process.argv[2],",
+				'  [process.env.DATABASE_URL, process.env.DATABASE_URL_UNPOOLED].join("\\n") + "\\n",',
+				");",
+			].join("\n"),
+		});
+		const outPath = join(root, "captured.txt");
+		const result = await runEnvRun(
+			{
+				command: [process.execPath, join(root, "check.mjs"), outPath],
+			},
+			{ cwd: root, env: {}, api },
+		);
+		expect(result.exitCode).toBe(0);
+		const captured = readFileSync(outPath, "utf-8").trim().split("\n");
+		expect(captured[0]).toMatch(/^postgres/);
+		expect(captured[0]).toContain("-pooler");
+		expect(captured[1]).toMatch(/^postgres/);
+		expect(captured[1]).not.toContain("-pooler");
+	});
+
+	test("no command supplied → exit 1 with usage hint", async () => {
+		const { api } = seededFake();
+		const root = setup({ "package.json": "{}" });
+		const result = await runEnvRun(
+			{ command: [] },
+			{ cwd: root, env: {}, api },
+		);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("env run -- <command>");
+	});
+
+	test("propagates the child's non-zero exit code", async () => {
+		const { api, projectId } = seededFake();
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({ projectId }),
+			"neon.ts": neonTsBody(),
+			"fail.mjs": "process.exit(42);",
+		});
+		const result = await runEnvRun(
+			{ command: [process.execPath, join(root, "fail.mjs")] },
+			{ cwd: root, env: {}, api },
+		);
+		expect(result.exitCode).toBe(42);
+	});
+
+	test("missing config file → exit 4 (ConfigLoadError)", async () => {
+		const { api, projectId } = seededFake();
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({ projectId }),
+		});
+		const result = await runEnvRun(
+			{ command: ["echo", "hi"] },
+			{ cwd: root, env: {}, api },
+		);
+		expect(result.exitCode).toBe(4);
+		expect(result.stderr).toContain("Failed to load config");
 	});
 });

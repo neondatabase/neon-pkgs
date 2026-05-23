@@ -20,7 +20,7 @@
  *
  * Surface guidelines:
  * - Top-level: the operations callers reach for daily (`pullConfig`, `pushConfig`,
- *   `loadEnv`, `branch`, …), the `PlatformError` base class + `ErrorCode` enum for
+ *   `fetchEnv`, `parseEnv`, `branch`, …), the `PlatformError` base class + `ErrorCode` enum for
  *   `instanceof` / code-based error handling, and the types those operations produce or
  *   accept.
  * - `errors` namespace: specific `PlatformError` subclasses (`ConfigLoadError`,
@@ -45,6 +45,12 @@ export type {
 // ─── Operations ────────────────────────────────────────────────────────────────
 export { branch } from "./lib/branch.js";
 export { defineConfig } from "./lib/define-config.js";
+export type {
+	FetchEnvOptions,
+	NeonEnv,
+	ParseEnvOptions,
+} from "./lib/env.js";
+export { fetchEnv, NEON_ENV_VAR_KEYS, parseEnv } from "./lib/env.js";
 // ─── Errors ────────────────────────────────────────────────────────────────────
 export { ErrorCode, PlatformError } from "./lib/errors.js";
 export * as errors from "./lib/errors-public.js";
@@ -53,8 +59,6 @@ export type {
 	NeonContext,
 } from "./lib/load-context.js";
 export { loadContext } from "./lib/load-context.js";
-export type { LoadEnvOptions, NeonEnv } from "./lib/load-env.js";
-export { loadEnv } from "./lib/load-env.js";
 export type { LoadConfigOptions } from "./lib/loader.js";
 export { loadConfigFromFile } from "./lib/loader.js";
 // ─── NeonApi types (needed by callers implementing their own adapters) ────────

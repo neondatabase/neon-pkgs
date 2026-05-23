@@ -100,7 +100,7 @@ export interface GetConnectionUriInput {
 }
 
 /**
- * Narrow façade over the Neon management API. `pullConfig`, `pushConfig`, and `loadEnv`
+ * Narrow façade over the Neon management API. `pullConfig`, `pushConfig`, and `fetchEnv`
  * depend on this interface — *not* on `@neondatabase/api-client` directly — which lets us
  * inject a real in-memory fake during tests without resorting to module mocks.
  */
@@ -134,13 +134,13 @@ export interface NeonApi {
 		settings: ComputeSettings,
 	): Promise<NeonEndpointSnapshot>;
 
-	/** List roles on a branch. Used by {@link loadEnv} to auto-pick the role when only one exists. */
+	/** List roles on a branch. Used by {@link fetchEnv} to auto-pick the role when only one exists. */
 	listBranchRoles(
 		projectId: string,
 		branchId: string,
 	): Promise<NeonRoleSnapshot[]>;
 
-	/** List databases on a branch. Used by {@link loadEnv} to auto-pick the database when only one exists. */
+	/** List databases on a branch. Used by {@link fetchEnv} to auto-pick the database when only one exists. */
 	listBranchDatabases(
 		projectId: string,
 		branchId: string,

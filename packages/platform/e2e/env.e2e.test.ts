@@ -1,5 +1,5 @@
 import { describe, expect } from "vitest";
-import { defineConfig, loadEnv, pushConfig } from "../src/v1.js";
+import { defineConfig, fetchEnv, pushConfig } from "../src/v1.js";
 import {
 	DEFAULT_REGION,
 	detectApiKeyScope,
@@ -8,7 +8,7 @@ import {
 	uniqueProjectName,
 } from "./helpers.js";
 
-describe("e2e — loadEnv against real Neon API", () => {
+describe("e2e — fetchEnv against real Neon API", () => {
 	e2eTest(
 		"returns env.postgres.{databaseUrl,databaseUrlUnpooled} that point at the default branch",
 		async ({ track }) => {
@@ -25,7 +25,7 @@ describe("e2e — loadEnv against real Neon API", () => {
 			const pushed = await pushConfig(config, { api });
 			track(pushed.projectId);
 
-			const env = await loadEnv(config, {
+			const env = await fetchEnv(config, {
 				api,
 				projectId: pushed.projectId,
 				env: {},
