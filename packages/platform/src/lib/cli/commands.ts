@@ -28,15 +28,15 @@ const NEON_CONFIG_FILENAME = "neon.ts";
 
 /**
  * Cross-cutting environment a CLI command is allowed to touch. Injected so tests can drive
- * the handlers with a `FakeNeonApi` and a controlled cwd / env without spawning child
- * processes or stubbing `process.*`.
+ * the handlers with a `FakeNeonApi` and a controlled `cwd` without spawning child
+ * processes. Env vars are read straight from `process.env`; tests use `vi.stubEnv` to
+ * control them.
  */
 export interface CommandEnv {
 	cwd: string;
-	env: Record<string, string | undefined>;
 	/**
 	 * When set, used directly as the NeonApi. When omitted, a real adapter is constructed
-	 * from `options.apiKey ?? env.NEON_API_KEY`.
+	 * from `options.apiKey ?? NEON_API_KEY`.
 	 */
 	api?: NeonApi;
 }
@@ -60,7 +60,6 @@ export interface CommandResult {
 
 export interface PullCommandOptions {
 	projectId?: string;
-	orgId?: string;
 	apiKey?: string;
 	format?: PullOutputFormat;
 }
@@ -87,7 +86,6 @@ export async function runPull(
 			api,
 			cwd: ctx.cwd,
 			...(options.projectId ? { projectId: options.projectId } : {}),
-			...(options.orgId ? { orgId: options.orgId } : {}),
 		});
 		const format = options.format ?? "ts";
 		if (format === "json") {
@@ -224,7 +222,6 @@ export async function runBranch(
 		const result = await branch({
 			blueprint: options.blueprint,
 			cwd: ctx.cwd,
-			env: ctx.env,
 			api,
 			...(options.projectId ? { projectId: options.projectId } : {}),
 			...(options.orgId ? { orgId: options.orgId } : {}),
@@ -286,7 +283,6 @@ export function runContext(
 	try {
 		const resolved = loadContext({
 			cwd: ctx.cwd,
-			env: ctx.env,
 			...(options.projectId ? { projectId: options.projectId } : {}),
 			...(options.orgId ? { orgId: options.orgId } : {}),
 			...(options.branch ? { branch: options.branch } : {}),
@@ -442,7 +438,6 @@ export interface EnvPullCommandOptions {
 	file?: string;
 	configPath?: string;
 	projectId?: string;
-	orgId?: string;
 	branch?: string;
 	apiKey?: string;
 }
@@ -570,7 +565,6 @@ export interface EnvRunCommandOptions {
 	command: string[];
 	configPath?: string;
 	projectId?: string;
-	orgId?: string;
 	branch?: string;
 	apiKey?: string;
 }
@@ -613,7 +607,7 @@ export async function runEnvRun(
 	const [executable, ...args] = options.command;
 	const exitCode = await spawnAndWait(executable, args, {
 		cwd: ctx.cwd,
-		env: { ...ctx.env, ...injected },
+		env: { ...process.env, ...injected },
 	});
 	return { exitCode, stdout: "", stderr: "" };
 }
@@ -668,7 +662,6 @@ async function loadConfigAndFetchEnv(
 	options: {
 		configPath?: string;
 		projectId?: string;
-		orgId?: string;
 		branch?: string;
 	},
 	ctx: CommandEnv,
@@ -681,9 +674,7 @@ async function loadConfigAndFetchEnv(
 	return fetchEnv(config, {
 		api,
 		cwd: ctx.cwd,
-		env: ctx.env,
 		...(options.projectId ? { projectId: options.projectId } : {}),
-		...(options.orgId ? { orgId: options.orgId } : {}),
 		...(options.branch ? { branch: options.branch } : {}),
 	});
 }
@@ -722,10 +713,9 @@ function resolveApi(
 	ctx: CommandEnv,
 ): NeonApi | string {
 	if (ctx.api) return ctx.api;
-	const resolved = resolveApiKey({
-		...(apiKeyOption ? { apiKey: apiKeyOption } : {}),
-		env: ctx.env,
-	});
+	const resolved = resolveApiKey(
+		apiKeyOption ? { apiKey: apiKeyOption } : {},
+	);
 	if (!resolved) {
 		return [
 			"Missing Neon API key.",

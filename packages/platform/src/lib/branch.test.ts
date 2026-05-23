@@ -1,7 +1,16 @@
 import { chmodSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, describe, expect, test } from "vitest";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	type MockInstance,
+	test,
+	vi,
+} from "vitest";
 import { branch } from "./branch.js";
+import * as branchNameModule from "./branch-name.js";
 import {
 	ConfigLoadError,
 	ErrorCode,
@@ -9,7 +18,7 @@ import {
 	PlatformError,
 } from "./errors.js";
 import { FakeNeonApi } from "./fake-neon-api.js";
-import { makeTempRepo } from "./test-utils.js";
+import { makeTempRepo, stubCleanNeonEnv } from "./test-utils.js";
 
 const PLATFORM_SRC = new URL("../v1.ts", import.meta.url).pathname;
 
@@ -18,10 +27,25 @@ afterEach(() => {
 	while (cleanups.length > 0) cleanups.shift()?.();
 });
 
+beforeEach(() => {
+	stubCleanNeonEnv();
+});
+
 function setup(files: Record<string, string | null>) {
 	const repo = makeTempRepo(files);
 	cleanups.push(repo.cleanup);
 	return repo.root;
+}
+
+/**
+ * Pin `generateMiniId` so a single test sees a deterministic sequence of mini-ids
+ * (`abc123`, `def456`, …). `mockReset: true` in `vitest.config.ts` restores the real
+ * implementation after each test, so we don't leak the stub into others.
+ */
+function stubMiniIds(...ids: string[]): MockInstance<() => string> {
+	const spy = vi.spyOn(branchNameModule, "generateMiniId");
+	for (const id of ids) spy.mockReturnValueOnce(id);
+	return spy;
 }
 
 interface SeededFake {
@@ -82,14 +106,13 @@ describe("branch — happy path", () => {
 			".neon/project.json": JSON.stringify({ projectId, orgId }),
 			"neon.ts": previewBlueprint(),
 		});
+		stubMiniIds("abc123");
 
 		const result = await branch({
 			blueprint: "preview",
 			cwd: root,
-			env: {},
 			api,
 			gitBranch: null,
-			generateMiniId: () => "abc123",
 		});
 
 		expect(result.projectId).toBe(projectId);
@@ -119,14 +142,13 @@ describe("branch — happy path", () => {
 			".neon/project.json": JSON.stringify({ projectId, orgId }),
 			"neon.ts": previewBlueprint(),
 		});
+		stubMiniIds("abc123");
 
 		const result = await branch({
 			blueprint: "preview",
 			cwd: root,
-			env: {},
 			api,
 			gitBranch: "andrelandgraf/new-feature",
-			generateMiniId: () => "abc123",
 		});
 
 		expect(result.branchName).toBe(
@@ -150,10 +172,8 @@ describe("branch — happy path", () => {
 		const result = await branch({
 			blueprint: "preview",
 			cwd: root,
-			env: {},
 			api,
 			gitBranch: null,
-			generateMiniId: () => "abc123",
 		});
 
 		expect(result.contextFile.status).toBe("updated");
@@ -182,10 +202,8 @@ describe("branch — happy path", () => {
 		const result = await branch({
 			blueprint: "preview",
 			cwd: root,
-			env: {},
 			api,
 			gitBranch: null,
-			generateMiniId: () => "abc123",
 		});
 
 		expect(result.contextFile.status).toBe("updated");
@@ -208,10 +226,8 @@ describe("branch — happy path", () => {
 			projectId,
 			orgId,
 			cwd: root,
-			env: {},
 			api,
 			gitBranch: null,
-			generateMiniId: () => "abc123",
 		});
 
 		expect(result.contextFile.status).toBe("no-file");
@@ -251,10 +267,8 @@ describe("branch — happy path", () => {
 		const result = await branch({
 			blueprint: "preview",
 			cwd: root,
-			env: {},
 			api,
 			gitBranch: null,
-			generateMiniId: () => "abc123",
 		});
 
 		expect(result.contextFile.status).toBe("write-failed");
@@ -309,21 +323,16 @@ describe("branch — happy path", () => {
 			"neon.ts": previewBlueprint(),
 		});
 
-		let call = 0;
+		const spy = stubMiniIds("abc123", "def456");
 		const result = await branch({
 			blueprint: "preview",
 			cwd: root,
-			env: {},
 			api,
 			gitBranch: null,
-			generateMiniId: () => {
-				call += 1;
-				return call === 1 ? "abc123" : "def456";
-			},
 		});
 
 		expect(result.branchName).toBe("preview-def456");
-		expect(call).toBe(2);
+		expect(spy).toHaveBeenCalledTimes(2);
 	});
 });
 
@@ -338,7 +347,6 @@ describe("branch — error paths", () => {
 			branch({
 				blueprint: "preview",
 				cwd: root,
-				env: {},
 				api,
 				gitBranch: null,
 			}),
@@ -355,7 +363,6 @@ describe("branch — error paths", () => {
 			branch({
 				blueprint: "preview",
 				cwd: root,
-				env: {},
 				api,
 				gitBranch: null,
 			}),
@@ -373,7 +380,6 @@ describe("branch — error paths", () => {
 			branch({
 				blueprint: "does-not-exist",
 				cwd: root,
-				env: {},
 				api,
 				gitBranch: null,
 			}),
@@ -393,7 +399,6 @@ describe("branch — error paths", () => {
 			branch({
 				blueprint: "production", // concrete branch — not for `branch`
 				cwd: root,
-				env: {},
 				api,
 				gitBranch: null,
 			}),
@@ -434,7 +439,6 @@ describe("branch — error paths", () => {
 			branch({
 				blueprint: "preview",
 				cwd: root,
-				env: {},
 				api,
 				gitBranch: null,
 			}),
@@ -443,16 +447,16 @@ describe("branch — error paths", () => {
 		});
 	});
 
-	test("throws InternalError when the mini-id generator never produces a unique name", async () => {
+	test("throws InternalError when name-generation never produces a unique name", async () => {
 		const { api, projectId } = seededFake();
 		const root = setup({
 			"package.json": "{}",
 			".neon/project.json": JSON.stringify({ projectId }),
 			"neon.ts": previewBlueprint(),
 		});
-		// Same id every call: existence check fails forever.
+		// Pin every mini-id to "stuck" and pre-seed a collision so every attempt fails.
+		vi.spyOn(branchNameModule, "generateMiniId").mockReturnValue("stuck");
 		api.history.length = 0;
-		// Pre-seed a collision so the first attempt collides.
 		await api.createBranch(projectId, {
 			name: "preview-stuck",
 			parentId: "br-production",
@@ -462,10 +466,8 @@ describe("branch — error paths", () => {
 			branch({
 				blueprint: "preview",
 				cwd: root,
-				env: {},
 				api,
 				gitBranch: null,
-				generateMiniId: () => "stuck",
 				maxAttempts: 3,
 			}),
 		).rejects.toMatchObject({
@@ -480,11 +482,12 @@ describe("branch — error paths", () => {
 			".neon/project.json": JSON.stringify({ projectId: "p1" }),
 			"neon.ts": previewBlueprint(),
 		});
+		vi.stubEnv("HOME", emptyHome);
+		vi.stubEnv("USERPROFILE", emptyHome);
 		await expect(
 			branch({
 				blueprint: "preview",
 				cwd: root,
-				env: { HOME: emptyHome, USERPROFILE: emptyHome },
 				gitBranch: null,
 			}),
 		).rejects.toMatchObject({
@@ -501,15 +504,15 @@ describe("branch — option overrides win over env / file", () => {
 			".neon/project.json": JSON.stringify({ projectId: "from-file" }),
 			"neon.ts": previewBlueprint(),
 		});
+		vi.stubEnv("NEON_PROJECT_ID", "from-env");
+		stubMiniIds("abc123");
 
 		const result = await branch({
 			blueprint: "preview",
 			projectId,
 			cwd: root,
-			env: { NEON_PROJECT_ID: "from-env" },
 			api,
 			gitBranch: null,
-			generateMiniId: () => "abc123",
 		});
 
 		expect(result.projectId).toBe(projectId);
@@ -526,7 +529,6 @@ describe("branch — option overrides win over env / file", () => {
 			branch({
 				blueprint: "does-not-exist",
 				cwd: root,
-				env: {},
 				api,
 				gitBranch: null,
 			}),

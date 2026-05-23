@@ -1,10 +1,14 @@
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { readNeonctlCredentials, resolveApiKey } from "./auth.js";
-import { makeTempRepo } from "./test-utils.js";
+import { makeTempRepo, stubCleanNeonEnv } from "./test-utils.js";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
 	while (cleanups.length > 0) cleanups.shift()?.();
+});
+
+beforeEach(() => {
+	stubCleanNeonEnv();
 });
 
 function setupHome(files: Record<string, string | null>): string {
@@ -21,7 +25,8 @@ describe("readNeonctlCredentials", () => {
 				refresh_token: "rt-xyz",
 			}),
 		});
-		const creds = readNeonctlCredentials({ home, env: {} });
+		vi.stubEnv("HOME", home);
+		const creds = readNeonctlCredentials();
 		expect(creds?.access_token).toBe("oauth-token-abc");
 		expect(creds?.refresh_token).toBe("rt-xyz");
 	});
@@ -35,10 +40,9 @@ describe("readNeonctlCredentials", () => {
 				access_token: "from-env-dir",
 			}),
 		});
-		const creds = readNeonctlCredentials({
-			home,
-			env: { NEONCTL_CONFIG_DIR: `${home}/custom` },
-		});
+		vi.stubEnv("HOME", home);
+		vi.stubEnv("NEONCTL_CONFIG_DIR", `${home}/custom`);
+		const creds = readNeonctlCredentials();
 		expect(creds?.access_token).toBe("from-env-dir");
 	});
 
@@ -54,24 +58,24 @@ describe("readNeonctlCredentials", () => {
 				access_token: "from-option",
 			}),
 		});
-		const creds = readNeonctlCredentials({
-			home,
-			env: { NEONCTL_CONFIG_DIR: `${home}/env` },
-			configDir: `${home}/opt`,
-		});
+		vi.stubEnv("HOME", home);
+		vi.stubEnv("NEONCTL_CONFIG_DIR", `${home}/env`);
+		const creds = readNeonctlCredentials({ configDir: `${home}/opt` });
 		expect(creds?.access_token).toBe("from-option");
 	});
 
 	test("returns null when the file is missing", () => {
 		const home = setupHome({ ".config/neonctl/.keep": "" });
-		expect(readNeonctlCredentials({ home, env: {} })).toBeNull();
+		vi.stubEnv("HOME", home);
+		expect(readNeonctlCredentials()).toBeNull();
 	});
 
 	test("returns null on malformed JSON instead of throwing", () => {
 		const home = setupHome({
 			".config/neonctl/credentials.json": "not json",
 		});
-		expect(readNeonctlCredentials({ home, env: {} })).toBeNull();
+		vi.stubEnv("HOME", home);
+		expect(readNeonctlCredentials()).toBeNull();
 	});
 
 	test("returns null when access_token is missing or empty", () => {
@@ -80,17 +84,20 @@ describe("readNeonctlCredentials", () => {
 				refresh_token: "rt-only",
 			}),
 		});
-		expect(readNeonctlCredentials({ home, env: {} })).toBeNull();
+		vi.stubEnv("HOME", home);
+		expect(readNeonctlCredentials()).toBeNull();
 		const home2 = setupHome({
 			".config/neonctl/credentials.json": JSON.stringify({
 				access_token: "",
 			}),
 		});
-		expect(readNeonctlCredentials({ home: home2, env: {} })).toBeNull();
+		vi.stubEnv("HOME", home2);
+		expect(readNeonctlCredentials()).toBeNull();
 	});
 
-	test("returns null when no home dir resolvable and no override", () => {
-		expect(readNeonctlCredentials({ env: {} })).toBeNull();
+	test("returns null when no home dir resolvable", () => {
+		// `stubCleanNeonEnv()` already cleared HOME and USERPROFILE.
+		expect(readNeonctlCredentials()).toBeNull();
 	});
 
 	test("falls back to USERPROFILE on Windows-style env", () => {
@@ -99,7 +106,8 @@ describe("readNeonctlCredentials", () => {
 				access_token: "win-token",
 			}),
 		});
-		const creds = readNeonctlCredentials({ env: { USERPROFILE: winHome } });
+		vi.stubEnv("USERPROFILE", winHome);
+		const creds = readNeonctlCredentials();
 		expect(creds?.access_token).toBe("win-token");
 	});
 });
@@ -111,22 +119,17 @@ describe("resolveApiKey — priority chain", () => {
 				access_token: "from-file",
 			}),
 		});
-		expect(
-			resolveApiKey({
-				apiKey: "from-option",
-				env: { NEON_API_KEY: "from-env" },
-				home,
-			}),
-		).toEqual({ token: "from-option", source: "option" });
-
-		expect(
-			resolveApiKey({ env: { NEON_API_KEY: "from-env" }, home }),
-		).toEqual({
-			token: "from-env",
-			source: "env",
+		vi.stubEnv("HOME", home);
+		vi.stubEnv("NEON_API_KEY", "from-env");
+		expect(resolveApiKey({ apiKey: "from-option" })).toEqual({
+			token: "from-option",
+			source: "option",
 		});
 
-		expect(resolveApiKey({ env: {}, home })).toEqual({
+		expect(resolveApiKey()).toEqual({ token: "from-env", source: "env" });
+
+		vi.stubEnv("NEON_API_KEY", undefined);
+		expect(resolveApiKey()).toEqual({
 			token: "from-file",
 			source: "neonctl",
 		});
@@ -134,7 +137,8 @@ describe("resolveApiKey — priority chain", () => {
 
 	test("returns null when no source provides a token", () => {
 		const home = setupHome({ ".config/neonctl/.keep": "" });
-		expect(resolveApiKey({ env: {}, home })).toBeNull();
+		vi.stubEnv("HOME", home);
+		expect(resolveApiKey()).toBeNull();
 	});
 
 	test("treats whitespace-only option / env as missing", () => {
@@ -143,18 +147,18 @@ describe("resolveApiKey — priority chain", () => {
 				access_token: "from-file",
 			}),
 		});
-		expect(
-			resolveApiKey({
-				apiKey: "   ",
-				env: { NEON_API_KEY: "   " },
-				home,
-			}),
-		).toEqual({ token: "from-file", source: "neonctl" });
+		vi.stubEnv("HOME", home);
+		vi.stubEnv("NEON_API_KEY", "   ");
+		expect(resolveApiKey({ apiKey: "   " })).toEqual({
+			token: "from-file",
+			source: "neonctl",
+		});
 	});
 
 	test("trims whitespace around the resolved token", () => {
 		const home = setupHome({ ".config/neonctl/.keep": "" });
-		expect(resolveApiKey({ apiKey: "  napi_x  ", env: {}, home })).toEqual({
+		vi.stubEnv("HOME", home);
+		expect(resolveApiKey({ apiKey: "  napi_x  " })).toEqual({
 			token: "napi_x",
 			source: "option",
 		});

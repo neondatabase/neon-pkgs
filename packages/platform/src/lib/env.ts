@@ -114,8 +114,6 @@ export interface FetchEnvOptions {
 	api?: NeonApi;
 	/** Explicit project id. Overrides `NEON_PROJECT_ID` and `.neon[/project.json]`. */
 	projectId?: string;
-	/** Explicit org id. Accepted for parity with the rest of the SDK. */
-	orgId?: string;
 	/**
 	 * Explicit branch id (`br-…`) or branch name. Resolution chain:
 	 * `options.branch` → `NEON_BRANCH_ID` env → context file → first key in
@@ -136,11 +134,6 @@ export interface FetchEnvOptions {
 	databaseName?: string;
 	/** Starting directory for the context-file search. Defaults to `process.cwd()`. */
 	cwd?: string;
-	/**
-	 * Override `process.env` for testing. Read keys: `NEON_PROJECT_ID`, `NEON_BRANCH_ID`,
-	 * `NEON_ORG_ID`, `NEON_API_KEY`. Real callers should leave this undefined.
-	 */
-	env?: Record<string, string | undefined>;
 }
 
 /**
@@ -181,10 +174,8 @@ export async function fetchEnv<const C extends Config>(
 
 	const ctx = loadContext({
 		...(options.projectId ? { projectId: options.projectId } : {}),
-		...(options.orgId ? { orgId: options.orgId } : {}),
 		...(options.branch ? { branch: options.branch } : {}),
 		...(options.cwd ? { cwd: options.cwd } : {}),
-		...(options.env ? { env: options.env } : {}),
 	});
 
 	const branches = await api.listBranches(ctx.projectId);
@@ -263,7 +254,7 @@ export async function fetchEnv<const C extends Config>(
 				},
 			);
 		}
-		const secrets = readAuthSecretsFromEnv(options.env);
+		const secrets = readAuthSecretsFromEnv();
 		result.auth = {
 			projectId: authSnapshot.projectId,
 			publishableClientKey: secrets.publishableClientKey,
@@ -296,23 +287,20 @@ export async function fetchEnv<const C extends Config>(
 }
 
 /**
- * Pull the auth secret/publishable key from the env source `fetchEnv` was given. These
- * two fields aren't fetchable from the Neon API after integration creation, so the user
- * must inject them out-of-band (via `.env`, hosting platform secret manager, etc.). When
- * either is missing we throw the same `EnvNotInjected` error `parseEnv` would.
+ * Pull the auth secret/publishable key from `process.env`. These two fields aren't
+ * fetchable from the Neon API after integration creation, so the user must inject them
+ * out-of-band (via `.env`, hosting platform secret manager, etc.). When either is
+ * missing we throw the same `EnvNotInjected` error `parseEnv` would.
  */
-function readAuthSecretsFromEnv(
-	envOverride: Record<string, string | undefined> | undefined,
-): {
+function readAuthSecretsFromEnv(): {
 	publishableClientKey: string;
 	secretServerKey: string;
 } {
-	const source = envOverride ?? process.env;
 	const pubKey = NEON_ENV_VAR_KEYS.auth.publishableClientKey;
 	const secretKey = NEON_ENV_VAR_KEYS.auth.secretServerKey;
 	const issues: string[] = [];
-	const publishableClientKey = source[pubKey];
-	const secretServerKey = source[secretKey];
+	const publishableClientKey = process.env[pubKey];
+	const secretServerKey = process.env[secretKey];
 	if (!publishableClientKey) issues.push(`${pubKey} is missing`);
 	if (!secretServerKey) issues.push(`${secretKey} is missing`);
 	if (issues.length > 0) {
@@ -333,10 +321,10 @@ function readAuthSecretsFromEnv(
 }
 
 function createApiFromOptions(options: FetchEnvOptions): NeonApi {
-	return createNeonApiFromOptions("fetchEnv", {
-		...(options.apiKey ? { apiKey: options.apiKey } : {}),
-		...(options.env ? { env: options.env } : {}),
-	});
+	return createNeonApiFromOptions(
+		"fetchEnv",
+		options.apiKey ? { apiKey: options.apiKey } : {},
+	);
 }
 
 function resolveBranch(
@@ -510,14 +498,6 @@ function pickDatabaseName(
 
 // ───────────────────────── parseEnv ─────────────────────────
 
-export interface ParseEnvOptions {
-	/**
-	 * Override the env source. Defaults to `process.env`. Real callers should leave this
-	 * undefined; tests can pass a fixture object.
-	 */
-	env?: Record<string, string | undefined>;
-}
-
 /**
  * Per-namespace zod schemas. Each defines exactly the OS-level keys parsed from
  * `process.env` for its namespace. Keep in sync with {@link NEON_ENV_VAR_KEYS}.
@@ -583,11 +563,8 @@ const dataApiEnvSchema = z.object({
  * // env.auth is statically typed when config.features.auth is true; type-error when not.
  * ```
  */
-export function parseEnv<const C extends Config>(
-	config: C,
-	options: ParseEnvOptions = {},
-): NeonEnv<C> {
-	const source = options.env ?? process.env;
+export function parseEnv<const C extends Config>(config: C): NeonEnv<C> {
+	const source = process.env;
 	const issues: string[] = [];
 	const result: Record<string, unknown> = {};
 

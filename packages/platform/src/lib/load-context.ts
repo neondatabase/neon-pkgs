@@ -19,17 +19,12 @@ export interface LoadContextOptions {
 	 * a name.
 	 */
 	branch?: string;
-	/** Explicit project id. Takes precedence over the context file. */
+	/** Explicit project id. Takes precedence over `NEON_PROJECT_ID` and the context file. */
 	projectId?: string;
-	/** Explicit org id. */
+	/** Explicit org id. Takes precedence over `NEON_ORG_ID` and the context file. */
 	orgId?: string;
 	/** Starting directory for the project-context file search. Defaults to `process.cwd()`. */
 	cwd?: string;
-	/**
-	 * Override `process.env` for testing. Read keys: `NEON_BRANCH_ID`, `NEON_PROJECT_ID`,
-	 * `NEON_ORG_ID`. Real callers should leave this undefined.
-	 */
-	env?: Record<string, string | undefined>;
 }
 
 /**
@@ -58,12 +53,11 @@ export interface NeonContext {
  * Per the package's read-only-filesystem contract, this function never creates files.
  */
 export function loadContext(options: LoadContextOptions = {}): NeonContext {
-	const env = options.env ?? process.env;
 	const file = findProjectContext({ cwd: options.cwd });
 
 	const projectId =
 		nonEmptyString(options.projectId) ??
-		nonEmptyString(env.NEON_PROJECT_ID) ??
+		nonEmptyString(process.env.NEON_PROJECT_ID) ??
 		file?.projectId;
 
 	if (!projectId) {
@@ -78,12 +72,12 @@ export function loadContext(options: LoadContextOptions = {}): NeonContext {
 
 	const orgId =
 		nonEmptyString(options.orgId) ??
-		nonEmptyString(env.NEON_ORG_ID) ??
+		nonEmptyString(process.env.NEON_ORG_ID) ??
 		file?.orgId;
 
 	const branchRaw =
 		nonEmptyString(options.branch) ??
-		nonEmptyString(env.NEON_BRANCH_ID) ??
+		nonEmptyString(process.env.NEON_BRANCH_ID) ??
 		file?.branchId;
 
 	const ctx: NeonContext = { projectId };

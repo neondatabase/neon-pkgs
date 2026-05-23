@@ -20,26 +20,20 @@ export interface NeonctlCredentials {
  * Resolution:
  * 1. `options.configDir` (explicit override — mirrors neonctl's `--config-dir` flag).
  * 2. `NEONCTL_CONFIG_DIR` environment variable.
- * 3. `<home>/.config/neonctl/credentials.json` (the neonctl default).
- *
- * `home` falls back to `USERPROFILE` for Windows parity, again matching neonctl/init.
+ * 3. `<home>/.config/neonctl/credentials.json` (the neonctl default; `home` reads
+ *    `HOME`, falling back to `USERPROFILE` for Windows parity).
  *
  * Returns `null` (never throws) when the file is missing, unreadable, malformed, or has
  * no `access_token` — so callers can use this as a quiet fallback in a resolution chain
  * without try/catch noise.
  */
 export function readNeonctlCredentials(
-	options: {
-		configDir?: string;
-		env?: Record<string, string | undefined>;
-		home?: string;
-	} = {},
+	options: { configDir?: string } = {},
 ): NeonctlCredentials | null {
-	const env = options.env ?? process.env;
-	const home = options.home ?? env.HOME ?? env.USERPROFILE;
+	const home = process.env.HOME ?? process.env.USERPROFILE;
 	const configDir =
 		options.configDir ??
-		env.NEONCTL_CONFIG_DIR ??
+		process.env.NEONCTL_CONFIG_DIR ??
 		(home ? resolve(home, ".config", "neonctl") : undefined);
 	if (!configDir) return null;
 
@@ -80,26 +74,18 @@ export function readNeonctlCredentials(
  * `PLATFORM_MISSING_API_KEY` error with a message tailored to the operation.
  */
 export function resolveApiKey(
-	options: {
-		apiKey?: string;
-		env?: Record<string, string | undefined>;
-		configDir?: string;
-		home?: string;
-	} = {},
+	options: { apiKey?: string; configDir?: string } = {},
 ): { token: string; source: "option" | "env" | "neonctl" } | null {
 	if (options.apiKey && options.apiKey.trim() !== "") {
 		return { token: options.apiKey.trim(), source: "option" };
 	}
-	const env = options.env ?? process.env;
-	const envKey = env.NEON_API_KEY;
+	const envKey = process.env.NEON_API_KEY;
 	if (typeof envKey === "string" && envKey.trim() !== "") {
 		return { token: envKey.trim(), source: "env" };
 	}
-	const creds = readNeonctlCredentials({
-		...(options.configDir ? { configDir: options.configDir } : {}),
-		...(options.home ? { home: options.home } : {}),
-		...(options.env ? { env: options.env } : {}),
-	});
+	const creds = readNeonctlCredentials(
+		options.configDir ? { configDir: options.configDir } : {},
+	);
 	if (creds) {
 		return { token: creds.access_token, source: "neonctl" };
 	}
@@ -120,13 +106,11 @@ export function createNeonApiFromOptions(
 	operation: string,
 	options: {
 		apiKey?: string;
-		env?: Record<string, string | undefined>;
 	} = {},
 ): NeonApi {
-	const resolved = resolveApiKey({
-		...(options.apiKey ? { apiKey: options.apiKey } : {}),
-		...(options.env ? { env: options.env } : {}),
-	});
+	const resolved = resolveApiKey(
+		options.apiKey ? { apiKey: options.apiKey } : {},
+	);
 	if (resolved) return createRealNeonApi({ apiKey: resolved.token });
 	throw new PlatformError(
 		ErrorCode.MissingApiKey,

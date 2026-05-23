@@ -51,7 +51,6 @@ export type {
 	NeonDataApiEnv,
 	NeonEnv,
 	NeonPostgresEnv,
-	ParseEnvOptions,
 } from "./lib/env.js";
 export { fetchEnv, NEON_ENV_VAR_KEYS, parseEnv } from "./lib/env.js";
 // ─── Errors ────────────────────────────────────────────────────────────────────

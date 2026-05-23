@@ -28,7 +28,6 @@ describe("e2e — fetchEnv against real Neon API", () => {
 			const env = await fetchEnv(config, {
 				api,
 				projectId: pushed.projectId,
-				env: {},
 			});
 
 			expect(Object.keys(env)).toEqual(["postgres"]);

@@ -4,6 +4,7 @@ export default defineConfig({
 	test: {
 		clearMocks: true,
 		mockReset: true,
+		unstubEnvs: true,
 		coverage: {
 			all: true,
 			include: ["src"],

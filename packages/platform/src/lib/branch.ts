@@ -1,10 +1,5 @@
 import { createNeonApiFromOptions } from "./auth.js";
-import {
-	buildBranchName,
-	DEFAULT_MAX_ATTEMPTS,
-	generateMiniId,
-	normalizeGitBranch,
-} from "./branch-name.js";
+import * as branchName from "./branch-name.js";
 import {
 	applyContextFileFields,
 	findContextFilePath,
@@ -40,11 +35,6 @@ export interface BranchOptions {
 	/** Working directory for context / config / git lookups. Defaults to `process.cwd()`. */
 	cwd?: string;
 	/**
-	 * Override `process.env` for testing. Read keys: `NEON_API_KEY`, `NEON_PROJECT_ID`,
-	 * `NEON_ORG_ID`. Real callers should leave this undefined.
-	 */
-	env?: Record<string, string | undefined>;
-	/**
 	 * Inject a custom NeonApi adapter. Primarily used by tests; production callers can rely
 	 * on the default real adapter built from `apiKey`.
 	 */
@@ -58,13 +48,8 @@ export interface BranchOptions {
 	 */
 	gitBranch?: string | null;
 	/**
-	 * Override the mini-id generator. Used by tests to produce deterministic names; real
-	 * callers should leave this unset.
-	 */
-	generateMiniId?: () => string;
-	/**
 	 * Maximum number of collision retries when generating a unique branch name.
-	 * Default: {@link DEFAULT_MAX_ATTEMPTS} (10).
+	 * Default: 10.
 	 */
 	maxAttempts?: number;
 }
@@ -168,7 +153,6 @@ export async function branch(options: BranchOptions): Promise<BranchResult> {
 	const ctx = loadContext({
 		...(options.projectId ? { projectId: options.projectId } : {}),
 		...(options.orgId ? { orgId: options.orgId } : {}),
-		...(options.env ? { env: options.env } : {}),
 		cwd,
 	});
 
@@ -226,13 +210,11 @@ export async function branch(options: BranchOptions): Promise<BranchResult> {
 	const parentBranch = resolveParentBranch(blueprint, resolved, branches);
 
 	const gitBranch = resolveGitBranch(options, cwd);
-	const generate = options.generateMiniId ?? generateMiniId;
-	const maxAttempts = options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
-	const branchName = pickUniqueName({
+	const maxAttempts = options.maxAttempts ?? branchName.DEFAULT_MAX_ATTEMPTS;
+	const generatedName = pickUniqueName({
 		pattern: blueprint.pattern,
 		...(gitBranch ? { gitBranch } : {}),
 		existingNames: new Set(branches.map((b) => b.name)),
-		generate,
 		maxAttempts,
 	});
 
@@ -241,7 +223,7 @@ export async function branch(options: BranchOptions): Promise<BranchResult> {
 			? new Date(Date.now() + blueprint.ttlSeconds * 1000).toISOString()
 			: undefined;
 	const createInput: CreateBranchInput = {
-		name: branchName,
+		name: generatedName,
 		parentId: parentBranch.id,
 	};
 	if (expiresAt) createInput.expiresAt = expiresAt;
@@ -300,10 +282,10 @@ function applyToContextFile(
 }
 
 function createApiFromOptions(options: BranchOptions): NeonApi {
-	return createNeonApiFromOptions("branch", {
-		...(options.apiKey ? { apiKey: options.apiKey } : {}),
-		...(options.env ? { env: options.env } : {}),
-	});
+	return createNeonApiFromOptions(
+		"branch",
+		options.apiKey ? { apiKey: options.apiKey } : {},
+	);
 }
 
 /**
@@ -372,7 +354,7 @@ function resolveGitBranch(
 			? options.gitBranch
 			: readCurrentGitBranch(cwd);
 	if (!raw) return undefined;
-	const normalized = normalizeGitBranch(raw);
+	const normalized = branchName.normalizeGitBranch(raw);
 	return normalized ?? undefined;
 }
 
@@ -380,16 +362,15 @@ interface PickUniqueNameInput {
 	pattern: string;
 	gitBranch?: string;
 	existingNames: Set<string>;
-	generate: () => string;
 	maxAttempts: number;
 }
 
 function pickUniqueName(input: PickUniqueNameInput): string {
 	for (let attempt = 0; attempt < input.maxAttempts; attempt++) {
-		const candidate = buildBranchName({
+		const candidate = branchName.buildBranchName({
 			pattern: input.pattern,
 			...(input.gitBranch ? { gitBranch: input.gitBranch } : {}),
-			miniId: input.generate(),
+			miniId: branchName.generateMiniId(),
 		});
 		if (!input.existingNames.has(candidate)) return candidate;
 	}
@@ -397,7 +378,7 @@ function pickUniqueName(input: PickUniqueNameInput): string {
 		ErrorCode.InternalError,
 		[
 			`branch: failed to generate a unique branch name after ${input.maxAttempts} attempts (pattern: ${input.pattern}).`,
-			"This typically means the mini-id generator is returning the same value repeatedly. If you injected a custom `generateMiniId`, make sure it returns fresh values.",
+			"This typically means too many branches already match the blueprint's pattern in the same namespace; consider tightening it or pruning old branches.",
 		].join(" "),
 		{
 			details: {

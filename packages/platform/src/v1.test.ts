@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { FakeNeonApi } from "./lib/fake-neon-api.js";
-import { makeTempRepo } from "./lib/test-utils.js";
+import { makeTempRepo, stubCleanNeonEnv } from "./lib/test-utils.js";
 import {
 	type Config,
 	defineConfig,
@@ -13,6 +13,10 @@ import {
 const cleanups: Array<() => void> = [];
 afterEach(() => {
 	while (cleanups.length > 0) cleanups.shift()?.();
+});
+
+beforeEach(() => {
+	stubCleanNeonEnv();
 });
 
 function setup(files: Record<string, string | null>) {
@@ -132,7 +136,7 @@ export default defineConfig({
 `,
 		});
 
-		const ctx = loadContext({ cwd: root, env: {} });
+		const ctx = loadContext({ cwd: root });
 		expect(ctx.projectId).toBe("proj-e2e");
 		expect(ctx.branch).toEqual({ kind: "id", value: "br-fake-1" });
 

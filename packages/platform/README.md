@@ -107,7 +107,7 @@ import {
 import type {
   // Config (used in neon.ts) — Config, ProjectConfig, BranchConfig, BranchBlueprint, ComputeSettings
   // Operation options + results — BranchOptions / BranchResult / BranchContextFile,
-  //   PullConfigOptions, PushConfigOptions / PushResult, FetchEnvOptions, ParseEnvOptions, NeonEnv, …
+  //   PullConfigOptions, PushConfigOptions / PushResult, FetchEnvOptions, NeonEnv, …
   // NeonApi types (for custom adapters) — NeonApi, NeonBranchSnapshot, CreateBranchInput, …
   Config, BranchOptions, BranchResult, PushResult, NeonEnv, NeonApi,
 } from "@neondatabase/platform/v1";
@@ -119,13 +119,14 @@ Internal helpers (`applyContextFileFields`, `readNeonctlCredentials`, `loadConte
 
 Every SDK function and every CLI subcommand resolves `projectId`, `orgId`, and `branchId` through the **same chain**. Each row's leftmost set entry wins:
 
-| Field       | 1st (call arg / CLI flag)              | 2nd (env)         | 3rd (`.neon/project.json`) | 4th (`.neon` file)     |
-| ----------- | -------------------------------------- | ----------------- | -------------------------- | ---------------------- |
-| `projectId` | `options.projectId` / `--project-id`   | `NEON_PROJECT_ID` | `projectId`                | `projectId`            |
-| `orgId`     | `options.orgId` / `--org-id`           | `NEON_ORG_ID`     | `orgId`                    | `orgId`                |
-| `branchId`  | `options.branch` / `--branch`[^branch] | `NEON_BRANCH_ID`  | `branchId`                 | `branchId`             |
+| Field       | 1st (call arg / CLI flag)                  | 2nd (env)         | 3rd (`.neon/project.json`) | 4th (`.neon` file)     |
+| ----------- | ------------------------------------------ | ----------------- | -------------------------- | ---------------------- |
+| `projectId` | `options.projectId` / `--project-id`       | `NEON_PROJECT_ID` | `projectId`                | `projectId`            |
+| `orgId`     | `options.orgId`[^orgId] / `--org-id`       | `NEON_ORG_ID`     | `orgId`                    | `orgId`                |
+| `branchId`  | `options.branch`[^branch] / `--branch`     | `NEON_BRANCH_ID`  | `branchId`                 | `branchId`             |
 
-[^branch]: Only commands that target a specific branch surface a `--branch` flag (`context`, `fetchEnv`). `pull` / `push` are branch-agnostic; `branch` *creates* a branch and produces its id as output.
+[^orgId]: `orgId` is only accepted (and only useful) on calls that may create a project or preserve the org pointer in a context file — `pushConfig`, `branch`, `loadContext`. `pullConfig` / `fetchEnv` / `parseEnv` don't take it because the project id already pins the org.
+[^branch]: Only commands that target a specific branch surface a `--branch` flag (`context`, `env pull`, `env run`). `pull` / `push` are branch-agnostic; `branch` *creates* a branch and produces its id as output.
 
 The file search walks up from `cwd` (default: `process.cwd()`) until it finds either file or hits a project-root marker (`.git`, `package.json`). `.neon/project.json` is preferred over `.neon` at every directory along the walk. If nothing resolves a `projectId`, callers receive `MissingContextError`.
 
@@ -233,7 +234,7 @@ const env = await fetchEnv(config);
 const db = drizzle(neon(env.postgres.databaseUrl), { schema });
 ```
 
-For `fetchEnv`: `projectId`, `orgId`, and `branch` follow the standard [Project context resolution](#project-context-resolution) chain, with one extra fallback for `branch` only — when nothing resolves it, the first key in `config.branches` (typically `"production"`) is used. `roleName` and `databaseName` are auto-picked when the branch has exactly one role / database; otherwise `fetchEnv` throws `PLATFORM_AMBIGUOUS_BRANCH_AUTH` and you'll need to pass `databaseName` explicitly.
+For `fetchEnv`: `projectId` and `branch` follow the standard [Project context resolution](#project-context-resolution) chain, with one extra fallback for `branch` only — when nothing resolves it, the first key in `config.branches` (typically `"production"`) is used. `roleName` and `databaseName` are auto-picked when the branch has exactly one role / database; otherwise `fetchEnv` throws `PLATFORM_AMBIGUOUS_BRANCH_AUTH` and you'll need to pass `databaseName` explicitly.
 
 For `parseEnv`: the OS-level env-var keys are exposed as `NEON_ENV_VAR_KEYS` for callers building their own pull/inject tooling. Current mapping:
 
@@ -400,7 +401,7 @@ Exit codes (stable — branch on these in CI / shell pipelines):
 
 Pass `--debug` to any subcommand to print stack traces, error codes, and structured details (request ids, neon API messages) on stderr.
 
-All flags accept env-var fallbacks: `NEON_API_KEY`, `NEON_PROJECT_ID`, `NEON_ORG_ID`, `NEON_BRANCH_ID`.
+All flags accept env-var fallbacks: `NEON_API_KEY`, `NEON_PROJECT_ID`, `NEON_ORG_ID` (only used by `push` / `status` / `branch` / `context`), `NEON_BRANCH_ID`.
 
 ## Error reference
 

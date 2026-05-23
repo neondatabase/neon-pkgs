@@ -14,8 +14,6 @@ export interface PullConfigOptions {
 	apiKey?: string;
 	/** Explicit project id. Overrides the value read from `.neon/project.json` or `.neon`. */
 	projectId?: string;
-	/** Explicit org id. Currently unused for pull but accepted for parity with pushConfig. */
-	orgId?: string;
 	/** Starting directory for the project-context search. Defaults to `process.cwd()`. */
 	cwd?: string;
 	/**
@@ -52,9 +50,8 @@ export async function pullConfig(
 
 function resolveProjectId(options: PullConfigOptions): string {
 	const ctx = loadContext({
-		projectId: options.projectId,
-		orgId: options.orgId,
-		cwd: options.cwd,
+		...(options.projectId ? { projectId: options.projectId } : {}),
+		...(options.cwd ? { cwd: options.cwd } : {}),
 	});
 	return ctx.projectId;
 }

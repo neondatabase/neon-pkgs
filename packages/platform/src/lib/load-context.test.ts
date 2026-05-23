@@ -1,11 +1,15 @@
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { MissingContextError } from "./errors.js";
 import { loadContext, loadContextWithBranch } from "./load-context.js";
-import { makeTempRepo } from "./test-utils.js";
+import { makeTempRepo, stubCleanNeonEnv } from "./test-utils.js";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
 	while (cleanups.length > 0) cleanups.shift()?.();
+});
+
+beforeEach(() => {
+	stubCleanNeonEnv();
 });
 
 function setup(files: Record<string, string | null>) {
@@ -23,11 +27,11 @@ describe("loadContext — project resolution", () => {
 				orgId: "org-file",
 			}),
 		});
+		vi.stubEnv("NEON_PROJECT_ID", "from-env");
 		const ctx = loadContext({
 			projectId: "from-args",
 			orgId: "org-args",
 			cwd: root,
-			env: { NEON_PROJECT_ID: "from-env" },
 		});
 		expect(ctx.projectId).toBe("from-args");
 		expect(ctx.orgId).toBe("org-args");
@@ -41,10 +45,9 @@ describe("loadContext — project resolution", () => {
 				orgId: "org-file",
 			}),
 		});
-		const ctx = loadContext({
-			cwd: root,
-			env: { NEON_PROJECT_ID: "from-env", NEON_ORG_ID: "org-env" },
-		});
+		vi.stubEnv("NEON_PROJECT_ID", "from-env");
+		vi.stubEnv("NEON_ORG_ID", "org-env");
+		const ctx = loadContext({ cwd: root });
 		expect(ctx.projectId).toBe("from-env");
 		expect(ctx.orgId).toBe("org-env");
 	});
@@ -57,16 +60,14 @@ describe("loadContext — project resolution", () => {
 				orgId: "org-file",
 			}),
 		});
-		const ctx = loadContext({ cwd: root, env: {} });
+		const ctx = loadContext({ cwd: root });
 		expect(ctx.projectId).toBe("from-file");
 		expect(ctx.orgId).toBe("org-file");
 	});
 
 	test("throws MissingContextError when nothing supplies a projectId", () => {
 		const root = setup({ "package.json": "{}" });
-		expect(() => loadContext({ cwd: root, env: {} })).toThrow(
-			MissingContextError,
-		);
+		expect(() => loadContext({ cwd: root })).toThrow(MissingContextError);
 	});
 
 	test("treats empty strings as missing", () => {
@@ -74,11 +75,8 @@ describe("loadContext — project resolution", () => {
 			"package.json": "{}",
 			".neon/project.json": JSON.stringify({ projectId: "from-file" }),
 		});
-		const ctx = loadContext({
-			projectId: "   ",
-			cwd: root,
-			env: { NEON_PROJECT_ID: "" },
-		});
+		vi.stubEnv("NEON_PROJECT_ID", "");
+		const ctx = loadContext({ projectId: "   ", cwd: root });
 		expect(ctx.projectId).toBe("from-file");
 	});
 });
@@ -92,11 +90,8 @@ describe("loadContext — branch resolution", () => {
 				branchId: "br-from-file",
 			}),
 		});
-		const ctx = loadContext({
-			branch: "feature-x",
-			cwd: root,
-			env: { NEON_BRANCH_ID: "br-from-env" },
-		});
+		vi.stubEnv("NEON_BRANCH_ID", "br-from-env");
+		const ctx = loadContext({ branch: "feature-x", cwd: root });
 		expect(ctx.branch).toEqual({ kind: "name", value: "feature-x" });
 	});
 
@@ -106,7 +101,6 @@ describe("loadContext — branch resolution", () => {
 			projectId: "p1",
 			branch: "br-cool-snow-12345",
 			cwd: root,
-			env: {},
 		});
 		expect(ctx.branch).toEqual({ kind: "id", value: "br-cool-snow-12345" });
 	});
@@ -119,10 +113,8 @@ describe("loadContext — branch resolution", () => {
 				branchId: "br-from-file",
 			}),
 		});
-		const ctx = loadContext({
-			cwd: root,
-			env: { NEON_BRANCH_ID: "br-from-env" },
-		});
+		vi.stubEnv("NEON_BRANCH_ID", "br-from-env");
+		const ctx = loadContext({ cwd: root });
 		expect(ctx.branch).toEqual({ kind: "id", value: "br-from-env" });
 	});
 
@@ -134,7 +126,7 @@ describe("loadContext — branch resolution", () => {
 				branchId: "br-from-file",
 			}),
 		});
-		const ctx = loadContext({ cwd: root, env: {} });
+		const ctx = loadContext({ cwd: root });
 		expect(ctx.branch).toEqual({ kind: "id", value: "br-from-file" });
 	});
 
@@ -143,7 +135,7 @@ describe("loadContext — branch resolution", () => {
 			"package.json": "{}",
 			".neon/project.json": JSON.stringify({ projectId: "p1" }),
 		});
-		const ctx = loadContext({ cwd: root, env: {} });
+		const ctx = loadContext({ cwd: root });
 		expect(ctx.branch).toBeUndefined();
 	});
 
@@ -155,10 +147,8 @@ describe("loadContext — branch resolution", () => {
 				branchId: "br-from-file",
 			}),
 		});
-		const ctx = loadContext({
-			cwd: root,
-			env: { NEON_BRANCH_ID: "   " },
-		});
+		vi.stubEnv("NEON_BRANCH_ID", "   ");
+		const ctx = loadContext({ cwd: root });
 		expect(ctx.branch).toEqual({ kind: "id", value: "br-from-file" });
 	});
 
@@ -167,7 +157,7 @@ describe("loadContext — branch resolution", () => {
 			"package.json": "{}",
 			".neon/project.json": JSON.stringify({ projectId: "p1" }),
 		});
-		expect(() => loadContextWithBranch({ cwd: root, env: {} })).toThrow(
+		expect(() => loadContextWithBranch({ cwd: root })).toThrow(
 			MissingContextError,
 		);
 	});
@@ -180,7 +170,7 @@ describe("loadContext — branch resolution", () => {
 				branchId: "br-x",
 			}),
 		});
-		const ctx = loadContextWithBranch({ cwd: root, env: {} });
+		const ctx = loadContextWithBranch({ cwd: root });
 		// At the type level, ctx.branch is BranchRef (non-optional). Just assert at runtime.
 		expect(ctx.branch.kind).toBe("id");
 		expect(ctx.branch.value).toBe("br-x");

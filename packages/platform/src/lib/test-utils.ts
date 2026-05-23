@@ -1,6 +1,47 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { vi } from "vitest";
+
+/**
+ * Every Neon env var (and adjacent OS env var) the platform package reads at runtime.
+ * Used by {@link stubCleanNeonEnv} to give each test a deterministic, empty starting
+ * env regardless of the developer's local `~/.config/neonctl`, exported `NEON_*` vars,
+ * or anything else carried over from the parent shell.
+ */
+const NEON_AND_RELATED_ENV_KEYS = [
+	"NEON_API_KEY",
+	"NEON_PROJECT_ID",
+	"NEON_BRANCH_ID",
+	"NEON_ORG_ID",
+	"NEON_AUTH_PROJECT_ID",
+	"NEON_AUTH_PUBLISHABLE_CLIENT_KEY",
+	"NEON_AUTH_SECRET_SERVER_KEY",
+	"NEON_AUTH_JWKS_URL",
+	"NEON_DATA_API_URL",
+	"DATABASE_URL",
+	"DATABASE_URL_UNPOOLED",
+	"NEONCTL_CONFIG_DIR",
+	"HOME",
+	"USERPROFILE",
+] as const;
+
+/**
+ * Stub every Neon-related env var to `undefined` (so they look unset to the code under
+ * test). Tests can override individual keys with `vi.stubEnv(key, value)` after calling
+ * this. `vitest.config.ts` sets `unstubEnvs: true` so each test's stubs are auto-reset.
+ *
+ * Call this from a `beforeEach` in any test file that touches `process.env`-driven
+ * resolution (api key / context / connection-string env vars).
+ */
+export function stubCleanNeonEnv(): void {
+	for (const key of NEON_AND_RELATED_ENV_KEYS) {
+		// vitest 3.x: passing `undefined` deletes the env var (rather than setting it
+		// to the literal string "undefined") — exactly what we want, because empty
+		// strings would still trip code that reads `env.HOME` to build paths.
+		vi.stubEnv(key, undefined);
+	}
+}
 
 /**
  * Build a transient project tree under the OS temp directory.

@@ -37,10 +37,6 @@ const argv = yargs(hideBin(process.argv))
 					type: "string",
 					describe: "Override the .neon/project.json projectId",
 				})
-				.option("org-id", {
-					type: "string",
-					describe: "Override the .neon/project.json orgId",
-				})
 				.option("api-key", {
 					type: "string",
 					describe: "Neon API key (defaults to NEON_API_KEY)",
@@ -187,10 +183,6 @@ const argv = yargs(hideBin(process.argv))
 							describe:
 								"Override the .neon/project.json projectId",
 						})
-						.option("org-id", {
-							type: "string",
-							describe: "Override the .neon/project.json orgId",
-						})
 						.option("branch", {
 							type: "string",
 							describe:
@@ -216,10 +208,6 @@ const argv = yargs(hideBin(process.argv))
 							describe:
 								"Override the .neon/project.json projectId",
 						})
-						.option("org-id", {
-							type: "string",
-							describe: "Override the .neon/project.json orgId",
-						})
 						.option("branch", {
 							type: "string",
 							describe:
@@ -243,7 +231,6 @@ const argv = yargs(hideBin(process.argv))
 
 const command = String(argv._[0]);
 const subcommand = argv._[1] !== undefined ? String(argv._[1]) : undefined;
-const env: Record<string, string | undefined> = { ...process.env };
 const cwd = process.cwd();
 
 let result: CommandResult;
@@ -257,15 +244,12 @@ switch (command) {
 				...(typeof argv["project-id"] === "string"
 					? { projectId: argv["project-id"] }
 					: {}),
-				...(typeof argv["org-id"] === "string"
-					? { orgId: argv["org-id"] }
-					: {}),
 				...(typeof argv["api-key"] === "string"
 					? { apiKey: argv["api-key"] }
 					: {}),
 				format,
 			},
-			{ cwd, env },
+			{ cwd },
 		);
 		break;
 	}
@@ -288,7 +272,7 @@ switch (command) {
 				updateExisting: argv["update-existing"] === true,
 				applyExisting: argv["apply-existing"] === true,
 			},
-			{ cwd, env },
+			{ cwd },
 		);
 		break;
 	}
@@ -305,7 +289,7 @@ switch (command) {
 					? { orgId: argv["org-id"] }
 					: {}),
 			},
-			{ cwd, env },
+			{ cwd },
 		);
 		break;
 	}
@@ -325,7 +309,7 @@ switch (command) {
 					? { apiKey: argv["api-key"] }
 					: {}),
 			},
-			{ cwd, env },
+			{ cwd },
 		);
 		break;
 	}
@@ -348,7 +332,7 @@ switch (command) {
 					? { apiKey: argv["api-key"] }
 					: {}),
 			},
-			{ cwd, env },
+			{ cwd },
 		);
 		break;
 	}
@@ -365,9 +349,6 @@ switch (command) {
 					...(typeof argv["project-id"] === "string"
 						? { projectId: argv["project-id"] }
 						: {}),
-					...(typeof argv["org-id"] === "string"
-						? { orgId: argv["org-id"] }
-						: {}),
 					...(typeof argv.branch === "string"
 						? { branch: argv.branch }
 						: {}),
@@ -375,7 +356,7 @@ switch (command) {
 						? { apiKey: argv["api-key"] }
 						: {}),
 				},
-				{ cwd, env },
+				{ cwd },
 			);
 		} else if (subcommand === "run") {
 			const passthrough = Array.isArray(argv["--"])
@@ -390,9 +371,6 @@ switch (command) {
 					...(typeof argv["project-id"] === "string"
 						? { projectId: argv["project-id"] }
 						: {}),
-					...(typeof argv["org-id"] === "string"
-						? { orgId: argv["org-id"] }
-						: {}),
 					...(typeof argv.branch === "string"
 						? { branch: argv.branch }
 						: {}),
@@ -400,7 +378,7 @@ switch (command) {
 						? { apiKey: argv["api-key"] }
 						: {}),
 				},
-				{ cwd, env },
+				{ cwd },
 			);
 		} else {
 			result = {

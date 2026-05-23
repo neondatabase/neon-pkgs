@@ -1,13 +1,17 @@
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { defineConfig } from "./define-config.js";
 import { fetchEnv, parseEnv } from "./env.js";
 import { ErrorCode, PlatformError } from "./errors.js";
 import { FakeNeonApi } from "./fake-neon-api.js";
-import { makeTempRepo } from "./test-utils.js";
+import { makeTempRepo, stubCleanNeonEnv } from "./test-utils.js";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
 	while (cleanups.length > 0) cleanups.shift()?.();
+});
+
+beforeEach(() => {
+	stubCleanNeonEnv();
 });
 
 function setup(files: Record<string, string | null>) {
@@ -42,7 +46,7 @@ const minimalConfig = defineConfig({
 describe("fetchEnv — happy path", () => {
 	test("returns env.postgres.databaseUrl + databaseUrlUnpooled for the resolved branch", async () => {
 		const { api, projectId } = seedSingleBranch();
-		const env = await fetchEnv(minimalConfig, { api, projectId, env: {} });
+		const env = await fetchEnv(minimalConfig, { api, projectId });
 
 		// Compile-time check: the shape is fixed and statically known.
 		({
@@ -75,16 +79,14 @@ describe("fetchEnv — happy path", () => {
 			"package.json": "{}",
 			".neon/project.json": JSON.stringify({ projectId }),
 		});
-		const env = await fetchEnv(minimalConfig, { api, cwd: root, env: {} });
+		const env = await fetchEnv(minimalConfig, { api, cwd: root });
 		expect(env.postgres.databaseUrl).toContain("br-prod");
 	});
 
 	test("resolves project id from NEON_PROJECT_ID env", async () => {
 		const { api, projectId } = seedSingleBranch("proj-from-env");
-		const env = await fetchEnv(minimalConfig, {
-			api,
-			env: { NEON_PROJECT_ID: projectId },
-		});
+		vi.stubEnv("NEON_PROJECT_ID", projectId);
+		const env = await fetchEnv(minimalConfig, { api });
 		expect(env.postgres.databaseUrl).toContain("br-prod");
 	});
 
@@ -115,11 +117,11 @@ describe("fetchEnv — happy path", () => {
 				},
 			],
 		});
+		vi.stubEnv("NEON_BRANCH_ID", "br-preview");
 
 		const env = await fetchEnv(minimalConfig, {
 			api,
 			projectId: "proj-multi",
-			env: { NEON_BRANCH_ID: "br-preview" },
 		});
 		expect(env.postgres.databaseUrl).toContain("br-preview");
 	});
@@ -156,7 +158,6 @@ describe("fetchEnv — happy path", () => {
 			api,
 			projectId: "proj-named",
 			branch: "preview-pr-9",
-			env: {},
 		});
 		expect(env.postgres.databaseUrl).toContain("br-pr-9");
 	});
@@ -188,7 +189,6 @@ describe("fetchEnv — happy path", () => {
 		const env = await fetchEnv(minimalConfig, {
 			api,
 			projectId: "proj-fallback",
-			env: {},
 		});
 		expect(env.postgres.databaseUrl).toContain("br-prd");
 	});
@@ -220,7 +220,6 @@ describe("fetchEnv — happy path", () => {
 		const env = await fetchEnv(config, {
 			api,
 			projectId: "proj-nokey",
-			env: {},
 		});
 		expect(env.postgres.databaseUrl).toContain("br-main");
 	});
@@ -229,11 +228,10 @@ describe("fetchEnv — happy path", () => {
 describe("fetchEnv — error paths", () => {
 	test("missing API key without injected api → PlatformError(MissingApiKey)", async () => {
 		const emptyHome = setup({ ".config/neonctl/.keep": "" });
+		vi.stubEnv("HOME", emptyHome);
+		vi.stubEnv("USERPROFILE", emptyHome);
 		await expect(
-			fetchEnv(minimalConfig, {
-				projectId: "proj-x",
-				env: { HOME: emptyHome, USERPROFILE: emptyHome },
-			}),
+			fetchEnv(minimalConfig, { projectId: "proj-x" }),
 		).rejects.toMatchObject({
 			code: ErrorCode.MissingApiKey,
 		});
@@ -243,7 +241,7 @@ describe("fetchEnv — error paths", () => {
 		const { api } = seedSingleBranch();
 		const root = setup({ "package.json": "{}" });
 		await expect(
-			fetchEnv(minimalConfig, { api, cwd: root, env: {} }),
+			fetchEnv(minimalConfig, { api, cwd: root }),
 		).rejects.toMatchObject({
 			code: ErrorCode.MissingContext,
 		});
@@ -266,7 +264,6 @@ describe("fetchEnv — error paths", () => {
 				api,
 				projectId: "proj-empty",
 				branch: "br-doesnt-exist",
-				env: {},
 			}),
 		).rejects.toMatchObject({
 			code: ErrorCode.BranchNotFound,
@@ -280,7 +277,6 @@ describe("fetchEnv — error paths", () => {
 				api,
 				projectId,
 				roleName: "nope_owner",
-				env: {},
 			}),
 		).rejects.toMatchObject({
 			code: ErrorCode.BranchNotFound,
@@ -312,7 +308,6 @@ describe("fetchEnv — error paths", () => {
 			fetchEnv(minimalConfig, {
 				api,
 				projectId: "proj-multi-role",
-				env: {},
 			}),
 		).rejects.toMatchObject({
 			code: ErrorCode.AmbiguousBranchAuth,
@@ -348,7 +343,6 @@ describe("fetchEnv — error paths", () => {
 			fetchEnv(minimalConfig, {
 				api,
 				projectId: "proj-multi-db",
-				env: {},
 			}),
 		).rejects.toMatchObject({
 			code: ErrorCode.AmbiguousBranchAuth,
@@ -383,7 +377,6 @@ describe("fetchEnv — error paths", () => {
 		const env = await fetchEnv(minimalConfig, {
 			api,
 			projectId: "proj-owned",
-			env: {},
 		});
 		expect(env.postgres.databaseUrl).toContain("/neondb?");
 	});
@@ -392,7 +385,7 @@ describe("fetchEnv — error paths", () => {
 describe("fetchEnv — passes correct arguments to NeonApi", () => {
 	test("calls getConnectionUri twice with pooled=true and pooled=false", async () => {
 		const { api, projectId } = seedSingleBranch();
-		await fetchEnv(minimalConfig, { api, projectId, env: {} });
+		await fetchEnv(minimalConfig, { api, projectId });
 		const calls = api.history.filter(
 			(h) => h.method === "getConnectionUri",
 		);
@@ -439,7 +432,6 @@ describe("fetchEnv — passes correct arguments to NeonApi", () => {
 			projectId: "proj-explicit",
 			roleName: "app_user",
 			databaseName: "app",
-			env: {},
 		});
 		expect(env.postgres.databaseUrl).toContain("/app?");
 		const url = new URL(env.postgres.databaseUrl);
@@ -466,20 +458,16 @@ describe("fetchEnv — passes correct arguments to NeonApi", () => {
 			fetchEnv(minimalConfig, {
 				api,
 				projectId: "proj-x",
-				env: {},
 			}),
 		).rejects.toMatchObject({ code: ErrorCode.Unauthorized });
 	});
 });
 
 describe("parseEnv", () => {
-	test("returns the same NeonEnv shape from process.env", () => {
-		const env = parseEnv(minimalConfig, {
-			env: {
-				DATABASE_URL: "postgres://pooled.example/db",
-				DATABASE_URL_UNPOOLED: "postgres://direct.example/db",
-			},
-		});
+	test("returns the NeonEnv shape from process.env", () => {
+		vi.stubEnv("DATABASE_URL", "postgres://pooled.example/db");
+		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct.example/db");
+		const env = parseEnv(minimalConfig);
 		expect(env).toEqual({
 			postgres: {
 				databaseUrl: "postgres://pooled.example/db",
@@ -494,11 +482,9 @@ describe("parseEnv", () => {
 	});
 
 	test("throws EnvNotInjected when both vars are missing", () => {
-		expect(() => parseEnv(minimalConfig, { env: {} })).toThrow(
-			PlatformError,
-		);
+		expect(() => parseEnv(minimalConfig)).toThrow(PlatformError);
 		try {
-			parseEnv(minimalConfig, { env: {} });
+			parseEnv(minimalConfig);
 		} catch (err) {
 			expect(err).toBeInstanceOf(PlatformError);
 			const e = err as PlatformError;
@@ -511,22 +497,16 @@ describe("parseEnv", () => {
 	});
 
 	test("throws EnvNotInjected when only one is set", () => {
-		expect(() =>
-			parseEnv(minimalConfig, {
-				env: { DATABASE_URL: "postgres://pooled" },
-			}),
-		).toThrow(/DATABASE_URL_UNPOOLED is missing/);
+		vi.stubEnv("DATABASE_URL", "postgres://pooled");
+		expect(() => parseEnv(minimalConfig)).toThrow(
+			/DATABASE_URL_UNPOOLED is missing/,
+		);
 	});
 
 	test("rejects empty-string values (e.g. unset .env entries)", () => {
-		expect(() =>
-			parseEnv(minimalConfig, {
-				env: {
-					DATABASE_URL: "",
-					DATABASE_URL_UNPOOLED: "postgres://direct",
-				},
-			}),
-		).toThrow(/must not be empty/);
+		vi.stubEnv("DATABASE_URL", "");
+		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
+		expect(() => parseEnv(minimalConfig)).toThrow(/must not be empty/);
 	});
 });
 
@@ -547,18 +527,22 @@ describe("parseEnv — features-driven shape", () => {
 		features: { auth: true, dataApi: true },
 	});
 
-	const FULL_ENV = {
-		DATABASE_URL: "postgres://pooled/db",
-		DATABASE_URL_UNPOOLED: "postgres://direct/db",
-		NEON_AUTH_PROJECT_ID: "stack-proj-x",
-		NEON_AUTH_PUBLISHABLE_CLIENT_KEY: "pck_test",
-		NEON_AUTH_SECRET_SERVER_KEY: "ssk_test",
-		NEON_AUTH_JWKS_URL: "https://auth.example/.well-known/jwks.json",
-		NEON_DATA_API_URL: "https://dataapi.example",
-	};
+	function stubFullEnv(): void {
+		vi.stubEnv("DATABASE_URL", "postgres://pooled/db");
+		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct/db");
+		vi.stubEnv("NEON_AUTH_PROJECT_ID", "stack-proj-x");
+		vi.stubEnv("NEON_AUTH_PUBLISHABLE_CLIENT_KEY", "pck_test");
+		vi.stubEnv("NEON_AUTH_SECRET_SERVER_KEY", "ssk_test");
+		vi.stubEnv(
+			"NEON_AUTH_JWKS_URL",
+			"https://auth.example/.well-known/jwks.json",
+		);
+		vi.stubEnv("NEON_DATA_API_URL", "https://dataapi.example");
+	}
 
 	test("with features.auth=true: parses auth env vars and types env.auth", () => {
-		const env = parseEnv(authConfig, { env: FULL_ENV });
+		stubFullEnv();
+		const env = parseEnv(authConfig);
 		expect(env.auth).toEqual({
 			projectId: "stack-proj-x",
 			publishableClientKey: "pck_test",
@@ -570,33 +554,33 @@ describe("parseEnv — features-driven shape", () => {
 	});
 
 	test("with features.dataApi=true: parses dataApi env vars and types env.dataApi", () => {
-		const env = parseEnv(dataApiConfig, { env: FULL_ENV });
+		stubFullEnv();
+		const env = parseEnv(dataApiConfig);
 		expect(env.dataApi).toEqual({ url: "https://dataapi.example" });
 	});
 
 	test("with both features enabled: both namespaces are populated", () => {
-		const env = parseEnv(bothConfig, { env: FULL_ENV });
+		stubFullEnv();
+		const env = parseEnv(bothConfig);
 		expect(env.postgres).toBeDefined();
 		expect(env.auth).toBeDefined();
 		expect(env.dataApi).toBeDefined();
 	});
 
 	test("missing auth secret server key throws EnvNotInjected when features.auth is true", () => {
-		const env = { ...FULL_ENV, NEON_AUTH_SECRET_SERVER_KEY: undefined };
-		expect(() => parseEnv(authConfig, { env })).toThrow(
+		stubFullEnv();
+		vi.stubEnv("NEON_AUTH_SECRET_SERVER_KEY", undefined);
+		expect(() => parseEnv(authConfig)).toThrow(
 			/NEON_AUTH_SECRET_SERVER_KEY is missing/,
 		);
 	});
 
 	test("a disabled feature does NOT require its env vars to be present", () => {
-		// Same env as the failing test above, but config doesn't enable auth — so the
-		// missing NEON_AUTH_* keys are irrelevant.
-		const env = parseEnv(minimalConfig, {
-			env: {
-				DATABASE_URL: "postgres://pooled",
-				DATABASE_URL_UNPOOLED: "postgres://direct",
-			},
-		});
+		// Stub only the Postgres vars; the (missing) NEON_AUTH_* keys are irrelevant
+		// because `minimalConfig` doesn't enable auth.
+		vi.stubEnv("DATABASE_URL", "postgres://pooled");
+		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
+		const env = parseEnv(minimalConfig);
 		expect(env.postgres.databaseUrl).toBe("postgres://pooled");
 		// Compile-time check: env.auth must be a type error when features.auth is unset.
 		// @ts-expect-error — env.auth is not in the type when features.auth is false
@@ -604,15 +588,10 @@ describe("parseEnv — features-driven shape", () => {
 	});
 
 	test("aggregates every missing var across namespaces into one error", () => {
+		// Only DATABASE_URL set; every other namespace's required var is missing.
+		vi.stubEnv("DATABASE_URL", "postgres://pooled");
 		try {
-			parseEnv(bothConfig, {
-				env: {
-					DATABASE_URL: "postgres://pooled",
-					// DATABASE_URL_UNPOOLED missing
-					// all NEON_AUTH_* missing
-					// NEON_DATA_API_URL missing
-				},
-			});
+			parseEnv(bothConfig);
 			expect.fail("should have thrown");
 		} catch (err) {
 			expect(err).toBeInstanceOf(PlatformError);
@@ -667,14 +646,9 @@ describe("fetchEnv — features-driven shape", () => {
 			branches: { production: {} },
 			features: { auth: true },
 		});
-		const env = await fetchEnv(config, {
-			api,
-			projectId,
-			env: {
-				NEON_AUTH_PUBLISHABLE_CLIENT_KEY: "pck_test",
-				NEON_AUTH_SECRET_SERVER_KEY: "ssk_test",
-			},
-		});
+		vi.stubEnv("NEON_AUTH_PUBLISHABLE_CLIENT_KEY", "pck_test");
+		vi.stubEnv("NEON_AUTH_SECRET_SERVER_KEY", "ssk_test");
+		const env = await fetchEnv(config, { api, projectId });
 		expect(env.auth).toEqual({
 			projectId: "stack-proj-x",
 			publishableClientKey: "pck_test",
@@ -690,7 +664,7 @@ describe("fetchEnv — features-driven shape", () => {
 			branches: { production: {} },
 			features: { dataApi: true },
 		});
-		const env = await fetchEnv(config, { api, projectId, env: {} });
+		const env = await fetchEnv(config, { api, projectId });
 		expect(env.dataApi).toEqual({ url: "https://dataapi.example" });
 	});
 
@@ -702,7 +676,7 @@ describe("fetchEnv — features-driven shape", () => {
 			features: { auth: true },
 		});
 		await expect(
-			fetchEnv(config, { api, projectId, env: {} }),
+			fetchEnv(config, { api, projectId }),
 		).rejects.toMatchObject({ code: ErrorCode.EnvNotInjected });
 	});
 
@@ -722,21 +696,16 @@ describe("fetchEnv — features-driven shape", () => {
 			branches: { production: {} },
 			features: { auth: true },
 		});
+		vi.stubEnv("NEON_AUTH_PUBLISHABLE_CLIENT_KEY", "pck");
+		vi.stubEnv("NEON_AUTH_SECRET_SERVER_KEY", "ssk");
 		await expect(
-			fetchEnv(config, {
-				api,
-				projectId,
-				env: {
-					NEON_AUTH_PUBLISHABLE_CLIENT_KEY: "pck",
-					NEON_AUTH_SECRET_SERVER_KEY: "ssk",
-				},
-			}),
+			fetchEnv(config, { api, projectId }),
 		).rejects.toMatchObject({ code: ErrorCode.NotFound });
 	});
 
 	test("skips getNeonAuth / getNeonDataApi when features are disabled", async () => {
 		const { api, projectId } = seedWithFeatures();
-		await fetchEnv(minimalConfig, { api, projectId, env: {} });
+		await fetchEnv(minimalConfig, { api, projectId });
 		const integrationCalls = api.history.filter(
 			(h) => h.method === "getNeonAuth" || h.method === "getNeonDataApi",
 		);

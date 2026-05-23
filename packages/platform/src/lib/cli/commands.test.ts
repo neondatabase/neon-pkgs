@@ -1,10 +1,10 @@
 import { chmodSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { ErrorCode, PlatformError } from "../errors.js";
 import { FakeNeonApi } from "../fake-neon-api.js";
 import type { NeonApi } from "../neon-api.js";
-import { makeTempRepo } from "../test-utils.js";
+import { makeTempRepo, stubCleanNeonEnv } from "../test-utils.js";
 import {
 	runBranch,
 	runContext,
@@ -18,6 +18,10 @@ import {
 const cleanups: Array<() => void> = [];
 afterEach(() => {
 	while (cleanups.length > 0) cleanups.shift()?.();
+});
+
+beforeEach(() => {
+	stubCleanNeonEnv();
 });
 
 function setup(files: Record<string, string | null>) {
@@ -50,10 +54,7 @@ describe("runPull", () => {
 		const neonPath = join(root, "neon.ts");
 		expect(existsSync(neonPath)).toBe(false);
 
-		const result = await runPull(
-			{ projectId },
-			{ cwd: root, env: {}, api },
-		);
+		const result = await runPull({ projectId }, { cwd: root, api });
 
 		expect(result.exitCode).toBe(0);
 		expect(result.stderr).toBe("");
@@ -76,10 +77,7 @@ describe("runPull", () => {
 		});
 		const neonPath = join(root, "neon.ts");
 
-		const result = await runPull(
-			{ projectId },
-			{ cwd: root, env: {}, api },
-		);
+		const result = await runPull({ projectId }, { cwd: root, api });
 
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain("Updated");
@@ -97,10 +95,7 @@ describe("runPull", () => {
 		// missing — exactly the kind of unexpected filesystem error we want to
 		// surface as a clean exit-1 with a useful message.
 		const bogusCwd = join(setup({ ".keep": "" }), "does-not-exist-subdir");
-		const result = await runPull(
-			{ projectId },
-			{ cwd: bogusCwd, env: {}, api },
-		);
+		const result = await runPull({ projectId }, { cwd: bogusCwd, api });
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain(
 			`Failed to write ${join(bogusCwd, "neon.ts")}`,
@@ -112,7 +107,7 @@ describe("runPull", () => {
 		const root = setup({ "package.json": "{}" });
 		const result = await runPull(
 			{ projectId, format: "json" },
-			{ cwd: root, env: {}, api },
+			{ cwd: root, api },
 		);
 		expect(result.exitCode).toBe(0);
 		const parsed = JSON.parse(result.stdout);
@@ -123,12 +118,11 @@ describe("runPull", () => {
 	test("missing api key without injected api → exit 1 with helpful message", async () => {
 		// Point HOME at an empty temp dir so the neonctl credentials fallback also misses.
 		const emptyHome = setup({ ".config/neonctl/.keep": "" });
+		vi.stubEnv("HOME", emptyHome);
+		vi.stubEnv("USERPROFILE", emptyHome);
 		const result = await runPull(
 			{ projectId: "proj-x" },
-			{
-				cwd: process.cwd(),
-				env: { HOME: emptyHome, USERPROFILE: emptyHome },
-			},
+			{ cwd: process.cwd() },
 		);
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain("NEON_API_KEY");
@@ -138,7 +132,7 @@ describe("runPull", () => {
 	test("missing context (no projectId, no .neon, no env) → exit 3", async () => {
 		const { api } = seededFake();
 		const root = setup({ "package.json": "{}" });
-		const result = await runPull({}, { cwd: root, env: {}, api });
+		const result = await runPull({}, { cwd: root, api });
 		expect(result.exitCode).toBe(3);
 		expect(result.stderr).toContain("Missing context");
 	});
@@ -161,7 +155,7 @@ export default defineConfig({
 });
 `,
 		});
-		const result = await runPush({}, { cwd: root, env: {}, api });
+		const result = await runPush({}, { cwd: root, api });
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain(
 			`pushed config to project ${projectId}`,
@@ -194,7 +188,7 @@ export default defineConfig({
 });
 `,
 		});
-		const result = await runPush({}, { cwd: root, env: {}, api });
+		const result = await runPush({}, { cwd: root, api });
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain(
 			`project ${projectId} (org org-sync) is already in sync`,
@@ -222,7 +216,7 @@ export default defineConfig({
 });
 `,
 		});
-		const result = await runPush({}, { cwd: root, env: {}, api });
+		const result = await runPush({}, { cwd: root, api });
 		expect(result.exitCode).toBe(2);
 		expect(result.stderr).toContain("conflict");
 	});
@@ -244,7 +238,7 @@ export default defineConfig({
 		});
 		const result = await runPush(
 			{ applyChanges: true },
-			{ cwd: root, env: {}, api },
+			{ cwd: root, api },
 		);
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain("update");
@@ -292,7 +286,7 @@ export default defineConfig({
 });
 `,
 		});
-		const result = await runPush({}, { cwd: root, env: {}, api });
+		const result = await runPush({}, { cwd: root, api });
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain("Skipped wildcard branches");
 		expect(result.stdout).toContain("preview-pr-1");
@@ -304,7 +298,7 @@ export default defineConfig({
 			"package.json": "{}",
 			".neon/project.json": JSON.stringify({ projectId }),
 		});
-		const result = await runPush({}, { cwd: root, env: {}, api });
+		const result = await runPush({}, { cwd: root, api });
 		expect(result.exitCode).toBe(4);
 		expect(result.stderr).toContain("Failed to load config");
 	});
@@ -340,7 +334,7 @@ describe("runPull / runPush — per-code exit mapping", () => {
 		const api = apiThatThrows(new PlatformError(code, `simulated ${code}`));
 		const result = await runPull(
 			{ projectId: "proj-test" },
-			{ cwd: process.cwd(), env: {}, api },
+			{ cwd: process.cwd(), api },
 		);
 		expect(result.exitCode).toBe(expectedExit);
 		expect(result.stderr).toContain(`simulated ${code}`);
@@ -351,7 +345,7 @@ describe("runPull / runPush — per-code exit mapping", () => {
 		const api = apiThatThrows(new Error("kaboom"));
 		const result = await runPull(
 			{ projectId: "proj-test" },
-			{ cwd: process.cwd(), env: {}, api },
+			{ cwd: process.cwd(), api },
 		);
 		expect(result.exitCode).toBe(1);
 		expect(result.debugInfo).toBeDefined();
@@ -372,7 +366,7 @@ export default defineConfig({
 });
 `,
 		});
-		const result = await runPush({}, { cwd: root, env: {}, api });
+		const result = await runPush({}, { cwd: root, api });
 		expect(result.exitCode).toBe(2);
 		expect(result.stderr).toContain("current :");
 		expect(result.stderr).toContain("fix     :");
@@ -389,7 +383,7 @@ describe("runContext", () => {
 				branchId: "br-ctx",
 			}),
 		});
-		const result = runContext({}, { cwd: root, env: {} });
+		const result = runContext({}, { cwd: root });
 		expect(result.exitCode).toBe(0);
 		const parsed = JSON.parse(result.stdout);
 		expect(parsed.projectId).toBe("proj-ctx");
@@ -405,10 +399,8 @@ describe("runContext", () => {
 				branchId: "br-file",
 			}),
 		});
-		const result = runContext(
-			{ branch: "feature-x" },
-			{ cwd: root, env: { NEON_BRANCH_ID: "br-env" } },
-		);
+		vi.stubEnv("NEON_BRANCH_ID", "br-env");
+		const result = runContext({ branch: "feature-x" }, { cwd: root });
 		expect(result.exitCode).toBe(0);
 		const parsed = JSON.parse(result.stdout);
 		expect(parsed.branch).toEqual({ kind: "name", value: "feature-x" });
@@ -416,7 +408,7 @@ describe("runContext", () => {
 
 	test("no project id resolvable → exit 3", () => {
 		const root = setup({ "package.json": "{}" });
-		const result = runContext({}, { cwd: root, env: {} });
+		const result = runContext({}, { cwd: root });
 		expect(result.exitCode).toBe(3);
 		expect(result.stderr).toContain("Missing context");
 	});
@@ -474,7 +466,7 @@ export default defineConfig({
 		});
 		const result = await runBranch(
 			{ blueprint: "preview" },
-			{ cwd: root, env: {}, api },
+			{ cwd: root, api },
 		);
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain("created branch preview-");
@@ -499,7 +491,7 @@ export default defineConfig({
 		});
 		const result = await runBranch(
 			{ blueprint: "preview", projectId, orgId },
-			{ cwd: root, env: {}, api },
+			{ cwd: root, api },
 		);
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain(
@@ -519,7 +511,7 @@ export default defineConfig({
 		});
 		const result = await runBranch(
 			{ blueprint: "nope" },
-			{ cwd: root, env: {}, api },
+			{ cwd: root, api },
 		);
 		expect(result.exitCode).toBe(8);
 		expect(result.stderr).toContain('no blueprint named "nope"');
@@ -534,7 +526,7 @@ export default defineConfig({
 		});
 		const result = await runBranch(
 			{ blueprint: "production" },
-			{ cwd: root, env: {}, api },
+			{ cwd: root, api },
 		);
 		expect(result.exitCode).toBe(5);
 		expect(result.stderr).toContain("concrete branch");
@@ -548,7 +540,7 @@ export default defineConfig({
 		});
 		const result = await runBranch(
 			{ blueprint: "preview" },
-			{ cwd: root, env: {}, api },
+			{ cwd: root, api },
 		);
 		expect(result.exitCode).toBe(3);
 		expect(result.stderr).toContain("Missing context");
@@ -562,7 +554,7 @@ export default defineConfig({
 		});
 		const result = await runBranch(
 			{ blueprint: "preview" },
-			{ cwd: root, env: {}, api },
+			{ cwd: root, api },
 		);
 		expect(result.exitCode).toBe(4);
 		expect(result.stderr).toContain("Failed to load config");
@@ -587,7 +579,7 @@ export default defineConfig({
 
 		const result = await runBranch(
 			{ blueprint: "preview" },
-			{ cwd: root, env: {}, api },
+			{ cwd: root, api },
 		);
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain("created branch preview-");
@@ -615,7 +607,7 @@ export default defineConfig({
 			".neon/project.json": JSON.stringify({ projectId }),
 			"neon.ts": neonTsBody(),
 		});
-		const result = await runEnvPull({}, { cwd: root, env: {}, api });
+		const result = await runEnvPull({}, { cwd: root, api });
 		expect(result.exitCode).toBe(0);
 		const targetPath = join(root, ".env.local");
 		expect(result.stdout).toContain(`Created ${targetPath}`);
@@ -634,10 +626,7 @@ export default defineConfig({
 			".neon/project.json": JSON.stringify({ projectId }),
 			"neon.ts": neonTsBody(),
 		});
-		const result = await runEnvPull(
-			{ file: ".env" },
-			{ cwd: root, env: {}, api },
-		);
+		const result = await runEnvPull({ file: ".env" }, { cwd: root, api });
 		expect(result.exitCode).toBe(0);
 		expect(existsSync(join(root, ".env"))).toBe(true);
 		expect(existsSync(join(root, ".env.local"))).toBe(false);
@@ -652,7 +641,7 @@ export default defineConfig({
 			".env.local":
 				"# pulled from vercel\nVERCEL_FOO=bar\nDATABASE_URL=postgres://stale\n",
 		});
-		const result = await runEnvPull({}, { cwd: root, env: {}, api });
+		const result = await runEnvPull({}, { cwd: root, api });
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain("Updated");
 		const body = readFileSync(join(root, ".env.local"), "utf-8");
@@ -674,7 +663,7 @@ export default defineConfig({
 			".neon/project.json": JSON.stringify({ projectId }),
 			"neon.ts": neonTsBody(),
 		});
-		const result = await runEnvPull({}, { cwd: root, env: {}, api });
+		const result = await runEnvPull({}, { cwd: root, api });
 		expect(result.exitCode).toBe(0);
 		const body = readFileSync(join(root, ".env.local"), "utf-8");
 		expect(body).not.toContain("Generated by");
@@ -687,7 +676,7 @@ export default defineConfig({
 			"package.json": "{}",
 			".neon/project.json": JSON.stringify({ projectId }),
 		});
-		const result = await runEnvPull({}, { cwd: root, env: {}, api });
+		const result = await runEnvPull({}, { cwd: root, api });
 		expect(result.exitCode).toBe(4);
 		expect(result.stderr).toContain("Failed to load config");
 	});
@@ -726,7 +715,7 @@ export default defineConfig({
 			{
 				command: [process.execPath, join(root, "check.mjs"), outPath],
 			},
-			{ cwd: root, env: {}, api },
+			{ cwd: root, api },
 		);
 		expect(result.exitCode).toBe(0);
 		const captured = readFileSync(outPath, "utf-8").trim().split("\n");
@@ -739,10 +728,7 @@ export default defineConfig({
 	test("no command supplied → exit 1 with usage hint", async () => {
 		const { api } = seededFake();
 		const root = setup({ "package.json": "{}" });
-		const result = await runEnvRun(
-			{ command: [] },
-			{ cwd: root, env: {}, api },
-		);
+		const result = await runEnvRun({ command: [] }, { cwd: root, api });
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain("env run -- <command>");
 	});
@@ -757,7 +743,7 @@ export default defineConfig({
 		});
 		const result = await runEnvRun(
 			{ command: [process.execPath, join(root, "fail.mjs")] },
-			{ cwd: root, env: {}, api },
+			{ cwd: root, api },
 		);
 		expect(result.exitCode).toBe(42);
 	});
@@ -770,7 +756,7 @@ export default defineConfig({
 		});
 		const result = await runEnvRun(
 			{ command: ["echo", "hi"] },
-			{ cwd: root, env: {}, api },
+			{ cwd: root, api },
 		);
 		expect(result.exitCode).toBe(4);
 		expect(result.stderr).toContain("Failed to load config");
@@ -794,7 +780,7 @@ export default defineConfig(${content});
 				`{ project: { name: "cli-test", region: "aws-us-east-1" }, branches: { production: {} } }`,
 			),
 		});
-		const result = await runStatus({}, { cwd: root, env: {}, api });
+		const result = await runStatus({}, { cwd: root, api });
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain(`Status against project ${projectId}`);
 		expect(result.stdout).toContain("in sync");
@@ -810,7 +796,7 @@ export default defineConfig(${content});
 				`{ project: { name: "cli-test", region: "aws-us-east-1" }, branches: { production: {}, staging: { parent: "production" } } }`,
 			),
 		});
-		const result = await runStatus({}, { cwd: root, env: {}, api });
+		const result = await runStatus({}, { cwd: root, api });
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain("Plan (would apply");
 		expect(result.stdout).toContain("[branch:staging] create");
@@ -825,7 +811,7 @@ export default defineConfig(${content});
 				`{ project: { name: "cli-test", region: "aws-us-east-1" }, branches: { production: {}, staging: { parent: "production" } } }`,
 			),
 		});
-		await runStatus({}, { cwd: root, env: {}, api });
+		await runStatus({}, { cwd: root, api });
 		const mutations = api.history.filter((h) =>
 			[
 				"createBranch",
@@ -847,7 +833,7 @@ export default defineConfig(${content});
 				`{ project: { name: "cli-test", region: "aws-eu-central-1" }, branches: { production: {} } }`,
 			),
 		});
-		const result = await runStatus({}, { cwd: root, env: {}, api });
+		const result = await runStatus({}, { cwd: root, api });
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain("Conflicts (would block push)");
 		expect(result.stdout).toContain("[project:");
@@ -864,7 +850,7 @@ export default defineConfig(${content});
 				`{ project: { name: "cli-test", region: "aws-us-east-1" }, branches: { production: { computeSettings: { autoscalingLimitMaxCu: 4 } } } }`,
 			),
 		});
-		const result = await runStatus({}, { cwd: root, env: {}, api });
+		const result = await runStatus({}, { cwd: root, api });
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain("Plan");
 		expect(result.stdout).toContain("[branch:production] update");
@@ -878,7 +864,7 @@ export default defineConfig(${content});
 			"package.json": "{}",
 			".neon/project.json": JSON.stringify({ projectId }),
 		});
-		const result = await runStatus({}, { cwd: root, env: {}, api });
+		const result = await runStatus({}, { cwd: root, api });
 		expect(result.exitCode).toBe(4);
 		expect(result.stderr).toContain("Failed to load config");
 	});
@@ -892,7 +878,7 @@ export default defineConfig(${content});
 				`{ project: { name: "cli-test", region: "aws-us-east-1" }, branches: { production: {} }, features: { auth: true, dataApi: true } }`,
 			),
 		});
-		const result = await runStatus({}, { cwd: root, env: {}, api });
+		const result = await runStatus({}, { cwd: root, api });
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain("Plan (would apply");
 		expect(result.stdout).toContain("[feature:auth] enable");
@@ -917,7 +903,7 @@ export default defineConfig(${content});
 				`{ project: { name: "cli-test", region: "aws-us-east-1" }, branches: { production: {} }, features: { auth: true, dataApi: true } }`,
 			),
 		});
-		const result = await runStatus({}, { cwd: root, env: {}, api });
+		const result = await runStatus({}, { cwd: root, api });
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain("in sync");
 		expect(result.stdout).not.toContain("[feature:");
