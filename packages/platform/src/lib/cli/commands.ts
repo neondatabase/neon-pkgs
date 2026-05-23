@@ -159,8 +159,12 @@ export async function runPush(
 				lines.push("");
 				lines.push("Applied:");
 				for (const change of realChanges) {
+					const verb =
+						change.kind === "feature" && change.action === "create"
+							? "enable"
+							: change.action;
 					lines.push(
-						`  - [${change.kind}:${change.identifier}] ${change.action}`,
+						`  - [${change.kind}:${change.identifier}] ${verb}`,
 					);
 				}
 			}
@@ -370,8 +374,15 @@ function formatStatus(result: Awaited<ReturnType<typeof pushConfig>>): string {
 		lines.push("Plan (would apply on `neon-ts push`):");
 		for (const change of realChanges) {
 			const marker = change.action === "create" ? "+" : "~";
+			// `feature` is enabling an integration (Neon Auth, Data API) — render it as
+			// "enable" rather than the underlying "create" so the diff matches the user's
+			// mental model from `config.features`.
+			const verb =
+				change.kind === "feature" && change.action === "create"
+					? "enable"
+					: change.action;
 			lines.push(
-				`  ${marker} [${change.kind}:${change.identifier}] ${change.action}${formatChangeDetails(change.details)}`,
+				`  ${marker} [${change.kind}:${change.identifier}] ${verb}${formatChangeDetails(change.details)}`,
 			);
 		}
 		lines.push("");

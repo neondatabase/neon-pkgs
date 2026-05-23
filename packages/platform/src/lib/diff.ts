@@ -1,6 +1,8 @@
 import { normalizeRegion } from "./define-config.js";
 import type {
+	NeonAuthSnapshot,
 	NeonBranchSnapshot,
+	NeonDataApiSnapshot,
 	NeonEndpointSnapshot,
 	NeonProjectSnapshot,
 } from "./neon-api.js";
@@ -62,12 +64,46 @@ export type PlanStep =
 			branchName: string;
 			endpointId: string;
 			settings: ComputeSettings;
+	  }
+	| {
+			kind: "enable-auth";
+			projectId: string;
+			branchId: string;
+			branchName: string;
+			databaseName?: string;
+	  }
+	| {
+			kind: "enable-data-api";
+			projectId: string;
+			branchId: string;
+			branchName: string;
+			databaseName: string;
 	  };
+
+/**
+ * The current state of the project's `config.features` integrations on the branch the
+ * features should target — typically the project's default / root concrete branch.
+ *
+ * `auth` / `dataApi` are `null` when the integration is not enabled on that branch.
+ * `branchId` / `branchName` are the branch the diff will target if a feature has to be
+ * enabled. `databaseName` is the database the Data API integration would attach to.
+ *
+ * Optional altogether: when `config.features` is empty / undefined, push doesn't fetch
+ * the feature snapshot at all and passes `undefined`.
+ */
+export interface RemoteFeatureState {
+	branchId: string;
+	branchName: string;
+	databaseName: string;
+	auth: NeonAuthSnapshot | null;
+	dataApi: NeonDataApiSnapshot | null;
+}
 
 export interface RemoteState {
 	project: NeonProjectSnapshot;
 	branches: NeonBranchSnapshot[];
 	endpoints: NeonEndpointSnapshot[];
+	features?: RemoteFeatureState;
 }
 
 export interface DiffOptions {
@@ -182,7 +218,48 @@ export function diffConfig(
 		});
 	}
 
+	diffFeatures({ config, remote, plan });
+
 	return { plan, conflicts, skippedWildcardBranches };
+}
+
+/**
+ * Plan the integrations driven by `config.features`. Currently only additive — when a
+ * feature flag is `true` and the integration isn't yet enabled on the targeted branch,
+ * we emit an `enable-*` plan step. When the flag is `false` (or absent) we leave any
+ * existing integration alone — disabling is destructive (auth integrations create
+ * `neon_auth.*` schemas, data API exposes a public REST endpoint), so the user has to
+ * tear those down via the Neon console explicitly.
+ */
+function diffFeatures(args: {
+	config: ResolvedConfig;
+	remote: RemoteState;
+	plan: PlanStep[];
+}): void {
+	const { config, remote, plan } = args;
+	const features = config.features;
+	if (!features) return;
+	const state = remote.features;
+	if (!state) return;
+	if (features.auth === true && !state.auth) {
+		const step: PlanStep = {
+			kind: "enable-auth",
+			projectId: remote.project.id,
+			branchId: state.branchId,
+			branchName: state.branchName,
+		};
+		if (state.databaseName) step.databaseName = state.databaseName;
+		plan.push(step);
+	}
+	if (features.dataApi === true && !state.dataApi) {
+		plan.push({
+			kind: "enable-data-api",
+			projectId: remote.project.id,
+			branchId: state.branchId,
+			branchName: state.branchName,
+			databaseName: state.databaseName,
+		});
+	}
 }
 
 interface BranchConfigArgs {

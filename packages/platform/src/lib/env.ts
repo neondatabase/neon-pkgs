@@ -256,7 +256,7 @@ export async function fetchEnv<const C extends Config>(
 				ErrorCode.NotFound,
 				[
 					`fetchEnv: config has features.auth=true but no Neon Auth integration is enabled on branch ${branch.name} (${branch.id}).`,
-					"Enable it in the Neon Console (or via `npx neonctl auth …`) before calling fetchEnv, or set features.auth=false.",
+					"Enable it via `npx neon-ts push` (or `npx neonctl platform push`), in the Neon Console, or with `npx neonctl auth …` — then re-run fetchEnv. Or set features.auth=false.",
 				].join(" "),
 				{
 					details: { projectId: ctx.projectId, branchId: branch.id },
@@ -278,7 +278,7 @@ export async function fetchEnv<const C extends Config>(
 				ErrorCode.NotFound,
 				[
 					`fetchEnv: config has features.dataApi=true but no Data API integration is enabled on branch ${branch.name} (${branch.id}) database ${databaseName}.`,
-					"Enable it in the Neon Console before calling fetchEnv, or set features.dataApi=false.",
+					"Enable it via `npx neon-ts push` (or `npx neonctl platform push`) or in the Neon Console — then re-run fetchEnv. Or set features.dataApi=false.",
 				].join(" "),
 				{
 					details: {

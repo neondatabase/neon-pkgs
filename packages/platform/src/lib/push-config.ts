@@ -1,6 +1,11 @@
 import { createNeonApiFromOptions } from "./auth.js";
 import { normalizeRegion, resolveConfig } from "./define-config.js";
-import { diffConfig, type PlanStep, type RemoteState } from "./diff.js";
+import {
+	diffConfig,
+	type PlanStep,
+	type RemoteFeatureState,
+	type RemoteState,
+} from "./diff.js";
 import {
 	bugReportFooter,
 	ErrorCode,
@@ -138,7 +143,15 @@ export async function pushConfig(
 	const endpoints = remoteEmpty
 		? syntheticRootEndpoints(resolved, branches)
 		: await api.listEndpoints(remoteProject.id);
+	const features = await resolveFeatureState({
+		api,
+		resolved,
+		project: remoteProject,
+		branches,
+		remoteEmpty,
+	});
 	const remote: RemoteState = { project: remoteProject, branches, endpoints };
+	if (features) remote.features = features;
 
 	const updateExisting =
 		options.updateExisting === true || options.applyChanges === true;
@@ -268,6 +281,28 @@ function synthesizeAppliedChange(step: PlanStep): AppliedChange {
 					field: "computeSettings",
 					endpointId: step.endpointId,
 					settings: step.settings,
+				},
+			};
+		case "enable-auth":
+			return {
+				kind: "feature",
+				action: "create",
+				identifier: "auth",
+				details: {
+					branchName: step.branchName,
+					...(step.databaseName
+						? { databaseName: step.databaseName }
+						: {}),
+				},
+			};
+		case "enable-data-api":
+			return {
+				kind: "feature",
+				action: "create",
+				identifier: "dataApi",
+				details: {
+					branchName: step.branchName,
+					databaseName: step.databaseName,
 				},
 			};
 		case "create-project":
@@ -541,6 +576,95 @@ function syntheticRootEndpoints(
 	}));
 }
 
+/**
+ * Pre-fetch the current state of `config.features` integrations on the branch they should
+ * target — typically the project's root concrete branch (the entry without `parent`),
+ * falling back to whichever branch Neon has marked as default. Returns `undefined` when
+ * `config.features` is empty / disabled, so push and diff stay free from extra work.
+ *
+ * Two read calls per enabled feature: `getNeonAuth` (when `features.auth`) and
+ * `listBranchDatabases` + `getNeonDataApi` (when `features.dataApi`).
+ *
+ * For brand-new project dry-runs (`remoteEmpty: true`) the snapshots are synthesized as
+ * `null` (would-be-created) and the database name defaults to Neon's standard `neondb`.
+ */
+async function resolveFeatureState(args: {
+	api: NeonApi;
+	resolved: ResolvedConfig;
+	project: NeonProjectSnapshot;
+	branches: NeonBranchSnapshot[];
+	remoteEmpty: boolean;
+}): Promise<RemoteFeatureState | undefined> {
+	const { api, resolved, project, branches, remoteEmpty } = args;
+	const features = resolved.features;
+	if (!features) return undefined;
+	if (features.auth !== true && features.dataApi !== true) return undefined;
+
+	const targetBranch = findFeatureTargetBranch(resolved, branches);
+	if (!targetBranch) return undefined;
+
+	const databaseName = remoteEmpty
+		? "neondb"
+		: await pickFeatureDatabaseName(api, project.id, targetBranch.id);
+
+	const state: RemoteFeatureState = {
+		branchId: targetBranch.id,
+		branchName: targetBranch.name,
+		databaseName,
+		auth: null,
+		dataApi: null,
+	};
+
+	if (remoteEmpty) return state;
+
+	const [auth, dataApi] = await Promise.all([
+		features.auth === true
+			? api.getNeonAuth(project.id, targetBranch.id)
+			: Promise.resolve(null),
+		features.dataApi === true
+			? api.getNeonDataApi(project.id, targetBranch.id, databaseName)
+			: Promise.resolve(null),
+	]);
+	state.auth = auth;
+	state.dataApi = dataApi;
+	return state;
+}
+
+/**
+ * Pick the branch `config.features` integrations should attach to. The root concrete
+ * branch (the one with no `parent`) wins because it's where `fetchEnv` reads by default;
+ * if no concrete branch exists, fall back to whatever branch Neon has marked as default.
+ */
+function findFeatureTargetBranch(
+	resolved: ResolvedConfig,
+	branches: NeonBranchSnapshot[],
+): NeonBranchSnapshot | undefined {
+	const root = findRootBranch(resolved);
+	if (root) {
+		const match = branches.find((b) => b.name === root.name);
+		if (match) return match;
+	}
+	return branches.find((b) => b.isDefault) ?? branches[0];
+}
+
+/**
+ * Resolve the database name for a Data API integration. Auto-pick when the branch has
+ * exactly one database; otherwise fall back to Neon's default (`neondb`) so the call
+ * stays useful even on branches with multiple databases — push doesn't have a way to
+ * surface a "pick one" prompt the way `fetchEnv` does.
+ */
+async function pickFeatureDatabaseName(
+	api: NeonApi,
+	projectId: string,
+	branchId: string,
+): Promise<string> {
+	const databases = await api.listBranchDatabases(projectId, branchId);
+	if (databases.length === 1) return databases[0].name;
+	const neondb = databases.find((d) => d.name === "neondb");
+	if (neondb) return neondb.name;
+	return databases[0]?.name ?? "neondb";
+}
+
 interface ApplyContext {
 	api: NeonApi;
 	remoteProjectId: string;
@@ -641,6 +765,40 @@ async function applyStep(
 					field: "computeSettings",
 					endpointId: updated.id,
 					settings: step.settings,
+				},
+			};
+		}
+		case "enable-auth": {
+			await ctx.api.enableNeonAuth(ctx.remoteProjectId, step.branchId, {
+				...(step.databaseName
+					? { databaseName: step.databaseName }
+					: {}),
+			});
+			return {
+				kind: "feature",
+				action: "create",
+				identifier: "auth",
+				details: {
+					branchName: step.branchName,
+					...(step.databaseName
+						? { databaseName: step.databaseName }
+						: {}),
+				},
+			};
+		}
+		case "enable-data-api": {
+			await ctx.api.enableProjectBranchDataApi(
+				ctx.remoteProjectId,
+				step.branchId,
+				step.databaseName,
+			);
+			return {
+				kind: "feature",
+				action: "create",
+				identifier: "dataApi",
+				details: {
+					branchName: step.branchName,
+					databaseName: step.databaseName,
 				},
 			};
 		}

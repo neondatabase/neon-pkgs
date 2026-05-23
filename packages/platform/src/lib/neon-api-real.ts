@@ -9,6 +9,7 @@ import {
 	type Endpoint,
 	EndpointType,
 	type EndpointUpdateRequest,
+	NeonAuthSupportedAuthProvider,
 	type PgVersion,
 	type Project,
 	type ProjectCreateRequest,
@@ -472,6 +473,51 @@ class RealNeonApi implements NeonApi {
 		}
 	}
 
+	async enableNeonAuth(
+		projectId: string,
+		branchId: string,
+		input: { databaseName?: string } = {},
+	): Promise<NeonAuthSnapshot> {
+		// Idempotent: if an integration already exists on the branch, the POST returns 409
+		// (`Conflict`). We swallow that and re-fetch the existing snapshot so callers can
+		// rely on `enableNeonAuth` to be safe to invoke from any push, including no-ops.
+		try {
+			return await this.call(
+				`enableNeonAuth(${projectId}/${branchId})`,
+				async () => {
+					const res = await this.client.createNeonAuth(
+						projectId,
+						branchId,
+						{
+							auth_provider:
+								NeonAuthSupportedAuthProvider.StackV2,
+							...(input.databaseName
+								? { database_name: input.databaseName }
+								: {}),
+						},
+					);
+					const data = res.data;
+					const snapshot: NeonAuthSnapshot = {
+						projectId: data.auth_provider_project_id,
+						jwksUrl: data.jwks_url,
+					};
+					if (data.base_url) snapshot.baseUrl = data.base_url;
+					return snapshot;
+				},
+				{ projectId, mutating: true },
+			);
+		} catch (err) {
+			if (
+				err instanceof PlatformError &&
+				err.code === ErrorCode.Conflict
+			) {
+				const existing = await this.getNeonAuth(projectId, branchId);
+				if (existing) return existing;
+			}
+			throw err;
+		}
+	}
+
 	async getNeonDataApi(
 		projectId: string,
 		branchId: string,
@@ -495,6 +541,45 @@ class RealNeonApi implements NeonApi {
 		} catch (err) {
 			if (err instanceof PlatformError && err.code === ErrorCode.NotFound)
 				return null;
+			throw err;
+		}
+	}
+
+	async enableProjectBranchDataApi(
+		projectId: string,
+		branchId: string,
+		databaseName: string,
+	): Promise<NeonDataApiSnapshot> {
+		// Idempotent in the same shape as `enableNeonAuth`: if an integration already
+		// exists, the POST returns 409 and we re-fetch the existing snapshot.
+		try {
+			return await this.call(
+				`enableProjectBranchDataApi(${projectId}/${branchId}/${databaseName})`,
+				async () => {
+					const res = await this.client.createProjectBranchDataApi(
+						projectId,
+						branchId,
+						databaseName,
+						// Empty body — pick up Neon defaults (auth_provider inferred from
+						// whether Neon Auth is also enabled; default schemas/grants).
+						{},
+					);
+					return { url: res.data.url };
+				},
+				{ projectId, mutating: true },
+			);
+		} catch (err) {
+			if (
+				err instanceof PlatformError &&
+				err.code === ErrorCode.Conflict
+			) {
+				const existing = await this.getNeonDataApi(
+					projectId,
+					branchId,
+					databaseName,
+				);
+				if (existing) return existing;
+			}
 			throw err;
 		}
 	}

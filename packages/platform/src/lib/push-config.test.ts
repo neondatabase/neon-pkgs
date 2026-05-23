@@ -537,6 +537,106 @@ describe("pushConfig — dry-run", () => {
 	});
 });
 
+describe("pushConfig — features (auth / dataApi)", () => {
+	test("enables Neon Auth on the root branch when features.auth=true", async () => {
+		const { api, projectId } = seededFake();
+		const config = defineConfig({
+			project: { name: "my-app" },
+			branches: { production: {} },
+			features: { auth: true },
+		});
+		const result = await pushConfig(config, { api, projectId });
+		expect(result.applied).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					kind: "feature",
+					action: "create",
+					identifier: "auth",
+				}),
+			]),
+		);
+		// Idempotent: a second push reports no feature change.
+		const second = await pushConfig(config, { api, projectId });
+		expect(second.applied.filter((a) => a.kind === "feature")).toHaveLength(
+			0,
+		);
+	});
+
+	test("enables Data API on the root branch with the auto-picked database", async () => {
+		const { api, projectId } = seededFake();
+		const config = defineConfig({
+			project: { name: "my-app" },
+			branches: { production: {} },
+			features: { dataApi: true },
+		});
+		const result = await pushConfig(config, { api, projectId });
+		expect(result.applied).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					kind: "feature",
+					action: "create",
+					identifier: "dataApi",
+					details: expect.objectContaining({
+						branchName: "production",
+						databaseName: "neondb",
+					}),
+				}),
+			]),
+		);
+	});
+
+	test("dryRun: features that need enabling are reported but no API mutations run", async () => {
+		const { api, projectId } = seededFake();
+		const config = defineConfig({
+			project: { name: "my-app" },
+			branches: { production: {} },
+			features: { auth: true, dataApi: true },
+		});
+		const result = await pushConfig(config, {
+			api,
+			projectId,
+			dryRun: true,
+		});
+		expect(result.dryRun).toBe(true);
+		const featureChanges = result.applied.filter(
+			(a) => a.kind === "feature",
+		);
+		expect(featureChanges.map((c) => c.identifier).sort()).toEqual([
+			"auth",
+			"dataApi",
+		]);
+		expect(
+			api.history.some(
+				(h) =>
+					h.method === "enableNeonAuth" ||
+					h.method === "enableProjectBranchDataApi",
+			),
+		).toBe(false);
+	});
+
+	test("dryRun on a brand-new project: features.auth/dataApi are planned alongside project create", async () => {
+		const api = new FakeNeonApi();
+		const config = defineConfig({
+			project: { name: "brand-new", region: "aws-us-east-1" },
+			branches: { production: {} },
+			features: { auth: true, dataApi: true },
+		});
+		const result = await pushConfig(config, {
+			api,
+			orgId: "org-1",
+			dryRun: true,
+		});
+		expect(result.projectId).toBe("<would-create>");
+		const featureChanges = result.applied.filter(
+			(a) => a.kind === "feature",
+		);
+		expect(featureChanges.map((c) => c.identifier).sort()).toEqual([
+			"auth",
+			"dataApi",
+		]);
+	});
+});
+
 describe("pushConfig — overloads & file loading", () => {
 	test("pushConfig() auto-loads neon.ts from cwd", async () => {
 		const { api, projectId } = seededFake();

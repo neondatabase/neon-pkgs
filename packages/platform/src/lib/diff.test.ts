@@ -447,3 +447,122 @@ describe("diffConfig — wildcard blueprint", () => {
 		expect(result.skippedWildcardBranches).toHaveLength(0);
 	});
 });
+
+describe("diffConfig — features", () => {
+	function remoteWithFeatures(args: {
+		auth?: { projectId: string; jwksUrl: string } | null;
+		dataApi?: { url: string } | null;
+	}) {
+		const base = makeRemote();
+		base.features = {
+			branchId: "br-prod",
+			branchName: "production",
+			databaseName: "neondb",
+			auth: args.auth ?? null,
+			dataApi: args.dataApi ?? null,
+		};
+		return base;
+	}
+
+	test("plans `enable-auth` when features.auth=true and remote has none", () => {
+		const config = resolveConfig(
+			defineConfig({
+				project: { name: "my-app" },
+				branches: { production: {} },
+				features: { auth: true },
+			}),
+		);
+		const result = diffConfig(config, remoteWithFeatures({}), {
+			applyExisting: false,
+			updateExisting: false,
+		});
+		expect(result.plan).toEqual([
+			expect.objectContaining({
+				kind: "enable-auth",
+				branchId: "br-prod",
+				branchName: "production",
+			}),
+		]);
+		expect(result.conflicts).toHaveLength(0);
+	});
+
+	test("plans `enable-data-api` when features.dataApi=true and remote has none", () => {
+		const config = resolveConfig(
+			defineConfig({
+				project: { name: "my-app" },
+				branches: { production: {} },
+				features: { dataApi: true },
+			}),
+		);
+		const result = diffConfig(config, remoteWithFeatures({}), {
+			applyExisting: false,
+			updateExisting: false,
+		});
+		expect(result.plan).toEqual([
+			expect.objectContaining({
+				kind: "enable-data-api",
+				branchId: "br-prod",
+				branchName: "production",
+				databaseName: "neondb",
+			}),
+		]);
+	});
+
+	test("noop when integrations are already enabled remotely", () => {
+		const config = resolveConfig(
+			defineConfig({
+				project: { name: "my-app" },
+				branches: { production: {} },
+				features: { auth: true, dataApi: true },
+			}),
+		);
+		const result = diffConfig(
+			config,
+			remoteWithFeatures({
+				auth: { projectId: "neon-auth-x", jwksUrl: "https://j.tld" },
+				dataApi: { url: "https://d.tld" },
+			}),
+			{ applyExisting: false, updateExisting: false },
+		);
+		expect(result.plan).toHaveLength(0);
+		expect(result.conflicts).toHaveLength(0);
+	});
+
+	test("does not plan disable when feature is false but remote integration exists", () => {
+		// Disabling is destructive (drops `neon_auth.*` schema, kills public REST endpoint),
+		// so push leaves remote integrations alone. The user has to tear them down via the
+		// Neon console explicitly.
+		const config = resolveConfig(
+			defineConfig({
+				project: { name: "my-app" },
+				branches: { production: {} },
+				features: { auth: false, dataApi: false },
+			}),
+		);
+		const result = diffConfig(
+			config,
+			remoteWithFeatures({
+				auth: { projectId: "neon-auth-x", jwksUrl: "https://j.tld" },
+				dataApi: { url: "https://d.tld" },
+			}),
+			{ applyExisting: false, updateExisting: false },
+		);
+		expect(result.plan).toHaveLength(0);
+		expect(result.conflicts).toHaveLength(0);
+	});
+
+	test("plans nothing when config.features is undefined / not set", () => {
+		const config = resolveConfig(
+			defineConfig({
+				project: { name: "my-app" },
+				branches: { production: {} },
+			}),
+		);
+		// Pass remote with feature state — diff still ignores it because config.features is unset.
+		const result = diffConfig(config, remoteWithFeatures({}), {
+			applyExisting: false,
+			updateExisting: false,
+		});
+		expect(result.plan).toHaveLength(0);
+	});
+});

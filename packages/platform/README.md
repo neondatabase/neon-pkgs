@@ -173,6 +173,14 @@ Important options:
 
 `pushConfig` will create a project if none exists in the resolved org/name combination and `project.region` is set. Region and Postgres major version are immutable on Neon — pushing a different value surfaces a `ConflictReport`.
 
+`config.features` is also reconciled on push:
+
+- `features.auth: true` enables the Neon Auth integration on the project's root concrete branch (the entry without `parent`, falling back to Neon's default branch). Idempotent — already-enabled integrations show up as a noop in `applied`.
+- `features.dataApi: true` enables the Neon Data API on the same branch + the auto-picked database (the only one when there's just one, otherwise `neondb`).
+- `features.<flag>: false` (or absent) is treated as "leave it alone" — push **never disables** an integration that's already enabled, because the teardown is destructive (drops the `neon_auth.*` schema, kills the public REST endpoint). Disable via the Neon console explicitly.
+
+`neon-ts status` (and `pushConfig({ dryRun: true })`) surface the same enable steps as `+ [feature:auth] enable (branchName=…)` / `+ [feature:dataApi] enable (branchName=…, databaseName=…)` so you can see them coming before you push.
+
 ### Env: `fetchEnv` / `parseEnv` / `NeonEnv<Config>`
 
 Both functions return a namespaced, statically-typed value whose shape is **derived from `config.features`** — `postgres` is always present; `auth` and `dataApi` are added to the type iff the matching flag is set:

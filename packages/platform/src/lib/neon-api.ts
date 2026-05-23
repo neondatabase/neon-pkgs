@@ -189,6 +189,17 @@ export interface NeonApi {
 	): Promise<NeonAuthSnapshot | null>;
 
 	/**
+	 * Enable the Neon Auth integration on a specific branch. Idempotent: if an integration
+	 * is already enabled, the existing snapshot is returned unchanged. Used by
+	 * `pushConfig` to honour `config.features.auth: true`.
+	 */
+	enableNeonAuth(
+		projectId: string,
+		branchId: string,
+		input?: { databaseName?: string },
+	): Promise<NeonAuthSnapshot>;
+
+	/**
 	 * Fetch the Neon Data API integration attached to a specific branch + database.
 	 * Returns `null` when no integration is enabled — used by `fetchEnv` to decide
 	 * whether the `env.dataApi` namespace can be populated.
@@ -198,4 +209,15 @@ export interface NeonApi {
 		branchId: string,
 		databaseName: string,
 	): Promise<NeonDataApiSnapshot | null>;
+
+	/**
+	 * Enable the Neon Data API integration on a specific branch + database. Idempotent:
+	 * if an integration is already enabled, the existing snapshot is returned unchanged.
+	 * Used by `pushConfig` to honour `config.features.dataApi: true`.
+	 */
+	enableProjectBranchDataApi(
+		projectId: string,
+		branchId: string,
+		databaseName: string,
+	): Promise<NeonDataApiSnapshot>;
 }

@@ -220,13 +220,20 @@ export interface ResolvedConfig {
 	project: ProjectConfig;
 	branches: ResolvedBranchConfig[];
 	branchBlueprints: ResolvedBranchBlueprint[];
+	/** Project-level integration flags. Mirrors `Config.features`; pass-through. */
+	features?: FeatureFlags;
 }
 
 /**
  * One concrete change `pushConfig` made (or, in dry-run, would make) on the remote.
  */
 export interface AppliedChange {
-	kind: "project" | "branch";
+	/**
+	 * `feature` covers project-wide integrations driven by `config.features` (e.g.
+	 * Neon Auth, Data API). The integration itself is enabled per-branch on Neon — the
+	 * targeted branch lives in `details.branchName`.
+	 */
+	kind: "project" | "branch" | "feature";
 	action: "create" | "update" | "noop";
 	identifier: string;
 	details?: Record<string, unknown>;

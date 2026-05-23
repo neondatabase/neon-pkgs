@@ -882,4 +882,44 @@ export default defineConfig(${content});
 		expect(result.exitCode).toBe(4);
 		expect(result.stderr).toContain("Failed to load config");
 	});
+
+	test("reports `features.auth` / `features.dataApi` as + enable steps when not enabled remotely", async () => {
+		const { api, projectId } = seededFake();
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({ projectId }),
+			"neon.ts": neonTsBody(
+				`{ project: { name: "cli-test", region: "aws-us-east-1" }, branches: { production: {} }, features: { auth: true, dataApi: true } }`,
+			),
+		});
+		const result = await runStatus({}, { cwd: root, env: {}, api });
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("Plan (would apply");
+		expect(result.stdout).toContain("[feature:auth] enable");
+		expect(result.stdout).toContain("[feature:dataApi] enable");
+		expect(result.stdout).toContain("branchName=production");
+		expect(result.stdout).toContain("databaseName=neondb");
+	});
+
+	test("noop when features are already enabled on Neon", async () => {
+		const { api, projectId } = seededFake();
+		// The seeded fake's auto-created branches don't carry an integration; pre-enable
+		// them so the diff has nothing to do.
+		const branches = await api.listBranches(projectId);
+		const prod = branches.find((b) => b.name === "production");
+		if (!prod) throw new Error("seed fixture lost the production branch");
+		await api.enableNeonAuth(projectId, prod.id);
+		await api.enableProjectBranchDataApi(projectId, prod.id, "neondb");
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({ projectId }),
+			"neon.ts": neonTsBody(
+				`{ project: { name: "cli-test", region: "aws-us-east-1" }, branches: { production: {} }, features: { auth: true, dataApi: true } }`,
+			),
+		});
+		const result = await runStatus({}, { cwd: root, env: {}, api });
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("in sync");
+		expect(result.stdout).not.toContain("[feature:");
+	});
 });

@@ -403,6 +403,28 @@ export class FakeNeonApi implements NeonApi {
 		return found ? clone(found) : null;
 	}
 
+	async enableNeonAuth(
+		projectId: string,
+		branchId: string,
+		input: { databaseName?: string } = {},
+	): Promise<NeonAuthSnapshot> {
+		this.history.push({
+			method: "enableNeonAuth",
+			args: [projectId, branchId, input],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		const key = `${projectId}:${branchId}`;
+		const existing = this.neonAuth.get(key);
+		if (existing) return clone(existing);
+		const snapshot: NeonAuthSnapshot = {
+			projectId: `auth-${branchId}`,
+			jwksUrl: `https://api.fake.neon.tech/auth/${projectId}/${branchId}/.well-known/jwks.json`,
+		};
+		this.neonAuth.set(key, snapshot);
+		return clone(snapshot);
+	}
+
 	async getNeonDataApi(
 		projectId: string,
 		branchId: string,
@@ -418,6 +440,27 @@ export class FakeNeonApi implements NeonApi {
 			`${projectId}:${branchId}:${databaseName}`,
 		);
 		return found ? clone(found) : null;
+	}
+
+	async enableProjectBranchDataApi(
+		projectId: string,
+		branchId: string,
+		databaseName: string,
+	): Promise<NeonDataApiSnapshot> {
+		this.history.push({
+			method: "enableProjectBranchDataApi",
+			args: [projectId, branchId, databaseName],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		const key = `${projectId}:${branchId}:${databaseName}`;
+		const existing = this.neonDataApi.get(key);
+		if (existing) return clone(existing);
+		const snapshot: NeonDataApiSnapshot = {
+			url: `https://${branchId}.fake.neon.tech/data-api/${databaseName}`,
+		};
+		this.neonDataApi.set(key, snapshot);
+		return clone(snapshot);
 	}
 
 	/** Test helper: attach a Neon Auth integration to a branch. */

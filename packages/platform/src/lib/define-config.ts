@@ -151,11 +151,13 @@ export function resolveConfig(config: Config): ResolvedConfig {
 		throw new ConfigValidationError(issues);
 	}
 
-	return {
+	const resolved: ResolvedConfig = {
 		project: { ...config.project },
 		branches,
 		branchBlueprints: blueprints,
 	};
+	if (config.features) resolved.features = { ...config.features };
+	return resolved;
 }
 
 function validateParent(args: {
