@@ -27,12 +27,14 @@
 	},
 	"exports": {
 		".": {
+			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js",
-			"types": "./dist/index.d.ts"
+			"default": "./dist/index.js"
 		},
 		"./v1": {
+			"types": "./dist/v1.d.ts",
 			"import": "./dist/v1.js",
-			"types": "./dist/v1.d.ts"
+			"default": "./dist/v1.js"
 		}
 	},
 	"files": [
