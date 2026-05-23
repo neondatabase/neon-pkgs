@@ -6,6 +6,7 @@ import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import {
 	type CommandResult,
+	runBranch,
 	runContext,
 	runPull,
 	runPush,
@@ -25,7 +26,7 @@ const argv = yargs(hideBin(process.argv))
 	})
 	.command(
 		"pull",
-		"Pull the live Neon project state and print it as `neon.ts` (or JSON).",
+		"Pull the live Neon project state into a neon.ts file in the current directory (or print JSON).",
 		(y) =>
 			y
 				.option("project-id", {
@@ -45,7 +46,7 @@ const argv = yargs(hideBin(process.argv))
 					choices: ["ts", "json"] as const,
 					default: "ts" as const,
 					describe:
-						"Output format. `ts` emits a neon.ts snippet; `json` emits the raw Config",
+						"Output format. `ts` (default) writes/overwrites ./neon.ts; `json` prints the raw Config to stdout",
 				}),
 	)
 	.command(
@@ -106,6 +107,35 @@ const argv = yargs(hideBin(process.argv))
 				.option("org-id", {
 					type: "string",
 					describe: "Override the .neon/project.json orgId",
+				}),
+	)
+	.command(
+		"branch <blueprint>",
+		"Create an ephemeral branch from a wildcard blueprint in neon.ts.",
+		(y) =>
+			y
+				.positional("blueprint", {
+					type: "string",
+					describe:
+						"Name of the blueprint key in neon.ts (e.g. `preview`)",
+					demandOption: true,
+				})
+				.option("config", {
+					type: "string",
+					describe:
+						"Path to neon.ts (defaults to walking up from cwd)",
+				})
+				.option("project-id", {
+					type: "string",
+					describe: "Override the .neon/project.json projectId",
+				})
+				.option("org-id", {
+					type: "string",
+					describe: "Override the .neon/project.json orgId",
+				})
+				.option("api-key", {
+					type: "string",
+					describe: "Neon API key (defaults to NEON_API_KEY)",
 				}),
 	)
 	.demandCommand(1, "Run `neon-ts --help` to see the available commands.")
@@ -175,6 +205,29 @@ switch (command) {
 					: {}),
 				...(typeof argv["org-id"] === "string"
 					? { orgId: argv["org-id"] }
+					: {}),
+			},
+			{ cwd, env },
+		);
+		break;
+	}
+	case "branch": {
+		const blueprint =
+			typeof argv.blueprint === "string" ? argv.blueprint : "";
+		result = await runBranch(
+			{
+				blueprint,
+				...(typeof argv.config === "string"
+					? { configPath: argv.config }
+					: {}),
+				...(typeof argv["project-id"] === "string"
+					? { projectId: argv["project-id"] }
+					: {}),
+				...(typeof argv["org-id"] === "string"
+					? { orgId: argv["org-id"] }
+					: {}),
+				...(typeof argv["api-key"] === "string"
+					? { apiKey: argv["api-key"] }
 					: {}),
 			},
 			{ cwd, env },

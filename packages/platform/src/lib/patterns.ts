@@ -18,6 +18,24 @@ export function matchPattern(pattern: string, branchName: string): boolean {
 }
 
 /**
+ * Substitute every `*` in `pattern` with `replacement`. When the pattern has no `*`, the
+ * replacement is appended with a `-` separator so the caller still gets a unique name.
+ *
+ * Pure function. The returned string is **not** validated — callers compose it from
+ * sources that already passed {@link validatePattern} (the pattern) and
+ * {@link normalizeGitBranch}-style sanitization (the replacement).
+ *
+ * @example
+ * fillPattern("preview-*", "andre-feature-a1b2c3") // → "preview-andre-feature-a1b2c3"
+ * fillPattern("feat-*-staging", "x")               // → "feat-x-staging"
+ * fillPattern("specific", "x")                     // → "specific-x"
+ */
+export function fillPattern(pattern: string, replacement: string): string {
+	if (!isWildcardPattern(pattern)) return `${pattern}-${replacement}`;
+	return pattern.replaceAll("*", replacement);
+}
+
+/**
  * Validate a branch pattern. Pure — returns either `{ ok: true }` or `{ error: string }`.
  *
  * Rules:

@@ -68,36 +68,70 @@ await pushConfig({
 });
 ```
 
+## Public surface
+
+`@neondatabase/platform/v1` exposes the surface in three buckets:
+
+```ts
+import {
+  // Operations — what you use day-to-day
+  defineConfig, pullConfig, pushConfig, loadEnv, loadContext,
+  loadConfigFromFile, branch, createRealNeonApi, resolveApiKey,
+
+  // Error primitives — for instanceof / code-based checks
+  PlatformError, ErrorCode,
+
+  // Namespaces — specific error subclasses and zod schemas
+  errors,   // errors.ConfigLoadError, errors.PushConflictError, …
+  schemas,  // schemas.config, schemas.project, schemas.branchBlueprint, schemas.computeSettings
+} from "@neondatabase/platform/v1";
+
+import type {
+  // Config (used in neon.ts) — Config, ProjectConfig, BranchBlueprint, ComputeSettings
+  // Operation options + results — BranchOptions / BranchResult / BranchContextFile,
+  //   PullConfigOptions, PushConfigOptions / PushResult, LoadEnvOptions, …
+  // NeonApi types (for custom adapters) — NeonApi, NeonBranchSnapshot, CreateBranchInput, …
+  Config, BranchOptions, BranchResult, PushResult, NeonApi,
+} from "@neondatabase/platform/v1";
+```
+
+Internal helpers (`applyContextFileFields`, `readNeonctlCredentials`, `loadContextWithBranch`, the `Resolved*` types, …) are intentionally **not** exported.
+
+## Project context resolution
+
+Every SDK function and every CLI subcommand resolves `projectId`, `orgId`, and `branchId` through the **same chain**. Each row's leftmost set entry wins:
+
+| Field       | 1st (call arg / CLI flag)              | 2nd (env)         | 3rd (`.neon/project.json`) | 4th (`.neon` file)     |
+| ----------- | -------------------------------------- | ----------------- | -------------------------- | ---------------------- |
+| `projectId` | `options.projectId` / `--project-id`   | `NEON_PROJECT_ID` | `projectId`                | `projectId`            |
+| `orgId`     | `options.orgId` / `--org-id`           | `NEON_ORG_ID`     | `orgId`                    | `orgId`                |
+| `branchId`  | `options.branch` / `--branch`[^branch] | `NEON_BRANCH_ID`  | `branchId`                 | `branchId`             |
+
+[^branch]: Only commands that target a specific branch surface a `--branch` flag (`context`, `loadEnv`). `pull` / `push` are branch-agnostic; `branch` *creates* a branch and produces its id as output.
+
+The file search walks up from `cwd` (default: `process.cwd()`) until it finds either file or hits a project-root marker (`.git`, `package.json`). `.neon/project.json` is preferred over `.neon` at every directory along the walk. If nothing resolves a `projectId`, callers receive `MissingContextError`.
+
 ## API
 
 ### `defineConfig(input: Config): Config`
 
-Validates and freezes a config using the zod-based {@link configSchema}. Throws `ConfigValidationError` (collecting every issue at once) when something is malformed. Pure function — no I/O.
+Validates and freezes a config using the zod-based `schemas.config`. Throws `errors.ConfigValidationError` (collecting every issue at once) when something is malformed. Pure function — no I/O.
 
-The underlying schema (and its sub-schemas) is also exported so you can compose it into your own validation pipeline:
+The underlying zod schemas live under the `schemas` namespace so you can compose them into your own validation pipeline:
 
 ```ts
-import {
-  configSchema,
-  projectConfigSchema,
-  branchBlueprintSchema,
-  computeSettingsSchema,
-} from "@neondatabase/platform/v1";
+import { schemas } from "@neondatabase/platform/v1";
 
-const parsed = configSchema.safeParse(unknownInput);
+const parsed = schemas.config.safeParse(unknownInput);
 if (!parsed.success) console.error(parsed.error.format());
+// schemas.project / schemas.branchBlueprint / schemas.computeSettings are also available
 ```
 
 ### `pullConfig(options?: PullConfigOptions): Promise<Config>`
 
-Reads the live Neon project state and returns a `Config` object. The package is **filesystem-read-only**: it never writes `.neon/project.json` or `neon.ts`. If you want to persist the pulled config, do so from `neonctl` or your own glue.
+Reads the live Neon project state and returns a `Config` object. The SDK call itself is **filesystem-read-only**: it never writes `.neon/project.json` or `neon.ts`. If you want to persist the result, either write it yourself or use the `neon-ts pull` CLI, which renders it as a `neon.ts` snippet and writes it into the current directory.
 
-Project resolution order:
-1. `options.projectId` (explicit)
-2. `.neon/project.json` walking up from `options.cwd ?? process.cwd()`
-3. `.neon` (neonctl's existing context file) walking up from the same directory
-
-If none of those produce a project id, `pullConfig` throws `MissingContextError`.
+Project resolution follows the standard chain — see [Project context resolution](#project-context-resolution). Throws `errors.MissingContextError` if no project id can be resolved.
 
 ### `pushConfig(...): Promise<PushResult>`
 
@@ -138,16 +172,9 @@ const env = await loadEnv(config);
 Object.assign(process.env, env);
 ```
 
-Resolution chain — each entry wins over the next:
+`projectId`, `orgId`, and `branch` follow the standard [Project context resolution](#project-context-resolution) chain, with one extra fallback for `branch` only: when nothing resolves it, the first key in `config.branchBlueprints` (typically `"production"`) is used.
 
-| Field          | 1st (call args)        | 2nd (env)         | 3rd (file)                            | 4th (config)                       |
-| -------------- | ---------------------- | ----------------- | ------------------------------------- | ---------------------------------- |
-| `projectId`    | `options.projectId`    | `NEON_PROJECT_ID` | `projectId` in `.neon[/project.json]` | — (throws `MissingContextError`)   |
-| `branch`       | `options.branch`       | `NEON_BRANCH_ID`  | `branchId` in `.neon[/project.json]`  | first key in `branchBlueprints`    |
-| `roleName`     | `options.roleName`     | —                 | —                                     | auto-picked when branch has one    |
-| `databaseName` | `options.databaseName` | —                 | —                                     | auto-picked when branch has one[^1] |
-
-[^1]: When the branch has multiple databases but only one is owned by the resolved role, that one is auto-picked. Otherwise `loadEnv` throws `PLATFORM_AMBIGUOUS_BRANCH_AUTH` and you'll need to pass `databaseName` explicitly.
+`roleName` and `databaseName` resolve to `options.roleName` / `options.databaseName` first; when omitted, the only role / database on the branch is auto-picked. When the branch has multiple databases but only one is owned by the resolved role, that one is auto-picked. Otherwise `loadEnv` throws `PLATFORM_AMBIGUOUS_BRANCH_AUTH` and you'll need to pass `databaseName` explicitly.
 
 Override the output env-var keys to match Vercel's / Cloudflare's conventions:
 
@@ -160,19 +187,13 @@ const env = await loadEnv(config, {
 
 This call is **read-only**: it never mutates `process.env`, writes to disk, or modifies the remote Neon project. Two `getConnectionUri` API calls (pooled + direct) plus one `listBranches` and one each of `listBranchRoles` / `listBranchDatabases`.
 
-Throws `MissingContextError`, `PLATFORM_MISSING_API_KEY`, `PLATFORM_BRANCH_NOT_FOUND`, or `PLATFORM_AMBIGUOUS_BRANCH_AUTH` depending on what's underspecified — see [Error reference](#error-reference) below.
+Throws `errors.MissingContextError`, or a `PlatformError` with code `PLATFORM_MISSING_API_KEY`, `PLATFORM_BRANCH_NOT_FOUND`, or `PLATFORM_AMBIGUOUS_BRANCH_AUTH` depending on what's underspecified — see [Error reference](#error-reference) below.
 
 ### `loadContext(options?: LoadContextOptions): NeonContext`
 
-Resolves the Neon project and (optionally) branch this process should target. Pure helper — does no network calls and never writes to disk. The resolution chain is the same one `pullConfig` / `pushConfig` use internally:
+Resolves the Neon project and (optionally) branch this process should target via the [standard chain](#project-context-resolution). Pure helper — does no network calls and never writes to disk.
 
-| Field      | 1st (call args)         | 2nd (env)         | 3rd (file)                          |
-| ---------- | ----------------------- | ----------------- | ----------------------------------- |
-| `branch`   | `options.branch`        | `NEON_BRANCH_ID`  | `branchId` in `.neon[/project.json]` |
-| `projectId`| `options.projectId`     | `NEON_PROJECT_ID` | `projectId` in `.neon[/project.json]`|
-| `orgId`    | `options.orgId`         | `NEON_ORG_ID`     | `orgId` in `.neon[/project.json]`   |
-
-Throws `MissingContextError` when no project id can be resolved. `branch` is optional — use `loadContextWithBranch()` if you want a hard error when no branch is supplied.
+Throws `errors.MissingContextError` when no project id can be resolved. `branch` is optional — when the operation downstream needs a branch, check `ctx.branch` and throw your own error.
 
 ```ts
 import { loadContext } from "@neondatabase/platform/v1";
@@ -184,6 +205,43 @@ const ctx = loadContext({ branch: "preview-pr-42" });
 // ctx.sourcePath         "/repo/.neon/project.json"
 ```
 
+### `branch(options: BranchOptions): Promise<BranchResult>`
+
+Create a single ephemeral branch from a wildcard blueprint defined in `neon.ts`. This is the "I'm starting a new feature, give me a dedicated database" entry point — exactly one branch per call, named after your git branch when available, with the blueprint's TTL and compute settings applied.
+
+```ts
+import { branch } from "@neondatabase/platform/v1";
+
+const result = await branch({ blueprint: "preview" });
+// → {
+//     branchName: "preview-andre-feature-a1b2c3",
+//     branchId: "br-...",
+//     projectId: "proj-...",
+//     parentBranchName: "production",
+//     contextFile: { status: "updated", path: "/repo/.neon/project.json", json: "{...}", data: {...} },
+//   }
+```
+
+Behaviour:
+
+1. **Project context** is resolved via the standard chain (see [Project context resolution](#project-context-resolution)). Throws `errors.MissingContextError` if no project id is resolvable.
+2. **`neon.ts`** is loaded via `loadConfigFromFile`. Throws `errors.ConfigLoadError` if missing.
+3. The **blueprint** identified by `options.blueprint` must exist and its `pattern` must contain a `*` wildcard (e.g. `"preview-*"`). Specific-name blueprints (e.g. `"production"`) refer to a single concrete branch and are managed by `pushConfig` instead — `branch` throws a `PlatformError` with code `PLATFORM_INVALID_CONFIG` if you try to use one.
+4. The **branch name** is composed as `<pattern>` with `*` substituted by:
+   - `<normalised-git-branch>-<mini-id>` when git is available (e.g. `andre/new-feat` → `andre-new-feat-a1b2c3`), or
+   - just `<mini-id>` (6 hex chars) when not. Pass `gitBranch: null` to opt out of the git lookup explicitly, or `gitBranch: "my-name"` to inject one.
+5. On name **collision** with an existing branch the mini-id is re-rolled up to `maxAttempts` times (default 10).
+6. The branch is **created on Neon** with the blueprint's `parent`, `ttl`, and `computeSettings` applied. Parent branches must exist on Neon (run `pushConfig` first if not) — otherwise `PLATFORM_MISSING_PARENT_BRANCH`.
+7. The **project-context file is updated** (in place) so subsequent `loadEnv` / `pullConfig` calls target the new branch. The outcome is reported via `result.contextFile.status`:
+
+   | `status`        | When                                                                  | Extra fields            |
+   | --------------- | --------------------------------------------------------------------- | ----------------------- |
+   | `updated`       | `.neon/project.json` (preferred) or `.neon` existed and was rewritten | `path`                  |
+   | `no-file`       | Neither file existed; nothing was written                             | —                       |
+   | `write-failed`  | A file existed but the write itself failed (read-only FS, EACCES, …)  | `path`, `error`         |
+
+   `json` and `data` are always populated regardless of status, so you can apply the update by hand. `branch()` never *creates* a new context file — write `result.contextFile.json` to `.neon/project.json` yourself if you want to bootstrap one.
+
 ### `loadConfigFromFile(options?: LoadConfigOptions): Promise<{ config: Config; resolvedPath: string }>`
 
 Find and load a `neon.ts` (or `.mts` / `.js` / `.mjs`) from disk, validate it via `defineConfig`, and return both the parsed config and the absolute path it was loaded from.
@@ -193,7 +251,7 @@ This is the same loader `pushConfig()` calls internally — exposed so callers c
 Resolution rules:
 
 - When `options.path` is set, that file is loaded directly. The path may be absolute or relative to `options.cwd ?? process.cwd()`.
-- When `options.path` is omitted, the loader walks up from `options.cwd ?? process.cwd()` looking for the first file matching `DEFAULT_CONFIG_FILENAMES` (`neon.ts`, `neon.mts`, `neon.js`, `neon.mjs`). The walk stops at the first directory containing a `package.json` or `.git`.
+- When `options.path` is omitted, the loader walks up from `options.cwd ?? process.cwd()` looking for the first file matching `neon.ts`, `neon.mts`, `neon.js`, or `neon.mjs`. The walk stops at the first directory containing a `package.json` or `.git`.
 
 `.ts` / `.mts` / `.cts` files are loaded via [`jiti`](https://github.com/unjs/jiti) (zero-config runtime TypeScript). `.js` / `.mjs` files use Node's native dynamic `import`. Either way, the file must `export default defineConfig(...)`. Module objects that look like a `Config` (have a `project` property) are also accepted as a convenience.
 
@@ -210,7 +268,7 @@ const { config: ciConfig } = await loadConfigFromFile({
 });
 ```
 
-Throws `ConfigLoadError` when the file can't be found / evaluated / lacks a default export, and `ConfigValidationError` when the loaded object fails schema validation. Both extend `PlatformError` — see the [Error reference](#error-reference) below.
+Throws `errors.ConfigLoadError` when the file can't be found / evaluated / lacks a default export, and `errors.ConfigValidationError` when the loaded object fails schema validation. Both extend `PlatformError` — see the [Error reference](#error-reference) below.
 
 ## CLI
 
@@ -223,15 +281,19 @@ neon-ts --help
 # Print the resolved project + branch context as JSON
 neon-ts context
 
-# Pull the live state of the project into a neon.ts snippet (default) or JSON
-neon-ts pull
-neon-ts pull --format json --project-id proj-cool-snow-123
+# Pull the live state of the project into a neon.ts file in the current directory
+neon-ts pull                                         # writes/overwrites ./neon.ts
+neon-ts pull --format json --project-id proj-...     # prints raw Config JSON to stdout instead
 
 # Push your local neon.ts to the resolved Neon project
 neon-ts push                                # fail on conflict
 neon-ts push --update-existing              # update existing specific-name branches
 neon-ts push --apply-existing               # apply wildcard blueprints to existing matching branches
 neon-ts push --apply-changes                # force-apply, ignoring branch-level conflicts
+
+# Create an ephemeral branch from a wildcard blueprint
+neon-ts branch preview                      # creates `preview-<git-branch>-<mini-id>`
+neon-ts branch preview --project-id proj-x  # override the resolved project id
 ```
 
 Exit codes (stable — branch on these in CI / shell pipelines):
@@ -240,9 +302,9 @@ Exit codes (stable — branch on these in CI / shell pipelines):
 | ---- | ------------------------------------------------------------------------------------ |
 | 0    | Success                                                                              |
 | 1    | Generic error / missing `NEON_API_KEY`                                               |
-| 2    | `PushConflictError` (re-run with `--apply-changes` / `--update-existing`)            |
-| 3    | `MissingContextError` (no project id resolvable from args, env, or `.neon[/project.json]`) |
-| 4    | `ConfigLoadError` (couldn't find / load `neon.ts`)                                   |
+| 2    | `errors.PushConflictError` (re-run with `--apply-changes` / `--update-existing`)     |
+| 3    | `errors.MissingContextError` (no project id resolvable from args, env, or `.neon[/project.json]`) |
+| 4    | `errors.ConfigLoadError` (couldn't find / load `neon.ts`)                            |
 | 5    | Other `PlatformError`                                                                |
 | 6    | `PLATFORM_UNAUTHORIZED` — bad / expired / revoked API key                            |
 | 7    | `PLATFORM_FORBIDDEN` or `PLATFORM_INSUFFICIENT_SCOPE` — key lacks required scope     |
@@ -258,13 +320,29 @@ All flags accept env-var fallbacks: `NEON_API_KEY`, `NEON_PROJECT_ID`, `NEON_ORG
 
 ## Error reference
 
-Every error this package throws extends `PlatformError`. The `code` field is the stable identifier — match on it programmatically (`if (err instanceof PlatformError && err.code === ErrorCode.NotFound)`) rather than parsing free-text messages.
+Every error this package throws extends `PlatformError`. The `code` field is the stable identifier — match on it programmatically rather than parsing free-text messages:
+
+```ts
+import { ErrorCode, PlatformError, errors } from "@neondatabase/platform/v1";
+
+try { await pushConfig(); }
+catch (err) {
+  if (err instanceof errors.PushConflictError) {
+    // Structured access: err.conflicts has each ConflictReport with current/desired/reason.
+    console.error(err.conflicts);
+  } else if (err instanceof PlatformError && err.code === ErrorCode.NotFound) {
+    // Code-based check for the wrapped HTTP errors that don't have dedicated subclasses.
+  }
+}
+```
+
+The specific subclasses (`ConfigLoadError`, `ConfigValidationError`, `MissingContextError`, `PushConflictError`) live under the `errors` namespace; the table below lists every `ErrorCode`.
 
 | Code                              | When it fires                                                                   | What to do                                                                                                       |
 | --------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `PLATFORM_INVALID_CONFIG`         | `defineConfig` / the zod schema rejected your config                            | Read the aggregated issue list in `err.issues` and fix each one                                                  |
 | `PLATFORM_MISSING_CONTEXT`        | No project id resolvable from args, env, or context file                        | Pass `projectId` / `--project-id`, set `NEON_PROJECT_ID`, or run `npx neonctl set-context --project-id <id>`     |
-| `PLATFORM_PUSH_CONFLICT`          | Local config differs from remote (and you didn't opt into apply)                | The thrown `PushConflictError` lists each conflict with a `fix` hint. Most resolve via `updateExisting: true`    |
+| `PLATFORM_PUSH_CONFLICT`          | Local config differs from remote (and you didn't opt into apply)                | The thrown `errors.PushConflictError` lists each conflict with a `fix` hint. Most resolve via `updateExisting: true` |
 | `PLATFORM_CONFIG_LOAD_FAILED`     | `neon.ts` is missing, has a syntax error, or doesn't `export default`           | Path is in the message. Run the file directly (`npx tsx neon.ts`) to reproduce the underlying error              |
 | `PLATFORM_MISSING_API_KEY`        | No API key in `apiKey` option or `NEON_API_KEY` env                             | Generate one at <https://console.neon.tech/app/settings/api-keys>                                                |
 | `PLATFORM_AMBIGUOUS_PROJECT`      | Multiple projects with the same name (org-/user-scoped key without `projectId`) | Pass `projectId` to pick one — the candidate ids are in `err.details.candidateProjectIds`                        |
@@ -291,9 +369,13 @@ Every wrapped HTTP error carries structured context in `err.details`:
 - `requestId` — Neon's `X-Request-Id` for support tickets
 - `neonMessage` / `neonCode` — the raw error message and code from the Neon API response body
 
-## Read-only filesystem contract
+## Filesystem contract
 
-The package never creates, updates, or deletes files. In particular it does **not** write `.neon/project.json`. To bootstrap a project-context file, use `neon set-context` (which writes `.neon`) or any other tool of your choice. This package will happily read both layouts.
+The **SDK** is filesystem-read-only with one exception: `branch()` updates an existing project-context file's `branchId` in place after creating an ephemeral branch (so subsequent `loadEnv` / `pullConfig` calls target it). The write is attempted *safely* — a read-only filesystem or permission error is reported as `contextFile.status === "write-failed"` rather than crashing the call, and the JSON payload is still returned so the user can apply it by hand. All other public SDK functions — `pullConfig`, `pushConfig`, `loadEnv`, `loadContext`, `loadConfigFromFile`, `defineConfig` — never touch disk.
+
+Project-context files (`.neon/project.json` or the neonctl `.neon` file) themselves are **never created** by the SDK; bootstrap one with `neon set-context` or any other tool of your choice before calling `branch()`.
+
+The **`neon-ts` CLI** is the one place that does write `neon.ts` for you: `neon-ts pull` writes (or overwrites) `./neon.ts` so you can start editing immediately. Pass `--format json` to get the raw `Config` on stdout instead (read-only). `neon-ts push`, `neon-ts context`, and `neon-ts branch` only ever read `neon.ts` and never modify it.
 
 ## Authentication
 

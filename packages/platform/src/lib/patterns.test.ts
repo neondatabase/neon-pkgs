@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+	fillPattern,
 	isWildcardPattern,
 	matchPattern,
 	validatePattern,
@@ -60,5 +61,20 @@ describe("validatePattern", () => {
 	test("accepts patterns with slashes (Neon branch names allow '/')", () => {
 		expect(validatePattern("feature/foo")).toEqual({ ok: true });
 		expect(validatePattern("feature/*")).toEqual({ ok: true });
+	});
+});
+
+describe("fillPattern", () => {
+	test.each([
+		["preview-*", "andre-feature-a1b2c3", "preview-andre-feature-a1b2c3"],
+		["*", "branch-x", "branch-x"],
+		["feat-*-staging", "x", "feat-x-staging"],
+		["feat-*-prod-*", "x", "feat-x-prod-x"],
+	])("fillPattern(%s, %s) === %s", (pattern, replacement, expected) => {
+		expect(fillPattern(pattern, replacement)).toBe(expected);
+	});
+
+	test("non-wildcard pattern appends with a dash", () => {
+		expect(fillPattern("specific", "x")).toBe("specific-x");
 	});
 });

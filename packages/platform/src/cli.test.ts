@@ -55,12 +55,13 @@ const cliBuilt = existsSync(CLI_PATH);
 const describeIfBuilt = cliBuilt ? describe : describe.skip;
 
 describeIfBuilt("neon-ts CLI (e2e, spawns dist/cli.js)", () => {
-	test("--help exits 0 and lists the three subcommands", async () => {
+	test("--help exits 0 and lists the four subcommands", async () => {
 		const result = await runCli(["--help"]);
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain("pull");
 		expect(result.stdout).toContain("push");
 		expect(result.stdout).toContain("context");
+		expect(result.stdout).toContain("branch");
 	});
 
 	test("--version prints the package version", async () => {

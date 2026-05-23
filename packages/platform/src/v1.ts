@@ -14,40 +14,47 @@
  *   },
  * });
  * ```
+ *
+ * Surface guidelines:
+ * - Top-level: the operations callers reach for daily (`pullConfig`, `pushConfig`,
+ *   `loadEnv`, `branch`, …), the `PlatformError` base class + `ErrorCode` enum for
+ *   `instanceof` / code-based error handling, and the types those operations produce or
+ *   accept.
+ * - `errors` namespace: specific `PlatformError` subclasses (`ConfigLoadError`,
+ *   `PushConflictError`, …). Reach for them when you want structured access to
+ *   `err.conflicts` / `err.issues` instead of a generic code check.
+ * - `schemas` namespace: the zod schemas underlying `defineConfig`. Pull in only when
+ *   composing your own validation pipeline on top of ours.
+ *
+ * Internal helpers (`applyContextFileFields`, `formatContextFile`, `readNeonctlCredentials`,
+ * `loadContextWithBranch`, the `Resolved*` types, …) are intentionally **not** exported.
+ * They power the public surface and may change without notice.
  */
 
-export {
-	type NeonctlCredentials,
-	readNeonctlCredentials,
-	resolveApiKey,
-} from "./lib/auth.js";
+// ─── Lower-level adapters ──────────────────────────────────────────────────────
+export { resolveApiKey } from "./lib/auth.js";
+// ─── Option + result types for each operation ─────────────────────────────────
+export type {
+	BranchContextFile,
+	BranchOptions,
+	BranchResult,
+} from "./lib/branch.js";
+// ─── Operations ────────────────────────────────────────────────────────────────
+export { branch } from "./lib/branch.js";
 export { defineConfig } from "./lib/define-config.js";
-export {
-	ConfigLoadError,
-	ConfigValidationError,
-	ErrorCode,
-	MissingContextError,
-	PlatformError,
-	PushConflictError,
-} from "./lib/errors.js";
-export {
-	type BranchRef,
-	type LoadContextOptions,
-	loadContext,
-	loadContextWithBranch,
-	type NeonContext,
+// ─── Errors ────────────────────────────────────────────────────────────────────
+export { ErrorCode, PlatformError } from "./lib/errors.js";
+export * as errors from "./lib/errors-public.js";
+export type {
+	LoadContextOptions,
+	NeonContext,
 } from "./lib/load-context.js";
-export {
-	DEFAULT_DATABASE_URL_KEY,
-	DEFAULT_DATABASE_URL_UNPOOLED_KEY,
-	type LoadEnvOptions,
-	loadEnv,
-} from "./lib/load-env.js";
-export {
-	DEFAULT_CONFIG_FILENAMES,
-	type LoadConfigOptions,
-	loadConfigFromFile,
-} from "./lib/loader.js";
+export { loadContext } from "./lib/load-context.js";
+export type { LoadEnvOptions } from "./lib/load-env.js";
+export { loadEnv } from "./lib/load-env.js";
+export type { LoadConfigOptions } from "./lib/loader.js";
+export { loadConfigFromFile } from "./lib/loader.js";
+// ─── NeonApi types (needed by callers implementing their own adapters) ────────
 export type {
 	CreateBranchInput,
 	CreateProjectInput,
@@ -61,22 +68,17 @@ export type {
 	UpdateBranchInput,
 } from "./lib/neon-api.js";
 export { createRealNeonApi } from "./lib/neon-api-real.js";
-export { type PullConfigOptions, pullConfig } from "./lib/pull-config.js";
-export { type PushConfigOptions, pushConfig } from "./lib/push-config.js";
-export {
-	branchBlueprintSchema,
-	computeSettingsSchema,
-	configSchema,
-	projectConfigSchema,
-} from "./lib/schema.js";
+export type { PullConfigOptions } from "./lib/pull-config.js";
+export { pullConfig } from "./lib/pull-config.js";
+export type { PushConfigOptions } from "./lib/push-config.js";
+export { pushConfig } from "./lib/push-config.js";
+// ─── Zod schemas ──────────────────────────────────────────────────────────────
+export * as schemas from "./lib/schemas.js";
+// ─── Config types (used in neon.ts and in pushConfig return values) ───────────
 export type {
-	AppliedChange,
 	BranchBlueprint,
 	ComputeSettings,
 	Config,
-	ConflictReport,
 	ProjectConfig,
 	PushResult,
-	ResolvedBranchBlueprint,
-	ResolvedConfig,
 } from "./lib/types.js";

@@ -1,5 +1,5 @@
 import { describe, expect } from "vitest";
-import { defineConfig, PushConflictError, pushConfig } from "../src/v1.js";
+import { defineConfig, errors, pushConfig } from "../src/v1.js";
 import {
 	DEFAULT_REGION,
 	detectApiKeyScope,
@@ -36,7 +36,7 @@ describe("e2e — conflict detection against real Neon API", () => {
 
 			await expect(
 				pushConfig(wrongRegion, { api, projectId: created.projectId }),
-			).rejects.toBeInstanceOf(PushConflictError);
+			).rejects.toBeInstanceOf(errors.PushConflictError);
 
 			const forced = await pushConfig(wrongRegion, {
 				api,
@@ -79,7 +79,7 @@ describe("e2e — conflict detection against real Neon API", () => {
 			});
 			await expect(
 				pushConfig(bigger, { api, projectId: created.projectId }),
-			).rejects.toBeInstanceOf(PushConflictError);
+			).rejects.toBeInstanceOf(errors.PushConflictError);
 
 			// With updateExisting:true the drift is applied as an endpoint update.
 			const applied = await pushConfig(bigger, {

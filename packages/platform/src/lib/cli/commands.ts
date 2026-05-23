@@ -1,4 +1,7 @@
+import { existsSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { resolveApiKey } from "../auth.js";
+import { branch } from "../branch.js";
 import {
 	ConfigLoadError,
 	ErrorCode,
@@ -16,6 +19,9 @@ import {
 	formatConfigAsTypeScript,
 	type PullOutputFormat,
 } from "./format.js";
+
+/** Filename written by `neon-ts pull` (and read by every other subcommand). */
+const NEON_CONFIG_FILENAME = "neon.ts";
 
 /**
  * Cross-cutting environment a CLI command is allowed to touch. Injected so tests can drive
@@ -57,8 +63,14 @@ export interface PullCommandOptions {
 }
 
 /**
- * Implementation of `neon-ts pull`. Pulls the live Neon project state and prints
- * it either as a `neon.ts` snippet (default) or as JSON.
+ * Implementation of `neon-ts pull`.
+ *
+ * - `format: "ts"` (default) **writes** the rendered snippet to `${cwd}/neon.ts`,
+ *   creating or overwriting it, and prints a one-line status message — there is no
+ *   reason to dump the file contents to the terminal when the very next step is to
+ *   `import` from disk.
+ * - `format: "json"` keeps the read-only behaviour and prints the raw `Config` as
+ *   JSON to stdout, so it can be piped into `jq` / a file of the caller's choice.
  */
 export async function runPull(
 	options: PullCommandOptions,
@@ -75,11 +87,39 @@ export async function runPull(
 			...(options.orgId ? { orgId: options.orgId } : {}),
 		});
 		const format = options.format ?? "ts";
-		const stdout =
-			format === "json"
-				? formatConfigAsJson(config)
-				: formatConfigAsTypeScript(config);
-		return { exitCode: 0, stdout, stderr: "" };
+		if (format === "json") {
+			return {
+				exitCode: 0,
+				stdout: formatConfigAsJson(config),
+				stderr: "",
+			};
+		}
+		const targetPath = join(ctx.cwd, NEON_CONFIG_FILENAME);
+		const existed = existsSync(targetPath);
+		try {
+			writeFileSync(
+				targetPath,
+				formatConfigAsTypeScript(config),
+				"utf-8",
+			);
+		} catch (writeErr) {
+			const message =
+				writeErr instanceof Error ? writeErr.message : String(writeErr);
+			return {
+				exitCode: 1,
+				stdout: "",
+				stderr: `Failed to write ${targetPath}: ${message}\n`,
+				...(writeErr instanceof Error && writeErr.stack
+					? { debugInfo: writeErr.stack }
+					: {}),
+			};
+		}
+		const verb = existed ? "Updated" : "Created";
+		return {
+			exitCode: 0,
+			stdout: `✓ ${verb} ${targetPath}\n`,
+			stderr: "",
+		};
 	} catch (err) {
 		return handleError(err);
 	}
@@ -165,6 +205,78 @@ export async function runPush(
 					`  - [${c.kind}:${c.identifier}] ${c.field}: ${c.reason}`,
 				);
 			}
+		}
+		return { exitCode: 0, stdout: `${lines.join("\n")}\n`, stderr: "" };
+	} catch (err) {
+		return handleError(err);
+	}
+}
+
+// ───────────────────────── branch ───────────────────────
+
+export interface BranchCommandOptions {
+	blueprint: string;
+	projectId?: string;
+	orgId?: string;
+	apiKey?: string;
+	configPath?: string;
+}
+
+/**
+ * Implementation of `neon-ts branch <blueprint>`. Creates an ephemeral branch from a
+ * wildcard blueprint in `neon.ts`, updates an existing `.neon[/project.json]` context file
+ * with the new `branchId`, and prints a JSON-friendly summary on stdout.
+ *
+ * When no context file exists, the JSON suitable for writing to `.neon/project.json` is
+ * included in the summary so the user can pipe it into a file themselves.
+ */
+export async function runBranch(
+	options: BranchCommandOptions,
+	ctx: CommandEnv,
+): Promise<CommandResult> {
+	const api = resolveApi(options.apiKey, ctx);
+	if (typeof api === "string") return failure(api);
+
+	try {
+		const result = await branch({
+			blueprint: options.blueprint,
+			cwd: ctx.cwd,
+			env: ctx.env,
+			api,
+			...(options.projectId ? { projectId: options.projectId } : {}),
+			...(options.orgId ? { orgId: options.orgId } : {}),
+			...(options.configPath ? { configPath: options.configPath } : {}),
+		});
+
+		const lines: string[] = [
+			`✓ created branch ${result.branchName} (${result.branchId})`,
+			`  blueprint : ${result.blueprintKey} (pattern: ${result.blueprintPattern})`,
+			`  project   : ${result.projectId}${result.orgId ? ` (org ${result.orgId})` : ""}`,
+			`  parent    : ${result.parentBranchName} (${result.parentBranchId})`,
+		];
+		if (result.expiresAt) lines.push(`  expiresAt : ${result.expiresAt}`);
+		lines.push("");
+		switch (result.contextFile.status) {
+			case "updated":
+				lines.push(
+					`  updated ${result.contextFile.path} with the new branchId.`,
+				);
+				break;
+			case "no-file":
+				lines.push(
+					"  no .neon/project.json (or .neon) found — write the snippet below to pin the new branch for subsequent commands:",
+					"",
+					result.contextFile.json.trimEnd(),
+				);
+				break;
+			case "write-failed":
+				lines.push(
+					`  ! could not update ${result.contextFile.path}: ${result.contextFile.error}`,
+					"  the branch on Neon was still created; apply this snippet by hand:",
+					"",
+					result.contextFile.json.trimEnd(),
+				);
+				break;
 		}
 		return { exitCode: 0, stdout: `${lines.join("\n")}\n`, stderr: "" };
 	} catch (err) {

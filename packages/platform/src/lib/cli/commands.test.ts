@@ -1,9 +1,11 @@
+import { chmodSync, existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { ErrorCode, PlatformError } from "../errors.js";
 import { FakeNeonApi } from "../fake-neon-api.js";
 import type { NeonApi } from "../neon-api.js";
 import { makeTempRepo } from "../test-utils.js";
-import { runContext, runPull, runPush } from "./commands.js";
+import { runBranch, runContext, runPull, runPush } from "./commands.js";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -34,29 +36,80 @@ function seededFake(): { api: FakeNeonApi; projectId: string } {
 }
 
 describe("runPull", () => {
-	test("default format `ts` emits a neon.ts snippet", async () => {
+	test("default format `ts` creates neon.ts in cwd and reports the path", async () => {
 		const { api, projectId } = seededFake();
+		const root = setup({ "package.json": "{}" });
+		const neonPath = join(root, "neon.ts");
+		expect(existsSync(neonPath)).toBe(false);
+
 		const result = await runPull(
 			{ projectId },
-			{ cwd: process.cwd(), env: {}, api },
+			{ cwd: root, env: {}, api },
 		);
+
 		expect(result.exitCode).toBe(0);
-		expect(result.stdout).toContain(
+		expect(result.stderr).toBe("");
+		expect(result.stdout).toContain("Created");
+		expect(result.stdout).toContain(neonPath);
+		expect(result.stdout).not.toContain("defineConfig");
+
+		const written = readFileSync(neonPath, "utf-8");
+		expect(written).toContain(
 			'import { defineConfig } from "@neondatabase/platform/v1"',
 		);
-		expect(result.stdout).toContain('"name": "cli-test"');
-		expect(result.stderr).toBe("");
+		expect(written).toContain('"name": "cli-test"');
 	});
 
-	test("--format json emits raw JSON", async () => {
+	test("default format `ts` overwrites an existing neon.ts and reports 'Updated'", async () => {
 		const { api, projectId } = seededFake();
+		const root = setup({
+			"package.json": "{}",
+			"neon.ts": "// stale contents that should be replaced\n",
+		});
+		const neonPath = join(root, "neon.ts");
+
+		const result = await runPull(
+			{ projectId },
+			{ cwd: root, env: {}, api },
+		);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("Updated");
+		expect(result.stdout).toContain(neonPath);
+
+		const written = readFileSync(neonPath, "utf-8");
+		expect(written).not.toContain("stale contents");
+		expect(written).toContain('"name": "cli-test"');
+	});
+
+	test("default format `ts` reports a write failure without crashing", async () => {
+		const { api, projectId } = seededFake();
+		// Point cwd at a path that doesn't exist on disk. writeFileSync will fail
+		// with ENOENT trying to create `${cwd}/neon.ts` because the directory is
+		// missing — exactly the kind of unexpected filesystem error we want to
+		// surface as a clean exit-1 with a useful message.
+		const bogusCwd = join(setup({ ".keep": "" }), "does-not-exist-subdir");
+		const result = await runPull(
+			{ projectId },
+			{ cwd: bogusCwd, env: {}, api },
+		);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain(
+			`Failed to write ${join(bogusCwd, "neon.ts")}`,
+		);
+	});
+
+	test("--format json emits raw JSON to stdout and does not write neon.ts", async () => {
+		const { api, projectId } = seededFake();
+		const root = setup({ "package.json": "{}" });
 		const result = await runPull(
 			{ projectId, format: "json" },
-			{ cwd: process.cwd(), env: {}, api },
+			{ cwd: root, env: {}, api },
 		);
 		expect(result.exitCode).toBe(0);
 		const parsed = JSON.parse(result.stdout);
 		expect(parsed.project.name).toBe("cli-test");
+		expect(existsSync(join(root, "neon.ts"))).toBe(false);
 	});
 
 	test("missing api key without injected api → exit 1 with helpful message", async () => {
@@ -358,5 +411,180 @@ describe("runContext", () => {
 		const result = runContext({}, { cwd: root, env: {} });
 		expect(result.exitCode).toBe(3);
 		expect(result.stderr).toContain("Missing context");
+	});
+});
+
+describe("runBranch", () => {
+	function previewBlueprint(): string {
+		return `
+import { defineConfig } from "${PLATFORM_SRC}";
+export default defineConfig({
+  project: { name: "cli-test", region: "aws-us-east-1" },
+  branchBlueprints: {
+    production: {},
+    preview: { pattern: "preview-*", ttl: "1h", parent: "production" },
+  },
+});
+`;
+	}
+
+	function seedFakeWithProduction(): {
+		api: FakeNeonApi;
+		projectId: string;
+		orgId: string;
+	} {
+		const api = new FakeNeonApi();
+		const projectId = "proj-cli-branch";
+		const orgId = "org-cli-branch";
+		api.seedProject({
+			project: {
+				id: projectId,
+				name: "cli-test",
+				regionId: "aws-us-east-1",
+				pgVersion: 17,
+				orgId,
+			},
+			branches: [
+				{
+					branch: {
+						id: "br-prod-cli",
+						name: "production",
+						isDefault: true,
+					},
+				},
+			],
+		});
+		return { api, projectId, orgId };
+	}
+
+	test("creates a branch and updates an existing .neon/project.json", async () => {
+		const { api, projectId, orgId } = seedFakeWithProduction();
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({ projectId, orgId }),
+			"neon.ts": previewBlueprint(),
+		});
+		const result = await runBranch(
+			{ blueprint: "preview" },
+			{ cwd: root, env: {}, api },
+		);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("created branch preview-");
+		expect(result.stdout).toContain("blueprint : preview");
+		expect(result.stdout).toContain("parent    : production");
+		expect(result.stdout).toContain(
+			`updated ${join(root, ".neon", "project.json")}`,
+		);
+
+		const reread = JSON.parse(
+			readFileSync(join(root, ".neon", "project.json"), "utf-8"),
+		);
+		expect(reread.branchId).toMatch(/^br-/);
+		expect(reread.projectId).toBe(projectId);
+	});
+
+	test("when no context file exists, prints the suggested JSON payload", async () => {
+		const { api, projectId, orgId } = seedFakeWithProduction();
+		const root = setup({
+			"package.json": "{}",
+			"neon.ts": previewBlueprint(),
+		});
+		const result = await runBranch(
+			{ blueprint: "preview", projectId, orgId },
+			{ cwd: root, env: {}, api },
+		);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain(
+			"no .neon/project.json (or .neon) found",
+		);
+		expect(result.stdout).toContain(`"projectId": "${projectId}"`);
+		expect(result.stdout).toContain(`"orgId": "${orgId}"`);
+		expect(result.stdout).toContain(`"branchId": "br-`);
+	});
+
+	test("unknown blueprint → exit 8 (NotFound)", async () => {
+		const { api, projectId } = seedFakeWithProduction();
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({ projectId }),
+			"neon.ts": previewBlueprint(),
+		});
+		const result = await runBranch(
+			{ blueprint: "nope" },
+			{ cwd: root, env: {}, api },
+		);
+		expect(result.exitCode).toBe(8);
+		expect(result.stderr).toContain('no blueprint named "nope"');
+	});
+
+	test("specific-name blueprint → exit 5 (InvalidConfig)", async () => {
+		const { api, projectId } = seedFakeWithProduction();
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({ projectId }),
+			"neon.ts": previewBlueprint(),
+		});
+		const result = await runBranch(
+			{ blueprint: "production" },
+			{ cwd: root, env: {}, api },
+		);
+		expect(result.exitCode).toBe(5);
+		expect(result.stderr).toContain("not a wildcard");
+	});
+
+	test("missing context (no projectId/file) → exit 3", async () => {
+		const { api } = seedFakeWithProduction();
+		const root = setup({
+			"package.json": "{}",
+			"neon.ts": previewBlueprint(),
+		});
+		const result = await runBranch(
+			{ blueprint: "preview" },
+			{ cwd: root, env: {}, api },
+		);
+		expect(result.exitCode).toBe(3);
+		expect(result.stderr).toContain("Missing context");
+	});
+
+	test("missing config file → exit 4 (ConfigLoadError)", async () => {
+		const { api, projectId } = seedFakeWithProduction();
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({ projectId }),
+		});
+		const result = await runBranch(
+			{ blueprint: "preview" },
+			{ cwd: root, env: {}, api },
+		);
+		expect(result.exitCode).toBe(4);
+		expect(result.stderr).toContain("Failed to load config");
+	});
+
+	test("read-only context file → exit 0 with a warning and the JSON payload", async () => {
+		const { api, projectId, orgId } = seedFakeWithProduction();
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({ projectId, orgId }),
+			"neon.ts": previewBlueprint(),
+		});
+		const filePath = join(root, ".neon", "project.json");
+		chmodSync(filePath, 0o444);
+		cleanups.push(() => {
+			try {
+				chmodSync(filePath, 0o644);
+			} catch {
+				/* best effort */
+			}
+		});
+
+		const result = await runBranch(
+			{ blueprint: "preview" },
+			{ cwd: root, env: {}, api },
+		);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("created branch preview-");
+		expect(result.stdout).toContain(`could not update ${filePath}`);
+		expect(result.stdout).toContain("apply this snippet by hand");
+		expect(result.stdout).toContain(`"projectId": "${projectId}"`);
 	});
 });
