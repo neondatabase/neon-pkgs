@@ -367,8 +367,9 @@ neon-ts env pull --branch preview-andre     # override the resolved branch
 # Run a command with Neon env vars injected on top of the current `process.env`. Use `--`
 # to separate the wrapped command. The child inherits stdio so dev servers stay
 # interactive; the parent exits with the child's exit code.
-neon-ts env run -- npm run dev
-neon-ts env run --branch preview-andre -- pnpm test
+neon-ts env run -- npm run dev               # wrap any dev / build / test command
+neon-ts env run --branch preview-andre -- pnpm test   # override the branch for one run
+neon-ts env run -- pnpm drizzle-kit generate # drizzle-kit < 0.30 doesn't auto-load .env
 ```
 
 Exit codes (stable — branch on these in CI / shell pipelines):
