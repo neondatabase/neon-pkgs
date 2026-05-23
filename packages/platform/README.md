@@ -168,46 +168,37 @@ Important options:
 
 `pushConfig` will create a project if none exists in the resolved org/name combination and `project.region` is set. Region and Postgres major version are immutable on Neon — pushing a different value surfaces a `ConflictReport`.
 
-### `loadEnv(config: Config, options?: LoadEnvOptions): Promise<Record<string, string>>`
+### `loadEnv(config: Config, options?: LoadEnvOptions): Promise<NeonEnv>`
 
-Fetch Postgres connection strings for the project + branch this process should target, ready to spread into `process.env` or write to a `.env` file. Returns:
+Resolve the project + branch this process should target, then fetch the live Neon connection strings for that branch. Returns a fixed-shape, namespaced, statically-typed {@link NeonEnv}:
 
 ```ts
-{ DATABASE_URL: "postgres://…-pooler…?sslmode=require",
-  DATABASE_URL_UNPOOLED: "postgres://…?sslmode=require" }
+interface NeonEnv {
+  postgres: {
+    databaseUrl: string;          // pooled (PgBouncer) — the right default
+    databaseUrlUnpooled: string;  // direct — for LISTEN/NOTIFY, prepared statements, etc.
+  };
+}
 ```
 
-Typical usage at the top of an application bootstrap or build script:
+Typical usage at the top of an application bootstrap. **No `.env` entries for connection strings required** — run `neon-ts branch` / `neonctl link` once to write `.neon/project.json`, and `loadEnv` picks the branch up from there for every subsequent call:
 
 ```ts
+import { drizzle } from "drizzle-orm/neon-http";
+import { neon } from "@neondatabase/serverless";
 import { loadEnv } from "@neondatabase/platform/v1";
 import config from "./neon";
+import * as schema from "./schema";
 
 const env = await loadEnv(config);
-Object.assign(process.env, env);
+const db = drizzle(neon(env.postgres.databaseUrl), { schema });
 ```
 
 `projectId`, `orgId`, and `branch` follow the standard [Project context resolution](#project-context-resolution) chain, with one extra fallback for `branch` only: when nothing resolves it, the first key in `config.branches` (typically `"production"`) is used.
 
 `roleName` and `databaseName` resolve to `options.roleName` / `options.databaseName` first; when omitted, the only role / database on the branch is auto-picked. When the branch has multiple databases but only one is owned by the resolved role, that one is auto-picked. Otherwise `loadEnv` throws `PLATFORM_AMBIGUOUS_BRANCH_AUTH` and you'll need to pass `databaseName` explicitly.
 
-Override the output env-var keys to match Vercel's / Cloudflare's conventions — and have those keys reflected in `loadEnv`'s **static return type** so they autocomplete in your bootstrap:
-
-```ts
-const config = defineConfig({
-  project: { name: "my-app", region: "aws-us-east-1" },
-  branches: { production: {} },
-  env: {
-    databaseUrl: "POSTGRES_URL",
-    databaseUrlUnpooled: "POSTGRES_URL_NON_POOLING",
-  },
-});
-
-const env = await loadEnv(config);
-//    ^? { POSTGRES_URL: string; POSTGRES_URL_NON_POOLING: string }
-```
-
-`defineConfig` is declared with a `const` generic, so the literal strings in `config.env` flow through to `LoadEnvResult<typeof config>`. When `config.env` is omitted, the return type falls back to `{ DATABASE_URL: string; DATABASE_URL_UNPOOLED: string }`. There are no call-site overrides for these keys — that would defeat the point of config-as-code.
+The return shape is **fixed** — there are no call-site or config-driven knobs for renaming keys, on purpose. The point of `loadEnv` is to be a typed escape hatch from `.env` files: one `import config from "./neon"`, one `await loadEnv(config)`, and the rest of your app talks to `env.postgres.databaseUrl` directly. Future namespaces (`env.vector`, `env.s3`, …) can be added alongside `postgres` without breaking the existing surface.
 
 This call is **read-only**: it never mutates `process.env`, writes to disk, or modifies the remote Neon project. Two `getConnectionUri` API calls (pooled + direct) plus one `listBranches` and one each of `listBranchRoles` / `listBranchDatabases`.
 

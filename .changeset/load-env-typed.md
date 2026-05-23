@@ -2,20 +2,20 @@
 "@neondatabase/platform": minor
 ---
 
-`loadEnv` is now statically typed from the config. Declare your env-var keys once in `neon.ts` via the new `config.env` block:
+`loadEnv` now returns a fixed, statically-typed, namespaced shape — no more `Record<string, string>`, no call-site or config-driven env-var renames:
 
 ```ts
-const config = defineConfig({
-  project: { name: "my-app" },
-  branches: { production: {} },
-  env: {
-    databaseUrl: "POSTGRES_URL",
-    databaseUrlUnpooled: "POSTGRES_URL_NON_POOLING",
-  },
-});
+interface NeonEnv {
+  postgres: {
+    databaseUrl: string;          // pooled (PgBouncer)
+    databaseUrlUnpooled: string;  // direct
+  };
+}
 
 const env = await loadEnv(config);
-//    ^? { POSTGRES_URL: string; POSTGRES_URL_NON_POOLING: string }
+const db = drizzle(neon(env.postgres.databaseUrl), { schema });
 ```
 
-`defineConfig` is declared with a `const` generic so the literal strings flow through to `loadEnv`'s `LoadEnvResult<typeof config>`. Missing `config.env` falls back to `{ DATABASE_URL: string; DATABASE_URL_UNPOOLED: string }`. The previous call-site overrides (`databaseUrlKey` / `databaseUrlUnpooledKey` on `LoadEnvOptions`) are removed — config-as-code is the point.
+The previous `databaseUrlKey` / `databaseUrlUnpooledKey` options on `LoadEnvOptions` are removed. The keys are lowercase camelCase and live under a `postgres` namespace so future namespaces (`vector`, `s3`, …) can be added without breaking the existing surface.
+
+Together with the project/branch resolution chain (`options.projectId|branch` → `NEON_PROJECT_ID` / `NEON_BRANCH_ID` → `.neon/project.json` → `.neon`), this makes `loadEnv` a typed drop-in replacement for `.env` entries: run `neon-ts branch` / `neonctl link` once to pin the branch, then `import config from "./neon"; const env = await loadEnv(config)` everywhere else.

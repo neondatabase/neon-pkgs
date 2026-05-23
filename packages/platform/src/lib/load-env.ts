@@ -10,52 +10,29 @@ import type {
 import type { Config } from "./types.js";
 
 /**
- * Default env-var key for the pooled (PgBouncer) connection string. Matches the convention
- * Neon's own integrations (Vercel, Cloudflare, Local Connect) write to `.env` files.
- */
-export const DEFAULT_DATABASE_URL_KEY = "DATABASE_URL";
-/** Default env-var key for the direct (unpooled) connection string. */
-export const DEFAULT_DATABASE_URL_UNPOOLED_KEY = "DATABASE_URL_UNPOOLED";
-
-/**
- * Extract a string literal env-var key from `config.env[field]`, falling back to a default
- * when the field is absent or widened to `string` (i.e. when the caller didn't go through
- * `defineConfig` to preserve literals).
- */
-type EnvKeyOf<
-	C extends Config,
-	Field extends "databaseUrl" | "databaseUrlUnpooled",
-	Default extends string,
-> = C extends { env: infer E }
-	? E extends { [K in Field]: infer V }
-		? V extends string
-			? string extends V
-				? Default
-				: V
-			: Default
-		: Default
-	: Default;
-
-/**
- * Static return type of {@link loadEnv} derived from the supplied {@link Config}. The keys
- * are exactly the literal env-var names declared in `config.env` (defaulting to
- * `DATABASE_URL` / `DATABASE_URL_UNPOOLED` when `config.env` is omitted).
+ * Static, namespaced shape of `loadEnv`'s return value. Fixed and known — there's no
+ * call-site or config-driven configurability — so consumers can destructure with
+ * autocomplete and zero `Record<string, string>` widening.
  *
- * ```ts
- * const config = defineConfig({ project: {...}, env: { databaseUrl: "POSTGRES_URL" } });
- * type Env = LoadEnvResult<typeof config>;
- * //   ^? { POSTGRES_URL: string; DATABASE_URL_UNPOOLED: string }
- * ```
+ * Future namespaces (e.g. `vector`, `s3`, …) can be added alongside `postgres` without
+ * breaking the existing surface. Keep keys lowercase camelCase.
  */
-export type LoadEnvResult<C extends Config> = {
-	[K in
-		| EnvKeyOf<C, "databaseUrl", typeof DEFAULT_DATABASE_URL_KEY>
-		| EnvKeyOf<
-				C,
-				"databaseUrlUnpooled",
-				typeof DEFAULT_DATABASE_URL_UNPOOLED_KEY
-		  >]: string;
-};
+export interface NeonEnv {
+	/** Postgres connection strings for the resolved branch. */
+	postgres: {
+		/**
+		 * Pooled connection string (via Neon's PgBouncer pooler). The right default for
+		 * serverless drivers (`@neondatabase/serverless`, edge runtimes, Postgres.js, …).
+		 */
+		databaseUrl: string;
+		/**
+		 * Direct (unpooled) connection string. Use this when you need session-level
+		 * features (`LISTEN`/`NOTIFY`, prepared statements across calls, transactions
+		 * spanning round-trips) that PgBouncer's transaction-mode pooling drops.
+		 */
+		databaseUrlUnpooled: string;
+	};
+}
 
 export interface LoadEnvOptions {
 	/**
@@ -100,43 +77,38 @@ export interface LoadEnvOptions {
 }
 
 /**
- * Load Neon connection strings for the project + branch this process should target, using
- * the live Neon API.
+ * Resolve the project + branch this process should target, then fetch the live Neon
+ * connection strings for that branch. Returns a fixed-shape, statically-typed
+ * {@link NeonEnv} — namespaced (`env.postgres.databaseUrl`, …) so future namespaces
+ * (`vector`, `s3`, …) can be added without breaking the existing shape.
  *
- * Typical usage in an application bootstrap:
+ * Typical usage in an application bootstrap (no `.env` entries for connection strings
+ * required — `neon-ts` / `neonctl link` writes `.neon/project.json` once and `loadEnv`
+ * picks it up from there):
+ *
  * ```ts
  * import config from "../neon";
  * import { loadEnv } from "@neondatabase/platform/v1";
  *
  * const env = await loadEnv(config);
- * // → { DATABASE_URL: "postgres://…-pooler…", DATABASE_URL_UNPOOLED: "postgres://…" }
- * Object.assign(process.env, env);
+ * const db = drizzle(neon(env.postgres.databaseUrl), { schema });
  * ```
  *
- * The return type is derived from `config.env` — when the config declares
- * `env: { databaseUrl: "POSTGRES_URL", databaseUrlUnpooled: "POSTGRES_URL_NON_POOLING" }`,
- * the result type is `{ POSTGRES_URL: string; POSTGRES_URL_NON_POOLING: string }` and the
- * keys autocomplete. When `config.env` is omitted, the result type falls back to
- * `{ DATABASE_URL: string; DATABASE_URL_UNPOOLED: string }`. This is why `defineConfig`
- * is declared with a `const` generic: the literal strings you write in `neon.ts` flow
- * through to the static type of `loadEnv`'s return value.
+ * Resolution chain — each entry wins over the next:
  *
- * Resolution chain (each entry wins over the next):
+ * | Field          | 1st (call args)       | 2nd (env vars)    | 3rd (`.neon/project.json`) | 4th (`.neon` file) | 5th (config)                  |
+ * | -------------- | --------------------- | ----------------- | -------------------------- | ------------------ | ----------------------------- |
+ * | `projectId`    | `options.projectId`   | `NEON_PROJECT_ID` | `projectId`                | `projectId`        | — (throws if unresolved)      |
+ * | `branch`       | `options.branch`      | `NEON_BRANCH_ID`  | `branchId`                 | `branchId`         | first key in `config.branches`|
+ * | `roleName`     | `options.roleName`    | —                 | —                          | —                  | auto-pick if branch has one   |
+ * | `databaseName` | `options.databaseName`| —                 | —                          | —                  | auto-pick if branch has one   |
  *
- * | Field        | 1st (call args)         | 2nd (env)         | 3rd (file)                            | 4th (config)                    |
- * | ------------ | ----------------------- | ----------------- | ------------------------------------- | ------------------------------- |
- * | `projectId`  | `options.projectId`     | `NEON_PROJECT_ID` | `projectId` in `.neon[/project.json]` | — (throws if unresolved)        |
- * | `branch`     | `options.branch`        | `NEON_BRANCH_ID`  | `branchId` in `.neon[/project.json]`  | first key in `config.branches`  |
- * | `roleName`   | `options.roleName`      | —                 | —                                     | auto-pick if branch has one     |
- * | `databaseName` | `options.databaseName`| —                 | —                                     | auto-pick if branch has one     |
- *
- * The package does **not** mutate `process.env` or the filesystem itself — assign the
- * returned object yourself.
+ * The package does **not** mutate `process.env` or the filesystem itself.
  */
-export async function loadEnv<const C extends Config>(
-	config: C,
+export async function loadEnv(
+	config: Config,
 	options: LoadEnvOptions = {},
-): Promise<LoadEnvResult<C>> {
+): Promise<NeonEnv> {
 	const api = options.api ?? createApiFromOptions(options);
 
 	const ctx = loadContext({
@@ -189,18 +161,12 @@ export async function loadEnv<const C extends Config>(
 		}),
 	]);
 
-	const pooledKey = config.env?.databaseUrl ?? DEFAULT_DATABASE_URL_KEY;
-	const unpooledKey =
-		config.env?.databaseUrlUnpooled ?? DEFAULT_DATABASE_URL_UNPOOLED_KEY;
-
-	// The dynamic-key object construction below produces a value with the same shape as
-	// LoadEnvResult<C> by construction — the runtime keys are exactly the ones the static
-	// type promised — but TypeScript can't follow the dependent computed-key reasoning, so
-	// assert through `unknown`.
 	return {
-		[pooledKey]: pooled.uri,
-		[unpooledKey]: unpooled.uri,
-	} as unknown as LoadEnvResult<C>;
+		postgres: {
+			databaseUrl: pooled.uri,
+			databaseUrlUnpooled: unpooled.uri,
+		},
+	};
 }
 
 function createApiFromOptions(options: LoadEnvOptions): NeonApi {

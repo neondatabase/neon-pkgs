@@ -40,51 +40,33 @@ const minimalConfig = defineConfig({
 });
 
 describe("loadEnv — happy path", () => {
-	test("returns DATABASE_URL + DATABASE_URL_UNPOOLED for the resolved branch", async () => {
+	test("returns env.postgres.databaseUrl + databaseUrlUnpooled for the resolved branch", async () => {
 		const { api, projectId } = seedSingleBranch();
 		const env = await loadEnv(minimalConfig, { api, projectId, env: {} });
 
-		expect(Object.keys(env).sort()).toEqual([
-			"DATABASE_URL",
-			"DATABASE_URL_UNPOOLED",
+		// Compile-time check: the shape is fixed and statically known.
+		({
+			databaseUrl: env.postgres.databaseUrl,
+			databaseUrlUnpooled: env.postgres.databaseUrlUnpooled,
+		}) satisfies { databaseUrl: string; databaseUrlUnpooled: string };
+
+		expect(Object.keys(env)).toEqual(["postgres"]);
+		expect(Object.keys(env.postgres).sort()).toEqual([
+			"databaseUrl",
+			"databaseUrlUnpooled",
 		]);
-		expect(env.DATABASE_URL).toMatch(/^postgresql:\/\//);
-		expect(env.DATABASE_URL).toContain("-pooler");
-		expect(env.DATABASE_URL_UNPOOLED).toMatch(/^postgresql:\/\//);
-		expect(env.DATABASE_URL_UNPOOLED).not.toContain("-pooler");
+		expect(env.postgres.databaseUrl).toMatch(/^postgresql:\/\//);
+		expect(env.postgres.databaseUrl).toContain("-pooler");
+		expect(env.postgres.databaseUrlUnpooled).toMatch(/^postgresql:\/\//);
+		expect(env.postgres.databaseUrlUnpooled).not.toContain("-pooler");
 
 		// Both URIs hit the same database + role.
-		const url = new URL(env.DATABASE_URL);
-		const unpooledUrl = new URL(env.DATABASE_URL_UNPOOLED);
+		const url = new URL(env.postgres.databaseUrl);
+		const unpooledUrl = new URL(env.postgres.databaseUrlUnpooled);
 		expect(url.username).toBe("neondb_owner");
 		expect(unpooledUrl.username).toBe("neondb_owner");
 		expect(url.pathname).toBe("/neondb");
 		expect(unpooledUrl.pathname).toBe("/neondb");
-	});
-
-	test("custom env-var keys declared in config.env are honoured (and statically typed)", async () => {
-		const { api, projectId } = seedSingleBranch();
-		const config = defineConfig({
-			project: { name: "my-app", region: "aws-us-east-1" },
-			branches: { production: {} },
-			env: {
-				databaseUrl: "POSTGRES_URL",
-				databaseUrlUnpooled: "POSTGRES_URL_NON_POOLING",
-			},
-		});
-		const env = await loadEnv(config, { api, projectId, env: {} });
-		expect(Object.keys(env).sort()).toEqual([
-			"POSTGRES_URL",
-			"POSTGRES_URL_NON_POOLING",
-		]);
-		// Compile-time check: the keys must be statically known. If `env`'s type widened to
-		// `Record<string, string>` these property accesses would still type-check; the
-		// `satisfies` confines us to the precise return shape so a regression breaks the
-		// build.
-		({
-			POSTGRES_URL: env.POSTGRES_URL,
-			POSTGRES_URL_NON_POOLING: env.POSTGRES_URL_NON_POOLING,
-		}) satisfies { POSTGRES_URL: string; POSTGRES_URL_NON_POOLING: string };
 	});
 
 	test("resolves project id from .neon/project.json when not passed", async () => {
@@ -94,7 +76,7 @@ describe("loadEnv — happy path", () => {
 			".neon/project.json": JSON.stringify({ projectId }),
 		});
 		const env = await loadEnv(minimalConfig, { api, cwd: root, env: {} });
-		expect(env.DATABASE_URL).toContain("br-prod");
+		expect(env.postgres.databaseUrl).toContain("br-prod");
 	});
 
 	test("resolves project id from NEON_PROJECT_ID env", async () => {
@@ -103,7 +85,7 @@ describe("loadEnv — happy path", () => {
 			api,
 			env: { NEON_PROJECT_ID: projectId },
 		});
-		expect(env.DATABASE_URL).toContain("br-prod");
+		expect(env.postgres.databaseUrl).toContain("br-prod");
 	});
 
 	test("resolves branch by NEON_BRANCH_ID and uses it over the blueprint key", async () => {
@@ -139,7 +121,7 @@ describe("loadEnv — happy path", () => {
 			projectId: "proj-multi",
 			env: { NEON_BRANCH_ID: "br-preview" },
 		});
-		expect(env.DATABASE_URL).toContain("br-preview");
+		expect(env.postgres.databaseUrl).toContain("br-preview");
 	});
 
 	test("resolves branch by name from options.branch", async () => {
@@ -176,7 +158,7 @@ describe("loadEnv — happy path", () => {
 			branch: "preview-pr-9",
 			env: {},
 		});
-		expect(env.DATABASE_URL).toContain("br-pr-9");
+		expect(env.postgres.databaseUrl).toContain("br-pr-9");
 	});
 
 	test("falls back to first blueprint key when no branch in args/env/file", async () => {
@@ -208,7 +190,7 @@ describe("loadEnv — happy path", () => {
 			projectId: "proj-fallback",
 			env: {},
 		});
-		expect(env.DATABASE_URL).toContain("br-prd");
+		expect(env.postgres.databaseUrl).toContain("br-prd");
 	});
 
 	test("falls back to default branch when neither blueprint key nor env match", async () => {
@@ -240,7 +222,7 @@ describe("loadEnv — happy path", () => {
 			projectId: "proj-nokey",
 			env: {},
 		});
-		expect(env.DATABASE_URL).toContain("br-main");
+		expect(env.postgres.databaseUrl).toContain("br-main");
 	});
 });
 
@@ -403,7 +385,7 @@ describe("loadEnv — error paths", () => {
 			projectId: "proj-owned",
 			env: {},
 		});
-		expect(env.DATABASE_URL).toContain("/neondb?");
+		expect(env.postgres.databaseUrl).toContain("/neondb?");
 	});
 });
 
@@ -459,8 +441,8 @@ describe("loadEnv — passes correct arguments to NeonApi", () => {
 			databaseName: "app",
 			env: {},
 		});
-		expect(env.DATABASE_URL).toContain("/app?");
-		const url = new URL(env.DATABASE_URL);
+		expect(env.postgres.databaseUrl).toContain("/app?");
+		const url = new URL(env.postgres.databaseUrl);
 		expect(url.username).toBe("app_user");
 	});
 

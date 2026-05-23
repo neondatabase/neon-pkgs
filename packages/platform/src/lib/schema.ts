@@ -139,16 +139,6 @@ export const projectConfigSchema = z.strictObject({
 });
 
 /**
- * Zod schema for {@link import("./types.js").EnvKeysConfig}. Both keys are optional and,
- * when present, must be non-empty strings (otherwise `loadEnv` would write into the empty
- * key, silently shadowing every other env var).
- */
-export const envKeysConfigSchema = z.strictObject({
-	databaseUrl: z.string().min(1, "must not be empty").optional(),
-	databaseUrlUnpooled: z.string().min(1, "must not be empty").optional(),
-});
-
-/**
  * Top-level zod schema for a Neon Platform config (the value returned by `defineConfig`).
  *
  * Cross-key invariants enforced here:
@@ -168,7 +158,6 @@ export const configSchema = z
 		branchBlueprints: z
 			.record(z.string(), branchBlueprintSchema)
 			.optional(),
-		env: envKeysConfigSchema.optional(),
 	})
 	.superRefine((cfg, ctx) => {
 		const branches = cfg.branches ?? {};

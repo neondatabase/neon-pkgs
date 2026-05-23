@@ -53,7 +53,7 @@ export type {
 	NeonContext,
 } from "./lib/load-context.js";
 export { loadContext } from "./lib/load-context.js";
-export type { LoadEnvOptions, LoadEnvResult } from "./lib/load-env.js";
+export type { LoadEnvOptions, NeonEnv } from "./lib/load-env.js";
 export { loadEnv } from "./lib/load-env.js";
 export type { LoadConfigOptions } from "./lib/loader.js";
 export { loadConfigFromFile } from "./lib/loader.js";
@@ -83,7 +83,6 @@ export type {
 	BranchConfig,
 	ComputeSettings,
 	Config,
-	EnvKeysConfig,
 	ProjectConfig,
 	PushResult,
 } from "./lib/types.js";
