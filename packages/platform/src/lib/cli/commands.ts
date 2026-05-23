@@ -321,6 +321,130 @@ export function runContext(
 	}
 }
 
+// ─────────────────────── status ─────────────────────────
+
+export interface StatusCommandOptions {
+	configPath?: string;
+	projectId?: string;
+	orgId?: string;
+	apiKey?: string;
+}
+
+/**
+ * Implementation of `neon-ts status`. Loads `neon.ts`, computes a full push plan against
+ * the live remote state via `pushConfig({ dryRun: true })`, and pretty-prints a
+ * `terraform plan`-style summary of what a real `neon-ts push` *would* do.
+ *
+ * Never mutates anything on Neon — safe to run from CI on every PR, from pre-push hooks,
+ * or just to check whether your local config has drifted.
+ */
+export async function runStatus(
+	options: StatusCommandOptions,
+	ctx: CommandEnv,
+): Promise<CommandResult> {
+	const api = resolveApi(options.apiKey, ctx);
+	if (typeof api === "string") return failure(api);
+
+	try {
+		const result = await pushConfig({
+			api,
+			cwd: ctx.cwd,
+			dryRun: true,
+			// Pretend the user opted in to every kind of update so the diff doesn't fold
+			// drift into `conflicts` — status should show the full would-apply list even
+			// when the real push would refuse without explicit flags. The `conflicts`
+			// array is then reserved for the things flags can't fix (immutable region,
+			// pgVersion, …) so the user sees a clean "this is hard-blocked" subset.
+			updateExisting: true,
+			applyExisting: true,
+			applyChanges: true,
+			...(options.configPath ? { configPath: options.configPath } : {}),
+			...(options.projectId ? { projectId: options.projectId } : {}),
+			...(options.orgId ? { orgId: options.orgId } : {}),
+		});
+		return { exitCode: 0, stdout: `${formatStatus(result)}\n`, stderr: "" };
+	} catch (err) {
+		return handleError(err);
+	}
+}
+
+/**
+ * Render a {@link PushResult} from a dry-run into a `terraform plan`-style summary.
+ * Mirrors the shape `runPush` prints on a real apply so the two outputs are familiar.
+ */
+function formatStatus(result: Awaited<ReturnType<typeof pushConfig>>): string {
+	const lines: string[] = [];
+	const projectLabel = result.projectId.startsWith("<would-create")
+		? `(would create new project)`
+		: `project ${result.projectId}${result.orgId ? ` (org ${result.orgId})` : ""}`;
+	lines.push(`Status against ${projectLabel}:`);
+	lines.push("");
+
+	const realChanges = result.applied.filter((a) => a.action !== "noop");
+	if (
+		realChanges.length === 0 &&
+		result.conflicts.length === 0 &&
+		result.skippedWildcardBranches.length === 0
+	) {
+		lines.push("  ✓ in sync — push would be a no-op.");
+		return lines.join("\n");
+	}
+
+	if (realChanges.length > 0) {
+		lines.push("Plan (would apply on `neon-ts push`):");
+		for (const change of realChanges) {
+			const marker = change.action === "create" ? "+" : "~";
+			lines.push(
+				`  ${marker} [${change.kind}:${change.identifier}] ${change.action}${formatChangeDetails(change.details)}`,
+			);
+		}
+		lines.push("");
+	}
+
+	if (result.skippedWildcardBranches.length > 0) {
+		lines.push(
+			"Wildcard branches (skipped on push without --apply-existing):",
+		);
+		for (const skip of result.skippedWildcardBranches) {
+			lines.push(
+				`  • pattern "${skip.pattern}" matches: ${skip.branches.join(", ")}`,
+			);
+		}
+		lines.push("");
+	}
+
+	if (result.conflicts.length > 0) {
+		lines.push("Conflicts (would block push):");
+		for (const c of result.conflicts) {
+			lines.push(
+				`  ! [${c.kind}:${c.identifier}] ${c.field}: ${formatValue(c.current)} → ${formatValue(c.desired)}`,
+			);
+			lines.push(`    reason: ${c.reason}`);
+		}
+		lines.push("");
+	}
+
+	// Trim the trailing blank line.
+	while (lines[lines.length - 1] === "") lines.pop();
+	return lines.join("\n");
+}
+
+function formatChangeDetails(
+	details: Record<string, unknown> | undefined,
+): string {
+	if (!details || Object.keys(details).length === 0) return "";
+	const inline = Object.entries(details)
+		.map(([k, v]) => `${k}=${formatValue(v)}`)
+		.join(", ");
+	return ` (${inline})`;
+}
+
+function formatValue(value: unknown): string {
+	if (value === undefined || value === null) return "<unset>";
+	if (typeof value === "string") return value;
+	return JSON.stringify(value);
+}
+
 // ─────────────────────── env pull ───────────────────────
 
 /** Filename `env pull` writes by default. Matches the Vercel/Next.js convention. */

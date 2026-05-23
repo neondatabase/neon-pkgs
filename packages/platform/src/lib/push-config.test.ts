@@ -451,6 +451,92 @@ describe("pushConfig — wildcard blueprints", () => {
 	});
 });
 
+describe("pushConfig — dry-run", () => {
+	test("returns dryRun:true and never calls a mutating API method", async () => {
+		const { api, projectId } = seededFake();
+		const config = defineConfig({
+			project: { name: "my-app" },
+			branches: {
+				production: {},
+				staging: { parent: "production" },
+			},
+		});
+		const result = await pushConfig(config, {
+			api,
+			projectId,
+			dryRun: true,
+		});
+		expect(result.dryRun).toBe(true);
+		expect(result.applied).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ kind: "project", action: "noop" }),
+				expect.objectContaining({
+					kind: "branch",
+					action: "create",
+					identifier: "staging",
+				}),
+			]),
+		);
+		const mutating = api.history.filter((h) =>
+			[
+				"createBranch",
+				"updateBranch",
+				"updateEndpoint",
+				"createProject",
+				"updateProject",
+			].includes(h.method),
+		);
+		expect(mutating).toHaveLength(0);
+	});
+
+	test("reports conflicts without throwing even when applyChanges is false", async () => {
+		const { api, projectId } = seededFake();
+		const config = defineConfig({
+			project: { name: "my-app", region: "aws-eu-central-1" },
+			branches: { production: {} },
+		});
+		// Region drift would throw on a real push; dry-run must surface it cleanly.
+		const result = await pushConfig(config, {
+			api,
+			projectId,
+			dryRun: true,
+		});
+		expect(result.dryRun).toBe(true);
+		expect(result.conflicts).toContainEqual(
+			expect.objectContaining({ kind: "project", field: "region" }),
+		);
+	});
+
+	test("brand-new project: returns sentinel projectId and a 'would create' applied entry", async () => {
+		const api = new FakeNeonApi();
+		const config = defineConfig({
+			project: { name: "brand-new", region: "aws-us-east-1" },
+			branches: { production: {}, staging: { parent: "production" } },
+		});
+		const result = await pushConfig(config, {
+			api,
+			orgId: "org-1",
+			dryRun: true,
+		});
+		expect(result.dryRun).toBe(true);
+		expect(result.projectId).toBe("<would-create>");
+		expect(result.applied[0]).toEqual(
+			expect.objectContaining({ kind: "project", action: "create" }),
+		);
+		expect(result.applied).toContainEqual(
+			expect.objectContaining({
+				kind: "branch",
+				action: "create",
+				identifier: "staging",
+			}),
+		);
+		// And the actual create-project API call was NOT made.
+		expect(api.history.some((h) => h.method === "createProject")).toBe(
+			false,
+		);
+	});
+});
+
 describe("pushConfig — overloads & file loading", () => {
 	test("pushConfig() auto-loads neon.ts from cwd", async () => {
 		const { api, projectId } = seededFake();

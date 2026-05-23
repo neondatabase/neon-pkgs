@@ -12,6 +12,7 @@ import {
 	runEnvRun,
 	runPull,
 	runPush,
+	runStatus,
 } from "./lib/cli/commands.js";
 import { isPullOutputFormat, type PullOutputFormat } from "./lib/cli/format.js";
 
@@ -110,6 +111,29 @@ const argv = yargs(hideBin(process.argv))
 				.option("org-id", {
 					type: "string",
 					describe: "Override the .neon/project.json orgId",
+				}),
+	)
+	.command(
+		"status",
+		"Show what `neon-ts push` would do — diff your local neon.ts against the live project, no mutations.",
+		(y) =>
+			y
+				.option("config", {
+					type: "string",
+					describe:
+						"Path to neon.ts (defaults to walking up from cwd)",
+				})
+				.option("project-id", {
+					type: "string",
+					describe: "Override the .neon/project.json projectId",
+				})
+				.option("org-id", {
+					type: "string",
+					describe: "Override the .neon/project.json orgId",
+				})
+				.option("api-key", {
+					type: "string",
+					describe: "Neon API key (defaults to NEON_API_KEY)",
 				}),
 	)
 	.command(
@@ -279,6 +303,26 @@ switch (command) {
 					: {}),
 				...(typeof argv["org-id"] === "string"
 					? { orgId: argv["org-id"] }
+					: {}),
+			},
+			{ cwd, env },
+		);
+		break;
+	}
+	case "status": {
+		result = await runStatus(
+			{
+				...(typeof argv.config === "string"
+					? { configPath: argv.config }
+					: {}),
+				...(typeof argv["project-id"] === "string"
+					? { projectId: argv["project-id"] }
+					: {}),
+				...(typeof argv["org-id"] === "string"
+					? { orgId: argv["org-id"] }
+					: {}),
+				...(typeof argv["api-key"] === "string"
+					? { apiKey: argv["api-key"] }
 					: {}),
 			},
 			{ cwd, env },

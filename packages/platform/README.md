@@ -349,6 +349,10 @@ neon-ts push --update-existing              # update existing specific-name bran
 neon-ts push --apply-existing               # apply wildcard blueprints to existing matching branches
 neon-ts push --apply-changes                # force-apply, ignoring branch-level conflicts
 
+# Diff your local neon.ts against the live project (read-only — no mutations).
+# `terraform plan`-style output: `+ create`, `~ update`, conflicts that would block push.
+neon-ts status
+
 # Create an ephemeral branch from a wildcard blueprint
 neon-ts branch preview                      # creates `preview-<git-branch>-<mini-id>`
 neon-ts branch preview --project-id proj-x  # override the resolved project id

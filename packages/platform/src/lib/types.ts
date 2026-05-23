@@ -251,6 +251,13 @@ export interface ConflictReport {
 export interface PushResult {
 	projectId: string;
 	orgId?: string;
+	/**
+	 * `true` when `pushConfig` was called with `{ dryRun: true }`. `applied` then records
+	 * what **would** be applied on a real push; no API mutations were performed. Note
+	 * that for a brand-new project (no remote project yet) `projectId` is a placeholder
+	 * sentinel — see `applied[0].details` for the proposed name/region.
+	 */
+	dryRun: boolean;
 	applied: AppliedChange[];
 	conflicts: ConflictReport[];
 	/**

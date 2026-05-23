@@ -12,6 +12,7 @@ import {
 	runEnvRun,
 	runPull,
 	runPush,
+	runStatus,
 } from "./commands.js";
 
 const cleanups: Array<() => void> = [];
@@ -749,6 +750,113 @@ export default defineConfig({
 			{ command: ["echo", "hi"] },
 			{ cwd: root, env: {}, api },
 		);
+		expect(result.exitCode).toBe(4);
+		expect(result.stderr).toContain("Failed to load config");
+	});
+});
+
+describe("runStatus", () => {
+	function neonTsBody(content: string): string {
+		return `
+import { defineConfig } from "${PLATFORM_SRC}";
+export default defineConfig(${content});
+`;
+	}
+
+	test("in-sync project prints 'in sync — push would be a no-op'", async () => {
+		const { api, projectId } = seededFake();
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({ projectId }),
+			"neon.ts": neonTsBody(
+				`{ project: { name: "cli-test", region: "aws-us-east-1" }, branches: { production: {} } }`,
+			),
+		});
+		const result = await runStatus({}, { cwd: root, env: {}, api });
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain(`Status against project ${projectId}`);
+		expect(result.stdout).toContain("in sync");
+		expect(result.stdout).not.toContain("Plan");
+	});
+
+	test("with a missing branch: prints a + create entry under Plan", async () => {
+		const { api, projectId } = seededFake();
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({ projectId }),
+			"neon.ts": neonTsBody(
+				`{ project: { name: "cli-test", region: "aws-us-east-1" }, branches: { production: {}, staging: { parent: "production" } } }`,
+			),
+		});
+		const result = await runStatus({}, { cwd: root, env: {}, api });
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("Plan (would apply");
+		expect(result.stdout).toContain("[branch:staging] create");
+	});
+
+	test("makes no API mutations", async () => {
+		const { api, projectId } = seededFake();
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({ projectId }),
+			"neon.ts": neonTsBody(
+				`{ project: { name: "cli-test", region: "aws-us-east-1" }, branches: { production: {}, staging: { parent: "production" } } }`,
+			),
+		});
+		await runStatus({}, { cwd: root, env: {}, api });
+		const mutations = api.history.filter((h) =>
+			[
+				"createBranch",
+				"updateBranch",
+				"updateEndpoint",
+				"createProject",
+				"updateProject",
+			].includes(h.method),
+		);
+		expect(mutations).toHaveLength(0);
+	});
+
+	test("reports a region conflict (hard-blocked, immutable on Neon)", async () => {
+		const { api, projectId } = seededFake();
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({ projectId }),
+			"neon.ts": neonTsBody(
+				`{ project: { name: "cli-test", region: "aws-eu-central-1" }, branches: { production: {} } }`,
+			),
+		});
+		const result = await runStatus({}, { cwd: root, env: {}, api });
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("Conflicts (would block push)");
+		expect(result.stdout).toContain("[project:");
+		expect(result.stdout).toContain("region");
+		expect(result.stdout).toContain("aws-us-east-1 → aws-eu-central-1");
+	});
+
+	test("reports compute drift as a ~ update under Plan (not as a conflict)", async () => {
+		const { api, projectId } = seededFake();
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({ projectId }),
+			"neon.ts": neonTsBody(
+				`{ project: { name: "cli-test", region: "aws-us-east-1" }, branches: { production: { computeSettings: { autoscalingLimitMaxCu: 4 } } } }`,
+			),
+		});
+		const result = await runStatus({}, { cwd: root, env: {}, api });
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("Plan");
+		expect(result.stdout).toContain("[branch:production] update");
+		expect(result.stdout).toContain("computeSettings");
+		expect(result.stdout).not.toContain("Conflicts");
+	});
+
+	test("missing config file → exit 4 (ConfigLoadError)", async () => {
+		const { api, projectId } = seededFake();
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({ projectId }),
+		});
+		const result = await runStatus({}, { cwd: root, env: {}, api });
 		expect(result.exitCode).toBe(4);
 		expect(result.stderr).toContain("Failed to load config");
 	});
