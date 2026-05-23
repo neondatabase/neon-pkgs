@@ -529,3 +529,217 @@ describe("parseEnv", () => {
 		).toThrow(/must not be empty/);
 	});
 });
+
+describe("parseEnv — features-driven shape", () => {
+	const authConfig = defineConfig({
+		project: { name: "my-app", region: "aws-us-east-1" },
+		branches: { production: {} },
+		features: { auth: true },
+	});
+	const dataApiConfig = defineConfig({
+		project: { name: "my-app", region: "aws-us-east-1" },
+		branches: { production: {} },
+		features: { dataApi: true },
+	});
+	const bothConfig = defineConfig({
+		project: { name: "my-app", region: "aws-us-east-1" },
+		branches: { production: {} },
+		features: { auth: true, dataApi: true },
+	});
+
+	const FULL_ENV = {
+		DATABASE_URL: "postgres://pooled/db",
+		DATABASE_URL_UNPOOLED: "postgres://direct/db",
+		NEON_AUTH_PROJECT_ID: "stack-proj-x",
+		NEON_AUTH_PUBLISHABLE_CLIENT_KEY: "pck_test",
+		NEON_AUTH_SECRET_SERVER_KEY: "ssk_test",
+		NEON_AUTH_JWKS_URL: "https://auth.example/.well-known/jwks.json",
+		NEON_DATA_API_URL: "https://dataapi.example",
+	};
+
+	test("with features.auth=true: parses auth env vars and types env.auth", () => {
+		const env = parseEnv(authConfig, { env: FULL_ENV });
+		expect(env.auth).toEqual({
+			projectId: "stack-proj-x",
+			publishableClientKey: "pck_test",
+			secretServerKey: "ssk_test",
+			jwksUrl: "https://auth.example/.well-known/jwks.json",
+		});
+		// Compile-time check: env.auth exists in the static type when features.auth: true.
+		({ projectId: env.auth.projectId }) satisfies { projectId: string };
+	});
+
+	test("with features.dataApi=true: parses dataApi env vars and types env.dataApi", () => {
+		const env = parseEnv(dataApiConfig, { env: FULL_ENV });
+		expect(env.dataApi).toEqual({ url: "https://dataapi.example" });
+	});
+
+	test("with both features enabled: both namespaces are populated", () => {
+		const env = parseEnv(bothConfig, { env: FULL_ENV });
+		expect(env.postgres).toBeDefined();
+		expect(env.auth).toBeDefined();
+		expect(env.dataApi).toBeDefined();
+	});
+
+	test("missing auth secret server key throws EnvNotInjected when features.auth is true", () => {
+		const env = { ...FULL_ENV, NEON_AUTH_SECRET_SERVER_KEY: undefined };
+		expect(() => parseEnv(authConfig, { env })).toThrow(
+			/NEON_AUTH_SECRET_SERVER_KEY is missing/,
+		);
+	});
+
+	test("a disabled feature does NOT require its env vars to be present", () => {
+		// Same env as the failing test above, but config doesn't enable auth — so the
+		// missing NEON_AUTH_* keys are irrelevant.
+		const env = parseEnv(minimalConfig, {
+			env: {
+				DATABASE_URL: "postgres://pooled",
+				DATABASE_URL_UNPOOLED: "postgres://direct",
+			},
+		});
+		expect(env.postgres.databaseUrl).toBe("postgres://pooled");
+		// Compile-time check: env.auth must be a type error when features.auth is unset.
+		// @ts-expect-error — env.auth is not in the type when features.auth is false
+		void env.auth;
+	});
+
+	test("aggregates every missing var across namespaces into one error", () => {
+		try {
+			parseEnv(bothConfig, {
+				env: {
+					DATABASE_URL: "postgres://pooled",
+					// DATABASE_URL_UNPOOLED missing
+					// all NEON_AUTH_* missing
+					// NEON_DATA_API_URL missing
+				},
+			});
+			expect.fail("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(PlatformError);
+			const message = (err as PlatformError).message;
+			expect(message).toContain("DATABASE_URL_UNPOOLED is missing");
+			expect(message).toContain("NEON_AUTH_PROJECT_ID is missing");
+			expect(message).toContain(
+				"NEON_AUTH_PUBLISHABLE_CLIENT_KEY is missing",
+			);
+			expect(message).toContain("NEON_AUTH_SECRET_SERVER_KEY is missing");
+			expect(message).toContain("NEON_AUTH_JWKS_URL is missing");
+			expect(message).toContain("NEON_DATA_API_URL is missing");
+		}
+	});
+});
+
+describe("fetchEnv — features-driven shape", () => {
+	function seedWithFeatures(): { api: FakeNeonApi; projectId: string } {
+		const api = new FakeNeonApi();
+		const projectId = "proj-features";
+		api.seedProject({
+			project: {
+				id: projectId,
+				name: "my-app",
+				regionId: "aws-us-east-1",
+				pgVersion: 17,
+			},
+			branches: [
+				{
+					branch: {
+						id: "br-prod",
+						name: "production",
+						isDefault: true,
+					},
+				},
+			],
+		});
+		api.seedNeonAuth(projectId, "br-prod", {
+			projectId: "stack-proj-x",
+			jwksUrl: "https://auth.example/.well-known/jwks.json",
+		});
+		api.seedNeonDataApi(projectId, "br-prod", "neondb", {
+			url: "https://dataapi.example",
+		});
+		return { api, projectId };
+	}
+
+	test("populates env.auth from getNeonAuth + injected secrets", async () => {
+		const { api, projectId } = seedWithFeatures();
+		const config = defineConfig({
+			project: { name: "my-app", region: "aws-us-east-1" },
+			branches: { production: {} },
+			features: { auth: true },
+		});
+		const env = await fetchEnv(config, {
+			api,
+			projectId,
+			env: {
+				NEON_AUTH_PUBLISHABLE_CLIENT_KEY: "pck_test",
+				NEON_AUTH_SECRET_SERVER_KEY: "ssk_test",
+			},
+		});
+		expect(env.auth).toEqual({
+			projectId: "stack-proj-x",
+			publishableClientKey: "pck_test",
+			secretServerKey: "ssk_test",
+			jwksUrl: "https://auth.example/.well-known/jwks.json",
+		});
+	});
+
+	test("populates env.dataApi from getNeonDataApi", async () => {
+		const { api, projectId } = seedWithFeatures();
+		const config = defineConfig({
+			project: { name: "my-app", region: "aws-us-east-1" },
+			branches: { production: {} },
+			features: { dataApi: true },
+		});
+		const env = await fetchEnv(config, { api, projectId, env: {} });
+		expect(env.dataApi).toEqual({ url: "https://dataapi.example" });
+	});
+
+	test("throws EnvNotInjected when features.auth is true but secrets aren't in env", async () => {
+		const { api, projectId } = seedWithFeatures();
+		const config = defineConfig({
+			project: { name: "my-app", region: "aws-us-east-1" },
+			branches: { production: {} },
+			features: { auth: true },
+		});
+		await expect(
+			fetchEnv(config, { api, projectId, env: {} }),
+		).rejects.toMatchObject({ code: ErrorCode.EnvNotInjected });
+	});
+
+	test("throws NotFound when features.auth=true but no integration exists on the branch", async () => {
+		const api = new FakeNeonApi();
+		const projectId = "proj-no-auth";
+		api.seedProject({
+			project: {
+				id: projectId,
+				name: "my-app",
+				regionId: "aws-us-east-1",
+				pgVersion: 17,
+			},
+		});
+		const config = defineConfig({
+			project: { name: "my-app", region: "aws-us-east-1" },
+			branches: { production: {} },
+			features: { auth: true },
+		});
+		await expect(
+			fetchEnv(config, {
+				api,
+				projectId,
+				env: {
+					NEON_AUTH_PUBLISHABLE_CLIENT_KEY: "pck",
+					NEON_AUTH_SECRET_SERVER_KEY: "ssk",
+				},
+			}),
+		).rejects.toMatchObject({ code: ErrorCode.NotFound });
+	});
+
+	test("skips getNeonAuth / getNeonDataApi when features are disabled", async () => {
+		const { api, projectId } = seedWithFeatures();
+		await fetchEnv(minimalConfig, { api, projectId, env: {} });
+		const integrationCalls = api.history.filter(
+			(h) => h.method === "getNeonAuth" || h.method === "getNeonDataApi",
+		);
+		expect(integrationCalls).toHaveLength(0);
+	});
+});

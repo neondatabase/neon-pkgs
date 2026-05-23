@@ -47,7 +47,10 @@ export { branch } from "./lib/branch.js";
 export { defineConfig } from "./lib/define-config.js";
 export type {
 	FetchEnvOptions,
+	NeonAuthEnv,
+	NeonDataApiEnv,
 	NeonEnv,
+	NeonPostgresEnv,
 	ParseEnvOptions,
 } from "./lib/env.js";
 export { fetchEnv, NEON_ENV_VAR_KEYS, parseEnv } from "./lib/env.js";
@@ -67,7 +70,9 @@ export type {
 	CreateProjectInput,
 	GetConnectionUriInput,
 	NeonApi,
+	NeonAuthSnapshot,
 	NeonBranchSnapshot,
+	NeonDataApiSnapshot,
 	NeonDatabaseSnapshot,
 	NeonEndpointSnapshot,
 	NeonProjectSnapshot,
@@ -87,6 +92,7 @@ export type {
 	BranchConfig,
 	ComputeSettings,
 	Config,
+	FeatureFlags,
 	ProjectConfig,
 	PushResult,
 } from "./lib/types.js";

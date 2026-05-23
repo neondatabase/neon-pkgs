@@ -86,6 +86,29 @@ export interface NeonDatabaseSnapshot {
 }
 
 /**
+ * Public, fetchable bits of a Neon Auth integration. The secrets (`pub_client_key`,
+ * `secret_server_key`) are intentionally absent here — the Neon API only returns those
+ * at create / rotate time, never on `GET /auth`, so `fetchEnv` reads them from
+ * `process.env` instead of trying to refetch.
+ */
+export interface NeonAuthSnapshot {
+	/** The Neon Auth project id (`auth_provider_project_id` on the Neon API). */
+	projectId: string;
+	/** JWKS URL for verifying tokens issued by Neon Auth. */
+	jwksUrl: string;
+	/** Optional base URL of the Neon Auth deployment. */
+	baseUrl?: string;
+}
+
+/**
+ * Public, fetchable bits of a Neon Data API integration on a specific branch.
+ */
+export interface NeonDataApiSnapshot {
+	/** REST endpoint URL. */
+	url: string;
+}
+
+/**
  * Parameters accepted by {@link NeonApi.getConnectionUri}. `branchId` and `endpointId`
  * are optional — when omitted, the API uses the project's default branch and that
  * branch's read-write endpoint, respectively.
@@ -154,4 +177,25 @@ export interface NeonApi {
 		projectId: string,
 		input: GetConnectionUriInput,
 	): Promise<{ uri: string }>;
+
+	/**
+	 * Fetch the Neon Auth integration attached to a specific branch. Returns `null` when
+	 * no integration is enabled — used by `fetchEnv` to decide whether the `env.auth`
+	 * namespace can be populated.
+	 */
+	getNeonAuth(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonAuthSnapshot | null>;
+
+	/**
+	 * Fetch the Neon Data API integration attached to a specific branch + database.
+	 * Returns `null` when no integration is enabled — used by `fetchEnv` to decide
+	 * whether the `env.dataApi` namespace can be populated.
+	 */
+	getNeonDataApi(
+		projectId: string,
+		branchId: string,
+		databaseName: string,
+	): Promise<NeonDataApiSnapshot | null>;
 }

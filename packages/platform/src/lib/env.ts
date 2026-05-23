@@ -15,40 +15,91 @@ import type { Config } from "./types.js";
  * for cross-process transport (via `.env` files, `env run -- <cmd>`, or anything else
  * that talks to `process.env`).
  *
- * The shape is fixed on purpose so the SDK, CLI, and consumer apps all agree on the wire
- * format. Updating a key here is a breaking change for downstream `.env` files.
+ * Each top-level key here is a {@link NeonEnv} namespace; the inner record maps the
+ * camelCase property names exposed to TypeScript to the UPPER_SNAKE env-var names used
+ * by the OS. Keep this in sync with {@link postgresEnvSchema} / {@link authEnvSchema} /
+ * {@link dataApiEnvSchema}.
  */
 export const NEON_ENV_VAR_KEYS = {
 	postgres: {
 		databaseUrl: "DATABASE_URL",
 		databaseUrlUnpooled: "DATABASE_URL_UNPOOLED",
 	},
+	auth: {
+		projectId: "NEON_AUTH_PROJECT_ID",
+		publishableClientKey: "NEON_AUTH_PUBLISHABLE_CLIENT_KEY",
+		secretServerKey: "NEON_AUTH_SECRET_SERVER_KEY",
+		jwksUrl: "NEON_AUTH_JWKS_URL",
+	},
+	dataApi: {
+		url: "NEON_DATA_API_URL",
+	},
 } as const;
 
-/**
- * Static, namespaced shape of `fetchEnv` / `parseEnv`'s return value. Fixed and known —
- * there's no call-site or config-driven configurability — so consumers can destructure
- * with autocomplete and zero `Record<string, string>` widening.
- *
- * Future namespaces (e.g. `vector`, `s3`, …) can be added alongside `postgres` without
- * breaking the existing surface. Keep keys lowercase camelCase.
- */
-export interface NeonEnv {
-	/** Postgres connection strings for the resolved branch. */
-	postgres: {
-		/**
-		 * Pooled connection string (via Neon's PgBouncer pooler). The right default for
-		 * serverless drivers (`@neondatabase/serverless`, edge runtimes, Postgres.js, …).
-		 */
-		databaseUrl: string;
-		/**
-		 * Direct (unpooled) connection string. Use this when you need session-level
-		 * features (`LISTEN`/`NOTIFY`, prepared statements across calls, transactions
-		 * spanning round-trips) that PgBouncer's transaction-mode pooling drops.
-		 */
-		databaseUrlUnpooled: string;
-	};
+/** Per-namespace inner shapes. Exposed so consumers can name the parts independently. */
+export interface NeonPostgresEnv {
+	/**
+	 * Pooled connection string (via Neon's PgBouncer pooler). The right default for
+	 * serverless drivers (`@neondatabase/serverless`, edge runtimes, Postgres.js, …).
+	 */
+	databaseUrl: string;
+	/**
+	 * Direct (unpooled) connection string. Use this when you need session-level
+	 * features (`LISTEN`/`NOTIFY`, prepared statements across calls, transactions
+	 * spanning round-trips) that PgBouncer's transaction-mode pooling drops.
+	 */
+	databaseUrlUnpooled: string;
 }
+
+/**
+ * Public + secret bits of a Neon Auth integration for the resolved branch. Only present
+ * on `NeonEnv` when `config.features.auth === true`.
+ *
+ * `projectId` / `jwksUrl` are fetchable via `getNeonAuth`. The two key fields
+ * (`publishableClientKey`, `secretServerKey`) are *not* refetchable after integration
+ * creation — `fetchEnv` reads them from `process.env`, `parseEnv` always does. Pull them
+ * once at create time (via the Neon Console / `neonctl auth …`) and feed them through
+ * your secret-management of choice.
+ */
+export interface NeonAuthEnv {
+	projectId: string;
+	publishableClientKey: string;
+	secretServerKey: string;
+	jwksUrl: string;
+}
+
+/** Bits of a Neon Data API integration. Only present when `config.features.dataApi === true`. */
+export interface NeonDataApiEnv {
+	url: string;
+}
+
+/**
+ * Static, namespaced shape of `fetchEnv` / `parseEnv`'s return value. Generic over the
+ * {@link Config} so the type system knows which optional namespaces are present.
+ *
+ * - `postgres` is always present.
+ * - `auth` is added iff `config.features.auth` is the literal `true`.
+ * - `dataApi` is added iff `config.features.dataApi` is the literal `true`.
+ *
+ * The conditional types use `extends { features: { auth: true } }` (rather than `boolean`)
+ * so `features.auth: false` and an absent `features` block both correctly drop the
+ * `auth` namespace from the result type.
+ */
+/**
+ * Empty record alias used as the "false" branch of the conditional namespace adds below.
+ * `Record<never, never>` is the no-op for intersection — the cleaner alternative to `{}`,
+ * which biome rejects (it means "any non-null", not "empty object").
+ */
+type NoNamespace = Record<never, never>;
+
+export type NeonEnv<C extends Config = Config> = {
+	postgres: NeonPostgresEnv;
+} & (C extends { features: { auth: true } }
+	? { auth: NeonAuthEnv }
+	: NoNamespace) &
+	(C extends { features: { dataApi: true } }
+		? { dataApi: NeonDataApiEnv }
+		: NoNamespace);
 
 export interface FetchEnvOptions {
 	/**
@@ -122,10 +173,10 @@ export interface FetchEnvOptions {
  *
  * The package does **not** mutate `process.env` or the filesystem itself.
  */
-export async function fetchEnv(
-	config: Config,
+export async function fetchEnv<const C extends Config>(
+	config: C,
 	options: FetchEnvOptions = {},
-): Promise<NeonEnv> {
+): Promise<NeonEnv<C>> {
 	const api = options.api ?? createApiFromOptions(options);
 
 	const ctx = loadContext({
@@ -163,26 +214,121 @@ export async function fetchEnv(
 		options.databaseName,
 	);
 
-	const [pooled, unpooled] = await Promise.all([
-		api.getConnectionUri(ctx.projectId, {
-			branchId: branch.id,
-			databaseName,
-			roleName,
-			pooled: true,
-		}),
-		api.getConnectionUri(ctx.projectId, {
-			branchId: branch.id,
-			databaseName,
-			roleName,
-			pooled: false,
-		}),
-	]);
+	// Fan out: always fetch both Postgres URIs. Conditionally fetch auth + dataApi based
+	// on declared features. Auth secret keys aren't fetchable post-create (Neon's API only
+	// returns them at integration creation / rotation) so we read those from the env.
+	const wantsAuth = config.features?.auth === true;
+	const wantsDataApi = config.features?.dataApi === true;
 
-	return {
+	const [pooled, unpooled, authSnapshot, dataApiSnapshot] = await Promise.all(
+		[
+			api.getConnectionUri(ctx.projectId, {
+				branchId: branch.id,
+				databaseName,
+				roleName,
+				pooled: true,
+			}),
+			api.getConnectionUri(ctx.projectId, {
+				branchId: branch.id,
+				databaseName,
+				roleName,
+				pooled: false,
+			}),
+			wantsAuth
+				? api.getNeonAuth(ctx.projectId, branch.id)
+				: Promise.resolve(null),
+			wantsDataApi
+				? api.getNeonDataApi(ctx.projectId, branch.id, databaseName)
+				: Promise.resolve(null),
+		],
+	);
+
+	const result: Record<string, unknown> = {
 		postgres: {
 			databaseUrl: pooled.uri,
 			databaseUrlUnpooled: unpooled.uri,
 		},
+	};
+
+	if (wantsAuth) {
+		if (!authSnapshot) {
+			throw new PlatformError(
+				ErrorCode.NotFound,
+				[
+					`fetchEnv: config has features.auth=true but no Neon Auth integration is enabled on branch ${branch.name} (${branch.id}).`,
+					"Enable it in the Neon Console (or via `npx neonctl auth …`) before calling fetchEnv, or set features.auth=false.",
+				].join(" "),
+				{
+					details: { projectId: ctx.projectId, branchId: branch.id },
+				},
+			);
+		}
+		const secrets = readAuthSecretsFromEnv(options.env);
+		result.auth = {
+			projectId: authSnapshot.projectId,
+			publishableClientKey: secrets.publishableClientKey,
+			secretServerKey: secrets.secretServerKey,
+			jwksUrl: authSnapshot.jwksUrl,
+		} satisfies NeonAuthEnv;
+	}
+
+	if (wantsDataApi) {
+		if (!dataApiSnapshot) {
+			throw new PlatformError(
+				ErrorCode.NotFound,
+				[
+					`fetchEnv: config has features.dataApi=true but no Data API integration is enabled on branch ${branch.name} (${branch.id}) database ${databaseName}.`,
+					"Enable it in the Neon Console before calling fetchEnv, or set features.dataApi=false.",
+				].join(" "),
+				{
+					details: {
+						projectId: ctx.projectId,
+						branchId: branch.id,
+						databaseName,
+					},
+				},
+			);
+		}
+		result.dataApi = { url: dataApiSnapshot.url } satisfies NeonDataApiEnv;
+	}
+
+	return result as NeonEnv<C>;
+}
+
+/**
+ * Pull the auth secret/publishable key from the env source `fetchEnv` was given. These
+ * two fields aren't fetchable from the Neon API after integration creation, so the user
+ * must inject them out-of-band (via `.env`, hosting platform secret manager, etc.). When
+ * either is missing we throw the same `EnvNotInjected` error `parseEnv` would.
+ */
+function readAuthSecretsFromEnv(
+	envOverride: Record<string, string | undefined> | undefined,
+): {
+	publishableClientKey: string;
+	secretServerKey: string;
+} {
+	const source = envOverride ?? process.env;
+	const pubKey = NEON_ENV_VAR_KEYS.auth.publishableClientKey;
+	const secretKey = NEON_ENV_VAR_KEYS.auth.secretServerKey;
+	const issues: string[] = [];
+	const publishableClientKey = source[pubKey];
+	const secretServerKey = source[secretKey];
+	if (!publishableClientKey) issues.push(`${pubKey} is missing`);
+	if (!secretServerKey) issues.push(`${secretKey} is missing`);
+	if (issues.length > 0) {
+		throw new PlatformError(
+			ErrorCode.EnvNotInjected,
+			[
+				"fetchEnv: Neon Auth secrets must be supplied via process.env — they are not refetchable from the Neon API after integration creation.",
+				...issues.map((i) => `  - ${i}`),
+				"Pull them once via the Neon Console / `npx neonctl auth …`, then inject via your hosting platform or `.env` file.",
+			].join("\n"),
+			{ details: { missing: issues } },
+		);
+	}
+	return {
+		publishableClientKey: publishableClientKey as string,
+		secretServerKey: secretServerKey as string,
 	};
 }
 
@@ -373,20 +519,41 @@ export interface ParseEnvOptions {
 }
 
 /**
- * Schema for the OS-level env vars `parseEnv` reads. Mirrors {@link NEON_ENV_VAR_KEYS} —
- * if you add a key there, add it here too.
+ * Per-namespace zod schemas. Each defines exactly the OS-level keys parsed from
+ * `process.env` for its namespace. Keep in sync with {@link NEON_ENV_VAR_KEYS}.
  *
  * `z.string().url()` would be tighter than `min(1)` but Postgres URIs that include
- * URL-illegal characters in the password (rare but legal in Neon's own connection-string
+ * URL-illegal characters in the password (rare but legal in Neon's connection-string
  * format) fail the WHATWG `URL` parse, so we settle for "non-empty string".
  */
-const neonEnvSchema = z.object({
+const postgresEnvSchema = z.object({
 	DATABASE_URL: z
 		.string({ message: "DATABASE_URL is missing" })
 		.min(1, "DATABASE_URL must not be empty"),
 	DATABASE_URL_UNPOOLED: z
 		.string({ message: "DATABASE_URL_UNPOOLED is missing" })
 		.min(1, "DATABASE_URL_UNPOOLED must not be empty"),
+});
+
+const authEnvSchema = z.object({
+	NEON_AUTH_PROJECT_ID: z
+		.string({ message: "NEON_AUTH_PROJECT_ID is missing" })
+		.min(1, "NEON_AUTH_PROJECT_ID must not be empty"),
+	NEON_AUTH_PUBLISHABLE_CLIENT_KEY: z
+		.string({ message: "NEON_AUTH_PUBLISHABLE_CLIENT_KEY is missing" })
+		.min(1, "NEON_AUTH_PUBLISHABLE_CLIENT_KEY must not be empty"),
+	NEON_AUTH_SECRET_SERVER_KEY: z
+		.string({ message: "NEON_AUTH_SECRET_SERVER_KEY is missing" })
+		.min(1, "NEON_AUTH_SECRET_SERVER_KEY must not be empty"),
+	NEON_AUTH_JWKS_URL: z
+		.string({ message: "NEON_AUTH_JWKS_URL is missing" })
+		.min(1, "NEON_AUTH_JWKS_URL must not be empty"),
+});
+
+const dataApiEnvSchema = z.object({
+	NEON_DATA_API_URL: z
+		.string({ message: "NEON_DATA_API_URL is missing" })
+		.min(1, "NEON_DATA_API_URL must not be empty"),
 });
 
 /**
@@ -398,15 +565,14 @@ const neonEnvSchema = z.object({
  * Designed for the **"env-vars-already-injected"** path:
  * - You ran `neon-ts env pull` to write `.env.local`, and your framework auto-loads it.
  * - You wrapped your dev command with `neon-ts env run -- <cmd>`.
- * - Your platform (Vercel, Fly, Railway, …) injected `DATABASE_URL` via its own
- *   integration.
+ * - Your platform (Vercel, Fly, Railway, …) injected the vars via its own integration.
+ *
+ * The shape is keyed off `config.features` — `features.auth: true` adds the `auth`
+ * namespace and validates its env vars; same for `features.dataApi`. Disabled features
+ * are skipped at both the type and runtime level.
  *
  * Throws `PlatformError(EnvNotInjected)` listing every missing/invalid var when the env
  * isn't fully populated, with a fix hint pointing back at `neon-ts env pull/run`.
- *
- * The `config` argument is currently unused at runtime — it exists for symmetry with
- * `fetchEnv(config)` and so future namespaces (`vector`, `s3`, …) can hang off the same
- * call site without breaking the API.
  *
  * ```ts
  * import config from "../neon";
@@ -414,43 +580,82 @@ const neonEnvSchema = z.object({
  *
  * const env = parseEnv(config);
  * const db = drizzle(neon(env.postgres.databaseUrl), { schema });
+ * // env.auth is statically typed when config.features.auth is true; type-error when not.
  * ```
  */
-export function parseEnv(
-	_config: Config,
+export function parseEnv<const C extends Config>(
+	config: C,
 	options: ParseEnvOptions = {},
-): NeonEnv {
+): NeonEnv<C> {
 	const source = options.env ?? process.env;
-	const result = neonEnvSchema.safeParse({
+	const issues: string[] = [];
+	const result: Record<string, unknown> = {};
+
+	const pg = postgresEnvSchema.safeParse({
 		DATABASE_URL: source.DATABASE_URL,
 		DATABASE_URL_UNPOOLED: source.DATABASE_URL_UNPOOLED,
 	});
-	if (!result.success) {
-		const issues = result.error.issues.map((i) => `  - ${i.message}`);
+	if (pg.success) {
+		result.postgres = {
+			databaseUrl: pg.data.DATABASE_URL,
+			databaseUrlUnpooled: pg.data.DATABASE_URL_UNPOOLED,
+		} satisfies NeonPostgresEnv;
+	} else {
+		for (const issue of pg.error.issues) issues.push(issue.message);
+	}
+
+	if (config.features?.auth === true) {
+		const auth = authEnvSchema.safeParse({
+			NEON_AUTH_PROJECT_ID: source.NEON_AUTH_PROJECT_ID,
+			NEON_AUTH_PUBLISHABLE_CLIENT_KEY:
+				source.NEON_AUTH_PUBLISHABLE_CLIENT_KEY,
+			NEON_AUTH_SECRET_SERVER_KEY: source.NEON_AUTH_SECRET_SERVER_KEY,
+			NEON_AUTH_JWKS_URL: source.NEON_AUTH_JWKS_URL,
+		});
+		if (auth.success) {
+			result.auth = {
+				projectId: auth.data.NEON_AUTH_PROJECT_ID,
+				publishableClientKey:
+					auth.data.NEON_AUTH_PUBLISHABLE_CLIENT_KEY,
+				secretServerKey: auth.data.NEON_AUTH_SECRET_SERVER_KEY,
+				jwksUrl: auth.data.NEON_AUTH_JWKS_URL,
+			} satisfies NeonAuthEnv;
+		} else {
+			for (const issue of auth.error.issues) issues.push(issue.message);
+		}
+	}
+
+	if (config.features?.dataApi === true) {
+		const dataApi = dataApiEnvSchema.safeParse({
+			NEON_DATA_API_URL: source.NEON_DATA_API_URL,
+		});
+		if (dataApi.success) {
+			result.dataApi = {
+				url: dataApi.data.NEON_DATA_API_URL,
+			} satisfies NeonDataApiEnv;
+		} else {
+			for (const issue of dataApi.error.issues)
+				issues.push(issue.message);
+		}
+	}
+
+	if (issues.length > 0) {
 		throw new PlatformError(
 			ErrorCode.EnvNotInjected,
 			[
 				"parseEnv: the required Neon env variables are not present in process.env.",
-				...issues,
+				...issues.map((i) => `  - ${i}`),
 				"Inject them via one of:",
 				"  - `neon-ts env pull` (writes them to .env.local, picked up by Next.js/Vite/etc.)",
 				"  - `neon-ts env run -- <your dev command>` (wraps the command with the vars injected)",
 				"  - your hosting platform's Neon integration (Vercel, Fly, Railway, …)",
 				"Or switch the call to `await fetchEnv(config)` if you're in a context that can do async I/O.",
 			].join("\n"),
-			{
-				details: {
-					missing: result.error.issues.map((i) => i.path.join(".")),
-				},
-			},
+			{ details: { missing: issues } },
 		);
 	}
-	return {
-		postgres: {
-			databaseUrl: result.data.DATABASE_URL,
-			databaseUrlUnpooled: result.data.DATABASE_URL_UNPOOLED,
-		},
-	};
+
+	return result as NeonEnv<C>;
 }
 
 // ───────────────────────── env-var mapping helpers ─────────────────────────
@@ -459,11 +664,30 @@ export function parseEnv(
  * Project a fully-resolved {@link NeonEnv} into the OS-level `{ KEY: value }` pairs used
  * for cross-process transport. Shared by `neon-ts env pull` (writes them to a file) and
  * `neon-ts env run` (injects them into a subprocess's `process.env`).
+ *
+ * Walks the value at runtime so it works for any `NeonEnv<C>` regardless of which
+ * conditional namespaces are present.
  */
-export function neonEnvToProcessEnv(env: NeonEnv): Record<string, string> {
-	return {
+export function neonEnvToProcessEnv(
+	env: NeonEnv<Config>,
+): Record<string, string> {
+	const out: Record<string, string> = {
 		[NEON_ENV_VAR_KEYS.postgres.databaseUrl]: env.postgres.databaseUrl,
 		[NEON_ENV_VAR_KEYS.postgres.databaseUrlUnpooled]:
 			env.postgres.databaseUrlUnpooled,
 	};
+	const withAuth = env as { auth?: NeonAuthEnv };
+	if (withAuth.auth) {
+		out[NEON_ENV_VAR_KEYS.auth.projectId] = withAuth.auth.projectId;
+		out[NEON_ENV_VAR_KEYS.auth.publishableClientKey] =
+			withAuth.auth.publishableClientKey;
+		out[NEON_ENV_VAR_KEYS.auth.secretServerKey] =
+			withAuth.auth.secretServerKey;
+		out[NEON_ENV_VAR_KEYS.auth.jwksUrl] = withAuth.auth.jwksUrl;
+	}
+	const withDataApi = env as { dataApi?: NeonDataApiEnv };
+	if (withDataApi.dataApi) {
+		out[NEON_ENV_VAR_KEYS.dataApi.url] = withDataApi.dataApi.url;
+	}
+	return out;
 }

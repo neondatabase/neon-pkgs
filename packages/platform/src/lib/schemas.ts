@@ -11,5 +11,6 @@ export {
 	branchConfigSchema as branch,
 	computeSettingsSchema as computeSettings,
 	configSchema as config,
+	featureFlagsSchema as features,
 	projectConfigSchema as project,
 } from "./schema.js";

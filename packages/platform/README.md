@@ -173,18 +173,28 @@ Important options:
 
 `pushConfig` will create a project if none exists in the resolved org/name combination and `project.region` is set. Region and Postgres major version are immutable on Neon — pushing a different value surfaces a `ConflictReport`.
 
-### Env: `fetchEnv` / `parseEnv` / `NeonEnv`
+### Env: `fetchEnv` / `parseEnv` / `NeonEnv<Config>`
 
-Both functions return the same fixed-shape, namespaced, statically-typed value — no `Record<string, string>` widening, no call-site or config-driven knobs for renaming keys:
+Both functions return a namespaced, statically-typed value whose shape is **derived from `config.features`** — `postgres` is always present; `auth` and `dataApi` are added to the type iff the matching flag is set:
 
 ```ts
-interface NeonEnv {
-  postgres: {
-    databaseUrl: string;          // pooled (PgBouncer) — the right default
-    databaseUrlUnpooled: string;  // direct — for LISTEN/NOTIFY, prepared statements, etc.
-  };
-}
+const config = defineConfig({
+  project: { name: "my-app" },
+  branches: { production: {} },
+  features: { auth: true, dataApi: true },   // ← drives the env type
+});
+
+const env = parseEnv(config);
+// env.postgres.databaseUrl              — pooled, always present
+// env.postgres.databaseUrlUnpooled      — direct, always present
+// env.auth.projectId                    — present because features.auth
+// env.auth.publishableClientKey
+// env.auth.secretServerKey
+// env.auth.jwksUrl
+// env.dataApi.url                       — present because features.dataApi
 ```
+
+`defineConfig` is declared with a `const` generic so the literal flag flows through to `NeonEnv<typeof config>`. When a feature is `false` (or absent), its namespace is dropped from both the static type and the runtime validation — your app can't accidentally read `env.auth` for a project that doesn't enable it.
 
 Pick whichever matches your runtime constraints:
 
@@ -217,7 +227,19 @@ const db = drizzle(neon(env.postgres.databaseUrl), { schema });
 
 For `fetchEnv`: `projectId`, `orgId`, and `branch` follow the standard [Project context resolution](#project-context-resolution) chain, with one extra fallback for `branch` only — when nothing resolves it, the first key in `config.branches` (typically `"production"`) is used. `roleName` and `databaseName` are auto-picked when the branch has exactly one role / database; otherwise `fetchEnv` throws `PLATFORM_AMBIGUOUS_BRANCH_AUTH` and you'll need to pass `databaseName` explicitly.
 
-For `parseEnv`: the OS-level env-var keys are exposed as `NEON_ENV_VAR_KEYS` for callers building their own pull/inject tooling. The current mapping is `postgres.databaseUrl → DATABASE_URL` and `postgres.databaseUrlUnpooled → DATABASE_URL_UNPOOLED`.
+For `parseEnv`: the OS-level env-var keys are exposed as `NEON_ENV_VAR_KEYS` for callers building their own pull/inject tooling. Current mapping:
+
+| `NeonEnv` path                       | env-var key                          | when                |
+| ------------------------------------ | ------------------------------------ | ------------------- |
+| `postgres.databaseUrl`               | `DATABASE_URL`                       | always              |
+| `postgres.databaseUrlUnpooled`       | `DATABASE_URL_UNPOOLED`              | always              |
+| `auth.projectId`                     | `NEON_AUTH_PROJECT_ID`               | `features.auth`     |
+| `auth.publishableClientKey`          | `NEON_AUTH_PUBLISHABLE_CLIENT_KEY`   | `features.auth`     |
+| `auth.secretServerKey`               | `NEON_AUTH_SECRET_SERVER_KEY`        | `features.auth`     |
+| `auth.jwksUrl`                       | `NEON_AUTH_JWKS_URL`                 | `features.auth`     |
+| `dataApi.url`                        | `NEON_DATA_API_URL`                  | `features.dataApi`  |
+
+For `fetchEnv` with `features.auth`: the public bits (`projectId`, `jwksUrl`) are fetched fresh from the Neon API (`GET /projects/:pid/branches/:bid/auth`). The secret bits (`publishableClientKey`, `secretServerKey`) are **not** refetchable — Neon only returns them at integration-creation time — so `fetchEnv` reads them from `process.env` and throws `PLATFORM_ENV_NOT_INJECTED` if they aren't there. Pull them once at create time (via the Neon Console / `npx neonctl auth …`) and feed them through your hosting platform's secret store.
 
 The return shape is **fixed** on purpose — the point of `fetchEnv`/`parseEnv` is to be a typed escape hatch from `.env` files: one `import config from "./neon"`, one `parseEnv(config)`, and the rest of your app talks to `env.postgres.databaseUrl` directly. Future namespaces (`env.vector`, `env.s3`, …) can be added alongside `postgres` without breaking the existing surface.
 

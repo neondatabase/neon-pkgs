@@ -23,7 +23,9 @@ import type {
 	CreateProjectInput,
 	GetConnectionUriInput,
 	NeonApi,
+	NeonAuthSnapshot,
 	NeonBranchSnapshot,
+	NeonDataApiSnapshot,
 	NeonDatabaseSnapshot,
 	NeonEndpointSnapshot,
 	NeonProjectSnapshot,
@@ -437,6 +439,64 @@ class RealNeonApi implements NeonApi {
 			},
 			{ projectId },
 		);
+	}
+
+	async getNeonAuth(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonAuthSnapshot | null> {
+		// `GET /projects/:pid/branches/:bid/auth` returns 404 when no integration exists.
+		// Surface that as `null` so callers can branch cleanly instead of try/catch.
+		try {
+			return await this.call(
+				`getNeonAuth(${projectId}/${branchId})`,
+				async () => {
+					const res = await this.client.getNeonAuth(
+						projectId,
+						branchId,
+					);
+					const data = res.data;
+					const snapshot: NeonAuthSnapshot = {
+						projectId: data.auth_provider_project_id,
+						jwksUrl: data.jwks_url,
+					};
+					if (data.base_url) snapshot.baseUrl = data.base_url;
+					return snapshot;
+				},
+				{ projectId },
+			);
+		} catch (err) {
+			if (err instanceof PlatformError && err.code === ErrorCode.NotFound)
+				return null;
+			throw err;
+		}
+	}
+
+	async getNeonDataApi(
+		projectId: string,
+		branchId: string,
+		databaseName: string,
+	): Promise<NeonDataApiSnapshot | null> {
+		// Same shape as getNeonAuth — 404 means "no integration on this branch/db", which
+		// we translate to `null` for the caller.
+		try {
+			return await this.call(
+				`getNeonDataApi(${projectId}/${branchId}/${databaseName})`,
+				async () => {
+					const res = await this.client.getProjectBranchDataApi(
+						projectId,
+						branchId,
+						databaseName,
+					);
+					return { url: res.data.url };
+				},
+				{ projectId },
+			);
+		} catch (err) {
+			if (err instanceof PlatformError && err.code === ErrorCode.NotFound)
+				return null;
+			throw err;
+		}
 	}
 }
 

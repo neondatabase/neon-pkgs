@@ -5,13 +5,29 @@ import {
 	resolveConfig,
 } from "./define-config.js";
 import { ConfigValidationError } from "./errors.js";
+import type { Config } from "./types.js";
 
 describe("defineConfig", () => {
 	test("accepts a minimal project-only config", () => {
-		const cfg = defineConfig({ project: { name: "my-app" } });
+		// Widen via the `Config` type so the test can assert on absent optional fields —
+		// `defineConfig`'s `<const C>` generic preserves literal types, so `cfg.branches`
+		// wouldn't even exist on the narrow inferred return type when the input omits it.
+		const cfg: Config = defineConfig({ project: { name: "my-app" } });
 		expect(cfg.project.name).toBe("my-app");
 		expect(cfg.branches).toBeUndefined();
 		expect(cfg.branchBlueprints).toBeUndefined();
+	});
+
+	test("preserves the features literal so NeonEnv<C> can narrow", () => {
+		const cfg = defineConfig({
+			project: { name: "my-app" },
+			features: { auth: true },
+		});
+		// Compile-time check — the literal `true` must flow through, otherwise the
+		// conditional NeonEnv types collapse to the unconditional shape.
+		const _check: true | undefined = cfg.features?.auth;
+		void _check;
+		expect(cfg.features?.auth).toBe(true);
 	});
 
 	test("freezes returned objects", () => {

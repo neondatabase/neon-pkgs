@@ -139,6 +139,16 @@ export const projectConfigSchema = z.strictObject({
 });
 
 /**
+ * Zod schema for {@link import("./types.js").FeatureFlags}. Both fields are optional
+ * booleans. Default-`false` semantics are applied at the consumer-call site (e.g.
+ * `fetchEnv` / `parseEnv` check `config.features?.auth === true`).
+ */
+export const featureFlagsSchema = z.strictObject({
+	auth: z.boolean().optional(),
+	dataApi: z.boolean().optional(),
+});
+
+/**
  * Top-level zod schema for a Neon Platform config (the value returned by `defineConfig`).
  *
  * Cross-key invariants enforced here:
@@ -158,6 +168,7 @@ export const configSchema = z
 		branchBlueprints: z
 			.record(z.string(), branchBlueprintSchema)
 			.optional(),
+		features: featureFlagsSchema.optional(),
 	})
 	.superRefine((cfg, ctx) => {
 		const branches = cfg.branches ?? {};

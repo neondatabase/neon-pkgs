@@ -3,7 +3,9 @@ import type {
 	CreateProjectInput,
 	GetConnectionUriInput,
 	NeonApi,
+	NeonAuthSnapshot,
 	NeonBranchSnapshot,
+	NeonDataApiSnapshot,
 	NeonDatabaseSnapshot,
 	NeonEndpointSnapshot,
 	NeonProjectSnapshot,
@@ -40,6 +42,10 @@ export class FakeNeonApi implements NeonApi {
 	private readonly endpoints = new Map<string, NeonEndpointSnapshot[]>();
 	private readonly roles = new Map<string, NeonRoleSnapshot[]>();
 	private readonly databases = new Map<string, NeonDatabaseSnapshot[]>();
+	/** Keyed by `${projectId}:${branchId}` so a project can have per-branch integrations. */
+	private readonly neonAuth = new Map<string, NeonAuthSnapshot>();
+	/** Keyed by `${projectId}:${branchId}:${databaseName}`. */
+	private readonly neonDataApi = new Map<string, NeonDataApiSnapshot>();
 	readonly history: Array<{ method: string; args: unknown[] }> = [];
 
 	/**
@@ -381,6 +387,58 @@ export class FakeNeonApi implements NeonApi {
 			: `${branchId}.${region}.fake.neon.tech`;
 		const uri = `postgresql://${input.roleName}:fake-password-for-${branchId}@${hostPart}/${input.databaseName}?sslmode=require`;
 		return { uri };
+	}
+
+	async getNeonAuth(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonAuthSnapshot | null> {
+		this.history.push({
+			method: "getNeonAuth",
+			args: [projectId, branchId],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		const found = this.neonAuth.get(`${projectId}:${branchId}`);
+		return found ? clone(found) : null;
+	}
+
+	async getNeonDataApi(
+		projectId: string,
+		branchId: string,
+		databaseName: string,
+	): Promise<NeonDataApiSnapshot | null> {
+		this.history.push({
+			method: "getNeonDataApi",
+			args: [projectId, branchId, databaseName],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		const found = this.neonDataApi.get(
+			`${projectId}:${branchId}:${databaseName}`,
+		);
+		return found ? clone(found) : null;
+	}
+
+	/** Test helper: attach a Neon Auth integration to a branch. */
+	seedNeonAuth(
+		projectId: string,
+		branchId: string,
+		snapshot: NeonAuthSnapshot,
+	): void {
+		this.neonAuth.set(`${projectId}:${branchId}`, { ...snapshot });
+	}
+
+	/** Test helper: attach a Neon Data API integration to a branch + database. */
+	seedNeonDataApi(
+		projectId: string,
+		branchId: string,
+		databaseName: string,
+		snapshot: NeonDataApiSnapshot,
+	): void {
+		this.neonDataApi.set(`${projectId}:${branchId}:${databaseName}`, {
+			...snapshot,
+		});
 	}
 
 	private requireProject(projectId: string): void {

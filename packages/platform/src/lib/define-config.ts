@@ -34,18 +34,25 @@ const REGION_PREFIX = /^(aws|azure|gcp)-/;
  * Pure function — no I/O, no side effects. Aggregates every zod issue into one
  * {@link ConfigValidationError} so users see every issue at once.
  */
-export function defineConfig(input: Config): Config {
+export function defineConfig<const C extends Config>(input: C): C {
 	const result = configSchema.safeParse(input);
 	if (!result.success) {
 		throw new ConfigValidationError(formatZodIssues(result.error));
 	}
 
 	const parsed = result.data as Config;
-	return Object.freeze({
+	const frozen: Config = {
 		project: Object.freeze({ ...parsed.project }),
-		branches: freezeRecord(parsed.branches),
-		branchBlueprints: freezeRecord(parsed.branchBlueprints),
-	}) as Config;
+	};
+	if (parsed.branches) frozen.branches = freezeRecord(parsed.branches);
+	if (parsed.branchBlueprints)
+		frozen.branchBlueprints = freezeRecord(parsed.branchBlueprints);
+	if (parsed.features)
+		frozen.features = Object.freeze({ ...parsed.features });
+	// The frozen copy has the same structural shape as `input`; cast to preserve the
+	// caller-supplied literal types (feature flags, branch keys, …) so downstream
+	// inference (NeonEnv<C>, etc.) sees the actual literals.
+	return Object.freeze(frozen) as C;
 }
 
 function freezeRecord<T extends object>(

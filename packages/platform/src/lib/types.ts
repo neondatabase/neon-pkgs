@@ -126,6 +126,36 @@ export interface ProjectConfig {
 }
 
 /**
+ * Optional Neon-platform features that, when enabled, contribute additional namespaces
+ * to the env surface returned by `fetchEnv` / `parseEnv`. Each flag is a literal `true` /
+ * `false` (default `false`) — `defineConfig` is declared with a `const` generic so the
+ * literal flows through to {@link NeonEnv}'s static type:
+ *
+ * ```ts
+ * const config = defineConfig({
+ *   project: { name: "my-app" },
+ *   branches: { production: {} },
+ *   features: { auth: true },
+ * });
+ * const env = parseEnv(config);
+ * // env.postgres.databaseUrl       — always present
+ * // env.auth.publishableClientKey  — present because features.auth is true
+ * // env.dataApi                    — type error (features.dataApi is not enabled)
+ * ```
+ */
+export interface FeatureFlags {
+	/**
+	 * Enable the Neon Auth integration. Adds the `auth` namespace to `NeonEnv`
+	 * (`projectId`, `publishableClientKey`, `secretServerKey`, `jwksUrl`).
+	 */
+	auth?: boolean;
+	/**
+	 * Enable the Neon Data API. Adds the `dataApi` namespace to `NeonEnv` (`url`).
+	 */
+	dataApi?: boolean;
+}
+
+/**
  * A complete Neon Platform configuration. Built via {@link defineConfig}.
  *
  * The branch surface is split into two intentionally distinct maps:
@@ -153,6 +183,12 @@ export interface Config {
 	 * branch already on Neon.
 	 */
 	branchBlueprints?: Record<string, BranchBlueprint>;
+	/**
+	 * Optional Neon-platform features. Each enabled feature adds an extra namespace to the
+	 * env surface returned by `fetchEnv` / `parseEnv` (e.g. `features.auth: true` → the
+	 * `env.auth` namespace becomes statically known).
+	 */
+	features?: FeatureFlags;
 }
 
 /**
