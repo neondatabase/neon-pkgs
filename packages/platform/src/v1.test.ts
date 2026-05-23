@@ -26,7 +26,7 @@ describe("v1 surface — full lifecycle", () => {
 		const api = new FakeNeonApi();
 		const config = defineConfig({
 			project: { name: "lifecycle", region: "aws-us-east-1" },
-			branchBlueprints: {
+			branches: {
 				production: { computeSettings: { autoscalingLimitMaxCu: 2 } },
 				staging: { parent: "production" },
 			},
@@ -54,8 +54,8 @@ describe("v1 surface — full lifecycle", () => {
 			projectId: firstPush.projectId,
 		});
 		expect(pulled.project.name).toBe("lifecycle");
-		expect(pulled.branchBlueprints?.production).toBeDefined();
-		expect(pulled.branchBlueprints?.staging).toBeDefined();
+		expect(pulled.branches?.production).toBeDefined();
+		expect(pulled.branches?.staging).toBeDefined();
 
 		// Pushing the same config again should be a noop — no conflicts, no plan steps.
 		const secondPush = await pushConfig(config, {
@@ -66,15 +66,15 @@ describe("v1 surface — full lifecycle", () => {
 		const mutations = secondPush.applied.filter((a) => a.action !== "noop");
 		expect(mutations).toHaveLength(0);
 
-		// Final pull should still find a production blueprint. pullConfig elides any compute
+		// Final pull should still find a production branch. pullConfig elides any compute
 		// fields that match the project's default endpoint settings — and since the first
-		// push seeded the production-blueprint compute settings as project defaults, that
+		// push seeded the production branch's compute settings as project defaults, that
 		// elision is expected. The source-of-truth assertion is the remote endpoint state:
 		const finalPull: Config = await pullConfig({
 			api,
 			projectId: firstPush.projectId,
 		});
-		expect(finalPull.branchBlueprints?.production).toBeDefined();
+		expect(finalPull.branches?.production).toBeDefined();
 
 		const branches = await api.listBranches(firstPush.projectId);
 		const prodBranchId = branches.find((b) => b.name === "production")?.id;
@@ -91,7 +91,7 @@ describe("v1 surface — full lifecycle", () => {
 import { defineConfig } from "${platformSrc}";
 export default defineConfig({
   project: { name: "loaded-from-v1", region: "aws-us-east-1" },
-  branchBlueprints: { production: {} },
+  branches: { production: {} },
 });
 `,
 		});
@@ -124,7 +124,7 @@ export default defineConfig({
 import { defineConfig } from "${platformSrc}";
 export default defineConfig({
   project: { name: "from-file", region: "aws-us-east-1" },
-  branchBlueprints: {
+  branches: {
     production: {},
     staging: { parent: "production" },
   },

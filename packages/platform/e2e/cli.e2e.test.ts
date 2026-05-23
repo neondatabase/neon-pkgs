@@ -69,7 +69,7 @@ describe("e2e — neon-ts CLI against real Neon API", () => {
 							name: uniqueProjectName("cli-pull"),
 							region: DEFAULT_REGION,
 						},
-						branchBlueprints: { production: {} },
+						branches: { production: {} },
 					}),
 					{ api },
 				);
@@ -106,7 +106,7 @@ describe("e2e — neon-ts CLI against real Neon API", () => {
 			const created = await pushConfig(
 				defineConfig({
 					project: { name: projectName, region: DEFAULT_REGION },
-					branchBlueprints: { production: {} },
+					branches: { production: {} },
 				}),
 				{ api },
 			);
@@ -123,7 +123,7 @@ describe("e2e — neon-ts CLI against real Neon API", () => {
 import { defineConfig } from "${PLATFORM_SRC}";
 export default defineConfig({
   project: { name: ${JSON.stringify(projectName)}, region: ${JSON.stringify(DEFAULT_REGION)} },
-  branchBlueprints: {
+  branches: {
     production: {},
     staging: { parent: "production" },
   },
@@ -186,7 +186,7 @@ export default defineConfig({
 			const created = await pushConfig(
 				defineConfig({
 					project: { name: projectName, region: DEFAULT_REGION },
-					branchBlueprints: { production: {} },
+					branches: { production: {} },
 				}),
 				{ api },
 			);
@@ -201,7 +201,7 @@ export default defineConfig({
 import { defineConfig } from "${PLATFORM_SRC}";
 export default defineConfig({
   project: { name: ${JSON.stringify(projectName)}, region: "aws-eu-central-1" },
-  branchBlueprints: { production: {} },
+  branches: { production: {} },
 });
 `,
 			});

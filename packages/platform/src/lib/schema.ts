@@ -63,21 +63,40 @@ export const computeSettingsSchema = z
 	});
 
 /**
- * Zod schema for {@link import("./types.js").BranchBlueprint}. Validates pattern, ttl,
- * and (per-field) compute settings; the cross-blueprint `parent` reference check lives on
- * the top-level config schema where we can see every blueprint key at once.
+ * Zod schema for {@link import("./types.js").BranchConfig} — a concrete, persistent branch
+ * managed by `pushConfig`. The map key in `Config.branches` is the literal branch name on
+ * Neon, so this schema deliberately has no `pattern` (the key serves that role) and no
+ * `ttl` (concrete branches don't expire).
+ */
+export const branchConfigSchema = z.strictObject({
+	parent: z.string().optional(),
+	protected: z.boolean().optional(),
+	computeSettings: computeSettingsSchema.optional(),
+});
+
+/**
+ * Zod schema for {@link import("./types.js").BranchBlueprint} — a template for ephemeral
+ * branches minted by `branch()`. The `pattern` field is **required** and **must contain a
+ * `*` wildcard**; specific-name branches live under `Config.branches` (see
+ * {@link branchConfigSchema}) instead.
+ *
+ * Cross-blueprint `parent` reference checks live on the top-level config schema where we
+ * can see every key in both `branches` and `branchBlueprints` at once.
  */
 export const branchBlueprintSchema = z.strictObject({
-	pattern: z
-		.string()
-		.optional()
-		.superRefine((value, ctx) => {
-			if (value === undefined) return;
-			const result = validatePattern(value);
-			if ("error" in result) {
-				ctx.addIssue({ code: "custom", message: result.error });
-			}
-		}),
+	pattern: z.string().superRefine((value, ctx) => {
+		const result = validatePattern(value);
+		if ("error" in result) {
+			ctx.addIssue({ code: "custom", message: result.error });
+			return;
+		}
+		if (!isWildcardPattern(value)) {
+			ctx.addIssue({
+				code: "custom",
+				message: `pattern must contain a "*" wildcard (got "${value}"). Specific-name branches belong in \`branches\`, not \`branchBlueprints\`.`,
+			});
+		}
+	}),
 	ttl: z
 		.union([z.string(), z.number()])
 		.optional()
@@ -122,35 +141,65 @@ export const projectConfigSchema = z.strictObject({
 /**
  * Top-level zod schema for a Neon Platform config (the value returned by `defineConfig`).
  *
- * Cross-blueprint invariants are enforced here:
- * - `parent` must not reference its own blueprint key.
- * - `parent` either matches another blueprint key, or is a valid concrete branch name
- *   (wildcard patterns are disallowed for parents).
+ * Cross-key invariants enforced here:
+ *
+ * - The key of every entry in `branches` must be a valid, concrete branch name (no
+ *   wildcards) — it's the literal name the branch will have on Neon.
+ * - `parent` on a `branches` entry must not reference itself, and must match either
+ *   another `branches` key or a literal branch name (no wildcards).
+ * - `parent` on a `branchBlueprints` entry must match a `branches` key or a literal
+ *   branch name. Pointing a blueprint's `parent` at another blueprint key is rejected:
+ *   blueprints are wildcards and a parent must resolve to a single concrete branch.
  */
 export const configSchema = z
 	.strictObject({
 		project: projectConfigSchema,
+		branches: z.record(z.string(), branchConfigSchema).optional(),
 		branchBlueprints: z
 			.record(z.string(), branchBlueprintSchema)
 			.optional(),
 	})
 	.superRefine((cfg, ctx) => {
-		const blueprints = cfg.branchBlueprints;
-		if (!blueprints) return;
-		const keys = new Set(Object.keys(blueprints));
+		const branches = cfg.branches ?? {};
+		const blueprints = cfg.branchBlueprints ?? {};
+		const branchKeys = new Set(Object.keys(branches));
+		const blueprintKeys = new Set(Object.keys(blueprints));
+
+		for (const [key, branch] of Object.entries(branches)) {
+			// The map key IS the branch name on Neon. Validate it as a concrete name (a
+			// pattern with no wildcard) so users get a clean error here rather than
+			// downstream when push tries to create the branch.
+			const keyCheck = validatePattern(key);
+			if ("error" in keyCheck) {
+				ctx.addIssue({
+					code: "custom",
+					path: ["branches", key],
+					message: `branch key "${key}" is not a valid branch name: ${keyCheck.error}`,
+				});
+			} else if (isWildcardPattern(key)) {
+				ctx.addIssue({
+					code: "custom",
+					path: ["branches", key],
+					message: `branch key "${key}" must be a concrete branch name (no wildcards). Move wildcard entries to \`branchBlueprints\`.`,
+				});
+			}
+
+			validateParentReference({
+				ctx,
+				path: ["branches", key, "parent"],
+				ownKey: key,
+				parent: branch.parent,
+				branchKeys,
+			});
+		}
+
 		for (const [key, blueprint] of Object.entries(blueprints)) {
-			// When a blueprint omits `pattern`, the blueprint key itself is used as the
-			// pattern at resolve time. Surface invalid keys here so the user gets a clear
-			// error instead of a confusing "pattern: …" message buried deep in the path.
-			if (blueprint.pattern === undefined) {
-				const keyAsPattern = validatePattern(key);
-				if ("error" in keyAsPattern) {
-					ctx.addIssue({
-						code: "custom",
-						path: ["branchBlueprints", key],
-						message: `blueprint key "${key}" is used as the default pattern but is invalid: ${keyAsPattern.error}`,
-					});
-				}
+			if (branchKeys.has(key)) {
+				ctx.addIssue({
+					code: "custom",
+					path: ["branchBlueprints", key],
+					message: `blueprint key "${key}" collides with a key in \`branches\`. Rename one of them.`,
+				});
 			}
 
 			const parent = blueprint.parent;
@@ -163,7 +212,15 @@ export const configSchema = z
 				});
 				continue;
 			}
-			if (keys.has(parent)) continue;
+			if (blueprintKeys.has(parent)) {
+				ctx.addIssue({
+					code: "custom",
+					path: ["branchBlueprints", key, "parent"],
+					message: `parent must point at a concrete branch (a \`branches\` key or literal name), not another blueprint key "${parent}"`,
+				});
+				continue;
+			}
+			if (branchKeys.has(parent)) continue;
 
 			const patternCheck = validatePattern(parent);
 			if ("error" in patternCheck) {
@@ -181,6 +238,37 @@ export const configSchema = z
 			}
 		}
 	});
+
+function validateParentReference(args: {
+	ctx: z.RefinementCtx;
+	path: (string | number)[];
+	ownKey: string;
+	parent: string | undefined;
+	branchKeys: Set<string>;
+}): void {
+	const { ctx, path, ownKey, parent, branchKeys } = args;
+	if (parent === undefined) return;
+	if (parent === ownKey) {
+		ctx.addIssue({
+			code: "custom",
+			path,
+			message: "parent must not reference itself",
+		});
+		return;
+	}
+	if (branchKeys.has(parent)) return;
+
+	const patternCheck = validatePattern(parent);
+	if ("error" in patternCheck) {
+		ctx.addIssue({ code: "custom", path, message: patternCheck.error });
+	} else if (isWildcardPattern(parent)) {
+		ctx.addIssue({
+			code: "custom",
+			path,
+			message: `parent must be a concrete branch name (no wildcards), got "${parent}"`,
+		});
+	}
+}
 
 /**
  * Convert the structured {@link z.ZodError} produced by `configSchema.safeParse` into the

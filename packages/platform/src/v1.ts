@@ -8,9 +8,12 @@
  *
  * export default defineConfig({
  *   project: { name: "my-app", region: "aws-us-east-1" },
+ *   branches: {
+ *     production: { protected: true, computeSettings: { autoscalingLimitMaxCu: 2 } },
+ *     staging:    { parent: "production" },
+ *   },
  *   branchBlueprints: {
- *     production: { computeSettings: { autoscalingLimitMaxCu: 2 } },
- *     preview:    { pattern: "preview-*", ttl: "1h", parent: "production" },
+ *     preview: { pattern: "preview-*", ttl: "1h", parent: "production" },
  *   },
  * });
  * ```
@@ -77,6 +80,7 @@ export * as schemas from "./lib/schemas.js";
 // ─── Config types (used in neon.ts and in pushConfig return values) ───────────
 export type {
 	BranchBlueprint,
+	BranchConfig,
 	ComputeSettings,
 	Config,
 	ProjectConfig,

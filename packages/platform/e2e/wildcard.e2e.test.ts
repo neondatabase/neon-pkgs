@@ -22,7 +22,7 @@ describe("e2e — wildcard blueprints against real Neon API", () => {
 			const created = await pushConfig(
 				defineConfig({
 					project: { name: projectName, region: DEFAULT_REGION },
-					branchBlueprints: { production: {} },
+					branches: { production: {} },
 				}),
 				{ api },
 			);
@@ -46,8 +46,8 @@ describe("e2e — wildcard blueprints against real Neon API", () => {
 			const result = await pushConfig(
 				defineConfig({
 					project: { name: projectName, region: DEFAULT_REGION },
+					branches: { production: {} },
 					branchBlueprints: {
-						production: {},
 						preview: {
 							pattern: "preview-*",
 							computeSettings: { autoscalingLimitMaxCu: 2 },
@@ -84,7 +84,7 @@ describe("e2e — wildcard blueprints against real Neon API", () => {
 			const created = await pushConfig(
 				defineConfig({
 					project: { name: projectName, region: DEFAULT_REGION },
-					branchBlueprints: { production: {} },
+					branches: { production: {} },
 				}),
 				{ api },
 			);
@@ -106,8 +106,8 @@ describe("e2e — wildcard blueprints against real Neon API", () => {
 			const result = await pushConfig(
 				defineConfig({
 					project: { name: projectName, region: DEFAULT_REGION },
+					branches: { production: {} },
 					branchBlueprints: {
-						production: {},
 						preview: {
 							pattern: "preview-*",
 							computeSettings: { autoscalingLimitMaxCu: 2 },

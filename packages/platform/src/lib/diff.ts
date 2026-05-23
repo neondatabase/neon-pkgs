@@ -4,11 +4,12 @@ import type {
 	NeonEndpointSnapshot,
 	NeonProjectSnapshot,
 } from "./neon-api.js";
-import { isWildcardPattern, matchPattern } from "./patterns.js";
+import { matchPattern } from "./patterns.js";
 import type {
 	ComputeSettings,
 	ConflictReport,
 	ResolvedBranchBlueprint,
+	ResolvedBranchConfig,
 	ResolvedConfig,
 } from "./types.js";
 
@@ -32,11 +33,13 @@ export type PlanStep =
 	  }
 	| {
 			kind: "create-branch";
-			blueprintKey: string;
+			/** Source key in `branches` or `branchBlueprints` that drove the creation. */
+			sourceKey: string;
 			branchName: string;
 			parentBranchName: string;
 			parentBranchId?: string;
 			expiresAt?: string;
+			protected?: boolean;
 			computeSettings?: ComputeSettings;
 	  }
 	| {
@@ -45,6 +48,13 @@ export type PlanStep =
 			branchId: string;
 			branchName: string;
 			expiresAt: string | null;
+	  }
+	| {
+			kind: "update-branch-protected";
+			projectId: string;
+			branchId: string;
+			branchName: string;
+			protected: boolean;
 	  }
 	| {
 			kind: "update-endpoint";
@@ -78,11 +88,11 @@ export interface DiffResult {
  *
  * - Region mismatches and unauthorized project rename are always conflicts (Neon does not
  *   support changing them post-create, regardless of `updateExisting`).
- * - Per the design, **specific-name** blueprints (no wildcard) always create-if-missing.
- *   Updating an existing branch's settings requires `updateExisting: true`.
- * - **Wildcard** blueprints never create. They only update existing matching branches when
- *   `applyExisting: true` is set; otherwise matching branches are reported under
- *   `skippedWildcardBranches`.
+ * - `config.branches` entries always create-if-missing. Updating an existing branch's
+ *   settings / `protected` flag requires `updateExisting: true`.
+ * - `config.branchBlueprints` entries never create. They only update existing matching
+ *   branches when `applyExisting: true` is set; otherwise matching branches are reported
+ *   under `skippedWildcardBranches`.
  */
 export function diffConfig(
 	config: ResolvedConfig,
@@ -146,23 +156,9 @@ export function diffConfig(
 	// Track which existing branches are claimed by any blueprint so we don't double-warn.
 	const claimedByWildcard = new Set<string>();
 
-	for (const blueprint of config.branchBlueprints) {
-		if (isWildcardPattern(blueprint.pattern)) {
-			diffWildcardBlueprint({
-				blueprint,
-				remote,
-				options,
-				plan,
-				conflicts,
-				skippedWildcardBranches,
-				claimedByWildcard,
-				endpointsByBranchId,
-			});
-			continue;
-		}
-
-		diffSpecificBlueprint({
-			blueprint,
+	for (const branch of config.branches) {
+		diffBranchConfig({
+			branch,
 			branchesByName,
 			endpointsByBranchId,
 			config,
@@ -173,11 +169,24 @@ export function diffConfig(
 		});
 	}
 
+	for (const blueprint of config.branchBlueprints) {
+		diffWildcardBlueprint({
+			blueprint,
+			remote,
+			options,
+			plan,
+			conflicts,
+			skippedWildcardBranches,
+			claimedByWildcard,
+			endpointsByBranchId,
+		});
+	}
+
 	return { plan, conflicts, skippedWildcardBranches };
 }
 
-interface SpecificBlueprintArgs {
-	blueprint: ResolvedBranchBlueprint;
+interface BranchConfigArgs {
+	branch: ResolvedBranchConfig;
 	branchesByName: Map<string, NeonBranchSnapshot>;
 	endpointsByBranchId: Map<string, NeonEndpointSnapshot>;
 	config: ResolvedConfig;
@@ -187,9 +196,9 @@ interface SpecificBlueprintArgs {
 	conflicts: ConflictReport[];
 }
 
-function diffSpecificBlueprint(args: SpecificBlueprintArgs): void {
+function diffBranchConfig(args: BranchConfigArgs): void {
 	const {
-		blueprint,
+		branch,
 		branchesByName,
 		endpointsByBranchId,
 		config,
@@ -198,19 +207,19 @@ function diffSpecificBlueprint(args: SpecificBlueprintArgs): void {
 		plan,
 		conflicts,
 	} = args;
-	const branchName = blueprint.pattern;
+	const branchName = branch.name;
 	const existing = branchesByName.get(branchName);
 
 	if (!existing) {
-		// Create the branch (always allowed for specific-name blueprints).
-		const parentName = resolveParentBranchName(blueprint, config);
+		// Create the branch (always allowed for concrete `branches` entries).
+		const parentName = resolveBranchParentName(branch, config);
 		const parentBranch = parentName
 			? branchesByName.get(parentName)
 			: undefined;
 		if (parentName && !parentBranch && parentName !== branchName) {
-			// Parent isn't in this push (and isn't itself being created — we don't reorder ahead of time
-			// in v1). Report as a conflict so the user fixes their config rather than silently failing
-			// at apply time.
+			// Parent isn't on Neon and isn't being created earlier in this push (we don't
+			// reorder ahead of time in v1). Surface as a conflict so the user fixes their
+			// config rather than silently failing at apply time.
 			conflicts.push({
 				kind: "branch",
 				identifier: branchName,
@@ -224,22 +233,21 @@ function diffSpecificBlueprint(args: SpecificBlueprintArgs): void {
 
 		const step: PlanStep = {
 			kind: "create-branch",
-			blueprintKey: blueprint.key,
+			sourceKey: branch.key,
 			branchName,
 			parentBranchName:
 				parentName ?? findDefaultBranchName(remote) ?? branchName,
 		};
 		if (parentBranch) step.parentBranchId = parentBranch.id;
-		if (blueprint.ttlSeconds !== undefined)
-			step.expiresAt = ttlSecondsToExpiresAt(blueprint.ttlSeconds);
-		if (blueprint.computeSettings)
-			step.computeSettings = blueprint.computeSettings;
+		if (branch.protected) step.protected = true;
+		if (branch.computeSettings)
+			step.computeSettings = branch.computeSettings;
 		plan.push(step);
 		return;
 	}
 
 	// Branch exists. Check for setting drifts.
-	if (blueprint.computeSettings) {
+	if (branch.computeSettings) {
 		const endpoint = endpointsByBranchId.get(existing.id);
 		if (!endpoint) {
 			conflicts.push({
@@ -247,14 +255,11 @@ function diffSpecificBlueprint(args: SpecificBlueprintArgs): void {
 				identifier: branchName,
 				field: "endpoint",
 				current: undefined,
-				desired: blueprint.computeSettings,
+				desired: branch.computeSettings,
 				reason: "Branch has no read-write endpoint; cannot apply compute settings.",
 			});
 		} else {
-			const drift = computeDriftBetween(
-				blueprint.computeSettings,
-				endpoint,
-			);
+			const drift = computeDriftBetween(branch.computeSettings, endpoint);
 			if (drift) {
 				if (options.updateExisting) {
 					plan.push({
@@ -262,7 +267,7 @@ function diffSpecificBlueprint(args: SpecificBlueprintArgs): void {
 						projectId: remote.project.id,
 						branchName,
 						endpointId: endpoint.id,
-						settings: blueprint.computeSettings,
+						settings: branch.computeSettings,
 					});
 				} else {
 					conflicts.push({
@@ -278,29 +283,24 @@ function diffSpecificBlueprint(args: SpecificBlueprintArgs): void {
 		}
 	}
 
-	// TTL drift.
-	const desiredExpiresAt =
-		blueprint.ttlSeconds !== undefined
-			? ttlSecondsToExpiresAt(blueprint.ttlSeconds)
-			: null;
-	const currentExpiresAt = existing.expiresAt ?? null;
-	if (!expiresAtEqual(currentExpiresAt, desiredExpiresAt)) {
+	// `protected` drift.
+	if (branch.protected !== existing.protected) {
 		if (options.updateExisting) {
 			plan.push({
-				kind: "update-branch-ttl",
+				kind: "update-branch-protected",
 				projectId: remote.project.id,
 				branchId: existing.id,
 				branchName,
-				expiresAt: desiredExpiresAt,
+				protected: branch.protected,
 			});
 		} else {
 			conflicts.push({
 				kind: "branch",
 				identifier: branchName,
-				field: "ttl",
-				current: currentExpiresAt,
-				desired: desiredExpiresAt,
-				reason: "Existing branch has a different TTL. Pass `updateExisting: true` (SDK) or `--update-existing` (CLI) to apply.",
+				field: "protected",
+				current: existing.protected,
+				desired: branch.protected,
+				reason: "Existing branch has a different `protected` flag. Pass `updateExisting: true` (SDK) or `--update-existing` (CLI) to apply.",
 			});
 		}
 	}
@@ -393,14 +393,14 @@ function diffWildcardBlueprint(args: WildcardBlueprintArgs): void {
 	}
 }
 
-function resolveParentBranchName(
-	blueprint: ResolvedBranchBlueprint,
+function resolveBranchParentName(
+	branch: ResolvedBranchConfig,
 	config: ResolvedConfig,
 ): string | undefined {
-	const parent = blueprint.parent;
+	const parent = branch.parent;
 	if (!parent) return undefined;
-	const resolved = config.branchBlueprints.find((b) => b.key === parent);
-	if (resolved) return resolved.pattern;
+	const fromBranches = config.branches.find((b) => b.key === parent);
+	if (fromBranches) return fromBranches.name;
 	return parent;
 }
 

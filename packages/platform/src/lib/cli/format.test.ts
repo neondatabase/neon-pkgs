@@ -15,8 +15,11 @@ describe("formatConfigAsJson", () => {
 	test("parses back into the same shape", () => {
 		const config = defineConfig({
 			project: { name: "round-trip", region: "aws-us-east-1" },
+			branches: {
+				production: { protected: true },
+				staging: { parent: "production" },
+			},
 			branchBlueprints: {
-				production: {},
 				preview: {
 					pattern: "preview-*",
 					ttl: "1h",
@@ -43,7 +46,7 @@ describe("formatConfigAsTypeScript", () => {
 	test("the produced source, evaluated, yields the same config", () => {
 		const config = defineConfig({
 			project: { name: "ts-roundtrip" },
-			branchBlueprints: { production: {} },
+			branches: { production: {} },
 		});
 		const ts = formatConfigAsTypeScript(config);
 		// Strip the import + the wrapping defineConfig(); evaluate the JSON body. This is

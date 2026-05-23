@@ -1,4 +1,4 @@
-import { resolveApiKey } from "./auth.js";
+import { createNeonApiFromOptions } from "./auth.js";
 import { normalizeRegion, resolveConfig } from "./define-config.js";
 import { diffConfig, type PlanStep, type RemoteState } from "./diff.js";
 import {
@@ -16,7 +16,6 @@ import type {
 	NeonBranchSnapshot,
 	NeonProjectSnapshot,
 } from "./neon-api.js";
-import { createRealNeonApi } from "./neon-api-real.js";
 import type {
 	AppliedChange,
 	Config,
@@ -202,21 +201,9 @@ function isConfigLike(value: unknown): value is Config {
 }
 
 function createApiFromOptions(options: PushConfigOptions): NeonApi {
-	const resolved = resolveApiKey({
+	return createNeonApiFromOptions("pushConfig", {
 		...(options.apiKey ? { apiKey: options.apiKey } : {}),
 	});
-	if (!resolved) {
-		throw new PlatformError(
-			ErrorCode.MissingApiKey,
-			[
-				"pushConfig has no Neon API key to work with.",
-				"Tried (in order): `apiKey` option, NEON_API_KEY env, and `~/.config/neonctl/credentials.json`.",
-				"Either pass `apiKey` directly, set NEON_API_KEY, run `npx neonctl auth` to populate the credentials file, or pass a custom `api` adapter (e.g. an in-memory fake for tests).",
-				"Generate a key at https://console.neon.tech/app/settings/api-keys.",
-			].join(" "),
-		);
-	}
-	return createRealNeonApi({ apiKey: resolved.token });
 }
 
 interface ResolvedProjectResult {
@@ -313,11 +300,11 @@ async function resolveOrCreateProject(
 	}
 
 	// On first-time create, name the project's auto-created default branch after the
-	// root blueprint (e.g. `production`) so the diff matches without trying to create a
-	// sibling. Likewise seed the project's default endpoint settings from that blueprint
-	// so the auto-created endpoint matches the desired compute settings on the very first
+	// root branch (e.g. `production`) so the diff matches without trying to create a
+	// sibling. Likewise seed the project's default endpoint settings from that branch so
+	// the auto-created endpoint matches the desired compute settings on the very first
 	// push, no `updateExisting` flag needed.
-	const root = findRootBlueprint(config);
+	const root = findRootBranch(config);
 	const created = await api.createProject({
 		name: config.project.name,
 		regionId: normalizeRegion(config.project.region),
@@ -326,7 +313,7 @@ async function resolveOrCreateProject(
 		...(root?.computeSettings
 			? { defaultEndpointSettings: root.computeSettings }
 			: {}),
-		...(root ? { defaultBranchName: root.pattern } : {}),
+		...(root ? { defaultBranchName: root.name } : {}),
 	});
 	return { project: created, projectCreated: true };
 }
@@ -352,19 +339,16 @@ function isLikelyScopeError(err: unknown): boolean {
 }
 
 /**
- * Find the blueprint that should govern the project's default branch on first-time
- * creation. The "root" blueprint is the specific-name (non-wildcard) blueprint with no
- * parent — i.e. the top of the branch tree. By default this is whatever blueprint is
- * named `production`; users can rename it by setting `parent` on the others.
+ * Find the concrete branch that should govern the project's default branch on first-time
+ * creation. The "root" branch is the entry in `config.branches` with no parent — the top
+ * of the branch tree. Users can rename it by setting `parent` on the others.
  */
-function findRootBlueprint(config: ResolvedConfig) {
-	const candidates = config.branchBlueprints.filter(
-		(b) => !b.pattern.includes("*") && b.parent === undefined,
-	);
+function findRootBranch(config: ResolvedConfig) {
+	const candidates = config.branches.filter((b) => b.parent === undefined);
 	if (candidates.length > 0) return candidates[0];
-	// Fallback: no clean root (every specific blueprint has a parent). Pick the first
-	// specific blueprint just so the auto-created default branch has a useful name.
-	return config.branchBlueprints.find((b) => !b.pattern.includes("*"));
+	// Fallback: every entry has a parent (cycle / orphan). Pick the first so the
+	// auto-created default branch at least has a useful name.
+	return config.branches[0];
 }
 
 interface ApplyContext {
@@ -402,6 +386,7 @@ async function applyStep(
 			else if (step.parentBranchId)
 				createInput.parentId = step.parentBranchId;
 			if (step.expiresAt) createInput.expiresAt = step.expiresAt;
+			if (step.protected) createInput.protected = true;
 			if (step.computeSettings)
 				createInput.computeSettings = step.computeSettings;
 			const result = await ctx.api.createBranch(
@@ -435,6 +420,21 @@ async function applyStep(
 				action: "update",
 				identifier: updated.name,
 				details: { field: "ttl", expiresAt: step.expiresAt },
+			};
+		}
+		case "update-branch-protected": {
+			const updated = await ctx.api.updateBranch(
+				ctx.remoteProjectId,
+				step.branchId,
+				{ protected: step.protected },
+			);
+			ctx.branchById.set(updated.id, updated);
+			ctx.branchByName.set(updated.name, updated);
+			return {
+				kind: "branch",
+				action: "update",
+				identifier: updated.name,
+				details: { field: "protected", protected: step.protected },
 			};
 		}
 		case "update-endpoint": {

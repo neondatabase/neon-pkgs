@@ -5,6 +5,7 @@ import { configSchema, formatZodIssues } from "./schema.js";
 import type {
 	Config,
 	ResolvedBranchBlueprint,
+	ResolvedBranchConfig,
 	ResolvedConfig,
 } from "./types.js";
 
@@ -20,9 +21,12 @@ const REGION_PREFIX = /^(aws|azure|gcp)-/;
  *
  * export default defineConfig({
  *   project: { name: "my-app", region: "aws-us-east-1" },
+ *   branches: {
+ *     production: { protected: true, computeSettings: { autoscalingLimitMaxCu: 2 } },
+ *     staging:    { parent: "production" },
+ *   },
  *   branchBlueprints: {
- *     production: { computeSettings: { autoscalingLimitMaxCu: 2 } },
- *     preview:    { pattern: "preview-*", ttl: "1h", parent: "production" },
+ *     preview: { pattern: "preview-*", ttl: "1h", parent: "production" },
  *   },
  * });
  * ```
@@ -39,40 +43,72 @@ export function defineConfig(input: Config): Config {
 	const parsed = result.data as Config;
 	return Object.freeze({
 		project: Object.freeze({ ...parsed.project }),
-		branchBlueprints: parsed.branchBlueprints
-			? Object.freeze(
-					Object.fromEntries(
-						Object.entries(parsed.branchBlueprints).map(
-							([k, v]) => [k, Object.freeze({ ...v })],
-						),
-					),
-				)
-			: undefined,
+		branches: freezeRecord(parsed.branches),
+		branchBlueprints: freezeRecord(parsed.branchBlueprints),
 	}) as Config;
 }
 
+function freezeRecord<T extends object>(
+	record: Record<string, T> | undefined,
+): Record<string, T> | undefined {
+	if (!record) return undefined;
+	return Object.freeze(
+		Object.fromEntries(
+			Object.entries(record).map(([k, v]) => [
+				k,
+				Object.freeze({ ...v }),
+			]),
+		),
+	) as Record<string, T>;
+}
+
 /**
- * Resolve a `Config` (as produced by {@link defineConfig}) into a flat list of blueprints with
- * defaults applied (key copied into `pattern`, TTL parsed into seconds, etc.).
+ * Resolve a `Config` (as produced by {@link defineConfig}) into flat lists of concrete
+ * branches and blueprints with defaults applied (TTL parsed into seconds, default parents
+ * filled in, etc.).
  *
- * Pure function. Throws {@link ConfigValidationError} if a blueprint has an unresolvable
- * parent or invalid TTL — these are caught at `defineConfig` time too, but `resolveConfig`
- * re-validates to make it usable from `pullConfig` (which constructs a `Config` from remote
- * state and skips `defineConfig`).
+ * Pure function. Throws {@link ConfigValidationError} if any cross-reference is invalid —
+ * these are caught at `defineConfig` time too, but `resolveConfig` re-validates to make it
+ * usable from `pullConfig` (which constructs a `Config` from remote state and skips
+ * `defineConfig`).
  */
 export function resolveConfig(config: Config): ResolvedConfig {
 	const issues: string[] = [];
-	const blueprints: ResolvedBranchBlueprint[] = [];
 
-	const entries = config.branchBlueprints
+	const branchEntries = config.branches
+		? Object.entries(config.branches)
+		: [];
+	const blueprintEntries = config.branchBlueprints
 		? Object.entries(config.branchBlueprints)
 		: [];
-	const keys = new Set(entries.map(([k]) => k));
+	const branchKeys = new Set(branchEntries.map(([k]) => k));
 
-	for (const [key, blueprint] of entries) {
-		const pattern = blueprint.pattern ?? key;
+	const branches: ResolvedBranchConfig[] = [];
+	for (const [key, branch] of branchEntries) {
+		const parent = branch.parent;
+		validateParent({
+			parent,
+			ownKey: key,
+			branchKeys,
+			label: `branches.${key}.parent`,
+			issues,
+		});
+		branches.push({
+			key,
+			name: key,
+			parent:
+				parent ??
+				(key === DEFAULT_PARENT_KEY ? undefined : DEFAULT_PARENT_KEY),
+			protected: branch.protected === true,
+			computeSettings: branch.computeSettings
+				? { ...branch.computeSettings }
+				: undefined,
+		});
+	}
+
+	const blueprints: ResolvedBranchBlueprint[] = [];
+	for (const [key, blueprint] of blueprintEntries) {
 		let ttlSeconds: number | undefined;
-
 		if (blueprint.ttl !== undefined) {
 			const parsed = parseDuration(blueprint.ttl);
 			if ("error" in parsed) {
@@ -83,24 +119,17 @@ export function resolveConfig(config: Config): ResolvedConfig {
 		}
 
 		const parent = blueprint.parent;
-		if (parent !== undefined && parent !== key && !keys.has(parent)) {
-			// Allow literal remote branch names (we cannot verify them without an API call).
-			// We do flag it as an issue ONLY if it does not look like a valid branch name.
-			const patternCheck = validatePattern(parent);
-			if ("error" in patternCheck) {
-				issues.push(
-					`branchBlueprints.${key}.parent: refers to "${parent}" which is neither another blueprint key nor a valid branch name (${patternCheck.error})`,
-				);
-			} else if (isWildcardPattern(parent)) {
-				issues.push(
-					`branchBlueprints.${key}.parent: must be a concrete branch name (no wildcards), got "${parent}"`,
-				);
-			}
-		}
+		validateParent({
+			parent,
+			ownKey: key,
+			branchKeys,
+			label: `branchBlueprints.${key}.parent`,
+			issues,
+		});
 
 		blueprints.push({
 			key,
-			pattern,
+			pattern: blueprint.pattern,
 			ttlSeconds,
 			parent:
 				parent ??
@@ -117,8 +146,32 @@ export function resolveConfig(config: Config): ResolvedConfig {
 
 	return {
 		project: { ...config.project },
+		branches,
 		branchBlueprints: blueprints,
 	};
+}
+
+function validateParent(args: {
+	parent: string | undefined;
+	ownKey: string;
+	branchKeys: Set<string>;
+	label: string;
+	issues: string[];
+}): void {
+	const { parent, ownKey, branchKeys, label, issues } = args;
+	if (parent === undefined) return;
+	if (parent === ownKey) return;
+	if (branchKeys.has(parent)) return;
+	const patternCheck = validatePattern(parent);
+	if ("error" in patternCheck) {
+		issues.push(
+			`${label}: refers to "${parent}" which is neither another \`branches\` key nor a valid branch name (${patternCheck.error})`,
+		);
+	} else if (isWildcardPattern(parent)) {
+		issues.push(
+			`${label}: must be a concrete branch name (no wildcards), got "${parent}"`,
+		);
+	}
 }
 
 /**

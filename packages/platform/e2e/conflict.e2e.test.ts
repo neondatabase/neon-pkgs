@@ -21,7 +21,7 @@ describe("e2e — conflict detection against real Neon API", () => {
 			const created = await pushConfig(
 				defineConfig({
 					project: { name: projectName, region: DEFAULT_REGION },
-					branchBlueprints: { production: {} },
+					branches: { production: {} },
 				}),
 				{ api },
 			);
@@ -31,7 +31,7 @@ describe("e2e — conflict detection against real Neon API", () => {
 			// applyChanges:true → reports the conflict in the result without throwing.
 			const wrongRegion = defineConfig({
 				project: { name: projectName, region: "aws-eu-central-1" },
-				branchBlueprints: { production: {} },
+				branches: { production: {} },
 			});
 
 			await expect(
@@ -62,7 +62,7 @@ describe("e2e — conflict detection against real Neon API", () => {
 			const created = await pushConfig(
 				defineConfig({
 					project: { name: projectName, region: DEFAULT_REGION },
-					branchBlueprints: { production: {} },
+					branches: { production: {} },
 				}),
 				{ api },
 			);
@@ -71,7 +71,7 @@ describe("e2e — conflict detection against real Neon API", () => {
 			// Now push a config that wants max=2 on production. Should be a conflict by default.
 			const bigger = defineConfig({
 				project: { name: projectName, region: DEFAULT_REGION },
-				branchBlueprints: {
+				branches: {
 					production: {
 						computeSettings: { autoscalingLimitMaxCu: 2 },
 					},

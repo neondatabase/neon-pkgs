@@ -20,7 +20,12 @@ function makeRemote(args?: {
 		...args?.project,
 	};
 	const branches: NeonBranchSnapshot[] = args?.branches ?? [
-		{ id: "br-prod", name: "production", isDefault: true },
+		{
+			id: "br-prod",
+			name: "production",
+			isDefault: true,
+			protected: false,
+		},
 	];
 	const endpoints: NeonEndpointSnapshot[] = args?.endpoints ?? [
 		{
@@ -94,12 +99,12 @@ describe("diffConfig — project diff", () => {
 	});
 });
 
-describe("diffConfig — specific-name blueprint", () => {
+describe("diffConfig — concrete branches", () => {
 	test("plans create when branch missing (always allowed)", () => {
 		const config = resolveConfig(
 			defineConfig({
 				project: { name: "my-app" },
-				branchBlueprints: {
+				branches: {
 					production: {},
 					staging: { parent: "production" },
 				},
@@ -123,7 +128,7 @@ describe("diffConfig — specific-name blueprint", () => {
 		const config = resolveConfig(
 			defineConfig({
 				project: { name: "my-app" },
-				branchBlueprints: {
+				branches: {
 					production: {
 						computeSettings: { autoscalingLimitMaxCu: 2 },
 					},
@@ -148,7 +153,7 @@ describe("diffConfig — specific-name blueprint", () => {
 		const config = resolveConfig(
 			defineConfig({
 				project: { name: "my-app" },
-				branchBlueprints: {
+				branches: {
 					production: {
 						computeSettings: { autoscalingLimitMaxCu: 2 },
 					},
@@ -169,30 +174,72 @@ describe("diffConfig — specific-name blueprint", () => {
 		]);
 	});
 
-	test("reports TTL drift as conflict by default", () => {
-		const remote = makeRemote({
-			branches: [{ id: "br-prod", name: "production", isDefault: true }],
-		});
+	test("reports `protected` drift as conflict by default", () => {
+		const remote = makeRemote();
 		const config = resolveConfig(
 			defineConfig({
 				project: { name: "my-app" },
-				branchBlueprints: {
-					production: { ttl: "1h" },
-				},
+				branches: { production: { protected: true } },
 			}),
 		);
 		const result = diffConfig(config, remote, {
 			applyExisting: false,
 			updateExisting: false,
 		});
-		expect(result.conflicts.some((c) => c.field === "ttl")).toBe(true);
+		expect(result.conflicts.some((c) => c.field === "protected")).toBe(
+			true,
+		);
+	});
+
+	test("plans a protected toggle when updateExisting is true", () => {
+		const remote = makeRemote();
+		const config = resolveConfig(
+			defineConfig({
+				project: { name: "my-app" },
+				branches: { production: { protected: true } },
+			}),
+		);
+		const result = diffConfig(config, remote, {
+			applyExisting: false,
+			updateExisting: true,
+		});
+		expect(result.plan).toEqual([
+			expect.objectContaining({
+				kind: "update-branch-protected",
+				branchId: "br-prod",
+				protected: true,
+			}),
+		]);
+	});
+
+	test("applies `protected: true` on create", () => {
+		const config = resolveConfig(
+			defineConfig({
+				project: { name: "my-app" },
+				branches: {
+					production: {},
+					staging: { parent: "production", protected: true },
+				},
+			}),
+		);
+		const result = diffConfig(config, makeRemote(), {
+			applyExisting: false,
+			updateExisting: false,
+		});
+		expect(result.plan).toEqual([
+			expect.objectContaining({
+				kind: "create-branch",
+				branchName: "staging",
+				protected: true,
+			}),
+		]);
 	});
 
 	test("missing parent branch is a conflict, not a silent failure", () => {
 		const config = resolveConfig(
 			defineConfig({
 				project: { name: "my-app" },
-				branchBlueprints: {
+				branches: {
 					production: {},
 					feature: { parent: "does-not-exist" },
 				},
@@ -216,17 +263,24 @@ describe("diffConfig — wildcard blueprint", () => {
 	test("skips wildcard updates by default and records them", () => {
 		const remote = makeRemote({
 			branches: [
-				{ id: "br-prod", name: "production", isDefault: true },
+				{
+					id: "br-prod",
+					name: "production",
+					isDefault: true,
+					protected: false,
+				},
 				{
 					id: "br-p1",
 					name: "preview-pr-1",
 					isDefault: false,
+					protected: false,
 					parentId: "br-prod",
 				},
 				{
 					id: "br-p2",
 					name: "preview-pr-2",
 					isDefault: false,
+					protected: false,
 					parentId: "br-prod",
 				},
 			],
@@ -260,8 +314,8 @@ describe("diffConfig — wildcard blueprint", () => {
 		const config = resolveConfig(
 			defineConfig({
 				project: { name: "my-app" },
+				branches: { production: {} },
 				branchBlueprints: {
-					production: {},
 					preview: {
 						pattern: "preview-*",
 						ttl: "1h",
@@ -287,11 +341,17 @@ describe("diffConfig — wildcard blueprint", () => {
 	test("with applyExisting=true, plans endpoint and TTL updates for matching branches", () => {
 		const remote = makeRemote({
 			branches: [
-				{ id: "br-prod", name: "production", isDefault: true },
+				{
+					id: "br-prod",
+					name: "production",
+					isDefault: true,
+					protected: false,
+				},
 				{
 					id: "br-p1",
 					name: "preview-pr-1",
 					isDefault: false,
+					protected: false,
 					parentId: "br-prod",
 				},
 			],
@@ -317,8 +377,8 @@ describe("diffConfig — wildcard blueprint", () => {
 		const config = resolveConfig(
 			defineConfig({
 				project: { name: "my-app" },
+				branches: { production: {} },
 				branchBlueprints: {
-					production: {},
 					preview: {
 						pattern: "preview-*",
 						ttl: "1h",
@@ -350,7 +410,12 @@ describe("diffConfig — wildcard blueprint", () => {
 		const remote = makeRemote({
 			project: { name: "my-app" },
 			branches: [
-				{ id: "br-prod", name: "preview-default", isDefault: true },
+				{
+					id: "br-prod",
+					name: "preview-default",
+					isDefault: true,
+					protected: false,
+				},
 			],
 			endpoints: [
 				{

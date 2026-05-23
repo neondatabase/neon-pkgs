@@ -19,6 +19,8 @@ export interface NeonBranchSnapshot {
 	name: string;
 	parentId?: string;
 	isDefault: boolean;
+	/** Whether the branch is marked protected on Neon. */
+	protected: boolean;
 	expiresAt?: string;
 }
 
@@ -49,12 +51,16 @@ export interface CreateBranchInput {
 	name: string;
 	parentId?: string;
 	expiresAt?: string;
+	/** When `true`, the branch is created with the `protected` flag set on Neon. */
+	protected?: boolean;
 	computeSettings?: ComputeSettings;
 }
 
 export interface UpdateBranchInput {
 	name?: string;
 	expiresAt?: string | null;
+	/** When set, toggles the branch's `protected` flag on Neon. */
+	protected?: boolean;
 }
 
 /**

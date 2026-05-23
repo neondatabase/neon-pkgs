@@ -1,5 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { ErrorCode, PlatformError } from "./errors.js";
+import type { NeonApi } from "./neon-api.js";
+import { createRealNeonApi } from "./neon-api-real.js";
 
 /**
  * Minimal shape of `~/.config/neonctl/credentials.json` we read. `neonctl` writes more
@@ -101,4 +104,37 @@ export function resolveApiKey(
 		return { token: creds.access_token, source: "neonctl" };
 	}
 	return null;
+}
+
+/**
+ * Resolve the Neon API key via the standard chain (option → `NEON_API_KEY` env →
+ * `~/.config/neonctl/credentials.json`) and construct a real {@link NeonApi} adapter from
+ * it, or throw a uniform `PLATFORM_MISSING_API_KEY` error if no key can be found.
+ *
+ * Used by `pullConfig`, `pushConfig`, `loadEnv`, and `branch` to build their default
+ * `NeonApi` when the caller doesn't inject one. `operation` is the calling function's
+ * name (e.g. `"pushConfig"`, `"branch"`) — it's prepended to the error message so users
+ * can tell which call surfaced the missing key.
+ */
+export function createNeonApiFromOptions(
+	operation: string,
+	options: {
+		apiKey?: string;
+		env?: Record<string, string | undefined>;
+	} = {},
+): NeonApi {
+	const resolved = resolveApiKey({
+		...(options.apiKey ? { apiKey: options.apiKey } : {}),
+		...(options.env ? { env: options.env } : {}),
+	});
+	if (resolved) return createRealNeonApi({ apiKey: resolved.token });
+	throw new PlatformError(
+		ErrorCode.MissingApiKey,
+		[
+			`${operation} has no Neon API key to work with.`,
+			"Tried (in order): `apiKey` option, NEON_API_KEY env, and `~/.config/neonctl/credentials.json`.",
+			"Either pass `apiKey` directly, set NEON_API_KEY, run `npx neonctl auth` to populate the credentials file, or pass a custom `api` adapter (e.g. an in-memory fake for tests).",
+			"Generate a key at https://console.neon.tech/app/settings/api-keys.",
+		].join(" "),
+	);
 }

@@ -30,8 +30,8 @@ describe("loadConfigFromFile", () => {
 import { defineConfig } from "${PLATFORM_SRC}";
 export default defineConfig({
   project: { name: "test-project", region: "aws-us-east-1" },
+  branches: { production: {} },
   branchBlueprints: {
-    production: {},
     preview: { pattern: "preview-*", ttl: "1h" },
   },
 });

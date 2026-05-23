@@ -1,0 +1,10 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+  "dynamicallyLoaded": [
+    "e2e/setup.ts",
+    "e2e/load-env.ts"
+  ],
+  "ignoreDependencies": [
+    "console-fail-test"
+  ]
+}

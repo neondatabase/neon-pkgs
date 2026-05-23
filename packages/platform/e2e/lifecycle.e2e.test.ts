@@ -22,7 +22,7 @@ describe("e2e — full lifecycle against real Neon API", () => {
 			const projectName = uniqueProjectName("lifecycle");
 			const baseConfig = defineConfig({
 				project: { name: projectName, region: DEFAULT_REGION },
-				branchBlueprints: {
+				branches: {
 					production: {
 						computeSettings: { autoscalingLimitMaxCu: 1 },
 					},
@@ -57,7 +57,7 @@ describe("e2e — full lifecycle against real Neon API", () => {
 			// 3. Third push adds a `staging` branch. Should be additive — no conflicts, no flags.
 			const withStaging = defineConfig({
 				project: { name: projectName, region: DEFAULT_REGION },
-				branchBlueprints: {
+				branches: {
 					production: {
 						computeSettings: { autoscalingLimitMaxCu: 1 },
 					},
@@ -83,7 +83,7 @@ describe("e2e — full lifecycle against real Neon API", () => {
 				api,
 				projectId: first.projectId,
 			});
-			expect(pulledAfterAdd.branchBlueprints?.staging).toBeDefined();
+			expect(pulledAfterAdd.branches?.staging).toBeDefined();
 		},
 	);
 
@@ -100,7 +100,7 @@ describe("e2e — full lifecycle against real Neon API", () => {
 			const first = await pushConfig(
 				defineConfig({
 					project: { name: projectName, region: DEFAULT_REGION },
-					branchBlueprints: { production: {} },
+					branches: { production: {} },
 				}),
 				{ api },
 			);
@@ -111,7 +111,7 @@ describe("e2e — full lifecycle against real Neon API", () => {
 			const second = await pushConfig(
 				defineConfig({
 					project: { name: projectName, region: DEFAULT_REGION },
-					branchBlueprints: { production: {} },
+					branches: { production: {} },
 				}),
 				{ api },
 			);
@@ -137,7 +137,7 @@ describe("e2e — full lifecycle against real Neon API", () => {
 							name: uniqueProjectName("byid"),
 							region: DEFAULT_REGION,
 						},
-						branchBlueprints: { production: {} },
+						branches: { production: {} },
 					}),
 					{ api },
 				);

@@ -10,37 +10,45 @@ describe("defineConfig", () => {
 	test("accepts a minimal project-only config", () => {
 		const cfg = defineConfig({ project: { name: "my-app" } });
 		expect(cfg.project.name).toBe("my-app");
+		expect(cfg.branches).toBeUndefined();
 		expect(cfg.branchBlueprints).toBeUndefined();
 	});
 
 	test("freezes returned objects", () => {
 		const cfg = defineConfig({
 			project: { name: "my-app", region: "aws-us-east-1" },
-			branchBlueprints: {
+			branches: {
 				production: { computeSettings: { autoscalingLimitMaxCu: 1 } },
+			},
+			branchBlueprints: {
+				preview: { pattern: "preview-*", ttl: "1h" },
 			},
 		});
 		expect(Object.isFrozen(cfg)).toBe(true);
 		expect(Object.isFrozen(cfg.project)).toBe(true);
+		expect(Object.isFrozen(cfg.branches)).toBe(true);
+		expect(Object.isFrozen(cfg.branches?.production)).toBe(true);
 		expect(Object.isFrozen(cfg.branchBlueprints)).toBe(true);
-		expect(Object.isFrozen(cfg.branchBlueprints?.production)).toBe(true);
+		expect(Object.isFrozen(cfg.branchBlueprints?.preview)).toBe(true);
 	});
 
 	test("aggregates multiple validation issues into one error", () => {
 		expect(() =>
 			defineConfig({
 				project: { name: "  ", region: "BAD" } as never,
+				branches: {
+					"foo bar": {},
+					selfref: { parent: "selfref" },
+				},
 				branchBlueprints: {
-					"foo bar": {} as never,
-					preview: { ttl: "abc" } as never,
-					selfref: { parent: "selfref" } as never,
-				} as never,
+					preview: { pattern: "preview-*", ttl: "abc" } as never,
+				},
 			}),
 		).toThrow(ConfigValidationError);
 		try {
 			defineConfig({
 				project: { name: "" } as never,
-				branchBlueprints: { "bad name!": {} } as never,
+				branches: { "bad name!": {} },
 			});
 		} catch (err) {
 			const e = err as ConfigValidationError;
@@ -58,7 +66,15 @@ describe("defineConfig", () => {
 		expect(() =>
 			defineConfig({
 				project: { name: "x" },
-				branchBlueprints: { production: { whatevs: 1 } as never },
+				branches: { production: { whatevs: 1 } as never },
+			}),
+		).toThrow(/unknown key/);
+		expect(() =>
+			defineConfig({
+				project: { name: "x" },
+				branchBlueprints: {
+					preview: { pattern: "preview-*", whatevs: 1 } as never,
+				},
 			}),
 		).toThrow(/unknown key/);
 	});
@@ -67,7 +83,7 @@ describe("defineConfig", () => {
 		expect(() =>
 			defineConfig({
 				project: { name: "x" },
-				branchBlueprints: {
+				branches: {
 					production: { parent: "production" },
 				},
 			}),
@@ -78,7 +94,7 @@ describe("defineConfig", () => {
 		expect(() =>
 			defineConfig({
 				project: { name: "x" },
-				branchBlueprints: {
+				branches: {
 					production: {},
 					feature: { parent: "preview-*" },
 				},
@@ -86,22 +102,34 @@ describe("defineConfig", () => {
 		).toThrow(/must be a concrete branch name/);
 	});
 
-	test("allows parent that matches another blueprint key", () => {
+	test("rejects a blueprint parent pointing at another blueprint key", () => {
+		expect(() =>
+			defineConfig({
+				project: { name: "x" },
+				branchBlueprints: {
+					preview: { pattern: "preview-*" },
+					feature: { pattern: "feat-*", parent: "preview" },
+				},
+			}),
+		).toThrow(/concrete branch/);
+	});
+
+	test("allows a blueprint parent that matches a `branches` key", () => {
 		const cfg = defineConfig({
 			project: { name: "x" },
+			branches: { production: {} },
 			branchBlueprints: {
-				production: {},
 				preview: { pattern: "preview-*", parent: "production" },
 			},
 		});
 		expect(cfg.branchBlueprints?.preview.parent).toBe("production");
 	});
 
-	test("allows parent that is a literal branch name not in blueprints", () => {
+	test("allows parent that is a literal branch name not in branches", () => {
 		const cfg = defineConfig({
 			project: { name: "x" },
 			branchBlueprints: {
-				feature: { parent: "main" },
+				feature: { pattern: "feat-*", parent: "main" },
 			},
 		});
 		expect(cfg.branchBlueprints?.feature.parent).toBe("main");
@@ -111,7 +139,9 @@ describe("defineConfig", () => {
 		expect(() =>
 			defineConfig({
 				project: { name: "x" },
-				branchBlueprints: { preview: { ttl: "1mo" } } as never,
+				branchBlueprints: {
+					preview: { pattern: "preview-*", ttl: "1mo" },
+				} as never,
 			}),
 		).toThrow(/ttl:/);
 	});
@@ -119,9 +149,59 @@ describe("defineConfig", () => {
 	test("accepts ttl as positive integer (interpreted as seconds)", () => {
 		const cfg = defineConfig({
 			project: { name: "x" },
-			branchBlueprints: { preview: { ttl: 3600 } },
+			branchBlueprints: {
+				preview: { pattern: "preview-*", ttl: 3600 },
+			},
 		});
 		expect(cfg.branchBlueprints?.preview.ttl).toBe(3600);
+	});
+
+	test("rejects blueprint without a pattern", () => {
+		expect(() =>
+			defineConfig({
+				project: { name: "x" },
+				branchBlueprints: { preview: {} } as never,
+			}),
+		).toThrow(/pattern/);
+	});
+
+	test("rejects a blueprint whose pattern has no wildcard", () => {
+		expect(() =>
+			defineConfig({
+				project: { name: "x" },
+				branchBlueprints: {
+					preview: { pattern: "preview" },
+				},
+			}),
+		).toThrow(/wildcard/);
+	});
+
+	test("rejects a branches entry whose key is not a valid branch name", () => {
+		expect(() =>
+			defineConfig({
+				project: { name: "x" },
+				branches: { "bad name!": {} },
+			}),
+		).toThrow(/not a valid branch name/);
+	});
+
+	test("rejects a branches entry whose key contains a wildcard", () => {
+		expect(() =>
+			defineConfig({
+				project: { name: "x" },
+				branches: { "preview-*": {} },
+			}),
+		).toThrow(/concrete branch name/);
+	});
+
+	test("rejects key collisions between branches and branchBlueprints", () => {
+		expect(() =>
+			defineConfig({
+				project: { name: "x" },
+				branches: { preview: {} },
+				branchBlueprints: { preview: { pattern: "preview-*" } },
+			}),
+		).toThrow(/collides with a key in `branches`/);
 	});
 
 	test("rejects pgVersion outside the 14..18 range", () => {
@@ -140,7 +220,7 @@ describe("defineConfig", () => {
 		expect(() =>
 			defineConfig({
 				project: { name: "x" },
-				branchBlueprints: {
+				branches: {
 					production: {
 						computeSettings: {
 							autoscalingLimitMinCu: 4,
@@ -156,7 +236,7 @@ describe("defineConfig", () => {
 		expect(() =>
 			defineConfig({
 				project: { name: "x" },
-				branchBlueprints: {
+				branches: {
 					production: {
 						computeSettings: { suspendTimeout: "30s" },
 					},
@@ -167,7 +247,7 @@ describe("defineConfig", () => {
 		expect(() =>
 			defineConfig({
 				project: { name: "x" },
-				branchBlueprints: {
+				branches: {
 					production: {
 						computeSettings: { suspendTimeout: 1_000_000 },
 					},
@@ -180,7 +260,7 @@ describe("defineConfig", () => {
 		expect(() =>
 			defineConfig({
 				project: { name: "x" },
-				branchBlueprints: {
+				branches: {
 					production: {
 						computeSettings: { suspendTimeout: undefined },
 					},
@@ -190,7 +270,7 @@ describe("defineConfig", () => {
 		expect(() =>
 			defineConfig({
 				project: { name: "x" },
-				branchBlueprints: {
+				branches: {
 					production: {
 						computeSettings: { suspendTimeout: false },
 					},
@@ -200,7 +280,7 @@ describe("defineConfig", () => {
 		expect(() =>
 			defineConfig({
 				project: { name: "x" },
-				branchBlueprints: {
+				branches: {
 					production: {
 						computeSettings: { suspendTimeout: "5m" },
 					},
@@ -208,22 +288,29 @@ describe("defineConfig", () => {
 			}),
 		).not.toThrow();
 	});
+
+	test("accepts the `protected` flag on a branch", () => {
+		const cfg = defineConfig({
+			project: { name: "x" },
+			branches: { production: { protected: true } },
+		});
+		expect(cfg.branches?.production.protected).toBe(true);
+	});
 });
 
 describe("resolveConfig", () => {
-	test("copies blueprint key into pattern when missing", () => {
+	test("flattens branches and blueprints with their keys", () => {
 		const resolved = resolveConfig(
 			defineConfig({
 				project: { name: "x" },
-				branchBlueprints: {
-					production: {},
-					preview: { pattern: "preview-*" },
-				},
+				branches: { production: {} },
+				branchBlueprints: { preview: { pattern: "preview-*" } },
 			}),
 		);
-		const byKey = new Map(resolved.branchBlueprints.map((b) => [b.key, b]));
-		expect(byKey.get("production")?.pattern).toBe("production");
-		expect(byKey.get("preview")?.pattern).toBe("preview-*");
+		expect(resolved.branches.map((b) => b.name)).toEqual(["production"]);
+		expect(resolved.branchBlueprints.map((b) => b.pattern)).toEqual([
+			"preview-*",
+		]);
 	});
 
 	test("parses ttl into seconds", () => {
@@ -238,35 +325,47 @@ describe("resolveConfig", () => {
 		expect(resolved.branchBlueprints[0].ttlSeconds).toBe(3600);
 	});
 
-	test("defaults parent to 'production' for non-production blueprints", () => {
+	test("defaults parent to 'production' for non-production branches/blueprints", () => {
 		const resolved = resolveConfig(
 			defineConfig({
 				project: { name: "x" },
-				branchBlueprints: {
-					production: {},
-					preview: { pattern: "preview-*" },
-				},
+				branches: { production: {}, staging: {} },
+				branchBlueprints: { preview: { pattern: "preview-*" } },
 			}),
 		);
-		const byKey = new Map(resolved.branchBlueprints.map((b) => [b.key, b]));
-		expect(byKey.get("production")?.parent).toBeUndefined();
-		expect(byKey.get("preview")?.parent).toBe("production");
+		const branchByKey = new Map(resolved.branches.map((b) => [b.key, b]));
+		const blueprintByKey = new Map(
+			resolved.branchBlueprints.map((b) => [b.key, b]),
+		);
+		expect(branchByKey.get("production")?.parent).toBeUndefined();
+		expect(branchByKey.get("staging")?.parent).toBe("production");
+		expect(blueprintByKey.get("preview")?.parent).toBe("production");
 	});
 
 	test("respects explicit parent", () => {
 		const resolved = resolveConfig(
 			defineConfig({
 				project: { name: "x" },
-				branchBlueprints: {
+				branches: {
 					production: {},
 					staging: {},
 					feature: { parent: "staging" },
 				},
 			}),
 		);
-		expect(
-			resolved.branchBlueprints.find((b) => b.key === "feature")?.parent,
-		).toBe("staging");
+		expect(resolved.branches.find((b) => b.key === "feature")?.parent).toBe(
+			"staging",
+		);
+	});
+
+	test("defaults `protected` to false", () => {
+		const resolved = resolveConfig(
+			defineConfig({
+				project: { name: "x" },
+				branches: { production: {} },
+			}),
+		);
+		expect(resolved.branches[0].protected).toBe(false);
 	});
 });
 

@@ -1,7 +1,5 @@
-import { resolveApiKey } from "./auth.js";
+import { createNeonApiFromOptions } from "./auth.js";
 import { defineConfig } from "./define-config.js";
-import { formatDurationSeconds } from "./duration.js";
-import { ErrorCode, PlatformError } from "./errors.js";
 import { loadContext } from "./load-context.js";
 import type {
 	NeonApi,
@@ -9,8 +7,7 @@ import type {
 	NeonEndpointSnapshot,
 	NeonProjectSnapshot,
 } from "./neon-api.js";
-import { createRealNeonApi } from "./neon-api-real.js";
-import type { BranchBlueprint, ComputeSettings, Config } from "./types.js";
+import type { BranchConfig, ComputeSettings, Config } from "./types.js";
 
 export interface PullConfigOptions {
 	/** Neon API key. Falls back to `NEON_API_KEY`. Ignored when a custom `api` is supplied. */
@@ -63,26 +60,20 @@ function resolveProjectId(options: PullConfigOptions): string {
 }
 
 function createApiFromOptions(options: PullConfigOptions): NeonApi {
-	const resolved = resolveApiKey({
+	return createNeonApiFromOptions("pullConfig", {
 		...(options.apiKey ? { apiKey: options.apiKey } : {}),
 	});
-	if (!resolved) {
-		throw new PlatformError(
-			ErrorCode.MissingApiKey,
-			[
-				"pullConfig has no Neon API key to work with.",
-				"Tried (in order): `apiKey` option, NEON_API_KEY env, and `~/.config/neonctl/credentials.json`.",
-				"Either pass `apiKey` directly, set NEON_API_KEY, run `npx neonctl auth` to populate the credentials file, or pass a custom `api` adapter (e.g. an in-memory fake for tests).",
-				"Generate a key at https://console.neon.tech/app/settings/api-keys.",
-			].join(" "),
-		);
-	}
-	return createRealNeonApi({ apiKey: resolved.token });
 }
 
 /**
  * Build a {@link Config} from a project snapshot + branches. Pure helper, exported so the
  * v1 e2e test can use it without re-importing internals.
+ *
+ * Only **concrete, persistent branches** make it into `config.branches` — ephemeral
+ * branches (those with a future `expiresAt`) are dropped. Listing live branches at runtime
+ * is `neonctl branches list`'s job, not config-as-code's. Likewise we don't try to round
+ * trip a `branchBlueprints` section: blueprints are templates that live in your editable
+ * `neon.ts`, not on Neon.
  */
 export function buildConfigFromSnapshots(
 	project: NeonProjectSnapshot,
@@ -94,24 +85,24 @@ export function buildConfigFromSnapshots(
 		if (ep.type === "read_write") endpointsByBranchId.set(ep.branchId, ep);
 	}
 
-	const blueprints: Record<string, BranchBlueprint> = {};
-	const usedKeys = new Set<string>();
+	const persistent = branches.filter((b) => !isEphemeral(b));
 
 	// Sort branches so the default branch comes first; this makes the emitted file stable.
-	const sorted = [...branches].sort((a, b) => {
+	const sorted = [...persistent].sort((a, b) => {
 		if (a.isDefault && !b.isDefault) return -1;
 		if (!a.isDefault && b.isDefault) return 1;
 		return a.name.localeCompare(b.name);
 	});
 
 	const branchById = new Map(branches.map((b) => [b.id, b] as const));
+	const branchEntries: Record<string, BranchConfig> = {};
+	const usedKeys = new Set<string>();
 
 	for (const branch of sorted) {
-		const key = pickBlueprintKey(branch.name, usedKeys);
+		const key = pickBranchKey(branch.name, usedKeys);
 		usedKeys.add(key);
 
-		const blueprint: BranchBlueprint = {};
-		if (key !== branch.name) blueprint.pattern = branch.name;
+		const entry: BranchConfig = {};
 
 		const parent = branch.parentId
 			? branchById.get(branch.parentId)
@@ -122,25 +113,19 @@ export function buildConfigFromSnapshots(
 				parent.name !== defaultParentKey ||
 				branch.name === defaultParentKey
 			) {
-				blueprint.parent = parent.name;
+				entry.parent = parent.name;
 			}
 		}
 
-		if (branch.expiresAt) {
-			const ms = Date.parse(branch.expiresAt) - Date.now();
-			if (Number.isFinite(ms) && ms > 0) {
-				const ttlSeconds = Math.max(1, Math.round(ms / 1000));
-				blueprint.ttl = formatDurationSeconds(ttlSeconds);
-			}
-		}
+		if (branch.protected) entry.protected = true;
 
 		const endpoint = endpointsByBranchId.get(branch.id);
 		if (endpoint) {
 			const compute = endpointToComputeSettings(endpoint, project);
-			if (compute) blueprint.computeSettings = compute;
+			if (compute) entry.computeSettings = compute;
 		}
 
-		blueprints[key] = blueprint;
+		branchEntries[key] = entry;
 	}
 
 	const config: Config = {
@@ -150,23 +135,26 @@ export function buildConfigFromSnapshots(
 			pgVersion: project.pgVersion,
 		},
 	};
-	if (Object.keys(blueprints).length > 0)
-		config.branchBlueprints = blueprints;
+	if (Object.keys(branchEntries).length > 0) config.branches = branchEntries;
 	return config;
 }
 
-function pickBlueprintKey(branchName: string, used: Set<string>): string {
-	const normalized = sanitizeKey(branchName);
-	if (!used.has(normalized)) return normalized;
-	let i = 2;
-	while (used.has(`${normalized}_${i}`)) i += 1;
-	return `${normalized}_${i}`;
+function isEphemeral(branch: NeonBranchSnapshot): boolean {
+	if (!branch.expiresAt) return false;
+	const expiresMs = Date.parse(branch.expiresAt);
+	if (!Number.isFinite(expiresMs)) return false;
+	return expiresMs > Date.now();
 }
 
-function sanitizeKey(branchName: string): string {
-	const replaced = branchName.replace(/[^A-Za-z0-9_]/g, "_");
-	if (replaced === "" || /^[0-9]/.test(replaced)) return `branch_${replaced}`;
-	return replaced;
+function pickBranchKey(branchName: string, used: Set<string>): string {
+	// Concrete branch keys must equal the branch name on Neon (the key IS the name).
+	// If a branch name contains characters that aren't legal in our config keys, the user
+	// will see the validation error and decide whether to rename the branch on Neon —
+	// we don't silently rewrite the key.
+	if (!used.has(branchName)) return branchName;
+	let i = 2;
+	while (used.has(`${branchName}_${i}`)) i += 1;
+	return `${branchName}_${i}`;
 }
 
 function endpointToComputeSettings(

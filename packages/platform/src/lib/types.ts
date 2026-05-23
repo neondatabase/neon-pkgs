@@ -41,35 +41,64 @@ export interface ComputeSettings {
 }
 
 /**
- * A branch blueprint describes the desired state of any branch whose name matches `pattern`.
+ * Desired state of a single concrete, persistent branch (e.g. `production`, `staging`).
  *
- * When the blueprint key is used as the pattern (the default) the blueprint targets a single
- * concrete branch. When `pattern` contains `*` characters the blueprint becomes a template that
- * applies to all matching branches.
+ * The map key in {@link Config.branches} is the literal branch name on Neon — no wildcards.
+ * These entries describe branches `pushConfig` should create-if-missing and update-on-drift.
+ * For *ephemeral* branches spun up via `branch()`, see {@link BranchBlueprint} instead.
  */
-export interface BranchBlueprint {
+export interface BranchConfig {
 	/**
-	 * Branch name pattern. Supports `*` wildcards. When omitted, the blueprint key is used.
-	 *
-	 * Examples: `"production"`, `"preview-*"`, `"feat-*"`.
-	 */
-	pattern?: string;
-	/**
-	 * Time-to-live for ephemeral branches. When set, matching branches are scheduled for
-	 * deletion after the TTL elapses. Accepts simple duration strings: `30s`, `5m`, `1h`,
-	 * `7d`, `2w`, or a positive integer (interpreted as seconds).
-	 *
-	 * When omitted, the matched branch is not treated as ephemeral and has no expiry.
-	 */
-	ttl?: string | number;
-	/**
-	 * Parent branch. Resolved against other blueprint keys first, then against branch names.
-	 * Defaults to `"production"` (which must be defined as a blueprint or already exist).
+	 * Parent branch. Resolved against other `branches` keys first, then against literal
+	 * branch names on Neon. Defaults to `"production"` (which must be declared as another
+	 * `branches` entry or already exist on Neon). The root branch (e.g. `production`) leaves
+	 * this unset.
 	 */
 	parent?: string;
 	/**
-	 * Optional compute settings. When omitted, the matched branch inherits the project-level
-	 * defaults from the Neon Console.
+	 * Whether the branch is marked protected on Neon. Protected branches cannot be deleted
+	 * without first removing the flag, and pick up additional safeguards (e.g. password
+	 * rotation guards, IP allow-list enforcement). Defaults to `false`.
+	 */
+	protected?: boolean;
+	/**
+	 * Optional compute settings for the branch's read-write endpoint. When omitted, the
+	 * branch inherits the project-level defaults from the Neon Console.
+	 */
+	computeSettings?: ComputeSettings;
+}
+
+/**
+ * Template for *ephemeral* branches spun up via `branch()`. Every blueprint's `pattern`
+ * must contain a `*` wildcard — the wildcard is what makes the blueprint a factory rather
+ * than a single managed branch. For specific-name branches (e.g. `production`), use
+ * {@link BranchConfig} under {@link Config.branches} instead.
+ */
+export interface BranchBlueprint {
+	/**
+	 * Branch name pattern. **Must** contain a `*` wildcard. Examples: `"preview-*"`,
+	 * `"feat-*"`, `"pr-*-staging"`. The `*` is substituted with `<git-branch>-<mini-id>`
+	 * (or just `<mini-id>` when git isn't available) at `branch()` call time.
+	 */
+	pattern: string;
+	/**
+	 * Optional time-to-live for the ephemeral child. When set, every branch minted from
+	 * this blueprint is scheduled for deletion after the TTL elapses. Accepts simple
+	 * duration strings: `30s`, `5m`, `1h`, `7d`, `2w`, or a positive integer (seconds).
+	 *
+	 * When omitted, branches from this blueprint do not expire — `branch()` becomes a
+	 * convenient name-generator but the resulting branch lives on until explicitly deleted.
+	 */
+	ttl?: string | number;
+	/**
+	 * Parent branch. Resolved against `branches` keys first, then against literal branch
+	 * names on Neon. Defaults to `"production"` (which must be declared as a `branches`
+	 * entry or already exist on Neon).
+	 */
+	parent?: string;
+	/**
+	 * Optional compute settings applied to every child branch's read-write endpoint. When
+	 * omitted, children inherit the project-level defaults from the Neon Console.
 	 */
 	computeSettings?: ComputeSettings;
 }
@@ -98,18 +127,49 @@ export interface ProjectConfig {
 
 /**
  * A complete Neon Platform configuration. Built via {@link defineConfig}.
+ *
+ * The branch surface is split into two intentionally distinct maps:
+ *
+ * - {@link branches} — concrete, persistent branches managed by `pushConfig`. The map key
+ *   is the literal branch name on Neon. Use this for `production`, `staging`, etc.
+ * - {@link branchBlueprints} — templates for ephemeral branches spun up via `branch()`.
+ *   Every blueprint's `pattern` must contain a `*` wildcard.
+ *
+ * Listing the *live* branches currently on a project (including ephemeral ones) is **not**
+ * part of this config — that's a runtime query exposed by `neonctl branches list`.
  */
 export interface Config {
 	project: ProjectConfig;
 	/**
-	 * Branch blueprints keyed by an identifier. When `pattern` is omitted on a blueprint,
-	 * the key is used as the pattern.
+	 * Concrete branches keyed by their literal name on Neon. Managed by `pushConfig`:
+	 * created if missing, settings/TTL/protected drift surfaced (and applied with
+	 * `updateExisting: true`).
+	 */
+	branches?: Record<string, BranchConfig>;
+	/**
+	 * Templates for ephemeral branches. Each entry's `pattern` must contain `*`; the
+	 * blueprint is consumed by `branch()` to mint new branches and (optionally) by
+	 * `pushConfig --apply-existing` to retroactively apply settings to every matching
+	 * branch already on Neon.
 	 */
 	branchBlueprints?: Record<string, BranchBlueprint>;
 }
 
 /**
- * A blueprint after defaults have been resolved (key copied into `pattern`, etc.).
+ * A concrete-branch config after defaults have been resolved (parent inferred, etc.).
+ */
+export interface ResolvedBranchConfig {
+	/** The map key inside `branches`, which is also the branch name on Neon. */
+	key: string;
+	/** Branch name on Neon. Equal to `key`. */
+	name: string;
+	parent?: string;
+	protected: boolean;
+	computeSettings?: ComputeSettings;
+}
+
+/**
+ * A blueprint after defaults have been resolved (TTL parsed to seconds, parent inferred).
  */
 export interface ResolvedBranchBlueprint
 	extends Required<Pick<BranchBlueprint, "pattern">> {
@@ -122,6 +182,7 @@ export interface ResolvedBranchBlueprint
 
 export interface ResolvedConfig {
 	project: ProjectConfig;
+	branches: ResolvedBranchConfig[];
 	branchBlueprints: ResolvedBranchBlueprint[];
 }
 

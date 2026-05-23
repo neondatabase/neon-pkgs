@@ -146,7 +146,7 @@ describe("runPush", () => {
 import { defineConfig } from "${PLATFORM_SRC}";
 export default defineConfig({
   project: { name: "cli-test", region: "aws-us-east-1" },
-  branchBlueprints: {
+  branches: {
     production: {},
     staging: { parent: "production" },
   },
@@ -182,7 +182,7 @@ export default defineConfig({
 import { defineConfig } from "${PLATFORM_SRC}";
 export default defineConfig({
   project: { name: "cli-test", region: "aws-us-east-1" },
-  branchBlueprints: { production: {} },
+  branches: { production: {} },
 });
 `,
 		});
@@ -208,7 +208,7 @@ export default defineConfig({
 import { defineConfig } from "${PLATFORM_SRC}";
 export default defineConfig({
   project: { name: "cli-test", region: "aws-us-east-1" },
-  branchBlueprints: {
+  branches: {
     production: { computeSettings: { autoscalingLimitMaxCu: 4 } },
   },
 });
@@ -228,7 +228,7 @@ export default defineConfig({
 import { defineConfig } from "${PLATFORM_SRC}";
 export default defineConfig({
   project: { name: "cli-test", region: "aws-us-east-1" },
-  branchBlueprints: {
+  branches: {
     production: { computeSettings: { autoscalingLimitMaxCu: 4 } },
   },
 });
@@ -277,8 +277,8 @@ export default defineConfig({
 import { defineConfig } from "${PLATFORM_SRC}";
 export default defineConfig({
   project: { name: "cli-test", region: "aws-us-east-1" },
+  branches: { production: {} },
   branchBlueprints: {
-    production: {},
     preview: { pattern: "preview-*", computeSettings: { autoscalingLimitMaxCu: 1 } },
   },
 });
@@ -360,7 +360,7 @@ describe("runPull / runPush — per-code exit mapping", () => {
 import { defineConfig } from "${platformSrc}";
 export default defineConfig({
   project: { name: "my-app", region: "aws-us-east-1" },
-  branchBlueprints: { production: { computeSettings: { autoscalingLimitMaxCu: 4 } } },
+  branches: { production: { computeSettings: { autoscalingLimitMaxCu: 4 } } },
 });
 `,
 		});
@@ -420,8 +420,8 @@ describe("runBranch", () => {
 import { defineConfig } from "${PLATFORM_SRC}";
 export default defineConfig({
   project: { name: "cli-test", region: "aws-us-east-1" },
+  branches: { production: {} },
   branchBlueprints: {
-    production: {},
     preview: { pattern: "preview-*", ttl: "1h", parent: "production" },
   },
 });
@@ -517,7 +517,7 @@ export default defineConfig({
 		expect(result.stderr).toContain('no blueprint named "nope"');
 	});
 
-	test("specific-name blueprint → exit 5 (InvalidConfig)", async () => {
+	test("name refers to a concrete branch → exit 5 (InvalidConfig)", async () => {
 		const { api, projectId } = seedFakeWithProduction();
 		const root = setup({
 			"package.json": "{}",
@@ -529,7 +529,7 @@ export default defineConfig({
 			{ cwd: root, env: {}, api },
 		);
 		expect(result.exitCode).toBe(5);
-		expect(result.stderr).toContain("not a wildcard");
+		expect(result.stderr).toContain("concrete branch");
 	});
 
 	test("missing context (no projectId/file) → exit 3", async () => {

@@ -1,4 +1,4 @@
-import { resolveApiKey } from "./auth.js";
+import { createNeonApiFromOptions } from "./auth.js";
 import {
 	buildBranchName,
 	DEFAULT_MAX_ATTEMPTS,
@@ -20,8 +20,6 @@ import type {
 	NeonApi,
 	NeonBranchSnapshot,
 } from "./neon-api.js";
-import { createRealNeonApi } from "./neon-api-real.js";
-import { isWildcardPattern } from "./patterns.js";
 import type { ResolvedBranchBlueprint, ResolvedConfig } from "./types.js";
 
 export interface BranchOptions {
@@ -184,6 +182,26 @@ export async function branch(options: BranchOptions): Promise<BranchResult> {
 		(b) => b.key === options.blueprint,
 	);
 	if (!blueprint) {
+		// Help users who confused `branches` (concrete) with `branchBlueprints` (templates).
+		const branchMatch = resolved.branches.find(
+			(b) => b.key === options.blueprint,
+		);
+		if (branchMatch) {
+			throw new PlatformError(
+				ErrorCode.InvalidConfig,
+				[
+					`branch: "${options.blueprint}" is a concrete branch (in \`branches\`), not a blueprint.`,
+					"`branch` creates *ephemeral* branches from a wildcard blueprint (e.g. `preview-*`).",
+					"For specific-name branches (e.g. `production`), use `neon-ts push` instead — it create-or-updates the branch directly.",
+				].join(" "),
+				{
+					details: {
+						blueprint: options.blueprint,
+						branchKey: branchMatch.key,
+					},
+				},
+			);
+		}
 		throw new PlatformError(
 			ErrorCode.NotFound,
 			[
@@ -199,22 +217,6 @@ export async function branch(options: BranchOptions): Promise<BranchResult> {
 				details: {
 					blueprint: options.blueprint,
 					available: resolved.branchBlueprints.map((b) => b.key),
-				},
-			},
-		);
-	}
-	if (!isWildcardPattern(blueprint.pattern)) {
-		throw new PlatformError(
-			ErrorCode.InvalidConfig,
-			[
-				`branch: blueprint "${options.blueprint}" has pattern "${blueprint.pattern}" which is not a wildcard.`,
-				"`branch` creates *ephemeral* branches from a wildcard blueprint (e.g. `preview-*`).",
-				"For specific-name blueprints (e.g. `production`), use `neon-ts push` instead — it create-or-updates the single branch the blueprint refers to.",
-			].join(" "),
-			{
-				details: {
-					blueprint: options.blueprint,
-					pattern: blueprint.pattern,
 				},
 			},
 		);
@@ -298,22 +300,10 @@ function applyToContextFile(
 }
 
 function createApiFromOptions(options: BranchOptions): NeonApi {
-	const resolved = resolveApiKey({
+	return createNeonApiFromOptions("branch", {
 		...(options.apiKey ? { apiKey: options.apiKey } : {}),
 		...(options.env ? { env: options.env } : {}),
 	});
-	if (!resolved) {
-		throw new PlatformError(
-			ErrorCode.MissingApiKey,
-			[
-				"branch has no Neon API key to work with.",
-				"Tried (in order): `apiKey` option, NEON_API_KEY env, and `~/.config/neonctl/credentials.json`.",
-				"Either pass `apiKey` directly, set NEON_API_KEY, run `npx neonctl auth`, or pass a custom `api` adapter.",
-				"Generate a key at https://console.neon.tech/app/settings/api-keys.",
-			].join(" "),
-		);
-	}
-	return createRealNeonApi({ apiKey: resolved.token });
 }
 
 /**
@@ -367,10 +357,8 @@ function resolveParentBranchName(
 ): string | undefined {
 	const parent = blueprint.parent;
 	if (!parent) return undefined;
-	const fromBlueprints = config.branchBlueprints.find(
-		(b) => b.key === parent,
-	);
-	if (fromBlueprints) return fromBlueprints.pattern;
+	const fromBranches = config.branches.find((b) => b.key === parent);
+	if (fromBranches) return fromBranches.name;
 	return parent;
 }
 

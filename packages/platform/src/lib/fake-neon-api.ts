@@ -13,6 +13,14 @@ import type {
 import type { ComputeSettings } from "./types.js";
 
 /**
+ * Test-only branch seed shape. Permits omitting `protected` (defaults to `false`) so the
+ * many tests that pre-date the field don't have to spell it out on every entry.
+ */
+type SeedBranch = Omit<NeonBranchSnapshot, "protected"> & {
+	protected?: boolean;
+};
+
+/**
  * In-memory NeonApi implementation used by tests. **Not** exported from `dist/`.
  *
  * Models the subset of Neon's data model that {@link Config} actually exercises:
@@ -46,7 +54,7 @@ export class FakeNeonApi implements NeonApi {
 	seedProject(input: {
 		project: NeonProjectSnapshot;
 		branches?: Array<{
-			branch: NeonBranchSnapshot;
+			branch: SeedBranch;
 			endpoint?: Partial<NeonEndpointSnapshot>;
 			roles?: Array<Partial<NeonRoleSnapshot> & { name: string }>;
 			databases?: Array<Partial<NeonDatabaseSnapshot> & { name: string }>;
@@ -58,7 +66,7 @@ export class FakeNeonApi implements NeonApi {
 		const endpoints: NeonEndpointSnapshot[] = [];
 
 		for (const entry of input.branches ?? []) {
-			branches.push({ ...entry.branch });
+			branches.push({ protected: false, ...entry.branch });
 			endpoints.push(
 				this.makeEndpoint(entry.branch.id, entry.endpoint, project),
 			);
@@ -71,6 +79,7 @@ export class FakeNeonApi implements NeonApi {
 				id: this.allocateId("br"),
 				name: "production",
 				isDefault: true,
+				protected: false,
 			};
 			branches.push(defaultBranch);
 			endpoints.push(
@@ -148,6 +157,7 @@ export class FakeNeonApi implements NeonApi {
 			id: this.allocateId("br"),
 			name: input.defaultBranchName ?? "main",
 			isDefault: true,
+			protected: false,
 		};
 		const defaultEndpoint = this.makeEndpoint(
 			defaultBranch.id,
@@ -210,6 +220,7 @@ export class FakeNeonApi implements NeonApi {
 			id: this.allocateId("br"),
 			name: input.name,
 			isDefault: false,
+			protected: input.protected === true,
 		};
 		if (input.parentId) branch.parentId = input.parentId;
 		else if (branchList[0])
@@ -270,6 +281,7 @@ export class FakeNeonApi implements NeonApi {
 		if (input.expiresAt === null) delete updated.expiresAt;
 		else if (input.expiresAt !== undefined)
 			updated.expiresAt = input.expiresAt;
+		if (input.protected !== undefined) updated.protected = input.protected;
 		branchList[idx] = updated;
 		return clone(updated);
 	}

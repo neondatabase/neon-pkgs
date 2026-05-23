@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
 	branchBlueprintSchema,
+	branchConfigSchema,
 	computeSettingsSchema,
 	configSchema,
 	formatZodIssues,
@@ -17,8 +18,14 @@ describe("schema — basic shape", () => {
 	test("configSchema accepts the full example from PLAN.md", () => {
 		const result = configSchema.safeParse({
 			project: { name: "my-app", region: "aws-us-east-1" },
+			branches: {
+				production: {
+					protected: true,
+					computeSettings: { autoscalingLimitMaxCu: 2 },
+				},
+				staging: { parent: "production" },
+			},
 			branchBlueprints: {
-				production: { computeSettings: { autoscalingLimitMaxCu: 2 } },
 				preview: {
 					pattern: "preview-*",
 					ttl: "1h",
@@ -31,9 +38,15 @@ describe("schema — basic shape", () => {
 
 	test("schemas are independently usable", () => {
 		expect(projectConfigSchema.safeParse({ name: "x" }).success).toBe(true);
-		expect(branchBlueprintSchema.safeParse({ ttl: "1h" }).success).toBe(
+		expect(branchConfigSchema.safeParse({ protected: true }).success).toBe(
 			true,
 		);
+		expect(
+			branchBlueprintSchema.safeParse({
+				pattern: "preview-*",
+				ttl: "1h",
+			}).success,
+		).toBe(true);
 		expect(
 			computeSettingsSchema.safeParse({ autoscalingLimitMaxCu: 1 })
 				.success,
@@ -46,7 +59,7 @@ describe("schema — issue formatting", () => {
 		const result = configSchema.safeParse({
 			project: { name: "x" },
 			branchBlueprints: {
-				preview: { ttl: "abc" },
+				preview: { pattern: "preview-*", ttl: "abc" },
 			},
 		});
 		expect(result.success).toBe(false);
@@ -61,7 +74,7 @@ describe("schema — issue formatting", () => {
 		const result = configSchema.safeParse({
 			project: { name: "", pgVersion: 99 },
 			branchBlueprints: {
-				preview: { ttl: "1mo" },
+				preview: { pattern: "preview-*", ttl: "1mo" },
 			},
 		});
 		expect(result.success).toBe(false);
@@ -83,28 +96,60 @@ describe("schema — issue formatting", () => {
 	});
 });
 
-describe("schema — blueprint key serves as pattern", () => {
-	test("rejects a blueprint key that is not a valid pattern when `pattern` is omitted", () => {
+describe("schema — branch / blueprint shape", () => {
+	test("rejects a branches entry whose key is not a valid branch name", () => {
 		const result = configSchema.safeParse({
 			project: { name: "x" },
-			branchBlueprints: {
-				"bad name!": {},
-			},
+			branches: { "bad name!": {} },
 		});
 		expect(result.success).toBe(false);
 		if (result.success) return;
 		const issues = formatZodIssues(result.error);
-		expect(issues.some((i) => i.includes("blueprint key"))).toBe(true);
+		expect(issues.some((i) => i.includes("not a valid branch name"))).toBe(
+			true,
+		);
 	});
 
-	test("accepts a blueprint with an explicit pattern even when the key is not a legal pattern", () => {
+	test("rejects a branches entry whose key is a wildcard", () => {
 		const result = configSchema.safeParse({
 			project: { name: "x" },
-			branchBlueprints: {
-				my_key: { pattern: "feature-*" },
-			},
+			branches: { "preview-*": {} },
 		});
-		expect(result.success).toBe(true);
+		expect(result.success).toBe(false);
+		if (result.success) return;
+		const issues = formatZodIssues(result.error);
+		expect(issues.some((i) => i.includes("concrete branch name"))).toBe(
+			true,
+		);
+	});
+
+	test("requires a wildcard `pattern` on every branchBlueprints entry", () => {
+		const noPattern = configSchema.safeParse({
+			project: { name: "x" },
+			branchBlueprints: { preview: {} },
+		});
+		expect(noPattern.success).toBe(false);
+
+		const nonWildcard = configSchema.safeParse({
+			project: { name: "x" },
+			branchBlueprints: { preview: { pattern: "preview" } },
+		});
+		expect(nonWildcard.success).toBe(false);
+		if (nonWildcard.success) return;
+		const issues = formatZodIssues(nonWildcard.error);
+		expect(issues.some((i) => i.includes("wildcard"))).toBe(true);
+	});
+
+	test("rejects collisions between branches and branchBlueprints keys", () => {
+		const result = configSchema.safeParse({
+			project: { name: "x" },
+			branches: { preview: {} },
+			branchBlueprints: { preview: { pattern: "preview-*" } },
+		});
+		expect(result.success).toBe(false);
+		if (result.success) return;
+		const issues = formatZodIssues(result.error);
+		expect(issues.some((i) => i.includes("collides"))).toBe(true);
 	});
 });
 

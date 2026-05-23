@@ -48,15 +48,18 @@ describe("pullConfig", () => {
 			region: "aws-us-east-1",
 			pgVersion: 17,
 		});
-		expect(config.branchBlueprints?.production).toBeDefined();
+		expect(config.branches?.production).toBeDefined();
 		// `parent: "production"` is elided on emit because it's the default; resolveConfig
 		// fills it back in. The compute drift (max=2 vs project default max=1) is captured.
-		expect(config.branchBlueprints?.staging).toEqual({
+		expect(config.branches?.staging).toEqual({
 			computeSettings: { autoscalingLimitMaxCu: 2 },
 		});
+		// Blueprints are templates that live in your editable `neon.ts`; pull never
+		// emits a `branchBlueprints` section.
+		expect(config.branchBlueprints).toBeUndefined();
 	});
 
-	test("emits TTL when branch has an expires_at in the future", async () => {
+	test("drops ephemeral branches with a future expires_at — those are runtime, not config", async () => {
 		const api = new FakeNeonApi();
 		const expiresAt = new Date(Date.now() + 3600 * 1000).toISOString();
 		api.seedProject({
@@ -77,7 +80,7 @@ describe("pullConfig", () => {
 				{
 					branch: {
 						id: "br-eph",
-						name: "ephemeral",
+						name: "preview-eph",
 						isDefault: false,
 						parentId: "br-prod",
 						expiresAt,
@@ -86,10 +89,31 @@ describe("pullConfig", () => {
 			],
 		});
 		const config = await pullConfig({ projectId: "proj-2", api });
-		const blueprint = config.branchBlueprints?.ephemeral;
-		expect(blueprint?.ttl).toBeDefined();
-		// TTL should be roughly 1h; allow some skew since we just constructed it.
-		expect(blueprint?.ttl).toMatch(/^(3[5-6]\d{2}s|1h)$/);
+		expect(Object.keys(config.branches ?? {})).toEqual(["production"]);
+	});
+
+	test("emits the `protected` flag for protected branches", async () => {
+		const api = new FakeNeonApi();
+		api.seedProject({
+			project: {
+				id: "proj-prot",
+				name: "my-app",
+				regionId: "aws-us-east-1",
+				pgVersion: 17,
+			},
+			branches: [
+				{
+					branch: {
+						id: "br-prod",
+						name: "production",
+						isDefault: true,
+						protected: true,
+					},
+				},
+			],
+		});
+		const config = await pullConfig({ projectId: "proj-prot", api });
+		expect(config.branches?.production.protected).toBe(true);
 	});
 
 	test("does not emit compute settings when they match project defaults", async () => {
@@ -108,44 +132,7 @@ describe("pullConfig", () => {
 			},
 		});
 		const config = await pullConfig({ projectId: "proj-3", api });
-		expect(
-			config.branchBlueprints?.production.computeSettings,
-		).toBeUndefined();
-	});
-
-	test("sanitises branch names that are not legal blueprint keys", async () => {
-		const api = new FakeNeonApi();
-		api.seedProject({
-			project: {
-				id: "proj-4",
-				name: "my-app",
-				regionId: "aws-us-east-1",
-				pgVersion: 17,
-			},
-			branches: [
-				{
-					branch: {
-						id: "br-prod",
-						name: "production",
-						isDefault: true,
-					},
-				},
-				{
-					branch: {
-						id: "br-bad",
-						name: "feature/foo",
-						isDefault: false,
-						parentId: "br-prod",
-					},
-				},
-			],
-		});
-		const config = await pullConfig({ projectId: "proj-4", api });
-		const keys = Object.keys(config.branchBlueprints ?? {});
-		expect(keys).toContain("feature_foo");
-		expect(config.branchBlueprints?.feature_foo.pattern).toBe(
-			"feature/foo",
-		);
+		expect(config.branches?.production.computeSettings).toBeUndefined();
 	});
 
 	test("falls back to .neon/project.json when no projectId passed", async () => {

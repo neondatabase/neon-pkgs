@@ -294,6 +294,9 @@ class RealNeonApi implements NeonApi {
 				name: input.name,
 				...(input.parentId ? { parent_id: input.parentId } : {}),
 				...(input.expiresAt ? { expires_at: input.expiresAt } : {}),
+				...(input.protected !== undefined
+					? { protected: input.protected }
+					: {}),
 			},
 			endpoints: [endpointOptions],
 		};
@@ -323,6 +326,7 @@ class RealNeonApi implements NeonApi {
 		const branch: BranchUpdateRequest["branch"] = {};
 		if (input.name !== undefined) branch.name = input.name;
 		if (input.expiresAt !== undefined) branch.expires_at = input.expiresAt;
+		if (input.protected !== undefined) branch.protected = input.protected;
 		return this.call(
 			`updateBranch(${projectId}/${branchId})`,
 			async () => {
@@ -459,6 +463,7 @@ function branchToSnapshot(branch: Branch): NeonBranchSnapshot {
 		id: branch.id,
 		name: branch.name,
 		isDefault: branch.default,
+		protected: branch.protected === true,
 	};
 	if (branch.parent_id) snapshot.parentId = branch.parent_id;
 	if (branch.expires_at) snapshot.expiresAt = branch.expires_at;

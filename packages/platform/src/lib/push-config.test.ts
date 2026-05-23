@@ -32,11 +32,11 @@ function seededFake(): { api: FakeNeonApi; projectId: string } {
 }
 
 describe("pushConfig — additive operations", () => {
-	test("creates a missing specific-name branch", async () => {
+	test("creates a missing concrete branch", async () => {
 		const { api, projectId } = seededFake();
 		const config = defineConfig({
 			project: { name: "my-app" },
-			branchBlueprints: {
+			branches: {
 				production: {},
 				staging: { parent: "production" },
 			},
@@ -64,7 +64,7 @@ describe("pushConfig — additive operations", () => {
 		const api = new FakeNeonApi();
 		const config = defineConfig({
 			project: { name: "brand-new", region: "aws-us-east-1" },
-			branchBlueprints: { production: {} },
+			branches: { production: {} },
 		});
 		const result = await pushConfig(config, { api, orgId: "org-1" });
 		expect(result.applied[0]).toEqual(
@@ -79,7 +79,7 @@ describe("pushConfig — additive operations", () => {
 		const api = new FakeNeonApi();
 		const config = defineConfig({
 			project: { name: "missing-region" },
-			branchBlueprints: { production: {} },
+			branches: { production: {} },
 		});
 		await expect(
 			pushConfig(config, { api, orgId: "org-1" }),
@@ -99,12 +99,45 @@ describe("pushConfig — additive operations", () => {
 		});
 		const config = defineConfig({
 			project: { name: "my-app", region: "aws-us-east-1" },
-			branchBlueprints: { production: {} },
+			branches: { production: {} },
 		});
 		const result = await pushConfig(config, { api, orgId: "org-1" });
 		expect(result.projectId).toBe("proj-existing");
 		expect(result.applied[0]).toEqual(
 			expect.objectContaining({ kind: "project", action: "noop" }),
+		);
+	});
+
+	test("applies `protected: true` on creating a branch", async () => {
+		const { api, projectId } = seededFake();
+		const config = defineConfig({
+			project: { name: "my-app" },
+			branches: {
+				production: {},
+				staging: { parent: "production", protected: true },
+			},
+		});
+		await pushConfig(config, { api, projectId });
+		const branches = await api.listBranches(projectId);
+		const staging = branches.find((b) => b.name === "staging");
+		expect(staging?.protected).toBe(true);
+	});
+
+	test("with updateExisting:true, toggles `protected` on an existing branch", async () => {
+		const { api, projectId } = seededFake();
+		const config = defineConfig({
+			project: { name: "my-app" },
+			branches: { production: { protected: true } },
+		});
+		const result = await pushConfig(config, {
+			api,
+			projectId,
+			updateExisting: true,
+		});
+		expect(result.conflicts).toHaveLength(0);
+		const branches = await api.listBranches(projectId);
+		expect(branches.find((b) => b.name === "production")?.protected).toBe(
+			true,
 		);
 	});
 
@@ -156,7 +189,7 @@ describe("pushConfig — API key scopes", () => {
 		};
 		const config = defineConfig({
 			project: { name: "my-app", region: "aws-us-east-1" },
-			branchBlueprints: {
+			branches: {
 				production: {},
 				staging: { parent: "production" },
 			},
@@ -203,7 +236,7 @@ describe("pushConfig — conflict handling", () => {
 		const { api, projectId } = seededFake();
 		const config = defineConfig({
 			project: { name: "my-app", region: "aws-us-east-1" },
-			branchBlueprints: {
+			branches: {
 				production: { computeSettings: { autoscalingLimitMaxCu: 4 } },
 			},
 		});
@@ -216,7 +249,7 @@ describe("pushConfig — conflict handling", () => {
 		const { api, projectId } = seededFake();
 		const config = defineConfig({
 			project: { name: "my-app", region: "aws-us-east-1" },
-			branchBlueprints: {
+			branches: {
 				production: { computeSettings: { autoscalingLimitMaxCu: 4 } },
 			},
 		});
@@ -267,7 +300,7 @@ describe("pushConfig — conflict handling", () => {
 		const { api, projectId } = seededFake();
 		const config = defineConfig({
 			project: { name: "my-app", region: "aws-us-east-1" },
-			branchBlueprints: {
+			branches: {
 				production: { computeSettings: { autoscalingLimitMaxCu: 2 } },
 			},
 		});
@@ -338,8 +371,8 @@ describe("pushConfig — wildcard blueprints", () => {
 		});
 		const config = defineConfig({
 			project: { name: "my-app" },
+			branches: { production: {} },
 			branchBlueprints: {
-				production: {},
 				preview: {
 					pattern: "preview-*",
 					ttl: "1h",
@@ -393,8 +426,8 @@ describe("pushConfig — wildcard blueprints", () => {
 		});
 		const config = defineConfig({
 			project: { name: "my-app" },
+			branches: { production: {} },
 			branchBlueprints: {
-				production: {},
 				preview: {
 					pattern: "preview-*",
 					ttl: "1h",
@@ -429,7 +462,7 @@ describe("pushConfig — overloads & file loading", () => {
 import { defineConfig } from "${platformSrcPath}";
 export default defineConfig({
   project: { name: "my-app", region: "aws-us-east-1" },
-  branchBlueprints: {
+  branches: {
     production: {},
     staging: { parent: "production" },
   },
@@ -457,7 +490,7 @@ export default defineConfig({
 import { defineConfig } from "${platformSrcPath}";
 export default defineConfig({
   project: { name: "my-app", region: "aws-us-east-1" },
-  branchBlueprints: { production: {} },
+  branches: { production: {} },
 });
 `,
 		});

@@ -81,7 +81,7 @@ const argv = yargs(hideBin(process.argv))
 					type: "boolean",
 					default: false,
 					describe:
-						"Update existing specific-name branches' settings/TTL instead of reporting them as conflicts",
+						"Update existing concrete branches' settings / protected flag instead of reporting them as conflicts",
 				})
 				.option("apply-existing", {
 					type: "boolean",

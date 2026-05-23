@@ -1,6 +1,6 @@
 # @neondatabase/platform
 
-IaC and Config-as-Code for the Neon Platform. Describe your project, branch blueprints, TTLs, and compute settings in a single `neon.ts` file at the root of your repo, then `pullConfig` / `pushConfig` to sync against the [Neon API](https://api-docs.neon.tech).
+IaC and Config-as-Code for the Neon Platform. Describe your project, the persistent branches it should have, and the ephemeral-branch templates you spin up via `branch()` — all in a single `neon.ts` file at the root of your repo — then `pullConfig` / `pushConfig` to sync against the [Neon API](https://api-docs.neon.tech).
 
 > The user-facing CLI surface for end-users lives in [`neonctl`](https://github.com/neondatabase/neonctl) (`neon platform pull|push|branch`) and wraps the SDK exported here. This package also ships a thin standalone `neon-ts` CLI so the same commands can be exercised in isolation — see [CLI](#cli) below.
 
@@ -26,14 +26,20 @@ export default defineConfig({
     name: "my-app",
     region: "aws-us-east-1",
   },
-  branchBlueprints: {
+  branches: {
     production: {
+      protected: true,
       computeSettings: {
         autoscalingLimitMinCu: 0.25,
         autoscalingLimitMaxCu: 2,
         suspendTimeout: "5m",
       },
     },
+    staging: {
+      parent: "production",
+    },
+  },
+  branchBlueprints: {
     preview: {
       pattern: "preview-*",
       ttl: "1h",
@@ -42,6 +48,13 @@ export default defineConfig({
   },
 });
 ```
+
+The config has two intentionally distinct branch surfaces:
+
+- **`branches`** — concrete, persistent branches. The map key is the literal branch name on Neon. Managed by `pushConfig` (create-if-missing, update-on-drift with `updateExisting`). Supports `protected`, `computeSettings`, and a `parent` reference.
+- **`branchBlueprints`** — templates for *ephemeral* branches spun up via `branch()`. Each entry's `pattern` must contain a `*` wildcard. Consumed by `branch()` to mint new branches, and by `pushConfig --apply-existing` to retroactively patch matching live branches.
+
+Listing the live branches currently on a project (including ephemeral ones) is **not** part of this config — that's `neonctl branches list`.
 
 Then either pull, push, or load connection strings:
 
@@ -83,11 +96,11 @@ import {
 
   // Namespaces — specific error subclasses and zod schemas
   errors,   // errors.ConfigLoadError, errors.PushConflictError, …
-  schemas,  // schemas.config, schemas.project, schemas.branchBlueprint, schemas.computeSettings
+  schemas,  // schemas.config, schemas.project, schemas.branch, schemas.branchBlueprint, schemas.computeSettings
 } from "@neondatabase/platform/v1";
 
 import type {
-  // Config (used in neon.ts) — Config, ProjectConfig, BranchBlueprint, ComputeSettings
+  // Config (used in neon.ts) — Config, ProjectConfig, BranchConfig, BranchBlueprint, ComputeSettings
   // Operation options + results — BranchOptions / BranchResult / BranchContextFile,
   //   PullConfigOptions, PushConfigOptions / PushResult, LoadEnvOptions, …
   // NeonApi types (for custom adapters) — NeonApi, NeonBranchSnapshot, CreateBranchInput, …
@@ -124,12 +137,14 @@ import { schemas } from "@neondatabase/platform/v1";
 
 const parsed = schemas.config.safeParse(unknownInput);
 if (!parsed.success) console.error(parsed.error.format());
-// schemas.project / schemas.branchBlueprint / schemas.computeSettings are also available
+// schemas.project / schemas.branch / schemas.branchBlueprint / schemas.computeSettings are also available
 ```
 
 ### `pullConfig(options?: PullConfigOptions): Promise<Config>`
 
 Reads the live Neon project state and returns a `Config` object. The SDK call itself is **filesystem-read-only**: it never writes `.neon/project.json` or `neon.ts`. If you want to persist the result, either write it yourself or use the `neon-ts pull` CLI, which renders it as a `neon.ts` snippet and writes it into the current directory.
+
+Concrete, persistent branches are materialised into `config.branches`. Ephemeral branches (those with a future `expiresAt`) are **dropped** — listing live branches at runtime is `neonctl branches list`'s job, not config-as-code's. Likewise pull never emits a `branchBlueprints` section: blueprints are templates that live in your editable `neon.ts`, not on Neon.
 
 Project resolution follows the standard chain — see [Project context resolution](#project-context-resolution). Throws `errors.MissingContextError` if no project id can be resolved.
 
@@ -145,11 +160,11 @@ pushConfig(config, options?);          // use an already-validated Config object
 
 Important options:
 
-| Option            | Default | Effect                                                                                                                                    |
-| ----------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `applyChanges`    | `false` | When `false`, push fails (`PushConflictError`) if any field-level conflict is detected. When `true`, push patches the remote regardless.  |
-| `updateExisting`  | `false` | When `true`, settings/TTL drift on **specific-name** blueprints (e.g. `production`) is applied to the existing branch instead of failing. |
-| `applyExisting`   | `false` | When `true`, blueprints with wildcard patterns (e.g. `preview-*`) apply their settings/TTL to **every matching existing branch**.         |
+| Option            | Default | Effect                                                                                                                                                |
+| ----------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `applyChanges`    | `false` | When `false`, push fails (`PushConflictError`) if any field-level conflict is detected. When `true`, push patches the remote regardless.              |
+| `updateExisting`  | `false` | When `true`, settings / `protected` drift on `config.branches` entries (e.g. `production`) is applied to the existing branch instead of failing.      |
+| `applyExisting`   | `false` | When `true`, `branchBlueprints` entries (wildcard patterns like `preview-*`) apply their settings/TTL to **every matching existing branch**.          |
 
 `pushConfig` will create a project if none exists in the resolved org/name combination and `project.region` is set. Region and Postgres major version are immutable on Neon — pushing a different value surfaces a `ConflictReport`.
 
@@ -172,7 +187,7 @@ const env = await loadEnv(config);
 Object.assign(process.env, env);
 ```
 
-`projectId`, `orgId`, and `branch` follow the standard [Project context resolution](#project-context-resolution) chain, with one extra fallback for `branch` only: when nothing resolves it, the first key in `config.branchBlueprints` (typically `"production"`) is used.
+`projectId`, `orgId`, and `branch` follow the standard [Project context resolution](#project-context-resolution) chain, with one extra fallback for `branch` only: when nothing resolves it, the first key in `config.branches` (typically `"production"`) is used.
 
 `roleName` and `databaseName` resolve to `options.roleName` / `options.databaseName` first; when omitted, the only role / database on the branch is auto-picked. When the branch has multiple databases but only one is owned by the resolved role, that one is auto-picked. Otherwise `loadEnv` throws `PLATFORM_AMBIGUOUS_BRANCH_AUTH` and you'll need to pass `databaseName` explicitly.
 
@@ -226,7 +241,7 @@ Behaviour:
 
 1. **Project context** is resolved via the standard chain (see [Project context resolution](#project-context-resolution)). Throws `errors.MissingContextError` if no project id is resolvable.
 2. **`neon.ts`** is loaded via `loadConfigFromFile`. Throws `errors.ConfigLoadError` if missing.
-3. The **blueprint** identified by `options.blueprint` must exist and its `pattern` must contain a `*` wildcard (e.g. `"preview-*"`). Specific-name blueprints (e.g. `"production"`) refer to a single concrete branch and are managed by `pushConfig` instead — `branch` throws a `PlatformError` with code `PLATFORM_INVALID_CONFIG` if you try to use one.
+3. The **blueprint** identified by `options.blueprint` must exist in `config.branchBlueprints`. (Patterns are validated at `defineConfig` time to ensure they contain a `*` wildcard.) Passing the name of a concrete branch (entry in `config.branches` like `"production"`) throws a `PlatformError` with code `PLATFORM_INVALID_CONFIG` along with a pointer to use `pushConfig` instead.
 4. The **branch name** is composed as `<pattern>` with `*` substituted by:
    - `<normalised-git-branch>-<mini-id>` when git is available (e.g. `andre/new-feat` → `andre-new-feat-a1b2c3`), or
    - just `<mini-id>` (6 hex chars) when not. Pass `gitBranch: null` to opt out of the git lookup explicitly, or `gitBranch: "my-name"` to inject one.
@@ -340,7 +355,7 @@ The specific subclasses (`ConfigLoadError`, `ConfigValidationError`, `MissingCon
 
 | Code                              | When it fires                                                                   | What to do                                                                                                       |
 | --------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `PLATFORM_INVALID_CONFIG`         | `defineConfig` / the zod schema rejected your config                            | Read the aggregated issue list in `err.issues` and fix each one                                                  |
+| `PLATFORM_INVALID_CONFIG`         | `defineConfig` / the zod schema rejected your config, or `branch()` was called with the name of a concrete branch instead of a wildcard blueprint | Read the aggregated issue list in `err.issues` and fix each one                                                  |
 | `PLATFORM_MISSING_CONTEXT`        | No project id resolvable from args, env, or context file                        | Pass `projectId` / `--project-id`, set `NEON_PROJECT_ID`, or run `npx neonctl set-context --project-id <id>`     |
 | `PLATFORM_PUSH_CONFLICT`          | Local config differs from remote (and you didn't opt into apply)                | The thrown `errors.PushConflictError` lists each conflict with a `fix` hint. Most resolve via `updateExisting: true` |
 | `PLATFORM_CONFIG_LOAD_FAILED`     | `neon.ts` is missing, has a syntax error, or doesn't `export default`           | Path is in the message. Run the file directly (`npx tsx neon.ts`) to reproduce the underlying error              |

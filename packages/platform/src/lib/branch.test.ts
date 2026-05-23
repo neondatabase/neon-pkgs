@@ -64,8 +64,10 @@ function previewBlueprint(): string {
 import { defineConfig } from "${PLATFORM_SRC}";
 export default defineConfig({
   project: { name: "branch-test", region: "aws-us-east-1" },
-  branchBlueprints: {
+  branches: {
     production: {},
+  },
+  branchBlueprints: {
     preview: { pattern: "preview-*", ttl: "1h", parent: "production" },
   },
 });
@@ -380,7 +382,7 @@ describe("branch — error paths", () => {
 		});
 	});
 
-	test("throws InvalidConfig when the blueprint pattern is not a wildcard", async () => {
+	test("throws InvalidConfig when the name refers to a concrete branch, not a blueprint", async () => {
 		const { api, projectId } = seededFake();
 		const root = setup({
 			"package.json": "{}",
@@ -389,7 +391,7 @@ describe("branch — error paths", () => {
 		});
 		await expect(
 			branch({
-				blueprint: "production", // specific name — not for `branch`
+				blueprint: "production", // concrete branch — not for `branch`
 				cwd: root,
 				env: {},
 				api,

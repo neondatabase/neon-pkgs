@@ -19,7 +19,7 @@ describe("e2e — loadEnv against real Neon API", () => {
 			const projectName = uniqueProjectName("loadenv");
 			const config = defineConfig({
 				project: { name: projectName, region: DEFAULT_REGION },
-				branchBlueprints: { production: {} },
+				branches: { production: {} },
 			});
 
 			const pushed = await pushConfig(config, { api });
@@ -60,7 +60,7 @@ describe("e2e — loadEnv against real Neon API", () => {
 			const projectName = uniqueProjectName("loadenv-keys");
 			const config = defineConfig({
 				project: { name: projectName, region: DEFAULT_REGION },
-				branchBlueprints: { production: {} },
+				branches: { production: {} },
 			});
 
 			const pushed = await pushConfig(config, { api });

@@ -8,6 +8,7 @@
  */
 export {
 	branchBlueprintSchema as branchBlueprint,
+	branchConfigSchema as branch,
 	computeSettingsSchema as computeSettings,
 	configSchema as config,
 	projectConfigSchema as project,

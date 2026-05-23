@@ -36,7 +36,7 @@ function seedSingleBranch(projectId = "proj-env-1") {
 
 const minimalConfig = defineConfig({
 	project: { name: "my-app", region: "aws-us-east-1" },
-	branchBlueprints: { production: {} },
+	branches: { production: {} },
 });
 
 describe("loadEnv — happy path", () => {

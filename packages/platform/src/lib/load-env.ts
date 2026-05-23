@@ -1,4 +1,4 @@
-import { resolveApiKey } from "./auth.js";
+import { createNeonApiFromOptions } from "./auth.js";
 import { ErrorCode, PlatformError } from "./errors.js";
 import { type BranchRef, loadContext } from "./load-context.js";
 import type {
@@ -7,7 +7,6 @@ import type {
 	NeonDatabaseSnapshot,
 	NeonRoleSnapshot,
 } from "./neon-api.js";
-import { createRealNeonApi } from "./neon-api-real.js";
 import type { Config } from "./types.js";
 
 /**
@@ -35,8 +34,8 @@ export interface LoadEnvOptions {
 	orgId?: string;
 	/**
 	 * Explicit branch id (`br-…`) or branch name. Resolution chain:
-	 * `options.branch` → `NEON_BRANCH_ID` env → context file → root blueprint key in
-	 * `config.branchBlueprints` (typically `"production"`) → project default branch.
+	 * `options.branch` → `NEON_BRANCH_ID` env → context file → first key in
+	 * `config.branches` (typically `"production"`) → project default branch.
 	 */
 	branch?: string;
 	/**
@@ -89,7 +88,7 @@ export interface LoadEnvOptions {
  * | Field        | 1st (call args)         | 2nd (env)         | 3rd (file)                            | 4th (config)                    |
  * | ------------ | ----------------------- | ----------------- | ------------------------------------- | ------------------------------- |
  * | `projectId`  | `options.projectId`     | `NEON_PROJECT_ID` | `projectId` in `.neon[/project.json]` | — (throws if unresolved)        |
- * | `branch`     | `options.branch`        | `NEON_BRANCH_ID`  | `branchId` in `.neon[/project.json]`  | first key in `branchBlueprints` |
+ * | `branch`     | `options.branch`        | `NEON_BRANCH_ID`  | `branchId` in `.neon[/project.json]`  | first key in `config.branches`  |
  * | `roleName`   | `options.roleName`      | —                 | —                                     | auto-pick if branch has one     |
  * | `databaseName` | `options.databaseName`| —                 | —                                     | auto-pick if branch has one     |
  *
@@ -165,22 +164,10 @@ export async function loadEnv(
 }
 
 function createApiFromOptions(options: LoadEnvOptions): NeonApi {
-	const resolved = resolveApiKey({
+	return createNeonApiFromOptions("loadEnv", {
 		...(options.apiKey ? { apiKey: options.apiKey } : {}),
 		...(options.env ? { env: options.env } : {}),
 	});
-	if (!resolved) {
-		throw new PlatformError(
-			ErrorCode.MissingApiKey,
-			[
-				"loadEnv has no Neon API key to work with.",
-				"Tried (in order): `apiKey` option, NEON_API_KEY env, and `~/.config/neonctl/credentials.json`.",
-				"Either pass `apiKey` directly, set NEON_API_KEY, run `npx neonctl auth` to populate the credentials file, or pass a custom `api` adapter (e.g. an in-memory fake for tests).",
-				"Generate a key at https://console.neon.tech/app/settings/api-keys.",
-			].join(" "),
-		);
-	}
-	return createRealNeonApi({ apiKey: resolved.token });
 }
 
 function resolveBranch(
@@ -206,10 +193,12 @@ function resolveBranch(
 		);
 	}
 
-	// Fall back to the first blueprint key (typically "production").
-	const blueprintKey = firstBlueprintKey(config);
-	if (blueprintKey) {
-		const named = branches.find((b) => b.name === blueprintKey);
+	// Fall back to the first concrete branch key (typically "production"). When no
+	// `branches` map is defined we don't peek into `branchBlueprints` — those entries
+	// are templates that don't correspond to a single concrete branch by themselves.
+	const branchKey = firstBranchKey(config);
+	if (branchKey) {
+		const named = branches.find((b) => b.name === branchKey);
 		if (named) return named;
 	}
 
@@ -237,10 +226,10 @@ function describeRef(ref: BranchRef): string {
 	return `${ref.kind === "id" ? "id" : "name"}=${JSON.stringify(ref.value)}`;
 }
 
-function firstBlueprintKey(config: Config): string | undefined {
-	const blueprints = config.branchBlueprints;
-	if (!blueprints) return undefined;
-	const keys = Object.keys(blueprints);
+function firstBranchKey(config: Config): string | undefined {
+	const branches = config.branches;
+	if (!branches) return undefined;
+	const keys = Object.keys(branches);
 	return keys[0];
 }
 
