@@ -62,19 +62,29 @@ describe("loadEnv — happy path", () => {
 		expect(unpooledUrl.pathname).toBe("/neondb");
 	});
 
-	test("custom env-var keys are honoured", async () => {
+	test("custom env-var keys declared in config.env are honoured (and statically typed)", async () => {
 		const { api, projectId } = seedSingleBranch();
-		const env = await loadEnv(minimalConfig, {
-			api,
-			projectId,
-			env: {},
-			databaseUrlKey: "POSTGRES_URL",
-			databaseUrlUnpooledKey: "POSTGRES_URL_NON_POOLING",
+		const config = defineConfig({
+			project: { name: "my-app", region: "aws-us-east-1" },
+			branches: { production: {} },
+			env: {
+				databaseUrl: "POSTGRES_URL",
+				databaseUrlUnpooled: "POSTGRES_URL_NON_POOLING",
+			},
 		});
+		const env = await loadEnv(config, { api, projectId, env: {} });
 		expect(Object.keys(env).sort()).toEqual([
 			"POSTGRES_URL",
 			"POSTGRES_URL_NON_POOLING",
 		]);
+		// Compile-time check: the keys must be statically known. If `env`'s type widened to
+		// `Record<string, string>` these property accesses would still type-check; the
+		// `satisfies` confines us to the precise return shape so a regression breaks the
+		// build.
+		({
+			POSTGRES_URL: env.POSTGRES_URL,
+			POSTGRES_URL_NON_POOLING: env.POSTGRES_URL_NON_POOLING,
+		}) satisfies { POSTGRES_URL: string; POSTGRES_URL_NON_POOLING: string };
 	});
 
 	test("resolves project id from .neon/project.json when not passed", async () => {

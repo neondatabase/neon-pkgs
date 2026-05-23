@@ -61,6 +61,10 @@ describe("e2e — loadEnv against real Neon API", () => {
 			const config = defineConfig({
 				project: { name: projectName, region: DEFAULT_REGION },
 				branches: { production: {} },
+				env: {
+					databaseUrl: "POSTGRES_URL",
+					databaseUrlUnpooled: "POSTGRES_URL_NON_POOLING",
+				},
 			});
 
 			const pushed = await pushConfig(config, { api });
@@ -69,8 +73,6 @@ describe("e2e — loadEnv against real Neon API", () => {
 			const env = await loadEnv(config, {
 				api,
 				projectId: pushed.projectId,
-				databaseUrlKey: "POSTGRES_URL",
-				databaseUrlUnpooledKey: "POSTGRES_URL_NON_POOLING",
 				env: {},
 			});
 

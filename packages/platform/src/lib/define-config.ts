@@ -28,24 +28,33 @@ const REGION_PREFIX = /^(aws|azure|gcp)-/;
  *   branchBlueprints: {
  *     preview: { pattern: "preview-*", ttl: "1h", parent: "production" },
  *   },
+ *   env: { databaseUrl: "POSTGRES_URL", databaseUrlUnpooled: "POSTGRES_URL_NON_POOLING" },
  * });
  * ```
+ *
+ * The `const` modifier preserves literal types from the input — so when `loadEnv(config)`
+ * is called downstream, the return type knows exactly which env-var keys it will produce.
  *
  * Pure function — no I/O, no side effects. Aggregates every zod issue into one
  * {@link ConfigValidationError} so users see every issue at once.
  */
-export function defineConfig(input: Config): Config {
+export function defineConfig<const C extends Config>(input: C): C {
 	const result = configSchema.safeParse(input);
 	if (!result.success) {
 		throw new ConfigValidationError(formatZodIssues(result.error));
 	}
 
 	const parsed = result.data as Config;
-	return Object.freeze({
+	const frozen: Config = {
 		project: Object.freeze({ ...parsed.project }),
-		branches: freezeRecord(parsed.branches),
-		branchBlueprints: freezeRecord(parsed.branchBlueprints),
-	}) as Config;
+	};
+	if (parsed.branches) frozen.branches = freezeRecord(parsed.branches);
+	if (parsed.branchBlueprints)
+		frozen.branchBlueprints = freezeRecord(parsed.branchBlueprints);
+	if (parsed.env) frozen.env = Object.freeze({ ...parsed.env });
+	// The frozen copy has the same structural shape as `input`; cast to preserve the
+	// caller-supplied literal types (env-var keys, branch keys, …) for downstream inference.
+	return Object.freeze(frozen) as C;
 }
 
 function freezeRecord<T extends object>(

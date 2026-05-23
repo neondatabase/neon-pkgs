@@ -191,14 +191,23 @@ Object.assign(process.env, env);
 
 `roleName` and `databaseName` resolve to `options.roleName` / `options.databaseName` first; when omitted, the only role / database on the branch is auto-picked. When the branch has multiple databases but only one is owned by the resolved role, that one is auto-picked. Otherwise `loadEnv` throws `PLATFORM_AMBIGUOUS_BRANCH_AUTH` and you'll need to pass `databaseName` explicitly.
 
-Override the output env-var keys to match Vercel's / Cloudflare's conventions:
+Override the output env-var keys to match Vercel's / Cloudflare's conventions — and have those keys reflected in `loadEnv`'s **static return type** so they autocomplete in your bootstrap:
 
 ```ts
-const env = await loadEnv(config, {
-  databaseUrlKey: "POSTGRES_URL",
-  databaseUrlUnpooledKey: "POSTGRES_URL_NON_POOLING",
+const config = defineConfig({
+  project: { name: "my-app", region: "aws-us-east-1" },
+  branches: { production: {} },
+  env: {
+    databaseUrl: "POSTGRES_URL",
+    databaseUrlUnpooled: "POSTGRES_URL_NON_POOLING",
+  },
 });
+
+const env = await loadEnv(config);
+//    ^? { POSTGRES_URL: string; POSTGRES_URL_NON_POOLING: string }
 ```
+
+`defineConfig` is declared with a `const` generic, so the literal strings in `config.env` flow through to `LoadEnvResult<typeof config>`. When `config.env` is omitted, the return type falls back to `{ DATABASE_URL: string; DATABASE_URL_UNPOOLED: string }`. There are no call-site overrides for these keys — that would defeat the point of config-as-code.
 
 This call is **read-only**: it never mutates `process.env`, writes to disk, or modifies the remote Neon project. Two `getConnectionUri` API calls (pooled + direct) plus one `listBranches` and one each of `listBranchRoles` / `listBranchDatabases`.
 

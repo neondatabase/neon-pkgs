@@ -5,13 +5,29 @@ import {
 	resolveConfig,
 } from "./define-config.js";
 import { ConfigValidationError } from "./errors.js";
+import type { Config } from "./types.js";
 
 describe("defineConfig", () => {
 	test("accepts a minimal project-only config", () => {
-		const cfg = defineConfig({ project: { name: "my-app" } });
+		// Widen via the `Config` type so we can assert on absent optional fields.
+		// `defineConfig`'s generic preserves literal types, so `cfg.branches` would not
+		// exist on the narrow return type when the input omits the field.
+		const cfg: Config = defineConfig({ project: { name: "my-app" } });
 		expect(cfg.project.name).toBe("my-app");
 		expect(cfg.branches).toBeUndefined();
 		expect(cfg.branchBlueprints).toBeUndefined();
+	});
+
+	test("preserves literal types from the input (so loadEnv can statically type its return)", () => {
+		const cfg = defineConfig({
+			project: { name: "literal" },
+			env: { databaseUrl: "POSTGRES_URL" },
+		});
+		// Compile-time check: the literal must flow through. If `cfg.env.databaseUrl` were
+		// widened to `string`, this assignment would fail.
+		const _check: "POSTGRES_URL" | undefined = cfg.env?.databaseUrl;
+		void _check;
+		expect(cfg.env?.databaseUrl).toBe("POSTGRES_URL");
 	});
 
 	test("freezes returned objects", () => {

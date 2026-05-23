@@ -104,6 +104,31 @@ export interface BranchBlueprint {
 }
 
 /**
+ * Per-config override for the env-var names that `loadEnv` produces. When omitted, the
+ * defaults are `DATABASE_URL` and `DATABASE_URL_UNPOOLED`. Override these to match the
+ * conventions of your platform (e.g. Vercel's `POSTGRES_URL` / `POSTGRES_URL_NON_POOLING`).
+ *
+ * Defined as a literal `as const`-style block in `neon.ts` so that the `loadEnv` return
+ * type is statically narrowed to exactly the keys your config produces:
+ *
+ * ```ts
+ * const config = defineConfig({
+ *   project: { name: "my-app" },
+ *   env: { databaseUrl: "POSTGRES_URL", databaseUrlUnpooled: "POSTGRES_URL_NON_POOLING" },
+ * });
+ * const env = await loadEnv(config);
+ * // env.POSTGRES_URL              — string (autocompleted)
+ * // env.POSTGRES_URL_NON_POOLING  — string (autocompleted)
+ * ```
+ */
+export interface EnvKeysConfig {
+	/** Env-var key for the pooled (PgBouncer) connection string. Default: `"DATABASE_URL"`. */
+	databaseUrl?: string;
+	/** Env-var key for the direct (unpooled) connection string. Default: `"DATABASE_URL_UNPOOLED"`. */
+	databaseUrlUnpooled?: string;
+}
+
+/**
  * Project-level configuration. The `name` is treated as an upsert key. `region` only matters
  * when the project is being created and must not change once the project exists.
  */
@@ -153,6 +178,13 @@ export interface Config {
 	 * branch already on Neon.
 	 */
 	branchBlueprints?: Record<string, BranchBlueprint>;
+	/**
+	 * Optional override for the env-var keys produced by {@link loadEnv}. When omitted,
+	 * `loadEnv` writes `DATABASE_URL` (pooled) and `DATABASE_URL_UNPOOLED` (direct). The
+	 * literal strings declared here drive `loadEnv`'s static return type — autocompleting
+	 * the exact env-var keys your app will see.
+	 */
+	env?: EnvKeysConfig;
 }
 
 /**
