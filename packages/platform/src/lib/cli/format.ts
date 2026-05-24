@@ -1,4 +1,4 @@
-import type { Config } from "../types.js";
+import type { PulledBranchConfig } from "../pull-config.js";
 
 /**
  * Serialise a {@link Config} as the textual body of a `neon.ts` file:
@@ -13,12 +13,26 @@ import type { Config } from "../types.js";
  * TypeScript and keeps the formatter trivial — no AST construction, no edge cases around
  * reserved words, no quoting decisions to make.
  */
-export function formatConfigAsTypeScript(config: Config): string {
-	const body = JSON.stringify(config, null, 2);
+export function formatInitTemplate(pulled: PulledBranchConfig): string {
+	const rootName = pulled.branch.name;
+	const rootConfig = JSON.stringify(pulled.config, null, 4)
+		.split("\n")
+		.map((line) => `      ${line}`)
+		.join("\n")
+		.trimStart();
 	return [
 		'import { defineConfig } from "@neondatabase/platform/v1";',
 		"",
-		`export default defineConfig(${body});`,
+		"export default defineConfig((branch) => {",
+		`  if (branch.name === ${JSON.stringify(rootName)}) {`,
+		`    return ${rootConfig};`,
+		"  }",
+		"",
+		"  return {",
+		`    parent: ${JSON.stringify(rootName)},`,
+		'    ttl: "7d",',
+		"  };",
+		"});",
 		"",
 	].join("\n");
 }
@@ -26,7 +40,7 @@ export function formatConfigAsTypeScript(config: Config): string {
 /**
  * Pretty-print a {@link Config} as JSON with a trailing newline.
  */
-export function formatConfigAsJson(config: Config): string {
+export function formatConfigAsJson(config: PulledBranchConfig): string {
 	return `${JSON.stringify(config, null, 2)}\n`;
 }
 

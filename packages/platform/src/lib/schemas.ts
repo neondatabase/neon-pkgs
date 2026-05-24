@@ -3,14 +3,13 @@
  *
  * This barrel exists so `v1.ts` can do `export * as schemas from "./lib/schemas.js"`
  * without leaking `formatZodIssues` (an internal helper used by `defineConfig` to
- * render zod errors). Callers compose schemas under `schemas.config`, `schemas.project`,
+ * render zod errors). Callers compose schemas under `schemas.branch`, `schemas.postgres`,
  * etc.
  */
 export {
-	branchBlueprintSchema as branchBlueprint,
 	branchConfigSchema as branch,
 	computeSettingsSchema as computeSettings,
 	configSchema as config,
-	featureFlagsSchema as features,
-	projectConfigSchema as project,
+	featureToggleSchema as feature,
+	postgresConfigSchema as postgres,
 } from "./schema.js";

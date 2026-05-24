@@ -7,14 +7,15 @@ import { hideBin } from "yargs/helpers";
 import {
 	type CommandResult,
 	runBranch,
+	runCheckout,
 	runContext,
 	runEnvPull,
 	runEnvRun,
+	runInit,
 	runPull,
 	runPush,
 	runStatus,
 } from "./lib/cli/commands.js";
-import { isPullOutputFormat, type PullOutputFormat } from "./lib/cli/format.js";
 
 const pkgVersion = readPackageVersion();
 
@@ -30,7 +31,7 @@ const argv = yargs(hideBin(process.argv))
 	})
 	.command(
 		"pull",
-		"Pull the live Neon project state into a neon.ts file in the current directory (or print JSON).",
+		"Print the selected branch's live Neon state as JSON.",
 		(y) =>
 			y
 				.option("project-id", {
@@ -41,17 +42,34 @@ const argv = yargs(hideBin(process.argv))
 					type: "string",
 					describe: "Neon API key (defaults to NEON_API_KEY)",
 				})
-				.option("format", {
+				.option("branch", {
 					type: "string",
-					choices: ["ts", "json"] as const,
-					default: "ts" as const,
 					describe:
-						"Output format. `ts` (default) writes/overwrites ./neon.ts; `json` prints the raw Config to stdout",
+						"Override the .neon/project.json branchId / NEON_BRANCH_ID",
+				}),
+	)
+	.command(
+		"init",
+		"Create a starter neon.ts branch-policy file from the selected branch.",
+		(y) =>
+			y
+				.option("project-id", {
+					type: "string",
+					describe: "Override the .neon/project.json projectId",
+				})
+				.option("branch", {
+					type: "string",
+					describe:
+						"Override the .neon/project.json branchId / NEON_BRANCH_ID",
+				})
+				.option("api-key", {
+					type: "string",
+					describe: "Neon API key (defaults to NEON_API_KEY)",
 				}),
 	)
 	.command(
 		"push",
-		"Push your local neon.ts to the resolved Neon project. Requires an existing project — bootstrap one with `npx neonctl link` first.",
+		"Push your local neon.ts policy to the selected Neon branch.",
 		(y) =>
 			y
 				.option("config", {
@@ -66,6 +84,11 @@ const argv = yargs(hideBin(process.argv))
 				.option("api-key", {
 					type: "string",
 					describe: "Neon API key (defaults to NEON_API_KEY)",
+				})
+				.option("branch", {
+					type: "string",
+					describe:
+						"Override the .neon/project.json branchId / NEON_BRANCH_ID",
 				})
 				.option("update-existing", {
 					type: "boolean",
@@ -95,7 +118,7 @@ const argv = yargs(hideBin(process.argv))
 	)
 	.command(
 		"status",
-		"Show what `neon-ts push` would do — diff your local neon.ts against the live project, no mutations.",
+		"Show what `neon-ts push` would do for the selected branch, no mutations.",
 		(y) =>
 			y
 				.option("config", {
@@ -110,23 +133,50 @@ const argv = yargs(hideBin(process.argv))
 				.option("api-key", {
 					type: "string",
 					describe: "Neon API key (defaults to NEON_API_KEY)",
+				})
+				.option("branch", {
+					type: "string",
+					describe:
+						"Override the .neon/project.json branchId / NEON_BRANCH_ID",
 				}),
 	)
 	.command(
-		"branch <blueprint>",
-		"Create an ephemeral branch from a wildcard blueprint, or check out a concrete branch from neon.ts.",
+		"branch <name>",
+		"Create a new branch from the neon.ts branch policy.",
 		(y) =>
 			y
-				.positional("blueprint", {
+				.positional("name", {
 					type: "string",
-					describe:
-						"Name of the blueprint key in neon.ts (e.g. `preview`)",
+					describe: "Branch name or pattern to create (e.g. `dev`)",
 					demandOption: true,
 				})
 				.option("config", {
 					type: "string",
 					describe:
 						"Path to neon.ts (defaults to walking up from cwd)",
+				})
+				.option("project-id", {
+					type: "string",
+					describe: "Override the .neon/project.json projectId",
+				})
+				.option("org-id", {
+					type: "string",
+					describe: "Override the .neon/project.json orgId",
+				})
+				.option("api-key", {
+					type: "string",
+					describe: "Neon API key (defaults to NEON_API_KEY)",
+				}),
+	)
+	.command(
+		"checkout <branch>",
+		"Check out an existing Neon branch by name or id and update local context.",
+		(y) =>
+			y
+				.positional("branch", {
+					type: "string",
+					describe: "Branch name or id to check out",
+					demandOption: true,
 				})
 				.option("project-id", {
 					type: "string",
@@ -216,9 +266,6 @@ const cwd = process.cwd();
 let result: CommandResult;
 switch (command) {
 	case "pull": {
-		const format: PullOutputFormat = isPullOutputFormat(argv.format)
-			? argv.format
-			: "ts";
 		result = await runPull(
 			{
 				...(typeof argv["project-id"] === "string"
@@ -227,7 +274,26 @@ switch (command) {
 				...(typeof argv["api-key"] === "string"
 					? { apiKey: argv["api-key"] }
 					: {}),
-				format,
+				...(typeof argv.branch === "string"
+					? { branch: argv.branch }
+					: {}),
+			},
+			{ cwd },
+		);
+		break;
+	}
+	case "init": {
+		result = await runInit(
+			{
+				...(typeof argv["project-id"] === "string"
+					? { projectId: argv["project-id"] }
+					: {}),
+				...(typeof argv.branch === "string"
+					? { branch: argv.branch }
+					: {}),
+				...(typeof argv["api-key"] === "string"
+					? { apiKey: argv["api-key"] }
+					: {}),
 			},
 			{ cwd },
 		);
@@ -244,6 +310,9 @@ switch (command) {
 					: {}),
 				...(typeof argv["api-key"] === "string"
 					? { apiKey: argv["api-key"] }
+					: {}),
+				...(typeof argv.branch === "string"
+					? { branch: argv.branch }
 					: {}),
 				updateExisting: argv["update-existing"] === true,
 			},
@@ -280,20 +349,41 @@ switch (command) {
 				...(typeof argv["api-key"] === "string"
 					? { apiKey: argv["api-key"] }
 					: {}),
+				...(typeof argv.branch === "string"
+					? { branch: argv.branch }
+					: {}),
 			},
 			{ cwd },
 		);
 		break;
 	}
 	case "branch": {
-		const blueprint =
-			typeof argv.blueprint === "string" ? argv.blueprint : "";
+		const name = typeof argv.name === "string" ? argv.name : "";
 		result = await runBranch(
 			{
-				blueprint,
+				name,
 				...(typeof argv.config === "string"
 					? { configPath: argv.config }
 					: {}),
+				...(typeof argv["project-id"] === "string"
+					? { projectId: argv["project-id"] }
+					: {}),
+				...(typeof argv["org-id"] === "string"
+					? { orgId: argv["org-id"] }
+					: {}),
+				...(typeof argv["api-key"] === "string"
+					? { apiKey: argv["api-key"] }
+					: {}),
+			},
+			{ cwd },
+		);
+		break;
+	}
+	case "checkout": {
+		const branch = typeof argv.branch === "string" ? argv.branch : "";
+		result = await runCheckout(
+			{
+				branch,
 				...(typeof argv["project-id"] === "string"
 					? { projectId: argv["project-id"] }
 					: {}),

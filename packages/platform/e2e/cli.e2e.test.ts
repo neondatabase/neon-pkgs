@@ -56,7 +56,7 @@ async function runCli(
 
 describe("e2e — neon-ts CLI against real Neon API", () => {
 	e2eTest(
-		"`neon-ts pull --format json` prints a real Config from the live project",
+		"`neon-ts pull` prints selected branch state JSON from the live project",
 		async ({ track }) => {
 			const scope = await detectApiKeyScope();
 			const api = makeRealApi();
@@ -72,17 +72,12 @@ describe("e2e — neon-ts CLI against real Neon API", () => {
 				projectId = scope.projectId;
 			}
 
-			const result = await runCli([
-				"pull",
-				"--format",
-				"json",
-				"--project-id",
-				projectId,
-			]);
+			const result = await runCli(["pull", "--project-id", projectId]);
 			expect(result.exitCode).toBe(0);
 			const parsed = JSON.parse(result.stdout);
 			expect(parsed.project.name).toBeTruthy();
-			expect(typeof parsed.project.region).toBe("string");
+			expect(parsed.branch.name).toBeTruthy();
+			expect(parsed.config).toBeDefined();
 		},
 	);
 
@@ -107,16 +102,15 @@ describe("e2e — neon-ts CLI against real Neon API", () => {
 			// and a `.neon/project.json` pointing at the just-created project.
 			const repo = makeTempRepo({
 				"package.json": "{}",
-				".neon/project.json": JSON.stringify({ projectId }),
+				".neon/project.json": JSON.stringify({
+					projectId,
+					branchId: (await api.listBranches(projectId)).find(
+						(b) => b.isDefault,
+					)?.id,
+				}),
 				"neon.ts": `
 import { defineConfig } from "${PLATFORM_SRC}";
-export default defineConfig({
-  project: { name: ${JSON.stringify(projectName)}, region: ${JSON.stringify(DEFAULT_REGION)} },
-  branches: {
-    production: {},
-    staging: { parent: "production" },
-  },
-});
+export default defineConfig((branch) => branch.name === "main" || branch.isDefault ? { protected: true } : { parent: "main" });
 `,
 			});
 
@@ -126,11 +120,10 @@ export default defineConfig({
 					env: { NEON_API_KEY: requireApiKey() },
 				});
 				expect(pushResult.exitCode).toBe(0);
-				expect(pushResult.stdout).toContain("pushed config to project");
-				expect(pushResult.stdout).toContain("staging");
+				expect(pushResult.stdout).toContain("branch");
 
 				const branches = await api.listBranches(projectId);
-				expect(branches.map((b) => b.name)).toContain("staging");
+				expect(branches.find((b) => b.isDefault)?.protected).toBe(true);
 			} finally {
 				repo.cleanup();
 			}
@@ -164,7 +157,7 @@ export default defineConfig({
 	);
 
 	e2eTest(
-		"`neon-ts push` exits 2 (PushConflictError) when there's drift and no --update-existing",
+		"`neon-ts push` exits 2 (PushConflictError) when selected branch drifts and no --update-existing",
 		async ({ track }) => {
 			const scope = await detectApiKeyScope();
 			if (scope.kind !== "org-or-user") return;
@@ -179,13 +172,15 @@ export default defineConfig({
 
 			const repo = makeTempRepo({
 				"package.json": "{}",
-				".neon/project.json": JSON.stringify({ projectId }),
+				".neon/project.json": JSON.stringify({
+					projectId,
+					branchId: (await api.listBranches(projectId)).find(
+						(b) => b.isDefault,
+					)?.id,
+				}),
 				"neon.ts": `
 import { defineConfig } from "${PLATFORM_SRC}";
-export default defineConfig({
-  project: { name: ${JSON.stringify(projectName)}, region: "aws-eu-central-1" },
-  branches: { production: {} },
-});
+export default defineConfig(() => ({ protected: true }));
 `,
 			});
 

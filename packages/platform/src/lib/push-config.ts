@@ -6,26 +6,11 @@ import {
 	type RemoteFeatureState,
 	type RemoteState,
 } from "./diff.js";
-import {
-	ErrorCode,
-	MissingContextError,
-	PlatformError,
-	PushConflictError,
-} from "./errors.js";
-import { loadContext } from "./load-context.js";
+import { MissingContextError, PushConflictError } from "./errors.js";
+import { type BranchRef, loadContextWithBranch } from "./load-context.js";
 import { loadConfigFromFile } from "./loader.js";
-import type {
-	CreateBranchInput,
-	NeonApi,
-	NeonBranchSnapshot,
-	NeonProjectSnapshot,
-} from "./neon-api.js";
-import type {
-	AppliedChange,
-	Config,
-	PushResult,
-	ResolvedConfig,
-} from "./types.js";
+import type { NeonApi, NeonBranchSnapshot } from "./neon-api.js";
+import type { AppliedChange, Config, PushResult } from "./types.js";
 
 export interface PushConfigOptions {
 	/** Neon API key. Falls back to `NEON_API_KEY`. Ignored when `api` is supplied. */
@@ -40,6 +25,8 @@ export interface PushConfigOptions {
 	 * `npx neonctl link` to create/select a project and write local context.
 	 */
 	projectId?: string;
+	/** Explicit branch id or name. Overrides `NEON_BRANCH_ID` and `.neon` branchId. */
+	branch?: string;
 	/** Working directory for context / config file lookups. Defaults to `process.cwd()`. */
 	cwd?: string;
 	/**
@@ -48,13 +35,10 @@ export interface PushConfigOptions {
 	 */
 	api?: NeonApi;
 	/**
-	 * When `true`, apply settings / `protected` / TTL drift on `config.branches` entries —
-	 * and a project rename — as actual mutations instead of refusing with
-	 * `PushConflictError`. Immutable project fields (`region`, `pgVersion`) always remain
-	 * conflicts: no flag can patch them, the project would need to be recreated.
+	 * When `true`, apply mutable drift on the selected branch as actual mutations instead
+	 * of refusing with `PushConflictError`.
 	 *
-	 * Default: `false` (drift on existing entities → fail-fast conflict). Branch *creation*
-	 * (adding a new entry to `config.branches`) is additive and runs regardless.
+	 * Default: `false` (drift on existing branch resources → fail-fast conflict).
 	 */
 	updateExisting?: boolean;
 	/**
@@ -87,8 +71,10 @@ export interface PushConfigOptions {
  *    No filesystem reads (other than the project-context lookup, which can be bypassed by
  *    setting `projectId`).
  *
- * `pushConfig` requires a resolvable `projectId` (option / env / context file). It will
- * **not** create a project — bootstrap one with `npx neonctl link` first.
+ * `pushConfig` requires a resolvable `projectId` and branch (`--branch`,
+ * `NEON_BRANCH_ID`, or `.neon` branchId). It will **not** create a project or branch —
+ * bootstrap the project with `npx neonctl link` and create branches with
+ * `neonctl platform branch`.
  */
 export async function pushConfig(): Promise<PushResult>;
 export async function pushConfig(
@@ -105,31 +91,46 @@ export async function pushConfig(
 	const { config: passedConfig, options } = splitArgs(arg1, arg2);
 
 	const cwd = options.cwd ?? process.cwd();
-	const projectId = requireProjectIdForPush(options, cwd);
-
 	const api = options.api ?? createApiFromOptions(options);
 	const config =
 		passedConfig ??
 		(await loadConfigFromFile({ path: options.configPath, cwd })).config;
-	const resolved = resolveConfig(config);
 
 	const dryRun = options.dryRun === true;
 	const updateExisting = options.updateExisting === true;
 
-	const remoteProject = await api.getProject(projectId);
+	const ctx = requireContextForPush(options, cwd);
+	const remoteProject = await api.getProject(ctx.projectId);
 
 	const [branches, endpoints] = await Promise.all([
 		api.listBranches(remoteProject.id),
 		api.listEndpoints(remoteProject.id),
 	]);
+	const branch = resolveRemoteBranch(ctx.branch, branches);
+	const resolved = resolveConfig(config, {
+		name: branch.name,
+		id: branch.id,
+		exists: true,
+		...(branch.parentId ? { parentId: branch.parentId } : {}),
+		isDefault: branch.isDefault,
+		isProtected: branch.protected,
+		...(branch.expiresAt ? { expiresAt: branch.expiresAt } : {}),
+	});
 	const features = await resolveFeatureState({
 		api,
-		resolved,
-		project: remoteProject,
-		branches,
+		projectId: remoteProject.id,
+		branch,
+		wantsAuth: resolved.authEnabled,
+		wantsDataApi: resolved.dataApiEnabled,
 	});
-	const remote: RemoteState = { project: remoteProject, branches, endpoints };
-	if (features) remote.features = features;
+	const remote: RemoteState = {
+		projectId: remoteProject.id,
+		branch,
+		endpoint: endpoints.find(
+			(ep) => ep.type === "read_write" && ep.branchId === branch.id,
+		),
+		features,
+	};
 
 	const diff = diffConfig(resolved, remote, { updateExisting });
 
@@ -138,7 +139,7 @@ export async function pushConfig(
 	}
 
 	const applied: AppliedChange[] = [
-		{ kind: "project", action: "noop", identifier: remoteProject.id },
+		{ kind: "branch", action: "noop", identifier: branch.name },
 	];
 
 	const branchById = new Map(branches.map((b) => [b.id, b] as const));
@@ -153,16 +154,13 @@ export async function pushConfig(
 					branchById,
 					branchByName,
 				});
-		// `rename-project` is the only step that mutates the project record itself; once
-		// it runs (or would-run in dry-run) the implicit noop entry above no longer
-		// reflects reality, so swap it for the real change.
-		if (change.kind === "project" && change.action === "update")
-			applied[0] = change;
-		else applied.push(change);
+		applied.push(change);
 	}
 
 	const result: PushResult = {
 		projectId: remoteProject.id,
+		branchId: branch.id,
+		branchName: branch.name,
 		dryRun,
 		applied,
 		conflicts: diff.conflicts,
@@ -179,27 +177,6 @@ export async function pushConfig(
  */
 function synthesizeAppliedChange(step: PlanStep): AppliedChange {
 	switch (step.kind) {
-		case "rename-project":
-			return {
-				kind: "project",
-				action: "update",
-				identifier: step.projectId,
-				details: { from: step.fromName, to: step.toName },
-			};
-		case "create-branch":
-			return {
-				kind: "branch",
-				action: "create",
-				identifier: step.branchName,
-				details: {
-					parentBranchName: step.parentBranchName,
-					...(step.expiresAt ? { expiresAt: step.expiresAt } : {}),
-					...(step.protected ? { protected: true } : {}),
-					...(step.computeSettings
-						? { computeSettings: step.computeSettings }
-						: {}),
-				},
-			};
 		case "update-branch-ttl":
 			return {
 				kind: "branch",
@@ -260,11 +237,7 @@ function splitArgs(
 }
 
 function isConfigLike(value: unknown): value is Config {
-	if (value === null || typeof value !== "object") return false;
-	const obj = value as Record<string, unknown>;
-	if (obj.project === null || typeof obj.project !== "object") return false;
-	const project = obj.project as Record<string, unknown>;
-	return typeof project.name === "string";
+	return typeof value === "function";
 }
 
 function createApiFromOptions(options: PushConfigOptions): NeonApi {
@@ -273,122 +246,84 @@ function createApiFromOptions(options: PushConfigOptions): NeonApi {
 	});
 }
 
-function requireProjectIdForPush(
+function requireContextForPush(
 	options: PushConfigOptions,
 	cwd: string,
-): string {
-	const projectId = resolveProjectId(options, cwd);
-	if (!projectId) {
+): ReturnType<typeof loadContextWithBranch> {
+	try {
+		return loadContextWithBranch({
+			projectId: options.projectId,
+			branch: options.branch,
+			cwd,
+		});
+	} catch (cause) {
+		if (!(cause instanceof MissingContextError)) throw cause;
 		throw new MissingContextError(
 			[
-				"pushConfig could not resolve a Neon project id.",
-				"`pushConfig` does not create projects — run `npx neonctl link` first to create/select a project and write local context.",
-				"Alternatively, pass `projectId` / `--project-id`, set `NEON_PROJECT_ID`, or commit a `.neon/project.json` context file.",
+				"pushConfig could not resolve a Neon project id and branch.",
+				"`pushConfig` is branch-scoped — run `npx neonctl link` to select a project, then `neonctl platform checkout <branch>` or `neonctl platform branch <name>` to select a branch.",
+				"Alternatively, pass `projectId` / `--project-id` and `branch` / `--branch`, or set `NEON_PROJECT_ID` and `NEON_BRANCH_ID`.",
 			].join("\n"),
 		);
 	}
-	return projectId;
+}
+
+function resolveRemoteBranch(
+	ref: BranchRef,
+	branches: NeonBranchSnapshot[],
+): NeonBranchSnapshot {
+	const found =
+		ref.kind === "id"
+			? branches.find((b) => b.id === ref.value)
+			: branches.find((b) => b.name === ref.value);
+	if (found) return found;
+	throw new MissingContextError(
+		[
+			`Selected branch ${ref.kind}=${ref.value} does not exist on Neon.`,
+			`Available branches: ${branches.map((b) => `${b.name} (${b.id})`).join(", ") || "(none)"}.`,
+			"Run `neonctl platform checkout <branch>` to select an existing branch, or `neonctl platform branch <name>` to create a new one.",
+		].join(" "),
+	);
 }
 
 /**
- * Resolve a project id from the standard chain (options → env → `.neon[/project.json]`).
- * Returns `undefined` rather than throwing when nothing is set — the caller turns that
- * into a {@link MissingContextError} with the bootstrap hint.
- */
-function resolveProjectId(
-	options: PushConfigOptions,
-	cwd: string,
-): string | undefined {
-	try {
-		const ctx = loadContext({
-			projectId: options.projectId,
-			cwd,
-		});
-		return ctx.projectId;
-	} catch (cause) {
-		if (!(cause instanceof MissingContextError)) throw cause;
-		return undefined;
-	}
-}
-
-/**
- * Find the concrete branch that should govern the project's default branch — the entry
- * in `config.branches` with no `parent`. Used by feature targeting (the root branch is
- * where `features.auth` / `features.dataApi` integrations are enabled).
- */
-function findRootBranch(config: ResolvedConfig) {
-	const candidates = config.branches.filter((b) => b.parent === undefined);
-	if (candidates.length > 0) return candidates[0];
-	// Fallback: every entry has a parent (cycle / orphan). Pick the first so feature
-	// targeting still has something to land on.
-	return config.branches[0];
-}
-
-/**
- * Pre-fetch the current state of `config.features` integrations on the branch they should
- * target — typically the project's root concrete branch (the entry without `parent`),
- * falling back to whichever branch Neon has marked as default. Returns `undefined` when
- * `config.features` is empty / disabled, so push and diff stay free from extra work.
- *
- * Two read calls per enabled feature: `getNeonAuth` (when `features.auth`) and
- * `listBranchDatabases` + `getNeonDataApi` (when `features.dataApi`).
+ * Pre-fetch the current state of branch-scoped integrations on the selected branch.
  */
 async function resolveFeatureState(args: {
 	api: NeonApi;
-	resolved: ResolvedConfig;
-	project: NeonProjectSnapshot;
-	branches: NeonBranchSnapshot[];
-}): Promise<RemoteFeatureState | undefined> {
-	const { api, resolved, project, branches } = args;
-	const features = resolved.features;
-	if (!features) return undefined;
-	if (features.auth !== true && features.dataApi !== true) return undefined;
-
-	const targetBranch = findFeatureTargetBranch(resolved, branches);
-	if (!targetBranch) return undefined;
+	projectId: string;
+	branch: NeonBranchSnapshot;
+	wantsAuth: boolean;
+	wantsDataApi: boolean;
+}): Promise<RemoteFeatureState> {
+	const { api, projectId, branch, wantsAuth, wantsDataApi } = args;
+	if (!wantsAuth && !wantsDataApi) {
+		return {
+			databaseName: "neondb",
+			authEnabled: false,
+			dataApiEnabled: false,
+		};
+	}
 
 	const databaseName = await pickFeatureDatabaseName(
 		api,
-		project.id,
-		targetBranch.id,
+		projectId,
+		branch.id,
 	);
 
-	const state: RemoteFeatureState = {
-		branchId: targetBranch.id,
-		branchName: targetBranch.name,
-		databaseName,
-		auth: null,
-		dataApi: null,
-	};
-
 	const [auth, dataApi] = await Promise.all([
-		features.auth === true
-			? api.getNeonAuth(project.id, targetBranch.id)
+		wantsAuth
+			? api.getNeonAuth(projectId, branch.id)
 			: Promise.resolve(null),
-		features.dataApi === true
-			? api.getNeonDataApi(project.id, targetBranch.id, databaseName)
+		wantsDataApi
+			? api.getNeonDataApi(projectId, branch.id, databaseName)
 			: Promise.resolve(null),
 	]);
-	state.auth = auth;
-	state.dataApi = dataApi;
-	return state;
-}
-
-/**
- * Pick the branch `config.features` integrations should attach to. The root concrete
- * branch (the one with no `parent`) wins because it's where `fetchEnv` reads by default;
- * if no concrete branch exists, fall back to whatever branch Neon has marked as default.
- */
-function findFeatureTargetBranch(
-	resolved: ResolvedConfig,
-	branches: NeonBranchSnapshot[],
-): NeonBranchSnapshot | undefined {
-	const root = findRootBranch(resolved);
-	if (root) {
-		const match = branches.find((b) => b.name === root.name);
-		if (match) return match;
-	}
-	return branches.find((b) => b.isDefault) ?? branches[0];
+	return {
+		databaseName,
+		authEnabled: auth !== null,
+		dataApiEnabled: dataApi !== null,
+	};
 }
 
 /**
@@ -421,52 +356,6 @@ async function applyStep(
 	ctx: ApplyContext,
 ): Promise<AppliedChange> {
 	switch (step.kind) {
-		case "rename-project": {
-			const updated = await ctx.api.updateProject(step.projectId, {
-				name: step.toName,
-			});
-			return {
-				kind: "project",
-				action: "update",
-				identifier: updated.id,
-				details: { from: step.fromName, to: updated.name },
-			};
-		}
-		case "create-branch": {
-			const parentBranch = ctx.branchByName.get(step.parentBranchName);
-			if (!parentBranch && step.parentBranchName !== step.branchName) {
-				throw new PlatformError(
-					ErrorCode.MissingParentBranch,
-					[
-						`Cannot create branch '${step.branchName}': its parent '${step.parentBranchName}' does not exist on Neon.`,
-						"Either define a blueprint for the parent so it gets created first, or change this blueprint's `parent` to an existing branch.",
-					].join(" "),
-				);
-			}
-			const createInput: CreateBranchInput = { name: step.branchName };
-			if (parentBranch) createInput.parentId = parentBranch.id;
-			else if (step.parentBranchId)
-				createInput.parentId = step.parentBranchId;
-			if (step.expiresAt) createInput.expiresAt = step.expiresAt;
-			if (step.protected) createInput.protected = true;
-			if (step.computeSettings)
-				createInput.computeSettings = step.computeSettings;
-			const result = await ctx.api.createBranch(
-				ctx.remoteProjectId,
-				createInput,
-			);
-			ctx.branchById.set(result.branch.id, result.branch);
-			ctx.branchByName.set(result.branch.name, result.branch);
-			return {
-				kind: "branch",
-				action: "create",
-				identifier: result.branch.name,
-				details: {
-					branchId: result.branch.id,
-					parentBranchName: step.parentBranchName,
-				},
-			};
-		}
 		case "update-branch-ttl": {
 			const updated = await ctx.api.updateBranch(
 				ctx.remoteProjectId,

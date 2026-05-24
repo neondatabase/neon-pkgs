@@ -117,9 +117,7 @@ export class MissingContextError extends PlatformError {
  * the remote project that the caller hasn't opted in to apply.
  *
  * The message lists every conflict with both the current and desired value plus a
- * per-conflict hint — immutable Neon fields (`region`, Postgres major) cannot be patched
- * at all and require recreating the project; mutable drift (settings, `protected`,
- * project rename) is applied by passing `updateExisting: true`.
+ * per-conflict hint. Mutable branch drift is applied by passing `updateExisting: true`.
  */
 export class PushConflictError extends PlatformError {
 	override readonly name = "PushConflictError";
@@ -138,18 +136,8 @@ export class PushConflictError extends PlatformError {
 				`      fix     : ${suggestFix(c)}`,
 			);
 		}
-		const hasImmutable = conflicts.some(
-			(c) =>
-				c.kind === "project" &&
-				(c.field === "region" || c.field === "pgVersion"),
-		);
 		const hasMutable = conflicts.some((c) => !isImmutableConflict(c));
 		lines.push("");
-		if (hasImmutable) {
-			lines.push(
-				"Some conflicts are immutable on Neon (region, Postgres major version). They cannot be applied — recreate the project, or update your `neon.ts` to match the remote.",
-			);
-		}
 		if (hasMutable) {
 			lines.push(
 				"For mutable conflicts, pass `updateExisting: true` (SDK) / `--update-existing` (CLI) to apply.",
@@ -163,19 +151,13 @@ export class PushConflictError extends PlatformError {
 	}
 }
 
-function isImmutableConflict(c: ConflictReport): boolean {
-	return (
-		c.kind === "project" &&
-		(c.field === "region" || c.field === "pgVersion")
-	);
+function isImmutableConflict(_c: ConflictReport): boolean {
+	return false;
 }
 
 function suggestFix(c: ConflictReport): string {
 	if (isImmutableConflict(c)) {
 		return "immutable on Neon — recreate the project, or change your `neon.ts` to match the remote.";
-	}
-	if (c.kind === "project" && c.field === "name") {
-		return "pass `updateExisting: true` (SDK) / `--update-existing` (CLI) to rename the remote project, or change your `neon.ts` to match the remote name.";
 	}
 	if (c.kind === "branch" && c.field === "parent") {
 		return "create the parent branch on Neon first, or change the `parent` reference to an existing branch.";

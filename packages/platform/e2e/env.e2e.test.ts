@@ -1,6 +1,7 @@
 import { describe, expect } from "vitest";
-import { defineConfig, fetchEnv, pushConfig } from "../src/v1.js";
+import { defineConfig, fetchEnv } from "../src/v1.js";
 import {
+	bootstrapProject,
 	DEFAULT_REGION,
 	detectApiKeyScope,
 	e2eTest,
@@ -9,44 +10,26 @@ import {
 } from "./helpers.js";
 
 describe("e2e — fetchEnv against real Neon API", () => {
-	e2eTest(
-		"returns env.postgres.{databaseUrl,databaseUrlUnpooled} that point at the default branch",
-		async ({ track }) => {
-			const scope = await detectApiKeyScope();
-			if (scope.kind !== "org-or-user") return;
-
-			const api = makeRealApi();
-			const projectName = uniqueProjectName("loadenv");
-			const config = defineConfig({
-				project: { name: projectName, region: DEFAULT_REGION },
-				branches: { production: {} },
-			});
-
-			const pushed = await pushConfig(config, { api });
-			track(pushed.projectId);
-
-			const env = await fetchEnv(config, {
-				api,
-				projectId: pushed.projectId,
-			});
-
-			expect(Object.keys(env)).toEqual(["postgres"]);
-			expect(Object.keys(env.postgres).sort()).toEqual([
-				"databaseUrl",
-				"databaseUrlUnpooled",
-			]);
-
-			// Both URIs must be valid Postgres URIs targeting the same database + role.
-			const pooled = new URL(env.postgres.databaseUrl);
-			const direct = new URL(env.postgres.databaseUrlUnpooled);
-			expect(pooled.protocol).toMatch(/^postgres(ql)?:$/);
-			expect(direct.protocol).toMatch(/^postgres(ql)?:$/);
-			expect(pooled.username).toBe(direct.username);
-			expect(pooled.pathname).toBe(direct.pathname);
-
-			// Pooled host always carries the `-pooler` segment in Neon.
-			expect(pooled.host).toContain("-pooler");
-			expect(direct.host).not.toContain("-pooler");
-		},
-	);
+	e2eTest("returns Postgres env for selected branch", async ({ track }) => {
+		const scope = await detectApiKeyScope();
+		const api = makeRealApi();
+		const projectId =
+			scope.kind === "org-or-user"
+				? await bootstrapProject(api, {
+						name: uniqueProjectName("env"),
+						region: DEFAULT_REGION,
+					})
+				: scope.projectId;
+		if (scope.kind === "org-or-user") track(projectId);
+		const branchId = (await api.listBranches(projectId)).find(
+			(b) => b.isDefault,
+		)?.id;
+		if (!branchId) throw new Error("missing default branch");
+		const env = await fetchEnv(
+			defineConfig(() => ({})),
+			{ api, projectId, branch: branchId },
+		);
+		expect(env.postgres.databaseUrl).toContain("postgresql://");
+		expect(env.postgres.databaseUrlUnpooled).toContain("postgresql://");
+	});
 });

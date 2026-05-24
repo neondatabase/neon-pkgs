@@ -6,15 +6,9 @@
  * ```ts
  * import { defineConfig } from "@neondatabase/platform/v1";
  *
- * export default defineConfig({
- *   project: { name: "my-app", region: "aws-us-east-1" },
- *   branches: {
- *     production: { protected: true, computeSettings: { autoscalingLimitMaxCu: 2 } },
- *     staging:    { parent: "production" },
- *   },
- *   branchBlueprints: {
- *     preview: { pattern: "preview-*", ttl: "1h", parent: "production" },
- *   },
+ * export default defineConfig((branch) => {
+ *   if (branch.name === "main") return { protected: true, auth: { enabled: true } };
+ *   return { parent: "main", ttl: "7d" };
  * });
  * ```
  *
@@ -44,6 +38,12 @@ export type {
 } from "./lib/branch.js";
 // ─── Operations ────────────────────────────────────────────────────────────────
 export { branch } from "./lib/branch.js";
+export type {
+	CheckoutContextFile,
+	CheckoutOptions,
+	CheckoutResult,
+} from "./lib/checkout.js";
+export { checkout } from "./lib/checkout.js";
 export { defineConfig } from "./lib/define-config.js";
 export type {
 	FetchEnvOptions,
@@ -87,11 +87,11 @@ export { pushConfig } from "./lib/push-config.js";
 export * as schemas from "./lib/schemas.js";
 // ─── Config types (used in neon.ts and in pushConfig return values) ───────────
 export type {
-	BranchBlueprint,
 	BranchConfig,
+	BranchTarget,
 	ComputeSettings,
 	Config,
-	FeatureFlags,
-	ProjectConfig,
+	FeatureToggle,
+	PostgresConfig,
 	PushResult,
 } from "./lib/types.js";

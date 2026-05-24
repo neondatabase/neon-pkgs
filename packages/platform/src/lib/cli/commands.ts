@@ -3,6 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { resolveApiKey } from "../auth.js";
 import { branch } from "../branch.js";
+import { checkout } from "../checkout.js";
 import { fetchEnv, neonEnvToProcessEnv } from "../env.js";
 import {
 	ConfigLoadError,
@@ -17,11 +18,7 @@ import type { NeonApi } from "../neon-api.js";
 import { createRealNeonApi } from "../neon-api-real.js";
 import { pullConfig } from "../pull-config.js";
 import { type PushConfigOptions, pushConfig } from "../push-config.js";
-import {
-	formatConfigAsJson,
-	formatConfigAsTypeScript,
-	type PullOutputFormat,
-} from "./format.js";
+import { formatConfigAsJson, formatInitTemplate } from "./format.js";
 
 /** Filename written by `neon-ts pull` (and read by every other subcommand). */
 const NEON_CONFIG_FILENAME = "neon.ts";
@@ -60,19 +57,15 @@ export interface CommandResult {
 
 export interface PullCommandOptions {
 	projectId?: string;
+	branch?: string;
 	apiKey?: string;
-	format?: PullOutputFormat;
 }
 
 /**
  * Implementation of `neon-ts pull`.
  *
- * - `format: "ts"` (default) **writes** the rendered snippet to `${cwd}/neon.ts`,
- *   creating or overwriting it, and prints a one-line status message — there is no
- *   reason to dump the file contents to the terminal when the very next step is to
- *   `import` from disk.
- * - `format: "json"` keeps the read-only behaviour and prints the raw `Config` as
- *   JSON to stdout, so it can be piped into `jq` / a file of the caller's choice.
+ * Prints the selected branch's current remote state as JSON for copy/paste into the
+ * branch-policy function. Use `init` to create a starter `neon.ts`.
  */
 export async function runPull(
 	options: PullCommandOptions,
@@ -86,17 +79,41 @@ export async function runPull(
 			api,
 			cwd: ctx.cwd,
 			...(options.projectId ? { projectId: options.projectId } : {}),
+			...(options.branch ? { branch: options.branch } : {}),
 		});
-		const format = options.format ?? "ts";
-		if (format === "json") {
-			return {
-				exitCode: 0,
-				stdout: formatConfigAsJson(config),
-				stderr: "",
-			};
-		}
+		return {
+			exitCode: 0,
+			stdout: formatConfigAsJson(config),
+			stderr: "",
+		};
+	} catch (err) {
+		return handleError(err);
+	}
+}
+
+// ───────────────────────── init ─────────────────────────
+
+export interface InitCommandOptions {
+	projectId?: string;
+	branch?: string;
+	apiKey?: string;
+}
+
+export async function runInit(
+	options: InitCommandOptions,
+	ctx: CommandEnv,
+): Promise<CommandResult> {
+	const api = resolveApi(options.apiKey, ctx);
+	if (typeof api === "string") return failure(api);
+	try {
+		const pulled = await pullConfig({
+			api,
+			cwd: ctx.cwd,
+			...(options.projectId ? { projectId: options.projectId } : {}),
+			...(options.branch ? { branch: options.branch } : {}),
+		});
 		const targetPath = join(ctx.cwd, NEON_CONFIG_FILENAME);
-		return writeFileSafely(targetPath, formatConfigAsTypeScript(config));
+		return writeFileSafely(targetPath, formatInitTemplate(pulled));
 	} catch (err) {
 		return handleError(err);
 	}
@@ -107,6 +124,7 @@ export async function runPull(
 export interface PushCommandOptions {
 	configPath?: string;
 	projectId?: string;
+	branch?: string;
 	apiKey?: string;
 	updateExisting?: boolean;
 }
@@ -128,13 +146,14 @@ export async function runPush(
 		cwd: ctx.cwd,
 		...(options.configPath ? { configPath: options.configPath } : {}),
 		...(options.projectId ? { projectId: options.projectId } : {}),
+		...(options.branch ? { branch: options.branch } : {}),
 		...(options.updateExisting ? { updateExisting: true } : {}),
 	};
 
 	try {
 		const result = await pushConfig(pushOptions);
 		const realChanges = result.applied.filter((c) => c.action !== "noop");
-		const projectLabel = `project ${result.projectId}${result.orgId ? ` (org ${result.orgId})` : ""}`;
+		const projectLabel = `project ${result.projectId}${result.orgId ? ` (org ${result.orgId})` : ""} branch ${result.branchName} (${result.branchId})`;
 
 		const lines: string[] = [];
 		if (realChanges.length === 0) {
@@ -162,7 +181,7 @@ export async function runPush(
 // ───────────────────────── branch ───────────────────────
 
 export interface BranchCommandOptions {
-	blueprint: string;
+	name: string;
 	projectId?: string;
 	orgId?: string;
 	apiKey?: string;
@@ -170,10 +189,8 @@ export interface BranchCommandOptions {
 }
 
 /**
- * Implementation of `neon-ts branch <blueprint>`. Creates an ephemeral branch from a
- * wildcard blueprint in `neon.ts`, or checks out a concrete branch listed in `branches`.
- * In both cases it updates an existing `.neon[/project.json]` context file with the
- * selected `branchId` and prints a JSON-friendly summary on stdout.
+ * Implementation of `neon-ts branch <name>`. Always creates a new branch from the
+ * branch-policy function in `neon.ts`, updates context, and prints a summary.
  *
  * When no context file exists, the JSON suitable for writing to `.neon/project.json` is
  * included in the summary so the user can pipe it into a file themselves.
@@ -187,7 +204,7 @@ export async function runBranch(
 
 	try {
 		const result = await branch({
-			blueprint: options.blueprint,
+			name: options.name,
 			cwd: ctx.cwd,
 			api,
 			...(options.projectId ? { projectId: options.projectId } : {}),
@@ -195,19 +212,12 @@ export async function runBranch(
 			...(options.configPath ? { configPath: options.configPath } : {}),
 		});
 
-		const lines: string[] =
-			result.action === "checked-out"
-				? [
-						`✓ checked out branch ${result.branchName} (${result.branchId})`,
-						`  branch    : ${result.branchKey ?? result.branchName}`,
-						`  project   : ${result.projectId}${result.orgId ? ` (org ${result.orgId})` : ""}`,
-					]
-				: [
-						`✓ created branch ${result.branchName} (${result.branchId})`,
-						`  blueprint : ${result.blueprintKey} (pattern: ${result.blueprintPattern})`,
-						`  project   : ${result.projectId}${result.orgId ? ` (org ${result.orgId})` : ""}`,
-						`  parent    : ${result.parentBranchName} (${result.parentBranchId})`,
-					];
+		const lines: string[] = [
+			`✓ created branch ${result.branchName} (${result.branchId})`,
+			`  pattern   : ${result.pattern}`,
+			`  project   : ${result.projectId}${result.orgId ? ` (org ${result.orgId})` : ""}`,
+			`  parent    : ${result.parentBranchName} (${result.parentBranchId})`,
+		];
 		if (result.expiresAt) lines.push(`  expiresAt : ${result.expiresAt}`);
 		lines.push("");
 		switch (result.contextFile.status) {
@@ -226,9 +236,63 @@ export async function runBranch(
 			case "write-failed":
 				lines.push(
 					`  ! could not update ${result.contextFile.path}: ${result.contextFile.error}`,
-					result.action === "checked-out"
-						? "  the branch was still checked out for this command; apply this snippet by hand:"
-						: "  the branch on Neon was still created; apply this snippet by hand:",
+					"  the branch on Neon was still created; apply this snippet by hand:",
+					"",
+					result.contextFile.json.trimEnd(),
+				);
+				break;
+		}
+		return { exitCode: 0, stdout: `${lines.join("\n")}\n`, stderr: "" };
+	} catch (err) {
+		return handleError(err);
+	}
+}
+
+// ─────────────────────── checkout ────────────────────────
+
+export interface CheckoutCommandOptions {
+	branch: string;
+	projectId?: string;
+	orgId?: string;
+	apiKey?: string;
+}
+
+export async function runCheckout(
+	options: CheckoutCommandOptions,
+	ctx: CommandEnv,
+): Promise<CommandResult> {
+	const api = resolveApi(options.apiKey, ctx);
+	if (typeof api === "string") return failure(api);
+	try {
+		const result = await checkout({
+			branch: options.branch,
+			cwd: ctx.cwd,
+			api,
+			...(options.projectId ? { projectId: options.projectId } : {}),
+			...(options.orgId ? { orgId: options.orgId } : {}),
+		});
+		const lines = [
+			`✓ checked out branch ${result.branchName} (${result.branchId})`,
+			`  project   : ${result.projectId}${result.orgId ? ` (org ${result.orgId})` : ""}`,
+			"",
+		];
+		switch (result.contextFile.status) {
+			case "updated":
+				lines.push(
+					`  updated ${result.contextFile.path} with the new branchId.`,
+				);
+				break;
+			case "no-file":
+				lines.push(
+					"  no .neon/project.json (or .neon) found — write the snippet below to pin the selected branch for subsequent commands:",
+					"",
+					result.contextFile.json.trimEnd(),
+				);
+				break;
+			case "write-failed":
+				lines.push(
+					`  ! could not update ${result.contextFile.path}: ${result.contextFile.error}`,
+					"  apply this snippet by hand:",
 					"",
 					result.contextFile.json.trimEnd(),
 				);
@@ -278,6 +342,7 @@ export function runContext(
 export interface StatusCommandOptions {
 	configPath?: string;
 	projectId?: string;
+	branch?: string;
 	apiKey?: string;
 }
 
@@ -301,13 +366,12 @@ export async function runStatus(
 			api,
 			cwd: ctx.cwd,
 			dryRun: true,
-			// Pretend the caller passed `updateExisting: true` so the diff exposes the
-			// full would-apply list as plan steps. `conflicts` then reserves itself for
-			// the things no flag can fix (immutable region, pgVersion) — a clean
-			// "hard-blocked" subset.
+			// Pretend the caller passed `updateExisting: true` so status exposes the
+			// full would-apply list as plan steps without mutating the selected branch.
 			updateExisting: true,
 			...(options.configPath ? { configPath: options.configPath } : {}),
 			...(options.projectId ? { projectId: options.projectId } : {}),
+			...(options.branch ? { branch: options.branch } : {}),
 		});
 		return { exitCode: 0, stdout: `${formatStatus(result)}\n`, stderr: "" };
 	} catch (err) {
@@ -321,7 +385,7 @@ export async function runStatus(
  */
 function formatStatus(result: Awaited<ReturnType<typeof pushConfig>>): string {
 	const lines: string[] = [];
-	const projectLabel = `project ${result.projectId}${result.orgId ? ` (org ${result.orgId})` : ""}`;
+	const projectLabel = `project ${result.projectId}${result.orgId ? ` (org ${result.orgId})` : ""} branch ${result.branchName} (${result.branchId})`;
 	lines.push(`Status against ${projectLabel}:`);
 	lines.push("");
 
@@ -336,8 +400,8 @@ function formatStatus(result: Awaited<ReturnType<typeof pushConfig>>): string {
 		for (const change of realChanges) {
 			const marker = change.action === "create" ? "+" : "~";
 			// `feature` is enabling an integration (Neon Auth, Data API) — render it as
-			// "enable" rather than the underlying "create" so the diff matches the user's
-			// mental model from `config.features`.
+			// "enable" rather than the underlying "create" so the diff matches the branch
+			// policy mental model.
 			const verb =
 				change.kind === "feature" && change.action === "create"
 					? "enable"

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { createNeonApiFromOptions } from "./auth.js";
+import { resolveConfig } from "./define-config.js";
 import { ErrorCode, PlatformError } from "./errors.js";
 import { type BranchRef, loadContext } from "./load-context.js";
 import type {
@@ -8,7 +9,7 @@ import type {
 	NeonDatabaseSnapshot,
 	NeonRoleSnapshot,
 } from "./neon-api.js";
-import type { Config } from "./types.js";
+import type { BranchConfig, Config } from "./types.js";
 
 /**
  * Mapping between the {@link NeonEnv} property paths and the OS-level env-var keys used
@@ -53,7 +54,7 @@ export interface NeonPostgresEnv {
 
 /**
  * Public + secret bits of a Neon Auth integration for the resolved branch. Only present
- * on `NeonEnv` when `config.features.auth === true`.
+ * on `NeonEnv` when the branch policy enables `auth`.
  *
  * `projectId` / `jwksUrl` are fetchable via `getNeonAuth`. The two key fields
  * (`publishableClientKey`, `secretServerKey`) are *not* refetchable after integration
@@ -68,7 +69,7 @@ export interface NeonAuthEnv {
 	jwksUrl: string;
 }
 
-/** Bits of a Neon Data API integration. Only present when `config.features.dataApi === true`. */
+/** Bits of a Neon Data API integration. Only present when the branch policy enables it. */
 export interface NeonDataApiEnv {
 	url: string;
 }
@@ -78,12 +79,8 @@ export interface NeonDataApiEnv {
  * {@link Config} so the type system knows which optional namespaces are present.
  *
  * - `postgres` is always present.
- * - `auth` is added iff `config.features.auth` is the literal `true`.
- * - `dataApi` is added iff `config.features.dataApi` is the literal `true`.
- *
- * The conditional types use `extends { features: { auth: true } }` (rather than `boolean`)
- * so `features.auth: false` and an absent `features` block both correctly drop the
- * `auth` namespace from the result type.
+ * - `auth` is added iff the config return type has `auth.enabled` as literal `true`.
+ * - `dataApi` is added iff the config return type has `dataApi.enabled` as literal `true`.
  */
 /**
  * Empty record alias used as the "false" branch of the conditional namespace adds below.
@@ -92,12 +89,16 @@ export interface NeonDataApiEnv {
  */
 type NoNamespace = Record<never, never>;
 
+type BranchConfigOf<C extends Config> = ReturnType<C> extends BranchConfig
+	? ReturnType<C>
+	: BranchConfig;
+
 export type NeonEnv<C extends Config = Config> = {
 	postgres: NeonPostgresEnv;
-} & (C extends { features: { auth: true } }
+} & (BranchConfigOf<C> extends { auth: { enabled: true } }
 	? { auth: NeonAuthEnv }
 	: NoNamespace) &
-	(C extends { features: { dataApi: true } }
+	(BranchConfigOf<C> extends { dataApi: { enabled: true } }
 		? { dataApi: NeonDataApiEnv }
 		: NoNamespace);
 
@@ -116,8 +117,7 @@ export interface FetchEnvOptions {
 	projectId?: string;
 	/**
 	 * Explicit branch id (`br-…`) or branch name. Resolution chain:
-	 * `options.branch` → `NEON_BRANCH_ID` env → context file → first key in
-	 * `config.branches` (typically `"production"`) → project default branch.
+	 * `options.branch` → `NEON_BRANCH_ID` env → context file → project default branch.
 	 */
 	branch?: string;
 	/**
@@ -160,7 +160,7 @@ export interface FetchEnvOptions {
  * | Field          | 1st (call args)       | 2nd (env vars)    | 3rd (`.neon/project.json`) | 4th (`.neon` file) | 5th (config)                  |
  * | -------------- | --------------------- | ----------------- | -------------------------- | ------------------ | ----------------------------- |
  * | `projectId`    | `options.projectId`   | `NEON_PROJECT_ID` | `projectId`                | `projectId`        | — (throws if unresolved)      |
- * | `branch`       | `options.branch`      | `NEON_BRANCH_ID`  | `branchId`                 | `branchId`         | first key in `config.branches`|
+ * | `branch`       | `options.branch`      | `NEON_BRANCH_ID`  | `branchId`                 | `branchId`         | project default branch        |
  * | `roleName`     | `options.roleName`    | —                 | —                          | —                  | auto-pick if branch has one   |
  * | `databaseName` | `options.databaseName`| —                 | —                          | —                  | auto-pick if branch has one   |
  *
@@ -190,7 +190,16 @@ export async function fetchEnv<const C extends Config>(
 		);
 	}
 
-	const branch = resolveBranch(ctx.branch, branches, config);
+	const branch = resolveBranch(ctx.branch, branches);
+	const desired = resolveConfig(config, {
+		name: branch.name,
+		id: branch.id,
+		exists: true,
+		...(branch.parentId ? { parentId: branch.parentId } : {}),
+		isDefault: branch.isDefault,
+		isProtected: branch.protected,
+		...(branch.expiresAt ? { expiresAt: branch.expiresAt } : {}),
+	});
 
 	const [roles, databases] = await Promise.all([
 		api.listBranchRoles(ctx.projectId, branch.id),
@@ -206,10 +215,10 @@ export async function fetchEnv<const C extends Config>(
 	);
 
 	// Fan out: always fetch both Postgres URIs. Conditionally fetch auth + dataApi based
-	// on declared features. Auth secret keys aren't fetchable post-create (Neon's API only
+	// on the branch policy. Auth secret keys aren't fetchable post-create (Neon's API only
 	// returns them at integration creation / rotation) so we read those from the env.
-	const wantsAuth = config.features?.auth === true;
-	const wantsDataApi = config.features?.dataApi === true;
+	const wantsAuth = desired.authEnabled;
+	const wantsDataApi = desired.dataApiEnabled;
 
 	const [pooled, unpooled, authSnapshot, dataApiSnapshot] = await Promise.all(
 		[
@@ -246,8 +255,8 @@ export async function fetchEnv<const C extends Config>(
 			throw new PlatformError(
 				ErrorCode.NotFound,
 				[
-					`fetchEnv: config has features.auth=true but no Neon Auth integration is enabled on branch ${branch.name} (${branch.id}).`,
-					"Enable it via `npx neon-ts push` (or `npx neonctl platform push`), in the Neon Console, or with `npx neonctl auth …` — then re-run fetchEnv. Or set features.auth=false.",
+					`fetchEnv: branch policy enables auth but no Neon Auth integration is enabled on branch ${branch.name} (${branch.id}).`,
+					"Enable it via `npx neon-ts push` (or `npx neonctl platform push`), in the Neon Console, or with `npx neonctl auth …` — then re-run fetchEnv. Or return auth.enabled=false.",
 				].join(" "),
 				{
 					details: { projectId: ctx.projectId, branchId: branch.id },
@@ -268,8 +277,8 @@ export async function fetchEnv<const C extends Config>(
 			throw new PlatformError(
 				ErrorCode.NotFound,
 				[
-					`fetchEnv: config has features.dataApi=true but no Data API integration is enabled on branch ${branch.name} (${branch.id}) database ${databaseName}.`,
-					"Enable it via `npx neon-ts push` (or `npx neonctl platform push`) or in the Neon Console — then re-run fetchEnv. Or set features.dataApi=false.",
+					`fetchEnv: branch policy enables dataApi but no Data API integration is enabled on branch ${branch.name} (${branch.id}) database ${databaseName}.`,
+					"Enable it via `npx neon-ts push` (or `npx neonctl platform push`) or in the Neon Console — then re-run fetchEnv. Or return dataApi.enabled=false.",
 				].join(" "),
 				{
 					details: {
@@ -330,7 +339,6 @@ function createApiFromOptions(options: FetchEnvOptions): NeonApi {
 function resolveBranch(
 	requested: BranchRef | undefined,
 	branches: NeonBranchSnapshot[],
-	config: Config,
 ): NeonBranchSnapshot {
 	if (requested) {
 		const match = findBranch(branches, requested);
@@ -348,15 +356,6 @@ function resolveBranch(
 				},
 			},
 		);
-	}
-
-	// Fall back to the first concrete branch key (typically "production"). When no
-	// `branches` map is defined we don't peek into `branchBlueprints` — those entries
-	// are templates that don't correspond to a single concrete branch by themselves.
-	const branchKey = firstBranchKey(config);
-	if (branchKey) {
-		const named = branches.find((b) => b.name === branchKey);
-		if (named) return named;
 	}
 
 	const fallback = branches.find((b) => b.isDefault) ?? branches[0];
@@ -381,13 +380,6 @@ function findBranch(
 
 function describeRef(ref: BranchRef): string {
 	return `${ref.kind === "id" ? "id" : "name"}=${JSON.stringify(ref.value)}`;
-}
-
-function firstBranchKey(config: Config): string | undefined {
-	const branches = config.branches;
-	if (!branches) return undefined;
-	const keys = Object.keys(branches);
-	return keys[0];
 }
 
 function pickRoleName(
@@ -547,9 +539,9 @@ const dataApiEnvSchema = z.object({
  * - You wrapped your dev command with `neon-ts env run -- <cmd>`.
  * - Your platform (Vercel, Fly, Railway, …) injected the vars via its own integration.
  *
- * The shape is keyed off `config.features` — `features.auth: true` adds the `auth`
- * namespace and validates its env vars; same for `features.dataApi`. Disabled features
- * are skipped at both the type and runtime level.
+ * The shape is keyed off the branch policy evaluated for `NEON_BRANCH_NAME` when set,
+ * otherwise `NEON_BRANCH_ID` when it is a branch name, otherwise a synthetic `"main"`
+ * target. Prefer `fetchEnv` when runtime code needs exact branch-name-aware policy.
  *
  * Throws `PlatformError(EnvNotInjected)` listing every missing/invalid var when the env
  * isn't fully populated, with a fix hint pointing back at `neon-ts env pull/run`.
@@ -560,13 +552,20 @@ const dataApiEnvSchema = z.object({
  *
  * const env = parseEnv(config);
  * const db = drizzle(neon(env.postgres.databaseUrl), { schema });
- * // env.auth is statically typed when config.features.auth is true; type-error when not.
+ * // env.auth is statically typed when the config return type has auth.enabled: true.
  * ```
  */
 export function parseEnv<const C extends Config>(config: C): NeonEnv<C> {
 	const source = process.env;
 	const issues: string[] = [];
 	const result: Record<string, unknown> = {};
+	const desired = resolveConfig(config, {
+		name: parseEnvBranchName(source),
+		...(source.NEON_BRANCH_ID?.startsWith("br-")
+			? { id: source.NEON_BRANCH_ID }
+			: {}),
+		exists: true,
+	});
 
 	const pg = postgresEnvSchema.safeParse({
 		DATABASE_URL: source.DATABASE_URL,
@@ -581,7 +580,7 @@ export function parseEnv<const C extends Config>(config: C): NeonEnv<C> {
 		for (const issue of pg.error.issues) issues.push(issue.message);
 	}
 
-	if (config.features?.auth === true) {
+	if (desired.authEnabled) {
 		const auth = authEnvSchema.safeParse({
 			NEON_AUTH_PROJECT_ID: source.NEON_AUTH_PROJECT_ID,
 			NEON_AUTH_PUBLISHABLE_CLIENT_KEY:
@@ -602,7 +601,7 @@ export function parseEnv<const C extends Config>(config: C): NeonEnv<C> {
 		}
 	}
 
-	if (config.features?.dataApi === true) {
+	if (desired.dataApiEnabled) {
 		const dataApi = dataApiEnvSchema.safeParse({
 			NEON_DATA_API_URL: source.NEON_DATA_API_URL,
 		});
@@ -633,6 +632,14 @@ export function parseEnv<const C extends Config>(config: C): NeonEnv<C> {
 	}
 
 	return result as NeonEnv<C>;
+}
+
+function parseEnvBranchName(source: NodeJS.ProcessEnv): string {
+	const explicit = source.NEON_BRANCH_NAME;
+	if (explicit && explicit.trim() !== "") return explicit.trim();
+	const branch = source.NEON_BRANCH_ID;
+	if (branch && !branch.startsWith("br-")) return branch;
+	return "main";
 }
 
 // ───────────────────────── env-var mapping helpers ─────────────────────────

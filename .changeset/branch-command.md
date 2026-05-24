@@ -2,13 +2,16 @@
 "@neondatabase/platform": minor
 ---
 
-Split the branch surface in `neon.ts` into two intentionally distinct maps:
+Replace the static project/branches config shape with a branch-scoped TypeScript policy function:
 
-- **`branches`** (new) — concrete, persistent branches managed by `pushConfig`. The map key is the literal branch name on Neon, settings describe a single branch, and entries support a new `protected: boolean` flag for marking branches as protected.
-- **`branchBlueprints`** (tightened) — templates for *ephemeral* branches spun up via `branch()`. Every blueprint's `pattern` is now **required** and **must contain a `*` wildcard**; specific-name entries belong in `branches` instead.
+```ts
+export default defineConfig((branch) => ({
+  parent: branch.name === "main" ? undefined : "main",
+  postgres: { computeSettings: { autoscalingLimitMaxCu: 2 } },
+  auth: { enabled: true },
+}));
+```
 
-`pullConfig` materialises concrete branches into `config.branches` (including the `protected` flag) and drops ephemeral branches with a future `expiresAt` — listing live branches at runtime is `neonctl branches list`'s job, not config-as-code's. The newly-added `protected` drift is reported as a conflict by default and applied with `updateExisting: true`, mirroring the existing compute-settings drift handling.
+`push` is now scoped to the selected branch (`--branch`, `NEON_BRANCH_ID`, or `.neon[/project.json].branchId`) and applies only that branch's desired resources. Project identity stays in Neon context (`neonctl link`), not in `neon.ts`.
 
-Add `branch()` SDK function and `neon-ts branch <name>` CLI command for selecting the active branch. When `<name>` matches a concrete `branches` entry, the existing Neon branch is checked out locally by updating `.neon[/project.json]` with its `branchId`. When `<name>` matches a wildcard blueprint, a new ephemeral branch is created from that blueprint: the new name is composed as `<pattern with * replaced by normalised-git-branch + mini-id>` (or just `<mini-id>` when git isn't available), the blueprint's `parent`, `ttl`, and `computeSettings` are applied on Neon, and an existing `.neon[/project.json]` file is updated in place with the resulting `branchId` so subsequent `fetchEnv` / `pullConfig` calls target the selected branch.
-
-`neon-ts pull` now writes (or overwrites) `./neon.ts` in the current directory by default and prints a one-line `✓ Created/Updated <path>` status instead of dumping the snippet to stdout — the next step after pulling is invariably `import`ing the file, so having to redirect `> neon.ts` was friction with no upside. Pass `--format json` to opt back into stdout output (raw `Config` JSON for piping into `jq` / your own file).
+Add `checkout <branch>` for selecting an existing branch without creating anything, and make `branch <name>` always create a new branch from the policy (`dev` becomes `dev-*`, with the wildcard filled by git branch + mini id). `pull` now prints selected branch state as JSON for inspection/copy-paste, while `init` writes a starter `neon.ts` policy file.

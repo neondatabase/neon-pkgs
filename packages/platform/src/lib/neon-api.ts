@@ -41,8 +41,7 @@ export interface CreateProjectInput {
 	defaultEndpointSettings?: ComputeSettings;
 	/**
 	 * Optional name for the project's auto-created default branch. When omitted, Neon
-	 * uses its own default (`main`). Set this to the root blueprint's pattern so push
-	 * can match the desired state without trying to create a sibling branch.
+	 * uses its own default (`main`).
 	 */
 	defaultBranchName?: string;
 }
@@ -191,7 +190,7 @@ export interface NeonApi {
 	/**
 	 * Enable the Neon Auth integration on a specific branch. Idempotent: if an integration
 	 * is already enabled, the existing snapshot is returned unchanged. Used by
-	 * `pushConfig` to honour `config.features.auth: true`.
+	 * `pushConfig` and `branch` to honour branch policy `auth.enabled: true`.
 	 */
 	enableNeonAuth(
 		projectId: string,
@@ -213,7 +212,7 @@ export interface NeonApi {
 	/**
 	 * Enable the Neon Data API integration on a specific branch + database. Idempotent:
 	 * if an integration is already enabled, the existing snapshot is returned unchanged.
-	 * Used by `pushConfig` to honour `config.features.dataApi: true`.
+	 * Used by `pushConfig` and `branch` to honour branch policy `dataApi.enabled: true`.
 	 */
 	enableProjectBranchDataApi(
 		projectId: string,

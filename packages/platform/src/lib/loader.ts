@@ -90,7 +90,7 @@ export async function loadConfigFromFile(
 		);
 	}
 
-	// Run through defineConfig to validate any object the user might have constructed manually.
+	// Run through defineConfig to validate any function the user might have constructed manually.
 	const config = defineConfig(exported as Config);
 	return { config, resolvedPath };
 }
@@ -199,10 +199,10 @@ function extractDefaultExport(mod: unknown): unknown {
 	if (mod === null || typeof mod !== "object") return mod;
 	const obj = mod as Record<string, unknown>;
 	if ("default" in obj && obj.default !== undefined) return obj.default;
-	// No `default` export. If the module shape itself looks like a Config (has `project`),
-	// treat the module as the config — that lets tests and advanced users skip the wrapper.
+	// No `default` export. If the module itself is a function, treat it as the config —
+	// that lets tests and advanced users skip the wrapper.
 	// Otherwise, return `undefined` so the caller surfaces a clear ConfigLoadError.
-	if ("project" in obj) return mod;
+	if (typeof mod === "function") return mod;
 	return undefined;
 }
 

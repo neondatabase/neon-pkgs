@@ -1,16 +1,8 @@
-import { normalizeRegion } from "./define-config.js";
-import type {
-	NeonAuthSnapshot,
-	NeonBranchSnapshot,
-	NeonDataApiSnapshot,
-	NeonEndpointSnapshot,
-	NeonProjectSnapshot,
-} from "./neon-api.js";
+import type { NeonBranchSnapshot, NeonEndpointSnapshot } from "./neon-api.js";
 import type {
 	ComputeSettings,
 	ConflictReport,
 	ResolvedBranchConfig,
-	ResolvedConfig,
 } from "./types.js";
 
 /**
@@ -18,23 +10,6 @@ import type {
  * produces a list of these for `pushConfig` to execute (or report).
  */
 export type PlanStep =
-	| {
-			kind: "rename-project";
-			projectId: string;
-			fromName: string;
-			toName: string;
-	  }
-	| {
-			kind: "create-branch";
-			/** Source key in `branches` or `branchBlueprints` that drove the creation. */
-			sourceKey: string;
-			branchName: string;
-			parentBranchName: string;
-			parentBranchId?: string;
-			expiresAt?: string;
-			protected?: boolean;
-			computeSettings?: ComputeSettings;
-	  }
 	| {
 			kind: "update-branch-ttl";
 			projectId: string;
@@ -71,37 +46,22 @@ export type PlanStep =
 			databaseName: string;
 	  };
 
-/**
- * The current state of the project's `config.features` integrations on the branch the
- * features should target — typically the project's default / root concrete branch.
- *
- * `auth` / `dataApi` are `null` when the integration is not enabled on that branch.
- * `branchId` / `branchName` are the branch the diff will target if a feature has to be
- * enabled. `databaseName` is the database the Data API integration would attach to.
- *
- * Optional altogether: when `config.features` is empty / undefined, push doesn't fetch
- * the feature snapshot at all and passes `undefined`.
- */
 export interface RemoteFeatureState {
-	branchId: string;
-	branchName: string;
 	databaseName: string;
-	auth: NeonAuthSnapshot | null;
-	dataApi: NeonDataApiSnapshot | null;
+	authEnabled: boolean;
+	dataApiEnabled: boolean;
 }
 
 export interface RemoteState {
-	project: NeonProjectSnapshot;
-	branches: NeonBranchSnapshot[];
-	endpoints: NeonEndpointSnapshot[];
-	features?: RemoteFeatureState;
+	projectId: string;
+	branch: NeonBranchSnapshot;
+	endpoint?: NeonEndpointSnapshot;
+	features: RemoteFeatureState;
 }
 
 export interface DiffOptions {
 	/**
-	 * Apply settings / `protected` / TTL drift on `config.branches` entries — and a
-	 * project rename — as plan steps instead of reporting them as conflicts.
-	 * Immutable project fields (region, pgVersion) always remain conflicts regardless.
+	 * Apply mutable drift on the selected branch as plan steps instead of conflicts.
 	 * Default: `false`.
 	 */
 	updateExisting: boolean;
@@ -113,147 +73,54 @@ export interface DiffResult {
 }
 
 /**
- * Diff a desired configuration against a remote snapshot. Pure function.
- *
- * - Region and Postgres major version mismatches are **always** conflicts (Neon does not
- *   support changing them post-create — no flag can override this).
- * - Project name drift is mutable: planned as a `rename-project` step when
- *   `updateExisting: true`, reported as a conflict otherwise.
- * - `config.branches` entries always create-if-missing. Updating an existing branch's
- *   settings / `protected` flag requires `updateExisting: true`.
- * - `config.branchBlueprints` entries are **never** consulted by `diffConfig` — blueprints
- *   are creation-only and consumed by `branch()`. `pushConfig` deliberately leaves live
- *   blueprint-matched branches alone.
+ * Diff desired branch policy against the selected remote branch. Pure function.
  */
 export function diffConfig(
-	config: ResolvedConfig,
+	config: ResolvedBranchConfig,
 	remote: RemoteState,
 	options: DiffOptions,
 ): DiffResult {
 	const conflicts: ConflictReport[] = [];
 	const plan: PlanStep[] = [];
-
-	// --- Project diff ---
-	const desiredName = config.project.name;
-	if (remote.project.name !== desiredName) {
-		if (options.updateExisting) {
-			plan.push({
-				kind: "rename-project",
-				projectId: remote.project.id,
-				fromName: remote.project.name,
-				toName: desiredName,
-			});
-		} else {
-			conflicts.push({
-				kind: "project",
-				identifier: remote.project.id,
-				field: "name",
-				current: remote.project.name,
-				desired: desiredName,
-				reason: "Project name on Neon differs from local config. Pass `updateExisting: true` to rename, or update your config to match.",
-			});
-		}
-	}
-
-	if (config.project.region !== undefined) {
-		const desiredRegion = normalizeRegion(config.project.region);
-		if (remote.project.regionId !== desiredRegion) {
-			conflicts.push({
-				kind: "project",
-				identifier: remote.project.id,
-				field: "region",
-				current: remote.project.regionId,
-				desired: desiredRegion,
-				reason: "Region is immutable on Neon. Recreate the project to change region.",
-			});
-		}
-	}
-
-	if (
-		config.project.pgVersion !== undefined &&
-		remote.project.pgVersion !== config.project.pgVersion
-	) {
-		conflicts.push({
-			kind: "project",
-			identifier: remote.project.id,
-			field: "pgVersion",
-			current: remote.project.pgVersion,
-			desired: config.project.pgVersion,
-			reason: "Postgres major version cannot be changed via push. Use Neon's upgrade flow.",
-		});
-	}
-
-	// --- Branch diff ---
-	const branchesByName = new Map(
-		remote.branches.map((b) => [b.name, b] as const),
-	);
-	const endpointsByBranchId = new Map<string, NeonEndpointSnapshot>();
-	for (const ep of remote.endpoints) {
-		if (ep.type === "read_write") endpointsByBranchId.set(ep.branchId, ep);
-	}
-
-	for (const branch of config.branches) {
-		diffBranchConfig({
-			branch,
-			branchesByName,
-			endpointsByBranchId,
-			config,
-			remote,
-			options,
-			plan,
-			conflicts,
-		});
-	}
-
+	diffBranchConfig({ config, remote, options, plan, conflicts });
 	diffFeatures({ config, remote, plan });
-
 	return { plan, conflicts };
 }
 
 /**
- * Plan the integrations driven by `config.features`. Currently only additive — when a
- * feature flag is `true` and the integration isn't yet enabled on the targeted branch,
- * we emit an `enable-*` plan step. When the flag is `false` (or absent) we leave any
- * existing integration alone — disabling is destructive (auth integrations create
- * `neon_auth.*` schemas, data API exposes a public REST endpoint), so the user has to
- * tear those down via the Neon console explicitly.
+ * Plan additive branch-scoped integrations. Disabling remains explicit/manual because
+ * teardown is destructive.
  */
 function diffFeatures(args: {
-	config: ResolvedConfig;
+	config: ResolvedBranchConfig;
 	remote: RemoteState;
 	plan: PlanStep[];
 }): void {
 	const { config, remote, plan } = args;
-	const features = config.features;
-	if (!features) return;
 	const state = remote.features;
-	if (!state) return;
-	if (features.auth === true && !state.auth) {
+	if (config.authEnabled && !state.authEnabled) {
 		const step: PlanStep = {
 			kind: "enable-auth",
-			projectId: remote.project.id,
-			branchId: state.branchId,
-			branchName: state.branchName,
+			projectId: remote.projectId,
+			branchId: remote.branch.id,
+			branchName: remote.branch.name,
 		};
 		if (state.databaseName) step.databaseName = state.databaseName;
 		plan.push(step);
 	}
-	if (features.dataApi === true && !state.dataApi) {
+	if (config.dataApiEnabled && !state.dataApiEnabled) {
 		plan.push({
 			kind: "enable-data-api",
-			projectId: remote.project.id,
-			branchId: state.branchId,
-			branchName: state.branchName,
+			projectId: remote.projectId,
+			branchId: remote.branch.id,
+			branchName: remote.branch.name,
 			databaseName: state.databaseName,
 		});
 	}
 }
 
 interface BranchConfigArgs {
-	branch: ResolvedBranchConfig;
-	branchesByName: Map<string, NeonBranchSnapshot>;
-	endpointsByBranchId: Map<string, NeonEndpointSnapshot>;
-	config: ResolvedConfig;
+	config: ResolvedBranchConfig;
 	remote: RemoteState;
 	options: DiffOptions;
 	plan: PlanStep[];
@@ -261,77 +128,31 @@ interface BranchConfigArgs {
 }
 
 function diffBranchConfig(args: BranchConfigArgs): void {
-	const {
-		branch,
-		branchesByName,
-		endpointsByBranchId,
-		config,
-		remote,
-		options,
-		plan,
-		conflicts,
-	} = args;
-	const branchName = branch.name;
-	const existing = branchesByName.get(branchName);
+	const { config, remote, options, plan, conflicts } = args;
+	const branchName = remote.branch.name;
+	const computeSettings = config.postgres?.computeSettings;
 
-	if (!existing) {
-		// Create the branch (always allowed for concrete `branches` entries).
-		const parentName = resolveBranchParentName(branch, config);
-		const parentBranch = parentName
-			? branchesByName.get(parentName)
-			: undefined;
-		if (parentName && !parentBranch && parentName !== branchName) {
-			// Parent isn't on Neon and isn't being created earlier in this push (we don't
-			// reorder ahead of time in v1). Surface as a conflict so the user fixes their
-			// config rather than silently failing at apply time.
-			conflicts.push({
-				kind: "branch",
-				identifier: branchName,
-				field: "parent",
-				current: undefined,
-				desired: parentName,
-				reason: `Parent branch '${parentName}' does not exist on Neon. Create it first or remove the parent reference.`,
-			});
-			return;
-		}
-
-		const step: PlanStep = {
-			kind: "create-branch",
-			sourceKey: branch.key,
-			branchName,
-			parentBranchName:
-				parentName ?? findDefaultBranchName(remote) ?? branchName,
-		};
-		if (parentBranch) step.parentBranchId = parentBranch.id;
-		if (branch.protected) step.protected = true;
-		if (branch.computeSettings)
-			step.computeSettings = branch.computeSettings;
-		plan.push(step);
-		return;
-	}
-
-	// Branch exists. Check for setting drifts.
-	if (branch.computeSettings) {
-		const endpoint = endpointsByBranchId.get(existing.id);
+	if (computeSettings) {
+		const endpoint = remote.endpoint;
 		if (!endpoint) {
 			conflicts.push({
 				kind: "branch",
 				identifier: branchName,
 				field: "endpoint",
 				current: undefined,
-				desired: branch.computeSettings,
+				desired: computeSettings,
 				reason: "Branch has no read-write endpoint; cannot apply compute settings.",
 			});
 		} else {
-			const drift = computeDriftBetween(branch.computeSettings, endpoint);
+			const drift = computeDriftBetween(computeSettings, endpoint);
 			if (drift) {
 				if (options.updateExisting) {
 					plan.push({
 						kind: "update-endpoint",
-						projectId: remote.project.id,
+						projectId: remote.projectId,
 						branchName,
 						endpointId: endpoint.id,
-						settings: branch.computeSettings,
+						settings: computeSettings,
 					});
 				} else {
 					conflicts.push({
@@ -347,42 +168,67 @@ function diffBranchConfig(args: BranchConfigArgs): void {
 		}
 	}
 
-	// `protected` drift.
-	if (branch.protected !== existing.protected) {
+	if (
+		config.protected !== undefined &&
+		config.protected !== remote.branch.protected
+	) {
 		if (options.updateExisting) {
 			plan.push({
 				kind: "update-branch-protected",
-				projectId: remote.project.id,
-				branchId: existing.id,
+				projectId: remote.projectId,
+				branchId: remote.branch.id,
 				branchName,
-				protected: branch.protected,
+				protected: config.protected,
 			});
 		} else {
 			conflicts.push({
 				kind: "branch",
 				identifier: branchName,
 				field: "protected",
-				current: existing.protected,
-				desired: branch.protected,
+				current: remote.branch.protected,
+				desired: config.protected,
 				reason: "Existing branch has a different `protected` flag. Pass `updateExisting: true` (SDK) or `--update-existing` (CLI) to apply.",
 			});
 		}
 	}
-}
 
-function resolveBranchParentName(
-	branch: ResolvedBranchConfig,
-	config: ResolvedConfig,
-): string | undefined {
-	const parent = branch.parent;
-	if (!parent) return undefined;
-	const fromBranches = config.branches.find((b) => b.key === parent);
-	if (fromBranches) return fromBranches.name;
-	return parent;
-}
-
-function findDefaultBranchName(remote: RemoteState): string | undefined {
-	return remote.branches.find((b) => b.isDefault)?.name;
+	if (config.ttlSeconds !== undefined) {
+		const current = remote.branch.expiresAt
+			? Math.max(
+					0,
+					Math.round(
+						(Date.parse(remote.branch.expiresAt) - Date.now()) /
+							1000,
+					),
+				)
+			: undefined;
+		if (
+			current === undefined ||
+			Math.abs(current - config.ttlSeconds) > 30
+		) {
+			const expiresAt = new Date(
+				Date.now() + config.ttlSeconds * 1000,
+			).toISOString();
+			if (options.updateExisting) {
+				plan.push({
+					kind: "update-branch-ttl",
+					projectId: remote.projectId,
+					branchId: remote.branch.id,
+					branchName,
+					expiresAt,
+				});
+			} else {
+				conflicts.push({
+					kind: "branch",
+					identifier: branchName,
+					field: "ttl",
+					current: remote.branch.expiresAt,
+					desired: expiresAt,
+					reason: "Existing branch has a different TTL. Pass `updateExisting: true` (SDK) or `--update-existing` (CLI) to apply.",
+				});
+			}
+		}
+	}
 }
 
 function computeDriftBetween(
