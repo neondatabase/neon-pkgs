@@ -241,7 +241,9 @@ function resolveGitBranch(
 }
 
 function normalizeCreatePattern(input: string): string {
-	return input.includes("*") ? input : `${input}-*`;
+	const trimmed = input.trim();
+	if (trimmed === "") return "*";
+	return trimmed.includes("*") ? trimmed : `${trimmed}-*`;
 }
 
 interface PickUniqueNameInput {

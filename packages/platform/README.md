@@ -64,6 +64,9 @@ neon-ts checkout main
 # Create a new branch. `dev` becomes the creation pattern `dev-*`.
 neon-ts branch dev
 
+# Or omit the name to use the bare wildcard `*`.
+neon-ts branch
+
 # Show what push would do for the selected branch.
 neon-ts status
 
@@ -114,6 +117,7 @@ neon-ts init                    # write ./neon.ts starter policy
 neon-ts pull                    # print selected branch state as JSON
 neon-ts checkout main           # select existing branch
 neon-ts branch dev              # create dev-<git-branch>-<mini-id>
+neon-ts branch                  # create <git-branch>-<mini-id>
 neon-ts status                  # dry-run push for selected branch
 neon-ts push --update-existing  # apply mutable drift for selected branch
 neon-ts context                 # print resolved project + branch context

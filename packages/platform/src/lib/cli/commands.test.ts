@@ -106,6 +106,22 @@ describe("runBranch / runCheckout", () => {
 		expect(reread.branchId).not.toBe("br-main");
 	});
 
+	test("branch accepts no name and creates from the bare wildcard", async () => {
+		const { api, projectId } = seededFake();
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({
+				projectId,
+				branchId: "br-main",
+			}),
+			"neon.ts": policy(),
+		});
+		const result = await runBranch({ name: "" }, { cwd: root, api });
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("pattern   : *");
+		expect(result.stdout).toContain("created branch");
+	});
+
 	test("checkout selects an existing branch", async () => {
 		const { api, projectId } = seededFake();
 		const root = setup({

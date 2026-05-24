@@ -141,14 +141,14 @@ const argv = yargs(hideBin(process.argv))
 				}),
 	)
 	.command(
-		"branch <name>",
+		"branch [name]",
 		"Create a new branch from the neon.ts branch policy.",
 		(y) =>
 			y
 				.positional("name", {
 					type: "string",
-					describe: "Branch name or pattern to create (e.g. `dev`)",
-					demandOption: true,
+					describe:
+						"Branch name or pattern to create (e.g. `dev`). Omit to use `*`.",
 				})
 				.option("config", {
 					type: "string",

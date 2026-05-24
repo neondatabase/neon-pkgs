@@ -125,6 +125,26 @@ describe("branch", () => {
 		expect(result.branchName).toBe("preview-feat-x-def456");
 	});
 
+	test("uses bare wildcard when name is empty", async () => {
+		const { api, projectId } = seededFake();
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({ projectId }),
+			"neon.ts": policy(),
+		});
+		vi.spyOn(branchNameModule, "generateMiniId").mockReturnValue("abc123");
+
+		const result = await branch({
+			name: "",
+			cwd: root,
+			api,
+			gitBranch: "feat/empty-name",
+		});
+
+		expect(result.pattern).toBe("*");
+		expect(result.branchName).toBe("feat-empty-name-abc123");
+	});
+
 	test("fails when policy parent does not exist", async () => {
 		const { api, projectId } = seededFake();
 		const root = setup({
