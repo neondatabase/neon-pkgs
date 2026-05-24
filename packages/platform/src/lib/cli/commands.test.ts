@@ -201,7 +201,7 @@ export default defineConfig({
 		expect(result.stdout).not.toContain("pushed config");
 	});
 
-	test("conflict without --apply-changes → exit 2", async () => {
+	test("conflict without --update-existing → exit 2", async () => {
 		const { api, projectId } = seededFake();
 		const root = setup({
 			"package.json": "{}",
@@ -221,7 +221,7 @@ export default defineConfig({
 		expect(result.stderr).toContain("conflict");
 	});
 
-	test("--apply-changes applies branch-level drift", async () => {
+	test("--update-existing applies branch-level drift", async () => {
 		const { api, projectId } = seededFake();
 		const root = setup({
 			"package.json": "{}",
@@ -237,14 +237,17 @@ export default defineConfig({
 `,
 		});
 		const result = await runPush(
-			{ applyChanges: true },
+			{ updateExisting: true },
 			{ cwd: root, api },
 		);
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain("update");
 	});
 
-	test("wildcard branches are summarised as skipped when --apply-existing is not set", async () => {
+	test("wildcard-matched live branches are silently left alone (creation-only)", async () => {
+		// Confirms the CLI surface stays consistent with the SDK contract: blueprints
+		// never touch existing branches, so there's no "skipped wildcard branches"
+		// section to print and no flag to enable one.
 		const api = new FakeNeonApi();
 		const projectId = "proj-cli-w";
 		api.seedProject({
@@ -288,8 +291,8 @@ export default defineConfig({
 		});
 		const result = await runPush({}, { cwd: root, api });
 		expect(result.exitCode).toBe(0);
-		expect(result.stdout).toContain("Skipped wildcard branches");
-		expect(result.stdout).toContain("preview-pr-1");
+		expect(result.stdout).toContain("is already in sync");
+		expect(result.stdout).not.toContain("preview-pr-1");
 	});
 
 	test("missing config file → exit 4 (ConfigLoadError)", async () => {
@@ -323,7 +326,6 @@ describe("runPull / runPush — per-code exit mapping", () => {
 	test.each([
 		[ErrorCode.Unauthorized, 6],
 		[ErrorCode.Forbidden, 7],
-		[ErrorCode.InsufficientScope, 7],
 		[ErrorCode.NotFound, 8],
 		[ErrorCode.RateLimited, 9],
 		[ErrorCode.NetworkError, 10],

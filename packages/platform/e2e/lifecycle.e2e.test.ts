@@ -1,6 +1,7 @@
 import { describe, expect } from "vitest";
-import { defineConfig, pullConfig, pushConfig } from "../src/v1.js";
+import { defineConfig, errors, pullConfig, pushConfig } from "../src/v1.js";
 import {
+	bootstrapProject,
 	DEFAULT_REGION,
 	detectApiKeyScope,
 	e2eTest,
@@ -10,7 +11,7 @@ import {
 
 describe("e2e — full lifecycle against real Neon API", () => {
 	e2eTest(
-		"first push creates project, second push is a no-op, third push is additive",
+		"push against a pre-existing project: first push is additive, second is a no-op",
 		async ({ track }) => {
 			const scope = await detectApiKeyScope();
 			if (scope.kind !== "org-or-user") {
@@ -20,57 +21,27 @@ describe("e2e — full lifecycle against real Neon API", () => {
 
 			const api = makeRealApi();
 			const projectName = uniqueProjectName("lifecycle");
+			// Bootstrap the project out-of-band — pushConfig itself never creates projects.
+			const projectId = await bootstrapProject(api, {
+				name: projectName,
+				region: DEFAULT_REGION,
+			});
+			track(projectId);
+
 			const baseConfig = defineConfig({
 				project: { name: projectName, region: DEFAULT_REGION },
 				branches: {
-					production: {
-						computeSettings: { autoscalingLimitMaxCu: 1 },
-					},
-				},
-			});
-
-			// 1. First push creates the project.
-			const first = await pushConfig(baseConfig, { api });
-			track(first.projectId);
-			expect(first.conflicts).toHaveLength(0);
-			expect(first.applied[0]).toMatchObject({
-				kind: "project",
-				action: "create",
-			});
-
-			const pulledAfterCreate = await pullConfig({
-				api,
-				projectId: first.projectId,
-			});
-			expect(pulledAfterCreate.project.name).toBe(projectName);
-
-			// 2. Second push with identical config: no mutations.
-			const second = await pushConfig(baseConfig, {
-				api,
-				projectId: first.projectId,
-			});
-			expect(second.conflicts).toHaveLength(0);
-			expect(
-				second.applied.filter((a) => a.action !== "noop"),
-			).toHaveLength(0);
-
-			// 3. Third push adds a `staging` branch. Should be additive — no conflicts, no flags.
-			const withStaging = defineConfig({
-				project: { name: projectName, region: DEFAULT_REGION },
-				branches: {
-					production: {
-						computeSettings: { autoscalingLimitMaxCu: 1 },
-					},
+					production: {},
 					staging: { parent: "production" },
 				},
 			});
-			const third = await pushConfig(withStaging, {
-				api,
-				projectId: first.projectId,
-			});
-			expect(third.conflicts).toHaveLength(0);
+
+			// 1. First push: additive — creates the staging branch alongside the
+			// auto-created production branch.
+			const first = await pushConfig(baseConfig, { api, projectId });
+			expect(first.conflicts).toHaveLength(0);
 			expect(
-				third.applied.some(
+				first.applied.some(
 					(a) =>
 						a.kind === "branch" &&
 						a.action === "create" &&
@@ -78,48 +49,40 @@ describe("e2e — full lifecycle against real Neon API", () => {
 				),
 			).toBe(true);
 
-			// 4. Pull again — staging is now in the round-tripped config.
-			const pulledAfterAdd = await pullConfig({
-				api,
-				projectId: first.projectId,
-			});
-			expect(pulledAfterAdd.branches?.staging).toBeDefined();
+			// 2. Pull round-trips production + staging.
+			const pulled = await pullConfig({ api, projectId });
+			expect(pulled.branches?.production).toBeDefined();
+			expect(pulled.branches?.staging).toBeDefined();
+
+			// 3. Second push with identical config: no mutations.
+			const second = await pushConfig(baseConfig, { api, projectId });
+			expect(second.conflicts).toHaveLength(0);
+			expect(
+				second.applied.filter((a) => a.action !== "noop"),
+			).toHaveLength(0);
 		},
 	);
 
 	e2eTest(
-		"resolves an existing project by name when only orgId is supplied (no projectId)",
-		async ({ track }) => {
+		"push without a resolvable projectId throws MissingContextError instead of creating",
+		async () => {
 			const scope = await detectApiKeyScope();
 			if (scope.kind !== "org-or-user") return;
 
 			const api = makeRealApi();
-			const projectName = uniqueProjectName("byname");
-
-			// Create via the SDK so we can rely on `pickProjectDefaultSettings`.
-			const first = await pushConfig(
-				defineConfig({
-					project: { name: projectName, region: DEFAULT_REGION },
-					branches: { production: {} },
-				}),
-				{ api },
-			);
-			track(first.projectId);
-
-			// Push the same config again WITHOUT projectId — the lookup-by-name path should find
-			// the existing project rather than try to create a second one.
-			const second = await pushConfig(
-				defineConfig({
-					project: { name: projectName, region: DEFAULT_REGION },
-					branches: { production: {} },
-				}),
-				{ api },
-			);
-			expect(second.projectId).toBe(first.projectId);
-			expect(second.applied[0]).toMatchObject({
-				kind: "project",
-				action: "noop",
-			});
+			// No projectId / NEON_PROJECT_ID / context file in cwd — push must refuse.
+			await expect(
+				pushConfig(
+					defineConfig({
+						project: {
+							name: uniqueProjectName("no-bootstrap"),
+							region: DEFAULT_REGION,
+						},
+						branches: { production: {} },
+					}),
+					{ api, cwd: "/tmp" },
+				),
+			).rejects.toBeInstanceOf(errors.MissingContextError);
 		},
 	);
 
@@ -131,25 +94,17 @@ describe("e2e — full lifecycle against real Neon API", () => {
 
 			let projectId: string;
 			if (scope.kind === "org-or-user") {
-				const created = await pushConfig(
-					defineConfig({
-						project: {
-							name: uniqueProjectName("byid"),
-							region: DEFAULT_REGION,
-						},
-						branches: { production: {} },
-					}),
-					{ api },
-				);
-				track(created.projectId);
-				projectId = created.projectId;
+				projectId = await bootstrapProject(api, {
+					name: uniqueProjectName("byid"),
+					region: DEFAULT_REGION,
+				});
+				track(projectId);
 			} else {
 				projectId = scope.projectId;
 			}
 
-			// The "project-scoped" path inside pushConfig — projectId supplied, listProjects is
-			// never called. Works for both real project-scoped keys and for orgs that pass
-			// projectId explicitly.
+			// The "project-scoped" path inside pushConfig — projectId supplied, listProjects
+			// is never called.
 			const pulled = await pullConfig({ api, projectId });
 			const result = await pushConfig(pulled, { api, projectId });
 			expect(result.projectId).toBe(projectId);

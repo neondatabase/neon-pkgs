@@ -51,7 +51,7 @@ const argv = yargs(hideBin(process.argv))
 	)
 	.command(
 		"push",
-		"Push your local neon.ts to the resolved Neon project.",
+		"Push your local neon.ts to the resolved Neon project. Requires an existing project — bootstrap one with `npx neonctl link` first.",
 		(y) =>
 			y
 				.option("config", {
@@ -63,31 +63,15 @@ const argv = yargs(hideBin(process.argv))
 					type: "string",
 					describe: "Override the .neon/project.json projectId",
 				})
-				.option("org-id", {
-					type: "string",
-					describe: "Override the .neon/project.json orgId",
-				})
 				.option("api-key", {
 					type: "string",
 					describe: "Neon API key (defaults to NEON_API_KEY)",
-				})
-				.option("apply-changes", {
-					type: "boolean",
-					default: false,
-					describe:
-						"Force-apply even when local config conflicts with remote state",
 				})
 				.option("update-existing", {
 					type: "boolean",
 					default: false,
 					describe:
-						"Update existing concrete branches' settings / protected flag instead of reporting them as conflicts",
-				})
-				.option("apply-existing", {
-					type: "boolean",
-					default: false,
-					describe:
-						"Apply wildcard-blueprint settings/TTL to every matching existing branch",
+						"Apply mutable drift (branch settings / `protected` flag / project rename) instead of reporting it as a conflict. Immutable fields (region, pgVersion) always remain conflicts.",
 				}),
 	)
 	.command(
@@ -122,10 +106,6 @@ const argv = yargs(hideBin(process.argv))
 				.option("project-id", {
 					type: "string",
 					describe: "Override the .neon/project.json projectId",
-				})
-				.option("org-id", {
-					type: "string",
-					describe: "Override the .neon/project.json orgId",
 				})
 				.option("api-key", {
 					type: "string",
@@ -262,15 +242,10 @@ switch (command) {
 				...(typeof argv["project-id"] === "string"
 					? { projectId: argv["project-id"] }
 					: {}),
-				...(typeof argv["org-id"] === "string"
-					? { orgId: argv["org-id"] }
-					: {}),
 				...(typeof argv["api-key"] === "string"
 					? { apiKey: argv["api-key"] }
 					: {}),
-				applyChanges: argv["apply-changes"] === true,
 				updateExisting: argv["update-existing"] === true,
-				applyExisting: argv["apply-existing"] === true,
 			},
 			{ cwd },
 		);
@@ -301,9 +276,6 @@ switch (command) {
 					: {}),
 				...(typeof argv["project-id"] === "string"
 					? { projectId: argv["project-id"] }
-					: {}),
-				...(typeof argv["org-id"] === "string"
-					? { orgId: argv["org-id"] }
 					: {}),
 				...(typeof argv["api-key"] === "string"
 					? { apiKey: argv["api-key"] }

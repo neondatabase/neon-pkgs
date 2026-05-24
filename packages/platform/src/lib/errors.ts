@@ -12,9 +12,6 @@ import type { ConflictReport } from "./types.js";
  *   opt in to apply.
  * - `PLATFORM_CONFIG_LOAD_FAILED` — `neon.ts` could not be found or evaluated.
  * - `PLATFORM_MISSING_API_KEY` — no `NEON_API_KEY` and no explicit `apiKey` was provided.
- * - `PLATFORM_AMBIGUOUS_PROJECT` — multiple projects with the same name; need `projectId`.
- * - `PLATFORM_REGION_REQUIRED` — first-time create needs `project.region`.
- * - `PLATFORM_INSUFFICIENT_SCOPE` — project-scoped key can't list projects.
  * - `PLATFORM_MISSING_PARENT_BRANCH` — push tried to create a child of a non-existent
  *   branch.
  * - `PLATFORM_UNAUTHORIZED` / `PLATFORM_FORBIDDEN` / `PLATFORM_NOT_FOUND` /
@@ -31,11 +28,8 @@ export const ErrorCode = {
 	PushConflict: "PLATFORM_PUSH_CONFLICT",
 	ConfigLoadFailed: "PLATFORM_CONFIG_LOAD_FAILED",
 	MissingApiKey: "PLATFORM_MISSING_API_KEY",
-	AmbiguousProject: "PLATFORM_AMBIGUOUS_PROJECT",
 	AmbiguousBranchAuth: "PLATFORM_AMBIGUOUS_BRANCH_AUTH",
 	BranchNotFound: "PLATFORM_BRANCH_NOT_FOUND",
-	RegionRequired: "PLATFORM_REGION_REQUIRED",
-	InsufficientScope: "PLATFORM_INSUFFICIENT_SCOPE",
 	MissingParentBranch: "PLATFORM_MISSING_PARENT_BRANCH",
 	Unauthorized: "PLATFORM_UNAUTHORIZED",
 	Forbidden: "PLATFORM_FORBIDDEN",
@@ -119,12 +113,13 @@ export class MissingContextError extends PlatformError {
 }
 
 /**
- * Thrown by {@link pushConfig} (without `applyChanges`) when it detects differences between
- * the local config and the remote project.
+ * Thrown by {@link pushConfig} when it detects differences between the local config and
+ * the remote project that the caller hasn't opted in to apply.
  *
  * The message lists every conflict with both the current and desired value plus a
  * per-conflict hint — immutable Neon fields (`region`, Postgres major) cannot be patched
- * at all, mutable branch fields just need `updateExisting: true`, etc.
+ * at all and require recreating the project; mutable drift (settings, `protected`,
+ * project rename) is applied by passing `updateExisting: true`.
  */
 export class PushConflictError extends PlatformError {
 	override readonly name = "PushConflictError";
@@ -148,28 +143,16 @@ export class PushConflictError extends PlatformError {
 				c.kind === "project" &&
 				(c.field === "region" || c.field === "pgVersion"),
 		);
-		const hasMutableBranchDrift = conflicts.some(
-			(c) =>
-				c.kind === "branch" &&
-				(c.field === "computeSettings" || c.field === "ttl"),
-		);
+		const hasMutable = conflicts.some((c) => !isImmutableConflict(c));
 		lines.push("");
 		if (hasImmutable) {
 			lines.push(
-				"Some conflicts are immutable on Neon (region, Postgres major version). They cannot be applied — recreate the project or update your `neon.ts` to match the remote.",
+				"Some conflicts are immutable on Neon (region, Postgres major version). They cannot be applied — recreate the project, or update your `neon.ts` to match the remote.",
 			);
-			if (hasMutableBranchDrift) {
-				lines.push(
-					"For the remaining mutable conflicts, pass `updateExisting: true` (SDK) / `--update-existing` (CLI).",
-				);
-			}
-		} else if (hasMutableBranchDrift) {
+		}
+		if (hasMutable) {
 			lines.push(
-				"Pass `updateExisting: true` (SDK) / `--update-existing` (CLI) to apply, or `applyChanges: true` to force-apply everything.",
-			);
-		} else {
-			lines.push(
-				"Pass `applyChanges: true` (SDK) / `--apply-changes` (CLI) to force-apply, or update your `neon.ts` to match the remote.",
+				"For mutable conflicts, pass `updateExisting: true` (SDK) / `--update-existing` (CLI) to apply.",
 			);
 		}
 
@@ -180,26 +163,24 @@ export class PushConflictError extends PlatformError {
 	}
 }
 
-function suggestFix(c: ConflictReport): string {
-	if (
+function isImmutableConflict(c: ConflictReport): boolean {
+	return (
 		c.kind === "project" &&
 		(c.field === "region" || c.field === "pgVersion")
-	) {
+	);
+}
+
+function suggestFix(c: ConflictReport): string {
+	if (isImmutableConflict(c)) {
 		return "immutable on Neon — recreate the project, or change your `neon.ts` to match the remote.";
 	}
 	if (c.kind === "project" && c.field === "name") {
-		return "rename via the Neon console, or pass `applyChanges: true` to let push rename it.";
-	}
-	if (
-		c.kind === "branch" &&
-		(c.field === "computeSettings" || c.field === "ttl")
-	) {
-		return "pass `updateExisting: true` (SDK) / `--update-existing` (CLI) to apply.";
+		return "pass `updateExisting: true` (SDK) / `--update-existing` (CLI) to rename the remote project, or change your `neon.ts` to match the remote name.";
 	}
 	if (c.kind === "branch" && c.field === "parent") {
-		return "create the parent branch on Neon first, or change the blueprint's `parent` to an existing branch.";
+		return "create the parent branch on Neon first, or change the `parent` reference to an existing branch.";
 	}
-	return "pass `applyChanges: true` (SDK) / `--apply-changes` (CLI) to force.";
+	return "pass `updateExisting: true` (SDK) / `--update-existing` (CLI) to apply.";
 }
 
 /**

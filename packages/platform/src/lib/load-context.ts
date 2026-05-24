@@ -65,7 +65,7 @@ export function loadContext(options: LoadContextOptions = {}): NeonContext {
 			[
 				"No Neon project id could be resolved.",
 				"loadContext checked three sources in order: (1) `options.projectId`, (2) the `NEON_PROJECT_ID` environment variable, and (3) the `projectId` field of `.neon/project.json` (or the neonctl `.neon` file) above the current directory.",
-				"Set any one of these to continue. For an interactive bootstrap, run `npx neonctl set-context --project-id <id>`.",
+				"Set any one of these to continue. For an interactive bootstrap, run `npx neonctl link` to create/select a project and write local context.",
 			].join(" "),
 		);
 	}

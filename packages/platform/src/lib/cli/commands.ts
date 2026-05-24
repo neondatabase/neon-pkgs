@@ -107,17 +107,14 @@ export async function runPull(
 export interface PushCommandOptions {
 	configPath?: string;
 	projectId?: string;
-	orgId?: string;
 	apiKey?: string;
-	applyChanges?: boolean;
 	updateExisting?: boolean;
-	applyExisting?: boolean;
 }
 
 /**
  * Implementation of `neon-ts push`. Loads `neon.ts` (or the path supplied via
  * `--config`), pushes against the resolved project, and prints a human-readable summary
- * of what changed (or what would change).
+ * of what changed.
  */
 export async function runPush(
 	options: PushCommandOptions,
@@ -131,10 +128,7 @@ export async function runPush(
 		cwd: ctx.cwd,
 		...(options.configPath ? { configPath: options.configPath } : {}),
 		...(options.projectId ? { projectId: options.projectId } : {}),
-		...(options.orgId ? { orgId: options.orgId } : {}),
-		...(options.applyChanges ? { applyChanges: true } : {}),
 		...(options.updateExisting ? { updateExisting: true } : {}),
-		...(options.applyExisting ? { applyExisting: true } : {}),
 	};
 
 	try {
@@ -143,48 +137,20 @@ export async function runPush(
 		const projectLabel = `project ${result.projectId}${result.orgId ? ` (org ${result.orgId})` : ""}`;
 
 		const lines: string[] = [];
-		if (
-			realChanges.length === 0 &&
-			result.conflicts.length === 0 &&
-			result.skippedWildcardBranches.length === 0
-		) {
+		if (realChanges.length === 0) {
 			lines.push(
 				`✓ ${projectLabel} is already in sync. No changes needed.`,
 			);
 		} else {
 			lines.push(`✓ pushed config to ${projectLabel}`);
-			if (realChanges.length > 0) {
-				lines.push("");
-				lines.push("Applied:");
-				for (const change of realChanges) {
-					const verb =
-						change.kind === "feature" && change.action === "create"
-							? "enable"
-							: change.action;
-					lines.push(
-						`  - [${change.kind}:${change.identifier}] ${verb}`,
-					);
-				}
-			}
-		}
-		if (result.skippedWildcardBranches.length > 0) {
 			lines.push("");
-			lines.push(
-				"Skipped wildcard branches (pass --apply-existing to apply):",
-			);
-			for (const skip of result.skippedWildcardBranches) {
-				lines.push(
-					`  - pattern "${skip.pattern}" matched: ${skip.branches.join(", ")}`,
-				);
-			}
-		}
-		if (result.conflicts.length > 0) {
-			lines.push("");
-			lines.push("Conflicts (informational — applyChanges was set):");
-			for (const c of result.conflicts) {
-				lines.push(
-					`  - [${c.kind}:${c.identifier}] ${c.field}: ${c.reason}`,
-				);
+			lines.push("Applied:");
+			for (const change of realChanges) {
+				const verb =
+					change.kind === "feature" && change.action === "create"
+						? "enable"
+						: change.action;
+				lines.push(`  - [${change.kind}:${change.identifier}] ${verb}`);
 			}
 		}
 		return { exitCode: 0, stdout: `${lines.join("\n")}\n`, stderr: "" };
@@ -302,7 +268,6 @@ export function runContext(
 export interface StatusCommandOptions {
 	configPath?: string;
 	projectId?: string;
-	orgId?: string;
 	apiKey?: string;
 }
 
@@ -326,17 +291,13 @@ export async function runStatus(
 			api,
 			cwd: ctx.cwd,
 			dryRun: true,
-			// Pretend the user opted in to every kind of update so the diff doesn't fold
-			// drift into `conflicts` — status should show the full would-apply list even
-			// when the real push would refuse without explicit flags. The `conflicts`
-			// array is then reserved for the things flags can't fix (immutable region,
-			// pgVersion, …) so the user sees a clean "this is hard-blocked" subset.
+			// Pretend the caller passed `updateExisting: true` so the diff exposes the
+			// full would-apply list as plan steps. `conflicts` then reserves itself for
+			// the things no flag can fix (immutable region, pgVersion) — a clean
+			// "hard-blocked" subset.
 			updateExisting: true,
-			applyExisting: true,
-			applyChanges: true,
 			...(options.configPath ? { configPath: options.configPath } : {}),
 			...(options.projectId ? { projectId: options.projectId } : {}),
-			...(options.orgId ? { orgId: options.orgId } : {}),
 		});
 		return { exitCode: 0, stdout: `${formatStatus(result)}\n`, stderr: "" };
 	} catch (err) {
@@ -350,18 +311,12 @@ export async function runStatus(
  */
 function formatStatus(result: Awaited<ReturnType<typeof pushConfig>>): string {
 	const lines: string[] = [];
-	const projectLabel = result.projectId.startsWith("<would-create")
-		? `(would create new project)`
-		: `project ${result.projectId}${result.orgId ? ` (org ${result.orgId})` : ""}`;
+	const projectLabel = `project ${result.projectId}${result.orgId ? ` (org ${result.orgId})` : ""}`;
 	lines.push(`Status against ${projectLabel}:`);
 	lines.push("");
 
 	const realChanges = result.applied.filter((a) => a.action !== "noop");
-	if (
-		realChanges.length === 0 &&
-		result.conflicts.length === 0 &&
-		result.skippedWildcardBranches.length === 0
-	) {
+	if (realChanges.length === 0 && result.conflicts.length === 0) {
 		lines.push("  ✓ in sync — push would be a no-op.");
 		return lines.join("\n");
 	}
@@ -379,18 +334,6 @@ function formatStatus(result: Awaited<ReturnType<typeof pushConfig>>): string {
 					: change.action;
 			lines.push(
 				`  ${marker} [${change.kind}:${change.identifier}] ${verb}${formatChangeDetails(change.details)}`,
-			);
-		}
-		lines.push("");
-	}
-
-	if (result.skippedWildcardBranches.length > 0) {
-		lines.push(
-			"Wildcard branches (skipped on push without --apply-existing):",
-		);
-		for (const skip of result.skippedWildcardBranches) {
-			lines.push(
-				`  • pattern "${skip.pattern}" matches: ${skip.branches.join(", ")}`,
 			);
 		}
 		lines.push("");
@@ -737,7 +680,6 @@ const EXIT_CODE_BY_PLATFORM_ERROR_CODE: Readonly<Record<string, number>> = {
 	[ErrorCode.MissingApiKey]: 1,
 	[ErrorCode.Unauthorized]: 6,
 	[ErrorCode.Forbidden]: 7,
-	[ErrorCode.InsufficientScope]: 7,
 	[ErrorCode.NotFound]: 8,
 	[ErrorCode.RateLimited]: 9,
 	[ErrorCode.NetworkError]: 10,

@@ -40,6 +40,22 @@ export function makeRealApi(): NeonApi {
 	return createRealNeonApi({ apiKey: requireApiKey() });
 }
 
+/**
+ * Create a real Neon project via the NeonApi adapter directly. `pushConfig` no longer
+ * provisions projects (callers are expected to run `neonctl link` first), so every e2e
+ * test that needs a fresh project to push against goes through this helper instead.
+ */
+export async function bootstrapProject(
+	api: NeonApi,
+	args: { name: string; region: string },
+): Promise<string> {
+	const created = await api.createProject({
+		name: args.name,
+		regionId: args.region,
+	});
+	return created.id;
+}
+
 /** Lower-level Neon client. Used by cleanup and a few setup helpers. */
 function makeRawClient(): ReturnType<typeof createApiClient> {
 	return createApiClient({ apiKey: requireApiKey() });

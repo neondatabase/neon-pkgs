@@ -46,7 +46,6 @@ describe("diffConfig — project diff", () => {
 			defineConfig({ project: { name: "other" } }),
 		);
 		const result = diffConfig(config, makeRemote(), {
-			applyExisting: false,
 			updateExisting: false,
 		});
 		expect(result.conflicts).toEqual([
@@ -66,7 +65,6 @@ describe("diffConfig — project diff", () => {
 			}),
 		);
 		const result = diffConfig(config, makeRemote(), {
-			applyExisting: false,
 			updateExisting: false,
 		});
 		expect(result.conflicts.some((c) => c.field === "region")).toBe(true);
@@ -77,7 +75,6 @@ describe("diffConfig — project diff", () => {
 			defineConfig({ project: { name: "my-app", region: "us-east-1" } }),
 		);
 		const result = diffConfig(config, makeRemote(), {
-			applyExisting: false,
 			updateExisting: false,
 		});
 		expect(
@@ -90,8 +87,48 @@ describe("diffConfig — project diff", () => {
 			defineConfig({ project: { name: "my-app", pgVersion: 15 } }),
 		);
 		const result = diffConfig(config, makeRemote(), {
-			applyExisting: false,
 			updateExisting: false,
+		});
+		expect(result.conflicts.some((c) => c.field === "pgVersion")).toBe(
+			true,
+		);
+	});
+
+	test("with updateExisting:true, plans a rename-project step instead of conflict", () => {
+		const config = resolveConfig(
+			defineConfig({ project: { name: "renamed-app" } }),
+		);
+		const result = diffConfig(config, makeRemote(), {
+			updateExisting: true,
+		});
+		expect(result.conflicts).toHaveLength(0);
+		expect(result.plan).toEqual([
+			expect.objectContaining({
+				kind: "rename-project",
+				fromName: "my-app",
+				toName: "renamed-app",
+			}),
+		]);
+	});
+
+	test("region mismatch stays a conflict even with updateExisting:true (immutable)", () => {
+		const config = resolveConfig(
+			defineConfig({
+				project: { name: "my-app", region: "aws-us-west-2" },
+			}),
+		);
+		const result = diffConfig(config, makeRemote(), {
+			updateExisting: true,
+		});
+		expect(result.conflicts.some((c) => c.field === "region")).toBe(true);
+	});
+
+	test("pgVersion mismatch stays a conflict even with updateExisting:true (immutable)", () => {
+		const config = resolveConfig(
+			defineConfig({ project: { name: "my-app", pgVersion: 15 } }),
+		);
+		const result = diffConfig(config, makeRemote(), {
+			updateExisting: true,
 		});
 		expect(result.conflicts.some((c) => c.field === "pgVersion")).toBe(
 			true,
@@ -111,7 +148,6 @@ describe("diffConfig — concrete branches", () => {
 			}),
 		);
 		const result = diffConfig(config, makeRemote(), {
-			applyExisting: false,
 			updateExisting: false,
 		});
 		expect(result.plan).toEqual([
@@ -136,7 +172,6 @@ describe("diffConfig — concrete branches", () => {
 			}),
 		);
 		const result = diffConfig(config, makeRemote(), {
-			applyExisting: false,
 			updateExisting: false,
 		});
 		expect(result.plan).toHaveLength(0);
@@ -161,7 +196,6 @@ describe("diffConfig — concrete branches", () => {
 			}),
 		);
 		const result = diffConfig(config, makeRemote(), {
-			applyExisting: false,
 			updateExisting: true,
 		});
 		expect(result.conflicts).toHaveLength(0);
@@ -183,7 +217,6 @@ describe("diffConfig — concrete branches", () => {
 			}),
 		);
 		const result = diffConfig(config, remote, {
-			applyExisting: false,
 			updateExisting: false,
 		});
 		expect(result.conflicts.some((c) => c.field === "protected")).toBe(
@@ -200,7 +233,6 @@ describe("diffConfig — concrete branches", () => {
 			}),
 		);
 		const result = diffConfig(config, remote, {
-			applyExisting: false,
 			updateExisting: true,
 		});
 		expect(result.plan).toEqual([
@@ -223,7 +255,6 @@ describe("diffConfig — concrete branches", () => {
 			}),
 		);
 		const result = diffConfig(config, makeRemote(), {
-			applyExisting: false,
 			updateExisting: false,
 		});
 		expect(result.plan).toEqual([
@@ -246,7 +277,6 @@ describe("diffConfig — concrete branches", () => {
 			}),
 		);
 		const result = diffConfig(config, makeRemote(), {
-			applyExisting: false,
 			updateExisting: false,
 		});
 		expect(result.conflicts).toEqual([
@@ -259,8 +289,8 @@ describe("diffConfig — concrete branches", () => {
 	});
 });
 
-describe("diffConfig — wildcard blueprint", () => {
-	test("skips wildcard updates by default and records them", () => {
+describe("diffConfig — wildcard blueprints are creation-only (ignored by diff)", () => {
+	test("matching live branches are left untouched (no plan, no conflict, no flag)", () => {
 		const remote = makeRemote({
 			branches: [
 				{
@@ -311,6 +341,9 @@ describe("diffConfig — wildcard blueprint", () => {
 				},
 			],
 		});
+		// Blueprint settings differ from the live previews' compute settings — diff still
+		// emits nothing for them. Blueprints only ever govern *creation* (via `branch()`),
+		// never retroactive updates to live branches.
 		const config = resolveConfig(
 			defineConfig({
 				project: { name: "my-app" },
@@ -324,89 +357,16 @@ describe("diffConfig — wildcard blueprint", () => {
 				},
 			}),
 		);
+		// Even with the most permissive flag, blueprints never produce plan steps for
+		// existing branches.
 		const result = diffConfig(config, remote, {
-			applyExisting: false,
-			updateExisting: false,
+			updateExisting: true,
 		});
 		expect(result.plan).toHaveLength(0);
 		expect(result.conflicts).toHaveLength(0);
-		expect(result.skippedWildcardBranches).toEqual([
-			{
-				pattern: "preview-*",
-				branches: ["preview-pr-1", "preview-pr-2"],
-			},
-		]);
 	});
 
-	test("with applyExisting=true, plans endpoint and TTL updates for matching branches", () => {
-		const remote = makeRemote({
-			branches: [
-				{
-					id: "br-prod",
-					name: "production",
-					isDefault: true,
-					protected: false,
-				},
-				{
-					id: "br-p1",
-					name: "preview-pr-1",
-					isDefault: false,
-					protected: false,
-					parentId: "br-prod",
-				},
-			],
-			endpoints: [
-				{
-					id: "ep-prod",
-					branchId: "br-prod",
-					type: "read_write",
-					autoscalingLimitMinCu: 0.25,
-					autoscalingLimitMaxCu: 0.25,
-					suspendTimeout: 0,
-				},
-				{
-					id: "ep-p1",
-					branchId: "br-p1",
-					type: "read_write",
-					autoscalingLimitMinCu: 0.25,
-					autoscalingLimitMaxCu: 0.25,
-					suspendTimeout: 0,
-				},
-			],
-		});
-		const config = resolveConfig(
-			defineConfig({
-				project: { name: "my-app" },
-				branches: { production: {} },
-				branchBlueprints: {
-					preview: {
-						pattern: "preview-*",
-						ttl: "1h",
-						computeSettings: { autoscalingLimitMaxCu: 1 },
-					},
-				},
-			}),
-		);
-		const result = diffConfig(config, remote, {
-			applyExisting: true,
-			updateExisting: false,
-		});
-		expect(result.skippedWildcardBranches).toHaveLength(0);
-		expect(result.plan).toEqual(
-			expect.arrayContaining([
-				expect.objectContaining({
-					kind: "update-endpoint",
-					endpointId: "ep-p1",
-				}),
-				expect.objectContaining({
-					kind: "update-branch-ttl",
-					branchId: "br-p1",
-				}),
-			]),
-		);
-	});
-
-	test("default branch is excluded from wildcard match even when it matches", () => {
+	test("default branch matching a blueprint pattern is also untouched (no special-case needed)", () => {
 		const remote = makeRemote({
 			project: { name: "my-app" },
 			branches: [
@@ -440,11 +400,10 @@ describe("diffConfig — wildcard blueprint", () => {
 			}),
 		);
 		const result = diffConfig(config, remote, {
-			applyExisting: true,
 			updateExisting: false,
 		});
 		expect(result.plan).toHaveLength(0);
-		expect(result.skippedWildcardBranches).toHaveLength(0);
+		expect(result.conflicts).toHaveLength(0);
 	});
 });
 
@@ -473,7 +432,6 @@ describe("diffConfig — features", () => {
 			}),
 		);
 		const result = diffConfig(config, remoteWithFeatures({}), {
-			applyExisting: false,
 			updateExisting: false,
 		});
 		expect(result.plan).toEqual([
@@ -495,7 +453,6 @@ describe("diffConfig — features", () => {
 			}),
 		);
 		const result = diffConfig(config, remoteWithFeatures({}), {
-			applyExisting: false,
 			updateExisting: false,
 		});
 		expect(result.plan).toEqual([
@@ -522,7 +479,7 @@ describe("diffConfig — features", () => {
 				auth: { projectId: "neon-auth-x", jwksUrl: "https://j.tld" },
 				dataApi: { url: "https://d.tld" },
 			}),
-			{ applyExisting: false, updateExisting: false },
+			{ updateExisting: false },
 		);
 		expect(result.plan).toHaveLength(0);
 		expect(result.conflicts).toHaveLength(0);
@@ -545,7 +502,7 @@ describe("diffConfig — features", () => {
 				auth: { projectId: "neon-auth-x", jwksUrl: "https://j.tld" },
 				dataApi: { url: "https://d.tld" },
 			}),
-			{ applyExisting: false, updateExisting: false },
+			{ updateExisting: false },
 		);
 		expect(result.plan).toHaveLength(0);
 		expect(result.conflicts).toHaveLength(0);
@@ -560,7 +517,6 @@ describe("diffConfig — features", () => {
 		);
 		// Pass remote with feature state — diff still ignores it because config.features is unset.
 		const result = diffConfig(config, remoteWithFeatures({}), {
-			applyExisting: false,
 			updateExisting: false,
 		});
 		expect(result.plan).toHaveLength(0);

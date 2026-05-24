@@ -52,7 +52,7 @@ export default defineConfig({
 The config has two intentionally distinct branch surfaces:
 
 - **`branches`** — concrete, persistent branches. The map key is the literal branch name on Neon. Managed by `pushConfig` (create-if-missing, update-on-drift with `updateExisting`). Supports `protected`, `computeSettings`, and a `parent` reference.
-- **`branchBlueprints`** — templates for *ephemeral* branches spun up via `branch()`. Each entry's `pattern` must contain a `*` wildcard. Consumed by `branch()` to mint new branches, and by `pushConfig --apply-existing` to retroactively patch matching live branches.
+- **`branchBlueprints`** — templates for *ephemeral* branches spun up via `branch()`. Each entry's `pattern` must contain a `*` wildcard. **Creation-only** — `branch()` mints new branches from blueprints; `pushConfig` deliberately never touches live branches matched by a blueprint (most of them are short-lived per-PR / per-dev branches owned by whoever minted them).
 
 Listing the live branches currently on a project (including ephemeral ones) is **not** part of this config — that's `neonctl branches list`.
 
@@ -67,6 +67,8 @@ const remoteConfig = await pullConfig({ apiKey: process.env.NEON_API_KEY });
 
 // push your local neon.ts to Neon. With no arguments it auto-loads neon.ts and
 // refuses to apply if the local config conflicts with the remote project state.
+// Requires a resolvable projectId — bootstrap one with `npx neonctl link`
+// first; push will never create a project for you.
 await pushConfig();
 
 // fetch live connection strings for the resolved branch (async, hits the API)
@@ -78,12 +80,10 @@ const env = await fetchEnv(config);
 // parse them synchronously (no I/O — safe inside `drizzle.config.ts`, etc.)
 const sameShape = parseEnv(config);
 
-// force-apply, including drift on existing branches and wildcard-matched ones
-await pushConfig({
-  applyChanges: true,
-  updateExisting: true,
-  applyExisting: true,
-});
+// apply mutable drift (branch settings / `protected` flag / project rename) as
+// actual mutations instead of refusing with PushConflictError. Immutable fields
+// (region, pgVersion) always remain hard conflicts regardless.
+await pushConfig({ updateExisting: true });
 ```
 
 ## Public surface
@@ -125,10 +125,10 @@ Every SDK function and every CLI subcommand resolves `projectId`, `orgId`, and `
 | `orgId`     | `options.orgId`[^orgId] / `--org-id`       | `NEON_ORG_ID`     | `orgId`                    | `orgId`                |
 | `branchId`  | `options.branch`[^branch] / `--branch`     | `NEON_BRANCH_ID`  | `branchId`                 | `branchId`             |
 
-[^orgId]: `orgId` is only accepted (and only useful) on calls that may create a project or preserve the org pointer in a context file — `pushConfig`, `branch`, `loadContext`. `pullConfig` / `fetchEnv` / `parseEnv` don't take it because the project id already pins the org.
+[^orgId]: `orgId` is only accepted (and only useful) on calls that preserve or print the org pointer from context — `branch`, `loadContext`, and context-related CLI commands. `pushConfig` / `pullConfig` / `fetchEnv` / `parseEnv` don't take it because the project id already pins the org.
 [^branch]: Only commands that target a specific branch surface a `--branch` flag (`context`, `env pull`, `env run`). `pull` / `push` are branch-agnostic; `branch` *creates* a branch and produces its id as output.
 
-The file search walks up from `cwd` (default: `process.cwd()`) until it finds either file or hits a project-root marker (`.git`, `package.json`). `.neon/project.json` is preferred over `.neon` at every directory along the walk. If nothing resolves a `projectId`, callers receive `MissingContextError`.
+The file search walks up from `cwd` (default: `process.cwd()`) until it finds either file or hits a project-root marker (`.git`). `.neon/project.json` is preferred over `.neon` at every directory along the walk. If nothing resolves a `projectId`, callers receive `MissingContextError`.
 
 ## API
 
@@ -166,13 +166,38 @@ pushConfig(config, options?);          // use an already-validated Config object
 
 Important options:
 
-| Option            | Default | Effect                                                                                                                                                |
-| ----------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `applyChanges`    | `false` | When `false`, push fails (`PushConflictError`) if any field-level conflict is detected. When `true`, push patches the remote regardless.              |
-| `updateExisting`  | `false` | When `true`, settings / `protected` drift on `config.branches` entries (e.g. `production`) is applied to the existing branch instead of failing.      |
-| `applyExisting`   | `false` | When `true`, `branchBlueprints` entries (wildcard patterns like `preview-*`) apply their settings/TTL to **every matching existing branch**.          |
+| Option            | Default | Effect                                                                                                                                                                                                                                              |
+| ----------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `updateExisting`  | `false` | When `true`, apply mutable drift (branch settings / `protected` flag / TTL / **project rename**) as actual mutations instead of reporting them as `PushConflictError`. Immutable project fields (`region`, `pgVersion`) always remain hard conflicts. |
+| `dryRun`          | `false` | When `true`, compute the plan against live remote state but execute no mutations. `applied` records what *would* run.                                                                                                                                |
 
-`pushConfig` will create a project if none exists in the resolved org/name combination and `project.region` is set. Region and Postgres major version are immutable on Neon — pushing a different value surfaces a `ConflictReport`.
+#### Bootstrap is the user's job
+
+**`pushConfig` does not create projects.** It requires a resolvable `projectId` from one of:
+
+- `options.projectId` (SDK) / `--project-id` (CLI),
+- `NEON_PROJECT_ID` env var, or
+- a `.neon[/project.json]` context file walked upward from `cwd`.
+
+If nothing resolves, push throws `MissingContextError` and the message points the user at the canonical bootstrap flow:
+
+```bash
+npx neonctl link
+```
+
+This split keeps `pushConfig`'s remit narrow (sync a config against an existing project) and avoids hiding the "this just created infrastructure on your account" moment behind an option flag.
+
+#### Conflict semantics
+
+| Field                       | Mutable via `updateExisting: true`? |
+| --------------------------- | ----------------------------------- |
+| `project.name`              | ✅ — push renames the remote project |
+| `branches.<name>.computeSettings` | ✅                              |
+| `branches.<name>.protected` | ✅                                   |
+| `project.region`            | ❌ — immutable on Neon (recreate)    |
+| `project.pgVersion`         | ❌ — use Neon's upgrade flow         |
+
+Immutable conflicts always throw `PushConflictError`; the only fix is to change your `neon.ts` to match the remote or recreate the project.
 
 `config.features` is also reconciled on push:
 
@@ -352,11 +377,11 @@ neon-ts context
 neon-ts pull                                         # writes/overwrites ./neon.ts
 neon-ts pull --format json --project-id proj-...     # prints raw Config JSON to stdout instead
 
-# Push your local neon.ts to the resolved Neon project
+# Push your local neon.ts to the resolved Neon project.
+# Requires an existing project — bootstrap with `npx neonctl link` if you
+# don't have local project context yet.
 neon-ts push                                # fail on conflict
-neon-ts push --update-existing              # update existing specific-name branches
-neon-ts push --apply-existing               # apply wildcard blueprints to existing matching branches
-neon-ts push --apply-changes                # force-apply, ignoring branch-level conflicts
+neon-ts push --update-existing              # also apply mutable drift (settings, protected, project rename)
 
 # Diff your local neon.ts against the live project (read-only — no mutations).
 # `terraform plan`-style output: `+ create`, `~ update`, conflicts that would block push.
@@ -387,12 +412,12 @@ Exit codes (stable — branch on these in CI / shell pipelines):
 | ---- | ------------------------------------------------------------------------------------ |
 | 0    | Success                                                                              |
 | 1    | Generic error / missing `NEON_API_KEY`                                               |
-| 2    | `errors.PushConflictError` (re-run with `--apply-changes` / `--update-existing`)     |
+| 2    | `errors.PushConflictError` (re-run with `--update-existing` for mutable drift, or fix your config to match the immutable remote field) |
 | 3    | `errors.MissingContextError` (no project id resolvable from args, env, or `.neon[/project.json]`) |
 | 4    | `errors.ConfigLoadError` (couldn't find / load `neon.ts`)                            |
 | 5    | Other `PlatformError`                                                                |
 | 6    | `PLATFORM_UNAUTHORIZED` — bad / expired / revoked API key                            |
-| 7    | `PLATFORM_FORBIDDEN` or `PLATFORM_INSUFFICIENT_SCOPE` — key lacks required scope     |
+| 7    | `PLATFORM_FORBIDDEN` — key lacks required scope                                      |
 | 8    | `PLATFORM_NOT_FOUND` — project / branch / endpoint doesn't exist                     |
 | 9    | `PLATFORM_RATE_LIMITED` — back off and retry                                         |
 | 10   | `PLATFORM_NETWORK_ERROR` — could not reach the Neon API                              |
@@ -401,7 +426,7 @@ Exit codes (stable — branch on these in CI / shell pipelines):
 
 Pass `--debug` to any subcommand to print stack traces, error codes, and structured details (request ids, neon API messages) on stderr.
 
-All flags accept env-var fallbacks: `NEON_API_KEY`, `NEON_PROJECT_ID`, `NEON_ORG_ID` (only used by `push` / `status` / `branch` / `context`), `NEON_BRANCH_ID`.
+All flags accept env-var fallbacks: `NEON_API_KEY`, `NEON_PROJECT_ID`, `NEON_ORG_ID` (only used by `branch` / `context`), `NEON_BRANCH_ID`.
 
 ## Error reference
 
@@ -427,15 +452,12 @@ The specific subclasses (`ConfigLoadError`, `ConfigValidationError`, `MissingCon
 | --------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `PLATFORM_INVALID_CONFIG`         | `defineConfig` / the zod schema rejected your config, or `branch()` was called with the name of a concrete branch instead of a wildcard blueprint | Read the aggregated issue list in `err.issues` and fix each one                                                  |
 | `PLATFORM_ENV_NOT_INJECTED`       | `parseEnv` couldn't find the required Neon env vars in `process.env`            | Run `neon-ts env pull` to write `.env.local`, or wrap your dev command with `neon-ts env run -- <cmd>`. Or switch to `await fetchEnv(config)` if you can do async I/O. |
-| `PLATFORM_MISSING_CONTEXT`        | No project id resolvable from args, env, or context file                        | Pass `projectId` / `--project-id`, set `NEON_PROJECT_ID`, or run `npx neonctl set-context --project-id <id>`     |
-| `PLATFORM_PUSH_CONFLICT`          | Local config differs from remote (and you didn't opt into apply)                | The thrown `errors.PushConflictError` lists each conflict with a `fix` hint. Most resolve via `updateExisting: true` |
+| `PLATFORM_MISSING_CONTEXT`        | No project id resolvable from args, env, or context file                        | Run `npx neonctl link`, pass `projectId` / `--project-id`, set `NEON_PROJECT_ID`, or commit `.neon/project.json` |
+| `PLATFORM_PUSH_CONFLICT`          | Local config differs from remote (and you didn't opt into apply)                | The thrown `errors.PushConflictError` lists each conflict with a `fix` hint. Mutable drift resolves via `updateExisting: true`; immutable fields (region, pgVersion) require recreating the project |
 | `PLATFORM_CONFIG_LOAD_FAILED`     | `neon.ts` is missing, has a syntax error, or doesn't `export default`           | Path is in the message. Run the file directly (`npx tsx neon.ts`) to reproduce the underlying error              |
 | `PLATFORM_MISSING_API_KEY`        | No API key in `apiKey` option or `NEON_API_KEY` env                             | Generate one at <https://console.neon.tech/app/settings/api-keys>                                                |
-| `PLATFORM_AMBIGUOUS_PROJECT`      | Multiple projects with the same name (org-/user-scoped key without `projectId`) | Pass `projectId` to pick one — the candidate ids are in `err.details.candidateProjectIds`                        |
 | `PLATFORM_AMBIGUOUS_BRANCH_AUTH`  | `fetchEnv` found multiple roles / databases on the branch and can't auto-pick    | Pass `roleName` / `databaseName` — available values are in `err.details.availableRoles` / `availableDatabases`   |
 | `PLATFORM_BRANCH_NOT_FOUND`       | `fetchEnv` couldn't find the requested branch / role / database on the project   | Check the name; available values are in `err.details.available`                                                  |
-| `PLATFORM_REGION_REQUIRED`        | First-time create but `project.region` is missing                               | Add a region (e.g. `aws-us-east-1`) to your config                                                               |
-| `PLATFORM_INSUFFICIENT_SCOPE`     | Project-scoped key tried to list projects                                       | Pass `projectId` explicitly, or use an org/user-scoped key                                                       |
 | `PLATFORM_MISSING_PARENT_BRANCH`  | Push tried to create a branch whose parent doesn't exist on Neon                | Either define the parent as a blueprint too, or change the blueprint's `parent` to an existing branch           |
 | `PLATFORM_UNAUTHORIZED`           | Neon returned 401 — bad / expired key                                           | Rotate the key                                                                                                   |
 | `PLATFORM_FORBIDDEN`              | Neon returned 403 — key lacks the right scope for the operation                 | Use the appropriate key scope (org for listing, project for single-project ops)                                  |
@@ -459,7 +481,7 @@ Every wrapped HTTP error carries structured context in `err.details`:
 
 The **SDK** is filesystem-read-only with one exception: `branch()` updates an existing project-context file's `branchId` in place after creating an ephemeral branch (so subsequent `fetchEnv` / `pullConfig` calls target it). The write is attempted *safely* — a read-only filesystem or permission error is reported as `contextFile.status === "write-failed"` rather than crashing the call, and the JSON payload is still returned so the user can apply it by hand. All other public SDK functions — `pullConfig`, `pushConfig`, `fetchEnv`, `loadContext`, `loadConfigFromFile`, `defineConfig` — never touch disk.
 
-Project-context files (`.neon/project.json` or the neonctl `.neon` file) themselves are **never created** by the SDK; bootstrap one with `neon set-context` or any other tool of your choice before calling `branch()`.
+Project-context files (`.neon/project.json` or the neonctl `.neon` file) themselves are **never created** by the SDK; bootstrap one with `npx neonctl link` or any other tool of your choice before calling `branch()`.
 
 The **`neon-ts` CLI** is the one place that does write `neon.ts` for you: `neon-ts pull` writes (or overwrites) `./neon.ts` so you can start editing immediately. Pass `--format json` to get the raw `Config` on stdout instead (read-only). `neon-ts push`, `neon-ts context`, and `neon-ts branch` only ever read `neon.ts` and never modify it.
 
@@ -490,16 +512,14 @@ console.log(`using token from ${resolved.source}`);
 
 ## API key scopes
 
-`@neondatabase/platform` supports both **organisation/user-scoped** and **project-scoped** Neon API keys:
+`@neondatabase/platform` supports both **organisation/user-scoped** and **project-scoped** Neon API keys. Both work for `pullConfig` and `pushConfig` — neither operation creates projects, so neither needs the broader `listProjects` permission.
 
-| Scope                | `pullConfig` | `pushConfig` (with `projectId`) | `pushConfig` (without `projectId`) |
-| -------------------- | ------------ | ------------------------------- | ---------------------------------- |
-| Org or user-scoped   | ✅            | ✅                               | ✅ (looks up by name, may create)   |
-| Project-scoped       | ✅            | ✅                               | ❌ — `PLATFORM_INSUFFICIENT_SCOPE`  |
+| Scope                | `pullConfig` | `pushConfig` |
+| -------------------- | ------------ | ------------ |
+| Org or user-scoped   | ✅            | ✅            |
+| Project-scoped       | ✅            | ✅            |
 
-Project-scoped keys can only operate on a single project. Pass `projectId` explicitly (SDK), use `--project-id` (CLI), set `NEON_PROJECT_ID`, or commit a `.neon/project.json` so push knows where to apply.
-
-When using an org-scoped key, leave `orgId` unset — the API key implicitly scopes every request to its owning org.
+A `projectId` must always be resolvable — push refuses to operate on "whatever project I happen to find by name". Pass it explicitly (SDK: `projectId`, CLI: `--project-id`), set `NEON_PROJECT_ID`, or commit a `.neon/project.json` via
 
 ## Running e2e tests
 

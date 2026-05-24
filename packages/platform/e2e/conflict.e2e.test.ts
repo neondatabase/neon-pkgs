@@ -1,6 +1,7 @@
 import { describe, expect } from "vitest";
 import { defineConfig, errors, pushConfig } from "../src/v1.js";
 import {
+	bootstrapProject,
 	DEFAULT_REGION,
 	detectApiKeyScope,
 	e2eTest,
@@ -10,42 +11,36 @@ import {
 
 describe("e2e — conflict detection against real Neon API", () => {
 	e2eTest(
-		"region drift is reported even with applyChanges:true (region is immutable on Neon)",
+		"region drift always throws — region is immutable on Neon and no flag overrides it",
 		async ({ track }) => {
 			const scope = await detectApiKeyScope();
 			if (scope.kind !== "org-or-user") return;
 
 			const api = makeRealApi();
-			const projectName = uniqueProjectName("region");
+			const projectId = await bootstrapProject(api, {
+				name: uniqueProjectName("region"),
+				region: DEFAULT_REGION,
+			});
+			track(projectId);
 
-			const created = await pushConfig(
-				defineConfig({
-					project: { name: projectName, region: DEFAULT_REGION },
-					branches: { production: {} },
-				}),
-				{ api },
-			);
-			track(created.projectId);
-
-			// Same project, different region. By default → throws PushConflictError. With
-			// applyChanges:true → reports the conflict in the result without throwing.
 			const wrongRegion = defineConfig({
-				project: { name: projectName, region: "aws-eu-central-1" },
+				project: { name: "renamed", region: "aws-eu-central-1" },
 				branches: { production: {} },
 			});
 
+			// Default: throws PushConflictError on the region mismatch.
 			await expect(
-				pushConfig(wrongRegion, { api, projectId: created.projectId }),
+				pushConfig(wrongRegion, { api, projectId }),
 			).rejects.toBeInstanceOf(errors.PushConflictError);
 
-			const forced = await pushConfig(wrongRegion, {
-				api,
-				projectId: created.projectId,
-				applyChanges: true,
-			});
-			expect(forced.conflicts).toContainEqual(
-				expect.objectContaining({ kind: "project", field: "region" }),
-			);
+			// updateExisting:true does not save us — region is immutable, so it still throws.
+			await expect(
+				pushConfig(wrongRegion, {
+					api,
+					projectId,
+					updateExisting: true,
+				}),
+			).rejects.toBeInstanceOf(errors.PushConflictError);
 		},
 	);
 
@@ -57,16 +52,11 @@ describe("e2e — conflict detection against real Neon API", () => {
 
 			const api = makeRealApi();
 			const projectName = uniqueProjectName("compute");
-
-			// Create with default compute (0.25 / 0.25).
-			const created = await pushConfig(
-				defineConfig({
-					project: { name: projectName, region: DEFAULT_REGION },
-					branches: { production: {} },
-				}),
-				{ api },
-			);
-			track(created.projectId);
+			const projectId = await bootstrapProject(api, {
+				name: projectName,
+				region: DEFAULT_REGION,
+			});
+			track(projectId);
 
 			// Now push a config that wants max=2 on production. Should be a conflict by default.
 			const bigger = defineConfig({
@@ -78,13 +68,13 @@ describe("e2e — conflict detection against real Neon API", () => {
 				},
 			});
 			await expect(
-				pushConfig(bigger, { api, projectId: created.projectId }),
+				pushConfig(bigger, { api, projectId }),
 			).rejects.toBeInstanceOf(errors.PushConflictError);
 
 			// With updateExisting:true the drift is applied as an endpoint update.
 			const applied = await pushConfig(bigger, {
 				api,
-				projectId: created.projectId,
+				projectId,
 				updateExisting: true,
 			});
 			expect(applied.conflicts).toHaveLength(0);
@@ -97,8 +87,8 @@ describe("e2e — conflict detection against real Neon API", () => {
 			);
 
 			// Confirm via a fresh listEndpoints — the change actually landed on Neon.
-			const endpoints = await api.listEndpoints(created.projectId);
-			const branches = await api.listBranches(created.projectId);
+			const endpoints = await api.listEndpoints(projectId);
+			const branches = await api.listBranches(projectId);
 			const prodBranchId = branches.find(
 				(b) => b.name === "production",
 			)?.id;

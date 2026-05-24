@@ -1,9 +1,13 @@
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { defineConfig } from "./define-config.js";
-import { PushConflictError } from "./errors.js";
+import { MissingContextError, PushConflictError } from "./errors.js";
 import { FakeNeonApi } from "./fake-neon-api.js";
 import { pushConfig } from "./push-config.js";
-import { makeTempRepo } from "./test-utils.js";
+import { makeTempRepo, stubCleanNeonEnv } from "./test-utils.js";
+
+beforeEach(() => {
+	stubCleanNeonEnv();
+});
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -60,52 +64,39 @@ describe("pushConfig — additive operations", () => {
 		]);
 	});
 
-	test("creates a new project when one doesn't exist (with orgId+region)", async () => {
+	test("throws MissingContextError when no projectId / NEON_PROJECT_ID / context file is resolvable", async () => {
 		const api = new FakeNeonApi();
-		const config = defineConfig({
-			project: { name: "brand-new", region: "aws-us-east-1" },
-			branches: { production: {} },
-		});
-		const result = await pushConfig(config, { api, orgId: "org-1" });
-		expect(result.applied[0]).toEqual(
-			expect.objectContaining({ kind: "project", action: "create" }),
-		);
-		const created = await api.getProject(result.projectId);
-		expect(created.name).toBe("brand-new");
-		expect(created.orgId).toBe("org-1");
-	});
-
-	test("fails to create a project without region", async () => {
-		const api = new FakeNeonApi();
-		const config = defineConfig({
-			project: { name: "missing-region" },
-			branches: { production: {} },
-		});
-		await expect(
-			pushConfig(config, { api, orgId: "org-1" }),
-		).rejects.toThrow(/region/);
-	});
-
-	test("reuses an existing project with matching name in the same org", async () => {
-		const api = new FakeNeonApi();
-		api.seedProject({
-			project: {
-				id: "proj-existing",
-				name: "my-app",
-				regionId: "aws-us-east-1",
-				pgVersion: 17,
-				orgId: "org-1",
-			},
-		});
 		const config = defineConfig({
 			project: { name: "my-app", region: "aws-us-east-1" },
 			branches: { production: {} },
 		});
-		const result = await pushConfig(config, { api, orgId: "org-1" });
-		expect(result.projectId).toBe("proj-existing");
-		expect(result.applied[0]).toEqual(
-			expect.objectContaining({ kind: "project", action: "noop" }),
+		// `cwd` points at a fresh temp repo with no `.neon` context file. The error
+		// message must tell the user how to bootstrap with neonctl link rather than
+		// implying push will create one for them.
+		const root = setup({ "package.json": "{}" });
+		await expect(
+			pushConfig(config, { api, cwd: root }),
+		).rejects.toBeInstanceOf(MissingContextError);
+		await expect(pushConfig(config, { api, cwd: root })).rejects.toThrow(
+			/neonctl link/,
 		);
+		// And we never called the create API.
+		expect(api.history.some((h) => h.method === "createProject")).toBe(
+			false,
+		);
+	});
+
+	test("fails on missing project context before loading neon.ts", async () => {
+		const api = new FakeNeonApi();
+		const root = setup({ "package.json": "{}" });
+		await expect(
+			pushConfig({
+				api,
+				cwd: root,
+				configPath: "does-not-exist.ts",
+			}),
+		).rejects.toBeInstanceOf(MissingContextError);
+		expect(api.history).toHaveLength(0);
 	});
 
 	test("applies `protected: true` on creating a branch", async () => {
@@ -141,45 +132,11 @@ describe("pushConfig — additive operations", () => {
 		);
 	});
 
-	test("fails when multiple projects in the org share the same name", async () => {
-		const api = new FakeNeonApi();
-		api.seedProject({
-			project: {
-				id: "p1",
-				name: "dup",
-				regionId: "aws-us-east-1",
-				pgVersion: 17,
-				orgId: "org-1",
-			},
-		});
-		api.seedProject({
-			project: {
-				id: "p2",
-				name: "dup",
-				regionId: "aws-us-east-1",
-				pgVersion: 17,
-				orgId: "org-1",
-			},
-		});
-		await expect(
-			pushConfig(
-				defineConfig({
-					project: { name: "dup", region: "aws-us-east-1" },
-				}),
-				{
-					api,
-					orgId: "org-1",
-				},
-			),
-		).rejects.toThrow(/Multiple Neon projects/);
-	});
-});
-
-describe("pushConfig — API key scopes", () => {
-	test("works with a project-scoped key flow: getProject path is taken when projectId is supplied", async () => {
+	test("works with a project-scoped key flow: getProject is the only project call", async () => {
 		// Simulate a project-scoped key by giving the fake api a listProjects implementation
-		// that throws 403. The push must succeed because getProject is the only call needed
-		// when projectId is provided.
+		// that throws 403. The push must succeed because the new resolveProject path only
+		// calls getProject — listProjects (the lookup-by-name path) was removed alongside
+		// project auto-create.
 		const { api, projectId } = seededFake();
 		const guarded = Object.create(api) as typeof api;
 		guarded.listProjects = async () => {
@@ -199,36 +156,6 @@ describe("pushConfig — API key scopes", () => {
 			true,
 		);
 	});
-
-	test("project-scoped key without projectId surfaces PLATFORM_INSUFFICIENT_SCOPE", async () => {
-		const guarded = {
-			listProjects: async () => {
-				throw Object.assign(new Error("Forbidden"), {
-					response: { status: 403 },
-				});
-			},
-			getProject: () => Promise.reject(new Error("not used")),
-			createProject: () => Promise.reject(new Error("not used")),
-			updateProject: () => Promise.reject(new Error("not used")),
-			listBranches: () => Promise.reject(new Error("not used")),
-			createBranch: () => Promise.reject(new Error("not used")),
-			updateBranch: () => Promise.reject(new Error("not used")),
-			listEndpoints: () => Promise.reject(new Error("not used")),
-			updateEndpoint: () => Promise.reject(new Error("not used")),
-		} as unknown as Parameters<typeof pushConfig>[1] extends infer T
-			? T extends { api?: infer A }
-				? A
-				: never
-			: never;
-		const config = defineConfig({
-			project: { name: "my-app", region: "aws-us-east-1" },
-		});
-		await expect(
-			pushConfig(config, { api: guarded }),
-		).rejects.toMatchObject({
-			code: "PLATFORM_INSUFFICIENT_SCOPE",
-		});
-	});
 });
 
 describe("pushConfig — conflict handling", () => {
@@ -245,63 +172,12 @@ describe("pushConfig — conflict handling", () => {
 		);
 	});
 
-	test("with applyChanges:true, applies branch-level drift instead of failing", async () => {
+	test("with updateExisting:true, applies branch-level drift instead of failing", async () => {
 		const { api, projectId } = seededFake();
 		const config = defineConfig({
 			project: { name: "my-app", region: "aws-us-east-1" },
 			branches: {
 				production: { computeSettings: { autoscalingLimitMaxCu: 4 } },
-			},
-		});
-		const result = await pushConfig(config, {
-			api,
-			projectId,
-			applyChanges: true,
-		});
-		// applyChanges promotes branch-level drift from "conflict" to "applied" — that's the
-		// whole point of the flag. Project-level conflicts (immutable region) still surface
-		// separately, but there are none here.
-		expect(result.conflicts).toHaveLength(0);
-		expect(result.applied).toEqual(
-			expect.arrayContaining([
-				expect.objectContaining({
-					kind: "branch",
-					action: "update",
-					identifier: "production",
-				}),
-			]),
-		);
-		const branches = await api.listBranches(projectId);
-		const prodBranchId = branches.find((b) => b.name === "production")?.id;
-		const endpoints = await api.listEndpoints(projectId);
-		const prodEndpoint = endpoints.find((e) => e.branchId === prodBranchId);
-		expect(prodEndpoint?.autoscalingLimitMaxCu).toBe(4);
-	});
-
-	test("applyChanges:true still surfaces immutable project-level conflicts (region)", async () => {
-		const { api, projectId } = seededFake();
-		const config = defineConfig({
-			project: { name: "my-app", region: "aws-eu-central-1" },
-		});
-		// Region is immutable on Neon; even applyChanges:true cannot patch it. We surface the
-		// conflict and let the caller decide. (The diff records it; pushConfig does not throw
-		// because applyChanges suppressed the fail-fast guard.)
-		const result = await pushConfig(config, {
-			api,
-			projectId,
-			applyChanges: true,
-		});
-		expect(result.conflicts).toEqual([
-			expect.objectContaining({ kind: "project", field: "region" }),
-		]);
-	});
-
-	test("with updateExisting:true (without applyChanges), applies branch updates and clears branch conflicts", async () => {
-		const { api, projectId } = seededFake();
-		const config = defineConfig({
-			project: { name: "my-app", region: "aws-us-east-1" },
-			branches: {
-				production: { computeSettings: { autoscalingLimitMaxCu: 2 } },
 			},
 		});
 		const result = await pushConfig(config, {
@@ -319,9 +195,37 @@ describe("pushConfig — conflict handling", () => {
 				}),
 			]),
 		);
+		const branches = await api.listBranches(projectId);
+		const prodBranchId = branches.find((b) => b.name === "production")?.id;
+		const endpoints = await api.listEndpoints(projectId);
+		const prodEndpoint = endpoints.find((e) => e.branchId === prodBranchId);
+		expect(prodEndpoint?.autoscalingLimitMaxCu).toBe(4);
 	});
 
-	test("region conflicts are always reported (immutable on Neon)", async () => {
+	test("with updateExisting:true, renames the project when names differ", async () => {
+		const { api, projectId } = seededFake();
+		const config = defineConfig({
+			project: { name: "renamed-app", region: "aws-us-east-1" },
+		});
+		const result = await pushConfig(config, {
+			api,
+			projectId,
+			updateExisting: true,
+		});
+		expect(result.conflicts).toHaveLength(0);
+		expect(result.applied).toEqual([
+			expect.objectContaining({
+				kind: "project",
+				action: "update",
+				identifier: projectId,
+				details: { from: "my-app", to: "renamed-app" },
+			}),
+		]);
+		const refreshed = await api.getProject(projectId);
+		expect(refreshed.name).toBe("renamed-app");
+	});
+
+	test("region conflicts always throw, even with updateExisting:true (immutable)", async () => {
 		const { api, projectId } = seededFake();
 		const config = defineConfig({
 			project: { name: "my-app", region: "aws-eu-central-1" },
@@ -330,10 +234,23 @@ describe("pushConfig — conflict handling", () => {
 			pushConfig(config, { api, projectId, updateExisting: true }),
 		).rejects.toThrow(PushConflictError);
 	});
+
+	test("pgVersion conflicts always throw, even with updateExisting:true (immutable)", async () => {
+		const { api, projectId } = seededFake();
+		const config = defineConfig({
+			project: { name: "my-app", pgVersion: 15 },
+		});
+		await expect(
+			pushConfig(config, { api, projectId, updateExisting: true }),
+		).rejects.toThrow(PushConflictError);
+	});
 });
 
-describe("pushConfig — wildcard blueprints", () => {
-	test("default: matching existing branches are reported as skipped, not modified", async () => {
+describe("pushConfig — wildcard blueprints are creation-only", () => {
+	test("matching live branches are left completely untouched by push", async () => {
+		// Blueprints exist solely to mint ephemeral branches via `branch()`.
+		// `pushConfig` deliberately never touches branches matched by a wildcard —
+		// even with `updateExisting: true`, even when settings drift wildly.
 		const api = new FakeNeonApi();
 		const projectId = "proj-w";
 		api.seedProject({
@@ -380,74 +297,18 @@ describe("pushConfig — wildcard blueprints", () => {
 				},
 			},
 		});
-		const result = await pushConfig(config, { api, projectId });
-		expect(result.skippedWildcardBranches).toEqual([
-			{
-				pattern: "preview-*",
-				branches: ["preview-pr-1", "preview-pr-2"],
-			},
-		]);
-		// No mutation history beyond the listing calls.
+		const result = await pushConfig(config, {
+			api,
+			projectId,
+			updateExisting: true,
+		});
+		expect(result.conflicts).toHaveLength(0);
 		const mutations = api.history.filter((h) =>
 			["updateEndpoint", "updateBranch", "createBranch"].includes(
 				h.method,
 			),
 		);
 		expect(mutations).toHaveLength(0);
-	});
-
-	test("with applyExisting:true, applies blueprint to every matching existing branch", async () => {
-		const api = new FakeNeonApi();
-		const projectId = "proj-w2";
-		api.seedProject({
-			project: {
-				id: projectId,
-				name: "my-app",
-				regionId: "aws-us-east-1",
-				pgVersion: 17,
-			},
-			branches: [
-				{
-					branch: {
-						id: "br-prod",
-						name: "production",
-						isDefault: true,
-					},
-				},
-				{
-					branch: {
-						id: "br-p1",
-						name: "preview-pr-1",
-						isDefault: false,
-						parentId: "br-prod",
-					},
-				},
-			],
-		});
-		const config = defineConfig({
-			project: { name: "my-app" },
-			branches: { production: {} },
-			branchBlueprints: {
-				preview: {
-					pattern: "preview-*",
-					ttl: "1h",
-					computeSettings: { autoscalingLimitMaxCu: 1 },
-				},
-			},
-		});
-		const result = await pushConfig(config, {
-			api,
-			projectId,
-			applyExisting: true,
-		});
-		expect(result.skippedWildcardBranches).toHaveLength(0);
-		const ops = api.history.filter(
-			(h) => h.method === "updateEndpoint" || h.method === "updateBranch",
-		);
-		expect(ops.map((o) => o.method).sort()).toEqual([
-			"updateBranch",
-			"updateEndpoint",
-		]);
 	});
 });
 
@@ -489,7 +350,7 @@ describe("pushConfig — dry-run", () => {
 		expect(mutating).toHaveLength(0);
 	});
 
-	test("reports conflicts without throwing even when applyChanges is false", async () => {
+	test("dryRun reports conflicts without throwing", async () => {
 		const { api, projectId } = seededFake();
 		const config = defineConfig({
 			project: { name: "my-app", region: "aws-eu-central-1" },
@@ -507,31 +368,27 @@ describe("pushConfig — dry-run", () => {
 		);
 	});
 
-	test("brand-new project: returns sentinel projectId and a 'would create' applied entry", async () => {
-		const api = new FakeNeonApi();
+	test("dryRun: rename-project step shows up in `applied` without calling updateProject", async () => {
+		const { api, projectId } = seededFake();
 		const config = defineConfig({
-			project: { name: "brand-new", region: "aws-us-east-1" },
-			branches: { production: {}, staging: { parent: "production" } },
+			project: { name: "renamed-app" },
 		});
 		const result = await pushConfig(config, {
 			api,
-			orgId: "org-1",
+			projectId,
 			dryRun: true,
+			updateExisting: true,
 		});
 		expect(result.dryRun).toBe(true);
-		expect(result.projectId).toBe("<would-create>");
-		expect(result.applied[0]).toEqual(
-			expect.objectContaining({ kind: "project", action: "create" }),
-		);
-		expect(result.applied).toContainEqual(
+		expect(result.applied).toEqual([
 			expect.objectContaining({
-				kind: "branch",
-				action: "create",
-				identifier: "staging",
+				kind: "project",
+				action: "update",
+				identifier: projectId,
+				details: { from: "my-app", to: "renamed-app" },
 			}),
-		);
-		// And the actual create-project API call was NOT made.
-		expect(api.history.some((h) => h.method === "createProject")).toBe(
+		]);
+		expect(api.history.some((h) => h.method === "updateProject")).toBe(
 			false,
 		);
 	});
@@ -612,28 +469,6 @@ describe("pushConfig — features (auth / dataApi)", () => {
 					h.method === "enableProjectBranchDataApi",
 			),
 		).toBe(false);
-	});
-
-	test("dryRun on a brand-new project: features.auth/dataApi are planned alongside project create", async () => {
-		const api = new FakeNeonApi();
-		const config = defineConfig({
-			project: { name: "brand-new", region: "aws-us-east-1" },
-			branches: { production: {} },
-			features: { auth: true, dataApi: true },
-		});
-		const result = await pushConfig(config, {
-			api,
-			orgId: "org-1",
-			dryRun: true,
-		});
-		expect(result.projectId).toBe("<would-create>");
-		const featureChanges = result.applied.filter(
-			(a) => a.kind === "feature",
-		);
-		expect(featureChanges.map((c) => c.identifier).sort()).toEqual([
-			"auth",
-			"dataApi",
-		]);
 	});
 });
 

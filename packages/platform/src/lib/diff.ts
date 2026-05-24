@@ -6,11 +6,9 @@ import type {
 	NeonEndpointSnapshot,
 	NeonProjectSnapshot,
 } from "./neon-api.js";
-import { matchPattern } from "./patterns.js";
 import type {
 	ComputeSettings,
 	ConflictReport,
-	ResolvedBranchBlueprint,
 	ResolvedBranchConfig,
 	ResolvedConfig,
 } from "./types.js";
@@ -21,17 +19,10 @@ import type {
  */
 export type PlanStep =
 	| {
-			kind: "create-project";
-			name: string;
-			regionId: string;
-			pgVersion?: number;
-			orgId?: string;
-			defaultEndpointSettings?: ComputeSettings;
-	  }
-	| {
-			kind: "update-project";
+			kind: "rename-project";
 			projectId: string;
-			defaultEndpointSettings: ComputeSettings;
+			fromName: string;
+			toName: string;
 	  }
 	| {
 			kind: "create-branch";
@@ -107,28 +98,32 @@ export interface RemoteState {
 }
 
 export interface DiffOptions {
-	/** Allow updating existing specific-name branches' settings/TTL. Default: `false`. */
+	/**
+	 * Apply settings / `protected` / TTL drift on `config.branches` entries — and a
+	 * project rename — as plan steps instead of reporting them as conflicts.
+	 * Immutable project fields (region, pgVersion) always remain conflicts regardless.
+	 * Default: `false`.
+	 */
 	updateExisting: boolean;
-	/** Allow updating existing branches matched by a wildcard pattern. Default: `false`. */
-	applyExisting: boolean;
 }
 
 export interface DiffResult {
 	plan: PlanStep[];
 	conflicts: ConflictReport[];
-	skippedWildcardBranches: Array<{ pattern: string; branches: string[] }>;
 }
 
 /**
  * Diff a desired configuration against a remote snapshot. Pure function.
  *
- * - Region mismatches and unauthorized project rename are always conflicts (Neon does not
- *   support changing them post-create, regardless of `updateExisting`).
+ * - Region and Postgres major version mismatches are **always** conflicts (Neon does not
+ *   support changing them post-create — no flag can override this).
+ * - Project name drift is mutable: planned as a `rename-project` step when
+ *   `updateExisting: true`, reported as a conflict otherwise.
  * - `config.branches` entries always create-if-missing. Updating an existing branch's
  *   settings / `protected` flag requires `updateExisting: true`.
- * - `config.branchBlueprints` entries never create. They only update existing matching
- *   branches when `applyExisting: true` is set; otherwise matching branches are reported
- *   under `skippedWildcardBranches`.
+ * - `config.branchBlueprints` entries are **never** consulted by `diffConfig` — blueprints
+ *   are creation-only and consumed by `branch()`. `pushConfig` deliberately leaves live
+ *   blueprint-matched branches alone.
  */
 export function diffConfig(
 	config: ResolvedConfig,
@@ -137,19 +132,27 @@ export function diffConfig(
 ): DiffResult {
 	const conflicts: ConflictReport[] = [];
 	const plan: PlanStep[] = [];
-	const skippedWildcardBranches: DiffResult["skippedWildcardBranches"] = [];
 
 	// --- Project diff ---
 	const desiredName = config.project.name;
 	if (remote.project.name !== desiredName) {
-		conflicts.push({
-			kind: "project",
-			identifier: remote.project.id,
-			field: "name",
-			current: remote.project.name,
-			desired: desiredName,
-			reason: "Project name on Neon differs from local config. Rename via the Neon console or update your config.",
-		});
+		if (options.updateExisting) {
+			plan.push({
+				kind: "rename-project",
+				projectId: remote.project.id,
+				fromName: remote.project.name,
+				toName: desiredName,
+			});
+		} else {
+			conflicts.push({
+				kind: "project",
+				identifier: remote.project.id,
+				field: "name",
+				current: remote.project.name,
+				desired: desiredName,
+				reason: "Project name on Neon differs from local config. Pass `updateExisting: true` to rename, or update your config to match.",
+			});
+		}
 	}
 
 	if (config.project.region !== undefined) {
@@ -189,9 +192,6 @@ export function diffConfig(
 		if (ep.type === "read_write") endpointsByBranchId.set(ep.branchId, ep);
 	}
 
-	// Track which existing branches are claimed by any blueprint so we don't double-warn.
-	const claimedByWildcard = new Set<string>();
-
 	for (const branch of config.branches) {
 		diffBranchConfig({
 			branch,
@@ -205,22 +205,9 @@ export function diffConfig(
 		});
 	}
 
-	for (const blueprint of config.branchBlueprints) {
-		diffWildcardBlueprint({
-			blueprint,
-			remote,
-			options,
-			plan,
-			conflicts,
-			skippedWildcardBranches,
-			claimedByWildcard,
-			endpointsByBranchId,
-		});
-	}
-
 	diffFeatures({ config, remote, plan });
 
-	return { plan, conflicts, skippedWildcardBranches };
+	return { plan, conflicts };
 }
 
 /**
@@ -383,93 +370,6 @@ function diffBranchConfig(args: BranchConfigArgs): void {
 	}
 }
 
-interface WildcardBlueprintArgs {
-	blueprint: ResolvedBranchBlueprint;
-	remote: RemoteState;
-	options: DiffOptions;
-	plan: PlanStep[];
-	conflicts: ConflictReport[];
-	skippedWildcardBranches: DiffResult["skippedWildcardBranches"];
-	claimedByWildcard: Set<string>;
-	endpointsByBranchId: Map<string, NeonEndpointSnapshot>;
-}
-
-function diffWildcardBlueprint(args: WildcardBlueprintArgs): void {
-	const {
-		blueprint,
-		remote,
-		options,
-		plan,
-		conflicts,
-		skippedWildcardBranches,
-		claimedByWildcard,
-		endpointsByBranchId,
-	} = args;
-
-	const matching = remote.branches.filter(
-		(b) =>
-			matchPattern(blueprint.pattern, b.name) &&
-			!b.isDefault &&
-			!claimedByWildcard.has(b.name),
-	);
-
-	if (matching.length === 0) return;
-	for (const m of matching) claimedByWildcard.add(m.name);
-
-	if (!options.applyExisting) {
-		skippedWildcardBranches.push({
-			pattern: blueprint.pattern,
-			branches: matching.map((b) => b.name),
-		});
-		return;
-	}
-
-	for (const branch of matching) {
-		if (blueprint.computeSettings) {
-			const endpoint = endpointsByBranchId.get(branch.id);
-			if (!endpoint) {
-				conflicts.push({
-					kind: "branch",
-					identifier: branch.name,
-					field: "endpoint",
-					current: undefined,
-					desired: blueprint.computeSettings,
-					reason: "Branch has no read-write endpoint; cannot apply compute settings.",
-				});
-				continue;
-			}
-			const drift = computeDriftBetween(
-				blueprint.computeSettings,
-				endpoint,
-			);
-			if (drift) {
-				plan.push({
-					kind: "update-endpoint",
-					projectId: remote.project.id,
-					branchName: branch.name,
-					endpointId: endpoint.id,
-					settings: blueprint.computeSettings,
-				});
-			}
-		}
-
-		const desiredExpiresAt =
-			blueprint.ttlSeconds !== undefined
-				? ttlSecondsToExpiresAt(blueprint.ttlSeconds)
-				: null;
-		const currentExpiresAt = branch.expiresAt ?? null;
-		if (!expiresAtEqual(currentExpiresAt, desiredExpiresAt)) {
-			plan.push({
-				kind: "update-branch-ttl",
-				projectId: remote.project.id,
-				branchId: branch.id,
-				branchName: branch.name,
-				expiresAt: desiredExpiresAt,
-			});
-		}
-	}
-}
-
 function resolveBranchParentName(
 	branch: ResolvedBranchConfig,
 	config: ResolvedConfig,
@@ -521,18 +421,4 @@ function computeDriftBetween(
 		drift = true;
 	}
 	return drift ? { current: currentDrift, desired: desiredDrift } : null;
-}
-
-function expiresAtEqual(a: string | null, b: string | null): boolean {
-	if (a === null && b === null) return true;
-	if (a === null || b === null) return false;
-	const ta = Date.parse(a);
-	const tb = Date.parse(b);
-	if (Number.isNaN(ta) || Number.isNaN(tb)) return a === b;
-	// Treat differences smaller than 5 seconds as equal so a pull-then-push cycle is idempotent.
-	return Math.abs(ta - tb) < 5_000;
-}
-
-function ttlSecondsToExpiresAt(ttlSeconds: number): string {
-	return new Date(Date.now() + ttlSeconds * 1000).toISOString();
 }

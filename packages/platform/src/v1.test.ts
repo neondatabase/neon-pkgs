@@ -26,8 +26,17 @@ function setup(files: Record<string, string | null>) {
 }
 
 describe("v1 surface — full lifecycle", () => {
-	test("defineConfig + pushConfig + pullConfig form an idempotent loop on a fresh project", async () => {
+	test("defineConfig + pushConfig + pullConfig form an idempotent loop against an existing project", async () => {
+		// Bootstrap the remote project out-of-band — pushConfig itself never creates
+		// projects (the user does that via `neonctl link`).
 		const api = new FakeNeonApi();
+		const created = await api.createProject({
+			name: "lifecycle",
+			regionId: "aws-us-east-1",
+			defaultBranchName: "production",
+			defaultEndpointSettings: { autoscalingLimitMaxCu: 2 },
+		});
+		const projectId = created.id;
 		const config = defineConfig({
 			project: { name: "lifecycle", region: "aws-us-east-1" },
 			branches: {
@@ -36,16 +45,9 @@ describe("v1 surface — full lifecycle", () => {
 			},
 		});
 
-		// First push: creates the project + the staging branch. Because the production
-		// blueprint defines compute settings, pushConfig seeds them as project defaults so
-		// the auto-created `production` branch matches without further intervention.
-		const firstPush = await pushConfig(config, { api, orgId: "org-1" });
+		// First push: adds the staging branch alongside the auto-created production.
+		const firstPush = await pushConfig(config, { api, projectId });
 		expect(firstPush.conflicts).toHaveLength(0);
-		expect(
-			firstPush.applied.some(
-				(a) => a.kind === "project" && a.action === "create",
-			),
-		).toBe(true);
 		expect(
 			firstPush.applied.some(
 				(a) => a.kind === "branch" && a.identifier === "staging",
@@ -53,36 +55,25 @@ describe("v1 surface — full lifecycle", () => {
 		).toBe(true);
 
 		// Pull what we just pushed.
-		const pulled = await pullConfig({
-			api,
-			projectId: firstPush.projectId,
-		});
+		const pulled = await pullConfig({ api, projectId });
 		expect(pulled.project.name).toBe("lifecycle");
 		expect(pulled.branches?.production).toBeDefined();
 		expect(pulled.branches?.staging).toBeDefined();
 
 		// Pushing the same config again should be a noop — no conflicts, no plan steps.
-		const secondPush = await pushConfig(config, {
-			api,
-			projectId: firstPush.projectId,
-		});
+		const secondPush = await pushConfig(config, { api, projectId });
 		expect(secondPush.conflicts).toHaveLength(0);
 		const mutations = secondPush.applied.filter((a) => a.action !== "noop");
 		expect(mutations).toHaveLength(0);
 
 		// Final pull should still find a production branch. pullConfig elides any compute
-		// fields that match the project's default endpoint settings — and since the first
-		// push seeded the production branch's compute settings as project defaults, that
-		// elision is expected. The source-of-truth assertion is the remote endpoint state:
-		const finalPull: Config = await pullConfig({
-			api,
-			projectId: firstPush.projectId,
-		});
+		// fields that match the project's default endpoint settings.
+		const finalPull: Config = await pullConfig({ api, projectId });
 		expect(finalPull.branches?.production).toBeDefined();
 
-		const branches = await api.listBranches(firstPush.projectId);
+		const branches = await api.listBranches(projectId);
 		const prodBranchId = branches.find((b) => b.name === "production")?.id;
-		const endpoints = await api.listEndpoints(firstPush.projectId);
+		const endpoints = await api.listEndpoints(projectId);
 		const prodEndpoint = endpoints.find((e) => e.branchId === prodBranchId);
 		expect(prodEndpoint?.autoscalingLimitMaxCu).toBe(2);
 	});

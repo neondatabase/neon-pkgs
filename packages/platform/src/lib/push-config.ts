@@ -1,5 +1,5 @@
 import { createNeonApiFromOptions } from "./auth.js";
-import { normalizeRegion, resolveConfig } from "./define-config.js";
+import { resolveConfig } from "./define-config.js";
 import {
 	diffConfig,
 	type PlanStep,
@@ -7,7 +7,6 @@ import {
 	type RemoteState,
 } from "./diff.js";
 import {
-	bugReportFooter,
 	ErrorCode,
 	MissingContextError,
 	PlatformError,
@@ -19,7 +18,6 @@ import type {
 	CreateBranchInput,
 	NeonApi,
 	NeonBranchSnapshot,
-	NeonEndpointSnapshot,
 	NeonProjectSnapshot,
 } from "./neon-api.js";
 import type {
@@ -33,15 +31,15 @@ export interface PushConfigOptions {
 	/** Neon API key. Falls back to `NEON_API_KEY`. Ignored when `api` is supplied. */
 	apiKey?: string;
 	/**
-	 * Explicit project id. Overrides the value read from `.neon/project.json` or `.neon`.
+	 * Explicit project id. Overrides the value read from `.neon/project.json` / `.neon`
+	 * and the `NEON_PROJECT_ID` env var.
 	 *
-	 * On a brand-new project (no remote project yet) leave this unset; the push will
-	 * look for a project named `config.project.name` in the supplied org, and create one
-	 * if none is found.
+	 * `pushConfig` **never creates a project** — it requires a resolvable project id from
+	 * one of: this option, `NEON_PROJECT_ID`, or a `.neon[/project.json]` context file.
+	 * If none is set, push throws `MissingContextError` and the message points the user at
+	 * `npx neonctl link` to create/select a project and write local context.
 	 */
 	projectId?: string;
-	/** Explicit org id. Required when creating a new project unless a context file supplies one. */
-	orgId?: string;
 	/** Working directory for context / config file lookups. Defaults to `process.cwd()`. */
 	cwd?: string;
 	/**
@@ -50,35 +48,21 @@ export interface PushConfigOptions {
 	 */
 	api?: NeonApi;
 	/**
-	 * When `false` (the default): push pulls the remote, diffs against local, and refuses
-	 * to apply if there are conflicts. Specifically: branch creation (additive) always runs,
-	 * but settings/TTL updates on existing branches require `updateExisting: true`, and
-	 * project-level conflicts (region, pgVersion, name) are surfaced.
+	 * When `true`, apply settings / `protected` / TTL drift on `config.branches` entries —
+	 * and a project rename — as actual mutations instead of refusing with
+	 * `PushConflictError`. Immutable project fields (`region`, `pgVersion`) always remain
+	 * conflicts: no flag can patch them, the project would need to be recreated.
 	 *
-	 * When `true`: any field-level conflict is treated as "apply anyway". Combined with
-	 * `updateExisting: true` to actually rewrite existing branch settings.
-	 */
-	applyChanges?: boolean;
-	/**
-	 * When `true`, update existing specific-name branches whose settings/TTL drifted from
-	 * the local config. When `false` (default), report them as conflicts.
-	 *
-	 * Implies `applyChanges: true` for those branches (we still surface project-level
-	 * conflicts separately).
+	 * Default: `false` (drift on existing entities → fail-fast conflict). Branch *creation*
+	 * (adding a new entry to `config.branches`) is additive and runs regardless.
 	 */
 	updateExisting?: boolean;
-	/**
-	 * When `true`, apply wildcard-blueprint settings/TTL to every matching existing branch.
-	 * When `false` (default), matched branches are reported under
-	 * `PushResult.skippedWildcardBranches` and no mutations occur.
-	 */
-	applyExisting?: boolean;
 	/**
 	 * When `true`, compute the full plan against the live remote state but **do not
 	 * execute any mutations**. The resulting `PushResult.applied` array records every
 	 * change that *would* run on a real push (with the same action / identifier / details
 	 * shape, so the existing CLI summary formatter just works), and conflicts are
-	 * reported instead of thrown — even when `applyChanges` is `false`.
+	 * reported instead of thrown.
 	 *
 	 * Used by `neon-ts status` and any caller that wants a "would this push do
 	 * something dangerous?" check before invoking `pushConfig` for real.
@@ -97,11 +81,14 @@ export interface PushConfigOptions {
  *
  * 1. `pushConfig()` — auto-load `neon.ts` from the current working directory. Pulls the
  *    remote, diffs, and fails on conflict.
- * 2. `pushConfig(options)` — same as (1) but pass options like `applyChanges`, `apiKey`,
+ * 2. `pushConfig(options)` — same as (1) but pass options like `updateExisting`, `apiKey`,
  *    `cwd`, `configPath`, etc.
  * 3. `pushConfig(config, options?)` — caller supplies an already-validated `Config` object.
  *    No filesystem reads (other than the project-context lookup, which can be bypassed by
- *    setting `projectId`/`orgId`).
+ *    setting `projectId`).
+ *
+ * `pushConfig` requires a resolvable `projectId` (option / env / context file). It will
+ * **not** create a project — bootstrap one with `npx neonctl link` first.
  */
 export async function pushConfig(): Promise<PushResult>;
 export async function pushConfig(
@@ -117,98 +104,42 @@ export async function pushConfig(
 ): Promise<PushResult> {
 	const { config: passedConfig, options } = splitArgs(arg1, arg2);
 
-	const api = options.api ?? createApiFromOptions(options);
 	const cwd = options.cwd ?? process.cwd();
+	const projectId = requireProjectIdForPush(options, cwd);
 
+	const api = options.api ?? createApiFromOptions(options);
 	const config =
 		passedConfig ??
 		(await loadConfigFromFile({ path: options.configPath, cwd })).config;
 	const resolved = resolveConfig(config);
 
 	const dryRun = options.dryRun === true;
+	const updateExisting = options.updateExisting === true;
 
-	const { project: remoteProject, projectCreated } =
-		await resolveOrCreateProject(api, resolved, options, cwd, dryRun);
+	const remoteProject = await api.getProject(projectId);
 
-	// For a never-before-seen project in dry-run mode, listBranches/listEndpoints would
-	// 404 — synthesize the root branch (the one Neon auto-creates alongside the project
-	// from `defaultBranchName` + `defaultEndpointSettings`) so the diff sees production
-	// as a noop and child branches as plain `create-branch` plan steps. Without this
-	// seed, `staging`'s `parent: "production"` would conflict-fail with "Parent does not
-	// exist on Neon" because the diff doesn't reorder across the project boundary.
-	const remoteEmpty = projectCreated && dryRun;
-	const branches = remoteEmpty
-		? syntheticRootBranches(resolved)
-		: await api.listBranches(remoteProject.id);
-	const endpoints = remoteEmpty
-		? syntheticRootEndpoints(resolved, branches)
-		: await api.listEndpoints(remoteProject.id);
+	const [branches, endpoints] = await Promise.all([
+		api.listBranches(remoteProject.id),
+		api.listEndpoints(remoteProject.id),
+	]);
 	const features = await resolveFeatureState({
 		api,
 		resolved,
 		project: remoteProject,
 		branches,
-		remoteEmpty,
 	});
 	const remote: RemoteState = { project: remoteProject, branches, endpoints };
 	if (features) remote.features = features;
 
-	const updateExisting =
-		options.updateExisting === true || options.applyChanges === true;
-	const applyExisting = options.applyExisting === true;
-	const diff = diffConfig(resolved, remote, {
-		updateExisting,
-		applyExisting,
-	});
+	const diff = diffConfig(resolved, remote, { updateExisting });
 
-	if (!dryRun && diff.conflicts.length > 0 && options.applyChanges !== true) {
+	if (!dryRun && diff.conflicts.length > 0) {
 		throw new PushConflictError(diff.conflicts);
 	}
 
-	const applied: AppliedChange[] = [];
-
-	if (projectCreated) {
-		applied.push({
-			kind: "project",
-			action: "create",
-			identifier: remoteProject.id,
-			details: {
-				name: remoteProject.name,
-				regionId: remoteProject.regionId,
-			},
-		});
-	} else if (
-		resolved.project.name !== remoteProject.name &&
-		options.applyChanges === true
-	) {
-		if (dryRun) {
-			applied.push({
-				kind: "project",
-				action: "update",
-				identifier: remoteProject.id,
-				details: {
-					from: remoteProject.name,
-					to: resolved.project.name,
-				},
-			});
-		} else {
-			const updated = await api.updateProject(remoteProject.id, {
-				name: resolved.project.name,
-			});
-			applied.push({
-				kind: "project",
-				action: "update",
-				identifier: updated.id,
-				details: { from: remoteProject.name, to: updated.name },
-			});
-		}
-	} else {
-		applied.push({
-			kind: "project",
-			action: "noop",
-			identifier: remoteProject.id,
-		});
-	}
+	const applied: AppliedChange[] = [
+		{ kind: "project", action: "noop", identifier: remoteProject.id },
+	];
 
 	const branchById = new Map(branches.map((b) => [b.id, b] as const));
 	const branchByName = new Map(branches.map((b) => [b.name, b] as const));
@@ -222,7 +153,12 @@ export async function pushConfig(
 					branchById,
 					branchByName,
 				});
-		applied.push(change);
+		// `rename-project` is the only step that mutates the project record itself; once
+		// it runs (or would-run in dry-run) the implicit noop entry above no longer
+		// reflects reality, so swap it for the real change.
+		if (change.kind === "project" && change.action === "update")
+			applied[0] = change;
+		else applied.push(change);
 	}
 
 	const result: PushResult = {
@@ -230,7 +166,6 @@ export async function pushConfig(
 		dryRun,
 		applied,
 		conflicts: diff.conflicts,
-		skippedWildcardBranches: diff.skippedWildcardBranches,
 	};
 	if (remoteProject.orgId) result.orgId = remoteProject.orgId;
 	return result;
@@ -244,6 +179,13 @@ export async function pushConfig(
  */
 function synthesizeAppliedChange(step: PlanStep): AppliedChange {
 	switch (step.kind) {
+		case "rename-project":
+			return {
+				kind: "project",
+				action: "update",
+				identifier: step.projectId,
+				details: { from: step.fromName, to: step.toName },
+			};
 		case "create-branch":
 			return {
 				kind: "branch",
@@ -305,15 +247,6 @@ function synthesizeAppliedChange(step: PlanStep): AppliedChange {
 					databaseName: step.databaseName,
 				},
 			};
-		case "create-project":
-		case "update-project":
-			// Project mutations are handled outside the plan loop (see resolveOrCreateProject
-			// + the projectCreated/applyChanges block above), so they never reach the
-			// per-step synthesizer.
-			throw new PlatformError(
-				ErrorCode.InternalError,
-				`Plan step '${step.kind}' should never reach the dry-run synthesizer — pushConfig handles project mutations directly.${bugReportFooter()}`,
-			);
 	}
 }
 
@@ -340,240 +273,55 @@ function createApiFromOptions(options: PushConfigOptions): NeonApi {
 	});
 }
 
-interface ResolvedProjectResult {
-	project: NeonProjectSnapshot;
-	projectCreated: boolean;
-}
-
-async function resolveOrCreateProject(
-	api: NeonApi,
-	config: ResolvedConfig,
+function requireProjectIdForPush(
 	options: PushConfigOptions,
 	cwd: string,
-	dryRun: boolean,
-): Promise<ResolvedProjectResult> {
-	const { projectId, orgId } = resolveProjectContext(options, cwd);
-
-	if (projectId) {
-		const project = await api.getProject(projectId);
-		return { project, projectCreated: false };
-	}
-
-	const byName = await findProjectByName(api, config, orgId);
-	if (byName) return { project: byName, projectCreated: false };
-
-	if (!config.project.region) {
-		throw new PlatformError(
-			ErrorCode.RegionRequired,
+): string {
+	const projectId = resolveProjectId(options, cwd);
+	if (!projectId) {
+		throw new MissingContextError(
 			[
-				`No remote project named "${config.project.name}" exists${orgId ? ` in org ${orgId}` : ""}.`,
-				'Add a `region` to your config\'s `project` section so push can create the project on first run. Example: `region: "aws-us-east-1"`. See https://neon.com/docs/introduction/regions for valid identifiers.',
-			].join(" "),
+				"pushConfig could not resolve a Neon project id.",
+				"`pushConfig` does not create projects — run `npx neonctl link` first to create/select a project and write local context.",
+				"Alternatively, pass `projectId` / `--project-id`, set `NEON_PROJECT_ID`, or commit a `.neon/project.json` context file.",
+			].join("\n"),
 		);
 	}
-
-	return createProject(api, config, orgId, dryRun);
+	return projectId;
 }
 
 /**
- * Resolve the project + org from the standard context chain (options → env →
- * `.neon[/project.json]` walking up from `cwd`), treating "no project resolvable" as a
- * non-fatal — the caller then falls back to lookup-by-name / create.
+ * Resolve a project id from the standard chain (options → env → `.neon[/project.json]`).
+ * Returns `undefined` rather than throwing when nothing is set — the caller turns that
+ * into a {@link MissingContextError} with the bootstrap hint.
  */
-function resolveProjectContext(
+function resolveProjectId(
 	options: PushConfigOptions,
 	cwd: string,
-): { projectId: string | undefined; orgId: string | undefined } {
+): string | undefined {
 	try {
 		const ctx = loadContext({
 			projectId: options.projectId,
-			orgId: options.orgId,
 			cwd,
 		});
-		return { projectId: ctx.projectId, orgId: ctx.orgId };
+		return ctx.projectId;
 	} catch (cause) {
 		if (!(cause instanceof MissingContextError)) throw cause;
-		return {
-			projectId: undefined,
-			orgId: options.orgId ?? process.env.NEON_ORG_ID,
-		};
+		return undefined;
 	}
 }
 
 /**
- * Look for a project matching `config.project.name`. Returns the single match (caller
- * then treats it as "reuse"), `null` if no project with that name exists (caller then
- * creates), or throws `AmbiguousProject` when multiple share the name.
- *
- * Project-scoped API keys cannot list projects at all; that surfaces as
- * `InsufficientScope` with a fix-hint pointing at the alternatives.
- */
-async function findProjectByName(
-	api: NeonApi,
-	config: ResolvedConfig,
-	orgId: string | undefined,
-): Promise<NeonProjectSnapshot | null> {
-	let projects: Awaited<ReturnType<NeonApi["listProjects"]>>;
-	try {
-		projects = await api.listProjects(orgId ? { orgId } : {});
-	} catch (err) {
-		if (isLikelyScopeError(err)) {
-			throw new PlatformError(
-				ErrorCode.InsufficientScope,
-				[
-					"pushConfig could not list Neon projects with this API key.",
-					"This is expected for **project-scoped** keys, which can only operate on their own project.",
-					"Resolutions:",
-					"  - Pass `projectId` (SDK) / `--project-id` (CLI), or",
-					"  - Set `NEON_PROJECT_ID` in the environment, or",
-					"  - Commit a `.neon/project.json` (or `.neon`) with a `projectId` field, or",
-					"  - Switch to an organisation- or user-scoped API key.",
-				].join("\n"),
-				{ cause: err },
-			);
-		}
-		throw err;
-	}
-	const matches = projects.filter((p) => p.name === config.project.name);
-	if (matches.length > 1) {
-		throw new PlatformError(
-			ErrorCode.AmbiguousProject,
-			[
-				`Multiple Neon projects${orgId ? ` in org ${orgId}` : ""} are named "${config.project.name}":`,
-				...matches.map((p) => `  - ${p.id} (region ${p.regionId})`),
-				"Pass an explicit `projectId` (SDK), `--project-id` (CLI), or set `NEON_PROJECT_ID` to pick one.",
-			].join("\n"),
-			{
-				details: {
-					name: config.project.name,
-					candidateProjectIds: matches.map((p) => p.id),
-				},
-			},
-		);
-	}
-	return matches.length === 1 ? matches[0] : null;
-}
-
-/**
- * Create (or, in dry-run mode, synthesize) the project. The auto-created default branch
- * is named after the root entry in `config.branches`, and its compute settings seed the
- * project's `defaultEndpointSettings` so the resulting endpoint matches without a
- * follow-up `updateExisting` pass.
- */
-async function createProject(
-	api: NeonApi,
-	config: ResolvedConfig,
-	orgId: string | undefined,
-	dryRun: boolean,
-): Promise<ResolvedProjectResult> {
-	if (!config.project.region) {
-		throw new PlatformError(
-			ErrorCode.InternalError,
-			`createProject called without a region (caller should have caught this).${bugReportFooter()}`,
-		);
-	}
-	const root = findRootBranch(config);
-	if (dryRun) {
-		// Return a placeholder project so the rest of the dry-run flow has something to
-		// reference. The sentinel id flags this to anyone inspecting the PushResult
-		// payload — paired with `projectCreated: true` it means "would create".
-		const placeholder: NeonProjectSnapshot = {
-			id: "<would-create>",
-			name: config.project.name,
-			regionId: normalizeRegion(config.project.region),
-			pgVersion: config.project.pgVersion ?? 17,
-		};
-		if (orgId) placeholder.orgId = orgId;
-		if (root?.computeSettings)
-			placeholder.defaultEndpointSettings = root.computeSettings;
-		return { project: placeholder, projectCreated: true };
-	}
-	const created = await api.createProject({
-		name: config.project.name,
-		regionId: normalizeRegion(config.project.region),
-		pgVersion: config.project.pgVersion,
-		...(orgId ? { orgId } : {}),
-		...(root?.computeSettings
-			? { defaultEndpointSettings: root.computeSettings }
-			: {}),
-		...(root ? { defaultBranchName: root.name } : {}),
-	});
-	return { project: created, projectCreated: true };
-}
-
-function isLikelyScopeError(err: unknown): boolean {
-	if (err instanceof PlatformError) {
-		if (
-			err.code === ErrorCode.Unauthorized ||
-			err.code === ErrorCode.Forbidden
-		)
-			return true;
-	}
-	// Fall back to the raw HTTP status in case a custom adapter doesn't go through the
-	// wrapping layer.
-	if (err !== null && typeof err === "object") {
-		const response = (err as { response?: unknown }).response;
-		if (response !== null && typeof response === "object") {
-			const status = (response as { status?: unknown }).status;
-			if (status === 401 || status === 403) return true;
-		}
-	}
-	return false;
-}
-
-/**
- * Find the concrete branch that should govern the project's default branch on first-time
- * creation. The "root" branch is the entry in `config.branches` with no parent — the top
- * of the branch tree. Users can rename it by setting `parent` on the others.
+ * Find the concrete branch that should govern the project's default branch — the entry
+ * in `config.branches` with no `parent`. Used by feature targeting (the root branch is
+ * where `features.auth` / `features.dataApi` integrations are enabled).
  */
 function findRootBranch(config: ResolvedConfig) {
 	const candidates = config.branches.filter((b) => b.parent === undefined);
 	if (candidates.length > 0) return candidates[0];
-	// Fallback: every entry has a parent (cycle / orphan). Pick the first so the
-	// auto-created default branch at least has a useful name.
+	// Fallback: every entry has a parent (cycle / orphan). Pick the first so feature
+	// targeting still has something to land on.
 	return config.branches[0];
-}
-
-/**
- * Synthesize the branch list Neon would auto-create alongside `createProject` —
- * specifically, the single default branch named after the root entry. Used in dry-run
- * mode for brand-new projects so the diff sees `production` as already-present
- * (matching what would happen after a real push) rather than missing.
- */
-function syntheticRootBranches(config: ResolvedConfig): NeonBranchSnapshot[] {
-	const root = findRootBranch(config);
-	if (!root) return [];
-	return [
-		{
-			id: `<synthetic-${root.name}>`,
-			name: root.name,
-			isDefault: true,
-			protected: root.protected,
-		},
-	];
-}
-
-/**
- * Synthesize the endpoint Neon would auto-create on the root branch with the project's
- * `defaultEndpointSettings`. Paired with {@link syntheticRootBranches} so dry-run sees
- * matching compute settings (root branch's compute is seeded into the project defaults
- * on `createProject`).
- */
-function syntheticRootEndpoints(
-	config: ResolvedConfig,
-	branches: NeonBranchSnapshot[],
-): NeonEndpointSnapshot[] {
-	const root = findRootBranch(config);
-	if (!root) return [];
-	const compute = root.computeSettings ?? {};
-	return branches.map((b) => ({
-		id: `<synthetic-ep-${b.name}>`,
-		branchId: b.id,
-		type: "read_write" as const,
-		autoscalingLimitMinCu: compute.autoscalingLimitMinCu,
-		autoscalingLimitMaxCu: compute.autoscalingLimitMaxCu,
-		suspendTimeout: compute.suspendTimeout,
-	}));
 }
 
 /**
@@ -584,18 +332,14 @@ function syntheticRootEndpoints(
  *
  * Two read calls per enabled feature: `getNeonAuth` (when `features.auth`) and
  * `listBranchDatabases` + `getNeonDataApi` (when `features.dataApi`).
- *
- * For brand-new project dry-runs (`remoteEmpty: true`) the snapshots are synthesized as
- * `null` (would-be-created) and the database name defaults to Neon's standard `neondb`.
  */
 async function resolveFeatureState(args: {
 	api: NeonApi;
 	resolved: ResolvedConfig;
 	project: NeonProjectSnapshot;
 	branches: NeonBranchSnapshot[];
-	remoteEmpty: boolean;
 }): Promise<RemoteFeatureState | undefined> {
-	const { api, resolved, project, branches, remoteEmpty } = args;
+	const { api, resolved, project, branches } = args;
 	const features = resolved.features;
 	if (!features) return undefined;
 	if (features.auth !== true && features.dataApi !== true) return undefined;
@@ -603,9 +347,11 @@ async function resolveFeatureState(args: {
 	const targetBranch = findFeatureTargetBranch(resolved, branches);
 	if (!targetBranch) return undefined;
 
-	const databaseName = remoteEmpty
-		? "neondb"
-		: await pickFeatureDatabaseName(api, project.id, targetBranch.id);
+	const databaseName = await pickFeatureDatabaseName(
+		api,
+		project.id,
+		targetBranch.id,
+	);
 
 	const state: RemoteFeatureState = {
 		branchId: targetBranch.id,
@@ -614,8 +360,6 @@ async function resolveFeatureState(args: {
 		auth: null,
 		dataApi: null,
 	};
-
-	if (remoteEmpty) return state;
 
 	const [auth, dataApi] = await Promise.all([
 		features.auth === true
@@ -677,12 +421,16 @@ async function applyStep(
 	ctx: ApplyContext,
 ): Promise<AppliedChange> {
 	switch (step.kind) {
-		case "create-project":
-		case "update-project": {
-			throw new PlatformError(
-				ErrorCode.InternalError,
-				`Plan step '${step.kind}' should never reach the executor — pushConfig handles project mutations directly.${bugReportFooter()}`,
-			);
+		case "rename-project": {
+			const updated = await ctx.api.updateProject(step.projectId, {
+				name: step.toName,
+			});
+			return {
+				kind: "project",
+				action: "update",
+				identifier: updated.id,
+				details: { from: step.fromName, to: updated.name },
+			};
 		}
 		case "create-branch": {
 			const parentBranch = ctx.branchByName.get(step.parentBranchName);

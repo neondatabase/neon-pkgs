@@ -104,23 +104,34 @@ export interface BranchBlueprint {
 }
 
 /**
- * Project-level configuration. The `name` is treated as an upsert key. `region` only matters
- * when the project is being created and must not change once the project exists.
+ * Project-level configuration. `pushConfig` does **not** create projects — bootstrap one
+ * via `neonctl link` (or the Neon Console) before pushing — so these fields are pure
+ * metadata that push uses for **drift detection** against the remote project.
+ *
+ * `name` drift is mutable: pass `updateExisting: true` to rename the remote project to
+ * match. `region` and `pgVersion` drift are immutable on Neon — they always surface as
+ * `ConflictReport` entries, and the only fix is to recreate the project or change your
+ * `neon.ts` to match the remote.
  */
 export interface ProjectConfig {
-	/** Project name. Used as the upsert key for the Neon project. */
+	/**
+	 * Project name on Neon. Used purely for drift detection (and to label `pullConfig`
+	 * output). A mismatch surfaces as a `ConflictReport` unless `updateExisting: true`,
+	 * which renames the remote project to match.
+	 */
 	name: string;
 	/**
-	 * Cloud region identifier, e.g. `"aws-us-east-1"`. Only consulted on project create.
-	 * If the remote project exists with a different region, `pushConfig` will surface a
-	 * conflict (regions are immutable on Neon).
+	 * Cloud region identifier, e.g. `"aws-us-east-1"`. Region is **immutable on Neon** —
+	 * if the remote project's region differs from this value, `pushConfig` always reports
+	 * a conflict (no flag can override it). Recreate the project to change region.
 	 *
-	 * Accepts shorthand without the cloud prefix (`"us-east-1"`) which we normalize to
-	 * `"aws-us-east-1"` for the API call.
+	 * Accepts shorthand without the cloud prefix (`"us-east-1"`) which is normalized to
+	 * `"aws-us-east-1"` for comparison.
 	 */
 	region?: string;
 	/**
-	 * Major Postgres version. When omitted, Neon's default is used at project-create time.
+	 * Major Postgres version. Immutable on Neon — a mismatch always surfaces as a
+	 * `ConflictReport`. Use Neon's upgrade flow to change Postgres version.
 	 */
 	pgVersion?: number;
 }
@@ -177,10 +188,10 @@ export interface Config {
 	 */
 	branches?: Record<string, BranchConfig>;
 	/**
-	 * Templates for ephemeral branches. Each entry's `pattern` must contain `*`; the
-	 * blueprint is consumed by `branch()` to mint new branches and (optionally) by
-	 * `pushConfig --apply-existing` to retroactively apply settings to every matching
-	 * branch already on Neon.
+	 * Templates for *ephemeral* branches spun up via `branch()`. Each entry's `pattern`
+	 * must contain a `*` wildcard. `pushConfig` deliberately **never** touches branches
+	 * matched by a blueprint — they're owned by the dev / PR that minted them and are
+	 * expected to be short-lived. Blueprints are creation-only.
 	 */
 	branchBlueprints?: Record<string, BranchBlueprint>;
 	/**
@@ -240,8 +251,11 @@ export interface AppliedChange {
 }
 
 /**
- * A diff entry that conflicts with the desired config. Reported by `pushConfig` when
- * `applyChanges` is `false` (the default).
+ * A diff entry that conflicts with the desired config. `pushConfig` throws
+ * {@link PushConflictError} on the first call when conflicts exist; pass
+ * `updateExisting: true` to apply mutable drift (settings, `protected`, TTL, project
+ * rename). Immutable fields (region, Postgres major version) are always conflicts —
+ * recreate the project to change them.
  */
 export interface ConflictReport {
 	kind: "project" | "branch";
@@ -260,15 +274,9 @@ export interface PushResult {
 	orgId?: string;
 	/**
 	 * `true` when `pushConfig` was called with `{ dryRun: true }`. `applied` then records
-	 * what **would** be applied on a real push; no API mutations were performed. Note
-	 * that for a brand-new project (no remote project yet) `projectId` is a placeholder
-	 * sentinel — see `applied[0].details` for the proposed name/region.
+	 * what **would** be applied on a real push; no API mutations were performed.
 	 */
 	dryRun: boolean;
 	applied: AppliedChange[];
 	conflicts: ConflictReport[];
-	/**
-	 * Wildcard branches that were detected but skipped because `applyExisting` was not set.
-	 */
-	skippedWildcardBranches: Array<{ pattern: string; branches: string[] }>;
 }

@@ -3,8 +3,8 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect } from "vitest";
 import { makeTempRepo } from "../src/lib/test-utils.js";
-import { defineConfig, pushConfig } from "../src/v1.js";
 import {
+	bootstrapProject,
 	DEFAULT_REGION,
 	detectApiKeyScope,
 	e2eTest,
@@ -63,18 +63,11 @@ describe("e2e — neon-ts CLI against real Neon API", () => {
 
 			let projectId: string;
 			if (scope.kind === "org-or-user") {
-				const created = await pushConfig(
-					defineConfig({
-						project: {
-							name: uniqueProjectName("cli-pull"),
-							region: DEFAULT_REGION,
-						},
-						branches: { production: {} },
-					}),
-					{ api },
-				);
-				track(created.projectId);
-				projectId = created.projectId;
+				projectId = await bootstrapProject(api, {
+					name: uniqueProjectName("cli-pull"),
+					region: DEFAULT_REGION,
+				});
+				track(projectId);
 			} else {
 				projectId = scope.projectId;
 			}
@@ -102,23 +95,19 @@ describe("e2e — neon-ts CLI against real Neon API", () => {
 			const api = makeRealApi();
 			const projectName = uniqueProjectName("cli-push");
 
-			// Bootstrap: create the project via the SDK so we have a known id to put in .neon.
-			const created = await pushConfig(
-				defineConfig({
-					project: { name: projectName, region: DEFAULT_REGION },
-					branches: { production: {} },
-				}),
-				{ api },
-			);
-			track(created.projectId);
+			// Bootstrap: create the project via the raw NeonApi so we have a known id to
+			// put in .neon — `neon-ts push` itself never creates projects.
+			const projectId = await bootstrapProject(api, {
+				name: projectName,
+				region: DEFAULT_REGION,
+			});
+			track(projectId);
 
 			// Build a fake repo containing neon.ts (importing defineConfig from the local src)
 			// and a `.neon/project.json` pointing at the just-created project.
 			const repo = makeTempRepo({
 				"package.json": "{}",
-				".neon/project.json": JSON.stringify({
-					projectId: created.projectId,
-				}),
+				".neon/project.json": JSON.stringify({ projectId }),
 				"neon.ts": `
 import { defineConfig } from "${PLATFORM_SRC}";
 export default defineConfig({
@@ -140,7 +129,7 @@ export default defineConfig({
 				expect(pushResult.stdout).toContain("pushed config to project");
 				expect(pushResult.stdout).toContain("staging");
 
-				const branches = await api.listBranches(created.projectId);
+				const branches = await api.listBranches(projectId);
 				expect(branches.map((b) => b.name)).toContain("staging");
 			} finally {
 				repo.cleanup();
@@ -175,28 +164,22 @@ export default defineConfig({
 	);
 
 	e2eTest(
-		"`neon-ts push` exits 2 (PushConflictError) when there's drift and no --apply-changes",
+		"`neon-ts push` exits 2 (PushConflictError) when there's drift and no --update-existing",
 		async ({ track }) => {
 			const scope = await detectApiKeyScope();
 			if (scope.kind !== "org-or-user") return;
 
 			const api = makeRealApi();
 			const projectName = uniqueProjectName("cli-conflict");
-
-			const created = await pushConfig(
-				defineConfig({
-					project: { name: projectName, region: DEFAULT_REGION },
-					branches: { production: {} },
-				}),
-				{ api },
-			);
-			track(created.projectId);
+			const projectId = await bootstrapProject(api, {
+				name: projectName,
+				region: DEFAULT_REGION,
+			});
+			track(projectId);
 
 			const repo = makeTempRepo({
 				"package.json": "{}",
-				".neon/project.json": JSON.stringify({
-					projectId: created.projectId,
-				}),
+				".neon/project.json": JSON.stringify({ projectId }),
 				"neon.ts": `
 import { defineConfig } from "${PLATFORM_SRC}";
 export default defineConfig({

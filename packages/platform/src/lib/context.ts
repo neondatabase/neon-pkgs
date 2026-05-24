@@ -40,7 +40,7 @@ export interface ContextLoaderOptions {
  *
  * Returns `null` when no context file is found. This function does **no** writes — per the
  * package's read-only-filesystem contract, callers that want to bootstrap a context file
- * should do so themselves (e.g. via `neonctl set-context`).
+ * should do so themselves (e.g. via `neonctl link`).
  */
 export function findProjectContext(
 	options: ContextLoaderOptions = {},
@@ -82,7 +82,7 @@ export function requireProjectContext(
 			`No Neon project context file found while walking up from ${startDir} to ${stopDir}.`,
 			"Looked for `.neon/project.json` (preferred) and `.neon` (neonctl convention) in every directory along the way (stopping at the first `.git`).",
 			"To fix, either:",
-			"  - Create one with `npx neonctl set-context --project-id <id>` (writes a `.neon` file at the project root), or",
+			"  - Run `npx neonctl link` to create/select a project and write local context, or",
 			'  - Write `.neon/project.json` yourself with `{ "projectId": "…", "orgId": "…" }`, or',
 			"  - Pass `projectId` (and optionally `orgId`) directly to the SDK / CLI, or set `NEON_PROJECT_ID` in `process.env`.",
 		].join("\n"),
