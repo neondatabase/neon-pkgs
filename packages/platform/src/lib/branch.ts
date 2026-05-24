@@ -15,12 +15,16 @@ import type {
 	NeonApi,
 	NeonBranchSnapshot,
 } from "./neon-api.js";
-import type { ResolvedBranchBlueprint, ResolvedConfig } from "./types.js";
+import type {
+	ResolvedBranchBlueprint,
+	ResolvedBranchConfig,
+	ResolvedConfig,
+} from "./types.js";
 
 export interface BranchOptions {
 	/**
-	 * Name of the blueprint key in `neon.ts` to use as the template (e.g. `"preview"`).
-	 * The blueprint's `pattern` field controls the resulting branch name.
+	 * Name of the `branches` key to check out, or the `branchBlueprints` key to use as
+	 * the creation template (e.g. `"production"` or `"preview"`).
 	 */
 	blueprint: string;
 	/**
@@ -97,18 +101,26 @@ export type BranchContextFile =
 	  };
 
 export interface BranchResult {
+	/**
+	 * `created` means a new ephemeral branch was minted from `branchBlueprints`.
+	 * `checked-out` means the name matched a concrete entry in `branches` and the
+	 * existing Neon branch was selected locally by updating the context file.
+	 */
+	action: "created" | "checked-out";
 	projectId: string;
 	orgId?: string;
 	branchId: string;
 	branchName: string;
-	/** The blueprint key that drove the creation (the value of `options.blueprint`). */
-	blueprintKey: string;
+	/** Concrete branch key that drove a checkout (for `branches.main`, this is `"main"`). */
+	branchKey?: string;
+	/** The blueprint key that drove creation (the value of `options.blueprint`). */
+	blueprintKey?: string;
 	/** The pattern from the blueprint (e.g. `"preview-*"`). */
-	blueprintPattern: string;
-	/** Parent branch name on Neon. */
-	parentBranchName: string;
-	/** Parent branch id on Neon. */
-	parentBranchId: string;
+	blueprintPattern?: string;
+	/** Parent branch name on Neon. Present for newly-created branches. */
+	parentBranchName?: string;
+	/** Parent branch id on Neon. Present for newly-created branches. */
+	parentBranchId?: string;
 	/** Expiry timestamp applied from the blueprint's TTL, if any. */
 	expiresAt?: string;
 	/**
@@ -121,7 +133,8 @@ export interface BranchResult {
 }
 
 /**
- * Create a new ephemeral branch from a blueprint defined in `neon.ts`.
+ * Create a new ephemeral branch from a blueprint, or check out a concrete branch listed
+ * in `neon.ts`.
  *
  * Resolution & side-effects:
  * 1. Project context comes from (in order): `options.projectId` / `orgId` → env vars
@@ -129,16 +142,18 @@ export interface BranchResult {
  *    Throws {@link MissingContextError} if no project id is resolvable.
  * 2. `neon.ts` is loaded via {@link loadConfigFromFile}. Throws {@link ConfigLoadError}
  *    if missing.
- * 3. The blueprint identified by `options.blueprint` must exist and must have a wildcard
- *    pattern (e.g. `"preview-*"`). Specific-name blueprints (e.g. `"production"`) refer
- *    to one concrete branch and are handled by `pushConfig` instead.
- * 4. The branch name is composed as `<pattern with * replaced>` where the replacement is
+ * 3. If `options.blueprint` matches a concrete `branches` entry, the matching live Neon
+ *    branch is checked out locally by writing its `branchId` to the context file. No
+ *    branch is created. If the live branch does not exist yet, run `pushConfig` first.
+ * 4. Otherwise the blueprint identified by `options.blueprint` must exist in
+ *    `branchBlueprints` and have a wildcard pattern (e.g. `"preview-*"`).
+ * 5. The branch name is composed as `<pattern with * replaced>` where the replacement is
  *    either `<normalized-git-branch>-<mini-id>` (when git is available and `gitBranch`
  *    wasn't explicitly set to `null`) or `<mini-id>` otherwise. Collisions with existing
  *    branches trigger a regeneration up to `maxAttempts` times.
- * 5. The branch is created on Neon (one `listBranches` call for context + parent lookup
+ * 6. The branch is created on Neon (one `listBranches` call for context + parent lookup
  *    + collision detection, one `createBranch` mutation).
- * 6. When a context file already exists (`.neon/project.json` preferred, falling back to
+ * 7. When a context file already exists (`.neon/project.json` preferred, falling back to
  *    `.neon`), its `branchId` is updated in place so subsequent `fetchEnv` / `pullConfig`
  *    calls target the new branch. Other top-level keys are preserved. The write is
  *    attempted *safely* — a read-only filesystem or permission error is surfaced as
@@ -161,52 +176,52 @@ export async function branch(options: BranchOptions): Promise<BranchResult> {
 		cwd,
 	});
 	const resolved = resolveConfig(config);
+	const branches = await api.listBranches(ctx.projectId);
+
+	const concreteBranch = resolved.branches.find(
+		(b) => b.key === options.blueprint,
+	);
+	if (concreteBranch) {
+		return checkoutConcreteBranch({
+			cwd,
+			ctx,
+			branch: concreteBranch,
+			branches,
+		});
+	}
 
 	const blueprint = resolved.branchBlueprints.find(
 		(b) => b.key === options.blueprint,
 	);
 	if (!blueprint) {
-		// Help users who confused `branches` (concrete) with `branchBlueprints` (templates).
-		const branchMatch = resolved.branches.find(
-			(b) => b.key === options.blueprint,
-		);
-		if (branchMatch) {
-			throw new PlatformError(
-				ErrorCode.InvalidConfig,
-				[
-					`branch: "${options.blueprint}" is a concrete branch (in \`branches\`), not a blueprint.`,
-					"`branch` creates *ephemeral* branches from a wildcard blueprint (e.g. `preview-*`).",
-					"For specific-name branches (e.g. `production`), use `neon-ts push` instead — it create-or-updates the branch directly.",
-				].join(" "),
-				{
-					details: {
-						blueprint: options.blueprint,
-						branchKey: branchMatch.key,
-					},
-				},
-			);
-		}
 		throw new PlatformError(
 			ErrorCode.NotFound,
 			[
-				`branch: no blueprint named "${options.blueprint}" in your neon.ts.`,
+				`branch: no branch or blueprint named "${options.blueprint}" in your neon.ts.`,
+				`Available concrete branches: ${
+					resolved.branches.length === 0
+						? "(none — your config has no branches section)"
+						: resolved.branches.map((b) => b.key).join(", ")
+				}.`,
 				`Available blueprints: ${
 					resolved.branchBlueprints.length === 0
 						? "(none — your config has no branchBlueprints section)"
 						: resolved.branchBlueprints.map((b) => b.key).join(", ")
 				}.`,
-				"Either add the blueprint to `branchBlueprints` and re-run, or pass the name of an existing one.",
+				"Either add it to `branches` to check out an existing branch, or add it to `branchBlueprints` to create a new ephemeral branch.",
 			].join(" "),
 			{
 				details: {
 					blueprint: options.blueprint,
-					available: resolved.branchBlueprints.map((b) => b.key),
+					availableBranches: resolved.branches.map((b) => b.key),
+					availableBlueprints: resolved.branchBlueprints.map(
+						(b) => b.key,
+					),
 				},
 			},
 		);
 	}
 
-	const branches = await api.listBranches(ctx.projectId);
 	const parentBranch = resolveParentBranch(blueprint, resolved, branches);
 
 	const gitBranch = resolveGitBranch(options, cwd);
@@ -241,6 +256,7 @@ export async function branch(options: BranchOptions): Promise<BranchResult> {
 	const contextFile = applyToContextFile(cwd, contextData, contextJson);
 
 	const result: BranchResult = {
+		action: "created",
 		projectId: ctx.projectId,
 		branchId: created.branch.id,
 		branchName: created.branch.name,
@@ -252,6 +268,51 @@ export async function branch(options: BranchOptions): Promise<BranchResult> {
 	};
 	if (ctx.orgId) result.orgId = ctx.orgId;
 	if (expiresAt) result.expiresAt = expiresAt;
+	return result;
+}
+
+function checkoutConcreteBranch(args: {
+	cwd: string;
+	ctx: ReturnType<typeof loadContext>;
+	branch: ResolvedBranchConfig;
+	branches: NeonBranchSnapshot[];
+}): BranchResult {
+	const { cwd, ctx, branch, branches } = args;
+	const remote = branches.find((b) => b.name === branch.name);
+	if (!remote) {
+		throw new PlatformError(
+			ErrorCode.NotFound,
+			[
+				`branch: concrete branch "${branch.name}" is listed in neon.ts but does not exist on Neon.`,
+				"Run `neon-ts push` first to create it, or choose an existing branch.",
+			].join(" "),
+			{
+				details: {
+					branchKey: branch.key,
+					branchName: branch.name,
+					availableBranches: branches.map((b) => b.name),
+				},
+			},
+		);
+	}
+
+	const contextData: BranchContextData = {
+		projectId: ctx.projectId,
+		branchId: remote.id,
+	};
+	if (ctx.orgId) contextData.orgId = ctx.orgId;
+	const contextJson = formatContextFile(contextData);
+	const contextFile = applyToContextFile(cwd, contextData, contextJson);
+
+	const result: BranchResult = {
+		action: "checked-out",
+		projectId: ctx.projectId,
+		branchId: remote.id,
+		branchName: remote.name,
+		branchKey: branch.key,
+		contextFile,
+	};
+	if (ctx.orgId) result.orgId = ctx.orgId;
 	return result;
 }
 

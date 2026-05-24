@@ -171,8 +171,9 @@ export interface BranchCommandOptions {
 
 /**
  * Implementation of `neon-ts branch <blueprint>`. Creates an ephemeral branch from a
- * wildcard blueprint in `neon.ts`, updates an existing `.neon[/project.json]` context file
- * with the new `branchId`, and prints a JSON-friendly summary on stdout.
+ * wildcard blueprint in `neon.ts`, or checks out a concrete branch listed in `branches`.
+ * In both cases it updates an existing `.neon[/project.json]` context file with the
+ * selected `branchId` and prints a JSON-friendly summary on stdout.
  *
  * When no context file exists, the JSON suitable for writing to `.neon/project.json` is
  * included in the summary so the user can pipe it into a file themselves.
@@ -194,12 +195,19 @@ export async function runBranch(
 			...(options.configPath ? { configPath: options.configPath } : {}),
 		});
 
-		const lines: string[] = [
-			`✓ created branch ${result.branchName} (${result.branchId})`,
-			`  blueprint : ${result.blueprintKey} (pattern: ${result.blueprintPattern})`,
-			`  project   : ${result.projectId}${result.orgId ? ` (org ${result.orgId})` : ""}`,
-			`  parent    : ${result.parentBranchName} (${result.parentBranchId})`,
-		];
+		const lines: string[] =
+			result.action === "checked-out"
+				? [
+						`✓ checked out branch ${result.branchName} (${result.branchId})`,
+						`  branch    : ${result.branchKey ?? result.branchName}`,
+						`  project   : ${result.projectId}${result.orgId ? ` (org ${result.orgId})` : ""}`,
+					]
+				: [
+						`✓ created branch ${result.branchName} (${result.branchId})`,
+						`  blueprint : ${result.blueprintKey} (pattern: ${result.blueprintPattern})`,
+						`  project   : ${result.projectId}${result.orgId ? ` (org ${result.orgId})` : ""}`,
+						`  parent    : ${result.parentBranchName} (${result.parentBranchId})`,
+					];
 		if (result.expiresAt) lines.push(`  expiresAt : ${result.expiresAt}`);
 		lines.push("");
 		switch (result.contextFile.status) {
@@ -210,7 +218,7 @@ export async function runBranch(
 				break;
 			case "no-file":
 				lines.push(
-					"  no .neon/project.json (or .neon) found — write the snippet below to pin the new branch for subsequent commands:",
+					"  no .neon/project.json (or .neon) found — write the snippet below to pin the selected branch for subsequent commands:",
 					"",
 					result.contextFile.json.trimEnd(),
 				);
@@ -218,7 +226,9 @@ export async function runBranch(
 			case "write-failed":
 				lines.push(
 					`  ! could not update ${result.contextFile.path}: ${result.contextFile.error}`,
-					"  the branch on Neon was still created; apply this snippet by hand:",
+					result.action === "checked-out"
+						? "  the branch was still checked out for this command; apply this snippet by hand:"
+						: "  the branch on Neon was still created; apply this snippet by hand:",
 					"",
 					result.contextFile.json.trimEnd(),
 				);

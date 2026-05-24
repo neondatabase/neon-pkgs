@@ -114,7 +114,7 @@ const argv = yargs(hideBin(process.argv))
 	)
 	.command(
 		"branch <blueprint>",
-		"Create an ephemeral branch from a wildcard blueprint in neon.ts.",
+		"Create an ephemeral branch from a wildcard blueprint, or check out a concrete branch from neon.ts.",
 		(y) =>
 			y
 				.positional("blueprint", {

@@ -516,22 +516,42 @@ export default defineConfig({
 			{ cwd: root, api },
 		);
 		expect(result.exitCode).toBe(8);
-		expect(result.stderr).toContain('no blueprint named "nope"');
+		expect(result.stderr).toContain('no branch or blueprint named "nope"');
 	});
 
-	test("name refers to a concrete branch → exit 5 (InvalidConfig)", async () => {
+	test("name refers to a concrete branch → checks out that branch and updates context", async () => {
 		const { api, projectId } = seedFakeWithProduction();
 		const root = setup({
 			"package.json": "{}",
-			".neon/project.json": JSON.stringify({ projectId }),
+			".neon/project.json": JSON.stringify({
+				projectId,
+				branchId: "br-stale",
+			}),
 			"neon.ts": previewBlueprint(),
 		});
+		api.history.length = 0;
+
 		const result = await runBranch(
 			{ blueprint: "production" },
 			{ cwd: root, api },
 		);
-		expect(result.exitCode).toBe(5);
-		expect(result.stderr).toContain("concrete branch");
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain(
+			"checked out branch production (br-prod-cli)",
+		);
+		expect(result.stdout).toContain("branch    : production");
+		expect(result.stdout).toContain(
+			`updated ${join(root, ".neon", "project.json")}`,
+		);
+		expect(result.stdout).not.toContain("created branch");
+		expect(api.history.some((h) => h.method === "createBranch")).toBe(
+			false,
+		);
+
+		const reread = JSON.parse(
+			readFileSync(join(root, ".neon", "project.json"), "utf-8"),
+		);
+		expect(reread.branchId).toBe("br-prod-cli");
 	});
 
 	test("missing context (no projectId/file) → exit 3", async () => {

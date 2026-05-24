@@ -299,7 +299,7 @@ const ctx = loadContext({ branch: "preview-pr-42" });
 
 ### `branch(options: BranchOptions): Promise<BranchResult>`
 
-Create a single ephemeral branch from a wildcard blueprint defined in `neon.ts`. This is the "I'm starting a new feature, give me a dedicated database" entry point — exactly one branch per call, named after your git branch when available, with the blueprint's TTL and compute settings applied.
+Create a single ephemeral branch from a wildcard blueprint defined in `neon.ts`, or check out a concrete branch listed in `branches`. This is the "I'm starting a new feature, give me a dedicated database" entry point for blueprints, and the "point my local project back at main/production/staging" entry point for concrete branches.
 
 ```ts
 import { branch } from "@neondatabase/platform/v1";
@@ -314,17 +314,25 @@ const result = await branch({ blueprint: "preview" });
 //   }
 ```
 
+```ts
+// Concrete branches are checked out, not created. The branch must already exist on Neon;
+// run `pushConfig` first if it is listed in neon.ts but not created remotely yet.
+await branch({ blueprint: "production" });
+// updates `.neon[/project.json]` so subsequent env/pull commands target production
+```
+
 Behaviour:
 
 1. **Project context** is resolved via the standard chain (see [Project context resolution](#project-context-resolution)). Throws `errors.MissingContextError` if no project id is resolvable.
 2. **`neon.ts`** is loaded via `loadConfigFromFile`. Throws `errors.ConfigLoadError` if missing.
-3. The **blueprint** identified by `options.blueprint` must exist in `config.branchBlueprints`. (Patterns are validated at `defineConfig` time to ensure they contain a `*` wildcard.) Passing the name of a concrete branch (entry in `config.branches` like `"production"`) throws a `PlatformError` with code `PLATFORM_INVALID_CONFIG` along with a pointer to use `pushConfig` instead.
-4. The **branch name** is composed as `<pattern>` with `*` substituted by:
+3. If the name matches a concrete branch in `config.branches`, `branch()` finds the live branch by name and updates the local context file with its `branchId`. It does not create the branch; if the branch is listed locally but missing remotely, run `pushConfig` first.
+4. Otherwise the **blueprint** identified by `options.blueprint` must exist in `config.branchBlueprints`. Patterns are validated at `defineConfig` time to ensure they contain a `*` wildcard.
+5. The **branch name** is composed as `<pattern>` with `*` substituted by:
    - `<normalised-git-branch>-<mini-id>` when git is available (e.g. `andre/new-feat` → `andre-new-feat-a1b2c3`), or
    - just `<mini-id>` (6 hex chars) when not. Pass `gitBranch: null` to opt out of the git lookup explicitly, or `gitBranch: "my-name"` to inject one.
-5. On name **collision** with an existing branch the mini-id is re-rolled up to `maxAttempts` times (default 10).
-6. The branch is **created on Neon** with the blueprint's `parent`, `ttl`, and `computeSettings` applied. Parent branches must exist on Neon (run `pushConfig` first if not) — otherwise `PLATFORM_MISSING_PARENT_BRANCH`.
-7. The **project-context file is updated** (in place) so subsequent `fetchEnv` / `pullConfig` calls target the new branch. The outcome is reported via `result.contextFile.status`:
+6. On name **collision** with an existing branch the mini-id is re-rolled up to `maxAttempts` times (default 10).
+7. Blueprint branches are **created on Neon** with the blueprint's `parent`, `ttl`, and `computeSettings` applied. Parent branches must exist on Neon (run `pushConfig` first if not) — otherwise `PLATFORM_MISSING_PARENT_BRANCH`.
+8. The **project-context file is updated** (in place) so subsequent `fetchEnv` / `pullConfig` calls target the selected branch. The outcome is reported via `result.contextFile.status`:
 
    | `status`        | When                                                                  | Extra fields            |
    | --------------- | --------------------------------------------------------------------- | ----------------------- |
@@ -387,8 +395,9 @@ neon-ts push --update-existing              # also apply mutable drift (settings
 # `terraform plan`-style output: `+ create`, `~ update`, conflicts that would block push.
 neon-ts status
 
-# Create an ephemeral branch from a wildcard blueprint
+# Create an ephemeral branch from a wildcard blueprint, or check out a concrete branch
 neon-ts branch preview                      # creates `preview-<git-branch>-<mini-id>`
+neon-ts branch production                   # updates .neon to point at the existing branch
 neon-ts branch preview --project-id proj-x  # override the resolved project id
 
 # Pull live connection strings into a .env file (default: .env.local). The file format

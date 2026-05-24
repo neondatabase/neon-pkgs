@@ -214,6 +214,85 @@ describe("branch — happy path", () => {
 		expect(reread.branchId).toBe(result.branchId);
 	});
 
+	test("checks out a concrete branch from branches and updates context without creating", async () => {
+		const api = new FakeNeonApi();
+		const projectId = "proj-main-checkout";
+		const orgId = "org-main-checkout";
+		api.seedProject({
+			project: {
+				id: projectId,
+				name: "branch-test",
+				regionId: "aws-us-east-1",
+				pgVersion: 17,
+				orgId,
+			},
+			branches: [
+				{
+					branch: {
+						id: "br-main",
+						name: "main",
+						isDefault: true,
+					},
+				},
+				{
+					branch: {
+						id: "br-dev",
+						name: "dev",
+						isDefault: false,
+						parentId: "br-main",
+					},
+				},
+			],
+		});
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({
+				projectId,
+				orgId,
+				branchId: "br-dev",
+			}),
+			"neon.ts": `
+import { defineConfig } from "${PLATFORM_SRC}";
+export default defineConfig({
+  project: { name: "branch-test", region: "aws-us-east-1" },
+  branches: {
+    main: {},
+    dev: { parent: "main" },
+  },
+  branchBlueprints: {
+    preview: { pattern: "preview-*", parent: "main" },
+  },
+});
+`,
+		});
+		api.history.length = 0;
+
+		const result = await branch({
+			blueprint: "main",
+			cwd: root,
+			api,
+			gitBranch: null,
+		});
+
+		expect(result.action).toBe("checked-out");
+		expect(result.branchKey).toBe("main");
+		expect(result.branchName).toBe("main");
+		expect(result.branchId).toBe("br-main");
+		expect(result.contextFile.status).toBe("updated");
+		expect(api.history.some((h) => h.method === "createBranch")).toBe(
+			false,
+		);
+
+		const reread = JSON.parse(
+			readFileSync(join(root, ".neon", "project.json"), "utf-8"),
+		);
+		expect(reread).toMatchObject({
+			projectId,
+			orgId,
+			branchId: "br-main",
+		});
+	});
+
 	test("returns JSON payload but does NOT create a file when none exists", async () => {
 		const { api, projectId, orgId } = seededFake();
 		const root = setup({
@@ -388,22 +467,32 @@ describe("branch — error paths", () => {
 		});
 	});
 
-	test("throws InvalidConfig when the name refers to a concrete branch, not a blueprint", async () => {
+	test("throws NotFound when a concrete branch is listed locally but missing remotely", async () => {
 		const { api, projectId } = seededFake();
 		const root = setup({
 			"package.json": "{}",
 			".neon/project.json": JSON.stringify({ projectId }),
-			"neon.ts": previewBlueprint(),
+			"neon.ts": `
+import { defineConfig } from "${PLATFORM_SRC}";
+export default defineConfig({
+  project: { name: "branch-test", region: "aws-us-east-1" },
+  branches: {
+    production: {},
+    staging: { parent: "production" },
+  },
+});
+`,
 		});
 		await expect(
 			branch({
-				blueprint: "production", // concrete branch — not for `branch`
+				blueprint: "staging",
 				cwd: root,
 				api,
 				gitBranch: null,
 			}),
 		).rejects.toMatchObject({
-			code: ErrorCode.InvalidConfig,
+			code: ErrorCode.NotFound,
+			message: expect.stringContaining('concrete branch "staging"'),
 		});
 	});
 
