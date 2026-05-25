@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { retryOnLocked } from "./neon-api-real.js";
+import { createNeonAuthRestInput, retryOnLocked } from "./neon-api-real.js";
 
 const FAST_CONFIG = { maxAttempts: 5, initialDelayMs: 1, maxDelayMs: 4 };
 
@@ -53,5 +53,20 @@ describe("retryOnLocked", () => {
 			}, FAST_CONFIG),
 		).rejects.toMatchObject({ message: "still locked" });
 		expect(calls).toBe(FAST_CONFIG.maxAttempts);
+	});
+});
+
+describe("createNeonAuthRestInput", () => {
+	test("uses the documented Better Auth provider value", () => {
+		expect(createNeonAuthRestInput({})).toEqual({
+			auth_provider: "better_auth",
+		});
+	});
+
+	test("includes the database name when one is selected", () => {
+		expect(createNeonAuthRestInput({ databaseName: "app" })).toEqual({
+			auth_provider: "better_auth",
+			database_name: "app",
+		});
 	});
 });

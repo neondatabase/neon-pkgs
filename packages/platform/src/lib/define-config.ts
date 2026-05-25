@@ -14,7 +14,7 @@ const REGION_PREFIX = /^(aws|azure|gcp)-/;
  *
  * export default defineConfig((branch) => {
  *   if (branch.name === "main") {
- *     return { protected: true, auth: { enabled: true } };
+ *     return { protected: true, auth: {} };
  *   }
  *   return { parent: "main", ttl: "7d" };
  * });
@@ -72,8 +72,8 @@ export function resolveConfig(
 	}
 
 	const resolved: ResolvedBranchConfig = {
-		authEnabled: cfg.auth?.enabled === true,
-		dataApiEnabled: cfg.dataApi?.enabled === true,
+		authEnabled: isFeatureEnabled(cfg.auth),
+		dataApiEnabled: isFeatureEnabled(cfg.dataApi),
 	};
 	if (cfg.parent !== undefined) resolved.parent = cfg.parent;
 	if (ttlSeconds !== undefined) resolved.ttlSeconds = ttlSeconds;
@@ -86,6 +86,10 @@ export function resolveConfig(
 		};
 	}
 	return resolved;
+}
+
+function isFeatureEnabled(feature: { enabled?: boolean } | undefined): boolean {
+	return feature !== undefined && feature.enabled !== false;
 }
 
 /**

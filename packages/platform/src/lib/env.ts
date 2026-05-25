@@ -79,8 +79,10 @@ export interface NeonDataApiEnv {
  * {@link Config} so the type system knows which optional namespaces are present.
  *
  * - `postgres` is always present.
- * - `auth` is added iff the config return type has `auth.enabled` as literal `true`.
- * - `dataApi` is added iff the config return type has `dataApi.enabled` as literal `true`.
+ * - `auth` is added iff the config return type has an `auth` namespace that is not
+ *   explicitly disabled.
+ * - `dataApi` is added iff the config return type has a `dataApi` namespace that is not
+ *   explicitly disabled.
  */
 /**
  * Empty record alias used as the "false" branch of the conditional namespace adds below.
@@ -93,12 +95,27 @@ type BranchConfigOf<C extends Config> = ReturnType<C> extends BranchConfig
 	? ReturnType<C>
 	: BranchConfig;
 
+type FeatureEnabledConfig<
+	Cfg,
+	Key extends "auth" | "dataApi",
+> = Cfg extends Record<Key, infer Toggle>
+	? Toggle extends { enabled: false }
+		? never
+		: Cfg
+	: never;
+
+type HasEnabledFeature<Cfg, Key extends "auth" | "dataApi"> = [
+	FeatureEnabledConfig<Cfg, Key>,
+] extends [never]
+	? false
+	: true;
+
 export type NeonEnv<C extends Config = Config> = {
 	postgres: NeonPostgresEnv;
-} & (BranchConfigOf<C> extends { auth: { enabled: true } }
+} & (HasEnabledFeature<BranchConfigOf<C>, "auth"> extends true
 	? { auth: NeonAuthEnv }
 	: NoNamespace) &
-	(BranchConfigOf<C> extends { dataApi: { enabled: true } }
+	(HasEnabledFeature<BranchConfigOf<C>, "dataApi"> extends true
 		? { dataApi: NeonDataApiEnv }
 		: NoNamespace);
 
@@ -552,7 +569,7 @@ const dataApiEnvSchema = z.object({
  *
  * const env = parseEnv(config);
  * const db = drizzle(neon(env.postgres.databaseUrl), { schema });
- * // env.auth is statically typed when the config return type has auth.enabled: true.
+ * // env.auth is statically typed when the config return type has auth: {} or auth.enabled: true.
  * ```
  */
 export function parseEnv<const C extends Config>(config: C): NeonEnv<C> {

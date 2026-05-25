@@ -58,6 +58,7 @@ export interface BranchTarget {
 }
 
 export interface FeatureToggle {
+	/** Defaults to `true` when the feature namespace is present. Set `false` to opt out. */
 	enabled?: boolean;
 }
 

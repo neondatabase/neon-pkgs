@@ -30,7 +30,8 @@ describe("resolveConfig", () => {
 			ttl: "1h",
 			protected: true,
 			postgres: { computeSettings: { autoscalingLimitMaxCu: 2 } },
-			auth: { enabled: true },
+			auth: {},
+			dataApi: {},
 		}));
 		const resolved = resolveConfig(config, {
 			name: "dev-a",
@@ -41,9 +42,22 @@ describe("resolveConfig", () => {
 			ttlSeconds: 3600,
 			protected: true,
 			authEnabled: true,
-			dataApiEnabled: false,
+			dataApiEnabled: true,
 			postgres: { computeSettings: { autoscalingLimitMaxCu: 2 } },
 		});
+	});
+
+	test("treats explicit feature false as disabled", () => {
+		const config = defineConfig(() => ({
+			auth: { enabled: false },
+			dataApi: { enabled: false },
+		}));
+		const resolved = resolveConfig(config, {
+			name: "dev-a",
+			exists: false,
+		});
+		expect(resolved.authEnabled).toBe(false);
+		expect(resolved.dataApiEnabled).toBe(false);
 	});
 
 	test("reports invalid returned branch config", () => {

@@ -39,8 +39,8 @@ export default defineConfig((branch) => {
           suspendTimeout: "5m",
         },
       },
-      auth: { enabled: true },
-      dataApi: { enabled: true },
+      auth: {},
+      dataApi: {},
     };
   }
 
@@ -54,7 +54,7 @@ export default defineConfig((branch) => {
         suspendTimeout: "5m",
       },
     },
-    auth: { enabled: true },
+    auth: {},
   };
 });
 ```
@@ -110,8 +110,8 @@ type BranchConfig = {
     };
   };
 
-  auth?: { enabled?: boolean };
-  dataApi?: { enabled?: boolean };
+  auth?: { enabled?: boolean };    // {} enables with defaults; enabled: false opts out
+  dataApi?: { enabled?: boolean }; // {} enables with defaults; enabled: false opts out
 };
 ```
 
@@ -171,5 +171,5 @@ import {
 - `push` never creates projects or branches.
 - `checkout` never creates or mutates remote resources.
 - `branch` always creates a new branch and then updates local context.
-- `auth.enabled: false`, `dataApi.enabled: false`, or absence leaves existing integrations alone. Disabling is destructive and remains explicit/manual.
+- `auth: {}` and `dataApi: {}` enable those integrations with Neon defaults. `auth.enabled: false`, `dataApi.enabled: false`, or absence leaves existing integrations alone. Disabling is destructive and remains explicit/manual.
 - Mutable branch drift (`protected`, `ttl`, `postgres.computeSettings`) requires `--update-existing` outside dry-run status.

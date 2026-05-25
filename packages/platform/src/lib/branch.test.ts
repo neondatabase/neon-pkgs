@@ -48,14 +48,14 @@ function policy(): string {
 import { defineConfig } from "${PLATFORM_SRC}";
 export default defineConfig((branch) => {
   if (branch.name === "main") {
-    return { protected: true, auth: { enabled: true } };
+    return { protected: true, auth: {} };
   }
   return {
     parent: "main",
     ttl: "1h",
     postgres: { computeSettings: { autoscalingLimitMaxCu: 2 } },
-    auth: { enabled: true },
-    dataApi: { enabled: true },
+    auth: {},
+    dataApi: {},
   };
 });
 `;

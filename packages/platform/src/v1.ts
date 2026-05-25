@@ -7,7 +7,7 @@
  * import { defineConfig } from "@neondatabase/platform/v1";
  *
  * export default defineConfig((branch) => {
- *   if (branch.name === "main") return { protected: true, auth: { enabled: true } };
+ *   if (branch.name === "main") return { protected: true, auth: {} };
  *   return { parent: "main", ttl: "7d" };
  * });
  * ```

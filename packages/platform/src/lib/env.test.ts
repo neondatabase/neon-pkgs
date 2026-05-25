@@ -35,7 +35,7 @@ describe("fetchEnv", () => {
 
 	test("requires auth integration when branch policy enables auth", async () => {
 		const { api, projectId } = seededFake();
-		const config = defineConfig(() => ({ auth: { enabled: true } }));
+		const config = defineConfig(() => ({ auth: {} }));
 		await expect(
 			fetchEnv(config, { api, projectId, branch: "main" }),
 		).rejects.toMatchObject({ code: ErrorCode.NotFound });
@@ -48,6 +48,19 @@ describe("parseEnv", () => {
 		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
 		const env = parseEnv(defineConfig(() => ({})));
 		expect(env.postgres.databaseUrl).toBe("postgres://pooled");
+	});
+
+	test("requires feature env when feature namespaces are present", () => {
+		vi.stubEnv("DATABASE_URL", "postgres://pooled");
+		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
+		const config = defineConfig(() => ({
+			auth: {},
+			dataApi: {},
+		}));
+
+		expect(() => parseEnv(config)).toThrow(
+			expect.objectContaining({ code: ErrorCode.EnvNotInjected }),
+		);
 	});
 
 	test("projects env object to process env keys", () => {

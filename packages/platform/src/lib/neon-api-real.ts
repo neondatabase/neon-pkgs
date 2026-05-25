@@ -9,7 +9,6 @@ import {
 	type Endpoint,
 	EndpointType,
 	type EndpointUpdateRequest,
-	NeonAuthSupportedAuthProvider,
 	type PgVersion,
 	type Project,
 	type ProjectCreateRequest,
@@ -17,6 +16,7 @@ import {
 	type ProjectUpdateRequest,
 	type Role,
 } from "@neondatabase/api-client";
+import { z } from "zod";
 import { formatSuspendTimeout, parseSuspendTimeout } from "./duration.js";
 import { ErrorCode, PlatformError } from "./errors.js";
 import type {
@@ -37,6 +37,23 @@ import type { ComputeSettings } from "./types.js";
 import { wrapNeonError } from "./wrap-neon-error.js";
 
 type ApiClient = ReturnType<typeof createApiClient>;
+const DEFAULT_NEON_API_BASE_URL = "https://console.neon.tech/api/v2";
+
+const neonAuthResponseSchema = z.object({
+	auth_provider_project_id: z.string(),
+	jwks_url: z.string(),
+	base_url: z.string().optional(),
+});
+
+interface CreateNeonAuthRestInput {
+	auth_provider: "better_auth";
+	database_name?: string;
+}
+
+interface RestConfig {
+	apiKey: string;
+	baseUrl: string;
+}
 
 /**
  * Adapt `@neondatabase/api-client` to the narrow {@link NeonApi} façade used by the rest of
@@ -72,11 +89,18 @@ export function createRealNeonApi(options: {
 		...(options.baseUrl ? { baseURL: options.baseUrl } : {}),
 	});
 
-	return new RealNeonApi(client, {
-		maxAttempts: options.retryOnLocked?.maxAttempts ?? 12,
-		initialDelayMs: options.retryOnLocked?.initialDelayMs ?? 250,
-		maxDelayMs: options.retryOnLocked?.maxDelayMs ?? 5_000,
-	});
+	return new RealNeonApi(
+		client,
+		{
+			maxAttempts: options.retryOnLocked?.maxAttempts ?? 12,
+			initialDelayMs: options.retryOnLocked?.initialDelayMs ?? 250,
+			maxDelayMs: options.retryOnLocked?.maxDelayMs ?? 5_000,
+		},
+		{
+			apiKey: options.apiKey,
+			baseUrl: options.baseUrl ?? DEFAULT_NEON_API_BASE_URL,
+		},
+	);
 }
 
 interface RetryConfig {
@@ -128,6 +152,7 @@ class RealNeonApi implements NeonApi {
 	constructor(
 		private readonly client: ApiClient,
 		private readonly retryConfig: RetryConfig,
+		private readonly restConfig: RestConfig,
 	) {}
 
 	private retry<T>(fn: () => Promise<T>): Promise<T> {
@@ -485,23 +510,18 @@ class RealNeonApi implements NeonApi {
 			return await this.call(
 				`enableNeonAuth(${projectId}/${branchId})`,
 				async () => {
-					const res = await this.client.createNeonAuth(
-						projectId,
-						branchId,
-						{
-							auth_provider:
-								NeonAuthSupportedAuthProvider.StackV2,
-							...(input.databaseName
-								? { database_name: input.databaseName }
-								: {}),
-						},
+					// TODO: switch back to `this.client.createNeonAuth` once
+					// @neondatabase/api-client narrows this branch endpoint to `better_auth`.
+					const data = await this.postJson(
+						`/projects/${encodeURIComponent(projectId)}/branches/${encodeURIComponent(branchId)}/auth`,
+						createNeonAuthRestInput(input),
 					);
-					const data = res.data;
+					const parsed = neonAuthResponseSchema.parse(data);
 					const snapshot: NeonAuthSnapshot = {
-						projectId: data.auth_provider_project_id,
-						jwksUrl: data.jwks_url,
+						projectId: parsed.auth_provider_project_id,
+						jwksUrl: parsed.jwks_url,
 					};
-					if (data.base_url) snapshot.baseUrl = data.base_url;
+					if (parsed.base_url) snapshot.baseUrl = parsed.base_url;
 					return snapshot;
 				},
 				{ projectId, mutating: true },
@@ -516,6 +536,28 @@ class RealNeonApi implements NeonApi {
 			}
 			throw err;
 		}
+	}
+
+	private async postJson(path: string, body: unknown): Promise<unknown> {
+		const url = `${this.restConfig.baseUrl.replace(/\/+$/, "")}${path}`;
+		const res = await fetch(url, {
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${this.restConfig.apiKey}`,
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(body),
+		});
+		const data = await readJsonBody(res);
+		if (!res.ok) {
+			throw {
+				response: {
+					status: res.status,
+					data,
+				},
+			};
+		}
+		return data;
 	}
 
 	async getNeonDataApi(
@@ -583,6 +625,21 @@ class RealNeonApi implements NeonApi {
 			throw err;
 		}
 	}
+}
+
+export function createNeonAuthRestInput(input: {
+	databaseName?: string;
+}): CreateNeonAuthRestInput {
+	return {
+		auth_provider: "better_auth",
+		...(input.databaseName ? { database_name: input.databaseName } : {}),
+	};
+}
+
+async function readJsonBody(res: Response): Promise<unknown> {
+	const text = await res.text();
+	if (text.trim() === "") return {};
+	return JSON.parse(text);
 }
 
 function projectToSnapshot(

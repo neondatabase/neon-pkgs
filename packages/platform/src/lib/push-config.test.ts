@@ -31,8 +31,8 @@ describe("pushConfig", () => {
 					autoscalingLimitMaxCu: branch.name === "main" ? 4 : 1,
 				},
 			},
-			auth: { enabled: true },
-			dataApi: { enabled: true },
+			auth: {},
+			dataApi: {},
 		}));
 
 		const result = await pushConfig(config, {
@@ -79,7 +79,7 @@ describe("pushConfig", () => {
 		const { api, projectId } = seededFake();
 		const config = defineConfig(() => ({
 			protected: true,
-			auth: { enabled: true },
+			auth: {},
 		}));
 
 		const result = await pushConfig(config, {

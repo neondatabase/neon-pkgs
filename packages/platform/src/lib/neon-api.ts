@@ -190,7 +190,7 @@ export interface NeonApi {
 	/**
 	 * Enable the Neon Auth integration on a specific branch. Idempotent: if an integration
 	 * is already enabled, the existing snapshot is returned unchanged. Used by
-	 * `pushConfig` and `branch` to honour branch policy `auth.enabled: true`.
+	 * `pushConfig` and `branch` to honour branch policy `auth: {}` / `auth.enabled: true`.
 	 */
 	enableNeonAuth(
 		projectId: string,
@@ -212,7 +212,7 @@ export interface NeonApi {
 	/**
 	 * Enable the Neon Data API integration on a specific branch + database. Idempotent:
 	 * if an integration is already enabled, the existing snapshot is returned unchanged.
-	 * Used by `pushConfig` and `branch` to honour branch policy `dataApi.enabled: true`.
+	 * Used by `pushConfig` and `branch` to honour branch policy `dataApi: {}` / `dataApi.enabled: true`.
 	 */
 	enableProjectBranchDataApi(
 		projectId: string,
