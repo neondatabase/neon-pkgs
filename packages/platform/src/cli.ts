@@ -50,7 +50,7 @@ const argv = yargs(hideBin(process.argv))
 	)
 	.command(
 		"init",
-		"Create a starter neon.ts branch-policy file from the selected branch.",
+		"Install @neondatabase/platform (when needed) and create a starter neon.ts branch-policy file from the selected branch.",
 		(y) =>
 			y
 				.option("project-id", {

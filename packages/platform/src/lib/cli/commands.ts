@@ -16,6 +16,11 @@ import { loadContext } from "../load-context.js";
 import { loadConfigFromFile } from "../loader.js";
 import type { NeonApi } from "../neon-api.js";
 import { createRealNeonApi } from "../neon-api-real.js";
+import {
+	type EnsurePlatformPackageOptions,
+	type EnsurePlatformPackageResult,
+	ensurePlatformPackageInstalled,
+} from "../package-manager.js";
 import { pullConfig } from "../pull-config.js";
 import { type PushConfigOptions, pushConfig } from "../push-config.js";
 import { formatConfigAsJson, formatInitTemplate } from "./format.js";
@@ -36,6 +41,13 @@ export interface CommandEnv {
 	 * from `options.apiKey ?? NEON_API_KEY`.
 	 */
 	api?: NeonApi;
+	/**
+	 * When set, used instead of the real package-manager install during `init`. Tests inject
+	 * a stub so `runInit` does not spawn npm/pnpm/yarn/bun.
+	 */
+	ensurePlatformPackage?: (
+		options: EnsurePlatformPackageOptions,
+	) => Promise<EnsurePlatformPackageResult>;
 }
 
 export interface CommandResult {
@@ -105,6 +117,14 @@ export async function runInit(
 ): Promise<CommandResult> {
 	const api = resolveApi(options.apiKey, ctx);
 	if (typeof api === "string") return failure(api);
+
+	const ensurePlatformPackage =
+		ctx.ensurePlatformPackage ?? ensurePlatformPackageInstalled;
+	const installResult = await ensurePlatformPackage({ cwd: ctx.cwd });
+	if (!installResult.skipped && !installResult.installed) {
+		return failure(installResult.message);
+	}
+
 	try {
 		const pulled = await pullConfig({
 			api,
@@ -113,7 +133,18 @@ export async function runInit(
 			...(options.branch ? { branch: options.branch } : {}),
 		});
 		const targetPath = join(ctx.cwd, NEON_CONFIG_FILENAME);
-		return writeFileSafely(targetPath, formatInitTemplate(pulled));
+		const writeResult = writeFileSafely(
+			targetPath,
+			formatInitTemplate(pulled),
+		);
+		if (writeResult.exitCode !== 0) return writeResult;
+
+		const installLine = formatInitInstallMessage(installResult);
+		return {
+			exitCode: 0,
+			stdout: `${installLine}${writeResult.stdout}`,
+			stderr: writeResult.stderr,
+		};
 	} catch (err) {
 		return handleError(err);
 	}
@@ -701,6 +732,21 @@ async function loadConfigAndFetchEnv(
  * status depending on whether the file already existed — or a clean exit-1 with a
  * helpful message when the write failed (read-only FS, EACCES, missing parent dir).
  */
+function formatInitInstallMessage(
+	installResult: EnsurePlatformPackageResult,
+): string {
+	if (installResult.installed) {
+		return `✓ ${installResult.message}\n`;
+	}
+	if (installResult.skipped && installResult.packageRoot) {
+		return `• ${installResult.message}\n`;
+	}
+	if (installResult.skipped) {
+		return `! ${installResult.message}\n`;
+	}
+	return "";
+}
+
 function writeFileSafely(targetPath: string, body: string): CommandResult {
 	const existed = existsSync(targetPath);
 	try {

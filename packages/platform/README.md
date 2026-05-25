@@ -6,6 +6,13 @@ Branch-scoped config-as-code for the Neon Platform. A repo-local `neon.ts` expor
 
 ## Install
 
+`neon-ts init` installs `@neondatabase/platform` automatically when your repo has a
+`package.json`. It detects npm, pnpm, yarn, or bun from lockfiles (or the
+`packageManager` field) and runs the matching add/install command before writing
+`neon.ts`.
+
+You can also add the package manually:
+
 ```bash
 pnpm add @neondatabase/platform
 # or
@@ -55,7 +62,7 @@ export default defineConfig((branch) => {
 Project identity is not stored in `neon.ts`. Bootstrap or select the project with `neonctl link`; branch identity comes from `checkout`, `branch`, `--branch`, `NEON_BRANCH_ID`, or `.neon`.
 
 ```bash
-# Create a starter neon.ts from the linked project's selected/default branch.
+# Install @neondatabase/platform (when needed) and create starter neon.ts.
 neon-ts init
 
 # Select an existing branch by name or id. No creation, no config apply.
@@ -85,7 +92,7 @@ neon-ts env run -- pnpm dev
 - `branch <name>` always creates a new branch. If `<name>` has no `*`, the CLI treats it as `<name>-*` and substitutes the wildcard with `<git-branch>-<mini-id>` or `<mini-id>`.
 - `push` is scoped to the selected branch. It does not create projects or branches.
 - `pull` is inspection, not round-trip code generation. It prints the selected branch's remote state as JSON for copy/paste.
-- `init` is the file-creation command. It creates a starter `neon.ts` from the selected/default branch.
+- `init` installs `@neondatabase/platform` when it is missing, then creates a starter `neon.ts` from the selected/default branch. In monorepos it follows lockfiles up to the workspace root.
 
 ## Branch Config Shape
 
@@ -113,7 +120,7 @@ type BranchConfig = {
 ## Commands
 
 ```bash
-neon-ts init                    # write ./neon.ts starter policy
+neon-ts init                    # install package (if needed) and write ./neon.ts
 neon-ts pull                    # print selected branch state as JSON
 neon-ts checkout main           # select existing branch
 neon-ts branch dev              # create dev-<git-branch>-<mini-id>

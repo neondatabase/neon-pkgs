@@ -58,6 +58,14 @@ function policy() {
 export default defineConfig((branch) => branch.name === "main" ? { auth: { enabled: true } } : { parent: "main", ttl: "1h" });`;
 }
 
+function noopPlatformInstall() {
+	return Promise.resolve({
+		installed: false,
+		skipped: true,
+		message: "Skipped platform install in tests.",
+	});
+}
+
 describe("runPull / runInit", () => {
 	test("pull prints selected branch JSON", async () => {
 		const { api, projectId } = seededFake();
@@ -75,13 +83,53 @@ describe("runPull / runInit", () => {
 		const root = setup({ "package.json": "{}" });
 		const result = await runInit(
 			{ projectId, branch: "main" },
-			{ cwd: root, api },
+			{ cwd: root, api, ensurePlatformPackage: noopPlatformInstall },
 		);
 		expect(result.exitCode).toBe(0);
 		expect(existsSync(join(root, "neon.ts"))).toBe(true);
 		expect(readFileSync(join(root, "neon.ts"), "utf-8")).toContain(
 			"defineConfig((branch)",
 		);
+	});
+
+	test("init reports successful package install before writing neon.ts", async () => {
+		const { api, projectId } = seededFake();
+		const root = setup({ "package.json": "{}" });
+		const result = await runInit(
+			{ projectId, branch: "main" },
+			{
+				cwd: root,
+				api,
+				ensurePlatformPackage: async () => ({
+					installed: true,
+					skipped: false,
+					message: "Installed @neondatabase/platform with pnpm.",
+				}),
+			},
+		);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("Installed @neondatabase/platform");
+		expect(result.stdout).toContain("Created");
+	});
+
+	test("init fails when platform package install fails", async () => {
+		const { api, projectId } = seededFake();
+		const root = setup({ "package.json": "{}" });
+		const result = await runInit(
+			{ projectId, branch: "main" },
+			{
+				cwd: root,
+				api,
+				ensurePlatformPackage: async () => ({
+					installed: false,
+					skipped: false,
+					message: "install failed",
+				}),
+			},
+		);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("install failed");
+		expect(existsSync(join(root, "neon.ts"))).toBe(false);
 	});
 });
 
