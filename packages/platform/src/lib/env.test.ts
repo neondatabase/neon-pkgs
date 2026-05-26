@@ -104,6 +104,8 @@ describe("parseEnv", () => {
 
 		expectType<NeonEnv<typeof config>>(env);
 		expectType<NeonAuthEnv>(env.auth);
+		// @ts-expect-error Auth defaults must not imply Data API env.
+		env.dataApi;
 		expect(env.auth.projectId).toBe("auth-project");
 	});
 

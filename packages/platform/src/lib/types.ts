@@ -66,7 +66,7 @@ export interface PostgresConfig {
 	computeSettings?: ComputeSettings;
 }
 
-export interface BranchConfig {
+interface BranchConfigBase {
 	/** Parent branch name used when creating a new branch. Not a Postgres setting. */
 	parent?: string;
 	/** Time-to-live applied when creating a new branch, or reconciled on existing branches. */
@@ -74,9 +74,15 @@ export interface BranchConfig {
 	/** Whether the selected branch should be protected. Undefined means "leave as-is". */
 	protected?: boolean;
 	postgres?: PostgresConfig;
-	auth?: FeatureToggle;
-	dataApi?: FeatureToggle;
 }
+
+type BranchFeatureConfig =
+	| { auth?: never; dataApi?: never }
+	| { auth: FeatureToggle; dataApi?: never }
+	| { auth?: never; dataApi: FeatureToggle }
+	| { auth: FeatureToggle; dataApi: FeatureToggle };
+
+export type BranchConfig = BranchConfigBase & BranchFeatureConfig;
 
 export type Config = (branch: BranchTarget) => BranchConfig;
 
