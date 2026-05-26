@@ -1,11 +1,22 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { defineConfig } from "./define-config.js";
-import { fetchEnv, neonEnvToProcessEnv, parseEnv } from "./env.js";
+import {
+	fetchEnv,
+	type NeonAuthEnv,
+	type NeonEnv,
+	neonEnvToProcessEnv,
+	parseEnv,
+} from "./env.js";
 import { ErrorCode } from "./errors.js";
 import { FakeNeonApi } from "./fake-neon-api.js";
 import { stubCleanNeonEnv } from "./test-utils.js";
+import type { BranchConfig } from "./types.js";
 
 beforeEach(() => stubCleanNeonEnv());
+
+function expectType<T>(_value: T): void {
+	// Compile-time assertion only.
+}
 
 function seededFake() {
 	const api = new FakeNeonApi();
@@ -61,6 +72,39 @@ describe("parseEnv", () => {
 		expect(() => parseEnv(config)).toThrow(
 			expect.objectContaining({ code: ErrorCode.EnvNotInjected }),
 		);
+	});
+
+	test("types auth env when config spreads BranchConfig defaults", () => {
+		vi.stubEnv("DATABASE_URL", "postgres://pooled");
+		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
+		vi.stubEnv("NEON_AUTH_PROJECT_ID", "auth-project");
+		vi.stubEnv("NEON_AUTH_PUBLISHABLE_CLIENT_KEY", "pub");
+		vi.stubEnv("NEON_AUTH_SECRET_SERVER_KEY", "secret");
+		vi.stubEnv("NEON_AUTH_JWKS_URL", "https://example.com/jwks.json");
+		const config = defineConfig((branch) => {
+			const defaults: BranchConfig = {
+				auth: {},
+			};
+
+			if (branch.name === "main") {
+				return {
+					...defaults,
+					protected: true,
+				};
+			}
+
+			return {
+				...defaults,
+				parent: "main",
+				ttl: "7d",
+			};
+		});
+
+		const env = parseEnv(config);
+
+		expectType<NeonEnv<typeof config>>(env);
+		expectType<NeonAuthEnv>(env.auth);
+		expect(env.auth.projectId).toBe("auth-project");
 	});
 
 	test("projects env object to process env keys", () => {

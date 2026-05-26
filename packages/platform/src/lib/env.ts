@@ -95,29 +95,32 @@ type BranchConfigOf<C extends Config> = ReturnType<C> extends BranchConfig
 	? ReturnType<C>
 	: BranchConfig;
 
-type FeatureEnabledConfig<
-	Cfg,
-	Key extends "auth" | "dataApi",
-> = Cfg extends Record<Key, infer Toggle>
-	? Toggle extends { enabled: false }
-		? never
-		: Cfg
+type FeatureToggleOf<Cfg, Key extends "auth" | "dataApi"> = Cfg extends unknown
+	? Key extends keyof Cfg
+		? Cfg[Key]
+		: never
 	: never;
 
 type HasEnabledFeature<Cfg, Key extends "auth" | "dataApi"> = [
-	FeatureEnabledConfig<Cfg, Key>,
+	Exclude<FeatureToggleOf<Cfg, Key>, undefined | { enabled: false }>,
 ] extends [never]
 	? false
 	: true;
 
+type IsDefaultConfig<C extends Config> = Config extends C ? true : false;
+
 export type NeonEnv<C extends Config = Config> = {
 	postgres: NeonPostgresEnv;
-} & (HasEnabledFeature<BranchConfigOf<C>, "auth"> extends true
-	? { auth: NeonAuthEnv }
-	: NoNamespace) &
-	(HasEnabledFeature<BranchConfigOf<C>, "dataApi"> extends true
-		? { dataApi: NeonDataApiEnv }
-		: NoNamespace);
+} & (IsDefaultConfig<C> extends true
+	? NoNamespace
+	: HasEnabledFeature<BranchConfigOf<C>, "auth"> extends true
+		? { auth: NeonAuthEnv }
+		: NoNamespace) &
+	(IsDefaultConfig<C> extends true
+		? NoNamespace
+		: HasEnabledFeature<BranchConfigOf<C>, "dataApi"> extends true
+			? { dataApi: NeonDataApiEnv }
+			: NoNamespace);
 
 export interface FetchEnvOptions {
 	/**
