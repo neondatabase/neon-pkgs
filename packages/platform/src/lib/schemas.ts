@@ -10,6 +10,6 @@ export {
 	branchConfigSchema as branch,
 	computeSettingsSchema as computeSettings,
 	configSchema as config,
-	featureToggleSchema as feature,
 	postgresConfigSchema as postgres,
+	serviceToggleSchema as service,
 } from "./schema.js";

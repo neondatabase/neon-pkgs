@@ -46,7 +46,7 @@ export type PlanStep =
 			databaseName: string;
 	  };
 
-export interface RemoteFeatureState {
+export interface RemoteServiceState {
 	databaseName: string;
 	authEnabled: boolean;
 	dataApiEnabled: boolean;
@@ -56,7 +56,7 @@ export interface RemoteState {
 	projectId: string;
 	branch: NeonBranchSnapshot;
 	endpoint?: NeonEndpointSnapshot;
-	features: RemoteFeatureState;
+	services: RemoteServiceState;
 }
 
 export interface DiffOptions {
@@ -83,7 +83,7 @@ export function diffConfig(
 	const conflicts: ConflictReport[] = [];
 	const plan: PlanStep[] = [];
 	diffBranchConfig({ config, remote, options, plan, conflicts });
-	diffFeatures({ config, remote, plan });
+	diffServices({ config, remote, plan });
 	return { plan, conflicts };
 }
 
@@ -91,13 +91,13 @@ export function diffConfig(
  * Plan additive branch-scoped integrations. Disabling remains explicit/manual because
  * teardown is destructive.
  */
-function diffFeatures(args: {
+function diffServices(args: {
 	config: ResolvedBranchConfig;
 	remote: RemoteState;
 	plan: PlanStep[];
 }): void {
 	const { config, remote, plan } = args;
-	const state = remote.features;
+	const state = remote.services;
 	if (config.authEnabled && !state.authEnabled) {
 		const step: PlanStep = {
 			kind: "enable-auth",

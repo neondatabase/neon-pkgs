@@ -6,6 +6,7 @@ import {
 	formatContextFile,
 } from "./context-file.js";
 import { resolveConfig } from "./define-config.js";
+import { NEON_ENV_VAR_KEYS } from "./env.js";
 import { ErrorCode, PlatformError } from "./errors.js";
 import { readCurrentGitBranch } from "./git.js";
 import { loadContext } from "./load-context.js";
@@ -52,6 +53,8 @@ export interface BranchResult {
 	parentBranchId: string;
 	expiresAt?: string;
 	contextFile: BranchContextFile;
+	configPath: string;
+	capturedEnv: Record<string, string>;
 }
 
 export async function branch(options: BranchOptions): Promise<BranchResult> {
@@ -62,11 +65,18 @@ export async function branch(options: BranchOptions): Promise<BranchResult> {
 		...(options.orgId ? { orgId: options.orgId } : {}),
 		cwd,
 	});
-	const { config } = await loadConfigFromFile({
+	const { config, resolvedPath } = await loadConfigFromFile({
 		...(options.configPath ? { path: options.configPath } : {}),
 		cwd,
 	});
-	return createBranchFromPolicy({ options, cwd, ctx, config, api });
+	return createBranchFromPolicy({
+		options,
+		cwd,
+		ctx,
+		config,
+		configPath: resolvedPath,
+		api,
+	});
 }
 
 async function createBranchFromPolicy(args: {
@@ -74,9 +84,10 @@ async function createBranchFromPolicy(args: {
 	cwd: string;
 	ctx: ReturnType<typeof loadContext>;
 	config: Config;
+	configPath: string;
 	api: NeonApi;
 }): Promise<BranchResult> {
-	const { options, cwd, ctx, config, api } = args;
+	const { options, cwd, ctx, config, configPath, api } = args;
 	const branches = await api.listBranches(ctx.projectId);
 	const pattern = normalizeCreatePattern(options.name);
 	const gitBranch = resolveGitBranch(options, cwd);
@@ -107,7 +118,7 @@ async function createBranchFromPolicy(args: {
 			: {}),
 	};
 	const created = await api.createBranch(ctx.projectId, createInput);
-	await applyBranchFeatures({
+	const capturedEnv = await applyBranchServices({
 		api,
 		projectId: ctx.projectId,
 		branchId: created.branch.id,
@@ -128,26 +139,28 @@ async function createBranchFromPolicy(args: {
 		parentBranchName: parentBranch.name,
 		parentBranchId: parentBranch.id,
 		contextFile,
+		configPath,
+		capturedEnv,
 	};
 	if (ctx.orgId) result.orgId = ctx.orgId;
 	if (expiresAt) result.expiresAt = expiresAt;
 	return result;
 }
 
-async function applyBranchFeatures(args: {
+async function applyBranchServices(args: {
 	api: NeonApi;
 	projectId: string;
 	branchId: string;
 	desired: ResolvedBranchConfig;
-}): Promise<void> {
+}): Promise<Record<string, string>> {
 	const { api, projectId, branchId, desired } = args;
-	if (!desired.authEnabled && !desired.dataApiEnabled) return;
-	const databaseName = await pickFeatureDatabaseName(
+	if (!desired.authEnabled && !desired.dataApiEnabled) return {};
+	const databaseName = await pickServiceDatabaseName(
 		api,
 		projectId,
 		branchId,
 	);
-	await Promise.all([
+	const [authSnapshot] = await Promise.all([
 		desired.authEnabled
 			? api.enableNeonAuth(projectId, branchId, { databaseName })
 			: Promise.resolve(),
@@ -155,9 +168,15 @@ async function applyBranchFeatures(args: {
 			? api.enableProjectBranchDataApi(projectId, branchId, databaseName)
 			: Promise.resolve(),
 	]);
+	if (!authSnapshot || !authSnapshot.baseUrl) {
+		return {};
+	}
+	return {
+		[NEON_ENV_VAR_KEYS.auth.baseUrl]: authSnapshot.baseUrl,
+	};
 }
 
-async function pickFeatureDatabaseName(
+async function pickServiceDatabaseName(
 	api: NeonApi,
 	projectId: string,
 	branchId: string,

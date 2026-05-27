@@ -47,7 +47,7 @@ describe("resolveConfig", () => {
 		});
 	});
 
-	test("treats explicit feature false as disabled", () => {
+	test("treats explicit service false as disabled", () => {
 		const config = defineConfig(() => ({
 			auth: { enabled: false },
 			dataApi: { enabled: false },

@@ -4,7 +4,7 @@ import { ErrorCode } from "./errors.js";
 import { FakeNeonApi } from "./fake-neon-api.js";
 import { pushConfig } from "./push-config.js";
 
-function seededFake() {
+function seededFake(opts?: { protected?: boolean }) {
 	const api = new FakeNeonApi();
 	const projectId = "proj-push";
 	api.seedProject({
@@ -16,14 +16,21 @@ function seededFake() {
 			orgId: "org-push",
 		},
 		branches: [
-			{ branch: { id: "br-main", name: "main", isDefault: true } },
+			{
+				branch: {
+					id: "br-main",
+					name: "main",
+					isDefault: true,
+					protected: opts?.protected ?? false,
+				},
+			},
 		],
 	});
 	return { api, projectId };
 }
 
 describe("pushConfig", () => {
-	test("applies branch-scoped feature enables to the selected branch", async () => {
+	test("applies branch-scoped service enables to the selected branch", async () => {
 		const { api, projectId } = seededFake();
 		const config = defineConfig((branch) => ({
 			postgres: {
@@ -46,11 +53,11 @@ describe("pushConfig", () => {
 		expect(result.applied).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({
-					kind: "feature",
+					kind: "service",
 					identifier: "auth",
 				}),
 				expect.objectContaining({
-					kind: "feature",
+					kind: "service",
 					identifier: "dataApi",
 				}),
 			]),
@@ -73,6 +80,170 @@ describe("pushConfig", () => {
 		).rejects.toMatchObject({
 			code: ErrorCode.PushConflict,
 		});
+	});
+
+	test("confirm callback applies mutable drift when user accepts", async () => {
+		const { api, projectId } = seededFake();
+		const config = defineConfig(() => ({
+			postgres: { computeSettings: { autoscalingLimitMaxCu: 4 } },
+		}));
+
+		const calls: Array<{
+			protectedBranch: boolean;
+			overrideUpdates: boolean;
+		}> = [];
+		const result = await pushConfig(config, {
+			api,
+			projectId,
+			branch: "main",
+			confirm: (ctx) => {
+				calls.push({
+					protectedBranch: ctx.protectedBranch,
+					overrideUpdates: ctx.overrideUpdates,
+				});
+				return true;
+			},
+		});
+
+		expect(calls).toEqual([
+			{ protectedBranch: false, overrideUpdates: true },
+		]);
+		expect(
+			result.applied.some(
+				(c) =>
+					c.kind === "branch" &&
+					c.action === "update" &&
+					c.identifier === "main",
+			),
+		).toBe(true);
+		expect(api.history.some((h) => h.method === "updateEndpoint")).toBe(
+			true,
+		);
+	});
+
+	test("confirm callback returning false aborts with PushAbortedError", async () => {
+		const { api, projectId } = seededFake();
+		const config = defineConfig(() => ({
+			postgres: { computeSettings: { autoscalingLimitMaxCu: 4 } },
+		}));
+
+		await expect(
+			pushConfig(config, {
+				api,
+				projectId,
+				branch: "main",
+				confirm: () => false,
+			}),
+		).rejects.toMatchObject({ code: ErrorCode.PushAborted });
+		expect(api.history.some((h) => h.method === "updateEndpoint")).toBe(
+			false,
+		);
+	});
+
+	test("protected branch triggers confirm even when no drift", async () => {
+		const { api, projectId } = seededFake({ protected: true });
+		const config = defineConfig(() => ({ auth: {} }));
+
+		const ctxs: Array<{
+			protectedBranch: boolean;
+			overrideUpdates: boolean;
+		}> = [];
+		const result = await pushConfig(config, {
+			api,
+			projectId,
+			branch: "main",
+			confirm: (ctx) => {
+				ctxs.push({
+					protectedBranch: ctx.protectedBranch,
+					overrideUpdates: ctx.overrideUpdates,
+				});
+				return true;
+			},
+		});
+
+		expect(ctxs).toEqual([
+			{ protectedBranch: true, overrideUpdates: false },
+		]);
+		expect(
+			result.applied.some(
+				(c) => c.kind === "service" && c.identifier === "auth",
+			),
+		).toBe(true);
+	});
+
+	test("protected branch + drift collapses into a single confirm call", async () => {
+		const { api, projectId } = seededFake({ protected: true });
+		const config = defineConfig(() => ({
+			postgres: { computeSettings: { autoscalingLimitMaxCu: 4 } },
+		}));
+
+		const ctxs: Array<{
+			protectedBranch: boolean;
+			overrideUpdates: boolean;
+		}> = [];
+		await pushConfig(config, {
+			api,
+			projectId,
+			branch: "main",
+			confirm: (ctx) => {
+				ctxs.push({
+					protectedBranch: ctx.protectedBranch,
+					overrideUpdates: ctx.overrideUpdates,
+				});
+				return true;
+			},
+		});
+
+		expect(ctxs).toEqual([
+			{ protectedBranch: true, overrideUpdates: true },
+		]);
+	});
+
+	test("allowProtectedBranch + updateExisting skip the confirm callback", async () => {
+		const { api, projectId } = seededFake({ protected: true });
+		const config = defineConfig(() => ({
+			postgres: { computeSettings: { autoscalingLimitMaxCu: 4 } },
+		}));
+
+		let called = false;
+		await pushConfig(config, {
+			api,
+			projectId,
+			branch: "main",
+			allowProtectedBranch: true,
+			updateExisting: true,
+			confirm: () => {
+				called = true;
+				return true;
+			},
+		});
+
+		expect(called).toBe(false);
+		expect(api.history.some((h) => h.method === "updateEndpoint")).toBe(
+			true,
+		);
+	});
+
+	test("dryRun never invokes the confirm callback", async () => {
+		const { api, projectId } = seededFake({ protected: true });
+		const config = defineConfig(() => ({
+			postgres: { computeSettings: { autoscalingLimitMaxCu: 4 } },
+		}));
+
+		let called = false;
+		const result = await pushConfig(config, {
+			api,
+			projectId,
+			branch: "main",
+			dryRun: true,
+			confirm: () => {
+				called = true;
+				return true;
+			},
+		});
+
+		expect(called).toBe(false);
+		expect(result.dryRun).toBe(true);
 	});
 
 	test("dryRun surfaces selected branch plan without mutating", async () => {
@@ -99,7 +270,7 @@ describe("pushConfig", () => {
 					identifier: "main",
 				}),
 				expect.objectContaining({
-					kind: "feature",
+					kind: "service",
 					identifier: "auth",
 				}),
 			]),

@@ -72,8 +72,8 @@ export function resolveConfig(
 	}
 
 	const resolved: ResolvedBranchConfig = {
-		authEnabled: isFeatureEnabled(cfg.auth),
-		dataApiEnabled: isFeatureEnabled(cfg.dataApi),
+		authEnabled: isServiceEnabled(cfg.auth),
+		dataApiEnabled: isServiceEnabled(cfg.dataApi),
 	};
 	if (cfg.parent !== undefined) resolved.parent = cfg.parent;
 	if (ttlSeconds !== undefined) resolved.ttlSeconds = ttlSeconds;
@@ -88,8 +88,8 @@ export function resolveConfig(
 	return resolved;
 }
 
-function isFeatureEnabled(feature: { enabled?: boolean } | undefined): boolean {
-	return feature !== undefined && feature.enabled !== false;
+function isServiceEnabled(service: { enabled?: boolean } | undefined): boolean {
+	return service !== undefined && service.enabled !== false;
 }
 
 /**

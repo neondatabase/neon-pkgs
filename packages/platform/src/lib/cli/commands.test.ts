@@ -6,6 +6,7 @@ import { makeTempRepo, stubCleanNeonEnv } from "../test-utils.js";
 import {
 	runBranch,
 	runCheckout,
+	runEnvPull,
 	runInit,
 	runPull,
 	runPush,
@@ -55,7 +56,7 @@ function seededFake() {
 
 function policy() {
 	return `import { defineConfig } from "${PLATFORM_SRC}";
-export default defineConfig((branch) => branch.name === "main" ? { auth: { enabled: true } } : { parent: "main", ttl: "1h" });`;
+export default defineConfig((branch) => branch.name === "main" ? { auth: { enabled: true } } : { parent: "main", ttl: "1h", auth: {} });`;
 }
 
 function noopPlatformInstall() {
@@ -152,6 +153,42 @@ describe("runBranch / runCheckout", () => {
 			readFileSync(join(root, ".neon", "project.json"), "utf-8"),
 		);
 		expect(reread.branchId).not.toBe("br-main");
+		expect(readFileSync(join(root, ".env.local"), "utf-8")).toContain(
+			"NEON_AUTH_BASE_URL=https://api.fake.neon.tech/auth/",
+		);
+	});
+
+	test("env pull from a package reuses auth keys captured at branch creation", async () => {
+		const { api, projectId, orgId } = seededFake();
+		const root = setup({
+			"package.json": "{}",
+			"packages/db/package.json": "{}",
+			".neon/project.json": JSON.stringify({
+				projectId,
+				orgId,
+				branchId: "br-main",
+			}),
+			"neon.ts": policy(),
+		});
+		const nested = join(root, "packages", "db");
+
+		const branchResult = await runBranch(
+			{ name: "dev" },
+			{ cwd: root, api },
+		);
+		expect(branchResult.exitCode).toBe(0);
+		const pullResult = await runEnvPull({}, { cwd: nested, api });
+
+		expect(pullResult.exitCode).toBe(0);
+		expect(pullResult.stdout).toContain(
+			`Updated ${join(root, ".env.local")}`,
+		);
+		const envFile = readFileSync(join(root, ".env.local"), "utf-8");
+		expect(envFile).toContain("DATABASE_URL=");
+		expect(envFile).toContain("DATABASE_URL_UNPOOLED=");
+		expect(envFile).toContain(
+			"NEON_AUTH_BASE_URL=https://api.fake.neon.tech/auth/",
+		);
 	});
 
 	test("branch accepts no name and creates from the bare wildcard", async () => {
@@ -206,7 +243,159 @@ describe("runPush / runStatus", () => {
 		const result = await runPush({}, { cwd: root, api });
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain("branch main (br-main)");
-		expect(result.stdout).toContain("[feature:auth] enable");
+		expect(result.stdout).toContain("[service:auth] enable");
+	});
+
+	test("push prompts and applies when user confirms an override", async () => {
+		const { api, projectId } = seededFake();
+		// Pre-create a drift on the read-write endpoint so the policy below requests
+		// an override the user has to confirm.
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({
+				projectId,
+				branchId: "br-main",
+			}),
+			"neon.ts": `import { defineConfig } from "${PLATFORM_SRC}";\nexport default defineConfig(() => ({ postgres: { computeSettings: { autoscalingLimitMaxCu: 4 } } }));`,
+		});
+		const prompts: string[] = [];
+		const result = await runPush(
+			{},
+			{
+				cwd: root,
+				api,
+				confirmPrompt: async (msg) => {
+					prompts.push(msg);
+					return true;
+				},
+			},
+		);
+		expect(result.exitCode).toBe(0);
+		expect(prompts).toHaveLength(1);
+		expect(prompts[0]).toContain("override existing remote settings");
+		expect(api.history.some((h) => h.method === "updateEndpoint")).toBe(
+			true,
+		);
+	});
+
+	test("push aborts with non-zero exit when user declines", async () => {
+		const { api, projectId } = seededFake();
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({
+				projectId,
+				branchId: "br-main",
+			}),
+			"neon.ts": `import { defineConfig } from "${PLATFORM_SRC}";\nexport default defineConfig(() => ({ postgres: { computeSettings: { autoscalingLimitMaxCu: 4 } } }));`,
+		});
+		const result = await runPush(
+			{},
+			{
+				cwd: root,
+				api,
+				confirmPrompt: async () => false,
+			},
+		);
+		expect(result.exitCode).toBe(12);
+		expect(result.stderr).toContain("Aborted push");
+		expect(api.history.some((h) => h.method === "updateEndpoint")).toBe(
+			false,
+		);
+	});
+
+	test("push collapses protected branch + override drift into a single prompt", async () => {
+		const api = new FakeNeonApi();
+		const projectId = "proj-cli-prot";
+		api.seedProject({
+			project: {
+				id: projectId,
+				name: "cli-prot",
+				regionId: "aws-us-east-1",
+				pgVersion: 17,
+			},
+			branches: [
+				{
+					branch: {
+						id: "br-main",
+						name: "main",
+						isDefault: true,
+						protected: true,
+					},
+				},
+			],
+		});
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({
+				projectId,
+				branchId: "br-main",
+			}),
+			"neon.ts": `import { defineConfig } from "${PLATFORM_SRC}";\nexport default defineConfig(() => ({ postgres: { computeSettings: { autoscalingLimitMaxCu: 4 } } }));`,
+		});
+		const prompts: string[] = [];
+		const result = await runPush(
+			{},
+			{
+				cwd: root,
+				api,
+				confirmPrompt: async (msg) => {
+					prompts.push(msg);
+					return true;
+				},
+			},
+		);
+		expect(result.exitCode).toBe(0);
+		expect(prompts).toHaveLength(1);
+		expect(prompts[0]).toContain("protected");
+		expect(prompts[0]).toContain("override existing remote settings");
+	});
+
+	test("--allow-protected-branch + --update-existing skip the prompt entirely", async () => {
+		const api = new FakeNeonApi();
+		const projectId = "proj-cli-prot2";
+		api.seedProject({
+			project: {
+				id: projectId,
+				name: "cli-prot2",
+				regionId: "aws-us-east-1",
+				pgVersion: 17,
+			},
+			branches: [
+				{
+					branch: {
+						id: "br-main",
+						name: "main",
+						isDefault: true,
+						protected: true,
+					},
+				},
+			],
+		});
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({
+				projectId,
+				branchId: "br-main",
+			}),
+			"neon.ts": `import { defineConfig } from "${PLATFORM_SRC}";\nexport default defineConfig(() => ({ postgres: { computeSettings: { autoscalingLimitMaxCu: 4 } } }));`,
+		});
+		let calls = 0;
+		const result = await runPush(
+			{ allowProtectedBranch: true, updateExisting: true },
+			{
+				cwd: root,
+				api,
+				confirmPrompt: async () => {
+					calls++;
+					return true;
+				},
+			},
+		);
+		expect(result.exitCode).toBe(0);
+		expect(calls).toBe(0);
+		expect(api.history.some((h) => h.method === "updateEndpoint")).toBe(
+			true,
+		);
 	});
 
 	test("status is a dry run", async () => {

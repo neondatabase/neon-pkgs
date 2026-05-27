@@ -26,6 +26,7 @@ export const ErrorCode = {
 	EnvNotInjected: "PLATFORM_ENV_NOT_INJECTED",
 	MissingContext: "PLATFORM_MISSING_CONTEXT",
 	PushConflict: "PLATFORM_PUSH_CONFLICT",
+	PushAborted: "PLATFORM_PUSH_ABORTED",
 	ConfigLoadFailed: "PLATFORM_CONFIG_LOAD_FAILED",
 	MissingApiKey: "PLATFORM_MISSING_API_KEY",
 	AmbiguousBranchAuth: "PLATFORM_AMBIGUOUS_BRANCH_AUTH",
@@ -163,6 +164,40 @@ function suggestFix(c: ConflictReport): string {
 		return "create the parent branch on Neon first, or change the `parent` reference to an existing branch.";
 	}
 	return "pass `updateExisting: true` (SDK) / `--update-existing` (CLI) to apply.";
+}
+
+/**
+ * Thrown by {@link pushConfig} when the caller-supplied `confirm` callback declines a
+ * push that requires confirmation (protected branch and/or mutable drift overriding
+ * existing remote settings).
+ *
+ * The CLI maps this to a non-zero exit so users see "aborted" rather than a stack trace.
+ */
+export class PushAbortedError extends PlatformError {
+	override readonly name = "PushAbortedError";
+	readonly branchName: string;
+	readonly reasons: readonly ("protected-branch" | "override-updates")[];
+
+	constructor(
+		branchName: string,
+		reasons: readonly ("protected-branch" | "override-updates")[],
+	) {
+		super(
+			"PLATFORM_PUSH_ABORTED",
+			[
+				`Aborted push to branch ${JSON.stringify(branchName)}.`,
+				reasons.length > 0
+					? `Reason${reasons.length === 1 ? "" : "s"}: ${reasons.join(", ")}.`
+					: undefined,
+				"Re-run with `--update-existing` (override existing settings) or `--allow-protected-branch` (push to a protected branch) to skip the prompt.",
+			]
+				.filter(Boolean)
+				.join(" "),
+			{ details: { branchName, reasons: [...reasons] } },
+		);
+		this.branchName = branchName;
+		this.reasons = reasons;
+	}
 }
 
 /**

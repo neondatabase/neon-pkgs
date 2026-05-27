@@ -3,10 +3,14 @@ import { resolveConfig } from "./define-config.js";
 import {
 	diffConfig,
 	type PlanStep,
-	type RemoteFeatureState,
+	type RemoteServiceState,
 	type RemoteState,
 } from "./diff.js";
-import { MissingContextError, PushConflictError } from "./errors.js";
+import {
+	MissingContextError,
+	PushAbortedError,
+	PushConflictError,
+} from "./errors.js";
 import { type BranchRef, loadContextWithBranch } from "./load-context.js";
 import { loadConfigFromFile } from "./loader.js";
 import type { NeonApi, NeonBranchSnapshot } from "./neon-api.js";
@@ -35,12 +39,40 @@ export interface PushConfigOptions {
 	 */
 	api?: NeonApi;
 	/**
-	 * When `true`, apply mutable drift on the selected branch as actual mutations instead
-	 * of refusing with `PushConflictError`.
+	 * Auto-confirm overriding existing remote settings.
 	 *
-	 * Default: `false` (drift on existing branch resources → fail-fast conflict).
+	 * When `true`, mutable drift on the selected branch (TTL, `protected` flag, compute
+	 * settings) is applied as actual mutations and the override-confirm prompt is
+	 * skipped. When `false` (default) the behaviour depends on whether `confirm` is
+	 * supplied:
+	 *   - With `confirm`: the callback is asked whether to apply the override.
+	 *   - Without `confirm`: drift is reported as a `PushConflictError` (legacy
+	 *     non-interactive default — preserved so programmatic SDK callers don't
+	 *     silently start mutating remote state).
 	 */
 	updateExisting?: boolean;
+	/**
+	 * Auto-confirm pushing to a protected branch.
+	 *
+	 * When `true`, no protected-branch confirmation is asked. When `false` (default):
+	 *   - With `confirm`: the callback is asked.
+	 *   - Without `confirm`: the push proceeds (legacy SDK default).
+	 */
+	allowProtectedBranch?: boolean;
+	/**
+	 * Optional confirmation callback. Invoked once with a single context object before
+	 * any mutations run when the push needs confirmation: pushing to a protected
+	 * branch (unless `allowProtectedBranch` is `true`) and/or applying mutable drift
+	 * (unless `updateExisting` is `true`).
+	 *
+	 * Both prompts collapse into a single callback invocation when both apply, so the
+	 * CLI can render one combined "are you sure?" prompt.
+	 *
+	 * Resolves to `true` to proceed, `false` to abort with {@link PushAbortedError}.
+	 *
+	 * Never invoked on `dryRun`.
+	 */
+	confirm?: (context: PushConfirmContext) => boolean | Promise<boolean>;
 	/**
 	 * When `true`, compute the full plan against the live remote state but **do not
 	 * execute any mutations**. The resulting `PushResult.applied` array records every
@@ -56,6 +88,29 @@ export interface PushConfigOptions {
 	 * Explicit path to a config file (only used when no `config` is supplied).
 	 */
 	configPath?: string;
+}
+
+/**
+ * Context handed to a {@link PushConfigOptions.confirm} callback. Both flags can be
+ * `true` simultaneously when the push targets a protected branch *and* would override
+ * existing settings — render a single combined prompt covering both reasons.
+ */
+export interface PushConfirmContext {
+	/** Name of the target branch on Neon. */
+	branchName: string;
+	/**
+	 * `true` when the target branch has the `protected` flag on Neon and the caller
+	 * did not pass `allowProtectedBranch: true`.
+	 */
+	protectedBranch: boolean;
+	/**
+	 * `true` when the plan would override existing remote settings (TTL, `protected`
+	 * flag, compute settings on an existing endpoint) and the caller did not pass
+	 * `updateExisting: true`. Additive operations (enabling Neon Auth / Data API for
+	 * the first time) are **not** counted here — those are unambiguous and never
+	 * prompt.
+	 */
+	overrideUpdates: boolean;
 }
 
 /**
@@ -98,6 +153,7 @@ export async function pushConfig(
 
 	const dryRun = options.dryRun === true;
 	const updateExisting = options.updateExisting === true;
+	const allowProtectedBranch = options.allowProtectedBranch === true;
 
 	const ctx = requireContextForPush(options, cwd);
 	const remoteProject = await api.getProject(ctx.projectId);
@@ -116,7 +172,7 @@ export async function pushConfig(
 		isProtected: branch.protected,
 		...(branch.expiresAt ? { expiresAt: branch.expiresAt } : {}),
 	});
-	const features = await resolveFeatureState({
+	const services = await resolveServiceState({
 		api,
 		projectId: remoteProject.id,
 		branch,
@@ -129,13 +185,45 @@ export async function pushConfig(
 		endpoint: endpoints.find(
 			(ep) => ep.type === "read_write" && ep.branchId === branch.id,
 		),
-		features,
+		services,
 	};
 
-	const diff = diffConfig(resolved, remote, { updateExisting });
+	// Always compute the plan with `updateExisting: true` so we can see what *would* be
+	// overridden. The decision of whether to apply / prompt / fail is gated below using
+	// the recorded steps.
+	const diff = diffConfig(resolved, remote, { updateExisting: true });
+	const overrideSteps = diff.plan.filter(isOverrideStep);
+	const needsOverrideConfirm = overrideSteps.length > 0 && !updateExisting;
+	const needsProtectedConfirm = branch.protected && !allowProtectedBranch;
 
 	if (!dryRun && diff.conflicts.length > 0) {
 		throw new PushConflictError(diff.conflicts);
+	}
+
+	if (!dryRun && (needsOverrideConfirm || needsProtectedConfirm)) {
+		if (options.confirm) {
+			const ok = await options.confirm({
+				branchName: branch.name,
+				protectedBranch: needsProtectedConfirm,
+				overrideUpdates: needsOverrideConfirm,
+			});
+			if (!ok) {
+				const reasons: ("protected-branch" | "override-updates")[] = [];
+				if (needsProtectedConfirm) reasons.push("protected-branch");
+				if (needsOverrideConfirm) reasons.push("override-updates");
+				throw new PushAbortedError(branch.name, reasons);
+			}
+		} else if (needsOverrideConfirm) {
+			// Legacy non-interactive fallback: surface the would-be drift as a
+			// `PushConflictError` so programmatic callers that skipped both
+			// `updateExisting` and `confirm` see the previous fail-fast behavior.
+			const legacy = diffConfig(resolved, remote, {
+				updateExisting: false,
+			});
+			throw new PushConflictError(legacy.conflicts);
+		}
+		// Protected branch + no confirm callback: legacy default proceeds without
+		// any extra check (no programmatic regression).
 	}
 
 	const applied: AppliedChange[] = [
@@ -167,6 +255,18 @@ export async function pushConfig(
 	};
 	if (remoteProject.orgId) result.orgId = remoteProject.orgId;
 	return result;
+}
+
+/**
+ * `update-*` plan steps mutate existing remote state. `enable-*` steps are additive (no
+ * existing resource to override) and never trigger the override-confirm prompt.
+ */
+function isOverrideStep(step: PlanStep): boolean {
+	return (
+		step.kind === "update-branch-ttl" ||
+		step.kind === "update-branch-protected" ||
+		step.kind === "update-endpoint"
+	);
 }
 
 /**
@@ -204,7 +304,7 @@ function synthesizeAppliedChange(step: PlanStep): AppliedChange {
 			};
 		case "enable-auth":
 			return {
-				kind: "feature",
+				kind: "service",
 				action: "create",
 				identifier: "auth",
 				details: {
@@ -216,7 +316,7 @@ function synthesizeAppliedChange(step: PlanStep): AppliedChange {
 			};
 		case "enable-data-api":
 			return {
-				kind: "feature",
+				kind: "service",
 				action: "create",
 				identifier: "dataApi",
 				details: {
@@ -289,13 +389,13 @@ function resolveRemoteBranch(
 /**
  * Pre-fetch the current state of branch-scoped integrations on the selected branch.
  */
-async function resolveFeatureState(args: {
+async function resolveServiceState(args: {
 	api: NeonApi;
 	projectId: string;
 	branch: NeonBranchSnapshot;
 	wantsAuth: boolean;
 	wantsDataApi: boolean;
-}): Promise<RemoteFeatureState> {
+}): Promise<RemoteServiceState> {
 	const { api, projectId, branch, wantsAuth, wantsDataApi } = args;
 	if (!wantsAuth && !wantsDataApi) {
 		return {
@@ -305,7 +405,7 @@ async function resolveFeatureState(args: {
 		};
 	}
 
-	const databaseName = await pickFeatureDatabaseName(
+	const databaseName = await pickServiceDatabaseName(
 		api,
 		projectId,
 		branch.id,
@@ -332,7 +432,7 @@ async function resolveFeatureState(args: {
  * stays useful even on branches with multiple databases — push doesn't have a way to
  * surface a "pick one" prompt the way `fetchEnv` does.
  */
-async function pickFeatureDatabaseName(
+async function pickServiceDatabaseName(
 	api: NeonApi,
 	projectId: string,
 	branchId: string,
@@ -412,7 +512,7 @@ async function applyStep(
 					: {}),
 			});
 			return {
-				kind: "feature",
+				kind: "service",
 				action: "create",
 				identifier: "auth",
 				details: {
@@ -430,7 +530,7 @@ async function applyStep(
 				step.databaseName,
 			);
 			return {
-				kind: "feature",
+				kind: "service",
 				action: "create",
 				identifier: "dataApi",
 				details: {

@@ -62,7 +62,7 @@ export const computeSettingsSchema = z
 		}
 	});
 
-export const featureToggleSchema = z.strictObject({
+export const serviceToggleSchema = z.strictObject({
 	enabled: z.boolean().optional(),
 });
 
@@ -85,8 +85,8 @@ export const branchConfigSchema = z
 				}
 			}),
 		postgres: postgresConfigSchema.optional(),
-		auth: featureToggleSchema.optional(),
-		dataApi: featureToggleSchema.optional(),
+		auth: serviceToggleSchema.optional(),
+		dataApi: serviceToggleSchema.optional(),
 	})
 	.superRefine((cfg, ctx) => {
 		validateParentReference({

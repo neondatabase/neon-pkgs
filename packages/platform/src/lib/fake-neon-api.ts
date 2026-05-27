@@ -400,7 +400,7 @@ export class FakeNeonApi implements NeonApi {
 		this.requireProject(projectId);
 		this.requireBranch(projectId, branchId);
 		const found = this.neonAuth.get(`${projectId}:${branchId}`);
-		return found ? clone(found) : null;
+		return found ? clone(publicNeonAuthSnapshot(found)) : null;
 	}
 
 	async enableNeonAuth(
@@ -416,10 +416,13 @@ export class FakeNeonApi implements NeonApi {
 		this.requireBranch(projectId, branchId);
 		const key = `${projectId}:${branchId}`;
 		const existing = this.neonAuth.get(key);
-		if (existing) return clone(existing);
+		if (existing) return clone(publicNeonAuthSnapshot(existing));
 		const snapshot: NeonAuthSnapshot = {
 			projectId: `auth-${branchId}`,
+			publishableClientKey: `pub-${branchId}`,
+			secretServerKey: `secret-${branchId}`,
 			jwksUrl: `https://api.fake.neon.tech/auth/${projectId}/${branchId}/.well-known/jwks.json`,
+			baseUrl: `https://api.fake.neon.tech/auth/${projectId}/${branchId}`,
 		};
 		this.neonAuth.set(key, snapshot);
 		return clone(snapshot);
@@ -537,4 +540,13 @@ export class FakeNeonApi implements NeonApi {
 
 function clone<T>(value: T): T {
 	return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function publicNeonAuthSnapshot(snapshot: NeonAuthSnapshot): NeonAuthSnapshot {
+	const publicSnapshot: NeonAuthSnapshot = {
+		projectId: snapshot.projectId,
+		jwksUrl: snapshot.jwksUrl,
+	};
+	if (snapshot.baseUrl) publicSnapshot.baseUrl = snapshot.baseUrl;
+	return publicSnapshot;
 }

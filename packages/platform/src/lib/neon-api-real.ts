@@ -41,6 +41,8 @@ const DEFAULT_NEON_API_BASE_URL = "https://console.neon.tech/api/v2";
 
 const neonAuthResponseSchema = z.object({
 	auth_provider_project_id: z.string(),
+	pub_client_key: z.string().optional(),
+	secret_server_key: z.string().optional(),
 	jwks_url: z.string(),
 	base_url: z.string().optional(),
 });
@@ -481,13 +483,7 @@ class RealNeonApi implements NeonApi {
 						projectId,
 						branchId,
 					);
-					const data = res.data;
-					const snapshot: NeonAuthSnapshot = {
-						projectId: data.auth_provider_project_id,
-						jwksUrl: data.jwks_url,
-					};
-					if (data.base_url) snapshot.baseUrl = data.base_url;
-					return snapshot;
+					return neonAuthResponseToSnapshot(res.data);
 				},
 				{ projectId },
 			);
@@ -517,12 +513,7 @@ class RealNeonApi implements NeonApi {
 						createNeonAuthRestInput(input),
 					);
 					const parsed = neonAuthResponseSchema.parse(data);
-					const snapshot: NeonAuthSnapshot = {
-						projectId: parsed.auth_provider_project_id,
-						jwksUrl: parsed.jwks_url,
-					};
-					if (parsed.base_url) snapshot.baseUrl = parsed.base_url;
-					return snapshot;
+					return neonAuthResponseToSnapshot(parsed);
 				},
 				{ projectId, mutating: true },
 			);
@@ -625,6 +616,23 @@ class RealNeonApi implements NeonApi {
 			throw err;
 		}
 	}
+}
+
+function neonAuthResponseToSnapshot(
+	data: z.infer<typeof neonAuthResponseSchema>,
+): NeonAuthSnapshot {
+	const snapshot: NeonAuthSnapshot = {
+		projectId: data.auth_provider_project_id,
+		jwksUrl: data.jwks_url,
+	};
+	if (data.pub_client_key !== undefined) {
+		snapshot.publishableClientKey = data.pub_client_key;
+	}
+	if (data.secret_server_key !== undefined) {
+		snapshot.secretServerKey = data.secret_server_key;
+	}
+	if (data.base_url) snapshot.baseUrl = data.base_url;
+	return snapshot;
 }
 
 export function createNeonAuthRestInput(input: {

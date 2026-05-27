@@ -13,5 +13,6 @@ export {
 	ErrorCode,
 	MissingContextError,
 	PlatformError,
+	PushAbortedError,
 	PushConflictError,
 } from "./errors.js";

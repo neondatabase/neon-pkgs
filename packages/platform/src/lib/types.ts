@@ -57,8 +57,8 @@ export interface BranchTarget {
 	expiresAt?: string;
 }
 
-export interface FeatureToggle {
-	/** Defaults to `true` when the feature namespace is present. Set `false` to opt out. */
+export interface ServiceToggle {
+	/** Defaults to `true` when the service namespace is present. Set `false` to opt out. */
 	enabled?: boolean;
 }
 
@@ -76,13 +76,13 @@ interface BranchConfigBase {
 	postgres?: PostgresConfig;
 }
 
-type BranchFeatureConfig =
+type BranchServiceConfig =
 	| { auth?: never; dataApi?: never }
-	| { auth: FeatureToggle; dataApi?: never }
-	| { auth?: never; dataApi: FeatureToggle }
-	| { auth: FeatureToggle; dataApi: FeatureToggle };
+	| { auth: ServiceToggle; dataApi?: never }
+	| { auth?: never; dataApi: ServiceToggle }
+	| { auth: ServiceToggle; dataApi: ServiceToggle };
 
-export type BranchConfig = BranchConfigBase & BranchFeatureConfig;
+export type BranchConfig = BranchConfigBase & BranchServiceConfig;
 
 export type Config = (branch: BranchTarget) => BranchConfig;
 
@@ -100,10 +100,10 @@ export interface ResolvedBranchConfig {
  */
 export interface AppliedChange {
 	/**
-	 * `feature` covers branch-scoped integrations driven by the branch policy (e.g.
+	 * `service` covers branch-scoped integrations driven by the branch policy (e.g.
 	 * Neon Auth, Data API).
 	 */
-	kind: "branch" | "feature";
+	kind: "branch" | "service";
 	action: "create" | "update" | "noop";
 	identifier: string;
 	details?: Record<string, unknown>;

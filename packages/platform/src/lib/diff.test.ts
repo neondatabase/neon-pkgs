@@ -18,14 +18,14 @@ describe("diffConfig", () => {
 			autoscalingLimitMaxCu: 1,
 			suspendTimeout: "5m",
 		},
-		features: {
+		services: {
 			databaseName: "neondb",
 			authEnabled: false,
 			dataApiEnabled: false,
 		},
 	};
 
-	test("plans feature enables", () => {
+	test("plans service enables", () => {
 		const diff = diffConfig(
 			{ authEnabled: true, dataApiEnabled: true },
 			remote,

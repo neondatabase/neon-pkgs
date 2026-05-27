@@ -51,6 +51,40 @@ describe("fetchEnv", () => {
 			fetchEnv(config, { api, projectId, branch: "main" }),
 		).rejects.toMatchObject({ code: ErrorCode.NotFound });
 	});
+
+	test("returns the integration base URL from the live snapshot", async () => {
+		const { api, projectId } = seededFake();
+		await api.enableNeonAuth(projectId, "br-main");
+		const config = defineConfig(() => ({ auth: {} }));
+
+		const env = await fetchEnv(config, {
+			api,
+			projectId,
+			branch: "main",
+		});
+
+		expect(env.auth.baseUrl).toBe(
+			`https://api.fake.neon.tech/auth/${projectId}/br-main`,
+		);
+	});
+
+	test("falls back to the supplied env source when the snapshot omits base URL", async () => {
+		const { api, projectId } = seededFake();
+		api.seedNeonAuth(projectId, "br-main", {
+			projectId: "auth-br-main",
+			jwksUrl: "https://example.com/jwks.json",
+		});
+		const config = defineConfig(() => ({ auth: {} }));
+
+		const env = await fetchEnv(config, {
+			api,
+			projectId,
+			branch: "main",
+			env: { NEON_AUTH_BASE_URL: "https://auth.example.com" },
+		});
+
+		expect(env.auth.baseUrl).toBe("https://auth.example.com");
+	});
 });
 
 describe("parseEnv", () => {
@@ -61,7 +95,7 @@ describe("parseEnv", () => {
 		expect(env.postgres.databaseUrl).toBe("postgres://pooled");
 	});
 
-	test("requires feature env when feature namespaces are present", () => {
+	test("requires service env when service namespaces are present", () => {
 		vi.stubEnv("DATABASE_URL", "postgres://pooled");
 		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
 		const config = defineConfig(() => ({
@@ -77,10 +111,7 @@ describe("parseEnv", () => {
 	test("types auth env when config spreads BranchConfig defaults", () => {
 		vi.stubEnv("DATABASE_URL", "postgres://pooled");
 		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
-		vi.stubEnv("NEON_AUTH_PROJECT_ID", "auth-project");
-		vi.stubEnv("NEON_AUTH_PUBLISHABLE_CLIENT_KEY", "pub");
-		vi.stubEnv("NEON_AUTH_SECRET_SERVER_KEY", "secret");
-		vi.stubEnv("NEON_AUTH_JWKS_URL", "https://example.com/jwks.json");
+		vi.stubEnv("NEON_AUTH_BASE_URL", "https://auth.example.com");
 		const config = defineConfig((branch) => {
 			const defaults: BranchConfig = {
 				auth: {},
@@ -106,7 +137,17 @@ describe("parseEnv", () => {
 		expectType<NeonAuthEnv>(env.auth);
 		// @ts-expect-error Auth defaults must not imply Data API env.
 		env.dataApi;
-		expect(env.auth.projectId).toBe("auth-project");
+		expect(env.auth.baseUrl).toBe("https://auth.example.com");
+	});
+
+	test("rejects an empty NEON_AUTH_BASE_URL value", () => {
+		vi.stubEnv("DATABASE_URL", "postgres://pooled");
+		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
+		vi.stubEnv("NEON_AUTH_BASE_URL", "");
+
+		expect(() => parseEnv(defineConfig(() => ({ auth: {} })))).toThrow(
+			expect.objectContaining({ code: ErrorCode.EnvNotInjected }),
+		);
 	});
 
 	test("projects env object to process env keys", () => {

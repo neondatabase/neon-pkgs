@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { createInterface } from "node:readline/promises";
 import { resolveApiKey } from "../auth.js";
 import { branch } from "../branch.js";
 import { checkout } from "../checkout.js";
@@ -10,6 +11,7 @@ import {
 	ErrorCode,
 	MissingContextError,
 	PlatformError,
+	PushAbortedError,
 	PushConflictError,
 } from "../errors.js";
 import { loadContext } from "../load-context.js";
@@ -22,7 +24,11 @@ import {
 	ensurePlatformPackageInstalled,
 } from "../package-manager.js";
 import { pullConfig } from "../pull-config.js";
-import { type PushConfigOptions, pushConfig } from "../push-config.js";
+import {
+	type PushConfigOptions,
+	type PushConfirmContext,
+	pushConfig,
+} from "../push-config.js";
 import { formatConfigAsJson, formatInitTemplate } from "./format.js";
 
 /** Filename written by `neon-ts pull` (and read by every other subcommand). */
@@ -48,6 +54,12 @@ export interface CommandEnv {
 	ensurePlatformPackage?: (
 		options: EnsurePlatformPackageOptions,
 	) => Promise<EnsurePlatformPackageResult>;
+	/**
+	 * Yes/no prompt used by `runPush` for protected-branch / override confirmation.
+	 * When omitted, a real readline-backed prompt over stdin/stdout is used; tests
+	 * inject a stub to drive the interactive flow without a TTY.
+	 */
+	confirmPrompt?: (message: string) => Promise<boolean>;
 }
 
 export interface CommandResult {
@@ -158,12 +170,18 @@ export interface PushCommandOptions {
 	branch?: string;
 	apiKey?: string;
 	updateExisting?: boolean;
+	allowProtectedBranch?: boolean;
 }
 
 /**
  * Implementation of `neon-ts push`. Loads `neon.ts` (or the path supplied via
  * `--config`), pushes against the resolved project, and prints a human-readable summary
  * of what changed.
+ *
+ * Interactive by default. When the push targets a protected branch and/or would
+ * override existing remote settings, the user is prompted once with a single combined
+ * "are you sure?" question. `--allow-protected-branch` and `--update-existing` are the
+ * non-interactive ack flags for those cases respectively.
  */
 export async function runPush(
 	options: PushCommandOptions,
@@ -172,6 +190,7 @@ export async function runPush(
 	const api = resolveApi(options.apiKey, ctx);
 	if (typeof api === "string") return failure(api);
 
+	const confirmPrompt = ctx.confirmPrompt ?? defaultConfirmPrompt;
 	const pushOptions: PushConfigOptions = {
 		api,
 		cwd: ctx.cwd,
@@ -179,6 +198,8 @@ export async function runPush(
 		...(options.projectId ? { projectId: options.projectId } : {}),
 		...(options.branch ? { branch: options.branch } : {}),
 		...(options.updateExisting ? { updateExisting: true } : {}),
+		...(options.allowProtectedBranch ? { allowProtectedBranch: true } : {}),
+		confirm: (context) => confirmPushChanges(context, { confirmPrompt }),
 	};
 
 	try {
@@ -197,7 +218,7 @@ export async function runPush(
 			lines.push("Applied:");
 			for (const change of realChanges) {
 				const verb =
-					change.kind === "feature" && change.action === "create"
+					change.kind === "service" && change.action === "create"
 						? "enable"
 						: change.action;
 				lines.push(`  - [${change.kind}:${change.identifier}] ${verb}`);
@@ -206,6 +227,57 @@ export async function runPush(
 		return { exitCode: 0, stdout: `${lines.join("\n")}\n`, stderr: "" };
 	} catch (err) {
 		return handleError(err);
+	}
+}
+
+/**
+ * Compose the human-readable confirmation message for a push that requires acking,
+ * delegate to the supplied yes/no prompt, and return whether the user confirmed.
+ *
+ * Both reasons (protected branch + override updates) collapse into a single prompt
+ * when both apply.
+ */
+async function confirmPushChanges(
+	context: PushConfirmContext,
+	deps: { confirmPrompt: (message: string) => Promise<boolean> },
+): Promise<boolean> {
+	const lines: string[] = [];
+	if (context.protectedBranch && context.overrideUpdates) {
+		lines.push(
+			`Branch ${JSON.stringify(context.branchName)} is protected and this push will override existing remote settings on it.`,
+		);
+	} else if (context.protectedBranch) {
+		lines.push(
+			`Branch ${JSON.stringify(context.branchName)} is protected. About to push changes to it.`,
+		);
+	} else if (context.overrideUpdates) {
+		lines.push(
+			`This push will override existing remote settings on branch ${JSON.stringify(context.branchName)}.`,
+		);
+	}
+	lines.push("");
+	lines.push("Continue? [y/N]");
+	return deps.confirmPrompt(lines.join("\n"));
+}
+
+/**
+ * Read a single y/n answer from stdin via `readline/promises`. Empty input or anything
+ * that doesn't start with `y`/`Y` resolves to `false` so the safe default is "abort".
+ *
+ * When stdin isn't a TTY (CI, scripts) the prompt still works — it just reads a line
+ * non-interactively. To skip the prompt entirely, pass `--update-existing` and/or
+ * `--allow-protected-branch`.
+ */
+async function defaultConfirmPrompt(message: string): Promise<boolean> {
+	const rl = createInterface({
+		input: process.stdin,
+		output: process.stderr,
+	});
+	try {
+		const answer = await rl.question(`${message} `);
+		return /^y(es)?$/i.test(answer.trim());
+	} finally {
+		rl.close();
 	}
 }
 
@@ -272,6 +344,29 @@ export async function runBranch(
 					result.contextFile.json.trimEnd(),
 				);
 				break;
+		}
+		const capturedEnvKeys = Object.keys(result.capturedEnv);
+		if (capturedEnvKeys.length > 0) {
+			const envPath = join(dirname(result.configPath), DEFAULT_ENV_FILE);
+			const existing = existsSync(envPath)
+				? readFileSync(envPath, "utf-8")
+				: null;
+			const writeResult = writeFileSafely(
+				envPath,
+				mergeEnvFile(existing, result.capturedEnv),
+			);
+			if (writeResult.exitCode === 0) {
+				lines.push(
+					`  stored Neon Auth keys in ${envPath} for future env pulls.`,
+				);
+			} else {
+				lines.push(
+					`  ! could not write Neon Auth keys to ${envPath}: ${writeResult.stderr.trim()}`,
+					"  the branch on Neon was still created; add these values to your env file before they are lost:",
+					"",
+					mergeEnvFile(null, result.capturedEnv).trimEnd(),
+				);
+			}
 		}
 		return { exitCode: 0, stdout: `${lines.join("\n")}\n`, stderr: "" };
 	} catch (err) {
@@ -430,11 +525,11 @@ function formatStatus(result: Awaited<ReturnType<typeof pushConfig>>): string {
 		lines.push("Plan (would apply on `neon-ts push`):");
 		for (const change of realChanges) {
 			const marker = change.action === "create" ? "+" : "~";
-			// `feature` is enabling an integration (Neon Auth, Data API) — render it as
+			// `service` is enabling an integration (Neon Auth, Data API) — render it as
 			// "enable" rather than the underlying "create" so the diff matches the branch
 			// policy mental model.
 			const verb =
-				change.kind === "feature" && change.action === "create"
+				change.kind === "service" && change.action === "create"
 					? "enable"
 					: change.action;
 			lines.push(
@@ -510,12 +605,16 @@ export async function runEnvPull(
 	if (typeof api === "string") return failure(api);
 
 	try {
-		const env = await loadConfigAndFetchEnv(options, ctx, api);
-		const targetPath = options.file
-			? options.file.startsWith("/")
-				? options.file
-				: join(ctx.cwd, options.file)
-			: join(ctx.cwd, DEFAULT_ENV_FILE);
+		const explicitTargetPath = options.file
+			? resolveEnvFilePath(options.file, ctx.cwd)
+			: undefined;
+		const { env, defaultEnvPath } = await loadConfigAndFetchEnv(
+			options,
+			ctx,
+			api,
+			explicitTargetPath,
+		);
+		const targetPath = explicitTargetPath ?? defaultEnvPath;
 		const existing = existsSync(targetPath)
 			? readFileSync(targetPath, "utf-8")
 			: null;
@@ -595,6 +694,25 @@ function matchEnvKey(line: string): string | null {
 	return match ? (match[1] ?? null) : null;
 }
 
+function parseEnvFile(body: string): NodeJS.ProcessEnv {
+	const out: NodeJS.ProcessEnv = {};
+	for (const line of body.split("\n")) {
+		const parsed = parseEnvLine(line);
+		if (parsed) out[parsed.key] = parsed.value;
+	}
+	return out;
+}
+
+function parseEnvLine(line: string): { key: string; value: string } | null {
+	const match = line.match(
+		/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/,
+	);
+	const key = match?.[1];
+	const rawValue = match?.[2];
+	if (key === undefined || rawValue === undefined) return null;
+	return { key, value: unescapeEnvValue(rawValue.trim()) };
+}
+
 /**
  * Quote env-var values that contain characters which would otherwise break the
  * `KEY=value` parse (`#` for comments, leading/trailing whitespace, embedded quotes).
@@ -604,6 +722,20 @@ function escapeEnvValue(value: string): string {
 	if (/^[A-Za-z0-9_./:@-]*$/.test(value)) return value;
 	const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 	return `"${escaped}"`;
+}
+
+function unescapeEnvValue(value: string): string {
+	if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
+		return value.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+	}
+	if (value.length >= 2 && value.startsWith("'") && value.endsWith("'")) {
+		return value.slice(1, -1);
+	}
+	return value;
+}
+
+function resolveEnvFilePath(file: string, cwd: string): string {
+	return file.startsWith("/") ? file : join(cwd, file);
 }
 
 // ─────────────────────── env run ────────────────────────
@@ -646,7 +778,7 @@ export async function runEnvRun(
 
 	let injected: Record<string, string>;
 	try {
-		const env = await loadConfigAndFetchEnv(options, ctx, api);
+		const { env } = await loadConfigAndFetchEnv(options, ctx, api);
 		injected = neonEnvToProcessEnv(env);
 	} catch (err) {
 		return handleError(err);
@@ -714,17 +846,29 @@ async function loadConfigAndFetchEnv(
 	},
 	ctx: CommandEnv,
 	api: NeonApi,
-): Promise<Awaited<ReturnType<typeof fetchEnv>>> {
-	const { config } = await loadConfigFromFile({
+	envFilePath?: string,
+): Promise<{
+	env: Awaited<ReturnType<typeof fetchEnv>>;
+	configPath: string;
+	defaultEnvPath: string;
+}> {
+	const { config, resolvedPath } = await loadConfigFromFile({
 		...(options.configPath ? { path: options.configPath } : {}),
 		cwd: ctx.cwd,
 	});
-	return fetchEnv(config, {
+	const defaultEnvPath = join(dirname(resolvedPath), DEFAULT_ENV_FILE);
+	const envFileSource = envFilePath ?? defaultEnvPath;
+	const fileEnv = existsSync(envFileSource)
+		? parseEnvFile(readFileSync(envFileSource, "utf-8"))
+		: {};
+	const env = await fetchEnv(config, {
 		api,
 		cwd: ctx.cwd,
+		env: { ...process.env, ...fileEnv },
 		...(options.projectId ? { projectId: options.projectId } : {}),
 		...(options.branch ? { branch: options.branch } : {}),
 	});
+	return { env, configPath: resolvedPath, defaultEnvPath };
 }
 
 /**
@@ -814,6 +958,8 @@ const EXIT_CODE_BY_PLATFORM_ERROR_CODE: Readonly<Record<string, number>> = {
  * table.
  */
 function handleError(err: unknown): CommandResult {
+	if (err instanceof PushAbortedError)
+		return errorResult(err, err.message, 12);
 	if (err instanceof PushConflictError)
 		return errorResult(err, err.message, 2);
 	if (err instanceof MissingContextError)

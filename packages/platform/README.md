@@ -77,8 +77,10 @@ neon-ts branch
 # Show what push would do for the selected branch.
 neon-ts status
 
-# Apply the selected branch's policy. Mutable branch drift needs --update-existing.
-neon-ts push --update-existing
+# Apply the selected branch's policy. Push prompts before overriding existing
+# settings or pushing to a protected branch; pass --update-existing /
+# --allow-protected-branch to skip the prompt.
+neon-ts push
 
 # Pull branch-specific connection strings.
 neon-ts env pull
@@ -99,7 +101,7 @@ neon-ts env run -- pnpm dev
 ```ts
 type BranchConfig = {
   parent?: string;        // used when creating a new branch
-  ttl?: string | number;  // applied on create, reconciled on push with --update-existing
+  ttl?: string | number;  // applied on create, reconciled on push (prompts to override)
   protected?: boolean;    // branch-level protected flag
 
   postgres?: {
@@ -126,7 +128,9 @@ neon-ts checkout main           # select existing branch
 neon-ts branch dev              # create dev-<git-branch>-<mini-id>
 neon-ts branch                  # create <git-branch>-<mini-id>
 neon-ts status                  # dry-run push for selected branch
-neon-ts push --update-existing  # apply mutable drift for selected branch
+neon-ts push                    # apply selected branch policy (interactive)
+neon-ts push --update-existing  # auto-confirm overriding existing remote settings
+neon-ts push --allow-protected-branch  # auto-confirm pushing to a protected branch
 neon-ts context                 # print resolved project + branch context
 neon-ts env pull                # write .env.local
 neon-ts env run -- pnpm test    # run a command with Neon env vars injected
@@ -172,4 +176,5 @@ import {
 - `checkout` never creates or mutates remote resources.
 - `branch` always creates a new branch and then updates local context.
 - `auth: {}` and `dataApi: {}` enable those integrations with Neon defaults. `auth.enabled: false`, `dataApi.enabled: false`, or absence leaves existing integrations alone. Disabling is destructive and remains explicit/manual.
-- Mutable branch drift (`protected`, `ttl`, `postgres.computeSettings`) requires `--update-existing` outside dry-run status.
+- Mutable branch drift (`protected`, `ttl`, `postgres.computeSettings`) prompts for confirmation on the CLI; pass `--update-existing` to auto-confirm or supply a `confirm` callback to `pushConfig` programmatically.
+- Pushing to a branch with the `protected` flag set on Neon prompts for confirmation; pass `--allow-protected-branch` to auto-confirm.

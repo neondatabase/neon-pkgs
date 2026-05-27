@@ -81,7 +81,10 @@ export type {
 export { createRealNeonApi } from "./lib/neon-api-real.js";
 export type { PullConfigOptions } from "./lib/pull-config.js";
 export { pullConfig } from "./lib/pull-config.js";
-export type { PushConfigOptions } from "./lib/push-config.js";
+export type {
+	PushConfigOptions,
+	PushConfirmContext,
+} from "./lib/push-config.js";
 export { pushConfig } from "./lib/push-config.js";
 // ─── Zod schemas ──────────────────────────────────────────────────────────────
 export * as schemas from "./lib/schemas.js";
@@ -91,7 +94,7 @@ export type {
 	BranchTarget,
 	ComputeSettings,
 	Config,
-	FeatureToggle,
 	PostgresConfig,
 	PushResult,
+	ServiceToggle,
 } from "./lib/types.js";

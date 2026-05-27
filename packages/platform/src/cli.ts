@@ -94,7 +94,13 @@ const argv = yargs(hideBin(process.argv))
 					type: "boolean",
 					default: false,
 					describe:
-						"Apply mutable drift (branch settings / `protected` flag / project rename) instead of reporting it as a conflict. Immutable fields (region, pgVersion) always remain conflicts.",
+						"Auto-confirm overriding existing remote settings (branch settings / `protected` flag / compute settings) on the selected branch. Without this flag, push prompts interactively before applying any override. Immutable fields (region, pgVersion) always remain conflicts.",
+				})
+				.option("allow-protected-branch", {
+					type: "boolean",
+					default: false,
+					describe:
+						"Auto-confirm pushing to a branch that's marked protected on Neon. Without this flag, push prompts interactively before touching a protected branch.",
 				}),
 	)
 	.command(
@@ -315,6 +321,7 @@ switch (command) {
 					? { branch: argv.branch }
 					: {}),
 				updateExisting: argv["update-existing"] === true,
+				allowProtectedBranch: argv["allow-protected-branch"] === true,
 			},
 			{ cwd },
 		);

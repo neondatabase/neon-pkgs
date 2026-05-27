@@ -85,14 +85,16 @@ export interface NeonDatabaseSnapshot {
 }
 
 /**
- * Public, fetchable bits of a Neon Auth integration. The secrets (`pub_client_key`,
- * `secret_server_key`) are intentionally absent here — the Neon API only returns those
- * at create / rotate time, never on `GET /auth`, so `fetchEnv` reads them from
- * `process.env` instead of trying to refetch.
+ * Bits of a Neon Auth integration. The key fields are optional because the Neon API only
+ * includes them on create / rotate responses; `GET /auth` returns the public fields.
  */
 export interface NeonAuthSnapshot {
 	/** The Neon Auth project id (`auth_provider_project_id` on the Neon API). */
 	projectId: string;
+	/** Public client key (`pub_client_key`), only present on create / rotate responses. */
+	publishableClientKey?: string;
+	/** Secret server key (`secret_server_key`), only present on create / rotate responses. */
+	secretServerKey?: string;
 	/** JWKS URL for verifying tokens issued by Neon Auth. */
 	jwksUrl: string;
 	/** Optional base URL of the Neon Auth deployment. */

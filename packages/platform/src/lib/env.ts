@@ -27,10 +27,7 @@ export const NEON_ENV_VAR_KEYS = {
 		databaseUrlUnpooled: "DATABASE_URL_UNPOOLED",
 	},
 	auth: {
-		projectId: "NEON_AUTH_PROJECT_ID",
-		publishableClientKey: "NEON_AUTH_PUBLISHABLE_CLIENT_KEY",
-		secretServerKey: "NEON_AUTH_SECRET_SERVER_KEY",
-		jwksUrl: "NEON_AUTH_JWKS_URL",
+		baseUrl: "NEON_AUTH_BASE_URL",
 	},
 	dataApi: {
 		url: "NEON_DATA_API_URL",
@@ -53,20 +50,16 @@ export interface NeonPostgresEnv {
 }
 
 /**
- * Public + secret bits of a Neon Auth integration for the resolved branch. Only present
- * on `NeonEnv` when the branch policy enables `auth`.
+ * Bits of a Neon Auth integration for the resolved branch. Only present on `NeonEnv`
+ * when the branch policy enables `auth`.
  *
- * `projectId` / `jwksUrl` are fetchable via `getNeonAuth`. The two key fields
- * (`publishableClientKey`, `secretServerKey`) are *not* refetchable after integration
- * creation — `fetchEnv` reads them from `process.env`, `parseEnv` always does. Pull them
- * once at create time (via the Neon Console / `neonctl auth …`) and feed them through
- * your secret-management of choice.
+ * Neon Auth exposes a single `baseUrl` that doubles as the publishable client identifier
+ * — the rest of the surface (project id, JWKS URL, …) is derived from it at runtime by
+ * the Neon Auth SDK. `fetchEnv` reads it from the live integration; `parseEnv` reads it
+ * from `process.env` (`NEON_AUTH_BASE_URL`).
  */
 export interface NeonAuthEnv {
-	projectId: string;
-	publishableClientKey: string;
-	secretServerKey: string;
-	jwksUrl: string;
+	baseUrl: string;
 }
 
 /** Bits of a Neon Data API integration. Only present when the branch policy enables it. */
@@ -95,14 +88,14 @@ type BranchConfigOf<C extends Config> = ReturnType<C> extends BranchConfig
 	? ReturnType<C>
 	: BranchConfig;
 
-type FeatureToggleOf<Cfg, Key extends "auth" | "dataApi"> = Cfg extends unknown
+type ServiceToggleOf<Cfg, Key extends "auth" | "dataApi"> = Cfg extends unknown
 	? Key extends keyof Cfg
 		? Cfg[Key]
 		: never
 	: never;
 
-type HasEnabledFeature<Cfg, Key extends "auth" | "dataApi"> = [
-	Exclude<FeatureToggleOf<Cfg, Key>, undefined | { enabled: false }>,
+type HasEnabledService<Cfg, Key extends "auth" | "dataApi"> = [
+	Exclude<ServiceToggleOf<Cfg, Key>, undefined | { enabled: false }>,
 ] extends [never]
 	? false
 	: true;
@@ -113,12 +106,12 @@ export type NeonEnv<C extends Config = Config> = {
 	postgres: NeonPostgresEnv;
 } & (IsDefaultConfig<C> extends true
 	? NoNamespace
-	: HasEnabledFeature<BranchConfigOf<C>, "auth"> extends true
+	: HasEnabledService<BranchConfigOf<C>, "auth"> extends true
 		? { auth: NeonAuthEnv }
 		: NoNamespace) &
 	(IsDefaultConfig<C> extends true
 		? NoNamespace
-		: HasEnabledFeature<BranchConfigOf<C>, "dataApi"> extends true
+		: HasEnabledService<BranchConfigOf<C>, "dataApi"> extends true
 			? { dataApi: NeonDataApiEnv }
 			: NoNamespace);
 
@@ -154,6 +147,11 @@ export interface FetchEnvOptions {
 	databaseName?: string;
 	/** Starting directory for the context-file search. Defaults to `process.cwd()`. */
 	cwd?: string;
+	/**
+	 * Env source used for one-time Auth keys that cannot be refetched after integration
+	 * creation. Defaults to `process.env`; CLI commands may layer values from `.env.local`.
+	 */
+	env?: NodeJS.ProcessEnv;
 }
 
 /**
@@ -235,8 +233,9 @@ export async function fetchEnv<const C extends Config>(
 	);
 
 	// Fan out: always fetch both Postgres URIs. Conditionally fetch auth + dataApi based
-	// on the branch policy. Auth secret keys aren't fetchable post-create (Neon's API only
-	// returns them at integration creation / rotation) so we read those from the env.
+	// on the branch policy. Auth key fields are only returned at integration creation time;
+	// for Better Auth they may legitimately be empty, so absence in the local env becomes
+	// empty string values while still emitting the required variable names.
 	const wantsAuth = desired.authEnabled;
 	const wantsDataApi = desired.dataApiEnabled;
 
@@ -283,13 +282,11 @@ export async function fetchEnv<const C extends Config>(
 				},
 			);
 		}
-		const secrets = readAuthSecretsFromEnv();
-		result.auth = {
-			projectId: authSnapshot.projectId,
-			publishableClientKey: secrets.publishableClientKey,
-			secretServerKey: secrets.secretServerKey,
-			jwksUrl: authSnapshot.jwksUrl,
-		} satisfies NeonAuthEnv;
+		const baseUrl = resolveAuthBaseUrl(
+			authSnapshot.baseUrl,
+			options.env ?? process.env,
+		);
+		result.auth = { baseUrl } satisfies NeonAuthEnv;
 	}
 
 	if (wantsDataApi) {
@@ -316,37 +313,17 @@ export async function fetchEnv<const C extends Config>(
 }
 
 /**
- * Pull the auth secret/publishable key from `process.env`. These two fields aren't
- * fetchable from the Neon API after integration creation, so the user must inject them
- * out-of-band (via `.env`, hosting platform secret manager, etc.). When either is
- * missing we throw the same `EnvNotInjected` error `parseEnv` would.
+ * Resolve the Neon Auth base URL to surface in `env.auth`. Prefer the value returned by
+ * the integration (`getNeonAuth` includes it); fall back to whatever is already in the
+ * caller's env source so older integrations created before `base_url` was returned still
+ * round-trip through `env pull` / `env run`.
  */
-function readAuthSecretsFromEnv(): {
-	publishableClientKey: string;
-	secretServerKey: string;
-} {
-	const pubKey = NEON_ENV_VAR_KEYS.auth.publishableClientKey;
-	const secretKey = NEON_ENV_VAR_KEYS.auth.secretServerKey;
-	const issues: string[] = [];
-	const publishableClientKey = process.env[pubKey];
-	const secretServerKey = process.env[secretKey];
-	if (!publishableClientKey) issues.push(`${pubKey} is missing`);
-	if (!secretServerKey) issues.push(`${secretKey} is missing`);
-	if (issues.length > 0) {
-		throw new PlatformError(
-			ErrorCode.EnvNotInjected,
-			[
-				"fetchEnv: Neon Auth secrets must be supplied via process.env — they are not refetchable from the Neon API after integration creation.",
-				...issues.map((i) => `  - ${i}`),
-				"Pull them once via the Neon Console / `npx neonctl auth …`, then inject via your hosting platform or `.env` file.",
-			].join("\n"),
-			{ details: { missing: issues } },
-		);
-	}
-	return {
-		publishableClientKey: publishableClientKey as string,
-		secretServerKey: secretServerKey as string,
-	};
+function resolveAuthBaseUrl(
+	snapshotBaseUrl: string | undefined,
+	source: NodeJS.ProcessEnv,
+): string {
+	if (snapshotBaseUrl && snapshotBaseUrl !== "") return snapshotBaseUrl;
+	return source[NEON_ENV_VAR_KEYS.auth.baseUrl] ?? "";
 }
 
 function createApiFromOptions(options: FetchEnvOptions): NeonApi {
@@ -528,18 +505,9 @@ const postgresEnvSchema = z.object({
 });
 
 const authEnvSchema = z.object({
-	NEON_AUTH_PROJECT_ID: z
-		.string({ message: "NEON_AUTH_PROJECT_ID is missing" })
-		.min(1, "NEON_AUTH_PROJECT_ID must not be empty"),
-	NEON_AUTH_PUBLISHABLE_CLIENT_KEY: z
-		.string({ message: "NEON_AUTH_PUBLISHABLE_CLIENT_KEY is missing" })
-		.min(1, "NEON_AUTH_PUBLISHABLE_CLIENT_KEY must not be empty"),
-	NEON_AUTH_SECRET_SERVER_KEY: z
-		.string({ message: "NEON_AUTH_SECRET_SERVER_KEY is missing" })
-		.min(1, "NEON_AUTH_SECRET_SERVER_KEY must not be empty"),
-	NEON_AUTH_JWKS_URL: z
-		.string({ message: "NEON_AUTH_JWKS_URL is missing" })
-		.min(1, "NEON_AUTH_JWKS_URL must not be empty"),
+	NEON_AUTH_BASE_URL: z
+		.string({ message: "NEON_AUTH_BASE_URL is missing" })
+		.min(1, "NEON_AUTH_BASE_URL must not be empty"),
 });
 
 const dataApiEnvSchema = z.object({
@@ -602,19 +570,11 @@ export function parseEnv<const C extends Config>(config: C): NeonEnv<C> {
 
 	if (desired.authEnabled) {
 		const auth = authEnvSchema.safeParse({
-			NEON_AUTH_PROJECT_ID: source.NEON_AUTH_PROJECT_ID,
-			NEON_AUTH_PUBLISHABLE_CLIENT_KEY:
-				source.NEON_AUTH_PUBLISHABLE_CLIENT_KEY,
-			NEON_AUTH_SECRET_SERVER_KEY: source.NEON_AUTH_SECRET_SERVER_KEY,
-			NEON_AUTH_JWKS_URL: source.NEON_AUTH_JWKS_URL,
+			NEON_AUTH_BASE_URL: source.NEON_AUTH_BASE_URL,
 		});
 		if (auth.success) {
 			result.auth = {
-				projectId: auth.data.NEON_AUTH_PROJECT_ID,
-				publishableClientKey:
-					auth.data.NEON_AUTH_PUBLISHABLE_CLIENT_KEY,
-				secretServerKey: auth.data.NEON_AUTH_SECRET_SERVER_KEY,
-				jwksUrl: auth.data.NEON_AUTH_JWKS_URL,
+				baseUrl: auth.data.NEON_AUTH_BASE_URL,
 			} satisfies NeonAuthEnv;
 		} else {
 			for (const issue of auth.error.issues) issues.push(issue.message);
@@ -682,12 +642,7 @@ export function neonEnvToProcessEnv(
 	};
 	const withAuth = env as { auth?: NeonAuthEnv };
 	if (withAuth.auth) {
-		out[NEON_ENV_VAR_KEYS.auth.projectId] = withAuth.auth.projectId;
-		out[NEON_ENV_VAR_KEYS.auth.publishableClientKey] =
-			withAuth.auth.publishableClientKey;
-		out[NEON_ENV_VAR_KEYS.auth.secretServerKey] =
-			withAuth.auth.secretServerKey;
-		out[NEON_ENV_VAR_KEYS.auth.jwksUrl] = withAuth.auth.jwksUrl;
+		out[NEON_ENV_VAR_KEYS.auth.baseUrl] = withAuth.auth.baseUrl;
 	}
 	const withDataApi = env as { dataApi?: NeonDataApiEnv };
 	if (withDataApi.dataApi) {
