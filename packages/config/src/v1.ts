@@ -15,20 +15,20 @@
  * and the target branch explicitly):
  * ```ts
  * import config from "../neon";
- * import { status, deploy, pull } from "@neondatabase/config/v1";
+ * import { inspect, plan, apply } from "@neondatabase/config/v1";
  *
  * const opts = { projectId: "patient-art-12345" };
- * const plan = await status(config, "main", opts);   // dry-run diff, no mutations
- * await deploy(config, "main", opts);                // apply the policy to a branch
- * const live = await pull("main", opts);             // read the branch's live state
+ * const diff = await plan(config, "main", opts);    // dry-run plan, no mutations
+ * await apply(config, "main", opts);                // apply the policy to a branch
+ * const live = await inspect("main", opts);         // read the branch's live state
  * ```
  *
- * No CLI commands are shipped here, and no `.neon` files or `NEON_*` env vars are read —
- * resolve project/branch in your CLI (e.g. neonctl) and pass them in. This package is
- * functions only.
+ * `plan` / `apply` mirror the Terraform mental model. No CLI commands are shipped here,
+ * and no `.neon` files or `NEON_*` env vars are read — resolve project/branch in your CLI
+ * (e.g. neonctl) and pass them in. This package is functions only.
  *
  * Surface guidelines:
- * - Top-level: the operations callers reach for daily (`status`, `deploy`, `pull`,
+ * - Top-level: the operations callers reach for daily (`inspect`, `plan`, `apply`,
  *   `defineConfig`), plus the lower-level engine (`pushConfig` / `pullConfig`), the
  *   `PlatformError` base class + `ErrorCode` enum, and the types those operations produce.
  * - `errors` namespace: specific `PlatformError` subclasses (`ConfigLoadError`,
@@ -111,10 +111,10 @@ export type {
 export { createRealNeonApi } from "./lib/neon-api-real.js";
 // ─── Operations (intent-revealing entry points) ───────────────────────────────
 export type {
+	ApplyOptions,
 	ConfigOperationOptions,
-	DeployOptions,
 } from "./lib/operations.js";
-export { deploy, pull, status } from "./lib/operations.js";
+export { apply, inspect, plan } from "./lib/operations.js";
 // ─── Engine (advanced / programmatic use) ─────────────────────────────────────
 export type {
 	PullConfigOptions,

@@ -77,7 +77,7 @@ export interface PushConfigOptions {
 	 * shape, so the existing CLI summary formatter just works), and conflicts are
 	 * reported instead of thrown.
 	 *
-	 * Used by `status(config)` and any caller that wants a "would this push do
+	 * Used by `plan(config, branchId)` and any caller that wants a "would this push do
 	 * something dangerous?" check before invoking `pushConfig` for real.
 	 */
 	dryRun?: boolean;

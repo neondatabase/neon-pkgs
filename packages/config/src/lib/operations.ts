@@ -20,25 +20,25 @@ export interface ConfigOperationOptions {
 }
 
 /**
- * Options accepted by {@link deploy} on top of {@link ConfigOperationOptions}.
+ * Options accepted by {@link apply} on top of {@link ConfigOperationOptions}.
  */
-export interface DeployOptions extends ConfigOperationOptions {
+export interface ApplyOptions extends ConfigOperationOptions {
 	/**
 	 * Auto-confirm overriding existing remote settings (TTL, `protected`, compute
 	 * settings) on the selected branch. Without it, drift is reported as a conflict.
 	 */
 	updateExisting?: boolean;
-	/** Auto-confirm deploying to a branch marked `protected` on Neon. */
+	/** Auto-confirm applying to a branch marked `protected` on Neon. */
 	allowProtectedBranch?: boolean;
 }
 
 /**
- * Pull a branch's live Neon state as a plain object (project + branch metadata and the
+ * Read a branch's live Neon state as a plain object (project + branch metadata and the
  * reverse-engineered `BranchConfig`). Network read only — never mutates.
  *
  * `branchId` selects the branch (id `br-…` or name) and is **required**.
  */
-export async function pull(
+export async function inspect(
 	branchId: string,
 	options: ConfigOperationOptions,
 ): Promise<PulledBranchConfig> {
@@ -51,13 +51,14 @@ export async function pull(
 }
 
 /**
- * Compute what {@link deploy} would do for the given branch without mutating anything
- * (dry-run). Returns the full {@link PushResult} with the planned changes in `applied`
- * and any blocking drift in `conflicts`.
+ * Compute what {@link apply} would do for the given branch without mutating anything
+ * (dry-run plan). Returns the full {@link PushResult} with the planned changes in
+ * `applied` and any blocking drift in `conflicts` — the Neon equivalent of
+ * `terraform plan`.
  *
  * `branchId` selects the branch (id `br-…` or name) and is **required**.
  */
-export async function status(
+export async function plan(
 	config: Config,
 	branchId: string,
 	options: ConfigOperationOptions,
@@ -74,20 +75,20 @@ export async function status(
 }
 
 /**
- * Push a `neon.ts` policy to the given Neon branch and return the {@link PushResult}
- * describing what changed.
+ * Apply a `neon.ts` policy to the given Neon branch and return the {@link PushResult}
+ * describing what changed — the Neon equivalent of `terraform apply`.
  *
  * `branchId` selects the branch (id `br-…` or name) and is **required**. Pass
  * `updateExisting` to auto-confirm overriding existing remote settings and
- * `allowProtectedBranch` to auto-confirm pushing to a protected branch; otherwise drift
+ * `allowProtectedBranch` to auto-confirm applying to a protected branch; otherwise drift
  * is reported as a `PushConflictError`.
  *
  * Never creates projects or branches — both must already exist.
  */
-export async function deploy(
+export async function apply(
 	config: Config,
 	branchId: string,
-	options: DeployOptions,
+	options: ApplyOptions,
 ): Promise<PushResult> {
 	return pushConfig(config, {
 		projectId: options.projectId,

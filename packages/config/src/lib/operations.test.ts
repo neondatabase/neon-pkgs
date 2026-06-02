@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { defineConfig } from "./define-config.js";
 import { FakeNeonApi } from "./fake-neon-api.js";
-import { deploy, pull, status } from "./operations.js";
+import { apply, inspect, plan } from "./operations.js";
 
 function seededFake() {
 	const api = new FakeNeonApi();
@@ -21,21 +21,21 @@ function seededFake() {
 	return { api, projectId };
 }
 
-describe("pull", () => {
+describe("inspect", () => {
 	test("returns the selected branch's live state", async () => {
 		const { api, projectId } = seededFake();
-		const result = await pull("main", { api, projectId });
+		const result = await inspect("main", { api, projectId });
 		expect(result.project.name).toBe("ops-test");
 		expect(result.branch.name).toBe("main");
 		expect(result.config).toBeDefined();
 	});
 });
 
-describe("status", () => {
+describe("plan", () => {
 	test("computes a dry-run plan without mutating", async () => {
 		const { api, projectId } = seededFake();
 		const config = defineConfig(() => ({ auth: {} }));
-		const result = await status(config, "main", { api, projectId });
+		const result = await plan(config, "main", { api, projectId });
 		expect(result.dryRun).toBe(true);
 		expect(result.applied).toEqual(
 			expect.arrayContaining([
@@ -45,17 +45,17 @@ describe("status", () => {
 				}),
 			]),
 		);
-		// No mutation happened: a fresh status still plans the same enable.
-		const again = await status(config, "main", { api, projectId });
+		// No mutation happened: a fresh plan still shows the same enable.
+		const again = await plan(config, "main", { api, projectId });
 		expect(again.applied).toEqual(result.applied);
 	});
 });
 
-describe("deploy", () => {
+describe("apply", () => {
 	test("applies the branch policy to the selected branch", async () => {
 		const { api, projectId } = seededFake();
 		const config = defineConfig(() => ({ auth: {} }));
-		const result = await deploy(config, "main", {
+		const result = await apply(config, "main", {
 			api,
 			projectId,
 			updateExisting: true,
