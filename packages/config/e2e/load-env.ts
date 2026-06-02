@@ -1,3 +1,5 @@
+// Loaded by vitest.e2e.config.ts `setupFiles`; not imported statically.
+// fallow-ignore-file unused-file
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";

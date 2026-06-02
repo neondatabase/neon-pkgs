@@ -25,7 +25,7 @@ export function uniqueProjectName(suffix?: string): string {
 		: `${PROJECT_PREFIX}${id}`;
 }
 
-export function requireApiKey(): string {
+function requireApiKey(): string {
 	const key = process.env.NEON_API_KEY;
 	if (!key || key.trim() === "") {
 		throw new Error(

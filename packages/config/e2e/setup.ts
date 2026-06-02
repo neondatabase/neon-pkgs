@@ -1,3 +1,5 @@
+// Loaded by vitest.e2e.config.ts `setupFiles`; not imported statically.
+// fallow-ignore-file unused-file
 import { beforeAll } from "vitest";
 import { detectApiKeyScope, sweepOrphans } from "./helpers.js";
 
