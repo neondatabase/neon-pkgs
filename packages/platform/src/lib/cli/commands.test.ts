@@ -3,14 +3,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { FakeNeonApi } from "../fake-neon-api.js";
 import { makeTempRepo, stubCleanNeonEnv } from "../test-utils.js";
-import {
-	runBranch,
-	runEnvPull,
-	runInit,
-	runPull,
-	runPush,
-	runStatus,
-} from "./commands.js";
+import { runInit, runPull, runPush, runStatus } from "./commands.js";
 
 const PLATFORM_SRC = new URL("../../v1.ts", import.meta.url).pathname;
 const cleanups: Array<() => void> = [];
@@ -130,80 +123,6 @@ describe("runPull / runInit", () => {
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain("install failed");
 		expect(existsSync(join(root, "neon.ts"))).toBe(false);
-	});
-});
-
-describe("runBranch", () => {
-	test("branch creates and updates context", async () => {
-		const { api, projectId, orgId } = seededFake();
-		const root = setup({
-			"package.json": "{}",
-			".neon/project.json": JSON.stringify({
-				projectId,
-				orgId,
-				branchId: "br-main",
-			}),
-			"neon.ts": policy(),
-		});
-		const result = await runBranch({ name: "dev" }, { cwd: root, api });
-		expect(result.exitCode).toBe(0);
-		expect(result.stdout).toContain("created branch dev-");
-		const reread = JSON.parse(
-			readFileSync(join(root, ".neon", "project.json"), "utf-8"),
-		);
-		expect(reread.branchId).not.toBe("br-main");
-		expect(readFileSync(join(root, ".env.local"), "utf-8")).toContain(
-			"NEON_AUTH_BASE_URL=https://api.fake.neon.tech/auth/",
-		);
-	});
-
-	test("env pull from a package reuses auth keys captured at branch creation", async () => {
-		const { api, projectId, orgId } = seededFake();
-		const root = setup({
-			"package.json": "{}",
-			"packages/db/package.json": "{}",
-			".neon/project.json": JSON.stringify({
-				projectId,
-				orgId,
-				branchId: "br-main",
-			}),
-			"neon.ts": policy(),
-		});
-		const nested = join(root, "packages", "db");
-
-		const branchResult = await runBranch(
-			{ name: "dev" },
-			{ cwd: root, api },
-		);
-		expect(branchResult.exitCode).toBe(0);
-		const pullResult = await runEnvPull({}, { cwd: nested, api });
-
-		expect(pullResult.exitCode).toBe(0);
-		expect(pullResult.stdout).toContain(
-			`Updated ${join(root, ".env.local")}`,
-		);
-		const envFile = readFileSync(join(root, ".env.local"), "utf-8");
-		expect(envFile).toContain("DATABASE_URL=");
-		expect(envFile).toContain("DATABASE_URL_UNPOOLED=");
-		expect(envFile).toContain(
-			"NEON_AUTH_BASE_URL=https://api.fake.neon.tech/auth/",
-		);
-	});
-
-	test("branch accepts no name and creates from the bare wildcard", async () => {
-		const { api, projectId } = seededFake();
-		const root = setup({
-			"package.json": "{}",
-			".neon/project.json": JSON.stringify({
-				projectId,
-				branchId: "br-main",
-			}),
-			"neon.ts": policy(),
-		});
-		const result = await runBranch({ name: "" }, { cwd: root, api });
-		expect(result.exitCode).toBe(0);
-		expect(result.stdout).toContain("pattern   : *");
-		expect(result.stdout).toContain("created branch");
 	});
 });
 

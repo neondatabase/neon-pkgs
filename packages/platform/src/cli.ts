@@ -6,7 +6,6 @@ import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import {
 	type CommandResult,
-	runBranch,
 	runEnvPull,
 	runEnvRun,
 	runInit,
@@ -123,34 +122,6 @@ const argv = yargs(hideBin(process.argv))
 					type: "string",
 					describe:
 						"Override the .neon/project.json branchId / NEON_BRANCH_ID",
-				}),
-	)
-	.command(
-		"branch [name]",
-		"Create a new branch from the neon.ts branch policy.",
-		(y) =>
-			y
-				.positional("name", {
-					type: "string",
-					describe:
-						"Branch name or pattern to create (e.g. `dev`). Omit to use `*`.",
-				})
-				.option("config", {
-					type: "string",
-					describe:
-						"Path to neon.ts (defaults to walking up from cwd)",
-				})
-				.option("project-id", {
-					type: "string",
-					describe: "Override the .neon/project.json projectId",
-				})
-				.option("org-id", {
-					type: "string",
-					describe: "Override the .neon/project.json orgId",
-				})
-				.option("api-key", {
-					type: "string",
-					describe: "Neon API key (defaults to NEON_API_KEY)",
 				}),
 	)
 	.command("env", "Pull or run with Neon env vars injected.", (env) =>
@@ -297,28 +268,6 @@ switch (command) {
 					: {}),
 				...(typeof argv.branch === "string"
 					? { branch: argv.branch }
-					: {}),
-			},
-			{ cwd },
-		);
-		break;
-	}
-	case "branch": {
-		const name = typeof argv.name === "string" ? argv.name : "";
-		result = await runBranch(
-			{
-				name,
-				...(typeof argv.config === "string"
-					? { configPath: argv.config }
-					: {}),
-				...(typeof argv["project-id"] === "string"
-					? { projectId: argv["project-id"] }
-					: {}),
-				...(typeof argv["org-id"] === "string"
-					? { orgId: argv["org-id"] }
-					: {}),
-				...(typeof argv["api-key"] === "string"
-					? { apiKey: argv["api-key"] }
 					: {}),
 			},
 			{ cwd },

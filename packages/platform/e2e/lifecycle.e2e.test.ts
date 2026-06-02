@@ -1,5 +1,5 @@
 import { describe, expect } from "vitest";
-import { branch, defineConfig, pushConfig } from "../src/v1.js";
+import { defineConfig, pushConfig } from "../src/v1.js";
 import {
 	bootstrapProject,
 	DEFAULT_REGION,
@@ -30,13 +30,11 @@ describe("e2e — branch policy lifecycle", () => {
 					? { protected: true }
 					: { parent: main.name, ttl: "1h" },
 			);
-			const created = await branch({
+			const created = await api.createBranch(projectId, {
 				name: "dev",
-				projectId,
-				api,
-				gitBranch: null,
+				parentId: main.id,
 			});
-			expect(created.branchName).toMatch(/^dev-/);
+			expect(created.branch.name).toBe("dev");
 			await pushConfig(config, {
 				api,
 				projectId,

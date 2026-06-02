@@ -14,7 +14,7 @@
  *
  * Surface guidelines:
  * - Top-level: the operations callers reach for daily (`pullConfig`, `pushConfig`,
- *   `fetchEnv`, `parseEnv`, `branch`, …), the `PlatformError` base class + `ErrorCode` enum for
+ *   `fetchEnv`, `parseEnv`, …), the `PlatformError` base class + `ErrorCode` enum for
  *   `instanceof` / code-based error handling, and the types those operations produce or
  *   accept.
  * - `errors` namespace: specific `PlatformError` subclasses (`ConfigLoadError`,
@@ -30,14 +30,7 @@
 
 // ─── Lower-level adapters ──────────────────────────────────────────────────────
 export { resolveApiKey } from "./lib/auth.js";
-// ─── Option + result types for each operation ─────────────────────────────────
-export type {
-	BranchContextFile,
-	BranchOptions,
-	BranchResult,
-} from "./lib/branch.js";
 // ─── Operations ────────────────────────────────────────────────────────────────
-export { branch } from "./lib/branch.js";
 export { defineConfig } from "./lib/define-config.js";
 export type {
 	FetchEnvOptions,

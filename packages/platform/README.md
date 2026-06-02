@@ -59,7 +59,7 @@ export default defineConfig((branch) => {
 });
 ```
 
-Project identity is not stored in `neon.ts`. Bootstrap or select the project with `neonctl link`; branch identity comes from `neonctl checkout`, `branch`, `--branch`, `NEON_BRANCH_ID`, or `.neon`.
+Project identity is not stored in `neon.ts`. Bootstrap or select the project with `neonctl link`; branch identity comes from `neonctl checkout`, `--branch`, `NEON_BRANCH_ID`, or `.neon`.
 
 ```bash
 # Install @neondatabase/platform (when needed) and create starter neon.ts.
@@ -68,12 +68,6 @@ neon-ts init
 # Select an existing branch by name or id. No creation, no config apply.
 # (Provided by the neonctl CLI; updates the same .neon context file.)
 neonctl checkout main
-
-# Create a new branch. `dev` becomes the creation pattern `dev-*`.
-neon-ts branch dev
-
-# Or omit the name to use the bare wildcard `*`.
-neon-ts branch
 
 # Show what push would do for the selected branch.
 neon-ts status
@@ -92,7 +86,6 @@ neon-ts env run -- pnpm dev
 
 - `defineConfig((branch) => ...)` is a branch policy function. It can use normal TypeScript control flow: `branch.name`, `branch.exists`, `branch.isDefault`, `branch.isProtected`, env vars, shared constants, helper functions, etc.
 - `neonctl checkout <branch>` (from the neonctl CLI) selects an existing branch and updates `.neon[/project.json]` with its `branchId`.
-- `branch <name>` always creates a new branch. If `<name>` has no `*`, the CLI treats it as `<name>-*` and substitutes the wildcard with `<git-branch>-<mini-id>` or `<mini-id>`.
 - `push` is scoped to the selected branch. It does not create projects or branches.
 - `pull` is inspection, not round-trip code generation. It prints the selected branch's remote state as JSON for copy/paste.
 - `init` installs `@neondatabase/platform` when it is missing, then creates a starter `neon.ts` from the selected/default branch. In monorepos it follows lockfiles up to the workspace root.
@@ -126,8 +119,6 @@ type BranchConfig = {
 neon-ts init                    # install package (if needed) and write ./neon.ts
 neon-ts pull                    # print selected branch state as JSON
 neonctl checkout main           # select existing branch (neonctl CLI)
-neon-ts branch dev              # create dev-<git-branch>-<mini-id>
-neon-ts branch                  # create <git-branch>-<mini-id>
 neon-ts status                  # dry-run push for selected branch
 neon-ts push                    # apply selected branch policy (interactive)
 neon-ts push --update-existing  # auto-confirm overriding existing remote settings
@@ -149,7 +140,6 @@ Stable context precedence:
 ```ts
 import {
   defineConfig,
-  branch,
   pushConfig,
   pullConfig,
   fetchEnv,
@@ -172,7 +162,6 @@ import {
 ## Safety Rules
 
 - `push` never creates projects or branches.
-- `branch` always creates a new branch and then updates local context.
 - `auth: {}` and `dataApi: {}` enable those integrations with Neon defaults. `auth.enabled: false`, `dataApi.enabled: false`, or absence leaves existing integrations alone. Disabling is destructive and remains explicit/manual.
 - Mutable branch drift (`protected`, `ttl`, `postgres.computeSettings`) prompts for confirmation on the CLI; pass `--update-existing` to auto-confirm or supply a `confirm` callback to `pushConfig` programmatically.
 - Pushing to a branch with the `protected` flag set on Neon prompts for confirmation; pass `--allow-protected-branch` to auto-confirm.

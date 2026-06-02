@@ -3,7 +3,6 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { resolveApiKey } from "../auth.js";
-import { branch } from "../branch.js";
 import { fetchEnv, neonEnvToProcessEnv } from "../env.js";
 import {
 	ConfigLoadError,
@@ -276,99 +275,6 @@ async function defaultConfirmPrompt(message: string): Promise<boolean> {
 		return /^y(es)?$/i.test(answer.trim());
 	} finally {
 		rl.close();
-	}
-}
-
-// ───────────────────────── branch ───────────────────────
-
-export interface BranchCommandOptions {
-	name: string;
-	projectId?: string;
-	orgId?: string;
-	apiKey?: string;
-	configPath?: string;
-}
-
-/**
- * Implementation of `neon-ts branch <name>`. Always creates a new branch from the
- * branch-policy function in `neon.ts`, updates context, and prints a summary.
- *
- * When no context file exists, the JSON suitable for writing to `.neon/project.json` is
- * included in the summary so the user can pipe it into a file themselves.
- */
-export async function runBranch(
-	options: BranchCommandOptions,
-	ctx: CommandEnv,
-): Promise<CommandResult> {
-	const api = resolveApi(options.apiKey, ctx);
-	if (typeof api === "string") return failure(api);
-
-	try {
-		const result = await branch({
-			name: options.name,
-			cwd: ctx.cwd,
-			api,
-			...(options.projectId ? { projectId: options.projectId } : {}),
-			...(options.orgId ? { orgId: options.orgId } : {}),
-			...(options.configPath ? { configPath: options.configPath } : {}),
-		});
-
-		const lines: string[] = [
-			`✓ created branch ${result.branchName} (${result.branchId})`,
-			`  pattern   : ${result.pattern}`,
-			`  project   : ${result.projectId}${result.orgId ? ` (org ${result.orgId})` : ""}`,
-			`  parent    : ${result.parentBranchName} (${result.parentBranchId})`,
-		];
-		if (result.expiresAt) lines.push(`  expiresAt : ${result.expiresAt}`);
-		lines.push("");
-		switch (result.contextFile.status) {
-			case "updated":
-				lines.push(
-					`  updated ${result.contextFile.path} with the new branchId.`,
-				);
-				break;
-			case "no-file":
-				lines.push(
-					"  no .neon/project.json (or .neon) found — write the snippet below to pin the selected branch for subsequent commands:",
-					"",
-					result.contextFile.json.trimEnd(),
-				);
-				break;
-			case "write-failed":
-				lines.push(
-					`  ! could not update ${result.contextFile.path}: ${result.contextFile.error}`,
-					"  the branch on Neon was still created; apply this snippet by hand:",
-					"",
-					result.contextFile.json.trimEnd(),
-				);
-				break;
-		}
-		const capturedEnvKeys = Object.keys(result.capturedEnv);
-		if (capturedEnvKeys.length > 0) {
-			const envPath = join(dirname(result.configPath), DEFAULT_ENV_FILE);
-			const existing = existsSync(envPath)
-				? readFileSync(envPath, "utf-8")
-				: null;
-			const writeResult = writeFileSafely(
-				envPath,
-				mergeEnvFile(existing, result.capturedEnv),
-			);
-			if (writeResult.exitCode === 0) {
-				lines.push(
-					`  stored Neon Auth keys in ${envPath} for future env pulls.`,
-				);
-			} else {
-				lines.push(
-					`  ! could not write Neon Auth keys to ${envPath}: ${writeResult.stderr.trim()}`,
-					"  the branch on Neon was still created; add these values to your env file before they are lost:",
-					"",
-					mergeEnvFile(null, result.capturedEnv).trimEnd(),
-				);
-			}
-		}
-		return { exitCode: 0, stdout: `${lines.join("\n")}\n`, stderr: "" };
-	} catch (err) {
-		return handleError(err);
 	}
 }
 
