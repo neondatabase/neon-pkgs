@@ -14,6 +14,8 @@ npm install @neondatabase/env
 
 The library functions are **filesystem- and env-agnostic**: `fetchEnv` requires an explicit `projectId` + `branchId`, and `parseEnv` requires an explicit `branchName`. (The `neon-env` CLI does the `.neon`/`NEON_*` resolution and passes these in.)
 
+> `parseEnv` takes a branch **name**, not an id, because it makes no API call — it only needs the branch to evaluate your `neon.ts` policy, which switches on `branch.name`. The API-backed functions take a `branchId` (`br-…`) and read the name back from Neon.
+
 ```ts
 import config from "../neon";
 import { fetchEnv, parseEnv } from "@neondatabase/env/v1";

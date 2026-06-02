@@ -489,9 +489,12 @@ const dataApiEnvSchema = z.object({
  * - You wrapped your dev command with `neon-env run -- <cmd>`.
  * - Your platform (Vercel, Fly, Railway, …) injected the vars via its own integration.
  *
- * `branchName` is the branch the policy should be evaluated for — pass it explicitly so
- * the result is deterministic and not coupled to any `NEON_*` env var. (The `neon-env`
- * CLI resolves it for you and injects `NEON_BRANCH_NAME`; pass that through, or default to
+ * Takes a branch **name** (not an id like the API-backed `fetchEnv` / config operations):
+ * `parseEnv` makes no Neon API call, so the only thing it needs the branch for is
+ * evaluating your `neon.ts` policy, which switches on `branch.name`. With no network round
+ * trip there's no way to turn a `br-…` id into a name, so the name is passed directly.
+ * Pass it explicitly so the result is deterministic and not coupled to any `NEON_*` env
+ * var. (The `neon-env` CLI injects `NEON_BRANCH_NAME`; pass that through, or default to
  * your main branch name.) Prefer `fetchEnv` when runtime code needs the exact live branch.
  *
  * Throws `PlatformError(EnvNotInjected)` listing every missing/invalid var when the env
