@@ -361,7 +361,7 @@ function requireContextForPush(
 		throw new MissingContextError(
 			[
 				"pushConfig could not resolve a Neon project id and branch.",
-				"`pushConfig` is branch-scoped — run `npx neonctl link` to select a project, then `neonctl platform checkout <branch>` or `neonctl platform branch <name>` to select a branch.",
+				"`pushConfig` is branch-scoped — run `npx neonctl link` to select a project, then `neonctl checkout <branch>` or `neonctl platform branch <name>` to select a branch.",
 				"Alternatively, pass `projectId` / `--project-id` and `branch` / `--branch`, or set `NEON_PROJECT_ID` and `NEON_BRANCH_ID`.",
 			].join("\n"),
 		);
@@ -381,7 +381,7 @@ function resolveRemoteBranch(
 		[
 			`Selected branch ${ref.kind}=${ref.value} does not exist on Neon.`,
 			`Available branches: ${branches.map((b) => `${b.name} (${b.id})`).join(", ") || "(none)"}.`,
-			"Run `neonctl platform checkout <branch>` to select an existing branch, or `neonctl platform branch <name>` to create a new one.",
+			"Run `neonctl checkout <branch>` to select an existing branch, or `neonctl platform branch <name>` to create a new one.",
 		].join(" "),
 	);
 }

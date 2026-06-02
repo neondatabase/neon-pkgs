@@ -4,7 +4,6 @@ import { dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { resolveApiKey } from "../auth.js";
 import { branch } from "../branch.js";
-import { checkout } from "../checkout.js";
 import { fetchEnv, neonEnvToProcessEnv } from "../env.js";
 import {
 	ConfigLoadError,
@@ -367,62 +366,6 @@ export async function runBranch(
 					mergeEnvFile(null, result.capturedEnv).trimEnd(),
 				);
 			}
-		}
-		return { exitCode: 0, stdout: `${lines.join("\n")}\n`, stderr: "" };
-	} catch (err) {
-		return handleError(err);
-	}
-}
-
-// ─────────────────────── checkout ────────────────────────
-
-export interface CheckoutCommandOptions {
-	branch: string;
-	projectId?: string;
-	orgId?: string;
-	apiKey?: string;
-}
-
-export async function runCheckout(
-	options: CheckoutCommandOptions,
-	ctx: CommandEnv,
-): Promise<CommandResult> {
-	const api = resolveApi(options.apiKey, ctx);
-	if (typeof api === "string") return failure(api);
-	try {
-		const result = await checkout({
-			branch: options.branch,
-			cwd: ctx.cwd,
-			api,
-			...(options.projectId ? { projectId: options.projectId } : {}),
-			...(options.orgId ? { orgId: options.orgId } : {}),
-		});
-		const lines = [
-			`✓ checked out branch ${result.branchName} (${result.branchId})`,
-			`  project   : ${result.projectId}${result.orgId ? ` (org ${result.orgId})` : ""}`,
-			"",
-		];
-		switch (result.contextFile.status) {
-			case "updated":
-				lines.push(
-					`  updated ${result.contextFile.path} with the new branchId.`,
-				);
-				break;
-			case "no-file":
-				lines.push(
-					"  no .neon/project.json (or .neon) found — write the snippet below to pin the selected branch for subsequent commands:",
-					"",
-					result.contextFile.json.trimEnd(),
-				);
-				break;
-			case "write-failed":
-				lines.push(
-					`  ! could not update ${result.contextFile.path}: ${result.contextFile.error}`,
-					"  apply this snippet by hand:",
-					"",
-					result.contextFile.json.trimEnd(),
-				);
-				break;
 		}
 		return { exitCode: 0, stdout: `${lines.join("\n")}\n`, stderr: "" };
 	} catch (err) {

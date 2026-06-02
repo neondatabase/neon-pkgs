@@ -1,5 +1,5 @@
 import { describe, expect } from "vitest";
-import { branch, checkout, defineConfig, pushConfig } from "../src/v1.js";
+import { branch, defineConfig, pushConfig } from "../src/v1.js";
 import {
 	bootstrapProject,
 	DEFAULT_REGION,
@@ -11,7 +11,7 @@ import {
 
 describe("e2e — branch policy lifecycle", () => {
 	e2eTest(
-		"creates a dev branch, checks out main, and pushes main policy",
+		"creates a dev branch and pushes main policy",
 		async ({ track }) => {
 			const scope = await detectApiKeyScope();
 			if (scope.kind !== "org-or-user") return;
@@ -37,12 +37,6 @@ describe("e2e — branch policy lifecycle", () => {
 				gitBranch: null,
 			});
 			expect(created.branchName).toMatch(/^dev-/);
-			const checked = await checkout({
-				branch: main.name,
-				projectId,
-				api,
-			});
-			expect(checked.branchId).toBe(main.id);
 			await pushConfig(config, {
 				api,
 				projectId,

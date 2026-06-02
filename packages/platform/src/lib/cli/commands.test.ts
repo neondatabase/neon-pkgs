@@ -5,7 +5,6 @@ import { FakeNeonApi } from "../fake-neon-api.js";
 import { makeTempRepo, stubCleanNeonEnv } from "../test-utils.js";
 import {
 	runBranch,
-	runCheckout,
 	runEnvPull,
 	runInit,
 	runPull,
@@ -134,7 +133,7 @@ describe("runPull / runInit", () => {
 	});
 });
 
-describe("runBranch / runCheckout", () => {
+describe("runBranch", () => {
 	test("branch creates and updates context", async () => {
 		const { api, projectId, orgId } = seededFake();
 		const root = setup({
@@ -205,27 +204,6 @@ describe("runBranch / runCheckout", () => {
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain("pattern   : *");
 		expect(result.stdout).toContain("created branch");
-	});
-
-	test("checkout selects an existing branch", async () => {
-		const { api, projectId } = seededFake();
-		const root = setup({
-			"package.json": "{}",
-			".neon/project.json": JSON.stringify({
-				projectId,
-				branchId: "br-main",
-			}),
-		});
-		const result = await runCheckout(
-			{ branch: "dev-a" },
-			{ cwd: root, api },
-		);
-		expect(result.exitCode).toBe(0);
-		expect(result.stdout).toContain("checked out branch dev-a (br-dev)");
-		const reread = JSON.parse(
-			readFileSync(join(root, ".neon", "project.json"), "utf-8"),
-		);
-		expect(reread.branchId).toBe("br-dev");
 	});
 });
 

@@ -1,11 +1,5 @@
 import { describe, expect, test } from "vitest";
-import {
-	branch,
-	checkout,
-	defineConfig,
-	pullConfig,
-	pushConfig,
-} from "./v1.js";
+import { branch, defineConfig, pullConfig, pushConfig } from "./v1.js";
 
 describe("v1 surface", () => {
 	test("exports branch policy helpers", () => {
@@ -16,7 +10,6 @@ describe("v1 surface", () => {
 			parent: "main",
 		});
 		expect(branch).toBeTypeOf("function");
-		expect(checkout).toBeTypeOf("function");
 		expect(pushConfig).toBeTypeOf("function");
 		expect(pullConfig).toBeTypeOf("function");
 	});

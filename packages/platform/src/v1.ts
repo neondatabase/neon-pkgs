@@ -38,12 +38,6 @@ export type {
 } from "./lib/branch.js";
 // ─── Operations ────────────────────────────────────────────────────────────────
 export { branch } from "./lib/branch.js";
-export type {
-	CheckoutContextFile,
-	CheckoutOptions,
-	CheckoutResult,
-} from "./lib/checkout.js";
-export { checkout } from "./lib/checkout.js";
 export { defineConfig } from "./lib/define-config.js";
 export type {
 	FetchEnvOptions,

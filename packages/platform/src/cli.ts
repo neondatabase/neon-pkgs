@@ -7,7 +7,6 @@ import { hideBin } from "yargs/helpers";
 import {
 	type CommandResult,
 	runBranch,
-	runCheckout,
 	runContext,
 	runEnvPull,
 	runEnvRun,
@@ -160,29 +159,6 @@ const argv = yargs(hideBin(process.argv))
 					type: "string",
 					describe:
 						"Path to neon.ts (defaults to walking up from cwd)",
-				})
-				.option("project-id", {
-					type: "string",
-					describe: "Override the .neon/project.json projectId",
-				})
-				.option("org-id", {
-					type: "string",
-					describe: "Override the .neon/project.json orgId",
-				})
-				.option("api-key", {
-					type: "string",
-					describe: "Neon API key (defaults to NEON_API_KEY)",
-				}),
-	)
-	.command(
-		"checkout <branch>",
-		"Check out an existing Neon branch by name or id and update local context.",
-		(y) =>
-			y
-				.positional("branch", {
-					type: "string",
-					describe: "Branch name or id to check out",
-					demandOption: true,
 				})
 				.option("project-id", {
 					type: "string",
@@ -372,25 +348,6 @@ switch (command) {
 				...(typeof argv.config === "string"
 					? { configPath: argv.config }
 					: {}),
-				...(typeof argv["project-id"] === "string"
-					? { projectId: argv["project-id"] }
-					: {}),
-				...(typeof argv["org-id"] === "string"
-					? { orgId: argv["org-id"] }
-					: {}),
-				...(typeof argv["api-key"] === "string"
-					? { apiKey: argv["api-key"] }
-					: {}),
-			},
-			{ cwd },
-		);
-		break;
-	}
-	case "checkout": {
-		const branch = typeof argv.branch === "string" ? argv.branch : "";
-		result = await runCheckout(
-			{
-				branch,
 				...(typeof argv["project-id"] === "string"
 					? { projectId: argv["project-id"] }
 					: {}),
