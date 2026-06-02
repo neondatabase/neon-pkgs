@@ -3,17 +3,18 @@ import { type PushConfigOptions, pushConfig } from "./push-config.js";
 import type { Config, PushResult } from "./types.js";
 
 /**
- * Common options shared by the {@link status} / {@link deploy} entry points. These are a
- * thin, intent-revealing subset of {@link PushConfigOptions}; everything resolves through
- * the same project/branch/api-key chain as the rest of the package.
+ * Where to run the operation and how to authenticate. Filesystem- and env-agnostic: the
+ * `projectId` and target branch are always passed explicitly by the caller (e.g. neonctl
+ * resolves them from `.neon` / `NEON_*` and forwards them here).
  */
 export interface ConfigOperationOptions {
+	/**
+	 * Neon project id. **Required** — the management API addresses branches through their
+	 * project, so operations cannot run without it.
+	 */
+	projectId: string;
 	/** Neon API key. Falls back to `NEON_API_KEY` / neonctl credentials. */
 	apiKey?: string;
-	/** Explicit project id. Overrides `NEON_PROJECT_ID` / `.neon[/project.json]`. */
-	projectId?: string;
-	/** Working directory for context / config file lookups. Defaults to `process.cwd()`. */
-	cwd?: string;
 	/** Inject a custom NeonApi adapter (primarily for tests). */
 	api?: PushConfigOptions["api"];
 }
@@ -32,71 +33,67 @@ export interface DeployOptions extends ConfigOperationOptions {
 }
 
 /**
- * Pull the selected branch's live Neon state as a plain object (project + branch metadata
- * and the reverse-engineered `BranchConfig`). Network read only — never mutates.
+ * Pull a branch's live Neon state as a plain object (project + branch metadata and the
+ * reverse-engineered `BranchConfig`). Network read only — never mutates.
  *
- * `branchId` selects the branch (id `br-…` or name). Omit it to use the project's default
- * branch / the branch resolved from `NEON_BRANCH_ID` / `.neon[/project.json]`.
+ * `branchId` selects the branch (id `br-…` or name) and is **required**.
  */
 export async function pull(
-	branchId?: string,
-	options: ConfigOperationOptions = {},
+	branchId: string,
+	options: ConfigOperationOptions,
 ): Promise<PulledBranchConfig> {
 	return pullConfig({
+		projectId: options.projectId,
+		branch: branchId,
 		...(options.api ? { api: options.api } : {}),
 		...(options.apiKey ? { apiKey: options.apiKey } : {}),
-		...(options.projectId ? { projectId: options.projectId } : {}),
-		...(options.cwd ? { cwd: options.cwd } : {}),
-		...(branchId ? { branch: branchId } : {}),
 	});
 }
 
 /**
- * Compute what {@link deploy} would do for the selected branch without mutating anything
+ * Compute what {@link deploy} would do for the given branch without mutating anything
  * (dry-run). Returns the full {@link PushResult} with the planned changes in `applied`
  * and any blocking drift in `conflicts`.
  *
- * `branchId` selects the branch (id `br-…` or name). Omit it to use the branch resolved
- * from `NEON_BRANCH_ID` / `.neon[/project.json]`.
+ * `branchId` selects the branch (id `br-…` or name) and is **required**.
  */
 export async function status(
 	config: Config,
-	branchId?: string,
-	options: ConfigOperationOptions = {},
+	branchId: string,
+	options: ConfigOperationOptions,
 ): Promise<PushResult> {
 	return pushConfig(config, {
+		projectId: options.projectId,
+		branch: branchId,
 		dryRun: true,
 		// Surface the full would-apply list as plan steps without mutating anything.
 		updateExisting: true,
 		...(options.api ? { api: options.api } : {}),
 		...(options.apiKey ? { apiKey: options.apiKey } : {}),
-		...(options.projectId ? { projectId: options.projectId } : {}),
-		...(options.cwd ? { cwd: options.cwd } : {}),
-		...(branchId ? { branch: branchId } : {}),
 	});
 }
 
 /**
- * Push the local `neon.ts` policy to the selected Neon branch and return the
- * {@link PushResult} describing what changed.
+ * Push a `neon.ts` policy to the given Neon branch and return the {@link PushResult}
+ * describing what changed.
  *
- * `branchId` selects the branch (id `br-…` or name). Pass `updateExisting` to auto-confirm
- * overriding existing remote settings and `allowProtectedBranch` to auto-confirm pushing
- * to a protected branch; otherwise drift is reported as a `PushConflictError`.
+ * `branchId` selects the branch (id `br-…` or name) and is **required**. Pass
+ * `updateExisting` to auto-confirm overriding existing remote settings and
+ * `allowProtectedBranch` to auto-confirm pushing to a protected branch; otherwise drift
+ * is reported as a `PushConflictError`.
  *
- * Never creates projects or branches.
+ * Never creates projects or branches — both must already exist.
  */
 export async function deploy(
 	config: Config,
-	branchId?: string,
-	options: DeployOptions = {},
+	branchId: string,
+	options: DeployOptions,
 ): Promise<PushResult> {
 	return pushConfig(config, {
+		projectId: options.projectId,
+		branch: branchId,
 		...(options.api ? { api: options.api } : {}),
 		...(options.apiKey ? { apiKey: options.apiKey } : {}),
-		...(options.projectId ? { projectId: options.projectId } : {}),
-		...(options.cwd ? { cwd: options.cwd } : {}),
-		...(branchId ? { branch: branchId } : {}),
 		...(options.updateExisting ? { updateExisting: true } : {}),
 		...(options.allowProtectedBranch ? { allowProtectedBranch: true } : {}),
 	});

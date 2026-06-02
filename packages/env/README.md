@@ -12,26 +12,27 @@ npm install @neondatabase/env
 
 ## Functions
 
+The library functions are **filesystem- and env-agnostic**: `fetchEnv` requires an explicit `projectId` + `branch`, and `parseEnv` requires an explicit `branchName`. (The `neon-env` CLI does the `.neon`/`NEON_*` resolution and passes these in.)
+
 ```ts
 import config from "../neon";
 import { fetchEnv, parseEnv } from "@neondatabase/env/v1";
 
-// Async — resolves the branch and calls the Neon API for live connection strings.
-// Use in build scripts / top-level await.
-const env = await fetchEnv(config);
+// Async — calls the Neon API for live connection strings. Use in build scripts / top-level await.
+const env = await fetchEnv(config, { projectId: "patient-art-12345", branch: "main" });
 const db = drizzle(neon(env.postgres.databaseUrl), { schema });
 
 // Sync — reads already-injected process.env and validates it (no network).
 // Use in app bootstrap where async isn't available.
-const env2 = parseEnv(config);
+const env2 = parseEnv(config, process.env.NEON_BRANCH_NAME ?? "main");
 ```
 
 Both return the same namespaced `NeonEnv` shape: `postgres` is always present; `auth` and `dataApi` are included (and statically typed) when the evaluated branch policy enables them.
 
 | Function | Description |
 | --- | --- |
-| `fetchEnv(config, options?)` | Async. Resolves the project + branch, calls the Neon API, returns live connection strings (and Auth/Data API values when enabled). |
-| `parseEnv(config)` | Sync. Reads/validates the Neon env vars already present in `process.env`. Throws `PlatformError(EnvNotInjected)` listing missing vars when the env isn't populated. |
+| `fetchEnv(config, { projectId, branch, ... })` | Async. Calls the Neon API for the given project + branch and returns live connection strings (and Auth/Data API values when enabled). `projectId` and `branch` are required. |
+| `parseEnv(config, branchName)` | Sync. Reads/validates the Neon env vars already present in `process.env`, evaluating the policy for `branchName`. Throws `PlatformError(EnvNotInjected)` listing missing vars when the env isn't populated. |
 | `neonEnvToProcessEnv(env)` | Project a resolved `NeonEnv` into `{ KEY: value }` pairs for cross-process transport. |
 
 ## CLI
@@ -58,4 +59,6 @@ Flags: `--config <path>`, `--project-id`, `--branch`, `--api-key`, `--debug`.
 
 ## Resolution
 
-Project/branch/api-key resolve through the same chain as `@neondatabase/config` (option/arg → env var → `.neon[/project.json]` → neonctl credentials).
+The **CLI** (`neon-env run`) resolves project + branch itself: `--project-id` / `--branch` flag → `NEON_PROJECT_ID` / `NEON_BRANCH_ID` env → `.neon[/project.json]` walked up from the working directory. The API key resolves via `--api-key` → `NEON_API_KEY` → `~/.config/neonctl/credentials.json`.
+
+The **library functions** do none of this — pass `projectId` / `branch` explicitly. This keeps `.neon` parsing in one place (the CLI / neonctl) and the functions pure.

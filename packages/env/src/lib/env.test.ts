@@ -93,7 +93,10 @@ describe("parseEnv", () => {
 	test("parses postgres env synchronously", () => {
 		vi.stubEnv("DATABASE_URL", "postgres://pooled");
 		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
-		const env = parseEnv(defineConfig(() => ({})));
+		const env = parseEnv(
+			defineConfig(() => ({})),
+			"main",
+		);
 		expect(env.postgres.databaseUrl).toBe("postgres://pooled");
 	});
 
@@ -105,7 +108,7 @@ describe("parseEnv", () => {
 			dataApi: {},
 		}));
 
-		expect(() => parseEnv(config)).toThrow(
+		expect(() => parseEnv(config, "main")).toThrow(
 			expect.objectContaining({ code: ErrorCode.EnvNotInjected }),
 		);
 	});
@@ -133,7 +136,7 @@ describe("parseEnv", () => {
 			};
 		});
 
-		const env = parseEnv(config);
+		const env = parseEnv(config, "main");
 
 		expectType<NeonEnv<typeof config>>(env);
 		expectType<NeonAuthEnv>(env.auth);
@@ -147,9 +150,12 @@ describe("parseEnv", () => {
 		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
 		vi.stubEnv("NEON_AUTH_BASE_URL", "");
 
-		expect(() => parseEnv(defineConfig(() => ({ auth: {} })))).toThrow(
-			expect.objectContaining({ code: ErrorCode.EnvNotInjected }),
-		);
+		expect(() =>
+			parseEnv(
+				defineConfig(() => ({ auth: {} })),
+				"main",
+			),
+		).toThrow(expect.objectContaining({ code: ErrorCode.EnvNotInjected }));
 	});
 
 	test("projects env object to process env keys", () => {

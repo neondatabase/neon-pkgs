@@ -1,4 +1,5 @@
 import { createNeonApiFromOptions } from "./auth.js";
+import { type BranchRef, classifyBranchRef } from "./branch-ref.js";
 import { resolveConfig } from "./define-config.js";
 import {
 	diffConfig,
@@ -7,32 +8,28 @@ import {
 	type RemoteState,
 } from "./diff.js";
 import {
-	MissingContextError,
+	ErrorCode,
+	PlatformError,
 	PushAbortedError,
 	PushConflictError,
 } from "./errors.js";
-import { type BranchRef, loadContextWithBranch } from "./load-context.js";
-import { loadConfigFromFile } from "./loader.js";
 import type { NeonApi, NeonBranchSnapshot } from "./neon-api.js";
 import type { AppliedChange, Config, PushResult } from "./types.js";
 
 export interface PushConfigOptions {
-	/** Neon API key. Falls back to `NEON_API_KEY`. Ignored when `api` is supplied. */
-	apiKey?: string;
 	/**
-	 * Explicit project id. Overrides the value read from `.neon/project.json` / `.neon`
-	 * and the `NEON_PROJECT_ID` env var.
-	 *
-	 * `pushConfig` **never creates a project** — it requires a resolvable project id from
-	 * one of: this option, `NEON_PROJECT_ID`, or a `.neon[/project.json]` context file.
-	 * If none is set, push throws `MissingContextError` and the message points the user at
-	 * `npx neonctl link` to create/select a project and write local context.
+	 * Neon project id. **Required** — the management API addresses every branch through
+	 * its project, so there is no way to push without it. `pushConfig` never creates a
+	 * project; resolve the id yourself (e.g. via neonctl) and pass it in.
 	 */
-	projectId?: string;
-	/** Explicit branch id or name. Overrides `NEON_BRANCH_ID` and `.neon` branchId. */
-	branch?: string;
-	/** Working directory for context / config file lookups. Defaults to `process.cwd()`. */
-	cwd?: string;
+	projectId: string;
+	/**
+	 * Branch selector: a Neon branch id (`br-…`) or a branch name. **Required.**
+	 * `pushConfig` never creates a branch — it must already exist on the project.
+	 */
+	branch: string;
+	/** Neon API key. Falls back to `NEON_API_KEY` / neonctl credentials. Ignored when `api` is supplied. */
+	apiKey?: string;
 	/**
 	 * Inject a custom NeonApi adapter. Primarily used by tests; production callers can rely
 	 * on the default real adapter built from `apiKey`.
@@ -84,10 +81,6 @@ export interface PushConfigOptions {
 	 * something dangerous?" check before invoking `pushConfig` for real.
 	 */
 	dryRun?: boolean;
-	/**
-	 * Explicit path to a config file (only used when no `config` is supplied).
-	 */
-	configPath?: string;
 }
 
 /**
@@ -114,54 +107,33 @@ export interface PushConfirmContext {
 }
 
 /**
- * Push the local Neon configuration to the remote project.
+ * Push a Neon branch policy to a specific project + branch.
  *
- * Overloads:
+ * Filesystem- and env-agnostic: the caller supplies an already-validated `Config` object
+ * (from `defineConfig` / `loadConfigFromFile`) and explicit `projectId` + `branch` in
+ * `options`. `pushConfig` performs no `.neon` lookups and reads no `NEON_*` env vars.
  *
- * 1. `pushConfig()` — auto-load `neon.ts` from the current working directory. Pulls the
- *    remote, diffs, and fails on conflict.
- * 2. `pushConfig(options)` — same as (1) but pass options like `updateExisting`, `apiKey`,
- *    `cwd`, `configPath`, etc.
- * 3. `pushConfig(config, options?)` — caller supplies an already-validated `Config` object.
- *    No filesystem reads (other than the project-context lookup, which can be bypassed by
- *    setting `projectId`).
- *
- * `pushConfig` requires a resolvable `projectId` and branch (the `branch` option,
- * `NEON_BRANCH_ID`, or `.neon` branchId). It will **not** create a project or branch —
- * bootstrap the project with `npx neonctl link` and create branches with the neonctl CLI.
+ * It will **not** create a project or branch — both must already exist on Neon.
  */
-export async function pushConfig(): Promise<PushResult>;
-export async function pushConfig(
-	options: PushConfigOptions,
-): Promise<PushResult>;
 export async function pushConfig(
 	config: Config,
-	options?: PushConfigOptions,
-): Promise<PushResult>;
-export async function pushConfig(
-	arg1?: Config | PushConfigOptions,
-	arg2?: PushConfigOptions,
+	options: PushConfigOptions,
 ): Promise<PushResult> {
-	const { config: passedConfig, options } = splitArgs(arg1, arg2);
-
-	const cwd = options.cwd ?? process.cwd();
 	const api = options.api ?? createApiFromOptions(options);
-	const config =
-		passedConfig ??
-		(await loadConfigFromFile({ path: options.configPath, cwd })).config;
+	const projectId = options.projectId;
+	const branchRef = classifyBranchRef(options.branch);
 
 	const dryRun = options.dryRun === true;
 	const updateExisting = options.updateExisting === true;
 	const allowProtectedBranch = options.allowProtectedBranch === true;
 
-	const ctx = requireContextForPush(options, cwd);
-	const remoteProject = await api.getProject(ctx.projectId);
+	const remoteProject = await api.getProject(projectId);
 
 	const [branches, endpoints] = await Promise.all([
 		api.listBranches(remoteProject.id),
 		api.listEndpoints(remoteProject.id),
 	]);
-	const branch = resolveRemoteBranch(ctx.branch, branches);
+	const branch = resolveRemoteBranch(branchRef, branches);
 	const resolved = resolveConfig(config, {
 		name: branch.name,
 		id: branch.id,
@@ -326,45 +298,10 @@ function synthesizeAppliedChange(step: PlanStep): AppliedChange {
 	}
 }
 
-function splitArgs(
-	arg1: Config | PushConfigOptions | undefined,
-	arg2: PushConfigOptions | undefined,
-): { config?: Config; options: PushConfigOptions } {
-	if (arg1 === undefined) return { options: arg2 ?? {} };
-	if (isConfigLike(arg1)) return { config: arg1, options: arg2 ?? {} };
-	return { options: arg1 };
-}
-
-function isConfigLike(value: unknown): value is Config {
-	return typeof value === "function";
-}
-
 function createApiFromOptions(options: PushConfigOptions): NeonApi {
 	return createNeonApiFromOptions("pushConfig", {
 		...(options.apiKey ? { apiKey: options.apiKey } : {}),
 	});
-}
-
-function requireContextForPush(
-	options: PushConfigOptions,
-	cwd: string,
-): ReturnType<typeof loadContextWithBranch> {
-	try {
-		return loadContextWithBranch({
-			projectId: options.projectId,
-			branch: options.branch,
-			cwd,
-		});
-	} catch (cause) {
-		if (!(cause instanceof MissingContextError)) throw cause;
-		throw new MissingContextError(
-			[
-				"pushConfig could not resolve a Neon project id and branch.",
-				"`pushConfig` is branch-scoped — run `npx neonctl link` to select a project, then `neonctl checkout <branch>` to select a branch.",
-				"Alternatively, pass `projectId` / `--project-id` and `branch` / `--branch`, or set `NEON_PROJECT_ID` and `NEON_BRANCH_ID`.",
-			].join("\n"),
-		);
-	}
 }
 
 function resolveRemoteBranch(
@@ -376,12 +313,14 @@ function resolveRemoteBranch(
 			? branches.find((b) => b.id === ref.value)
 			: branches.find((b) => b.name === ref.value);
 	if (found) return found;
-	throw new MissingContextError(
+	throw new PlatformError(
+		ErrorCode.BranchNotFound,
 		[
-			`Selected branch ${ref.kind}=${ref.value} does not exist on Neon.`,
+			`pushConfig: branch ${ref.kind}=${JSON.stringify(ref.value)} does not exist on the project.`,
 			`Available branches: ${branches.map((b) => `${b.name} (${b.id})`).join(", ") || "(none)"}.`,
-			"Run `neonctl checkout <branch>` to select an existing branch, or create a new one with the neonctl CLI.",
+			"Pass an existing branch id/name, or create the branch first with the neonctl CLI.",
 		].join(" "),
+		{ details: { branch: ref, available: branches.map((b) => b.name) } },
 	);
 }
 

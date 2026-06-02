@@ -11,17 +11,20 @@
  * });
  * ```
  *
- * Then, from a script or another tool:
+ * Then, from a script or another tool (filesystem- and env-agnostic — pass `projectId`
+ * and the target branch explicitly):
  * ```ts
  * import config from "../neon";
  * import { status, deploy, pull } from "@neondatabase/config/v1";
  *
- * const plan = await status(config);        // dry-run diff, no mutations
- * await deploy(config, "main");             // apply the policy to a branch
- * const live = await pull("main");          // read the branch's live state
+ * const opts = { projectId: "patient-art-12345" };
+ * const plan = await status(config, "main", opts);   // dry-run diff, no mutations
+ * await deploy(config, "main", opts);                // apply the policy to a branch
+ * const live = await pull("main", opts);             // read the branch's live state
  * ```
  *
- * No CLI commands are shipped here — those live in the neonctl CLI. This package is
+ * No CLI commands are shipped here, and no `.neon` files or `NEON_*` env vars are read —
+ * resolve project/branch in your CLI (e.g. neonctl) and pass them in. This package is
  * functions only.
  *
  * Surface guidelines:
@@ -75,6 +78,8 @@ export const schemas = {
 
 // ─── Lower-level adapters ──────────────────────────────────────────────────────
 export { createNeonApiFromOptions, resolveApiKey } from "./lib/auth.js";
+export type { BranchRef } from "./lib/branch-ref.js";
+export { classifyBranchRef } from "./lib/branch-ref.js";
 export { defineConfig, resolveConfig } from "./lib/define-config.js";
 // ─── Errors ────────────────────────────────────────────────────────────────────
 export {
@@ -86,12 +91,6 @@ export {
 	PushAbortedError,
 	PushConflictError,
 } from "./lib/errors.js";
-export type {
-	BranchRef,
-	LoadContextOptions,
-	NeonContext,
-} from "./lib/load-context.js";
-export { loadContext } from "./lib/load-context.js";
 export type { LoadConfigOptions } from "./lib/loader.js";
 export { loadConfigFromFile } from "./lib/loader.js";
 // ─── NeonApi types (needed by callers implementing their own adapters) ────────

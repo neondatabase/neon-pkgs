@@ -2,9 +2,9 @@ import {
 	type BranchConfig,
 	type BranchRef,
 	type Config,
+	classifyBranchRef,
 	createNeonApiFromOptions,
 	ErrorCode,
-	loadContext,
 	type NeonApi,
 	type NeonBranchSnapshot,
 	type NeonDatabaseSnapshot,
@@ -120,6 +120,13 @@ export type NeonEnv<C extends Config = Config> = {
 
 export interface FetchEnvOptions {
 	/**
+	 * Neon project id. **Required** — the management API addresses branches through their
+	 * project. Resolve it in your CLI (e.g. neonctl) and pass it in.
+	 */
+	projectId: string;
+	/** Branch selector: a Neon branch id (`br-…`) or a branch name. **Required.** */
+	branch: string;
+	/**
 	 * Neon API key. Resolved via the standard chain (option → `NEON_API_KEY` →
 	 * `~/.config/neonctl/credentials.json`) when omitted. Ignored when a custom `api`
 	 * is supplied.
@@ -130,13 +137,6 @@ export interface FetchEnvOptions {
 	 * on the default real adapter built from `apiKey`.
 	 */
 	api?: NeonApi;
-	/** Explicit project id. Overrides `NEON_PROJECT_ID` and `.neon[/project.json]`. */
-	projectId?: string;
-	/**
-	 * Explicit branch id (`br-…`) or branch name. Resolution chain:
-	 * `options.branch` → `NEON_BRANCH_ID` env → context file → project default branch.
-	 */
-	branch?: string;
 	/**
 	 * Role name to fetch credentials for. When omitted, the only role on the branch is
 	 * auto-picked; throws {@link PlatformError} with `PLATFORM_AMBIGUOUS_BRANCH_AUTH` if
@@ -149,8 +149,6 @@ export interface FetchEnvOptions {
 	 * than one database.
 	 */
 	databaseName?: string;
-	/** Starting directory for the context-file search. Defaults to `process.cwd()`. */
-	cwd?: string;
 	/**
 	 * Env source used for one-time Auth keys that cannot be refetched after integration
 	 * creation. Defaults to `process.env`; callers may layer values from `.env.local`.
@@ -168,11 +166,14 @@ export interface FetchEnvOptions {
  * {@link parseEnv} instead — same {@link NeonEnv} shape, but a sync call against
  * `process.env`.
  *
+ * Filesystem- and env-agnostic: pass `projectId` and the target `branch` explicitly
+ * (resolve them in your CLI, e.g. neonctl).
+ *
  * ```ts
  * import config from "../neon";
  * import { fetchEnv } from "@neondatabase/env/v1";
  *
- * const env = await fetchEnv(config);
+ * const env = await fetchEnv(config, { projectId: "patient-art-12345", branch: "main" });
  * const db = drizzle(neon(env.postgres.databaseUrl), { schema });
  * ```
  *
@@ -180,29 +181,25 @@ export interface FetchEnvOptions {
  */
 export async function fetchEnv<const C extends Config>(
 	config: C,
-	options: FetchEnvOptions = {},
+	options: FetchEnvOptions,
 ): Promise<NeonEnv<C>> {
 	const api = options.api ?? createApiFromOptions(options);
+	const projectId = options.projectId;
+	const branchRef = classifyBranchRef(options.branch);
 
-	const ctx = loadContext({
-		...(options.projectId ? { projectId: options.projectId } : {}),
-		...(options.branch ? { branch: options.branch } : {}),
-		...(options.cwd ? { cwd: options.cwd } : {}),
-	});
-
-	const branches = await api.listBranches(ctx.projectId);
+	const branches = await api.listBranches(projectId);
 	if (branches.length === 0) {
 		throw new PlatformError(
 			ErrorCode.BranchNotFound,
 			[
-				`fetchEnv: project ${ctx.projectId} has no branches.`,
-				"Either run `deploy(config)` to provision the project from your `neon.ts`, or pick a different project id.",
+				`fetchEnv: project ${projectId} has no branches.`,
+				"Deploy your neon.ts policy (or create a branch) first, or pick a different project id.",
 			].join(" "),
-			{ details: { projectId: ctx.projectId } },
+			{ details: { projectId } },
 		);
 	}
 
-	const branch = resolveBranch(ctx.branch, branches);
+	const branch = resolveBranch(branchRef, branches);
 	const desired = resolveConfig(config, {
 		name: branch.name,
 		id: branch.id,
@@ -214,8 +211,8 @@ export async function fetchEnv<const C extends Config>(
 	});
 
 	const [roles, databases] = await Promise.all([
-		api.listBranchRoles(ctx.projectId, branch.id),
-		api.listBranchDatabases(ctx.projectId, branch.id),
+		api.listBranchRoles(projectId, branch.id),
+		api.listBranchDatabases(projectId, branch.id),
 	]);
 
 	const roleName = pickRoleName(roles, branch, options.roleName);
@@ -235,23 +232,23 @@ export async function fetchEnv<const C extends Config>(
 
 	const [pooled, unpooled, authSnapshot, dataApiSnapshot] = await Promise.all(
 		[
-			api.getConnectionUri(ctx.projectId, {
+			api.getConnectionUri(projectId, {
 				branchId: branch.id,
 				databaseName,
 				roleName,
 				pooled: true,
 			}),
-			api.getConnectionUri(ctx.projectId, {
+			api.getConnectionUri(projectId, {
 				branchId: branch.id,
 				databaseName,
 				roleName,
 				pooled: false,
 			}),
 			wantsAuth
-				? api.getNeonAuth(ctx.projectId, branch.id)
+				? api.getNeonAuth(projectId, branch.id)
 				: Promise.resolve(null),
 			wantsDataApi
-				? api.getNeonDataApi(ctx.projectId, branch.id, databaseName)
+				? api.getNeonDataApi(projectId, branch.id, databaseName)
 				: Promise.resolve(null),
 		],
 	);
@@ -272,7 +269,7 @@ export async function fetchEnv<const C extends Config>(
 					"Enable it via `deploy(config)` (or `npx neonctl …`), in the Neon Console — then re-run fetchEnv. Or return auth.enabled=false.",
 				].join(" "),
 				{
-					details: { projectId: ctx.projectId, branchId: branch.id },
+					details: { projectId, branchId: branch.id },
 				},
 			);
 		}
@@ -293,7 +290,7 @@ export async function fetchEnv<const C extends Config>(
 				].join(" "),
 				{
 					details: {
-						projectId: ctx.projectId,
+						projectId,
 						branchId: branch.id,
 						databaseName,
 					},
@@ -328,37 +325,24 @@ function createApiFromOptions(options: FetchEnvOptions): NeonApi {
 }
 
 function resolveBranch(
-	requested: BranchRef | undefined,
+	requested: BranchRef,
 	branches: NeonBranchSnapshot[],
 ): NeonBranchSnapshot {
-	if (requested) {
-		const match = findBranch(branches, requested);
-		if (match) return match;
-		throw new PlatformError(
-			ErrorCode.BranchNotFound,
-			[
-				`fetchEnv: branch ${describeRef(requested)} not found on project.`,
-				`Existing branches: ${branches.map((b) => `${b.name} (${b.id})`).join(", ")}.`,
-			].join(" "),
-			{
-				details: {
-					branch: requested,
-					available: branches.map((b) => b.name),
-				},
+	const match = findBranch(branches, requested);
+	if (match) return match;
+	throw new PlatformError(
+		ErrorCode.BranchNotFound,
+		[
+			`fetchEnv: branch ${describeRef(requested)} not found on project.`,
+			`Existing branches: ${branches.map((b) => `${b.name} (${b.id})`).join(", ")}.`,
+		].join(" "),
+		{
+			details: {
+				branch: requested,
+				available: branches.map((b) => b.name),
 			},
-		);
-	}
-
-	const fallback = branches.find((b) => b.isDefault) ?? branches[0];
-	if (!fallback) {
-		// listBranches returned [], but the empty-list path above already throws.
-		// This is a belt-and-braces guard so the function is total.
-		throw new PlatformError(
-			ErrorCode.BranchNotFound,
-			"fetchEnv: no branches available on the project.",
-		);
-	}
-	return fallback;
+		},
+	);
 }
 
 function findBranch(
@@ -520,9 +504,10 @@ const dataApiEnvSchema = z.object({
  * - You wrapped your dev command with `neon-env run -- <cmd>`.
  * - Your platform (Vercel, Fly, Railway, …) injected the vars via its own integration.
  *
- * The shape is keyed off the branch policy evaluated for `NEON_BRANCH_NAME` when set,
- * otherwise `NEON_BRANCH_ID` when it is a branch name, otherwise a synthetic `"main"`
- * target. Prefer `fetchEnv` when runtime code needs exact branch-name-aware policy.
+ * `branchName` is the branch the policy should be evaluated for — pass it explicitly so
+ * the result is deterministic and not coupled to any `NEON_*` env var. (The `neon-env`
+ * CLI resolves it for you and injects `NEON_BRANCH_NAME`; pass that through, or default to
+ * your main branch name.) Prefer `fetchEnv` when runtime code needs the exact live branch.
  *
  * Throws `PlatformError(EnvNotInjected)` listing every missing/invalid var when the env
  * isn't fully populated, with a fix hint pointing back at `neon-env run`.
@@ -531,20 +516,20 @@ const dataApiEnvSchema = z.object({
  * import config from "../neon";
  * import { parseEnv } from "@neondatabase/env/v1";
  *
- * const env = parseEnv(config);
+ * const env = parseEnv(config, process.env.NEON_BRANCH_NAME ?? "main");
  * const db = drizzle(neon(env.postgres.databaseUrl), { schema });
  * // env.auth is statically typed when the config return type has auth: {} or auth.enabled: true.
  * ```
  */
-export function parseEnv<const C extends Config>(config: C): NeonEnv<C> {
+export function parseEnv<const C extends Config>(
+	config: C,
+	branchName: string,
+): NeonEnv<C> {
 	const source = process.env;
 	const issues: string[] = [];
 	const result: Record<string, unknown> = {};
 	const desired = resolveConfig(config, {
-		name: parseEnvBranchName(source),
-		...(source.NEON_BRANCH_ID?.startsWith("br-")
-			? { id: source.NEON_BRANCH_ID }
-			: {}),
+		name: branchName,
 		exists: true,
 	});
 
@@ -604,14 +589,6 @@ export function parseEnv<const C extends Config>(config: C): NeonEnv<C> {
 	}
 
 	return result as NeonEnv<C>;
-}
-
-function parseEnvBranchName(source: NodeJS.ProcessEnv): string {
-	const explicit = source.NEON_BRANCH_NAME;
-	if (explicit && explicit.trim() !== "") return explicit.trim();
-	const branch = source.NEON_BRANCH_ID;
-	if (branch && !branch.startsWith("br-")) return branch;
-	return "main";
 }
 
 // ───────────────────────── env-var mapping helpers ─────────────────────────

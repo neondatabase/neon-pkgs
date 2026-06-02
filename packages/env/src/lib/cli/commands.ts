@@ -10,6 +10,7 @@ import {
 	PlatformError,
 } from "@neondatabase/config/v1";
 import { fetchEnv, neonEnvToProcessEnv } from "../env.js";
+import { resolveContext } from "./resolve-context.js";
 
 /** File `env run` reads to layer one-time auth keys. Matches the Vercel/Next.js convention. */
 const DEFAULT_ENV_FILE = ".env.local";
@@ -68,9 +69,26 @@ export async function runEnvRun(
 		);
 	}
 
+	// The CLI owns project/branch resolution (flags → NEON_* env → .neon file) so the
+	// library functions stay filesystem/env-agnostic.
+	const resolved = resolveContext({
+		cwd: ctx.cwd,
+		...(options.projectId ? { projectId: options.projectId } : {}),
+		...(options.branch ? { branch: options.branch } : {}),
+	});
+	if (!resolved.ok) {
+		return failure(
+			[
+				"`env run` could not resolve the Neon project and branch:",
+				...resolved.missing.map((m) => `  - ${m}`),
+			].join("\n"),
+			3,
+		);
+	}
+
 	let injected: Record<string, string>;
 	try {
-		const env = await loadConfigAndFetchEnv(options, ctx);
+		const env = await loadConfigAndFetchEnv(options, ctx, resolved.context);
 		injected = neonEnvToProcessEnv(env);
 	} catch (err) {
 		return handleError(err);
@@ -85,13 +103,15 @@ export async function runEnvRun(
 }
 
 /**
- * Load `neon.ts`, then call `fetchEnv`. Layers any one-time Auth keys from `.env.local`
- * (next to the config file) into the env source so re-runs keep round-tripping values the
- * Neon API only returns once at integration-creation time.
+ * Load `neon.ts`, then call `fetchEnv` with the explicitly-resolved project + branch.
+ * Layers any one-time Auth keys from `.env.local` (next to the config file) into the env
+ * source so re-runs keep round-tripping values the Neon API only returns once at
+ * integration-creation time.
  */
 async function loadConfigAndFetchEnv(
 	options: EnvRunCommandOptions,
 	ctx: CommandEnv,
+	resolved: { projectId: string; branch: string },
 ): Promise<Awaited<ReturnType<typeof fetchEnv>>> {
 	const { config, resolvedPath } = await loadConfigFromFile({
 		...(options.configPath ? { path: options.configPath } : {}),
@@ -102,12 +122,11 @@ async function loadConfigAndFetchEnv(
 		? parseEnvFile(readFileSync(envFileSource, "utf-8"))
 		: {};
 	return fetchEnv(config, {
-		cwd: ctx.cwd,
+		projectId: resolved.projectId,
+		branch: resolved.branch,
 		env: { ...process.env, ...fileEnv },
 		...(ctx.api ? { api: ctx.api } : {}),
 		...(options.apiKey ? { apiKey: options.apiKey } : {}),
-		...(options.projectId ? { projectId: options.projectId } : {}),
-		...(options.branch ? { branch: options.branch } : {}),
 	});
 }
 

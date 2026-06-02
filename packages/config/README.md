@@ -2,7 +2,7 @@
 
 Config-as-Code for the Neon Platform. A repo-local `neon.ts` exports a TypeScript policy function describing a branch's desired state. This package exposes **functions** to inspect, diff, and deploy that policy against the Neon API.
 
-> No CLI commands ship here — branch/project selection and command-line wrappers live in the neonctl CLI. This package is functions only.
+> No CLI commands ship here, and the package is **filesystem- and env-agnostic**: it never reads `.neon` files or `NEON_*` environment variables. You pass `projectId` and the target branch explicitly (resolve them in your CLI, e.g. neonctl). This package is functions only.
 
 ## Install
 
@@ -28,38 +28,35 @@ export default defineConfig((branch) => {
 
 ## Functions
 
+`projectId` and `branchId` are **required** — there is no `.neon`/env fallback. (`projectId` is required because the Neon management API addresses every branch through its project; deriving it from a branch id would need an extra discovery round-trip.)
+
 ```ts
 import config from "../neon";
 import { status, deploy, pull } from "@neondatabase/config/v1";
 
-// Dry-run: what would deploy do for the selected branch? No mutations.
-const plan = await status(config, "main");
+const opts = { projectId: "patient-art-12345" };
+
+// Dry-run: what would deploy do for this branch? No mutations.
+const plan = await status(config, "main", opts);
 
 // Apply the policy to a branch (id `br-…` or name). Never creates projects/branches.
-await deploy(config, "main", { updateExisting: true });
+await deploy(config, "main", { ...opts, updateExisting: true });
 
 // Read a branch's live Neon state as a plain object.
-const live = await pull("main");
+const live = await pull("main", opts);
 ```
 
 | Function | Description |
 | --- | --- |
-| `status(config, branchId?, options?)` | Returns the diff (dry-run). Shows what `deploy` would do for the selected branch, with no mutations. Returns a `PushResult` whose `applied` holds the plan and `conflicts` holds blocking drift. |
-| `pull(branchId?, options?)` | Returns the selected branch's live Neon state (project + branch metadata and a reverse-engineered `BranchConfig`). |
-| `deploy(config, branchId?, options?)` | Pushes your local `neon.ts` policy to the selected Neon branch. Pass `updateExisting` to auto-confirm overriding existing remote settings and `allowProtectedBranch` to auto-confirm pushing to a protected branch. |
+| `status(config, branchId, options)` | Returns the diff (dry-run). Shows what `deploy` would do for the branch, with no mutations. Returns a `PushResult` whose `applied` holds the plan and `conflicts` holds blocking drift. |
+| `pull(branchId, options)` | Returns the branch's live Neon state (project + branch metadata and a reverse-engineered `BranchConfig`). |
+| `deploy(config, branchId, options)` | Pushes your local `neon.ts` policy to the branch. Pass `updateExisting` to auto-confirm overriding existing remote settings and `allowProtectedBranch` to auto-confirm pushing to a protected branch. |
 
-All functions resolve the project + branch through the standard chain:
-
-| Field | 1st | 2nd | 3rd |
-| --- | --- | --- | --- |
-| project | option (`projectId`) | `NEON_PROJECT_ID` | `.neon[/project.json].projectId` |
-| branch | `branchId` arg | `NEON_BRANCH_ID` | `.neon[/project.json].branchId` |
-
-The Neon API key resolves via `apiKey` option → `NEON_API_KEY` → `~/.config/neonctl/credentials.json`.
+`options` requires `projectId`; `branchId` is the required positional (a Neon branch id `br-…` or a branch name). The Neon API key resolves via the `apiKey` option → `NEON_API_KEY` → `~/.config/neonctl/credentials.json`.
 
 ## Lower-level engine
 
-`status` / `deploy` / `pull` are thin wrappers over `pushConfig` / `pullConfig`, which are also exported for advanced/programmatic use along with `defineConfig`, `loadConfigFromFile`, `loadContext`, `createRealNeonApi`, the `PlatformError` base class + `ErrorCode` enum, the `errors` and `schemas` namespaces, and the supporting types.
+`status` / `deploy` / `pull` are thin wrappers over `pushConfig(config, options)` / `pullConfig(options)` (both require `projectId` + `branch`), which are also exported for advanced/programmatic use along with `defineConfig`, `loadConfigFromFile` (optional `neon.ts` loader), `classifyBranchRef`, `createRealNeonApi`, the `PlatformError` base class + `ErrorCode` enum, the `errors` and `schemas` namespaces, and the supporting types.
 
 ```ts
 import {
@@ -70,7 +67,7 @@ import {
   pushConfig,
   pullConfig,
   loadConfigFromFile,
-  loadContext,
+  classifyBranchRef,
   createRealNeonApi,
   resolveApiKey,
   PlatformError,
