@@ -55,12 +55,11 @@ const cliBuilt = existsSync(CLI_PATH);
 const describeIfBuilt = cliBuilt ? describe : describe.skip;
 
 describeIfBuilt("neon-ts CLI (e2e, spawns dist/cli.js)", () => {
-	test("--help exits 0 and lists the four subcommands", async () => {
+	test("--help exits 0 and lists the subcommands", async () => {
 		const result = await runCli(["--help"]);
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain("pull");
 		expect(result.stdout).toContain("push");
-		expect(result.stdout).toContain("context");
 		expect(result.stdout).toContain("branch");
 	});
 
@@ -79,25 +78,6 @@ describeIfBuilt("neon-ts CLI (e2e, spawns dist/cli.js)", () => {
 	test("unknown subcommand exits non-zero (strict mode)", async () => {
 		const result = await runCli(["delete-everything"]);
 		expect(result.exitCode).not.toBe(0);
-	});
-
-	test("context subcommand resolves from a .neon/project.json file in cwd", async () => {
-		const root = setup({
-			"package.json": "{}",
-			".neon/project.json": JSON.stringify({
-				projectId: "proj-e2e",
-				orgId: "org-e2e",
-				branchId: "br-e2e",
-			}),
-		});
-		const result = await runCli(["context"], {
-			cwd: root,
-			env: { NEON_BRANCH_ID: undefined },
-		});
-		expect(result.exitCode).toBe(0);
-		const parsed = JSON.parse(result.stdout);
-		expect(parsed.projectId).toBe("proj-e2e");
-		expect(parsed.branch).toEqual({ kind: "id", value: "br-e2e" });
 	});
 
 	test("pull without an API key + no neonctl credentials exits 1 with a helpful message", async () => {

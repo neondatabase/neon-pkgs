@@ -7,7 +7,6 @@ import { hideBin } from "yargs/helpers";
 import {
 	type CommandResult,
 	runBranch,
-	runContext,
 	runEnvPull,
 	runEnvRun,
 	runInit,
@@ -100,25 +99,6 @@ const argv = yargs(hideBin(process.argv))
 					default: false,
 					describe:
 						"Auto-confirm pushing to a branch that's marked protected on Neon. Without this flag, push prompts interactively before touching a protected branch.",
-				}),
-	)
-	.command(
-		"context",
-		"Resolve and print the Neon project + branch context.",
-		(y) =>
-			y
-				.option("branch", {
-					type: "string",
-					describe:
-						"Override the branch id/name from NEON_BRANCH_ID or the context file",
-				})
-				.option("project-id", {
-					type: "string",
-					describe: "Override the .neon/project.json projectId",
-				})
-				.option("org-id", {
-					type: "string",
-					describe: "Override the .neon/project.json orgId",
 				}),
 	)
 	.command(
@@ -298,23 +278,6 @@ switch (command) {
 					: {}),
 				updateExisting: argv["update-existing"] === true,
 				allowProtectedBranch: argv["allow-protected-branch"] === true,
-			},
-			{ cwd },
-		);
-		break;
-	}
-	case "context": {
-		result = runContext(
-			{
-				...(typeof argv.branch === "string"
-					? { branch: argv.branch }
-					: {}),
-				...(typeof argv["project-id"] === "string"
-					? { projectId: argv["project-id"] }
-					: {}),
-				...(typeof argv["org-id"] === "string"
-					? { orgId: argv["org-id"] }
-					: {}),
 			},
 			{ cwd },
 		);

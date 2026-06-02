@@ -13,7 +13,6 @@ import {
 	PushAbortedError,
 	PushConflictError,
 } from "../errors.js";
-import { loadContext } from "../load-context.js";
 import { loadConfigFromFile } from "../loader.js";
 import type { NeonApi } from "../neon-api.js";
 import { createRealNeonApi } from "../neon-api-real.js";
@@ -368,39 +367,6 @@ export async function runBranch(
 			}
 		}
 		return { exitCode: 0, stdout: `${lines.join("\n")}\n`, stderr: "" };
-	} catch (err) {
-		return handleError(err);
-	}
-}
-
-// ─────────────────────── context ────────────────────────
-
-export interface ContextCommandOptions {
-	projectId?: string;
-	orgId?: string;
-	branch?: string;
-}
-
-/**
- * Implementation of `neon-ts context`. Prints the resolved project + branch context
- * as JSON. Pure read of {@link loadContext} — does not touch the Neon API.
- */
-export function runContext(
-	options: ContextCommandOptions,
-	ctx: CommandEnv,
-): CommandResult {
-	try {
-		const resolved = loadContext({
-			cwd: ctx.cwd,
-			...(options.projectId ? { projectId: options.projectId } : {}),
-			...(options.orgId ? { orgId: options.orgId } : {}),
-			...(options.branch ? { branch: options.branch } : {}),
-		});
-		return {
-			exitCode: 0,
-			stdout: `${JSON.stringify(resolved, null, 2)}\n`,
-			stderr: "",
-		};
 	} catch (err) {
 		return handleError(err);
 	}

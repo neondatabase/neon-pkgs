@@ -131,32 +131,6 @@ export default defineConfig((branch) => branch.name === "main" || branch.isDefau
 	);
 
 	e2eTest(
-		"`neon-ts context` reads NEON_PROJECT_ID + NEON_BRANCH_ID from env",
-		async () => {
-			const repo = makeTempRepo({ "package.json": "{}" });
-			try {
-				const result = await runCli(["context"], {
-					cwd: repo.root,
-					env: {
-						NEON_PROJECT_ID: "proj-env",
-						NEON_ORG_ID: "org-env",
-						NEON_BRANCH_ID: "br-env-id",
-					},
-				});
-				expect(result.exitCode).toBe(0);
-				const parsed = JSON.parse(result.stdout);
-				expect(parsed).toMatchObject({
-					projectId: "proj-env",
-					orgId: "org-env",
-					branch: { kind: "id", value: "br-env-id" },
-				});
-			} finally {
-				repo.cleanup();
-			}
-		},
-	);
-
-	e2eTest(
 		"`neon-ts push` exits 2 (PushConflictError) when selected branch drifts and no --update-existing",
 		async ({ track }) => {
 			const scope = await detectApiKeyScope();

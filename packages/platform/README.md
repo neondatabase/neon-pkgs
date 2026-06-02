@@ -132,7 +132,6 @@ neon-ts status                  # dry-run push for selected branch
 neon-ts push                    # apply selected branch policy (interactive)
 neon-ts push --update-existing  # auto-confirm overriding existing remote settings
 neon-ts push --allow-protected-branch  # auto-confirm pushing to a protected branch
-neon-ts context                 # print resolved project + branch context
 neon-ts env pull                # write .env.local
 neon-ts env run -- pnpm test    # run a command with Neon env vars injected
 ```
