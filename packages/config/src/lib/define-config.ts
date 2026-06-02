@@ -20,6 +20,13 @@ const REGION_PREFIX = /^(aws|azure|gcp)-/;
  * });
  * ```
  *
+ * The `branch` parameter is a **read-only {@link BranchTarget} descriptor** of the branch
+ * this policy invocation is deciding for — not a live branch handle. You don't mutate it
+ * (`branch.protected = true` does nothing); you switch on its facts (`branch.name`,
+ * `branch.isDefault`, `branch.exists`, …) and **return** the desired {@link BranchConfig}.
+ * The same callback runs in two modes: against an existing branch (fields populated from
+ * Neon) and during pre-create evaluation (`exists: false`, `id` undefined).
+ *
  * Pure function — no I/O, no side effects. The returned policy validates its output every
  * time it is evaluated so errors point at the concrete branch target that triggered them.
  */

@@ -24,6 +24,8 @@ export default defineConfig((branch) => {
 });
 ```
 
+The `branch` argument is a **read-only descriptor** (`BranchTarget`) of the branch this policy is being evaluated for — `name`, `id`, `exists`, `isDefault`, `isProtected`, `parentId`, `expiresAt`. It is not a live branch handle: don't mutate it, just switch on its fields and **return** the desired config. The same callback runs both against existing branches and during pre-create evaluation (`exists: false`).
+
 `parent` and `ttl` are branch lifecycle fields. Product-specific settings live under product namespaces such as `postgres`, `auth`, and `dataApi`.
 
 ## Functions

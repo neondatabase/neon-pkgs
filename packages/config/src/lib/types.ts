@@ -40,6 +40,12 @@ export interface ComputeSettings {
 	suspendTimeout?: false | "5m" | "1h" | string | number;
 }
 
+/**
+ * Read-only descriptor of the branch a {@link Config} policy is being evaluated for — the
+ * `branch` argument passed to your `defineConfig((branch) => …)` callback. It describes
+ * **which** branch this invocation decides for; it is not a live branch handle and must not
+ * be mutated. Switch on its fields and return the desired {@link BranchConfig}.
+ */
 export interface BranchTarget {
 	/** Branch name being evaluated. For `branch dev`, this is the generated branch name. */
 	name: string;
