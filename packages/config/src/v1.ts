@@ -17,10 +17,10 @@
  * import config from "../neon";
  * import { inspect, plan, apply } from "@neondatabase/config/v1";
  *
- * const opts = { projectId: "patient-art-12345" };
- * const diff = await plan(config, "main", opts);    // dry-run plan, no mutations
- * await apply(config, "main", opts);                // apply the policy to a branch
- * const live = await inspect("main", opts);         // read the branch's live state
+ * const target = { projectId: "patient-art-12345", branchId: "main" };
+ * const diff = await plan(config, target);     // dry-run plan, no mutations
+ * await apply(config, target);                 // apply the policy to a branch
+ * const live = await inspect(target);          // read the branch's live state
  * ```
  *
  * `plan` / `apply` mirror the Terraform mental model. No CLI commands are shipped here,

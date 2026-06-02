@@ -36,25 +36,25 @@ The three operations mirror the Terraform mental model: **`inspect`** (read live
 import config from "../neon";
 import { inspect, plan, apply } from "@neondatabase/config/v1";
 
-const opts = { projectId: "patient-art-12345" };
+const target = { projectId: "patient-art-12345", branchId: "main" };
 
 // Dry-run: what would apply do for this branch? No mutations.
-const diff = await plan(config, "main", opts);
+const diff = await plan(config, target);
 
-// Apply the policy to a branch (id `br-…` or name). Never creates projects/branches.
-await apply(config, "main", { ...opts, updateExisting: true });
+// Apply the policy to a branch. Never creates projects/branches.
+await apply(config, { ...target, updateExisting: true });
 
 // Read a branch's live Neon state as a plain object.
-const live = await inspect("main", opts);
+const live = await inspect(target);
 ```
 
 | Function | Description |
 | --- | --- |
-| `inspect(branchId, options)` | Returns the branch's live Neon state (project + branch metadata and a reverse-engineered `BranchConfig`). Read-only. |
-| `plan(config, branchId, options)` | Returns the dry-run diff — what `apply` would do for the branch, with no mutations. Returns a `PushResult` whose `applied` holds the plan and `conflicts` holds blocking drift. |
-| `apply(config, branchId, options)` | Reconciles your local `neon.ts` policy onto the branch. Pass `updateExisting` to auto-confirm overriding existing remote settings and `allowProtectedBranch` to auto-confirm applying to a protected branch. |
+| `inspect(options)` | Returns the branch's live Neon state (project + branch metadata and a reverse-engineered `BranchConfig`). Read-only. |
+| `plan(config, options)` | Returns the dry-run diff — what `apply` would do for the branch, with no mutations. Returns a `PushResult` whose `applied` holds the plan and `conflicts` holds blocking drift. |
+| `apply(config, options)` | Reconciles your local `neon.ts` policy onto the branch. Pass `updateExisting` to auto-confirm overriding existing remote settings and `allowProtectedBranch` to auto-confirm applying to a protected branch. |
 
-`options` requires `projectId`; `branchId` is the required positional (a Neon branch id `br-…` or a branch name). The Neon API key resolves via the `apiKey` option → `NEON_API_KEY` → `~/.config/neonctl/credentials.json`.
+`options` requires both `projectId` and `branchId` (`branchId` is a Neon branch id `br-…` or a branch name). The Neon API key resolves via the `apiKey` option → `NEON_API_KEY` → `~/.config/neonctl/credentials.json`.
 
 ## Lower-level engine
 

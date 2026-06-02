@@ -4,7 +4,7 @@ import type { Config, PushResult } from "./types.js";
 
 /**
  * Where to run the operation and how to authenticate. Filesystem- and env-agnostic: the
- * `projectId` and target branch are always passed explicitly by the caller (e.g. neonctl
+ * `projectId` and `branchId` are always passed explicitly by the caller (e.g. neonctl
  * resolves them from `.neon` / `NEON_*` and forwards them here).
  */
 export interface ConfigOperationOptions {
@@ -13,6 +13,11 @@ export interface ConfigOperationOptions {
 	 * project, so operations cannot run without it.
 	 */
 	projectId: string;
+	/**
+	 * Branch selector: a Neon branch id (`br-…`) or a branch name. **Required.** The
+	 * branch must already exist on the project.
+	 */
+	branchId: string;
 	/** Neon API key. Falls back to `NEON_API_KEY` / neonctl credentials. */
 	apiKey?: string;
 	/** Inject a custom NeonApi adapter (primarily for tests). */
@@ -36,15 +41,14 @@ export interface ApplyOptions extends ConfigOperationOptions {
  * Read a branch's live Neon state as a plain object (project + branch metadata and the
  * reverse-engineered `BranchConfig`). Network read only — never mutates.
  *
- * `branchId` selects the branch (id `br-…` or name) and is **required**.
+ * `projectId` and `branchId` are **required** (both in `options`).
  */
 export async function inspect(
-	branchId: string,
 	options: ConfigOperationOptions,
 ): Promise<PulledBranchConfig> {
 	return pullConfig({
 		projectId: options.projectId,
-		branch: branchId,
+		branch: options.branchId,
 		...(options.api ? { api: options.api } : {}),
 		...(options.apiKey ? { apiKey: options.apiKey } : {}),
 	});
@@ -56,16 +60,15 @@ export async function inspect(
  * `applied` and any blocking drift in `conflicts` — the Neon equivalent of
  * `terraform plan`.
  *
- * `branchId` selects the branch (id `br-…` or name) and is **required**.
+ * `projectId` and `branchId` are **required** (both in `options`).
  */
 export async function plan(
 	config: Config,
-	branchId: string,
 	options: ConfigOperationOptions,
 ): Promise<PushResult> {
 	return pushConfig(config, {
 		projectId: options.projectId,
-		branch: branchId,
+		branch: options.branchId,
 		dryRun: true,
 		// Surface the full would-apply list as plan steps without mutating anything.
 		updateExisting: true,
@@ -78,21 +81,20 @@ export async function plan(
  * Apply a `neon.ts` policy to the given Neon branch and return the {@link PushResult}
  * describing what changed — the Neon equivalent of `terraform apply`.
  *
- * `branchId` selects the branch (id `br-…` or name) and is **required**. Pass
- * `updateExisting` to auto-confirm overriding existing remote settings and
- * `allowProtectedBranch` to auto-confirm applying to a protected branch; otherwise drift
- * is reported as a `PushConflictError`.
+ * `projectId` and `branchId` are **required** (both in `options`). Pass `updateExisting`
+ * to auto-confirm overriding existing remote settings and `allowProtectedBranch` to
+ * auto-confirm applying to a protected branch; otherwise drift is reported as a
+ * `PushConflictError`.
  *
  * Never creates projects or branches — both must already exist.
  */
 export async function apply(
 	config: Config,
-	branchId: string,
 	options: ApplyOptions,
 ): Promise<PushResult> {
 	return pushConfig(config, {
 		projectId: options.projectId,
-		branch: branchId,
+		branch: options.branchId,
 		...(options.api ? { api: options.api } : {}),
 		...(options.apiKey ? { apiKey: options.apiKey } : {}),
 		...(options.updateExisting ? { updateExisting: true } : {}),
