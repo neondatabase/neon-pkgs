@@ -9,7 +9,7 @@ import {
 	type NeonApi,
 	PlatformError,
 } from "@neondatabase/config/v1";
-import { fetchEnv, neonEnvToProcessEnv } from "../env.js";
+import { fetchEnv, toEntries } from "../env.js";
 import { resolveContext } from "./resolve-context.js";
 
 /** File `env run` reads to layer one-time auth keys. Matches the Vercel/Next.js convention. */
@@ -89,7 +89,7 @@ export async function runEnvRun(
 	let injected: Record<string, string>;
 	try {
 		const env = await loadConfigAndFetchEnv(options, ctx, resolved.context);
-		injected = neonEnvToProcessEnv(env);
+		injected = toEntries(env);
 	} catch (err) {
 		return handleError(err);
 	}

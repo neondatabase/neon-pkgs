@@ -583,15 +583,16 @@ export function parseEnv<const C extends Config>(
 
 /**
  * Project a fully-resolved {@link NeonEnv} into the OS-level `{ KEY: value }` pairs used
- * for cross-process transport. Used by `neon-env run` (injects them into a subprocess's
- * `process.env`).
+ * for cross-process transport. Named after the web-platform `.entries()` convention
+ * (`URLSearchParams` / `Headers` / `FormData`); returns a `Record` rather than an
+ * iterator of tuples since that's the shape env injection needs (wrap with
+ * `Object.entries(...)` if you want literal `[key, value]` pairs). Used by `neon-env run`
+ * to inject the vars into a subprocess's `process.env`.
  *
  * Walks the value at runtime so it works for any `NeonEnv<C>` regardless of which
  * conditional namespaces are present.
  */
-export function neonEnvToProcessEnv(
-	env: NeonEnv<Config>,
-): Record<string, string> {
+export function toEntries(env: NeonEnv<Config>): Record<string, string> {
 	const out: Record<string, string> = {
 		[NEON_ENV_VAR_KEYS.postgres.databaseUrl]: env.postgres.databaseUrl,
 		[NEON_ENV_VAR_KEYS.postgres.databaseUrlUnpooled]:

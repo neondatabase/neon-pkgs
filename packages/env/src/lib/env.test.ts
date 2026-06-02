@@ -8,8 +8,8 @@ import {
 	fetchEnv,
 	type NeonAuthEnv,
 	type NeonEnv,
-	neonEnvToProcessEnv,
 	parseEnv,
+	toEntries,
 } from "./env.js";
 import { FakeNeonApi } from "./fake-neon-api.js";
 import { stubCleanNeonEnv } from "./test-utils.js";
@@ -163,7 +163,7 @@ describe("parseEnv", () => {
 	});
 
 	test("projects env object to process env keys", () => {
-		const pairs = neonEnvToProcessEnv({
+		const pairs = toEntries({
 			postgres: { databaseUrl: "a", databaseUrlUnpooled: "b" },
 		});
 		expect(pairs.DATABASE_URL).toBe("a");

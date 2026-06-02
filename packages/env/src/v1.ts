@@ -6,7 +6,7 @@
  *   connection strings. Use in build scripts / top-level await.
  * - `parseEnv(config)` — sync; reads already-injected `process.env` and validates it.
  *   Use in app bootstrap (Drizzle config, Next.js, Vite, …).
- * - `neonEnvToProcessEnv(env)` — project a resolved env into `{ KEY: value }` pairs.
+ * - `toEntries(env)` — project a resolved env into `{ KEY: value }` pairs.
  *
  * The branch policy type (`Config`) and `defineConfig` come from `@neondatabase/config`.
  */
@@ -21,8 +21,8 @@ export type {
 export {
 	fetchEnv,
 	NEON_ENV_VAR_KEYS,
-	neonEnvToProcessEnv,
 	parseEnv,
+	toEntries,
 } from "./lib/env.js";
 
 // The branch policy type (`Config`) and `defineConfig` live in `@neondatabase/config`.

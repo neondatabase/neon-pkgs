@@ -35,7 +35,7 @@ Both return the same namespaced `NeonEnv` shape: `postgres` is always present; `
 | --- | --- |
 | `fetchEnv(config, { projectId, branchId, ... })` | Async. Calls the Neon API for the given project + branch and returns live connection strings (and Auth/Data API values when enabled). `projectId` and `branchId` are required (`branchId` is a `br-…` id). |
 | `parseEnv(config, branchName)` | Sync. Reads/validates the Neon env vars already present in `process.env`, evaluating the policy for `branchName`. Throws `PlatformError(EnvNotInjected)` listing missing vars when the env isn't populated. |
-| `neonEnvToProcessEnv(env)` | Project a resolved `NeonEnv` into `{ KEY: value }` pairs for cross-process transport. |
+| `toEntries(env)` | Project a resolved `NeonEnv` into `{ KEY: value }` pairs for cross-process transport (named after the web `.entries()` convention; returns a `Record`). |
 
 ## CLI
 
