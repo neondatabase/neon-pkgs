@@ -29,7 +29,7 @@ describe("pullConfig", () => {
 			],
 		});
 
-		const pulled = await pullConfig({ api, projectId, branch: "dev-a" });
+		const pulled = await pullConfig({ api, projectId, branchId: "br-dev" });
 
 		expect(pulled.project).toMatchObject({
 			id: projectId,

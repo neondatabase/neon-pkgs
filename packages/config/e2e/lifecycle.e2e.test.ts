@@ -38,7 +38,7 @@ describe("e2e — branch policy lifecycle", () => {
 			await pushConfig(config, {
 				api,
 				projectId,
-				branch: main.id,
+				branchId: main.id,
 				updateExisting: true,
 			});
 			const reread = (await api.listBranches(projectId)).find(

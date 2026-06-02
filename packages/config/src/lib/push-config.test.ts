@@ -45,7 +45,7 @@ describe("pushConfig", () => {
 		const result = await pushConfig(config, {
 			api,
 			projectId,
-			branch: "main",
+			branchId: "br-main",
 			updateExisting: true,
 		});
 
@@ -76,7 +76,7 @@ describe("pushConfig", () => {
 		}));
 
 		await expect(
-			pushConfig(config, { api, projectId, branch: "main" }),
+			pushConfig(config, { api, projectId, branchId: "br-main" }),
 		).rejects.toMatchObject({
 			code: ErrorCode.PushConflict,
 		});
@@ -95,7 +95,7 @@ describe("pushConfig", () => {
 		const result = await pushConfig(config, {
 			api,
 			projectId,
-			branch: "main",
+			branchId: "br-main",
 			confirm: (ctx) => {
 				calls.push({
 					protectedBranch: ctx.protectedBranch,
@@ -131,7 +131,7 @@ describe("pushConfig", () => {
 			pushConfig(config, {
 				api,
 				projectId,
-				branch: "main",
+				branchId: "br-main",
 				confirm: () => false,
 			}),
 		).rejects.toMatchObject({ code: ErrorCode.PushAborted });
@@ -151,7 +151,7 @@ describe("pushConfig", () => {
 		const result = await pushConfig(config, {
 			api,
 			projectId,
-			branch: "main",
+			branchId: "br-main",
 			confirm: (ctx) => {
 				ctxs.push({
 					protectedBranch: ctx.protectedBranch,
@@ -184,7 +184,7 @@ describe("pushConfig", () => {
 		await pushConfig(config, {
 			api,
 			projectId,
-			branch: "main",
+			branchId: "br-main",
 			confirm: (ctx) => {
 				ctxs.push({
 					protectedBranch: ctx.protectedBranch,
@@ -209,7 +209,7 @@ describe("pushConfig", () => {
 		await pushConfig(config, {
 			api,
 			projectId,
-			branch: "main",
+			branchId: "br-main",
 			allowProtectedBranch: true,
 			updateExisting: true,
 			confirm: () => {
@@ -234,7 +234,7 @@ describe("pushConfig", () => {
 		const result = await pushConfig(config, {
 			api,
 			projectId,
-			branch: "main",
+			branchId: "br-main",
 			dryRun: true,
 			confirm: () => {
 				called = true;
@@ -256,7 +256,7 @@ describe("pushConfig", () => {
 		const result = await pushConfig(config, {
 			api,
 			projectId,
-			branch: "main",
+			branchId: "br-main",
 			dryRun: true,
 			updateExisting: true,
 		});

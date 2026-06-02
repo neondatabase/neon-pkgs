@@ -1,5 +1,4 @@
 import { createNeonApiFromOptions } from "./auth.js";
-import { type BranchRef, classifyBranchRef } from "./branch-ref.js";
 import { resolveConfig } from "./define-config.js";
 import {
 	diffConfig,
@@ -24,10 +23,10 @@ export interface PushConfigOptions {
 	 */
 	projectId: string;
 	/**
-	 * Branch selector: a Neon branch id (`br-…`) or a branch name. **Required.**
-	 * `pushConfig` never creates a branch — it must already exist on the project.
+	 * Neon branch id (`br-…`). **Required.** `pushConfig` never creates a branch — it must
+	 * already exist on the project. Resolve names to ids before calling.
 	 */
-	branch: string;
+	branchId: string;
 	/** Neon API key. Falls back to `NEON_API_KEY` / neonctl credentials. Ignored when `api` is supplied. */
 	apiKey?: string;
 	/**
@@ -121,7 +120,6 @@ export async function pushConfig(
 ): Promise<PushResult> {
 	const api = options.api ?? createApiFromOptions(options);
 	const projectId = options.projectId;
-	const branchRef = classifyBranchRef(options.branch);
 
 	const dryRun = options.dryRun === true;
 	const updateExisting = options.updateExisting === true;
@@ -133,7 +131,7 @@ export async function pushConfig(
 		api.listBranches(remoteProject.id),
 		api.listEndpoints(remoteProject.id),
 	]);
-	const branch = resolveRemoteBranch(branchRef, branches);
+	const branch = resolveRemoteBranch(options.branchId, branches);
 	const resolved = resolveConfig(config, {
 		name: branch.name,
 		id: branch.id,
@@ -305,22 +303,19 @@ function createApiFromOptions(options: PushConfigOptions): NeonApi {
 }
 
 function resolveRemoteBranch(
-	ref: BranchRef,
+	branchId: string,
 	branches: NeonBranchSnapshot[],
 ): NeonBranchSnapshot {
-	const found =
-		ref.kind === "id"
-			? branches.find((b) => b.id === ref.value)
-			: branches.find((b) => b.name === ref.value);
+	const found = branches.find((b) => b.id === branchId);
 	if (found) return found;
 	throw new PlatformError(
 		ErrorCode.BranchNotFound,
 		[
-			`pushConfig: branch ${ref.kind}=${JSON.stringify(ref.value)} does not exist on the project.`,
+			`pushConfig: branch id ${JSON.stringify(branchId)} does not exist on the project.`,
 			`Available branches: ${branches.map((b) => `${b.name} (${b.id})`).join(", ") || "(none)"}.`,
-			"Pass an existing branch id/name, or create the branch first with the neonctl CLI.",
+			"Pass an existing branch id, or create the branch first with the neonctl CLI.",
 		].join(" "),
-		{ details: { branch: ref, available: branches.map((b) => b.name) } },
+		{ details: { branchId, available: branches.map((b) => b.id) } },
 	);
 }
 

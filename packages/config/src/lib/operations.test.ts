@@ -24,7 +24,7 @@ function seededFake() {
 describe("inspect", () => {
 	test("returns the selected branch's live state", async () => {
 		const { api, projectId } = seededFake();
-		const result = await inspect({ api, projectId, branchId: "main" });
+		const result = await inspect({ api, projectId, branchId: "br-main" });
 		expect(result.project.name).toBe("ops-test");
 		expect(result.branch.name).toBe("main");
 		expect(result.config).toBeDefined();
@@ -35,7 +35,11 @@ describe("plan", () => {
 	test("computes a dry-run plan without mutating", async () => {
 		const { api, projectId } = seededFake();
 		const config = defineConfig(() => ({ auth: {} }));
-		const result = await plan(config, { api, projectId, branchId: "main" });
+		const result = await plan(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+		});
 		expect(result.dryRun).toBe(true);
 		expect(result.applied).toEqual(
 			expect.arrayContaining([
@@ -46,7 +50,11 @@ describe("plan", () => {
 			]),
 		);
 		// No mutation happened: a fresh plan still shows the same enable.
-		const again = await plan(config, { api, projectId, branchId: "main" });
+		const again = await plan(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+		});
 		expect(again.applied).toEqual(result.applied);
 	});
 });
@@ -58,7 +66,7 @@ describe("apply", () => {
 		const result = await apply(config, {
 			api,
 			projectId,
-			branchId: "main",
+			branchId: "br-main",
 			updateExisting: true,
 		});
 		expect(result.dryRun).toBe(false);

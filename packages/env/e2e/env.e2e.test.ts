@@ -28,7 +28,7 @@ describe("e2e — fetchEnv against real Neon API", () => {
 		if (!branchId) throw new Error("missing default branch");
 		const env = await fetchEnv(
 			defineConfig(() => ({})),
-			{ api, projectId, branch: branchId },
+			{ api, projectId, branchId },
 		);
 		expect(env.postgres.databaseUrl).toContain("postgresql://");
 		expect(env.postgres.databaseUrlUnpooled).toContain("postgresql://");

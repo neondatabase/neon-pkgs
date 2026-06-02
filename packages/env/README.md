@@ -12,14 +12,14 @@ npm install @neondatabase/env
 
 ## Functions
 
-The library functions are **filesystem- and env-agnostic**: `fetchEnv` requires an explicit `projectId` + `branch`, and `parseEnv` requires an explicit `branchName`. (The `neon-env` CLI does the `.neon`/`NEON_*` resolution and passes these in.)
+The library functions are **filesystem- and env-agnostic**: `fetchEnv` requires an explicit `projectId` + `branchId`, and `parseEnv` requires an explicit `branchName`. (The `neon-env` CLI does the `.neon`/`NEON_*` resolution and passes these in.)
 
 ```ts
 import config from "../neon";
 import { fetchEnv, parseEnv } from "@neondatabase/env/v1";
 
 // Async — calls the Neon API for live connection strings. Use in build scripts / top-level await.
-const env = await fetchEnv(config, { projectId: "patient-art-12345", branch: "main" });
+const env = await fetchEnv(config, { projectId: "patient-art-12345", branchId: "br-…" });
 const db = drizzle(neon(env.postgres.databaseUrl), { schema });
 
 // Sync — reads already-injected process.env and validates it (no network).
@@ -31,7 +31,7 @@ Both return the same namespaced `NeonEnv` shape: `postgres` is always present; `
 
 | Function | Description |
 | --- | --- |
-| `fetchEnv(config, { projectId, branch, ... })` | Async. Calls the Neon API for the given project + branch and returns live connection strings (and Auth/Data API values when enabled). `projectId` and `branch` are required. |
+| `fetchEnv(config, { projectId, branchId, ... })` | Async. Calls the Neon API for the given project + branch and returns live connection strings (and Auth/Data API values when enabled). `projectId` and `branchId` are required (`branchId` is a `br-…` id). |
 | `parseEnv(config, branchName)` | Sync. Reads/validates the Neon env vars already present in `process.env`, evaluating the policy for `branchName`. Throws `PlatformError(EnvNotInjected)` listing missing vars when the env isn't populated. |
 | `neonEnvToProcessEnv(env)` | Project a resolved `NeonEnv` into `{ KEY: value }` pairs for cross-process transport. |
 
@@ -61,4 +61,4 @@ Flags: `--config <path>`, `--project-id`, `--branch`, `--api-key`, `--debug`.
 
 The **CLI** (`neon-env run`) resolves project + branch itself: `--project-id` / `--branch` flag → `NEON_PROJECT_ID` / `NEON_BRANCH_ID` env → `.neon[/project.json]` walked up from the working directory. The API key resolves via `--api-key` → `NEON_API_KEY` → `~/.config/neonctl/credentials.json`.
 
-The **library functions** do none of this — pass `projectId` / `branch` explicitly. This keeps `.neon` parsing in one place (the CLI / neonctl) and the functions pure.
+The **library functions** do none of this — pass `projectId` / `branchId` explicitly. This keeps `.neon` parsing in one place (the CLI / neonctl) and the functions pure.

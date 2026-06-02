@@ -54,11 +54,11 @@ const live = await inspect(target);
 | `plan(config, options)` | Returns the dry-run diff — what `apply` would do for the branch, with no mutations. Returns a `PushResult` whose `applied` holds the plan and `conflicts` holds blocking drift. |
 | `apply(config, options)` | Reconciles your local `neon.ts` policy onto the branch. Pass `updateExisting` to auto-confirm overriding existing remote settings and `allowProtectedBranch` to auto-confirm applying to a protected branch. |
 
-`options` requires both `projectId` and `branchId` (`branchId` is a Neon branch id `br-…` or a branch name). The Neon API key resolves via the `apiKey` option → `NEON_API_KEY` → `~/.config/neonctl/credentials.json`.
+`options` requires both `projectId` and `branchId` (a Neon branch id, `br-…`). Resolve branch names to ids before calling. The Neon API key resolves via the `apiKey` option → `NEON_API_KEY` → `~/.config/neonctl/credentials.json`.
 
 ## Lower-level engine
 
-`inspect` / `plan` / `apply` are thin wrappers over `pullConfig(options)` / `pushConfig(config, options)` (both require `projectId` + `branch`), which are also exported for advanced/programmatic use along with `defineConfig`, `loadConfigFromFile` (optional `neon.ts` loader), `classifyBranchRef`, `createRealNeonApi`, the `PlatformError` base class + `ErrorCode` enum, the `errors` and `schemas` namespaces, and the supporting types.
+`inspect` / `plan` / `apply` are thin wrappers over `pullConfig(options)` / `pushConfig(config, options)` (both require `projectId` + `branchId`), which are also exported for advanced/programmatic use along with `defineConfig`, `loadConfigFromFile` (optional `neon.ts` loader), `createRealNeonApi`, the `PlatformError` base class + `ErrorCode` enum, the `errors` and `schemas` namespaces, and the supporting types.
 
 ```ts
 import {
@@ -69,7 +69,6 @@ import {
   pushConfig,
   pullConfig,
   loadConfigFromFile,
-  classifyBranchRef,
   createRealNeonApi,
   resolveApiKey,
   PlatformError,

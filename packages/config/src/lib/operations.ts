@@ -14,8 +14,8 @@ export interface ConfigOperationOptions {
 	 */
 	projectId: string;
 	/**
-	 * Branch selector: a Neon branch id (`br-…`) or a branch name. **Required.** The
-	 * branch must already exist on the project.
+	 * Neon branch id (`br-…`). **Required.** Must already exist on the project; resolve
+	 * branch names to ids before calling.
 	 */
 	branchId: string;
 	/** Neon API key. Falls back to `NEON_API_KEY` / neonctl credentials. */
@@ -48,7 +48,7 @@ export async function inspect(
 ): Promise<PulledBranchConfig> {
 	return pullConfig({
 		projectId: options.projectId,
-		branch: options.branchId,
+		branchId: options.branchId,
 		...(options.api ? { api: options.api } : {}),
 		...(options.apiKey ? { apiKey: options.apiKey } : {}),
 	});
@@ -68,7 +68,7 @@ export async function plan(
 ): Promise<PushResult> {
 	return pushConfig(config, {
 		projectId: options.projectId,
-		branch: options.branchId,
+		branchId: options.branchId,
 		dryRun: true,
 		// Surface the full would-apply list as plan steps without mutating anything.
 		updateExisting: true,
@@ -94,7 +94,7 @@ export async function apply(
 ): Promise<PushResult> {
 	return pushConfig(config, {
 		projectId: options.projectId,
-		branch: options.branchId,
+		branchId: options.branchId,
 		...(options.api ? { api: options.api } : {}),
 		...(options.apiKey ? { apiKey: options.apiKey } : {}),
 		...(options.updateExisting ? { updateExisting: true } : {}),

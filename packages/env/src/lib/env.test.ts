@@ -41,7 +41,11 @@ describe("fetchEnv", () => {
 	test("fetches postgres env for selected branch", async () => {
 		const { api, projectId } = seededFake();
 		const config = defineConfig(() => ({}));
-		const env = await fetchEnv(config, { api, projectId, branch: "main" });
+		const env = await fetchEnv(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+		});
 		expect(env.postgres.databaseUrl).toContain("postgresql://");
 		expect(env.postgres.databaseUrl).toContain("-pooler");
 	});
@@ -50,7 +54,7 @@ describe("fetchEnv", () => {
 		const { api, projectId } = seededFake();
 		const config = defineConfig(() => ({ auth: {} }));
 		await expect(
-			fetchEnv(config, { api, projectId, branch: "main" }),
+			fetchEnv(config, { api, projectId, branchId: "br-main" }),
 		).rejects.toMatchObject({ code: ErrorCode.NotFound });
 	});
 
@@ -62,7 +66,7 @@ describe("fetchEnv", () => {
 		const env = await fetchEnv(config, {
 			api,
 			projectId,
-			branch: "main",
+			branchId: "br-main",
 		});
 
 		expect(env.auth.baseUrl).toBe(
@@ -81,7 +85,7 @@ describe("fetchEnv", () => {
 		const env = await fetchEnv(config, {
 			api,
 			projectId,
-			branch: "main",
+			branchId: "br-main",
 			env: { NEON_AUTH_BASE_URL: "https://auth.example.com" },
 		});
 

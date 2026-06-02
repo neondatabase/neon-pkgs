@@ -9,7 +9,7 @@ import { dirname, resolve } from "node:path";
  */
 export interface ResolvedContext {
 	projectId: string;
-	branch: string;
+	branchId: string;
 	/** Branch name for `parseEnv`-style policy evaluation, when known. */
 	branchName?: string;
 }
@@ -39,7 +39,7 @@ export function resolveContext(
 		nonEmpty(env.NEON_PROJECT_ID) ??
 		file?.projectId;
 
-	const branch =
+	const branchId =
 		nonEmpty(options.branch) ??
 		nonEmpty(env.NEON_BRANCH_ID) ??
 		file?.branchId;
@@ -52,18 +52,18 @@ export function resolveContext(
 			"project id — pass `--project-id`, set `NEON_PROJECT_ID`, or add `projectId` to `.neon/project.json` (run `npx neonctl link`).",
 		);
 	}
-	if (!branch) {
+	if (!branchId) {
 		missing.push(
 			"branch — pass `--branch`, set `NEON_BRANCH_ID`, or add `branchId` to `.neon/project.json` (run `npx neonctl checkout <branch>`).",
 		);
 	}
-	if (!projectId || !branch) return { ok: false, missing };
+	if (!projectId || !branchId) return { ok: false, missing };
 
 	return {
 		ok: true,
 		context: {
 			projectId,
-			branch,
+			branchId,
 			...(branchName ? { branchName } : {}),
 		},
 	};

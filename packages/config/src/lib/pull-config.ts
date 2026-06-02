@@ -1,5 +1,4 @@
 import { createNeonApiFromOptions } from "./auth.js";
-import { type BranchRef, classifyBranchRef } from "./branch-ref.js";
 import { ErrorCode, PlatformError } from "./errors.js";
 import type {
 	NeonApi,
@@ -12,8 +11,8 @@ import type { BranchConfig, ComputeSettings } from "./types.js";
 export interface PullConfigOptions {
 	/** Neon project id (`<project>`). Required — the API addresses branches by project. */
 	projectId: string;
-	/** Branch selector: a Neon branch id (`br-…`) or a branch name. Required. */
-	branch: string;
+	/** Neon branch id (`br-…`). Required. Resolve names to ids before calling. */
+	branchId: string;
 	/** Neon API key. Falls back to `NEON_API_KEY` / neonctl credentials. */
 	apiKey?: string;
 	/** Inject a custom NeonApi adapter (primarily for tests). */
@@ -44,13 +43,12 @@ export async function pullConfig(
 ): Promise<PulledBranchConfig> {
 	const api = options.api ?? createApiFromOptions(options);
 	const projectId = options.projectId;
-	const branchRef = classifyBranchRef(options.branch);
 	const project = await api.getProject(projectId);
 	const [branches, endpoints] = await Promise.all([
 		api.listBranches(projectId),
 		api.listEndpoints(projectId),
 	]);
-	const branch = resolveBranch(branchRef, branches);
+	const branch = resolveBranch(options.branchId, branches);
 	const endpoint = endpoints.find(
 		(ep) => ep.type === "read_write" && ep.branchId === branch.id,
 	);
@@ -101,24 +99,21 @@ export function buildPulledBranchConfig(
 }
 
 function resolveBranch(
-	requested: BranchRef,
+	branchId: string,
 	branches: NeonBranchSnapshot[],
 ): NeonBranchSnapshot {
-	const match =
-		requested.kind === "id"
-			? branches.find((b) => b.id === requested.value)
-			: branches.find((b) => b.name === requested.value);
+	const match = branches.find((b) => b.id === branchId);
 	if (match) return match;
 	throw new PlatformError(
 		ErrorCode.BranchNotFound,
 		[
-			`pullConfig: branch ${requested.kind}=${JSON.stringify(requested.value)} not found on project.`,
+			`pullConfig: branch id ${JSON.stringify(branchId)} not found on project.`,
 			`Available branches: ${branches.map((b) => `${b.name} (${b.id})`).join(", ") || "(none)"}.`,
 		].join(" "),
 		{
 			details: {
-				branch: requested,
-				available: branches.map((b) => b.name),
+				branchId,
+				available: branches.map((b) => b.id),
 			},
 		},
 	);

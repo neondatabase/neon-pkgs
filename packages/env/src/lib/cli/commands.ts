@@ -111,7 +111,7 @@ export async function runEnvRun(
 async function loadConfigAndFetchEnv(
 	options: EnvRunCommandOptions,
 	ctx: CommandEnv,
-	resolved: { projectId: string; branch: string },
+	resolved: { projectId: string; branchId: string },
 ): Promise<Awaited<ReturnType<typeof fetchEnv>>> {
 	const { config, resolvedPath } = await loadConfigFromFile({
 		...(options.configPath ? { path: options.configPath } : {}),
@@ -123,7 +123,7 @@ async function loadConfigAndFetchEnv(
 		: {};
 	return fetchEnv(config, {
 		projectId: resolved.projectId,
-		branch: resolved.branch,
+		branchId: resolved.branchId,
 		env: { ...process.env, ...fileEnv },
 		...(ctx.api ? { api: ctx.api } : {}),
 		...(options.apiKey ? { apiKey: options.apiKey } : {}),

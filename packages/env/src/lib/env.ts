@@ -1,8 +1,6 @@
 import {
 	type BranchConfig,
-	type BranchRef,
 	type Config,
-	classifyBranchRef,
 	createNeonApiFromOptions,
 	ErrorCode,
 	type NeonApi,
@@ -124,8 +122,8 @@ export interface FetchEnvOptions {
 	 * project. Resolve it in your CLI (e.g. neonctl) and pass it in.
 	 */
 	projectId: string;
-	/** Branch selector: a Neon branch id (`br-…`) or a branch name. **Required.** */
-	branch: string;
+	/** Neon branch id (`br-…`). **Required.** Resolve names to ids before calling. */
+	branchId: string;
 	/**
 	 * Neon API key. Resolved via the standard chain (option → `NEON_API_KEY` →
 	 * `~/.config/neonctl/credentials.json`) when omitted. Ignored when a custom `api`
@@ -166,14 +164,14 @@ export interface FetchEnvOptions {
  * {@link parseEnv} instead — same {@link NeonEnv} shape, but a sync call against
  * `process.env`.
  *
- * Filesystem- and env-agnostic: pass `projectId` and the target `branch` explicitly
+ * Filesystem- and env-agnostic: pass `projectId` and the target `branchId` explicitly
  * (resolve them in your CLI, e.g. neonctl).
  *
  * ```ts
  * import config from "../neon";
  * import { fetchEnv } from "@neondatabase/env/v1";
  *
- * const env = await fetchEnv(config, { projectId: "patient-art-12345", branch: "main" });
+ * const env = await fetchEnv(config, { projectId: "patient-art-12345", branchId: "br-…" });
  * const db = drizzle(neon(env.postgres.databaseUrl), { schema });
  * ```
  *
@@ -185,7 +183,6 @@ export async function fetchEnv<const C extends Config>(
 ): Promise<NeonEnv<C>> {
 	const api = options.api ?? createApiFromOptions(options);
 	const projectId = options.projectId;
-	const branchRef = classifyBranchRef(options.branch);
 
 	const branches = await api.listBranches(projectId);
 	if (branches.length === 0) {
@@ -199,7 +196,7 @@ export async function fetchEnv<const C extends Config>(
 		);
 	}
 
-	const branch = resolveBranch(branchRef, branches);
+	const branch = resolveBranch(options.branchId, branches);
 	const desired = resolveConfig(config, {
 		name: branch.name,
 		id: branch.id,
@@ -325,36 +322,24 @@ function createApiFromOptions(options: FetchEnvOptions): NeonApi {
 }
 
 function resolveBranch(
-	requested: BranchRef,
+	branchId: string,
 	branches: NeonBranchSnapshot[],
 ): NeonBranchSnapshot {
-	const match = findBranch(branches, requested);
+	const match = branches.find((b) => b.id === branchId);
 	if (match) return match;
 	throw new PlatformError(
 		ErrorCode.BranchNotFound,
 		[
-			`fetchEnv: branch ${describeRef(requested)} not found on project.`,
+			`fetchEnv: branch id ${JSON.stringify(branchId)} not found on project.`,
 			`Existing branches: ${branches.map((b) => `${b.name} (${b.id})`).join(", ")}.`,
 		].join(" "),
 		{
 			details: {
-				branch: requested,
-				available: branches.map((b) => b.name),
+				branchId,
+				available: branches.map((b) => b.id),
 			},
 		},
 	);
-}
-
-function findBranch(
-	branches: NeonBranchSnapshot[],
-	ref: BranchRef,
-): NeonBranchSnapshot | undefined {
-	if (ref.kind === "id") return branches.find((b) => b.id === ref.value);
-	return branches.find((b) => b.name === ref.value);
-}
-
-function describeRef(ref: BranchRef): string {
-	return `${ref.kind === "id" ? "id" : "name"}=${JSON.stringify(ref.value)}`;
 }
 
 function pickRoleName(

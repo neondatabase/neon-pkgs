@@ -78,8 +78,6 @@ export const schemas = {
 
 // ─── Lower-level adapters ──────────────────────────────────────────────────────
 export { createNeonApiFromOptions, resolveApiKey } from "./lib/auth.js";
-export type { BranchRef } from "./lib/branch-ref.js";
-export { classifyBranchRef } from "./lib/branch-ref.js";
 export { defineConfig, resolveConfig } from "./lib/define-config.js";
 // ─── Errors ────────────────────────────────────────────────────────────────────
 export {
