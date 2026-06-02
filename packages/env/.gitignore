@@ -1,0 +1,4 @@
+# Local e2e credentials — never commit
+.env
+.env.*
+!.env.example

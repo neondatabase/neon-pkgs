@@ -1,0 +1,75 @@
+{
+	"name": "@neondatabase/env",
+	"version": "0.1.0",
+	"description": "Resolve and inject Neon connection strings for the branch selected by your neon.ts policy. fetchEnv / parseEnv plus a single `env run -- <cmd>` CLI.",
+	"keywords": [
+		"neon",
+		"database",
+		"postgres",
+		"env",
+		"dotenv",
+		"platform"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/neondatabase/neon-pkgs.git"
+	},
+	"license": "Apache-2.0",
+	"author": {
+		"name": "Neon",
+		"url": "https://neon.com"
+	},
+	"type": "module",
+	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"bin": {
+		"neon-env": "dist/cli.js"
+	},
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		},
+		"./v1": {
+			"types": "./dist/v1.d.ts",
+			"import": "./dist/v1.js",
+			"default": "./dist/v1.js"
+		}
+	},
+	"files": [
+		"README.md",
+		"dist/",
+		"package.json"
+	],
+	"scripts": {
+		"build": "tsc --noEmit && tsdown",
+		"prepare": "npm run build",
+		"test": "vitest --passWithNoTests",
+		"test:ci": "vitest run --passWithNoTests",
+		"test:e2e": "vitest run --config vitest.e2e.config.ts",
+		"tsc": "tsc"
+	},
+	"devDependencies": {
+		"@neondatabase/api-client": "^2.7.1",
+		"@types/node": "catalog:",
+		"@types/yargs": "^17.0.35",
+		"@vitest/coverage-v8": "3.0.9",
+		"console-fail-test": "0.5.0",
+		"tsdown": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	},
+	"dependencies": {
+		"@neondatabase/config": "workspace:*",
+		"zod": "^4.4.3",
+		"yargs": "^18.0.0"
+	},
+	"packageManager": "pnpm@10.4.0",
+	"engines": {
+		"node": ">=22"
+	},
+	"publishConfig": {
+		"provenance": false
+	}
+}

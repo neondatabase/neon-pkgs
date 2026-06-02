@@ -1,0 +1,142 @@
+/**
+ * `@neondatabase/config/v1` — the v1 public API for Config-as-Code on the Neon Platform.
+ *
+ * Usage in `neon.ts`:
+ * ```ts
+ * import { defineConfig } from "@neondatabase/config/v1";
+ *
+ * export default defineConfig((branch) => {
+ *   if (branch.name === "main") return { protected: true, auth: {} };
+ *   return { parent: "main", ttl: "7d" };
+ * });
+ * ```
+ *
+ * Then, from a script or another tool:
+ * ```ts
+ * import config from "../neon";
+ * import { status, deploy, pull } from "@neondatabase/config/v1";
+ *
+ * const plan = await status(config);        // dry-run diff, no mutations
+ * await deploy(config, "main");             // apply the policy to a branch
+ * const live = await pull("main");          // read the branch's live state
+ * ```
+ *
+ * No CLI commands are shipped here — those live in the neonctl CLI. This package is
+ * functions only.
+ *
+ * Surface guidelines:
+ * - Top-level: the operations callers reach for daily (`status`, `deploy`, `pull`,
+ *   `defineConfig`), plus the lower-level engine (`pushConfig` / `pullConfig`), the
+ *   `PlatformError` base class + `ErrorCode` enum, and the types those operations produce.
+ * - `errors` namespace: specific `PlatformError` subclasses (`ConfigLoadError`,
+ *   `PushConflictError`, …).
+ * - `schemas` namespace: the zod schemas underlying `defineConfig`.
+ */
+
+import {
+	ConfigLoadError,
+	ConfigValidationError,
+	ErrorCode,
+	MissingContextError,
+	PlatformError,
+	PushAbortedError,
+	PushConflictError,
+} from "./lib/errors.js";
+import {
+	branchConfigSchema,
+	computeSettingsSchema,
+	configSchema,
+	postgresConfigSchema,
+	serviceToggleSchema,
+} from "./lib/schema.js";
+
+/**
+ * Specific `PlatformError` subclasses, grouped for `instanceof` / structured access.
+ * Also available as top-level exports.
+ */
+export const errors = {
+	ConfigLoadError,
+	ConfigValidationError,
+	ErrorCode,
+	MissingContextError,
+	PlatformError,
+	PushAbortedError,
+	PushConflictError,
+} as const;
+
+/** The zod schemas underlying `defineConfig`, grouped under product-friendly names. */
+export const schemas = {
+	branch: branchConfigSchema,
+	computeSettings: computeSettingsSchema,
+	config: configSchema,
+	postgres: postgresConfigSchema,
+	service: serviceToggleSchema,
+} as const;
+
+// ─── Lower-level adapters ──────────────────────────────────────────────────────
+export { createNeonApiFromOptions, resolveApiKey } from "./lib/auth.js";
+export { defineConfig, resolveConfig } from "./lib/define-config.js";
+// ─── Errors ────────────────────────────────────────────────────────────────────
+export {
+	ConfigLoadError,
+	ConfigValidationError,
+	ErrorCode,
+	MissingContextError,
+	PlatformError,
+	PushAbortedError,
+	PushConflictError,
+} from "./lib/errors.js";
+export type {
+	BranchRef,
+	LoadContextOptions,
+	NeonContext,
+} from "./lib/load-context.js";
+export { loadContext } from "./lib/load-context.js";
+export type { LoadConfigOptions } from "./lib/loader.js";
+export { loadConfigFromFile } from "./lib/loader.js";
+// ─── NeonApi types (needed by callers implementing their own adapters) ────────
+export type {
+	CreateBranchInput,
+	CreateProjectInput,
+	GetConnectionUriInput,
+	NeonApi,
+	NeonAuthSnapshot,
+	NeonBranchSnapshot,
+	NeonDataApiSnapshot,
+	NeonDatabaseSnapshot,
+	NeonEndpointSnapshot,
+	NeonProjectSnapshot,
+	NeonRoleSnapshot,
+	UpdateBranchInput,
+} from "./lib/neon-api.js";
+export { createRealNeonApi } from "./lib/neon-api-real.js";
+// ─── Operations (intent-revealing entry points) ───────────────────────────────
+export type {
+	ConfigOperationOptions,
+	DeployOptions,
+} from "./lib/operations.js";
+export { deploy, pull, status } from "./lib/operations.js";
+// ─── Engine (advanced / programmatic use) ─────────────────────────────────────
+export type {
+	PullConfigOptions,
+	PulledBranchConfig,
+} from "./lib/pull-config.js";
+export { pullConfig } from "./lib/pull-config.js";
+export type {
+	PushConfigOptions,
+	PushConfirmContext,
+} from "./lib/push-config.js";
+export { pushConfig } from "./lib/push-config.js";
+// ─── Config types (used in neon.ts and in operation return values) ────────────
+export type {
+	AppliedChange,
+	BranchConfig,
+	BranchTarget,
+	ComputeSettings,
+	Config,
+	ConflictReport,
+	PostgresConfig,
+	PushResult,
+	ResolvedBranchConfig,
+	ServiceToggle,
+} from "./lib/types.js";
