@@ -47,9 +47,12 @@ import {
 } from "./lib/errors.js";
 import {
 	branchConfigSchema,
+	bucketConfigSchema,
 	computeSettingsSchema,
 	configSchema,
+	functionConfigSchema,
 	postgresConfigSchema,
+	previewConfigSchema,
 	serviceToggleSchema,
 } from "./lib/schema.js";
 
@@ -70,9 +73,12 @@ export const errors = {
 /** The zod schemas underlying `defineConfig`, grouped under product-friendly names. */
 export const schemas = {
 	branch: branchConfigSchema,
+	bucket: bucketConfigSchema,
 	computeSettings: computeSettingsSchema,
 	config: configSchema,
+	function: functionConfigSchema,
 	postgres: postgresConfigSchema,
+	preview: previewConfigSchema,
 	service: serviceToggleSchema,
 } as const;
 
@@ -94,14 +100,19 @@ export { loadConfigFromFile } from "./lib/loader.js";
 // ─── NeonApi types (needed by callers implementing their own adapters) ────────
 export type {
 	CreateBranchInput,
+	CreateBucketInput,
 	CreateProjectInput,
+	DeployFunctionInput,
 	GetConnectionUriInput,
 	NeonApi,
 	NeonAuthSnapshot,
 	NeonBranchSnapshot,
+	NeonBucketSnapshot,
 	NeonDataApiSnapshot,
 	NeonDatabaseSnapshot,
 	NeonEndpointSnapshot,
+	NeonFunctionDeploymentSnapshot,
+	NeonFunctionSnapshot,
 	NeonProjectSnapshot,
 	NeonRoleSnapshot,
 	UpdateBranchInput,
@@ -117,6 +128,7 @@ export { apply, inspect, plan } from "./lib/operations.js";
 export type {
 	PullConfigOptions,
 	PulledBranchConfig,
+	PulledPreview,
 } from "./lib/pull-config.js";
 export { pullConfig } from "./lib/pull-config.js";
 export type {
@@ -129,11 +141,20 @@ export type {
 	AppliedChange,
 	BranchConfig,
 	BranchTarget,
+	BucketAccessLevel,
+	BucketConfig,
 	ComputeSettings,
 	Config,
 	ConflictReport,
+	FunctionConfig,
+	FunctionMemoryMib,
+	FunctionRuntime,
 	PostgresConfig,
+	PreviewConfig,
 	PushResult,
 	ResolvedBranchConfig,
+	ResolvedBucketConfig,
+	ResolvedFunctionConfig,
+	ResolvedPreviewConfig,
 	ServiceToggle,
 } from "./lib/types.js";

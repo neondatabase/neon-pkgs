@@ -43,6 +43,31 @@ describe("branchConfigSchema", () => {
 		const result = branchConfigSchema.safeParse({ parent: "preview-*" });
 		expect(result.success).toBe(false);
 	});
+
+	test("accepts a preview block with functions, buckets, and aiGateway", () => {
+		const result = branchConfigSchema.safeParse({
+			preview: {
+				functions: [
+					{
+						slug: "hello-world",
+						name: "Hello World",
+						source: "./hello.ts",
+						env: { KEY: "value" },
+					},
+				],
+				buckets: [{ name: "uploads", access: "public_read" }],
+				aiGateway: { enabled: true },
+			},
+		});
+		expect(result.success).toBe(true);
+	});
+
+	test("rejects an unknown key inside preview", () => {
+		const result = branchConfigSchema.safeParse({
+			preview: { functions: [], typo: true },
+		});
+		expect(result.success).toBe(false);
+	});
 });
 
 describe("formatZodIssues", () => {

@@ -70,6 +70,100 @@ export const postgresConfigSchema = z.strictObject({
 	computeSettings: computeSettingsSchema.optional(),
 });
 
+/**
+ * Branch-unique function slug. Mirrors the Neon Functions API path-segment rule
+ * (`platform/internal/platform/functions/name.go`): lowercase DNS label, 1–40 chars.
+ */
+const functionSlugSchema = z
+	.string()
+	.regex(
+		/^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$/,
+		"function slug must be a lowercase DNS label (1-40 chars, letters/digits/hyphens, no leading/trailing hyphen)",
+	);
+
+/**
+ * Per-function environment map. Every value must be a defined string: a `process.env.X`
+ * that is unset surfaces as `undefined` and is rejected here (rather than silently
+ * shipping `undefined` into the deployment).
+ */
+const functionEnvSchema = z.record(z.string(), z.string());
+
+export const functionConfigSchema = z.strictObject({
+	slug: functionSlugSchema,
+	name: z.string().min(1).max(255),
+	source: z.string().min(1),
+	env: functionEnvSchema.optional(),
+	runtime: z.literal("nodejs24").optional(),
+	memoryMib: z
+		.union([
+			z.literal(256),
+			z.literal(512),
+			z.literal(1024),
+			z.literal(2048),
+			z.literal(4096),
+			z.literal(8192),
+		])
+		.optional(),
+	concurrency: z.number().int().min(1).max(1000).optional(),
+});
+
+export const bucketConfigSchema = z.strictObject({
+	name: z.string().min(1).max(255),
+	access: z
+		.union([z.literal("private"), z.literal("public_read")])
+		.optional(),
+});
+
+export const previewConfigSchema = z
+	.strictObject({
+		functions: z.array(functionConfigSchema).optional(),
+		buckets: z.array(bucketConfigSchema).optional(),
+		aiGateway: serviceToggleSchema.optional(),
+	})
+	.superRefine((preview, ctx) => {
+		assertUnique({
+			ctx,
+			path: ["functions"],
+			items: preview.functions ?? [],
+			key: (fn) => fn.slug,
+			label: "function slug",
+		});
+		assertUnique({
+			ctx,
+			path: ["buckets"],
+			items: preview.buckets ?? [],
+			key: (bucket) => bucket.name,
+			label: "bucket name",
+		});
+	});
+
+/**
+ * Flag duplicate keys within a Preview collection so a typo in two function slugs (or two
+ * buckets) surfaces as a config error rather than the second silently clobbering the first
+ * at apply time.
+ */
+function assertUnique<T>(args: {
+	ctx: z.RefinementCtx;
+	path: (string | number)[];
+	items: T[];
+	key: (item: T) => string;
+	label: string;
+}): void {
+	const { ctx, path, items, key, label } = args;
+	const seen = new Set<string>();
+	items.forEach((item, index) => {
+		const value = key(item);
+		if (seen.has(value)) {
+			ctx.addIssue({
+				code: "custom",
+				path: [...path, index],
+				message: `duplicate ${label}: ${JSON.stringify(value)}`,
+			});
+		}
+		seen.add(value);
+	});
+}
+
 export const branchConfigSchema = z
 	.strictObject({
 		parent: z.string().optional(),
@@ -87,6 +181,7 @@ export const branchConfigSchema = z
 		postgres: postgresConfigSchema.optional(),
 		auth: serviceToggleSchema.optional(),
 		dataApi: serviceToggleSchema.optional(),
+		preview: previewConfigSchema.optional(),
 	})
 	.superRefine((cfg, ctx) => {
 		validateParentReference({

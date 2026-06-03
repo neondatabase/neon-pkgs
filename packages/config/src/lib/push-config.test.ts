@@ -246,6 +246,126 @@ describe("pushConfig", () => {
 		expect(result.dryRun).toBe(true);
 	});
 
+	test("creates buckets, creates + deploys functions, and enables AI Gateway", async () => {
+		const { api, projectId } = seededFake();
+		const config = defineConfig(() => ({
+			preview: {
+				functions: [
+					{
+						name: "Hello World",
+						slug: "hello-world",
+						source: "./functions/hello-world.ts",
+						env: { RESEND_API_KEY: "re_abc" },
+					},
+				],
+				buckets: [{ name: "uploads" }],
+				aiGateway: {},
+			},
+		}));
+
+		const result = await pushConfig(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+
+		expect(result.applied).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					kind: "service",
+					action: "create",
+					identifier: "bucket:uploads",
+				}),
+				expect.objectContaining({
+					kind: "service",
+					action: "create",
+					identifier: "function:hello-world",
+				}),
+				expect.objectContaining({
+					kind: "service",
+					action: "update",
+					identifier: "function:hello-world",
+				}),
+				expect.objectContaining({
+					kind: "service",
+					action: "create",
+					identifier: "aiGateway",
+				}),
+			]),
+		);
+		// The function exists and now has an active deployment on the branch.
+		const functions = await api.listBranchFunctions(projectId, "br-main");
+		expect(functions).toEqual([
+			expect.objectContaining({
+				slug: "hello-world",
+				activeDeploymentId: 1,
+			}),
+		]);
+		expect(await api.getAiGatewayEnabled(projectId, "br-main")).toBe(true);
+		expect(
+			(await api.listBranchBuckets(projectId, "br-main")).map(
+				(b) => b.name,
+			),
+		).toEqual(["uploads"]);
+	});
+
+	test("re-deploys an existing function but does not recreate it", async () => {
+		const { api, projectId } = seededFake();
+		api.seedFunction(projectId, "br-main", {
+			id: "fn-existing",
+			slug: "hello-world",
+			name: "Hello World",
+			invocationUrl: "https://x/functions/hello-world",
+		});
+		const config = defineConfig(() => ({
+			preview: {
+				functions: [
+					{
+						name: "Hello World",
+						slug: "hello-world",
+						source: "./functions/hello-world.ts",
+					},
+				],
+			},
+		}));
+
+		await pushConfig(config, { api, projectId, branchId: "br-main" });
+
+		expect(
+			api.history.filter((h) => h.method === "createBranchFunction"),
+		).toHaveLength(0);
+		expect(
+			api.history.filter((h) => h.method === "deployBranchFunction"),
+		).toHaveLength(1);
+	});
+
+	test("dryRun plans preview steps without mutating", async () => {
+		const { api, projectId } = seededFake();
+		const config = defineConfig(() => ({
+			preview: { buckets: [{ name: "uploads" }], aiGateway: {} },
+		}));
+
+		const result = await pushConfig(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+			dryRun: true,
+		});
+
+		expect(result.applied).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ identifier: "bucket:uploads" }),
+				expect.objectContaining({ identifier: "aiGateway" }),
+			]),
+		);
+		expect(api.history.some((h) => h.method === "createBranchBucket")).toBe(
+			false,
+		);
+		expect(api.history.some((h) => h.method === "enableAiGateway")).toBe(
+			false,
+		);
+	});
+
 	test("dryRun surfaces selected branch plan without mutating", async () => {
 		const { api, projectId } = seededFake();
 		const config = defineConfig(() => ({

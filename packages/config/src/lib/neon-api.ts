@@ -1,4 +1,9 @@
-import type { ComputeSettings } from "./types.js";
+import type {
+	BucketAccessLevel,
+	ComputeSettings,
+	FunctionMemoryMib,
+	FunctionRuntime,
+} from "./types.js";
 
 /**
  * Snapshot of a Neon project field set we care about. Maps onto a subset of the upstream
@@ -107,6 +112,62 @@ export interface NeonAuthSnapshot {
 export interface NeonDataApiSnapshot {
 	/** REST endpoint URL. */
 	url: string;
+}
+
+/**
+ * A branchable object-storage bucket (Preview). Backed by the Neon Platform
+ * branchable-storage service.
+ */
+export interface NeonBucketSnapshot {
+	name: string;
+	accessLevel: BucketAccessLevel;
+}
+
+/**
+ * Input for creating a bucket on a branch.
+ */
+export interface CreateBucketInput {
+	name: string;
+	accessLevel?: BucketAccessLevel;
+}
+
+/**
+ * A Neon Function on a branch (Preview). Mirrors the subset of the Functions API we model:
+ * the immutable `slug`, the display `name`, and the active deployment id when one exists.
+ */
+export interface NeonFunctionSnapshot {
+	/** Opaque, stable function identifier. */
+	id: string;
+	/** Branch-unique slug (the invocation path segment). Immutable. */
+	slug: string;
+	/** Free-form display name. */
+	name: string;
+	/** URL at which the function is invoked. */
+	invocationUrl: string;
+	/** Id (platform version number) of the active deployment, when any code is deployed. */
+	activeDeploymentId?: number;
+}
+
+/**
+ * Input for deploying code to a function. `bundle` is the already-built ZIP archive of the
+ * function source — building it (esbuild + zip) is an imperative step performed by the
+ * caller, not by the {@link NeonApi} adapter.
+ */
+export interface DeployFunctionInput {
+	bundle: Uint8Array;
+	runtime: FunctionRuntime;
+	memoryMib: FunctionMemoryMib;
+	concurrency: number;
+	environment: Record<string, string>;
+}
+
+/**
+ * A function deployment (Preview).
+ */
+export interface NeonFunctionDeploymentSnapshot {
+	/** The deployment id (monotonic per function). */
+	id: number;
+	status: "pending" | "building" | "completed" | "failed";
 }
 
 /**
@@ -221,4 +282,76 @@ export interface NeonApi {
 		branchId: string,
 		databaseName: string,
 	): Promise<NeonDataApiSnapshot>;
+
+	// ─── Preview: buckets ──────────────────────────────────────────────────────
+
+	/** List branchable object-storage buckets visible on a branch. */
+	listBranchBuckets(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonBucketSnapshot[]>;
+
+	/** Create a bucket on a branch. Used by `pushConfig` to honour `preview.buckets`. */
+	createBranchBucket(
+		projectId: string,
+		branchId: string,
+		input: CreateBucketInput,
+	): Promise<NeonBucketSnapshot>;
+
+	/** Delete a bucket from a branch. */
+	deleteBranchBucket(
+		projectId: string,
+		branchId: string,
+		bucketName: string,
+	): Promise<void>;
+
+	// ─── Preview: functions ────────────────────────────────────────────────────
+
+	/** List functions on a branch. */
+	listBranchFunctions(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonFunctionSnapshot[]>;
+
+	/**
+	 * Create a function on a branch. The function has no deployment until code is deployed
+	 * to it with {@link deployBranchFunction}.
+	 */
+	createBranchFunction(
+		projectId: string,
+		branchId: string,
+		input: { slug: string; name: string },
+	): Promise<NeonFunctionSnapshot>;
+
+	/** Delete a function (by slug) from a branch. */
+	deleteBranchFunction(
+		projectId: string,
+		branchId: string,
+		slug: string,
+	): Promise<void>;
+
+	/**
+	 * Deploy a built bundle to a function. The newest deployment becomes active. The
+	 * `bundle` is built (esbuild + zip) by the caller and passed in as bytes.
+	 */
+	deployBranchFunction(
+		projectId: string,
+		branchId: string,
+		slug: string,
+		input: DeployFunctionInput,
+	): Promise<NeonFunctionDeploymentSnapshot>;
+
+	// ─── Preview: AI Gateway ───────────────────────────────────────────────────
+
+	/**
+	 * Whether the AI Gateway is enabled on a branch. Toggle-style, like Neon Auth / Data
+	 * API: used by both `fetchEnv` (to decide visibility) and `pushConfig` (to diff intent).
+	 */
+	getAiGatewayEnabled(projectId: string, branchId: string): Promise<boolean>;
+
+	/** Enable the AI Gateway on a branch. Idempotent. */
+	enableAiGateway(projectId: string, branchId: string): Promise<void>;
+
+	/** Disable the AI Gateway on a branch. Idempotent. */
+	disableAiGateway(projectId: string, branchId: string): Promise<void>;
 }

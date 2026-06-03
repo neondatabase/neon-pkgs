@@ -61,4 +61,84 @@ describe("diffConfig", () => {
 			branchId: "br-main",
 		});
 	});
+
+	test("plans preview create + deploy + bucket + ai-gateway when nothing exists", () => {
+		const diff = diffConfig(
+			{
+				authEnabled: false,
+				dataApiEnabled: false,
+				preview: {
+					functions: [
+						{
+							slug: "hello-world",
+							name: "Hello World",
+							source: "./hello.ts",
+							env: {},
+							runtime: "nodejs24",
+							memoryMib: 512,
+							concurrency: 1,
+						},
+					],
+					buckets: [{ name: "uploads", access: "private" }],
+					aiGatewayEnabled: true,
+				},
+			},
+			{
+				...remote,
+				preview: {
+					buckets: [],
+					functions: [],
+					aiGatewayEnabled: false,
+				},
+			},
+			{ updateExisting: false },
+		);
+		expect(diff.plan.map((p) => p.kind)).toEqual([
+			"create-bucket",
+			"create-function",
+			"deploy-function",
+			"enable-ai-gateway",
+		]);
+	});
+
+	test("skips create-function and skips enable-ai-gateway when already present, but still re-deploys", () => {
+		const diff = diffConfig(
+			{
+				authEnabled: false,
+				dataApiEnabled: false,
+				preview: {
+					functions: [
+						{
+							slug: "hello-world",
+							name: "Hello World",
+							source: "./hello.ts",
+							env: {},
+							runtime: "nodejs24",
+							memoryMib: 512,
+							concurrency: 1,
+						},
+					],
+					buckets: [{ name: "uploads", access: "private" }],
+					aiGatewayEnabled: true,
+				},
+			},
+			{
+				...remote,
+				preview: {
+					buckets: [{ name: "uploads", accessLevel: "private" }],
+					functions: [
+						{
+							id: "fn-1",
+							slug: "hello-world",
+							name: "Hello World",
+							invocationUrl: "https://x/functions/hello-world",
+						},
+					],
+					aiGatewayEnabled: true,
+				},
+			},
+			{ updateExisting: false },
+		);
+		expect(diff.plan.map((p) => p.kind)).toEqual(["deploy-function"]);
+	});
 });

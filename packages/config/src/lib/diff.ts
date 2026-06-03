@@ -1,8 +1,15 @@
-import type { NeonBranchSnapshot, NeonEndpointSnapshot } from "./neon-api.js";
 import type {
+	NeonBranchSnapshot,
+	NeonBucketSnapshot,
+	NeonEndpointSnapshot,
+	NeonFunctionSnapshot,
+} from "./neon-api.js";
+import type {
+	BucketAccessLevel,
 	ComputeSettings,
 	ConflictReport,
 	ResolvedBranchConfig,
+	ResolvedFunctionConfig,
 } from "./types.js";
 
 /**
@@ -44,6 +51,40 @@ export type PlanStep =
 			branchId: string;
 			branchName: string;
 			databaseName: string;
+	  }
+	| {
+			kind: "create-bucket";
+			projectId: string;
+			branchId: string;
+			branchName: string;
+			bucketName: string;
+			accessLevel: BucketAccessLevel;
+	  }
+	| {
+			kind: "create-function";
+			projectId: string;
+			branchId: string;
+			branchName: string;
+			fn: ResolvedFunctionConfig;
+	  }
+	| {
+			/**
+			 * Deploy (or re-deploy) code to a function. Always planned for every desired
+			 * function — deployments are versioned and the newest becomes active, so a push
+			 * ships the current source each time. `functionExists` tells `pushConfig` whether
+			 * it must create the function first (covered by a preceding `create-function` step).
+			 */
+			kind: "deploy-function";
+			projectId: string;
+			branchId: string;
+			branchName: string;
+			fn: ResolvedFunctionConfig;
+	  }
+	| {
+			kind: "enable-ai-gateway";
+			projectId: string;
+			branchId: string;
+			branchName: string;
 	  };
 
 export interface RemoteServiceState {
@@ -52,11 +93,22 @@ export interface RemoteServiceState {
 	dataApiEnabled: boolean;
 }
 
+/**
+ * Snapshot of the branch's current Preview-feature state. Absent (`undefined`) when the
+ * policy has no `preview` block — `pushConfig` only fetches this when needed.
+ */
+export interface RemotePreviewState {
+	buckets: NeonBucketSnapshot[];
+	functions: NeonFunctionSnapshot[];
+	aiGatewayEnabled: boolean;
+}
+
 export interface RemoteState {
 	projectId: string;
 	branch: NeonBranchSnapshot;
 	endpoint?: NeonEndpointSnapshot;
 	services: RemoteServiceState;
+	preview?: RemotePreviewState;
 }
 
 export interface DiffOptions {
@@ -84,7 +136,76 @@ export function diffConfig(
 	const plan: PlanStep[] = [];
 	diffBranchConfig({ config, remote, options, plan, conflicts });
 	diffServices({ config, remote, plan });
+	diffPreview({ config, remote, plan });
 	return { plan, conflicts };
+}
+
+/**
+ * Plan Preview features (functions, buckets, AI Gateway). Like {@link diffServices}, this
+ * is **additive**: it creates desired buckets/functions and enables the AI Gateway, but
+ * never deletes buckets/functions or disables the gateway. Teardown is destructive, so it
+ * stays explicit/manual — matching the existing auth / dataApi behaviour.
+ *
+ * Functions are always (re-)deployed: deployments are versioned and the newest becomes
+ * active, so each push ships the current source. A `create-function` step precedes the
+ * `deploy-function` step when the function does not yet exist remotely.
+ */
+function diffPreview(args: {
+	config: ResolvedBranchConfig;
+	remote: RemoteState;
+	plan: PlanStep[];
+}): void {
+	const { config, remote, plan } = args;
+	const preview = config.preview;
+	if (!preview) return;
+	// `remote.preview` is only fetched when the policy has a preview block; treat a missing
+	// snapshot as "nothing exists yet" so the diff is still well-defined.
+	const state: RemotePreviewState = remote.preview ?? {
+		buckets: [],
+		functions: [],
+		aiGatewayEnabled: false,
+	};
+
+	for (const bucket of preview.buckets) {
+		if (state.buckets.some((b) => b.name === bucket.name)) continue;
+		plan.push({
+			kind: "create-bucket",
+			projectId: remote.projectId,
+			branchId: remote.branch.id,
+			branchName: remote.branch.name,
+			bucketName: bucket.name,
+			accessLevel: bucket.access,
+		});
+	}
+
+	for (const fn of preview.functions) {
+		const exists = state.functions.some((f) => f.slug === fn.slug);
+		if (!exists) {
+			plan.push({
+				kind: "create-function",
+				projectId: remote.projectId,
+				branchId: remote.branch.id,
+				branchName: remote.branch.name,
+				fn,
+			});
+		}
+		plan.push({
+			kind: "deploy-function",
+			projectId: remote.projectId,
+			branchId: remote.branch.id,
+			branchName: remote.branch.name,
+			fn,
+		});
+	}
+
+	if (preview.aiGatewayEnabled && !state.aiGatewayEnabled) {
+		plan.push({
+			kind: "enable-ai-gateway",
+			projectId: remote.projectId,
+			branchId: remote.branch.id,
+			branchName: remote.branch.name,
+		});
+	}
 }
 
 /**

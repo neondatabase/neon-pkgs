@@ -1,7 +1,19 @@
 import { parseDuration } from "./duration.js";
 import { ConfigValidationError } from "./errors.js";
 import { branchConfigSchema, formatZodIssues } from "./schema.js";
-import type { BranchTarget, Config, ResolvedBranchConfig } from "./types.js";
+import type {
+	BranchTarget,
+	Config,
+	FunctionConfig,
+	PreviewConfig,
+	ResolvedBranchConfig,
+	ResolvedPreviewConfig,
+} from "./types.js";
+
+/** Default deploy parameters applied to functions that omit them in `neon.ts`. */
+const DEFAULT_FUNCTION_RUNTIME = "nodejs24" as const;
+const DEFAULT_FUNCTION_MEMORY_MIB = 512 as const;
+const DEFAULT_FUNCTION_CONCURRENCY = 1 as const;
 
 const REGION_PREFIX = /^(aws|azure|gcp)-/;
 
@@ -92,11 +104,43 @@ export function resolveConfig(
 				: {}),
 		};
 	}
+	if (cfg.preview) {
+		resolved.preview = resolvePreviewConfig(cfg.preview);
+	}
 	return resolved;
 }
 
 function isServiceEnabled(service: { enabled?: boolean } | undefined): boolean {
 	return service !== undefined && service.enabled !== false;
+}
+
+/**
+ * Normalize a {@link PreviewConfig} into a {@link ResolvedPreviewConfig}: apply per-function
+ * deploy defaults, default each bucket's access level to `private`, and collapse the
+ * `aiGateway` toggle to a boolean using the same present-and-not-`false` rule as
+ * `auth` / `dataApi`.
+ */
+function resolvePreviewConfig(preview: PreviewConfig): ResolvedPreviewConfig {
+	return {
+		functions: (preview.functions ?? []).map(resolveFunctionConfig),
+		buckets: (preview.buckets ?? []).map((bucket) => ({
+			name: bucket.name,
+			access: bucket.access ?? "private",
+		})),
+		aiGatewayEnabled: isServiceEnabled(preview.aiGateway),
+	};
+}
+
+function resolveFunctionConfig(fn: FunctionConfig) {
+	return {
+		slug: fn.slug,
+		name: fn.name,
+		source: fn.source,
+		env: { ...(fn.env ?? {}) },
+		runtime: fn.runtime ?? DEFAULT_FUNCTION_RUNTIME,
+		memoryMib: fn.memoryMib ?? DEFAULT_FUNCTION_MEMORY_MIB,
+		concurrency: fn.concurrency ?? DEFAULT_FUNCTION_CONCURRENCY,
+	};
 }
 
 /**

@@ -72,6 +72,91 @@ export interface PostgresConfig {
 	computeSettings?: ComputeSettings;
 }
 
+/**
+ * Supported function runtimes. Mirrors the Neon Functions deploy API `runtime` enum.
+ * Only `nodejs24` exists today; kept as a union so adding runtimes later is a
+ * non-breaking, type-checked change.
+ */
+export type FunctionRuntime = "nodejs24";
+
+/**
+ * Memory sizes (MiB) accepted by the Neon Functions deploy API. Mirrors the
+ * `memory_mib` enum in the spec.
+ */
+export type FunctionMemoryMib = 256 | 512 | 1024 | 2048 | 4096 | 8192;
+
+/**
+ * A single Neon Function deployed to a branch (Preview feature).
+ *
+ * A function is invoked like a Cloudflare/Vercel handler — its source module
+ * `export default { fetch }` or `export async function handler(req): Response`. The
+ * `source` path is bundled (esbuild) and uploaded as a deployment; the newest
+ * deployment becomes active.
+ */
+export interface FunctionConfig {
+	/**
+	 * Branch-unique, lowercase DNS-label used as the path segment in the function's
+	 * invocation URL. Immutable once created. 1–40 chars, `^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`.
+	 * @example "hello-world"
+	 */
+	slug: string;
+	/** Free-form display name. @example "Hello World" */
+	name: string;
+	/**
+	 * Path to the function's entry module, **relative to `neon.ts`** (or absolute). The
+	 * module's default export (`{ fetch }`) or `handler` export is the function entry. This
+	 * path is resolved against the loaded `neon.ts` location and bundled with esbuild at
+	 * deploy time.
+	 *
+	 * We require a string path rather than an imported handler because a JS function value
+	 * carries no reference back to its source file, so esbuild has nothing to bundle from.
+	 * @example "./functions/hello-world.ts"
+	 */
+	source: string;
+	/**
+	 * Environment variables injected into the deployed function. Every value must be a
+	 * defined string — a `process.env.X` that is `undefined` (unset) errors at validation
+	 * time rather than silently shipping `undefined`.
+	 * @example { RESEND_API_KEY: process.env.RESEND_API_KEY }
+	 */
+	env?: Record<string, string>;
+	/** Runtime to execute the function with. Defaults to `"nodejs24"`. */
+	runtime?: FunctionRuntime;
+	/** Memory allotted to each invocation, in MiB. Defaults to `512`. */
+	memoryMib?: FunctionMemoryMib;
+	/** Maximum concurrent invocations (1–1000). Defaults to `1`. */
+	concurrency?: number;
+}
+
+/** Anonymous-access level for a branchable object-storage bucket. */
+export type BucketAccessLevel = "private" | "public_read";
+
+/**
+ * A branchable object-storage bucket on a branch (Preview feature).
+ */
+export interface BucketConfig {
+	/** Bucket name, unique within a branch. 1–255 chars. */
+	name: string;
+	/**
+	 * Anonymous access level. `private` (default) requires authenticated reads/writes;
+	 * `public_read` allows anonymous GetObject/HeadObject.
+	 */
+	access?: BucketAccessLevel;
+}
+
+/**
+ * Branch-scoped Preview features. Grouped under `preview` to signal they are backed by
+ * Neon `x-stability-level: beta` endpoints and may change before GA.
+ */
+export interface PreviewConfig {
+	/** Functions to deploy on the branch. */
+	functions?: FunctionConfig[];
+	/** Object-storage buckets to create on the branch. */
+	buckets?: BucketConfig[];
+	/** Enable/disable the AI Gateway on the branch (toggle, like auth / dataApi). */
+	aiGateway?: ServiceToggle;
+}
+
 interface BranchConfigBase {
 	/** Parent branch name used when creating a new branch. Not a Postgres setting. */
 	parent?: string;
@@ -80,6 +165,11 @@ interface BranchConfigBase {
 	/** Whether the selected branch should be protected. Undefined means "leave as-is". */
 	protected?: boolean;
 	postgres?: PostgresConfig;
+	/**
+	 * Branch-scoped Preview features (functions, object-storage buckets, AI Gateway).
+	 * Backed by Neon `x-stability-level: beta` endpoints — see {@link PreviewConfig}.
+	 */
+	preview?: PreviewConfig;
 }
 
 type BranchServiceConfig =
@@ -92,6 +182,37 @@ export type BranchConfig = BranchConfigBase & BranchServiceConfig;
 
 export type Config = (branch: BranchTarget) => BranchConfig;
 
+/**
+ * A function with all deploy defaults applied. `resolveConfig` fills in `runtime`,
+ * `memoryMib`, and `concurrency` so downstream diff/apply never has to re-derive them.
+ */
+export interface ResolvedFunctionConfig {
+	slug: string;
+	name: string;
+	source: string;
+	env: Record<string, string>;
+	runtime: FunctionRuntime;
+	memoryMib: FunctionMemoryMib;
+	concurrency: number;
+}
+
+/** A bucket with its access level defaulted to `private`. */
+export interface ResolvedBucketConfig {
+	name: string;
+	access: BucketAccessLevel;
+}
+
+/**
+ * Normalized {@link PreviewConfig}. Only present on {@link ResolvedBranchConfig} when the
+ * policy returned a `preview` block. `aiGatewayEnabled` follows the same
+ * "present-and-not-`false`" semantics as `authEnabled` / `dataApiEnabled`.
+ */
+export interface ResolvedPreviewConfig {
+	functions: ResolvedFunctionConfig[];
+	buckets: ResolvedBucketConfig[];
+	aiGatewayEnabled: boolean;
+}
+
 export interface ResolvedBranchConfig {
 	parent?: string;
 	ttlSeconds?: number;
@@ -99,6 +220,7 @@ export interface ResolvedBranchConfig {
 	postgres?: PostgresConfig;
 	authEnabled: boolean;
 	dataApiEnabled: boolean;
+	preview?: ResolvedPreviewConfig;
 }
 
 /**

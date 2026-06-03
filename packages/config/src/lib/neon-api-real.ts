@@ -21,19 +21,24 @@ import { formatSuspendTimeout, parseSuspendTimeout } from "./duration.js";
 import { ErrorCode, PlatformError } from "./errors.js";
 import type {
 	CreateBranchInput,
+	CreateBucketInput,
 	CreateProjectInput,
+	DeployFunctionInput,
 	GetConnectionUriInput,
 	NeonApi,
 	NeonAuthSnapshot,
 	NeonBranchSnapshot,
+	NeonBucketSnapshot,
 	NeonDataApiSnapshot,
 	NeonDatabaseSnapshot,
 	NeonEndpointSnapshot,
+	NeonFunctionDeploymentSnapshot,
+	NeonFunctionSnapshot,
 	NeonProjectSnapshot,
 	NeonRoleSnapshot,
 	UpdateBranchInput,
 } from "./neon-api.js";
-import type { ComputeSettings } from "./types.js";
+import type { BucketAccessLevel, ComputeSettings } from "./types.js";
 import { wrapNeonError } from "./wrap-neon-error.js";
 
 type ApiClient = ReturnType<typeof createApiClient>;
@@ -45,6 +50,36 @@ const neonAuthResponseSchema = z.object({
 	secret_server_key: z.string().optional(),
 	jwks_url: z.string(),
 	base_url: z.string().optional(),
+});
+
+// ─── Preview: buckets ──────────────────────────────────────────────────────
+
+const bucketSchema = z.object({
+	name: z.string(),
+	access_level: z.string().optional(),
+});
+const bucketResponseSchema = z.object({ bucket: bucketSchema });
+const bucketsListResponseSchema = z.object({ buckets: z.array(bucketSchema) });
+
+// ─── Preview: functions ────────────────────────────────────────────────────
+
+const functionDeploymentSchema = z.object({
+	id: z.number(),
+	status: z.string(),
+});
+const neonFunctionSchema = z.object({
+	id: z.string(),
+	slug: z.string(),
+	name: z.string(),
+	invocation_url: z.string(),
+	active_deployment: functionDeploymentSchema.optional(),
+});
+const functionResponseSchema = z.object({ function: neonFunctionSchema });
+const functionsListResponseSchema = z.object({
+	functions: z.array(neonFunctionSchema),
+});
+const functionDeploymentResponseSchema = z.object({
+	deployment: functionDeploymentSchema,
 });
 
 interface CreateNeonAuthRestInput {
@@ -530,14 +565,58 @@ class RealNeonApi implements NeonApi {
 	}
 
 	private async postJson(path: string, body: unknown): Promise<unknown> {
+		return this.request("POST", path, {
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(body),
+		});
+	}
+
+	private async getJson(path: string): Promise<unknown> {
+		return this.request("GET", path);
+	}
+
+	private async deleteJson(path: string): Promise<unknown> {
+		return this.request("DELETE", path);
+	}
+
+	/**
+	 * Upload a built function bundle via `multipart/form-data` to the deploy endpoint.
+	 * Sends the bundle as the `file` field plus the deploy params Neon requires.
+	 */
+	private async postMultipart(
+		path: string,
+		input: DeployFunctionInput,
+	): Promise<unknown> {
+		const form = new FormData();
+		form.set(
+			"file",
+			new Blob([input.bundle as BlobPart], {
+				type: "application/zip",
+			}),
+			"bundle.zip",
+		);
+		form.set("memory_mib", String(input.memoryMib));
+		form.set("concurrency", String(input.concurrency));
+		form.set("runtime", input.runtime);
+		for (const [key, value] of Object.entries(input.environment)) {
+			form.set(`environment[${key}]`, value);
+		}
+		return this.request("POST", path, { body: form });
+	}
+
+	private async request(
+		method: "GET" | "POST" | "DELETE",
+		path: string,
+		init: { headers?: Record<string, string>; body?: BodyInit } = {},
+	): Promise<unknown> {
 		const url = `${this.restConfig.baseUrl.replace(/\/+$/, "")}${path}`;
 		const res = await fetch(url, {
-			method: "POST",
+			method,
 			headers: {
 				Authorization: `Bearer ${this.restConfig.apiKey}`,
-				"Content-Type": "application/json",
+				...(init.headers ?? {}),
 			},
-			body: JSON.stringify(body),
+			...(init.body !== undefined ? { body: init.body } : {}),
 		});
 		const data = await readJsonBody(res);
 		if (!res.ok) {
@@ -616,6 +695,270 @@ class RealNeonApi implements NeonApi {
 			throw err;
 		}
 	}
+
+	// ─── Preview: buckets ──────────────────────────────────────────────────────
+
+	async listBranchBuckets(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonBucketSnapshot[]> {
+		return this.call(
+			`listBranchBuckets(${projectId}/${branchId})`,
+			async () => {
+				const data = await this.getJson(
+					branchPreviewPath(projectId, branchId, "buckets"),
+				);
+				const parsed = bucketsListResponseSchema.parse(data);
+				return parsed.buckets.map(bucketToSnapshot);
+			},
+			{ projectId },
+		);
+	}
+
+	async createBranchBucket(
+		projectId: string,
+		branchId: string,
+		input: CreateBucketInput,
+	): Promise<NeonBucketSnapshot> {
+		return this.call(
+			`createBranchBucket(${projectId}/${branchId}/${input.name})`,
+			async () => {
+				const data = await this.postJson(
+					branchPreviewPath(projectId, branchId, "buckets"),
+					{
+						name: input.name,
+						...(input.accessLevel
+							? { access_level: input.accessLevel }
+							: {}),
+					},
+				);
+				const parsed = bucketResponseSchema.parse(data);
+				return bucketToSnapshot(parsed.bucket);
+			},
+			{ projectId, mutating: true },
+		);
+	}
+
+	async deleteBranchBucket(
+		projectId: string,
+		branchId: string,
+		bucketName: string,
+	): Promise<void> {
+		await this.call(
+			`deleteBranchBucket(${projectId}/${branchId}/${bucketName})`,
+			async () => {
+				await this.deleteJson(
+					`${branchPreviewPath(projectId, branchId, "buckets")}/${encodeURIComponent(bucketName)}`,
+				);
+			},
+			{ projectId, mutating: true },
+		);
+	}
+
+	// ─── Preview: functions ────────────────────────────────────────────────────
+
+	async listBranchFunctions(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonFunctionSnapshot[]> {
+		return this.call(
+			`listBranchFunctions(${projectId}/${branchId})`,
+			async () => {
+				const data = await this.getJson(
+					branchPreviewPath(projectId, branchId, "functions"),
+				);
+				const parsed = functionsListResponseSchema.parse(data);
+				return parsed.functions.map(functionToSnapshot);
+			},
+			{ projectId },
+		);
+	}
+
+	async createBranchFunction(
+		projectId: string,
+		branchId: string,
+		input: { slug: string; name: string },
+	): Promise<NeonFunctionSnapshot> {
+		return this.call(
+			`createBranchFunction(${projectId}/${branchId}/${input.slug})`,
+			async () => {
+				const data = await this.postJson(
+					branchPreviewPath(projectId, branchId, "functions"),
+					{ slug: input.slug, name: input.name },
+				);
+				const parsed = functionResponseSchema.parse(data);
+				return functionToSnapshot(parsed.function);
+			},
+			{ projectId, mutating: true },
+		);
+	}
+
+	async deleteBranchFunction(
+		projectId: string,
+		branchId: string,
+		slug: string,
+	): Promise<void> {
+		await this.call(
+			`deleteBranchFunction(${projectId}/${branchId}/${slug})`,
+			async () => {
+				await this.deleteJson(
+					`${branchPreviewPath(projectId, branchId, "functions")}/${encodeURIComponent(slug)}`,
+				);
+			},
+			{ projectId, mutating: true },
+		);
+	}
+
+	async deployBranchFunction(
+		projectId: string,
+		branchId: string,
+		slug: string,
+		input: DeployFunctionInput,
+	): Promise<NeonFunctionDeploymentSnapshot> {
+		return this.call(
+			`deployBranchFunction(${projectId}/${branchId}/${slug})`,
+			async () => {
+				const data = await this.postMultipart(
+					`${branchPreviewPath(projectId, branchId, "functions")}/${encodeURIComponent(slug)}/deployments`,
+					input,
+				);
+				const parsed = functionDeploymentResponseSchema.parse(data);
+				return deploymentToSnapshot(parsed.deployment);
+			},
+			{ projectId, mutating: true },
+		);
+	}
+
+	// ─── Preview: AI Gateway ───────────────────────────────────────────────────
+	//
+	// TODO(neon-deploy): the AI Gateway routes are not yet in the public API spec we wired
+	// the rest of this adapter against. The paths below follow the established branch-scoped
+	// convention (`/projects/{p}/branches/{b}/ai-gateway`); confirm them against the real
+	// API (and the exact enable/disable verb + response shape) before relying on this in
+	// production, and swap to the typed `@neondatabase/api-client` method once it exists.
+
+	async getAiGatewayEnabled(
+		projectId: string,
+		branchId: string,
+	): Promise<boolean> {
+		try {
+			return await this.call(
+				`getAiGatewayEnabled(${projectId}/${branchId})`,
+				async () => {
+					const data = await this.getJson(
+						aiGatewayPath(projectId, branchId),
+					);
+					return aiGatewayEnabledFromResponse(data);
+				},
+				{ projectId },
+			);
+		} catch (err) {
+			if (err instanceof PlatformError && err.code === ErrorCode.NotFound)
+				return false;
+			throw err;
+		}
+	}
+
+	async enableAiGateway(projectId: string, branchId: string): Promise<void> {
+		await this.call(
+			`enableAiGateway(${projectId}/${branchId})`,
+			async () => {
+				await this.postJson(aiGatewayPath(projectId, branchId), {
+					enabled: true,
+				});
+			},
+			{ projectId, mutating: true },
+		);
+	}
+
+	async disableAiGateway(projectId: string, branchId: string): Promise<void> {
+		await this.call(
+			`disableAiGateway(${projectId}/${branchId})`,
+			async () => {
+				await this.deleteJson(aiGatewayPath(projectId, branchId));
+			},
+			{ projectId, mutating: true },
+		);
+	}
+}
+
+function branchPreviewPath(
+	projectId: string,
+	branchId: string,
+	resource: "buckets" | "functions",
+): string {
+	return `/projects/${encodeURIComponent(projectId)}/branches/${encodeURIComponent(branchId)}/${resource}`;
+}
+
+function aiGatewayPath(projectId: string, branchId: string): string {
+	return `/projects/${encodeURIComponent(projectId)}/branches/${encodeURIComponent(branchId)}/ai-gateway`;
+}
+
+function bucketToSnapshot(
+	bucket: z.infer<typeof bucketSchema>,
+): NeonBucketSnapshot {
+	return {
+		name: bucket.name,
+		accessLevel: normalizeBucketAccessLevel(bucket.access_level),
+	};
+}
+
+/**
+ * The Neon API returns `access_level` as a free-form string (per the API guidelines:
+ * responses use plain strings, not enums). Map the known values onto our union and treat
+ * anything else as `private` — the safe default for an unrecognised access level.
+ */
+function normalizeBucketAccessLevel(
+	value: string | undefined,
+): BucketAccessLevel {
+	return value === "public_read" ? "public_read" : "private";
+}
+
+function functionToSnapshot(
+	fn: z.infer<typeof neonFunctionSchema>,
+): NeonFunctionSnapshot {
+	const snapshot: NeonFunctionSnapshot = {
+		id: fn.id,
+		slug: fn.slug,
+		name: fn.name,
+		invocationUrl: fn.invocation_url,
+	};
+	if (fn.active_deployment) {
+		snapshot.activeDeploymentId = fn.active_deployment.id;
+	}
+	return snapshot;
+}
+
+function deploymentToSnapshot(
+	deployment: z.infer<typeof functionDeploymentSchema>,
+): NeonFunctionDeploymentSnapshot {
+	return {
+		id: deployment.id,
+		status: normalizeDeploymentStatus(deployment.status),
+	};
+}
+
+function normalizeDeploymentStatus(
+	value: string,
+): NeonFunctionDeploymentSnapshot["status"] {
+	switch (value) {
+		case "pending":
+		case "building":
+		case "completed":
+		case "failed":
+			return value;
+		default:
+			// Unknown status from a newer server — surface as `pending` rather than throwing,
+			// matching the API guideline that clients treat undocumented enum values leniently.
+			return "pending";
+	}
+}
+
+function aiGatewayEnabledFromResponse(data: unknown): boolean {
+	if (data !== null && typeof data === "object" && "enabled" in data) {
+		return (data as { enabled?: unknown }).enabled === true;
+	}
+	return false;
 }
 
 function neonAuthResponseToSnapshot(

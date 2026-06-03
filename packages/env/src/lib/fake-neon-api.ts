@@ -1,14 +1,19 @@
 import type {
 	ComputeSettings,
 	CreateBranchInput,
+	CreateBucketInput,
 	CreateProjectInput,
+	DeployFunctionInput,
 	GetConnectionUriInput,
 	NeonApi,
 	NeonAuthSnapshot,
 	NeonBranchSnapshot,
+	NeonBucketSnapshot,
 	NeonDataApiSnapshot,
 	NeonDatabaseSnapshot,
 	NeonEndpointSnapshot,
+	NeonFunctionDeploymentSnapshot,
+	NeonFunctionSnapshot,
 	NeonProjectSnapshot,
 	NeonRoleSnapshot,
 	UpdateBranchInput,
@@ -46,6 +51,14 @@ export class FakeNeonApi implements NeonApi {
 	private readonly neonAuth = new Map<string, NeonAuthSnapshot>();
 	/** Keyed by `${projectId}:${branchId}:${databaseName}`. */
 	private readonly neonDataApi = new Map<string, NeonDataApiSnapshot>();
+	/** Preview buckets, keyed by `${projectId}:${branchId}`. */
+	private readonly buckets = new Map<string, NeonBucketSnapshot[]>();
+	/** Preview functions, keyed by `${projectId}:${branchId}`. */
+	private readonly functions = new Map<string, NeonFunctionSnapshot[]>();
+	/** Monotonic per-function deployment counter, keyed by `${projectId}:${branchId}:${slug}`. */
+	private readonly functionDeployments = new Map<string, number>();
+	/** AI Gateway enabled set, keyed by `${projectId}:${branchId}`. */
+	private readonly aiGateway = new Set<string>();
 	readonly history: Array<{ method: string; args: unknown[] }> = [];
 
 	/**
@@ -485,6 +498,223 @@ export class FakeNeonApi implements NeonApi {
 		this.neonDataApi.set(`${projectId}:${branchId}:${databaseName}`, {
 			...snapshot,
 		});
+	}
+
+	// ─── Preview: buckets ──────────────────────────────────────────────────────
+
+	async listBranchBuckets(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonBucketSnapshot[]> {
+		this.history.push({
+			method: "listBranchBuckets",
+			args: [projectId, branchId],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		return (this.buckets.get(`${projectId}:${branchId}`) ?? []).map(clone);
+	}
+
+	async createBranchBucket(
+		projectId: string,
+		branchId: string,
+		input: CreateBucketInput,
+	): Promise<NeonBucketSnapshot> {
+		this.history.push({
+			method: "createBranchBucket",
+			args: [projectId, branchId, input],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		const key = `${projectId}:${branchId}`;
+		const list = this.buckets.get(key) ?? [];
+		if (list.some((b) => b.name === input.name)) {
+			throw new Error(
+				`Fake Neon: bucket '${input.name}' already exists on branch ${branchId}`,
+			);
+		}
+		const snapshot: NeonBucketSnapshot = {
+			name: input.name,
+			accessLevel: input.accessLevel ?? "private",
+		};
+		list.push(snapshot);
+		this.buckets.set(key, list);
+		return clone(snapshot);
+	}
+
+	async deleteBranchBucket(
+		projectId: string,
+		branchId: string,
+		bucketName: string,
+	): Promise<void> {
+		this.history.push({
+			method: "deleteBranchBucket",
+			args: [projectId, branchId, bucketName],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		const key = `${projectId}:${branchId}`;
+		const list = this.buckets.get(key) ?? [];
+		this.buckets.set(
+			key,
+			list.filter((b) => b.name !== bucketName),
+		);
+	}
+
+	// ─── Preview: functions ────────────────────────────────────────────────────
+
+	async listBranchFunctions(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonFunctionSnapshot[]> {
+		this.history.push({
+			method: "listBranchFunctions",
+			args: [projectId, branchId],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		return (this.functions.get(`${projectId}:${branchId}`) ?? []).map(
+			clone,
+		);
+	}
+
+	async createBranchFunction(
+		projectId: string,
+		branchId: string,
+		input: { slug: string; name: string },
+	): Promise<NeonFunctionSnapshot> {
+		this.history.push({
+			method: "createBranchFunction",
+			args: [projectId, branchId, input],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		const key = `${projectId}:${branchId}`;
+		const list = this.functions.get(key) ?? [];
+		if (list.some((f) => f.slug === input.slug)) {
+			throw new Error(
+				`Fake Neon: function '${input.slug}' already exists on branch ${branchId}`,
+			);
+		}
+		const snapshot: NeonFunctionSnapshot = {
+			id: this.allocateId("fn"),
+			slug: input.slug,
+			name: input.name,
+			invocationUrl: `https://${branchId}.fake.neon.tech/functions/${input.slug}`,
+		};
+		list.push(snapshot);
+		this.functions.set(key, list);
+		return clone(snapshot);
+	}
+
+	async deleteBranchFunction(
+		projectId: string,
+		branchId: string,
+		slug: string,
+	): Promise<void> {
+		this.history.push({
+			method: "deleteBranchFunction",
+			args: [projectId, branchId, slug],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		const key = `${projectId}:${branchId}`;
+		const list = this.functions.get(key) ?? [];
+		this.functions.set(
+			key,
+			list.filter((f) => f.slug !== slug),
+		);
+	}
+
+	async deployBranchFunction(
+		projectId: string,
+		branchId: string,
+		slug: string,
+		input: DeployFunctionInput,
+	): Promise<NeonFunctionDeploymentSnapshot> {
+		this.history.push({
+			method: "deployBranchFunction",
+			args: [projectId, branchId, slug, input],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		const key = `${projectId}:${branchId}`;
+		const list = this.functions.get(key) ?? [];
+		const fn = list.find((f) => f.slug === slug);
+		if (!fn) {
+			throw new Error(
+				`Fake Neon: function '${slug}' not found on branch ${branchId}`,
+			);
+		}
+		const deployKey = `${projectId}:${branchId}:${slug}`;
+		const id = (this.functionDeployments.get(deployKey) ?? 0) + 1;
+		this.functionDeployments.set(deployKey, id);
+		fn.activeDeploymentId = id;
+		return { id, status: "completed" };
+	}
+
+	// ─── Preview: AI Gateway ───────────────────────────────────────────────────
+
+	async getAiGatewayEnabled(
+		projectId: string,
+		branchId: string,
+	): Promise<boolean> {
+		this.history.push({
+			method: "getAiGatewayEnabled",
+			args: [projectId, branchId],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		return this.aiGateway.has(`${projectId}:${branchId}`);
+	}
+
+	async enableAiGateway(projectId: string, branchId: string): Promise<void> {
+		this.history.push({
+			method: "enableAiGateway",
+			args: [projectId, branchId],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		this.aiGateway.add(`${projectId}:${branchId}`);
+	}
+
+	async disableAiGateway(projectId: string, branchId: string): Promise<void> {
+		this.history.push({
+			method: "disableAiGateway",
+			args: [projectId, branchId],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		this.aiGateway.delete(`${projectId}:${branchId}`);
+	}
+
+	/** Test helper: attach a bucket to a branch. */
+	seedBucket(
+		projectId: string,
+		branchId: string,
+		snapshot: NeonBucketSnapshot,
+	): void {
+		const key = `${projectId}:${branchId}`;
+		const list = this.buckets.get(key) ?? [];
+		list.push({ ...snapshot });
+		this.buckets.set(key, list);
+	}
+
+	/** Test helper: attach a function to a branch. */
+	seedFunction(
+		projectId: string,
+		branchId: string,
+		snapshot: NeonFunctionSnapshot,
+	): void {
+		const key = `${projectId}:${branchId}`;
+		const list = this.functions.get(key) ?? [];
+		list.push({ ...snapshot });
+		this.functions.set(key, list);
+	}
+
+	/** Test helper: mark the AI Gateway enabled on a branch. */
+	seedAiGateway(projectId: string, branchId: string): void {
+		this.aiGateway.add(`${projectId}:${branchId}`);
 	}
 
 	private requireProject(projectId: string): void {
