@@ -19,6 +19,8 @@ jobs:
                       dir: vite-plugin-neon-new
                     - name: "@neondatabase/config"
                       dir: config
+                    - name: "@neondatabase/config-runtime"
+                      dir: config-runtime
                     - name: "@neondatabase/env"
                       dir: env
         steps:

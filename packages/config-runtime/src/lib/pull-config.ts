@@ -1,14 +1,17 @@
-import { createNeonApiFromOptions } from "./auth.js";
-import { ErrorCode, PlatformError } from "./errors.js";
-import type {
-	NeonApi,
-	NeonBranchSnapshot,
-	NeonBucketSnapshot,
-	NeonEndpointSnapshot,
-	NeonFunctionSnapshot,
-	NeonProjectSnapshot,
-} from "./neon-api.js";
-import type { BranchConfig, BucketConfig, ComputeSettings } from "./types.js";
+import {
+	type BranchConfig,
+	type BucketConfig,
+	type ComputeSettings,
+	createNeonApiFromOptions,
+	ErrorCode,
+	type NeonApi,
+	type NeonBranchSnapshot,
+	type NeonBucketSnapshot,
+	type NeonEndpointSnapshot,
+	type NeonFunctionSnapshot,
+	type NeonProjectSnapshot,
+	PlatformError,
+} from "@neondatabase/config";
 
 export interface PullConfigOptions {
 	/** Neon project id (`<project>`). Required — the API addresses branches by project. */

@@ -1,6 +1,6 @@
+import type { Config, PushResult } from "@neondatabase/config";
 import { type PulledBranchConfig, pullConfig } from "./pull-config.js";
 import { type PushConfigOptions, pushConfig } from "./push-config.js";
-import type { Config, PushResult } from "./types.js";
 
 /**
  * Where to run the operation and how to authenticate. Filesystem- and env-agnostic: the

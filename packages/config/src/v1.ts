@@ -11,26 +11,22 @@
  * });
  * ```
  *
- * Then, from a script or another tool (filesystem- and env-agnostic — pass `projectId`
- * and the target branch explicitly):
+ * This is the **authoring** surface — `defineConfig`, types, schemas, the pure diff engine,
+ * and the Neon API adapter. It is intentionally free of heavy/native dependencies so that
+ * importing it from `neon.ts` stays cheap and bundler-safe.
+ *
+ * The imperative operations (`inspect` / `plan` / `apply`, `pushConfig` / `pullConfig`) and
+ * function bundling/deploy live in **`@neondatabase/config-runtime`**, which depends on this
+ * package and pulls in `esbuild`. Import that from your CLI / CI, not from `neon.ts`:
  * ```ts
  * import config from "../neon";
- * import { inspect, plan, apply } from "@neondatabase/config/v1";
- *
- * const target = { projectId: "patient-art-12345", branchId: "main" };
- * const diff = await plan(config, target);     // dry-run plan, no mutations
- * await apply(config, target);                 // apply the policy to a branch
- * const live = await inspect(target);          // read the branch's live state
+ * import { inspect, plan, apply } from "@neondatabase/config-runtime/v1";
  * ```
  *
- * `plan` / `apply` mirror the Terraform mental model. No CLI commands are shipped here,
- * and no `.neon` files or `NEON_*` env vars are read — resolve project/branch in your CLI
- * (e.g. neonctl) and pass them in. This package is functions only.
- *
  * Surface guidelines:
- * - Top-level: the operations callers reach for daily (`inspect`, `plan`, `apply`,
- *   `defineConfig`), plus the lower-level engine (`pushConfig` / `pullConfig`), the
- *   `PlatformError` base class + `ErrorCode` enum, and the types those operations produce.
+ * - Top-level: `defineConfig` / `resolveConfig`, the pure `diffConfig` engine, the
+ *   `createRealNeonApi` adapter + `NeonApi` types, the config loader, the `PlatformError`
+ *   base class + `ErrorCode` enum, and the config types used in `neon.ts`.
  * - `errors` namespace: specific `PlatformError` subclasses (`ConfigLoadError`,
  *   `PushConflictError`, …).
  * - `schemas` namespace: the zod schemas underlying `defineConfig`.
@@ -85,6 +81,16 @@ export const schemas = {
 // ─── Lower-level adapters ──────────────────────────────────────────────────────
 export { createNeonApiFromOptions, resolveApiKey } from "./lib/auth.js";
 export { defineConfig, resolveConfig } from "./lib/define-config.js";
+// ─── Diff engine (pure; consumed by @neondatabase/config-runtime) ─────────────
+export type {
+	DiffOptions,
+	DiffResult,
+	PlanStep,
+	RemotePreviewState,
+	RemoteServiceState,
+	RemoteState,
+} from "./lib/diff.js";
+export { diffConfig } from "./lib/diff.js";
 // ─── Errors ────────────────────────────────────────────────────────────────────
 export {
 	ConfigLoadError,
@@ -118,24 +124,6 @@ export type {
 	UpdateBranchInput,
 } from "./lib/neon-api.js";
 export { createRealNeonApi } from "./lib/neon-api-real.js";
-// ─── Operations (intent-revealing entry points) ───────────────────────────────
-export type {
-	ApplyOptions,
-	ConfigOperationOptions,
-} from "./lib/operations.js";
-export { apply, inspect, plan } from "./lib/operations.js";
-// ─── Engine (advanced / programmatic use) ─────────────────────────────────────
-export type {
-	PullConfigOptions,
-	PulledBranchConfig,
-	PulledPreview,
-} from "./lib/pull-config.js";
-export { pullConfig } from "./lib/pull-config.js";
-export type {
-	PushConfigOptions,
-	PushConfirmContext,
-} from "./lib/push-config.js";
-export { pushConfig } from "./lib/push-config.js";
 // ─── Config types (used in neon.ts and in operation return values) ────────────
 export type {
 	AppliedChange,

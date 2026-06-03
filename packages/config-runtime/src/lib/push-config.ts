@@ -1,21 +1,22 @@
-import { createNeonApiFromOptions } from "./auth.js";
-import { resolveConfig } from "./define-config.js";
 import {
+	type AppliedChange,
+	type Config,
+	createNeonApiFromOptions,
 	diffConfig,
-	type PlanStep,
-	type RemotePreviewState,
-	type RemoteServiceState,
-	type RemoteState,
-} from "./diff.js";
-import {
 	ErrorCode,
+	type NeonApi,
+	type NeonBranchSnapshot,
+	type PlanStep,
 	PlatformError,
 	PushAbortedError,
 	PushConflictError,
-} from "./errors.js";
+	type PushResult,
+	type RemotePreviewState,
+	type RemoteServiceState,
+	type RemoteState,
+	resolveConfig,
+} from "@neondatabase/config";
 import { buildFunctionBundle } from "./function-bundle.js";
-import type { NeonApi, NeonBranchSnapshot } from "./neon-api.js";
-import type { AppliedChange, Config, PushResult } from "./types.js";
 
 export interface PushConfigOptions {
 	/**

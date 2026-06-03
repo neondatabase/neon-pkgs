@@ -1,8 +1,27 @@
-import { describe, expect, test } from "vitest";
-import { defineConfig } from "./define-config.js";
-import { ErrorCode } from "./errors.js";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { defineConfig, ErrorCode } from "@neondatabase/config";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { FakeNeonApi } from "./fake-neon-api.js";
 import { pushConfig } from "./push-config.js";
+
+// A real on-disk function source so `buildFunctionBundle` (real esbuild) has something to
+// bundle. We avoid mocks per the project's no-mocks rule: the deploy path runs esbuild for
+// real against this trivial handler.
+let fnSource: string;
+let fnTmpDir: string;
+beforeAll(() => {
+	fnTmpDir = mkdtempSync(join(tmpdir(), "neon-fn-"));
+	fnSource = join(fnTmpDir, "hello-world.ts");
+	writeFileSync(
+		fnSource,
+		"export default { fetch(_req: Request): Response { return new Response('ok'); } };\n",
+	);
+});
+afterAll(() => {
+	rmSync(fnTmpDir, { recursive: true, force: true });
+});
 
 function seededFake(opts?: { protected?: boolean }) {
 	const api = new FakeNeonApi();
@@ -254,7 +273,7 @@ describe("pushConfig", () => {
 					{
 						name: "Hello World",
 						slug: "hello-world",
-						source: "./functions/hello-world.ts",
+						source: fnSource,
 						env: { RESEND_API_KEY: "re_abc" },
 					},
 				],
@@ -323,7 +342,7 @@ describe("pushConfig", () => {
 					{
 						name: "Hello World",
 						slug: "hello-world",
-						source: "./functions/hello-world.ts",
+						source: fnSource,
 					},
 				],
 			},

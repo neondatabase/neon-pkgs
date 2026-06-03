@@ -1,6 +1,5 @@
+import { defineConfig, ErrorCode } from "@neondatabase/config";
 import { describe, expect, test } from "vitest";
-import { defineConfig } from "./define-config.js";
-import { ErrorCode } from "./errors.js";
 import { FakeNeonApi } from "./fake-neon-api.js";
 import { apply, inspect, plan } from "./operations.js";
 

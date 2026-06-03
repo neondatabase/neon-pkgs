@@ -1,25 +1,33 @@
 import { describe, expect, test } from "vitest";
 import {
-	apply,
+	createRealNeonApi,
 	defineConfig,
-	inspect,
-	plan,
-	pullConfig,
-	pushConfig,
+	diffConfig,
+	loadConfigFromFile,
+	resolveConfig,
 } from "./v1.js";
 
 describe("v1 surface", () => {
-	test("exports the config operations and policy helper", () => {
+	test("exports the authoring helpers, pure diff engine, adapter, and loader", () => {
 		const config = defineConfig((branch) => ({
 			parent: branch.name === "main" ? undefined : "main",
 		}));
 		expect(config({ name: "dev", exists: false })).toEqual({
 			parent: "main",
 		});
-		expect(inspect).toBeTypeOf("function");
-		expect(plan).toBeTypeOf("function");
-		expect(apply).toBeTypeOf("function");
-		expect(pushConfig).toBeTypeOf("function");
-		expect(pullConfig).toBeTypeOf("function");
+		// Authoring + pure core stays in @neondatabase/config.
+		expect(resolveConfig).toBeTypeOf("function");
+		expect(diffConfig).toBeTypeOf("function");
+		expect(createRealNeonApi).toBeTypeOf("function");
+		expect(loadConfigFromFile).toBeTypeOf("function");
+	});
+
+	test("does not export the imperative operations (they live in @neondatabase/config-runtime)", async () => {
+		const surface = await import("./v1.js");
+		expect("apply" in surface).toBe(false);
+		expect("plan" in surface).toBe(false);
+		expect("inspect" in surface).toBe(false);
+		expect("pushConfig" in surface).toBe(false);
+		expect("pullConfig" in surface).toBe(false);
 	});
 });

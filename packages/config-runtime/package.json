@@ -1,0 +1,72 @@
+{
+	"name": "@neondatabase/config-runtime",
+	"version": "0.0.0",
+	"description": "Imperative runtime for @neondatabase/config: inspect/plan/apply a neon.ts policy against the Neon API and bundle + deploy Neon Functions. Pulls in esbuild; import this from CLIs and CI, not from neon.ts.",
+	"keywords": [
+		"neon",
+		"database",
+		"postgres",
+		"iac",
+		"config-as-code",
+		"platform",
+		"deploy"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/neondatabase/neon-pkgs.git"
+	},
+	"license": "Apache-2.0",
+	"author": {
+		"name": "Neon",
+		"url": "https://neon.com"
+	},
+	"type": "module",
+	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		},
+		"./v1": {
+			"types": "./dist/v1.d.ts",
+			"import": "./dist/v1.js",
+			"default": "./dist/v1.js"
+		}
+	},
+	"files": [
+		"README.md",
+		"dist/",
+		"package.json"
+	],
+	"scripts": {
+		"build": "tsc --noEmit && tsdown",
+		"prepare": "npm run build",
+		"test": "vitest --passWithNoTests",
+		"test:ci": "vitest run --passWithNoTests",
+		"test:e2e": "vitest run --config vitest.e2e.config.ts",
+		"tsc": "tsc"
+	},
+	"devDependencies": {
+		"@neondatabase/api-client": "^2.7.1",
+		"@types/node": "catalog:",
+		"@vitest/coverage-v8": "3.0.9",
+		"console-fail-test": "0.5.0",
+		"tsdown": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	},
+	"dependencies": {
+		"@neondatabase/config": "workspace:*",
+		"esbuild": "^0.25.0",
+		"fflate": "^0.8.2"
+	},
+	"packageManager": "pnpm@10.4.0",
+	"engines": {
+		"node": ">=22"
+	},
+	"publishConfig": {
+		"provenance": false
+	}
+}
