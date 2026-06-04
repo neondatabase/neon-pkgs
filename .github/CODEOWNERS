@@ -1,0 +1,15 @@
+# CODEOWNERS — review gate for security-sensitive supply-chain files.
+#
+# To ENFORCE this, enable branch protection on `main` with
+# "Require review from Code Owners". Replace the individual owners below with a
+# team handle (e.g. @neondatabase/neon-pkgs-maintainers) once one exists.
+
+# CI/CD: workflows, composite actions, Dependabot config, CODEOWNERS itself
+/.github/                @atilafassina @rodneyshibu
+
+# Supply-chain manifests and package-manager config
+/package.json            @atilafassina @rodneyshibu
+/pnpm-lock.yaml          @atilafassina @rodneyshibu
+/pnpm-workspace.yaml     @atilafassina @rodneyshibu
+/.npmrc                  @atilafassina @rodneyshibu
+/mise.toml               @atilafassina @rodneyshibu

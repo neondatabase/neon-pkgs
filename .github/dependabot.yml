@@ -1,0 +1,30 @@
+version: 2
+updates:
+  # GitHub Actions — keep the SHA-pinned actions (workflows + composite actions) current.
+  # Dependabot updates the pinned SHA and the `# vX.Y.Z` comment together.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  # npm — root workspace plus every package/example manifest.
+  - package-ecosystem: npm
+    directories:
+      - /
+      - /packages/*
+      - /examples/*
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 10
+    groups:
+      npm:
+        patterns:
+          - "*"

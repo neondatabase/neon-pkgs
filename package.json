@@ -22,7 +22,7 @@
 		"lint-staged": "15.5.0",
 		"typescript": "catalog:"
 	},
-	"packageManager": "pnpm@10.4.0",
+	"packageManager": "pnpm@10.30.3",
 	"engines": {
 		"node": ">=22"
 	}

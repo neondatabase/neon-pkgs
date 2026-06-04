@@ -1,36 +1,143 @@
+name: Post-release (tag + handoff)
+
+# Stage 2 trigger of the two-stage secure publishing pipeline (mirrors neondatabase/neonctl).
+#
+# Fires when a prepare-release PR merges to main. It:
+#   1. Creates + pushes a `name@version` git tag for every non-private workspace
+#      package whose tag does not yet exist (i.e. the ones just bumped)
+#   2. Comments on the merged PR + writes a run summary with Stage 2 dispatch
+#      instructions (build + scan + publish to npm via OIDC Trusted Publishing)
+#
+# Publishing happens in databricks/secure-public-registry-releases-eng — we do
+# NOT build or publish from this public repo, and no npm token lives here.
+
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: post-release
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash -euo pipefail {0}
+
 jobs:
-  post_release:
-    runs-on: ubuntu-latest
+  tag-and-handoff:
+    if: "startsWith(github.event.head_commit.message, 'chore: release packages')"
+    runs-on:
+      group: neondatabase-protected-runner-group
+      labels: linux-ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # push tags
+      pull-requests: write # comment on the merged PR
+
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
         with:
           egress-policy: audit
 
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      # Push tags under the release App identity (same App as Stage 1).
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
-      - run: echo "npm_version=$(npm pkg get version | tr -d '"')" >> "$GITHUB_ENV"
-      - uses: apexskier/github-release-commenter@3bd413ad5e1d603bfe2282f9f06f2bdcec079327 # v1.3.6
-        with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          comment-template: |
-            :tada: This is included in version {release_link} :tada:
+          token: ${{ steps.app-token.outputs.token }}
 
-            The release is available on:
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-            * [GitHub releases](https://github.com/neondatabase/neondb/releases/tag/{release_tag})
-            * [npm package (@latest dist-tag)](https://www.npmjs.com/package/neondb/v/${{ env.npm_version }})
+      - name: Create + push per-package tags
+        id: tags
+        run: |
+          created=()
+          for pkgjson in packages/*/package.json; do
+            name=$(jq -r '.name' "$pkgjson")
+            version=$(jq -r '.version' "$pkgjson")
+            private=$(jq -r '.private // false' "$pkgjson")
+            if [[ "$private" == "true" || -z "$name" || "$name" == "null" ]]; then
+              continue
+            fi
+            tag="${name}@${version}"
+            if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+              echo "Tag ${tag} already exists — skipping."
+              continue
+            fi
+            git tag -a "${tag}" -m "Release ${tag}" "${GITHUB_SHA}"
+            created+=("${tag}")
+            echo "Prepared tag ${tag}"
+          done
 
-            Cheers! 📦🚀
+          if [[ ${#created[@]} -eq 0 ]]; then
+            echo "No new package tags to create."
+            echo "tags=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
-name: Post Release
+          git push origin "${created[@]}"
+          printf 'Pushed tags: %s\n' "${created[*]}"
+          {
+            echo "tags<<TAGS_EOF"
+            printf '%s\n' "${created[@]}"
+            echo "TAGS_EOF"
+          } >> "$GITHUB_OUTPUT"
 
-on:
-  release:
-    types:
-      - published
+      - name: Comment handoff on merged PR + write summary
+        if: steps.tags.outputs.tags != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAGS: ${{ steps.tags.outputs.tags }}
+          MSG: ${{ github.event.head_commit.message }}
+        run: |
+          pr_num=$(printf '%s' "$MSG" | head -n 1 | grep -oE '\(#[0-9]+\)' | tail -1 | grep -oE '[0-9]+' || true)
+          {
+            echo ":rocket: **Tagged these packages on the merge commit \`${GITHUB_SHA}\`:**"
+            echo ""
+            while IFS= read -r t; do [ -z "$t" ] || echo "- \`${t}\`"; done <<< "$TAGS"
+            echo ""
+            echo "### Stage 2 — build, scan & publish (npm via OIDC Trusted Publishing)"
+            echo ""
+            echo "> :warning: **Provisional:** confirm the workflow filename + input names in \`databricks/secure-public-registry-releases-eng\` (and that npm Trusted Publishing trusts that workflow for each package)."
+            echo ""
+            echo "Trigger Stage 2 in \`databricks/secure-public-registry-releases-eng\`:"
+            echo ""
+            echo '```bash'
+            echo "# Dry run first:"
+            echo "gh workflow run release-neondatabase-neon-pkgs.yml \\"
+            echo "  --repo databricks/secure-public-registry-releases-eng \\"
+            echo "  --ref main \\"
+            echo "  -f ref=${GITHUB_SHA} \\"
+            echo "  -f dry-run=true"
+            echo ""
+            echo "# Real publish:"
+            echo "gh workflow run release-neondatabase-neon-pkgs.yml \\"
+            echo "  --repo databricks/secure-public-registry-releases-eng \\"
+            echo "  --ref main \\"
+            echo "  -f ref=${GITHUB_SHA} \\"
+            echo "  -f dry-run=false"
+            echo '```'
+          } > handoff.md
 
-permissions:
-  issues: write
-  pull-requests: write
+          cat handoff.md >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ -n "$pr_num" ]]; then
+            gh pr comment "$pr_num" --repo "$GITHUB_REPOSITORY" --body-file handoff.md
+          else
+            echo "No PR number parsed from commit subject; skipped PR comment."
+          fi

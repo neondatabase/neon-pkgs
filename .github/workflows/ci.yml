@@ -36,9 +36,12 @@ jobs:
             - uses: ./.github/actions/prepare
             - run: pnpm test:ci --coverage
             - if: always()
-              uses: codecov/codecov-action@ab904c41d6ece82784817410c45d8b8c02684457 # v3.1.6
+              uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe # v5.5.4
 
 name: CI
+
+permissions:
+    contents: read
 
 on:
     pull_request: ~
