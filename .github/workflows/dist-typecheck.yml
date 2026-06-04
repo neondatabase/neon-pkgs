@@ -12,7 +12,9 @@ permissions:
 jobs:
     typecheck-dist:
         name: Check ${{ matrix.name }} distributed types
-        runs-on: ubuntu-latest
+        runs-on:
+            group: neondatabase-protected-runner-group
+            labels: linux-ubuntu-latest
         strategy:
             matrix:
                 include:
