@@ -157,7 +157,6 @@ export interface DeployFunctionInput {
 	bundle: Uint8Array;
 	runtime: FunctionRuntime;
 	memoryMib: FunctionMemoryMib;
-	concurrency: number;
 	environment: Record<string, string>;
 }
 

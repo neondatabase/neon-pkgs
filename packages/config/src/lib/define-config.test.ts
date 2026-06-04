@@ -95,7 +95,6 @@ describe("resolveConfig", () => {
 					env: { RESEND_API_KEY: "re_abc" },
 					runtime: "nodejs24",
 					memoryMib: 512,
-					concurrency: 1,
 				},
 			],
 			buckets: [{ name: "uploads", access: "private" }],

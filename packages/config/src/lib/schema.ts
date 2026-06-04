@@ -104,7 +104,6 @@ export const functionConfigSchema = z.strictObject({
 			z.literal(8192),
 		])
 		.optional(),
-	concurrency: z.number().int().min(1).max(1000).optional(),
 });
 
 export const bucketConfigSchema = z.strictObject({

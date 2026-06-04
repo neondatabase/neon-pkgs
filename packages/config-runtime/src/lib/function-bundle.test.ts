@@ -22,7 +22,6 @@ function fn(source: string): ResolvedFunctionConfig {
 		env: {},
 		runtime: "nodejs24",
 		memoryMib: 512,
-		concurrency: 1,
 	};
 }
 

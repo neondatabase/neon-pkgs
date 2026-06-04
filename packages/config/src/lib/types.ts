@@ -124,8 +124,6 @@ export interface FunctionConfig {
 	runtime?: FunctionRuntime;
 	/** Memory allotted to each invocation, in MiB. Defaults to `512`. */
 	memoryMib?: FunctionMemoryMib;
-	/** Maximum concurrent invocations (1–1000). Defaults to `1`. */
-	concurrency?: number;
 }
 
 /** Anonymous-access level for a branchable object-storage bucket. */
@@ -183,8 +181,8 @@ export type BranchConfig = BranchConfigBase & BranchServiceConfig;
 export type Config = (branch: BranchTarget) => BranchConfig;
 
 /**
- * A function with all deploy defaults applied. `resolveConfig` fills in `runtime`,
- * `memoryMib`, and `concurrency` so downstream diff/apply never has to re-derive them.
+ * A function with all deploy defaults applied. `resolveConfig` fills in `runtime` and
+ * `memoryMib` so downstream diff/apply never has to re-derive them.
  */
 export interface ResolvedFunctionConfig {
 	slug: string;
@@ -193,7 +191,6 @@ export interface ResolvedFunctionConfig {
 	env: Record<string, string>;
 	runtime: FunctionRuntime;
 	memoryMib: FunctionMemoryMib;
-	concurrency: number;
 }
 
 /** A bucket with its access level defaulted to `private`. */

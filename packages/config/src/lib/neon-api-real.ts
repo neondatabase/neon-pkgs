@@ -596,7 +596,9 @@ class RealNeonApi implements NeonApi {
 			"bundle.zip",
 		);
 		form.set("memory_mib", String(input.memoryMib));
-		form.set("concurrency", String(input.concurrency));
+		// Keep concurrency internal for now. The API requires it, but the public
+		// neon.ts config surface intentionally does not expose it yet.
+		form.set("concurrency", "1");
 		form.set("runtime", input.runtime);
 		for (const [key, value] of Object.entries(input.environment)) {
 			form.set(`environment[${key}]`, value);

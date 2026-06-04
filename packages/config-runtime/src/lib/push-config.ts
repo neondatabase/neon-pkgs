@@ -338,7 +338,6 @@ function synthesizeAppliedChange(step: PlanStep): AppliedChange {
 					source: step.fn.source,
 					runtime: step.fn.runtime,
 					memoryMib: step.fn.memoryMib,
-					concurrency: step.fn.concurrency,
 				},
 			};
 		case "enable-ai-gateway":
@@ -590,7 +589,6 @@ async function applyStep(
 					bundle,
 					runtime: step.fn.runtime,
 					memoryMib: step.fn.memoryMib,
-					concurrency: step.fn.concurrency,
 					environment: step.fn.env,
 				},
 			);
@@ -604,7 +602,6 @@ async function applyStep(
 					source: step.fn.source,
 					runtime: step.fn.runtime,
 					memoryMib: step.fn.memoryMib,
-					concurrency: step.fn.concurrency,
 					deploymentId: deployment.id,
 				},
 			};

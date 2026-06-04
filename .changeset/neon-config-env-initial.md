@@ -12,7 +12,7 @@ Initial release of the Config-as-Code packages for the Neon Platform.
 - `diffConfig(...)` — the pure diff engine (desired policy vs. live state → plan steps).
 - `createRealNeonApi` + the `NeonApi` interface, the config loader, and a fully typed, actionable error surface (every error carries a stable `code` and structured `details`).
 - A `preview` block for upcoming Neon Platform features (all backed by `x-stability-level: beta` endpoints):
-  - **`preview.functions`** — deploy worker/Vercel-style handlers (`export default { fetch }` or `export async function handler(req)`) from a `source` file path. Supports per-function `env` (validated as defined strings), `runtime` (`nodejs24`), `memoryMib`, and `concurrency`, with sane defaults.
+  - **`preview.functions`** — deploy worker/Vercel-style handlers (`export default { fetch }` or `export async function handler(req)`) from a `source` file path. Supports per-function `env` (validated as defined strings), `runtime` (`nodejs24`), and `memoryMib`, with sane defaults.
   - **`preview.buckets`** — branchable object-storage buckets, each `{ name, access?: "private" | "public_read" }` (defaults to `private`).
   - **`preview.aiGateway`** — an `{ enabled }` toggle, mirroring the `auth` / `dataApi` semantics.
 

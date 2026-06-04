@@ -13,7 +13,6 @@ import type {
 /** Default deploy parameters applied to functions that omit them in `neon.ts`. */
 const DEFAULT_FUNCTION_RUNTIME = "nodejs24" as const;
 const DEFAULT_FUNCTION_MEMORY_MIB = 512 as const;
-const DEFAULT_FUNCTION_CONCURRENCY = 1 as const;
 
 const REGION_PREFIX = /^(aws|azure|gcp)-/;
 
@@ -139,7 +138,6 @@ function resolveFunctionConfig(fn: FunctionConfig) {
 		env: { ...(fn.env ?? {}) },
 		runtime: fn.runtime ?? DEFAULT_FUNCTION_RUNTIME,
 		memoryMib: fn.memoryMib ?? DEFAULT_FUNCTION_MEMORY_MIB,
-		concurrency: fn.concurrency ?? DEFAULT_FUNCTION_CONCURRENCY,
 	};
 }
 
