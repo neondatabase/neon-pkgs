@@ -38,7 +38,4 @@ jobs:
               run: pnpm --filter ${{ matrix.name }}... build
 
             - name: Check types with @arethetypeswrong/cli
-              # Pinned to the 0.18.x line (matches @arethetypeswrong/core in pnpm-lock.yaml) so CI
-              # no longer pulls @latest. Stronger follow-up: add @arethetypeswrong/cli to
-              # devDependencies so it is integrity-pinned in the lockfile and run via `pnpm exec`.
-              run: pnpx @arethetypeswrong/cli@^0.18.0 --pack packages/${{ matrix.dir }} --profile esm-only
+              run: pnpm exec attw --pack packages/${{ matrix.dir }} --profile esm-only

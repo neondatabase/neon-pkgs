@@ -15,6 +15,7 @@
 		"*": "biome check --write --no-errors-on-unmatched --files-ignore-unknown=true"
 	},
 	"devDependencies": {
+		"@arethetypeswrong/cli": "^0.18.2",
 		"@biomejs/biome": "catalog:",
 		"@changesets/cli": "^2.29.7",
 		"console-fail-test": "0.5.0",
