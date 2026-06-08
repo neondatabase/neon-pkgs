@@ -48,4 +48,121 @@ describe("pullConfig", () => {
 			postgres: { computeSettings: { autoscalingLimitMaxCu: 2 } },
 		});
 	});
+
+	test("omits auth/dataApi when neither integration is enabled", async () => {
+		const api = new FakeNeonApi();
+		const projectId = "proj-none";
+		api.seedProject({
+			project: {
+				id: projectId,
+				name: "none",
+				regionId: "aws-us-east-1",
+				pgVersion: 17,
+			},
+			branches: [
+				{ branch: { id: "br-main", name: "main", isDefault: true } },
+			],
+		});
+
+		const pulled = await pullConfig({
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+
+		expect(pulled.config.auth).toBeUndefined();
+		expect(pulled.config.dataApi).toBeUndefined();
+	});
+
+	test("sets config.auth when a Neon Auth integration is enabled", async () => {
+		const api = new FakeNeonApi();
+		const projectId = "proj-auth";
+		api.seedProject({
+			project: {
+				id: projectId,
+				name: "auth",
+				regionId: "aws-us-east-1",
+				pgVersion: 17,
+			},
+			branches: [
+				{ branch: { id: "br-main", name: "main", isDefault: true } },
+			],
+		});
+		api.seedNeonAuth(projectId, "br-main", {
+			projectId: "auth-proj",
+			jwksUrl: "https://example.test/jwks",
+			baseUrl: "https://example.test/auth",
+		});
+
+		const pulled = await pullConfig({
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+
+		expect(pulled.config.auth).toEqual({});
+		expect(pulled.config.dataApi).toBeUndefined();
+	});
+
+	test("sets config.dataApi when a Data API integration is enabled", async () => {
+		const api = new FakeNeonApi();
+		const projectId = "proj-dataapi";
+		api.seedProject({
+			project: {
+				id: projectId,
+				name: "dataapi",
+				regionId: "aws-us-east-1",
+				pgVersion: 17,
+			},
+			branches: [
+				{ branch: { id: "br-main", name: "main", isDefault: true } },
+			],
+		});
+		// The branch is seeded with a default `neondb` database, which pullConfig probes.
+		api.seedNeonDataApi(projectId, "br-main", "neondb", {
+			url: "https://example.test/data-api/neondb",
+		});
+
+		const pulled = await pullConfig({
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+
+		expect(pulled.config.dataApi).toEqual({});
+		expect(pulled.config.auth).toBeUndefined();
+	});
+
+	test("sets both auth and dataApi when both are enabled", async () => {
+		const api = new FakeNeonApi();
+		const projectId = "proj-both";
+		api.seedProject({
+			project: {
+				id: projectId,
+				name: "both",
+				regionId: "aws-us-east-1",
+				pgVersion: 17,
+			},
+			branches: [
+				{ branch: { id: "br-main", name: "main", isDefault: true } },
+			],
+		});
+		api.seedNeonAuth(projectId, "br-main", {
+			projectId: "auth-proj",
+			jwksUrl: "https://example.test/jwks",
+			baseUrl: "https://example.test/auth",
+		});
+		api.seedNeonDataApi(projectId, "br-main", "neondb", {
+			url: "https://example.test/data-api/neondb",
+		});
+
+		const pulled = await pullConfig({
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+
+		expect(pulled.config.auth).toEqual({});
+		expect(pulled.config.dataApi).toEqual({});
+	});
 });
