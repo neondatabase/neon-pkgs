@@ -95,21 +95,15 @@ const functionEnvSchema = z.record(z.string(), z.string());
 const devPortSchema = z.number().int().min(1).max(65535);
 
 /**
- * Local-dev settings for a function (`neon dev` only; never affects deploy). Modeled as a
- * union of two strict shapes so the inferred type *is* the {@link FunctionDevConfig}
- * discriminated union — `portless: true` carries a required `port` (portless needs a concrete
- * port to map its `slug.localhost` name to); otherwise `port` is optional.
+ * Local-dev settings for a function (`neon dev` only; never affects deploy). `port` and
+ * `portless` are independent: when `portless` is true, portless assigns the port itself
+ * (so `port` is ignored); otherwise `port` is bound exactly when set, or a free port is
+ * found when omitted.
  */
-const functionDevConfigSchema = z.union([
-	z.strictObject({
-		portless: z.literal(true),
-		port: devPortSchema,
-	}),
-	z.strictObject({
-		portless: z.literal(false).optional(),
-		port: devPortSchema.optional(),
-	}),
-]);
+const functionDevConfigSchema = z.strictObject({
+	port: devPortSchema.optional(),
+	portless: z.boolean().optional(),
+});
 
 export const functionConfigSchema = z.strictObject({
 	slug: functionSlugSchema,

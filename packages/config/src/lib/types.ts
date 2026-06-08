@@ -89,18 +89,26 @@ export type FunctionMemoryMib = 256 | 512 | 1024 | 2048 | 4096 | 8192;
  * Local-development settings for a function, used by `neon dev` when it serves every
  * function declared in `neon.ts` (i.e. invoked with no `--source`). Never affects deploy.
  *
- * Typed as a discriminated union so the `portless` ⇒ `port` requirement is enforced at
- * compile time: a `portless` route needs a concrete port to map its `slug.localhost`
- * name to, so `port` is mandatory when `portless: true`.
+ * `port` and `portless` are independent:
  *
- * - `{ portless: true; port }` — wrap this function with `portless run <slug> …` so it gets
- *   a stable `slug.localhost` URL. `port` is required.
- * - `{ portless?: false; port? }` — serve directly. `port` is optional: when set it is bound
- *   exactly (and `neon dev` fails loudly if it is taken); when omitted a free port is found.
+ * - `portless: true` — wrap this function's local server with `portless <slug> …` so it gets
+ *   a stable `slug.localhost` URL. Portless assigns the port itself (it injects `PORT`), so
+ *   `port` is ignored in this mode.
+ * - otherwise — serve directly. `port`, when set, is bound exactly (and `neon dev` fails
+ *   loudly if it is taken); when omitted a free port is found automatically.
  */
-export type FunctionDevConfig =
-	| { portless: true; port: number }
-	| { portless?: false; port?: number };
+export interface FunctionDevConfig {
+	/**
+	 * Port the local server binds. Bound exactly (fails if taken) when set; a free port is
+	 * found when omitted. Ignored when `portless` is true (portless assigns the port).
+	 */
+	port?: number;
+	/**
+	 * Expose this function via `portless` (a stable `slug.localhost` URL). Requires the
+	 * `portless` binary on PATH. Portless assigns the port, so `port` is ignored here.
+	 */
+	portless?: boolean;
+}
 
 /**
  * A single Neon Function deployed to a branch (Preview feature).

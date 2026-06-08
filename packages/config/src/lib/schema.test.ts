@@ -96,7 +96,7 @@ describe("branchConfigSchema", () => {
 		expect(result.success).toBe(true);
 	});
 
-	test("rejects dev.portless true without a port", () => {
+	test("accepts dev.portless true without a port (portless assigns the port)", () => {
 		const result = branchConfigSchema.safeParse({
 			preview: {
 				functions: [
@@ -109,7 +109,7 @@ describe("branchConfigSchema", () => {
 				],
 			},
 		});
-		expect(result.success).toBe(false);
+		expect(result.success).toBe(true);
 	});
 
 	test("rejects an out-of-range dev.port", () => {

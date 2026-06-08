@@ -1,5 +1,11 @@
 # @neondatabase/config
 
+## 0.2.1
+
+### Patch Changes
+
+- Decouple `dev.portless` from `dev.port` on `FunctionConfig`. `portless` and `port` are now independent optional fields rather than a discriminated union requiring `port` when `portless` is true. Portless assigns the local port itself (it injects `PORT`), so a `portless` function does not — and should not — specify one. `port` still binds exactly when set (and `neon dev` fails if it is taken) or selects a free port when omitted, for non-portless functions.
+
 ## 0.2.0
 
 ### Minor Changes
