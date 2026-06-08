@@ -68,6 +68,81 @@ describe("branchConfigSchema", () => {
 		});
 		expect(result.success).toBe(false);
 	});
+
+	test("accepts a function dev block with port and portless", () => {
+		const result = branchConfigSchema.safeParse({
+			preview: {
+				functions: [
+					{
+						slug: "hello-world",
+						name: "Hello World",
+						source: "./hello.ts",
+						dev: { port: 8787, portless: true },
+					},
+				],
+			},
+		});
+		expect(result.success).toBe(true);
+	});
+
+	test("accepts dev with no port when portless is not set", () => {
+		const result = branchConfigSchema.safeParse({
+			preview: {
+				functions: [
+					{ slug: "f", name: "F", source: "./f.ts", dev: {} },
+				],
+			},
+		});
+		expect(result.success).toBe(true);
+	});
+
+	test("rejects dev.portless true without a port", () => {
+		const result = branchConfigSchema.safeParse({
+			preview: {
+				functions: [
+					{
+						slug: "f",
+						name: "F",
+						source: "./f.ts",
+						dev: { portless: true },
+					},
+				],
+			},
+		});
+		expect(result.success).toBe(false);
+	});
+
+	test("rejects an out-of-range dev.port", () => {
+		const result = branchConfigSchema.safeParse({
+			preview: {
+				functions: [
+					{
+						slug: "f",
+						name: "F",
+						source: "./f.ts",
+						dev: { port: 0 },
+					},
+				],
+			},
+		});
+		expect(result.success).toBe(false);
+	});
+
+	test("rejects an unknown key inside dev", () => {
+		const result = branchConfigSchema.safeParse({
+			preview: {
+				functions: [
+					{
+						slug: "f",
+						name: "F",
+						source: "./f.ts",
+						dev: { port: 8787, typo: true },
+					},
+				],
+			},
+		});
+		expect(result.success).toBe(false);
+	});
 });
 
 describe("formatZodIssues", () => {

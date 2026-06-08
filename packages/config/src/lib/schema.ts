@@ -88,6 +88,29 @@ const functionSlugSchema = z
  */
 const functionEnvSchema = z.record(z.string(), z.string());
 
+/**
+ * TCP port for a function's local dev server. Excludes 0 (which means "any port" to the OS
+ * — `neon dev` expresses "pick one for me" by omitting `port`, not by passing 0).
+ */
+const devPortSchema = z.number().int().min(1).max(65535);
+
+/**
+ * Local-dev settings for a function (`neon dev` only; never affects deploy). Modeled as a
+ * union of two strict shapes so the inferred type *is* the {@link FunctionDevConfig}
+ * discriminated union — `portless: true` carries a required `port` (portless needs a concrete
+ * port to map its `slug.localhost` name to); otherwise `port` is optional.
+ */
+const functionDevConfigSchema = z.union([
+	z.strictObject({
+		portless: z.literal(true),
+		port: devPortSchema,
+	}),
+	z.strictObject({
+		portless: z.literal(false).optional(),
+		port: devPortSchema.optional(),
+	}),
+]);
+
 export const functionConfigSchema = z.strictObject({
 	slug: functionSlugSchema,
 	name: z.string().min(1).max(255),
@@ -104,6 +127,7 @@ export const functionConfigSchema = z.strictObject({
 			z.literal(8192),
 		])
 		.optional(),
+	dev: functionDevConfigSchema.optional(),
 });
 
 export const bucketConfigSchema = z.strictObject({

@@ -135,6 +135,7 @@ export type {
 	Config,
 	ConflictReport,
 	FunctionConfig,
+	FunctionDevConfig,
 	FunctionMemoryMib,
 	FunctionRuntime,
 	PostgresConfig,

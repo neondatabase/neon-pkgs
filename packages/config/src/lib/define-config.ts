@@ -7,6 +7,7 @@ import type {
 	FunctionConfig,
 	PreviewConfig,
 	ResolvedBranchConfig,
+	ResolvedFunctionConfig,
 	ResolvedPreviewConfig,
 } from "./types.js";
 
@@ -130,7 +131,7 @@ function resolvePreviewConfig(preview: PreviewConfig): ResolvedPreviewConfig {
 	};
 }
 
-function resolveFunctionConfig(fn: FunctionConfig) {
+function resolveFunctionConfig(fn: FunctionConfig): ResolvedFunctionConfig {
 	return {
 		slug: fn.slug,
 		name: fn.name,
@@ -138,6 +139,8 @@ function resolveFunctionConfig(fn: FunctionConfig) {
 		env: { ...(fn.env ?? {}) },
 		runtime: fn.runtime ?? DEFAULT_FUNCTION_RUNTIME,
 		memoryMib: fn.memoryMib ?? DEFAULT_FUNCTION_MEMORY_MIB,
+		// Passed through untouched (no defaults); only `neon dev` reads it.
+		...(fn.dev ? { dev: fn.dev } : {}),
 	};
 }
 

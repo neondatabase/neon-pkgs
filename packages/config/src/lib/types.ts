@@ -86,6 +86,23 @@ export type FunctionRuntime = "nodejs24";
 export type FunctionMemoryMib = 256 | 512 | 1024 | 2048 | 4096 | 8192;
 
 /**
+ * Local-development settings for a function, used by `neon dev` when it serves every
+ * function declared in `neon.ts` (i.e. invoked with no `--source`). Never affects deploy.
+ *
+ * Typed as a discriminated union so the `portless` ⇒ `port` requirement is enforced at
+ * compile time: a `portless` route needs a concrete port to map its `slug.localhost`
+ * name to, so `port` is mandatory when `portless: true`.
+ *
+ * - `{ portless: true; port }` — wrap this function with `portless run <slug> …` so it gets
+ *   a stable `slug.localhost` URL. `port` is required.
+ * - `{ portless?: false; port? }` — serve directly. `port` is optional: when set it is bound
+ *   exactly (and `neon dev` fails loudly if it is taken); when omitted a free port is found.
+ */
+export type FunctionDevConfig =
+	| { portless: true; port: number }
+	| { portless?: false; port?: number };
+
+/**
  * A single Neon Function deployed to a branch (Preview feature).
  *
  * A function is invoked like a Cloudflare/Vercel handler — its source module
@@ -124,6 +141,11 @@ export interface FunctionConfig {
 	runtime?: FunctionRuntime;
 	/** Memory allotted to each invocation, in MiB. Defaults to `512`. */
 	memoryMib?: FunctionMemoryMib;
+	/**
+	 * Local-development settings used by `neon dev` when serving every function from
+	 * `neon.ts`. Ignored at deploy time. See {@link FunctionDevConfig}.
+	 */
+	dev?: FunctionDevConfig;
 }
 
 /** Anonymous-access level for a branchable object-storage bucket. */
@@ -191,6 +213,11 @@ export interface ResolvedFunctionConfig {
 	env: Record<string, string>;
 	runtime: FunctionRuntime;
 	memoryMib: FunctionMemoryMib;
+	/**
+	 * Local-development settings, passed through untouched from {@link FunctionConfig.dev}
+	 * (no defaults applied). Only consumed by `neon dev`; deploy ignores it.
+	 */
+	dev?: FunctionDevConfig;
 }
 
 /** A bucket with its access level defaulted to `private`. */

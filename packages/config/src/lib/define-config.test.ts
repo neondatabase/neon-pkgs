@@ -113,6 +113,44 @@ describe("resolveConfig", () => {
 		expect(resolved.preview?.aiGatewayEnabled).toBe(false);
 	});
 
+	test("passes a function dev block through untouched", () => {
+		const config = defineConfig(() => ({
+			preview: {
+				functions: [
+					{
+						name: "Hello",
+						slug: "hello",
+						source: "./hello.ts",
+						dev: { port: 8787, portless: true },
+					},
+				],
+			},
+		}));
+		const resolved = resolveConfig(config, {
+			name: "preview-1",
+			exists: false,
+		});
+		expect(resolved.preview?.functions[0].dev).toEqual({
+			port: 8787,
+			portless: true,
+		});
+	});
+
+	test("omits dev from the resolved function when not provided", () => {
+		const config = defineConfig(() => ({
+			preview: {
+				functions: [
+					{ name: "Hello", slug: "hello", source: "./hello.ts" },
+				],
+			},
+		}));
+		const resolved = resolveConfig(config, {
+			name: "preview-1",
+			exists: false,
+		});
+		expect(resolved.preview?.functions[0]).not.toHaveProperty("dev");
+	});
+
 	test("rejects a function env value that is undefined (e.g. unset process.env)", () => {
 		const config = defineConfig(() => ({
 			preview: {
