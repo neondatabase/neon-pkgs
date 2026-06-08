@@ -16,7 +16,7 @@ afterAll(() => {
 
 function fn(source: string): ResolvedFunctionConfig {
 	return {
-		slug: "hello-world",
+		slug: "fn1",
 		name: "Hello World",
 		source,
 		env: {},
@@ -55,6 +55,6 @@ describe("buildFunctionBundle", () => {
 	test("throws a PlatformError when the source cannot be resolved", async () => {
 		await expect(
 			buildFunctionBundle(fn(join(dir, "does-not-exist.ts"))),
-		).rejects.toThrow(/Failed to bundle function "hello-world"/);
+		).rejects.toThrow(/Failed to bundle function "fn1"/);
 	});
 });

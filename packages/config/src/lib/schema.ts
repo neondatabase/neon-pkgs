@@ -72,13 +72,13 @@ export const postgresConfigSchema = z.strictObject({
 
 /**
  * Branch-unique function slug. Mirrors the Neon Functions API path-segment rule
- * (`platform/internal/platform/functions/name.go`): lowercase DNS label, 1–40 chars.
+ * (`platform/internal/platform/functions/name.go`): 1–20 lowercase letters and digits.
  */
 const functionSlugSchema = z
 	.string()
 	.regex(
-		/^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$/,
-		"function slug must be a lowercase DNS label (1-40 chars, letters/digits/hyphens, no leading/trailing hyphen)",
+		/^[a-z0-9]{1,20}$/,
+		"function slug must be 1-20 lowercase letters and digits (no hyphens or other characters)",
 	);
 
 /**

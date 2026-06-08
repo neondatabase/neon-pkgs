@@ -272,7 +272,7 @@ describe("pushConfig", () => {
 				functions: [
 					{
 						name: "Hello World",
-						slug: "hello-world",
+						slug: "fn1",
 						source: fnSource,
 						env: { RESEND_API_KEY: "re_abc" },
 					},
@@ -298,12 +298,12 @@ describe("pushConfig", () => {
 				expect.objectContaining({
 					kind: "service",
 					action: "create",
-					identifier: "function:hello-world",
+					identifier: "function:fn1",
 				}),
 				expect.objectContaining({
 					kind: "service",
 					action: "update",
-					identifier: "function:hello-world",
+					identifier: "function:fn1",
 				}),
 				expect.objectContaining({
 					kind: "service",
@@ -316,7 +316,7 @@ describe("pushConfig", () => {
 		const functions = await api.listBranchFunctions(projectId, "br-main");
 		expect(functions).toEqual([
 			expect.objectContaining({
-				slug: "hello-world",
+				slug: "fn1",
 				activeDeploymentId: 1,
 			}),
 		]);
@@ -335,7 +335,7 @@ describe("pushConfig", () => {
 				functions: [
 					{
 						name: "Hello World",
-						slug: "hello-world",
+						slug: "fn1",
 						source: fnSource,
 					},
 				],
@@ -355,7 +355,7 @@ describe("pushConfig", () => {
 			},
 		});
 
-		expect(bundled).toEqual(["hello-world"]);
+		expect(bundled).toEqual(["fn1"]);
 		const deploys = api.history.filter(
 			(h) => h.method === "deployBranchFunction",
 		);
@@ -368,16 +368,16 @@ describe("pushConfig", () => {
 		const { api, projectId } = seededFake();
 		api.seedFunction(projectId, "br-main", {
 			id: "fn-existing",
-			slug: "hello-world",
+			slug: "fn1",
 			name: "Hello World",
-			invocationUrl: "https://x/functions/hello-world",
+			invocationUrl: "https://x/functions/fn1",
 		});
 		const config = defineConfig(() => ({
 			preview: {
 				functions: [
 					{
 						name: "Hello World",
-						slug: "hello-world",
+						slug: "fn1",
 						source: fnSource,
 					},
 				],

@@ -120,9 +120,9 @@ export interface FunctionDevConfig {
  */
 export interface FunctionConfig {
 	/**
-	 * Branch-unique, lowercase DNS-label used as the path segment in the function's
-	 * invocation URL. Immutable once created. 1–40 chars, `^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`.
-	 * @example "hello-world"
+	 * Branch-unique slug used as the path segment in the function's invocation URL.
+	 * Immutable once created. 1–20 lowercase letters and digits: `^[a-z0-9]{1,20}$`.
+	 * @example "hellofn"
 	 */
 	slug: string;
 	/** Free-form display name. @example "Hello World" */

@@ -73,7 +73,7 @@ describe("resolveConfig", () => {
 				functions: [
 					{
 						name: "Hello World",
-						slug: "hello-world",
+						slug: "fn1",
 						source: "./functions/hello-world.ts",
 						env: { RESEND_API_KEY: "re_abc" },
 					},
@@ -89,7 +89,7 @@ describe("resolveConfig", () => {
 		expect(resolved.preview).toEqual({
 			functions: [
 				{
-					slug: "hello-world",
+					slug: "fn1",
 					name: "Hello World",
 					source: "./functions/hello-world.ts",
 					env: { RESEND_API_KEY: "re_abc" },
@@ -181,6 +181,44 @@ describe("resolveConfig", () => {
 		expect(() =>
 			resolveConfig(config, { name: "preview-1", exists: false }),
 		).toThrow(ConfigValidationError);
+	});
+
+	test("rejects a hyphenated function slug (only letters and digits allowed)", () => {
+		const config = defineConfig(() => ({
+			preview: {
+				functions: [
+					{ name: "H", slug: "hello-world", source: "./x.ts" },
+				],
+			},
+		}));
+		expect(() =>
+			resolveConfig(config, { name: "preview-1", exists: false }),
+		).toThrow(ConfigValidationError);
+	});
+
+	test("rejects a function slug longer than 20 chars", () => {
+		const config = defineConfig(() => ({
+			preview: {
+				functions: [
+					{ name: "L", slug: "a".repeat(21), source: "./x.ts" },
+				],
+			},
+		}));
+		expect(() =>
+			resolveConfig(config, { name: "preview-1", exists: false }),
+		).toThrow(ConfigValidationError);
+	});
+
+	test("accepts a valid alphanumeric function slug", () => {
+		const config = defineConfig(() => ({
+			preview: {
+				functions: [{ name: "OK", slug: "fn1", source: "./x.ts" }],
+			},
+		}));
+		expect(
+			resolveConfig(config, { name: "preview-1", exists: false }).preview
+				?.functions[0].slug,
+		).toBe("fn1");
 	});
 
 	test("rejects duplicate function slugs", () => {

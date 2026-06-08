@@ -49,7 +49,7 @@ describe("branchConfigSchema", () => {
 			preview: {
 				functions: [
 					{
-						slug: "hello-world",
+						slug: "fn1",
 						name: "Hello World",
 						source: "./hello.ts",
 						env: { KEY: "value" },
@@ -74,7 +74,7 @@ describe("branchConfigSchema", () => {
 			preview: {
 				functions: [
 					{
-						slug: "hello-world",
+						slug: "fn1",
 						name: "Hello World",
 						source: "./hello.ts",
 						dev: { port: 8787, portless: true },

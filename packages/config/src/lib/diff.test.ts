@@ -70,7 +70,7 @@ describe("diffConfig", () => {
 				preview: {
 					functions: [
 						{
-							slug: "hello-world",
+							slug: "fn1",
 							name: "Hello World",
 							source: "./hello.ts",
 							env: {},
@@ -108,7 +108,7 @@ describe("diffConfig", () => {
 				preview: {
 					functions: [
 						{
-							slug: "hello-world",
+							slug: "fn1",
 							name: "Hello World",
 							source: "./hello.ts",
 							env: {},
@@ -127,9 +127,9 @@ describe("diffConfig", () => {
 					functions: [
 						{
 							id: "fn-1",
-							slug: "hello-world",
+							slug: "fn1",
 							name: "Hello World",
-							invocationUrl: "https://x/functions/hello-world",
+							invocationUrl: "https://x/functions/fn1",
 						},
 					],
 					aiGatewayEnabled: true,
