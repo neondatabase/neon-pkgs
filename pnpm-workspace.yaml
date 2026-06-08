@@ -4,7 +4,7 @@ packages:
 
 catalog:
     typescript: ^5.8.2
-    vitest: ^3.0.9
+    vitest: ^4.1.0
     tsdown: ^0.14.1
     "@biomejs/biome": ^2.0.0-beta.1
     "vite": ^6.4.1
