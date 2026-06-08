@@ -1,5 +1,12 @@
 # @neondatabase/env
 
+## 0.1.1
+
+### Patch Changes
+
+- Updated dependencies [ff7103b]
+  - @neondatabase/config@0.2.0
+
 ## 0.1.0
 
 ### Minor Changes
