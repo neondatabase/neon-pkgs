@@ -52,6 +52,7 @@ export {
 	PushAbortedError,
 	PushConflictError,
 } from "@neondatabase/config";
+export type { FunctionBundler } from "./lib/function-bundle.js";
 // ─── Function bundling (esbuild + zip) ────────────────────────────────────────
 export { buildFunctionBundle } from "./lib/function-bundle.js";
 // ─── Operations (intent-revealing entry points) ───────────────────────────────

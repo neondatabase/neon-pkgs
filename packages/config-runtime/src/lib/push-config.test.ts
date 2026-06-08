@@ -328,6 +328,42 @@ describe("pushConfig", () => {
 		).toEqual(["uploads"]);
 	});
 
+	test("uses an injected bundleFunction instead of the default esbuild bundler", async () => {
+		const { api, projectId } = seededFake();
+		const config = defineConfig(() => ({
+			preview: {
+				functions: [
+					{
+						name: "Hello World",
+						slug: "hello-world",
+						source: fnSource,
+					},
+				],
+			},
+		}));
+
+		const bundled: string[] = [];
+		const sentinel = new Uint8Array([1, 2, 3, 4]);
+		await pushConfig(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+			// A bundler that never touches esbuild — proves the seam is honored.
+			bundleFunction: async (fn) => {
+				bundled.push(fn.slug);
+				return sentinel;
+			},
+		});
+
+		expect(bundled).toEqual(["hello-world"]);
+		const deploys = api.history.filter(
+			(h) => h.method === "deployBranchFunction",
+		);
+		expect(deploys).toHaveLength(1);
+		const input = (deploys[0].args[3] as { bundle: Uint8Array }).bundle;
+		expect(Array.from(input)).toEqual([1, 2, 3, 4]);
+	});
+
 	test("re-deploys an existing function but does not recreate it", async () => {
 		const { api, projectId } = seededFake();
 		api.seedFunction(projectId, "br-main", {

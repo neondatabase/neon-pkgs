@@ -6,6 +6,18 @@ import {
 } from "@neondatabase/config";
 
 /**
+ * Builds the deployable ZIP bundle for a single function. The default
+ * implementation ({@link buildFunctionBundle}) shells out to esbuild, but
+ * `pushConfig` / `apply` accept a custom bundler so a consumer that can't ship
+ * esbuild's native binary (e.g. a single-file CLI) can supply its own — a WASM
+ * build, an esbuild binary on PATH, etc. — without this package dragging esbuild
+ * into their bundle.
+ */
+export type FunctionBundler = (
+	fn: ResolvedFunctionConfig,
+) => Promise<Uint8Array>;
+
+/**
  * Build the deployable bundle (a ZIP archive of the esbuild-bundled source) for a function.
  *
  * This is the **imperative shell** step of function deploys, and the reason it lives in

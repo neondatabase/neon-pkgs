@@ -1,4 +1,5 @@
 import type { Config, PushResult } from "@neondatabase/config";
+import type { FunctionBundler } from "./function-bundle.js";
 import { type PulledBranchConfig, pullConfig } from "./pull-config.js";
 import { type PushConfigOptions, pushConfig } from "./push-config.js";
 
@@ -35,6 +36,12 @@ export interface ApplyOptions extends ConfigOperationOptions {
 	updateExisting?: boolean;
 	/** Auto-confirm applying to a branch marked `protected` on Neon. */
 	allowProtectedBranch?: boolean;
+	/**
+	 * Custom function bundler. Defaults to esbuild (`buildFunctionBundle`); inject
+	 * your own to deploy functions without pulling esbuild's native binary into
+	 * your build. See {@link FunctionBundler}.
+	 */
+	bundleFunction?: FunctionBundler;
 }
 
 /**
@@ -99,5 +106,8 @@ export async function apply(
 		...(options.apiKey ? { apiKey: options.apiKey } : {}),
 		...(options.updateExisting ? { updateExisting: true } : {}),
 		...(options.allowProtectedBranch ? { allowProtectedBranch: true } : {}),
+		...(options.bundleFunction
+			? { bundleFunction: options.bundleFunction }
+			: {}),
 	});
 }

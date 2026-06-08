@@ -14,9 +14,24 @@ import {
 	type RemotePreviewState,
 	type RemoteServiceState,
 	type RemoteState,
+	type ResolvedFunctionConfig,
 	resolveConfig,
 } from "@neondatabase/config";
-import { buildFunctionBundle } from "./function-bundle.js";
+import type { FunctionBundler } from "./function-bundle.js";
+
+/**
+ * Default function bundler (esbuild), loaded lazily so that `buildFunctionBundle`
+ * — and the esbuild it pulls in — only enters the module graph when a deploy
+ * actually needs it AND no custom `bundleFunction` was injected. A consumer that
+ * injects its own bundler never triggers this import, so esbuild can be dropped
+ * from their build entirely.
+ */
+const defaultBundleFunction: FunctionBundler = async (
+	fn: ResolvedFunctionConfig,
+): Promise<Uint8Array> => {
+	const { buildFunctionBundle } = await import("./function-bundle.js");
+	return buildFunctionBundle(fn);
+};
 
 export interface PushConfigOptions {
 	/**
@@ -72,6 +87,12 @@ export interface PushConfigOptions {
 	 * Never invoked on `dryRun`.
 	 */
 	confirm?: (context: PushConfirmContext) => boolean | Promise<boolean>;
+	/**
+	 * Custom bundler for function source. Defaults to {@link buildFunctionBundle}
+	 * (esbuild). Inject your own to deploy functions without this package pulling
+	 * esbuild's native binary into your build — see {@link FunctionBundler}.
+	 */
+	bundleFunction?: FunctionBundler;
 	/**
 	 * When `true`, compute the full plan against the live remote state but **do not
 	 * execute any mutations**. The resulting `PushResult.applied` array records every
@@ -222,6 +243,8 @@ export async function pushConfig(
 					remoteProjectId: remoteProject.id,
 					branchById,
 					branchByName,
+					bundleFunction:
+						options.bundleFunction ?? defaultBundleFunction,
 				});
 		applied.push(change);
 	}
@@ -455,6 +478,7 @@ interface ApplyContext {
 	remoteProjectId: string;
 	branchById: Map<string, NeonBranchSnapshot>;
 	branchByName: Map<string, NeonBranchSnapshot>;
+	bundleFunction: FunctionBundler;
 }
 
 async function applyStep(
@@ -580,7 +604,7 @@ async function applyStep(
 			};
 		}
 		case "deploy-function": {
-			const bundle = await buildFunctionBundle(step.fn);
+			const bundle = await ctx.bundleFunction(step.fn);
 			const deployment = await ctx.api.deployBranchFunction(
 				ctx.remoteProjectId,
 				step.branchId,
