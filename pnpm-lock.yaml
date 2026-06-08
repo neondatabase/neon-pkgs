@@ -260,6 +260,27 @@ importers:
         specifier: 'catalog:'
         version: 3.0.9(@types/node@20.19.17)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.39.0)(tsx@4.20.5)(yaml@2.7.1)
 
+  packages/functions:
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 20.19.17
+      '@vitest/coverage-v8':
+        specifier: 3.0.9
+        version: 3.0.9(vitest@3.0.9(@types/node@20.19.17)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.39.0)(tsx@4.20.5)(yaml@2.7.1))
+      console-fail-test:
+        specifier: 0.5.0
+        version: 0.5.0
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.14.1(@arethetypeswrong/core@0.18.2)(typescript@5.8.2)
+      typescript:
+        specifier: 'catalog:'
+        version: 5.8.2
+      vitest:
+        specifier: 'catalog:'
+        version: 3.0.9(@types/node@20.19.17)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.39.0)(tsx@4.20.5)(yaml@2.7.1)
+
   packages/get-db:
     dependencies:
       neon-new:

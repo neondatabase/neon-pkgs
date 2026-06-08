@@ -1,0 +1,64 @@
+{
+	"name": "@neondatabase/functions",
+	"version": "0.0.0",
+	"description": "Runtime helpers for Neon Functions. Currently provides a `waitUntil` primitive for deferring async work past a response.",
+	"keywords": [
+		"neon",
+		"database",
+		"postgres",
+		"functions",
+		"serverless",
+		"platform"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/neondatabase/neon-pkgs.git"
+	},
+	"license": "Apache-2.0",
+	"author": {
+		"name": "Neon",
+		"url": "https://neon.com"
+	},
+	"type": "module",
+	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		},
+		"./v1": {
+			"types": "./dist/v1.d.ts",
+			"import": "./dist/v1.js",
+			"default": "./dist/v1.js"
+		}
+	},
+	"files": [
+		"README.md",
+		"dist/",
+		"package.json"
+	],
+	"scripts": {
+		"build": "tsc --noEmit && tsdown",
+		"prepare": "npm run build",
+		"test": "vitest --passWithNoTests",
+		"test:ci": "vitest run --passWithNoTests",
+		"tsc": "tsc"
+	},
+	"devDependencies": {
+		"@types/node": "catalog:",
+		"@vitest/coverage-v8": "3.0.9",
+		"console-fail-test": "0.5.0",
+		"tsdown": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	},
+	"packageManager": "pnpm@10.4.0",
+	"engines": {
+		"node": ">=22"
+	},
+	"publishConfig": {
+		"provenance": true
+	}
+}
