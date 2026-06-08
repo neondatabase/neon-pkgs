@@ -1,5 +1,11 @@
 import { describe, expect, test } from "vitest";
-import { createNeonAuthRestInput, retryOnLocked } from "./neon-api-real.js";
+import { ErrorCode, PlatformError } from "./errors.js";
+import {
+	createNeonAuthRestInput,
+	isPreviewFeatureUnavailable,
+	readJsonBody,
+	retryOnLocked,
+} from "./neon-api-real.js";
 
 const FAST_CONFIG = { maxAttempts: 5, initialDelayMs: 1, maxDelayMs: 4 };
 
@@ -68,5 +74,71 @@ describe("createNeonAuthRestInput", () => {
 			auth_provider: "better_auth",
 			database_name: "app",
 		});
+	});
+});
+
+describe("readJsonBody", () => {
+	test("parses a JSON body", async () => {
+		await expect(
+			readJsonBody(new Response('{"message":"hi"}')),
+		).resolves.toEqual({ message: "hi" });
+	});
+
+	test("returns {} for an empty body", async () => {
+		await expect(readJsonBody(new Response(""))).resolves.toEqual({});
+	});
+
+	test("wraps a non-JSON body as { message } instead of throwing", async () => {
+		// A real Neon 404 for a Preview route returns this plain-text body.
+		await expect(
+			readJsonBody(new Response("this route does not exist")),
+		).resolves.toEqual({ message: "this route does not exist" });
+	});
+});
+
+describe("isPreviewFeatureUnavailable", () => {
+	const platformError = (
+		code: string,
+		details: Record<string, unknown>,
+	): PlatformError => new PlatformError(code, "boom", { details });
+
+	test("true for a NotFound (route does not exist)", () => {
+		expect(
+			isPreviewFeatureUnavailable(
+				platformError(ErrorCode.NotFound, { status: 404 }),
+			),
+		).toBe(true);
+	});
+
+	test("true for a 503 'not available for this project'", () => {
+		expect(
+			isPreviewFeatureUnavailable(
+				platformError(ErrorCode.ServerError, {
+					status: 503,
+					neonMessage:
+						"platform functions not available for this project",
+				}),
+			),
+		).toBe(true);
+	});
+
+	test("false for a 503 without an unavailability message (real transient error)", () => {
+		expect(
+			isPreviewFeatureUnavailable(
+				platformError(ErrorCode.ServerError, {
+					status: 503,
+					neonMessage: "internal error",
+				}),
+			),
+		).toBe(false);
+	});
+
+	test("false for unrelated errors", () => {
+		expect(isPreviewFeatureUnavailable(new Error("nope"))).toBe(false);
+		expect(
+			isPreviewFeatureUnavailable(
+				platformError(ErrorCode.Unauthorized, { status: 401 }),
+			),
+		).toBe(false);
 	});
 });

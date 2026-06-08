@@ -6,6 +6,7 @@
 
 - Decouple `dev.portless` from `dev.port` on `FunctionConfig`. `portless` and `port` are now independent optional fields rather than a discriminated union requiring `port` when `portless` is true. Portless assigns the local port itself (it injects `PORT`), so a `portless` function does not — and should not — specify one. `port` still binds exactly when set (and `neon dev` fails if it is taken) or selects a free port when omitted, for non-portless functions.
 - Tighten the function slug rule to match the Neon Functions API: `^[a-z0-9]{1,20}$` (1–20 lowercase letters and digits, no hyphens). Previously the schema accepted hyphenated DNS-label slugs up to 40 chars.
+- Make the REST adapter resilient to Preview features that aren't available for a project/region. Reading a non-JSON response body (e.g. a 404 `"this route does not exist"`) no longer throws a cryptic `Unexpected token … is not valid JSON` — it's wrapped so the real HTTP status surfaces. And `listBranchBuckets` / `listBranchFunctions` / `getAiGatewayEnabled` now degrade to "none / disabled" when the feature reports unavailable (404 route missing, or a 503/4xx "not available"), so `inspect` / `plan` / `apply` (and `neon dev`) work on projects without those Preview features instead of aborting.
 
 ## 0.2.0
 

@@ -704,17 +704,22 @@ class RealNeonApi implements NeonApi {
 		projectId: string,
 		branchId: string,
 	): Promise<NeonBucketSnapshot[]> {
-		return this.call(
-			`listBranchBuckets(${projectId}/${branchId})`,
-			async () => {
-				const data = await this.getJson(
-					branchPreviewPath(projectId, branchId, "buckets"),
-				);
-				const parsed = bucketsListResponseSchema.parse(data);
-				return parsed.buckets.map(bucketToSnapshot);
-			},
-			{ projectId },
-		);
+		try {
+			return await this.call(
+				`listBranchBuckets(${projectId}/${branchId})`,
+				async () => {
+					const data = await this.getJson(
+						branchPreviewPath(projectId, branchId, "buckets"),
+					);
+					const parsed = bucketsListResponseSchema.parse(data);
+					return parsed.buckets.map(bucketToSnapshot);
+				},
+				{ projectId },
+			);
+		} catch (err) {
+			if (isPreviewFeatureUnavailable(err)) return [];
+			throw err;
+		}
 	}
 
 	async createBranchBucket(
@@ -763,17 +768,22 @@ class RealNeonApi implements NeonApi {
 		projectId: string,
 		branchId: string,
 	): Promise<NeonFunctionSnapshot[]> {
-		return this.call(
-			`listBranchFunctions(${projectId}/${branchId})`,
-			async () => {
-				const data = await this.getJson(
-					branchPreviewPath(projectId, branchId, "functions"),
-				);
-				const parsed = functionsListResponseSchema.parse(data);
-				return parsed.functions.map(functionToSnapshot);
-			},
-			{ projectId },
-		);
+		try {
+			return await this.call(
+				`listBranchFunctions(${projectId}/${branchId})`,
+				async () => {
+					const data = await this.getJson(
+						branchPreviewPath(projectId, branchId, "functions"),
+					);
+					const parsed = functionsListResponseSchema.parse(data);
+					return parsed.functions.map(functionToSnapshot);
+				},
+				{ projectId },
+			);
+		} catch (err) {
+			if (isPreviewFeatureUnavailable(err)) return [];
+			throw err;
+		}
 	}
 
 	async createBranchFunction(
@@ -855,7 +865,11 @@ class RealNeonApi implements NeonApi {
 				{ projectId },
 			);
 		} catch (err) {
-			if (err instanceof PlatformError && err.code === ErrorCode.NotFound)
+			if (
+				(err instanceof PlatformError &&
+					err.code === ErrorCode.NotFound) ||
+				isPreviewFeatureUnavailable(err)
+			)
 				return false;
 			throw err;
 		}
@@ -963,6 +977,32 @@ function aiGatewayEnabledFromResponse(data: unknown): boolean {
 	return false;
 }
 
+/**
+ * Whether an error from a Preview-feature read means the feature simply isn't available
+ * for this project/branch/region (as opposed to a real failure). Neon signals this a few
+ * ways: a 404 "this route does not exist" (the route isn't deployed), or a 503/4xx whose
+ * message says the platform feature is "not available". For a *read*, that's equivalent to
+ * "there are none" — so callers degrade to an empty result instead of aborting `pull` /
+ * `plan` / `neon dev` on a project that just doesn't have the feature enabled.
+ */
+export function isPreviewFeatureUnavailable(err: unknown): boolean {
+	if (!(err instanceof PlatformError)) return false;
+	if (err.code === ErrorCode.NotFound) return true;
+	const status = err.details.status;
+	const message =
+		typeof err.details.neonMessage === "string"
+			? err.details.neonMessage.toLowerCase()
+			: "";
+	const mentionsUnavailable =
+		message.includes("not available") ||
+		message.includes("does not exist") ||
+		message.includes("not enabled");
+	return (
+		mentionsUnavailable &&
+		(status === 503 || status === 404 || status === 501)
+	);
+}
+
 function neonAuthResponseToSnapshot(
 	data: z.infer<typeof neonAuthResponseSchema>,
 ): NeonAuthSnapshot {
@@ -989,10 +1029,24 @@ export function createNeonAuthRestInput(input: {
 	};
 }
 
-async function readJsonBody(res: Response): Promise<unknown> {
+/**
+ * Read a response body as JSON, tolerating non-JSON. Some Neon routes return a plain-text
+ * body (e.g. a 404 `"this route does not exist"` for a Preview feature not enabled in the
+ * project/region). Parsing that with `JSON.parse` used to throw a cryptic
+ * `SyntaxError: Unexpected token …`, which — because parsing happens before the `res.ok`
+ * check in {@link request} — masked the real HTTP status. We instead return the raw text
+ * wrapped as `{ message }` so the status-based error path in `request` / `wrapNeonError`
+ * runs and produces a proper {@link PlatformError} (e.g. `NotFound`), and a non-error body
+ * that simply isn't JSON degrades to text rather than crashing.
+ */
+export async function readJsonBody(res: Response): Promise<unknown> {
 	const text = await res.text();
 	if (text.trim() === "") return {};
-	return JSON.parse(text);
+	try {
+		return JSON.parse(text);
+	} catch {
+		return { message: text.trim() };
+	}
 }
 
 function projectToSnapshot(
