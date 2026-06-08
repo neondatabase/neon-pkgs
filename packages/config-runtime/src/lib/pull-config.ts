@@ -7,6 +7,7 @@ import {
 	type NeonApi,
 	type NeonBranchSnapshot,
 	type NeonBucketSnapshot,
+	type NeonDatabaseSnapshot,
 	type NeonEndpointSnapshot,
 	type NeonFunctionSnapshot,
 	type NeonProjectSnapshot,
@@ -74,16 +75,44 @@ export async function pullConfig(
 	const endpoint = endpoints.find(
 		(ep) => ep.type === "read_write" && ep.branchId === branch.id,
 	);
-	const [buckets, functions, aiGatewayEnabled] = await Promise.all([
-		api.listBranchBuckets(projectId, branch.id),
-		api.listBranchFunctions(projectId, branch.id),
-		api.getAiGatewayEnabled(projectId, branch.id),
-	]);
+
+	// Data API is enabled per branch + database, so resolve a database to probe.
+	const databases = await api.listBranchDatabases(projectId, branch.id);
+	const probeDatabase = pickProbeDatabase(databases);
+
+	const [buckets, functions, aiGatewayEnabled, auth, dataApi] =
+		await Promise.all([
+			api.listBranchBuckets(projectId, branch.id),
+			api.listBranchFunctions(projectId, branch.id),
+			api.getAiGatewayEnabled(projectId, branch.id),
+			api.getNeonAuth(projectId, branch.id),
+			probeDatabase
+				? api.getNeonDataApi(projectId, branch.id, probeDatabase)
+				: Promise.resolve(null),
+		]);
+
 	return buildPulledBranchConfig(project, branch, branches, endpoint, {
 		buckets,
 		functions,
 		aiGatewayEnabled,
+		authEnabled: auth !== null,
+		dataApiEnabled: dataApi !== null,
 	});
+}
+
+/**
+ * Pick the database to probe for a Data API integration. Data API is enabled per
+ * branch + database; for read-back we only need to know whether *any* database has it
+ * on, so prefer the conventional default (`neondb`) and otherwise fall back to the first
+ * database. Returns `undefined` when the branch has no databases.
+ */
+function pickProbeDatabase(
+	databases: NeonDatabaseSnapshot[],
+): string | undefined {
+	if (databases.length === 0) return undefined;
+	const byName = databases.find((d) => d.name === "neondb");
+	if (byName) return byName.name;
+	return databases[0].name;
 }
 
 function createApiFromOptions(options: PullConfigOptions): NeonApi {
@@ -101,12 +130,22 @@ export function buildPulledBranchConfig(
 		buckets: NeonBucketSnapshot[];
 		functions: NeonFunctionSnapshot[];
 		aiGatewayEnabled: boolean;
+		/** Whether a Neon Auth integration is enabled on the branch. */
+		authEnabled?: boolean;
+		/** Whether a Neon Data API integration is enabled on the branch. */
+		dataApiEnabled?: boolean;
 	},
 ): PulledBranchConfig {
 	const parent = branch.parentId
 		? branches.find((b) => b.id === branch.parentId)
 		: undefined;
-	const config: BranchConfig = {};
+	// Auth/Data API live on the branch's service config (not under `preview`), so a
+	// config pulled from a branch with them enabled round-trips through `resolveConfig`
+	// / `fetchEnv` and the matching secrets get injected.
+	const config: BranchConfig = {
+		...(previewState?.authEnabled ? { auth: {} } : {}),
+		...(previewState?.dataApiEnabled ? { dataApi: {} } : {}),
+	};
 	if (parent) config.parent = parent.name;
 	if (branch.expiresAt) config.ttl = branch.expiresAt;
 	if (branch.protected) config.protected = true;
