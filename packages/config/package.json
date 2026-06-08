@@ -65,6 +65,6 @@
 		"node": ">=22"
 	},
 	"publishConfig": {
-		"provenance": true
+		"provenance": false
 	}
 }

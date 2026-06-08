@@ -66,7 +66,7 @@
 		"node": ">=22"
 	},
 	"publishConfig": {
-		"provenance": true
+		"provenance": false
 	},
 	"dependencies": {
 		"@clack/prompts": "0.10.1",
