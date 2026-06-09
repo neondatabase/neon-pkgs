@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { defineConfig, resolveConfig } from "./define-config.js";
 import { ConfigValidationError } from "./errors.js";
+import type { BranchTuning, BranchTuningFn } from "./types.js";
 
 describe("defineConfig", () => {
 	test("accepts a static policy object and freezes it", () => {
@@ -263,6 +264,30 @@ describe("resolveConfig", () => {
 		).toBe("fn1");
 	});
 
+	test("ignores branch tuning for a function slug not declared statically", () => {
+		// The type system blocks unknown slugs in the closure (see the type-constraint
+		// tests); at runtime an unknown slug that slips past types is simply ignored — it
+		// can never fabricate a function that isn't statically declared. We bypass the
+		// slug-narrowing guard via `unknown` (the value is still a well-typed BranchTuning).
+		const ghostTuning: BranchTuning = {
+			preview: { functions: { ghost: { memoryMib: 2048 } } },
+		};
+		const config = defineConfig({
+			preview: {
+				functions: { hello: { name: "Hello", source: "./h.ts" } },
+			},
+			branch: (() => ghostTuning) as unknown as BranchTuningFn<{
+				functions: { hello: { name: string; source: string } };
+			}>,
+		});
+		const resolved = resolveConfig(config, { name: "main", exists: true });
+		expect(resolved.preview?.functions.map((f) => f.slug)).toEqual([
+			"hello",
+		]);
+		// hello keeps the default memory (the ghost tuning never applied to it).
+		expect(resolved.preview?.functions[0].memoryMib).toBe(512);
+	});
+
 	test("passes the branch target to the closure for per-branch decisions", () => {
 		const config = defineConfig({
 			branch: (branch) => ({ protected: branch.name === "main" }),
@@ -273,6 +298,20 @@ describe("resolveConfig", () => {
 		expect(
 			resolveConfig(config, { name: "dev", exists: false }).protected,
 		).toBe(false);
+	});
+
+	test("treats a branch closure returning undefined as no tuning", () => {
+		// A closure that returns nothing is not part of the public type (it must return a
+		// BranchTuning), but the runtime must treat a stray `undefined` as empty tuning. We
+		// bypass the return-type guard via `unknown` rather than fabricating a `void` type.
+		const config = defineConfig({
+			auth: true,
+			branch: (() => undefined) as unknown as BranchTuningFn,
+		});
+		const resolved = resolveConfig(config, { name: "main", exists: true });
+		expect(resolved.authEnabled).toBe(true);
+		expect(resolved.parent).toBeUndefined();
+		expect(resolved.protected).toBeUndefined();
 	});
 });
 
