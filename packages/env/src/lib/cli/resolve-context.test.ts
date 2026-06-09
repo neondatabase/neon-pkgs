@@ -67,7 +67,6 @@ describe("resolveContext — precedence", () => {
 			".neon/project.json": JSON.stringify({
 				projectId: "proj-file",
 				branchId: "br-file",
-				branchName: "main",
 			}),
 		});
 		const result = resolveContext({ cwd: root, env: EMPTY_ENV });
@@ -76,26 +75,7 @@ describe("resolveContext — precedence", () => {
 			context: {
 				projectId: "proj-file",
 				branchId: "br-file",
-				branchName: "main",
 			},
-		});
-	});
-
-	test("NEON_BRANCH_NAME populates branchName", () => {
-		const root = setup({
-			"package.json": "{}",
-			".neon/project.json": JSON.stringify({
-				projectId: "p",
-				branchId: "br-1",
-			}),
-		});
-		const result = resolveContext({
-			cwd: root,
-			env: { NEON_BRANCH_NAME: "feature-x" },
-		});
-		expect(result).toMatchObject({
-			ok: true,
-			context: { branchName: "feature-x" },
 		});
 	});
 });

@@ -189,7 +189,11 @@ export function buildPulledBranchConfig(
 	// the `branch` closure.
 	const tuning: BranchTuning = {};
 	if (parent) tuning.parent = parent.name;
-	if (branch.expiresAt) tuning.ttl = branch.expiresAt;
+	// Deliberately NOT emitting `ttl` from `branch.expiresAt`: policy `ttl` is a
+	// creation-time *duration*, while `expiresAt` is an absolute timestamp. Feeding the
+	// timestamp through `parseDuration` (in `resolveConfig`) would throw, breaking
+	// `fetchEnv` / `neon dev` / `neon env pull` for any branch that has a TTL. The expiry
+	// is reported faithfully on `branch.expiresAt` above.
 	if (branch.protected) tuning.protected = true;
 	if (endpoint) {
 		const compute = endpointToComputeSettings(endpoint, project);

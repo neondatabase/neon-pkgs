@@ -627,7 +627,10 @@ export function parseEnv(config: Config, scope?: string): unknown {
 		const envOut: Record<string, string> = {};
 		for (const key of Object.keys(fn.env ?? {})) {
 			const value = source[key];
-			if (value === undefined || value === "") {
+			// Only a truly *unset* var is "not injected". Function env values carry no
+			// non-empty constraint (unlike DATABASE_URL / NEON_AUTH_BASE_URL), so a
+			// deliberately empty value is a present, valid value and is passed through.
+			if (value === undefined) {
 				issues.push(`${key} is missing (function "${scope}")`);
 			} else {
 				envOut[key] = value;

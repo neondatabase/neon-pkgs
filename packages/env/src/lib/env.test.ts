@@ -187,6 +187,73 @@ describe("parseEnv", () => {
 			// @ts-expect-error "nope" is not a declared function slug.
 			expect(() => parseEnv(config, "nope")).toThrow();
 		});
+
+		test("passes through a deliberately empty function env value (present != non-empty)", () => {
+			vi.stubEnv("DATABASE_URL", "postgres://pooled");
+			vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
+			vi.stubEnv("resendApiKey", "");
+			const env = parseEnv(config, "hello");
+			expect(env.function.resendApiKey).toBe("");
+		});
+
+		test("returns an empty function namespace when the function declares no env keys", () => {
+			vi.stubEnv("DATABASE_URL", "postgres://pooled");
+			vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
+			const noEnvConfig = defineConfig({
+				preview: {
+					functions: { bare: { name: "Bare", source: "./bare.ts" } },
+				},
+			});
+			const env = parseEnv(noEnvConfig, "bare");
+			expect(env.function).toEqual({});
+		});
+
+		test("function scope still includes branch secrets (auth) when enabled", () => {
+			vi.stubEnv("DATABASE_URL", "postgres://pooled");
+			vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
+			vi.stubEnv("NEON_AUTH_BASE_URL", "https://auth.example.com");
+			vi.stubEnv("resendApiKey", "re_live_123");
+			const authConfig = defineConfig({
+				auth: true,
+				preview: {
+					functions: {
+						hello: {
+							name: "Hello",
+							source: "./hello.ts",
+							env: { resendApiKey: "" },
+						},
+					},
+				},
+			});
+			const env = parseEnv(authConfig, "hello");
+			expect(env.auth.baseUrl).toBe("https://auth.example.com");
+			expect(env.function.resendApiKey).toBe("re_live_123");
+		});
+	});
+
+	test("external scope has no function namespace (type-level)", () => {
+		vi.stubEnv("DATABASE_URL", "postgres://pooled");
+		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
+		const env = parseEnv(defineConfig({}));
+		// @ts-expect-error external scope must not expose the function namespace.
+		env.function;
+		expect(env.postgres.databaseUrl).toBe("postgres://pooled");
+	});
+
+	test("a present-but-empty object toggle (`auth: {}`) enables the namespace", () => {
+		vi.stubEnv("DATABASE_URL", "postgres://pooled");
+		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
+		vi.stubEnv("NEON_AUTH_BASE_URL", "https://auth.example.com");
+		const env = parseEnv(defineConfig({ auth: {} }));
+		expect(env.auth.baseUrl).toBe("https://auth.example.com");
+	});
+
+	test("`dataApi: { enabled: true }` enables the data API namespace", () => {
+		vi.stubEnv("DATABASE_URL", "postgres://pooled");
+		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
+		vi.stubEnv("NEON_DATA_API_URL", "https://data.example.com");
+		const env = parseEnv(defineConfig({ dataApi: { enabled: true } }));
+		expect(env.dataApi.url).toBe("https://data.example.com");
 	});
 
 	test("projects env object to process env keys", () => {

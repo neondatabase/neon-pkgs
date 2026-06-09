@@ -1,4 +1,4 @@
-import { ErrorCode, PlatformError } from "@neondatabase/config";
+import { ErrorCode, PlatformError, resolveConfig } from "@neondatabase/config";
 import { describe, expect, test } from "vitest";
 import { FakeNeonApi } from "./fake-neon-api.js";
 import { pullConfig } from "./pull-config.js";
@@ -51,6 +51,48 @@ describe("pullConfig", () => {
 			protected: true,
 			postgres: { computeSettings: { autoscalingLimitMaxCu: 2 } },
 		});
+	});
+
+	test("pulled config from a branch with an expiry resolves without a ttl parse crash", async () => {
+		// Regression: `pullConfig` must not emit the branch's `expiresAt` (an ISO timestamp)
+		// as the policy `ttl` — `ttl` is a creation-time duration, and feeding a timestamp
+		// to `parseDuration` would make `resolveConfig` (and therefore `fetchEnv` /
+		// `neon dev` / `neon env pull` in the no-policy tier) throw on any branch that has a
+		// TTL. The expiry is reported on `branch.expiresAt` instead.
+		const api = new FakeNeonApi();
+		const projectId = "proj-ttl";
+		api.seedProject({
+			project: {
+				id: projectId,
+				name: "ttl",
+				regionId: "aws-us-east-1",
+				pgVersion: 17,
+			},
+			branches: [
+				{ branch: { id: "br-main", name: "main", isDefault: true } },
+				{
+					branch: {
+						id: "br-ttl",
+						name: "preview",
+						isDefault: false,
+						parentId: "br-main",
+						expiresAt: "2099-01-01T00:00:00.000Z",
+					},
+				},
+			],
+		});
+
+		const pulled = await pullConfig({ api, projectId, branchId: "br-ttl" });
+
+		expect(pulled.branch.expiresAt).toBe("2099-01-01T00:00:00.000Z");
+		expect(() =>
+			resolveConfig(pulled.config, { name: "preview", exists: true }),
+		).not.toThrow();
+		// expiry is not smuggled into the policy as a (bogus) ttl duration.
+		expect(
+			resolveConfig(pulled.config, { name: "preview", exists: true })
+				.ttlSeconds,
+		).toBeUndefined();
 	});
 
 	test("omits auth/dataApi when neither integration is enabled", async () => {

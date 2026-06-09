@@ -101,26 +101,17 @@ export function resolveConfig(
 ): ResolvedBranchConfig {
 	const tuning = evaluateBranchTuning(config.branch, branch);
 
-	const issues: string[] = [];
-	let ttlSeconds: number | undefined;
-	if (tuning.ttl !== undefined) {
-		const parsedTtl = parseDuration(tuning.ttl);
-		if ("error" in parsedTtl) {
-			issues.push(`ttl: ${parsedTtl.error}`);
-		} else {
-			ttlSeconds = parsedTtl.seconds;
-		}
-	}
-	if (issues.length > 0) {
-		throw new ConfigValidationError(issues);
-	}
-
 	const resolved: ResolvedBranchConfig = {
 		authEnabled: isServiceEnabled(config.auth),
 		dataApiEnabled: isServiceEnabled(config.dataApi),
 	};
 	if (tuning.parent !== undefined) resolved.parent = tuning.parent;
-	if (ttlSeconds !== undefined) resolved.ttlSeconds = ttlSeconds;
+	if (tuning.ttl !== undefined) {
+		// `branchTuningSchema` already validated `ttl` with the same `parseDuration`, so
+		// this only converts the validated value to seconds — it cannot fail here.
+		const parsedTtl = parseDuration(tuning.ttl);
+		if (!("error" in parsedTtl)) resolved.ttlSeconds = parsedTtl.seconds;
+	}
 	if (tuning.protected !== undefined) resolved.protected = tuning.protected;
 	if (tuning.postgres?.computeSettings) {
 		resolved.postgres = {

@@ -10,8 +10,6 @@ import { dirname, resolve } from "node:path";
 export interface ResolvedContext {
 	projectId: string;
 	branchId: string;
-	/** Branch name for `parseEnv`-style policy evaluation, when known. */
-	branchName?: string;
 }
 
 export interface ResolveContextOptions {
@@ -44,8 +42,6 @@ export function resolveContext(
 		nonEmpty(env.NEON_BRANCH_ID) ??
 		file?.branchId;
 
-	const branchName = nonEmpty(env.NEON_BRANCH_NAME) ?? file?.branchName;
-
 	const missing: string[] = [];
 	if (!projectId) {
 		missing.push(
@@ -61,18 +57,13 @@ export function resolveContext(
 
 	return {
 		ok: true,
-		context: {
-			projectId,
-			branchId,
-			...(branchName ? { branchName } : {}),
-		},
+		context: { projectId, branchId },
 	};
 }
 
 interface NeonFile {
 	projectId?: string;
 	branchId?: string;
-	branchName?: string;
 }
 
 /**
@@ -122,8 +113,6 @@ function readNeonFileAt(path: string): NeonFile | null {
 		out.projectId = obj.projectId;
 	if (typeof obj.branchId === "string" && obj.branchId !== "")
 		out.branchId = obj.branchId;
-	if (typeof obj.branchName === "string" && obj.branchName !== "")
-		out.branchName = obj.branchName;
 	return out;
 }
 

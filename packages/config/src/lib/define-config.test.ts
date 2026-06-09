@@ -26,6 +26,19 @@ describe("defineConfig", () => {
 			ConfigValidationError,
 		);
 	});
+
+	test("rejects a non-object input", () => {
+		expect(() => defineConfig(null as never)).toThrow(
+			ConfigValidationError,
+		);
+		expect(() => defineConfig(42 as never)).toThrow(ConfigValidationError);
+	});
+
+	test("rejects a `branch` that is not a function", () => {
+		expect(() => defineConfig({ branch: {} as never })).toThrow(
+			ConfigValidationError,
+		);
+	});
 });
 
 describe("resolveConfig", () => {
@@ -248,5 +261,68 @@ describe("resolveConfig", () => {
 			resolveConfig(config, { name: "preview-1", exists: false }).preview
 				?.functions[0].slug,
 		).toBe("fn1");
+	});
+
+	test("ignores branch tuning for a function slug not declared statically", () => {
+		// The type system blocks unknown slugs in the closure (see the type-constraint
+		// tests); at runtime an unknown slug that slips past types is simply ignored — it
+		// can never fabricate a function that isn't statically declared.
+		const config = defineConfig({
+			preview: {
+				functions: { hello: { name: "Hello", source: "./h.ts" } },
+			},
+			// biome-ignore lint/suspicious/noExplicitAny: exercising the runtime guard past types.
+			branch: () =>
+				({
+					preview: { functions: { ghost: { memoryMib: 2048 } } },
+				}) as any,
+		});
+		const resolved = resolveConfig(config, { name: "main", exists: true });
+		expect(resolved.preview?.functions.map((f) => f.slug)).toEqual([
+			"hello",
+		]);
+		// hello keeps the default memory (the ghost tuning never applied to it).
+		expect(resolved.preview?.functions[0].memoryMib).toBe(512);
+	});
+
+	test("treats a branch closure returning undefined as no tuning", () => {
+		const config = defineConfig({
+			auth: true,
+			// biome-ignore lint/suspicious/noConfusingVoidType: closure may legitimately return nothing.
+			branch: (() => undefined) as never,
+		});
+		const resolved = resolveConfig(config, { name: "main", exists: true });
+		expect(resolved.authEnabled).toBe(true);
+		expect(resolved.parent).toBeUndefined();
+		expect(resolved.protected).toBeUndefined();
+	});
+});
+
+describe("defineConfig type constraints (compile-time)", () => {
+	test("the branch closure cannot tune an undeclared function slug", () => {
+		defineConfig({
+			preview: { functions: { hello: { name: "H", source: "./h.ts" } } },
+			// @ts-expect-error "goodbye" is not a declared function slug.
+			branch: () => ({
+				preview: { functions: { goodbye: { memoryMib: 512 } } },
+			}),
+		});
+	});
+
+	test("the branch closure cannot add a service toggle", () => {
+		defineConfig({
+			// @ts-expect-error `auth` is a static top-level toggle, not branch tuning.
+			branch: () => ({ auth: true }),
+		});
+	});
+
+	test("the branch closure cannot redeclare a function's source", () => {
+		defineConfig({
+			preview: { functions: { hello: { name: "H", source: "./h.ts" } } },
+			// @ts-expect-error `source` is static; tuning only sets memoryMib/runtime.
+			branch: () => ({
+				preview: { functions: { hello: { source: "./other.ts" } } },
+			}),
+		});
 	});
 });
