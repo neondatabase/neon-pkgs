@@ -717,8 +717,7 @@ class RealNeonApi implements NeonApi {
 				{ projectId },
 			);
 		} catch (err) {
-			if (isPreviewFeatureUnavailable(err)) return [];
-			throw err;
+			throw previewUnavailableError(err, "Object storage (buckets)");
 		}
 	}
 
@@ -781,8 +780,7 @@ class RealNeonApi implements NeonApi {
 				{ projectId },
 			);
 		} catch (err) {
-			if (isPreviewFeatureUnavailable(err)) return [];
-			throw err;
+			throw previewUnavailableError(err, "Functions");
 		}
 	}
 
@@ -865,12 +863,19 @@ class RealNeonApi implements NeonApi {
 				{ projectId },
 			);
 		} catch (err) {
+			// A "feature unavailable" signal (route not deployed / "not available")
+			// is a hard error — surface it rather than reporting "disabled". A plain
+			// NotFound *without* that signal means the route exists but AI Gateway is
+			// simply not enabled on this branch, which is `false`.
+			if (isPreviewFeatureUnavailable(err)) {
+				throw previewUnavailableError(err, "AI Gateway");
+			}
 			if (
-				(err instanceof PlatformError &&
-					err.code === ErrorCode.NotFound) ||
-				isPreviewFeatureUnavailable(err)
-			)
+				err instanceof PlatformError &&
+				err.code === ErrorCode.NotFound
+			) {
 				return false;
+			}
 			throw err;
 		}
 	}
@@ -979,15 +984,17 @@ function aiGatewayEnabledFromResponse(data: unknown): boolean {
 
 /**
  * Whether an error from a Preview-feature read means the feature simply isn't available
- * for this project/branch/region (as opposed to a real failure). Neon signals this a few
- * ways: a 404 "this route does not exist" (the route isn't deployed), or a 503/4xx whose
- * message says the platform feature is "not available". For a *read*, that's equivalent to
- * "there are none" — so callers degrade to an empty result instead of aborting `pull` /
- * `plan` / `neon dev` on a project that just doesn't have the feature enabled.
+ * for this project/branch/region (as opposed to a real, transient failure). Neon signals
+ * this a few ways: a 404 "this route does not exist" (the route isn't deployed at all), or
+ * a 503/4xx whose message says the platform feature is "not available" / "not enabled".
+ *
+ * Callers do **not** swallow this into an empty result — touching a Preview feature that
+ * isn't available is surfaced as a {@link previewUnavailableError} so `plan` / `status` /
+ * `pull` (and `neon dev`) fail clearly instead of, say, planning to create resources the
+ * API will refuse to create.
  */
 export function isPreviewFeatureUnavailable(err: unknown): boolean {
 	if (!(err instanceof PlatformError)) return false;
-	if (err.code === ErrorCode.NotFound) return true;
 	const status = err.details.status;
 	const message =
 		typeof err.details.neonMessage === "string"
@@ -1000,6 +1007,29 @@ export function isPreviewFeatureUnavailable(err: unknown): boolean {
 	return (
 		mentionsUnavailable &&
 		(status === 503 || status === 404 || status === 501)
+	);
+}
+
+/**
+ * Convert a Preview-feature error into a clear {@link PlatformError} when the feature is
+ * unavailable for the project; otherwise pass the original error through unchanged so a
+ * genuine failure (auth, transient 5xx, …) keeps its specific code and message.
+ */
+export function previewUnavailableError(
+	err: unknown,
+	featureLabel: string,
+): unknown {
+	if (!isPreviewFeatureUnavailable(err)) return err;
+	const neonMessage =
+		err instanceof PlatformError &&
+		typeof err.details.neonMessage === "string"
+			? ` (Neon API said: "${err.details.neonMessage}")`
+			: "";
+	return new PlatformError(
+		ErrorCode.FeatureUnavailable,
+		`${featureLabel} is a Preview feature that is not available for this project or region${neonMessage}. ` +
+			"Enable it for your Neon account/project first, then re-run.",
+		{ cause: err, details: { feature: featureLabel } },
 	);
 }
 

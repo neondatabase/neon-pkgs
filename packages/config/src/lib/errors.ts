@@ -31,6 +31,7 @@ export const ErrorCode = {
 	MissingApiKey: "PLATFORM_MISSING_API_KEY",
 	AmbiguousBranchAuth: "PLATFORM_AMBIGUOUS_BRANCH_AUTH",
 	BranchNotFound: "PLATFORM_BRANCH_NOT_FOUND",
+	FeatureUnavailable: "PLATFORM_FEATURE_UNAVAILABLE",
 	MissingParentBranch: "PLATFORM_MISSING_PARENT_BRANCH",
 	Unauthorized: "PLATFORM_UNAUTHORIZED",
 	Forbidden: "PLATFORM_FORBIDDEN",

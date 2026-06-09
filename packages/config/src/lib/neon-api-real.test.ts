@@ -3,6 +3,7 @@ import { ErrorCode, PlatformError } from "./errors.js";
 import {
 	createNeonAuthRestInput,
 	isPreviewFeatureUnavailable,
+	previewUnavailableError,
 	readJsonBody,
 	retryOnLocked,
 } from "./neon-api-real.js";
@@ -102,12 +103,23 @@ describe("isPreviewFeatureUnavailable", () => {
 		details: Record<string, unknown>,
 	): PlatformError => new PlatformError(code, "boom", { details });
 
-	test("true for a NotFound (route does not exist)", () => {
+	test("true for a 404 'this route does not exist' (route not deployed)", () => {
+		expect(
+			isPreviewFeatureUnavailable(
+				platformError(ErrorCode.NotFound, {
+					status: 404,
+					neonMessage: "this route does not exist",
+				}),
+			),
+		).toBe(true);
+	});
+
+	test("false for a plain 404 without an unavailability message (feature exists, not enabled)", () => {
 		expect(
 			isPreviewFeatureUnavailable(
 				platformError(ErrorCode.NotFound, { status: 404 }),
 			),
-		).toBe(true);
+		).toBe(false);
 	});
 
 	test("true for a 503 'not available for this project'", () => {
@@ -140,5 +152,30 @@ describe("isPreviewFeatureUnavailable", () => {
 				platformError(ErrorCode.Unauthorized, { status: 401 }),
 			),
 		).toBe(false);
+	});
+});
+
+describe("previewUnavailableError", () => {
+	test("wraps an unavailable error with a clear FeatureUnavailable message", () => {
+		const original = new PlatformError(ErrorCode.ServerError, "boom", {
+			details: {
+				status: 503,
+				neonMessage:
+					"platform functions not available for this project",
+			},
+		});
+		const wrapped = previewUnavailableError(original, "Functions");
+		expect(wrapped).toBeInstanceOf(PlatformError);
+		if (!(wrapped instanceof PlatformError)) throw new Error("not wrapped");
+		expect(wrapped.code).toBe(ErrorCode.FeatureUnavailable);
+		expect(wrapped.message).toMatch(/Functions is a Preview feature/);
+		expect(wrapped.message).toMatch(/not available for this project/);
+	});
+
+	test("passes a non-unavailable error through unchanged", () => {
+		const original = new PlatformError(ErrorCode.Unauthorized, "nope", {
+			details: { status: 401 },
+		});
+		expect(previewUnavailableError(original, "Functions")).toBe(original);
 	});
 });
