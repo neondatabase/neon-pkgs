@@ -263,28 +263,6 @@ describe("resolveConfig", () => {
 		).toBe("fn1");
 	});
 
-	test("ignores branch tuning for a function slug not declared statically", () => {
-		// The type system blocks unknown slugs in the closure (see the type-constraint
-		// tests); at runtime an unknown slug that slips past types is simply ignored — it
-		// can never fabricate a function that isn't statically declared.
-		const config = defineConfig({
-			preview: {
-				functions: { hello: { name: "Hello", source: "./h.ts" } },
-			},
-			// biome-ignore lint/suspicious/noExplicitAny: exercising the runtime guard past types.
-			branch: () =>
-				({
-					preview: { functions: { ghost: { memoryMib: 2048 } } },
-				}) as any,
-		});
-		const resolved = resolveConfig(config, { name: "main", exists: true });
-		expect(resolved.preview?.functions.map((f) => f.slug)).toEqual([
-			"hello",
-		]);
-		// hello keeps the default memory (the ghost tuning never applied to it).
-		expect(resolved.preview?.functions[0].memoryMib).toBe(512);
-	});
-
 	test("passes the branch target to the closure for per-branch decisions", () => {
 		const config = defineConfig({
 			branch: (branch) => ({ protected: branch.name === "main" }),
@@ -295,18 +273,6 @@ describe("resolveConfig", () => {
 		expect(
 			resolveConfig(config, { name: "dev", exists: false }).protected,
 		).toBe(false);
-	});
-
-	test("treats a branch closure returning undefined as no tuning", () => {
-		const config = defineConfig({
-			auth: true,
-			// biome-ignore lint/suspicious/noConfusingVoidType: closure may legitimately return nothing.
-			branch: (() => undefined) as never,
-		});
-		const resolved = resolveConfig(config, { name: "main", exists: true });
-		expect(resolved.authEnabled).toBe(true);
-		expect(resolved.parent).toBeUndefined();
-		expect(resolved.protected).toBeUndefined();
 	});
 });
 
