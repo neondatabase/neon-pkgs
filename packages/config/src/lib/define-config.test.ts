@@ -350,4 +350,55 @@ describe("defineConfig type constraints (compile-time)", () => {
 			}),
 		});
 	});
+
+	test("the preview block accepts all of its declared members (aiGateway/functions/buckets)", () => {
+		// Regression: when `preview` was typed as the bare generic `Preview`, editors saw
+		// `{} | undefined` and offered no member hints. Intersecting with `PreviewInput` keeps
+		// the field's full shape, so every declared member type-checks in place.
+		defineConfig({
+			preview: {
+				aiGateway: { enabled: true },
+				functions: { hello: { name: "H", source: "./h.ts" } },
+				buckets: { uploads: { access: "public_read" } },
+			},
+		});
+	});
+
+	test("the preview block rejects an unknown member (type + runtime)", () => {
+		expect(() =>
+			defineConfig({
+				// @ts-expect-error `gateway` is not a PreviewInput member (it's `aiGateway`).
+				preview: { gateway: { enabled: true } },
+			}),
+		).toThrow(ConfigValidationError);
+	});
+
+	test("a bucket access level is constrained to the known literals (type + runtime)", () => {
+		expect(() =>
+			defineConfig({
+				preview: {
+					// @ts-expect-error access is "private" | "public_read", not an arbitrary string.
+					buckets: { uploads: { access: "world_readable" } },
+				},
+			}),
+		).toThrow(ConfigValidationError);
+	});
+
+	test("intersecting the generics still infers function slugs for the branch closure", () => {
+		// The autocomplete fix (Preview & PreviewInput) must not weaken slug inference: the
+		// closure can tune a declared slug but not an undeclared one.
+		defineConfig({
+			preview: { functions: { hello: { name: "H", source: "./h.ts" } } },
+			branch: () => ({
+				preview: { functions: { hello: { runtime: "nodejs24" } } },
+			}),
+		});
+		defineConfig({
+			preview: { functions: { hello: { name: "H", source: "./h.ts" } } },
+			// @ts-expect-error "bye" is not a declared function slug.
+			branch: () => ({
+				preview: { functions: { bye: { runtime: "nodejs24" } } },
+			}),
+		});
+	});
 });

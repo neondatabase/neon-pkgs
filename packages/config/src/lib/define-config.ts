@@ -62,9 +62,15 @@ export function defineConfig<
 	const DataApi extends ServiceToggleInput | undefined = undefined,
 	const Preview extends PreviewInput | undefined = undefined,
 >(input: {
-	auth?: Auth;
-	dataApi?: DataApi;
-	preview?: Preview;
+	// Each field is intersected with its concrete interface (not just typed as the bare
+	// generic). The generic alone — e.g. `preview?: Preview` — gives editors no members to
+	// complete against in the object-literal position (they see `{} | undefined`), so you
+	// lose hints for `aiGateway` / `functions` / `buckets`. `& PreviewInput` restores the
+	// full shape for autocomplete while still inferring the `const` literal that types the
+	// `branch` closure's slugs (BranchTuningFn<Preview>) and the returned Config.
+	auth?: Auth & ServiceToggleInput;
+	dataApi?: DataApi & ServiceToggleInput;
+	preview?: Preview & PreviewInput;
 	branch?: BranchTuningFn<Preview>;
 }): Config<Auth, DataApi, Preview> {
 	if (typeof input === "function") {
