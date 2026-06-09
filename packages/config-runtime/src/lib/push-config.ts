@@ -364,7 +364,6 @@ function synthesizeAppliedChange(step: PlanStep): AppliedChange {
 					slug: step.fn.slug,
 					source: step.fn.source,
 					runtime: step.fn.runtime,
-					memoryMib: step.fn.memoryMib,
 				},
 			};
 		case "enable-ai-gateway":
@@ -628,7 +627,6 @@ async function applyStep(
 				{
 					bundle,
 					runtime: step.fn.runtime,
-					memoryMib: step.fn.memoryMib,
 					environment: step.fn.env,
 				},
 			);
@@ -641,7 +639,6 @@ async function applyStep(
 					slug: step.fn.slug,
 					source: step.fn.source,
 					runtime: step.fn.runtime,
-					memoryMib: step.fn.memoryMib,
 					deploymentId: deployment.id,
 				},
 			};

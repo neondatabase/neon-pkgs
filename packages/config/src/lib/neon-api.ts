@@ -1,7 +1,6 @@
 import type {
 	BucketAccessLevel,
 	ComputeSettings,
-	FunctionMemoryMib,
 	FunctionRuntime,
 } from "./types.js";
 
@@ -156,7 +155,6 @@ export interface NeonFunctionSnapshot {
 export interface DeployFunctionInput {
 	bundle: Uint8Array;
 	runtime: FunctionRuntime;
-	memoryMib: FunctionMemoryMib;
 	environment: Record<string, string>;
 }
 

@@ -21,7 +21,6 @@ function fn(source: string): ResolvedFunctionConfig {
 		source,
 		env: {},
 		runtime: "nodejs24",
-		memoryMib: 512,
 	};
 }
 

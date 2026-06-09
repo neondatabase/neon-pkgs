@@ -118,21 +118,12 @@ const functionDevConfigSchema = z.strictObject({
 	portless: z.boolean().optional(),
 });
 
-const memoryMibSchema = z.union([
-	z.literal(256),
-	z.literal(512),
-	z.literal(1024),
-	z.literal(2048),
-	z.literal(4096),
-	z.literal(8192),
-]);
-
 const runtimeSchema = z.literal("nodejs24");
 
 /**
  * Static definition of a function (existence). The slug is the record key (validated by
- * {@link functionSlugSchema}), so it is not a field here. Deploy tuning (`memoryMib`,
- * `runtime`) lives in the `branch` closure, not here.
+ * {@link functionSlugSchema}), so it is not a field here. Deploy tuning (`runtime`) lives
+ * in the `branch` closure, not here.
  */
 export const functionDefSchema = z.strictObject({
 	name: z.string().min(1).max(255),
@@ -157,7 +148,6 @@ export const previewInputSchema = z.strictObject({
 
 /** Per-function deploy tuning returned by the `branch` closure. */
 export const functionTuningSchema = z.strictObject({
-	memoryMib: memoryMibSchema.optional(),
 	runtime: runtimeSchema.optional(),
 });
 

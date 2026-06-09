@@ -97,12 +97,6 @@ export interface PostgresConfig {
 export type FunctionRuntime = "nodejs24";
 
 /**
- * Memory sizes (MiB) accepted by the Neon Functions deploy API. Mirrors the
- * `memory_mib` enum in the spec.
- */
-export type FunctionMemoryMib = 256 | 512 | 1024 | 2048 | 4096 | 8192;
-
-/**
  * Local-development settings for a function, used by `neon dev` when it serves every
  * function declared in `neon.ts` (i.e. invoked with no `--source`). Never affects deploy.
  *
@@ -138,8 +132,9 @@ export interface FunctionDevConfig {
  * `source` path is bundled (esbuild) and uploaded as a deployment; the newest deployment
  * becomes active.
  *
- * Deploy tuning (`memoryMib`, `runtime`) is **not** here — it varies per branch and lives
- * in the `branch` closure (see {@link FunctionTuning}).
+ * Runtime tuning is **not** here — it varies per branch and lives in the `branch` closure
+ * (see {@link FunctionTuning}). Memory is fixed by the platform policy for now and is not
+ * user-configurable.
  */
 export interface FunctionDef {
 	/** Free-form display name. @example "Hello World" */
@@ -206,12 +201,11 @@ export interface PreviewInput {
 
 /**
  * Per-branch deploy tuning for a single function. Returned (per slug) by the `branch`
- * closure. Deliberately **cannot** change the function's existence, source, name, or env
- * **keys** — only how it is deployed — so the static secret/function set stays sound.
+ * closure. Deliberately **cannot** change the function's existence, source, name, env
+ * **keys**, or memory — only runtime selection is currently configurable — so the static
+ * secret/function set stays sound.
  */
 export interface FunctionTuning {
-	/** Memory allotted to each invocation, in MiB. Defaults to `512`. */
-	memoryMib?: FunctionMemoryMib;
 	/** Runtime to execute the function with. Defaults to `"nodejs24"`. */
 	runtime?: FunctionRuntime;
 }
@@ -291,8 +285,8 @@ export interface Config<
 }
 
 /**
- * A function with all deploy defaults applied. `resolveConfig` fills in `runtime` and
- * `memoryMib` so downstream diff/apply never has to re-derive them.
+ * A function with all deploy defaults applied. `resolveConfig` fills in `runtime` so
+ * downstream diff/apply never has to re-derive it.
  */
 export interface ResolvedFunctionConfig {
 	slug: string;
@@ -300,9 +294,8 @@ export interface ResolvedFunctionConfig {
 	source: string;
 	env: Record<string, string>;
 	runtime: FunctionRuntime;
-	memoryMib: FunctionMemoryMib;
 	/**
-	 * Local-development settings, passed through untouched from {@link FunctionConfig.dev}
+	 * Local-development settings, passed through untouched from {@link FunctionDef.dev}
 	 * (no defaults applied). Only consumed by `neon dev`; deploy ignores it.
 	 */
 	dev?: FunctionDevConfig;
@@ -315,7 +308,7 @@ export interface ResolvedBucketConfig {
 }
 
 /**
- * Normalized {@link PreviewConfig}. Only present on {@link ResolvedBranchConfig} when the
+ * Normalized {@link PreviewInput}. Only present on {@link ResolvedBranchConfig} when the
  * policy returned a `preview` block. `aiGatewayEnabled` follows the same
  * "present-and-not-`false`" semantics as `authEnabled` / `dataApiEnabled`.
  */

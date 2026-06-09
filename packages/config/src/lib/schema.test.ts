@@ -108,16 +108,23 @@ describe("configInputSchema", () => {
 });
 
 describe("branchTuningSchema", () => {
-	test("accepts branch lifecycle, postgres, and per-function tuning", () => {
+	test("accepts branch lifecycle, postgres, and per-function runtime tuning", () => {
 		expect(
 			branchTuningSchema.parse({
 				parent: "main",
 				ttl: "7d",
 				protected: true,
 				postgres: { computeSettings: { autoscalingLimitMaxCu: 2 } },
-				preview: { functions: { hello: { memoryMib: 1024 } } },
+				preview: { functions: { hello: { runtime: "nodejs24" } } },
 			}),
 		).toMatchObject({ parent: "main", protected: true });
+	});
+
+	test("rejects function memory tuning", () => {
+		const result = branchTuningSchema.safeParse({
+			preview: { functions: { hello: { memoryMib: 1024 } } },
+		});
+		expect(result.success).toBe(false);
 	});
 
 	test("rejects wildcard parent", () => {

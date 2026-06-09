@@ -123,7 +123,6 @@ describe("resolveConfig", () => {
 					source: "./functions/hello-world.ts",
 					env: { RESEND_API_KEY: "re_abc" },
 					runtime: "nodejs24",
-					memoryMib: 512,
 				},
 			],
 			buckets: [{ name: "uploads", access: "private" }],
@@ -131,7 +130,7 @@ describe("resolveConfig", () => {
 		});
 	});
 
-	test("applies per-branch function tuning (memoryMib / runtime) over defaults", () => {
+	test("applies per-branch function runtime tuning", () => {
 		const config = defineConfig({
 			preview: {
 				functions: {
@@ -139,7 +138,7 @@ describe("resolveConfig", () => {
 				},
 			},
 			branch: () => ({
-				preview: { functions: { hello: { memoryMib: 2048 } } },
+				preview: { functions: { hello: { runtime: "nodejs24" } } },
 			}),
 		});
 		const resolved = resolveConfig(config, {
@@ -148,9 +147,9 @@ describe("resolveConfig", () => {
 		});
 		expect(resolved.preview?.functions[0]).toMatchObject({
 			slug: "hello",
-			memoryMib: 2048,
 			runtime: "nodejs24",
 		});
+		expect(resolved.preview?.functions[0]).not.toHaveProperty("memoryMib");
 	});
 
 	test("treats aiGateway enabled:false as disabled", () => {
@@ -270,7 +269,7 @@ describe("resolveConfig", () => {
 		// can never fabricate a function that isn't statically declared. We bypass the
 		// slug-narrowing guard via `unknown` (the value is still a well-typed BranchTuning).
 		const ghostTuning: BranchTuning = {
-			preview: { functions: { ghost: { memoryMib: 2048 } } },
+			preview: { functions: { ghost: { runtime: "nodejs24" } } },
 		};
 		const config = defineConfig({
 			preview: {
@@ -281,11 +280,10 @@ describe("resolveConfig", () => {
 			}>,
 		});
 		const resolved = resolveConfig(config, { name: "main", exists: true });
+		// Only the statically declared `hello` is resolved; the ghost slug is dropped.
 		expect(resolved.preview?.functions.map((f) => f.slug)).toEqual([
 			"hello",
 		]);
-		// hello keeps the default memory (the ghost tuning never applied to it).
-		expect(resolved.preview?.functions[0].memoryMib).toBe(512);
 	});
 
 	test("passes the branch target to the closure for per-branch decisions", () => {
@@ -321,7 +319,7 @@ describe("defineConfig type constraints (compile-time)", () => {
 			preview: { functions: { hello: { name: "H", source: "./h.ts" } } },
 			// @ts-expect-error "goodbye" is not a declared function slug.
 			branch: () => ({
-				preview: { functions: { goodbye: { memoryMib: 512 } } },
+				preview: { functions: { goodbye: { runtime: "nodejs24" } } },
 			}),
 		});
 	});
@@ -336,9 +334,19 @@ describe("defineConfig type constraints (compile-time)", () => {
 	test("the branch closure cannot redeclare a function's source", () => {
 		defineConfig({
 			preview: { functions: { hello: { name: "H", source: "./h.ts" } } },
-			// @ts-expect-error `source` is static; tuning only sets memoryMib/runtime.
+			// @ts-expect-error `source` is static; tuning only sets runtime.
 			branch: () => ({
 				preview: { functions: { hello: { source: "./other.ts" } } },
+			}),
+		});
+	});
+
+	test("the branch closure cannot tune function memory", () => {
+		defineConfig({
+			preview: { functions: { hello: { name: "H", source: "./h.ts" } } },
+			// @ts-expect-error function memory is fixed at 2048 and not configurable.
+			branch: () => ({
+				preview: { functions: { hello: { memoryMib: 512 } } },
 			}),
 		});
 	});

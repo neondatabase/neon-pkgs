@@ -21,7 +21,6 @@ import type {
 
 /** Default deploy parameters applied to functions that omit them in `neon.ts`. */
 const DEFAULT_FUNCTION_RUNTIME = "nodejs24" as const;
-const DEFAULT_FUNCTION_MEMORY_MIB = 512 as const;
 
 const REGION_PREFIX = /^(aws|azure|gcp)-/;
 
@@ -197,7 +196,6 @@ function resolveFunctionConfig(
 		source: def.source,
 		env: { ...(def.env ?? {}) },
 		runtime: tuning.runtime ?? DEFAULT_FUNCTION_RUNTIME,
-		memoryMib: tuning.memoryMib ?? DEFAULT_FUNCTION_MEMORY_MIB,
 		// Passed through untouched (no defaults); only `neon dev` reads it.
 		...(def.dev ? { dev: def.dev } : {}),
 	};

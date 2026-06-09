@@ -141,7 +141,6 @@ export type {
 	ConflictReport,
 	FunctionDef,
 	FunctionDevConfig,
-	FunctionMemoryMib,
 	FunctionRuntime,
 	FunctionTuning,
 	PostgresConfig,
