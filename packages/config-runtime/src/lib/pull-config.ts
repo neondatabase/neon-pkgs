@@ -80,11 +80,25 @@ export async function pullConfig(
 	const databases = await api.listBranchDatabases(projectId, branch.id);
 	const probeDatabase = pickProbeDatabase(databases);
 
+	// Preview reads degrade to "none / disabled" when the feature isn't available for the
+	// project/region. `pullConfig` mirrors the branch for env resolution (`neon dev`,
+	// `neon env pull`) and `inspect` — an unavailable Preview feature should not break those
+	// (env comes from auth/dataApi/postgres). `pushConfig` is the place that fails on an
+	// unavailable feature, and only when the policy declares it.
 	const [buckets, functions, aiGatewayEnabled, auth, dataApi] =
 		await Promise.all([
-			api.listBranchBuckets(projectId, branch.id),
-			api.listBranchFunctions(projectId, branch.id),
-			api.getAiGatewayEnabled(projectId, branch.id),
+			degradeUnavailable(
+				() => api.listBranchBuckets(projectId, branch.id),
+				[],
+			),
+			degradeUnavailable(
+				() => api.listBranchFunctions(projectId, branch.id),
+				[],
+			),
+			degradeUnavailable(
+				() => api.getAiGatewayEnabled(projectId, branch.id),
+				false,
+			),
 			api.getNeonAuth(projectId, branch.id),
 			probeDatabase
 				? api.getNeonDataApi(projectId, branch.id, probeDatabase)
@@ -113,6 +127,29 @@ function pickProbeDatabase(
 	const byName = databases.find((d) => d.name === "neondb");
 	if (byName) return byName.name;
 	return databases[0].name;
+}
+
+/**
+ * Run a Preview-feature read, returning `fallback` if the feature is unavailable for the
+ * project/region (a {@link ErrorCode.FeatureUnavailable} from the adapter). Other errors
+ * propagate. Used by `pullConfig` so a branch without a Preview feature still mirrors
+ * cleanly for env resolution / `inspect`, rather than aborting on an unrelated capability.
+ */
+async function degradeUnavailable<T>(
+	read: () => Promise<T>,
+	fallback: T,
+): Promise<T> {
+	try {
+		return await read();
+	} catch (err) {
+		if (
+			err instanceof PlatformError &&
+			err.code === ErrorCode.FeatureUnavailable
+		) {
+			return fallback;
+		}
+		throw err;
+	}
 }
 
 function createApiFromOptions(options: PullConfigOptions): NeonApi {

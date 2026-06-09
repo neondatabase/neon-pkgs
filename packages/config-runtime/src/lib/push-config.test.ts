@@ -328,6 +328,28 @@ describe("pushConfig", () => {
 		).toEqual(["uploads"]);
 	});
 
+	test("only probes the Preview features the policy declares", async () => {
+		const { api, projectId } = seededFake();
+		// Policy declares functions only — no buckets, no aiGateway.
+		const config = defineConfig(() => ({
+			preview: {
+				functions: [
+					{ name: "Hello World", slug: "fn1", source: fnSource },
+				],
+			},
+		}));
+
+		await pushConfig(config, { api, projectId, branchId: "br-main" });
+
+		const methods = api.history.map((h) => h.method);
+		expect(methods).toContain("listBranchFunctions");
+		// AI Gateway / buckets are not in the policy, so they are never read — this is
+		// what keeps `plan`/`apply` from failing on a Preview feature the user didn't ask
+		// for when it's unavailable in the project/region.
+		expect(methods).not.toContain("getAiGatewayEnabled");
+		expect(methods).not.toContain("listBranchBuckets");
+	});
+
 	test("uses an injected bundleFunction instead of the default esbuild bundler", async () => {
 		const { api, projectId } = seededFake();
 		const config = defineConfig(() => ({

@@ -15,6 +15,7 @@ import {
 	type RemoteServiceState,
 	type RemoteState,
 	type ResolvedFunctionConfig,
+	type ResolvedPreviewConfig,
 	resolveConfig,
 } from "@neondatabase/config";
 import type { FunctionBundler } from "./function-bundle.js";
@@ -180,13 +181,16 @@ export async function pushConfig(
 		),
 		services,
 	};
-	// Only fetch Preview state when the policy actually uses it — keeps pushes that don't
-	// touch functions/buckets/aiGateway at the same number of API calls as before.
+	// Only fetch Preview state when the policy actually uses it — and within that, only the
+	// specific features the policy declares. So a policy that uses functions never probes
+	// the AI Gateway, and `apply`/`plan` only fail on a Preview feature being unavailable
+	// (404/503) when the policy actually asks for it.
 	if (resolved.preview) {
 		remote.preview = await resolvePreviewState({
 			api,
 			projectId: remoteProject.id,
 			branchId: branch.id,
+			desired: resolved.preview,
 		});
 	}
 
@@ -445,12 +449,24 @@ async function resolvePreviewState(args: {
 	api: NeonApi;
 	projectId: string;
 	branchId: string;
+	desired: ResolvedPreviewConfig;
 }): Promise<RemotePreviewState> {
-	const { api, projectId, branchId } = args;
+	const { api, projectId, branchId, desired } = args;
+	// Read only the Preview features the policy declares: undeclared features can never
+	// produce a plan step (see diffConfig), so probing them is pure waste — and would make
+	// `plan`/`apply` fail on a feature the user didn't ask for if it's unavailable in the
+	// project/region. A declared-but-unavailable feature still throws (failing the push),
+	// which is the intended signal to enable it first.
 	const [buckets, functions, aiGatewayEnabled] = await Promise.all([
-		api.listBranchBuckets(projectId, branchId),
-		api.listBranchFunctions(projectId, branchId),
-		api.getAiGatewayEnabled(projectId, branchId),
+		desired.buckets.length > 0
+			? api.listBranchBuckets(projectId, branchId)
+			: Promise.resolve([]),
+		desired.functions.length > 0
+			? api.listBranchFunctions(projectId, branchId)
+			: Promise.resolve([]),
+		desired.aiGatewayEnabled
+			? api.getAiGatewayEnabled(projectId, branchId)
+			: Promise.resolve(false),
 	]);
 	return { buckets, functions, aiGatewayEnabled };
 }

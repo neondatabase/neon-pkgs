@@ -1,3 +1,4 @@
+import { ErrorCode, PlatformError } from "@neondatabase/config";
 import { describe, expect, test } from "vitest";
 import { FakeNeonApi } from "./fake-neon-api.js";
 import { pullConfig } from "./pull-config.js";
@@ -164,5 +165,47 @@ describe("pullConfig", () => {
 
 		expect(pulled.config.auth).toEqual({});
 		expect(pulled.config.dataApi).toEqual({});
+	});
+
+	test("degrades when a Preview feature is unavailable, still pulling auth/dataApi", async () => {
+		// A branch whose AI Gateway endpoint is unavailable for the project/region. pullConfig
+		// mirrors the branch for env resolution (`neon dev` / `neon env pull`) and inspect, so
+		// it must not abort on an unrelated Preview capability — env comes from auth/dataApi.
+		class UnavailableAiGatewayApi extends FakeNeonApi {
+			override async getAiGatewayEnabled(): Promise<boolean> {
+				throw new PlatformError(
+					ErrorCode.FeatureUnavailable,
+					"AI Gateway is a Preview feature that is not available for this project or region.",
+				);
+			}
+		}
+		const api = new UnavailableAiGatewayApi();
+		const projectId = "proj-degrade";
+		api.seedProject({
+			project: {
+				id: projectId,
+				name: "degrade",
+				regionId: "aws-us-east-1",
+				pgVersion: 17,
+			},
+			branches: [
+				{ branch: { id: "br-main", name: "main", isDefault: true } },
+			],
+		});
+		api.seedNeonAuth(projectId, "br-main", {
+			projectId: "auth-proj",
+			jwksUrl: "https://example.test/jwks",
+			baseUrl: "https://example.test/auth",
+		});
+
+		const pulled = await pullConfig({
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+
+		// Auth still pulled; the unavailable AI Gateway degrades to "off" rather than throwing.
+		expect(pulled.config.auth).toEqual({});
+		expect(pulled.preview?.aiGatewayEnabled ?? false).toBe(false);
 	});
 });

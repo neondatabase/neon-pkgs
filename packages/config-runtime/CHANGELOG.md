@@ -4,6 +4,7 @@
 
 ### Patch Changes
 
+- Only probe the Preview features a policy declares, and don't let an unavailable Preview feature break read paths. `pushConfig` (`plan` / `apply`) now reads remote bucket / function / AI Gateway state **only** for the features the `neon.ts` policy uses — so it fails on a `PLATFORM_FEATURE_UNAVAILABLE` (404/503) only when the policy actually asks for that feature. `pullConfig` (`inspect`, and the env resolution behind `neon dev` / `neon env pull`) degrades an unavailable Preview feature to "none / disabled" instead of throwing, so env (DATABASE_URL + Auth / Data API) is still pulled.
 - Updated dependencies
   - @neondatabase/config@0.2.1
 
