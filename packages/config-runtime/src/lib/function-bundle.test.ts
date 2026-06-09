@@ -25,7 +25,7 @@ function fn(source: string): ResolvedFunctionConfig {
 }
 
 describe("buildFunctionBundle", () => {
-	test("bundles a handler with esbuild and returns a ZIP containing out.js + sourcemap", async () => {
+	test("bundles a handler with esbuild and returns a ZIP containing index.mjs + sourcemap", async () => {
 		const helper = join(dir, "shared.ts");
 		writeFileSync(helper, "export const greeting = 'hello from neon';\n");
 		const source = join(dir, "hello-world.ts");
@@ -43,11 +43,11 @@ describe("buildFunctionBundle", () => {
 
 		const files = unzipSync(bundle);
 		const names = Object.keys(files).sort();
-		expect(names).toContain("out.js");
-		expect(names).toContain("out.js.map");
+		expect(names).toContain("index.mjs");
+		expect(names).toContain("index.mjs.map");
 
 		// The bundled output should have inlined the imported constant.
-		const js = new TextDecoder().decode(files["out.js"]);
+		const js = new TextDecoder().decode(files["index.mjs"]);
 		expect(js).toContain("hello from neon");
 	});
 

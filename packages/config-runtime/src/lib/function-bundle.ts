@@ -31,8 +31,8 @@ export type FunctionBundler = (
  * that nothing in this package's static graph names esbuild until a deploy actually runs —
  * a second layer of protection on top of the package split.
  *
- * Mirrors: `esbuild <source> --bundle --outfile=out.js --sourcemap --minify`, then zips the
- * emitted files into the archive the Functions deploy endpoint expects.
+ * Mirrors: `esbuild <source> --bundle --outfile=index.mjs --sourcemap --minify`, then zips
+ * the emitted files into the archive the Functions deploy endpoint expects.
  */
 export async function buildFunctionBundle(
 	fn: ResolvedFunctionConfig,
@@ -45,9 +45,11 @@ export async function buildFunctionBundle(
 			entryPoints: [fn.source],
 			bundle: true,
 			write: false,
-			// Set an explicit outfile so the emitted files are named `out.js` / `out.js.map`
-			// (with `write: false` and no outfile, esbuild labels the buffer `<stdout>`).
-			outfile: "out.js",
+			// Emit `index.mjs` / `index.mjs.map`: the Functions runtime imports the archive's
+			// entry by the conventional `index.{js,mjs}` name, and `.mjs` makes Node load the
+			// ESM output directly. (With `write: false` and no outfile, esbuild would label the
+			// buffer `<stdout>`.)
+			outfile: "index.mjs",
 			sourcemap: true,
 			minify: true,
 			format: "esm",
@@ -71,7 +73,7 @@ export async function buildFunctionBundle(
 	// `write: false` guarantees `outputFiles`, but the type is optional — guard for safety.
 	for (const file of result.outputFiles ?? []) {
 		// esbuild returns absolute output paths; archive them under their basename
-		// (`out.js`, `out.js.map`) so the bundle layout is stable regardless of cwd.
+		// (`index.mjs`, `index.mjs.map`) so the bundle layout is stable regardless of cwd.
 		entries[basename(file.path)] = file.contents;
 	}
 
