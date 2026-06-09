@@ -5,6 +5,9 @@ import { makeTempRepo } from "./test-utils.js";
 const PLATFORM_SRC = new URL("../v1.ts", import.meta.url).pathname;
 
 describe("loadConfigFromFile", () => {
+	// jiti transpiles the temp `neon.ts` on first import; under CI's `--coverage`
+	// instrumentation that cold transpile can take >5s, so give this test a generous
+	// timeout (the default 5s flakes in CI even though it runs in ~250ms locally).
 	test("loads a neon.ts branch policy", async () => {
 		const repo = makeTempRepo({
 			"neon.ts": `import { defineConfig } from "${PLATFORM_SRC}"; export default defineConfig({ auth: true, branch: (branch) => ({ parent: branch.name === "main" ? undefined : "main" }) });`,
@@ -21,7 +24,7 @@ describe("loadConfigFromFile", () => {
 		} finally {
 			repo.cleanup();
 		}
-	});
+	}, 30_000);
 
 	test("fails when config is missing", async () => {
 		const repo = makeTempRepo({ "package.json": "{}" });
