@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { ErrorCode, PlatformError } from "./errors.js";
 import {
+	buildFunctionDeployForm,
 	createNeonAuthRestInput,
 	isPreviewFeatureUnavailable,
 	previewUnavailableError,
@@ -60,6 +61,54 @@ describe("retryOnLocked", () => {
 			}, FAST_CONFIG),
 		).rejects.toMatchObject({ message: "still locked" });
 		expect(calls).toBe(FAST_CONFIG.maxAttempts);
+	});
+});
+
+describe("buildFunctionDeployForm", () => {
+	const bundle = new Uint8Array([0x50, 0x4b, 0x03, 0x04]); // "PK\x03\x04"
+
+	test("matches the FunctionDeployRequest spec fields (zip / runtime / environment)", () => {
+		const form = buildFunctionDeployForm({
+			bundle,
+			runtime: "nodejs24",
+			environment: { RESEND_API_KEY: "re_abc", STRIPE: "sk_x" },
+		});
+		// Exactly the three spec fields — no legacy `file` / `concurrency`.
+		expect([...form.keys()].sort()).toEqual([
+			"environment",
+			"runtime",
+			"zip",
+		]);
+		expect(form.has("file")).toBe(false);
+		expect(form.has("concurrency")).toBe(false);
+		expect(form.get("runtime")).toBe("nodejs24");
+		const zip = form.get("zip");
+		expect(zip).toBeInstanceOf(Blob);
+		expect((zip as Blob).type).toBe("application/zip");
+	});
+
+	test("encodes environment as a single JSON-encoded string map", () => {
+		const form = buildFunctionDeployForm({
+			bundle,
+			runtime: "nodejs24",
+			environment: { A: "1", B: "two" },
+		});
+		// Spec: `environment` is one JSON string, NOT bracketed `environment[A]` parts.
+		expect(form.has("environment[A]")).toBe(false);
+		expect(JSON.parse(form.get("environment") as string)).toEqual({
+			A: "1",
+			B: "two",
+		});
+	});
+
+	test("omits the environment field entirely when there are no vars", () => {
+		const form = buildFunctionDeployForm({
+			bundle,
+			runtime: "nodejs24",
+			environment: {},
+		});
+		expect(form.has("environment")).toBe(false);
+		expect([...form.keys()].sort()).toEqual(["runtime", "zip"]);
 	});
 });
 
