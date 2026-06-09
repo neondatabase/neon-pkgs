@@ -3,18 +3,26 @@ import { resolve } from "node:path";
 import { log } from "@clack/prompts";
 import { execa } from "execa";
 
+export interface AuthOptions {
+	json?: boolean;
+}
+
 /**
  * Ensures neonctl is authenticated by running a command that triggers auth if needed
  * This will automatically start the OAuth flow if the user isn't already authenticated
  */
-export async function ensureNeonctlAuth(): Promise<boolean> {
+export async function ensureNeonctlAuth(
+	options?: AuthOptions,
+): Promise<boolean> {
+	const quiet = options?.json === true;
+
 	// If already authenticated (e.g. ran in a terminal before), we can proceed
 	const existingToken = await getNeonctlAccessToken();
 	if (existingToken) return true;
 
 	try {
 		// Use execa to authenticate with neonctl
-		await execa("npx", ["-y", "neonctl", "me", "--no-analytics"], {
+		await execa("npx", ["-y", "neonctl", "me"], {
 			// Shows OAuth URL and prompts to the user
 			stdio: "inherit",
 			// Unset CI so neonctl doesn't refuse to open the browser (e.g. when run from agent chat)
@@ -23,15 +31,25 @@ export async function ensureNeonctlAuth(): Promise<boolean> {
 		return true;
 	} catch (error) {
 		const msg = error instanceof Error ? error.message : "Unknown error";
-		if (msg.includes("interactive auth") || msg.includes("CI")) {
-			log.error(
-				"Auth requires an interactive terminal. Run neon-init in your system terminal (outside the chat) to sign in.",
-			);
-		} else {
-			log.error(`Authentication failed: ${msg}`);
+		if (!quiet) {
+			if (msg.includes("interactive auth") || msg.includes("CI")) {
+				log.error(
+					"Auth requires an interactive terminal. Run neon-init in your system terminal (outside the chat) to sign in.",
+				);
+			} else {
+				log.error(`Authentication failed: ${msg}`);
+			}
 		}
 		return false;
 	}
+}
+
+/**
+ * Checks whether neonctl has stored OAuth credentials.
+ */
+export async function isAuthenticated(): Promise<boolean> {
+	const token = await getNeonctlAccessToken();
+	return token !== null;
 }
 
 /**
@@ -60,11 +78,15 @@ async function getNeonctlAccessToken(): Promise<string | null> {
 /**
  * Creates an API key using the Neon API with the OAuth token from neonctl
  */
-export async function createApiKeyFromNeonctl(): Promise<string | null> {
+export async function createApiKeyFromNeonctl(
+	options?: AuthOptions,
+): Promise<string | null> {
+	const quiet = options?.json === true;
+
 	try {
 		const accessToken = await getNeonctlAccessToken();
 		if (!accessToken) {
-			log.error("Could not find OAuth token from neonctl");
+			if (!quiet) log.error("Could not find OAuth token from neonctl");
 			return null;
 		}
 
@@ -87,23 +109,26 @@ export async function createApiKeyFromNeonctl(): Promise<string | null> {
 				body: JSON.stringify({
 					key_name: keyName,
 				}),
+				signal: AbortSignal.timeout(30000),
 			},
 		);
 
 		if (!response.ok) {
 			const errorText = await response.text();
-			log.error(
-				`Failed to create API key: ${response.status} ${errorText}`,
-			);
+			if (!quiet)
+				log.error(
+					`Failed to create API key: ${response.status} ${errorText}`,
+				);
 			return null;
 		}
 
 		const data = await response.json();
 		return data.key || null;
 	} catch (error) {
-		log.error(
-			`Failed to create API key: ${error instanceof Error ? error.message : "Unknown error"}`,
-		);
+		if (!quiet)
+			log.error(
+				`Failed to create API key: ${error instanceof Error ? error.message : "Unknown error"}`,
+			);
 		return null;
 	}
 }

@@ -1,8 +1,8 @@
 import { existsSync } from "node:fs";
+import { unlink } from "node:fs/promises";
 import { execa } from "execa";
 import type { Editor } from "./types.js";
-
-const NEON_EXTENSION_ID = "databricks.neon-local-connect";
+import { downloadVsix, NEON_EXTENSION_ID } from "./vsix.js";
 
 /**
  * Uses macOS mdfind to locate an app by bundle identifier
@@ -156,7 +156,7 @@ function getEditorUriScheme(editor: Editor): string | null {
 /**
  * Checks if the extension is installed by querying the editor's extension list
  */
-async function isExtensionInList(editor: Editor): Promise<boolean> {
+export async function isExtensionInstalled(editor: Editor): Promise<boolean> {
 	const command = await findEditorCommand(editor);
 	if (!command) {
 		return false;
@@ -182,7 +182,7 @@ export async function waitForExtensionInstalled(
 	delayMs = 1000,
 ): Promise<boolean> {
 	for (let attempt = 0; attempt < maxAttempts; attempt++) {
-		const isInstalled = await isExtensionInList(editor);
+		const isInstalled = await isExtensionInstalled(editor);
 
 		if (isInstalled) {
 			// Give the extension a moment to fully activate and register URI handlers
@@ -200,8 +200,12 @@ export async function waitForExtensionInstalled(
 }
 
 /**
- * Installs the Neon Local Connect extension for VS Code or Cursor
- * Returns success only if installation succeeds, fails silently otherwise
+ * Installs the Neon Local Connect extension for VS Code or Cursor.
+ *
+ * Strategy:
+ * 1. Try `--install-extension <id>` directly (uses the editor's configured marketplace)
+ * 2. If that fails, download .vsix (from proxy or Open VSX) and install locally
+ * 3. Set NEON_VSX_GALLERY_URL to use a corporate proxy for the download
  */
 export async function installExtension(editor: Editor): Promise<boolean> {
 	const command = await findEditorCommand(editor);
@@ -209,11 +213,35 @@ export async function installExtension(editor: Editor): Promise<boolean> {
 		return false;
 	}
 
+	// Try direct marketplace install first
 	try {
-		await execa(command, ["--install-extension", NEON_EXTENSION_ID]);
+		await execa(command, ["--install-extension", NEON_EXTENSION_ID], {
+			stdio: "pipe",
+			timeout: 60000,
+		});
+		return true;
+	} catch {
+		// Fall through to VSIX download
+	}
+
+	// Download .vsix and install locally
+	const vsixPath = await downloadVsix();
+	if (!vsixPath) {
+		return false;
+	}
+
+	try {
+		await execa(command, ["--install-extension", vsixPath], {
+			stdio: "pipe",
+			timeout: 60000,
+		});
 		return true;
 	} catch {
 		return false;
+	} finally {
+		try {
+			await unlink(vsixPath);
+		} catch {}
 	}
 }
 

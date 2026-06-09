@@ -1,7 +1,11 @@
 import { log, spinner } from "@clack/prompts";
 import { execa } from "execa";
 import { getAddMcpAgentId } from "./agents.js";
-import { createApiKeyFromNeonctl, ensureNeonctlAuth } from "./auth.js";
+import {
+	type AuthOptions,
+	createApiKeyFromNeonctl,
+	ensureNeonctlAuth,
+} from "./auth.js";
 import {
 	configureExtension,
 	installExtension,
@@ -44,48 +48,57 @@ async function installMCPServerViaAddMcp(
 	);
 }
 
+export interface InstallNeonOptions {
+	json?: boolean;
+}
+
 /**
- * Installs Neon's Local Connect extension or MCP Server for specific editors
+ * Installs Neon's Local Connect extension or MCP Server for specific editors.
+ * Returns a map of editor → install status and whether auth succeeded.
  */
 export async function installNeon(
 	selectedEditors: Editor[],
-): Promise<Map<Editor, InstallStatus>> {
+	options?: InstallNeonOptions,
+): Promise<{ results: Map<Editor, InstallStatus>; authSuccess: boolean }> {
+	const quiet = options?.json === true;
+	const authOptions: AuthOptions = { json: quiet };
 	const results = new Map<Editor, InstallStatus>();
 
 	const extensionEditors = selectedEditors.filter(usesExtension);
 	const mcpEditors = selectedEditors.filter((e) => !usesExtension(e));
 
 	if (extensionEditors.length === 0 && mcpEditors.length === 0) {
-		return results;
+		return { results, authSuccess: false };
 	}
 
-	const authSpinner = spinner();
-	authSpinner.start("Authenticating...");
+	const authSpinner = quiet ? null : spinner();
+	authSpinner?.start("Authenticating...");
 
-	const authSuccess = await ensureNeonctlAuth();
+	const authSuccess = await ensureNeonctlAuth(authOptions);
 
 	if (!authSuccess) {
-		authSpinner.stop("Authentication failed");
+		authSpinner?.stop("Authentication failed");
 		for (const editor of selectedEditors) {
 			results.set(editor, "failed");
 		}
-		return results;
+		return { results, authSuccess: false };
 	}
 
-	authSpinner.stop("Authentication successful ✓");
+	authSpinner?.stop("Authentication successful ✓");
 
-	// Create API key using the OAuth token
-	const apiKey = await createApiKeyFromNeonctl();
+	const apiKey = await createApiKeyFromNeonctl(authOptions);
 
 	if (!apiKey) {
-		log.error("Could not create API key after authentication.");
-		log.info(
-			"You can manually create one at: https://console.neon.tech/app/settings/api-keys",
-		);
+		if (!quiet) {
+			log.error("Could not create API key after authentication.");
+			log.info(
+				"You can manually create one at: https://console.neon.tech/app/settings/api-keys",
+			);
+		}
 		for (const editor of selectedEditors) {
 			results.set(editor, "failed");
 		}
-		return results;
+		return { results, authSuccess: true };
 	}
 
 	for (const editor of extensionEditors) {
@@ -98,25 +111,22 @@ export async function installNeon(
 
 		const isReady = await waitForExtensionInstalled(editor);
 		if (!isReady) {
-			// Extension install command succeeded but extension didn't appear in list
 			results.set(editor, "failed");
 			continue;
 		}
 
-		// Configure the extension with the API key
 		const configSuccess = await configureExtension(editor, apiKey);
 
 		if (configSuccess) {
 			results.set(editor, "success");
 		} else {
-			// Extension installed but auth failed but user can manually configure later
-			results.set(editor, "success");
+			results.set(editor, "failed");
 		}
 	}
 
 	if (mcpEditors.length > 0) {
-		const mcpSpinner = spinner();
-		mcpSpinner.start("Installing and configuring Neon MCP Server...");
+		const mcpSpinner = quiet ? null : spinner();
+		mcpSpinner?.start("Installing and configuring Neon MCP Server...");
 
 		let mcpSuccessCount = 0;
 		for (const editor of mcpEditors) {
@@ -127,6 +137,7 @@ export async function installNeon(
 			} catch (err) {
 				results.set(editor, "failed");
 				if (
+					!quiet &&
 					err &&
 					typeof err === "object" &&
 					"stderr" in err &&
@@ -140,12 +151,12 @@ export async function installNeon(
 			}
 		}
 
-		mcpSpinner.stop(
+		mcpSpinner?.stop(
 			mcpSuccessCount > 0
 				? "Neon MCP Server configuration complete ✓"
 				: "Failed to configure Neon MCP Server",
 		);
 	}
 
-	return results;
+	return { results, authSuccess: true };
 }

@@ -34,10 +34,12 @@
 		"package.json"
 	],
 	"scripts": {
-		"build": "tsc --noEmit && tsdown",
+		"build": "node scripts/set-vsx-gallery.mjs && tsc --noEmit && tsdown",
+		"build:internal": "node scripts/set-vsx-gallery.mjs https://cursor-vsx-proxy.cloud.databricks.com/gallery && tsc --noEmit && tsdown",
+		"pretest": "node scripts/set-vsx-gallery.mjs",
 		"test": "vitest --passWithNoTests",
 		"test:ci": "vitest run --passWithNoTests",
-		"tsc": "tsc"
+		"tsc": "node scripts/set-vsx-gallery.mjs && tsc"
 	},
 	"devDependencies": {
 		"@types/node": "catalog:",
@@ -52,6 +54,7 @@
 		"@clack/prompts": "0.10.1",
 		"add-mcp": "^1.5.1",
 		"execa": "^9.5.2",
+		"picocolors": "^1.1.1",
 		"yargs": "^18.0.0",
 		"yoctocolors": "^2.1.2"
 	},

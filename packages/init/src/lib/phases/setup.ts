@@ -1,0 +1,841 @@
+import { unlink } from "node:fs/promises";
+import { execa } from "execa";
+import { resolveAddMcpAgentId } from "../agents.js";
+import {
+	detectIde,
+	isCursorInstalled,
+	isVSCodeInstalled,
+} from "../detect-agent.js";
+import { findEditorCommand } from "../extension.js";
+import { inspectProject } from "../inspect.js";
+import { ensureNeonctl } from "../neonctl.js";
+import { ensureSkillsUpToDate } from "../skills.js";
+import type { Editor, PhaseResponse } from "../types.js";
+import { downloadVsix, NEON_EXTENSION_ID } from "../vsix.js";
+
+export interface SetupPhaseOptions {
+	agent?: string;
+	/** The IDE/editor the user is running in (e.g. "cursor", "vscode") — reported by agent */
+	ide?: string;
+	// Consent (from userPreferences)
+	consent?: "proceed" | "cancel";
+	// Inspection results — pre-filled by orchestrator or reported by agent
+	mcpConfigured?: boolean | null;
+	connectionString?: boolean | null;
+	connectionParams?: string; // JSON with host/dbname/etc if found
+	framework?: string;
+	orm?: string;
+	migrationTool?: string;
+	migrationDir?: string;
+	isVscodeIde?: boolean | null;
+	// User preferences
+	mode?: "defaults" | "customize";
+	mcpScope?: "global" | "project";
+	skillsScope?: "global" | "project";
+	installExtension?: boolean;
+	// Execution flags
+	execute?: boolean;
+}
+
+/**
+ * Comprehensive setup phase: inspects repo state, collects user preferences,
+ * then batches all installation commands together.
+ *
+ * With --data JSON, the agent sends inspection results AND user preferences
+ * in a single call, so the CLI can go straight to installation.
+ */
+export async function handleSetupPhase(
+	options: SetupPhaseOptions,
+): Promise<PhaseResponse> {
+	// User declined setup via consent preference
+	if (options.consent === "cancel") {
+		return {
+			phase: "setup",
+			status: "cancelled",
+			nextAction: {
+				type: "complete",
+				message:
+					"Neon setup cancelled. You can run neon-init again anytime to set up your project.",
+			},
+		};
+	}
+
+	// --execute: run the batched installation (legacy path)
+	if (options.execute) {
+		return executeBatchedInstallation(await mergeCliInspection(options));
+	}
+
+	// User chose "defaults" — batch install with default settings
+	if (options.mode === "defaults") {
+		const merged = await mergeCliInspection(options);
+		const shouldInstallExt =
+			merged.installExtension ?? isVscodeBasedIde(merged);
+		return executeBatchedInstallation({
+			...merged,
+			mcpScope: merged.mcpScope ?? "global",
+			skillsScope: merged.skillsScope ?? "project",
+			installExtension: shouldInstallExt,
+		});
+	}
+
+	// User chose "customize" with scopes already provided (via --data) — go straight to install
+	if (options.mode === "customize") {
+		if (
+			options.mcpScope !== undefined ||
+			options.skillsScope !== undefined
+		) {
+			const merged = await mergeCliInspection(options);
+			const shouldInstallExt =
+				merged.installExtension ?? isVscodeBasedIde(merged);
+			return executeBatchedInstallation({
+				...merged,
+				mcpScope: merged.mcpScope ?? "global",
+				skillsScope: merged.skillsScope ?? "project",
+				installExtension: shouldInstallExt,
+			});
+		}
+		// Legacy path: scopes not yet chosen, ask follow-up
+		return buildCustomizeQuestions(options);
+	}
+
+	// Agent has reported inspection results (via legacy individual flags), but user hasn't chosen mode yet.
+	// Only go to mode question if the agent explicitly reported back (not pre-filled by orchestrator).
+	// Agent has reported inspection results (via legacy individual flags), but user hasn't chosen mode yet
+	if (options.mcpConfigured !== null && options.mcpConfigured !== undefined) {
+		return buildModeQuestion(options);
+	}
+
+	// Default: send inspection checks with consent as first userPreference
+	return buildBulkInspection(options);
+}
+
+function buildBulkInspection(_options: SetupPhaseOptions): PhaseResponse {
+	const detectedIde = detectIde();
+
+	// If no IDE detected (e.g. standalone terminal), check what's installed
+	const installedEditors: string[] = [];
+	if (!detectedIde) {
+		if (isCursorInstalled()) installedEditors.push("cursor");
+		if (isVSCodeInstalled()) installedEditors.push("vscode");
+	}
+
+	return {
+		phase: "setup",
+		status: "consent_needed",
+		detectedIde: detectedIde?.toLowerCase() ?? null,
+		installedEditors: installedEditors.length > 0 ? installedEditors : null,
+		nextAction: {
+			type: "agent_check",
+			instructions: [
+				"Present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the `condition` field — only show a question if its condition is met.",
+				"",
+				'IMPORTANT: The consent question MUST be asked first, by itself. If the user declines (cancel), immediately call reportBack with {"consent": "cancel"} and stop. Do NOT show any other questions.',
+				"",
+				"If the user consents (proceed), perform the agent checks listed above (MCP server status and your agent identity), then present the mode question. If the MCP server is already configured, tell the user and note that it will be kept up to date. IMPORTANT: If you find neon-postgres in skills-lock.json, you MUST verify the actual SKILL.md file exists on disk (e.g. .agents/skills/neon-postgres/SKILL.md or .cursor/skills/neon-postgres/SKILL.md). If the lock file references it but the file is missing, report skills as NOT installed. Only ask about scope/options for components that are NOT already configured.",
+				"",
+				"IMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.",
+				"",
+				"GROUPING: Preferences that share the same `group` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a `group` must be asked individually.",
+				"",
+				detectedIde
+					? `The CLI has detected the IDE as: ${detectedIde.toLowerCase()}. Include this as the "ide" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.`
+					: installedEditors.length > 0
+						? `No IDE detected, but the following editors are installed: ${installedEditors.join(", ")}. The "installedEditors" field in this response lists them. If the user wants the extension installed, ask which editor to install it for and include that as the "ide" field in your reportBack data. If not, set "ide" to "none".`
+						: `No IDE or supported editors detected. Set "ide" to "none" in your reportBack data.`,
+				"",
+				"After all questions are answered, call reportBack with a single --data JSON containing: consent, agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
+			].join("\n"),
+			checks: [
+				{
+					id: "mcp_server",
+					description:
+						"Check if the Neon MCP server is already configured in your MCP server list",
+					lookFor: [
+						"An MCP server entry named 'Neon' or with URL containing 'mcp.neon.tech'",
+					],
+				},
+				{
+					id: "agent_type",
+					description:
+						"Identify which coding agent is running this command",
+					lookFor: [
+						"Determine which agent you are: cursor, claude-code, copilot, vscode, windsurf, codex, cline, gemini-cli, goose, opencode, or antigravity",
+						"Report your own agent identifier — this is used to configure the MCP server for the correct tool",
+					],
+				},
+				...(detectedIde
+					? [
+							{
+								id: "extension_installed",
+								description:
+									"Check if the Neon editor extension (databricks.neon-local-connect) is already installed in the IDE (NOT the agent — e.g. if you are Claude Code running inside Cursor, check Cursor's extensions)",
+								lookFor: [
+									"Run the IDE's --list-extensions command or check installed extensions for 'databricks.neon-local-connect' or 'Neon Local Connect'",
+									"If the extension is found, set installExtension to false in your reportBack data and SKIP the installExtension question",
+								],
+							},
+						]
+					: []),
+			],
+			userPreferences: [
+				{
+					id: "consent",
+					question:
+						"neon-init will install Neon's MCP server, agent skills, and editor extension, then guide you through connecting a Neon database. Proceed?",
+					phase: "before_checks",
+					options: [
+						{ value: "proceed", label: "Yes, set up Neon" },
+						{ value: "cancel", label: "No, cancel" },
+					],
+					default: "proceed",
+				},
+				{
+					id: "mode",
+					question: "Use default settings or customize?",
+					phase: "after_checks",
+					options: [
+						{
+							value: "defaults",
+							label: "Use defaults (MCP: global, skills: project-level, extension if applicable — already-configured components will be skipped)",
+						},
+						{
+							value: "customize",
+							label: "Customize installation settings",
+						},
+					],
+					default: "defaults",
+					condition: { preferenceId: "consent", equals: "proceed" },
+				},
+				{
+					id: "mcpScope",
+					question: "Where should the Neon MCP server be configured?",
+					context:
+						"SKIP this question entirely if the mcp_server check found it is already configured. Only ask if MCP is NOT yet configured. NOTE: Cursor disables project-level MCP servers by default — if the user is in Cursor, recommend global scope or warn that they will need to manually enable the server in Cursor Settings > MCP.",
+					phase: "after_checks",
+					options: [
+						{
+							value: "global",
+							label: "Global (available in all projects)",
+						},
+						{
+							value: "project",
+							label: "Project-level (scoped to this project only)",
+						},
+					],
+					default: "global",
+					condition: { preferenceId: "mode", equals: "customize" },
+					group: "customize",
+				},
+				{
+					id: "skillsScope",
+					question: "Where should Neon agent skills be installed?",
+					context:
+						"Always ask this question — the CLI handles skill detection and freshness automatically.",
+					phase: "after_checks",
+					options: [
+						{
+							value: "global",
+							label: "Global (available in all projects)",
+						},
+						{
+							value: "project",
+							label: "Project-level (scoped to this project only)",
+						},
+					],
+					default: "project",
+					condition: { preferenceId: "mode", equals: "customize" },
+					group: "customize",
+				},
+				{
+					id: "installExtension",
+					question:
+						"Install the Neon editor extension for local database browsing?",
+					phase: "after_checks",
+					options: [
+						{ value: "true", label: "Yes" },
+						{ value: "false", label: "No" },
+					],
+					default: "true",
+					context:
+						"The extension installs into the IDE, NOT the agent. If the CLI detected the IDE (see detectedIde field), use that — e.g. Claude Code running inside Cursor means the IDE is Cursor and the extension IS applicable. Only applicable for VS Code-based IDEs (VS Code, Cursor, Windsurf). SKIP this question if the user is NOT in a VS Code-based IDE, or if the extension_installed check found it is already installed. Set installExtension to false in reportBack if skipped.",
+					condition: { preferenceId: "mode", equals: "customize" },
+					group: "customize",
+				},
+			],
+			reportBack: {
+				type: "run_neon_init",
+				args: [
+					"setup",
+					"--json",
+					"--data",
+					"<json: { consent: string, agent: string, ide: string, mcpConfigured: bool, mode: string, mcpScope?: string, skillsScope?: string, installExtension?: bool }>",
+				],
+			},
+		},
+	};
+}
+
+function buildModeQuestion(options: SetupPhaseOptions): PhaseResponse {
+	const agentArgs = options.agent ? ["--agent", options.agent] : [];
+
+	// Build a context summary from what the agent found
+	const findings: string[] = [];
+	if (options.mcpConfigured) {
+		findings.push(
+			"Neon MCP server is already configured (will be upgraded to evergreen)",
+		);
+	} else {
+		findings.push("Neon MCP server is not configured");
+	}
+	if (options.connectionString) {
+		findings.push("A Neon connection string was found in the project");
+	} else {
+		findings.push("No Neon connection string found — will need to add one");
+	}
+	if (options.framework && options.framework !== "none") {
+		findings.push(`Framework detected: ${options.framework}`);
+	}
+	if (options.orm && options.orm !== "none") {
+		findings.push(`ORM detected: ${options.orm}`);
+	}
+	if (options.migrationTool && options.migrationTool !== "none") {
+		findings.push(`Migration tool detected: ${options.migrationTool}`);
+	}
+	if (options.isVscodeIde) {
+		findings.push("VS Code-based IDE detected — Neon extension available");
+	}
+
+	const inspectionArgs = buildInspectionArgs(options);
+
+	// Build defaults label showing only what will be installed
+	const defaultsParts: string[] = [];
+	if (!options.mcpConfigured) defaultsParts.push("MCP global");
+	defaultsParts.push("skills in project");
+	if (options.isVscodeIde) defaultsParts.push("install extension");
+	const defaultsLabel =
+		defaultsParts.length > 0
+			? `Use defaults (${defaultsParts.join(", ")})`
+			: "Use defaults";
+
+	return {
+		phase: "setup",
+		status: "preferences_needed",
+		inspection: {
+			mcpConfigured: options.mcpConfigured,
+			connectionString: options.connectionString,
+			framework: options.framework,
+			orm: options.orm,
+			migrationTool: options.migrationTool,
+			migrationDir: options.migrationDir,
+			isVscodeIde: options.isVscodeIde,
+		},
+		nextAction: {
+			type: "ask_user",
+			question: "Use default settings or customize?",
+			options: [
+				{
+					value: "defaults",
+					label: defaultsLabel,
+				},
+				{
+					value: "customize",
+					label: "Customize installation settings",
+				},
+			],
+			context: `Project inspection results:\n${findings.map((f) => `- ${f}`).join("\n")}`,
+			responseMapping: {
+				defaults: {
+					args: [
+						"setup",
+						"--json",
+						...agentArgs,
+						...inspectionArgs,
+						"--mode",
+						"defaults",
+					],
+				},
+				customize: {
+					args: [
+						"setup",
+						"--json",
+						...agentArgs,
+						...inspectionArgs,
+						"--mode",
+						"customize",
+					],
+				},
+			},
+		},
+	};
+}
+
+function buildCustomizeQuestions(options: SetupPhaseOptions): PhaseResponse {
+	const agentArgs = options.agent ? ["--agent", options.agent] : [];
+	const inspectionArgs = buildInspectionArgs(options);
+
+	const needsMcp = !options.mcpConfigured;
+	const mcpScopes = needsMcp ? ["global", "project"] : ["skip"];
+	const skillsScopes = ["global", "project"];
+	const extOptions = options.isVscodeIde ? ["ext", "noext"] : ["ext"];
+
+	// Build all combinations of configurable options
+	const customOptions: { value: string; label: string }[] = [];
+	for (const mcp of mcpScopes) {
+		for (const skills of skillsScopes) {
+			for (const ext of extOptions) {
+				const parts: string[] = [];
+				if (mcp !== "skip") parts.push(`MCP: ${mcp}`);
+				if (skills !== "skip")
+					parts.push(
+						`Skills: ${skills === "project" ? "project-level" : skills}`,
+					);
+				if (options.isVscodeIde) {
+					parts.push(
+						ext === "ext" ? "Install extension" : "Skip extension",
+					);
+				}
+				customOptions.push({
+					value: `${mcp}_${skills}_${ext}`,
+					label: parts.join(", "),
+				});
+			}
+		}
+	}
+
+	const responseMapping: Record<string, { args: string[] }> = {};
+
+	for (const opt of customOptions) {
+		const parts = opt.value.split("_");
+		const mcpScope = parts[0] === "skip" ? "global" : parts[0];
+		const skillsScope = parts[1] === "skip" ? "project" : parts[1];
+		const installExt = parts[2] === "ext";
+
+		responseMapping[opt.value] = {
+			args: [
+				"setup",
+				"--json",
+				...agentArgs,
+				...inspectionArgs,
+				"--mode",
+				"customize",
+				"--mcp-scope",
+				mcpScope,
+				"--skills-scope",
+				skillsScope,
+				...(options.isVscodeIde
+					? ["--install-extension", installExt ? "true" : "false"]
+					: []),
+				"--execute",
+			],
+		};
+	}
+
+	return {
+		phase: "setup",
+		status: "customizing",
+		nextAction: {
+			type: "ask_user",
+			question: "Choose your installation configuration:",
+			options: customOptions,
+			context:
+				"Global scope means settings apply across all your projects. Project-level means settings are scoped to this project only." +
+				(options.mcpConfigured
+					? "\nSince Neon tools are already installed, they will be upgraded to the latest evergreen version."
+					: "") +
+				(isCursorAgent(options)
+					? "\nNote: Cursor disables project-level MCP servers by default. If you choose project scope, you will need to manually enable the Neon server in Cursor Settings > MCP."
+					: ""),
+			responseMapping,
+		},
+	};
+}
+
+interface InstallResult {
+	id: string;
+	description: string;
+	status: "success" | "failed";
+	error?: string;
+	/** True when the step wasn't automated — the description contains manual instructions for the user */
+	manualAction?: boolean;
+}
+
+/**
+ * Executes the batched installation of MCP server, skills, and extension.
+ * Runs commands directly in the CLI process — the agent does NOT run these.
+ * Returns results and chains to the getting-started phase.
+ */
+async function executeBatchedInstallation(
+	options: SetupPhaseOptions,
+): Promise<PhaseResponse> {
+	const mcpScope = options.mcpScope ?? "global";
+	const agentId = options.agent ?? "claude-code";
+	const mcpAgentId = resolveAddMcpAgentId(agentId);
+	const installExt = options.installExtension === true;
+
+	const results: InstallResult[] = [];
+
+	// Step 1: Ensure neonctl CLI is installed and up to date
+	const neonctlResult = await ensureNeonctl();
+	switch (neonctlResult.status) {
+		case "already_current":
+			results.push({
+				id: "neonctl",
+				description: `neonctl CLI is up to date (v${neonctlResult.version})`,
+				status: "success",
+			});
+			break;
+		case "installed":
+			results.push({
+				id: "neonctl",
+				description: `Installed neonctl CLI (v${neonctlResult.version})`,
+				status: "success",
+			});
+			break;
+		case "updated":
+			results.push({
+				id: "neonctl",
+				description: `Updated neonctl CLI to v${neonctlResult.version}`,
+				status: "success",
+			});
+			break;
+		case "failed":
+			results.push({
+				id: "neonctl",
+				description: "Failed to install neonctl CLI",
+				status: "failed",
+				error: neonctlResult.error,
+			});
+			break;
+	}
+
+	// Step 2: Install MCP server (skip if already configured)
+	const isCursor =
+		mcpAgentId === "cursor" ||
+		options.ide?.toLowerCase() === "cursor" ||
+		options.agent?.toLowerCase() === "cursor";
+
+	if (options.mcpConfigured) {
+		results.push({
+			id: "skip_mcp",
+			description: "Neon MCP server already configured",
+			status: "success",
+		});
+	} else {
+		const mcpArgs = [
+			"-y",
+			"add-mcp",
+			"https://mcp.neon.tech/mcp",
+			...(mcpScope === "global" ? ["-g"] : []),
+			"-n",
+			"Neon",
+			"-y",
+			"-a",
+			mcpAgentId,
+		];
+		try {
+			await execa("npx", mcpArgs, { stdio: "pipe", timeout: 60000 });
+			results.push({
+				id: "install_mcp",
+				description: `Installed Neon MCP server (${mcpScope} scope)`,
+				status: "success",
+			});
+
+			// Some editors disable newly added MCP servers by default.
+			// Cursor: project-level servers are always disabled initially.
+			// Claude Code: newly added servers require user approval.
+			const isClaudeCode =
+				mcpAgentId === "claude-code" ||
+				options.agent?.toLowerCase() === "claude-code";
+
+			if (isCursor && mcpScope === "project") {
+				results.push({
+					id: "enable_mcp",
+					description:
+						'Cursor disables project-level MCP servers by default. Open Cursor Settings > MCP and toggle the "Neon" server on.',
+					status: "success",
+					manualAction: true,
+				});
+			} else if (isClaudeCode) {
+				results.push({
+					id: "enable_mcp",
+					description:
+						'Claude Code requires approval for newly added MCP servers. When prompted, approve the "Neon" MCP server to enable it. You can check MCP server status with /mcp in Claude Code.',
+					status: "success",
+					manualAction: true,
+				});
+			}
+		} catch (err) {
+			results.push({
+				id: "install_mcp",
+				description: "Failed to install Neon MCP server",
+				status: "failed",
+				error: err instanceof Error ? err.message : "Unknown error",
+			});
+		}
+	}
+
+	// Step 3: Install/update skills (ensureSkillsUpToDate handles freshness checks)
+	const skillsScope = options.skillsScope ?? "project";
+	const skillsOk = await ensureSkillsUpToDate(agentId, skillsScope);
+	results.push({
+		id: "install_skills",
+		description: skillsOk
+			? "Neon agent skills installed"
+			: "Failed to install Neon agent skills",
+		status: skillsOk ? "success" : "failed",
+	});
+
+	// Step 4: Install editor extension if requested
+	// Use the agent-reported IDE (not agent identity) — e.g. Claude Code running in
+	// Cursor should install the extension for Cursor, not skip it.
+	if (installExt) {
+		const extResult = await installExtensionForIde(options.ide ?? agentId);
+		results.push(extResult);
+	}
+
+	const allSucceeded = results.every((r) => r.status === "success");
+
+	// Build args to chain to the getting-started phase as a separate CLI call.
+	// This ensures the agent gets a clean response with ONLY the getting-started
+	// action — no competing "results" array to distract it.
+	const gettingStartedData: Record<string, unknown> = {};
+	if (options.connectionString) gettingStartedData.hasConnectionString = true;
+	if (options.framework) gettingStartedData.framework = options.framework;
+	if (options.orm) gettingStartedData.orm = options.orm;
+	if (options.migrationTool)
+		gettingStartedData.migrationTool = options.migrationTool;
+	if (options.migrationDir)
+		gettingStartedData.migrationDir = options.migrationDir;
+	const gettingStartedArgs = [
+		"getting-started",
+		"--json",
+		"--data",
+		JSON.stringify(gettingStartedData),
+	];
+
+	return {
+		phase: "setup",
+		status: allSucceeded ? "installed" : "partial",
+		results,
+		nextAction: {
+			type: "run_neon_init",
+			args: gettingStartedArgs,
+		},
+	};
+}
+
+function buildInspectionArgs(options: SetupPhaseOptions): string[] {
+	const args: string[] = [];
+	if (options.mcpConfigured !== null && options.mcpConfigured !== undefined) {
+		args.push("--mcp-configured", options.mcpConfigured ? "true" : "false");
+	}
+	if (
+		options.connectionString !== null &&
+		options.connectionString !== undefined
+	) {
+		args.push(
+			"--connection-string",
+			options.connectionString ? "true" : "false",
+		);
+	}
+	if (options.framework) {
+		args.push("--framework", options.framework);
+	}
+	if (options.orm) {
+		args.push("--orm", options.orm);
+	}
+	if (options.migrationTool) {
+		args.push("--migration-tool", options.migrationTool);
+	}
+	if (options.migrationDir) {
+		args.push("--migration-dir", options.migrationDir);
+	}
+	if (options.isVscodeIde !== null && options.isVscodeIde !== undefined) {
+		args.push("--is-vscode-ide", options.isVscodeIde ? "true" : "false");
+	}
+	return args;
+}
+
+/**
+ * Fills in missing filesystem inspection fields by running inspectProject().
+ * Agent-reported data (mcpConfigured, agent, mode, scopes) is preserved.
+ * CLI-detectable fields (framework, orm, migrations, connectionString, isVscodeIde)
+ * are filled in only if not already present.
+ */
+async function mergeCliInspection(
+	options: SetupPhaseOptions,
+): Promise<SetupPhaseOptions> {
+	// If the agent already provided these, no need to re-inspect
+	if (options.framework !== undefined && options.orm !== undefined) {
+		return options;
+	}
+
+	const inspection = await inspectProject([
+		{ id: "connection_string", description: "", lookFor: [] },
+		{ id: "project_stack", description: "", lookFor: [] },
+		{ id: "migrations", description: "", lookFor: [] },
+		{ id: "ide_type", description: "", lookFor: [] },
+	]);
+
+	// Also detect IDE if not already reported by the agent
+	const ide =
+		options.ide?.toLowerCase().replace(/\s+/g, "-") ||
+		detectIde()?.toLowerCase().replace(/\s+/g, "-") ||
+		undefined;
+
+	return {
+		...options,
+		ide,
+		connectionString:
+			options.connectionString ??
+			(inspection.connectionString as boolean | undefined),
+		framework:
+			options.framework ?? (inspection.framework as string | undefined),
+		orm: options.orm ?? (inspection.orm as string | undefined),
+		migrationTool:
+			options.migrationTool ??
+			(inspection.migrationTool as string | undefined),
+		migrationDir:
+			options.migrationDir ??
+			(inspection.migrationDir as string | undefined),
+		isVscodeIde:
+			options.isVscodeIde ??
+			(inspection.isVscodeIde as boolean | undefined),
+	};
+}
+
+/**
+ * Checks whether the user is in a VS Code-based IDE that supports extensions.
+ * Uses agent-reported `ide` field first, then falls back to `isVscodeIde` from inspection.
+ */
+function isCursorAgent(options: SetupPhaseOptions): boolean {
+	const ide = options.ide?.toLowerCase();
+	if (ide === "cursor") return true;
+	const agent = options.agent?.toLowerCase();
+	if (agent === "cursor") return true;
+	return false;
+}
+
+function isVscodeBasedIde(options: SetupPhaseOptions): boolean {
+	if (options.ide) {
+		const ide = options.ide.toLowerCase();
+		return (
+			ide === "cursor" ||
+			ide === "vscode" ||
+			ide === "vs-code" ||
+			ide === "windsurf"
+		);
+	}
+	return options.isVscodeIde === true;
+}
+
+/**
+ * Resolves which IDE to install the extension for.
+ * Accepts the agent-reported IDE value (preferred), the agent ID, or
+ * falls back to env-var detection.
+ */
+function resolveEditorForExtension(ideOrAgentId: string): Editor | null {
+	// Map known IDE/agent identifiers to Editor types
+	switch (ideOrAgentId.toLowerCase()) {
+		case "cursor":
+			return "Cursor";
+		case "vscode":
+		case "vs-code":
+		case "copilot":
+		case "github-copilot":
+		case "github-copilot-cli":
+			return "VS Code";
+		default:
+			break;
+	}
+
+	// Fall back to env-var detection
+	const ide = detectIde();
+	if (ide === "Cursor" || ide === "VS Code") return ide;
+
+	return null;
+}
+
+const MANUAL_INSTALL_MSG = `Search for "Neon" in the extensions panel (Cmd+Shift+X / Ctrl+Shift+X) and install "Neon Local Connect" by Databricks.`;
+
+/**
+ * Installs the Neon extension for the detected IDE.
+ *
+ * Uses env-var detection to determine the IDE (not the agent identity),
+ * so Claude Code running in Cursor correctly installs for Cursor.
+ *
+ * Strategy:
+ * 1. Try `<editor> --install-extension <id>` directly (uses editor's configured marketplace)
+ * 2. If that fails, download .vsix (from proxy or Open VSX) and install via local file
+ * 3. If all else fails: return manual install instructions
+ */
+async function installExtensionForIde(agentId: string): Promise<InstallResult> {
+	const editorType = resolveEditorForExtension(agentId);
+	if (!editorType) {
+		return {
+			id: "install_extension",
+			description: MANUAL_INSTALL_MSG,
+			status: "success",
+			manualAction: true,
+		};
+	}
+
+	const editorCmd = await findEditorCommand(editorType);
+	if (!editorCmd) {
+		return {
+			id: "install_extension",
+			description: MANUAL_INSTALL_MSG,
+			status: "success",
+			manualAction: true,
+		};
+	}
+
+	// Try direct marketplace install first (works if editor has marketplace configured)
+	try {
+		await execa(editorCmd, ["--install-extension", NEON_EXTENSION_ID], {
+			stdio: "pipe",
+			timeout: 60000,
+		});
+		return {
+			id: "install_extension",
+			description: `Installed Neon extension for ${editorType}`,
+			status: "success",
+		};
+	} catch {
+		// Fall through to VSIX download approach
+	}
+
+	// Download .vsix and install locally
+	const vsixPath = await downloadVsix();
+	if (!vsixPath) {
+		return {
+			id: "install_extension",
+			description: MANUAL_INSTALL_MSG,
+			status: "success",
+			manualAction: true,
+		};
+	}
+
+	try {
+		await execa(editorCmd, ["--install-extension", vsixPath], {
+			stdio: "pipe",
+			timeout: 60000,
+		});
+		return {
+			id: "install_extension",
+			description: `Installed Neon extension for ${editorType}`,
+			status: "success",
+		};
+	} catch {
+		return {
+			id: "install_extension",
+			description: MANUAL_INSTALL_MSG,
+			status: "success",
+			manualAction: true,
+		};
+	} finally {
+		try {
+			await unlink(vsixPath);
+		} catch {}
+	}
+}
