@@ -580,29 +580,17 @@ class RealNeonApi implements NeonApi {
 	}
 
 	/**
-	 * Upload a built function bundle via `multipart/form-data` to the deploy endpoint.
-	 * Sends the bundle as the `file` field plus the deploy params Neon requires.
+	 * Upload a built function bundle via `multipart/form-data` to the deploy endpoint
+	 * (`POST .../functions/{slug}/deployments`). Body shape lives in the pure
+	 * {@link buildFunctionDeployForm} helper so it can be unit-tested against the spec.
 	 */
 	private async postMultipart(
 		path: string,
 		input: DeployFunctionInput,
 	): Promise<unknown> {
-		const form = new FormData();
-		form.set(
-			"file",
-			new Blob([input.bundle as BlobPart], {
-				type: "application/zip",
-			}),
-			"bundle.zip",
-		);
-		// Keep concurrency internal for now. The API requires it, but the public
-		// neon.ts config surface intentionally does not expose it yet.
-		form.set("concurrency", "1");
-		form.set("runtime", input.runtime);
-		for (const [key, value] of Object.entries(input.environment)) {
-			form.set(`environment[${key}]`, value);
-		}
-		return this.request("POST", path, { body: form });
+		return this.request("POST", path, {
+			body: buildFunctionDeployForm(input),
+		});
 	}
 
 	private async request(
@@ -1056,6 +1044,31 @@ export function createNeonAuthRestInput(input: {
 		auth_provider: "better_auth",
 		...(input.databaseName ? { database_name: input.databaseName } : {}),
 	};
+}
+
+/**
+ * Build the `multipart/form-data` body for a function deployment, matching the public
+ * `FunctionDeployRequest` schema (`POST .../functions/{slug}/deployments`):
+ *
+ * - `zip` — the bundle as a binary part (named `bundle.zip`).
+ * - `runtime` — the function runtime.
+ * - `environment` — a single JSON-encoded string→string map (multipart can't carry a typed
+ *   object part), omitted entirely when there are no env vars.
+ *
+ * Pure (no I/O) so it can be unit-tested against the spec without stubbing `fetch`.
+ */
+export function buildFunctionDeployForm(input: DeployFunctionInput): FormData {
+	const form = new FormData();
+	form.set(
+		"zip",
+		new Blob([input.bundle as BlobPart], { type: "application/zip" }),
+		"bundle.zip",
+	);
+	form.set("runtime", input.runtime);
+	if (Object.keys(input.environment).length > 0) {
+		form.set("environment", JSON.stringify(input.environment));
+	}
+	return form;
 }
 
 /**
