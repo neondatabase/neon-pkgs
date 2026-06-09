@@ -30,8 +30,8 @@ importers:
   .:
     devDependencies:
       '@arethetypeswrong/cli':
-        specifier: ^0.18.2
-        version: 0.18.2
+        specifier: ^0.18.3
+        version: 0.18.3
       '@biomejs/biome':
         specifier: 'catalog:'
         version: 2.2.4
@@ -181,7 +181,7 @@ importers:
         version: 0.5.0
       tsdown:
         specifier: 'catalog:'
-        version: 0.14.1(@arethetypeswrong/core@0.18.2)(typescript@5.8.2)
+        version: 0.14.1(@arethetypeswrong/core@0.18.3)(typescript@5.8.2)
       typescript:
         specifier: 'catalog:'
         version: 5.8.2
@@ -215,7 +215,7 @@ importers:
         version: 0.5.0
       tsdown:
         specifier: 'catalog:'
-        version: 0.14.1(@arethetypeswrong/core@0.18.2)(typescript@5.8.2)
+        version: 0.14.1(@arethetypeswrong/core@0.18.3)(typescript@5.8.2)
       typescript:
         specifier: 'catalog:'
         version: 5.8.2
@@ -252,7 +252,7 @@ importers:
         version: 0.5.0
       tsdown:
         specifier: 'catalog:'
-        version: 0.14.1(@arethetypeswrong/core@0.18.2)(typescript@5.8.2)
+        version: 0.14.1(@arethetypeswrong/core@0.18.3)(typescript@5.8.2)
       typescript:
         specifier: 'catalog:'
         version: 5.8.2
@@ -273,7 +273,7 @@ importers:
         version: 0.5.0
       tsdown:
         specifier: 'catalog:'
-        version: 0.14.1(@arethetypeswrong/core@0.18.2)(typescript@5.8.2)
+        version: 0.14.1(@arethetypeswrong/core@0.18.3)(typescript@5.8.2)
       typescript:
         specifier: 'catalog:'
         version: 5.8.2
@@ -295,7 +295,7 @@ importers:
         version: 3.0.9(vitest@3.0.9(@types/node@20.19.17)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.39.0)(tsx@4.20.5)(yaml@2.7.1))
       tsdown:
         specifier: 'catalog:'
-        version: 0.14.1(@arethetypeswrong/core@0.18.2)(typescript@5.8.2)
+        version: 0.14.1(@arethetypeswrong/core@0.18.3)(typescript@5.8.2)
       typescript:
         specifier: 'catalog:'
         version: 5.8.2
@@ -335,7 +335,7 @@ importers:
         version: 0.5.0
       tsdown:
         specifier: 'catalog:'
-        version: 0.14.1(@arethetypeswrong/core@0.18.2)(typescript@5.8.2)
+        version: 0.14.1(@arethetypeswrong/core@0.18.3)(typescript@5.8.2)
       typescript:
         specifier: 'catalog:'
         version: 5.8.2
@@ -393,7 +393,7 @@ importers:
         version: 15.5.0
       tsdown:
         specifier: 'catalog:'
-        version: 0.14.1(@arethetypeswrong/core@0.18.2)(typescript@5.8.2)
+        version: 0.14.1(@arethetypeswrong/core@0.18.3)(typescript@5.8.2)
       typescript:
         specifier: 'catalog:'
         version: 5.8.2
@@ -415,7 +415,7 @@ importers:
         version: 3.0.9(vitest@3.0.9(@types/node@20.19.17)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.39.0)(tsx@4.20.5)(yaml@2.7.1))
       tsdown:
         specifier: 'catalog:'
-        version: 0.14.1(@arethetypeswrong/core@0.18.2)(typescript@5.8.2)
+        version: 0.14.1(@arethetypeswrong/core@0.18.3)(typescript@5.8.2)
       typescript:
         specifier: 'catalog:'
         version: 5.8.2
@@ -437,7 +437,7 @@ importers:
         version: 3.0.9(vitest@3.0.9(@types/node@20.19.17)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.39.0)(tsx@4.20.5)(yaml@2.7.1))
       tsdown:
         specifier: 'catalog:'
-        version: 0.14.1(@arethetypeswrong/core@0.18.2)(typescript@5.8.2)
+        version: 0.14.1(@arethetypeswrong/core@0.18.3)(typescript@5.8.2)
       typescript:
         specifier: 'catalog:'
         version: 5.8.2
@@ -465,7 +465,7 @@ importers:
         version: 3.0.9(vitest@3.0.9(@types/node@20.19.17)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.39.0)(tsx@4.20.5)(yaml@2.7.1))
       tsdown:
         specifier: 'catalog:'
-        version: 0.14.1(@arethetypeswrong/core@0.18.2)(typescript@5.8.2)
+        version: 0.14.1(@arethetypeswrong/core@0.18.3)(typescript@5.8.2)
       typescript:
         specifier: 'catalog:'
         version: 5.8.2
@@ -490,7 +490,7 @@ importers:
         version: 3.0.9(vitest@3.0.9(@types/node@20.19.17)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.39.0)(tsx@4.20.5)(yaml@2.7.1))
       tsdown:
         specifier: 'catalog:'
-        version: 0.14.1(@arethetypeswrong/core@0.18.2)(typescript@5.8.2)
+        version: 0.14.1(@arethetypeswrong/core@0.18.3)(typescript@5.8.2)
       typescript:
         specifier: 'catalog:'
         version: 5.8.2
@@ -510,13 +510,13 @@ packages:
   '@andrewbranch/untar.js@1.0.3':
     resolution: {integrity: sha512-Jh15/qVmrLGhkKJBdXlK1+9tY4lZruYjsgkDFj08ZmDiWVBLJcqkok7Z0/R0In+i1rScBpJlSvrTS2Lm41Pbnw==}
 
-  '@arethetypeswrong/cli@0.18.2':
-    resolution: {integrity: sha512-PcFM20JNlevEDKBg4Re29Rtv2xvjvQZzg7ENnrWFSS0PHgdP2njibVFw+dRUhNkPgNfac9iUqO0ohAXqQL4hbw==}
+  '@arethetypeswrong/cli@0.18.3':
+    resolution: {integrity: sha512-GeAlc+lUD4gKHD/LDQNvQY30FfQ+xAXg2inbQKUjFZgTOdI5ygEweaOnGHGBPSKXSLGQC7VLhpXu9zMnYk/4sQ==}
     engines: {node: '>=20'}
     hasBin: true
 
-  '@arethetypeswrong/core@0.18.2':
-    resolution: {integrity: sha512-GiwTmBFOU1/+UVNqqCGzFJYfBXEytUkiI+iRZ6Qx7KmUVtLm00sYySkfe203C9QtPG11yOz1ZaMek8dT/xnlgg==}
+  '@arethetypeswrong/core@0.18.3':
+    resolution: {integrity: sha512-sWBB/tdIktaT5xMq0Dz6CJyqcf6oMNdmiKiuPU1lWoJLTL6gjRSsksBuSgqot21hylkklBQY1wiSu+PkZhW7sw==}
     engines: {node: '>=20'}
 
   '@asamuzakjp/css-color@3.2.0':
@@ -4692,9 +4692,9 @@ snapshots:
 
   '@andrewbranch/untar.js@1.0.3': {}
 
-  '@arethetypeswrong/cli@0.18.2':
+  '@arethetypeswrong/cli@0.18.3':
     dependencies:
-      '@arethetypeswrong/core': 0.18.2
+      '@arethetypeswrong/core': 0.18.3
       chalk: 4.1.2
       cli-table3: 0.6.5
       commander: 10.0.1
@@ -4702,7 +4702,7 @@ snapshots:
       marked-terminal: 7.3.0(marked@9.1.6)
       semver: 7.7.2
 
-  '@arethetypeswrong/core@0.18.2':
+  '@arethetypeswrong/core@0.18.3':
     dependencies:
       '@andrewbranch/untar.js': 1.0.3
       '@loaderkit/resolve': 1.0.6
@@ -8659,7 +8659,7 @@ snapshots:
     optionalDependencies:
       typescript: 5.8.2
 
-  tsdown@0.14.1(@arethetypeswrong/core@0.18.2)(typescript@5.8.2):
+  tsdown@0.14.1(@arethetypeswrong/core@0.18.3)(typescript@5.8.2):
     dependencies:
       ansis: 4.2.0
       cac: 6.7.14
@@ -8676,7 +8676,7 @@ snapshots:
       tree-kill: 1.2.2
       unconfig: 7.3.2
     optionalDependencies:
-      '@arethetypeswrong/core': 0.18.2
+      '@arethetypeswrong/core': 0.18.3
       typescript: 5.8.2
     transitivePeerDependencies:
       - '@typescript/native-preview'
