@@ -48,6 +48,7 @@ name: CI
 
 permissions:
     contents: read
+    id-token: write # mint the JFrog OIDC token in ./.github/actions/prepare
 
 on:
     pull_request: ~

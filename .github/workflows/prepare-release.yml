@@ -47,6 +47,7 @@ jobs:
     permissions:
       contents: write # push the release branch
       pull-requests: write # open the release PR
+      id-token: write # mint the JFrog OIDC token in ./.github/actions/prepare
 
     steps:
       - name: Harden the runner (Audit all outbound calls)
