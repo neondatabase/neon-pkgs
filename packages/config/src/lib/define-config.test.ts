@@ -285,6 +285,18 @@ describe("resolveConfig", () => {
 		expect(resolved.preview?.functions[0].memoryMib).toBe(512);
 	});
 
+	test("passes the branch target to the closure for per-branch decisions", () => {
+		const config = defineConfig({
+			branch: (branch) => ({ protected: branch.name === "main" }),
+		});
+		expect(
+			resolveConfig(config, { name: "main", exists: true }).protected,
+		).toBe(true);
+		expect(
+			resolveConfig(config, { name: "dev", exists: false }).protected,
+		).toBe(false);
+	});
+
 	test("treats a branch closure returning undefined as no tuning", () => {
 		const config = defineConfig({
 			auth: true,
