@@ -63,10 +63,27 @@ export interface BranchTarget {
 	expiresAt?: string;
 }
 
+/**
+ * Object form of a branch-scoped service toggle. `{}` or `{ enabled: true }` enables it;
+ * `{ enabled: false }` opts out. Used as the object half of {@link ServiceToggleInput}.
+ */
 export interface ServiceToggle {
 	/** Defaults to `true` when the service namespace is present. Set `false` to opt out. */
 	enabled?: boolean;
 }
+
+/**
+ * How a branch-scoped service (Neon Auth, Data API, AI Gateway) is toggled in a policy.
+ *
+ * - `true` / `{}` / `{ enabled: true }` — enabled.
+ * - `false` / `{ enabled: false }` — disabled.
+ * - omitted (`undefined`) — not part of the policy at all.
+ *
+ * These toggles are **static** (they live in the top-level `defineConfig({ … })` object,
+ * not in the per-branch `branch` closure) so the secret set they imply can be derived at
+ * the type level — that's what makes `NeonEnv<typeof config>` exact.
+ */
+export type ServiceToggleInput = boolean | ServiceToggle;
 
 export interface PostgresConfig {
 	computeSettings?: ComputeSettings;
@@ -111,20 +128,20 @@ export interface FunctionDevConfig {
 }
 
 /**
- * A single Neon Function deployed to a branch (Preview feature).
+ * Static definition of a Neon Function (Preview feature). Declares that the function
+ * **exists** on every branch; its branch-unique slug is the **record key** in
+ * {@link PreviewInput.functions} (not a field here), so slugs are statically enumerable,
+ * cannot duplicate, and the `branch` closure can only tune slugs that are declared here.
  *
  * A function is invoked like a Cloudflare/Vercel handler — its source module
  * `export default { fetch }` or `export async function handler(req): Response`. The
- * `source` path is bundled (esbuild) and uploaded as a deployment; the newest
- * deployment becomes active.
+ * `source` path is bundled (esbuild) and uploaded as a deployment; the newest deployment
+ * becomes active.
+ *
+ * Deploy tuning (`memoryMib`, `runtime`) is **not** here — it varies per branch and lives
+ * in the `branch` closure (see {@link FunctionTuning}).
  */
-export interface FunctionConfig {
-	/**
-	 * Branch-unique slug used as the path segment in the function's invocation URL.
-	 * Immutable once created. 1–20 lowercase letters and digits: `^[a-z0-9]{1,20}$`.
-	 * @example "hellofn"
-	 */
-	slug: string;
+export interface FunctionDef {
 	/** Free-form display name. @example "Hello World" */
 	name: string;
 	/**
@@ -139,16 +156,16 @@ export interface FunctionConfig {
 	 */
 	source: string;
 	/**
-	 * Environment variables injected into the deployed function. Every value must be a
-	 * defined string — a `process.env.X` that is `undefined` (unset) errors at validation
-	 * time rather than silently shipping `undefined`.
-	 * @example { RESEND_API_KEY: process.env.RESEND_API_KEY }
+	 * Environment variables injected into the deployed function, keyed by the var name the
+	 * function reads at runtime. The **keys** are static (preserved at the type level so
+	 * `parseEnv(config, "<slug>").function.<key>` is typed); the **values** are arbitrary
+	 * strings evaluated when `neon.ts` is loaded (typically `process.env.X`) and uploaded
+	 * at `config apply`. Every value must be a defined string — a `process.env.X` that is
+	 * `undefined` (unset) errors at validation time rather than silently shipping
+	 * `undefined`.
+	 * @example { resendApiKey: process.env.RESEND_API_KEY ?? "" }
 	 */
 	env?: Record<string, string>;
-	/** Runtime to execute the function with. Defaults to `"nodejs24"`. */
-	runtime?: FunctionRuntime;
-	/** Memory allotted to each invocation, in MiB. Defaults to `512`. */
-	memoryMib?: FunctionMemoryMib;
 	/**
 	 * Local-development settings used by `neon dev` when serving every function from
 	 * `neon.ts`. Ignored at deploy time. See {@link FunctionDevConfig}.
@@ -160,11 +177,11 @@ export interface FunctionConfig {
 export type BucketAccessLevel = "private" | "public_read";
 
 /**
- * A branchable object-storage bucket on a branch (Preview feature).
+ * Static definition of a branchable object-storage bucket (Preview feature). The bucket's
+ * name is the **record key** in {@link PreviewInput.buckets}, so names are statically
+ * enumerable and cannot duplicate.
  */
-export interface BucketConfig {
-	/** Bucket name, unique within a branch. 1–255 chars. */
-	name: string;
+export interface BucketDef {
 	/**
 	 * Anonymous access level. `private` (default) requires authenticated reads/writes;
 	 * `public_read` allows anonymous GetObject/HeadObject.
@@ -173,19 +190,48 @@ export interface BucketConfig {
 }
 
 /**
- * Branch-scoped Preview features. Grouped under `preview` to signal they are backed by
- * Neon `x-stability-level: beta` endpoints and may change before GA.
+ * Static, branch-scoped **Preview** features. Grouped under `preview` to signal they are
+ * backed by Neon `x-stability-level: beta` endpoints and may change before GA. Everything
+ * here is existential (it determines what exists on the branch); per-branch tuning lives in
+ * the `branch` closure.
  */
-export interface PreviewConfig {
-	/** Functions to deploy on the branch. */
-	functions?: FunctionConfig[];
-	/** Object-storage buckets to create on the branch. */
-	buckets?: BucketConfig[];
+export interface PreviewInput {
 	/** Enable/disable the AI Gateway on the branch (toggle, like auth / dataApi). */
-	aiGateway?: ServiceToggle;
+	aiGateway?: ServiceToggleInput;
+	/** Functions to deploy, keyed by branch-unique slug (`^[a-z0-9]{1,20}$`). */
+	functions?: Record<string, FunctionDef>;
+	/** Object-storage buckets to create, keyed by bucket name. */
+	buckets?: Record<string, BucketDef>;
 }
 
-interface BranchConfigBase {
+/**
+ * Per-branch deploy tuning for a single function. Returned (per slug) by the `branch`
+ * closure. Deliberately **cannot** change the function's existence, source, name, or env
+ * **keys** — only how it is deployed — so the static secret/function set stays sound.
+ */
+export interface FunctionTuning {
+	/** Memory allotted to each invocation, in MiB. Defaults to `512`. */
+	memoryMib?: FunctionMemoryMib;
+	/** Runtime to execute the function with. Defaults to `"nodejs24"`. */
+	runtime?: FunctionRuntime;
+}
+
+/**
+ * Per-branch tuning of Preview features. Only existing function slugs (those declared in
+ * the static {@link PreviewInput.functions}) may be tuned — `Slug` is constrained to the
+ * declared keys by {@link BranchTuningFn}.
+ */
+export interface PreviewTuning<Slug extends string = string> {
+	functions?: Partial<Record<Slug, FunctionTuning>>;
+}
+
+/**
+ * The per-branch tuning object returned by the `branch` closure. It can adjust branch
+ * lifecycle (`parent`, `ttl`, `protected`), Postgres compute settings, and per-function
+ * deploy tuning — but **cannot** add/remove services or functions. That guarantee is what
+ * keeps the static secret set (and therefore `NeonEnv`) exact.
+ */
+export interface BranchTuning<Slug extends string = string> {
 	/** Parent branch name used when creating a new branch. Not a Postgres setting. */
 	parent?: string;
 	/** Time-to-live applied when creating a new branch, or reconciled on existing branches. */
@@ -193,22 +239,56 @@ interface BranchConfigBase {
 	/** Whether the selected branch should be protected. Undefined means "leave as-is". */
 	protected?: boolean;
 	postgres?: PostgresConfig;
-	/**
-	 * Branch-scoped Preview features (functions, object-storage buckets, AI Gateway).
-	 * Backed by Neon `x-stability-level: beta` endpoints — see {@link PreviewConfig}.
-	 */
-	preview?: PreviewConfig;
+	preview?: PreviewTuning<Slug>;
 }
 
-type BranchServiceConfig =
-	| { auth?: never; dataApi?: never }
-	| { auth: ServiceToggle; dataApi?: never }
-	| { auth?: never; dataApi: ServiceToggle }
-	| { auth: ServiceToggle; dataApi: ServiceToggle };
+/** Extract the declared function slugs from a {@link PreviewInput} for closure typing. */
+type FunctionSlugsOf<Preview extends PreviewInput | undefined> =
+	Preview extends {
+		functions: infer F;
+	}
+		? Extract<keyof F, string>
+		: string;
 
-export type BranchConfig = BranchConfigBase & BranchServiceConfig;
+/**
+ * Signature of the `branch` closure. Generic over the static {@link PreviewInput} so the
+ * `preview.functions` keys it may tune are constrained to the slugs actually declared.
+ */
+export type BranchTuningFn<
+	Preview extends PreviewInput | undefined = PreviewInput | undefined,
+> = (branch: BranchTarget) => BranchTuning<FunctionSlugsOf<Preview>>;
 
-export type Config = (branch: BranchTarget) => BranchConfig;
+/**
+ * A validated Neon branch policy — the value `defineConfig({ … })` returns and `neon.ts`
+ * default-exports.
+ *
+ * Split into a **static** existential set (top-level `auth` / `dataApi` GA toggles plus the
+ * beta `preview` block) and a **dynamic** per-branch `branch` closure for tuning. The
+ * static half is what makes the secret set — and therefore `NeonEnv<typeof config>` and
+ * `parseEnv` — exact; the closure can tune but never change what exists.
+ *
+ * Generic over the three static fields so the type system can read the exact toggle/slug
+ * literals; the defaults make the bare `Config` a usable "any policy" type for runtime
+ * function signatures.
+ */
+export interface Config<
+	Auth extends ServiceToggleInput | undefined =
+		| ServiceToggleInput
+		| undefined,
+	DataApi extends ServiceToggleInput | undefined =
+		| ServiceToggleInput
+		| undefined,
+	Preview extends PreviewInput | undefined = PreviewInput | undefined,
+> {
+	/** Neon Auth integration toggle (GA). Static — drives `NeonEnv.auth`. */
+	auth?: Auth;
+	/** Neon Data API integration toggle (GA). Static — drives `NeonEnv.dataApi`. */
+	dataApi?: DataApi;
+	/** Beta (Preview) feature set: AI Gateway, functions, buckets. Static. */
+	preview?: Preview;
+	/** Per-branch tuning closure. Cannot change the static existential set. */
+	branch?: BranchTuningFn<Preview>;
+}
 
 /**
  * A function with all deploy defaults applied. `resolveConfig` fills in `runtime` and

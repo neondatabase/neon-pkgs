@@ -7,14 +7,15 @@ const PLATFORM_SRC = new URL("../v1.ts", import.meta.url).pathname;
 describe("loadConfigFromFile", () => {
 	test("loads a neon.ts branch policy", async () => {
 		const repo = makeTempRepo({
-			"neon.ts": `import { defineConfig } from "${PLATFORM_SRC}"; export default defineConfig((branch) => ({ parent: branch.name === "main" ? undefined : "main" }));`,
+			"neon.ts": `import { defineConfig } from "${PLATFORM_SRC}"; export default defineConfig({ auth: true, branch: (branch) => ({ parent: branch.name === "main" ? undefined : "main" }) });`,
 		});
 		try {
 			const { config, resolvedPath } = await loadConfigFromFile({
 				cwd: repo.root,
 			});
 			expect(resolvedPath.endsWith("neon.ts")).toBe(true);
-			expect(config({ name: "dev", exists: false })).toEqual({
+			expect(config.auth).toBe(true);
+			expect(config.branch?.({ name: "dev", exists: false })).toEqual({
 				parent: "main",
 			});
 		} finally {

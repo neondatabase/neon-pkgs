@@ -43,7 +43,10 @@ describe("pullConfig", () => {
 			parent: "main",
 			protected: true,
 		});
-		expect(pulled.config).toMatchObject({
+		// Branch lifecycle/compute is carried by the `branch` tuning closure now.
+		expect(
+			pulled.config.branch?.({ name: "dev-a", exists: true }),
+		).toMatchObject({
 			parent: "main",
 			protected: true,
 			postgres: { computeSettings: { autoscalingLimitMaxCu: 2 } },
@@ -101,7 +104,7 @@ describe("pullConfig", () => {
 			branchId: "br-main",
 		});
 
-		expect(pulled.config.auth).toEqual({});
+		expect(pulled.config.auth).toBe(true);
 		expect(pulled.config.dataApi).toBeUndefined();
 	});
 
@@ -130,7 +133,7 @@ describe("pullConfig", () => {
 			branchId: "br-main",
 		});
 
-		expect(pulled.config.dataApi).toEqual({});
+		expect(pulled.config.dataApi).toBe(true);
 		expect(pulled.config.auth).toBeUndefined();
 	});
 
@@ -163,8 +166,8 @@ describe("pullConfig", () => {
 			branchId: "br-main",
 		});
 
-		expect(pulled.config.auth).toEqual({});
-		expect(pulled.config.dataApi).toEqual({});
+		expect(pulled.config.auth).toBe(true);
+		expect(pulled.config.dataApi).toBe(true);
 	});
 
 	test("degrades when a Preview feature is unavailable, still pulling auth/dataApi", async () => {
@@ -205,7 +208,7 @@ describe("pullConfig", () => {
 		});
 
 		// Auth still pulled; the unavailable AI Gateway degrades to "off" rather than throwing.
-		expect(pulled.config.auth).toEqual({});
+		expect(pulled.config.auth).toBe(true);
 		expect(pulled.preview?.aiGatewayEnabled ?? false).toBe(false);
 	});
 });

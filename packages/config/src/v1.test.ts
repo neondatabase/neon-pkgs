@@ -9,10 +9,12 @@ import {
 
 describe("v1 surface", () => {
 	test("exports the authoring helpers, pure diff engine, adapter, and loader", () => {
-		const config = defineConfig((branch) => ({
-			parent: branch.name === "main" ? undefined : "main",
-		}));
-		expect(config({ name: "dev", exists: false })).toEqual({
+		const config = defineConfig({
+			branch: (branch) => ({
+				parent: branch.name === "main" ? undefined : "main",
+			}),
+		});
+		expect(config.branch?.({ name: "dev", exists: false })).toEqual({
 			parent: "main",
 		});
 		// Authoring + pure core stays in @neondatabase/config.

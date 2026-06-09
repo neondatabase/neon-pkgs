@@ -41,7 +41,7 @@ describe("inspect", () => {
 describe("plan", () => {
 	test("computes a dry-run plan without mutating", async () => {
 		const { api, projectId } = seededFake();
-		const config = defineConfig(() => ({ auth: {} }));
+		const config = defineConfig({ auth: {} });
 		const result = await plan(config, {
 			api,
 			projectId,
@@ -69,7 +69,7 @@ describe("plan", () => {
 describe("apply", () => {
 	test("applies the branch policy to the selected branch", async () => {
 		const { api, projectId } = seededFake();
-		const config = defineConfig(() => ({ auth: {} }));
+		const config = defineConfig({ auth: {} });
 		const result = await apply(config, {
 			api,
 			projectId,
@@ -89,9 +89,11 @@ describe("apply", () => {
 
 	test("surfaces drift as a PushConflictError without updateExisting", async () => {
 		const { api, projectId } = seededFake();
-		const config = defineConfig(() => ({
-			postgres: { computeSettings: { autoscalingLimitMaxCu: 4 } },
-		}));
+		const config = defineConfig({
+			branch: () => ({
+				postgres: { computeSettings: { autoscalingLimitMaxCu: 4 } },
+			}),
+		});
 		await expect(
 			apply(config, { api, projectId, branchId: "br-main" }),
 		).rejects.toMatchObject({ code: ErrorCode.PushConflict });
@@ -99,9 +101,11 @@ describe("apply", () => {
 
 	test("applies drift to a protected branch with both override flags", async () => {
 		const { api, projectId } = seededFake({ protected: true });
-		const config = defineConfig(() => ({
-			postgres: { computeSettings: { autoscalingLimitMaxCu: 4 } },
-		}));
+		const config = defineConfig({
+			branch: () => ({
+				postgres: { computeSettings: { autoscalingLimitMaxCu: 4 } },
+			}),
+		});
 		const result = await apply(config, {
 			api,
 			projectId,
@@ -126,7 +130,7 @@ describe("branch not found (id-only lookup)", () => {
 
 	test("plan throws BranchNotFound for an unknown id", async () => {
 		const { api, projectId } = seededFake();
-		const config = defineConfig(() => ({}));
+		const config = defineConfig({});
 		await expect(
 			plan(config, { api, projectId, branchId: "br-does-not-exist" }),
 		).rejects.toMatchObject({ code: ErrorCode.BranchNotFound });
@@ -134,7 +138,7 @@ describe("branch not found (id-only lookup)", () => {
 
 	test("apply throws BranchNotFound for an unknown id", async () => {
 		const { api, projectId } = seededFake();
-		const config = defineConfig(() => ({}));
+		const config = defineConfig({});
 		await expect(
 			apply(config, { api, projectId, branchId: "br-does-not-exist" }),
 		).rejects.toMatchObject({ code: ErrorCode.BranchNotFound });

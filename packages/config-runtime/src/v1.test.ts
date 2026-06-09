@@ -20,10 +20,12 @@ describe("config-runtime v1 surface", () => {
 	});
 
 	test("re-exports defineConfig from @neondatabase/config for one-stop deploy scripts", () => {
-		const config = defineConfig((branch) => ({
-			parent: branch.name === "main" ? undefined : "main",
-		}));
-		expect(config({ name: "dev", exists: false })).toEqual({
+		const config = defineConfig({
+			branch: (branch) => ({
+				parent: branch.name === "main" ? undefined : "main",
+			}),
+		});
+		expect(config.branch?.({ name: "dev", exists: false })).toEqual({
 			parent: "main",
 		});
 	});

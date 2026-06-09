@@ -42,13 +42,15 @@ import {
 	PushConflictError,
 } from "./lib/errors.js";
 import {
-	branchConfigSchema,
-	bucketConfigSchema,
+	branchTuningSchema,
+	bucketDefSchema,
 	computeSettingsSchema,
-	configSchema,
-	functionConfigSchema,
+	configInputSchema,
+	functionDefSchema,
+	functionTuningSchema,
 	postgresConfigSchema,
-	previewConfigSchema,
+	previewInputSchema,
+	serviceToggleInputSchema,
 	serviceToggleSchema,
 } from "./lib/schema.js";
 
@@ -68,14 +70,16 @@ export const errors = {
 
 /** The zod schemas underlying `defineConfig`, grouped under product-friendly names. */
 export const schemas = {
-	branch: branchConfigSchema,
-	bucket: bucketConfigSchema,
+	config: configInputSchema,
+	branchTuning: branchTuningSchema,
+	bucket: bucketDefSchema,
 	computeSettings: computeSettingsSchema,
-	config: configSchema,
-	function: functionConfigSchema,
+	function: functionDefSchema,
+	functionTuning: functionTuningSchema,
 	postgres: postgresConfigSchema,
-	preview: previewConfigSchema,
+	preview: previewInputSchema,
 	service: serviceToggleSchema,
+	serviceInput: serviceToggleInputSchema,
 } as const;
 
 // ─── Lower-level adapters ──────────────────────────────────────────────────────
@@ -127,23 +131,27 @@ export { createRealNeonApi } from "./lib/neon-api-real.js";
 // ─── Config types (used in neon.ts and in operation return values) ────────────
 export type {
 	AppliedChange,
-	BranchConfig,
 	BranchTarget,
+	BranchTuning,
+	BranchTuningFn,
 	BucketAccessLevel,
-	BucketConfig,
+	BucketDef,
 	ComputeSettings,
 	Config,
 	ConflictReport,
-	FunctionConfig,
+	FunctionDef,
 	FunctionDevConfig,
 	FunctionMemoryMib,
 	FunctionRuntime,
+	FunctionTuning,
 	PostgresConfig,
-	PreviewConfig,
+	PreviewInput,
+	PreviewTuning,
 	PushResult,
 	ResolvedBranchConfig,
 	ResolvedBucketConfig,
 	ResolvedFunctionConfig,
 	ResolvedPreviewConfig,
 	ServiceToggle,
+	ServiceToggleInput,
 } from "./lib/types.js";

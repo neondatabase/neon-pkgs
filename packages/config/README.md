@@ -16,17 +16,30 @@ npm install @neondatabase/config
 // neon.ts
 import { defineConfig } from "@neondatabase/config/v1";
 
-export default defineConfig((branch) => {
-  if (branch.name === "main") {
-    return { protected: true, auth: {} };
-  }
-  return { parent: "main", ttl: "7d" };
+export default defineConfig({
+  // Static: what *exists* on every branch. GA service toggles drive the typed env.
+  auth: true,
+  dataApi: false,
+  // Beta (Preview) features, keyed by slug / name.
+  preview: {
+    functions: {
+      hello: { name: "Hello", source: "./functions/hello.ts", dev: { port: 8787 } },
+    },
+  },
+  // Dynamic: per-branch tuning only. Cannot add/remove services or functions.
+  branch: (branch) => ({
+    protected: branch.name === "main",
+    ...(branch.name === "main" ? {} : { parent: "main", ttl: "7d" }),
+  }),
 });
 ```
 
-The `branch` argument is a **read-only descriptor** (`BranchTarget`) of the branch this policy is being evaluated for — `name`, `id`, `exists`, `isDefault`, `isProtected`, `parentId`, `expiresAt`. It is not a live branch handle: don't mutate it, just switch on its fields and **return** the desired config. The same callback runs both against existing branches and during pre-create evaluation (`exists: false`).
+A policy is split into a **static** existential set and a **dynamic** `branch` closure:
 
-`parent` and `ttl` are branch lifecycle fields. Product-specific settings live under product namespaces such as `postgres`, `auth`, and `dataApi`.
+- **Static top-level** — `auth` / `dataApi` (GA service toggles) and the beta `preview` block (`aiGateway`, `functions` keyed by slug, `buckets` keyed by name). Because this is static, the secret set is known at the type level, so `parseEnv` / `fetchEnv` from `@neondatabase/env` return an exact `NeonEnv`.
+- **`branch` closure** — receives a **read-only descriptor** (`BranchTarget`) of the branch being evaluated (`name`, `id`, `exists`, `isDefault`, `isProtected`, `parentId`, `expiresAt`) and returns per-branch *tuning*: `parent`, `ttl`, `protected`, `postgres.computeSettings`, and per-function `memoryMib` / `runtime`. It runs both against existing branches and during pre-create evaluation (`exists: false`). It **cannot** change which services or functions exist — that is what keeps the static secret set sound.
+
+Service toggles accept `true` / `{}` / `{ enabled: true }` (enabled) and `false` / `{ enabled: false }` (disabled). Function slugs (record keys) must match `^[a-z0-9]{1,20}$`.
 
 ## Functions
 

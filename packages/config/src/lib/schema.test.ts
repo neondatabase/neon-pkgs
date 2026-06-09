@@ -1,7 +1,8 @@
 import { describe, expect, test } from "vitest";
 import {
-	branchConfigSchema,
+	branchTuningSchema,
 	computeSettingsSchema,
+	configInputSchema,
 	formatZodIssues,
 } from "./schema.js";
 
@@ -27,127 +28,107 @@ describe("computeSettingsSchema", () => {
 	});
 });
 
-describe("branchConfigSchema", () => {
-	test("accepts branch-level lifecycle and product namespaces", () => {
-		expect(
-			branchConfigSchema.parse({
-				parent: "main",
-				ttl: "7d",
-				postgres: { computeSettings: { autoscalingLimitMaxCu: 2 } },
-				auth: { enabled: true },
-			}),
-		).toMatchObject({ parent: "main", auth: { enabled: true } });
-	});
-
-	test("rejects wildcard parent", () => {
-		const result = branchConfigSchema.safeParse({ parent: "preview-*" });
-		expect(result.success).toBe(false);
-	});
-
-	test("accepts a preview block with functions, buckets, and aiGateway", () => {
-		const result = branchConfigSchema.safeParse({
+describe("configInputSchema", () => {
+	test("accepts top-level services, a preview block, and a branch closure", () => {
+		const result = configInputSchema.safeParse({
+			auth: true,
+			dataApi: { enabled: false },
 			preview: {
-				functions: [
-					{
-						slug: "fn1",
+				functions: {
+					fn1: {
 						name: "Hello World",
 						source: "./hello.ts",
 						env: { KEY: "value" },
 					},
-				],
-				buckets: [{ name: "uploads", access: "public_read" }],
+				},
+				buckets: { uploads: { access: "public_read" } },
 				aiGateway: { enabled: true },
 			},
+			branch: () => ({}),
 		});
 		expect(result.success).toBe(true);
 	});
 
+	test("rejects an invalid function slug used as a record key", () => {
+		const result = configInputSchema.safeParse({
+			preview: {
+				functions: { "Bad Slug": { name: "x", source: "./x.ts" } },
+			},
+		});
+		expect(result.success).toBe(false);
+	});
+
 	test("rejects an unknown key inside preview", () => {
-		const result = branchConfigSchema.safeParse({
-			preview: { functions: [], typo: true },
+		const result = configInputSchema.safeParse({
+			preview: { functions: {}, typo: true },
 		});
 		expect(result.success).toBe(false);
 	});
 
 	test("accepts a function dev block with port and portless", () => {
-		const result = branchConfigSchema.safeParse({
+		const result = configInputSchema.safeParse({
 			preview: {
-				functions: [
-					{
-						slug: "fn1",
+				functions: {
+					fn1: {
 						name: "Hello World",
 						source: "./hello.ts",
 						dev: { port: 8787, portless: true },
 					},
-				],
-			},
-		});
-		expect(result.success).toBe(true);
-	});
-
-	test("accepts dev with no port when portless is not set", () => {
-		const result = branchConfigSchema.safeParse({
-			preview: {
-				functions: [
-					{ slug: "f", name: "F", source: "./f.ts", dev: {} },
-				],
-			},
-		});
-		expect(result.success).toBe(true);
-	});
-
-	test("accepts dev.portless true without a port (portless assigns the port)", () => {
-		const result = branchConfigSchema.safeParse({
-			preview: {
-				functions: [
-					{
-						slug: "f",
-						name: "F",
-						source: "./f.ts",
-						dev: { portless: true },
-					},
-				],
+				},
 			},
 		});
 		expect(result.success).toBe(true);
 	});
 
 	test("rejects an out-of-range dev.port", () => {
-		const result = branchConfigSchema.safeParse({
+		const result = configInputSchema.safeParse({
 			preview: {
-				functions: [
-					{
-						slug: "f",
-						name: "F",
-						source: "./f.ts",
-						dev: { port: 0 },
-					},
-				],
+				functions: {
+					f: { name: "F", source: "./f.ts", dev: { port: 0 } },
+				},
 			},
 		});
 		expect(result.success).toBe(false);
 	});
 
 	test("rejects an unknown key inside dev", () => {
-		const result = branchConfigSchema.safeParse({
+		const result = configInputSchema.safeParse({
 			preview: {
-				functions: [
-					{
-						slug: "f",
+				functions: {
+					f: {
 						name: "F",
 						source: "./f.ts",
 						dev: { port: 8787, typo: true },
 					},
-				],
+				},
 			},
 		});
 		expect(result.success).toBe(false);
 	});
 });
 
+describe("branchTuningSchema", () => {
+	test("accepts branch lifecycle, postgres, and per-function tuning", () => {
+		expect(
+			branchTuningSchema.parse({
+				parent: "main",
+				ttl: "7d",
+				protected: true,
+				postgres: { computeSettings: { autoscalingLimitMaxCu: 2 } },
+				preview: { functions: { hello: { memoryMib: 1024 } } },
+			}),
+		).toMatchObject({ parent: "main", protected: true });
+	});
+
+	test("rejects wildcard parent", () => {
+		const result = branchTuningSchema.safeParse({ parent: "preview-*" });
+		expect(result.success).toBe(false);
+	});
+});
+
 describe("formatZodIssues", () => {
 	test("renders paths", () => {
-		const result = branchConfigSchema.safeParse({
+		const result = branchTuningSchema.safeParse({
 			postgres: {
 				computeSettings: {
 					autoscalingLimitMinCu: 8,

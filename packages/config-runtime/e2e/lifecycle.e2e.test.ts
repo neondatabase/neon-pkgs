@@ -25,11 +25,12 @@ describe("e2e — branch policy lifecycle", () => {
 				(b) => b.isDefault,
 			);
 			if (!main) throw new Error("missing default branch");
-			const config = defineConfig((b) =>
-				b.name === main.name
-					? { protected: true }
-					: { parent: main.name, ttl: "1h" },
-			);
+			const config = defineConfig({
+				branch: (b) =>
+					b.name === main.name
+						? { protected: true }
+						: { parent: main.name, ttl: "1h" },
+			});
 			const created = await api.createBranch(projectId, {
 				name: "dev",
 				parentId: main.id,

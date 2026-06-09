@@ -62,9 +62,16 @@ export const computeSettingsSchema = z
 		}
 	});
 
+/** Object form of a service toggle (`{ enabled?: boolean }`). */
 export const serviceToggleSchema = z.strictObject({
 	enabled: z.boolean().optional(),
 });
+
+/** A service toggle as written in a policy: `boolean` or `{ enabled?: boolean }`. */
+export const serviceToggleInputSchema = z.union([
+	z.boolean(),
+	serviceToggleSchema,
+]);
 
 export const postgresConfigSchema = z.strictObject({
 	computeSettings: computeSettingsSchema.optional(),
@@ -73,6 +80,9 @@ export const postgresConfigSchema = z.strictObject({
 /**
  * Branch-unique function slug. Mirrors the Neon Functions API path-segment rule
  * (`platform/internal/platform/functions/name.go`): 1–20 lowercase letters and digits.
+ * Used as the **key schema** of the `preview.functions` record, so a bad slug fails
+ * validation with a path pointing at the offending key and duplicate slugs are impossible
+ * by construction (object keys are unique).
  */
 const functionSlugSchema = z
 	.string()
@@ -80,6 +90,9 @@ const functionSlugSchema = z
 		/^[a-z0-9]{1,20}$/,
 		"function slug must be 1-20 lowercase letters and digits (no hyphens or other characters)",
 	);
+
+/** Bucket name: 1–255 chars. Used as the key schema of the `preview.buckets` record. */
+const bucketNameSchema = z.string().min(1).max(255);
 
 /**
  * Per-function environment map. Every value must be a defined string: a `process.env.X`
@@ -105,83 +118,59 @@ const functionDevConfigSchema = z.strictObject({
 	portless: z.boolean().optional(),
 });
 
-export const functionConfigSchema = z.strictObject({
-	slug: functionSlugSchema,
+const memoryMibSchema = z.union([
+	z.literal(256),
+	z.literal(512),
+	z.literal(1024),
+	z.literal(2048),
+	z.literal(4096),
+	z.literal(8192),
+]);
+
+const runtimeSchema = z.literal("nodejs24");
+
+/**
+ * Static definition of a function (existence). The slug is the record key (validated by
+ * {@link functionSlugSchema}), so it is not a field here. Deploy tuning (`memoryMib`,
+ * `runtime`) lives in the `branch` closure, not here.
+ */
+export const functionDefSchema = z.strictObject({
 	name: z.string().min(1).max(255),
 	source: z.string().min(1),
 	env: functionEnvSchema.optional(),
-	runtime: z.literal("nodejs24").optional(),
-	memoryMib: z
-		.union([
-			z.literal(256),
-			z.literal(512),
-			z.literal(1024),
-			z.literal(2048),
-			z.literal(4096),
-			z.literal(8192),
-		])
-		.optional(),
 	dev: functionDevConfigSchema.optional(),
 });
 
-export const bucketConfigSchema = z.strictObject({
-	name: z.string().min(1).max(255),
+/** Static definition of a bucket (existence). Name is the record key. */
+export const bucketDefSchema = z.strictObject({
 	access: z
 		.union([z.literal("private"), z.literal("public_read")])
 		.optional(),
 });
 
-export const previewConfigSchema = z
-	.strictObject({
-		functions: z.array(functionConfigSchema).optional(),
-		buckets: z.array(bucketConfigSchema).optional(),
-		aiGateway: serviceToggleSchema.optional(),
-	})
-	.superRefine((preview, ctx) => {
-		assertUnique({
-			ctx,
-			path: ["functions"],
-			items: preview.functions ?? [],
-			key: (fn) => fn.slug,
-			label: "function slug",
-		});
-		assertUnique({
-			ctx,
-			path: ["buckets"],
-			items: preview.buckets ?? [],
-			key: (bucket) => bucket.name,
-			label: "bucket name",
-		});
-	});
+/** Static, beta Preview feature set: AI Gateway toggle + functions/buckets records. */
+export const previewInputSchema = z.strictObject({
+	aiGateway: serviceToggleInputSchema.optional(),
+	functions: z.record(functionSlugSchema, functionDefSchema).optional(),
+	buckets: z.record(bucketNameSchema, bucketDefSchema).optional(),
+});
+
+/** Per-function deploy tuning returned by the `branch` closure. */
+export const functionTuningSchema = z.strictObject({
+	memoryMib: memoryMibSchema.optional(),
+	runtime: runtimeSchema.optional(),
+});
+
+/** Per-branch Preview tuning. Keys must be slugs declared in the static `preview`. */
+const previewTuningSchema = z.strictObject({
+	functions: z.record(functionSlugSchema, functionTuningSchema).optional(),
+});
 
 /**
- * Flag duplicate keys within a Preview collection so a typo in two function slugs (or two
- * buckets) surfaces as a config error rather than the second silently clobbering the first
- * at apply time.
+ * The object returned by the `branch` closure. Validated on every `resolveConfig` call so
+ * tuning errors point at the concrete branch target that triggered them.
  */
-function assertUnique<T>(args: {
-	ctx: z.RefinementCtx;
-	path: (string | number)[];
-	items: T[];
-	key: (item: T) => string;
-	label: string;
-}): void {
-	const { ctx, path, items, key, label } = args;
-	const seen = new Set<string>();
-	items.forEach((item, index) => {
-		const value = key(item);
-		if (seen.has(value)) {
-			ctx.addIssue({
-				code: "custom",
-				path: [...path, index],
-				message: `duplicate ${label}: ${JSON.stringify(value)}`,
-			});
-		}
-		seen.add(value);
-	});
-}
-
-export const branchConfigSchema = z
+export const branchTuningSchema = z
 	.strictObject({
 		parent: z.string().optional(),
 		protected: z.boolean().optional(),
@@ -196,9 +185,7 @@ export const branchConfigSchema = z
 				}
 			}),
 		postgres: postgresConfigSchema.optional(),
-		auth: serviceToggleSchema.optional(),
-		dataApi: serviceToggleSchema.optional(),
-		preview: previewConfigSchema.optional(),
+		preview: previewTuningSchema.optional(),
 	})
 	.superRefine((cfg, ctx) => {
 		validateParentReference({
@@ -207,6 +194,26 @@ export const branchConfigSchema = z
 			parent: cfg.parent,
 		});
 	});
+
+/**
+ * The top-level object accepted by `defineConfig`. The `branch` closure is validated
+ * structurally as a function here; its returned tuning is validated per-evaluation by
+ * {@link branchTuningSchema} inside `resolveConfig`.
+ */
+export const configInputSchema = z.strictObject({
+	auth: serviceToggleInputSchema.optional(),
+	dataApi: serviceToggleInputSchema.optional(),
+	preview: previewInputSchema.optional(),
+	branch: z
+		.custom<(...args: unknown[]) => unknown>(
+			(value) => typeof value === "function",
+			{
+				message:
+					"branch must be a function: `branch: (branch) => ({ … })`",
+			},
+		)
+		.optional(),
+});
 
 function validateParentReference(args: {
 	ctx: z.RefinementCtx;
@@ -227,11 +234,6 @@ function validateParentReference(args: {
 		});
 	}
 }
-
-export const configSchema = z.function({
-	input: [z.unknown()],
-	output: z.unknown(),
-});
 
 /**
  * Convert the structured {@link z.ZodError} produced by `configSchema.safeParse` into the

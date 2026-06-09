@@ -12,9 +12,9 @@ npm install @neondatabase/env
 
 ## Functions
 
-The library functions are **filesystem- and env-agnostic**: `fetchEnv` requires an explicit `projectId` + `branchId`, and `parseEnv` requires an explicit `branchName`. (The `neon-env` CLI does the `.neon`/`NEON_*` resolution and passes these in.)
+The library functions are **filesystem- and env-agnostic**: `fetchEnv` requires an explicit `projectId` + `branchId`. (The `neon-env` CLI does the `.neon`/`NEON_*` resolution and passes these in.)
 
-> `parseEnv` takes a branch **name**, not an id, because it makes no API call — it only needs the branch to evaluate your `neon.ts` policy, which switches on `branch.name`. The API-backed functions take a `branchId` (`br-…`) and read the name back from Neon.
+> `parseEnv` takes **no branch name**: the secret set is static (top-level `config.auth` / `config.dataApi`), so it reads those toggles directly without evaluating the per-branch closure. Its optional second argument is a **scope** — omit it for external (app/build) env, or pass a **function slug** when running inside that deployed function to also get a typed `function` namespace of its declared env keys.
 
 ```ts
 import config from "../neon";
@@ -26,7 +26,11 @@ const db = drizzle(neon(env.postgres.databaseUrl), { schema });
 
 // Sync — reads already-injected process.env and validates it (no network).
 // Use in app bootstrap where async isn't available.
-const env2 = parseEnv(config, process.env.NEON_BRANCH_NAME ?? "main");
+const env2 = parseEnv(config);
+
+// Inside a deployed function, pass its slug for the typed `function` namespace:
+const fnEnv = parseEnv(config, "hello");
+fnEnv.function.resendApiKey; // typed from hello's declared env keys
 ```
 
 Both return the same namespaced `NeonEnv` shape: `postgres` is always present; `auth` and `dataApi` are included (and statically typed) when the evaluated branch policy enables them.
@@ -34,7 +38,7 @@ Both return the same namespaced `NeonEnv` shape: `postgres` is always present; `
 | Function | Description |
 | --- | --- |
 | `fetchEnv(config, { projectId, branchId, ... })` | Async. Calls the Neon API for the given project + branch and returns live connection strings (and Auth/Data API values when enabled). `projectId` and `branchId` are required (`branchId` is a `br-…` id). |
-| `parseEnv(config, branchName)` | Sync. Reads/validates the Neon env vars already present in `process.env`, evaluating the policy for `branchName`. Throws `PlatformError(EnvNotInjected)` listing missing vars when the env isn't populated. |
+| `parseEnv(config)` / `parseEnv(config, slug)` | Sync. Reads/validates the Neon env vars already present in `process.env` against the static policy toggles. With a function `slug`, also returns a typed `function` namespace of that function's declared env keys. Throws `PlatformError(EnvNotInjected)` listing missing vars when the env isn't populated. |
 | `toEntries(env)` | Project a resolved `NeonEnv` into `{ KEY: value }` pairs for cross-process transport (named after the web `.entries()` convention; returns a `Record`). |
 
 ## CLI

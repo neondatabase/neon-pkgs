@@ -51,15 +51,17 @@ function seededFake(opts?: { protected?: boolean }) {
 describe("pushConfig", () => {
 	test("applies branch-scoped service enables to the selected branch", async () => {
 		const { api, projectId } = seededFake();
-		const config = defineConfig((branch) => ({
-			postgres: {
-				computeSettings: {
-					autoscalingLimitMaxCu: branch.name === "main" ? 4 : 1,
-				},
-			},
+		const config = defineConfig({
 			auth: {},
 			dataApi: {},
-		}));
+			branch: (branch) => ({
+				postgres: {
+					computeSettings: {
+						autoscalingLimitMaxCu: branch.name === "main" ? 4 : 1,
+					},
+				},
+			}),
+		});
 
 		const result = await pushConfig(config, {
 			api,
@@ -90,9 +92,11 @@ describe("pushConfig", () => {
 
 	test("reports mutable branch drift as conflict without updateExisting", async () => {
 		const { api, projectId } = seededFake();
-		const config = defineConfig(() => ({
-			postgres: { computeSettings: { autoscalingLimitMaxCu: 4 } },
-		}));
+		const config = defineConfig({
+			branch: () => ({
+				postgres: { computeSettings: { autoscalingLimitMaxCu: 4 } },
+			}),
+		});
 
 		await expect(
 			pushConfig(config, { api, projectId, branchId: "br-main" }),
@@ -103,9 +107,11 @@ describe("pushConfig", () => {
 
 	test("confirm callback applies mutable drift when user accepts", async () => {
 		const { api, projectId } = seededFake();
-		const config = defineConfig(() => ({
-			postgres: { computeSettings: { autoscalingLimitMaxCu: 4 } },
-		}));
+		const config = defineConfig({
+			branch: () => ({
+				postgres: { computeSettings: { autoscalingLimitMaxCu: 4 } },
+			}),
+		});
 
 		const calls: Array<{
 			protectedBranch: boolean;
@@ -142,9 +148,11 @@ describe("pushConfig", () => {
 
 	test("confirm callback returning false aborts with PushAbortedError", async () => {
 		const { api, projectId } = seededFake();
-		const config = defineConfig(() => ({
-			postgres: { computeSettings: { autoscalingLimitMaxCu: 4 } },
-		}));
+		const config = defineConfig({
+			branch: () => ({
+				postgres: { computeSettings: { autoscalingLimitMaxCu: 4 } },
+			}),
+		});
 
 		await expect(
 			pushConfig(config, {
@@ -161,7 +169,7 @@ describe("pushConfig", () => {
 
 	test("protected branch triggers confirm even when no drift", async () => {
 		const { api, projectId } = seededFake({ protected: true });
-		const config = defineConfig(() => ({ auth: {} }));
+		const config = defineConfig({ auth: {} });
 
 		const ctxs: Array<{
 			protectedBranch: boolean;
@@ -192,9 +200,11 @@ describe("pushConfig", () => {
 
 	test("protected branch + drift collapses into a single confirm call", async () => {
 		const { api, projectId } = seededFake({ protected: true });
-		const config = defineConfig(() => ({
-			postgres: { computeSettings: { autoscalingLimitMaxCu: 4 } },
-		}));
+		const config = defineConfig({
+			branch: () => ({
+				postgres: { computeSettings: { autoscalingLimitMaxCu: 4 } },
+			}),
+		});
 
 		const ctxs: Array<{
 			protectedBranch: boolean;
@@ -220,9 +230,11 @@ describe("pushConfig", () => {
 
 	test("allowProtectedBranch + updateExisting skip the confirm callback", async () => {
 		const { api, projectId } = seededFake({ protected: true });
-		const config = defineConfig(() => ({
-			postgres: { computeSettings: { autoscalingLimitMaxCu: 4 } },
-		}));
+		const config = defineConfig({
+			branch: () => ({
+				postgres: { computeSettings: { autoscalingLimitMaxCu: 4 } },
+			}),
+		});
 
 		let called = false;
 		await pushConfig(config, {
@@ -245,9 +257,11 @@ describe("pushConfig", () => {
 
 	test("dryRun never invokes the confirm callback", async () => {
 		const { api, projectId } = seededFake({ protected: true });
-		const config = defineConfig(() => ({
-			postgres: { computeSettings: { autoscalingLimitMaxCu: 4 } },
-		}));
+		const config = defineConfig({
+			branch: () => ({
+				postgres: { computeSettings: { autoscalingLimitMaxCu: 4 } },
+			}),
+		});
 
 		let called = false;
 		const result = await pushConfig(config, {
@@ -267,20 +281,19 @@ describe("pushConfig", () => {
 
 	test("creates buckets, creates + deploys functions, and enables AI Gateway", async () => {
 		const { api, projectId } = seededFake();
-		const config = defineConfig(() => ({
+		const config = defineConfig({
 			preview: {
-				functions: [
-					{
+				functions: {
+					fn1: {
 						name: "Hello World",
-						slug: "fn1",
 						source: fnSource,
 						env: { RESEND_API_KEY: "re_abc" },
 					},
-				],
-				buckets: [{ name: "uploads" }],
+				},
+				buckets: { uploads: {} },
 				aiGateway: {},
 			},
-		}));
+		});
 
 		const result = await pushConfig(config, {
 			api,
@@ -331,13 +344,11 @@ describe("pushConfig", () => {
 	test("only probes the Preview features the policy declares", async () => {
 		const { api, projectId } = seededFake();
 		// Policy declares functions only — no buckets, no aiGateway.
-		const config = defineConfig(() => ({
+		const config = defineConfig({
 			preview: {
-				functions: [
-					{ name: "Hello World", slug: "fn1", source: fnSource },
-				],
+				functions: { fn1: { name: "Hello World", source: fnSource } },
 			},
-		}));
+		});
 
 		await pushConfig(config, { api, projectId, branchId: "br-main" });
 
@@ -352,17 +363,11 @@ describe("pushConfig", () => {
 
 	test("uses an injected bundleFunction instead of the default esbuild bundler", async () => {
 		const { api, projectId } = seededFake();
-		const config = defineConfig(() => ({
+		const config = defineConfig({
 			preview: {
-				functions: [
-					{
-						name: "Hello World",
-						slug: "fn1",
-						source: fnSource,
-					},
-				],
+				functions: { fn1: { name: "Hello World", source: fnSource } },
 			},
-		}));
+		});
 
 		const bundled: string[] = [];
 		const sentinel = new Uint8Array([1, 2, 3, 4]);
@@ -394,17 +399,11 @@ describe("pushConfig", () => {
 			name: "Hello World",
 			invocationUrl: "https://x/functions/fn1",
 		});
-		const config = defineConfig(() => ({
+		const config = defineConfig({
 			preview: {
-				functions: [
-					{
-						name: "Hello World",
-						slug: "fn1",
-						source: fnSource,
-					},
-				],
+				functions: { fn1: { name: "Hello World", source: fnSource } },
 			},
-		}));
+		});
 
 		await pushConfig(config, { api, projectId, branchId: "br-main" });
 
@@ -418,9 +417,9 @@ describe("pushConfig", () => {
 
 	test("dryRun plans preview steps without mutating", async () => {
 		const { api, projectId } = seededFake();
-		const config = defineConfig(() => ({
-			preview: { buckets: [{ name: "uploads" }], aiGateway: {} },
-		}));
+		const config = defineConfig({
+			preview: { buckets: { uploads: {} }, aiGateway: {} },
+		});
 
 		const result = await pushConfig(config, {
 			api,
@@ -445,10 +444,10 @@ describe("pushConfig", () => {
 
 	test("dryRun surfaces selected branch plan without mutating", async () => {
 		const { api, projectId } = seededFake();
-		const config = defineConfig(() => ({
-			protected: true,
+		const config = defineConfig({
 			auth: {},
-		}));
+			branch: () => ({ protected: true }),
+		});
 
 		const result = await pushConfig(config, {
 			api,

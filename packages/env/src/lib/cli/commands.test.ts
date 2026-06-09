@@ -40,7 +40,7 @@ function seededFake() {
 
 function policy() {
 	return `import { defineConfig } from "${CONFIG_SRC}";
-export default defineConfig(() => ({}));`;
+export default defineConfig({});`;
 }
 
 describe("runEnvRun", () => {

@@ -1,7 +1,8 @@
 import {
-	type BranchConfig,
-	type BucketConfig,
+	type BranchTuning,
+	type BucketAccessLevel,
 	type ComputeSettings,
+	type Config,
 	createNeonApiFromOptions,
 	ErrorCode,
 	type NeonApi,
@@ -32,7 +33,7 @@ export interface PullConfigOptions {
  * function is reported as `{ slug, name }` (no `source`).
  */
 export interface PulledPreview {
-	buckets: BucketConfig[];
+	buckets: Array<{ name: string; access: BucketAccessLevel }>;
 	functions: Array<{ slug: string; name: string }>;
 	aiGatewayEnabled: boolean;
 }
@@ -53,7 +54,13 @@ export interface PulledBranchConfig {
 		protected: boolean;
 		expiresAt?: string;
 	};
-	config: BranchConfig;
+	/**
+	 * The branch's live state expressed as a {@link Config}: static `auth` / `dataApi`
+	 * toggles plus a `branch` closure carrying the branch's lifecycle/compute tuning.
+	 * Preview functions/buckets are reported separately in {@link PulledBranchConfig.preview}
+	 * because functions cannot round-trip (the remote has no `source` path).
+	 */
+	config: Config;
 	/**
 	 * Live Preview-feature state, when the branch has any buckets/functions or an enabled
 	 * AI Gateway. Omitted entirely when there is nothing to report.
@@ -176,20 +183,23 @@ export function buildPulledBranchConfig(
 	const parent = branch.parentId
 		? branches.find((b) => b.id === branch.parentId)
 		: undefined;
-	// Auth/Data API live on the branch's service config (not under `preview`), so a
-	// config pulled from a branch with them enabled round-trips through `resolveConfig`
-	// / `fetchEnv` and the matching secrets get injected.
-	const config: BranchConfig = {
-		...(previewState?.authEnabled ? { auth: {} } : {}),
-		...(previewState?.dataApiEnabled ? { dataApi: {} } : {}),
-	};
-	if (parent) config.parent = parent.name;
-	if (branch.expiresAt) config.ttl = branch.expiresAt;
-	if (branch.protected) config.protected = true;
+	// Auth/Data API are static top-level toggles, so a config pulled from a branch with
+	// them enabled round-trips through `resolveConfig` / `fetchEnv` and the matching
+	// secrets get injected. Branch lifecycle/compute is per-branch tuning, so it goes in
+	// the `branch` closure.
+	const tuning: BranchTuning = {};
+	if (parent) tuning.parent = parent.name;
+	if (branch.expiresAt) tuning.ttl = branch.expiresAt;
+	if (branch.protected) tuning.protected = true;
 	if (endpoint) {
 		const compute = endpointToComputeSettings(endpoint, project);
-		if (compute) config.postgres = { computeSettings: compute };
+		if (compute) tuning.postgres = { computeSettings: compute };
 	}
+	const config: Config = {
+		...(previewState?.authEnabled ? { auth: true } : {}),
+		...(previewState?.dataApiEnabled ? { dataApi: true } : {}),
+		...(Object.keys(tuning).length > 0 ? { branch: () => tuning } : {}),
+	};
 	const result: PulledBranchConfig = {
 		project: {
 			id: project.id,

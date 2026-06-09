@@ -1,5 +1,4 @@
 import {
-	type BranchConfig,
 	type Config,
 	createNeonApiFromOptions,
 	ErrorCode,
@@ -9,6 +8,7 @@ import {
 	type NeonRoleSnapshot,
 	PlatformError,
 	resolveConfig,
+	type ServiceToggleInput,
 } from "@neondatabase/config/v1";
 import { z } from "zod";
 
@@ -75,46 +75,82 @@ export interface NeonDataApiEnv {
  */
 type NoNamespace = Record<never, never>;
 
-type BranchConfigOf<C extends Config> = ReturnType<C> extends BranchConfig
-	? ReturnType<C>
-	: BranchConfig;
-
-type ServiceToggleOf<Cfg, Key extends "auth" | "dataApi"> = Cfg extends unknown
-	? Key extends keyof Cfg
-		? Cfg[Key]
-		: never
-	: never;
-
-type HasEnabledService<Cfg, Key extends "auth" | "dataApi"> = [
-	Exclude<ServiceToggleOf<Cfg, Key>, undefined | { enabled: false }>,
-] extends [never]
+/**
+ * Resolve a **static** service toggle (the value of `config.auth` / `config.dataApi`) to a
+ * type-level boolean. The whole-thing wrapping (`[T] extends […]`) turns off distribution
+ * so a union/`undefined` is checked as one unit:
+ *
+ * - `false` / `{ enabled: false }` / `undefined` → `false`
+ * - `true` / `{ enabled: true }` / any other object (`{}`, `{ enabled?: boolean }`) → `true`
+ *   (a present toggle defaults to enabled)
+ * - the bare `boolean | ServiceToggle | undefined` (the default `Config` param, no literal
+ *   info) → `false`, so an untyped policy yields just `{ postgres }`.
+ */
+type ServiceOn<T> = [T] extends [false]
 	? false
-	: true;
-
-type IsDefaultConfig<C extends Config> = Config extends C ? true : false;
+	: [T] extends [{ enabled: false }]
+		? false
+		: [T] extends [undefined]
+			? false
+			: [T] extends [true]
+				? true
+				: [T] extends [{ enabled: true }]
+					? true
+					: [T] extends [object]
+						? true
+						: false;
 
 /**
  * Static, namespaced shape of `fetchEnv` / `parseEnv`'s return value. Generic over the
  * {@link Config} so the type system knows which optional namespaces are present.
  *
+ * Because the secret-bearing toggles now live in the **static** top-level `config.auth` /
+ * `config.dataApi` (not inside a per-branch closure), the namespace presence is a direct
+ * read of those fields — no union-across-branches, no default-config escape hatch:
+ *
  * - `postgres` is always present.
- * - `auth` is added iff the config return type has an `auth` namespace that is not
- *   explicitly disabled.
- * - `dataApi` is added iff the config return type has a `dataApi` namespace that is not
- *   explicitly disabled.
+ * - `auth` is added iff `config.auth` is statically enabled.
+ * - `dataApi` is added iff `config.dataApi` is statically enabled.
  */
 export type NeonEnv<C extends Config = Config> = {
 	postgres: NeonPostgresEnv;
-} & (IsDefaultConfig<C> extends true
-	? NoNamespace
-	: HasEnabledService<BranchConfigOf<C>, "auth"> extends true
-		? { auth: NeonAuthEnv }
-		: NoNamespace) &
-	(IsDefaultConfig<C> extends true
-		? NoNamespace
-		: HasEnabledService<BranchConfigOf<C>, "dataApi"> extends true
-			? { dataApi: NeonDataApiEnv }
-			: NoNamespace);
+} & (ServiceOn<NonNullable<C["auth"]>> extends true
+	? { auth: NeonAuthEnv }
+	: NoNamespace) &
+	(ServiceOn<NonNullable<C["dataApi"]>> extends true
+		? { dataApi: NeonDataApiEnv }
+		: NoNamespace);
+
+/** The static `preview.functions` record of a config, or an empty record when absent. */
+type PreviewFunctionsOf<C extends Config> = NonNullable<C["preview"]> extends {
+	functions: infer F;
+}
+	? F
+	: Record<never, never>;
+
+/** The declared function slugs of a config (record keys), as a string union. */
+export type FunctionSlugOf<C extends Config> = Extract<
+	keyof PreviewFunctionsOf<C>,
+	string
+>;
+
+/** The declared env-var keys of one function `S`, as a string union. */
+type FunctionEnvKeysOf<
+	C extends Config,
+	S extends string,
+> = S extends keyof PreviewFunctionsOf<C>
+	? NonNullable<PreviewFunctionsOf<C>[S]> extends { env: infer E }
+		? Extract<keyof E, string>
+		: never
+	: never;
+
+/**
+ * The extra `function` namespace added to `parseEnv`'s result when called with a function
+ * slug scope: the declared env-var keys for that function, each resolved to a `string`.
+ */
+export type NeonFunctionEnv<C extends Config, S extends string> = {
+	function: Record<FunctionEnvKeysOf<C, S>, string>;
+};
 
 export interface FetchEnvOptions {
 	/**
@@ -479,47 +515,62 @@ const dataApiEnvSchema = z.object({
 		.min(1, "NEON_DATA_API_URL must not be empty"),
 });
 
+/** Static-toggle helper mirroring `config`'s `isServiceEnabled` for the env reader. */
+function isServiceEnabledInput(
+	toggle: ServiceToggleInput | undefined,
+): boolean {
+	if (toggle === undefined) return false;
+	if (typeof toggle === "boolean") return toggle;
+	return toggle.enabled !== false;
+}
+
 /**
- * Synchronous, network-free counterpart to {@link fetchEnv}. Reads `process.env` (or
- * `options.env`), validates the required Neon env vars with zod, and returns the same
- * {@link NeonEnv} shape — so the rest of your app touches `env.postgres.databaseUrl`
- * instead of stringly-typed `process.env.DATABASE_URL` lookups.
+ * Synchronous, network-free counterpart to {@link fetchEnv}. Reads `process.env`, validates
+ * the required Neon env vars with zod, and returns the same {@link NeonEnv} shape — so the
+ * rest of your app touches `env.postgres.databaseUrl` instead of stringly-typed
+ * `process.env.DATABASE_URL` lookups.
  *
  * Designed for the **"env-vars-already-injected"** path:
- * - You wrapped your dev command with `neon-env run -- <cmd>`.
+ * - You wrapped your dev command with `neon-env run -- <cmd>` or `neon dev`.
  * - Your platform (Vercel, Fly, Railway, …) injected the vars via its own integration.
+ * - You are **inside a deployed Neon Function**, whose env was uploaded at `config apply`.
  *
- * Takes a branch **name** (not an id like the API-backed `fetchEnv` / config operations):
- * `parseEnv` makes no Neon API call, so the only thing it needs the branch for is
- * evaluating your `neon.ts` policy, which switches on `branch.name`. With no network round
- * trip there's no way to turn a `br-…` id into a name, so the name is passed directly.
- * Pass it explicitly so the result is deterministic and not coupled to any `NEON_*` env
- * var. (The `neon-env` CLI injects `NEON_BRANCH_NAME`; pass that through, or default to
- * your main branch name.) Prefer `fetchEnv` when runtime code needs the exact live branch.
+ * Unlike the old API, `parseEnv` does **not** take a branch name: the secret set is now
+ * static (top-level `config.auth` / `config.dataApi`), so it reads those directly without
+ * evaluating the per-branch closure.
+ *
+ * The second argument is a **scope**:
+ * - omitted — *external* scope (app bootstrap, build scripts, your dev machine). Returns
+ *   `{ postgres, auth?, dataApi? }`.
+ * - a **function slug** (a key of `config.preview.functions`) — *function* scope: you are
+ *   running inside that function. Returns the same branch secrets **plus** a typed
+ *   `function` namespace with the function's declared env-var keys.
  *
  * Throws `PlatformError(EnvNotInjected)` listing every missing/invalid var when the env
- * isn't fully populated, with a fix hint pointing back at `neon-env run`.
+ * isn't fully populated, with a fix hint pointing back at `neon dev` / `neon-env run`.
  *
  * ```ts
  * import config from "../neon";
  * import { parseEnv } from "@neondatabase/env/v1";
  *
- * const env = parseEnv(config, process.env.NEON_BRANCH_NAME ?? "main");
+ * // External (app / build):
+ * const env = parseEnv(config);
  * const db = drizzle(neon(env.postgres.databaseUrl), { schema });
- * // env.auth is statically typed when the config return type has auth: {} or auth.enabled: true.
+ *
+ * // Inside the "hello" function:
+ * const env = parseEnv(config, "hello");
+ * env.function.resendApiKey; // typed from hello's declared env keys
  * ```
  */
-export function parseEnv<const C extends Config>(
-	config: C,
-	branchName: string,
-): NeonEnv<C> {
+export function parseEnv<const C extends Config>(config: C): NeonEnv<C>;
+export function parseEnv<
+	const C extends Config,
+	const S extends FunctionSlugOf<C>,
+>(config: C, scope: S): NeonEnv<C> & NeonFunctionEnv<C, S>;
+export function parseEnv(config: Config, scope?: string): unknown {
 	const source = process.env;
 	const issues: string[] = [];
 	const result: Record<string, unknown> = {};
-	const desired = resolveConfig(config, {
-		name: branchName,
-		exists: true,
-	});
 
 	const pg = postgresEnvSchema.safeParse({
 		DATABASE_URL: source.DATABASE_URL,
@@ -534,7 +585,7 @@ export function parseEnv<const C extends Config>(
 		for (const issue of pg.error.issues) issues.push(issue.message);
 	}
 
-	if (desired.authEnabled) {
+	if (isServiceEnabledInput(config.auth)) {
 		const auth = authEnvSchema.safeParse({
 			NEON_AUTH_BASE_URL: source.NEON_AUTH_BASE_URL,
 		});
@@ -547,7 +598,7 @@ export function parseEnv<const C extends Config>(
 		}
 	}
 
-	if (desired.dataApiEnabled) {
+	if (isServiceEnabledInput(config.dataApi)) {
 		const dataApi = dataApiEnvSchema.safeParse({
 			NEON_DATA_API_URL: source.NEON_DATA_API_URL,
 		});
@@ -561,6 +612,30 @@ export function parseEnv<const C extends Config>(
 		}
 	}
 
+	if (scope !== undefined) {
+		const fn = config.preview?.functions?.[scope];
+		if (!fn) {
+			throw new PlatformError(
+				ErrorCode.EnvNotInjected,
+				[
+					`parseEnv: no function "${scope}" is declared in this policy's preview.functions.`,
+					"Pass a declared function slug (or omit the scope to read external env).",
+				].join("\n"),
+				{ details: { scope } },
+			);
+		}
+		const envOut: Record<string, string> = {};
+		for (const key of Object.keys(fn.env ?? {})) {
+			const value = source[key];
+			if (value === undefined || value === "") {
+				issues.push(`${key} is missing (function "${scope}")`);
+			} else {
+				envOut[key] = value;
+			}
+		}
+		result.function = envOut;
+	}
+
 	if (issues.length > 0) {
 		throw new PlatformError(
 			ErrorCode.EnvNotInjected,
@@ -568,15 +643,16 @@ export function parseEnv<const C extends Config>(
 				"parseEnv: the required Neon env variables are not present in process.env.",
 				...issues.map((i) => `  - ${i}`),
 				"Inject them via one of:",
-				"  - `neon-env run -- <your dev command>` (wraps the command with the vars injected)",
+				"  - `neon dev` / `neon-env run -- <your dev command>` (wraps the command with the vars injected)",
 				"  - your hosting platform's Neon integration (Vercel, Fly, Railway, …)",
-				"Or switch the call to `await fetchEnv(config)` if you're in a context that can do async I/O.",
+				"  - for the `function` namespace: deploy the function (`neon deploy` / `config apply`) so its env is uploaded.",
+				"Or switch the call to `await fetchEnv(config, …)` if you're in a context that can do async I/O.",
 			].join("\n"),
 			{ details: { missing: issues } },
 		);
 	}
 
-	return result as NeonEnv<C>;
+	return result;
 }
 
 // ───────────────────────── env-var mapping helpers ─────────────────────────

@@ -1,6 +1,6 @@
 {
 	"name": "@neondatabase/config",
-	"version": "0.2.1",
+	"version": "0.3.0",
 	"description": "Config-as-Code for the Neon Platform. Define a `neon.ts` policy and inspect/diff/deploy it against the Neon API as plain TypeScript functions.",
 	"keywords": [
 		"neon",

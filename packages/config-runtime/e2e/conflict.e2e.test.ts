@@ -25,7 +25,9 @@ describe("e2e — branch-scoped push conflicts", () => {
 				(b) => b.isDefault,
 			)?.id;
 			if (!branchId) throw new Error("missing default branch");
-			const config = defineConfig(() => ({ protected: true }));
+			const config = defineConfig({
+				branch: () => ({ protected: true }),
+			});
 			await expect(
 				pushConfig(config, { api, projectId, branchId }),
 			).rejects.toMatchObject({ code: "PLATFORM_PUSH_CONFLICT" });
