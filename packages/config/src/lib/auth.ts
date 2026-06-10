@@ -92,10 +92,19 @@ export function resolveApiKey(
 	return null;
 }
 
+/** Trim trailing slashes and surrounding whitespace; treat empty as unset. */
+function normalizeApiHost(url: string | undefined): string | undefined {
+	const trimmed = url?.trim().replace(/\/+$/, "");
+	return trimmed ? trimmed : undefined;
+}
+
 /**
  * Resolve the Neon API key via the standard chain (option → `NEON_API_KEY` env →
  * `~/.config/neonctl/credentials.json`) and construct a real {@link NeonApi} adapter from
  * it, or throw a uniform `PLATFORM_MISSING_API_KEY` error if no key can be found.
+ *
+ * The API host is resolved via: `options.apiHost` → `NEON_API_HOST` env → production
+ * default (`https://console.neon.tech/api/v2`).
  *
  * Used by `pullConfig`, `pushConfig`, `fetchEnv`, and `branch` to build their default
  * `NeonApi` when the caller doesn't inject one. `operation` is the calling function's
@@ -106,12 +115,21 @@ export function createNeonApiFromOptions(
 	operation: string,
 	options: {
 		apiKey?: string;
+		apiHost?: string;
 	} = {},
 ): NeonApi {
 	const resolved = resolveApiKey(
 		options.apiKey ? { apiKey: options.apiKey } : {},
 	);
-	if (resolved) return createRealNeonApi({ apiKey: resolved.token });
+	if (resolved) {
+		const baseUrl =
+			normalizeApiHost(options.apiHost) ??
+			normalizeApiHost(process.env.NEON_API_HOST);
+		return createRealNeonApi({
+			apiKey: resolved.token,
+			...(baseUrl ? { baseUrl } : {}),
+		});
+	}
 	throw new PlatformError(
 		ErrorCode.MissingApiKey,
 		[

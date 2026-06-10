@@ -11,6 +11,7 @@ import { vi } from "vitest";
  */
 const NEON_AND_RELATED_ENV_KEYS = [
 	"NEON_API_KEY",
+	"NEON_API_HOST",
 	"NEON_PROJECT_ID",
 	"NEON_BRANCH_ID",
 	"NEON_ORG_ID",

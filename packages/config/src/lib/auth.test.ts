@@ -1,6 +1,16 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { readNeonctlCredentials, resolveApiKey } from "./auth.js";
+import {
+	createNeonApiFromOptions,
+	readNeonctlCredentials,
+	resolveApiKey,
+} from "./auth.js";
+import { createRealNeonApi } from "./neon-api-real.js";
 import { makeTempRepo, stubCleanNeonEnv } from "./test-utils.js";
+
+vi.mock("./neon-api-real.js", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("./neon-api-real.js")>();
+	return { ...actual, createRealNeonApi: vi.fn(() => ({}) as never) };
+});
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -161,6 +171,56 @@ describe("resolveApiKey — priority chain", () => {
 		expect(resolveApiKey({ apiKey: "  napi_x  " })).toEqual({
 			token: "napi_x",
 			source: "option",
+		});
+	});
+});
+
+describe("createNeonApiFromOptions — host resolution", () => {
+	const created = createRealNeonApi as unknown as ReturnType<typeof vi.fn>;
+
+	test("explicit apiHost option wins over NEON_API_HOST", () => {
+		vi.stubEnv("NEON_API_HOST", "https://env.example/api/v2");
+		createNeonApiFromOptions("op", {
+			apiKey: "napi_k",
+			apiHost: "https://opt.example/api/v2",
+		});
+		expect(created).toHaveBeenCalledWith({
+			apiKey: "napi_k",
+			baseUrl: "https://opt.example/api/v2",
+		});
+	});
+
+	test("falls back to NEON_API_HOST when no option is given", () => {
+		vi.stubEnv("NEON_API_HOST", "https://env.example/api/v2");
+		createNeonApiFromOptions("op", { apiKey: "napi_k" });
+		expect(created).toHaveBeenCalledWith({
+			apiKey: "napi_k",
+			baseUrl: "https://env.example/api/v2",
+		});
+	});
+
+	test("passes no baseUrl when neither option nor env is set (prod default)", () => {
+		createNeonApiFromOptions("op", { apiKey: "napi_k" });
+		expect(created).toHaveBeenCalledWith({ apiKey: "napi_k" });
+	});
+
+	test("normalizes trailing slashes and surrounding whitespace", () => {
+		createNeonApiFromOptions("op", {
+			apiKey: "napi_k",
+			apiHost: "  https://opt.example/api/v2/  ",
+		});
+		expect(created).toHaveBeenCalledWith({
+			apiKey: "napi_k",
+			baseUrl: "https://opt.example/api/v2",
+		});
+	});
+
+	test("treats an empty / whitespace apiHost as unset, falling through to env", () => {
+		vi.stubEnv("NEON_API_HOST", "https://env.example/api/v2");
+		createNeonApiFromOptions("op", { apiKey: "napi_k", apiHost: "   " });
+		expect(created).toHaveBeenCalledWith({
+			apiKey: "napi_k",
+			baseUrl: "https://env.example/api/v2",
 		});
 	});
 });
