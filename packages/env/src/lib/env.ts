@@ -189,6 +189,11 @@ export interface FetchEnvOptions {
 	 */
 	apiKey?: string;
 	/**
+	 * Neon **management** API base URL (not the Auth base URL). Falls back to
+	 * `NEON_API_HOST`, then production. Ignored when a custom `api` is supplied.
+	 */
+	apiHost?: string;
+	/**
 	 * Inject a custom NeonApi adapter. Primarily used by tests; production callers can rely
 	 * on the default real adapter built from `apiKey`.
 	 */
@@ -387,10 +392,10 @@ function resolveAuthJwksUrl(
 }
 
 function createApiFromOptions(options: FetchEnvOptions): NeonApi {
-	return createNeonApiFromOptions(
-		"fetchEnv",
-		options.apiKey ? { apiKey: options.apiKey } : {},
-	);
+	return createNeonApiFromOptions("fetchEnv", {
+		...(options.apiKey ? { apiKey: options.apiKey } : {}),
+		...(options.apiHost ? { apiHost: options.apiHost } : {}),
+	});
 }
 
 function resolveBranch(
