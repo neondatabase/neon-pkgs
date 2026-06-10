@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { FakeNeonApi } from "../fake-neon-api.js";
 import { makeTempRepo, stubCleanNeonEnv } from "../test-utils.js";
-import { runEnvRun } from "./commands.js";
+import { runEnvExport, runEnvRun } from "./commands.js";
 
 const CONFIG_SRC = new URL("../../../../config/src/v1.ts", import.meta.url)
 	.pathname;
@@ -97,5 +97,63 @@ describe("runEnvRun", () => {
 			{ cwd: root, api },
 		);
 		expect(result.exitCode).toBe(3);
+	});
+});
+
+describe("runEnvExport", () => {
+	test("prints the branch env as dotenv lines by default", async () => {
+		const { api, projectId } = seededFake();
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({
+				projectId,
+				branchId: "br-main",
+			}),
+			"neon.ts": policy(),
+		});
+
+		const result = await runEnvExport(
+			{ format: "dotenv" },
+			{ cwd: root, api },
+		);
+
+		expect(result.exitCode).toBe(0);
+		// The connection string contains `=` (e.g. ?sslmode=require), so the value is quoted.
+		expect(result.stdout).toMatch(/^DATABASE_URL="postgresql:\/\//m);
+		expect(result.stdout.endsWith("\n")).toBe(true);
+	});
+
+	test("prints valid JSON with --format json", async () => {
+		const { api, projectId } = seededFake();
+		const root = setup({
+			"package.json": "{}",
+			".neon/project.json": JSON.stringify({
+				projectId,
+				branchId: "br-main",
+			}),
+			"neon.ts": policy(),
+		});
+
+		const result = await runEnvExport(
+			{ format: "json" },
+			{ cwd: root, api },
+		);
+
+		expect(result.exitCode).toBe(0);
+		const parsed = JSON.parse(result.stdout) as Record<string, string>;
+		expect(parsed.DATABASE_URL).toMatch(/^postgresql:\/\//);
+	});
+
+	test("fails with a non-zero exit code when no project/branch can be resolved", async () => {
+		const { api } = seededFake();
+		const root = setup({ "package.json": "{}" });
+
+		const result = await runEnvExport(
+			{ format: "json" },
+			{ cwd: root, api },
+		);
+
+		expect(result.exitCode).not.toBe(0);
+		expect(result.stderr).toContain("could not resolve");
 	});
 });

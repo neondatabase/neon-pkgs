@@ -4,13 +4,17 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
-import { type CommandResult, runEnvRun } from "./lib/cli/commands.js";
+import {
+	type CommandResult,
+	runEnvExport,
+	runEnvRun,
+} from "./lib/cli/commands.js";
 
 const pkgVersion = readPackageVersion();
 
 const argv = yargs(hideBin(process.argv))
 	.scriptName("neon-env")
-	.usage("$0 run -- <command> [options]")
+	.usage("$0 <command> [options]")
 	.parserConfiguration({ "populate--": true })
 	.option("debug", {
 		type: "boolean",
@@ -23,6 +27,35 @@ const argv = yargs(hideBin(process.argv))
 		"Run a command with Neon env vars (from your neon.ts policy) injected into its environment. Use `--` to separate the command: `neon-env run -- npm run dev`.",
 		(y) =>
 			y
+				.option("config", {
+					type: "string",
+					describe:
+						"Path to neon.ts (defaults to walking up from cwd)",
+				})
+				.option("project-id", {
+					type: "string",
+					describe: "Override the .neon/project.json projectId",
+				})
+				.option("branch", {
+					type: "string",
+					describe:
+						"Override the .neon/project.json branchId / NEON_BRANCH_ID",
+				})
+				.option("api-key", {
+					type: "string",
+					describe: "Neon API key (defaults to NEON_API_KEY)",
+				}),
+	)
+	.command(
+		"export",
+		"Print the branch's Neon env vars (from your neon.ts policy) to stdout, as dotenv lines or JSON. Useful for piping into other env tools, e.g. `neon-env export --format json`.",
+		(y) =>
+			y
+				.option("format", {
+					choices: ["dotenv", "json"] as const,
+					default: "dotenv",
+					describe: "Output format: dotenv (KEY=value lines) or json",
+				})
 				.option("config", {
 					type: "string",
 					describe:
@@ -60,6 +93,27 @@ switch (command) {
 		result = await runEnvRun(
 			{
 				command: passthrough,
+				...(typeof argv.config === "string"
+					? { configPath: argv.config }
+					: {}),
+				...(typeof argv["project-id"] === "string"
+					? { projectId: argv["project-id"] }
+					: {}),
+				...(typeof argv.branch === "string"
+					? { branch: argv.branch }
+					: {}),
+				...(typeof argv["api-key"] === "string"
+					? { apiKey: argv["api-key"] }
+					: {}),
+			},
+			{ cwd },
+		);
+		break;
+	}
+	case "export": {
+		result = await runEnvExport(
+			{
+				format: argv.format === "json" ? "json" : "dotenv",
 				...(typeof argv.config === "string"
 					? { configPath: argv.config }
 					: {}),

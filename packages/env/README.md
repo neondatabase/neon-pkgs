@@ -1,6 +1,6 @@
 # @neondatabase/env
 
-Resolve and inject Neon connection strings for the branch selected by your `neon.ts` policy. Exposes `fetchEnv` / `parseEnv` functions plus a single CLI command: `neon-env run -- <cmd>`.
+Resolve and inject Neon connection strings for the branch selected by your `neon.ts` policy. Exposes `fetchEnv` / `parseEnv` functions plus a `neon-env` CLI with `run` (inject env into a command) and `export` (print env to stdout).
 
 Builds on [`@neondatabase/config`](../config) — it reuses the `Config` policy type and the Neon API client.
 
@@ -43,7 +43,9 @@ Both return the same namespaced `NeonEnv` shape: `postgres` is always present; `
 
 ## CLI
 
-One command — inject the env vars for your `neon.ts` branch into a dev command:
+### `run` — inject env into a command
+
+Inject the env vars for your `neon.ts` branch into a dev command:
 
 ```bash
 neon-env run -- npm run dev
@@ -52,7 +54,23 @@ neon-env run -- pnpm dev
 
 `run` loads `neon.ts`, resolves the branch (via `--branch`, `NEON_BRANCH_ID`, or `.neon[/project.json]`), fetches the connection strings from Neon, and spawns the command with `DATABASE_URL` / `DATABASE_URL_UNPOOLED` (and `NEON_AUTH_BASE_URL` / `NEON_DATA_API_URL` when the policy enables them) injected on top of the inherited environment. Stdio is inherited so interactive dev servers keep working, and the parent exits with the child's exit code.
 
-Flags: `--config <path>`, `--project-id`, `--branch`, `--api-key`, `--debug`.
+### `export` — print env to stdout
+
+Resolve the same branch env, but print it instead of spawning a process — for piping into other env tools:
+
+```bash
+neon-env export                 # dotenv KEY=value lines (default)
+neon-env export --format json   # JSON object
+```
+
+For example, [varlock](https://varlock.dev) can bulk-load Neon's branch env via its `exec()` resolver:
+
+```bash
+# .env.schema
+# @setValuesBulk(exec(`neon-env export --format json`), format=json)
+```
+
+Flags (both commands): `--config <path>`, `--project-id`, `--branch`, `--api-key`, `--debug`. `export` also takes `--format dotenv|json`.
 
 ## Env vars produced
 

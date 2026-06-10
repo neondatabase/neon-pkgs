@@ -40,13 +40,21 @@ export interface CommandResult {
 	debugInfo?: string;
 }
 
-export interface EnvRunCommandOptions {
-	/** The user command to spawn (after `--`). The first element is the executable. */
-	command: string[];
+/**
+ * Inputs needed to resolve a branch and fetch its env, shared by `run` and `export`: an
+ * optional explicit `neon.ts` path, project/branch overrides, and an API key (otherwise
+ * resolved from `.neon` / `NEON_*` env by the CLI and `NEON_API_KEY` by `fetchEnv`).
+ */
+export interface EnvResolveOptions {
 	configPath?: string;
 	projectId?: string;
 	branch?: string;
 	apiKey?: string;
+}
+
+export interface EnvRunCommandOptions extends EnvResolveOptions {
+	/** The user command to spawn (after `--`). The first element is the executable. */
+	command: string[];
 }
 
 /**
@@ -102,6 +110,69 @@ export async function runEnvRun(
 	return { exitCode, stdout: "", stderr: "" };
 }
 
+export interface EnvExportCommandOptions extends EnvResolveOptions {
+	/** Output format. `dotenv` (KEY=value lines) by default; `json` for tooling / bulk loaders. */
+	format?: "dotenv" | "json";
+}
+
+/**
+ * Implementation of `neon-env export`. Resolves the branch's Neon env the same way `run`
+ * does (neon.ts policy + linked branch), then writes it to stdout — as dotenv lines or JSON —
+ * instead of spawning a process, so other env tools can consume it. For example, varlock can
+ * bulk-load it with `@setValuesBulk(exec("neon-env export --format json"), format=json)`.
+ */
+export async function runEnvExport(
+	options: EnvExportCommandOptions,
+	ctx: CommandEnv,
+): Promise<CommandResult> {
+	const resolved = resolveContext({
+		cwd: ctx.cwd,
+		...(options.projectId ? { projectId: options.projectId } : {}),
+		...(options.branch ? { branch: options.branch } : {}),
+	});
+	if (!resolved.ok) {
+		return failure(
+			[
+				"`env export` could not resolve the Neon project and branch:",
+				...resolved.missing.map((m) => `  - ${m}`),
+			].join("\n"),
+			3,
+		);
+	}
+
+	let entries: Record<string, string>;
+	try {
+		const env = await loadConfigAndFetchEnv(options, ctx, resolved.context);
+		entries = toEntries(env);
+	} catch (err) {
+		return handleError(err);
+	}
+
+	const stdout =
+		options.format === "json"
+			? `${JSON.stringify(entries, null, 2)}\n`
+			: toDotenv(entries);
+	return { exitCode: 0, stdout, stderr: "" };
+}
+
+/** Render an env map as dotenv `KEY=value` lines, quoting values that need it. */
+function toDotenv(entries: Record<string, string>): string {
+	const lines = Object.entries(entries).map(([key, value]) =>
+		formatDotenvLine(key, value),
+	);
+	return lines.length > 0 ? `${lines.join("\n")}\n` : "";
+}
+
+/**
+ * Render a single `KEY=value` dotenv line, double-quoting (and escaping) values that contain
+ * whitespace, `#`, quotes, or `=` so connection strings round-trip through dotenv parsers.
+ */
+function formatDotenvLine(key: string, value: string): string {
+	if (!/[\s#"'=]/.test(value)) return `${key}=${value}`;
+	const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+	return `${key}="${escaped}"`;
+}
+
 /**
  * Load `neon.ts`, then call `fetchEnv` with the explicitly-resolved project + branch.
  * Layers any one-time Auth keys from `.env.local` (next to the config file) into the env
@@ -109,7 +180,7 @@ export async function runEnvRun(
  * integration-creation time.
  */
 async function loadConfigAndFetchEnv(
-	options: EnvRunCommandOptions,
+	options: EnvResolveOptions,
 	ctx: CommandEnv,
 	resolved: { projectId: string; branchId: string },
 ): Promise<Awaited<ReturnType<typeof fetchEnv>>> {
