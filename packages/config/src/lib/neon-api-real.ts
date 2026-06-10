@@ -29,6 +29,7 @@ import type {
 	NeonApi,
 	NeonAuthSnapshot,
 	NeonBranchSnapshot,
+	NeonBranchStorageSnapshot,
 	NeonBucketSnapshot,
 	NeonCredentialMeta,
 	NeonCredentialSecret,
@@ -63,6 +64,12 @@ const bucketSchema = z.object({
 });
 const bucketResponseSchema = z.object({ bucket: bucketSchema });
 const bucketsListResponseSchema = z.object({ buckets: z.array(bucketSchema) });
+const branchStorageSchema = z.object({
+	enabled: z.boolean().optional(),
+	s3_endpoint: z.string(),
+	region: z.string(),
+	force_path_style: z.boolean(),
+});
 
 // ─── Preview: functions ────────────────────────────────────────────────────
 
@@ -785,6 +792,35 @@ class RealNeonApi implements NeonApi {
 			},
 			{ projectId, mutating: true },
 		);
+	}
+
+	async getProjectBranchStorage(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonBranchStorageSnapshot | null> {
+		try {
+			return await this.call(
+				`getProjectBranchStorage(${projectId}/${branchId})`,
+				async () => {
+					const data = await this.getJson(
+						`/projects/${encodeURIComponent(projectId)}/branches/${encodeURIComponent(branchId)}/storage`,
+					);
+					const parsed = branchStorageSchema.parse(data);
+					return {
+						s3Endpoint: parsed.s3_endpoint,
+						region: parsed.region,
+						forcePathStyle: parsed.force_path_style,
+					};
+				},
+				{ projectId },
+			);
+		} catch (err) {
+			// 404 BranchStorageNotEnabled → storage not usable on this branch; let the
+			// caller decide (fetchEnv throws a clear "enable storage first" error).
+			if (err instanceof PlatformError && err.code === ErrorCode.NotFound)
+				return null;
+			throw previewUnavailableError(err, "Object storage");
+		}
 	}
 
 	// ─── Preview: functions ────────────────────────────────────────────────────

@@ -125,6 +125,23 @@ export interface NeonBucketSnapshot {
 }
 
 /**
+ * S3-compatible connection details for a branch's object storage (Preview) — the
+ * `BranchStorage` shape from `GET /projects/{id}/branches/{id}/storage`. Non-secret: it
+ * carries the endpoint/region/addressing the S3 SDK needs, while the access keys come from
+ * a minted {@link NeonCredentialSecret}. `forcePathStyle` is always `true` today (Neon's
+ * wildcard TLS cert puts the branch id in the subdomain, so the bucket must travel in the
+ * path).
+ */
+export interface NeonBranchStorageSnapshot {
+	/** S3-compatible endpoint URL, e.g. `https://br-….storage.<suffix>`. */
+	s3Endpoint: string;
+	/** AWS region string, normalized server-side (e.g. `us-east-2`, `us-east-1`). */
+	region: string;
+	/** Whether the S3 client must use path-style addressing (always `true` today). */
+	forcePathStyle: boolean;
+}
+
+/**
  * Input for creating a bucket on a branch.
  */
 export interface CreateBucketInput {
@@ -363,6 +380,17 @@ export interface NeonApi {
 		branchId: string,
 		bucketName: string,
 	): Promise<void>;
+
+	/**
+	 * Fetch the branch's S3-compatible object-storage connection details (endpoint, region,
+	 * path-style). Returns `null` when storage is not enabled for the branch (the API's 404
+	 * `BranchStorageNotEnabled`). Used by `fetchEnv` to populate the `AWS_*` storage env
+	 * alongside the minted credential's access keys.
+	 */
+	getProjectBranchStorage(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonBranchStorageSnapshot | null>;
 
 	// ─── Preview: functions ────────────────────────────────────────────────────
 

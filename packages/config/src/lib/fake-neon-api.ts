@@ -8,6 +8,7 @@ import type {
 	NeonApi,
 	NeonAuthSnapshot,
 	NeonBranchSnapshot,
+	NeonBranchStorageSnapshot,
 	NeonBucketSnapshot,
 	NeonCredentialMeta,
 	NeonCredentialSecret,
@@ -56,6 +57,13 @@ export class FakeNeonApi implements NeonApi {
 	private readonly neonDataApi = new Map<string, NeonDataApiSnapshot>();
 	/** Preview buckets, keyed by `${projectId}:${branchId}`. */
 	private readonly buckets = new Map<string, NeonBucketSnapshot[]>();
+	/** Object-storage connection overrides, keyed by `${projectId}:${branchId}`. */
+	private readonly branchStorage = new Map<
+		string,
+		NeonBranchStorageSnapshot
+	>();
+	/** Branches where object storage is explicitly disabled (getProjectBranchStorage → null). */
+	private readonly storageDisabled = new Set<string>();
 	/** Preview functions, keyed by `${projectId}:${branchId}`. */
 	private readonly functions = new Map<string, NeonFunctionSnapshot[]>();
 	/** Monotonic per-function deployment counter, keyed by `${projectId}:${branchId}:${slug}`. */
@@ -571,6 +579,30 @@ export class FakeNeonApi implements NeonApi {
 		);
 	}
 
+	async getProjectBranchStorage(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonBranchStorageSnapshot | null> {
+		this.history.push({
+			method: "getProjectBranchStorage",
+			args: [projectId, branchId],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		const key = `${projectId}:${branchId}`;
+		if (this.storageDisabled.has(key)) return null;
+		const override = this.branchStorage.get(key);
+		if (override) return clone(override);
+		const region = (
+			this.projects.get(projectId)?.regionId ?? "aws-us-east-1"
+		).replace(/^[a-z]+-/, "");
+		return {
+			s3Endpoint: `https://${branchId}.storage.fake.neon.tech`,
+			region,
+			forcePathStyle: true,
+		};
+	}
+
 	// ─── Preview: functions ────────────────────────────────────────────────────
 
 	async listBranchFunctions(
@@ -794,6 +826,21 @@ export class FakeNeonApi implements NeonApi {
 		const list = this.buckets.get(key) ?? [];
 		list.push({ ...snapshot });
 		this.buckets.set(key, list);
+	}
+
+	/** Test helper: override a branch's object-storage connection details. */
+	seedBranchStorage(
+		projectId: string,
+		branchId: string,
+		snapshot: NeonBranchStorageSnapshot,
+	): void {
+		this.storageDisabled.delete(`${projectId}:${branchId}`);
+		this.branchStorage.set(`${projectId}:${branchId}`, { ...snapshot });
+	}
+
+	/** Test helper: mark object storage as not enabled on a branch. */
+	seedStorageDisabled(projectId: string, branchId: string): void {
+		this.storageDisabled.add(`${projectId}:${branchId}`);
 	}
 
 	/** Test helper: attach a function to a branch. */

@@ -391,23 +391,31 @@ describe("parseEnv", () => {
 	});
 });
 
-describe("branch credentials (Preview)", () => {
+describe("branch storage + AI Gateway (Preview)", () => {
 	const callsTo = (api: FakeNeonApi, method: string) =>
 		api.history.filter((h) => h.method === method).length;
+	const lastCreateScopes = (api: FakeNeonApi): unknown => {
+		const calls = api.history.filter(
+			(h) => h.method === "createCredential",
+		);
+		const last = calls[calls.length - 1];
+		return (last?.args[2] as { scopes?: unknown } | undefined)?.scopes;
+	};
 
-	test("no Preview feature: never touches the credentials endpoint", async () => {
+	test("no Preview feature: never touches credentials or storage endpoints", async () => {
 		const { api, projectId } = seededFake();
 		const env = await fetchEnv(defineConfig({ auth: false }), {
 			api,
 			projectId,
 			branchId: "br-main",
 		});
-		expect("credentials" in env).toBe(false);
+		expect("storage" in env).toBe(false);
+		expect("aiGateway" in env).toBe(false);
 		expect(callsTo(api, "createCredential")).toBe(0);
-		expect(callsTo(api, "listCredentials")).toBe(0);
+		expect(callsTo(api, "getProjectBranchStorage")).toBe(0);
 	});
 
-	test("buckets policy mints a storage credential and surfaces the namespace", async () => {
+	test("buckets policy mints a credential + reads storage, surfacing the AWS storage env", async () => {
 		const { api, projectId } = seededFake();
 		const config = defineConfig({
 			preview: { buckets: { uploads: { access: "public_read" } } },
@@ -418,23 +426,40 @@ describe("branch credentials (Preview)", () => {
 			branchId: "br-main",
 		});
 		expect(callsTo(api, "createCredential")).toBe(1);
-		expect(env.credentials.scopes).toEqual([
-			"storage:read",
-			"storage:write",
-		]);
-		expect(env.credentials.apiToken).toMatch(/^nt_live_/);
-		expect(env.credentials.s3SecretAccessKey).toHaveLength(64);
-		// The S3 access-key id is the credential's short token id (embedded in api_token:
-		// `nt_live_<tokenIdShort>_…`), distinct from the full UUID token id.
-		expect(env.credentials.s3AccessKeyId).not.toBe(env.credentials.tokenId);
-		expect(env.credentials.apiToken).toContain(
-			env.credentials.s3AccessKeyId,
-		);
+		expect(callsTo(api, "getProjectBranchStorage")).toBe(1);
+		expect(env.storage.secretAccessKey).toHaveLength(64);
+		// The S3 access-key id is the credential's short token id (embedded in api_token).
+		expect(env.storage.accessKeyId).not.toBe("");
+		expect(env.storage.endpoint).toContain("storage");
+		expect(env.storage.region).toBe("us-east-1");
+		expect(env.storage.forcePathStyle).toBe(true);
+		expect("aiGateway" in env).toBe(false);
 	});
 
-	test("functions ride along on the unified credential but never mint alone", async () => {
+	test("aiGateway policy surfaces the OpenAI env (key + OpenAI-dialect base URL)", async () => {
 		const { api, projectId } = seededFake();
-		// functions-only: no credential at all.
+		const env = await fetchEnv(
+			defineConfig({ preview: { aiGateway: true } }),
+			{
+				api,
+				projectId,
+				branchId: "br-main",
+				apiHost: "https://console-stage.neon.build/api/v2",
+			},
+		);
+		expect(callsTo(api, "createCredential")).toBe(1);
+		// AI Gateway needs no S3 connection info.
+		expect(callsTo(api, "getProjectBranchStorage")).toBe(0);
+		expect(env.aiGateway.apiKey).toMatch(/^nt_live_/);
+		expect(env.aiGateway.baseUrl).toBe(
+			"https://console-stage.neon.build/ai-gateway/openai/v1",
+		);
+		expect("storage" in env).toBe(false);
+	});
+
+	test("functions ride along on the credential's scopes but never mint alone", async () => {
+		const { api, projectId } = seededFake();
+		// functions-only: no credential, no storage read.
 		const fnOnly = await fetchEnv(
 			defineConfig({
 				preview: {
@@ -443,11 +468,12 @@ describe("branch credentials (Preview)", () => {
 			}),
 			{ api, projectId, branchId: "br-main" },
 		);
-		expect("credentials" in fnOnly).toBe(false);
+		expect("storage" in fnOnly).toBe(false);
+		expect("aiGateway" in fnOnly).toBe(false);
 		expect(callsTo(api, "createCredential")).toBe(0);
 
 		// buckets + functions: one credential carrying storage + functions:invoke.
-		const env = await fetchEnv(
+		await fetchEnv(
 			defineConfig({
 				preview: {
 					buckets: { uploads: {} },
@@ -456,7 +482,7 @@ describe("branch credentials (Preview)", () => {
 			}),
 			{ api, projectId, branchId: "br-main" },
 		);
-		expect(env.credentials.scopes).toEqual([
+		expect(lastCreateScopes(api)).toEqual([
 			"storage:read",
 			"storage:write",
 			"functions:invoke",
@@ -479,13 +505,16 @@ describe("branch credentials (Preview)", () => {
 			env: { ...process.env, ...persisted },
 		});
 		expect(callsTo(api, "createCredential")).toBe(1); // not minted again
-		expect(second.credentials.tokenId).toBe(first.credentials.tokenId);
-		expect(second.credentials.apiToken).toBe(first.credentials.apiToken);
+		expect(second.storage.accessKeyId).toBe(first.storage.accessKeyId);
+		expect(second.storage.secretAccessKey).toBe(
+			first.storage.secretAccessKey,
+		);
 	});
 
-	test("re-mints when the persisted credential lacks a newly-added scope", async () => {
+	test("re-mints when a newly-enabled feature's secret is absent", async () => {
 		const { api, projectId } = seededFake();
-		// Persist a storage-only credential, then ask for a policy that also needs the AI Gateway.
+		// Persist a storage-only credential, then ask for a policy that also needs the AI Gateway
+		// (OPENAI_API_KEY is absent from the persisted env, so the credential must be re-minted).
 		const storageOnly = await fetchEnv(
 			defineConfig({ preview: { buckets: { uploads: {} } } }),
 			{ api, projectId, branchId: "br-main" },
@@ -503,78 +532,98 @@ describe("branch credentials (Preview)", () => {
 			},
 		);
 		expect(callsTo(api, "createCredential")).toBe(2); // re-minted
-		expect(widened.credentials.scopes).toContain("ai_gateway:invoke");
-		expect(widened.credentials.tokenId).not.toBe(
-			storageOnly.credentials.tokenId,
-		);
+		expect(lastCreateScopes(api)).toContain("ai_gateway:invoke");
+		expect(widened.aiGateway.apiKey).toMatch(/^nt_live_/);
 	});
 
-	test("parseEnv reads injected credential vars (sync, no network)", () => {
+	test("throws when buckets are declared but storage is not enabled on the branch", async () => {
+		const { api, projectId } = seededFake();
+		api.seedStorageDisabled(projectId, "br-main");
+		await expect(
+			fetchEnv(defineConfig({ preview: { buckets: { uploads: {} } } }), {
+				api,
+				projectId,
+				branchId: "br-main",
+			}),
+		).rejects.toMatchObject({ code: ErrorCode.NotFound });
+	});
+
+	test("parseEnv reads injected storage env (sync, no network)", () => {
 		vi.stubEnv("DATABASE_URL", "postgres://pooled");
 		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
-		vi.stubEnv("NEON_API_TOKEN", "nt_live_abc_def");
-		vi.stubEnv("NEON_S3_ACCESS_KEY_ID", "abc123");
-		vi.stubEnv("NEON_S3_SECRET_ACCESS_KEY", "s".repeat(64));
-		vi.stubEnv("NEON_CREDENTIAL_ID", "abc-123");
-		vi.stubEnv("NEON_CREDENTIAL_SCOPES", "storage:read,storage:write");
+		vi.stubEnv("AWS_ACCESS_KEY_ID", "abc123");
+		vi.stubEnv("AWS_SECRET_ACCESS_KEY", "s".repeat(64));
+		vi.stubEnv("AWS_ENDPOINT_URL_S3", "https://br.storage.neon.build");
+		vi.stubEnv("AWS_REGION", "us-east-2");
+		vi.stubEnv("NEON_STORAGE_FORCE_PATH_STYLE", "true");
 		const env = parseEnv(
 			defineConfig({ preview: { buckets: { uploads: {} } } }),
 		);
-		expect(env.credentials.apiToken).toBe("nt_live_abc_def");
-		expect(env.credentials.s3AccessKeyId).toBe("abc123");
-		expect(env.credentials.scopes).toEqual([
-			"storage:read",
-			"storage:write",
-		]);
+		expect(env.storage.accessKeyId).toBe("abc123");
+		expect(env.storage.endpoint).toBe("https://br.storage.neon.build");
+		expect(env.storage.region).toBe("us-east-2");
+		expect(env.storage.forcePathStyle).toBe(true);
 	});
 
-	test("parseEnv falls back to policy-derived scopes when the scopes var is absent", () => {
+	test("parseEnv reads injected AI Gateway env", () => {
 		vi.stubEnv("DATABASE_URL", "postgres://pooled");
 		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
-		vi.stubEnv("NEON_API_TOKEN", "nt_live_abc_def");
-		vi.stubEnv("NEON_S3_ACCESS_KEY_ID", "abc123");
-		vi.stubEnv("NEON_S3_SECRET_ACCESS_KEY", "s".repeat(64));
-		const env = parseEnv(
-			defineConfig({ preview: { buckets: { uploads: {} } } }),
+		vi.stubEnv("OPENAI_API_KEY", "nt_live_abc_def");
+		vi.stubEnv(
+			"OPENAI_BASE_URL",
+			"https://x.neon.build/ai-gateway/openai/v1",
 		);
-		expect(env.credentials.scopes).toEqual([
-			"storage:read",
-			"storage:write",
-		]);
+		const env = parseEnv(defineConfig({ preview: { aiGateway: true } }));
+		expect(env.aiGateway.apiKey).toBe("nt_live_abc_def");
+		expect(env.aiGateway.baseUrl).toBe(
+			"https://x.neon.build/ai-gateway/openai/v1",
+		);
 	});
 
-	test("parseEnv throws EnvNotInjected listing missing credential vars", () => {
+	test("parseEnv throws EnvNotInjected listing missing storage vars", () => {
 		vi.stubEnv("DATABASE_URL", "postgres://pooled");
 		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
 		expect(() =>
 			parseEnv(defineConfig({ preview: { buckets: { uploads: {} } } })),
-		).toThrowError(/NEON_API_TOKEN is missing/);
+		).toThrowError(/AWS_ACCESS_KEY_ID is missing/);
 	});
 
-	test("parseEnv ignores credentials for a non-Preview policy", () => {
+	test("parseEnv ignores storage/aiGateway for a non-Preview policy", () => {
 		vi.stubEnv("DATABASE_URL", "postgres://pooled");
 		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
 		const env = parseEnv(defineConfig({}));
-		expect("credentials" in env).toBe(false);
+		expect("storage" in env).toBe(false);
+		expect("aiGateway" in env).toBe(false);
 	});
 
-	test("toEntries projects the credentials namespace", () => {
-		const config = defineConfig({ preview: { buckets: { uploads: {} } } });
+	test("toEntries projects storage to AWS_* (+ NEON_STORAGE_*) and aiGateway to OPENAI_*", () => {
+		const config = defineConfig({
+			preview: { buckets: { uploads: {} }, aiGateway: true },
+		});
 		const env: NeonEnv<typeof config> = {
 			postgres: { databaseUrl: "a", databaseUrlUnpooled: "b" },
-			credentials: {
-				apiToken: "nt_live_x_y",
-				s3AccessKeyId: "akid",
-				s3SecretAccessKey: "secret",
-				tokenId: "tok-1",
-				scopes: ["storage:read", "storage:write"],
+			storage: {
+				accessKeyId: "akid",
+				secretAccessKey: "secret",
+				endpoint: "https://br.storage.neon.build",
+				region: "us-east-2",
+				forcePathStyle: true,
+			},
+			aiGateway: {
+				apiKey: "nt_live_x_y",
+				baseUrl: "https://x.neon.build/ai-gateway/openai/v1",
 			},
 		};
 		const pairs = toEntries(env);
-		expect(pairs.NEON_API_TOKEN).toBe("nt_live_x_y");
-		expect(pairs.NEON_S3_ACCESS_KEY_ID).toBe("akid");
-		expect(pairs.NEON_S3_SECRET_ACCESS_KEY).toBe("secret");
-		expect(pairs.NEON_CREDENTIAL_ID).toBe("tok-1");
-		expect(pairs.NEON_CREDENTIAL_SCOPES).toBe("storage:read,storage:write");
+		expect(pairs.AWS_ACCESS_KEY_ID).toBe("akid");
+		expect(pairs.AWS_SECRET_ACCESS_KEY).toBe("secret");
+		expect(pairs.AWS_ENDPOINT_URL_S3).toBe("https://br.storage.neon.build");
+		expect(pairs.AWS_REGION).toBe("us-east-2");
+		expect(pairs.NEON_STORAGE_REGION).toBe("us-east-2");
+		expect(pairs.NEON_STORAGE_FORCE_PATH_STYLE).toBe("true");
+		expect(pairs.OPENAI_API_KEY).toBe("nt_live_x_y");
+		expect(pairs.OPENAI_BASE_URL).toBe(
+			"https://x.neon.build/ai-gateway/openai/v1",
+		);
 	});
 });
