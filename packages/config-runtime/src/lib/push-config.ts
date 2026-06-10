@@ -148,7 +148,7 @@ export interface PushConfirmContext {
  *
  * Filesystem- and env-agnostic: the caller supplies an already-validated `Config` object
  * (from `defineConfig` / `loadConfigFromFile`) and explicit `projectId` + `branch` in
- * `options`. `pushConfig` performs no `.neon` lookups and reads no `NEON_*` env vars.
+ * `options`. `pushConfig` performs no `.neon` lookups and reads no `NEON_*` env vars except the API credential/host resolution documented on `apiKey`/`apiHost`.
  *
  * It will **not** create a project or branch — both must already exist on Neon.
  */

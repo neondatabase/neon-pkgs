@@ -26,12 +26,12 @@ describe("pullConfig — apiHost forwarding", () => {
 				projectId: "p",
 				branchId: "br-1",
 				apiKey: "napi_k",
-				apiHost: "https://stage.example/api/v2",
+				apiHost: HOST,
 			}),
 		).rejects.toThrow("STOP-AFTER-API-BUILD");
 		expect(createNeonApiFromOptions).toHaveBeenCalledWith("pullConfig", {
 			apiKey: "napi_k",
-			apiHost: "https://stage.example/api/v2",
+			apiHost: HOST,
 		});
 	});
 });
@@ -43,12 +43,12 @@ describe("pushConfig — apiHost forwarding", () => {
 				projectId: "p",
 				branchId: "br-1",
 				apiKey: "napi_k",
-				apiHost: "https://stage.example/api/v2",
+				apiHost: HOST,
 			}),
 		).rejects.toThrow("STOP-AFTER-API-BUILD");
 		expect(createNeonApiFromOptions).toHaveBeenCalledWith("pushConfig", {
 			apiKey: "napi_k",
-			apiHost: "https://stage.example/api/v2",
+			apiHost: HOST,
 		});
 	});
 });
