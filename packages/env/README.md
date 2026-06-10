@@ -52,7 +52,7 @@ neon-env run -- npm run dev
 neon-env run -- pnpm dev
 ```
 
-`run` loads `neon.ts`, resolves the branch (via `--branch`, `NEON_BRANCH_ID`, or `.neon[/project.json]`), fetches the connection strings from Neon, and spawns the command with `DATABASE_URL` / `DATABASE_URL_UNPOOLED` (and `NEON_AUTH_BASE_URL` / `NEON_DATA_API_URL` when the policy enables them) injected on top of the inherited environment. Stdio is inherited so interactive dev servers keep working, and the parent exits with the child's exit code.
+`run` loads `neon.ts`, resolves the branch (via `--branch`, `NEON_BRANCH_ID`, or `.neon[/project.json]`), fetches the connection strings from Neon, and spawns the command with `DATABASE_URL` / `DATABASE_URL_UNPOOLED` (and `NEON_AUTH_BASE_URL` / `NEON_AUTH_JWKS_URL` / `NEON_DATA_API_URL` when the policy enables them) injected on top of the inherited environment. Stdio is inherited so interactive dev servers keep working, and the parent exits with the child's exit code.
 
 ### `export` — print env to stdout
 
@@ -79,6 +79,7 @@ Flags (both commands): `--config <path>`, `--project-id`, `--branch`, `--api-key
 | `DATABASE_URL` | pooled connection string |
 | `DATABASE_URL_UNPOOLED` | direct connection string |
 | `NEON_AUTH_BASE_URL` | Neon Auth integration (when `auth` is enabled) |
+| `NEON_AUTH_JWKS_URL` | Neon Auth JWKS endpoint for verifying issued tokens (when `auth` is enabled) |
 | `NEON_DATA_API_URL` | Data API integration (when `dataApi` is enabled) |
 
 ## Resolution

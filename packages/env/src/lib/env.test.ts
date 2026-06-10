@@ -89,6 +89,9 @@ describe("fetchEnv", () => {
 		expect(env.auth.baseUrl).toBe(
 			`https://api.fake.neon.tech/auth/${projectId}/br-main`,
 		);
+		expect(env.auth.jwksUrl).toBe(
+			`https://api.fake.neon.tech/auth/${projectId}/br-main/.well-known/jwks.json`,
+		);
 	});
 
 	test("falls back to the supplied env source when the snapshot omits base URL", async () => {
@@ -107,6 +110,8 @@ describe("fetchEnv", () => {
 		});
 
 		expect(env.auth.baseUrl).toBe("https://auth.example.com");
+		// jwks_url is always returned by the snapshot, so it comes from there.
+		expect(env.auth.jwksUrl).toBe("https://example.com/jwks.json");
 	});
 
 	test("defaults to neondb_owner when Auth/Data API add managed roles", async () => {
@@ -195,6 +200,7 @@ describe("parseEnv", () => {
 		vi.stubEnv("DATABASE_URL", "postgres://pooled");
 		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
 		vi.stubEnv("NEON_AUTH_BASE_URL", "https://auth.example.com");
+		vi.stubEnv("NEON_AUTH_JWKS_URL", "https://auth.example.com/jwks.json");
 		const config = defineConfig({ auth: true });
 
 		const env = parseEnv(config);
@@ -204,12 +210,25 @@ describe("parseEnv", () => {
 		// @ts-expect-error auth: true must not imply Data API env.
 		env.dataApi;
 		expect(env.auth.baseUrl).toBe("https://auth.example.com");
+		expect(env.auth.jwksUrl).toBe("https://auth.example.com/jwks.json");
 	});
 
 	test("rejects an empty NEON_AUTH_BASE_URL value", () => {
 		vi.stubEnv("DATABASE_URL", "postgres://pooled");
 		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
 		vi.stubEnv("NEON_AUTH_BASE_URL", "");
+		vi.stubEnv("NEON_AUTH_JWKS_URL", "https://auth.example.com/jwks.json");
+
+		expect(() => parseEnv(defineConfig({ auth: true }))).toThrow(
+			expect.objectContaining({ code: ErrorCode.EnvNotInjected }),
+		);
+	});
+
+	test("rejects a missing NEON_AUTH_JWKS_URL value", () => {
+		vi.stubEnv("DATABASE_URL", "postgres://pooled");
+		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
+		vi.stubEnv("NEON_AUTH_BASE_URL", "https://auth.example.com");
+		// NEON_AUTH_JWKS_URL intentionally unset.
 
 		expect(() => parseEnv(defineConfig({ auth: true }))).toThrow(
 			expect.objectContaining({ code: ErrorCode.EnvNotInjected }),
@@ -296,6 +315,10 @@ describe("parseEnv", () => {
 			vi.stubEnv("DATABASE_URL", "postgres://pooled");
 			vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
 			vi.stubEnv("NEON_AUTH_BASE_URL", "https://auth.example.com");
+			vi.stubEnv(
+				"NEON_AUTH_JWKS_URL",
+				"https://auth.example.com/jwks.json",
+			);
 			vi.stubEnv("resendApiKey", "re_live_123");
 			const authConfig = defineConfig({
 				auth: true,
@@ -311,6 +334,7 @@ describe("parseEnv", () => {
 			});
 			const env = parseEnv(authConfig, "hello");
 			expect(env.auth.baseUrl).toBe("https://auth.example.com");
+			expect(env.auth.jwksUrl).toBe("https://auth.example.com/jwks.json");
 			expect(env.function.resendApiKey).toBe("re_live_123");
 		});
 	});
@@ -328,8 +352,10 @@ describe("parseEnv", () => {
 		vi.stubEnv("DATABASE_URL", "postgres://pooled");
 		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
 		vi.stubEnv("NEON_AUTH_BASE_URL", "https://auth.example.com");
+		vi.stubEnv("NEON_AUTH_JWKS_URL", "https://auth.example.com/jwks.json");
 		const env = parseEnv(defineConfig({ auth: {} }));
 		expect(env.auth.baseUrl).toBe("https://auth.example.com");
+		expect(env.auth.jwksUrl).toBe("https://auth.example.com/jwks.json");
 	});
 
 	test("`dataApi: { enabled: true }` enables the data API namespace", () => {
@@ -346,5 +372,21 @@ describe("parseEnv", () => {
 		});
 		expect(pairs.DATABASE_URL).toBe("a");
 		expect(pairs.DATABASE_URL_UNPOOLED).toBe("b");
+	});
+
+	test("projects the auth namespace (base + jwks URLs) to process env keys", () => {
+		const config = defineConfig({ auth: true });
+		const env: NeonEnv<typeof config> = {
+			postgres: { databaseUrl: "a", databaseUrlUnpooled: "b" },
+			auth: {
+				baseUrl: "https://auth.example.com",
+				jwksUrl: "https://auth.example.com/jwks.json",
+			},
+		};
+		const pairs = toEntries(env);
+		expect(pairs.NEON_AUTH_BASE_URL).toBe("https://auth.example.com");
+		expect(pairs.NEON_AUTH_JWKS_URL).toBe(
+			"https://auth.example.com/jwks.json",
+		);
 	});
 });

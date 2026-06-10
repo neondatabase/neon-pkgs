@@ -48,6 +48,7 @@ export const NEON_ENV_VAR_KEYS = {
 	},
 	auth: {
 		baseUrl: "NEON_AUTH_BASE_URL",
+		jwksUrl: "NEON_AUTH_JWKS_URL",
 	},
 	dataApi: {
 		url: "NEON_DATA_API_URL",
@@ -73,13 +74,15 @@ export interface NeonPostgresEnv {
  * Bits of a Neon Auth integration for the resolved branch. Only present on `NeonEnv`
  * when the branch policy enables `auth`.
  *
- * Neon Auth exposes a single `baseUrl` that doubles as the publishable client identifier
- * — the rest of the surface (project id, JWKS URL, …) is derived from it at runtime by
- * the Neon Auth SDK. `fetchEnv` reads it from the live integration; `parseEnv` reads it
- * from `process.env` (`NEON_AUTH_BASE_URL`).
+ * Neon Auth exposes the `baseUrl` (which doubles as the publishable client identifier) and
+ * the `jwksUrl` used to verify tokens it issues. `fetchEnv` reads both from the live
+ * integration; `parseEnv` reads them from `process.env` (`NEON_AUTH_BASE_URL` /
+ * `NEON_AUTH_JWKS_URL`).
  */
 export interface NeonAuthEnv {
 	baseUrl: string;
+	/** JWKS URL for verifying tokens issued by Neon Auth (`NEON_AUTH_JWKS_URL`). */
+	jwksUrl: string;
 }
 
 /** Bits of a Neon Data API integration. Only present when the branch policy enables it. */
@@ -327,11 +330,10 @@ export async function fetchEnv<const C extends Config>(
 				},
 			);
 		}
-		const baseUrl = resolveAuthBaseUrl(
-			authSnapshot.baseUrl,
-			options.env ?? process.env,
-		);
-		result.auth = { baseUrl } satisfies NeonAuthEnv;
+		const envSource = options.env ?? process.env;
+		const baseUrl = resolveAuthBaseUrl(authSnapshot.baseUrl, envSource);
+		const jwksUrl = resolveAuthJwksUrl(authSnapshot.jwksUrl, envSource);
+		result.auth = { baseUrl, jwksUrl } satisfies NeonAuthEnv;
 	}
 
 	if (wantsDataApi) {
@@ -369,6 +371,19 @@ function resolveAuthBaseUrl(
 ): string {
 	if (snapshotBaseUrl && snapshotBaseUrl !== "") return snapshotBaseUrl;
 	return source[NEON_ENV_VAR_KEYS.auth.baseUrl] ?? "";
+}
+
+/**
+ * Resolve the Neon Auth JWKS URL to surface in `env.auth`. Prefer the value returned by the
+ * integration (`getNeonAuth` always includes `jwks_url`); fall back to the caller's env
+ * source so the value still round-trips through `env run` if a snapshot ever omits it.
+ */
+function resolveAuthJwksUrl(
+	snapshotJwksUrl: string | undefined,
+	source: NodeJS.ProcessEnv,
+): string {
+	if (snapshotJwksUrl && snapshotJwksUrl !== "") return snapshotJwksUrl;
+	return source[NEON_ENV_VAR_KEYS.auth.jwksUrl] ?? "";
 }
 
 function createApiFromOptions(options: FetchEnvOptions): NeonApi {
@@ -541,6 +556,9 @@ const authEnvSchema = z.object({
 	NEON_AUTH_BASE_URL: z
 		.string({ message: "NEON_AUTH_BASE_URL is missing" })
 		.min(1, "NEON_AUTH_BASE_URL must not be empty"),
+	NEON_AUTH_JWKS_URL: z
+		.string({ message: "NEON_AUTH_JWKS_URL is missing" })
+		.min(1, "NEON_AUTH_JWKS_URL must not be empty"),
 });
 
 const dataApiEnvSchema = z.object({
@@ -622,10 +640,12 @@ export function parseEnv(config: Config, scope?: string): unknown {
 	if (isServiceEnabledInput(config.auth)) {
 		const auth = authEnvSchema.safeParse({
 			NEON_AUTH_BASE_URL: source.NEON_AUTH_BASE_URL,
+			NEON_AUTH_JWKS_URL: source.NEON_AUTH_JWKS_URL,
 		});
 		if (auth.success) {
 			result.auth = {
 				baseUrl: auth.data.NEON_AUTH_BASE_URL,
+				jwksUrl: auth.data.NEON_AUTH_JWKS_URL,
 			} satisfies NeonAuthEnv;
 		} else {
 			for (const issue of auth.error.issues) issues.push(issue.message);
@@ -714,6 +734,7 @@ export function toEntries(env: NeonEnv<Config>): Record<string, string> {
 	const withAuth = env as { auth?: NeonAuthEnv };
 	if (withAuth.auth) {
 		out[NEON_ENV_VAR_KEYS.auth.baseUrl] = withAuth.auth.baseUrl;
+		out[NEON_ENV_VAR_KEYS.auth.jwksUrl] = withAuth.auth.jwksUrl;
 	}
 	const withDataApi = env as { dataApi?: NeonDataApiEnv };
 	if (withDataApi.dataApi) {
