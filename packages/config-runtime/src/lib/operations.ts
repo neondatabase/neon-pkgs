@@ -30,6 +30,8 @@ export interface ConfigOperationOptions {
 	branchId: string;
 	/** Neon API key. Falls back to `NEON_API_KEY` / neonctl credentials. */
 	apiKey?: string;
+	/** Neon API base URL. Falls back to `NEON_API_HOST`, then production. */
+	apiHost?: string;
 	/** Inject a custom NeonApi adapter (primarily for tests). */
 	api?: PushConfigOptions["api"];
 }
@@ -67,6 +69,7 @@ export async function inspect(
 		branchId: options.branchId,
 		...(options.api ? { api: options.api } : {}),
 		...(options.apiKey ? { apiKey: options.apiKey } : {}),
+		...(options.apiHost ? { apiHost: options.apiHost } : {}),
 	});
 }
 
@@ -90,6 +93,7 @@ export async function plan(
 		updateExisting: true,
 		...(options.api ? { api: options.api } : {}),
 		...(options.apiKey ? { apiKey: options.apiKey } : {}),
+		...(options.apiHost ? { apiHost: options.apiHost } : {}),
 	});
 }
 
@@ -113,6 +117,7 @@ export async function apply(
 		branchId: options.branchId,
 		...(options.api ? { api: options.api } : {}),
 		...(options.apiKey ? { apiKey: options.apiKey } : {}),
+		...(options.apiHost ? { apiHost: options.apiHost } : {}),
 		...(options.updateExisting ? { updateExisting: true } : {}),
 		...(options.allowProtectedBranch ? { allowProtectedBranch: true } : {}),
 		...(options.bundleFunction
