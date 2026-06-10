@@ -17,8 +17,6 @@ export interface SetupPhaseOptions {
 	agent?: string;
 	/** The IDE/editor the user is running in (e.g. "cursor", "vscode") — reported by agent */
 	ide?: string;
-	// Consent (from userPreferences)
-	consent?: "proceed" | "cancel";
 	// Inspection results — pre-filled by orchestrator or reported by agent
 	mcpConfigured?: boolean | null;
 	connectionString?: boolean | null;
@@ -30,7 +28,7 @@ export interface SetupPhaseOptions {
 	isVscodeIde?: boolean | null;
 	// User preferences
 	mode?: "defaults" | "customize";
-	mcpScope?: "global" | "project";
+	mcpScope?: "global" | "project" | "none";
 	skillsScope?: "global" | "project";
 	installExtension?: boolean;
 	// Execution flags
@@ -47,19 +45,6 @@ export interface SetupPhaseOptions {
 export async function handleSetupPhase(
 	options: SetupPhaseOptions,
 ): Promise<PhaseResponse> {
-	// User declined setup via consent preference
-	if (options.consent === "cancel") {
-		return {
-			phase: "setup",
-			status: "cancelled",
-			nextAction: {
-				type: "complete",
-				message:
-					"Neon setup cancelled. You can run neon-init again anytime to set up your project.",
-			},
-		};
-	}
-
 	// --execute: run the batched installation (legacy path)
 	if (options.execute) {
 		return executeBatchedInstallation(await mergeCliInspection(options));
@@ -105,7 +90,7 @@ export async function handleSetupPhase(
 		return buildModeQuestion(options);
 	}
 
-	// Default: send inspection checks with consent as first userPreference
+	// Default: send inspection checks with user preferences
 	return buildBulkInspection(options);
 }
 
@@ -121,17 +106,15 @@ function buildBulkInspection(_options: SetupPhaseOptions): PhaseResponse {
 
 	return {
 		phase: "setup",
-		status: "consent_needed",
+		status: "pending",
 		detectedIde: detectedIde?.toLowerCase() ?? null,
 		installedEditors: installedEditors.length > 0 ? installedEditors : null,
 		nextAction: {
 			type: "agent_check",
 			instructions: [
-				"Present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the `condition` field — only show a question if its condition is met.",
+				"Perform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the `condition` field — only show a question if its condition is met.",
 				"",
-				'IMPORTANT: The consent question MUST be asked first, by itself. If the user declines (cancel), immediately call reportBack with {"consent": "cancel"} and stop. Do NOT show any other questions.',
-				"",
-				"If the user consents (proceed), perform the agent checks listed above (MCP server status and your agent identity), then present the mode question. If the MCP server is already configured, tell the user and note that it will be kept up to date. IMPORTANT: If you find neon-postgres in skills-lock.json, you MUST verify the actual SKILL.md file exists on disk (e.g. .agents/skills/neon-postgres/SKILL.md or .cursor/skills/neon-postgres/SKILL.md). If the lock file references it but the file is missing, report skills as NOT installed. Only ask about scope/options for components that are NOT already configured.",
+				"If the MCP server is already configured, tell the user and note that it will be kept up to date. IMPORTANT: If you find neon-postgres in skills-lock.json, you MUST verify the actual SKILL.md file exists on disk (e.g. .agents/skills/neon-postgres/SKILL.md or .cursor/skills/neon-postgres/SKILL.md). If the lock file references it but the file is missing, report skills as NOT installed. Only ask about scope/options for components that are NOT already configured.",
 				"",
 				"IMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.",
 				"",
@@ -143,9 +126,15 @@ function buildBulkInspection(_options: SetupPhaseOptions): PhaseResponse {
 						? `No IDE detected, but the following editors are installed: ${installedEditors.join(", ")}. The "installedEditors" field in this response lists them. If the user wants the extension installed, ask which editor to install it for and include that as the "ide" field in your reportBack data. If not, set "ide" to "none".`
 						: `No IDE or supported editors detected. Set "ide" to "none" in your reportBack data.`,
 				"",
-				"After all questions are answered, call reportBack with a single --data JSON containing: consent, agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
+				"After all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
 			].join("\n"),
 			checks: [
+				{
+					id: "neonctl",
+					description:
+						"The neonctl CLI will be installed or updated automatically (no action needed from the agent)",
+					lookFor: [],
+				},
 				{
 					id: "mcp_server",
 					description:
@@ -179,24 +168,13 @@ function buildBulkInspection(_options: SetupPhaseOptions): PhaseResponse {
 			],
 			userPreferences: [
 				{
-					id: "consent",
-					question:
-						"neon-init will install Neon's MCP server, agent skills, and editor extension, then guide you through connecting a Neon database. Proceed?",
-					phase: "before_checks",
-					options: [
-						{ value: "proceed", label: "Yes, set up Neon" },
-						{ value: "cancel", label: "No, cancel" },
-					],
-					default: "proceed",
-				},
-				{
 					id: "mode",
 					question: "Use default settings or customize?",
 					phase: "after_checks",
 					options: [
 						{
 							value: "defaults",
-							label: "Use defaults (MCP: global, skills: project-level, extension if applicable — already-configured components will be skipped)",
+							label: "Use defaults (neonctl CLI, MCP: global, skills: project-level, extension if applicable — already-configured components will be skipped)",
 						},
 						{
 							value: "customize",
@@ -204,7 +182,6 @@ function buildBulkInspection(_options: SetupPhaseOptions): PhaseResponse {
 						},
 					],
 					default: "defaults",
-					condition: { preferenceId: "consent", equals: "proceed" },
 				},
 				{
 					id: "mcpScope",
@@ -220,6 +197,10 @@ function buildBulkInspection(_options: SetupPhaseOptions): PhaseResponse {
 						{
 							value: "project",
 							label: "Project-level (scoped to this project only)",
+						},
+						{
+							value: "none",
+							label: "Skip — do not install the MCP server",
 						},
 					],
 					default: "global",
@@ -268,7 +249,7 @@ function buildBulkInspection(_options: SetupPhaseOptions): PhaseResponse {
 					"setup",
 					"--json",
 					"--data",
-					"<json: { consent: string, agent: string, ide: string, mcpConfigured: bool, mode: string, mcpScope?: string, skillsScope?: string, installExtension?: bool }>",
+					"<json: { agent: string, ide: string, mcpConfigured: bool, mode: string, mcpScope?: 'global'|'project'|'none', skillsScope?: string, installExtension?: bool }>",
 				],
 			},
 		},
@@ -308,7 +289,7 @@ function buildModeQuestion(options: SetupPhaseOptions): PhaseResponse {
 	const inspectionArgs = buildInspectionArgs(options);
 
 	// Build defaults label showing only what will be installed
-	const defaultsParts: string[] = [];
+	const defaultsParts: string[] = ["neonctl CLI"];
 	if (!options.mcpConfigured) defaultsParts.push("MCP global");
 	defaultsParts.push("skills in project");
 	if (options.isVscodeIde) defaultsParts.push("install extension");
@@ -374,7 +355,7 @@ function buildCustomizeQuestions(options: SetupPhaseOptions): PhaseResponse {
 	const inspectionArgs = buildInspectionArgs(options);
 
 	const needsMcp = !options.mcpConfigured;
-	const mcpScopes = needsMcp ? ["global", "project"] : ["skip"];
+	const mcpScopes = needsMcp ? ["global", "project", "none"] : ["skip"];
 	const skillsScopes = ["global", "project"];
 	const extOptions = options.isVscodeIde ? ["ext", "noext"] : ["ext"];
 
@@ -384,7 +365,8 @@ function buildCustomizeQuestions(options: SetupPhaseOptions): PhaseResponse {
 		for (const skills of skillsScopes) {
 			for (const ext of extOptions) {
 				const parts: string[] = [];
-				if (mcp !== "skip") parts.push(`MCP: ${mcp}`);
+				if (mcp === "none") parts.push("Skip MCP");
+				else if (mcp !== "skip") parts.push(`MCP: ${mcp}`);
 				if (skills !== "skip")
 					parts.push(
 						`Skills: ${skills === "project" ? "project-level" : skills}`,
@@ -406,7 +388,7 @@ function buildCustomizeQuestions(options: SetupPhaseOptions): PhaseResponse {
 
 	for (const opt of customOptions) {
 		const parts = opt.value.split("_");
-		const mcpScope = parts[0] === "skip" ? "global" : parts[0];
+		const mcpScope = parts[0] === "skip" ? "global" : parts[0]; // "none" passes through
 		const skillsScope = parts[1] === "skip" ? "project" : parts[1];
 		const installExt = parts[2] === "ext";
 
@@ -514,7 +496,13 @@ async function executeBatchedInstallation(
 		options.ide?.toLowerCase() === "cursor" ||
 		options.agent?.toLowerCase() === "cursor";
 
-	if (options.mcpConfigured) {
+	if (mcpScope === "none") {
+		results.push({
+			id: "skip_mcp",
+			description: "Neon MCP server installation skipped by user",
+			status: "success",
+		});
+	} else if (options.mcpConfigured) {
 		results.push({
 			id: "skip_mcp",
 			description: "Neon MCP server already configured",

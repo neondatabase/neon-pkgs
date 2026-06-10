@@ -80,20 +80,18 @@ describe("setup phase", () => {
 		const result = await handleSetupPhase({ agent: "claude" });
 
 		expect(result.phase).toBe("setup");
-		expect(result.status).toBe("consent_needed");
+		expect(result.status).toBe("pending");
 		expect(result.nextAction.type).toBe("agent_check");
 
 		if (result.nextAction.type === "agent_check") {
 			// Should have explicit workflow instructions
 			expect(result.nextAction.instructions).toBeDefined();
-			expect(result.nextAction.instructions).toContain(
-				"consent question",
-			);
 			expect(result.nextAction.instructions).toContain("ONE AT A TIME");
 			expect(result.nextAction.instructions).toContain("condition");
 
 			// Only agent-specific checks — filesystem checks are done CLI-side
 			const checkIds = result.nextAction.checks.map((c) => c.id);
+			expect(checkIds).toContain("neonctl");
 			expect(checkIds).toContain("mcp_server");
 			expect(checkIds).toContain("agent_type");
 			expect(checkIds).not.toContain("connection_string");
@@ -112,11 +110,9 @@ describe("setup phase", () => {
 			expect(result.nextAction.reportBack.args[0]).toBe("setup");
 			expect(result.nextAction.reportBack.args).toContain("--data");
 
-			// Consent should be before_checks, others after_checks
+			// No consent preference — mode should be first
 			const prefs = result.nextAction.userPreferences ?? [];
-			const consentPref = prefs.find((p) => p.id === "consent");
-			expect(consentPref?.phase).toBe("before_checks");
-			expect(consentPref?.question).toContain("Proceed?");
+			expect(prefs.find((p) => p.id === "consent")).toBeUndefined();
 
 			const modePref = prefs.find((p) => p.id === "mode");
 			expect(modePref?.phase).toBe("after_checks");
@@ -127,20 +123,6 @@ describe("setup phase", () => {
 				preferenceId: "mode",
 				equals: "customize",
 			});
-		}
-	});
-
-	test("returns cancelled response when user declines consent", async () => {
-		const result = await handleSetupPhase({
-			agent: "claude",
-			consent: "cancel",
-		});
-
-		expect(result.phase).toBe("setup");
-		expect(result.status).toBe("cancelled");
-		expect(result.nextAction.type).toBe("complete");
-		if (result.nextAction.type === "complete") {
-			expect(result.nextAction.message).toContain("cancelled");
 		}
 	});
 

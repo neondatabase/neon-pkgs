@@ -28,7 +28,7 @@ export interface OrchestratorOptions {
  * Each call is stateless — it re-checks everything from the file system and credentials.
  *
  * The orchestrator uses filesystem inspection to decide what to do:
- * - MCP not configured → full setup flow (consent → inspect → install → getting-started)
+ * - MCP not configured → full setup flow (inspect → install → getting-started)
  * - MCP configured, no connection string → skip install, go to getting-started
  * - MCP configured + connection string → fall through to neon-auth/migrations/complete
  */
@@ -58,7 +58,7 @@ export async function orchestrate(
 
 	// Phase 3a: Tooling not installed → full setup flow
 	// Don't pre-fill inspection results — the setup phase asks the agent to
-	// check and report back AFTER the user consents.
+	// check and report back.
 	if (!toolingInstalled) {
 		return handleSetupPhase({ agent: options.agent });
 	}

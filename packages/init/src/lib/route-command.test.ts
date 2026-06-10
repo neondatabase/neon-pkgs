@@ -46,7 +46,6 @@ describe("routeCommand", () => {
 
 	test("routes to setup with --data JSON", async () => {
 		const data = JSON.stringify({
-			consent: "proceed",
 			mcpConfigured: false,
 			connectionString: false,
 			framework: "next",

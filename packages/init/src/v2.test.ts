@@ -91,10 +91,10 @@ describe("v2 orchestrator", () => {
 		const result = await orchestrate({ agent: "claude" });
 
 		expect(result.phase).toBe("setup");
-		expect(result.status).toBe("consent_needed");
+		expect(result.status).toBe("pending");
 		expect(result.nextAction.type).toBe("agent_check");
 		if (result.nextAction.type === "agent_check") {
-			expect(result.nextAction.userPreferences?.[0]?.id).toBe("consent");
+			expect(result.nextAction.userPreferences?.[0]?.id).toBe("mode");
 		}
 	});
 
@@ -164,7 +164,7 @@ describe("v2 orchestrator", () => {
 		const result = await orchestrate({ agent: "cursor" });
 
 		expect(result.phase).toBe("setup");
-		expect(result.status).toBe("consent_needed");
+		expect(result.status).toBe("pending");
 	});
 
 	test("auth phase existing_account maps to inline run_command", async () => {
