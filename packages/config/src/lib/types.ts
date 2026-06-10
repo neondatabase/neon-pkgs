@@ -229,6 +229,31 @@ export interface FunctionDef {
 	dev?: FunctionDevConfig;
 }
 
+/**
+ * A single capability a branch-scoped service credential may exercise (Preview). A
+ * credential is granted a set of these and may only perform the listed actions. Mirrors
+ * the Neon API `CredentialScope` enum (`x-stability-level: beta`):
+ *
+ * - `storage:read` / `storage:write` — object-storage (bucket) access via the S3 key.
+ * - `ai_gateway:invoke` — call the AI Gateway with the bearer `api_token`.
+ * - `functions:invoke` — invoke Neon Functions with the bearer `api_token`.
+ *
+ * The set a policy needs is derived from its enabled Preview features (see
+ * {@link deriveCredentialScopes}); it is never authored by hand.
+ */
+export type CredentialScope =
+	| "storage:read"
+	| "storage:write"
+	| "ai_gateway:invoke"
+	| "functions:invoke";
+
+/**
+ * Who a credential acts as. `user` is the developer/app principal minted for local dev and
+ * app bootstrap (`fetchEnv` / `env pull`); `function` is a deployed-function principal
+ * (carries a `function_id`). The env tooling only mints `user` credentials today.
+ */
+export type CredentialPrincipalType = "user" | "function";
+
 /** Anonymous-access level for a branchable object-storage bucket. */
 export type BucketAccessLevel = "private" | "public_read";
 

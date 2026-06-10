@@ -15,6 +15,7 @@ export type {
 	FetchEnvOptions,
 	FunctionSlugOf,
 	NeonAuthEnv,
+	NeonCredentialsEnv,
 	NeonDataApiEnv,
 	NeonEnv,
 	NeonFunctionEnv,

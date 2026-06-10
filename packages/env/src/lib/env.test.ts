@@ -390,3 +390,191 @@ describe("parseEnv", () => {
 		);
 	});
 });
+
+describe("branch credentials (Preview)", () => {
+	const callsTo = (api: FakeNeonApi, method: string) =>
+		api.history.filter((h) => h.method === method).length;
+
+	test("no Preview feature: never touches the credentials endpoint", async () => {
+		const { api, projectId } = seededFake();
+		const env = await fetchEnv(defineConfig({ auth: false }), {
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+		expect("credentials" in env).toBe(false);
+		expect(callsTo(api, "createCredential")).toBe(0);
+		expect(callsTo(api, "listCredentials")).toBe(0);
+	});
+
+	test("buckets policy mints a storage credential and surfaces the namespace", async () => {
+		const { api, projectId } = seededFake();
+		const config = defineConfig({
+			preview: { buckets: { uploads: { access: "public_read" } } },
+		});
+		const env = await fetchEnv(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+		expect(callsTo(api, "createCredential")).toBe(1);
+		expect(env.credentials.scopes).toEqual([
+			"storage:read",
+			"storage:write",
+		]);
+		expect(env.credentials.apiToken).toMatch(/^nt_live_/);
+		expect(env.credentials.s3SecretAccessKey).toHaveLength(64);
+		// The S3 access-key id is the credential's short token id (embedded in api_token:
+		// `nt_live_<tokenIdShort>_…`), distinct from the full UUID token id.
+		expect(env.credentials.s3AccessKeyId).not.toBe(env.credentials.tokenId);
+		expect(env.credentials.apiToken).toContain(
+			env.credentials.s3AccessKeyId,
+		);
+	});
+
+	test("functions ride along on the unified credential but never mint alone", async () => {
+		const { api, projectId } = seededFake();
+		// functions-only: no credential at all.
+		const fnOnly = await fetchEnv(
+			defineConfig({
+				preview: {
+					functions: { hello: { name: "h", source: "./h.ts" } },
+				},
+			}),
+			{ api, projectId, branchId: "br-main" },
+		);
+		expect("credentials" in fnOnly).toBe(false);
+		expect(callsTo(api, "createCredential")).toBe(0);
+
+		// buckets + functions: one credential carrying storage + functions:invoke.
+		const env = await fetchEnv(
+			defineConfig({
+				preview: {
+					buckets: { uploads: {} },
+					functions: { hello: { name: "h", source: "./h.ts" } },
+				},
+			}),
+			{ api, projectId, branchId: "br-main" },
+		);
+		expect(env.credentials.scopes).toEqual([
+			"storage:read",
+			"storage:write",
+			"functions:invoke",
+		]);
+	});
+
+	test("round-trips a persisted credential instead of re-minting", async () => {
+		const { api, projectId } = seededFake();
+		const config = defineConfig({ preview: { buckets: { uploads: {} } } });
+		const first = await fetchEnv(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+		const persisted = toEntries(first);
+		const second = await fetchEnv(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+			env: { ...process.env, ...persisted },
+		});
+		expect(callsTo(api, "createCredential")).toBe(1); // not minted again
+		expect(second.credentials.tokenId).toBe(first.credentials.tokenId);
+		expect(second.credentials.apiToken).toBe(first.credentials.apiToken);
+	});
+
+	test("re-mints when the persisted credential lacks a newly-added scope", async () => {
+		const { api, projectId } = seededFake();
+		// Persist a storage-only credential, then ask for a policy that also needs the AI Gateway.
+		const storageOnly = await fetchEnv(
+			defineConfig({ preview: { buckets: { uploads: {} } } }),
+			{ api, projectId, branchId: "br-main" },
+		);
+		const persisted = toEntries(storageOnly);
+		const widened = await fetchEnv(
+			defineConfig({
+				preview: { buckets: { uploads: {} }, aiGateway: true },
+			}),
+			{
+				api,
+				projectId,
+				branchId: "br-main",
+				env: { ...process.env, ...persisted },
+			},
+		);
+		expect(callsTo(api, "createCredential")).toBe(2); // re-minted
+		expect(widened.credentials.scopes).toContain("ai_gateway:invoke");
+		expect(widened.credentials.tokenId).not.toBe(
+			storageOnly.credentials.tokenId,
+		);
+	});
+
+	test("parseEnv reads injected credential vars (sync, no network)", () => {
+		vi.stubEnv("DATABASE_URL", "postgres://pooled");
+		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
+		vi.stubEnv("NEON_API_TOKEN", "nt_live_abc_def");
+		vi.stubEnv("NEON_S3_ACCESS_KEY_ID", "abc123");
+		vi.stubEnv("NEON_S3_SECRET_ACCESS_KEY", "s".repeat(64));
+		vi.stubEnv("NEON_CREDENTIAL_ID", "abc-123");
+		vi.stubEnv("NEON_CREDENTIAL_SCOPES", "storage:read,storage:write");
+		const env = parseEnv(
+			defineConfig({ preview: { buckets: { uploads: {} } } }),
+		);
+		expect(env.credentials.apiToken).toBe("nt_live_abc_def");
+		expect(env.credentials.s3AccessKeyId).toBe("abc123");
+		expect(env.credentials.scopes).toEqual([
+			"storage:read",
+			"storage:write",
+		]);
+	});
+
+	test("parseEnv falls back to policy-derived scopes when the scopes var is absent", () => {
+		vi.stubEnv("DATABASE_URL", "postgres://pooled");
+		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
+		vi.stubEnv("NEON_API_TOKEN", "nt_live_abc_def");
+		vi.stubEnv("NEON_S3_ACCESS_KEY_ID", "abc123");
+		vi.stubEnv("NEON_S3_SECRET_ACCESS_KEY", "s".repeat(64));
+		const env = parseEnv(
+			defineConfig({ preview: { buckets: { uploads: {} } } }),
+		);
+		expect(env.credentials.scopes).toEqual([
+			"storage:read",
+			"storage:write",
+		]);
+	});
+
+	test("parseEnv throws EnvNotInjected listing missing credential vars", () => {
+		vi.stubEnv("DATABASE_URL", "postgres://pooled");
+		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
+		expect(() =>
+			parseEnv(defineConfig({ preview: { buckets: { uploads: {} } } })),
+		).toThrowError(/NEON_API_TOKEN is missing/);
+	});
+
+	test("parseEnv ignores credentials for a non-Preview policy", () => {
+		vi.stubEnv("DATABASE_URL", "postgres://pooled");
+		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
+		const env = parseEnv(defineConfig({}));
+		expect("credentials" in env).toBe(false);
+	});
+
+	test("toEntries projects the credentials namespace", () => {
+		const config = defineConfig({ preview: { buckets: { uploads: {} } } });
+		const env: NeonEnv<typeof config> = {
+			postgres: { databaseUrl: "a", databaseUrlUnpooled: "b" },
+			credentials: {
+				apiToken: "nt_live_x_y",
+				s3AccessKeyId: "akid",
+				s3SecretAccessKey: "secret",
+				tokenId: "tok-1",
+				scopes: ["storage:read", "storage:write"],
+			},
+		};
+		const pairs = toEntries(env);
+		expect(pairs.NEON_API_TOKEN).toBe("nt_live_x_y");
+		expect(pairs.NEON_S3_ACCESS_KEY_ID).toBe("akid");
+		expect(pairs.NEON_S3_SECRET_ACCESS_KEY).toBe("secret");
+		expect(pairs.NEON_CREDENTIAL_ID).toBe("tok-1");
+		expect(pairs.NEON_CREDENTIAL_SCOPES).toBe("storage:read,storage:write");
+	});
+});

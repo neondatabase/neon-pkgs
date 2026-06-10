@@ -1,12 +1,16 @@
 import {
 	type Config,
+	type CredentialScope,
 	createNeonApiFromOptions,
+	credentialScopesSatisfied,
+	deriveCredentialScopes,
 	ErrorCode,
 	type NeonApi,
 	type NeonBranchSnapshot,
 	type NeonDatabaseSnapshot,
 	type NeonRoleSnapshot,
 	PlatformError,
+	type ResolvedPreviewConfig,
 	resolveConfig,
 	type ServiceToggleInput,
 } from "@neondatabase/config/v1";
@@ -53,6 +57,13 @@ export const NEON_ENV_VAR_KEYS = {
 	dataApi: {
 		url: "NEON_DATA_API_URL",
 	},
+	credentials: {
+		apiToken: "NEON_API_TOKEN",
+		s3AccessKeyId: "NEON_S3_ACCESS_KEY_ID",
+		s3SecretAccessKey: "NEON_S3_SECRET_ACCESS_KEY",
+		tokenId: "NEON_CREDENTIAL_ID",
+		scopes: "NEON_CREDENTIAL_SCOPES",
+	},
 } as const;
 
 /** Per-namespace inner shapes. Exposed so consumers can name the parts independently. */
@@ -91,6 +102,32 @@ export interface NeonDataApiEnv {
 }
 
 /**
+ * The unified branch-scoped service credential (Preview). Present on `NeonEnv` only when the
+ * branch policy enables a credential-bearing Preview feature — object storage (`preview.buckets`),
+ * the AI Gateway (`preview.aiGateway`), or Functions (`preview.functions`). When **no** such
+ * feature is enabled this namespace is absent and the credentials endpoint is never called, so
+ * the Postgres / Auth / Data API path is byte-for-byte unchanged.
+ *
+ * A single credential carries capabilities across all enabled BaaS surfaces:
+ * - `apiToken` — bearer (`nt_live_…`) for the AI Gateway and Functions invocation.
+ * - `s3AccessKeyId` / `s3SecretAccessKey` — S3-compatible object-storage credentials.
+ *
+ * `tokenId` and `scopes` are carried so the credential can be round-tripped (reused instead of
+ * re-minted on the next `fetchEnv` / `env pull`) and revoked. The secret-bearing fields
+ * (`apiToken`, `s3SecretAccessKey`) are returned by the Neon API exactly once at mint time, so
+ * `fetchEnv` persists them via the env source the same way one-time Auth keys are handled.
+ */
+export interface NeonCredentialsEnv {
+	apiToken: string;
+	s3AccessKeyId: string;
+	s3SecretAccessKey: string;
+	/** The credential's `token_id` (UUID); used to reuse/revoke the persisted credential. */
+	tokenId: string;
+	/** Capabilities granted to this credential, derived from the enabled Preview features. */
+	scopes: CredentialScope[];
+}
+
+/**
  * Empty record alias used as the "false" branch of the conditional namespace adds below.
  * `Record<never, never>` is the no-op for intersection — the cleaner alternative to `{}`,
  * which biome rejects (it means "any non-null", not "empty object").
@@ -122,6 +159,41 @@ type ServiceOn<T> = [T] extends [false]
 						? true
 						: false;
 
+/** True when `T` has at least one known key; `false` for `{}` / `never`. */
+type HasKeys<T> = [keyof T] extends [never] ? false : true;
+
+/**
+ * Whether the policy's **static** `preview` block enables a feature that requires the unified
+ * branch credential — i.e. one whose secret the Neon API only returns by minting a credential:
+ * object storage (`preview.buckets`, the S3 keys) or the AI Gateway (`preview.aiGateway`, the
+ * bearer). Drives whether {@link NeonEnv} carries the `credentials` namespace.
+ *
+ * `preview.functions` is deliberately **not** here: functions don't have their own
+ * credential, so a functions-only policy mints nothing (and keeps the unchanged
+ * Postgres/Auth/Data API env). `functions:invoke` still rides along on the credential's scopes
+ * when one *is* minted for storage / the AI Gateway (see {@link previewCredentialScopes}).
+ *
+ * The leading `[never]` guard is load-bearing: when a policy has no `preview` at all,
+ * `NonNullable<C["preview"]>` is `never`, and without the guard the `extends { … }` probes
+ * below would vacuously match (everything extends `never`-derived shapes), wrongly adding the
+ * namespace. The guard short-circuits that to `false` so a non-Preview policy is unchanged.
+ */
+type PreviewNeedsCredential<C extends Config> = [
+	NonNullable<C["preview"]>,
+] extends [never]
+	? false
+	: NonNullable<C["preview"]> extends { buckets: infer B }
+		? HasKeys<NonNullable<B>> extends true
+			? true
+			: AiGatewayOn<C>
+		: AiGatewayOn<C>;
+
+type AiGatewayOn<C extends Config> = NonNullable<C["preview"]> extends {
+	aiGateway: infer A;
+}
+	? ServiceOn<NonNullable<A>>
+	: false;
+
 /**
  * Static, namespaced shape of `fetchEnv` / `parseEnv`'s return value. Generic over the
  * {@link Config} so the type system knows which optional namespaces are present.
@@ -133,6 +205,8 @@ type ServiceOn<T> = [T] extends [false]
  * - `postgres` is always present.
  * - `auth` is added iff `config.auth` is statically enabled.
  * - `dataApi` is added iff `config.dataApi` is statically enabled.
+ * - `credentials` is added iff `config.preview` statically enables a credential-bearing
+ *   feature (object storage, AI Gateway, or Functions).
  */
 export type NeonEnv<C extends Config = Config> = {
 	postgres: NeonPostgresEnv;
@@ -141,6 +215,9 @@ export type NeonEnv<C extends Config = Config> = {
 	: NoNamespace) &
 	(ServiceOn<NonNullable<C["dataApi"]>> extends true
 		? { dataApi: NeonDataApiEnv }
+		: NoNamespace) &
+	(PreviewNeedsCredential<C> extends true
+		? { credentials: NeonCredentialsEnv }
 		: NoNamespace);
 
 /** The static `preview.functions` record of a config, or an empty record when absent. */
@@ -361,7 +438,133 @@ export async function fetchEnv<const C extends Config>(
 		result.dataApi = { url: dataApiSnapshot.url } satisfies NeonDataApiEnv;
 	}
 
+	// Unified branch credential (Preview). Only minted when the policy enables a
+	// credential-bearing Preview feature; otherwise the credentials endpoint is never
+	// touched — keeping the Postgres / Auth / Data API path unchanged on projects without
+	// Preview (and on production, where the endpoint may not exist yet).
+	const desiredScopes = previewCredentialScopes(desired.preview);
+	if (desiredScopes.length > 0) {
+		result.credentials = await resolveCredentials({
+			api,
+			projectId,
+			branchId: branch.id,
+			branchName: branch.name,
+			scopes: desiredScopes,
+			env: options.env ?? process.env,
+		});
+	}
+
 	return result as NeonEnv<C>;
+}
+
+/**
+ * Scopes the unified branch credential needs for a resolved branch policy, or `[]` when the
+ * branch enables no credential-bearing Preview feature (the signal to mint nothing).
+ *
+ * Only object storage and the AI Gateway *require* a credential. Functions never force one
+ * (they have no credential of their own), but `functions:invoke` is added to the scope set
+ * when a credential is already being minted for storage / the AI Gateway, so the one unified
+ * credential can invoke the branch's functions too.
+ */
+function previewCredentialScopes(
+	preview: ResolvedPreviewConfig | undefined,
+): CredentialScope[] {
+	if (!preview) return [];
+	const storage = preview.buckets.length > 0;
+	const aiGateway = preview.aiGatewayEnabled;
+	if (!storage && !aiGateway) return [];
+	return deriveCredentialScopes({
+		storage,
+		aiGateway,
+		functions: preview.functions.length > 0,
+	});
+}
+
+/**
+ * Resolve the unified branch credential: reuse the one already persisted in the env source
+ * when it exists and still covers the desired scopes, otherwise mint a fresh `user`
+ * credential. Reuse is what keeps the secret stable across repeated `fetchEnv` / `env pull`
+ * runs — the Neon API returns `api_token` / `s3_secret_access_key` exactly once at mint time,
+ * so the persisted copy (e.g. in `.env.local`) is the only way to recover them, mirroring how
+ * one-time Auth keys are round-tripped.
+ */
+async function resolveCredentials(args: {
+	api: NeonApi;
+	projectId: string;
+	branchId: string;
+	branchName: string;
+	scopes: CredentialScope[];
+	env: NodeJS.ProcessEnv;
+}): Promise<NeonCredentialsEnv> {
+	const reused = reuseCredentialsFromEnv(args.env, args.scopes);
+	if (reused) return reused;
+
+	const minted = await args.api.createCredential(
+		args.projectId,
+		args.branchId,
+		{
+			scopes: args.scopes,
+			principalType: "user",
+			name: `neon-env ${args.branchName}`,
+		},
+	);
+	return {
+		apiToken: minted.apiToken,
+		s3AccessKeyId: minted.tokenIdShort,
+		s3SecretAccessKey: minted.s3SecretAccessKey,
+		tokenId: minted.tokenId,
+		scopes: minted.scopes,
+	};
+}
+
+/**
+ * Rebuild a {@link NeonCredentialsEnv} from values already present in the env source, but only
+ * when the persisted credential still covers every desired scope (otherwise we must re-mint to
+ * pick up a newly-added capability, e.g. the user just enabled the AI Gateway). Returns `null`
+ * when there is nothing usable to reuse.
+ */
+function reuseCredentialsFromEnv(
+	source: NodeJS.ProcessEnv,
+	desiredScopes: CredentialScope[],
+): NeonCredentialsEnv | null {
+	const keys = NEON_ENV_VAR_KEYS.credentials;
+	const apiToken = source[keys.apiToken];
+	const s3SecretAccessKey = source[keys.s3SecretAccessKey];
+	if (!apiToken || !s3SecretAccessKey) return null;
+
+	const grantedScopes = parseCredentialScopes(source[keys.scopes]);
+	if (!credentialScopesSatisfied(grantedScopes, desiredScopes)) return null;
+
+	return {
+		apiToken,
+		s3AccessKeyId: source[keys.s3AccessKeyId] ?? "",
+		s3SecretAccessKey,
+		tokenId: source[keys.tokenId] ?? "",
+		scopes: grantedScopes.length > 0 ? grantedScopes : desiredScopes,
+	};
+}
+
+const CREDENTIAL_SCOPES = [
+	"storage:read",
+	"storage:write",
+	"ai_gateway:invoke",
+	"functions:invoke",
+] as const satisfies readonly CredentialScope[];
+
+/** Type guard narrowing an arbitrary string to a known {@link CredentialScope}. */
+function isCredentialScope(value: string): value is CredentialScope {
+	return CREDENTIAL_SCOPES.some((scope) => scope === value);
+}
+
+/** Parse the comma-separated `NEON_CREDENTIAL_SCOPES` value into known {@link CredentialScope}s. */
+function parseCredentialScopes(value: string | undefined): CredentialScope[] {
+	if (!value) return [];
+	const out: CredentialScope[] = [];
+	for (const part of value.split(",")) {
+		const scope = part.trim();
+		if (isCredentialScope(scope)) out.push(scope);
+	}
+	return out;
 }
 
 /**
@@ -572,6 +775,35 @@ const dataApiEnvSchema = z.object({
 		.min(1, "NEON_DATA_API_URL must not be empty"),
 });
 
+const credentialsEnvSchema = z.object({
+	NEON_API_TOKEN: z
+		.string({ message: "NEON_API_TOKEN is missing" })
+		.min(1, "NEON_API_TOKEN must not be empty"),
+	NEON_S3_ACCESS_KEY_ID: z
+		.string({ message: "NEON_S3_ACCESS_KEY_ID is missing" })
+		.min(1, "NEON_S3_ACCESS_KEY_ID must not be empty"),
+	NEON_S3_SECRET_ACCESS_KEY: z
+		.string({ message: "NEON_S3_SECRET_ACCESS_KEY is missing" })
+		.min(1, "NEON_S3_SECRET_ACCESS_KEY must not be empty"),
+});
+
+/**
+ * Credential scopes a **static** policy needs, read straight off `config.preview` (no network,
+ * no resolved branch). Mirrors {@link previewCredentialScopes} for the sync `parseEnv` path.
+ */
+function configCredentialScopes(config: Config): CredentialScope[] {
+	const preview = config.preview;
+	if (!preview) return [];
+	const storage = Object.keys(preview.buckets ?? {}).length > 0;
+	const aiGateway = isServiceEnabledInput(preview.aiGateway);
+	if (!storage && !aiGateway) return [];
+	return deriveCredentialScopes({
+		storage,
+		aiGateway,
+		functions: Object.keys(preview.functions ?? {}).length > 0,
+	});
+}
+
 /** Static-toggle helper mirroring `config`'s `isServiceEnabled` for the env reader. */
 function isServiceEnabledInput(
 	toggle: ServiceToggleInput | undefined,
@@ -671,6 +903,29 @@ export function parseEnv(config: Config, scope?: string): unknown {
 		}
 	}
 
+	const credScopes = configCredentialScopes(config);
+	if (credScopes.length > 0) {
+		const cred = credentialsEnvSchema.safeParse({
+			NEON_API_TOKEN: source.NEON_API_TOKEN,
+			NEON_S3_ACCESS_KEY_ID: source.NEON_S3_ACCESS_KEY_ID,
+			NEON_S3_SECRET_ACCESS_KEY: source.NEON_S3_SECRET_ACCESS_KEY,
+		});
+		if (cred.success) {
+			const parsedScopes = parseCredentialScopes(
+				source.NEON_CREDENTIAL_SCOPES,
+			);
+			result.credentials = {
+				apiToken: cred.data.NEON_API_TOKEN,
+				s3AccessKeyId: cred.data.NEON_S3_ACCESS_KEY_ID,
+				s3SecretAccessKey: cred.data.NEON_S3_SECRET_ACCESS_KEY,
+				tokenId: source.NEON_CREDENTIAL_ID ?? "",
+				scopes: parsedScopes.length > 0 ? parsedScopes : credScopes,
+			} satisfies NeonCredentialsEnv;
+		} else {
+			for (const issue of cred.error.issues) issues.push(issue.message);
+		}
+	}
+
 	if (scope !== undefined) {
 		const fn = config.preview?.functions?.[scope];
 		if (!fn) {
@@ -744,6 +999,16 @@ export function toEntries(env: NeonEnv<Config>): Record<string, string> {
 	const withDataApi = env as { dataApi?: NeonDataApiEnv };
 	if (withDataApi.dataApi) {
 		out[NEON_ENV_VAR_KEYS.dataApi.url] = withDataApi.dataApi.url;
+	}
+	const withCredentials = env as { credentials?: NeonCredentialsEnv };
+	if (withCredentials.credentials) {
+		const cred = withCredentials.credentials;
+		const keys = NEON_ENV_VAR_KEYS.credentials;
+		out[keys.apiToken] = cred.apiToken;
+		out[keys.s3AccessKeyId] = cred.s3AccessKeyId;
+		out[keys.s3SecretAccessKey] = cred.s3SecretAccessKey;
+		out[keys.tokenId] = cred.tokenId;
+		out[keys.scopes] = cred.scopes.join(",");
 	}
 	return out;
 }

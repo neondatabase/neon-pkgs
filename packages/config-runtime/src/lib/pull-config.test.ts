@@ -212,6 +212,44 @@ describe("pullConfig", () => {
 		expect(pulled.config.dataApi).toBe(true);
 	});
 
+	test("reports issued credential metadata (secret-free) under preview", async () => {
+		const api = new FakeNeonApi();
+		const projectId = "proj-creds";
+		api.seedProject({
+			project: {
+				id: projectId,
+				name: "creds",
+				regionId: "aws-us-east-1",
+				pgVersion: 17,
+			},
+			branches: [
+				{ branch: { id: "br-main", name: "main", isDefault: true } },
+			],
+		});
+		await api.createCredential(projectId, "br-main", {
+			scopes: ["storage:read", "storage:write"],
+			principalType: "user",
+			name: "app",
+		});
+
+		const pulled = await pullConfig({
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+
+		expect(pulled.preview?.credentials).toHaveLength(1);
+		const [meta] = pulled.preview?.credentials ?? [];
+		expect(meta).toMatchObject({
+			name: "app",
+			principalType: "user",
+			scopes: ["storage:read", "storage:write"],
+		});
+		// Never leak the one-time secrets through the list/inspect path.
+		expect(meta).not.toHaveProperty("apiToken");
+		expect(meta).not.toHaveProperty("s3SecretAccessKey");
+	});
+
 	test("degrades when a Preview feature is unavailable, still pulling auth/dataApi", async () => {
 		// A branch whose AI Gateway endpoint is unavailable for the project/region. pullConfig
 		// mirrors the branch for env resolution (`neon dev` / `neon env pull`) and inspect, so

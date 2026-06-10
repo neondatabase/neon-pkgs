@@ -2,6 +2,7 @@ import type {
 	ComputeSettings,
 	CreateBranchInput,
 	CreateBucketInput,
+	CreateCredentialInput,
 	CreateProjectInput,
 	DeployFunctionInput,
 	GetConnectionUriInput,
@@ -9,6 +10,8 @@ import type {
 	NeonAuthSnapshot,
 	NeonBranchSnapshot,
 	NeonBucketSnapshot,
+	NeonCredentialMeta,
+	NeonCredentialSecret,
 	NeonDataApiSnapshot,
 	NeonDatabaseSnapshot,
 	NeonEndpointSnapshot,
@@ -59,6 +62,13 @@ export class FakeNeonApi implements NeonApi {
 	private readonly functionDeployments = new Map<string, number>();
 	/** AI Gateway enabled set, keyed by `${projectId}:${branchId}`. */
 	private readonly aiGateway = new Set<string>();
+	/** Issued credentials (incl. secrets), keyed by `${projectId}:${branchId}`. */
+	private readonly credentials = new Map<
+		string,
+		Array<
+			NeonCredentialMeta & { apiToken: string; s3SecretAccessKey: string }
+		>
+	>();
 	readonly history: Array<{ method: string; args: unknown[] }> = [];
 
 	/**
@@ -686,6 +696,92 @@ export class FakeNeonApi implements NeonApi {
 		this.requireProject(projectId);
 		this.requireBranch(projectId, branchId);
 		this.aiGateway.delete(`${projectId}:${branchId}`);
+	}
+
+	// ─── Preview: branch-scoped credentials ──────────────────────────────────
+
+	async createCredential(
+		projectId: string,
+		branchId: string,
+		input: CreateCredentialInput,
+	): Promise<NeonCredentialSecret> {
+		this.history.push({
+			method: "createCredential",
+			args: [projectId, branchId, input],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		const seq = this.nextId.toString(16).padStart(12, "0");
+		this.nextId += 1;
+		const tokenIdShort = `c${seq}`.slice(0, 12);
+		const tokenId = `${tokenIdShort}-fake-fake-fake-${seq}`;
+		const apiToken = `nt_live_${tokenIdShort}_${seq}secret`;
+		const s3SecretAccessKey = `s3secret${seq}`.padEnd(64, "0");
+		const key = `${projectId}:${branchId}`;
+		const list = this.credentials.get(key) ?? [];
+		list.push({
+			tokenId,
+			tokenIdShort,
+			...(input.name !== undefined ? { name: input.name } : {}),
+			scopes: [...input.scopes],
+			principalType: input.principalType,
+			...(input.functionId !== undefined
+				? { functionId: input.functionId }
+				: {}),
+			branchId,
+			createdAt: "2026-01-01T00:00:00Z",
+			apiToken,
+			s3SecretAccessKey,
+		});
+		this.credentials.set(key, list);
+		const secret: NeonCredentialSecret = {
+			tokenId,
+			tokenIdShort,
+			...(input.name !== undefined ? { name: input.name } : {}),
+			apiToken,
+			s3SecretAccessKey,
+			scopes: [...input.scopes],
+			branchId,
+			createdAt: "2026-01-01T00:00:00Z",
+		};
+		return clone(secret);
+	}
+
+	async listCredentials(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonCredentialMeta[]> {
+		this.history.push({
+			method: "listCredentials",
+			args: [projectId, branchId],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		const list = this.credentials.get(`${projectId}:${branchId}`) ?? [];
+		return list
+			.filter((c) => c.revokedAt === undefined)
+			.map(({ apiToken: _a, s3SecretAccessKey: _s, ...meta }) =>
+				clone(meta),
+			);
+	}
+
+	async revokeCredential(
+		projectId: string,
+		branchId: string,
+		tokenId: string,
+	): Promise<void> {
+		this.history.push({
+			method: "revokeCredential",
+			args: [projectId, branchId, tokenId],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		const list = this.credentials.get(`${projectId}:${branchId}`) ?? [];
+		for (const cred of list) {
+			if (cred.tokenId === tokenId && cred.revokedAt === undefined) {
+				cred.revokedAt = "2026-01-02T00:00:00Z";
+			}
+		}
 	}
 
 	/** Test helper: attach a bucket to a branch. */
