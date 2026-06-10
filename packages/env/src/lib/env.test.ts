@@ -33,6 +33,27 @@ function seededFake() {
 	return { api, projectId };
 }
 
+/** Seed a single-branch project whose `main` branch carries the given role names. */
+function seededFakeWithRoles(roleNames: string[]) {
+	const api = new FakeNeonApi();
+	const projectId = "proj-env-roles";
+	api.seedProject({
+		project: {
+			id: projectId,
+			name: "env-roles-test",
+			regionId: "aws-us-east-1",
+			pgVersion: 17,
+		},
+		branches: [
+			{
+				branch: { id: "br-main", name: "main", isDefault: true },
+				roles: roleNames.map((name) => ({ name })),
+			},
+		],
+	});
+	return { api, projectId };
+}
+
 describe("fetchEnv", () => {
 	test("fetches postgres env for selected branch", async () => {
 		const { api, projectId } = seededFake();
@@ -86,6 +107,69 @@ describe("fetchEnv", () => {
 		});
 
 		expect(env.auth.baseUrl).toBe("https://auth.example.com");
+	});
+
+	test("defaults to neondb_owner when Auth/Data API add managed roles", async () => {
+		// Enabling auth + dataApi provisions the PostgREST roles next to the owner.
+		const { api, projectId } = seededFakeWithRoles([
+			"neondb_owner",
+			"authenticator",
+			"anonymous",
+			"authenticated",
+		]);
+		const env = await fetchEnv(defineConfig({}), {
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+		expect(env.postgres.databaseUrl).toContain(
+			"postgresql://neondb_owner:",
+		);
+		expect(env.postgres.databaseUrlUnpooled).toContain(
+			"postgresql://neondb_owner:",
+		);
+	});
+
+	test("falls back to the single non-managed role for a custom owner name", async () => {
+		const { api, projectId } = seededFakeWithRoles([
+			"app_owner",
+			"authenticator",
+			"anonymous",
+			"authenticated",
+		]);
+		const env = await fetchEnv(defineConfig({}), {
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+		expect(env.postgres.databaseUrl).toContain("postgresql://app_owner:");
+	});
+
+	test("still throws when more than one app role remains", async () => {
+		const { api, projectId } = seededFakeWithRoles([
+			"owner_a",
+			"owner_b",
+			"authenticator",
+		]);
+		await expect(
+			fetchEnv(defineConfig({}), { api, projectId, branchId: "br-main" }),
+		).rejects.toMatchObject({ code: ErrorCode.AmbiguousBranchAuth });
+	});
+
+	test("an explicit roleName still wins over the owner default", async () => {
+		const { api, projectId } = seededFakeWithRoles([
+			"neondb_owner",
+			"authenticator",
+		]);
+		const env = await fetchEnv(defineConfig({}), {
+			api,
+			projectId,
+			branchId: "br-main",
+			roleName: "authenticator",
+		});
+		expect(env.postgres.databaseUrl).toContain(
+			"postgresql://authenticator:",
+		);
 	});
 });
 

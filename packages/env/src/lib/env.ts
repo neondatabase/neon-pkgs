@@ -22,6 +22,25 @@ import { z } from "zod";
  * by the OS. Keep this in sync with {@link postgresEnvSchema} / {@link authEnvSchema} /
  * {@link dataApiEnvSchema}.
  */
+/**
+ * Neon's default branch owner role, created with every project. This is the role a
+ * `DATABASE_URL` should connect as.
+ */
+const NEON_DEFAULT_OWNER_ROLE = "neondb_owner";
+
+/**
+ * Roles Neon provisions for the Auth / Data API (PostgREST) stack. They exist to back
+ * RLS-scoped Data API requests authenticated by JWT — never to hold a `DATABASE_URL` —
+ * so they're skipped when auto-picking the connection role. Enabling Neon Auth or the
+ * Data API (`neon config apply`) adds these next to the owner role, which is why a plain
+ * branch routinely reports more than one role.
+ */
+const NEON_MANAGED_AUTH_ROLES: ReadonlySet<string> = new Set([
+	"authenticator",
+	"anonymous",
+	"authenticated",
+]);
+
 export const NEON_ENV_VAR_KEYS = {
 	postgres: {
 		databaseUrl: "DATABASE_URL",
@@ -172,9 +191,11 @@ export interface FetchEnvOptions {
 	 */
 	api?: NeonApi;
 	/**
-	 * Role name to fetch credentials for. When omitted, the only role on the branch is
-	 * auto-picked; throws {@link PlatformError} with `PLATFORM_AMBIGUOUS_BRANCH_AUTH` if
-	 * the branch has more than one role.
+	 * Role name to fetch credentials for. When omitted, the connection role is auto-picked:
+	 * the only role on the branch, else Neon's default owner (`neondb_owner`), else the
+	 * single role left after dropping the managed Auth/Data API roles
+	 * (`authenticator`/`anonymous`/`authenticated`). Throws {@link PlatformError} with
+	 * `PLATFORM_AMBIGUOUS_BRANCH_AUTH` only when more than one app role remains.
 	 */
 	roleName?: string;
 	/**
@@ -413,10 +434,23 @@ function pickRoleName(
 		);
 	}
 	if (roles.length === 1) return roles[0].name;
+
+	// Multiple roles. Enabling Neon Auth / the Data API provisions the PostgREST roles
+	// (authenticator/anonymous/authenticated) alongside the project owner, so a normal
+	// branch ends up with >1 role even though only the owner backs a `DATABASE_URL`.
+	// Default to Neon's owner role; if the project was created with a custom owner name,
+	// fall back to the single role left after dropping the managed auth roles. Only a
+	// genuinely ambiguous set (more than one app role) still asks the caller to choose.
+	const owner = roles.find((r) => r.name === NEON_DEFAULT_OWNER_ROLE);
+	if (owner) return owner.name;
+
+	const appRoles = roles.filter((r) => !NEON_MANAGED_AUTH_ROLES.has(r.name));
+	if (appRoles.length === 1) return appRoles[0].name;
+
 	throw new PlatformError(
 		ErrorCode.AmbiguousBranchAuth,
 		[
-			`fetchEnv: branch ${branch.name} (${branch.id}) has ${roles.length} roles; cannot auto-pick.`,
+			`fetchEnv: branch ${branch.name} (${branch.id}) has ${roles.length} roles and none is "${NEON_DEFAULT_OWNER_ROLE}"; cannot auto-pick.`,
 			`Pass \`roleName\` explicitly. Available: ${roles.map((r) => r.name).join(", ")}.`,
 		].join(" "),
 		{
