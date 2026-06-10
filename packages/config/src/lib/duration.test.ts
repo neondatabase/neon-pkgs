@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { formatDurationSeconds, parseDuration } from "./duration.js";
+import {
+	formatDurationSeconds,
+	MAX_BRANCH_TTL_SECONDS,
+	parseBranchTtl,
+	parseDuration,
+} from "./duration.js";
 
 describe("parseDuration", () => {
 	test.each([
@@ -61,6 +66,32 @@ describe("parseDuration", () => {
 		expect(parseDuration(Number.NaN)).toEqual({
 			error: expect.stringContaining("not a finite number"),
 		});
+	});
+});
+
+describe("parseBranchTtl", () => {
+	test("accepts durations within the 30-day cap", () => {
+		expect(parseBranchTtl("7d")).toEqual({ seconds: 604_800 });
+		expect(parseBranchTtl("30d")).toEqual({
+			seconds: MAX_BRANCH_TTL_SECONDS,
+		});
+		expect(parseBranchTtl(3600)).toEqual({ seconds: 3600 });
+	});
+
+	test("rejects durations over 30 days", () => {
+		const result = parseBranchTtl("31d");
+		expect(result).toHaveProperty("error");
+		expect((result as { error: string }).error).toContain(
+			"at most 30 days",
+		);
+		expect(parseBranchTtl(MAX_BRANCH_TTL_SECONDS + 1)).toHaveProperty(
+			"error",
+		);
+	});
+
+	test("inherits parseDuration rules (unit required, > 0)", () => {
+		expect(parseBranchTtl("7")).toHaveProperty("error");
+		expect(parseBranchTtl(0)).toHaveProperty("error");
 	});
 });
 

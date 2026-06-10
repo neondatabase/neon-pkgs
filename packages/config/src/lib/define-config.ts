@@ -1,4 +1,4 @@
-import { parseDuration } from "./duration.js";
+import { parseBranchTtl } from "./duration.js";
 import { ConfigValidationError } from "./errors.js";
 import {
 	branchTuningSchema,
@@ -112,9 +112,9 @@ export function resolveConfig(
 	};
 	if (tuning.parent !== undefined) resolved.parent = tuning.parent;
 	if (tuning.ttl !== undefined) {
-		// `branchTuningSchema` already validated `ttl` with the same `parseDuration`, so
+		// `branchTuningSchema` already validated `ttl` with the same `parseBranchTtl`, so
 		// this only converts the validated value to seconds — it cannot fail here.
-		const parsedTtl = parseDuration(tuning.ttl);
+		const parsedTtl = parseBranchTtl(tuning.ttl);
 		if (!("error" in parsedTtl)) resolved.ttlSeconds = parsedTtl.seconds;
 	}
 	if (tuning.protected !== undefined) resolved.protected = tuning.protected;

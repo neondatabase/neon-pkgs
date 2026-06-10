@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { parseDuration, parseSuspendTimeout } from "./duration.js";
+import { parseBranchTtl, parseSuspendTimeout } from "./duration.js";
 import { isWildcardPattern, validatePattern } from "./patterns.js";
 
 /**
@@ -169,7 +169,7 @@ export const branchTuningSchema = z
 			.optional()
 			.superRefine((value, ctx) => {
 				if (value === undefined) return;
-				const result = parseDuration(value);
+				const result = parseBranchTtl(value);
 				if ("error" in result) {
 					ctx.addIssue({ code: "custom", message: result.error });
 				}

@@ -63,6 +63,29 @@ const UNIT_SECONDS = {
 	w: 7 * 24 * 60 * 60,
 } as const;
 
+/** Neon's branch-expiration ceiling: the API rejects an `expires_at` more than 30 days out. */
+export const MAX_BRANCH_TTL_SECONDS = 30 * UNIT_SECONDS.d;
+
+/**
+ * Parse a branch TTL into seconds, enforcing Neon's branch-expiration limit on top of the
+ * shared {@link parseDuration} rules: the result must be `> 0` and at most 30 days
+ * ({@link MAX_BRANCH_TTL_SECONDS}), since the API caps `expires_at` at 30 days from now.
+ *
+ * Returns `{ seconds }` on success or `{ error }` on failure. Pure function — never throws.
+ */
+export function parseBranchTtl(
+	input: string | number,
+): { seconds: number } | { error: string } {
+	const result = parseDuration(input);
+	if ("error" in result) return result;
+	if (result.seconds > MAX_BRANCH_TTL_SECONDS) {
+		return {
+			error: `branch TTL must be at most 30 days (${MAX_BRANCH_TTL_SECONDS}s), got ${result.seconds}s`,
+		};
+	}
+	return result;
+}
+
 /**
  * Render a TTL in seconds back to the canonical "<n><unit>" form. Used for round-trip
  * serialization when {@link pullConfig} emits a TTL value (it always falls back to seconds

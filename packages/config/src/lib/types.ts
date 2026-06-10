@@ -16,17 +16,19 @@ export type DurationUnit = "s" | "m" | "h" | "d" | "w";
  * express a raw number of seconds, pass a `number` (`300`) — not a string (`"300"`). This
  * removes the old ambiguity where `"7"` silently meant 7 *seconds* instead of, say, `"7d"`.
  *
- * Common values are surfaced as editor autocomplete suggestions (type `"` to see them), while
- * the `` `${number}${DurationUnit}` `` arm still accepts **any** `<integer><unit>` string —
- * e.g. `"45m"`, `"3h"`, `"2w"`. (Intersecting that arm with `NonNullable<unknown>` keeps
- * TypeScript from collapsing the suggested literals into the template type, which is what
- * preserves the autocomplete.)
- *
  * @example "5m"  // 5 minutes
  * @example "1h"  // 1 hour
  * @example "7d"  // 7 days
  */
-export type DurationString =
+export type DurationString = `${number}${DurationUnit}`;
+
+/**
+ * Autocomplete suggestions for {@link ComputeSettings.suspendTimeout}. Every value sits inside
+ * the Neon API's allowed scale-to-zero band: **60s–604800s** (1 minute – 1 week). This is *not*
+ * a closed set — the field also accepts any other {@link DurationString} or a `number` of
+ * seconds; out-of-range values type-check but are rejected at apply time.
+ */
+type SuspendTimeoutSuggestion =
 	| "1m"
 	| "5m"
 	| "15m"
@@ -35,8 +37,26 @@ export type DurationString =
 	| "6h"
 	| "12h"
 	| "1d"
-	| "7d"
-	| (`${number}${DurationUnit}` & NonNullable<unknown>);
+	| "7d";
+
+/**
+ * Autocomplete suggestions for {@link BranchTuning.ttl}. Every value sits within the Neon API's
+ * branch-expiration limit (**max 30 days** from creation; the Console's own presets are 1h / 1d
+ * / 7d). This is *not* a closed set — the field also accepts any other {@link DurationString} or
+ * a `number` of seconds; values over 30 days are rejected at apply time.
+ */
+type TtlSuggestion = "1h" | "6h" | "12h" | "1d" | "3d" | "7d" | "14d" | "30d";
+
+/**
+ * Compose a field's duration type: its curated autocomplete `Suggestions` plus the open
+ * `DurationString` template (so any `<integer><unit>` string still type-checks) and a `number`
+ * of seconds. Intersecting the template arm with `NonNullable<unknown>` stops TypeScript from
+ * collapsing the literal suggestions into the template, which is what preserves the autocomplete.
+ */
+type DurationField<Suggestions extends DurationString> =
+	| Suggestions
+	| (DurationString & NonNullable<unknown>)
+	| number;
 
 /**
  * Compute settings applied to the read/write endpoint of a branch.
@@ -63,20 +83,22 @@ export interface ComputeSettings {
 	 * {@link DurationString} (autocompletes common values), a number of seconds, or `false`.
 	 *
 	 * - `false` — never suspend (always-on compute)
-	 * - {@link DurationString} — e.g. `"5m"`; autocompletes `"1m"`, `"5m"`, `"1h"`, `"7d"`, …
-	 *   and accepts any `<integer><unit>` (units: `s`, `m`, `h`, `d`, `w`). A **unit is
-	 *   required** — for raw seconds pass a `number`, not a string.
+	 * - {@link DurationString} — e.g. `"5m"`; autocompletes the in-range values `"1m"`, `"5m"`,
+	 *   `"15m"`, `"30m"`, `"1h"`, `"6h"`, `"12h"`, `"1d"`, `"7d"`, and accepts any other
+	 *   `<integer><unit>` (units: `s`, `m`, `h`, `d`, `w`). A **unit is required** — for raw
+	 *   seconds pass a `number`, not a string.
 	 * - `number` — custom timeout in **seconds**, must be in `60`–`604800` (1 minute to 1 week)
 	 * - `undefined` — use the Neon platform default (currently 300s / 5 minutes)
 	 *
-	 * Whichever form you use, the resolved timeout must fall in `60`–`604800` seconds.
+	 * Whichever form you use, the resolved timeout must fall in `60`–`604800` seconds (the Neon
+	 * API limit); the suggestions are all within that band, anything else is checked at apply.
 	 *
 	 * @example false  // never suspend (always-on)
 	 * @example "5m"   // suspend after 5 minutes idle
 	 * @example "1h"   // suspend after 1 hour idle
 	 * @example 300    // 5 minutes, expressed in seconds
 	 */
-	suspendTimeout?: false | DurationString | number;
+	suspendTimeout?: false | DurationField<SuspendTimeoutSuggestion>;
 }
 
 /**
@@ -273,18 +295,23 @@ export interface BranchTuning<Slug extends string = string> {
 	 * is set). Accepts a {@link DurationString} (autocompletes common values) or a number of
 	 * seconds. Omit to keep the branch indefinitely.
 	 *
-	 * - {@link DurationString} — e.g. `"7d"`; autocompletes `"1h"`, `"1d"`, `"7d"`, … and
-	 *   accepts any `<integer><unit>` (units: `s`, `m`, `h`, `d`, `w` — e.g. `"12h"`, `"2w"`).
-	 *   A **unit is required** — `"7"` is rejected; for raw seconds pass a `number`.
-	 * - `number` — custom TTL in **seconds** (any positive integer, e.g. `3600`)
+	 * - {@link DurationString} — e.g. `"7d"`; autocompletes `"1h"`, `"6h"`, `"12h"`, `"1d"`,
+	 *   `"3d"`, `"7d"`, `"14d"`, `"30d"`, and accepts any other `<integer><unit>` (units: `s`,
+	 *   `m`, `h`, `d`, `w` — e.g. `"12h"`, `"2w"`). A **unit is required** — `"7"` is rejected;
+	 *   for raw seconds pass a `number`.
+	 * - `number` — custom TTL in **seconds** (e.g. `3600`)
 	 * - `undefined` — no expiry; the branch persists until explicitly deleted
+	 *
+	 * The Neon API caps branch expiration at **30 days** from creation, so the resolved TTL must
+	 * be `> 0` and `<= 30d`; the suggestions stay within that limit and anything longer is
+	 * rejected at apply.
 	 *
 	 * @example "1d"   // ephemeral preview branch: expires a day after creation
 	 * @example "7d"   // one-week TTL
-	 * @example "2w"   // two weeks
+	 * @example "30d"  // the maximum the API allows
 	 * @example 3600   // 1 hour, expressed in seconds
 	 */
-	ttl?: DurationString | number;
+	ttl?: DurationField<TtlSuggestion>;
 	/** Whether the selected branch should be protected. Undefined means "leave as-is". */
 	protected?: boolean;
 	postgres?: PostgresConfig;
