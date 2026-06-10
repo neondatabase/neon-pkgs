@@ -1,7 +1,7 @@
 import { defineConfig, ErrorCode } from "@neondatabase/config";
 import { describe, expect, test } from "vitest";
 import { FakeNeonApi } from "./fake-neon-api.js";
-import { apply, inspect, plan } from "./operations.js";
+import { apply, createBranch, inspect, plan } from "./operations.js";
 
 function seededFake(opts?: { protected?: boolean }) {
 	const api = new FakeNeonApi();
@@ -117,6 +117,107 @@ describe("apply", () => {
 		expect(api.history.some((h) => h.method === "updateEndpoint")).toBe(
 			true,
 		);
+	});
+});
+
+describe("createBranch", () => {
+	// Mirrors the reported neonctl checkout policy: settings are gated on a *new* branch.
+	const devPolicy = defineConfig({
+		auth: true,
+		dataApi: true,
+		branch: (branch) => {
+			if (branch.exists) return {};
+			if (branch.name.startsWith("dev")) {
+				return {
+					ttl: "7d",
+					postgres: {
+						computeSettings: {
+							autoscalingLimitMinCu: 0.25,
+							autoscalingLimitMaxCu: 1,
+							suspendTimeout: "5m",
+						},
+					},
+				};
+			}
+			return {};
+		},
+	});
+
+	test("applies creation-time tuning gated on !branch.exists", async () => {
+		const { api, projectId } = seededFake();
+		const { branchId, branchName, result } = await createBranch(devPolicy, {
+			api,
+			projectId,
+			branchName: "dev-1",
+		});
+
+		expect(branchName).toBe("dev-1");
+
+		// TTL was applied (branch has an expiry).
+		const branches = await api.listBranches(projectId);
+		const created = branches.find((b) => b.id === branchId);
+		expect(created?.expiresAt).toBeDefined();
+
+		// Compute settings from the policy landed on the new branch's endpoint.
+		const endpoints = await api.listEndpoints(projectId);
+		const endpoint = endpoints.find((e) => e.branchId === branchId);
+		expect(endpoint?.autoscalingLimitMaxCu).toBe(1);
+		expect(endpoint?.suspendTimeout).toBe("5m");
+
+		// Services declared at the top level were enabled too.
+		expect(result.applied).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					kind: "service",
+					identifier: "auth",
+				}),
+				expect.objectContaining({
+					kind: "service",
+					identifier: "dataApi",
+				}),
+			]),
+		);
+	});
+
+	test("branches from the policy's parent", async () => {
+		const { api, projectId } = seededFake();
+		const main = (await api.listBranches(projectId)).find(
+			(b) => b.isDefault,
+		);
+		const config = defineConfig({
+			branch: (branch) =>
+				branch.exists ? {} : { parent: "main", ttl: "1d" },
+		});
+		const { branchId } = await createBranch(config, {
+			api,
+			projectId,
+			branchName: "dev-from-main",
+		});
+		const created = (await api.listBranches(projectId)).find(
+			(b) => b.id === branchId,
+		);
+		expect(created?.parentId).toBe(main?.id);
+	});
+
+	test("throws when the policy names a parent that does not exist", async () => {
+		const { api, projectId } = seededFake();
+		const config = defineConfig({
+			branch: (branch) => (branch.exists ? {} : { parent: "nope" }),
+		});
+		await expect(
+			createBranch(config, { api, projectId, branchName: "dev-x" }),
+		).rejects.toMatchObject({ code: ErrorCode.BranchNotFound });
+	});
+
+	test("throws when the branch name already exists", async () => {
+		const { api, projectId } = seededFake();
+		await expect(
+			createBranch(defineConfig({}), {
+				api,
+				projectId,
+				branchName: "main",
+			}),
+		).rejects.toMatchObject({ code: ErrorCode.Conflict });
 	});
 });
 

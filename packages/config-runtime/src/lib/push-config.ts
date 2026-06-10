@@ -54,6 +54,17 @@ export interface PushConfigOptions {
 	 */
 	api?: NeonApi;
 	/**
+	 * Whether to evaluate the policy as if the target branch **already exists** (the value of
+	 * `branch.exists` passed to the `defineConfig((branch) => …)` closure). Defaults to `true`.
+	 *
+	 * Set to `false` to evaluate the policy as a **branch creation** — used by
+	 * {@link createBranch} right after it provisions a new branch, so creation-time tuning
+	 * gated on `!branch.exists` (TTL, compute settings, `parent`) actually resolves instead of
+	 * hitting the "existing branch, leave as-is" path. Only affects policy evaluation; the
+	 * branch must still physically exist on Neon (`pushConfig` never creates one).
+	 */
+	branchExists?: boolean;
+	/**
 	 * Auto-confirm overriding existing remote settings.
 	 *
 	 * When `true`, mutable drift on the selected branch (TTL, `protected` flag, compute
@@ -160,7 +171,7 @@ export async function pushConfig(
 	const resolved = resolveConfig(config, {
 		name: branch.name,
 		id: branch.id,
-		exists: true,
+		exists: options.branchExists !== false,
 		...(branch.parentId ? { parentId: branch.parentId } : {}),
 		isDefault: branch.isDefault,
 		isProtected: branch.protected,

@@ -59,8 +59,10 @@ export { buildFunctionBundle } from "./lib/function-bundle.js";
 export type {
 	ApplyOptions,
 	ConfigOperationOptions,
+	CreateBranchOptions,
+	CreateBranchResult,
 } from "./lib/operations.js";
-export { apply, inspect, plan } from "./lib/operations.js";
+export { apply, createBranch, inspect, plan } from "./lib/operations.js";
 // ─── Engine (advanced / programmatic use) ─────────────────────────────────────
 export type {
 	PullConfigOptions,
