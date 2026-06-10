@@ -11,7 +11,6 @@ describe("parseDuration", () => {
 		["7d", 604_800],
 		["2w", 1_209_600],
 		["1W", 604_800],
-		["3600", 3600],
 	])("parses %s as %d seconds", (input, expected) => {
 		const result = parseDuration(input);
 		expect(result).toEqual({ seconds: expected });
@@ -26,7 +25,10 @@ describe("parseDuration", () => {
 		["   ", "duration string is empty"],
 		["abc", 'invalid duration "abc"'],
 		["1h30m", 'invalid duration "1h30m"'],
-		["0", 'must be > 0, got "0"'],
+		// Bare numeric strings are rejected on purpose — pass a number for seconds, or add a unit.
+		["7", "missing a unit"],
+		["3600", "missing a unit"],
+		["0", "missing a unit"],
 		["0s", 'must be > 0, got "0s"'],
 		["-5", 'invalid duration "-5"'],
 	])("rejects %s", (input, expectedErrorFragment) => {

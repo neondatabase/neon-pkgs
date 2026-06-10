@@ -141,6 +141,7 @@ export type {
 	Config,
 	ConflictReport,
 	DurationString,
+	DurationUnit,
 	FunctionDef,
 	FunctionDevConfig,
 	FunctionRuntime,

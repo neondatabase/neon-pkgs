@@ -4,18 +4,23 @@
  */
 export type ComputeUnit = 0.25 | 0.5 | 1 | 2 | 4 | 8;
 
+/** Time units accepted in a {@link DurationString}: seconds, minutes, hours, days, weeks. */
+export type DurationUnit = "s" | "m" | "h" | "d" | "w";
+
 /**
- * A Neon duration string: a positive integer followed by a unit — `s` (seconds),
- * `m` (minutes), `h` (hours), `d` (days), or `w` (weeks). Used by {@link ComputeSettings.suspendTimeout}
- * and {@link BranchTuning.ttl}.
+ * A Neon duration string: a positive integer **followed by a unit** — `s` (seconds),
+ * `m` (minutes), `h` (hours), `d` (days), or `w` (weeks). Used by
+ * {@link ComputeSettings.suspendTimeout} and {@link BranchTuning.ttl}.
  *
- * Common values are surfaced as editor autocomplete suggestions (type `"` to see them), but
- * **any** valid `<number><unit>` string is still accepted — e.g. `"45m"`, `"3h"`, `"2w"`.
+ * A **unit is required**: a bare numeric string like `"7"` is rejected at the type level. To
+ * express a raw number of seconds, pass a `number` (`300`) — not a string (`"300"`). This
+ * removes the old ambiguity where `"7"` silently meant 7 *seconds* instead of, say, `"7d"`.
  *
- * The trailing `(string & NonNullable<unknown>)` is the "open literal union" trick: it keeps
- * the type assignable from any `string` while stopping TypeScript from collapsing the
- * suggested literals into a bare `string` (which is what would otherwise drop the
- * autocomplete suggestions).
+ * Common values are surfaced as editor autocomplete suggestions (type `"` to see them), while
+ * the `` `${number}${DurationUnit}` `` arm still accepts **any** `<integer><unit>` string —
+ * e.g. `"45m"`, `"3h"`, `"2w"`. (Intersecting that arm with `NonNullable<unknown>` keeps
+ * TypeScript from collapsing the suggested literals into the template type, which is what
+ * preserves the autocomplete.)
  *
  * @example "5m"  // 5 minutes
  * @example "1h"  // 1 hour
@@ -31,7 +36,7 @@ export type DurationString =
 	| "12h"
 	| "1d"
 	| "7d"
-	| (string & NonNullable<unknown>);
+	| (`${number}${DurationUnit}` & NonNullable<unknown>);
 
 /**
  * Compute settings applied to the read/write endpoint of a branch.
@@ -59,7 +64,8 @@ export interface ComputeSettings {
 	 *
 	 * - `false` — never suspend (always-on compute)
 	 * - {@link DurationString} — e.g. `"5m"`; autocompletes `"1m"`, `"5m"`, `"1h"`, `"7d"`, …
-	 *   and accepts any `<number><unit>` (units: `s`, `m`, `h`, `d`, `w`)
+	 *   and accepts any `<integer><unit>` (units: `s`, `m`, `h`, `d`, `w`). A **unit is
+	 *   required** — for raw seconds pass a `number`, not a string.
 	 * - `number` — custom timeout in **seconds**, must be in `60`–`604800` (1 minute to 1 week)
 	 * - `undefined` — use the Neon platform default (currently 300s / 5 minutes)
 	 *
@@ -268,8 +274,9 @@ export interface BranchTuning<Slug extends string = string> {
 	 * seconds. Omit to keep the branch indefinitely.
 	 *
 	 * - {@link DurationString} — e.g. `"7d"`; autocompletes `"1h"`, `"1d"`, `"7d"`, … and
-	 *   accepts any `<number><unit>` (units: `s`, `m`, `h`, `d`, `w` — e.g. `"12h"`, `"2w"`)
-	 * - `number` — custom TTL in **seconds** (any positive integer)
+	 *   accepts any `<integer><unit>` (units: `s`, `m`, `h`, `d`, `w` — e.g. `"12h"`, `"2w"`).
+	 *   A **unit is required** — `"7"` is rejected; for raw seconds pass a `number`.
+	 * - `number` — custom TTL in **seconds** (any positive integer, e.g. `3600`)
 	 * - `undefined` — no expiry; the branch persists until explicitly deleted
 	 *
 	 * @example "1d"   // ephemeral preview branch: expires a day after creation
