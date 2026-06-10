@@ -5,6 +5,35 @@
 export type ComputeUnit = 0.25 | 0.5 | 1 | 2 | 4 | 8;
 
 /**
+ * A Neon duration string: a positive integer followed by a unit — `s` (seconds),
+ * `m` (minutes), `h` (hours), `d` (days), or `w` (weeks). Used by {@link ComputeSettings.suspendTimeout}
+ * and {@link BranchTuning.ttl}.
+ *
+ * Common values are surfaced as editor autocomplete suggestions (type `"` to see them), but
+ * **any** valid `<number><unit>` string is still accepted — e.g. `"45m"`, `"3h"`, `"2w"`.
+ *
+ * The trailing `(string & NonNullable<unknown>)` is the "open literal union" trick: it keeps
+ * the type assignable from any `string` while stopping TypeScript from collapsing the
+ * suggested literals into a bare `string` (which is what would otherwise drop the
+ * autocomplete suggestions).
+ *
+ * @example "5m"  // 5 minutes
+ * @example "1h"  // 1 hour
+ * @example "7d"  // 7 days
+ */
+export type DurationString =
+	| "1m"
+	| "5m"
+	| "15m"
+	| "30m"
+	| "1h"
+	| "6h"
+	| "12h"
+	| "1d"
+	| "7d"
+	| (string & NonNullable<unknown>);
+
+/**
  * Compute settings applied to the read/write endpoint of a branch.
  *
  * Mirrors the subset of {@link https://api-docs.neon.tech/reference/getting-started-with-neon-api Neon endpoint}
@@ -25,19 +54,23 @@ export interface ComputeSettings {
 	 */
 	autoscalingLimitMaxCu?: ComputeUnit;
 	/**
-	 * How long to wait before suspending an idle compute.
+	 * How long an idle compute waits before suspending (Neon's scale-to-zero). Accepts a
+	 * {@link DurationString} (autocompletes common values), a number of seconds, or `false`.
 	 *
 	 * - `false` — never suspend (always-on compute)
-	 * - `"5m"` — duration string (supports "30s", "5m", "1h", "7d", etc)
-	 * - `300` — custom timeout in seconds (60-604800)
-	 * - `undefined` — use Neon platform default (currently 300s / 5 minutes)
+	 * - {@link DurationString} — e.g. `"5m"`; autocompletes `"1m"`, `"5m"`, `"1h"`, `"7d"`, …
+	 *   and accepts any `<number><unit>` (units: `s`, `m`, `h`, `d`, `w`)
+	 * - `number` — custom timeout in **seconds**, must be in `60`–`604800` (1 minute to 1 week)
+	 * - `undefined` — use the Neon platform default (currently 300s / 5 minutes)
 	 *
-	 * @example false       // never suspend
-	 * @example "5m"        // 5 minutes
-	 * @example "1h"        // 1 hour
-	 * @example 300         // 5 minutes in seconds
+	 * Whichever form you use, the resolved timeout must fall in `60`–`604800` seconds.
+	 *
+	 * @example false  // never suspend (always-on)
+	 * @example "5m"   // suspend after 5 minutes idle
+	 * @example "1h"   // suspend after 1 hour idle
+	 * @example 300    // 5 minutes, expressed in seconds
 	 */
-	suspendTimeout?: false | "5m" | "1h" | string | number;
+	suspendTimeout?: false | DurationString | number;
 }
 
 /**
@@ -228,8 +261,23 @@ export interface PreviewTuning<Slug extends string = string> {
 export interface BranchTuning<Slug extends string = string> {
 	/** Parent branch name used when creating a new branch. Not a Postgres setting. */
 	parent?: string;
-	/** Time-to-live applied when creating a new branch, or reconciled on existing branches. */
-	ttl?: string | number;
+	/**
+	 * Branch time-to-live: how long after creation the branch should auto-expire. Applied
+	 * when creating a new branch and reconciled on existing branches (when `updateExisting`
+	 * is set). Accepts a {@link DurationString} (autocompletes common values) or a number of
+	 * seconds. Omit to keep the branch indefinitely.
+	 *
+	 * - {@link DurationString} — e.g. `"7d"`; autocompletes `"1h"`, `"1d"`, `"7d"`, … and
+	 *   accepts any `<number><unit>` (units: `s`, `m`, `h`, `d`, `w` — e.g. `"12h"`, `"2w"`)
+	 * - `number` — custom TTL in **seconds** (any positive integer)
+	 * - `undefined` — no expiry; the branch persists until explicitly deleted
+	 *
+	 * @example "1d"   // ephemeral preview branch: expires a day after creation
+	 * @example "7d"   // one-week TTL
+	 * @example "2w"   // two weeks
+	 * @example 3600   // 1 hour, expressed in seconds
+	 */
+	ttl?: DurationString | number;
 	/** Whether the selected branch should be protected. Undefined means "leave as-is". */
 	protected?: boolean;
 	postgres?: PostgresConfig;
