@@ -1,6 +1,7 @@
 import { createNeonApiFromOptions } from "@neondatabase/config";
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { pullConfig } from "./pull-config.js";
+import { pushConfig } from "./push-config.js";
 
 // Throw immediately after the API client would be built. Every runtime entry builds its
 // API as its first statement, so this asserts the forwarded options without any network.
@@ -15,8 +16,6 @@ vi.mock("@neondatabase/config", async (importOriginal) => {
 	};
 });
 
-afterEach(() => vi.clearAllMocks());
-
 describe("pullConfig — apiHost forwarding", () => {
 	test("forwards apiHost (and apiKey) to createNeonApiFromOptions", async () => {
 		await expect(
@@ -28,6 +27,23 @@ describe("pullConfig — apiHost forwarding", () => {
 			}),
 		).rejects.toThrow("STOP-AFTER-API-BUILD");
 		expect(createNeonApiFromOptions).toHaveBeenCalledWith("pullConfig", {
+			apiKey: "napi_k",
+			apiHost: "https://stage.example/api/v2",
+		});
+	});
+});
+
+describe("pushConfig — apiHost forwarding", () => {
+	test("forwards apiHost (and apiKey) to createNeonApiFromOptions", async () => {
+		await expect(
+			pushConfig({} as never, {
+				projectId: "p",
+				branchId: "br-1",
+				apiKey: "napi_k",
+				apiHost: "https://stage.example/api/v2",
+			}),
+		).rejects.toThrow("STOP-AFTER-API-BUILD");
+		expect(createNeonApiFromOptions).toHaveBeenCalledWith("pushConfig", {
 			apiKey: "napi_k",
 			apiHost: "https://stage.example/api/v2",
 		});

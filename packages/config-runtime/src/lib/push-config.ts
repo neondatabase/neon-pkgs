@@ -48,6 +48,8 @@ export interface PushConfigOptions {
 	branchId: string;
 	/** Neon API key. Falls back to `NEON_API_KEY` / neonctl credentials. Ignored when `api` is supplied. */
 	apiKey?: string;
+	/** Neon API base URL. Falls back to `NEON_API_HOST`, then production. */
+	apiHost?: string;
 	/**
 	 * Inject a custom NeonApi adapter. Primarily used by tests; production callers can rely
 	 * on the default real adapter built from `apiKey`.
@@ -390,6 +392,7 @@ function synthesizeAppliedChange(step: PlanStep): AppliedChange {
 function createApiFromOptions(options: PushConfigOptions): NeonApi {
 	return createNeonApiFromOptions("pushConfig", {
 		...(options.apiKey ? { apiKey: options.apiKey } : {}),
+		...(options.apiHost ? { apiHost: options.apiHost } : {}),
 	});
 }
 
