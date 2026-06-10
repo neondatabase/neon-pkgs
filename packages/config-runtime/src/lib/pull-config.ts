@@ -22,6 +22,8 @@ export interface PullConfigOptions {
 	branchId: string;
 	/** Neon API key. Falls back to `NEON_API_KEY` / neonctl credentials. */
 	apiKey?: string;
+	/** Neon API base URL. Falls back to `NEON_API_HOST`, then production. */
+	apiHost?: string;
 	/** Inject a custom NeonApi adapter (primarily for tests). */
 	api?: NeonApi;
 }
@@ -162,6 +164,7 @@ async function degradeUnavailable<T>(
 function createApiFromOptions(options: PullConfigOptions): NeonApi {
 	return createNeonApiFromOptions("pullConfig", {
 		...(options.apiKey ? { apiKey: options.apiKey } : {}),
+		...(options.apiHost ? { apiHost: options.apiHost } : {}),
 	});
 }
 
