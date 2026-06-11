@@ -315,11 +315,6 @@ describe("pushConfig", () => {
 				}),
 				expect.objectContaining({
 					kind: "service",
-					action: "update",
-					identifier: "function:fn1",
-				}),
-				expect.objectContaining({
-					kind: "service",
 					action: "create",
 					identifier: "aiGateway",
 				}),
@@ -391,7 +386,7 @@ describe("pushConfig", () => {
 		expect(Array.from(input)).toEqual([1, 2, 3, 4]);
 	});
 
-	test("re-deploys an existing function but does not recreate it", async () => {
+	test("re-deploys an existing function as an update, without duplicating it", async () => {
 		const { api, projectId } = seededFake();
 		api.seedFunction(projectId, "br-main", {
 			id: "fn-existing",
@@ -405,14 +400,28 @@ describe("pushConfig", () => {
 			},
 		});
 
-		await pushConfig(config, { api, projectId, branchId: "br-main" });
+		const result = await pushConfig(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+		});
 
-		expect(
-			api.history.filter((h) => h.method === "createBranchFunction"),
-		).toHaveLength(0);
+		// A single deploy ships the new code; the function is not recreated.
 		expect(
 			api.history.filter((h) => h.method === "deployBranchFunction"),
 		).toHaveLength(1);
+		expect(result.applied).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					kind: "service",
+					action: "update",
+					identifier: "function:fn1",
+				}),
+			]),
+		);
+		// Still exactly one function on the branch (no duplicate created).
+		const functions = await api.listBranchFunctions(projectId, "br-main");
+		expect(functions.map((f) => f.slug)).toEqual(["fn1"]);
 	});
 
 	test("dryRun plans preview steps without mutating", async () => {

@@ -620,35 +620,6 @@ export class FakeNeonApi implements NeonApi {
 		);
 	}
 
-	async createBranchFunction(
-		projectId: string,
-		branchId: string,
-		input: { slug: string; name: string },
-	): Promise<NeonFunctionSnapshot> {
-		this.history.push({
-			method: "createBranchFunction",
-			args: [projectId, branchId, input],
-		});
-		this.requireProject(projectId);
-		this.requireBranch(projectId, branchId);
-		const key = `${projectId}:${branchId}`;
-		const list = this.functions.get(key) ?? [];
-		if (list.some((f) => f.slug === input.slug)) {
-			throw new Error(
-				`Fake Neon: function '${input.slug}' already exists on branch ${branchId}`,
-			);
-		}
-		const snapshot: NeonFunctionSnapshot = {
-			id: this.allocateId("fn"),
-			slug: input.slug,
-			name: input.name,
-			invocationUrl: `https://${branchId}.fake.neon.tech/functions/${input.slug}`,
-		};
-		list.push(snapshot);
-		this.functions.set(key, list);
-		return clone(snapshot);
-	}
-
 	async deleteBranchFunction(
 		projectId: string,
 		branchId: string,
@@ -682,11 +653,19 @@ export class FakeNeonApi implements NeonApi {
 		this.requireBranch(projectId, branchId);
 		const key = `${projectId}:${branchId}`;
 		const list = this.functions.get(key) ?? [];
-		const fn = list.find((f) => f.slug === slug);
+		let fn = list.find((f) => f.slug === slug);
 		if (!fn) {
-			throw new Error(
-				`Fake Neon: function '${slug}' not found on branch ${branchId}`,
-			);
+			// Neon creates the function on its first deployment — there is no separate
+			// create endpoint — so the fake mirrors that by materializing the function
+			// here instead of throwing. The deploy carries no name, so it defaults to slug.
+			fn = {
+				id: this.allocateId("fn"),
+				slug,
+				name: slug,
+				invocationUrl: `https://${branchId}.fake.neon.tech/functions/${slug}`,
+			};
+			list.push(fn);
+			this.functions.set(key, list);
 		}
 		const deployKey = `${projectId}:${branchId}:${slug}`;
 		const id = (this.functionDeployments.get(deployKey) ?? 0) + 1;

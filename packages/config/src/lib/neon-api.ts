@@ -400,16 +400,6 @@ export interface NeonApi {
 		branchId: string,
 	): Promise<NeonFunctionSnapshot[]>;
 
-	/**
-	 * Create a function on a branch. The function has no deployment until code is deployed
-	 * to it with {@link deployBranchFunction}.
-	 */
-	createBranchFunction(
-		projectId: string,
-		branchId: string,
-		input: { slug: string; name: string },
-	): Promise<NeonFunctionSnapshot>;
-
 	/** Delete a function (by slug) from a branch. */
 	deleteBranchFunction(
 		projectId: string,
@@ -418,8 +408,10 @@ export interface NeonApi {
 	): Promise<void>;
 
 	/**
-	 * Deploy a built bundle to a function. The newest deployment becomes active. The
-	 * `bundle` is built (esbuild + zip) by the caller and passed in as bytes.
+	 * Deploy a built bundle to a function, creating the function if it does not yet exist —
+	 * Neon has no separate create endpoint, so the first deployment to a slug creates the
+	 * function. The newest deployment becomes active. The `bundle` is built (esbuild + zip)
+	 * by the caller and passed in as bytes.
 	 */
 	deployBranchFunction(
 		projectId: string,

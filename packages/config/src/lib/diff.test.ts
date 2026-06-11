@@ -62,7 +62,7 @@ describe("diffConfig", () => {
 		});
 	});
 
-	test("plans preview create + deploy + bucket + ai-gateway when nothing exists", () => {
+	test("plans preview deploy + bucket + ai-gateway when nothing exists", () => {
 		const diff = diffConfig(
 			{
 				authEnabled: false,
@@ -93,13 +93,16 @@ describe("diffConfig", () => {
 		);
 		expect(diff.plan.map((p) => p.kind)).toEqual([
 			"create-bucket",
-			"create-function",
 			"deploy-function",
 			"enable-ai-gateway",
 		]);
+		// A brand-new function is created by its first deployment, so the single
+		// deploy-function step is flagged as not-yet-existing.
+		const deploy = diff.plan.find((p) => p.kind === "deploy-function");
+		expect(deploy).toMatchObject({ functionExists: false });
 	});
 
-	test("skips create-function and skips enable-ai-gateway when already present, but still re-deploys", () => {
+	test("skips enable-ai-gateway when already present, but still re-deploys an existing function", () => {
 		const diff = diffConfig(
 			{
 				authEnabled: false,
@@ -136,5 +139,8 @@ describe("diffConfig", () => {
 			{ updateExisting: false },
 		);
 		expect(diff.plan.map((p) => p.kind)).toEqual(["deploy-function"]);
+		// The function already exists remotely, so its deploy is flagged as an update.
+		const deploy = diff.plan.find((p) => p.kind === "deploy-function");
+		expect(deploy).toMatchObject({ functionExists: true });
 	});
 });

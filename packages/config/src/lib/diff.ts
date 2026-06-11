@@ -61,24 +61,20 @@ export type PlanStep =
 			accessLevel: BucketAccessLevel;
 	  }
 	| {
-			kind: "create-function";
-			projectId: string;
-			branchId: string;
-			branchName: string;
-			fn: ResolvedFunctionConfig;
-	  }
-	| {
 			/**
-			 * Deploy (or re-deploy) code to a function. Always planned for every desired
-			 * function — deployments are versioned and the newest becomes active, so a push
-			 * ships the current source each time. `functionExists` tells `pushConfig` whether
-			 * it must create the function first (covered by a preceding `create-function` step).
+			 * Deploy code to a function. Planned for every desired function — deployments are
+			 * versioned and the newest becomes active, so a push ships the current source each
+			 * time. Neon has no separate "create function" endpoint: the first deployment to a
+			 * slug creates the function. `functionExists` therefore only drives whether this
+			 * surfaces as a `create` (first deploy) or an `update` (re-deploy).
 			 */
 			kind: "deploy-function";
 			projectId: string;
 			branchId: string;
 			branchName: string;
 			fn: ResolvedFunctionConfig;
+			/** Whether the function already existed remotely when the plan was computed. */
+			functionExists: boolean;
 	  }
 	| {
 			kind: "enable-ai-gateway";
@@ -147,8 +143,10 @@ export function diffConfig(
  * stays explicit/manual — matching the existing auth / dataApi behaviour.
  *
  * Functions are always (re-)deployed: deployments are versioned and the newest becomes
- * active, so each push ships the current source. A `create-function` step precedes the
- * `deploy-function` step when the function does not yet exist remotely.
+ * active, so each push ships the current source. There is no separate create step — Neon
+ * creates the function on its first deployment — so a single `deploy-function` step is
+ * emitted per desired function, carrying `functionExists` so the apply can report it as a
+ * create (first deploy) or an update (re-deploy).
  */
 function diffPreview(args: {
 	config: ResolvedBranchConfig;
@@ -180,21 +178,16 @@ function diffPreview(args: {
 
 	for (const fn of preview.functions) {
 		const exists = state.functions.some((f) => f.slug === fn.slug);
-		if (!exists) {
-			plan.push({
-				kind: "create-function",
-				projectId: remote.projectId,
-				branchId: remote.branch.id,
-				branchName: remote.branch.name,
-				fn,
-			});
-		}
+		// Neon creates the function on its first deployment (there is no separate create
+		// endpoint), so always emit a single deploy step and let `functionExists` decide
+		// whether it is reported as a create or an update.
 		plan.push({
 			kind: "deploy-function",
 			projectId: remote.projectId,
 			branchId: remote.branch.id,
 			branchName: remote.branch.name,
 			fn,
+			functionExists: exists,
 		});
 	}
 

@@ -84,7 +84,6 @@ const neonFunctionSchema = z.object({
 	invocation_url: z.string(),
 	active_deployment: functionDeploymentSchema.optional(),
 });
-const functionResponseSchema = z.object({ function: neonFunctionSchema });
 const functionsListResponseSchema = z.object({
 	functions: z.array(neonFunctionSchema),
 });
@@ -844,25 +843,6 @@ class RealNeonApi implements NeonApi {
 		} catch (err) {
 			throw previewUnavailableError(err, "Functions");
 		}
-	}
-
-	async createBranchFunction(
-		projectId: string,
-		branchId: string,
-		input: { slug: string; name: string },
-	): Promise<NeonFunctionSnapshot> {
-		return this.call(
-			`createBranchFunction(${projectId}/${branchId}/${input.slug})`,
-			async () => {
-				const data = await this.postJson(
-					branchPreviewPath(projectId, branchId, "functions"),
-					{ slug: input.slug, name: input.name },
-				);
-				const parsed = functionResponseSchema.parse(data);
-				return functionToSnapshot(parsed.function);
-			},
-			{ projectId, mutating: true },
-		);
 	}
 
 	async deleteBranchFunction(

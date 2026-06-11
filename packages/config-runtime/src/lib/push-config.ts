@@ -356,21 +356,11 @@ function synthesizeAppliedChange(step: PlanStep): AppliedChange {
 					accessLevel: step.accessLevel,
 				},
 			};
-		case "create-function":
-			return {
-				kind: "service",
-				action: "create",
-				identifier: `function:${step.fn.slug}`,
-				details: {
-					branchName: step.branchName,
-					slug: step.fn.slug,
-					name: step.fn.name,
-				},
-			};
 		case "deploy-function":
 			return {
 				kind: "service",
-				action: "update",
+				// The first deployment creates the function; a later one updates it.
+				action: step.functionExists ? "update" : "create",
 				identifier: `function:${step.fn.slug}`,
 				details: {
 					branchName: step.branchName,
@@ -615,25 +605,10 @@ async function applyStep(
 				},
 			};
 		}
-		case "create-function": {
-			await ctx.api.createBranchFunction(
-				ctx.remoteProjectId,
-				step.branchId,
-				{ slug: step.fn.slug, name: step.fn.name },
-			);
-			return {
-				kind: "service",
-				action: "create",
-				identifier: `function:${step.fn.slug}`,
-				details: {
-					branchName: step.branchName,
-					slug: step.fn.slug,
-					name: step.fn.name,
-				},
-			};
-		}
 		case "deploy-function": {
 			const bundle = await ctx.bundleFunction(step.fn);
+			// Neon creates the function on its first deployment — there is no separate
+			// create call — so a single deploy both creates (when absent) and ships code.
 			const deployment = await ctx.api.deployBranchFunction(
 				ctx.remoteProjectId,
 				step.branchId,
@@ -646,7 +621,7 @@ async function applyStep(
 			);
 			return {
 				kind: "service",
-				action: "update",
+				action: step.functionExists ? "update" : "create",
 				identifier: `function:${step.fn.slug}`,
 				details: {
 					branchName: step.branchName,
