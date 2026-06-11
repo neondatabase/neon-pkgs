@@ -14,6 +14,8 @@ export interface OrchestratorOptions {
 	agent?: string;
 	skipNeonAuth?: boolean;
 	skipMigrations?: boolean;
+	/** Enable preview features (e.g. project bootstrapping from templates) */
+	preview?: boolean;
 }
 
 /**
@@ -28,6 +30,7 @@ export interface OrchestratorOptions {
  * Each call is stateless — it re-checks everything from the file system and credentials.
  *
  * The orchestrator uses filesystem inspection to decide what to do:
+ * - No app detected → bootstrap phase (scaffold from template)
  * - MCP not configured → full setup flow (inspect → install → getting-started)
  * - MCP configured, no connection string → skip install, go to getting-started
  * - MCP configured + connection string → fall through to neon-auth/migrations/complete
@@ -45,6 +48,7 @@ export async function orchestrate(
 
 	// Phase 2: Inspect what's already in place
 	const inspection = await inspectProject([
+		{ id: "has_app", description: "", lookFor: [] },
 		{ id: "mcp_server", description: "", lookFor: [] },
 		{ id: "skills", description: "", lookFor: [] },
 		{ id: "connection_string", description: "", lookFor: [] },
@@ -52,16 +56,30 @@ export async function orchestrate(
 		{ id: "migrations", description: "", lookFor: [] },
 	]);
 
+	// Only detect empty projects when --preview is enabled
+	const hasApp = options.preview ? inspection.hasApp === true : true;
 	const toolingInstalled =
 		inspection.mcpConfigured && inspection.skillsInstalled;
 	const hasNeonConnection = inspection.connectionString === true;
 
-	// Phase 3a: Tooling not installed → full setup flow
-	// Don't pre-fill inspection results — the setup phase asks the agent to
-	// check and report back.
-	if (!toolingInstalled) {
-		return handleSetupPhase({ agent: options.agent });
+	// Phase 3a: No app or tooling not installed → setup flow
+	// When !hasApp (preview mode), setup will offer template selection before asking about tooling.
+	// Clean up any stale _init state from a previous run.
+	if (!hasApp || !toolingInstalled) {
+		cleanupInitState(resolve(cwd, ".neon"));
+		return handleSetupPhase({ agent: options.agent, hasApp });
 	}
+
+	// Read .neon context early — needed for feature-based routing
+	const neonContextPath = resolve(cwd, ".neon");
+	const neonContext = readNeonContext(neonContextPath);
+	const initState =
+		typeof neonContext._init === "object" && neonContext._init !== null
+			? (neonContext._init as Record<string, unknown>)
+			: {};
+	const features: string[] = Array.isArray(initState.features)
+		? initState.features
+		: [];
 
 	// Phase 3b: Tooling installed but no Neon connection string → getting-started
 	if (!hasNeonConnection) {
@@ -72,36 +90,24 @@ export async function orchestrate(
 			orm: inspection.orm as string | undefined,
 			migrationTool: inspection.migrationTool as string | undefined,
 			migrationDir: inspection.migrationDir as string | undefined,
+			features,
+			preview: options.preview,
 		});
 	}
 
 	// Phase 3c: Neon connection exists but no .neon context file → resolve project
-	const neonContextPath = resolve(cwd, ".neon");
-	const hasNeonContext =
-		existsSync(neonContextPath) &&
-		(() => {
-			try {
-				const content = JSON.parse(
-					readFileSync(neonContextPath, "utf-8"),
-				);
-				return !!content.projectId;
-			} catch {
-				return false;
-			}
-		})();
 
-	if (!hasNeonContext) {
-		// Resolve the project from the connection string and write .neon
+	if (!neonContext.projectId) {
+		// Resolve the project from the connection string and merge into .neon
 		try {
 			const resolved = await resolveNeonContext(cwd);
 			if (resolved) {
-				const contextData: Record<string, string> = {};
-				if (resolved.orgId) contextData.orgId = resolved.orgId;
-				if (resolved.projectId)
-					contextData.projectId = resolved.projectId;
+				const merged = { ...neonContext };
+				if (resolved.orgId) merged.orgId = resolved.orgId;
+				if (resolved.projectId) merged.projectId = resolved.projectId;
 				writeFileSync(
 					neonContextPath,
-					`${JSON.stringify(contextData, null, 2)}\n`,
+					`${JSON.stringify(merged, null, 2)}\n`,
 				);
 			}
 		} catch {
@@ -109,11 +115,20 @@ export async function orchestrate(
 		}
 	}
 
-	// Phase 4: Neon Auth (optional)
-	if (!options.skipNeonAuth) {
+	// Phase 4: Neon Auth — skip if template/user doesn't require it
+	const hasFeatureRequirements = features.length > 0;
+	const needsAuth = hasFeatureRequirements
+		? features.includes("auth")
+		: !options.skipNeonAuth;
+	if (needsAuth) {
 		const hasNeonAuth = checkNeonAuth(cwd);
 		if (!hasNeonAuth) {
-			return handleNeonAuthPhase({ agent: options.agent });
+			// If auth was already selected via features, go straight to setup
+			// (don't re-ask the user)
+			return handleNeonAuthPhase({
+				agent: options.agent,
+				setup: hasFeatureRequirements,
+			});
 		}
 	}
 
@@ -122,7 +137,9 @@ export async function orchestrate(
 		return handleMigrationsPhase({ agent: options.agent });
 	}
 
-	// All done
+	// All done — clean up ephemeral _init state from .neon
+	cleanupInitState(neonContextPath);
+
 	return {
 		phase: "setup",
 		status: "complete",
@@ -132,6 +149,30 @@ export async function orchestrate(
 				"Neon setup is complete. Your database is configured and your agent has the Neon MCP server and skills available.",
 		},
 	};
+}
+
+/** Remove the ephemeral _init key from .neon, preserving other fields. */
+function cleanupInitState(neonContextPath: string): void {
+	if (!existsSync(neonContextPath)) return;
+	try {
+		const context = JSON.parse(readFileSync(neonContextPath, "utf-8"));
+		if (context._init !== undefined) {
+			delete context._init;
+			writeFileSync(
+				neonContextPath,
+				`${JSON.stringify(context, null, 2)}\n`,
+			);
+		}
+	} catch {}
+}
+
+function readNeonContext(neonContextPath: string): Record<string, unknown> {
+	if (!existsSync(neonContextPath)) return {};
+	try {
+		return JSON.parse(readFileSync(neonContextPath, "utf-8"));
+	} catch {
+		return {};
+	}
 }
 
 function checkNeonAuth(cwd: string): boolean {

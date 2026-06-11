@@ -21,6 +21,8 @@ export interface InspectionResults {
 	migrationDir?: string;
 	isVscodeIde?: boolean;
 	agent?: string;
+	/** True if the directory contains an application (package.json with deps, or source files) */
+	hasApp?: boolean;
 }
 
 /**
@@ -61,6 +63,9 @@ export async function inspectProject(
 				break;
 			case "ide_type":
 				results.isVscodeIde = checkVscodeIde();
+				break;
+			case "has_app":
+				results.hasApp = checkHasApp(cwd);
 				break;
 			case "agent_type":
 				// Handled by the interactive runner (prompt or env detection)
@@ -280,4 +285,37 @@ function checkVscodeIde(): boolean {
 		env.VSCODE_PID ||
 		env.VSCODE_CWD
 	);
+}
+
+/**
+ * Detects whether the current directory contains an application.
+ * Returns true if package.json has dependencies or common source directories exist.
+ */
+function checkHasApp(cwd: string): boolean {
+	const pkgPath = resolve(cwd, "package.json");
+	if (existsSync(pkgPath)) {
+		try {
+			const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+			const deps = Object.keys(pkg.dependencies ?? {});
+			const devDeps = Object.keys(pkg.devDependencies ?? {});
+			if (deps.length > 0 || devDeps.length > 0) return true;
+		} catch {}
+	}
+
+	// Check for common source directories / entry files
+	const indicators = [
+		"src",
+		"app",
+		"pages",
+		"lib",
+		"index.ts",
+		"index.js",
+		"main.ts",
+		"main.js",
+	];
+	for (const indicator of indicators) {
+		if (existsSync(resolve(cwd, indicator))) return true;
+	}
+
+	return false;
 }

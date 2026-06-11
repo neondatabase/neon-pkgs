@@ -48,6 +48,27 @@ vi.mock("node:fs/promises", () => ({
 	unlink: vi.fn().mockReturnValue(Promise.resolve()),
 }));
 
+vi.mock("../bootstrap.js", () => {
+	const templates = [
+		{
+			id: "hono",
+			title: "Hono API",
+			description: "A Hono template.",
+			requires: ["database"],
+			source: {
+				owner: "neondatabase",
+				repo: "examples",
+				ref: "main",
+				subdir: "with-hono",
+			},
+		},
+	];
+	return {
+		fetchTemplates: vi.fn().mockResolvedValue(templates),
+		FALLBACK_TEMPLATES: templates,
+	};
+});
+
 // Mock global fetch for Open VSX VSIX download
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);

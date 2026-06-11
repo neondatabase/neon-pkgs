@@ -27,6 +27,27 @@ vi.mock("./lib/resolve-context.js", () => ({
 	resolveNeonContext: vi.fn().mockResolvedValue(null),
 }));
 
+vi.mock("./lib/bootstrap.js", () => {
+	const templates = [
+		{
+			id: "hono",
+			title: "Hono API",
+			description: "A Hono template.",
+			requires: ["database"],
+			source: {
+				owner: "neondatabase",
+				repo: "examples",
+				ref: "main",
+				subdir: "with-hono",
+			},
+		},
+	];
+	return {
+		fetchTemplates: vi.fn().mockResolvedValue(templates),
+		FALLBACK_TEMPLATES: templates,
+	};
+});
+
 import { isAuthenticated } from "./lib/auth.js";
 import { orchestrate } from "./v2.js";
 
@@ -49,9 +70,19 @@ function mockFs(files: Record<string, string>) {
 	});
 }
 
+const APP_PKG_JSON = JSON.stringify({
+	dependencies: { next: "14.0.0" },
+});
+
+/** Simulate an app existing (package.json with deps) plus optional extra files */
+function mockAppExists(extraFiles: Record<string, string> = {}) {
+	mockFs({ "package.json": APP_PKG_JSON, ...extraFiles });
+}
+
 /** Simulate MCP + skills installed (Cursor config with neon, neon-postgres skill dir) */
 function mockToolingInstalled(extraFiles: Record<string, string> = {}) {
 	const files: Record<string, string> = {
+		"package.json": APP_PKG_JSON,
 		".cursor/mcp.json":
 			'{"mcpServers":{"Neon":{"url":"https://mcp.neon.tech/mcp"}}}',
 		// skills directory exists and contains neon-postgres skill with SKILL.md
@@ -85,8 +116,39 @@ describe("v2 orchestrator", () => {
 		}
 	});
 
+	test("enters setup with bootstrap when no app is detected and --preview", async () => {
+		mockIsAuthenticated.mockResolvedValue(true);
+
+		const result = await orchestrate({ agent: "claude", preview: true });
+
+		expect(result.phase).toBe("setup");
+		expect(result.status).toBe("bootstrap_needed");
+		expect(result.nextAction.type).toBe("agent_check");
+		if (result.nextAction.type === "agent_check") {
+			// Should include template preference before mode
+			const prefs = result.nextAction.userPreferences ?? [];
+			expect(prefs[0]?.id).toBe("template");
+			// Should NOT include skillsScope (template bundles skills)
+			expect(prefs.find((p) => p.id === "skillsScope")).toBeUndefined();
+		}
+	});
+
+	test("skips bootstrap without --preview even when no app detected", async () => {
+		mockIsAuthenticated.mockResolvedValue(true);
+
+		const result = await orchestrate({ agent: "claude" });
+
+		expect(result.phase).toBe("setup");
+		expect(result.status).toBe("pending");
+		if (result.nextAction.type === "agent_check") {
+			const prefs = result.nextAction.userPreferences ?? [];
+			expect(prefs.find((p) => p.id === "template")).toBeUndefined();
+		}
+	});
+
 	test("enters setup phase when no tooling is installed", async () => {
 		mockIsAuthenticated.mockResolvedValue(true);
+		mockAppExists();
 
 		const result = await orchestrate({ agent: "claude" });
 
@@ -94,7 +156,10 @@ describe("v2 orchestrator", () => {
 		expect(result.status).toBe("pending");
 		expect(result.nextAction.type).toBe("agent_check");
 		if (result.nextAction.type === "agent_check") {
-			expect(result.nextAction.userPreferences?.[0]?.id).toBe("mode");
+			const prefs = result.nextAction.userPreferences ?? [];
+			// Brownfield: features question first, then mode
+			expect(prefs[0]?.id).toBe("features");
+			expect(prefs[1]?.id).toBe("mode");
 		}
 	});
 
@@ -155,9 +220,36 @@ describe("v2 orchestrator", () => {
 		}
 	});
 
+	test("skips neon_auth when .neon _init features don't include auth", async () => {
+		mockIsAuthenticated.mockResolvedValue(true);
+		mockToolingInstalled({
+			".env": "DATABASE_URL=postgres://user:pass@ep-foo.us-east-2.aws.neon.tech/neondb",
+			".neon":
+				'{"projectId":"proj-123","_init":{"features":["database"]}}',
+		});
+
+		const result = await orchestrate({ agent: "claude" });
+
+		// Should skip neon_auth and go to migrations
+		expect(result.phase).toBe("migrations");
+	});
+
+	test("runs neon_auth when .neon _init features include auth", async () => {
+		mockIsAuthenticated.mockResolvedValue(true);
+		mockToolingInstalled({
+			".env": "DATABASE_URL=postgres://user:pass@ep-foo.us-east-2.aws.neon.tech/neondb",
+			".neon":
+				'{"projectId":"proj-123","_init":{"features":["database","auth"]}}',
+		});
+
+		const result = await orchestrate({ agent: "claude" });
+
+		expect(result.phase).toBe("neon_auth");
+	});
+
 	test("enters setup even with DATABASE_URL if MCP not configured", async () => {
 		mockIsAuthenticated.mockResolvedValue(true);
-		mockFs({
+		mockAppExists({
 			".env": "DATABASE_URL=postgres://user:pass@ep-foo.us-east-2.aws.neon.tech/neondb",
 		});
 

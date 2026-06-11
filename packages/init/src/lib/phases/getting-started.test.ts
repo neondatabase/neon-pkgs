@@ -34,13 +34,13 @@ describe("getting-started phase", () => {
 			expect(stepIds).toContain("select_org");
 			expect(stepIds).toContain("select_or_create_project");
 			expect(stepIds).toContain("create_project_if_needed");
-			expect(stepIds).toContain("set_connection_string");
+			expect(stepIds).toContain("pull_env");
 			// Org step should list orgs first
 			const orgStep = result.nextAction.steps.find(
 				(s) => s.id === "select_org",
 			);
 			expect(orgStep?.command).toContain("neonctl orgs list");
-			expect(orgStep?.description).toContain("MCP tool");
+			expect(orgStep?.description).toContain("CLI");
 			// Create step should include --org-id
 			const createStep = result.nextAction.steps.find(
 				(s) => s.id === "create_project_if_needed",
@@ -59,7 +59,7 @@ describe("getting-started phase", () => {
 			const stepIds = result.nextAction.steps.map((s) => s.id);
 			expect(stepIds).not.toContain("select_org");
 			expect(stepIds).not.toContain("select_or_create_project");
-			expect(stepIds).not.toContain("set_connection_string");
+			expect(stepIds).not.toContain("pull_env");
 		}
 	});
 
@@ -141,9 +141,8 @@ describe("getting-started phase", () => {
 			const verifyStep = result.nextAction.steps.find(
 				(s) => s.id === "verify_connection",
 			);
-			expect(verifyStep?.description).toContain("MCP tool");
 			expect(verifyStep?.description).toContain(
-				"Do NOT use the neonctl CLI",
+				"direct database connection",
 			);
 		}
 	});

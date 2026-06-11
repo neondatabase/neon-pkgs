@@ -51,11 +51,13 @@ export async function handleNeonAuthPhase(
 						],
 					},
 					no: {
-						action: {
-							type: "complete",
-							message:
-								"Neon setup is complete. You can set up Neon Auth later by having your agent run: neon-init neon-auth",
-						},
+						args: [
+							"finalize",
+							"--json",
+							...(options.agent
+								? ["--agent", options.agent]
+								: []),
+						],
 					},
 				},
 			},
@@ -74,12 +76,9 @@ export async function handleNeonAuthPhase(
 					{
 						id: "provision",
 						description:
-							"Enable Neon Auth on the project. " +
-							"Try using the Neon MCP server's provision_neon_auth tool first. " +
-							"If the MCP server is not available or the tool call fails, fall back to the neonctl CLI: " +
-							"`CI= npx -y neonctl neon-auth enable --project-id <project-id> --output json`. " +
-							"You can also check current status with: " +
-							"`CI= npx -y neonctl neon-auth status --project-id <project-id> --output json`." +
+							"Enable Neon Auth on the project using the neonctl CLI. " +
+							"Run: `CI= npx -y neonctl neon-auth enable --project-id <project-id> --output json`. " +
+							"You can check current status with: `CI= npx -y neonctl neon-auth status --project-id <project-id> --output json`." +
 							(options.projectId
 								? ` Project ID: ${options.projectId}.`
 								: " Determine the project ID from the .neon file in the project root, or from the DATABASE_URL in .env, or ask the user."),
@@ -95,16 +94,19 @@ export async function handleNeonAuthPhase(
 							"Create auth components per the skill reference. Follow the exact patterns and imports specified.",
 					},
 					{
-						id: "wire_env",
+						id: "pull_env",
 						description:
-							"Add the NEON_AUTH_* environment variables to .env as specified in the skill reference.",
+							"Run `neonctl env pull` to populate the NEON_AUTH_BASE_URL, NEON_AUTH_JWKS_URL, and other Neon Auth environment variables. This reads the .neon context file and writes the auth URLs to the project's env file.",
+						command: "CI= npx -y neonctl env pull",
 					},
 				],
 				onComplete: {
-					type: "complete",
-					message:
-						"Neon Auth has been configured successfully. Neon setup is complete! " +
-						"Your database is connected, agent tooling is installed, and authentication is ready.",
+					type: "run_neon_init",
+					args: [
+						"finalize",
+						"--json",
+						...(options.agent ? ["--agent", options.agent] : []),
+					],
 				},
 			},
 		};
@@ -135,11 +137,11 @@ export async function handleNeonAuthPhase(
 					],
 				},
 				no: {
-					action: {
-						type: "complete",
-						message:
-							"Neon setup is complete. You can set up Neon Auth later by having your agent run: neon-init neon-auth",
-					},
+					args: [
+						"finalize",
+						"--json",
+						...(options.agent ? ["--agent", options.agent] : []),
+					],
 				},
 				info: {
 					args: [
