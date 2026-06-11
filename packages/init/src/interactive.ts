@@ -159,14 +159,15 @@ async function interactiveInitInner(
 			options: [
 				...templates.map((t) => ({
 					value: t.id,
-					label: `${t.title} — ${t.description}`,
+					label: t.title,
+					hint: t.description,
 				})),
 				{
 					value: "none",
 					label: "No thanks — continue without scaffolding",
 				},
 			],
-			initialValue: "none",
+			initialValue: templates[0]?.id ?? "none",
 		});
 		if (isCancel(templateResult)) {
 			outro("Setup cancelled.");
