@@ -84,19 +84,34 @@ describe("configInputSchema", () => {
 		expect(result.success).toBe(false);
 	});
 
-	test("accepts a function dev block with port and portless", () => {
+	test("accepts a function dev block with a port", () => {
 		const result = configInputSchema.safeParse({
 			preview: {
 				functions: {
 					fn1: {
 						name: "Hello World",
 						source: "./hello.ts",
-						dev: { port: 8787, portless: true },
+						dev: { port: 8787 },
 					},
 				},
 			},
 		});
 		expect(result.success).toBe(true);
+	});
+
+	test("rejects an unknown key in the function dev block (e.g. removed `portless`)", () => {
+		const result = configInputSchema.safeParse({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: "./hello.ts",
+						dev: { portless: true },
+					},
+				},
+			},
+		});
+		expect(result.success).toBe(false);
 	});
 
 	test("rejects an out-of-range dev.port", () => {

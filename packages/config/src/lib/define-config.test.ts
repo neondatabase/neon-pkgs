@@ -170,7 +170,7 @@ describe("resolveConfig", () => {
 					hello: {
 						name: "Hello",
 						source: "./hello.ts",
-						dev: { port: 8787, portless: true },
+						dev: { port: 8787 },
 					},
 				},
 			},
@@ -181,7 +181,6 @@ describe("resolveConfig", () => {
 		});
 		expect(resolved.preview?.functions[0].dev).toEqual({
 			port: 8787,
-			portless: true,
 		});
 	});
 

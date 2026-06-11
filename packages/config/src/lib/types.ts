@@ -160,26 +160,13 @@ export type FunctionRuntime = "nodejs24";
 /**
  * Local-development settings for a function, used by `neon dev` when it serves every
  * function declared in `neon.ts` (i.e. invoked with no `--source`). Never affects deploy.
- *
- * `port` and `portless` are independent:
- *
- * - `portless: true` — wrap this function's local server with `portless <slug> …` so it gets
- *   a stable `slug.localhost` URL. Portless assigns the port itself (it injects `PORT`), so
- *   `port` is ignored in this mode.
- * - otherwise — serve directly. `port`, when set, is bound exactly (and `neon dev` fails
- *   loudly if it is taken); when omitted a free port is found automatically.
  */
 export interface FunctionDevConfig {
 	/**
-	 * Port the local server binds. Bound exactly (fails if taken) when set; a free port is
-	 * found when omitted. Ignored when `portless` is true (portless assigns the port).
+	 * Port the local server binds. Bound exactly (and `neon dev` fails loudly if it is taken)
+	 * when set; a free port is found automatically when omitted.
 	 */
 	port?: number;
-	/**
-	 * Expose this function via `portless` (a stable `slug.localhost` URL). Requires the
-	 * `portless` binary on PATH. Portless assigns the port, so `port` is ignored here.
-	 */
-	portless?: boolean;
 }
 
 /**
