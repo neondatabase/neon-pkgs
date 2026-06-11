@@ -1,9 +1,26 @@
 /**
- * `@neondatabase/ai-sdk-provider/v1` — community Vercel AI SDK provider for the Neon AI Gateway.
+ * `@neondatabase/ai-sdk-provider/v1` — community Vercel AI SDK provider for the
+ * Neon AI Gateway.
  *
- * - `createNeon()` — factory for the Neon provider.
- *   Not implemented yet; this `0.0.0` release reserves the package name.
+ * - `createNeon()` / `neon` — the provider. Routes each model to the best
+ *   gateway endpoint (Anthropic → native Messages, OpenAI → native Responses
+ *   incl. Codex, everything else → unified MLflow).
  */
-
-export type { NeonProvider, NeonProviderSettings } from "./lib/provider.js";
-export { createNeon } from "./lib/provider.js";
+export { NeonAnthropicLanguageModel } from "./lib/neon-anthropic-language-model.js";
+export { NeonChatLanguageModel } from "./lib/neon-chat-language-model.js";
+export type { NeonChatModelId } from "./lib/neon-chat-options.js";
+export {
+	getNeonModelCapabilities,
+	getNeonModelRoute,
+	type NeonModelCapabilities,
+	type NeonModelFamily,
+	type NeonModelRoute,
+} from "./lib/neon-model-capabilities.js";
+export { NeonResponsesLanguageModel } from "./lib/neon-responses-language-model.js";
+export {
+	createNeon,
+	type NeonErrorData,
+	type NeonProvider,
+	type NeonProviderSettings,
+	neon,
+} from "./lib/provider.js";
