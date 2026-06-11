@@ -75,8 +75,9 @@ export const NEON_ENV_VAR_KEYS = {
 	 * AI Gateway (Preview). Mapped onto the OpenAI SDK's standard env vars so the OpenAI
 	 * clients work from env alone; `baseUrl` carries the gateway's OpenAI-dialect route prefix
 	 * (`/ai-gateway/openai/v1`). The `NEON_AI_GATEWAY_*` aliases are also emitted: `neonToken`
-	 * mirrors the OpenAI key, and `neonBaseUrl` is the provider-neutral gateway root
-	 * (`/ai-gateway`) for hitting the anthropic / gemini / mlflow routes directly.
+	 * mirrors the OpenAI key, and `neonBaseUrl` is the bare branch gateway host
+	 * (`scheme://host`, no path) — the `@ai-sdk/neon` provider appends the
+	 * `/ai-gateway/<dialect>/…` routes itself (https://github.com/vercel/ai/pull/15997).
 	 */
 	aiGateway: {
 		apiKey: "OPENAI_API_KEY",
@@ -88,8 +89,6 @@ export const NEON_ENV_VAR_KEYS = {
 
 /** OpenAI-dialect route prefix on the branch AI Gateway host. */
 const AI_GATEWAY_OPENAI_PATH = "/ai-gateway/openai/v1";
-/** Provider-neutral gateway root (append `/openai/v1/responses`, `/anthropic/v1/messages`, …). */
-const AI_GATEWAY_BASE_PATH = "/ai-gateway";
 
 /** Per-namespace inner shapes. Exposed so consumers can name the parts independently. */
 export interface NeonPostgresEnv {
@@ -1102,13 +1101,11 @@ export function toEntries(env: NeonEnv<Config>): Record<string, string> {
 		const ai = withAiGateway.aiGateway;
 		out[keys.apiKey] = ai.apiKey;
 		out[keys.baseUrl] = ai.baseUrl;
-		// Neon-branded aliases: the same bearer, plus the provider-neutral gateway root
-		// (drop the OpenAI-dialect suffix) for the anthropic / gemini / mlflow routes.
+		// Neon-branded aliases: the same bearer, plus the bare branch gateway host
+		// (scheme://host, no path) — the @ai-sdk/neon provider appends the
+		// /ai-gateway/<dialect>/… routes itself (https://github.com/vercel/ai/pull/15997).
 		out[keys.neonToken] = ai.apiKey;
-		out[keys.neonBaseUrl] = ai.baseUrl.replace(
-			AI_GATEWAY_OPENAI_PATH,
-			AI_GATEWAY_BASE_PATH,
-		);
+		out[keys.neonBaseUrl] = new URL(ai.baseUrl).origin;
 	}
 	return out;
 }

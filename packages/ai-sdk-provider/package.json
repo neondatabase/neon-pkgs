@@ -1,0 +1,77 @@
+{
+	"name": "@neondatabase/ai-sdk-provider",
+	"version": "0.0.0",
+	"description": "Community Vercel AI SDK provider for the Neon AI Gateway.",
+	"keywords": [
+		"neon",
+		"ai",
+		"ai-sdk",
+		"vercel-ai-sdk",
+		"provider",
+		"ai-gateway",
+		"llm",
+		"platform"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/neondatabase/neon-pkgs.git"
+	},
+	"license": "Apache-2.0",
+	"author": {
+		"name": "Neon",
+		"url": "https://neon.com"
+	},
+	"type": "module",
+	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		},
+		"./v1": {
+			"types": "./dist/v1.d.ts",
+			"import": "./dist/v1.js",
+			"default": "./dist/v1.js"
+		}
+	},
+	"files": [
+		"README.md",
+		"dist/",
+		"package.json"
+	],
+	"scripts": {
+		"build": "tsc --noEmit && tsdown",
+		"prepare": "npm run build",
+		"test": "vitest --passWithNoTests",
+		"test:ci": "vitest run --passWithNoTests",
+		"tsc": "tsc"
+	},
+	"devDependencies": {
+		"@types/node": "catalog:",
+		"@vitest/coverage-v8": "3.0.9",
+		"console-fail-test": "0.5.0",
+		"tsdown": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:",
+		"zod": "^4.4.3"
+	},
+	"packageManager": "pnpm@10.4.0",
+	"engines": {
+		"node": ">=22"
+	},
+	"publishConfig": {
+		"provenance": false
+	},
+	"dependencies": {
+		"@ai-sdk/anthropic": "4.0.0-beta.42",
+		"@ai-sdk/openai": "4.0.0-beta.44",
+		"@ai-sdk/openai-compatible": "3.0.0-beta.36",
+		"@ai-sdk/provider": "4.0.0-beta.14",
+		"@ai-sdk/provider-utils": "5.0.0-beta.30"
+	},
+	"peerDependencies": {
+		"zod": "^3.25.76 || ^4.1.8"
+	}
+}

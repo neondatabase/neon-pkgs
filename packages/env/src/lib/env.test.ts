@@ -626,10 +626,9 @@ describe("branch storage + AI Gateway (Preview)", () => {
 		expect(pairs.OPENAI_BASE_URL).toBe(
 			"https://x.neon.build/ai-gateway/openai/v1",
 		);
-		// Neon-branded aliases: same token, provider-neutral base (no OpenAI-dialect suffix).
+		// Neon-branded aliases: same token, plus the bare branch gateway host (no path) —
+		// the @ai-sdk/neon provider appends the /ai-gateway/<dialect>/… routes itself.
 		expect(pairs.NEON_AI_GATEWAY_TOKEN).toBe("nt_live_x_y");
-		expect(pairs.NEON_AI_GATEWAY_BASE_URL).toBe(
-			"https://x.neon.build/ai-gateway",
-		);
+		expect(pairs.NEON_AI_GATEWAY_BASE_URL).toBe("https://x.neon.build");
 	});
 });

@@ -158,6 +158,46 @@ importers:
         specifier: ^4.2.4
         version: 4.2.4
 
+  packages/ai-sdk-provider:
+    dependencies:
+      '@ai-sdk/anthropic':
+        specifier: 4.0.0-beta.42
+        version: 4.0.0-beta.42(zod@4.4.3)
+      '@ai-sdk/openai':
+        specifier: 4.0.0-beta.44
+        version: 4.0.0-beta.44(zod@4.4.3)
+      '@ai-sdk/openai-compatible':
+        specifier: 3.0.0-beta.36
+        version: 3.0.0-beta.36(zod@4.4.3)
+      '@ai-sdk/provider':
+        specifier: 4.0.0-beta.14
+        version: 4.0.0-beta.14
+      '@ai-sdk/provider-utils':
+        specifier: 5.0.0-beta.30
+        version: 5.0.0-beta.30(zod@4.4.3)
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 20.19.17
+      '@vitest/coverage-v8':
+        specifier: 3.0.9
+        version: 3.0.9(vitest@3.0.9(@types/node@20.19.17)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.39.0)(tsx@4.20.5)(yaml@2.9.0))
+      console-fail-test:
+        specifier: 0.5.0
+        version: 0.5.0
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.14.1(@arethetypeswrong/core@0.18.3)(typescript@5.8.2)
+      typescript:
+        specifier: 'catalog:'
+        version: 5.8.2
+      vitest:
+        specifier: 'catalog:'
+        version: 3.0.9(@types/node@20.19.17)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.39.0)(tsx@4.20.5)(yaml@2.9.0)
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+
   packages/config:
     dependencies:
       '@neondatabase/api-client':
@@ -508,6 +548,34 @@ importers:
         version: 3.0.9(@types/node@20.19.17)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.39.0)(tsx@4.20.5)(yaml@2.9.0)
 
 packages:
+
+  '@ai-sdk/anthropic@4.0.0-beta.42':
+    resolution: {integrity: sha512-FdfNFc6ScMEMSXP2pjfpbCdFEKhznSzKgrAluNLZN4x+XAK4yoU2jhWUp8pHW085OyMA9Kg53HK1paIi3gED9g==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/openai-compatible@3.0.0-beta.36':
+    resolution: {integrity: sha512-aYCyXlIgOonStbme/ZvPMntVZWiPcHrvn+HX/awO3SO+leoXv3ZwtAviFRk+2LuX57s+SQrPpMGlU+ZCEIQTHg==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/openai@4.0.0-beta.44':
+    resolution: {integrity: sha512-kXdGA6vyh9SwL/B11UhODjbw0koFkDA/yD7hacBxMHSZx6l3T9hZLECEwOkn6OZDrQR+vno5Ka/pUyXrG82BkQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/provider-utils@5.0.0-beta.30':
+    resolution: {integrity: sha512-X3AxTsFJZr9Mw32SncWJA4/ShU8NA/XjhoallCYdcdQZ2gZZ/cIDyJJ6pNh1aBhicRNHv2ndgI6w/H2NGNIjOA==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/provider@4.0.0-beta.14':
+    resolution: {integrity: sha512-SMijtjVHs38n0dMkTcNuGrnStiF76OhAqS0R+ZX4iXUnuPPyTxQoVcF8Xuf2AoBB5rqndTId5FVT05bgqD5KsA==}
+    engines: {node: '>=18'}
 
   '@ampproject/remapping@2.3.0':
     resolution: {integrity: sha512-30iZtAPgz+LTIYoeivqYo853f02jBYSd5uGnGpkFV0M3xOt9aN73erkgYAmZU43x4VfqcnLxW9Kpg3R5LC4YYw==}
@@ -1557,6 +1625,9 @@ packages:
   '@speed-highlight/core@1.2.7':
     resolution: {integrity: sha512-0dxmVj4gxg3Jg879kvFS/msl4s9F3T9UXC1InxgOf7t5NvcPD97u/WTA5vL/IxWHMn7qSxBozqrnnE2wvl1m8g==}
 
+  '@standard-schema/spec@1.1.0':
+    resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
+
   '@tailwindcss/node@4.1.13':
     resolution: {integrity: sha512-eq3ouolC1oEFOAvOMOBAmfCIqZBJuvWvvYWh5h5iOYfe1HFC6+GZ6EIL0JdM3/niGRJmnrOc+8gl9/HGUaaptw==}
 
@@ -1968,6 +2039,9 @@ packages:
   '@whatwg-node/server@0.9.71':
     resolution: {integrity: sha512-ueFCcIPaMgtuYDS9u0qlUoEvj6GiSsKrwnOLPp9SshqjtcRaR1IEHRjoReq3sXNydsF5i0ZnmuYgXq9dV53t0g==}
     engines: {node: '>=18.0.0'}
+
+  '@workflow/serde@4.1.0':
+    resolution: {integrity: sha512-pav4F2BoirECWR7Nf1TKt+2eETcBj7jj4cBefQ8VXQCA6NPkaKeLfj/zMgi+3zYV5ZIBT4GuUiphsj0/b9hPQQ==}
 
   abbrev@3.0.1:
     resolution: {integrity: sha512-AO2ac6pjRB3SJmGJo+v5/aK6Omggp6fsLrs6wN9bd35ulu4cCwaAU9+7ZhXjeqHVkaHThLuzH0nZr0YpCDhygg==}
@@ -2650,6 +2724,10 @@ packages:
     resolution: {integrity: sha512-mQw+2fkQbALzQ7V0MY0IqdnXNOeTtP4r0lN9z7AAawCXgqea7bDii20AYrIBrFd/Hx0M2Ocz6S111CaFkUcb0Q==}
     engines: {node: '>=0.8.x'}
 
+  eventsource-parser@3.1.0:
+    resolution: {integrity: sha512-kJezFj9YFAMLeORyi7aCLxLbD5/qWMQnoMVlVPyHIll7lgRJCc3JVln9Vgl9nwQi0YkMnhdGTMNn7CkRRAptMg==}
+    engines: {node: '>=18.0.0'}
+
   execa@8.0.1:
     resolution: {integrity: sha512-VyhnebXciFV2DESc+p6B+y0LjSm0krU4OgJN44qFAhBY0TJ+1V61tYD2+wHusZ6F9n5K+vl8k0sTy7PEfV4qpg==}
     engines: {node: '>=16.17'}
@@ -3106,6 +3184,9 @@ packages:
     resolution: {integrity: sha512-/sM3dO2FOzXjKQhJuo0Q173wf2KOo8t4I8vHy6lF9poUp7bKT0/NHE8fPX23PwfhnykfqnC2xRxOnVw5XuGIaA==}
     engines: {node: '>=6'}
     hasBin: true
+
+  json-schema@0.4.0:
+    resolution: {integrity: sha512-es94M3nTIfsEPisRafak+HDLfHXnKBhV3vU5eqPcS3flIWqcxJWgXHXiey3YrpaNsanY5ei1VoYEbOzijuq9BA==}
 
   json5@2.2.3:
     resolution: {integrity: sha512-XmOWe7eyHYH14cLdVPoyg+GOH3rYX++KpzrylJwSW98t3Nk+U8XOl8FWKOgwtzdb8lXGf6zYwDUzeHMWfxasyg==}
@@ -4696,6 +4777,36 @@ packages:
 
 snapshots:
 
+  '@ai-sdk/anthropic@4.0.0-beta.42(zod@4.4.3)':
+    dependencies:
+      '@ai-sdk/provider': 4.0.0-beta.14
+      '@ai-sdk/provider-utils': 5.0.0-beta.30(zod@4.4.3)
+      zod: 4.4.3
+
+  '@ai-sdk/openai-compatible@3.0.0-beta.36(zod@4.4.3)':
+    dependencies:
+      '@ai-sdk/provider': 4.0.0-beta.14
+      '@ai-sdk/provider-utils': 5.0.0-beta.30(zod@4.4.3)
+      zod: 4.4.3
+
+  '@ai-sdk/openai@4.0.0-beta.44(zod@4.4.3)':
+    dependencies:
+      '@ai-sdk/provider': 4.0.0-beta.14
+      '@ai-sdk/provider-utils': 5.0.0-beta.30(zod@4.4.3)
+      zod: 4.4.3
+
+  '@ai-sdk/provider-utils@5.0.0-beta.30(zod@4.4.3)':
+    dependencies:
+      '@ai-sdk/provider': 4.0.0-beta.14
+      '@standard-schema/spec': 1.1.0
+      '@workflow/serde': 4.1.0
+      eventsource-parser: 3.1.0
+      zod: 4.4.3
+
+  '@ai-sdk/provider@4.0.0-beta.14':
+    dependencies:
+      json-schema: 0.4.0
+
   '@ampproject/remapping@2.3.0':
     dependencies:
       '@jridgewell/gen-mapping': 0.3.13
@@ -5707,6 +5818,8 @@ snapshots:
 
   '@speed-highlight/core@1.2.7': {}
 
+  '@standard-schema/spec@1.1.0': {}
+
   '@tailwindcss/node@4.1.13':
     dependencies:
       '@jridgewell/remapping': 2.3.5
@@ -6352,6 +6465,8 @@ snapshots:
       tslib: 2.8.1
     optional: true
 
+  '@workflow/serde@4.1.0': {}
+
   abbrev@3.0.1: {}
 
   abort-controller@3.0.0:
@@ -6996,6 +7111,8 @@ snapshots:
 
   events@3.3.0: {}
 
+  eventsource-parser@3.1.0: {}
+
   execa@8.0.1:
     dependencies:
       cross-spawn: 7.0.6
@@ -7490,6 +7607,8 @@ snapshots:
       - utf-8-validate
 
   jsesc@3.1.0: {}
+
+  json-schema@0.4.0: {}
 
   json5@2.2.3: {}
 
