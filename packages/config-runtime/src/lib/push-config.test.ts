@@ -90,6 +90,35 @@ describe("pushConfig", () => {
 		).toBe(true);
 	});
 
+	test("auth/dataApi changes carry no redundant details (target branch / derived db)", async () => {
+		const config = defineConfig({ auth: {}, dataApi: {} });
+
+		// Plan (dry-run) and live apply must agree on the trimmed shape: these are
+		// plain branch toggles, so the auto-derived database and the (constant)
+		// target branch are not surfaced as change "details".
+		const plan = await pushConfig(config, {
+			...seededFake(),
+			branchId: "br-main",
+			dryRun: true,
+		});
+		const applied = await pushConfig(config, {
+			...seededFake(),
+			branchId: "br-main",
+			updateExisting: true,
+		});
+
+		for (const result of [plan, applied]) {
+			const auth = result.applied.find((c) => c.identifier === "auth");
+			const dataApi = result.applied.find(
+				(c) => c.identifier === "dataApi",
+			);
+			expect(auth).toBeDefined();
+			expect(dataApi).toBeDefined();
+			expect(auth?.details).toBeUndefined();
+			expect(dataApi?.details).toBeUndefined();
+		}
+	});
+
 	test("reports mutable branch drift as conflict without updateExisting", async () => {
 		const { api, projectId } = seededFake();
 		const config = defineConfig({

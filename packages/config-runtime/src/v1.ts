@@ -46,6 +46,7 @@ export {
 	createRealNeonApi,
 	defineConfig,
 	ErrorCode,
+	isPlatformError,
 	loadConfigFromFile,
 	MissingContextError,
 	PlatformError,

@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { defineConfig } from "./define-config.js";
-import { ConfigLoadError } from "./errors.js";
+import { ConfigLoadError, isPlatformError } from "./errors.js";
 import type { Config } from "./types.js";
 
 /**
@@ -70,10 +70,20 @@ export async function loadConfigFromFile(
 	try {
 		mod = await importModule(resolvedPath);
 	} catch (cause) {
+		// `defineConfig()` runs at module-eval time, so a config the user got *wrong*
+		// (a bad function slug, an unknown key, an invalid duration, …) throws a
+		// PlatformError from inside this import. That error already pinpoints the exact
+		// field and reason, so surface it verbatim — burying it under the generic
+		// "this is usually a TypeScript syntax error" hint sent users hunting for a
+		// syntax bug that isn't there. The hint is reserved for genuine evaluation
+		// failures (syntax errors, missing deps, thrown runtime exceptions).
+		if (isPlatformError(cause)) {
+			throw cause;
+		}
 		throw new ConfigLoadError(
 			[
 				`Failed to evaluate ${resolvedPath}.`,
-				`Underlying error: ${(cause as Error)?.message ?? String(cause)}`,
+				`Underlying error: ${cause instanceof Error ? cause.message : String(cause)}`,
 				"This is usually a TypeScript syntax error, a missing dependency, or a runtime exception inside the config file. Run the file directly (e.g. `npx tsx neon.ts`) to reproduce.",
 			].join("\n"),
 			{ cause },

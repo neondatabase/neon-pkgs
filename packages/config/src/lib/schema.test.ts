@@ -58,6 +58,25 @@ describe("configInputSchema", () => {
 		expect(result.success).toBe(false);
 	});
 
+	test("surfaces the slug rule (not zod's generic message) for a bad function key", () => {
+		const result = configInputSchema.safeParse({
+			preview: {
+				functions: {
+					"hello-world": { name: "hello", source: "./x.ts" },
+				},
+			},
+		});
+		if (result.success) throw new Error("expected failure");
+		const formatted = formatZodIssues(result.error).join("\n");
+		// Points at the exact offending key…
+		expect(formatted).toContain("preview.functions.hello-world");
+		// …and explains *why* it is rejected, instead of zod's opaque default.
+		expect(formatted).toContain(
+			"function slug must be 1-20 lowercase letters and digits (no hyphens or other characters)",
+		);
+		expect(formatted).not.toContain("Invalid key in record");
+	});
+
 	test("rejects an unknown key inside preview", () => {
 		const result = configInputSchema.safeParse({
 			preview: { functions: {}, typo: true },

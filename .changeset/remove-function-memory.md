@@ -1,7 +1,7 @@
 ---
-"@neondatabase/config": major
-"@neondatabase/config-runtime": major
-"@neondatabase/env": major
+"@neondatabase/config": minor
+"@neondatabase/config-runtime": minor
+"@neondatabase/env": minor
 ---
 
 Remove the function `memoryMib` setting entirely.

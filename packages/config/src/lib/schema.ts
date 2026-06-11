@@ -254,9 +254,20 @@ function renderPath(path: ReadonlyArray<PropertyKey>): string {
 
 function normaliseIssueMessage(issue: z.core.$ZodIssue): string {
 	if (issue.code === "unrecognized_keys") {
-		const keys = (issue as z.core.$ZodIssueUnrecognizedKeys).keys ?? [];
+		const keys = issue.keys ?? [];
 		const formatted = keys.map((k) => JSON.stringify(k)).join(", ");
 		return `unknown key${keys.length === 1 ? "" : "s"}: ${formatted}`;
+	}
+	if (issue.code === "invalid_key") {
+		// A record *key* that fails its key schema (e.g. a bad function slug) surfaces in
+		// zod as a single `invalid_key` issue whose own `message` is the generic, useless
+		// "Invalid key in record". The actual reason — the function-slug regex rule, say —
+		// lives in the nested key-schema `issues`. Hoist those so the user sees *why* the
+		// key was rejected (the offending key itself is already in the issue `path`).
+		const reasons = issue.issues
+			.map((nested) => nested.message)
+			.filter((message) => message.length > 0);
+		if (reasons.length > 0) return reasons.join("; ");
 	}
 	return issue.message;
 }

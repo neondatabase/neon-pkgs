@@ -1,7 +1,7 @@
 ---
-"@neondatabase/config": major
-"@neondatabase/config-runtime": major
-"@neondatabase/env": major
+"@neondatabase/config": minor
+"@neondatabase/config-runtime": minor
+"@neondatabase/env": minor
 ---
 
 Reshape `defineConfig` into a static existential set + a tuning-only `branch` closure.

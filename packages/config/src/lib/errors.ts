@@ -72,6 +72,23 @@ export class PlatformError extends Error {
 }
 
 /**
+ * Structural check for a {@link PlatformError}.
+ *
+ * Prefer this over a bare `instanceof PlatformError` whenever the error may have crossed a
+ * module-realm boundary. A `neon.ts` loaded through jiti imports its *own* copy of this
+ * package, so a `PlatformError` thrown while evaluating it has a different class identity
+ * than ours and fails `instanceof` — but its stable string `code` (always prefixed
+ * `PLATFORM_`) survives the boundary intact, which is what we match on here.
+ */
+export function isPlatformError(value: unknown): value is PlatformError {
+	if (value instanceof PlatformError) return true;
+	if (typeof value !== "object" || value === null) return false;
+	if (!("code" in value)) return false;
+	const { code } = value;
+	return typeof code === "string" && code.startsWith("PLATFORM_");
+}
+
+/**
  * Append a "report-a-bug" footer to an error message. Used only on truly unreachable
  * internal errors — never on user-facing validation / configuration errors where the user
  * is supposed to fix something on their end.
