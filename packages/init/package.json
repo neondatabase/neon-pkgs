@@ -55,6 +55,7 @@
 		"add-mcp": "^1.5.1",
 		"execa": "^9.5.2",
 		"picocolors": "^1.1.1",
+		"yaml": "^2.9.0",
 		"yargs": "^18.0.0",
 		"yoctocolors": "^2.1.2"
 	},

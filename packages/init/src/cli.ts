@@ -110,6 +110,12 @@ const cli = yargs(hideBin(process.argv))
 					type: "boolean",
 					default: false,
 					description: "Skip the migrations phase.",
+				})
+				.option("preview", {
+					type: "boolean",
+					default: false,
+					description:
+						"Enable preview features (e.g. project bootstrapping from templates).",
 				}),
 		async (argv) => {
 			const detectedAgent = detectAgentInvocation();
@@ -125,13 +131,14 @@ const cli = yargs(hideBin(process.argv))
 					agent,
 					skipNeonAuth: argv.skipNeonAuth,
 					skipMigrations: argv.skipMigrations,
+					preview: argv.preview,
 				});
 				outputJson(result);
 				process.exit(0);
 			}
 
 			// v2 interactive mode — same phase logic, driven by terminal prompts
-			await interactiveInit();
+			await interactiveInit({ preview: argv.preview });
 			process.exit(0);
 		},
 	)
@@ -608,6 +615,21 @@ const cli = yargs(hideBin(process.argv))
 				scaffold: argv.scaffold as "prisma" | "drizzle" | undefined,
 				apply: argv.apply,
 			});
+			outputJson(result);
+			process.exit(0);
+		},
+	)
+
+	// -----------------------------------------------------------------------
+	// finalize (internal — called at the end of feature chains)
+	// -----------------------------------------------------------------------
+	.command(
+		"finalize",
+		false, // hidden from help
+		(y) => y.options(jsonOption).options(agentOption),
+		async () => {
+			const { handleCleanup } = await import("./lib/phases/cleanup.js");
+			const result = handleCleanup();
 			outputJson(result);
 			process.exit(0);
 		},

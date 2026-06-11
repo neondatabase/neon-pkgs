@@ -8,14 +8,18 @@ export interface GettingStartedPhaseOptions {
 	orm?: string;
 	migrationTool?: string;
 	migrationDir?: string;
+	/** Neon features required by the project (from .neon or template) */
+	features?: string[];
+	/** Preview mode — restricts project creation to new projects in AWS us-east */
+	preview?: boolean;
 }
 
 /**
  * Initiates the "Get started with Neon" workflow.
  *
- * Steps are concrete and executable — each has either an MCP tool to call,
- * a CLI command to run, or a specific file operation. The agent should
- * attempt each step in order and actually perform the action.
+ * Steps are concrete and executable — each has a CLI command to run
+ * or a specific file operation. The agent should attempt each step
+ * in order and actually perform the action using the neonctl CLI.
  */
 export async function handleGettingStartedPhase(
 	options: GettingStartedPhaseOptions,
@@ -27,72 +31,112 @@ export async function handleGettingStartedPhase(
 	const steps: { id: string; description: string; command?: string }[] = [];
 
 	if (!options.hasConnectionString) {
-		// Step 1: List organizations and let user choose
-		steps.push({
-			id: "select_org",
-			description: [
-				"List the user's Neon organizations.",
-				"Try using the Neon MCP tool `list_organizations` first.",
-				"If MCP is not available, use the CLI command below.",
-				"If only one org exists, use it automatically.",
-				"If multiple orgs exist, ask the user which one to use.",
-				"Remember the selected org ID for the next steps.",
-			].join(" "),
-			command: "CI= npx -y neonctl orgs list --output json",
-		});
+		if (options.preview) {
+			// Preview mode: new project in AWS us-east-2, or existing eligible project
+			steps.push(
+				{
+					id: "select_org",
+					description: [
+						"List the user's Neon organizations using the CLI command below.",
+						"If only one org exists, use it automatically.",
+						"If multiple orgs exist, ask the user which one to use.",
+						"Remember the selected org ID for the next steps.",
+					].join(" "),
+					command: "CI= npx -y neonctl orgs list --output json",
+				},
+				{
+					id: "select_or_create_project",
+					description: [
+						"List existing Neon projects in the selected organization using the CLI command below (replace <org-id> with the selected org ID).",
+						"IMPORTANT: Preview features require a project in the AWS us-east-2 region created on or after 2026-06-11.",
+						"Filter the project list to ONLY show projects where region_id is 'aws-us-east-2' AND created_at is on or after '2026-06-11'.",
+						"If eligible projects exist, present them alongside a 'Create new project' option.",
+						"If no eligible projects exist, tell the user and proceed directly to creating a new one.",
+						"IMPORTANT: Always include --org-id when creating a project to avoid interactive prompts.",
+					].join(" "),
+					command:
+						"CI= npx -y neonctl projects list --org-id <org-id> --output json",
+				},
+				{
+					id: "create_project_if_needed",
+					description: [
+						"If the user chose to create a new project, create it in the AWS us-east-2 region using the CLI command below (replace <org-id> and <project-name>).",
+						"Ask the user for a project name (suggest the current directory name).",
+						"If the user chose an existing eligible project, skip this step.",
+					].join(" "),
+					command:
+						"CI= npx -y neonctl projects create --name <project-name> --org-id <org-id> --region-id aws-us-east-2 --output json",
+				},
+			);
+		} else {
+			// Standard mode: let user choose existing or create new
+			steps.push(
+				{
+					id: "select_org",
+					description: [
+						"List the user's Neon organizations using the CLI command below.",
+						"If only one org exists, use it automatically.",
+						"If multiple orgs exist, ask the user which one to use.",
+						"Remember the selected org ID for the next steps.",
+					].join(" "),
+					command: "CI= npx -y neonctl orgs list --output json",
+				},
+				{
+					id: "select_or_create_project",
+					description: [
+						"List existing Neon projects in the selected organization using the CLI command below (replace <org-id> with the selected org ID).",
+						"Ask the user whether they want to use an existing project or create a new one.",
+						"If creating new, ask the user for a project name (suggest the current directory name).",
+						"IMPORTANT: Always include --org-id when creating a project to avoid interactive prompts.",
+					].join(" "),
+					command:
+						"CI= npx -y neonctl projects list --org-id <org-id> --output json",
+				},
+				{
+					id: "create_project_if_needed",
+					description: [
+						"If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>).",
+						"If the user chose an existing project, skip this step.",
+					].join(" "),
+					command:
+						"CI= npx -y neonctl projects create --name <project-name> --org-id <org-id> --output json",
+				},
+			);
+		}
 
-		// Step 2: List projects and let user choose or create new
-		steps.push({
-			id: "select_or_create_project",
-			description: [
-				"List existing Neon projects in the selected organization.",
-				"Try using the Neon MCP tool `list_projects` first.",
-				"If MCP is not available, use the CLI command below (replace <org-id> with the selected org ID).",
-				"Ask the user whether they want to use an existing project or create a new one.",
-				"If creating new, ask the user for a project name (suggest the current directory name).",
-				"IMPORTANT: Always include --org-id when creating a project to avoid interactive prompts.",
-			].join(" "),
-			command:
-				"CI= npx -y neonctl projects list --org-id <org-id> --output json",
-		});
-
-		// Step 3: Create project if needed (only if user chose to create new)
-		steps.push({
-			id: "create_project_if_needed",
-			description: [
-				"If the user chose to create a new project, create it now.",
-				"Try using the Neon MCP tool `create_project` first.",
-				"If MCP is not available, use the CLI command below (replace <org-id> and <project-name>).",
-				"If the user chose an existing project, skip this step.",
-			].join(" "),
-			command:
-				"CI= npx -y neonctl projects create --name <project-name> --org-id <org-id> --output json",
-		});
-
-		// Step 4: Create .neon context file
+		// Create/update .neon context file
 		steps.push({
 			id: "create_neon_context",
 			description: [
-				"Create a .neon context file in the project root with the selected org and project IDs.",
-				'The file is JSON with this format: {"orgId": "<org-id>", "projectId": "<project-id>"}',
-				"If a .neon file already exists, update only the fields that are missing or different. Do NOT overwrite fields the user may have customized (e.g. branch).",
+				"Update the .neon context file in the project root with the selected org and project IDs.",
+				"IMPORTANT: If a .neon file already exists, you MUST read it first, then merge the new orgId and projectId into the existing content. Do NOT overwrite the file — other fields (like _init, branch, etc.) must be preserved.",
+				"If no .neon file exists, create one.",
+				'The file is JSON. Add/update only the orgId and projectId fields: {"orgId": "<org-id>", "projectId": "<project-id>", ...existing fields}.',
 				"This file is safe to commit — it contains no secrets.",
 			].join(" "),
 		});
 
-		// Step 5: Get connection string and write to .env
+		// Install project dependencies (required before env pull — config files may import packages)
 		steps.push({
-			id: "set_connection_string",
+			id: "install_dependencies",
 			description: [
-				"Get the database connection string for the selected or newly created project.",
-				"Try using the Neon MCP tool `get_connection_string` first.",
-				"If MCP is not available, use the CLI command below.",
-				"Then write DATABASE_URL=<connection_string> to the .env file.",
-				"Create .env if it doesn't exist. Do NOT overwrite existing entries.",
-				"Ensure .env is listed in .gitignore.",
+				"Check if node_modules exists in the project root.",
+				"If not, install project dependencies using the appropriate package manager (check for pnpm-lock.yaml, yarn.lock, bun.lockb, or default to npm).",
+				"This must be done before `neonctl env pull` because the project's Neon config file may import packages that need to be installed first.",
 			].join(" "),
-			command:
-				"CI= npx -y neonctl connection-string --project-id <project-id>",
+			command: "npm install",
+		});
+
+		// Pull environment variables (connection string, etc.) from Neon
+		steps.push({
+			id: "pull_env",
+			description: [
+				"Now that the .neon context file is in place and dependencies are installed, run `neonctl env pull` to populate the project's environment variables.",
+				"This automatically writes the database connection string (and any other Neon-managed env vars) to the correct env file.",
+				"It reads the .neon context file to determine the project, and writes to the appropriate env file for the project.",
+				"Ensure the target env file is listed in .gitignore.",
+			].join(" "),
+			command: "CI= npx -y neonctl env pull",
 		});
 
 		// Step 6: Install Neon serverless driver if needed
@@ -124,19 +168,56 @@ export async function handleGettingStartedPhase(
 
 	// Run migrations if applicable
 	if (options.migrationTool && options.migrationTool !== "none") {
-		const migrationCommands: Record<string, string> = {
-			prisma: "npx prisma migrate deploy",
-			drizzle: "npx drizzle-kit migrate",
-			knex: "npx knex migrate:latest",
-		};
-		const cmd = migrationCommands[options.migrationTool.toLowerCase()];
-		if (cmd) {
+		const tool = options.migrationTool.toLowerCase();
+		const migrationDir = options.migrationDir;
+		const hasMigrationDir = migrationDir && migrationDir !== "none";
+
+		if (tool === "drizzle") {
 			steps.push({
 				id: "run_migrations",
-				description: `Apply existing ${options.migrationTool} migrations to the Neon database.`,
-				command: cmd,
+				description: [
+					hasMigrationDir
+						? `Check if the ${migrationDir} directory contains .sql migration files.`
+						: "Check if a drizzle migrations directory exists with .sql files.",
+					"If .sql files exist, apply them with `npx drizzle-kit migrate`.",
+					"If the directory is empty or missing but a drizzle schema file exists (e.g. src/db/schema.ts, drizzle/schema.ts), run `npx drizzle-kit generate` first to create migrations, then `npx drizzle-kit migrate` to apply them.",
+					"If neither schema nor migrations exist, skip this step.",
+				].join(" "),
+				command: "npx drizzle-kit migrate",
+			});
+		} else if (tool === "prisma") {
+			steps.push({
+				id: "run_migrations",
+				description: [
+					hasMigrationDir
+						? `Check if the ${migrationDir} directory contains migration folders.`
+						: "Check if prisma/migrations contains migration folders.",
+					"If migrations exist, apply them with `npx prisma migrate deploy`.",
+					"If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run `npx prisma migrate dev --name init` to create and apply the initial migration.",
+					"If no models are defined, skip this step.",
+				].join(" "),
+				command: "npx prisma migrate deploy",
+			});
+		} else if (tool === "knex") {
+			steps.push({
+				id: "run_migrations",
+				description: `Apply existing knex migrations to the Neon database.`,
+				command: "npx knex migrate:latest",
 			});
 		}
+	} else if (options.preview) {
+		// Bootstrap flow: migration tool wasn't detected because the project was
+		// inspected before scaffolding. Detect and run migrations from the scaffolded template.
+		steps.push({
+			id: "run_migrations",
+			description: [
+				"Check the scaffolded project for a migration tool and schema.",
+				"Look for: drizzle.config.ts/js (Drizzle), prisma/schema.prisma (Prisma), or knexfile.ts/js (Knex).",
+				"If Drizzle is found: check if a drizzle migrations directory exists with .sql files. If .sql files exist, run `npx drizzle-kit migrate`. If the directory is empty or missing but a schema file exists, run `npx drizzle-kit generate` first, then `npx drizzle-kit migrate`.",
+				"If Prisma is found: check if prisma/migrations contains migration folders. If yes, run `npx prisma migrate deploy`. If not but models exist, run `npx prisma migrate dev --name init`.",
+				"If no migration tool is found, skip this step.",
+			].join(" "),
+		});
 	}
 
 	// Verify the connection
@@ -144,9 +225,8 @@ export async function handleGettingStartedPhase(
 		id: "verify_connection",
 		description: [
 			"Verify the database connection works by running a SQL query against the Neon database.",
-			"Use the Neon MCP tool `run_sql` to query a table from the migration (if migrations were run), or run `SELECT 1` as a basic connectivity check.",
-			"If MCP is not available, write and run a short script that connects using DATABASE_URL from .env and executes the query.",
-			"Do NOT use the neonctl CLI for queries.",
+			"Write and run a short script that connects using DATABASE_URL from the project's env file and executes `SELECT 1` (or queries a table from the migration if migrations were run).",
+			"Do NOT use the neonctl CLI or MCP tools for this — use a direct database connection to verify end-to-end connectivity.",
 		].join(" "),
 	});
 
@@ -157,14 +237,31 @@ export async function handleGettingStartedPhase(
 			type: "agent_action",
 			prerequisite: SKILL_REFERENCE_URLS.gettingStarted,
 			steps,
-			onComplete: {
-				type: "run_neon_init",
-				args: [
-					"neon-auth",
-					"--json",
-					...(options.agent ? ["--agent", options.agent] : []),
-				],
-			},
+			onComplete: buildOnComplete(options),
 		},
+	};
+}
+
+function buildOnComplete(
+	options: GettingStartedPhaseOptions,
+): import("../types.js").RunNeonInitAction {
+	const agentArgs = options.agent ? ["--agent", options.agent] : [];
+	const features = options.features ?? [];
+	const hasFeatureRequirements = features.length > 0;
+
+	// If features are specified and auth is not required, go to finalize
+	if (hasFeatureRequirements && !features.includes("auth")) {
+		return {
+			type: "run_neon_init",
+			args: ["finalize", "--json", ...agentArgs],
+		};
+	}
+
+	// Chain to neon-auth — if user already selected auth via features, go straight to setup
+	const authSetup =
+		hasFeatureRequirements && features.includes("auth") ? ["--setup"] : [];
+	return {
+		type: "run_neon_init",
+		args: ["neon-auth", "--json", ...agentArgs, ...authSetup],
 	};
 }

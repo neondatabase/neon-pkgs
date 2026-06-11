@@ -4,7 +4,7 @@
  */
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, resolve } from "node:path";
+import { resolve } from "node:path";
 import {
 	confirm,
 	isCancel,
@@ -13,12 +13,17 @@ import {
 	outro,
 	select,
 	spinner,
-	text,
 } from "@clack/prompts";
 import { execa } from "execa";
 import { bold, dim } from "yoctocolors";
 import { ALL_CONFIGURABLE_AGENTS, getAddMcpAgentId } from "./lib/agents.js";
 import { ensureNeonctlAuth, isAuthenticated } from "./lib/auth.js";
+import {
+	type BootstrapTemplate,
+	FALLBACK_TEMPLATES,
+	fetchTemplates,
+	type NeonFeature,
+} from "./lib/bootstrap.js";
 import { detectAgent } from "./lib/detect-agent.js";
 import { detectAvailableEditors } from "./lib/editors.js";
 import {
@@ -74,16 +79,24 @@ function patchClackColors(): () => void {
 	};
 }
 
-export async function interactiveInit(): Promise<void> {
+export interface InteractiveInitOptions {
+	preview?: boolean;
+}
+
+export async function interactiveInit(
+	options: InteractiveInitOptions = {},
+): Promise<void> {
 	const restoreColors = patchClackColors();
 	try {
-		await interactiveInitInner();
+		await interactiveInitInner(options);
 	} finally {
 		restoreColors();
 	}
 }
 
-async function interactiveInitInner(): Promise<void> {
+async function interactiveInitInner(
+	options: InteractiveInitOptions,
+): Promise<void> {
 	console.log();
 	console.log(
 		"\x1b[38;2;75;181;120m" +
@@ -118,6 +131,7 @@ async function interactiveInitInner(): Promise<void> {
 	const inspectSpinner = spinner();
 	inspectSpinner.start("Checking existing configuration...");
 	const inspection = await inspectProject([
+		{ id: "has_app", description: "", lookFor: [] },
 		{ id: "mcp_server", description: "", lookFor: [] },
 		{ id: "skills", description: "", lookFor: [] },
 		{ id: "connection_string", description: "", lookFor: [] },
@@ -127,8 +141,117 @@ async function interactiveInitInner(): Promise<void> {
 	]);
 	inspectSpinner.stop(dim("Configuration checked ✓"));
 
+	const hasApp = inspection.hasApp === true;
+	let selectedFeatures: NeonFeature[] = [];
+	let selectedTemplate: BootstrapTemplate | null = null;
+
+	// Preview mode: bootstrap from template if no app detected
+	if (options.preview && !hasApp) {
+		let templates = FALLBACK_TEMPLATES;
+		try {
+			const fetched = await fetchTemplates();
+			if (fetched && fetched.length > 0) templates = fetched;
+		} catch {}
+
+		const templateResult = await select({
+			message:
+				"No application detected. Would you like to scaffold a new project from a template?",
+			options: [
+				...templates.map((t) => ({
+					value: t.id,
+					label: t.title,
+					hint: t.description,
+				})),
+				{
+					value: "none",
+					label: "No thanks — continue without scaffolding",
+				},
+			],
+			initialValue: templates[0]?.id ?? "none",
+		});
+		if (isCancel(templateResult)) {
+			outro("Setup cancelled.");
+			return;
+		}
+		if (templateResult !== "none") {
+			selectedTemplate =
+				templates.find((t) => t.id === templateResult) ?? null;
+			if (selectedTemplate) {
+				selectedFeatures = selectedTemplate.requires;
+				const bootstrapS = spinner();
+				bootstrapS.start(
+					`Scaffolding project from template "${selectedTemplate.title}"...`,
+				);
+				try {
+					await execa(
+						"npx",
+						[
+							"neonctl",
+							"bootstrap",
+							".",
+							"--template",
+							selectedTemplate.id,
+							"--force",
+						],
+						{ stdio: "pipe", timeout: 120000 },
+					);
+					bootstrapS.stop(
+						dim(
+							`Scaffolded project from "${selectedTemplate.title}" ✓`,
+						),
+					);
+				} catch (err) {
+					const msg =
+						err instanceof Error ? err.message : "Unknown error";
+					bootstrapS.stop("Failed to scaffold project");
+					log.error(msg);
+					outro("Setup failed.");
+					return;
+				}
+			}
+		}
+	}
+
+	// For brownfield flows (existing app), ask which features to enable
+	if (!selectedTemplate && hasApp) {
+		const featuresResult = await select({
+			message:
+				"Which Neon features would you like to enable for this project?",
+			options: [
+				{ value: "database", label: "Database" },
+				{
+					value: "database,auth",
+					label: "Database + Neon Auth (adds authentication via Neon)",
+				},
+			],
+			initialValue: "database",
+		});
+		if (isCancel(featuresResult)) {
+			outro("Setup cancelled.");
+			return;
+		}
+		selectedFeatures = (featuresResult as string).split(
+			",",
+		) as NeonFeature[];
+	}
+
+	// Write _init metadata to .neon
+	if (selectedFeatures.length > 0) {
+		const neonPath = resolve(process.cwd(), ".neon");
+		let existing: Record<string, unknown> = {};
+		if (existsSync(neonPath)) {
+			try {
+				existing = JSON.parse(readFileSync(neonPath, "utf-8"));
+			} catch {}
+		}
+		existing._init = { features: selectedFeatures };
+		writeFileSync(neonPath, `${JSON.stringify(existing, null, 2)}\n`);
+	}
+
 	const mcpAlready = inspection.mcpConfigured === true;
-	const skillsAlready = inspection.skillsInstalled === true;
+	// If we bootstrapped, skills come from the template
+	const skillsAlready =
+		inspection.skillsInstalled === true || selectedTemplate !== null;
 	const hasNeonConnection = inspection.connectionString === true;
 	const needsMcp = !mcpAlready;
 	const needsSkills = !skillsAlready;
@@ -505,80 +628,39 @@ async function interactiveInitInner(): Promise<void> {
 	}
 
 	// -----------------------------------------------------------------------
-	// Auth check (needed even if tooling is already installed)
-	// -----------------------------------------------------------------------
-	const authed = await isAuthenticated();
-	if (!authed) {
-		const authS = spinner();
-		authS.start("Authenticating with Neon...");
-		const authSuccess = await ensureNeonctlAuth();
-		if (!authSuccess) {
-			authS.stop("Authentication failed.");
-			outro("Run neon-init again after signing in.");
-			return;
-		}
-		authS.stop("Authenticated.");
-	}
-
-	// -----------------------------------------------------------------------
-	// Step 6: Collect org/project context for the get-started prompt
-	// -----------------------------------------------------------------------
-	let orgName: string | null = null;
-	let orgId: string | null = null;
-	let projectName: string | null = null;
-	let projectId: string | null = null;
-
-	const collected = await collectProjectContext();
-	if (collected === "cancelled") {
-		outro(dim("Setup cancelled."));
-		return;
-	}
-	if (collected === "no_orgs") {
-		outro(dim("Run neon-init again after creating an organization."));
-		return;
-	}
-	if (collected) {
-		orgName = collected.orgName;
-		orgId = collected.orgId;
-		projectName = collected.projectName;
-		projectId = collected.projectId;
-	}
-
-	// Write .neon context file if we have org/project info
-	if (orgId || projectId) {
-		writeNeonContext({ orgId, projectId });
-	}
-
-	// -----------------------------------------------------------------------
-	// Step 7: Done — build enhanced get-started prompt
+	// Step 6: Done — build prompt for the agent to continue
 	// -----------------------------------------------------------------------
 
-	// Build multi-line prompt for the user to paste
-	const promptLines: string[] = ["Get started with Neon."];
-	if (projectId && orgName && orgId) {
+	// Build the getting-started data payload (same as agent mode)
+	const gettingStartedData: Record<string, unknown> = {};
+	if (hasNeonConnection) gettingStartedData.hasConnectionString = true;
+	if (inspection.framework && inspection.framework !== "none")
+		gettingStartedData.framework = inspection.framework;
+	if (inspection.orm && inspection.orm !== "none")
+		gettingStartedData.orm = inspection.orm;
+	if (inspection.migrationTool && inspection.migrationTool !== "none")
+		gettingStartedData.migrationTool = inspection.migrationTool;
+	if (inspection.migrationDir && inspection.migrationDir !== "none")
+		gettingStartedData.migrationDir = inspection.migrationDir;
+	if (selectedFeatures.length > 0)
+		gettingStartedData.features = selectedFeatures;
+	if (options.preview) gettingStartedData.preview = true;
+
+	const dataJson = JSON.stringify(gettingStartedData);
+
+	// Build a natural-language prompt for the user to paste into their agent
+	const promptLines: string[] = [
+		"Continue setting up Neon for this project.",
+		`Run this command to proceed: neon-init getting-started --json --data '${dataJson}'`,
+		"Follow the steps it returns to connect a Neon database, pull environment variables, and verify the connection.",
+	];
+	if (selectedFeatures.includes("auth")) {
 		promptLines.push(
-			`Use project "${projectName}" (${projectId}) in org ${orgName} (${orgId}).`,
+			"After the database is connected, it will automatically set up Neon Auth.",
 		);
-	} else if (orgId && orgName) {
-		promptLines.push(`Use org ${orgName} (${orgId}).`);
-	}
-	const stackParts: string[] = [];
-	if (inspection.framework && inspection.framework !== "none") {
-		stackParts.push(inspection.framework as string);
-	}
-	if (inspection.orm && inspection.orm !== "none") {
-		if (stackParts.length > 0) {
-			promptLines.push(
-				`This is a ${stackParts[0]} app that uses ${inspection.orm}.`,
-			);
-		} else {
-			promptLines.push(`This app uses ${inspection.orm}.`);
-		}
-	} else if (stackParts.length > 0) {
-		promptLines.push(`This is a ${stackParts[0]} app.`);
 	}
 
-	log.step(`Next steps`);
+	log.step("Next steps");
 	log.message(
 		dim(
 			`Restart ${editorList} to load the Neon MCP server, then copy the following into your agent chat:`,
@@ -586,210 +668,6 @@ async function interactiveInitInner(): Promise<void> {
 	);
 	log.message(promptLines.map((line) => bold(neonGreenFn(line))).join("\n"));
 	outro(dim("Have feedback? Email us at feedback@neon.tech"));
-}
-
-// ---------------------------------------------------------------------------
-// Collect org/project context to enhance the get-started prompt
-// ---------------------------------------------------------------------------
-
-interface ProjectContext {
-	orgId: string;
-	orgName: string;
-	projectId: string | null;
-	projectName: string | null;
-}
-
-async function collectProjectContext(): Promise<
-	ProjectContext | "cancelled" | "no_orgs" | null
-> {
-	let orgs: { id: string; name: string }[];
-	const orgSpinner = spinner();
-	orgSpinner.start("Loading organizations...");
-	try {
-		const result = await execa(
-			"npx",
-			["-y", "neonctl", "orgs", "list", "--output", "json"],
-			{
-				stdio: "pipe",
-				timeout: 60000,
-				env: { ...process.env, CI: undefined },
-			},
-		);
-		orgs = JSON.parse(result.stdout);
-		orgSpinner.stop(dim("Organizations loaded ✓"));
-	} catch {
-		orgSpinner.stop("Failed to load organizations.");
-		return null;
-	}
-
-	if (orgs.length === 0) {
-		log.warn(
-			"No Neon organizations found for this account. Visit https://console.neon.tech to create an organization, then run neon-init again.",
-		);
-		return "no_orgs";
-	}
-
-	// Select org
-	let orgId: string;
-	let orgName: string;
-	if (orgs.length === 1) {
-		orgId = orgs[0].id;
-		orgName = orgs[0].name;
-	} else {
-		const orgResult = await select({
-			message: "Which organization?",
-			options: orgs.map((o) => ({ value: o.id, label: o.name })),
-		});
-		if (isCancel(orgResult)) return "cancelled";
-		orgId = orgResult as string;
-		orgName = orgs.find((o) => o.id === orgId)?.name ?? orgId;
-	}
-
-	// List existing projects
-	let projects: { id: string; name: string }[];
-	const projSpinner = spinner();
-	projSpinner.start("Loading projects...");
-	try {
-		const result = await execa(
-			"npx",
-			[
-				"-y",
-				"neonctl",
-				"projects",
-				"list",
-				"--org-id",
-				orgId,
-				"--output",
-				"json",
-			],
-			{
-				stdio: "pipe",
-				timeout: 60000,
-				env: { ...process.env, CI: undefined },
-			},
-		);
-		projects = JSON.parse(result.stdout);
-		projSpinner.stop(dim("Projects loaded ✓"));
-	} catch {
-		projSpinner.stop("Failed to load projects.");
-		return { orgId, orgName, projectId: null, projectName: null };
-	}
-
-	// Choose existing or create new
-	const projectOptions: { value: string; label: string; hint?: string }[] = [
-		{
-			value: "__new__",
-			label: "Create a new project",
-			hint: "the agent will create it",
-		},
-		...projects.map((p) => ({ value: p.id, label: p.name, hint: p.id })),
-	];
-
-	const projectResult = await select({
-		message: "Which Neon project should the agent use?",
-		options: projectOptions,
-	});
-	if (isCancel(projectResult)) return "cancelled";
-
-	if (projectResult === "__new__") {
-		const dirName = basename(process.cwd());
-		const nameResult = await text({
-			message: "What should the new project be called?",
-			defaultValue: dirName,
-			placeholder: dirName,
-		});
-		if (isCancel(nameResult)) return "cancelled";
-
-		const projectName = nameResult as string;
-
-		// Create the project now so we have the ID for .neon
-		const cs = spinner();
-		cs.start(`Creating project "${projectName}"...`);
-		try {
-			const result = await execa(
-				"npx",
-				[
-					"-y",
-					"neonctl",
-					"projects",
-					"create",
-					"--name",
-					projectName,
-					"--org-id",
-					orgId,
-					"--output",
-					"json",
-				],
-				{
-					stdio: "pipe",
-					timeout: 30000,
-					env: { ...process.env, CI: undefined },
-				},
-			);
-			const created = JSON.parse(result.stdout);
-			const projectId = created.project?.id ?? created.id;
-			cs.stop(dim(`Project "${projectName}" created (${projectId}) ✓`));
-			return { orgId, orgName, projectId, projectName };
-		} catch (err) {
-			const msg = err instanceof Error ? err.message : "Unknown error";
-			cs.stop(`Failed to create project`);
-			log.error(msg);
-			return { orgId, orgName, projectId: null, projectName };
-		}
-	}
-
-	const selectedProject = projects.find((p) => p.id === projectResult);
-	return {
-		orgId,
-		orgName,
-		projectId: projectResult as string,
-		projectName: selectedProject?.name ?? null,
-	};
-}
-
-// ---------------------------------------------------------------------------
-// Maps detectAgent() IDs to Editor types
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// .neon context file
-// ---------------------------------------------------------------------------
-
-function writeNeonContext(context: {
-	orgId: string | null;
-	projectId: string | null;
-}): void {
-	const neonPath = resolve(process.cwd(), ".neon");
-
-	let existing: Record<string, unknown> = {};
-	if (existsSync(neonPath)) {
-		try {
-			existing = JSON.parse(readFileSync(neonPath, "utf-8"));
-		} catch {
-			// Malformed file — we'll overwrite it
-		}
-	}
-
-	// Only set fields we have values for; preserve existing fields (e.g. branch)
-	const updated = { ...existing };
-	if (context.orgId) updated.orgId = context.orgId;
-	if (context.projectId) updated.projectId = context.projectId;
-
-	// Check if anything actually changed
-	const existingJson = JSON.stringify(existing, null, 2);
-	const updatedJson = JSON.stringify(updated, null, 2);
-	if (existingJson === updatedJson) {
-		return;
-	}
-
-	writeFileSync(neonPath, `${updatedJson}\n`);
-	if (Object.keys(existing).length > 0) {
-		log.step(dim("Updated .neon context file ✓"));
-	} else {
-		log.step(
-			dim("Created .neon context file (safe to commit — no secrets) ✓"),
-		);
-	}
 }
 
 function agentIdToEditor(agentId: string): Editor | null {

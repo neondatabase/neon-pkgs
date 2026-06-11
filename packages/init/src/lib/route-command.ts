@@ -75,6 +75,11 @@ export async function routeCommand(args: string[]): Promise<PhaseResponse> {
 	const agent = resolveAgent(parsed.agent as string | undefined);
 
 	switch (command) {
+		case "finalize": {
+			const { handleCleanup } = await import("./phases/cleanup.js");
+			return handleCleanup();
+		}
+
 		case "auth": {
 			const { handleAuthPhase } = await import("./phases/auth.js");
 			return handleAuthPhase({
@@ -229,6 +234,7 @@ export async function routeCommand(args: string[]): Promise<PhaseResponse> {
 				agent,
 				skipNeonAuth: parsed.skipNeonAuth === true,
 				skipMigrations: parsed.skipMigrations === true,
+				preview: parsed.preview === true,
 			});
 		}
 	}
