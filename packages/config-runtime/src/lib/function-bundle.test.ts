@@ -49,6 +49,8 @@ describe("buildFunctionBundle", () => {
 		// The bundled output should have inlined the imported constant.
 		const js = new TextDecoder().decode(files["index.mjs"]);
 		expect(js).toContain("hello from neon");
+		// The ESM↔CJS interop banner is prepended so bundled CommonJS deps can `require(...)`.
+		expect(js).toContain("createRequire");
 	});
 
 	test("throws a PlatformError when the source cannot be resolved", async () => {
