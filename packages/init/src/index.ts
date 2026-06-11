@@ -12,6 +12,8 @@ import {
 } from "./lib/skills.js";
 import type { Editor, InitResult } from "./lib/types.js";
 
+export type { InteractiveInitOptions } from "./interactive.js";
+export { interactiveInit } from "./interactive.js";
 export { handleAuthPhase } from "./lib/phases/auth.js";
 export { handleDbPhase } from "./lib/phases/db.js";
 export { handleMcpPhase } from "./lib/phases/mcp.js";
