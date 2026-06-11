@@ -451,8 +451,9 @@ describe("branch storage + AI Gateway (Preview)", () => {
 		// AI Gateway needs no S3 connection info.
 		expect(callsTo(api, "getProjectBranchStorage")).toBe(0);
 		expect(env.aiGateway.apiKey).toMatch(/^nt_live_/);
+		// Branch-scoped gateway host derived from the branch connection URI, NOT the API origin.
 		expect(env.aiGateway.baseUrl).toBe(
-			"https://console-stage.neon.build/ai-gateway/openai/v1",
+			"https://br-main-api.ai.aws-us-east-1.fake.neon.tech/ai-gateway/openai/v1",
 		);
 		expect("storage" in env).toBe(false);
 	});
@@ -596,7 +597,7 @@ describe("branch storage + AI Gateway (Preview)", () => {
 		expect("aiGateway" in env).toBe(false);
 	});
 
-	test("toEntries projects storage to AWS_* (+ NEON_STORAGE_*) and aiGateway to OPENAI_*", () => {
+	test("toEntries projects storage to AWS_* (+ NEON_STORAGE_*) and aiGateway to OPENAI_* (+ NEON_AI_GATEWAY_*)", () => {
 		const config = defineConfig({
 			preview: { buckets: { uploads: {} }, aiGateway: true },
 		});
@@ -624,6 +625,11 @@ describe("branch storage + AI Gateway (Preview)", () => {
 		expect(pairs.OPENAI_API_KEY).toBe("nt_live_x_y");
 		expect(pairs.OPENAI_BASE_URL).toBe(
 			"https://x.neon.build/ai-gateway/openai/v1",
+		);
+		// Neon-branded aliases: same token, provider-neutral base (no OpenAI-dialect suffix).
+		expect(pairs.NEON_AI_GATEWAY_TOKEN).toBe("nt_live_x_y");
+		expect(pairs.NEON_AI_GATEWAY_BASE_URL).toBe(
+			"https://x.neon.build/ai-gateway",
 		);
 	});
 });

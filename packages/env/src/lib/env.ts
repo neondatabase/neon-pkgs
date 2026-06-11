@@ -73,18 +73,23 @@ export const NEON_ENV_VAR_KEYS = {
 	},
 	/**
 	 * AI Gateway (Preview). Mapped onto the OpenAI SDK's standard env vars so the OpenAI
-	 * clients work from env alone; `baseUrl` already carries the gateway's OpenAI-dialect route
-	 * prefix (`/ai-gateway/openai/v1`).
+	 * clients work from env alone; `baseUrl` carries the gateway's OpenAI-dialect route prefix
+	 * (`/ai-gateway/openai/v1`). The `NEON_AI_GATEWAY_*` aliases are also emitted: `neonToken`
+	 * mirrors the OpenAI key, and `neonBaseUrl` is the provider-neutral gateway root
+	 * (`/ai-gateway`) for hitting the anthropic / gemini / mlflow routes directly.
 	 */
 	aiGateway: {
 		apiKey: "OPENAI_API_KEY",
 		baseUrl: "OPENAI_BASE_URL",
+		neonToken: "NEON_AI_GATEWAY_TOKEN",
+		neonBaseUrl: "NEON_AI_GATEWAY_BASE_URL",
 	},
 } as const;
 
-/** Route prefix appended to the Neon API origin to form the AI Gateway's OpenAI-dialect base URL. */
+/** OpenAI-dialect route prefix on the branch AI Gateway host. */
 const AI_GATEWAY_OPENAI_PATH = "/ai-gateway/openai/v1";
-const DEFAULT_NEON_API_HOST = "https://console.neon.tech/api/v2";
+/** Provider-neutral gateway root (append `/openai/v1/responses`, `/anthropic/v1/messages`, …). */
+const AI_GATEWAY_BASE_PATH = "/ai-gateway";
 
 /** Per-namespace inner shapes. Exposed so consumers can name the parts independently. */
 export interface NeonPostgresEnv {
@@ -144,8 +149,9 @@ export interface NeonStorageEnv {
 /**
  * AI Gateway access for the branch (Preview). Present on `NeonEnv` only when the policy
  * enables `preview.aiGateway`. `apiKey` is the minted credential's bearer (`api_token`);
- * `baseUrl` is the gateway's OpenAI-dialect endpoint (Neon API origin + `/ai-gateway/openai/v1`).
- * Projects to the OpenAI SDK's standard env (`OPENAI_API_KEY`, `OPENAI_BASE_URL`).
+ * `baseUrl` is the gateway's OpenAI-dialect endpoint on the branch-scoped gateway host
+ * (`https://<branchId>-api.ai.<region>.…/ai-gateway/openai/v1`). Projects to the OpenAI SDK's
+ * standard env (`OPENAI_API_KEY`, `OPENAI_BASE_URL`), plus the `NEON_AI_GATEWAY_*` aliases.
  */
 export interface NeonAiGatewayEnv {
 	apiKey: string;
@@ -506,7 +512,9 @@ export async function fetchEnv<const C extends Config>(
 		if (wantsAiGateway) {
 			result.aiGateway = {
 				apiKey: secrets.apiToken,
-				baseUrl: aiGatewayBaseUrl(options.apiHost),
+				// Branch-scoped gateway host derived from the branch's connection URI — not the
+				// control-plane API origin (which doesn't serve the gateway).
+				baseUrl: aiGatewayBaseUrl(branch.id, unpooled.uri),
 			} satisfies NeonAiGatewayEnv;
 		}
 	}
@@ -588,19 +596,32 @@ async function resolveCredentialSecrets(args: {
 }
 
 /**
- * Build the AI Gateway's OpenAI-dialect base URL (`OPENAI_BASE_URL`) from the Neon API host's
- * origin plus the gateway route prefix. The host is resolved the same way the API client is:
- * explicit `apiHost` option → `NEON_API_HOST` env → production default.
+ * The AI Gateway is a **branch-scoped host** — `<branchId>-api.ai.<region-suffix>` — NOT the
+ * control-plane API origin. Derive the `<region>.<cloud>.neon.<tld>` suffix from the branch's
+ * own Postgres connection host (e.g. a connection host of `ep-x.us-east-2.aws.neon.build`
+ * yields the gateway host `<branchId>-api.ai.us-east-2.aws.neon.build`). Any infra cell prefix
+ * (`c-N.`) on the connection host is dropped — the gateway resolves with or without it.
  */
-function aiGatewayBaseUrl(apiHost: string | undefined): string {
-	const host = apiHost ?? process.env.NEON_API_HOST ?? DEFAULT_NEON_API_HOST;
-	let origin: string;
+function aiGatewayHost(branchId: string, connectionUri: string): string {
+	let connectionHost = "";
 	try {
-		origin = new URL(host).origin;
+		connectionHost = new URL(connectionUri).hostname;
 	} catch {
-		origin = new URL(DEFAULT_NEON_API_HOST).origin;
+		connectionHost = "";
 	}
-	return `${origin}${AI_GATEWAY_OPENAI_PATH}`;
+	// Drop the endpoint label (first segment, e.g. `ep-x` / `ep-x-pooler`) and any infra cell
+	// prefix (`c-N.`), keeping `<region>.<cloud>.neon.<tld>`.
+	const suffix = connectionHost
+		.split(".")
+		.slice(1)
+		.join(".")
+		.replace(/^c-\d+\./, "");
+	return `${branchId}-api.ai.${suffix}`;
+}
+
+/** The AI Gateway's OpenAI-dialect base URL (`OPENAI_BASE_URL`) on the branch gateway host. */
+function aiGatewayBaseUrl(branchId: string, connectionUri: string): string {
+	return `https://${aiGatewayHost(branchId, connectionUri)}${AI_GATEWAY_OPENAI_PATH}`;
 }
 
 /**
@@ -1078,8 +1099,16 @@ export function toEntries(env: NeonEnv<Config>): Record<string, string> {
 	const withAiGateway = env as { aiGateway?: NeonAiGatewayEnv };
 	if (withAiGateway.aiGateway) {
 		const keys = NEON_ENV_VAR_KEYS.aiGateway;
-		out[keys.apiKey] = withAiGateway.aiGateway.apiKey;
-		out[keys.baseUrl] = withAiGateway.aiGateway.baseUrl;
+		const ai = withAiGateway.aiGateway;
+		out[keys.apiKey] = ai.apiKey;
+		out[keys.baseUrl] = ai.baseUrl;
+		// Neon-branded aliases: the same bearer, plus the provider-neutral gateway root
+		// (drop the OpenAI-dialect suffix) for the anthropic / gemini / mlflow routes.
+		out[keys.neonToken] = ai.apiKey;
+		out[keys.neonBaseUrl] = ai.baseUrl.replace(
+			AI_GATEWAY_OPENAI_PATH,
+			AI_GATEWAY_BASE_PATH,
+		);
 	}
 	return out;
 }
