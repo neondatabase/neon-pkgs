@@ -266,6 +266,18 @@ export async function pushConfig(
 		applied.push(change);
 	}
 
+	// Surface each deployed function's invocation URL on its applied change so callers
+	// (e.g. neonctl) can show users where to call it right after a push.
+	await enrichFunctionInvocationUrls({
+		api,
+		projectId: remoteProject.id,
+		branchId: branch.id,
+		plan: diff.plan,
+		applied,
+		preview: remote.preview,
+		dryRun,
+	});
+
 	const result: PushResult = {
 		projectId: remoteProject.id,
 		branchId: branch.id,
@@ -611,4 +623,69 @@ async function applyStep(
 			};
 		}
 	}
+}
+
+/**
+ * Add each deployed function's invocation URL to its applied-change `details` so callers
+ * (e.g. neonctl) can show users where to call the function right after a push.
+ *
+ * The URL is read from the preview snapshot already fetched for the diff, which lists every
+ * existing function with its `invocationUrl`. A function created by its *first* deployment in
+ * this push is not in that snapshot, so when one is present we re-list the branch's functions
+ * once to learn its freshly-minted URL. Skipped on dry-run (nothing was created) and
+ * best-effort otherwise: a failed re-list omits the URL rather than failing a push that has
+ * already applied.
+ */
+async function enrichFunctionInvocationUrls(args: {
+	api: NeonApi;
+	projectId: string;
+	branchId: string;
+	plan: PlanStep[];
+	applied: AppliedChange[];
+	preview: RemotePreviewState | undefined;
+	dryRun: boolean;
+}): Promise<void> {
+	const { api, projectId, branchId, plan, applied, preview, dryRun } = args;
+	const deployedSlugs = plan.flatMap((step) =>
+		step.kind === "deploy-function" ? [step.fn.slug] : [],
+	);
+	if (deployedSlugs.length === 0) return;
+
+	const urlBySlug = new Map<string, string>(
+		(preview?.functions ?? []).map(
+			(fn) => [fn.slug, fn.invocationUrl] as const,
+		),
+	);
+
+	// A first-time deploy creates the function, so its URL isn't in the pre-fetch; re-list
+	// once when any deployed slug is still missing a URL.
+	const hasMissingUrl = deployedSlugs.some((slug) => !urlBySlug.has(slug));
+	if (hasMissingUrl && !dryRun) {
+		try {
+			for (const fn of await api.listBranchFunctions(
+				projectId,
+				branchId,
+			)) {
+				urlBySlug.set(fn.slug, fn.invocationUrl);
+			}
+		} catch {
+			// Push already succeeded; surface what we can rather than failing here.
+		}
+	}
+
+	for (const change of applied) {
+		const slug = functionSlugFromIdentifier(change.identifier);
+		if (slug === undefined) continue;
+		const invocationUrl = urlBySlug.get(slug);
+		if (invocationUrl === undefined) continue;
+		change.details = { ...change.details, invocationUrl };
+	}
+}
+
+/** Pull the function slug out of a `function:<slug>` applied-change identifier. */
+function functionSlugFromIdentifier(identifier: string): string | undefined {
+	const prefix = "function:";
+	return identifier.startsWith(prefix)
+		? identifier.slice(prefix.length)
+		: undefined;
 }

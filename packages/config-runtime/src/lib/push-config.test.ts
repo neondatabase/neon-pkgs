@@ -453,6 +453,61 @@ describe("pushConfig", () => {
 		expect(functions.map((f) => f.slug)).toEqual(["fn1"]);
 	});
 
+	test("surfaces a first-deployed function's invocation URL in the applied details", async () => {
+		const { api, projectId } = seededFake();
+		const config = defineConfig({
+			preview: {
+				functions: { fn1: { name: "Hello World", source: fnSource } },
+			},
+		});
+
+		const result = await pushConfig(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+
+		const change = result.applied.find(
+			(c) => c.identifier === "function:fn1",
+		);
+		// The function is created on its first deploy, so its URL is not in the pre-fetched
+		// preview snapshot; pushConfig re-lists the branch's functions to learn it.
+		expect(change?.details?.invocationUrl).toBe(
+			"https://br-main.fake.neon.tech/functions/fn1",
+		);
+	});
+
+	test("reuses the pre-fetched URL for an existing function (no redundant re-list)", async () => {
+		const { api, projectId } = seededFake();
+		api.seedFunction(projectId, "br-main", {
+			id: "fn-existing",
+			slug: "fn1",
+			name: "Hello World",
+			invocationUrl: "https://x/functions/fn1",
+		});
+		const config = defineConfig({
+			preview: {
+				functions: { fn1: { name: "Hello World", source: fnSource } },
+			},
+		});
+
+		const result = await pushConfig(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+
+		const change = result.applied.find(
+			(c) => c.identifier === "function:fn1",
+		);
+		expect(change?.details?.invocationUrl).toBe("https://x/functions/fn1");
+		// The diff already fetched the function list, so the URL is known without a second
+		// read: exactly one `listBranchFunctions` call (the pre-fetch).
+		expect(
+			api.history.filter((h) => h.method === "listBranchFunctions"),
+		).toHaveLength(1);
+	});
+
 	test("dryRun plans preview steps without mutating", async () => {
 		const { api, projectId } = seededFake();
 		const config = defineConfig({
