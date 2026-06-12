@@ -123,7 +123,6 @@ async function interactiveInitInner(
 	const detectedEditor = detectedAgentId
 		? agentIdToEditor(detectedAgentId)
 		: null;
-	let editorList = detectedEditor ?? "your editor";
 
 	// -----------------------------------------------------------------------
 	// Step 1: Inspect what's already in place
@@ -623,8 +622,6 @@ async function interactiveInitInner(
 				}
 			}
 		}
-
-		editorList = selectedEditors.join(", ");
 	}
 
 	// -----------------------------------------------------------------------
@@ -648,25 +645,21 @@ async function interactiveInitInner(
 
 	const dataJson = JSON.stringify(gettingStartedData);
 
-	// Build a natural-language prompt for the user to paste into their agent
-	const promptLines: string[] = [
-		"Continue setting up Neon for this project.",
-		`Run this command to proceed: neon-init getting-started --json --data '${dataJson}'`,
-		"Follow the steps it returns to connect a Neon database, pull environment variables, and verify the connection.",
-	];
-	if (selectedFeatures.includes("auth")) {
-		promptLines.push(
-			"After the database is connected, it will automatically set up Neon Auth.",
-		);
-	}
+	// Build a prompt for the user to paste into their agent chat
+	const apiHost = process.env.NEON_API_HOST;
+	const envPrefix = apiHost ? `NEON_API_HOST=${apiHost} ` : "";
+	const cmd = `${envPrefix}neon-init getting-started --json --data '${dataJson}'`;
+	const cols = process.stdout.columns || 80;
+	const promptText = `To finish setting up Neon using Neon's agent-guided onboarding experience, have your agent run this shell command: ${cmd}`;
 
 	log.step("Next steps");
+	log.message(dim("Copy the following into your agent chat:"));
 	log.message(
-		dim(
-			`Restart ${editorList} to load the Neon MCP server, then copy the following into your agent chat:`,
-		),
+		wordWrap(promptText, cols)
+			.split("\n")
+			.map((line) => bold(neonGreenFn(line)))
+			.join("\n"),
 	);
-	log.message(promptLines.map((line) => bold(neonGreenFn(line))).join("\n"));
 	outro(dim("Have feedback? Email us at feedback@neon.tech"));
 }
 
