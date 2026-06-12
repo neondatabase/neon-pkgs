@@ -95,6 +95,14 @@ describe("FALLBACK_TEMPLATES", () => {
 		expect(FALLBACK_TEMPLATES.length).toBeGreaterThan(0);
 	});
 
+	test("offers the full starter set, not just one template", () => {
+		expect(FALLBACK_TEMPLATES.map((t) => t.id)).toEqual([
+			"hono",
+			"ai-sdk",
+			"mastra",
+		]);
+	});
+
 	test("each template has required fields", () => {
 		for (const t of FALLBACK_TEMPLATES) {
 			expect(typeof t.id).toBe("string");
