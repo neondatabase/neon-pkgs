@@ -62,7 +62,7 @@ describe("diffConfig", () => {
 		});
 	});
 
-	test("plans preview deploy + bucket + ai-gateway when nothing exists", () => {
+	test("plans preview deploy + bucket when nothing exists (aiGateway is never provisioned)", () => {
 		const diff = diffConfig(
 			{
 				authEnabled: false,
@@ -78,6 +78,8 @@ describe("diffConfig", () => {
 						},
 					],
 					buckets: [{ name: "uploads", access: "private" }],
+					// aiGateway is always available (credential-gated), so even when the
+					// policy enables it the diff emits no provisioning step for it.
 					aiGatewayEnabled: true,
 				},
 			},
@@ -86,7 +88,6 @@ describe("diffConfig", () => {
 				preview: {
 					buckets: [],
 					functions: [],
-					aiGatewayEnabled: false,
 				},
 			},
 			{ updateExisting: false },
@@ -94,7 +95,6 @@ describe("diffConfig", () => {
 		expect(diff.plan.map((p) => p.kind)).toEqual([
 			"create-bucket",
 			"deploy-function",
-			"enable-ai-gateway",
 		]);
 		// A brand-new function is created by its first deployment, so the single
 		// deploy-function step is flagged as not-yet-existing.
@@ -102,7 +102,7 @@ describe("diffConfig", () => {
 		expect(deploy).toMatchObject({ functionExists: false });
 	});
 
-	test("skips enable-ai-gateway when already present, but still re-deploys an existing function", () => {
+	test("re-deploys an existing function and never plans an aiGateway step", () => {
 		const diff = diffConfig(
 			{
 				authEnabled: false,
@@ -133,7 +133,6 @@ describe("diffConfig", () => {
 							invocationUrl: "https://x/functions/fn1",
 						},
 					],
-					aiGatewayEnabled: true,
 				},
 			},
 			{ updateExisting: false },

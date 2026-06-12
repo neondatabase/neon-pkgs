@@ -68,8 +68,6 @@ export class FakeNeonApi implements NeonApi {
 	private readonly functions = new Map<string, NeonFunctionSnapshot[]>();
 	/** Monotonic per-function deployment counter, keyed by `${projectId}:${branchId}:${slug}`. */
 	private readonly functionDeployments = new Map<string, number>();
-	/** AI Gateway enabled set, keyed by `${projectId}:${branchId}`. */
-	private readonly aiGateway = new Set<string>();
 	/** Issued credentials (incl. secrets), keyed by `${projectId}:${branchId}`. */
 	private readonly credentials = new Map<
 		string,
@@ -675,39 +673,11 @@ export class FakeNeonApi implements NeonApi {
 	}
 
 	// ─── Preview: AI Gateway ───────────────────────────────────────────────────
-
-	async getAiGatewayEnabled(
-		projectId: string,
-		branchId: string,
-	): Promise<boolean> {
-		this.history.push({
-			method: "getAiGatewayEnabled",
-			args: [projectId, branchId],
-		});
-		this.requireProject(projectId);
-		this.requireBranch(projectId, branchId);
-		return this.aiGateway.has(`${projectId}:${branchId}`);
-	}
-
-	async enableAiGateway(projectId: string, branchId: string): Promise<void> {
-		this.history.push({
-			method: "enableAiGateway",
-			args: [projectId, branchId],
-		});
-		this.requireProject(projectId);
-		this.requireBranch(projectId, branchId);
-		this.aiGateway.add(`${projectId}:${branchId}`);
-	}
-
-	async disableAiGateway(projectId: string, branchId: string): Promise<void> {
-		this.history.push({
-			method: "disableAiGateway",
-			args: [projectId, branchId],
-		});
-		this.requireProject(projectId);
-		this.requireBranch(projectId, branchId);
-		this.aiGateway.delete(`${projectId}:${branchId}`);
-	}
+	//
+	// No methods: the AI Gateway is always available on a branch (credential-gated, not
+	// per-branch provisioned), so the real adapter exposes no enable/disable/status route and
+	// neither does this fake. `preview.aiGateway` only drives the branch credential's
+	// `ai_gateway:invoke` scope (see `createCredential`).
 
 	// ─── Preview: branch-scoped credentials ──────────────────────────────────
 
@@ -832,11 +802,6 @@ export class FakeNeonApi implements NeonApi {
 		const list = this.functions.get(key) ?? [];
 		list.push({ ...snapshot });
 		this.functions.set(key, list);
-	}
-
-	/** Test helper: mark the AI Gateway enabled on a branch. */
-	seedAiGateway(projectId: string, branchId: string): void {
-		this.aiGateway.add(`${projectId}:${branchId}`);
 	}
 
 	private requireProject(projectId: string): void {

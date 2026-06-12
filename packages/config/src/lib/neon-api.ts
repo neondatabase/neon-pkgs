@@ -421,18 +421,13 @@ export interface NeonApi {
 	): Promise<NeonFunctionDeploymentSnapshot>;
 
 	// ─── Preview: AI Gateway ───────────────────────────────────────────────────
-
-	/**
-	 * Whether the AI Gateway is enabled on a branch. Toggle-style, like Neon Auth / Data
-	 * API: used by both `fetchEnv` (to decide visibility) and `pushConfig` (to diff intent).
-	 */
-	getAiGatewayEnabled(projectId: string, branchId: string): Promise<boolean>;
-
-	/** Enable the AI Gateway on a branch. Idempotent. */
-	enableAiGateway(projectId: string, branchId: string): Promise<void>;
-
-	/** Disable the AI Gateway on a branch. Idempotent. */
-	disableAiGateway(projectId: string, branchId: string): Promise<void>;
+	//
+	// The AI Gateway is always available on a branch (credential-gated, not per-branch
+	// provisioned): there is no control-plane enable/disable/status route. Declaring
+	// `preview.aiGateway` in a policy therefore provisions nothing — it only adds the
+	// `ai_gateway:invoke` scope to the branch credential and surfaces the gateway env vars
+	// (`OPENAI_*` / `NEON_AI_GATEWAY_*`) on `fetchEnv` / `env pull`. So this interface
+	// intentionally exposes no AI Gateway methods.
 
 	// ─── Preview: branch-scoped credentials ──────────────────────────────────
 

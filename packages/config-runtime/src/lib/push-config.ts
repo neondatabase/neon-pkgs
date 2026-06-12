@@ -364,12 +364,6 @@ function synthesizeAppliedChange(step: PlanStep): AppliedChange {
 					runtime: step.fn.runtime,
 				},
 			};
-		case "enable-ai-gateway":
-			return {
-				kind: "service",
-				action: "create",
-				identifier: "aiGateway",
-			};
 	}
 }
 
@@ -438,9 +432,12 @@ async function resolveServiceState(args: {
 }
 
 /**
- * Pre-fetch the current state of branch-scoped Preview features (buckets, functions, AI
- * Gateway) so the diff can be computed additively. Only called when the policy has a
- * `preview` block.
+ * Pre-fetch the current state of branch-scoped Preview features (buckets, functions) so the
+ * diff can be computed additively. Only called when the policy has a `preview` block.
+ *
+ * The AI Gateway is not probed: it is always available (credential-gated, not per-branch
+ * provisioned), so `preview.aiGateway` produces no plan step — it only drives the branch
+ * credential's `ai_gateway:invoke` scope and the gateway env vars (`@neondatabase/env`).
  */
 async function resolvePreviewState(args: {
 	api: NeonApi;
@@ -454,18 +451,15 @@ async function resolvePreviewState(args: {
 	// `plan`/`apply` fail on a feature the user didn't ask for if it's unavailable in the
 	// project/region. A declared-but-unavailable feature still throws (failing the push),
 	// which is the intended signal to enable it first.
-	const [buckets, functions, aiGatewayEnabled] = await Promise.all([
+	const [buckets, functions] = await Promise.all([
 		desired.buckets.length > 0
 			? api.listBranchBuckets(projectId, branchId)
 			: Promise.resolve([]),
 		desired.functions.length > 0
 			? api.listBranchFunctions(projectId, branchId)
 			: Promise.resolve([]),
-		desired.aiGatewayEnabled
-			? api.getAiGatewayEnabled(projectId, branchId)
-			: Promise.resolve(false),
 	]);
-	return { buckets, functions, aiGatewayEnabled };
+	return { buckets, functions };
 }
 
 /**
@@ -612,14 +606,6 @@ async function applyStep(
 					runtime: step.fn.runtime,
 					deploymentId: deployment.id,
 				},
-			};
-		}
-		case "enable-ai-gateway": {
-			await ctx.api.enableAiGateway(ctx.remoteProjectId, step.branchId);
-			return {
-				kind: "service",
-				action: "create",
-				identifier: "aiGateway",
 			};
 		}
 	}

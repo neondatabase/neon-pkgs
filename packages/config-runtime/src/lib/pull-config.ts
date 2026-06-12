@@ -38,7 +38,6 @@ export interface PullConfigOptions {
 export interface PulledPreview {
 	buckets: Array<{ name: string; access: BucketAccessLevel }>;
 	functions: Array<{ slug: string; name: string }>;
-	aiGatewayEnabled: boolean;
 	/**
 	 * Secret-free metadata for the credentials issued on the branch (Preview). Surfaced so
 	 * `config status` can show issued credentials (id, scopes, last used) without ever
@@ -72,8 +71,9 @@ export interface PulledBranchConfig {
 	 */
 	config: Config;
 	/**
-	 * Live Preview-feature state, when the branch has any buckets/functions or an enabled
-	 * AI Gateway. Omitted entirely when there is nothing to report.
+	 * Live Preview-feature state, when the branch has any buckets/functions or issued
+	 * credentials. Omitted entirely when there is nothing to report. The AI Gateway is not
+	 * included: it is always available (credential-gated), not per-branch state.
 	 */
 	preview?: PulledPreview;
 }
@@ -102,34 +102,25 @@ export async function pullConfig(
 	// `neon env pull`) and `inspect` — an unavailable Preview feature should not break those
 	// (env comes from auth/dataApi/postgres). `pushConfig` is the place that fails on an
 	// unavailable feature, and only when the policy declares it.
-	const [buckets, functions, aiGatewayEnabled, credentials, auth, dataApi] =
-		await Promise.all([
-			degradeUnavailable(
-				() => api.listBranchBuckets(projectId, branch.id),
-				[],
-			),
-			degradeUnavailable(
-				() => api.listBranchFunctions(projectId, branch.id),
-				[],
-			),
-			degradeUnavailable(
-				() => api.getAiGatewayEnabled(projectId, branch.id),
-				false,
-			),
-			degradeUnavailable(
-				() => api.listCredentials(projectId, branch.id),
-				[],
-			),
-			api.getNeonAuth(projectId, branch.id),
-			probeDatabase
-				? api.getNeonDataApi(projectId, branch.id, probeDatabase)
-				: Promise.resolve(null),
-		]);
+	const [buckets, functions, credentials, auth, dataApi] = await Promise.all([
+		degradeUnavailable(
+			() => api.listBranchBuckets(projectId, branch.id),
+			[],
+		),
+		degradeUnavailable(
+			() => api.listBranchFunctions(projectId, branch.id),
+			[],
+		),
+		degradeUnavailable(() => api.listCredentials(projectId, branch.id), []),
+		api.getNeonAuth(projectId, branch.id),
+		probeDatabase
+			? api.getNeonDataApi(projectId, branch.id, probeDatabase)
+			: Promise.resolve(null),
+	]);
 
 	return buildPulledBranchConfig(project, branch, branches, endpoint, {
 		buckets,
 		functions,
-		aiGatewayEnabled,
 		credentials,
 		authEnabled: auth !== null,
 		dataApiEnabled: dataApi !== null,
@@ -189,7 +180,6 @@ export function buildPulledBranchConfig(
 	previewState?: {
 		buckets: NeonBucketSnapshot[];
 		functions: NeonFunctionSnapshot[];
-		aiGatewayEnabled: boolean;
 		credentials?: NeonCredentialMeta[];
 		/** Whether a Neon Auth integration is enabled on the branch. */
 		authEnabled?: boolean;
@@ -251,14 +241,12 @@ export function buildPulledBranchConfig(
 function buildPulledPreview(state: {
 	buckets: NeonBucketSnapshot[];
 	functions: NeonFunctionSnapshot[];
-	aiGatewayEnabled: boolean;
 	credentials?: NeonCredentialMeta[];
 }): PulledPreview | undefined {
 	const credentials = state.credentials ?? [];
 	if (
 		state.buckets.length === 0 &&
 		state.functions.length === 0 &&
-		!state.aiGatewayEnabled &&
 		credentials.length === 0
 	) {
 		return undefined;
@@ -272,7 +260,6 @@ function buildPulledPreview(state: {
 			slug: f.slug,
 			name: f.name,
 		})),
-		aiGatewayEnabled: state.aiGatewayEnabled,
 		credentials,
 	};
 }

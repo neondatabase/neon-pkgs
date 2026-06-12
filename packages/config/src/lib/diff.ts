@@ -75,12 +75,6 @@ export type PlanStep =
 			fn: ResolvedFunctionConfig;
 			/** Whether the function already existed remotely when the plan was computed. */
 			functionExists: boolean;
-	  }
-	| {
-			kind: "enable-ai-gateway";
-			projectId: string;
-			branchId: string;
-			branchName: string;
 	  };
 
 export interface RemoteServiceState {
@@ -96,7 +90,6 @@ export interface RemoteServiceState {
 export interface RemotePreviewState {
 	buckets: NeonBucketSnapshot[];
 	functions: NeonFunctionSnapshot[];
-	aiGatewayEnabled: boolean;
 }
 
 export interface RemoteState {
@@ -137,10 +130,15 @@ export function diffConfig(
 }
 
 /**
- * Plan Preview features (functions, buckets, AI Gateway). Like {@link diffServices}, this
- * is **additive**: it creates desired buckets/functions and enables the AI Gateway, but
- * never deletes buckets/functions or disables the gateway. Teardown is destructive, so it
- * stays explicit/manual — matching the existing auth / dataApi behaviour.
+ * Plan Preview features (functions, buckets). Like {@link diffServices}, this is
+ * **additive**: it creates desired buckets and (re-)deploys functions, but never deletes
+ * them. Teardown is destructive, so it stays explicit/manual — matching the existing
+ * auth / dataApi behaviour.
+ *
+ * The AI Gateway is intentionally NOT planned here: it is always available on a branch
+ * (credential-gated, not per-branch provisioned), so `preview.aiGateway` produces no plan
+ * step — it only drives the branch credential's `ai_gateway:invoke` scope and the gateway
+ * env vars (`@neondatabase/env`). There is nothing to create, and nothing to probe.
  *
  * Functions are always (re-)deployed: deployments are versioned and the newest becomes
  * active, so each push ships the current source. There is no separate create step — Neon
@@ -161,7 +159,6 @@ function diffPreview(args: {
 	const state: RemotePreviewState = remote.preview ?? {
 		buckets: [],
 		functions: [],
-		aiGatewayEnabled: false,
 	};
 
 	for (const bucket of preview.buckets) {
@@ -188,15 +185,6 @@ function diffPreview(args: {
 			branchName: remote.branch.name,
 			fn,
 			functionExists: exists,
-		});
-	}
-
-	if (preview.aiGatewayEnabled && !state.aiGatewayEnabled) {
-		plan.push({
-			kind: "enable-ai-gateway",
-			projectId: remote.projectId,
-			branchId: remote.branch.id,
-			branchName: remote.branch.name,
 		});
 	}
 }

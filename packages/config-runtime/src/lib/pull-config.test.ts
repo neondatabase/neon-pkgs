@@ -251,18 +251,19 @@ describe("pullConfig", () => {
 	});
 
 	test("degrades when a Preview feature is unavailable, still pulling auth/dataApi", async () => {
-		// A branch whose AI Gateway endpoint is unavailable for the project/region. pullConfig
-		// mirrors the branch for env resolution (`neon dev` / `neon env pull`) and inspect, so
-		// it must not abort on an unrelated Preview capability — env comes from auth/dataApi.
-		class UnavailableAiGatewayApi extends FakeNeonApi {
-			override async getAiGatewayEnabled(): Promise<boolean> {
+		// A branch whose object-storage endpoint is unavailable for the project/region.
+		// pullConfig mirrors the branch for env resolution (`neon dev` / `neon env pull`) and
+		// inspect, so it must not abort on an unrelated Preview capability — env comes from
+		// auth/dataApi.
+		class UnavailableBucketsApi extends FakeNeonApi {
+			override async listBranchBuckets(): Promise<never> {
 				throw new PlatformError(
 					ErrorCode.FeatureUnavailable,
-					"AI Gateway is a Preview feature that is not available for this project or region.",
+					"Object storage is a Preview feature that is not available for this project or region.",
 				);
 			}
 		}
-		const api = new UnavailableAiGatewayApi();
+		const api = new UnavailableBucketsApi();
 		const projectId = "proj-degrade";
 		api.seedProject({
 			project: {
@@ -287,8 +288,9 @@ describe("pullConfig", () => {
 			branchId: "br-main",
 		});
 
-		// Auth still pulled; the unavailable AI Gateway degrades to "off" rather than throwing.
+		// Auth still pulled; the unavailable buckets endpoint degrades to "none" rather than
+		// throwing.
 		expect(pulled.config.auth).toBe(true);
-		expect(pulled.preview?.aiGatewayEnabled ?? false).toBe(false);
+		expect(pulled.preview?.buckets ?? []).toEqual([]);
 	});
 });

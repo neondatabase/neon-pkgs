@@ -883,66 +883,12 @@ class RealNeonApi implements NeonApi {
 
 	// ─── Preview: AI Gateway ───────────────────────────────────────────────────
 	//
-	// TODO(neon-deploy): the AI Gateway routes are not yet in the public API spec we wired
-	// the rest of this adapter against. The paths below follow the established branch-scoped
-	// convention (`/projects/{p}/branches/{b}/ai-gateway`); confirm them against the real
-	// API (and the exact enable/disable verb + response shape) before relying on this in
-	// production, and swap to the typed `@neondatabase/api-client` method once it exists.
-
-	async getAiGatewayEnabled(
-		projectId: string,
-		branchId: string,
-	): Promise<boolean> {
-		try {
-			return await this.call(
-				`getAiGatewayEnabled(${projectId}/${branchId})`,
-				async () => {
-					const data = await this.getJson(
-						aiGatewayPath(projectId, branchId),
-					);
-					return aiGatewayEnabledFromResponse(data);
-				},
-				{ projectId },
-			);
-		} catch (err) {
-			// A "feature unavailable" signal (route not deployed / "not available")
-			// is a hard error — surface it rather than reporting "disabled". A plain
-			// NotFound *without* that signal means the route exists but AI Gateway is
-			// simply not enabled on this branch, which is `false`.
-			if (isPreviewFeatureUnavailable(err)) {
-				throw previewUnavailableError(err, "AI Gateway");
-			}
-			if (
-				err instanceof PlatformError &&
-				err.code === ErrorCode.NotFound
-			) {
-				return false;
-			}
-			throw err;
-		}
-	}
-
-	async enableAiGateway(projectId: string, branchId: string): Promise<void> {
-		await this.call(
-			`enableAiGateway(${projectId}/${branchId})`,
-			async () => {
-				await this.postJson(aiGatewayPath(projectId, branchId), {
-					enabled: true,
-				});
-			},
-			{ projectId, mutating: true },
-		);
-	}
-
-	async disableAiGateway(projectId: string, branchId: string): Promise<void> {
-		await this.call(
-			`disableAiGateway(${projectId}/${branchId})`,
-			async () => {
-				await this.deleteJson(aiGatewayPath(projectId, branchId));
-			},
-			{ projectId, mutating: true },
-		);
-	}
+	// No methods: the AI Gateway is always available on a branch (credential-gated, not
+	// per-branch provisioned). There is no control-plane enable/disable/status route — the
+	// gateway is reached at the branch host with a credential carrying `ai_gateway:invoke`.
+	// `preview.aiGateway` only drives that credential scope and the `OPENAI_*` /
+	// `NEON_AI_GATEWAY_*` env vars (see `@neondatabase/env`); nothing is provisioned here, so
+	// `plan` / `apply` never touch an AI Gateway route and can't fail on its availability.
 
 	// ─── Preview: branch-scoped credentials ──────────────────────────────────
 
@@ -1020,10 +966,6 @@ function branchPreviewPath(
 	resource: "buckets" | "functions",
 ): string {
 	return `/projects/${encodeURIComponent(projectId)}/branches/${encodeURIComponent(branchId)}/${resource}`;
-}
-
-function aiGatewayPath(projectId: string, branchId: string): string {
-	return `/projects/${encodeURIComponent(projectId)}/branches/${encodeURIComponent(branchId)}/ai-gateway`;
 }
 
 function credentialsPath(projectId: string, branchId: string): string {
@@ -1127,13 +1069,6 @@ function normalizeDeploymentStatus(
 	}
 }
 
-function aiGatewayEnabledFromResponse(data: unknown): boolean {
-	if (data !== null && typeof data === "object" && "enabled" in data) {
-		return (data as { enabled?: unknown }).enabled === true;
-	}
-	return false;
-}
-
 /**
  * Whether an error from a Preview-feature read means the feature simply isn't available
  * for this project/branch/region (as opposed to a real, transient failure). Neon signals
@@ -1163,25 +1098,110 @@ export function isPreviewFeatureUnavailable(err: unknown): boolean {
 }
 
 /**
+ * Reason phrase for the handful of HTTP statuses a Preview-feature read can surface as
+ * "unavailable". Used to print a short `HTTP <status> <reason>` line (not a stack trace),
+ * so the message reads like the API response the user would see in a tool like curl.
+ */
+const HTTP_STATUS_TEXT: Record<number, string> = {
+	401: "Unauthorized",
+	403: "Forbidden",
+	404: "Not Found",
+	500: "Internal Server Error",
+	501: "Not Implemented",
+	503: "Service Unavailable",
+};
+
+/**
+ * Per-status guidance for a Preview feature that came back "unavailable". A preview can be
+ * gated several different ways and the HTTP status is the best signal for which, so we tailor
+ * the next step instead of emitting one catch-all — valuable while these features are in
+ * preview and rolling out region by region:
+ *
+ * - 404 / 501 — the route isn't deployed for this project's region (or the account isn't in
+ *   the private preview): create a project in a region where the preview is enabled, and
+ *   confirm your account has preview access.
+ * - 503 — the route exists but is refusing right now: either the preview is still coming up,
+ *   or Neon is having a transient incident. Retry; if it persists it's likely an incident.
+ * - anything else — generic "not enabled for your account/region; request access".
+ *
+ * Only statuses {@link isPreviewFeatureUnavailable} accepts (404/501/503) actually reach
+ * this, so there is intentionally no 401/403 branch — those never classify as "unavailable".
+ */
+function previewUnavailableHint(status: number | undefined): string {
+	switch (status) {
+		case 404:
+		case 501:
+			return (
+				"This usually means the preview isn't available in your project's region yet, or " +
+				"your Neon account isn't in the private preview: create a project in a region where " +
+				"the preview is enabled, and make sure your account has access to the preview."
+			);
+		case 503:
+			return (
+				"The endpoint is reachable but refused the request — the preview may still be " +
+				"coming up, or Neon may be having a transient incident. Retry shortly; if it keeps " +
+				"failing, check https://neonstatus.com and report it to Neon support."
+			);
+		default:
+			return (
+				"This usually means the preview isn't enabled for your Neon account or the project's " +
+				"region. Request access to the preview, or use a project in a region where it's available."
+			);
+	}
+}
+
+/**
  * Convert a Preview-feature error into a clear {@link PlatformError} when the feature is
  * unavailable for the project; otherwise pass the original error through unchanged so a
  * genuine failure (auth, transient 5xx, …) keeps its specific code and message.
+ *
+ * The message names the failing feature, summarizes the response in one short
+ * `HTTP <status> <reason>` line, includes the raw Neon API message + request id (valuable
+ * signal while the feature is in preview), gives status-specific guidance (see
+ * {@link previewUnavailableHint}), and offers removing the feature from the policy as an
+ * escape hatch. `status`/`requestId` are also kept on `details` for programmatic consumers.
  */
 export function previewUnavailableError(
 	err: unknown,
 	featureLabel: string,
 ): unknown {
 	if (!isPreviewFeatureUnavailable(err)) return err;
+	const details = err instanceof PlatformError ? err.details : {};
+	const status =
+		typeof details.status === "number" ? details.status : undefined;
 	const neonMessage =
-		err instanceof PlatformError &&
-		typeof err.details.neonMessage === "string"
-			? ` (Neon API said: "${err.details.neonMessage}")`
-			: "";
+		typeof details.neonMessage === "string"
+			? details.neonMessage
+			: undefined;
+	const requestId =
+		typeof details.requestId === "string" ? details.requestId : undefined;
+
+	// One short status line + the raw API message + request id — never a stack trace.
+	const statusText = status ? HTTP_STATUS_TEXT[status] : undefined;
+	const apiParts = [
+		status
+			? `HTTP ${status}${statusText ? ` ${statusText}` : ""}`
+			: undefined,
+		neonMessage ? `Neon API said: "${neonMessage}"` : undefined,
+		requestId ? `request id ${requestId}` : undefined,
+	].filter((part): part is string => part !== undefined);
+	const apiContext = apiParts.length > 0 ? ` (${apiParts.join("; ")})` : "";
+
 	return new PlatformError(
 		ErrorCode.FeatureUnavailable,
-		`${featureLabel} is a Preview feature that is not available for this project or region${neonMessage}. ` +
-			"Enable it for your Neon account/project first, then re-run.",
-		{ cause: err, details: { feature: featureLabel } },
+		[
+			`${featureLabel} is a Preview feature and isn't available for this Neon project${apiContext}.`,
+			previewUnavailableHint(status),
+			"If you don't need it, remove the corresponding feature from the `preview` block of your neon.ts and re-run.",
+		].join(" "),
+		{
+			cause: err,
+			details: {
+				feature: featureLabel,
+				...(status !== undefined ? { status } : {}),
+				...(requestId !== undefined ? { requestId } : {}),
+			},
+		},
 	);
 }
 
