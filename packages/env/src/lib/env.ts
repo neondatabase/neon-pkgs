@@ -128,7 +128,8 @@ export interface NeonDataApiEnv {
 /**
  * S3-compatible object-storage access for the branch (Preview). Present on `NeonEnv` only
  * when the policy declares `preview.buckets`. Combines a minted branch credential's access
- * keys (`accessKeyId` = the credential's short token id, `secretAccessKey` = its
+ * keys (`accessKeyId` = the credential's full token id, e.g. `nak_live_…`, which is what the
+ * storage gateway authenticates against; `secretAccessKey` = its
  * `s3_secret_access_key`) with the branch's non-secret connection details
  * (`endpoint`/`region`/`forcePathStyle`, from `GET .../storage`). Projects to the AWS SDK's
  * standard config env (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_URL_S3`,
@@ -588,7 +589,10 @@ async function resolveCredentialSecrets(args: {
 		},
 	);
 	return {
-		accessKeyId: minted.tokenIdShort,
+		// The storage gateway authenticates against the full token id (e.g.
+		// `nak_live_…`), not the short token id — using the short id yields
+		// `InvalidAccessKeyId` on every S3 request.
+		accessKeyId: minted.tokenId,
 		secretAccessKey: minted.s3SecretAccessKey,
 		apiToken: minted.apiToken,
 	};
