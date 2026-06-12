@@ -46,6 +46,7 @@
 		"prepare": "npm run build",
 		"test": "vitest --passWithNoTests",
 		"test:ci": "vitest run --passWithNoTests",
+		"test:drift": "NEON_DRIFT_CHECK=1 vitest run neon-catalog-drift",
 		"tsc": "tsc"
 	},
 	"devDependencies": {
