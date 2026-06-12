@@ -23,6 +23,12 @@ export default {
 };
 ```
 
-> **Status: not implemented yet.** `waitUntil()` currently returns a no-op function — the
-> promise you pass is accepted and ignored. Once the Neon Functions runtime ships, it will
-> register the promise with the host so the invocation stays alive until it settles.
+`waitUntil()` returns a function that forwards the promise to the Neon Functions
+runtime, which keeps the invocation alive until the promise settles (up to the
+15-minute `waitUntil` limit). When no runtime context is present — local dev, tests,
+or any non-Neon host — the returned function is a **no-op**: the promise is accepted
+and ignored, so the same code runs everywhere without branching.
+
+Under the hood the runtime publishes its per-invocation context at
+`globalThis[NEON_FUNCTIONS_CONTEXT]` (a `Symbol.for("@neondatabase/functions/request-context")`),
+mirroring the convention used by Vercel.
