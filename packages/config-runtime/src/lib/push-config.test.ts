@@ -1,7 +1,11 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { defineConfig, ErrorCode } from "@neondatabase/config";
+import {
+	defineConfig,
+	ErrorCode,
+	PushConflictError,
+} from "@neondatabase/config";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { FakeNeonApi } from "./fake-neon-api.js";
 import { pushConfig } from "./push-config.js";
@@ -88,6 +92,89 @@ describe("pushConfig", () => {
 				(h) => h.method === "enableNeonAuth" && h.args[1] === "br-main",
 			),
 		).toBe(true);
+	});
+
+	test("enabling the Data API forwards the create-time auth wiring + settings", async () => {
+		const { api, projectId } = seededFake();
+		const config = defineConfig({
+			dataApi: {
+				authProvider: "external",
+				jwksUrl: "https://idp.example.com/.well-known/jwks.json",
+				providerName: "Clerk",
+				settings: { dbMaxRows: 1000, dbSchemas: ["public", "api"] },
+			},
+		});
+
+		await pushConfig(config, { api, projectId, branchId: "br-main" });
+
+		const enable = api.history.find(
+			(h) => h.method === "enableProjectBranchDataApi",
+		);
+		expect(enable?.args[3]).toEqual({
+			authProvider: "external",
+			jwksUrl: "https://idp.example.com/.well-known/jwks.json",
+			providerName: "Clerk",
+			settings: { dbMaxRows: 1000, dbSchemas: ["public", "api"] },
+		});
+	});
+
+	test("Data API settings drift needs --update-existing (conflict otherwise, update with it)", async () => {
+		const config = defineConfig({
+			auth: true,
+			dataApi: { settings: { dbMaxRows: 1000 } },
+		});
+
+		// Seed an already-enabled Data API with different settings.
+		const seedEnabled = () => {
+			const { api, projectId } = seededFake();
+			api.seedNeonAuth("proj-push", "br-main", {
+				projectId: "auth-br-main",
+				jwksUrl: "https://api.fake.neon.tech/auth/jwks.json",
+			});
+			api.seedNeonDataApi("proj-push", "br-main", "neondb", {
+				url: "https://br-main.fake.neon.tech/data-api/neondb",
+				status: "ready",
+				settings: { dbMaxRows: 100 },
+			});
+			return { api, projectId };
+		};
+
+		// Without updateExisting → conflict (no mutation).
+		const noFlag = seedEnabled();
+		await expect(
+			pushConfig(config, {
+				api: noFlag.api,
+				projectId: noFlag.projectId,
+				branchId: "br-main",
+			}),
+		).rejects.toBeInstanceOf(PushConflictError);
+		expect(
+			noFlag.api.history.some(
+				(h) => h.method === "updateProjectBranchDataApi",
+			),
+		).toBe(false);
+
+		// With updateExisting → settings update is applied.
+		const withFlag = seedEnabled();
+		const result = await pushConfig(config, {
+			api: withFlag.api,
+			projectId: withFlag.projectId,
+			branchId: "br-main",
+			updateExisting: true,
+		});
+		const update = withFlag.api.history.find(
+			(h) => h.method === "updateProjectBranchDataApi",
+		);
+		expect(update?.args[3]).toEqual({ dbMaxRows: 1000 });
+		expect(result.applied).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					kind: "service",
+					action: "update",
+					identifier: "dataApi",
+				}),
+			]),
+		);
 	});
 
 	test("auth/dataApi changes carry no redundant details (target branch / derived db)", async () => {

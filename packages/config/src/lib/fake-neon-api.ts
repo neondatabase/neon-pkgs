@@ -4,6 +4,7 @@ import type {
 	CreateCredentialInput,
 	CreateProjectInput,
 	DeployFunctionInput,
+	EnableDataApiInput,
 	GetConnectionUriInput,
 	NeonApi,
 	NeonAuthSnapshot,
@@ -21,7 +22,7 @@ import type {
 	NeonRoleSnapshot,
 	UpdateBranchInput,
 } from "./neon-api.js";
-import type { ComputeSettings } from "./types.js";
+import type { ComputeSettings, DataApiSettings } from "./types.js";
 
 /**
  * Test-only branch seed shape. Permits omitting `protected` (defaults to `false`) so the
@@ -478,10 +479,11 @@ export class FakeNeonApi implements NeonApi {
 		projectId: string,
 		branchId: string,
 		databaseName: string,
+		input?: EnableDataApiInput,
 	): Promise<NeonDataApiSnapshot> {
 		this.history.push({
 			method: "enableProjectBranchDataApi",
-			args: [projectId, branchId, databaseName],
+			args: [projectId, branchId, databaseName, input],
 		});
 		this.requireProject(projectId);
 		this.requireBranch(projectId, branchId);
@@ -490,9 +492,38 @@ export class FakeNeonApi implements NeonApi {
 		if (existing) return clone(existing);
 		const snapshot: NeonDataApiSnapshot = {
 			url: `https://${branchId}.fake.neon.tech/data-api/${databaseName}`,
+			status: "ready",
 		};
+		if (input?.settings) snapshot.settings = { ...input.settings };
 		this.neonDataApi.set(key, snapshot);
 		return clone(snapshot);
+	}
+
+	async updateProjectBranchDataApi(
+		projectId: string,
+		branchId: string,
+		databaseName: string,
+		settings: DataApiSettings,
+	): Promise<NeonDataApiSnapshot> {
+		this.history.push({
+			method: "updateProjectBranchDataApi",
+			args: [projectId, branchId, databaseName, settings],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		const key = `${projectId}:${branchId}:${databaseName}`;
+		const existing = this.neonDataApi.get(key);
+		if (!existing) {
+			throw new Error(
+				`Fake Neon: Data API not enabled on ${branchId}/${databaseName}`,
+			);
+		}
+		const updated: NeonDataApiSnapshot = {
+			...existing,
+			settings: { ...(existing.settings ?? {}), ...settings },
+		};
+		this.neonDataApi.set(key, updated);
+		return clone(updated);
 	}
 
 	/** Test helper: attach a Neon Auth integration to a branch. */

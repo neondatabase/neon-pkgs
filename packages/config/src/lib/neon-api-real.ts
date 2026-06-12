@@ -4,6 +4,9 @@ import {
 	type BranchCreateRequestEndpointOptions,
 	type BranchUpdateRequest,
 	createApiClient,
+	type DataAPICreateRequest,
+	type DataAPIReponse,
+	type DataAPISettings,
 	type Database,
 	type DefaultEndpointSettings,
 	type Endpoint,
@@ -25,6 +28,7 @@ import type {
 	CreateCredentialInput,
 	CreateProjectInput,
 	DeployFunctionInput,
+	EnableDataApiInput,
 	GetConnectionUriInput,
 	NeonApi,
 	NeonAuthSnapshot,
@@ -42,7 +46,11 @@ import type {
 	NeonRoleSnapshot,
 	UpdateBranchInput,
 } from "./neon-api.js";
-import type { BucketAccessLevel, ComputeSettings } from "./types.js";
+import type {
+	BucketAccessLevel,
+	ComputeSettings,
+	DataApiSettings,
+} from "./types.js";
 import { wrapNeonError } from "./wrap-neon-error.js";
 
 type ApiClient = ReturnType<typeof createApiClient>;
@@ -55,6 +63,102 @@ const neonAuthResponseSchema = z.object({
 	jwks_url: z.string(),
 	base_url: z.string().optional(),
 });
+
+// ─── Data API mapping (camelCase neon.ts ↔ snake_case Neon API) ───────────────
+
+/** Map our camelCase {@link DataApiSettings} onto the Neon API's snake_case `DataAPISettings`. */
+function dataApiSettingsToApi(settings: DataApiSettings): DataAPISettings {
+	const out: DataAPISettings = {};
+	if (settings.dbAggregatesEnabled !== undefined)
+		out.db_aggregates_enabled = settings.dbAggregatesEnabled;
+	if (settings.dbAnonRole !== undefined)
+		out.db_anon_role = settings.dbAnonRole;
+	if (settings.dbExtraSearchPath !== undefined)
+		out.db_extra_search_path = settings.dbExtraSearchPath;
+	if (settings.dbMaxRows !== undefined) out.db_max_rows = settings.dbMaxRows;
+	if (settings.dbSchemas !== undefined) out.db_schemas = settings.dbSchemas;
+	if (settings.jwtRoleClaimKey !== undefined)
+		out.jwt_role_claim_key = settings.jwtRoleClaimKey;
+	if (settings.jwtCacheMaxLifetime !== undefined)
+		out.jwt_cache_max_lifetime = settings.jwtCacheMaxLifetime;
+	if (settings.openapiMode !== undefined)
+		out.openapi_mode = settings.openapiMode;
+	if (settings.serverCorsAllowedOrigins !== undefined)
+		out.server_cors_allowed_origins = settings.serverCorsAllowedOrigins;
+	if (settings.serverTimingEnabled !== undefined)
+		out.server_timing_enabled = settings.serverTimingEnabled;
+	return out;
+}
+
+/** Narrow the API's free-form `openapi_mode` string to our literal union (else drop it). */
+function normalizeOpenapiMode(
+	value: string,
+): DataApiSettings["openapiMode"] | undefined {
+	return value === "ignore-privileges" || value === "disabled"
+		? value
+		: undefined;
+}
+
+/** Map the Neon API's snake_case `DataAPISettings` back to our camelCase {@link DataApiSettings}. */
+function dataApiSettingsFromApi(
+	settings: DataAPISettings | null | undefined,
+): DataApiSettings | undefined {
+	if (!settings) return undefined;
+	const out: DataApiSettings = {};
+	if (settings.db_aggregates_enabled !== undefined)
+		out.dbAggregatesEnabled = settings.db_aggregates_enabled;
+	if (settings.db_anon_role !== undefined)
+		out.dbAnonRole = settings.db_anon_role;
+	if (settings.db_extra_search_path !== undefined)
+		out.dbExtraSearchPath = settings.db_extra_search_path;
+	if (settings.db_max_rows !== undefined)
+		out.dbMaxRows = settings.db_max_rows;
+	if (settings.db_schemas !== undefined) out.dbSchemas = settings.db_schemas;
+	if (settings.jwt_role_claim_key !== undefined)
+		out.jwtRoleClaimKey = settings.jwt_role_claim_key;
+	if (settings.jwt_cache_max_lifetime !== undefined)
+		out.jwtCacheMaxLifetime = settings.jwt_cache_max_lifetime;
+	if (settings.openapi_mode !== undefined) {
+		const mode = normalizeOpenapiMode(settings.openapi_mode);
+		if (mode !== undefined) out.openapiMode = mode;
+	}
+	if (settings.server_cors_allowed_origins !== undefined)
+		out.serverCorsAllowedOrigins = settings.server_cors_allowed_origins;
+	if (settings.server_timing_enabled !== undefined)
+		out.serverTimingEnabled = settings.server_timing_enabled;
+	return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/** Build the Neon API `DataAPICreateRequest` from our {@link EnableDataApiInput}. */
+function dataApiCreateRequest(
+	input: EnableDataApiInput | undefined,
+): DataAPICreateRequest {
+	const req: DataAPICreateRequest = {};
+	if (!input) return req;
+	if (input.authProvider !== undefined)
+		req.auth_provider =
+			input.authProvider === "neon" ? "neon_auth" : "external";
+	if (input.jwksUrl !== undefined) req.jwks_url = input.jwksUrl;
+	if (input.providerName !== undefined)
+		req.provider_name = input.providerName;
+	if (input.jwtAudience !== undefined) req.jwt_audience = input.jwtAudience;
+	if (input.settings) {
+		const settings = dataApiSettingsToApi(input.settings);
+		if (Object.keys(settings).length > 0) req.settings = settings;
+	}
+	return req;
+}
+
+/** Map a `DataAPIReponse` (GET) onto our {@link NeonDataApiSnapshot}. */
+function dataApiSnapshotFromResponse(
+	data: DataAPIReponse,
+): NeonDataApiSnapshot {
+	const snapshot: NeonDataApiSnapshot = { url: data.url };
+	if (data.status !== undefined) snapshot.status = data.status;
+	const settings = dataApiSettingsFromApi(data.settings);
+	if (settings) snapshot.settings = settings;
+	return snapshot;
+}
 
 // ─── Preview: buckets ──────────────────────────────────────────────────────
 
@@ -674,14 +778,16 @@ class RealNeonApi implements NeonApi {
 		try {
 			return await this.call(
 				`getNeonDataApi(${projectId}/${branchId}/${databaseName})`,
-				async () => {
-					const res = await this.client.getProjectBranchDataApi(
-						projectId,
-						branchId,
-						databaseName,
-					);
-					return { url: res.data.url };
-				},
+				async () =>
+					dataApiSnapshotFromResponse(
+						await this.client
+							.getProjectBranchDataApi(
+								projectId,
+								branchId,
+								databaseName,
+							)
+							.then((res) => res.data),
+					),
 				{ projectId },
 			);
 		} catch (err) {
@@ -695,6 +801,7 @@ class RealNeonApi implements NeonApi {
 		projectId: string,
 		branchId: string,
 		databaseName: string,
+		input?: EnableDataApiInput,
 	): Promise<NeonDataApiSnapshot> {
 		// Idempotent in the same shape as `enableNeonAuth`: if an integration already
 		// exists, the POST returns 409 and we re-fetch the existing snapshot.
@@ -706,10 +813,10 @@ class RealNeonApi implements NeonApi {
 						projectId,
 						branchId,
 						databaseName,
-						// Empty body — pick up Neon defaults (auth_provider inferred from
-						// whether Neon Auth is also enabled; default schemas/grants).
-						{},
+						dataApiCreateRequest(input),
 					);
+					// The create response only carries `url`; settings/status come from a
+					// follow-up GET, which we leave to the caller when it needs them.
 					return { url: res.data.url };
 				},
 				{ projectId, mutating: true },
@@ -728,6 +835,34 @@ class RealNeonApi implements NeonApi {
 			}
 			throw err;
 		}
+	}
+
+	async updateProjectBranchDataApi(
+		projectId: string,
+		branchId: string,
+		databaseName: string,
+		settings: DataApiSettings,
+	): Promise<NeonDataApiSnapshot> {
+		return await this.call(
+			`updateProjectBranchDataApi(${projectId}/${branchId}/${databaseName})`,
+			async () => {
+				await this.client.updateProjectBranchDataApi(
+					projectId,
+					branchId,
+					databaseName,
+					{ settings: dataApiSettingsToApi(settings) },
+				);
+				// The PATCH returns an empty body; re-fetch so the caller sees the
+				// post-update url/status/settings.
+				const res = await this.client.getProjectBranchDataApi(
+					projectId,
+					branchId,
+					databaseName,
+				);
+				return dataApiSnapshotFromResponse(res.data);
+			},
+			{ projectId, mutating: true },
+		);
 	}
 
 	// ─── Preview: buckets ──────────────────────────────────────────────────────

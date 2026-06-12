@@ -362,7 +362,17 @@ describe("parseEnv", () => {
 		vi.stubEnv("DATABASE_URL", "postgres://pooled");
 		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
 		vi.stubEnv("NEON_DATA_API_URL", "https://data.example.com");
-		const env = parseEnv(defineConfig({ dataApi: { enabled: true } }));
+		// `authProvider: "external"` so the toggle stands alone (a `"neon"` Data API
+		// requires Neon Auth — covered by the config package's validation tests).
+		const env = parseEnv(
+			defineConfig({
+				dataApi: {
+					enabled: true,
+					authProvider: "external",
+					jwksUrl: "https://idp.example.com/.well-known/jwks.json",
+				},
+			}),
+		);
 		expect(env.dataApi.url).toBe("https://data.example.com");
 	});
 

@@ -41,6 +41,47 @@ A policy is split into a **static** existential set and a **dynamic** `branch` c
 
 Service toggles accept `true` / `{}` / `{ enabled: true }` (enabled) and `false` / `{ enabled: false }` (disabled). Function slugs (record keys) must match `^[a-z0-9]{1,20}$`.
 
+### Data API
+
+`dataApi` accepts the same boolean/toggle forms **or** an object that selects the auth provider and reusable runtime `settings`:
+
+```ts
+export default defineConfig({
+  auth: true, // required when the Data API verifies Neon Auth tokens
+  dataApi: {
+    // "neon" (default) verifies Neon Auth tokens; "external" verifies a third-party IdP.
+    authProvider: "neon",
+    settings: {
+      dbSchemas: ["public", "api"],
+      dbMaxRows: 1000,
+      // dbAnonRole, dbExtraSearchPath, jwtRoleClaimKey, jwtCacheMaxLifetime,
+      // openapiMode ("ignore-privileges" | "disabled"), serverCorsAllowedOrigins,
+      // serverTimingEnabled — all optional, camelCase mirrors of the Neon API.
+    },
+  },
+});
+```
+
+```ts
+// External IdP (Clerk / Stytch / Auth0 / …): you provide the JWKS wiring, and no Neon Auth is required.
+export default defineConfig({
+  dataApi: {
+    authProvider: "external",
+    jwksUrl: "https://your-idp.example.com/.well-known/jwks.json",
+    providerName: "Clerk", // optional label
+    jwtAudience: "my-api", // optional; only *rejects* tokens with a different `aud`
+    settings: { dbSchemas: ["public"] },
+  },
+});
+```
+
+Two invariants are enforced **both** at author time (TypeScript) and at runtime (zod):
+
+- **`authProvider: "neon"` requires Neon Auth.** A Neon-verified Data API needs `auth` enabled on the same branch (so the tokens it verifies exist). `jwksUrl` / `providerName` / `jwtAudience` are forbidden on this variant — Neon supplies them.
+- **`authProvider: "external"`** is where `jwksUrl` / `providerName` / `jwtAudience` live, and it does **not** require Neon Auth.
+
+The auth wiring (`authProvider`, `jwksUrl`, …) is set when the Data API is first **enabled** and is immutable afterwards. The runtime `settings` are reconcilable: changing them is treated as an **update** and requires `updateExisting: true` (`apply`) / `--update-existing` (CLI), like compute/TTL/`protected` drift.
+
 ## Functions
 
 The three operations mirror the Terraform mental model: **`inspect`** (read live state), **`plan`** (dry-run diff), **`apply`** (reconcile).

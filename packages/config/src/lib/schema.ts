@@ -73,6 +73,66 @@ export const serviceToggleInputSchema = z.union([
 	serviceToggleSchema,
 ]);
 
+/**
+ * Reusable Data API runtime settings (camelCase mirror of the Neon API `DataAPISettings`).
+ * `strictObject` so a typo / snake_case key fails loudly instead of being silently dropped.
+ */
+export const dataApiSettingsSchema = z.strictObject({
+	dbAggregatesEnabled: z.boolean().optional(),
+	dbAnonRole: z.string().optional(),
+	dbExtraSearchPath: z.string().optional(),
+	dbMaxRows: z.number().int().optional(),
+	dbSchemas: z.array(z.string()).optional(),
+	jwtRoleClaimKey: z.string().optional(),
+	jwtCacheMaxLifetime: z.number().int().optional(),
+	openapiMode: z
+		.union([z.literal("ignore-privileges"), z.literal("disabled")])
+		.optional(),
+	serverCorsAllowedOrigins: z.string().optional(),
+	serverTimingEnabled: z.boolean().optional(),
+});
+
+/** Names of the external-IdP-only fields, forbidden when `authProvider` is `"neon"`. */
+const DATA_API_EXTERNAL_ONLY_KEYS = [
+	"jwksUrl",
+	"providerName",
+	"jwtAudience",
+] as const;
+
+/**
+ * Object form of the `dataApi` toggle. A single `strictObject` plus a `superRefine` (rather
+ * than a discriminated union) so the `"neon"` default works without the discriminator being
+ * present, and so the "external-only field with authProvider neon" error points at the exact
+ * offending key — mirroring the `?: never` type-level guard at runtime.
+ */
+export const dataApiConfigSchema = z
+	.strictObject({
+		enabled: z.boolean().optional(),
+		authProvider: z
+			.union([z.literal("neon"), z.literal("external")])
+			.optional(),
+		jwksUrl: z.string().optional(),
+		providerName: z.string().optional(),
+		jwtAudience: z.string().optional(),
+		settings: dataApiSettingsSchema.optional(),
+	})
+	.superRefine((cfg, ctx) => {
+		const provider = cfg.authProvider ?? "neon";
+		if (provider !== "neon") return;
+		for (const key of DATA_API_EXTERNAL_ONLY_KEYS) {
+			if (cfg[key] !== undefined) {
+				ctx.addIssue({
+					code: "custom",
+					path: [key],
+					message: `${key} is only allowed with authProvider: "external" — Neon supplies it for authProvider: "neon".`,
+				});
+			}
+		}
+	});
+
+/** A `dataApi` toggle as written in a policy: `boolean` or {@link dataApiConfigSchema}. */
+export const dataApiInputSchema = z.union([z.boolean(), dataApiConfigSchema]);
+
 export const postgresConfigSchema = z.strictObject({
 	computeSettings: computeSettingsSchema.optional(),
 });
@@ -187,20 +247,59 @@ export const branchTuningSchema = z
  * structurally as a function here; its returned tuning is validated per-evaluation by
  * {@link branchTuningSchema} inside `resolveConfig`.
  */
-export const configInputSchema = z.strictObject({
-	auth: serviceToggleInputSchema.optional(),
-	dataApi: serviceToggleInputSchema.optional(),
-	preview: previewInputSchema.optional(),
-	branch: z
-		.custom<(...args: unknown[]) => unknown>(
-			(value) => typeof value === "function",
-			{
+export const configInputSchema = z
+	.strictObject({
+		auth: serviceToggleInputSchema.optional(),
+		dataApi: dataApiInputSchema.optional(),
+		preview: previewInputSchema.optional(),
+		branch: z
+			.custom<(...args: unknown[]) => unknown>(
+				(value) => typeof value === "function",
+				{
+					message:
+						"branch must be a function: `branch: (branch) => ({ … })`",
+				},
+			)
+			.optional(),
+	})
+	.superRefine((cfg, ctx) => {
+		// A Data API verified by Neon Auth (`authProvider: "neon"`, the default) needs Neon
+		// Auth enabled on the same branch so the tokens it verifies actually exist. Enforce
+		// the same invariant the `defineConfig` type-level check expresses, at runtime.
+		if (!isToggleEnabledValue(cfg.dataApi)) return;
+		if (dataApiAuthProviderValue(cfg.dataApi) !== "neon") return;
+		if (!isToggleEnabledValue(cfg.auth)) {
+			ctx.addIssue({
+				code: "custom",
+				path: ["auth"],
 				message:
-					"branch must be a function: `branch: (branch) => ({ … })`",
-			},
-		)
-		.optional(),
-});
+					'dataApi with authProvider "neon" requires Neon Auth — set `auth: true` (or `auth: { enabled: true }`), or use `dataApi.authProvider: "external"` with your own `jwksUrl`.',
+			});
+		}
+	});
+
+/**
+ * Whether a parsed `auth` / `dataApi` toggle value is enabled: a present object (or `true`)
+ * is on unless `enabled` is explicitly `false`. Mirrors `isServiceEnabled` in
+ * `define-config.ts`, operating on the already-validated runtime value.
+ */
+function isToggleEnabledValue(value: unknown): boolean {
+	if (value === undefined || value === null) return false;
+	if (typeof value === "boolean") return value;
+	if (typeof value === "object") {
+		return (value as { enabled?: unknown }).enabled !== false;
+	}
+	return false;
+}
+
+/** Read the (defaulted) `authProvider` from a parsed `dataApi` value. */
+function dataApiAuthProviderValue(value: unknown): "neon" | "external" {
+	if (value !== null && typeof value === "object") {
+		const provider = (value as { authProvider?: unknown }).authProvider;
+		if (provider === "external") return "external";
+	}
+	return "neon";
+}
 
 function validateParentReference(args: {
 	ctx: z.RefinementCtx;

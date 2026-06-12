@@ -52,6 +52,9 @@ import {
 	bucketDefSchema,
 	computeSettingsSchema,
 	configInputSchema,
+	dataApiConfigSchema,
+	dataApiInputSchema,
+	dataApiSettingsSchema,
 	functionDefSchema,
 	functionTuningSchema,
 	postgresConfigSchema,
@@ -81,6 +84,9 @@ export const schemas = {
 	branchTuning: branchTuningSchema,
 	bucket: bucketDefSchema,
 	computeSettings: computeSettingsSchema,
+	dataApi: dataApiConfigSchema,
+	dataApiInput: dataApiInputSchema,
+	dataApiSettings: dataApiSettingsSchema,
 	function: functionDefSchema,
 	functionTuning: functionTuningSchema,
 	postgres: postgresConfigSchema,
@@ -128,6 +134,7 @@ export type {
 	CreateCredentialInput,
 	CreateProjectInput,
 	DeployFunctionInput,
+	EnableDataApiInput,
 	GetConnectionUriInput,
 	NeonApi,
 	NeonAuthSnapshot,
@@ -146,7 +153,6 @@ export type {
 	UpdateBranchInput,
 } from "./lib/neon-api.js";
 export { createRealNeonApi } from "./lib/neon-api-real.js";
-// ─── Config types (used in neon.ts and in operation return values) ────────────
 export type {
 	AppliedChange,
 	BranchTarget,
@@ -160,6 +166,12 @@ export type {
 	ConflictReport,
 	CredentialPrincipalType,
 	CredentialScope,
+	DataApiAuthProvider,
+	DataApiConfig,
+	DataApiExternalAuthConfig,
+	DataApiInput,
+	DataApiNeonAuthConfig,
+	DataApiSettings,
 	DurationString,
 	DurationUnit,
 	FunctionDef,
@@ -172,8 +184,12 @@ export type {
 	PushResult,
 	ResolvedBranchConfig,
 	ResolvedBucketConfig,
+	ResolvedDataApiConfig,
 	ResolvedFunctionConfig,
 	ResolvedPreviewConfig,
+	ServiceEnabled,
 	ServiceToggle,
 	ServiceToggleInput,
 } from "./lib/types.js";
+// ─── Config types (used in neon.ts and in operation return values) ────────────
+export { DATA_API_AUTH_PROVIDERS } from "./lib/types.js";

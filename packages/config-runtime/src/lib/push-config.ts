@@ -298,7 +298,8 @@ function isOverrideStep(step: PlanStep): boolean {
 	return (
 		step.kind === "update-branch-ttl" ||
 		step.kind === "update-branch-protected" ||
-		step.kind === "update-endpoint"
+		step.kind === "update-endpoint" ||
+		step.kind === "update-data-api"
 	);
 }
 
@@ -342,6 +343,13 @@ function synthesizeAppliedChange(step: PlanStep): AppliedChange {
 			return { kind: "service", action: "create", identifier: "auth" };
 		case "enable-data-api":
 			return { kind: "service", action: "create", identifier: "dataApi" };
+		case "update-data-api":
+			return {
+				kind: "service",
+				action: "update",
+				identifier: "dataApi",
+				details: { field: "settings", settings: step.settings },
+			};
 		case "create-bucket":
 			return {
 				kind: "service",
@@ -424,11 +432,15 @@ async function resolveServiceState(args: {
 			? api.getNeonDataApi(projectId, branch.id, databaseName)
 			: Promise.resolve(null),
 	]);
-	return {
+	const result: RemoteServiceState = {
 		databaseName,
 		authEnabled: auth !== null,
 		dataApiEnabled: dataApi !== null,
 	};
+	// Carry the current Data API settings (when reported) so the diff can detect settings
+	// drift and plan an update. `null` distinguishes "enabled but not reported" from "absent".
+	if (dataApi) result.dataApiSettings = dataApi.settings ?? null;
+	return result;
 }
 
 /**
@@ -559,11 +571,26 @@ async function applyStep(
 				ctx.remoteProjectId,
 				step.branchId,
 				step.databaseName,
+				step.input,
 			);
 			return {
 				kind: "service",
 				action: "create",
 				identifier: "dataApi",
+			};
+		}
+		case "update-data-api": {
+			await ctx.api.updateProjectBranchDataApi(
+				ctx.remoteProjectId,
+				step.branchId,
+				step.databaseName,
+				step.settings,
+			);
+			return {
+				kind: "service",
+				action: "update",
+				identifier: "dataApi",
+				details: { field: "settings", settings: step.settings },
 			};
 		}
 		case "create-bucket": {
