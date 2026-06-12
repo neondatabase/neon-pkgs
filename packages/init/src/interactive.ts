@@ -183,10 +183,14 @@ async function interactiveInitInner(
 					`Scaffolding project from template "${selectedTemplate.title}"...`,
 				);
 				try {
+					// Pin @latest (and -y) so a stale globally-installed neonctl
+					// can't be picked up by npx — bootstrap's rate-limit fix lives
+					// in recent neonctl.
 					await execa(
 						"npx",
 						[
-							"neonctl",
+							"-y",
+							"neonctl@latest",
 							"bootstrap",
 							".",
 							"--template",

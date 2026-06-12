@@ -28,7 +28,12 @@ export interface BootstrapTemplate {
 	};
 }
 
-/** Hardcoded fallback used when the remote manifest cannot be fetched. */
+/**
+ * Hardcoded fallback used when every remote manifest source is unreachable.
+ * Kept in sync with `neondatabase/examples/bootstrap.yaml` (the source of
+ * truth) so that, even fully offline from the manifest, the picker still offers
+ * the full set of starters rather than a single template.
+ */
 export const FALLBACK_TEMPLATES: BootstrapTemplate[] = [
 	{
 		id: "hono",
@@ -43,10 +48,46 @@ export const FALLBACK_TEMPLATES: BootstrapTemplate[] = [
 			subdir: "with-hono",
 		},
 	},
+	{
+		id: "ai-sdk",
+		title: "AI SDK agent (AI Gateway, object storage, Drizzle) on Neon Functions",
+		description:
+			"A Vercel AI SDK agent on Neon Functions: streams chat through the Neon AI Gateway, generates an image with OpenAI image generation, and stores it in Neon object storage indexed in Postgres via Drizzle.",
+		requires: ["database", "functions", "object-storage", "ai-gateway"],
+		source: {
+			owner: "neondatabase",
+			repo: "examples",
+			ref: "main",
+			subdir: "with-ai-sdk",
+		},
+	},
+	{
+		id: "mastra",
+		title: "Mastra personal agent (AI Gateway, Mastra Memory) on Neon Functions",
+		description:
+			"A Mastra personal-assistant agent on Neon Functions: streams chat through the Neon AI Gateway and uses Mastra Memory — backed by Neon Postgres — to remember the user across conversation threads via resource-scoped working memory.",
+		requires: ["database", "functions", "ai-gateway"],
+		source: {
+			owner: "neondatabase",
+			repo: "examples",
+			ref: "main",
+			subdir: "with-mastra",
+		},
+	},
 ];
 
-const MANIFEST_URL =
+// Primary manifest host is neon.com (CDN-backed, no GitHub rate limiting), with
+// the raw GitHub copy as a fallback and the hardcoded list as the last resort.
+// A single env override (used by tests) short-circuits the chain.
+const NEON_MANIFEST_URL = "https://neon.com/bootstrap/templates.yaml";
+const GITHUB_RAW_MANIFEST_URL =
 	"https://raw.githubusercontent.com/neondatabase/examples/main/bootstrap.yaml";
+
+function manifestUrls(): string[] {
+	const override = process.env.NEON_BOOTSTRAP_MANIFEST_URL;
+	if (override) return [override];
+	return [NEON_MANIFEST_URL, GITHUB_RAW_MANIFEST_URL];
+}
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null;
@@ -97,21 +138,23 @@ export function parseManifest(text: string): BootstrapTemplate[] {
 }
 
 /**
- * Fetch the template manifest from the remote bootstrap.yaml in the
- * neondatabase/examples repo. Falls back to the hardcoded list on any error.
+ * Fetch the template manifest, trying each source in {@link manifestUrls} in
+ * order and returning the first that yields a non-empty template list. Falls
+ * back to the hardcoded list when every source is unreachable or empty, so the
+ * picker never fails just because a host is down.
  */
 export async function fetchTemplates(): Promise<BootstrapTemplate[]> {
-	const url = process.env.NEON_BOOTSTRAP_MANIFEST_URL ?? MANIFEST_URL;
-	try {
-		const res = await fetch(url, {
-			signal: AbortSignal.timeout(10_000),
-		});
-		if (!res.ok) throw new Error(`HTTP ${res.status}`);
-		const text = await res.text();
-		const templates = parseManifest(text);
-		if (templates.length === 0) return FALLBACK_TEMPLATES;
-		return templates;
-	} catch {
-		return FALLBACK_TEMPLATES;
+	for (const url of manifestUrls()) {
+		try {
+			const res = await fetch(url, {
+				signal: AbortSignal.timeout(10_000),
+			});
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			const templates = parseManifest(await res.text());
+			if (templates.length > 0) return templates;
+		} catch {
+			// Try the next source.
+		}
 	}
+	return FALLBACK_TEMPLATES;
 }
