@@ -5,9 +5,14 @@
  * ```ts
  * import { defineConfig } from "@neondatabase/config/v1";
  *
- * export default defineConfig((branch) => {
- *   if (branch.name === "main") return { protected: true, auth: {} };
- *   return { parent: "main", ttl: "7d" };
+ * export default defineConfig({
+ *   // Static: what *exists* on every branch (drives the typed env).
+ *   auth: true,
+ *   // Dynamic: per-branch tuning only — cannot add/remove services.
+ *   branch: (branch) => ({
+ *     protected: branch.name === "main",
+ *     ...(branch.name === "main" ? {} : { parent: "main", ttl: "7d" }),
+ *   }),
  * });
  * ```
  *

@@ -57,7 +57,7 @@ export interface PushConfigOptions {
 	api?: NeonApi;
 	/**
 	 * Whether to evaluate the policy as if the target branch **already exists** (the value of
-	 * `branch.exists` passed to the `defineConfig((branch) => …)` closure). Defaults to `true`.
+	 * `branch.exists` passed to the `defineConfig({ branch: (branch) => … })` closure). Defaults to `true`.
 	 *
 	 * Set to `false` to evaluate the policy as a **branch creation** — used by
 	 * {@link createBranch} right after it provisions a new branch, so creation-time tuning
