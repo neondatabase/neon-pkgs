@@ -588,7 +588,12 @@ async function resolveCredentialSecrets(args: {
 		},
 	);
 	return {
-		accessKeyId: minted.tokenIdShort,
+		// The S3-compatible storage endpoint authenticates with the credential's full token
+		// id (`token_id`, e.g. `nak_live_…`), NOT the display-only `token_id_short`. Using the
+		// short form makes every S3 request fail with `InvalidAccessKeyId` ("The AWS Access Key
+		// Id you provided does not exist in our records"), so a pulled `.env` looks complete but
+		// object storage is unusable.
+		accessKeyId: minted.tokenId,
 		secretAccessKey: minted.s3SecretAccessKey,
 		apiToken: minted.apiToken,
 	};
