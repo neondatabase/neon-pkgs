@@ -5,6 +5,7 @@ import { isAuthenticated } from "./lib/auth.js";
 import { detectAvailableEditors } from "./lib/editors.js";
 import { usesExtension } from "./lib/extension.js";
 import { installNeon } from "./lib/install.js";
+import { getNeonctlApiFlags, neonctlCmd } from "./lib/neonctl.js";
 import {
 	fetchSkillContent,
 	installAgentSkills,
@@ -48,48 +49,57 @@ export interface InitOptions {
 	json?: boolean;
 }
 
-const NEONCTL_COMMANDS = {
-	listOrgs: "npx neonctl orgs list --output json",
-	listProjects: "npx neonctl projects list --output json",
-	createProject:
-		"npx neonctl projects create --name <project-name> --output json",
-	getConnectionString:
-		"npx neonctl connection-string --project-id <project-id>",
-} as const;
+function getNeonctlCommands() {
+	const flags = getNeonctlApiFlags();
+	const base = flags ? `npx neonctl ${flags}` : "npx neonctl";
+	return {
+		listOrgs: `${base} orgs list --output json`,
+		listProjects: `${base} projects list --output json`,
+		createProject: `${base} projects create --name <project-name> --output json`,
+		getConnectionString: `${base} connection-string --project-id <project-id>`,
+	};
+}
 
-const AUTH_INSTRUCTIONS = [
-	"YOU (the agent) must handle authentication. Do NOT ask the user to run commands themselves.",
-	"Do NOT write wrapper scripts (Python, shell, etc.) — use simple shell commands only.",
-	"IMPORTANT: Unset the CI environment variable for all neonctl commands below,",
-	"otherwise neonctl will refuse to open the browser.",
-	"",
-	'Step 1: Ask the user: "Do you already have a Neon account, or do you need to create one?"',
-	"",
-	"=== NEW ACCOUNT (sign up) ===",
-	"Step 2a: Open the Neon sign-up page in the user's browser:",
-	"   On macOS: open https://console.neon.tech/signup",
-	"   On Linux: xdg-open https://console.neon.tech/signup",
-	"Step 3a: Tell the user: \"I've opened the Neon sign-up page in your browser.",
-	"   Create your account, then check your email for a verification link and click it.",
-	'   Let me know when you have finished signing up and verifying your email."',
-	"Step 4a: Once the user confirms, run the OAuth login:",
-	"   CI= npx -y neonctl auth",
-	"   This opens a second browser tab for OAuth authorization. The user approves access.",
-	"   If exit code 0: authentication succeeded.",
-	"   If exit code 2 (timeout): ask the user to confirm they finished sign-up and",
-	"   email verification, then retry the same command.",
-	"",
-	"=== EXISTING ACCOUNT (sign in) ===",
-	"Step 2b: Execute: CI= npx -y neonctl auth",
-	"   This opens the OAuth login page directly. Sign-in is fast (60-second timeout).",
-	"   If exit code 0: authentication succeeded.",
-	"   If exit code 2 (timeout): ask the user to confirm they completed sign-in, then retry.",
-	"",
-	"=== AFTER SUCCESSFUL AUTH ===",
-	"Step 5: Verify by running: CI= npx -y neonctl me",
-	"   This should print the user's account info and exit with code 0.",
-	"Step 6: Re-run neon-init with the same --agent and --json flags to complete setup.",
-].join("\n");
+function getAuthInstructions(): string {
+	const cmd = neonctlCmd();
+	const apiBase = process.env.NEON_API_HOST?.replace(/\/+$/, "");
+	const signupUrl = apiBase
+		? `${apiBase}/signup`
+		: "https://console.neon.tech/signup";
+	return [
+		"YOU (the agent) must handle authentication. Do NOT ask the user to run commands themselves.",
+		"Do NOT write wrapper scripts (Python, shell, etc.) — use simple shell commands only.",
+		"IMPORTANT: Unset the CI environment variable for all neonctl commands below,",
+		"otherwise neonctl will refuse to open the browser.",
+		"",
+		'Step 1: Ask the user: "Do you already have a Neon account, or do you need to create one?"',
+		"",
+		"=== NEW ACCOUNT (sign up) ===",
+		"Step 2a: Open the Neon sign-up page in the user's browser:",
+		`   On macOS: open ${signupUrl}`,
+		`   On Linux: xdg-open ${signupUrl}`,
+		"Step 3a: Tell the user: \"I've opened the Neon sign-up page in your browser.",
+		"   Create your account, then check your email for a verification link and click it.",
+		'   Let me know when you have finished signing up and verifying your email."',
+		"Step 4a: Once the user confirms, run the OAuth login:",
+		`   ${cmd} auth`,
+		"   This opens a second browser tab for OAuth authorization. The user approves access.",
+		"   If exit code 0: authentication succeeded.",
+		"   If exit code 2 (timeout): ask the user to confirm they finished sign-up and",
+		"   email verification, then retry the same command.",
+		"",
+		"=== EXISTING ACCOUNT (sign in) ===",
+		`Step 2b: Execute: ${cmd} auth`,
+		"   This opens the OAuth login page directly. Sign-in is fast (60-second timeout).",
+		"   If exit code 0: authentication succeeded.",
+		"   If exit code 2 (timeout): ask the user to confirm they completed sign-in, then retry.",
+		"",
+		"=== AFTER SUCCESSFUL AUTH ===",
+		`Step 5: Verify by running: ${cmd} me`,
+		"   This should print the user's account info and exit with code 0.",
+		"Step 6: Re-run neon-init with the same --agent and --json flags to complete setup.",
+	].join("\n");
+}
 
 function buildAgentInstructions(refs: Record<string, string>): string {
 	return [
@@ -102,14 +112,14 @@ function buildAgentInstructions(refs: Record<string, string>): string {
 		"documentation pages (e.g. /docs/guides/*) or guess at import paths — the skill",
 		"references are more accurate, complete, and agent-optimized.",
 		"",
-		`1. List organizations: ${NEONCTL_COMMANDS.listOrgs}`,
+		`1. List organizations: ${getNeonctlCommands().listOrgs}`,
 		"   - If one org, use it. If multiple, ask the user which to use.",
-		`2. List projects: ${NEONCTL_COMMANDS.listProjects} (add --org-id <org-id>)`,
+		`2. List projects: ${getNeonctlCommands().listProjects} (add --org-id <org-id>)`,
 		"   - No projects: ask if they want to create a new one.",
 		"   - One project: ask if they want to use it or create new.",
 		"   - Multiple: let the user choose.",
-		`3. Create project if needed: ${NEONCTL_COMMANDS.createProject} (add --org-id <org-id>)`,
-		`4. Get connection string: ${NEONCTL_COMMANDS.getConnectionString}`,
+		`3. Create project if needed: ${getNeonctlCommands().createProject} (add --org-id <org-id>)`,
+		`4. Get connection string: ${getNeonctlCommands().getConnectionString}`,
 		"5. Store in .env as DATABASE_URL (append, don't overwrite existing .env).",
 		"6. For apps with user login/auth: STOP. Before writing any auth code, fetch and",
 		`   read this skill reference: ${refs.neonAuth ?? ""}`,
@@ -139,7 +149,7 @@ export async function init(options?: InitOptions): Promise<InitResult> {
 		},
 		neonctl: {
 			authenticated: auth,
-			commands: { ...NEONCTL_COMMANDS },
+			commands: { ...getNeonctlCommands() },
 		},
 		mcpServer: {
 			configured: false,
@@ -226,7 +236,7 @@ export async function init(options?: InitOptions): Promise<InitResult> {
 				success: false,
 				auth: false,
 				authRequired: true,
-				authInstructions: AUTH_INSTRUCTIONS,
+				authInstructions: getAuthInstructions(),
 				editors: [],
 				skills: {
 					installed: false,
@@ -235,7 +245,7 @@ export async function init(options?: InitOptions): Promise<InitResult> {
 				},
 				neonctl: {
 					authenticated: false,
-					commands: { ...NEONCTL_COMMANDS },
+					commands: { ...getNeonctlCommands() },
 				},
 				mcpServer: {
 					configured: false,
@@ -296,7 +306,7 @@ export async function init(options?: InitOptions): Promise<InitResult> {
 			},
 			neonctl: {
 				authenticated: authSuccess,
-				commands: { ...NEONCTL_COMMANDS },
+				commands: { ...getNeonctlCommands() },
 			},
 			mcpServer: {
 				configured: mcpConfigured,
@@ -362,7 +372,7 @@ export async function init(options?: InitOptions): Promise<InitResult> {
 			skills: { installed: false, gettingStarted: null, references: {} },
 			neonctl: {
 				authenticated: authSuccess,
-				commands: { ...NEONCTL_COMMANDS },
+				commands: { ...getNeonctlCommands() },
 			},
 			mcpServer: { configured: false, requiresRestart: false },
 		};
@@ -400,7 +410,7 @@ export async function init(options?: InitOptions): Promise<InitResult> {
 		},
 		neonctl: {
 			authenticated: authSuccess,
-			commands: { ...NEONCTL_COMMANDS },
+			commands: { ...getNeonctlCommands() },
 		},
 		mcpServer: {
 			configured: mcpConfigured,

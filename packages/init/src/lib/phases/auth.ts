@@ -1,11 +1,20 @@
 import { isAuthenticated } from "../auth.js";
+import { neonctlCmd } from "../neonctl.js";
 import type { PhaseResponse } from "../types.js";
 
-const SIGNUP_COMMANDS: Record<string, string> = {
-	darwin: "open https://console.neon.tech/signup",
-	linux: "xdg-open https://console.neon.tech/signup",
-	win32: "start https://console.neon.tech/signup",
-};
+function getSignupUrl(): string {
+	const base = process.env.NEON_API_HOST?.replace(/\/+$/, "");
+	return base ? `${base}/signup` : "https://console.neon.tech/signup";
+}
+
+function getSignupCommands(): Record<string, string> {
+	const url = getSignupUrl();
+	return {
+		darwin: `open ${url}`,
+		linux: `xdg-open ${url}`,
+		win32: `start ${url}`,
+	};
+}
 
 export interface AuthPhaseOptions {
 	agent?: string;
@@ -61,7 +70,7 @@ export async function handleAuthPhase(
 	// --method new: guide through signup
 	if (options.method === "new") {
 		const openCmd =
-			SIGNUP_COMMANDS[process.platform] ?? SIGNUP_COMMANDS.linux;
+			getSignupCommands()[process.platform] ?? getSignupCommands().linux;
 		return {
 			phase: "auth",
 			status: "in_progress",
@@ -95,7 +104,7 @@ export async function handleAuthPhase(
 			status: "in_progress",
 			nextAction: {
 				type: "run_command",
-				command: "CI= npx -y neonctl auth",
+				command: `${neonctlCmd()} auth`,
 				description:
 					"This will open your browser for Neon OAuth sign-in.",
 				timeout: 120000,
@@ -134,7 +143,8 @@ export async function handleAuthPhase(
 
 	// No method specified: ask the user, then launch OAuth directly for
 	// "existing account" without an intermediate CLI round-trip.
-	const openCmd = SIGNUP_COMMANDS[process.platform] ?? SIGNUP_COMMANDS.linux;
+	const openCmd =
+		getSignupCommands()[process.platform] ?? getSignupCommands().linux;
 	return {
 		phase: "auth",
 		status: "required",
@@ -158,7 +168,7 @@ export async function handleAuthPhase(
 				existing_account: {
 					action: {
 						type: "run_command",
-						command: "CI= npx -y neonctl auth",
+						command: `${neonctlCmd()} auth`,
 						description:
 							"This will open your browser for Neon OAuth sign-in.",
 						timeout: 120000,

@@ -98,20 +98,20 @@ export async function createApiKeyFromNeonctl(
 		const keyName = `neonctl-init-${timestamp}`;
 
 		// Call Neon API to create an API key
-		const response = await fetch(
-			"https://console.neon.tech/api/v2/api_keys",
-			{
-				method: "POST",
-				headers: {
-					Authorization: `Bearer ${accessToken}`,
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify({
-					key_name: keyName,
-				}),
-				signal: AbortSignal.timeout(30000),
+		const apiBase = process.env.NEON_API_HOST
+			? `${process.env.NEON_API_HOST.replace(/\/+$/, "")}/api/v2`
+			: "https://console.neon.tech/api/v2";
+		const response = await fetch(`${apiBase}/api_keys`, {
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${accessToken}`,
+				"Content-Type": "application/json",
 			},
-		);
+			body: JSON.stringify({
+				key_name: keyName,
+			}),
+			signal: AbortSignal.timeout(30000),
+		});
 
 		if (!response.ok) {
 			const errorText = await response.text();

@@ -1,3 +1,4 @@
+import { neonctlCmd } from "../neonctl.js";
 import { ensureSkillsUpToDate, SKILL_REFERENCE_URLS } from "../skills.js";
 import type { PhaseResponse } from "../types.js";
 
@@ -42,7 +43,7 @@ export async function handleGettingStartedPhase(
 						"If multiple orgs exist, ask the user which one to use.",
 						"Remember the selected org ID for the next steps.",
 					].join(" "),
-					command: "CI= npx -y neonctl orgs list --output json",
+					command: `${neonctlCmd()} orgs list --output json`,
 				},
 				{
 					id: "select_or_create_project",
@@ -54,8 +55,7 @@ export async function handleGettingStartedPhase(
 						"If no eligible projects exist, tell the user and proceed directly to creating a new one.",
 						"IMPORTANT: Always include --org-id when creating a project to avoid interactive prompts.",
 					].join(" "),
-					command:
-						"CI= npx -y neonctl projects list --org-id <org-id> --output json",
+					command: `${neonctlCmd()} projects list --org-id <org-id> --output json`,
 				},
 				{
 					id: "create_project_if_needed",
@@ -64,8 +64,7 @@ export async function handleGettingStartedPhase(
 						"Ask the user for a project name (suggest the current directory name).",
 						"If the user chose an existing eligible project, skip this step.",
 					].join(" "),
-					command:
-						"CI= npx -y neonctl projects create --name <project-name> --org-id <org-id> --region-id aws-us-east-2 --output json",
+					command: `${neonctlCmd()} projects create --name <project-name> --org-id <org-id> --region-id aws-us-east-2 --output json`,
 				},
 			);
 		} else {
@@ -79,7 +78,7 @@ export async function handleGettingStartedPhase(
 						"If multiple orgs exist, ask the user which one to use.",
 						"Remember the selected org ID for the next steps.",
 					].join(" "),
-					command: "CI= npx -y neonctl orgs list --output json",
+					command: `${neonctlCmd()} orgs list --output json`,
 				},
 				{
 					id: "select_or_create_project",
@@ -89,8 +88,7 @@ export async function handleGettingStartedPhase(
 						"If creating new, ask the user for a project name (suggest the current directory name).",
 						"IMPORTANT: Always include --org-id when creating a project to avoid interactive prompts.",
 					].join(" "),
-					command:
-						"CI= npx -y neonctl projects list --org-id <org-id> --output json",
+					command: `${neonctlCmd()} projects list --org-id <org-id> --output json`,
 				},
 				{
 					id: "create_project_if_needed",
@@ -98,8 +96,7 @@ export async function handleGettingStartedPhase(
 						"If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>).",
 						"If the user chose an existing project, skip this step.",
 					].join(" "),
-					command:
-						"CI= npx -y neonctl projects create --name <project-name> --org-id <org-id> --output json",
+					command: `${neonctlCmd()} projects create --name <project-name> --org-id <org-id> --output json`,
 				},
 			);
 		}
@@ -136,7 +133,7 @@ export async function handleGettingStartedPhase(
 				"It reads the .neon context file to determine the project, and writes to the appropriate env file for the project.",
 				"Ensure the target env file is listed in .gitignore.",
 			].join(" "),
-			command: "CI= npx -y neonctl env pull",
+			command: `${neonctlCmd()} env pull`,
 		});
 
 		// Step 6: Install Neon serverless driver if needed

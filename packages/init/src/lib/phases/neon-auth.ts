@@ -1,3 +1,4 @@
+import { neonctlCmd } from "../neonctl.js";
 import { ensureSkillsUpToDate, SKILL_REFERENCE_URLS } from "../skills.js";
 import type { PhaseResponse } from "../types.js";
 
@@ -77,8 +78,8 @@ export async function handleNeonAuthPhase(
 						id: "provision",
 						description:
 							"Enable Neon Auth on the project using the neonctl CLI. " +
-							"Run: `CI= npx -y neonctl neon-auth enable --project-id <project-id> --output json`. " +
-							"You can check current status with: `CI= npx -y neonctl neon-auth status --project-id <project-id> --output json`." +
+							`Run: \`${neonctlCmd()} neon-auth enable --project-id <project-id> --output json\`. ` +
+							`You can check current status with: \`${neonctlCmd()} neon-auth status --project-id <project-id> --output json\`.` +
 							(options.projectId
 								? ` Project ID: ${options.projectId}.`
 								: " Determine the project ID from the .neon file in the project root, or from the DATABASE_URL in .env, or ask the user."),
@@ -95,9 +96,8 @@ export async function handleNeonAuthPhase(
 					},
 					{
 						id: "pull_env",
-						description:
-							"Run `neonctl env pull` to populate the NEON_AUTH_BASE_URL, NEON_AUTH_JWKS_URL, and other Neon Auth environment variables. This reads the .neon context file and writes the auth URLs to the project's env file.",
-						command: "CI= npx -y neonctl env pull",
+						description: `Run \`${neonctlCmd()} env pull\` to populate the NEON_AUTH_BASE_URL, NEON_AUTH_JWKS_URL, and other Neon Auth environment variables. This reads the .neon context file and writes the auth URLs to the project's env file.`,
+						command: `${neonctlCmd()} env pull`,
 					},
 				],
 				onComplete: {

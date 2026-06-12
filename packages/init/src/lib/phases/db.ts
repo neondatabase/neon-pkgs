@@ -1,3 +1,4 @@
+import { neonctlCmd } from "../neonctl.js";
 import { SKILL_REFERENCE_URLS } from "../skills.js";
 import type { PhaseResponse } from "../types.js";
 
@@ -69,7 +70,7 @@ export async function handleDbPhase(
 					{
 						id: "get_connection_string",
 						description: "Get the database connection string",
-						command: `CI= npx -y neonctl connection-string --project-id ${options.projectId}`,
+						command: `${neonctlCmd()} connection-string --project-id ${options.projectId}`,
 					},
 					{
 						id: "store_env",
@@ -121,7 +122,7 @@ export async function handleDbPhase(
 						},
 					],
 					context:
-						"The agent should ask the user for a project name, then run: CI= npx -y neonctl projects create --name <name> --output json" +
+						`The agent should ask the user for a project name, then run: ${neonctlCmd()} projects create --name <name> --output json` +
 						(options.orgId ? ` --org-id ${options.orgId}` : "") +
 						" and pass the result back.",
 					responseMapping: {
@@ -171,8 +172,7 @@ export async function handleDbPhase(
 				type: "ask_user",
 				question: "Which Neon project would you like to use?",
 				options: projectOptions,
-				context:
-					"If the user wants to create a new project, ask for a name then run: CI= npx -y neonctl projects create --name <name> --output json and use the returned project id.",
+				context: `If the user wants to create a new project, ask for a name then run: ${neonctlCmd()} projects create --name <name> --output json and use the returned project id.`,
 				responseMapping,
 			},
 		};
@@ -203,7 +203,7 @@ export async function handleDbPhase(
 				org: { id: orgId },
 				nextAction: {
 					type: "run_command",
-					command: `CI= npx -y neonctl projects list --org-id ${orgId} --output json`,
+					command: `${neonctlCmd()} projects list --org-id ${orgId} --output json`,
 					description: "Listing Neon projects.",
 					timeout: 30000,
 					onSuccess: {
@@ -264,7 +264,7 @@ export async function handleDbPhase(
 			org: { id: options.orgId },
 			nextAction: {
 				type: "run_command",
-				command: `CI= npx -y neonctl projects list --org-id ${options.orgId} --output json`,
+				command: `${neonctlCmd()} projects list --org-id ${options.orgId} --output json`,
 				description: "Listing Neon projects.",
 				timeout: 30000,
 				onSuccess: {
@@ -299,7 +299,7 @@ export async function handleDbPhase(
 		status: "ready",
 		nextAction: {
 			type: "run_command",
-			command: "CI= npx -y neonctl orgs list --output json",
+			command: `${neonctlCmd()} orgs list --output json`,
 			description: "Listing your Neon organizations.",
 			timeout: 30000,
 			onSuccess: {
