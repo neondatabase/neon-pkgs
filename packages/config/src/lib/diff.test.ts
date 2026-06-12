@@ -37,6 +37,119 @@ describe("diffConfig", () => {
 		]);
 	});
 
+	test("enable-data-api carries the resolved create input (auth wiring + settings)", () => {
+		const diff = diffConfig(
+			{
+				authEnabled: false,
+				dataApiEnabled: true,
+				dataApi: {
+					authProvider: "external",
+					jwksUrl: "https://idp.example.com/jwks.json",
+					settings: { dbMaxRows: 500 },
+				},
+			},
+			remote,
+			{ updateExisting: false },
+		);
+		expect(diff.plan).toEqual([
+			{
+				kind: "enable-data-api",
+				projectId: "proj",
+				branchId: "br-main",
+				branchName: "main",
+				databaseName: "neondb",
+				input: {
+					authProvider: "external",
+					jwksUrl: "https://idp.example.com/jwks.json",
+					settings: { dbMaxRows: 500 },
+				},
+			},
+		]);
+	});
+
+	test("Data API settings drift is a conflict unless updateExisting is set", () => {
+		const enabledRemote: RemoteState = {
+			...remote,
+			services: {
+				databaseName: "neondb",
+				authEnabled: false,
+				dataApiEnabled: true,
+				dataApiSettings: { dbMaxRows: 100 },
+			},
+		};
+		const desired = {
+			authEnabled: false,
+			dataApiEnabled: true,
+			dataApi: {
+				authProvider: "neon" as const,
+				settings: { dbMaxRows: 500 },
+			},
+		};
+		const conflictDiff = diffConfig(desired, enabledRemote, {
+			updateExisting: false,
+		});
+		expect(conflictDiff.plan).toEqual([]);
+		expect(conflictDiff.conflicts[0]).toMatchObject({
+			field: "dataApi.settings",
+			current: { dbMaxRows: 100 },
+			desired: { dbMaxRows: 500 },
+		});
+
+		const updateDiff = diffConfig(desired, enabledRemote, {
+			updateExisting: true,
+		});
+		expect(updateDiff.conflicts).toEqual([]);
+		expect(updateDiff.plan[0]).toMatchObject({
+			kind: "update-data-api",
+			databaseName: "neondb",
+			settings: { dbMaxRows: 500 },
+		});
+	});
+
+	test("no Data API update when settings match or are unreported", () => {
+		const desired = {
+			authEnabled: false,
+			dataApiEnabled: true,
+			dataApi: {
+				authProvider: "neon" as const,
+				settings: { dbMaxRows: 500 },
+			},
+		};
+		// Matching remote settings → no plan, no conflict.
+		const matched = diffConfig(
+			desired,
+			{
+				...remote,
+				services: {
+					databaseName: "neondb",
+					authEnabled: false,
+					dataApiEnabled: true,
+					dataApiSettings: { dbMaxRows: 500 },
+				},
+			},
+			{ updateExisting: true },
+		);
+		expect(matched.plan).toEqual([]);
+		expect(matched.conflicts).toEqual([]);
+
+		// Remote settings not reported (null) → cannot diff, so no update is planned.
+		const unreported = diffConfig(
+			desired,
+			{
+				...remote,
+				services: {
+					databaseName: "neondb",
+					authEnabled: false,
+					dataApiEnabled: true,
+					dataApiSettings: null,
+				},
+			},
+			{ updateExisting: true },
+		);
+		expect(unreported.plan).toEqual([]);
+		expect(unreported.conflicts).toEqual([]);
+	});
+
 	test("reports compute drift unless updateExisting is set", () => {
 		const diff = diffConfig(
 			{
@@ -62,7 +175,7 @@ describe("diffConfig", () => {
 		});
 	});
 
-	test("plans preview deploy + bucket + ai-gateway when nothing exists", () => {
+	test("plans preview deploy + bucket when nothing exists (aiGateway is never provisioned)", () => {
 		const diff = diffConfig(
 			{
 				authEnabled: false,
@@ -78,6 +191,8 @@ describe("diffConfig", () => {
 						},
 					],
 					buckets: [{ name: "uploads", access: "private" }],
+					// aiGateway is always available (credential-gated), so even when the
+					// policy enables it the diff emits no provisioning step for it.
 					aiGatewayEnabled: true,
 				},
 			},
@@ -86,7 +201,6 @@ describe("diffConfig", () => {
 				preview: {
 					buckets: [],
 					functions: [],
-					aiGatewayEnabled: false,
 				},
 			},
 			{ updateExisting: false },
@@ -94,7 +208,6 @@ describe("diffConfig", () => {
 		expect(diff.plan.map((p) => p.kind)).toEqual([
 			"create-bucket",
 			"deploy-function",
-			"enable-ai-gateway",
 		]);
 		// A brand-new function is created by its first deployment, so the single
 		// deploy-function step is flagged as not-yet-existing.
@@ -102,7 +215,7 @@ describe("diffConfig", () => {
 		expect(deploy).toMatchObject({ functionExists: false });
 	});
 
-	test("skips enable-ai-gateway when already present, but still re-deploys an existing function", () => {
+	test("re-deploys an existing function and never plans an aiGateway step", () => {
 		const diff = diffConfig(
 			{
 				authEnabled: false,
@@ -133,7 +246,6 @@ describe("diffConfig", () => {
 							invocationUrl: "https://x/functions/fn1",
 						},
 					],
-					aiGatewayEnabled: true,
 				},
 			},
 			{ updateExisting: false },

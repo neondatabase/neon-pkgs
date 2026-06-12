@@ -1,4 +1,5 @@
 import type {
+	EnableDataApiInput,
 	NeonBranchSnapshot,
 	NeonBucketSnapshot,
 	NeonEndpointSnapshot,
@@ -8,7 +9,9 @@ import type {
 	BucketAccessLevel,
 	ComputeSettings,
 	ConflictReport,
+	DataApiSettings,
 	ResolvedBranchConfig,
+	ResolvedDataApiConfig,
 	ResolvedFunctionConfig,
 } from "./types.js";
 
@@ -51,6 +54,21 @@ export type PlanStep =
 			branchId: string;
 			branchName: string;
 			databaseName: string;
+			/** Create-time auth wiring + initial settings from the policy. */
+			input?: EnableDataApiInput;
+	  }
+	| {
+			/**
+			 * Reconcile the runtime settings of an already-enabled Data API integration.
+			 * Only `settings` are mutable post-create, so this is the lone Data API
+			 * *update* step — and it is an override (requires `updateExisting`).
+			 */
+			kind: "update-data-api";
+			projectId: string;
+			branchId: string;
+			branchName: string;
+			databaseName: string;
+			settings: DataApiSettings;
 	  }
 	| {
 			kind: "create-bucket";
@@ -75,18 +93,18 @@ export type PlanStep =
 			fn: ResolvedFunctionConfig;
 			/** Whether the function already existed remotely when the plan was computed. */
 			functionExists: boolean;
-	  }
-	| {
-			kind: "enable-ai-gateway";
-			projectId: string;
-			branchId: string;
-			branchName: string;
 	  };
 
 export interface RemoteServiceState {
 	databaseName: string;
 	authEnabled: boolean;
 	dataApiEnabled: boolean;
+	/**
+	 * Current Data API runtime settings, when the integration is enabled and the API reports
+	 * them (SubZero only). `null`/absent means "not reported" — settings drift can't be
+	 * computed, so no update step is planned.
+	 */
+	dataApiSettings?: DataApiSettings | null;
 }
 
 /**
@@ -96,7 +114,6 @@ export interface RemoteServiceState {
 export interface RemotePreviewState {
 	buckets: NeonBucketSnapshot[];
 	functions: NeonFunctionSnapshot[];
-	aiGatewayEnabled: boolean;
 }
 
 export interface RemoteState {
@@ -131,16 +148,21 @@ export function diffConfig(
 	const conflicts: ConflictReport[] = [];
 	const plan: PlanStep[] = [];
 	diffBranchConfig({ config, remote, options, plan, conflicts });
-	diffServices({ config, remote, plan });
+	diffServices({ config, remote, options, plan, conflicts });
 	diffPreview({ config, remote, plan });
 	return { plan, conflicts };
 }
 
 /**
- * Plan Preview features (functions, buckets, AI Gateway). Like {@link diffServices}, this
- * is **additive**: it creates desired buckets/functions and enables the AI Gateway, but
- * never deletes buckets/functions or disables the gateway. Teardown is destructive, so it
- * stays explicit/manual — matching the existing auth / dataApi behaviour.
+ * Plan Preview features (functions, buckets). Like {@link diffServices}, this is
+ * **additive**: it creates desired buckets and (re-)deploys functions, but never deletes
+ * them. Teardown is destructive, so it stays explicit/manual — matching the existing
+ * auth / dataApi behaviour.
+ *
+ * The AI Gateway is intentionally NOT planned here: it is always available on a branch
+ * (credential-gated, not per-branch provisioned), so `preview.aiGateway` produces no plan
+ * step — it only drives the branch credential's `ai_gateway:invoke` scope and the gateway
+ * env vars (`@neondatabase/env`). There is nothing to create, and nothing to probe.
  *
  * Functions are always (re-)deployed: deployments are versioned and the newest becomes
  * active, so each push ships the current source. There is no separate create step — Neon
@@ -161,7 +183,6 @@ function diffPreview(args: {
 	const state: RemotePreviewState = remote.preview ?? {
 		buckets: [],
 		functions: [],
-		aiGatewayEnabled: false,
 	};
 
 	for (const bucket of preview.buckets) {
@@ -190,27 +211,23 @@ function diffPreview(args: {
 			functionExists: exists,
 		});
 	}
-
-	if (preview.aiGatewayEnabled && !state.aiGatewayEnabled) {
-		plan.push({
-			kind: "enable-ai-gateway",
-			projectId: remote.projectId,
-			branchId: remote.branch.id,
-			branchName: remote.branch.name,
-		});
-	}
 }
 
 /**
- * Plan additive branch-scoped integrations. Disabling remains explicit/manual because
- * teardown is destructive.
+ * Plan branch-scoped integrations. Enabling is additive (no existing resource to override).
+ * The Data API is the one integration that also has a reconcilable *update*: its runtime
+ * `settings` can drift once enabled, and reconciling them is an override (gated on
+ * `updateExisting`, like compute/TTL/protected). The auth provider / JWKS wiring is fixed at
+ * enable time, so it is never updated here. Disabling stays explicit/manual (destructive).
  */
 function diffServices(args: {
 	config: ResolvedBranchConfig;
 	remote: RemoteState;
+	options: DiffOptions;
 	plan: PlanStep[];
+	conflicts: ConflictReport[];
 }): void {
-	const { config, remote, plan } = args;
+	const { config, remote, options, plan, conflicts } = args;
 	const state = remote.services;
 	if (config.authEnabled && !state.authEnabled) {
 		const step: PlanStep = {
@@ -222,15 +239,114 @@ function diffServices(args: {
 		if (state.databaseName) step.databaseName = state.databaseName;
 		plan.push(step);
 	}
-	if (config.dataApiEnabled && !state.dataApiEnabled) {
-		plan.push({
+	if (config.dataApiEnabled) {
+		diffDataApi({ config, remote, options, plan, conflicts });
+	}
+}
+
+/**
+ * Plan the Data API: a first-time **enable** (carrying the create-time auth wiring +
+ * settings), or — when it already exists — a **settings update** if the policy's settings
+ * drift from the remote. The update is an override: applied as a plan step under
+ * `updateExisting`, otherwise reported as a conflict.
+ */
+function diffDataApi(args: {
+	config: ResolvedBranchConfig;
+	remote: RemoteState;
+	options: DiffOptions;
+	plan: PlanStep[];
+	conflicts: ConflictReport[];
+}): void {
+	const { config, remote, options, plan, conflicts } = args;
+	const state = remote.services;
+	const desired = config.dataApi;
+
+	if (!state.dataApiEnabled) {
+		const step: PlanStep = {
 			kind: "enable-data-api",
 			projectId: remote.projectId,
 			branchId: remote.branch.id,
 			branchName: remote.branch.name,
 			databaseName: state.databaseName,
+		};
+		const input = desired ? enableInputFromResolved(desired) : undefined;
+		if (input) step.input = input;
+		plan.push(step);
+		return;
+	}
+
+	// Already enabled: the only reconcilable change is its runtime settings.
+	const desiredSettings = desired?.settings;
+	if (!desiredSettings) return;
+	if (!dataApiSettingsDiffer(desiredSettings, state.dataApiSettings)) return;
+
+	if (options.updateExisting) {
+		plan.push({
+			kind: "update-data-api",
+			projectId: remote.projectId,
+			branchId: remote.branch.id,
+			branchName: remote.branch.name,
+			databaseName: state.databaseName,
+			settings: desiredSettings,
+		});
+	} else {
+		conflicts.push({
+			kind: "branch",
+			identifier: remote.branch.name,
+			field: "dataApi.settings",
+			current: state.dataApiSettings ?? undefined,
+			desired: desiredSettings,
+			reason: "Existing Data API has different settings. Pass `updateExisting: true` (SDK) or `--update-existing` (CLI) to apply.",
 		});
 	}
+}
+
+/** Build the create-time {@link EnableDataApiInput} from a resolved Data API config. */
+function enableInputFromResolved(
+	resolved: ResolvedDataApiConfig,
+): EnableDataApiInput {
+	const input: EnableDataApiInput = { authProvider: resolved.authProvider };
+	if (resolved.jwksUrl !== undefined) input.jwksUrl = resolved.jwksUrl;
+	if (resolved.providerName !== undefined)
+		input.providerName = resolved.providerName;
+	if (resolved.jwtAudience !== undefined)
+		input.jwtAudience = resolved.jwtAudience;
+	if (resolved.settings) input.settings = resolved.settings;
+	return input;
+}
+
+/** The camelCase keys of {@link DataApiSettings}, used to compare desired vs remote settings. */
+const DATA_API_SETTING_KEYS = [
+	"dbAggregatesEnabled",
+	"dbAnonRole",
+	"dbExtraSearchPath",
+	"dbMaxRows",
+	"dbSchemas",
+	"jwtRoleClaimKey",
+	"jwtCacheMaxLifetime",
+	"openapiMode",
+	"serverCorsAllowedOrigins",
+	"serverTimingEnabled",
+] as const satisfies ReadonlyArray<keyof DataApiSettings>;
+
+/**
+ * Whether the policy's Data API `settings` differ from the remote ones. Only the keys the
+ * policy actually set are compared (so unset fields never count as drift). When the remote
+ * settings are not reported (`null`/absent — non-SubZero), drift can't be computed and this
+ * returns `false` so no spurious update is planned.
+ */
+function dataApiSettingsDiffer(
+	desired: DataApiSettings,
+	current: DataApiSettings | null | undefined,
+): boolean {
+	if (!current) return false;
+	for (const key of DATA_API_SETTING_KEYS) {
+		if (desired[key] === undefined) continue;
+		if (JSON.stringify(desired[key]) !== JSON.stringify(current[key])) {
+			return true;
+		}
+	}
+	return false;
 }
 
 interface BranchConfigArgs {

@@ -205,12 +205,13 @@ describe("isPreviewFeatureUnavailable", () => {
 });
 
 describe("previewUnavailableError", () => {
-	test("wraps an unavailable error with a clear FeatureUnavailable message", () => {
+	test("503: FeatureUnavailable with status line, API message, request id, and incident guidance", () => {
 		const original = new PlatformError(ErrorCode.ServerError, "boom", {
 			details: {
 				status: 503,
 				neonMessage:
 					"platform functions not available for this project",
+				requestId: "req-503",
 			},
 		});
 		const wrapped = previewUnavailableError(original, "Functions");
@@ -218,7 +219,41 @@ describe("previewUnavailableError", () => {
 		if (!(wrapped instanceof PlatformError)) throw new Error("not wrapped");
 		expect(wrapped.code).toBe(ErrorCode.FeatureUnavailable);
 		expect(wrapped.message).toMatch(/Functions is a Preview feature/);
-		expect(wrapped.message).toMatch(/not available for this project/);
+		expect(wrapped.message).toMatch(
+			/isn't available for this Neon project/,
+		);
+		// One short status line + the raw API message + request id (never a stack trace).
+		expect(wrapped.message).toMatch(/HTTP 503 Service Unavailable/);
+		expect(wrapped.message).toMatch(
+			/platform functions not available for this project/,
+		);
+		expect(wrapped.message).toMatch(/request id req-503/);
+		// 503 → still coming up, or a transient incident: retry / status page / support.
+		expect(wrapped.message).toMatch(/incident/);
+		expect(wrapped.message).toMatch(/neonstatus\.com/);
+		// Escape hatch + structured details for programmatic consumers.
+		expect(wrapped.message).toMatch(
+			/remove the corresponding feature from the `preview`/,
+		);
+		expect(wrapped.details.status).toBe(503);
+		expect(wrapped.details.requestId).toBe("req-503");
+	});
+
+	test("404: points at region availability / private-preview access", () => {
+		const original = new PlatformError(ErrorCode.NotFound, "boom", {
+			details: { status: 404, neonMessage: "this route does not exist" },
+		});
+		const wrapped = previewUnavailableError(
+			original,
+			"Object storage (buckets)",
+		);
+		if (!(wrapped instanceof PlatformError)) throw new Error("not wrapped");
+		expect(wrapped.code).toBe(ErrorCode.FeatureUnavailable);
+		expect(wrapped.message).toMatch(/HTTP 404 Not Found/);
+		expect(wrapped.message).toMatch(/region/);
+		expect(wrapped.message).toMatch(/access to the preview/);
+		expect(wrapped.message).not.toMatch(/neonstatus\.com/);
+		expect(wrapped.details.status).toBe(404);
 	});
 
 	test("passes a non-unavailable error through unchanged", () => {

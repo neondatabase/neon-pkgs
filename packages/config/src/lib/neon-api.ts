@@ -3,6 +3,8 @@ import type {
 	ComputeSettings,
 	CredentialPrincipalType,
 	CredentialScope,
+	DataApiAuthProvider,
+	DataApiSettings,
 	FunctionRuntime,
 } from "./types.js";
 
@@ -108,11 +110,33 @@ export interface NeonAuthSnapshot {
 }
 
 /**
- * Public, fetchable bits of a Neon Data API integration on a specific branch.
+ * Public, fetchable bits of a Neon Data API integration on a specific branch — the subset of
+ * the Neon API `DataAPIReponse` we model. `settings` is only populated for SubZero-backed
+ * integrations (the API returns `null` otherwise), so it is used for settings-drift diffing
+ * when present and ignored when absent.
  */
 export interface NeonDataApiSnapshot {
 	/** REST endpoint URL. */
 	url: string;
+	/** Deployment status (e.g. `"ready"`), when reported. */
+	status?: string;
+	/** Current runtime settings (SubZero only); `null`/absent when not reported. */
+	settings?: DataApiSettings | null;
+}
+
+/**
+ * Input for {@link NeonApi.enableProjectBranchDataApi} — the create-time wiring for a Data
+ * API integration (the subset of the Neon API `DataAPICreateRequest` we expose; the
+ * `add_default_grants` / `skip_auth_schema` create flags are intentionally not modeled).
+ * `authProvider` is the friendly `"neon"` / `"external"` value (mapped to the API's
+ * `neon_auth` / `external` by the adapter).
+ */
+export interface EnableDataApiInput {
+	authProvider?: DataApiAuthProvider;
+	jwksUrl?: string;
+	providerName?: string;
+	jwtAudience?: string;
+	settings?: DataApiSettings;
 }
 
 /**
@@ -351,12 +375,28 @@ export interface NeonApi {
 	/**
 	 * Enable the Neon Data API integration on a specific branch + database. Idempotent:
 	 * if an integration is already enabled, the existing snapshot is returned unchanged.
-	 * Used by `pushConfig` and `branch` to honour branch policy `dataApi: {}` / `dataApi.enabled: true`.
+	 * Used by `pushConfig` to honour branch policy `dataApi: {}` / `dataApi: { … }`. The
+	 * optional {@link EnableDataApiInput} carries the create-time auth wiring + initial
+	 * settings; omit it for an all-defaults, Neon-Auth integration.
 	 */
 	enableProjectBranchDataApi(
 		projectId: string,
 		branchId: string,
 		databaseName: string,
+		input?: EnableDataApiInput,
+	): Promise<NeonDataApiSnapshot>;
+
+	/**
+	 * Update the runtime {@link DataApiSettings} of an already-enabled Data API integration
+	 * (the Neon API `PATCH .../data-api/{db}`; always refreshes the schema cache). Only
+	 * `settings` are mutable post-create — the auth provider / JWKS wiring is fixed at
+	 * enable time. Used by `pushConfig` to reconcile settings drift under `updateExisting`.
+	 */
+	updateProjectBranchDataApi(
+		projectId: string,
+		branchId: string,
+		databaseName: string,
+		settings: DataApiSettings,
 	): Promise<NeonDataApiSnapshot>;
 
 	// ─── Preview: buckets ──────────────────────────────────────────────────────
@@ -421,18 +461,13 @@ export interface NeonApi {
 	): Promise<NeonFunctionDeploymentSnapshot>;
 
 	// ─── Preview: AI Gateway ───────────────────────────────────────────────────
-
-	/**
-	 * Whether the AI Gateway is enabled on a branch. Toggle-style, like Neon Auth / Data
-	 * API: used by both `fetchEnv` (to decide visibility) and `pushConfig` (to diff intent).
-	 */
-	getAiGatewayEnabled(projectId: string, branchId: string): Promise<boolean>;
-
-	/** Enable the AI Gateway on a branch. Idempotent. */
-	enableAiGateway(projectId: string, branchId: string): Promise<void>;
-
-	/** Disable the AI Gateway on a branch. Idempotent. */
-	disableAiGateway(projectId: string, branchId: string): Promise<void>;
+	//
+	// The AI Gateway is always available on a branch (credential-gated, not per-branch
+	// provisioned): there is no control-plane enable/disable/status route. Declaring
+	// `preview.aiGateway` in a policy therefore provisions nothing — it only adds the
+	// `ai_gateway:invoke` scope to the branch credential and surfaces the gateway env vars
+	// (`OPENAI_*` / `NEON_AI_GATEWAY_*`) on `fetchEnv` / `env pull`. So this interface
+	// intentionally exposes no AI Gateway methods.
 
 	// ─── Preview: branch-scoped credentials ──────────────────────────────────
 

@@ -57,7 +57,7 @@ export interface PushConfigOptions {
 	api?: NeonApi;
 	/**
 	 * Whether to evaluate the policy as if the target branch **already exists** (the value of
-	 * `branch.exists` passed to the `defineConfig((branch) => …)` closure). Defaults to `true`.
+	 * `branch.exists` passed to the `defineConfig({ branch: (branch) => … })` closure). Defaults to `true`.
 	 *
 	 * Set to `false` to evaluate the policy as a **branch creation** — used by
 	 * {@link createBranch} right after it provisions a new branch, so creation-time tuning
@@ -298,7 +298,8 @@ function isOverrideStep(step: PlanStep): boolean {
 	return (
 		step.kind === "update-branch-ttl" ||
 		step.kind === "update-branch-protected" ||
-		step.kind === "update-endpoint"
+		step.kind === "update-endpoint" ||
+		step.kind === "update-data-api"
 	);
 }
 
@@ -342,6 +343,13 @@ function synthesizeAppliedChange(step: PlanStep): AppliedChange {
 			return { kind: "service", action: "create", identifier: "auth" };
 		case "enable-data-api":
 			return { kind: "service", action: "create", identifier: "dataApi" };
+		case "update-data-api":
+			return {
+				kind: "service",
+				action: "update",
+				identifier: "dataApi",
+				details: { field: "settings", settings: step.settings },
+			};
 		case "create-bucket":
 			return {
 				kind: "service",
@@ -363,12 +371,6 @@ function synthesizeAppliedChange(step: PlanStep): AppliedChange {
 					source: step.fn.source,
 					runtime: step.fn.runtime,
 				},
-			};
-		case "enable-ai-gateway":
-			return {
-				kind: "service",
-				action: "create",
-				identifier: "aiGateway",
 			};
 	}
 }
@@ -430,17 +432,24 @@ async function resolveServiceState(args: {
 			? api.getNeonDataApi(projectId, branch.id, databaseName)
 			: Promise.resolve(null),
 	]);
-	return {
+	const result: RemoteServiceState = {
 		databaseName,
 		authEnabled: auth !== null,
 		dataApiEnabled: dataApi !== null,
 	};
+	// Carry the current Data API settings (when reported) so the diff can detect settings
+	// drift and plan an update. `null` distinguishes "enabled but not reported" from "absent".
+	if (dataApi) result.dataApiSettings = dataApi.settings ?? null;
+	return result;
 }
 
 /**
- * Pre-fetch the current state of branch-scoped Preview features (buckets, functions, AI
- * Gateway) so the diff can be computed additively. Only called when the policy has a
- * `preview` block.
+ * Pre-fetch the current state of branch-scoped Preview features (buckets, functions) so the
+ * diff can be computed additively. Only called when the policy has a `preview` block.
+ *
+ * The AI Gateway is not probed: it is always available (credential-gated, not per-branch
+ * provisioned), so `preview.aiGateway` produces no plan step — it only drives the branch
+ * credential's `ai_gateway:invoke` scope and the gateway env vars (`@neondatabase/env`).
  */
 async function resolvePreviewState(args: {
 	api: NeonApi;
@@ -454,18 +463,15 @@ async function resolvePreviewState(args: {
 	// `plan`/`apply` fail on a feature the user didn't ask for if it's unavailable in the
 	// project/region. A declared-but-unavailable feature still throws (failing the push),
 	// which is the intended signal to enable it first.
-	const [buckets, functions, aiGatewayEnabled] = await Promise.all([
+	const [buckets, functions] = await Promise.all([
 		desired.buckets.length > 0
 			? api.listBranchBuckets(projectId, branchId)
 			: Promise.resolve([]),
 		desired.functions.length > 0
 			? api.listBranchFunctions(projectId, branchId)
 			: Promise.resolve([]),
-		desired.aiGatewayEnabled
-			? api.getAiGatewayEnabled(projectId, branchId)
-			: Promise.resolve(false),
 	]);
-	return { buckets, functions, aiGatewayEnabled };
+	return { buckets, functions };
 }
 
 /**
@@ -565,11 +571,26 @@ async function applyStep(
 				ctx.remoteProjectId,
 				step.branchId,
 				step.databaseName,
+				step.input,
 			);
 			return {
 				kind: "service",
 				action: "create",
 				identifier: "dataApi",
+			};
+		}
+		case "update-data-api": {
+			await ctx.api.updateProjectBranchDataApi(
+				ctx.remoteProjectId,
+				step.branchId,
+				step.databaseName,
+				step.settings,
+			);
+			return {
+				kind: "service",
+				action: "update",
+				identifier: "dataApi",
+				details: { field: "settings", settings: step.settings },
 			};
 		}
 		case "create-bucket": {
@@ -612,14 +633,6 @@ async function applyStep(
 					runtime: step.fn.runtime,
 					deploymentId: deployment.id,
 				},
-			};
-		}
-		case "enable-ai-gateway": {
-			await ctx.api.enableAiGateway(ctx.remoteProjectId, step.branchId);
-			return {
-				kind: "service",
-				action: "create",
-				identifier: "aiGateway",
 			};
 		}
 	}

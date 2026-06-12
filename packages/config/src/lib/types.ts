@@ -103,7 +103,7 @@ export interface ComputeSettings {
 
 /**
  * Read-only descriptor of the branch a {@link Config} policy is being evaluated for — the
- * `branch` argument passed to your `defineConfig((branch) => …)` callback. It describes
+ * `branch` argument passed to your `defineConfig({ branch: (branch) => … })` closure. It describes
  * **which** branch this invocation decides for; it is not a live branch handle and must not
  * be mutated. Switch on its fields and return the desired {@link BranchConfig}.
  */
@@ -146,9 +146,134 @@ export interface ServiceToggle {
  */
 export type ServiceToggleInput = boolean | ServiceToggle;
 
+/**
+ * Resolve a **static** service toggle (`true` / `false` / `{ enabled?: boolean }` / object /
+ * `undefined`) to a type-level boolean. The tuple wrapping (`[T] extends […]`) disables
+ * distribution so a union/`undefined` is judged as a single unit:
+ *
+ * - `false` / `{ enabled: false }` / `undefined` → `false`
+ * - `true` / `{ enabled: true }` / any other object (`{}`, `{ enabled?: boolean }`) → `true`
+ *   (a present toggle defaults to enabled)
+ * - the bare `boolean | … | undefined` (no literal info) → `false`
+ *
+ * Shared by the {@link Config} static cross-field checks and the `@neondatabase/env`
+ * `NeonEnv` namespace derivation, so both read "is this service on?" identically.
+ */
+export type ServiceEnabled<T> = [T] extends [false]
+	? false
+	: [T] extends [{ enabled: false }]
+		? false
+		: [T] extends [undefined]
+			? false
+			: [T] extends [true]
+				? true
+				: [T] extends [{ enabled: true }]
+					? true
+					: [T] extends [object]
+						? true
+						: false;
+
 export interface PostgresConfig {
 	computeSettings?: ComputeSettings;
 }
+
+/**
+ * Authentication providers a Data API integration can verify JWTs against, as written in
+ * `neon.ts`. Friendly authoring values (mapped to the Neon API's `neon_auth` / `external`
+ * at the API boundary):
+ *
+ * - `"neon"` — verify tokens minted by **Neon Auth** on the same branch. Neon supplies the
+ *   JWKS URL / provider wiring for you, so the `jwksUrl` / `providerName` / `jwtAudience`
+ *   fields are forbidden (a type error) on this variant — and the policy must also enable
+ *   top-level `auth` (Neon Auth) so the tokens exist.
+ * - `"external"` — verify tokens from a third-party IdP (Clerk, Stytch, Auth0, …). You
+ *   provide `jwksUrl` (and optionally `providerName` / `jwtAudience`).
+ */
+export const DATA_API_AUTH_PROVIDERS = ["neon", "external"] as const;
+export type DataApiAuthProvider = (typeof DATA_API_AUTH_PROVIDERS)[number];
+
+/**
+ * Reusable runtime settings for a Data API integration (the Neon API `DataAPISettings`,
+ * camelCased to match the rest of `neon.ts`). Every field is optional; omitted fields keep
+ * the Neon defaults shown below. These are the **only** Data API fields that can change on
+ * an already-enabled integration — drift here is reconciled as an *update* (requires
+ * `updateExisting` / `--update-existing`); the create-only auth wiring above cannot.
+ */
+export interface DataApiSettings {
+	/** Enable the aggregates feature (`db_aggregates_enabled`). Default `true`. */
+	dbAggregatesEnabled?: boolean;
+	/** Database role used for anonymous requests (`db_anon_role`). Default `"anonymous"`. */
+	dbAnonRole?: string;
+	/** Extra schemas appended to the search path (`db_extra_search_path`). */
+	dbExtraSearchPath?: string;
+	/** Maximum rows returned in a single request (`db_max_rows`). */
+	dbMaxRows?: number;
+	/** Schemas exposed via the API (`db_schemas`). Default `["public"]`. */
+	dbSchemas?: string[];
+	/** JWT claim key used for role extraction (`jwt_role_claim_key`). Default `".role"`. */
+	jwtRoleClaimKey?: string;
+	/** Maximum lifetime of the JWT cache, in seconds (`jwt_cache_max_lifetime`). */
+	jwtCacheMaxLifetime?: number;
+	/** OpenAPI spec mode (`openapi_mode`). Default `"disabled"`. */
+	openapiMode?: "ignore-privileges" | "disabled";
+	/** CORS allowed origins (`server_cors_allowed_origins`). */
+	serverCorsAllowedOrigins?: string;
+	/** Emit server-timing headers (`server_timing_enabled`). */
+	serverTimingEnabled?: boolean;
+}
+
+/** Fields shared by every {@link DataApiConfig} variant. */
+interface DataApiConfigBase {
+	/** Defaults to `true` when the `dataApi` namespace is present. Set `false` to opt out. */
+	enabled?: boolean;
+	/** Reusable runtime settings. Drift here is reconciled as an update. */
+	settings?: DataApiSettings;
+}
+
+/**
+ * Data API verified by **Neon Auth** (`authProvider: "neon"`, the default). The external
+ * IdP fields are statically forbidden (`?: never`) because Neon supplies them; declaring any
+ * of them is a type error directing you to `authProvider: "external"`.
+ */
+export interface DataApiNeonAuthConfig extends DataApiConfigBase {
+	authProvider?: "neon";
+	/** Forbidden with `authProvider: "neon"` — Neon provides the JWKS URL. */
+	jwksUrl?: never;
+	/** Forbidden with `authProvider: "neon"` — the provider is Neon Auth. */
+	providerName?: never;
+	/** Forbidden with `authProvider: "neon"` — Neon manages the audience. */
+	jwtAudience?: never;
+}
+
+/**
+ * Data API verified by an **external** IdP (`authProvider: "external"`). You provide the
+ * JWKS URL (and optionally a provider label / expected audience).
+ */
+export interface DataApiExternalAuthConfig extends DataApiConfigBase {
+	authProvider: "external";
+	/** URL that publishes the IdP's JWKS (JSON Web Key Set). */
+	jwksUrl?: string;
+	/** Human label for the IdP (e.g. "Clerk", "Stytch", "Auth0"). */
+	providerName?: string;
+	/**
+	 * Expected `aud` claim. ⚠️ This only **rejects** tokens carrying a *different* audience;
+	 * tokens with no `aud` claim are still accepted.
+	 */
+	jwtAudience?: string;
+}
+
+/**
+ * Object form of the `dataApi` toggle. A discriminated union on {@link DataApiAuthProvider}:
+ * the `"neon"` variant forbids the external-IdP fields, the `"external"` variant allows them.
+ */
+export type DataApiConfig = DataApiNeonAuthConfig | DataApiExternalAuthConfig;
+
+/**
+ * How the Data API is toggled in a policy: a bare boolean (like the other service toggles)
+ * or the richer {@link DataApiConfig} object. `true` / `{}` / `{ enabled: true }` enable it
+ * with Neon defaults; `false` / `{ enabled: false }` opt out.
+ */
+export type DataApiInput = boolean | DataApiConfig;
 
 /**
  * Supported function runtimes. Mirrors the Neon Functions deploy API `runtime` enum.
@@ -363,14 +488,17 @@ export interface Config<
 	Auth extends ServiceToggleInput | undefined =
 		| ServiceToggleInput
 		| undefined,
-	DataApi extends ServiceToggleInput | undefined =
-		| ServiceToggleInput
-		| undefined,
+	DataApi extends DataApiInput | undefined = DataApiInput | undefined,
 	Preview extends PreviewInput | undefined = PreviewInput | undefined,
 > {
 	/** Neon Auth integration toggle (GA). Static — drives `NeonEnv.auth`. */
 	auth?: Auth;
-	/** Neon Data API integration toggle (GA). Static — drives `NeonEnv.dataApi`. */
+	/**
+	 * Neon Data API integration (GA). Static — drives `NeonEnv.dataApi`. A boolean/toggle, or
+	 * a {@link DataApiConfig} object selecting the auth provider (`"neon"` / `"external"`) and
+	 * runtime {@link DataApiSettings}. With `authProvider: "neon"` the policy must also enable
+	 * top-level `auth`.
+	 */
 	dataApi?: DataApi;
 	/** Beta (Preview) feature set: AI Gateway, functions, buckets. Static. */
 	preview?: Preview;
@@ -412,6 +540,20 @@ export interface ResolvedPreviewConfig {
 	aiGatewayEnabled: boolean;
 }
 
+/**
+ * Normalized Data API integration. Present on {@link ResolvedBranchConfig} only when the
+ * policy enables `dataApi`. `authProvider` always resolves (defaults to `"neon"`); the
+ * external-IdP wiring is present only for `"external"`; `settings` carries the camelCase
+ * runtime settings (reconciled as an update when they drift).
+ */
+export interface ResolvedDataApiConfig {
+	authProvider: DataApiAuthProvider;
+	jwksUrl?: string;
+	providerName?: string;
+	jwtAudience?: string;
+	settings?: DataApiSettings;
+}
+
 export interface ResolvedBranchConfig {
 	parent?: string;
 	ttlSeconds?: number;
@@ -419,6 +561,11 @@ export interface ResolvedBranchConfig {
 	postgres?: PostgresConfig;
 	authEnabled: boolean;
 	dataApiEnabled: boolean;
+	/**
+	 * Resolved Data API integration. Present iff {@link dataApiEnabled} is `true`. Carries the
+	 * create-time auth wiring and the updatable {@link DataApiSettings}.
+	 */
+	dataApi?: ResolvedDataApiConfig;
 	preview?: ResolvedPreviewConfig;
 }
 

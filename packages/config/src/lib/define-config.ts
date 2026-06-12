@@ -10,12 +10,16 @@ import type {
 	BranchTuning,
 	BranchTuningFn,
 	Config,
+	DataApiInput,
+	DataApiSettings,
 	FunctionDef,
 	FunctionTuning,
 	PreviewInput,
 	ResolvedBranchConfig,
+	ResolvedDataApiConfig,
 	ResolvedFunctionConfig,
 	ResolvedPreviewConfig,
+	ServiceEnabled,
 	ServiceToggleInput,
 } from "./types.js";
 
@@ -23,6 +27,34 @@ import type {
 const DEFAULT_FUNCTION_RUNTIME = "nodejs24" as const;
 
 const REGION_PREFIX = /^(aws|azure|gcp)-/;
+
+/**
+ * Whether a `dataApi` toggle is **enabled and verified by Neon Auth** at the type level: it is
+ * on (see {@link ServiceEnabled}) and not the explicit `authProvider: "external"` variant
+ * (so the default / `"neon"` provider). This is the case that requires top-level Neon Auth.
+ */
+type DataApiUsesNeonAuth<DataApi> = ServiceEnabled<DataApi> extends true
+	? [DataApi] extends [{ authProvider: "external" }]
+		? false
+		: true
+	: false;
+
+/** An `auth` toggle value that is statically guaranteed enabled (`true` / `{}` / `{ enabled: true }`). */
+type EnabledAuthToggle = true | { enabled?: true };
+
+/**
+ * Static cross-field guard for {@link defineConfig}. When the policy enables a Neon-Auth
+ * Data API (`authProvider: "neon"`, the default) but does **not** enable top-level `auth`,
+ * this resolves to `{ auth: EnabledAuthToggle }` — intersected into the parameter type, it
+ * makes `auth` required and rejects `auth: false` / a missing `auth`, surfacing the rule at
+ * author time. Otherwise it is `unknown` (a no-op intersection). The runtime `superRefine`
+ * in {@link configInputSchema} enforces the same invariant for non-typed callers.
+ */
+type RequiresNeonAuth<Auth, DataApi> = DataApiUsesNeonAuth<DataApi> extends true
+	? ServiceEnabled<Auth> extends true
+		? unknown
+		: { auth: EnabledAuthToggle }
+	: unknown;
 
 /**
  * Validate and freeze a Neon Platform branch policy.
@@ -59,20 +91,22 @@ const REGION_PREFIX = /^(aws|azure|gcp)-/;
  */
 export function defineConfig<
 	const Auth extends ServiceToggleInput | undefined = undefined,
-	const DataApi extends ServiceToggleInput | undefined = undefined,
+	const DataApi extends DataApiInput | undefined = undefined,
 	const Preview extends PreviewInput | undefined = undefined,
->(input: {
-	// Each field is intersected with its concrete interface (not just typed as the bare
-	// generic). The generic alone — e.g. `preview?: Preview` — gives editors no members to
-	// complete against in the object-literal position (they see `{} | undefined`), so you
-	// lose hints for `aiGateway` / `functions` / `buckets`. `& PreviewInput` restores the
-	// full shape for autocomplete while still inferring the `const` literal that types the
-	// `branch` closure's slugs (BranchTuningFn<Preview>) and the returned Config.
-	auth?: Auth & ServiceToggleInput;
-	dataApi?: DataApi & ServiceToggleInput;
-	preview?: Preview & PreviewInput;
-	branch?: BranchTuningFn<Preview>;
-}): Config<Auth, DataApi, Preview> {
+>(
+	input: {
+		// Each field is intersected with its concrete interface (not just typed as the bare
+		// generic). The generic alone — e.g. `preview?: Preview` — gives editors no members to
+		// complete against in the object-literal position (they see `{} | undefined`), so you
+		// lose hints for `aiGateway` / `functions` / `buckets`. `& PreviewInput` restores the
+		// full shape for autocomplete while still inferring the `const` literal that types the
+		// `branch` closure's slugs (BranchTuningFn<Preview>) and the returned Config.
+		auth?: Auth & ServiceToggleInput;
+		dataApi?: DataApi & DataApiInput;
+		preview?: Preview & PreviewInput;
+		branch?: BranchTuningFn<Preview>;
+	} & RequiresNeonAuth<Auth, DataApi>,
+): Config<Auth, DataApi, Preview> {
 	if (typeof input === "function") {
 		throw new ConfigValidationError([
 			"defineConfig now expects an object, not a function: `export default defineConfig({ auth: true, preview: { … }, branch: (branch) => ({ … }) })`.",
@@ -108,8 +142,10 @@ export function resolveConfig(
 
 	const resolved: ResolvedBranchConfig = {
 		authEnabled: isServiceEnabled(config.auth),
-		dataApiEnabled: isServiceEnabled(config.dataApi),
+		dataApiEnabled: isDataApiEnabled(config.dataApi),
 	};
+	const dataApi = resolveDataApi(config.dataApi);
+	if (dataApi) resolved.dataApi = dataApi;
 	if (tuning.parent !== undefined) resolved.parent = tuning.parent;
 	if (tuning.ttl !== undefined) {
 		// `branchTuningSchema` already validated `ttl` with the same `parseBranchTtl`, so
@@ -159,6 +195,55 @@ function isServiceEnabled(toggle: ServiceToggleInput | undefined): boolean {
 	if (toggle === undefined) return false;
 	if (typeof toggle === "boolean") return toggle;
 	return toggle.enabled !== false;
+}
+
+/** Whether a {@link DataApiInput} is enabled (present object/`true` unless `enabled: false`). */
+function isDataApiEnabled(input: DataApiInput | undefined): boolean {
+	if (input === undefined) return false;
+	if (typeof input === "boolean") return input;
+	return input.enabled !== false;
+}
+
+/**
+ * Normalize a {@link DataApiInput} into a {@link ResolvedDataApiConfig}, or `undefined` when
+ * the Data API is not enabled. `authProvider` defaults to `"neon"`; the external-IdP wiring
+ * is carried through only for the `"external"` provider; `settings` is copied with its
+ * `undefined` entries dropped so diffing only considers fields the policy actually set.
+ */
+function resolveDataApi(
+	input: DataApiInput | undefined,
+): ResolvedDataApiConfig | undefined {
+	if (!isDataApiEnabled(input)) return undefined;
+	if (typeof input !== "object") {
+		// Bare `true`: enabled with Neon Auth and all-default settings.
+		return { authProvider: "neon" };
+	}
+	const authProvider = input.authProvider ?? "neon";
+	const resolved: ResolvedDataApiConfig = { authProvider };
+	if (authProvider === "external") {
+		if (input.jwksUrl !== undefined) resolved.jwksUrl = input.jwksUrl;
+		if (input.providerName !== undefined)
+			resolved.providerName = input.providerName;
+		if (input.jwtAudience !== undefined)
+			resolved.jwtAudience = input.jwtAudience;
+	}
+	const settings = normalizeDataApiSettings(input.settings);
+	if (settings) resolved.settings = settings;
+	return resolved;
+}
+
+/** Copy a {@link DataApiSettings}, dropping `undefined` entries; `undefined` when empty. */
+function normalizeDataApiSettings(
+	settings: DataApiSettings | undefined,
+): DataApiSettings | undefined {
+	if (!settings) return undefined;
+	const out: DataApiSettings = {};
+	for (const [key, value] of Object.entries(settings)) {
+		if (value !== undefined) {
+			(out as Record<string, unknown>)[key] = value;
+		}
+	}
+	return Object.keys(out).length > 0 ? out : undefined;
 }
 
 /**

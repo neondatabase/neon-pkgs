@@ -4,6 +4,9 @@ import {
 	type BranchCreateRequestEndpointOptions,
 	type BranchUpdateRequest,
 	createApiClient,
+	type DataAPICreateRequest,
+	type DataAPIReponse,
+	type DataAPISettings,
 	type Database,
 	type DefaultEndpointSettings,
 	type Endpoint,
@@ -25,6 +28,7 @@ import type {
 	CreateCredentialInput,
 	CreateProjectInput,
 	DeployFunctionInput,
+	EnableDataApiInput,
 	GetConnectionUriInput,
 	NeonApi,
 	NeonAuthSnapshot,
@@ -42,7 +46,11 @@ import type {
 	NeonRoleSnapshot,
 	UpdateBranchInput,
 } from "./neon-api.js";
-import type { BucketAccessLevel, ComputeSettings } from "./types.js";
+import type {
+	BucketAccessLevel,
+	ComputeSettings,
+	DataApiSettings,
+} from "./types.js";
 import { wrapNeonError } from "./wrap-neon-error.js";
 
 type ApiClient = ReturnType<typeof createApiClient>;
@@ -55,6 +63,102 @@ const neonAuthResponseSchema = z.object({
 	jwks_url: z.string(),
 	base_url: z.string().optional(),
 });
+
+// ─── Data API mapping (camelCase neon.ts ↔ snake_case Neon API) ───────────────
+
+/** Map our camelCase {@link DataApiSettings} onto the Neon API's snake_case `DataAPISettings`. */
+function dataApiSettingsToApi(settings: DataApiSettings): DataAPISettings {
+	const out: DataAPISettings = {};
+	if (settings.dbAggregatesEnabled !== undefined)
+		out.db_aggregates_enabled = settings.dbAggregatesEnabled;
+	if (settings.dbAnonRole !== undefined)
+		out.db_anon_role = settings.dbAnonRole;
+	if (settings.dbExtraSearchPath !== undefined)
+		out.db_extra_search_path = settings.dbExtraSearchPath;
+	if (settings.dbMaxRows !== undefined) out.db_max_rows = settings.dbMaxRows;
+	if (settings.dbSchemas !== undefined) out.db_schemas = settings.dbSchemas;
+	if (settings.jwtRoleClaimKey !== undefined)
+		out.jwt_role_claim_key = settings.jwtRoleClaimKey;
+	if (settings.jwtCacheMaxLifetime !== undefined)
+		out.jwt_cache_max_lifetime = settings.jwtCacheMaxLifetime;
+	if (settings.openapiMode !== undefined)
+		out.openapi_mode = settings.openapiMode;
+	if (settings.serverCorsAllowedOrigins !== undefined)
+		out.server_cors_allowed_origins = settings.serverCorsAllowedOrigins;
+	if (settings.serverTimingEnabled !== undefined)
+		out.server_timing_enabled = settings.serverTimingEnabled;
+	return out;
+}
+
+/** Narrow the API's free-form `openapi_mode` string to our literal union (else drop it). */
+function normalizeOpenapiMode(
+	value: string,
+): DataApiSettings["openapiMode"] | undefined {
+	return value === "ignore-privileges" || value === "disabled"
+		? value
+		: undefined;
+}
+
+/** Map the Neon API's snake_case `DataAPISettings` back to our camelCase {@link DataApiSettings}. */
+function dataApiSettingsFromApi(
+	settings: DataAPISettings | null | undefined,
+): DataApiSettings | undefined {
+	if (!settings) return undefined;
+	const out: DataApiSettings = {};
+	if (settings.db_aggregates_enabled !== undefined)
+		out.dbAggregatesEnabled = settings.db_aggregates_enabled;
+	if (settings.db_anon_role !== undefined)
+		out.dbAnonRole = settings.db_anon_role;
+	if (settings.db_extra_search_path !== undefined)
+		out.dbExtraSearchPath = settings.db_extra_search_path;
+	if (settings.db_max_rows !== undefined)
+		out.dbMaxRows = settings.db_max_rows;
+	if (settings.db_schemas !== undefined) out.dbSchemas = settings.db_schemas;
+	if (settings.jwt_role_claim_key !== undefined)
+		out.jwtRoleClaimKey = settings.jwt_role_claim_key;
+	if (settings.jwt_cache_max_lifetime !== undefined)
+		out.jwtCacheMaxLifetime = settings.jwt_cache_max_lifetime;
+	if (settings.openapi_mode !== undefined) {
+		const mode = normalizeOpenapiMode(settings.openapi_mode);
+		if (mode !== undefined) out.openapiMode = mode;
+	}
+	if (settings.server_cors_allowed_origins !== undefined)
+		out.serverCorsAllowedOrigins = settings.server_cors_allowed_origins;
+	if (settings.server_timing_enabled !== undefined)
+		out.serverTimingEnabled = settings.server_timing_enabled;
+	return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/** Build the Neon API `DataAPICreateRequest` from our {@link EnableDataApiInput}. */
+function dataApiCreateRequest(
+	input: EnableDataApiInput | undefined,
+): DataAPICreateRequest {
+	const req: DataAPICreateRequest = {};
+	if (!input) return req;
+	if (input.authProvider !== undefined)
+		req.auth_provider =
+			input.authProvider === "neon" ? "neon_auth" : "external";
+	if (input.jwksUrl !== undefined) req.jwks_url = input.jwksUrl;
+	if (input.providerName !== undefined)
+		req.provider_name = input.providerName;
+	if (input.jwtAudience !== undefined) req.jwt_audience = input.jwtAudience;
+	if (input.settings) {
+		const settings = dataApiSettingsToApi(input.settings);
+		if (Object.keys(settings).length > 0) req.settings = settings;
+	}
+	return req;
+}
+
+/** Map a `DataAPIReponse` (GET) onto our {@link NeonDataApiSnapshot}. */
+function dataApiSnapshotFromResponse(
+	data: DataAPIReponse,
+): NeonDataApiSnapshot {
+	const snapshot: NeonDataApiSnapshot = { url: data.url };
+	if (data.status !== undefined) snapshot.status = data.status;
+	const settings = dataApiSettingsFromApi(data.settings);
+	if (settings) snapshot.settings = settings;
+	return snapshot;
+}
 
 // ─── Preview: buckets ──────────────────────────────────────────────────────
 
@@ -674,14 +778,16 @@ class RealNeonApi implements NeonApi {
 		try {
 			return await this.call(
 				`getNeonDataApi(${projectId}/${branchId}/${databaseName})`,
-				async () => {
-					const res = await this.client.getProjectBranchDataApi(
-						projectId,
-						branchId,
-						databaseName,
-					);
-					return { url: res.data.url };
-				},
+				async () =>
+					dataApiSnapshotFromResponse(
+						await this.client
+							.getProjectBranchDataApi(
+								projectId,
+								branchId,
+								databaseName,
+							)
+							.then((res) => res.data),
+					),
 				{ projectId },
 			);
 		} catch (err) {
@@ -695,6 +801,7 @@ class RealNeonApi implements NeonApi {
 		projectId: string,
 		branchId: string,
 		databaseName: string,
+		input?: EnableDataApiInput,
 	): Promise<NeonDataApiSnapshot> {
 		// Idempotent in the same shape as `enableNeonAuth`: if an integration already
 		// exists, the POST returns 409 and we re-fetch the existing snapshot.
@@ -706,10 +813,10 @@ class RealNeonApi implements NeonApi {
 						projectId,
 						branchId,
 						databaseName,
-						// Empty body — pick up Neon defaults (auth_provider inferred from
-						// whether Neon Auth is also enabled; default schemas/grants).
-						{},
+						dataApiCreateRequest(input),
 					);
+					// The create response only carries `url`; settings/status come from a
+					// follow-up GET, which we leave to the caller when it needs them.
 					return { url: res.data.url };
 				},
 				{ projectId, mutating: true },
@@ -728,6 +835,34 @@ class RealNeonApi implements NeonApi {
 			}
 			throw err;
 		}
+	}
+
+	async updateProjectBranchDataApi(
+		projectId: string,
+		branchId: string,
+		databaseName: string,
+		settings: DataApiSettings,
+	): Promise<NeonDataApiSnapshot> {
+		return await this.call(
+			`updateProjectBranchDataApi(${projectId}/${branchId}/${databaseName})`,
+			async () => {
+				await this.client.updateProjectBranchDataApi(
+					projectId,
+					branchId,
+					databaseName,
+					{ settings: dataApiSettingsToApi(settings) },
+				);
+				// The PATCH returns an empty body; re-fetch so the caller sees the
+				// post-update url/status/settings.
+				const res = await this.client.getProjectBranchDataApi(
+					projectId,
+					branchId,
+					databaseName,
+				);
+				return dataApiSnapshotFromResponse(res.data);
+			},
+			{ projectId, mutating: true },
+		);
 	}
 
 	// ─── Preview: buckets ──────────────────────────────────────────────────────
@@ -883,66 +1018,12 @@ class RealNeonApi implements NeonApi {
 
 	// ─── Preview: AI Gateway ───────────────────────────────────────────────────
 	//
-	// TODO(neon-deploy): the AI Gateway routes are not yet in the public API spec we wired
-	// the rest of this adapter against. The paths below follow the established branch-scoped
-	// convention (`/projects/{p}/branches/{b}/ai-gateway`); confirm them against the real
-	// API (and the exact enable/disable verb + response shape) before relying on this in
-	// production, and swap to the typed `@neondatabase/api-client` method once it exists.
-
-	async getAiGatewayEnabled(
-		projectId: string,
-		branchId: string,
-	): Promise<boolean> {
-		try {
-			return await this.call(
-				`getAiGatewayEnabled(${projectId}/${branchId})`,
-				async () => {
-					const data = await this.getJson(
-						aiGatewayPath(projectId, branchId),
-					);
-					return aiGatewayEnabledFromResponse(data);
-				},
-				{ projectId },
-			);
-		} catch (err) {
-			// A "feature unavailable" signal (route not deployed / "not available")
-			// is a hard error — surface it rather than reporting "disabled". A plain
-			// NotFound *without* that signal means the route exists but AI Gateway is
-			// simply not enabled on this branch, which is `false`.
-			if (isPreviewFeatureUnavailable(err)) {
-				throw previewUnavailableError(err, "AI Gateway");
-			}
-			if (
-				err instanceof PlatformError &&
-				err.code === ErrorCode.NotFound
-			) {
-				return false;
-			}
-			throw err;
-		}
-	}
-
-	async enableAiGateway(projectId: string, branchId: string): Promise<void> {
-		await this.call(
-			`enableAiGateway(${projectId}/${branchId})`,
-			async () => {
-				await this.postJson(aiGatewayPath(projectId, branchId), {
-					enabled: true,
-				});
-			},
-			{ projectId, mutating: true },
-		);
-	}
-
-	async disableAiGateway(projectId: string, branchId: string): Promise<void> {
-		await this.call(
-			`disableAiGateway(${projectId}/${branchId})`,
-			async () => {
-				await this.deleteJson(aiGatewayPath(projectId, branchId));
-			},
-			{ projectId, mutating: true },
-		);
-	}
+	// No methods: the AI Gateway is always available on a branch (credential-gated, not
+	// per-branch provisioned). There is no control-plane enable/disable/status route — the
+	// gateway is reached at the branch host with a credential carrying `ai_gateway:invoke`.
+	// `preview.aiGateway` only drives that credential scope and the `OPENAI_*` /
+	// `NEON_AI_GATEWAY_*` env vars (see `@neondatabase/env`); nothing is provisioned here, so
+	// `plan` / `apply` never touch an AI Gateway route and can't fail on its availability.
 
 	// ─── Preview: branch-scoped credentials ──────────────────────────────────
 
@@ -1020,10 +1101,6 @@ function branchPreviewPath(
 	resource: "buckets" | "functions",
 ): string {
 	return `/projects/${encodeURIComponent(projectId)}/branches/${encodeURIComponent(branchId)}/${resource}`;
-}
-
-function aiGatewayPath(projectId: string, branchId: string): string {
-	return `/projects/${encodeURIComponent(projectId)}/branches/${encodeURIComponent(branchId)}/ai-gateway`;
 }
 
 function credentialsPath(projectId: string, branchId: string): string {
@@ -1127,13 +1204,6 @@ function normalizeDeploymentStatus(
 	}
 }
 
-function aiGatewayEnabledFromResponse(data: unknown): boolean {
-	if (data !== null && typeof data === "object" && "enabled" in data) {
-		return (data as { enabled?: unknown }).enabled === true;
-	}
-	return false;
-}
-
 /**
  * Whether an error from a Preview-feature read means the feature simply isn't available
  * for this project/branch/region (as opposed to a real, transient failure). Neon signals
@@ -1163,25 +1233,110 @@ export function isPreviewFeatureUnavailable(err: unknown): boolean {
 }
 
 /**
+ * Reason phrase for the handful of HTTP statuses a Preview-feature read can surface as
+ * "unavailable". Used to print a short `HTTP <status> <reason>` line (not a stack trace),
+ * so the message reads like the API response the user would see in a tool like curl.
+ */
+const HTTP_STATUS_TEXT: Record<number, string> = {
+	401: "Unauthorized",
+	403: "Forbidden",
+	404: "Not Found",
+	500: "Internal Server Error",
+	501: "Not Implemented",
+	503: "Service Unavailable",
+};
+
+/**
+ * Per-status guidance for a Preview feature that came back "unavailable". A preview can be
+ * gated several different ways and the HTTP status is the best signal for which, so we tailor
+ * the next step instead of emitting one catch-all — valuable while these features are in
+ * preview and rolling out region by region:
+ *
+ * - 404 / 501 — the route isn't deployed for this project's region (or the account isn't in
+ *   the private preview): create a project in a region where the preview is enabled, and
+ *   confirm your account has preview access.
+ * - 503 — the route exists but is refusing right now: either the preview is still coming up,
+ *   or Neon is having a transient incident. Retry; if it persists it's likely an incident.
+ * - anything else — generic "not enabled for your account/region; request access".
+ *
+ * Only statuses {@link isPreviewFeatureUnavailable} accepts (404/501/503) actually reach
+ * this, so there is intentionally no 401/403 branch — those never classify as "unavailable".
+ */
+function previewUnavailableHint(status: number | undefined): string {
+	switch (status) {
+		case 404:
+		case 501:
+			return (
+				"This usually means the preview isn't available in your project's region yet, or " +
+				"your Neon account isn't in the private preview: create a project in a region where " +
+				"the preview is enabled, and make sure your account has access to the preview."
+			);
+		case 503:
+			return (
+				"The endpoint is reachable but refused the request — the preview may still be " +
+				"coming up, or Neon may be having a transient incident. Retry shortly; if it keeps " +
+				"failing, check https://neonstatus.com and report it to Neon support."
+			);
+		default:
+			return (
+				"This usually means the preview isn't enabled for your Neon account or the project's " +
+				"region. Request access to the preview, or use a project in a region where it's available."
+			);
+	}
+}
+
+/**
  * Convert a Preview-feature error into a clear {@link PlatformError} when the feature is
  * unavailable for the project; otherwise pass the original error through unchanged so a
  * genuine failure (auth, transient 5xx, …) keeps its specific code and message.
+ *
+ * The message names the failing feature, summarizes the response in one short
+ * `HTTP <status> <reason>` line, includes the raw Neon API message + request id (valuable
+ * signal while the feature is in preview), gives status-specific guidance (see
+ * {@link previewUnavailableHint}), and offers removing the feature from the policy as an
+ * escape hatch. `status`/`requestId` are also kept on `details` for programmatic consumers.
  */
 export function previewUnavailableError(
 	err: unknown,
 	featureLabel: string,
 ): unknown {
 	if (!isPreviewFeatureUnavailable(err)) return err;
+	const details = err instanceof PlatformError ? err.details : {};
+	const status =
+		typeof details.status === "number" ? details.status : undefined;
 	const neonMessage =
-		err instanceof PlatformError &&
-		typeof err.details.neonMessage === "string"
-			? ` (Neon API said: "${err.details.neonMessage}")`
-			: "";
+		typeof details.neonMessage === "string"
+			? details.neonMessage
+			: undefined;
+	const requestId =
+		typeof details.requestId === "string" ? details.requestId : undefined;
+
+	// One short status line + the raw API message + request id — never a stack trace.
+	const statusText = status ? HTTP_STATUS_TEXT[status] : undefined;
+	const apiParts = [
+		status
+			? `HTTP ${status}${statusText ? ` ${statusText}` : ""}`
+			: undefined,
+		neonMessage ? `Neon API said: "${neonMessage}"` : undefined,
+		requestId ? `request id ${requestId}` : undefined,
+	].filter((part): part is string => part !== undefined);
+	const apiContext = apiParts.length > 0 ? ` (${apiParts.join("; ")})` : "";
+
 	return new PlatformError(
 		ErrorCode.FeatureUnavailable,
-		`${featureLabel} is a Preview feature that is not available for this project or region${neonMessage}. ` +
-			"Enable it for your Neon account/project first, then re-run.",
-		{ cause: err, details: { feature: featureLabel } },
+		[
+			`${featureLabel} is a Preview feature and isn't available for this Neon project${apiContext}.`,
+			previewUnavailableHint(status),
+			"If you don't need it, remove the corresponding feature from the `preview` block of your neon.ts and re-run.",
+		].join(" "),
+		{
+			cause: err,
+			details: {
+				feature: featureLabel,
+				...(status !== undefined ? { status } : {}),
+				...(requestId !== undefined ? { requestId } : {}),
+			},
+		},
 	);
 }
 

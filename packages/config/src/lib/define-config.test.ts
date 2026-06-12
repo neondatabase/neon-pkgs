@@ -401,3 +401,113 @@ describe("defineConfig type constraints (compile-time)", () => {
 		});
 	});
 });
+
+describe("defineConfig — Data API config", () => {
+	test("resolves a bare `dataApi: true` to a neon-auth integration", () => {
+		const config = defineConfig({ auth: true, dataApi: true });
+		const resolved = resolveConfig(config, { name: "main", exists: true });
+		expect(resolved.dataApiEnabled).toBe(true);
+		expect(resolved.dataApi).toEqual({ authProvider: "neon" });
+	});
+
+	test("resolves neon-auth settings (camelCase, undefined dropped)", () => {
+		const config = defineConfig({
+			auth: true,
+			dataApi: {
+				settings: {
+					dbMaxRows: 1000,
+					dbSchemas: ["public", "api"],
+					dbExtraSearchPath: undefined,
+				},
+			},
+		});
+		const resolved = resolveConfig(config, { name: "main", exists: true });
+		expect(resolved.dataApi).toEqual({
+			authProvider: "neon",
+			settings: { dbMaxRows: 1000, dbSchemas: ["public", "api"] },
+		});
+	});
+
+	test("resolves external-auth wiring without requiring Neon Auth", () => {
+		const config = defineConfig({
+			dataApi: {
+				authProvider: "external",
+				jwksUrl: "https://idp.example.com/.well-known/jwks.json",
+				providerName: "Clerk",
+				jwtAudience: "my-api",
+				settings: { openapiMode: "ignore-privileges" },
+			},
+		});
+		const resolved = resolveConfig(config, { name: "main", exists: true });
+		expect(resolved.dataApi).toEqual({
+			authProvider: "external",
+			jwksUrl: "https://idp.example.com/.well-known/jwks.json",
+			providerName: "Clerk",
+			jwtAudience: "my-api",
+			settings: { openapiMode: "ignore-privileges" },
+		});
+	});
+
+	test("omits the resolved dataApi block when disabled", () => {
+		const config = defineConfig({ dataApi: false });
+		const resolved = resolveConfig(config, { name: "main", exists: true });
+		expect(resolved.dataApiEnabled).toBe(false);
+		expect(resolved.dataApi).toBeUndefined();
+	});
+
+	test("throws at runtime when a neon Data API is enabled without auth", () => {
+		// Bypass the static guard (as a non-typed / JS caller would) to exercise the zod check.
+		expect(() => defineConfig({ dataApi: true } as never)).toThrow(
+			ConfigValidationError,
+		);
+	});
+
+	test("throws at runtime when external-only fields are used with neon auth", () => {
+		expect(() =>
+			defineConfig({
+				auth: true,
+				dataApi: { jwksUrl: "https://x" } as never,
+			}),
+		).toThrow(ConfigValidationError);
+	});
+
+	// ─── Static (type-level) guarantees ─────────────────────────────────────────
+
+	test("static: external-only fields are forbidden with neon auth", () => {
+		// Type error (jwksUrl is `never` on the neon variant) AND a runtime rejection.
+		expect(() =>
+			defineConfig({
+				auth: true,
+				dataApi: {
+					authProvider: "neon",
+					// @ts-expect-error jwksUrl is only allowed with authProvider: "external".
+					jwksUrl: "https://idp.example.com/jwks.json",
+				},
+			}),
+		).toThrow(ConfigValidationError);
+	});
+
+	test("static: a neon Data API requires top-level auth", () => {
+		expect(() =>
+			// @ts-expect-error dataApi (neon) needs `auth` enabled — `auth` is now required.
+			defineConfig({ dataApi: true }),
+		).toThrow(ConfigValidationError);
+		expect(() =>
+			// @ts-expect-error same, with the object form.
+			defineConfig({ dataApi: { settings: { dbMaxRows: 10 } } }),
+		).toThrow(ConfigValidationError);
+		// These satisfy it and must type-check (and not throw):
+		defineConfig({ auth: true, dataApi: true });
+		defineConfig({ auth: {}, dataApi: { settings: { dbMaxRows: 10 } } });
+		// (An explicit `auth: false` is caught at runtime by the zod cross-field check.)
+	});
+
+	test("static: an external Data API does not require auth", () => {
+		defineConfig({
+			dataApi: {
+				authProvider: "external",
+				jwksUrl: "https://idp.example.com/jwks.json",
+			},
+		});
+	});
+});

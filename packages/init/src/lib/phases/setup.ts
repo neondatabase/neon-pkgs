@@ -574,10 +574,14 @@ async function executeBatchedInstallation(
 	// Step 0: Bootstrap project from template if specified
 	if (isBootstrap && options.template) {
 		try {
+			// Pin @latest (and -y) so a stale globally-installed neonctl can't be
+			// picked up by npx — bootstrap's rate-limit fix lives in recent
+			// neonctl, and this runs before ensureNeonctl() updates the global.
 			await execa(
 				"npx",
 				[
-					"neonctl",
+					"-y",
+					"neonctl@latest",
 					"bootstrap",
 					".",
 					"--template",

@@ -3,6 +3,7 @@ import {
 	branchTuningSchema,
 	computeSettingsSchema,
 	configInputSchema,
+	dataApiConfigSchema,
 	formatZodIssues,
 } from "./schema.js";
 
@@ -138,6 +139,98 @@ describe("configInputSchema", () => {
 			},
 		});
 		expect(result.success).toBe(false);
+	});
+});
+
+describe("dataApiConfigSchema", () => {
+	test("accepts an empty object (defaults to neon auth)", () => {
+		expect(dataApiConfigSchema.safeParse({}).success).toBe(true);
+	});
+
+	test("accepts neon auth with settings", () => {
+		const result = dataApiConfigSchema.safeParse({
+			authProvider: "neon",
+			settings: { dbMaxRows: 1000, dbSchemas: ["public", "api"] },
+		});
+		expect(result.success).toBe(true);
+	});
+
+	test("accepts external auth with jwksUrl / providerName / jwtAudience", () => {
+		const result = dataApiConfigSchema.safeParse({
+			authProvider: "external",
+			jwksUrl: "https://idp.example.com/.well-known/jwks.json",
+			providerName: "Clerk",
+			jwtAudience: "my-api",
+		});
+		expect(result.success).toBe(true);
+	});
+
+	test("rejects external-only fields when authProvider is neon (default)", () => {
+		const result = dataApiConfigSchema.safeParse({
+			jwksUrl: "https://idp.example.com/jwks.json",
+		});
+		if (result.success) throw new Error("expected failure");
+		const formatted = formatZodIssues(result.error).join("\n");
+		expect(formatted).toContain("jwksUrl");
+		expect(formatted).toContain('authProvider: "external"');
+	});
+
+	test("rejects external-only fields with an explicit neon provider", () => {
+		const result = dataApiConfigSchema.safeParse({
+			authProvider: "neon",
+			providerName: "Clerk",
+		});
+		expect(result.success).toBe(false);
+	});
+
+	test("rejects an unknown settings key (camelCase only)", () => {
+		const result = dataApiConfigSchema.safeParse({
+			settings: { db_max_rows: 1000 },
+		});
+		expect(result.success).toBe(false);
+	});
+});
+
+describe("configInputSchema — Data API requires Neon Auth", () => {
+	test("rejects a neon Data API without auth enabled", () => {
+		const result = configInputSchema.safeParse({ dataApi: true });
+		if (result.success) throw new Error("expected failure");
+		const formatted = formatZodIssues(result.error).join("\n");
+		expect(formatted).toContain("auth");
+		expect(formatted).toContain('authProvider "neon"');
+	});
+
+	test("rejects a neon Data API when auth is explicitly disabled", () => {
+		const result = configInputSchema.safeParse({
+			auth: false,
+			dataApi: { enabled: true },
+		});
+		expect(result.success).toBe(false);
+	});
+
+	test("accepts a neon Data API when auth is enabled", () => {
+		const result = configInputSchema.safeParse({
+			auth: true,
+			dataApi: { settings: { dbMaxRows: 500 } },
+		});
+		expect(result.success).toBe(true);
+	});
+
+	test("accepts an external Data API without auth", () => {
+		const result = configInputSchema.safeParse({
+			dataApi: {
+				authProvider: "external",
+				jwksUrl: "https://idp.example.com/jwks.json",
+			},
+		});
+		expect(result.success).toBe(true);
+	});
+
+	test("accepts a disabled Data API without auth", () => {
+		const result = configInputSchema.safeParse({
+			dataApi: { enabled: false },
+		});
+		expect(result.success).toBe(true);
 	});
 });
 

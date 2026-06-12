@@ -1,7 +1,11 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { defineConfig, ErrorCode } from "@neondatabase/config";
+import {
+	defineConfig,
+	ErrorCode,
+	PushConflictError,
+} from "@neondatabase/config";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { FakeNeonApi } from "./fake-neon-api.js";
 import { pushConfig } from "./push-config.js";
@@ -88,6 +92,89 @@ describe("pushConfig", () => {
 				(h) => h.method === "enableNeonAuth" && h.args[1] === "br-main",
 			),
 		).toBe(true);
+	});
+
+	test("enabling the Data API forwards the create-time auth wiring + settings", async () => {
+		const { api, projectId } = seededFake();
+		const config = defineConfig({
+			dataApi: {
+				authProvider: "external",
+				jwksUrl: "https://idp.example.com/.well-known/jwks.json",
+				providerName: "Clerk",
+				settings: { dbMaxRows: 1000, dbSchemas: ["public", "api"] },
+			},
+		});
+
+		await pushConfig(config, { api, projectId, branchId: "br-main" });
+
+		const enable = api.history.find(
+			(h) => h.method === "enableProjectBranchDataApi",
+		);
+		expect(enable?.args[3]).toEqual({
+			authProvider: "external",
+			jwksUrl: "https://idp.example.com/.well-known/jwks.json",
+			providerName: "Clerk",
+			settings: { dbMaxRows: 1000, dbSchemas: ["public", "api"] },
+		});
+	});
+
+	test("Data API settings drift needs --update-existing (conflict otherwise, update with it)", async () => {
+		const config = defineConfig({
+			auth: true,
+			dataApi: { settings: { dbMaxRows: 1000 } },
+		});
+
+		// Seed an already-enabled Data API with different settings.
+		const seedEnabled = () => {
+			const { api, projectId } = seededFake();
+			api.seedNeonAuth("proj-push", "br-main", {
+				projectId: "auth-br-main",
+				jwksUrl: "https://api.fake.neon.tech/auth/jwks.json",
+			});
+			api.seedNeonDataApi("proj-push", "br-main", "neondb", {
+				url: "https://br-main.fake.neon.tech/data-api/neondb",
+				status: "ready",
+				settings: { dbMaxRows: 100 },
+			});
+			return { api, projectId };
+		};
+
+		// Without updateExisting → conflict (no mutation).
+		const noFlag = seedEnabled();
+		await expect(
+			pushConfig(config, {
+				api: noFlag.api,
+				projectId: noFlag.projectId,
+				branchId: "br-main",
+			}),
+		).rejects.toBeInstanceOf(PushConflictError);
+		expect(
+			noFlag.api.history.some(
+				(h) => h.method === "updateProjectBranchDataApi",
+			),
+		).toBe(false);
+
+		// With updateExisting → settings update is applied.
+		const withFlag = seedEnabled();
+		const result = await pushConfig(config, {
+			api: withFlag.api,
+			projectId: withFlag.projectId,
+			branchId: "br-main",
+			updateExisting: true,
+		});
+		const update = withFlag.api.history.find(
+			(h) => h.method === "updateProjectBranchDataApi",
+		);
+		expect(update?.args[3]).toEqual({ dbMaxRows: 1000 });
+		expect(result.applied).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					kind: "service",
+					action: "update",
+					identifier: "dataApi",
+				}),
+			]),
+		);
 	});
 
 	test("auth/dataApi changes carry no redundant details (target branch / derived db)", async () => {
@@ -308,7 +395,7 @@ describe("pushConfig", () => {
 		expect(result.dryRun).toBe(true);
 	});
 
-	test("creates buckets, creates + deploys functions, and enables AI Gateway", async () => {
+	test("creates buckets and deploys functions; aiGateway needs no provisioning step", async () => {
 		const { api, projectId } = seededFake();
 		const config = defineConfig({
 			preview: {
@@ -342,12 +429,12 @@ describe("pushConfig", () => {
 					action: "create",
 					identifier: "function:fn1",
 				}),
-				expect.objectContaining({
-					kind: "service",
-					action: "create",
-					identifier: "aiGateway",
-				}),
 			]),
+		);
+		// The AI Gateway is always available (credential-gated), so enabling it in the
+		// policy produces no provisioning step — only a credential scope + env vars.
+		expect(result.applied.some((c) => c.identifier === "aiGateway")).toBe(
+			false,
 		);
 		// The function exists and now has an active deployment on the branch.
 		const functions = await api.listBranchFunctions(projectId, "br-main");
@@ -357,7 +444,6 @@ describe("pushConfig", () => {
 				activeDeploymentId: 1,
 			}),
 		]);
-		expect(await api.getAiGatewayEnabled(projectId, "br-main")).toBe(true);
 		expect(
 			(await api.listBranchBuckets(projectId, "br-main")).map(
 				(b) => b.name,
@@ -378,10 +464,10 @@ describe("pushConfig", () => {
 
 		const methods = api.history.map((h) => h.method);
 		expect(methods).toContain("listBranchFunctions");
-		// AI Gateway / buckets are not in the policy, so they are never read — this is
-		// what keeps `plan`/`apply` from failing on a Preview feature the user didn't ask
-		// for when it's unavailable in the project/region.
-		expect(methods).not.toContain("getAiGatewayEnabled");
+		// Buckets are not in the policy, so they are never read — this is what keeps
+		// `plan`/`apply` from failing on a Preview feature the user didn't ask for when it's
+		// unavailable in the project/region. (The AI Gateway is never probed at all — it is
+		// always available and credential-gated, not a per-branch resource.)
 		expect(methods).not.toContain("listBranchBuckets");
 	});
 
@@ -524,13 +610,13 @@ describe("pushConfig", () => {
 		expect(result.applied).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({ identifier: "bucket:uploads" }),
-				expect.objectContaining({ identifier: "aiGateway" }),
 			]),
 		);
-		expect(api.history.some((h) => h.method === "createBranchBucket")).toBe(
+		// aiGateway is always available (credential-gated), so it never produces a plan step.
+		expect(result.applied.some((c) => c.identifier === "aiGateway")).toBe(
 			false,
 		);
-		expect(api.history.some((h) => h.method === "enableAiGateway")).toBe(
+		expect(api.history.some((h) => h.method === "createBranchBucket")).toBe(
 			false,
 		);
 	});
