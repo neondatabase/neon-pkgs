@@ -652,7 +652,7 @@ async function interactiveInitInner(
 	// Build a prompt for the user to paste into their agent chat
 	const apiHost = process.env.NEON_API_HOST;
 	const envPrefix = apiHost ? `NEON_API_HOST=${apiHost} ` : "";
-	const cmd = `${envPrefix}neonctl init getting-started --agent --json --data '${dataJson}'`;
+	const cmd = `${envPrefix}neon-init getting-started --agent --json --data '${dataJson}'`;
 	const cols = process.stdout.columns || 80;
 	const promptText = `To finish setting up Neon using Neon's agent-guided onboarding experience, have your agent run this shell command: ${cmd}`;
 
