@@ -101,6 +101,11 @@ const cli = yargs(hideBin(process.argv))
 			y
 				.options(jsonOption)
 				.options(agentOption)
+				.option("data", {
+					type: "string",
+					description:
+						'JSON object with a "step" field to route to a specific phase (auth, db, setup, getting-started, mcp, skills, migrations, neon-auth, status, finalize) and phase-specific options.',
+				})
 				.option("skip-neon-auth", {
 					type: "boolean",
 					default: false,
@@ -124,6 +129,29 @@ const cli = yargs(hideBin(process.argv))
 			);
 			const jsonMode =
 				argv.json || argv.agent !== undefined || detectedAgent !== null;
+
+			// --data with a "step" field routes to the appropriate phase
+			if (argv.data && jsonMode) {
+				const { routeDataStep } = await import(
+					"./lib/route-command.js"
+				);
+				let data: Record<string, unknown>;
+				try {
+					data = JSON.parse(argv.data);
+				} catch {
+					console.error(
+						"Invalid JSON in --data flag. Expected a JSON object.",
+					);
+					process.exit(1);
+					return;
+				}
+				if (typeof data.step === "string") {
+					const result = await routeDataStep(data, agent);
+					outputJson(result);
+					process.exit(0);
+					return;
+				}
+			}
 
 			if (jsonMode) {
 				// v2: agent-driven state machine

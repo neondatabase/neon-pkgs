@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { routeCommand } from "./route-command.js";
+import { routeCommand, routeDataStep } from "./route-command.js";
 
 // Mock execa for setup phase (it runs add-mcp, skills install, etc.)
 vi.mock("execa", () => ({
@@ -86,6 +86,29 @@ describe("routeCommand", () => {
 			"--verify",
 		]);
 		expect(result.phase).toBe("auth");
+	});
+
+	test("routeDataStep routes to auth via step field", async () => {
+		const result = (await routeDataStep(
+			{ step: "auth", verify: true },
+			undefined,
+		)) as { phase: string };
+		expect(result.phase).toBe("auth");
+	});
+
+	test("routeDataStep routes to getting-started via step field", async () => {
+		const result = (await routeDataStep(
+			{ step: "getting-started", framework: "next" },
+			undefined,
+		)) as { phase: string; status: string };
+		expect(result.phase).toBe("setup");
+		expect(result.status).toBe("getting_started");
+	});
+
+	test("routeDataStep throws on unknown step", async () => {
+		await expect(
+			routeDataStep({ step: "bogus" }, undefined),
+		).rejects.toThrow("Unknown step");
 	});
 
 	test("parses camelCase flags correctly", async () => {
