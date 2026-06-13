@@ -41,10 +41,14 @@ const ESM_CJS_INTEROP_BANNER =
  * that nothing in this package's static graph names esbuild until a deploy actually runs —
  * a second layer of protection on top of the package split.
  *
- * Mirrors: `esbuild <source> --bundle --outfile=index.mjs --sourcemap --minify --format=esm
+ * Mirrors: `esbuild <source> --bundle --outfile=index.mjs --minify --format=esm
  * --platform=node --banner:js=<createRequire shim>`, then zips the emitted files into the
  * archive the Functions deploy endpoint expects. Dependencies are bundled into the entry
  * (Node built-ins stay external); see {@link ESM_CJS_INTEROP_BANNER} for why the banner.
+ *
+ * No source map is emitted: the Functions runtime does not run Node with source-map support,
+ * so an uploaded `index.mjs.map` is never consumed (a thrown error's stack still points into
+ * the minified bundle). Generating it only inflated the deployed archive, so it is omitted.
  */
 export async function buildFunctionBundle(
 	fn: ResolvedFunctionConfig,
@@ -57,12 +61,11 @@ export async function buildFunctionBundle(
 			entryPoints: [fn.source],
 			bundle: true,
 			write: false,
-			// Emit `index.mjs` / `index.mjs.map`: the Functions runtime imports the archive's
-			// entry by the conventional `index.{js,mjs}` name, and `.mjs` makes Node load the
-			// ESM output directly. (With `write: false` and no outfile, esbuild would label the
-			// buffer `<stdout>`.)
+			// Emit `index.mjs`: the Functions runtime imports the archive's entry by the
+			// conventional `index.{js,mjs}` name, and `.mjs` makes Node load the ESM output
+			// directly. (With `write: false` and no outfile, esbuild would label the buffer
+			// `<stdout>`.) No `sourcemap` — see the doc comment above for why.
 			outfile: "index.mjs",
-			sourcemap: true,
 			minify: true,
 			format: "esm",
 			platform: "node",
@@ -88,7 +91,7 @@ export async function buildFunctionBundle(
 	// `write: false` guarantees `outputFiles`, but the type is optional — guard for safety.
 	for (const file of result.outputFiles ?? []) {
 		// esbuild returns absolute output paths; archive them under their basename
-		// (`index.mjs`, `index.mjs.map`) so the bundle layout is stable regardless of cwd.
+		// (`index.mjs`) so the bundle layout is stable regardless of cwd.
 		entries[basename(file.path)] = file.contents;
 	}
 
