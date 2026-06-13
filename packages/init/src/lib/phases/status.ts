@@ -7,7 +7,7 @@ export interface StatusOptions {
 }
 
 export async function handleStatusPhase(
-	options: StatusOptions,
+	_options: StatusOptions,
 ): Promise<StatusResponse> {
 	const authed = await isAuthenticated();
 
