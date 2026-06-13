@@ -327,7 +327,7 @@ async function interactiveInitInner(
 		if (isCancel(authResult) || authResult === "no") {
 			outro(
 				dim(
-					"Your project is configured with Neon. You can set up Neon Auth later by having your agent run: neon-init neon-auth --agent --json",
+					`Your project is configured with Neon. You can set up Neon Auth later by having your agent run: neonctl init --agent --json --data '{"step":"neon-auth"}'`,
 				),
 			);
 			return;
@@ -647,13 +647,12 @@ async function interactiveInitInner(
 		gettingStartedData.features = selectedFeatures;
 	if (options.preview) gettingStartedData.preview = true;
 
-	const dataJson = JSON.stringify(gettingStartedData);
-
 	// Build a prompt for the user to paste into their agent chat
 	const apiHost = process.env.NEON_API_HOST;
 	const envPrefix = apiHost ? `NEON_API_HOST=${apiHost} ` : "";
-	const cmd = `${envPrefix}neon-init getting-started --agent --json --data '${dataJson}'`;
-	const cols = process.stdout.columns || 80;
+	const cmd = `${envPrefix}neonctl init --agent --json --data '${JSON.stringify({ step: "getting-started", ...gettingStartedData })}'`;
+	// Account for clack's "│  " prefix (3 chars) when wrapping
+	const cols = (process.stdout.columns || 80) - 3;
 	const promptText = `To finish setting up Neon using Neon's agent-guided onboarding experience, have your agent run this shell command: ${cmd}`;
 
 	log.step("Next steps");
