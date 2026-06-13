@@ -288,7 +288,7 @@ describe("init() with json mode", () => {
 			"Do NOT write wrapper scripts",
 		);
 		expect(result.authInstructions).toContain("exit code 2");
-		expect(result.authInstructions).toContain("Re-run neonctl init");
+		expect(result.authInstructions).toContain("Re-run neon-init");
 		expect(mockInstallNeon).not.toHaveBeenCalled();
 	});
 

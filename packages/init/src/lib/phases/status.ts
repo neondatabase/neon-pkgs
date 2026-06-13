@@ -31,7 +31,7 @@ export async function handleStatusPhase(
 		recommendations.push({
 			priority: "high",
 			message: "Not authenticated with Neon",
-			command: "neonctl init auth --agent --json",
+			command: "neon-init auth --agent --json",
 		});
 	}
 
@@ -39,7 +39,7 @@ export async function handleStatusPhase(
 		recommendations.push({
 			priority: "high",
 			message: "No DATABASE_URL found in .env",
-			command: "neonctl init db --agent --json",
+			command: "neon-init db --agent --json",
 		});
 	}
 
@@ -48,8 +48,8 @@ export async function handleStatusPhase(
 			priority: "medium",
 			message: "Neon agent skills not detected in this project",
 			command: options.agent
-				? `neonctl init skills --json --agent ${options.agent} --install`
-				: "neonctl init skills --json --install",
+				? `neon-init skills --json --agent ${options.agent} --install`
+				: "neon-init skills --json --install",
 		});
 	}
 
@@ -57,7 +57,7 @@ export async function handleStatusPhase(
 		recommendations.push({
 			priority: "medium",
 			message: `${migrationTool} detected but no migrations found`,
-			command: "neonctl init migrations --agent --json",
+			command: "neon-init migrations --agent --json",
 		});
 	}
 

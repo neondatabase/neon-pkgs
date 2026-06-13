@@ -327,7 +327,7 @@ async function interactiveInitInner(
 		if (isCancel(authResult) || authResult === "no") {
 			outro(
 				dim(
-					"Your project is configured with Neon. You can set up Neon Auth later by having your agent run: neonctl init neon-auth --agent --json",
+					"Your project is configured with Neon. You can set up Neon Auth later by having your agent run: neon-init neon-auth --agent --json",
 				),
 			);
 			return;

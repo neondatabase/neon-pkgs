@@ -97,7 +97,7 @@ function getAuthInstructions(): string {
 		"=== AFTER SUCCESSFUL AUTH ===",
 		`Step 5: Verify by running: ${cmd} me`,
 		"   This should print the user's account info and exit with code 0.",
-		"Step 6: Re-run neonctl init with the same --agent and --json flags to complete setup.",
+		"Step 6: Re-run neon-init with the same --agent and --json flags to complete setup.",
 	].join("\n");
 }
 
