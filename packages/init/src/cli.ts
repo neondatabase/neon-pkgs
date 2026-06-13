@@ -101,6 +101,11 @@ function enrichWithCommands(obj: unknown): unknown {
 		delete result.args;
 	}
 
+	// Rename run_neon_init → run_shell_command so agents don't infer subcommand patterns
+	if (result.type === "run_neon_init") {
+		result.type = "run_shell_command";
+	}
+
 	return result;
 }
 
