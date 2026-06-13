@@ -95,9 +95,10 @@ function enrichWithCommands(obj: unknown): unknown {
 		result[key] = enrichWithCommands(value);
 	}
 
-	// Add command to run_neon_init actions and responseMapping entries with args
+	// Replace args with command in run_neon_init actions and responseMapping entries
 	if (Array.isArray(result.args)) {
 		result.command = argsToCommand(result.args as string[]);
+		delete result.args;
 	}
 
 	return result;
