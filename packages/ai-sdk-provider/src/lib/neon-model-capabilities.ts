@@ -101,10 +101,11 @@ export function getNeonModelCapabilities(
 	// OpenAI GPT-5 reasoning family (routed to the native Responses API). The
 	// Responses model strips parameters the Responses API doesn't accept
 	// (penalties, seed, stop), but its reasoning-model detection matches the bare
-	// model id (`gpt-5`), which the gateway's `databricks-` prefix defeats. So we
-	// only handle the temperature/topP restriction here: the original gpt-5 /
-	// gpt-5-mini / gpt-5-nano require the default temperature and reject topP,
-	// while gpt-5.1+ (a minor version digit follows) accept them again.
+	// model id (`gpt-5`), which the gateway's optional `databricks-` prefix can
+	// defeat. So we only handle the temperature/topP restriction here: the
+	// original gpt-5 / gpt-5-mini / gpt-5-nano require the default temperature and
+	// reject topP, while gpt-5.1+ (a minor version digit follows) accept them
+	// again. The regex matches both prefixed and unprefixed ids.
 	if (/gpt-5/.test(id)) {
 		const hasMinorVersion = /gpt-5[.-]\d/.test(id);
 		return {

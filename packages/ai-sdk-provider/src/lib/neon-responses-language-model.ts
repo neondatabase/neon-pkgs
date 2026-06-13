@@ -13,10 +13,11 @@ import type {
  * reasoning and the image-generation tool.
  *
  * The shared OpenAI Responses model shapes a request based on whether the model
- * is a reasoning model, but it detects that from the bare model id (`gpt-5`),
- * which the gateway's required `databricks-` prefix defeats. For the GPT-5
- * reasoning family we set the model's own `forceReasoning` provider option so it
- * applies the correct reasoning behavior. Users can still override it.
+ * is a reasoning model, but its detection is brittle here: the gateway also
+ * accepts the legacy `databricks-` prefix, which defeats the upstream bare-id
+ * (`gpt-5`) match. For the GPT-5 reasoning family we set the model's own
+ * `forceReasoning` provider option so it applies the correct reasoning behavior
+ * for both id forms. Users can still override it.
  */
 export class NeonResponsesLanguageModel
 	extends OpenAIResponsesLanguageModel

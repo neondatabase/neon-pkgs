@@ -4,8 +4,9 @@
  * `createNeon()` returns a provider that routes each model to the best gateway
  * endpoint based on its id (Anthropic → native Messages, OpenAI → native
  * Responses incl. Codex, everything else → unified MLflow), so a single
- * `neon('databricks-...')` call (same base URL + token) reaches the whole
- * catalog. Configure with the branch-scoped `NEON_AI_GATEWAY_BASE_URL` +
+ * `neon('claude-...')` call (same base URL + token) reaches the whole catalog.
+ * Ids use the canonical Neon (unprefixed) form; the legacy `databricks-` prefix
+ * is also accepted. Configure with the branch-scoped `NEON_AI_GATEWAY_BASE_URL` +
  * `NEON_AI_GATEWAY_TOKEN` emitted by `neonctl env pull` / `neon dev`, or pass
  * `baseURL` / `apiKey` explicitly.
  */
