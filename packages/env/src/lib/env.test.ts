@@ -67,6 +67,18 @@ describe("fetchEnv", () => {
 		expect(env.postgres.databaseUrl).toContain("-pooler");
 	});
 
+	test("surfaces the branch name as NEON_BRANCH", async () => {
+		const { api, projectId } = seededFake();
+		const env = await fetchEnv(defineConfig({}), {
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+		// `NEON_BRANCH` mirrors the Functions runtime; uses the branch name (not the id).
+		expect(env.branch?.name).toBe("main");
+		expect(toEntries(env).NEON_BRANCH).toBe("main");
+	});
+
 	test("requires auth integration when policy enables auth", async () => {
 		const { api, projectId } = seededFake();
 		const config = defineConfig({ auth: true });
@@ -183,6 +195,22 @@ describe("parseEnv", () => {
 		vi.stubEnv("DATABASE_URL", "postgres://pooled");
 		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
 		const env = parseEnv(defineConfig({}));
+		expect(env.postgres.databaseUrl).toBe("postgres://pooled");
+	});
+
+	test("reads NEON_BRANCH when injected", () => {
+		vi.stubEnv("DATABASE_URL", "postgres://pooled");
+		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
+		vi.stubEnv("NEON_BRANCH", "preview/foo");
+		const env = parseEnv(defineConfig({}));
+		expect(env.branch?.name).toBe("preview/foo");
+	});
+
+	test("omits the branch namespace when NEON_BRANCH is absent (no throw)", () => {
+		vi.stubEnv("DATABASE_URL", "postgres://pooled");
+		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
+		const env = parseEnv(defineConfig({}));
+		expect(env.branch).toBeUndefined();
 		expect(env.postgres.databaseUrl).toBe("postgres://pooled");
 	});
 

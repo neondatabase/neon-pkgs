@@ -45,6 +45,14 @@ const NEON_MANAGED_AUTH_ROLES: ReadonlySet<string> = new Set([
 ]);
 
 export const NEON_ENV_VAR_KEYS = {
+	/**
+	 * Branch identity. `NEON_BRANCH` carries the branch **name** and is injected into the
+	 * Neon Functions runtime on every branch (including the default) by default. `env pull` /
+	 * `neon dev` / `neon-env run` emit it too so local dev mirrors the deployed runtime.
+	 */
+	branch: {
+		name: "NEON_BRANCH",
+	},
 	postgres: {
 		databaseUrl: "DATABASE_URL",
 		databaseUrlUnpooled: "DATABASE_URL_UNPOOLED",
@@ -89,6 +97,16 @@ export const NEON_ENV_VAR_KEYS = {
 
 /** OpenAI-dialect route prefix on the branch AI Gateway host. */
 const AI_GATEWAY_OPENAI_PATH = "/ai-gateway/openai/v1";
+
+/**
+ * Branch identity for the resolved branch. Always present on a `fetchEnv` result (the branch
+ * name is always known); on a `parseEnv` result it's present only when `NEON_BRANCH` was
+ * injected into `process.env` (the Functions runtime injects it by default, as do `neon dev` /
+ * `neon-env run` / `env pull`). `name` is the branch **name** (e.g. `main`, `preview/foo`).
+ */
+export interface NeonBranchEnv {
+	name: string;
+}
 
 /** Per-namespace inner shapes. Exposed so consumers can name the parts independently. */
 export interface NeonPostgresEnv {
@@ -239,6 +257,11 @@ type AiGatewayOn<C extends Config> = [NonNullable<C["preview"]>] extends [never]
  */
 export type NeonEnv<C extends Config = Config> = {
 	postgres: NeonPostgresEnv;
+	/**
+	 * Branch identity (`NEON_BRANCH`). Optional because `parseEnv` only surfaces it when the
+	 * var was injected; `fetchEnv` always populates it.
+	 */
+	branch?: NeonBranchEnv;
 } & (ServiceOn<NonNullable<C["auth"]>> extends true
 	? { auth: NeonAuthEnv }
 	: NoNamespace) &
@@ -427,6 +450,10 @@ export async function fetchEnv<const C extends Config>(
 			databaseUrl: pooled.uri,
 			databaseUrlUnpooled: unpooled.uri,
 		},
+		// Branch identity, mirroring what the Functions runtime injects on every branch.
+		// Surfaced as `NEON_BRANCH` so local dev (`neon dev` / `neon-env run` / `env pull`)
+		// matches the deployed runtime. Uses the branch name.
+		branch: { name: branch.name } satisfies NeonBranchEnv,
 	};
 
 	if (wantsAuth) {
@@ -945,6 +972,15 @@ export function parseEnv(config: Config, scope?: string): unknown {
 		for (const issue of pg.error.issues) issues.push(issue.message);
 	}
 
+	// Branch identity is optional: the Functions runtime injects `NEON_BRANCH` on every
+	// branch by default and `neon dev` / `neon-env run` / `env pull` emit it too, but older
+	// runtimes and platform integrations may not, so a missing value is not an error — we
+	// just omit the namespace rather than failing the whole parse.
+	const branchName = source[NEON_ENV_VAR_KEYS.branch.name];
+	if (branchName !== undefined && branchName !== "") {
+		result.branch = { name: branchName } satisfies NeonBranchEnv;
+	}
+
 	if (isServiceEnabledInput(config.auth)) {
 		const auth = authEnvSchema.safeParse({
 			NEON_AUTH_BASE_URL: source.NEON_AUTH_BASE_URL,
@@ -1078,6 +1114,9 @@ export function toEntries(env: NeonEnv<Config>): Record<string, string> {
 		[NEON_ENV_VAR_KEYS.postgres.databaseUrlUnpooled]:
 			env.postgres.databaseUrlUnpooled,
 	};
+	if (env.branch) {
+		out[NEON_ENV_VAR_KEYS.branch.name] = env.branch.name;
+	}
 	const withAuth = env as { auth?: NeonAuthEnv };
 	if (withAuth.auth) {
 		out[NEON_ENV_VAR_KEYS.auth.baseUrl] = withAuth.auth.baseUrl;

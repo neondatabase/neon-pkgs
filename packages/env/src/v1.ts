@@ -16,6 +16,7 @@ export type {
 	FunctionSlugOf,
 	NeonAiGatewayEnv,
 	NeonAuthEnv,
+	NeonBranchEnv,
 	NeonDataApiEnv,
 	NeonEnv,
 	NeonFunctionEnv,
