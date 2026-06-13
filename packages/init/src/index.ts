@@ -15,6 +15,7 @@ import type { Editor, InitResult } from "./lib/types.js";
 
 export type { InteractiveInitOptions } from "./interactive.js";
 export { interactiveInit } from "./interactive.js";
+export { enrichResponse } from "./lib/enrich-output.js";
 export { handleAuthPhase } from "./lib/phases/auth.js";
 export { handleDbPhase } from "./lib/phases/db.js";
 export { handleMcpPhase } from "./lib/phases/mcp.js";
@@ -22,6 +23,7 @@ export { handleMigrationsPhase } from "./lib/phases/migrations.js";
 export { handleNeonAuthPhase } from "./lib/phases/neon-auth.js";
 export { handleSkillsPhase } from "./lib/phases/skills.js";
 export { handleStatusPhase } from "./lib/phases/status.js";
+export { routeDataStep } from "./lib/route-command.js";
 // v2 exports
 export type {
 	AgentActionAction,

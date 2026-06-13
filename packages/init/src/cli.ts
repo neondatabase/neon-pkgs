@@ -40,77 +40,10 @@ const agentOption = {
 // Output helper
 // ---------------------------------------------------------------------------
 
-/**
- * Converts neon-init args (e.g. ["neon-auth", "--json", "--setup"]) to a
- * neonctl init --data command using the step routing pattern.
- */
-function argsToCommand(args: string[]): string {
-	const data: Record<string, unknown> = {};
-	let i = 0;
-
-	// First non-flag arg is the subcommand → step
-	if (args.length > 0 && !args[0].startsWith("-")) {
-		data.step = args[0];
-		i = 1;
-	}
-
-	while (i < args.length) {
-		const arg = args[i];
-		if (arg.startsWith("--")) {
-			const key = arg
-				.slice(2)
-				.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
-			if (key === "json") {
-				i += 1;
-				continue;
-			}
-			const next = args[i + 1];
-			if (next !== undefined && !next.startsWith("-")) {
-				data[key] = next;
-				i += 2;
-			} else {
-				data[key] = true;
-				i += 1;
-			}
-		} else {
-			i += 1;
-		}
-	}
-
-	return `neonctl init --agent --json --data '${JSON.stringify(data)}'`;
-}
-
-/**
- * Walks the response object and adds a `command` string to every
- * `run_neon_init` action and `responseMapping` entry that has `args`.
- */
-function enrichWithCommands(obj: unknown): unknown {
-	if (obj === null || typeof obj !== "object") return obj;
-	if (Array.isArray(obj)) return obj.map(enrichWithCommands);
-
-	const record = obj as Record<string, unknown>;
-	const result: Record<string, unknown> = {};
-
-	for (const [key, value] of Object.entries(record)) {
-		result[key] = enrichWithCommands(value);
-	}
-
-	// Replace args with command in run_neon_init actions and responseMapping entries
-	if (Array.isArray(result.args)) {
-		result.command = argsToCommand(result.args as string[]);
-		delete result.args;
-	}
-
-	// Rename run_neon_init → run_shell_command so agents don't infer subcommand patterns
-	if (result.type === "run_neon_init") {
-		result.type = "run_shell_command";
-	}
-
-	return result;
-}
+import { enrichResponse } from "./lib/enrich-output.js";
 
 function outputJson(data: unknown): void {
-	console.log(JSON.stringify(enrichWithCommands(data), null, 2));
+	console.log(JSON.stringify(enrichResponse(data), null, 2));
 }
 
 /**
