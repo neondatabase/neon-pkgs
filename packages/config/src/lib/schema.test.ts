@@ -140,6 +140,54 @@ describe("configInputSchema", () => {
 		});
 		expect(result.success).toBe(false);
 	});
+
+	test("explains an undefined function env value (e.g. unset process.env) by function + key", () => {
+		const result = configInputSchema.safeParse({
+			preview: {
+				functions: {
+					hello: {
+						name: "Hello",
+						source: "./hello.ts",
+						// Simulates `test: process.env.TEST` when TEST is unset.
+						env: { test: undefined },
+					},
+				},
+			},
+		});
+		if (result.success) throw new Error("expected failure");
+		const formatted = formatZodIssues(result.error).join("\n");
+		// Points at the exact offending path…
+		expect(formatted).toContain("preview.functions.hello.env.test");
+		// …names the function and env key explicitly…
+		expect(formatted).toContain('Environment variable "test"');
+		expect(formatted).toContain('function "hello"');
+		// …explains the likely cause and the fix…
+		expect(formatted).toContain("process.env");
+		// …and drops zod's opaque default.
+		expect(formatted).not.toContain(
+			"Invalid input: expected string, received undefined",
+		);
+	});
+
+	test("keeps zod's default message for a non-undefined wrong-typed env value", () => {
+		const result = configInputSchema.safeParse({
+			preview: {
+				functions: {
+					hello: {
+						name: "Hello",
+						source: "./hello.ts",
+						env: { count: 42 },
+					},
+				},
+			},
+		});
+		if (result.success) throw new Error("expected failure");
+		const formatted = formatZodIssues(result.error).join("\n");
+		expect(formatted).toContain("preview.functions.hello.env.count");
+		expect(formatted).toContain("expected string");
+		// The undefined-specific guidance must not fire for a defined wrong type.
+		expect(formatted).not.toContain("process.env");
+	});
 });
 
 describe("dataApiConfigSchema", () => {
