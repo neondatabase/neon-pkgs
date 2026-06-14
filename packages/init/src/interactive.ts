@@ -256,7 +256,7 @@ async function interactiveInitInner(
 	const skillsAlready =
 		inspection.skillsInstalled === true || selectedTemplate !== null;
 	const hasNeonConnection = inspection.connectionString === true;
-	const needsMcp = !mcpAlready;
+	let needsMcp = !mcpAlready;
 	const needsSkills = !skillsAlready;
 	const needsInstall = needsMcp || needsSkills;
 
@@ -415,7 +415,7 @@ async function interactiveInitInner(
 		if (doInstallExtension) hintParts.push("editor extension");
 
 		// Installation preferences
-		let mcpScope: "global" | "project" = "global";
+		let mcpScope: "global" | "project" | "none" = "global";
 		let skillsScope: "global" | "project" = "project";
 
 		let modeResult: string;
@@ -488,13 +488,18 @@ async function interactiveInitInner(
 							value: "project",
 							label: "Project-level (this project only)",
 						},
+						{
+							value: "none",
+							label: "Skip — do not install the MCP server",
+						},
 					],
 				});
 				if (isCancel(scopeResult)) {
 					outro("Setup cancelled.");
 					return;
 				}
-				mcpScope = scopeResult as "global" | "project";
+				mcpScope = scopeResult as "global" | "project" | "none";
+				if (mcpScope === "none") needsMcp = false;
 			}
 
 			if (needsSkills) {
