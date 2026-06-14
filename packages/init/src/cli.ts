@@ -57,13 +57,15 @@ function resolveAgent(explicit: string | undefined): string | undefined {
 /**
  * Detects if an AI agent is invoking the CLI programmatically.
  *
- * Checks agent-specific env vars first, then falls back to IDE detection
- * via environment variables (TERM_PROGRAM, GIT_ASKPASS, etc.).
+ * Agent-specific env vars (CLAUDECODE, CODEX, CLINE) are unambiguous.
+ * For IDE-based agents (Cursor, VS Code, Windsurf), we require non-TTY
+ * stdin to distinguish "agent spawned this" from "human typed this in
+ * the IDE's integrated terminal".
  */
 function detectAgentInvocation(): string | null {
 	const env = process.env;
 
-	// Agent-specific env vars (always definitive)
+	// Agent-specific env vars (always definitive, regardless of TTY)
 	if (
 		env.CLAUDECODE === "1" ||
 		env.CLAUDE_CODE === "1" ||
@@ -73,8 +75,13 @@ function detectAgentInvocation(): string | null {
 	if (env.CODEX === "1") return "codex";
 	if (env.CLINE === "1") return "cline";
 
-	// IDE detected from environment (Cursor, VS Code, Windsurf)
-	return detectAgent();
+	// IDE detected + non-interactive stdin = agent spawned us
+	// (a human typing in the same terminal would have isTTY=true)
+	if (!process.stdin.isTTY) {
+		return detectAgent();
+	}
+
+	return null;
 }
 
 // ---------------------------------------------------------------------------
