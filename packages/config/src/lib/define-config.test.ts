@@ -198,22 +198,85 @@ describe("resolveConfig", () => {
 	});
 
 	test("rejects a function env value that is undefined (e.g. unset process.env) at definition time", () => {
-		expect(() =>
+		// Faithful repro of the CLI scenario: a `neon.ts` writing `test: process.env.TEST`
+		// with TEST unset. `neon.ts` is evaluated (not type-checked) by neonctl via jiti, so
+		// the value arrives as a runtime `undefined`. The `@ts-expect-error` documents that the
+		// type system *also* rejects it (the env value must be a defined string).
+		const unsetEnvValue =
+			process.env.NEON_PKGS_DEFINITELY_UNSET_ENV_VAR_FOR_TEST;
+		let caught: unknown;
+		try {
 			defineConfig({
 				preview: {
 					functions: {
 						hello: {
 							name: "Hello",
 							source: "./hello.ts",
-							// Simulates `RESEND_API_KEY: process.env.RESEND_API_KEY` when unset.
+							// @ts-expect-error process.env.X is `string | undefined`; here it is unset.
+							env: { test: unsetEnvValue },
+						},
+					},
+				},
+			});
+		} catch (error) {
+			caught = error;
+		}
+		expect(caught).toBeInstanceOf(ConfigValidationError);
+		if (!(caught instanceof ConfigValidationError)) throw caught;
+
+		// The user-visible message is exactly what the CLI prints.
+		expect(caught.message).toContain("Invalid Neon platform config:");
+		const issue = caught.issues.join("\n");
+		// Points at the exact path…
+		expect(issue).toContain("preview.functions.hello.env.test");
+		// …names the offending function and env key explicitly…
+		expect(issue).toContain('Environment variable "test"');
+		expect(issue).toContain('function "hello"');
+		// …explains the likely cause + a fix…
+		expect(issue).toContain("process.env");
+		// …and drops zod's opaque default.
+		expect(issue).not.toContain(
+			"Invalid input: expected string, received undefined",
+		);
+	});
+
+	test("names the correct function and key when one of several env values is undefined", () => {
+		// Guards the path-extraction logic: the message must identify the *specific* function
+		// and key that is undefined, not the first function or a hardcoded name.
+		let caught: unknown;
+		try {
+			defineConfig({
+				preview: {
+					functions: {
+						alpha: {
+							name: "Alpha",
+							source: "./alpha.ts",
+							env: { OK: "present" },
+						},
+						beta: {
+							name: "Beta",
+							source: "./beta.ts",
 							env: {
-								RESEND_API_KEY: undefined as unknown as string,
+								OK: "present",
+								// @ts-expect-error simulates an unset process.env.SECRET_TOKEN.
+								secretToken: undefined,
 							},
 						},
 					},
 				},
-			}),
-		).toThrow(ConfigValidationError);
+			});
+		} catch (error) {
+			caught = error;
+		}
+		expect(caught).toBeInstanceOf(ConfigValidationError);
+		if (!(caught instanceof ConfigValidationError)) throw caught;
+		const issue = caught.issues.join("\n");
+		expect(issue).toContain("preview.functions.beta.env.secretToken");
+		expect(issue).toContain('Environment variable "secretToken"');
+		expect(issue).toContain('function "beta"');
+		// The healthy function/keys must not be implicated.
+		expect(issue).not.toContain('function "alpha"');
+		expect(issue).not.toContain('"OK"');
 	});
 
 	test("rejects an invalid function slug (record key) at definition time", () => {
