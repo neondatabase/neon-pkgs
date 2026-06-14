@@ -14,7 +14,7 @@ npm install @neondatabase/env
 
 The library functions are **filesystem- and env-agnostic**: `fetchEnv` requires an explicit `projectId` + `branchId`. (The `neon-env` CLI does the `.neon`/`NEON_*` resolution and passes these in.)
 
-> `parseEnv` takes **no branch name**: the secret set is static (top-level `config.auth` / `config.dataApi`), so it reads those toggles directly without evaluating the per-branch closure. Its optional second argument is a **scope** — omit it for external (app/build) env, or pass a **function slug** when running inside that deployed function to also get a typed `function` namespace of its declared env keys.
+> `parseEnv` takes **no branch name**: the secret set is static (top-level `config.auth` / `config.dataApi`), so it reads those toggles directly without evaluating the per-branch closure. Its optional second argument is a **scope** _or_ a **key filter** — omit it for the full external (app/build) env, pass a **function slug** when running inside that deployed function (adds a typed `function` namespace of its declared env keys), or pass an **array of OS-level env-var keys** to require + return only that subset.
 
 ```ts
 import config from "../neon";
@@ -31,6 +31,12 @@ const env2 = parseEnv(config);
 // Inside a deployed function, pass its slug for the typed `function` namespace:
 const fnEnv = parseEnv(config, "hello");
 fnEnv.function.resendApiKey; // typed from hello's declared env keys
+
+// Key filter — only enforce + return the vars you actually use (e.g. a Next.js app that
+// reads the pooled URL but not the unpooled one). The keys autocomplete from the policy, so
+// you can only select vars the policy enables, and the result is narrowed to match:
+const { postgres } = parseEnv(config, ["DATABASE_URL"]);
+postgres.databaseUrl; // string — `databaseUrlUnpooled` is absent, and never required
 ```
 
 Both return the same namespaced `NeonEnv` shape: `postgres` is always present; `auth` and `dataApi` are included (and statically typed) when the evaluated branch policy enables them.
@@ -38,7 +44,7 @@ Both return the same namespaced `NeonEnv` shape: `postgres` is always present; `
 | Function | Description |
 | --- | --- |
 | `fetchEnv(config, { projectId, branchId, ... })` | Async. Calls the Neon API for the given project + branch and returns live connection strings (and Auth/Data API values when enabled). `projectId` and `branchId` are required (`branchId` is a `br-…` id). |
-| `parseEnv(config)` / `parseEnv(config, slug)` | Sync. Reads/validates the Neon env vars already present in `process.env` against the static policy toggles. With a function `slug`, also returns a typed `function` namespace of that function's declared env keys. Throws `PlatformError(EnvNotInjected)` listing missing vars when the env isn't populated. |
+| `parseEnv(config)` / `parseEnv(config, slug)` / `parseEnv(config, keys)` | Sync. Reads/validates the Neon env vars already present in `process.env` against the static policy toggles. With a function `slug`, also returns a typed `function` namespace of that function's declared env keys. With a `keys` array (e.g. `["DATABASE_URL"]`), only those vars are required and returned, as a narrowed namespaced shape — the keys are typesafe against the policy. Throws `PlatformError(EnvNotInjected)` listing missing vars when the env isn't populated. |
 | `toEntries(env)` | Project a resolved `NeonEnv` into `{ KEY: value }` pairs for cross-process transport (named after the web `.entries()` convention; returns a `Record`). |
 
 ## CLI

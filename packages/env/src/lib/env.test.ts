@@ -376,6 +376,66 @@ describe("parseEnv", () => {
 		expect(env.dataApi.url).toBe("https://data.example.com");
 	});
 
+	describe("key filter", () => {
+		test("narrows a namespace to only the selected key", () => {
+			vi.stubEnv("DATABASE_URL", "postgres://pooled");
+			vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
+			const env = parseEnv(defineConfig({}), ["DATABASE_URL"]);
+			expect(env.postgres.databaseUrl).toBe("postgres://pooled");
+			// Only the selected key survives — the unpooled URL is filtered out.
+			expect("databaseUrlUnpooled" in env.postgres).toBe(false);
+		});
+
+		test("returns selected keys across multiple namespaces", () => {
+			vi.stubEnv("DATABASE_URL", "postgres://pooled");
+			vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
+			vi.stubEnv("NEON_AUTH_BASE_URL", "https://auth.example.com");
+			vi.stubEnv("NEON_AUTH_JWKS_URL", "https://auth.example.com/jwks");
+			const env = parseEnv(defineConfig({ auth: true }), [
+				"DATABASE_URL",
+				"NEON_AUTH_BASE_URL",
+			]);
+			expect(env.postgres.databaseUrl).toBe("postgres://pooled");
+			expect(env.auth.baseUrl).toBe("https://auth.example.com");
+			// Unselected keys are absent from their kept namespaces.
+			expect("jwksUrl" in env.auth).toBe(false);
+		});
+
+		test("does not enforce vars the policy enables but the filter omits", () => {
+			vi.stubEnv("DATABASE_URL", "postgres://pooled");
+			// auth is enabled in the policy, but NEON_AUTH_* is unset — filtering to just
+			// DATABASE_URL must not throw over the auth vars we never asked for.
+			const env = parseEnv(defineConfig({ auth: true }), [
+				"DATABASE_URL",
+			]);
+			expect(env.postgres.databaseUrl).toBe("postgres://pooled");
+			expect("auth" in env).toBe(false);
+		});
+
+		test("throws EnvNotInjected listing only the missing selected keys", () => {
+			vi.stubEnv("DATABASE_URL", "postgres://pooled");
+			// DATABASE_URL_UNPOOLED is unset; selecting it must throw and name it.
+			expect(() =>
+				parseEnv(defineConfig({}), [
+					"DATABASE_URL",
+					"DATABASE_URL_UNPOOLED",
+				]),
+			).toThrowError(/DATABASE_URL_UNPOOLED is missing/);
+		});
+
+		test("rejects a selected-but-empty value", () => {
+			vi.stubEnv("DATABASE_URL", "");
+			expect(() => parseEnv(defineConfig({}), ["DATABASE_URL"])).toThrow(
+				expect.objectContaining({ code: ErrorCode.EnvNotInjected }),
+			);
+		});
+
+		test("an empty selection returns an empty object", () => {
+			vi.stubEnv("DATABASE_URL", "postgres://pooled");
+			expect(parseEnv(defineConfig({}), [])).toEqual({});
+		});
+	});
+
 	test("projects env object to process env keys", () => {
 		const pairs = toEntries({
 			postgres: { databaseUrl: "a", databaseUrlUnpooled: "b" },

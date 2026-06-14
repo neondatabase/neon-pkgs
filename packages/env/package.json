@@ -47,6 +47,7 @@
 		"prepare": "npm run build",
 		"test": "vitest --passWithNoTests",
 		"test:ci": "vitest run --passWithNoTests",
+		"test:types": "vitest run --typecheck.enabled --typecheck.only",
 		"test:e2e": "vitest run --config vitest.e2e.config.ts",
 		"tsc": "tsc"
 	},
