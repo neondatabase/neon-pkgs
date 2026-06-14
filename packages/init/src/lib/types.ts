@@ -76,6 +76,7 @@ export type NextAction =
 
 export interface AskUserAction {
 	type: "ask_user";
+	instructions?: string;
 	question: string;
 	options: (string | { value: string; label: string })[];
 	context?: string;

@@ -151,6 +151,8 @@ export async function handleAuthPhase(
 		status: "required",
 		nextAction: {
 			type: "ask_user",
+			instructions:
+				"IMPORTANT: You MUST present this question to the user and WAIT for their response before proceeding. Do NOT assume the answer or auto-select an option. The user's answer determines the next step.",
 			question:
 				"Do you have an existing Neon account, or do you need to create one?",
 			options: [
