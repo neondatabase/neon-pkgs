@@ -12,6 +12,11 @@ import { beforeAll, describe, expect, test } from "vitest";
 // `Record<string, FunctionDef>` index signature. So we drive the real TypeScript language
 // service and assert on the member completions it returns at a marked cursor position.
 
+// Each test boots a full TypeScript language service over the package's source. That is
+// inherently CPU-heavy and gets markedly slower under `--coverage` instrumentation and CI
+// parallelism, so the default 5s timeout is too tight. Give them generous headroom.
+const LANGUAGE_SERVICE_TIMEOUT_MS = 30_000;
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PKG_DIR = resolve(HERE, "..", "..");
 // A virtual file living in `src/lib` so its `./define-config.js` import resolves to the real
@@ -83,20 +88,26 @@ function memberCompletionsAt(source: string): string[] {
 }
 
 describe("preview slug-object autocomplete (language service)", () => {
-	test("an empty function slug object offers every FunctionDef member", () => {
-		const completions = memberCompletionsAt(`
+	test(
+		"an empty function slug object offers every FunctionDef member",
+		() => {
+			const completions = memberCompletionsAt(`
 import { defineConfig } from "./define-config.js";
 export default defineConfig({
 	preview: { functions: { hello: { /*|*/ } } },
 });
 `);
-		expect(completions).toEqual(
-			expect.arrayContaining(["name", "source", "env", "dev"]),
-		);
-	});
+			expect(completions).toEqual(
+				expect.arrayContaining(["name", "source", "env", "dev"]),
+			);
+		},
+		LANGUAGE_SERVICE_TIMEOUT_MS,
+	);
 
-	test("a partial function slug object still offers the remaining members", () => {
-		const completions = memberCompletionsAt(`
+	test(
+		"a partial function slug object still offers the remaining members",
+		() => {
+			const completions = memberCompletionsAt(`
 import { defineConfig } from "./define-config.js";
 export default defineConfig({
 	preview: {
@@ -106,30 +117,40 @@ export default defineConfig({
 	},
 });
 `);
-		expect(completions).toEqual(expect.arrayContaining(["env", "dev"]));
-		// name/source are already present, so they are (correctly) not re-offered.
-		expect(completions).not.toContain("name");
-	});
+			expect(completions).toEqual(expect.arrayContaining(["env", "dev"]));
+			// name/source are already present, so they are (correctly) not re-offered.
+			expect(completions).not.toContain("name");
+		},
+		LANGUAGE_SERVICE_TIMEOUT_MS,
+	);
 
-	test("a bucket slug object offers the BucketDef members", () => {
-		const completions = memberCompletionsAt(`
+	test(
+		"a bucket slug object offers the BucketDef members",
+		() => {
+			const completions = memberCompletionsAt(`
 import { defineConfig } from "./define-config.js";
 export default defineConfig({
 	preview: { buckets: { uploads: { /*|*/ } } },
 });
 `);
-		expect(completions).toContain("access");
-	});
+			expect(completions).toContain("access");
+		},
+		LANGUAGE_SERVICE_TIMEOUT_MS,
+	);
 
-	test("the top-level preview object still offers its members", () => {
-		const completions = memberCompletionsAt(`
+	test(
+		"the top-level preview object still offers its members",
+		() => {
+			const completions = memberCompletionsAt(`
 import { defineConfig } from "./define-config.js";
 export default defineConfig({
 	preview: { /*|*/ },
 });
 `);
-		expect(completions).toEqual(
-			expect.arrayContaining(["aiGateway", "functions", "buckets"]),
-		);
-	});
+			expect(completions).toEqual(
+				expect.arrayContaining(["aiGateway", "functions", "buckets"]),
+			);
+		},
+		LANGUAGE_SERVICE_TIMEOUT_MS,
+	);
 });
