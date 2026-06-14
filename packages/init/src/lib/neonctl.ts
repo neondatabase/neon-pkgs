@@ -1,46 +1,15 @@
 import { execa } from "execa";
 
 /**
- * Derives --api-host and --oauth-host flags from the NEON_API_HOST env var.
+ * Returns the neonctl command prefix: "CI= npx -y neonctl".
  *
- * When NEON_API_HOST is set (e.g. "https://console-stage.neon.build"), neonctl
- * commands need explicit flags:
- *   --api-host https://console-stage.neon.build/api/v2
- *   --oauth-host https://oauth2-stage.neon.build
- *
- * The oauth host is derived by replacing the "console" prefix in the hostname
- * with "oauth2" (e.g. console-stage.neon.build → oauth2-stage.neon.build).
- */
-export function getNeonctlApiFlags(): string {
-	const apiHost = process.env.NEON_API_HOST;
-	if (!apiHost) return "";
-
-	const apiUrl = `${apiHost.replace(/\/+$/, "")}/api/v2`;
-
-	let oauthUrl = "";
-	try {
-		const url = new URL(apiHost);
-		url.hostname = url.hostname.replace(/^console/, "oauth2");
-		// OAuth host is just the origin (no path)
-		oauthUrl = url.origin;
-	} catch {
-		// If URL parsing fails, skip oauth-host
-	}
-
-	const flags = [`--api-host ${apiUrl}`];
-	if (oauthUrl) flags.push(`--oauth-host ${oauthUrl}`);
-	return flags.join(" ");
-}
-
-/**
- * Returns the neonctl command prefix: "CI= npx -y neonctl" with any
- * --api-host / --oauth-host flags appended when NEON_API_HOST is set.
+ * neonctl reads NEON_API_HOST and NEON_OAUTH_HOST from the environment
+ * directly, so no extra flags are needed.
  *
  * Usage: `${neonctlCmd()} orgs list --output json`
  */
 export function neonctlCmd(): string {
-	const flags = getNeonctlApiFlags();
-	return flags ? `CI= npx -y neonctl ${flags}` : "CI= npx -y neonctl";
+	return "CI= npx -y neonctl";
 }
 
 /**

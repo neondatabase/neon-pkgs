@@ -5,7 +5,7 @@ import { isAuthenticated } from "./lib/auth.js";
 import { detectAvailableEditors } from "./lib/editors.js";
 import { usesExtension } from "./lib/extension.js";
 import { installNeon } from "./lib/install.js";
-import { getNeonctlApiFlags, neonctlCmd } from "./lib/neonctl.js";
+import { neonctlCmd } from "./lib/neonctl.js";
 import {
 	fetchSkillContent,
 	installAgentSkills,
@@ -15,6 +15,7 @@ import type { Editor, InitResult } from "./lib/types.js";
 
 export type { InteractiveInitOptions } from "./interactive.js";
 export { interactiveInit } from "./interactive.js";
+export { detectAgent } from "./lib/detect-agent.js";
 export { enrichResponse } from "./lib/enrich-output.js";
 export { handleAuthPhase } from "./lib/phases/auth.js";
 export { handleDbPhase } from "./lib/phases/db.js";
@@ -52,8 +53,7 @@ export interface InitOptions {
 }
 
 function getNeonctlCommands() {
-	const flags = getNeonctlApiFlags();
-	const base = flags ? `npx neonctl ${flags}` : "npx neonctl";
+	const base = "npx neonctl";
 	return {
 		listOrgs: `${base} orgs list --output json`,
 		listProjects: `${base} projects list --output json`,
@@ -64,9 +64,8 @@ function getNeonctlCommands() {
 
 function getAuthInstructions(): string {
 	const cmd = neonctlCmd();
-	const apiBase = process.env.NEON_API_HOST?.replace(/\/+$/, "");
-	const signupUrl = apiBase
-		? `${apiBase}/signup`
+	const signupUrl = process.env.NEON_API_HOST
+		? `${new URL(process.env.NEON_API_HOST).origin}/signup`
 		: "https://console.neon.tech/signup";
 	return [
 		"YOU (the agent) must handle authentication. Do NOT ask the user to run commands themselves.",

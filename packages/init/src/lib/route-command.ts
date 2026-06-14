@@ -252,6 +252,26 @@ export async function routeDataStep(
 ): Promise<unknown> {
 	const { step, ...rest } = data;
 
+	// Agents sometimes nest the actual payload inside a "data" key:
+	//   {"step":"setup","data":{"mode":"defaults",...}}
+	// or as a JSON string:
+	//   {"step":"setup","data":"{\"mode\":\"defaults\",...}"}
+	// Unwrap it so the phase handler gets the right options.
+	if (rest.data !== undefined && Object.keys(rest).length === 1) {
+		let nested = rest.data;
+		if (typeof nested === "string") {
+			try {
+				nested = JSON.parse(nested);
+			} catch {
+				// leave as-is
+			}
+		}
+		if (typeof nested === "object" && nested !== null) {
+			Object.assign(rest, nested);
+			delete rest.data;
+		}
+	}
+
 	switch (step) {
 		case "auth": {
 			const { handleAuthPhase } = await import("./phases/auth.js");

@@ -648,9 +648,7 @@ async function interactiveInitInner(
 	if (options.preview) gettingStartedData.preview = true;
 
 	// Build a prompt for the user to paste into their agent chat
-	const apiHost = process.env.NEON_API_HOST;
-	const envPrefix = apiHost ? `NEON_API_HOST=${apiHost} ` : "";
-	const cmd = `${envPrefix}neonctl init --agent --json --data '${JSON.stringify({ step: "getting-started", ...gettingStartedData })}'`;
+	const cmd = `neonctl init --agent --json --data '${JSON.stringify({ step: "getting-started", ...gettingStartedData })}'`;
 	// Account for clack's "│  " prefix (3 chars) when wrapping
 	const cols = (process.stdout.columns || 80) - 3;
 	const promptText = `To finish setting up Neon using Neon's agent-guided onboarding experience, have your agent run this shell command: ${cmd}`;

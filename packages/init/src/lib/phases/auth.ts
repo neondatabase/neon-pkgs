@@ -3,8 +3,9 @@ import { neonctlCmd } from "../neonctl.js";
 import type { PhaseResponse } from "../types.js";
 
 function getSignupUrl(): string {
-	const base = process.env.NEON_API_HOST?.replace(/\/+$/, "");
-	return base ? `${base}/signup` : "https://console.neon.tech/signup";
+	return process.env.NEON_API_HOST
+		? `${new URL(process.env.NEON_API_HOST).origin}/signup`
+		: "https://console.neon.tech/signup";
 }
 
 function getSignupCommands(): Record<string, string> {

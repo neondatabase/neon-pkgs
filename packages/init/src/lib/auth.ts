@@ -99,7 +99,7 @@ export async function createApiKeyFromNeonctl(
 
 		// Call Neon API to create an API key
 		const apiBase = process.env.NEON_API_HOST
-			? `${process.env.NEON_API_HOST.replace(/\/+$/, "")}/api/v2`
+			? `${new URL(process.env.NEON_API_HOST).origin}/api/v2`
 			: "https://console.neon.tech/api/v2";
 		const response = await fetch(`${apiBase}/api_keys`, {
 			method: "POST",
