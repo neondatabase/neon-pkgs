@@ -9,6 +9,7 @@ import type {
 	BranchTarget,
 	BranchTuning,
 	BranchTuningFn,
+	BucketDef,
 	Config,
 	DataApiInput,
 	DataApiSettings,
@@ -39,22 +40,70 @@ type DataApiUsesNeonAuth<DataApi> = ServiceEnabled<DataApi> extends true
 		: true
 	: false;
 
-/** An `auth` toggle value that is statically guaranteed enabled (`true` / `{}` / `{ enabled: true }`). */
-type EnabledAuthToggle = true | { enabled?: true };
+/**
+ * Human-readable hint surfaced as the **expected type** of `dataApi` when a Neon-Auth Data
+ * API is declared without Neon Auth enabled (see {@link DataApiField}). TypeScript prints the
+ * offending value against this string literal — `Type 'true' is not assignable to type
+ * '…requires `auth: true`…'` — which points straight at the fix, instead of the opaque
+ * `Type 'true' is not assignable to type 'never'` an intersection guard produces.
+ *
+ * It documents **both** fixes: enabling Neon Auth (`auth: true`), and running the Data API
+ * *without* Neon Auth by verifying a third-party IdP (`authProvider: 'external'` + `jwksUrl`).
+ */
+// Exported (type-only) for the type tests in `define-config.test-d.ts`; intentionally not
+// re-exported from `v1.ts` / `index.ts`, so it stays an internal implementation detail.
+export type NeonAuthRequiredHint =
+	"`dataApi` with Neon Auth (the default `authProvider: 'neon'`) requires Neon Auth, so add `auth: true`. To enable the Data API WITHOUT Neon Auth, verify a third-party IdP instead: `dataApi: { authProvider: 'external', jwksUrl: 'https://your-idp/.well-known/jwks.json' }`";
 
 /**
- * Static cross-field guard for {@link defineConfig}. When the policy enables a Neon-Auth
- * Data API (`authProvider: "neon"`, the default) but does **not** enable top-level `auth`,
- * this resolves to `{ auth: EnabledAuthToggle }` — intersected into the parameter type, it
- * makes `auth` required and rejects `auth: false` / a missing `auth`, surfacing the rule at
- * author time. Otherwise it is `unknown` (a no-op intersection). The runtime `superRefine`
- * in {@link configInputSchema} enforces the same invariant for non-typed callers.
+ * Static cross-field guard for {@link defineConfig}, expressed as the **type of the `dataApi`
+ * field** rather than an intersected requirement on `auth`.
+ *
+ * - A Neon-Auth Data API (`authProvider: "neon"`, the default) with top-level `auth` enabled,
+ *   or any external Data API: the field keeps its normal `DataApi & DataApiInput` type (the
+ *   `& DataApiInput` preserves member autocomplete; the `const DataApi` still types the
+ *   returned {@link Config}).
+ * - A Neon-Auth Data API **without** `auth` enabled: the field's expected type collapses to
+ *   the {@link NeonAuthRequiredHint} message, so the author sees the rule (and the two fixes)
+ *   right on the `dataApi` value.
+ *
+ * The runtime `superRefine` in {@link configInputSchema} enforces the same invariant for
+ * non-typed (plain-JS) callers, so the behavior is identical — only the type-level message
+ * changes.
  */
-type RequiresNeonAuth<Auth, DataApi> = DataApiUsesNeonAuth<DataApi> extends true
-	? ServiceEnabled<Auth> extends true
-		? unknown
-		: { auth: EnabledAuthToggle }
-	: unknown;
+// Exported (type-only) for the type tests in `define-config.test-d.ts`; intentionally not
+// re-exported from `v1.ts` / `index.ts`, so it stays an internal implementation detail.
+export type DataApiField<Auth, DataApi> =
+	DataApiUsesNeonAuth<DataApi> extends true
+		? ServiceEnabled<Auth> extends true
+			? DataApi & DataApiInput
+			: NeonAuthRequiredHint
+		: DataApi & DataApiInput;
+
+/**
+ * Autocomplete bridge for the nested `preview.functions` / `preview.buckets` slug objects.
+ *
+ * {@link PreviewInput} types those records with a string index signature
+ * (`Record<string, FunctionDef>` / `Record<string, BucketDef>`). When `defineConfig` infers
+ * `const Preview`, every authored slug becomes a **named** property on the inferred literal
+ * (e.g. `{ hello: { name; source } }`), and a named property **shadows** the index signature
+ * when the editor computes the contextual type of that slug's value — so the rest of
+ * {@link FunctionDef} / {@link BucketDef} (`env`, `dev`, `access`, …) never surfaces as
+ * completions inside `hello: { … }` / `uploads: { … }`.
+ *
+ * Re-declaring each inferred slug's value as `FunctionDef` / `BucketDef` (a *named* member, via
+ * a mapped type over the already-inferred keys) puts those members back onto the contextual
+ * type without going through an index signature, which restores autocomplete. Intersected with
+ * `Preview & PreviewInput` it neither widens what is accepted (the values were already
+ * `FunctionDef` / `BucketDef`) nor perturbs the inferred `const Preview` — so slug inference for
+ * `BranchTuningFn<Preview>` and the returned {@link Config} is unchanged.
+ */
+type PreviewAutocomplete<Preview> = (Preview extends { functions: infer F }
+	? { functions: { [Slug in keyof F]: FunctionDef } }
+	: unknown) &
+	(Preview extends { buckets: infer B }
+		? { buckets: { [Name in keyof B]: BucketDef } }
+		: unknown);
 
 /**
  * Validate and freeze a Neon Platform branch policy.
@@ -93,20 +142,24 @@ export function defineConfig<
 	const Auth extends ServiceToggleInput | undefined = undefined,
 	const DataApi extends DataApiInput | undefined = undefined,
 	const Preview extends PreviewInput | undefined = undefined,
->(
-	input: {
-		// Each field is intersected with its concrete interface (not just typed as the bare
-		// generic). The generic alone — e.g. `preview?: Preview` — gives editors no members to
-		// complete against in the object-literal position (they see `{} | undefined`), so you
-		// lose hints for `aiGateway` / `functions` / `buckets`. `& PreviewInput` restores the
-		// full shape for autocomplete while still inferring the `const` literal that types the
-		// `branch` closure's slugs (BranchTuningFn<Preview>) and the returned Config.
-		auth?: Auth & ServiceToggleInput;
-		dataApi?: DataApi & DataApiInput;
-		preview?: Preview & PreviewInput;
-		branch?: BranchTuningFn<Preview>;
-	} & RequiresNeonAuth<Auth, DataApi>,
-): Config<Auth, DataApi, Preview> {
+>(input: {
+	// Each field is intersected with its concrete interface (not just typed as the bare
+	// generic). The generic alone — e.g. `preview?: Preview` — gives editors no members to
+	// complete against in the object-literal position (they see `{} | undefined`), so you
+	// lose hints for `aiGateway` / `functions` / `buckets`. `& PreviewInput` restores the
+	// full shape for autocomplete while still inferring the `const` literal that types the
+	// `branch` closure's slugs (BranchTuningFn<Preview>) and the returned Config.
+	auth?: Auth & ServiceToggleInput;
+	// The `dataApi` field carries the Neon-Auth cross-field guard at the type level (see
+	// `DataApiField`): a Neon-Auth Data API without `auth` enabled surfaces a readable hint
+	// as the field's expected type instead of collapsing the value to `never`.
+	dataApi?: DataApiField<Auth, DataApi>;
+	// `& PreviewInput` restores top-level member hints (aiGateway/functions/buckets);
+	// `& PreviewAutocomplete<Preview>` restores hints *inside* each function/bucket slug
+	// object (see `PreviewAutocomplete`), which the bare index signature otherwise hides.
+	preview?: Preview & PreviewInput & PreviewAutocomplete<Preview>;
+	branch?: BranchTuningFn<Preview>;
+}): Config<Auth, DataApi, Preview> {
 	if (typeof input === "function") {
 		throw new ConfigValidationError([
 			"defineConfig now expects an object, not a function: `export default defineConfig({ auth: true, preview: { … }, branch: (branch) => ({ … }) })`.",

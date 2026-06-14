@@ -19,7 +19,7 @@ defineConfig({
 
 - **`authProvider`** is `"neon"` (default) or `"external"` (friendly values, mapped to the API's `neon_auth` / `external`). The external-IdP wiring (`jwksUrl`, `providerName`, `jwtAudience`) is only valid — and only typeable — on the `"external"` variant (the `"neon"` variant types those fields as `never`).
 - **`settings`** mirror the Neon API `DataAPISettings` in camelCase (`dbAggregatesEnabled`, `dbAnonRole`, `dbExtraSearchPath`, `dbMaxRows`, `dbSchemas`, `jwtRoleClaimKey`, `jwtCacheMaxLifetime`, `openapiMode`, `serverCorsAllowedOrigins`, `serverTimingEnabled`).
-- **A `"neon"` Data API requires Neon Auth.** Enforced both at author time (TypeScript makes `auth` required) and at runtime (zod cross-field check). An `"external"` Data API does not.
+- **A `"neon"` Data API requires Neon Auth.** Enforced both at author time and at runtime (zod cross-field check). When `dataApi` is enabled with Neon Auth but top-level `auth` is missing, the `dataApi` field's expected type carries a readable hint (`… requires `auth: true`, or use `dataApi: { authProvider: 'external', jwksUrl: ... }``) so the error points straight at the fix instead of an opaque `Type '…' is not assignable to type 'never'`. An `"external"` Data API does not require auth.
 - The auth wiring is set when the Data API is first **enabled** (carried on the create request) and is immutable afterward. Changing the runtime `settings` is reconciled as an **update** and requires `updateExisting` / `--update-existing`, like compute/TTL/`protected` drift.
 
 The `add_default_grants` / `skip_auth_schema` create-only flags are intentionally not exposed.
