@@ -31,7 +31,7 @@ export async function handleStatusPhase(
 		recommendations.push({
 			priority: "high",
 			message: "Not authenticated with Neon",
-			command: "neon-init auth --json",
+			command: "neon-init auth --agent --json",
 		});
 	}
 
@@ -39,7 +39,7 @@ export async function handleStatusPhase(
 		recommendations.push({
 			priority: "high",
 			message: "No DATABASE_URL found in .env",
-			command: "neon-init db --json",
+			command: "neon-init db --agent --json",
 		});
 	}
 
@@ -57,7 +57,7 @@ export async function handleStatusPhase(
 		recommendations.push({
 			priority: "medium",
 			message: `${migrationTool} detected but no migrations found`,
-			command: "neon-init migrations --json",
+			command: "neon-init migrations --agent --json",
 		});
 	}
 
