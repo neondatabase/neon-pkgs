@@ -139,34 +139,37 @@ export async function installAgentSkills(
 	await ensureSkillsCli();
 	const skills = getSkillList(options?.preview);
 
-	const skillArgs = skills.flatMap((s) => ["--skill", s]);
-
 	for (const editor of editorsWithSkills) {
 		const agentName = editorToSkillsAgent(editor);
 
-		try {
-			await execa(
-				"skills",
-				[
-					"add",
-					"neondatabase/agent-skills",
-					...skillArgs,
-					"--agent",
-					agentName,
-					...(options?.scope === "global" ? ["-g"] : []),
-					"-y",
-				],
-				{
-					stdio: "pipe",
-					timeout: 120000,
-				},
-			);
-		} catch (error) {
-			if (!quiet)
-				log.error(
-					`Failed to install skills for ${editor}: ${error instanceof Error ? error.message : "Unknown error"}`,
+		// Install one skill at a time — the skills CLI has a bug with multiple
+		// --skill flags where it creates directories but doesn't copy all SKILL.md files.
+		for (const skill of skills) {
+			try {
+				await execa(
+					"skills",
+					[
+						"add",
+						"neondatabase/agent-skills",
+						"--skill",
+						skill,
+						"--agent",
+						agentName,
+						...(options?.scope === "global" ? ["-g"] : []),
+						"-y",
+					],
+					{
+						stdio: "pipe",
+						timeout: 120000,
+					},
 				);
-			anyFailed = true;
+			} catch (error) {
+				if (!quiet)
+					log.error(
+						`Failed to install skill ${skill} for ${editor}: ${error instanceof Error ? error.message : "Unknown error"}`,
+					);
+				anyFailed = true;
+			}
 		}
 	}
 
@@ -277,25 +280,25 @@ export async function ensureSkillsUpToDate(
 	const agentName = getSkillsAgentNameFromId(resolvedAgent);
 	let allOk = true;
 
-	const skillArgs = skills.flatMap((s) => ["--skill", s]);
-	try {
-		await execa(
-			"skills",
-			[
-				"add",
-				"neondatabase/agent-skills",
-				...skillArgs,
-				"--agent",
-				agentName,
-				...(scope === "global" ? ["-g"] : []),
-				"-y",
-			],
-			{ stdio: "pipe", timeout: 120000 },
-		);
-	} catch {
-		// Install may fail in sandboxed environments (e.g. Cursor sandbox).
-		// Check if any base skill already exists on disk — if so, treat as success.
-		if (!skillsAreFresh(resolvedAgent, BASE_SKILLS)) {
+	// Install one skill at a time — the skills CLI has a bug with multiple
+	// --skill flags where it creates directories but doesn't copy all SKILL.md files.
+	for (const skill of skills) {
+		try {
+			await execa(
+				"skills",
+				[
+					"add",
+					"neondatabase/agent-skills",
+					"--skill",
+					skill,
+					"--agent",
+					agentName,
+					...(scope === "global" ? ["-g"] : []),
+					"-y",
+				],
+				{ stdio: "pipe", timeout: 120000 },
+			);
+		} catch {
 			allOk = false;
 		}
 	}
