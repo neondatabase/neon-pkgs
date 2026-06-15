@@ -297,8 +297,16 @@ async function interactiveInitInner(
 
 	// If tooling + database are configured, check if there's anything left to do
 	if (mcpAlready && skillsAlready && hasNeonConnection && hasNeonContext) {
-		log.step(dim("Neon MCP server already configured ✓"));
-		log.step(dim("Neon agent skills already installed ✓"));
+		log.step(
+			dim(
+				`Neon MCP server already configured (${inspection.mcpScope || "detected"}) ✓`,
+			),
+		);
+		log.step(
+			dim(
+				`Neon agent skills already installed (${inspection.skillsScope || "detected"}) ✓`,
+			),
+		);
 		if (extensionAlready)
 			log.step(dim("Neon editor extension installed ✓"));
 		log.step(dim("Neon database connected ✓"));
@@ -352,8 +360,18 @@ async function interactiveInitInner(
 	}
 
 	// Log what's already in place
-	if (mcpAlready) log.step(dim("Neon MCP server already configured ✓"));
-	if (skillsAlready) log.step(dim("Neon agent skills already installed ✓"));
+	if (mcpAlready)
+		log.step(
+			dim(
+				`Neon MCP server already configured (${inspection.mcpScope || "detected"}) ✓`,
+			),
+		);
+	if (skillsAlready)
+		log.step(
+			dim(
+				`Neon agent skills already installed (${inspection.skillsScope || "detected"}) ✓`,
+			),
+		);
 
 	// -----------------------------------------------------------------------
 	// Step 3–5: Install what's missing (skip entirely if everything is configured)

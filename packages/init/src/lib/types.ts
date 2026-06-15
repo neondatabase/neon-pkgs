@@ -175,8 +175,12 @@ export interface StatusResponse {
 		user?: string;
 	};
 	tooling: {
-		mcpServer: { configured: boolean | null; location?: string };
-		skills: { installed: boolean };
+		mcpServer: {
+			configured: boolean | null;
+			scope?: string | null;
+			location?: string;
+		};
+		skills: { installed: boolean; scope?: string | null };
 		extension?: { installed: boolean; editor: string } | null;
 	};
 	project: {
