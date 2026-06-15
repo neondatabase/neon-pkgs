@@ -1,6 +1,6 @@
 {
 	"name": "@neondatabase/env",
-	"version": "0.5.1",
+	"version": "0.6.0",
 	"description": "Resolve and inject Neon connection strings for the branch selected by your neon.ts policy. fetchEnv / parseEnv plus a `neon-env` CLI with `run` and `export`.",
 	"keywords": [
 		"neon",
@@ -47,6 +47,7 @@
 		"prepare": "npm run build",
 		"test": "vitest --passWithNoTests",
 		"test:ci": "vitest run --passWithNoTests",
+		"test:types": "vitest run --typecheck.enabled --typecheck.only",
 		"test:e2e": "vitest run --config vitest.e2e.config.ts",
 		"tsc": "tsc"
 	},

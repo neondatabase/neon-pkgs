@@ -155,11 +155,39 @@ const functionSlugSchema = z
 const bucketNameSchema = z.string().min(1).max(255);
 
 /**
- * Per-function environment map. Every value must be a defined string: a `process.env.X`
- * that is unset surfaces as `undefined` and is rejected here (rather than silently
- * shipping `undefined` into the deployment).
+ * A single function environment-variable value. Must be a defined string: a `process.env.X`
+ * that is unset evaluates to `undefined`, and the bare `z.string()` message for that case
+ * (`Invalid input: expected string, received undefined`) gives no hint that an env var is the
+ * culprit. The custom `error` replaces *only* the `undefined` case with a message that names
+ * the offending function + env key (read from the issue path) and how to fix it; any other
+ * wrong type keeps zod's default (`expected string, received number`, …).
  */
-const functionEnvSchema = z.record(z.string(), z.string());
+const functionEnvValueSchema = z.string({
+	error: (issue) => {
+		if (issue.input !== undefined) return undefined;
+		const path = issue.path ?? [];
+		const key = path.length > 0 ? String(path[path.length - 1]) : undefined;
+		const functionsIndex = path.indexOf("functions");
+		const slug =
+			functionsIndex >= 0 && functionsIndex + 1 < path.length
+				? String(path[functionsIndex + 1])
+				: undefined;
+		const subject =
+			slug !== undefined && key !== undefined
+				? `Environment variable "${key}" for function "${slug}"`
+				: key !== undefined
+					? `Environment variable "${key}"`
+					: "An environment variable";
+		return `${subject} is undefined — its value (typically a \`process.env.*\`) is unset. Set it (e.g. add it to your .env) or provide a fallback like \`process.env.X ?? ""\`.`;
+	},
+});
+
+/**
+ * Per-function environment map. Every value must be a defined string (see
+ * {@link functionEnvValueSchema}): a `process.env.X` that is unset surfaces as `undefined` and
+ * is rejected here (rather than silently shipping `undefined` into the deployment).
+ */
+const functionEnvSchema = z.record(z.string(), functionEnvValueSchema);
 
 /**
  * TCP port for a function's local dev server. Excludes 0 (which means "any port" to the OS

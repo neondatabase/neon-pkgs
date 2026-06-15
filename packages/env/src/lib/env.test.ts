@@ -1,4 +1,8 @@
-import { defineConfig, ErrorCode } from "@neondatabase/config/v1";
+import {
+	defineConfig,
+	ErrorCode,
+	type GetConnectionUriInput,
+} from "@neondatabase/config/v1";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import {
 	fetchEnv,
@@ -33,6 +37,24 @@ function seededFake() {
 	return { api, projectId };
 }
 
+/**
+ * A {@link FakeNeonApi} whose Postgres connection host carries an infra cell prefix
+ * (`<endpoint>.c-3.<region>.…`), mirroring production. The base fake omits the cell, so this
+ * is the only way to exercise the gateway host's cell-routing derivation end to end.
+ */
+class CellHostFakeNeonApi extends FakeNeonApi {
+	override async getConnectionUri(
+		projectId: string,
+		input: GetConnectionUriInput,
+	): Promise<{ uri: string }> {
+		const { uri } = await super.getConnectionUri(projectId, input);
+		const url = new URL(uri);
+		const [endpointLabel, ...rest] = url.hostname.split(".");
+		url.hostname = [endpointLabel, "c-3", ...rest].join(".");
+		return { uri: url.toString() };
+	}
+}
+
 /** Seed a single-branch project whose `main` branch carries the given role names. */
 function seededFakeWithRoles(roleNames: string[]) {
 	const api = new FakeNeonApi();
@@ -65,6 +87,18 @@ describe("fetchEnv", () => {
 		});
 		expect(env.postgres.databaseUrl).toContain("postgresql://");
 		expect(env.postgres.databaseUrl).toContain("-pooler");
+	});
+
+	test("surfaces the branch name as NEON_BRANCH", async () => {
+		const { api, projectId } = seededFake();
+		const env = await fetchEnv(defineConfig({}), {
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+		// `NEON_BRANCH` mirrors the Functions runtime; uses the branch name (not the id).
+		expect(env.branch?.name).toBe("main");
+		expect(toEntries(env).NEON_BRANCH).toBe("main");
 	});
 
 	test("requires auth integration when policy enables auth", async () => {
@@ -183,6 +217,22 @@ describe("parseEnv", () => {
 		vi.stubEnv("DATABASE_URL", "postgres://pooled");
 		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
 		const env = parseEnv(defineConfig({}));
+		expect(env.postgres.databaseUrl).toBe("postgres://pooled");
+	});
+
+	test("reads NEON_BRANCH when injected", () => {
+		vi.stubEnv("DATABASE_URL", "postgres://pooled");
+		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
+		vi.stubEnv("NEON_BRANCH", "preview/foo");
+		const env = parseEnv(defineConfig({}));
+		expect(env.branch?.name).toBe("preview/foo");
+	});
+
+	test("omits the branch namespace when NEON_BRANCH is absent (no throw)", () => {
+		vi.stubEnv("DATABASE_URL", "postgres://pooled");
+		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
+		const env = parseEnv(defineConfig({}));
+		expect(env.branch).toBeUndefined();
 		expect(env.postgres.databaseUrl).toBe("postgres://pooled");
 	});
 
@@ -376,6 +426,66 @@ describe("parseEnv", () => {
 		expect(env.dataApi.url).toBe("https://data.example.com");
 	});
 
+	describe("key filter", () => {
+		test("narrows a namespace to only the selected key", () => {
+			vi.stubEnv("DATABASE_URL", "postgres://pooled");
+			vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
+			const env = parseEnv(defineConfig({}), ["DATABASE_URL"]);
+			expect(env.postgres.databaseUrl).toBe("postgres://pooled");
+			// Only the selected key survives — the unpooled URL is filtered out.
+			expect("databaseUrlUnpooled" in env.postgres).toBe(false);
+		});
+
+		test("returns selected keys across multiple namespaces", () => {
+			vi.stubEnv("DATABASE_URL", "postgres://pooled");
+			vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
+			vi.stubEnv("NEON_AUTH_BASE_URL", "https://auth.example.com");
+			vi.stubEnv("NEON_AUTH_JWKS_URL", "https://auth.example.com/jwks");
+			const env = parseEnv(defineConfig({ auth: true }), [
+				"DATABASE_URL",
+				"NEON_AUTH_BASE_URL",
+			]);
+			expect(env.postgres.databaseUrl).toBe("postgres://pooled");
+			expect(env.auth.baseUrl).toBe("https://auth.example.com");
+			// Unselected keys are absent from their kept namespaces.
+			expect("jwksUrl" in env.auth).toBe(false);
+		});
+
+		test("does not enforce vars the policy enables but the filter omits", () => {
+			vi.stubEnv("DATABASE_URL", "postgres://pooled");
+			// auth is enabled in the policy, but NEON_AUTH_* is unset — filtering to just
+			// DATABASE_URL must not throw over the auth vars we never asked for.
+			const env = parseEnv(defineConfig({ auth: true }), [
+				"DATABASE_URL",
+			]);
+			expect(env.postgres.databaseUrl).toBe("postgres://pooled");
+			expect("auth" in env).toBe(false);
+		});
+
+		test("throws EnvNotInjected listing only the missing selected keys", () => {
+			vi.stubEnv("DATABASE_URL", "postgres://pooled");
+			// DATABASE_URL_UNPOOLED is unset; selecting it must throw and name it.
+			expect(() =>
+				parseEnv(defineConfig({}), [
+					"DATABASE_URL",
+					"DATABASE_URL_UNPOOLED",
+				]),
+			).toThrowError(/DATABASE_URL_UNPOOLED is missing/);
+		});
+
+		test("rejects a selected-but-empty value", () => {
+			vi.stubEnv("DATABASE_URL", "");
+			expect(() => parseEnv(defineConfig({}), ["DATABASE_URL"])).toThrow(
+				expect.objectContaining({ code: ErrorCode.EnvNotInjected }),
+			);
+		});
+
+		test("an empty selection returns an empty object", () => {
+			vi.stubEnv("DATABASE_URL", "postgres://pooled");
+			expect(parseEnv(defineConfig({}), [])).toEqual({});
+		});
+	});
+
 	test("projects env object to process env keys", () => {
 		const pairs = toEntries({
 			postgres: { databaseUrl: "a", databaseUrlUnpooled: "b" },
@@ -469,6 +579,38 @@ describe("branch storage + AI Gateway (Preview)", () => {
 			"https://br-main-api.ai.aws-us-east-1.fake.neon.tech/ai-gateway/openai/v1",
 		);
 		expect("storage" in env).toBe(false);
+	});
+
+	test("preserves the infra cell prefix (c-N.) from the connection host", async () => {
+		// Production connection hosts carry a cell segment (`ep-x.c-3.<region>.…`). The gateway
+		// is cell-routed, so that `c-3.` prefix must survive into the gateway host — dropping it
+		// (the previous behavior) yields a host that resolves to the wrong cell or not at all.
+		const api = new CellHostFakeNeonApi();
+		const projectId = "proj-cell";
+		api.seedProject({
+			project: {
+				id: projectId,
+				name: "cell-test",
+				regionId: "aws-us-east-2",
+				pgVersion: 17,
+			},
+			branches: [
+				{ branch: { id: "br-cell", name: "main", isDefault: true } },
+			],
+		});
+
+		const env = await fetchEnv(
+			defineConfig({ preview: { aiGateway: true } }),
+			{ api, projectId, branchId: "br-cell" },
+		);
+
+		expect(env.aiGateway.baseUrl).toBe(
+			"https://br-cell-api.ai.c-3.aws-us-east-2.fake.neon.tech/ai-gateway/openai/v1",
+		);
+		// The bare-host alias (`NEON_AI_GATEWAY_BASE_URL`) must carry the cell too.
+		expect(toEntries(env).NEON_AI_GATEWAY_BASE_URL).toBe(
+			"https://br-cell-api.ai.c-3.aws-us-east-2.fake.neon.tech",
+		);
 	});
 
 	test("functions ride along on the credential's scopes but never mint alone", async () => {

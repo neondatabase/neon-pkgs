@@ -146,6 +146,29 @@ const cli = yargs(hideBin(process.argv))
 				}
 			}
 
+			// --data with a "step" field routes to the appropriate phase
+			if (argv.data && jsonMode) {
+				const { routeDataStep } = await import(
+					"./lib/route-command.js"
+				);
+				let data: Record<string, unknown>;
+				try {
+					data = JSON.parse(argv.data);
+				} catch {
+					console.error(
+						"Invalid JSON in --data flag. Expected a JSON object.",
+					);
+					process.exit(1);
+					return;
+				}
+				if (typeof data.step === "string") {
+					const result = await routeDataStep(data, agent);
+					outputJson(result);
+					process.exit(0);
+					return;
+				}
+			}
+
 			if (jsonMode) {
 				// v2: agent-driven state machine
 				const result = await orchestrate({

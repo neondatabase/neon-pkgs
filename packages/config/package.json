@@ -1,6 +1,6 @@
 {
 	"name": "@neondatabase/config",
-	"version": "0.7.1",
+	"version": "0.8.0",
 	"description": "Config-as-Code for the Neon Platform. Define a `neon.ts` policy and inspect/diff/deploy it against the Neon API as plain TypeScript functions.",
 	"keywords": [
 		"neon",
@@ -44,6 +44,7 @@
 		"prepare": "npm run build",
 		"test": "vitest --passWithNoTests",
 		"test:ci": "vitest run --passWithNoTests",
+		"test:types": "vitest run --typecheck.enabled --typecheck.only",
 		"test:e2e": "vitest run --config vitest.e2e.config.ts",
 		"tsc": "tsc"
 	},

@@ -45,6 +45,14 @@ const NEON_MANAGED_AUTH_ROLES: ReadonlySet<string> = new Set([
 ]);
 
 export const NEON_ENV_VAR_KEYS = {
+	/**
+	 * Branch identity. `NEON_BRANCH` carries the branch **name** and is injected into the
+	 * Neon Functions runtime on every branch (including the default) by default. `env pull` /
+	 * `neon dev` / `neon-env run` emit it too so local dev mirrors the deployed runtime.
+	 */
+	branch: {
+		name: "NEON_BRANCH",
+	},
 	postgres: {
 		databaseUrl: "DATABASE_URL",
 		databaseUrlUnpooled: "DATABASE_URL_UNPOOLED",
@@ -89,6 +97,16 @@ export const NEON_ENV_VAR_KEYS = {
 
 /** OpenAI-dialect route prefix on the branch AI Gateway host. */
 const AI_GATEWAY_OPENAI_PATH = "/ai-gateway/openai/v1";
+
+/**
+ * Branch identity for the resolved branch. Always present on a `fetchEnv` result (the branch
+ * name is always known); on a `parseEnv` result it's present only when `NEON_BRANCH` was
+ * injected into `process.env` (the Functions runtime injects it by default, as do `neon dev` /
+ * `neon-env run` / `env pull`). `name` is the branch **name** (e.g. `main`, `preview/foo`).
+ */
+export interface NeonBranchEnv {
+	name: string;
+}
 
 /** Per-namespace inner shapes. Exposed so consumers can name the parts independently. */
 export interface NeonPostgresEnv {
@@ -239,6 +257,11 @@ type AiGatewayOn<C extends Config> = [NonNullable<C["preview"]>] extends [never]
  */
 export type NeonEnv<C extends Config = Config> = {
 	postgres: NeonPostgresEnv;
+	/**
+	 * Branch identity (`NEON_BRANCH`). Optional because `parseEnv` only surfaces it when the
+	 * var was injected; `fetchEnv` always populates it.
+	 */
+	branch?: NeonBranchEnv;
 } & (ServiceOn<NonNullable<C["auth"]>> extends true
 	? { auth: NeonAuthEnv }
 	: NoNamespace) &
@@ -279,6 +302,88 @@ type FunctionEnvKeysOf<
  */
 export type NeonFunctionEnv<C extends Config, S extends string> = {
 	function: Record<FunctionEnvKeysOf<C, S>, string>;
+};
+
+// ───────────────────────── parseEnv key filtering ─────────────────────────
+
+/**
+ * OS-level env-var keys grouped by the {@link NeonEnv} namespace they populate. Only the
+ * **input** vars `parseEnv` validates are listed — the output-only aliases in
+ * {@link NEON_ENV_VAR_KEYS} (`NEON_STORAGE_REGION`, `NEON_AI_GATEWAY_TOKEN`, …) and the
+ * always-derived `storage.forcePathStyle` are intentionally absent, so they are not
+ * selectable in a `parseEnv(config, keys)` filter. Keep in sync with {@link EnvKeyToProp}.
+ */
+interface EnvKeysByNamespace {
+	postgres: "DATABASE_URL" | "DATABASE_URL_UNPOOLED";
+	auth: "NEON_AUTH_BASE_URL" | "NEON_AUTH_JWKS_URL";
+	dataApi: "NEON_DATA_API_URL";
+	storage:
+		| "AWS_ACCESS_KEY_ID"
+		| "AWS_SECRET_ACCESS_KEY"
+		| "AWS_ENDPOINT_URL_S3"
+		| "AWS_REGION";
+	aiGateway: "OPENAI_API_KEY" | "OPENAI_BASE_URL";
+}
+
+/** The {@link NeonEnv} namespace interface backing each namespace key. */
+interface NamespaceEnv {
+	postgres: NeonPostgresEnv;
+	auth: NeonAuthEnv;
+	dataApi: NeonDataApiEnv;
+	storage: NeonStorageEnv;
+	aiGateway: NeonAiGatewayEnv;
+}
+
+/** OS-level env-var key → the camelCase property it sets on its namespace object. */
+interface EnvKeyToProp {
+	DATABASE_URL: "databaseUrl";
+	DATABASE_URL_UNPOOLED: "databaseUrlUnpooled";
+	NEON_AUTH_BASE_URL: "baseUrl";
+	NEON_AUTH_JWKS_URL: "jwksUrl";
+	NEON_DATA_API_URL: "url";
+	AWS_ACCESS_KEY_ID: "accessKeyId";
+	AWS_SECRET_ACCESS_KEY: "secretAccessKey";
+	AWS_ENDPOINT_URL_S3: "endpoint";
+	AWS_REGION: "region";
+	OPENAI_API_KEY: "apiKey";
+	OPENAI_BASE_URL: "baseUrl";
+}
+
+/**
+ * The OS-level env-var keys selectable for a given policy: the union of input vars across
+ * exactly the namespaces {@link NeonEnv}<C> carries. Drives the typesafe autocomplete of the
+ * `keys` filter — selecting a var from a namespace the policy does not enable is a type error
+ * (e.g. `NEON_AUTH_BASE_URL` is only offered once the policy turns on `auth`).
+ */
+export type SelectableEnvKey<C extends Config> =
+	EnvKeysByNamespace[keyof NeonEnv<C> & keyof EnvKeysByNamespace];
+
+/**
+ * The result shape of a **filtered** `parseEnv(config, keys)` call: the namespaced
+ * {@link NeonEnv} restricted to exactly the selected OS-level keys `K`. Namespaces with no
+ * selected key are dropped, and within a kept namespace only the selected properties survive
+ * — selecting just `["DATABASE_URL"]` yields `{ postgres: { databaseUrl: string } }`, with no
+ * `databaseUrlUnpooled`.
+ *
+ * The policy gating lives on the `parseEnv` overload (which binds `K` to
+ * {@link SelectableEnvKey}); this type only needs the selection, so it takes a bare
+ * `K extends string` and filters with `Extract`. The outer mapped type's `as` clause drops
+ * any namespace whose intersection with the selection is empty (`[…] extends [never]`,
+ * tuple-wrapped to switch off distribution); the inner one re-keys each selected OS var to its
+ * camelCase property and looks the value type up on the canonical namespace interface, so it
+ * stays correct if a field ever stops being a plain `string`.
+ */
+export type FilteredNeonEnv<K extends string> = {
+	[N in keyof EnvKeysByNamespace as [
+		Extract<K, EnvKeysByNamespace[N]>,
+	] extends [never]
+		? never
+		: N]: {
+		[P in Extract<K, EnvKeysByNamespace[N]> as EnvKeyToProp[P &
+			keyof EnvKeyToProp]]: NamespaceEnv[N][EnvKeyToProp[P &
+			keyof EnvKeyToProp] &
+			keyof NamespaceEnv[N]];
+	};
 };
 
 export interface FetchEnvOptions {
@@ -427,6 +532,10 @@ export async function fetchEnv<const C extends Config>(
 			databaseUrl: pooled.uri,
 			databaseUrlUnpooled: unpooled.uri,
 		},
+		// Branch identity, mirroring what the Functions runtime injects on every branch.
+		// Surfaced as `NEON_BRANCH` so local dev (`neon dev` / `neon-env run` / `env pull`)
+		// matches the deployed runtime. Uses the branch name.
+		branch: { name: branch.name } satisfies NeonBranchEnv,
 	};
 
 	if (wantsAuth) {
@@ -599,11 +708,13 @@ async function resolveCredentialSecrets(args: {
 }
 
 /**
- * The AI Gateway is a **branch-scoped host** — `<branchId>-api.ai.<region-suffix>` — NOT the
- * control-plane API origin. Derive the `<region>.<cloud>.neon.<tld>` suffix from the branch's
- * own Postgres connection host (e.g. a connection host of `ep-x.us-east-2.aws.neon.build`
- * yields the gateway host `<branchId>-api.ai.us-east-2.aws.neon.build`). Any infra cell prefix
- * (`c-N.`) on the connection host is dropped — the gateway resolves with or without it.
+ * The AI Gateway is a **branch-scoped host** — `<branchId>-api.ai.<host-suffix>` — NOT the
+ * control-plane API origin. Derive the suffix from the branch's own Postgres connection host
+ * by dropping only the endpoint label (the first segment) and keeping everything after it,
+ * including any infra cell prefix (`c-N.`): a connection host of
+ * `ep-x.c-3.us-east-2.aws.neon.tech` yields the gateway host
+ * `<branchId>-api.ai.c-3.us-east-2.aws.neon.tech`. The cell prefix is **load-bearing** —
+ * the gateway is cell-routed, so dropping `c-N.` resolves to the wrong (or no) host.
  */
 function aiGatewayHost(branchId: string, connectionUri: string): string {
 	let connectionHost = "";
@@ -612,13 +723,10 @@ function aiGatewayHost(branchId: string, connectionUri: string): string {
 	} catch {
 		connectionHost = "";
 	}
-	// Drop the endpoint label (first segment, e.g. `ep-x` / `ep-x-pooler`) and any infra cell
-	// prefix (`c-N.`), keeping `<region>.<cloud>.neon.<tld>`.
-	const suffix = connectionHost
-		.split(".")
-		.slice(1)
-		.join(".")
-		.replace(/^c-\d+\./, "");
+	// Drop the endpoint label (first segment, e.g. `ep-x` / `ep-x-pooler`), keeping the rest
+	// of the host verbatim — including any infra cell prefix (`c-N.`) the gateway routes on:
+	// `[c-N.]<region>.<cloud>.neon.<tld>`.
+	const suffix = connectionHost.split(".").slice(1).join(".");
 	return `${branchId}-api.ai.${suffix}`;
 }
 
@@ -899,12 +1007,18 @@ function isServiceEnabledInput(
  * static (top-level `config.auth` / `config.dataApi`), so it reads those directly without
  * evaluating the per-branch closure.
  *
- * The second argument is a **scope**:
- * - omitted — *external* scope (app bootstrap, build scripts, your dev machine). Returns
- *   `{ postgres, auth?, dataApi? }`.
+ * The second argument is a **scope** or a **key filter**:
+ * - omitted — *external* scope (app bootstrap, build scripts, your dev machine). Returns the
+ *   full `{ postgres, auth?, dataApi?, … }` the policy enables.
  * - a **function slug** (a key of `config.preview.functions`) — *function* scope: you are
  *   running inside that function. Returns the same branch secrets **plus** a typed
  *   `function` namespace with the function's declared env-var keys.
+ * - an **array of OS-level env-var keys** (e.g. `["DATABASE_URL", "NEON_AUTH_BASE_URL"]`) —
+ *   *filtered* mode: only those vars are required and returned, as a narrowed namespaced
+ *   shape. The keys autocomplete from the policy ({@link SelectableEnvKey}), so you can only
+ *   pick vars the policy actually enables. Use this when a process needs just a subset (a
+ *   Next.js app that reads `DATABASE_URL` but not `DATABASE_URL_UNPOOLED`, say) and you don't
+ *   want `parseEnv` to throw over vars you never use.
  *
  * Throws `PlatformError(EnvNotInjected)` listing every missing/invalid var when the env
  * isn't fully populated, with a fix hint pointing back at `neon dev` / `neon-env run`.
@@ -920,15 +1034,32 @@ function isServiceEnabledInput(
  * // Inside the "hello" function:
  * const env = parseEnv(config, "hello");
  * env.function.resendApiKey; // typed from hello's declared env keys
+ *
+ * // Filtered: only enforce + return the pooled URL.
+ * const { postgres } = parseEnv(config, ["DATABASE_URL"]);
+ * postgres.databaseUrl; // string — `databaseUrlUnpooled` is absent
  * ```
  */
 export function parseEnv<const C extends Config>(config: C): NeonEnv<C>;
 export function parseEnv<
 	const C extends Config,
+	const K extends SelectableEnvKey<C>,
+>(config: C, keys: readonly K[]): FilteredNeonEnv<K>;
+export function parseEnv<
+	const C extends Config,
 	const S extends FunctionSlugOf<C>,
 >(config: C, scope: S): NeonEnv<C> & NeonFunctionEnv<C, S>;
-export function parseEnv(config: Config, scope?: string): unknown {
+export function parseEnv(
+	config: Config,
+	scopeOrKeys?: string | readonly string[],
+): unknown {
 	const source = process.env;
+	if (Array.isArray(scopeOrKeys)) {
+		return parseFilteredEnv(source, scopeOrKeys);
+	}
+	// `Array.isArray` doesn't narrow a `readonly string[]` out of the union, so re-derive the
+	// function-slug scope from the remaining `string` shape explicitly.
+	const scope = typeof scopeOrKeys === "string" ? scopeOrKeys : undefined;
 	const issues: string[] = [];
 	const result: Record<string, unknown> = {};
 
@@ -943,6 +1074,15 @@ export function parseEnv(config: Config, scope?: string): unknown {
 		} satisfies NeonPostgresEnv;
 	} else {
 		for (const issue of pg.error.issues) issues.push(issue.message);
+	}
+
+	// Branch identity is optional: the Functions runtime injects `NEON_BRANCH` on every
+	// branch by default and `neon dev` / `neon-env run` / `env pull` emit it too, but older
+	// runtimes and platform integrations may not, so a missing value is not an error — we
+	// just omit the namespace rather than failing the whole parse.
+	const branchName = source[NEON_ENV_VAR_KEYS.branch.name];
+	if (branchName !== undefined && branchName !== "") {
+		result.branch = { name: branchName } satisfies NeonBranchEnv;
 	}
 
 	if (isServiceEnabledInput(config.auth)) {
@@ -1059,6 +1199,77 @@ export function parseEnv(config: Config, scope?: string): unknown {
 	return result;
 }
 
+/**
+ * Runtime reverse map for filtered `parseEnv`: OS-level env-var key → `[namespace, property]`
+ * in the {@link NeonEnv} shape. The compile-time mirror is {@link EnvKeysByNamespace} /
+ * {@link EnvKeyToProp}; keep all three in sync. Only input vars appear (no output-only
+ * aliases, no derived `forcePathStyle`).
+ */
+const FILTERABLE_ENV_KEYS: Record<string, readonly [string, string]> = {
+	DATABASE_URL: ["postgres", "databaseUrl"],
+	DATABASE_URL_UNPOOLED: ["postgres", "databaseUrlUnpooled"],
+	NEON_AUTH_BASE_URL: ["auth", "baseUrl"],
+	NEON_AUTH_JWKS_URL: ["auth", "jwksUrl"],
+	NEON_DATA_API_URL: ["dataApi", "url"],
+	AWS_ACCESS_KEY_ID: ["storage", "accessKeyId"],
+	AWS_SECRET_ACCESS_KEY: ["storage", "secretAccessKey"],
+	AWS_ENDPOINT_URL_S3: ["storage", "endpoint"],
+	AWS_REGION: ["storage", "region"],
+	OPENAI_API_KEY: ["aiGateway", "apiKey"],
+	OPENAI_BASE_URL: ["aiGateway", "baseUrl"],
+};
+
+/**
+ * Filtered counterpart to the {@link parseEnv} body: validate and return only the explicitly
+ * selected OS-level env-var keys, projected back into the narrowed namespaced shape. Unlike
+ * the full reader it never consults the policy — the selection alone decides what's required —
+ * so vars the caller didn't ask for (e.g. `DATABASE_URL_UNPOOLED`) can be absent without
+ * throwing. Mirrors the same non-empty constraint and {@link PlatformError} aggregation.
+ */
+function parseFilteredEnv(
+	source: NodeJS.ProcessEnv,
+	keys: readonly string[],
+): Record<string, Record<string, string>> {
+	const issues: string[] = [];
+	const result: Record<string, Record<string, string>> = {};
+	for (const key of keys) {
+		// Unknown keys are blocked at the type level; a runtime caller bypassing the types
+		// gets a clear error rather than a silently-dropped selection.
+		if (!Object.hasOwn(FILTERABLE_ENV_KEYS, key)) {
+			issues.push(`${key} is not a selectable Neon env variable`);
+			continue;
+		}
+		const value = source[key];
+		if (value === undefined) {
+			issues.push(`${key} is missing`);
+			continue;
+		}
+		if (value === "") {
+			issues.push(`${key} must not be empty`);
+			continue;
+		}
+		const [namespace, property] = FILTERABLE_ENV_KEYS[key];
+		const bucket = result[namespace] ?? {};
+		bucket[property] = value;
+		result[namespace] = bucket;
+	}
+	if (issues.length > 0) {
+		throw new PlatformError(
+			ErrorCode.EnvNotInjected,
+			[
+				"parseEnv: the required Neon env variables are not present in process.env.",
+				...issues.map((i) => `  - ${i}`),
+				"Inject them via one of:",
+				"  - `neon dev` / `neon-env run -- <your dev command>` (wraps the command with the vars injected)",
+				"  - your hosting platform's Neon integration (Vercel, Fly, Railway, …)",
+				"Or switch the call to `await fetchEnv(config, …)` if you're in a context that can do async I/O.",
+			].join("\n"),
+			{ details: { missing: issues } },
+		);
+	}
+	return result;
+}
+
 // ───────────────────────── env-var mapping helpers ─────────────────────────
 
 /**
@@ -1078,6 +1289,9 @@ export function toEntries(env: NeonEnv<Config>): Record<string, string> {
 		[NEON_ENV_VAR_KEYS.postgres.databaseUrlUnpooled]:
 			env.postgres.databaseUrlUnpooled,
 	};
+	if (env.branch) {
+		out[NEON_ENV_VAR_KEYS.branch.name] = env.branch.name;
+	}
 	const withAuth = env as { auth?: NeonAuthEnv };
 	if (withAuth.auth) {
 		out[NEON_ENV_VAR_KEYS.auth.baseUrl] = withAuth.auth.baseUrl;

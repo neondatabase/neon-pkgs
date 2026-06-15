@@ -11,6 +11,7 @@ export default defineConfig({
 		"src/cli.ts",
 		"src/lib/**/*.ts",
 		"!src/**/*.test.*",
+		"!src/**/*.test-d.*",
 		"!src/lib/fake-neon-api.ts",
 		"!src/lib/test-utils.ts",
 	],

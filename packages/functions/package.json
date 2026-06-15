@@ -1,6 +1,6 @@
 {
 	"name": "@neondatabase/functions",
-	"version": "0.1.2",
+	"version": "0.2.0",
 	"description": "Runtime helpers for Neon Functions. Currently provides a `waitUntil` primitive for deferring async work past a response.",
 	"keywords": [
 		"neon",

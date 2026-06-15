@@ -1,5 +1,172 @@
 # @neondatabase/config-runtime
 
+## 0.8.0
+
+### Minor Changes
+
+- 101c4cb: Stop treating the AI Gateway as a provisionable branch resource. The AI Gateway is always available on a branch — it is credential-gated, not per-branch provisioned, and has no control-plane enable/disable/status route. Declaring `preview.aiGateway` in a `neon.ts` only means "mint a branch credential scoped `ai_gateway:invoke` and surface the gateway env vars (`OPENAI_*` / `NEON_AI_GATEWAY_*`)", which `@neondatabase/env` already does without touching any AI Gateway endpoint.
+
+  Previously `plan` / `apply` / `status` (and the policy-gated `env pull`) probed `GET /projects/{p}/branches/{b}/ai-gateway` to diff an `enable-ai-gateway` step. That endpoint isn't part of the platform, so the probe failed with a `PLATFORM_FEATURE_UNAVAILABLE` error and broke commands that otherwise only needed `DATABASE_URL` / auth. Removed end to end:
+
+  - **`@neondatabase/config`** — `NeonApi` no longer declares `getAiGatewayEnabled` / `enableAiGateway` / `disableAiGateway`; the `enable-ai-gateway` `PlanStep` and `RemotePreviewState.aiGatewayEnabled` are gone, and `diffConfig` never emits an AI Gateway step. `ResolvedPreviewConfig.aiGatewayEnabled` stays — it still drives the credential scope and env vars.
+  - **`@neondatabase/config-runtime`** — `pushConfig` no longer probes or applies AI Gateway state, and `PulledPreview.aiGatewayEnabled` is removed from `pullConfig` / `inspect` (the gateway is not per-branch state to report).
+
+  Consumers reading `PulledPreview.aiGatewayEnabled` (e.g. a CLI `config status` view) should drop it; `preview.aiGateway` continues to work in `neon.ts` exactly as before for env resolution.
+
+- 0cabe8e: Add branch-scoped service credentials + object-storage / AI Gateway env (Preview).
+
+  - `@neondatabase/config`: the `NeonApi` adapter gains `createCredential` / `listCredentials` / `revokeCredential` (the beta `…/credentials` endpoints) and `getProjectBranchStorage` (the beta `…/storage` endpoint → `s3_endpoint` / `region` / `force_path_style`), plus the `CredentialScope` / `CredentialPrincipalType` types, the `NeonCredentialSecret` / `NeonCredentialMeta` / `CreateCredentialInput` / `NeonBranchStorageSnapshot` shapes, and pure `deriveCredentialScopes` / `credentialScopesSatisfied` helpers.
+  - `@neondatabase/env`: `fetchEnv` / `parseEnv` expose two new namespaces, mapped onto the **SDK-standard** env names so the AWS and OpenAI SDKs work from env alone:
+    - `env.storage` (when `preview.buckets`) → `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_URL_S3`, `AWS_REGION` (and `NEON_STORAGE_REGION`), `NEON_STORAGE_FORCE_PATH_STYLE`.
+    - `env.aiGateway` (when `preview.aiGateway`) → `OPENAI_API_KEY`, `OPENAI_BASE_URL` (the branch gateway host + `/ai-gateway/openai/v1`).
+    - The access keys come from a minted branch credential; the S3 endpoint/region/path-style come from `getProjectBranchStorage`. `functions:invoke` rides along on the credential's scopes when functions are also declared, but functions never mint a credential on their own. `fetchEnv` reuses the secrets already present in its env source (round-tripping the one-time `api_token` / `s3_secret_access_key`) and only re-mints when a needed secret is missing. Policies without `preview.buckets` / `preview.aiGateway` never touch the credentials/storage endpoints, so the Postgres / Auth / Data API path is unchanged.
+  - `@neondatabase/config-runtime`: `pullConfig` / `inspect` report secret-free issued-credential metadata under `preview.credentials` (degrading to none when the endpoint is unavailable).
+
+- b6efa3a: Give `neon.ts` config errors a precise, actionable message instead of a misleading catch-all.
+
+  A bad function slug used to surface as `preview.functions.<slug>: Invalid key in record`, wrapped in a generic `Failed to evaluate … This is usually a TypeScript syntax error` hint — pointing users at a syntax bug that wasn't there. Two fixes:
+
+  - `defineConfig` validation now hoists the real reason out of zod's `invalid_key` issue, so a rejected record key reports _why_ (e.g. `preview.functions.hello-world: function slug must be 1-20 lowercase letters and digits (no hyphens or other characters)`).
+  - `loadConfigFromFile` surfaces a `PlatformError` thrown during evaluation verbatim (the config is invalid, not the TypeScript), reserving the "run it with tsx" hint for genuine syntax/runtime/missing-dependency failures.
+  - An `undefined` function `env` value (typically a `process.env.X` referenced in `neon.ts` that is unset) used to surface as zod's opaque `preview.functions.hello.env.test: Invalid input: expected string, received undefined`. It now names the function and env key and points at the fix, e.g. `Environment variable "test" for function "hello" is undefined — its value (typically a process.env.*) is unset. Set it (e.g. add it to your .env) or provide a fallback like process.env.X ?? "".` (a non-`undefined` wrong type keeps zod's default message).
+
+  Adds `isPlatformError`, a structural guard that recognises a `PlatformError` even across the jiti module-realm boundary (where `instanceof` fails), re-exported from `@neondatabase/config-runtime`.
+
+- 11c14e6: Add a `createBranch` operation that provisions a branch from a `neon.ts` policy.
+
+  `apply` always evaluated the policy as an _existing_ branch (`exists: true`), so a policy that
+  gates creation-time tuning on `!branch.exists` (TTL, compute settings, `parent`) never applied
+  it when a branch was first created — e.g. `neonctl checkout <new-name>`, which created a bare
+  branch and then `apply`'d it. New `createBranch(config, { projectId, branchName })`:
+
+  1. evaluates the policy with `exists: false`,
+  2. creates the branch from the policy's `parent` (falling back to the project default), and
+  3. reconciles the rest (TTL, compute, `protected`, Neon Auth, Data API, functions) onto it.
+
+  Also adds a `branchExists?: boolean` option to `pushConfig` (defaults to `true`) that controls
+  the `branch.exists` value passed to the policy — the mechanism `createBranch` uses to apply as
+  a new branch.
+
+- 9170128: Add a rich `dataApi` config to `neon.ts`: auth provider selection + reconcilable runtime settings.
+
+  `dataApi` still accepts the boolean/toggle forms (`true` / `{}` / `{ enabled: true }`), but now also takes an object describing the integration:
+
+  ```ts
+  defineConfig({
+    auth: true,
+    dataApi: {
+      authProvider: "neon", // default; "external" verifies a third-party IdP
+      settings: { dbSchemas: ["public", "api"], dbMaxRows: 1000 },
+    },
+  });
+  ```
+
+  - **`authProvider`** is `"neon"` (default) or `"external"` (friendly values, mapped to the API's `neon_auth` / `external`). The external-IdP wiring (`jwksUrl`, `providerName`, `jwtAudience`) is only valid — and only typeable — on the `"external"` variant (the `"neon"` variant types those fields as `never`).
+  - **`settings`** mirror the Neon API `DataAPISettings` in camelCase (`dbAggregatesEnabled`, `dbAnonRole`, `dbExtraSearchPath`, `dbMaxRows`, `dbSchemas`, `jwtRoleClaimKey`, `jwtCacheMaxLifetime`, `openapiMode`, `serverCorsAllowedOrigins`, `serverTimingEnabled`).
+  - **A `"neon"` Data API requires Neon Auth.** Enforced both at author time and at runtime (zod cross-field check). When `dataApi` is enabled with Neon Auth but top-level `auth` is missing, the `dataApi` field's expected type carries a readable hint (`… requires `auth: true`, or use `dataApi: { authProvider: 'external', jwksUrl: ... }``) so the error points straight at the fix instead of an opaque `Type '…' is not assignable to type 'never'`. An `"external"` Data API does not require auth.
+  - The auth wiring is set when the Data API is first **enabled** (carried on the create request) and is immutable afterward. Changing the runtime `settings` is reconciled as an **update** and requires `updateExisting` / `--update-existing`, like compute/TTL/`protected` drift.
+
+  The `add_default_grants` / `skip_auth_schema` create-only flags are intentionally not exposed.
+
+- b6efa3a: Fix `config apply` failing with HTTP 405 when creating a function.
+
+  The Neon API has no standalone "create function" endpoint: the functions collection (`POST /projects/{p}/branches/{b}/functions`) only supports `GET`, and a function is created implicitly by its first deployment (`POST .../functions/{slug}/deployments`). Pushing a policy with a new function therefore tried a non-existent create call and failed with `HTTP 405`.
+
+  - `@neondatabase/config`: remove `createBranchFunction` from the `NeonApi` interface, the real adapter, and the fake. `deployBranchFunction` now creates the function on first deploy. The `deploy-function` plan step carries a `functionExists` flag (the separate `create-function` `PlanStep` is gone).
+  - `@neondatabase/config-runtime`: `pushConfig` emits a single `deploy-function` step per function and reports it as a `create` (first deploy) or `update` (re-deploy) based on `functionExists`, instead of a separate create + deploy.
+
+- 3fbf556: Remove the function `memoryMib` setting entirely.
+
+  **Breaking.** Function memory is no longer user-configurable from `neon.ts` or the deploy
+  API surface — it is fixed by the platform policy.
+
+  - `@neondatabase/config`: drop `FunctionMemoryMib`, remove `memoryMib` from `FunctionTuning`,
+    `ResolvedFunctionConfig`, and `DeployFunctionInput`. The real NeonApi adapter no longer
+    sends a `memory_mib` form field.
+  - `@neondatabase/config-runtime`: stop threading `memoryMib` through plan/apply steps.
+  - A `neon.ts` that sets `branch.preview.functions[slug].memoryMib` is now a type error and
+    is rejected by the schema.
+
+- 0d4c973: Reshape `defineConfig` into a static existential set + a tuning-only `branch` closure.
+
+  **Breaking.** `defineConfig` now takes an **object**, not a function:
+
+  ```ts
+  export default defineConfig({
+    auth: true,
+    dataApi: false,
+    preview: {
+      aiGateway: false,
+      functions: {
+        hello: {
+          name: "Hello",
+          source: "./functions/hello.ts",
+          dev: { port: 8787 },
+        },
+      },
+      buckets: { uploads: { access: "public_read" } },
+    },
+    branch: (branch) => ({
+      protected: branch.name === "main",
+      preview: { functions: { hello: { memoryMib: 1024 } } },
+    }),
+  });
+  ```
+
+  - GA service toggles (`auth`, `dataApi`) and the beta `preview` block (`aiGateway`,
+    `functions`, `buckets`) are **static and top-level**, so the secret set is known at the
+    type level. `functions`/`buckets` are **records keyed by slug/name** (regex-enforced,
+    dup-free).
+  - The `branch` closure is **tuning-only** (`parent`/`ttl`/`protected`/`postgres` + per-function
+    `memoryMib`/`runtime`), and is type-constrained to only reference declared function slugs.
+    It cannot add or remove services or functions.
+  - `resolveConfig` still returns the same `ResolvedBranchConfig`, so `diff`/`plan`/`apply`
+    are unchanged at runtime. `pullConfig` now returns the new `Config` shape.
+  - `@neondatabase/env`: `NeonEnv<C>` is derived directly from the static toggles, so it is
+    exact. `parseEnv` drops the `branchName` argument and takes an optional **scope** — omit
+    for external env, or pass a function slug to also get a typed `function` namespace of that
+    function's declared env keys.
+
+### Patch Changes
+
+- f7ddc9d: Bundle function dependencies into the deploy archive.
+
+  The default function bundler (`buildFunctionBundle`) ran esbuild with `--packages=external`, so npm dependencies were left as bare imports and never shipped. Since the Functions runtime has no `node_modules`, any function importing a third-party package failed to load at runtime (`Cannot find package '…'`).
+
+  It now bundles dependencies into `index.mjs` (Node built-ins stay external on `platform: "node"`) and prepends a `createRequire` banner so bundled CommonJS dependencies work inside the ESM output (avoids `Dynamic require of "fs" is not supported`).
+
+- b6efa3a: Trim noise from `plan` / `apply` change details. The `auth` / `dataApi` / `aiGateway` toggles no longer carry a `details` blob (they're plain branch on/off switches — the auto-derived `databaseName` was never policy-controlled, and `branchName` just repeats the command's target branch on every row). `bucket` / `function` changes keep their meaningful fields (`accessLevel`, `name`, `source`, `runtime`, …) but drop the redundant `branchName`. Plan and apply stay in sync.
+- 6b4a26f: Stop generating a source map for deployed function bundles.
+
+  `buildFunctionBundle` ran esbuild with `sourcemap: true`, shipping an `index.mjs.map` in every deploy archive. The Functions runtime does not run Node with source-map support, so the uploaded map is never consumed (a thrown error's stack still points into the minified `index.mjs`). It only inflated the archive, so it is no longer emitted.
+
+- 11c14e6: Name the function bundle entry `index.mjs` instead of `out.js`.
+
+  `buildFunctionBundle` emitted the esbuild output as `out.js` / `out.js.map`, but the Functions
+  runtime imports the deploy archive's entry by the conventional `index.{js,mjs}` name — so a
+  deployed function's zip had no importable module. The default bundler now emits
+  `index.mjs` / `index.mjs.map`.
+
+- b6efa3a: Surface each deployed function's invocation URL in `plan` / `apply` results.
+
+  `pushConfig` now adds an `invocationUrl` to the `details` of every `function:<slug>` change in `PushResult.applied`, so callers (e.g. `neonctl deploy`) can show users where to call a function right after deploying it. The URL comes from the preview state already fetched for the diff; a function created by its first deployment in the same push triggers a single extra `listBranchFunctions` to learn its freshly-minted URL (best-effort — a failed re-list simply omits the URL).
+
+- c57536b: Honor `NEON_API_HOST` / the new `apiHost` option when building the default Neon API client. `createNeonApiFromOptions` now resolves the host (explicit `apiHost` option → `NEON_API_HOST` env → production default), and `pullConfig`, `pushConfig`, `inspect`/`plan`/`apply`, and `fetchEnv` accept and forward an optional `apiHost`.
+- Updated dependencies [101c4cb]
+- Updated dependencies [0cabe8e]
+- Updated dependencies [b6efa3a]
+- Updated dependencies [9170128]
+- Updated dependencies [4702726]
+- Updated dependencies [11c14e6]
+- Updated dependencies [b6efa3a]
+- Updated dependencies [c57536b]
+- Updated dependencies [5c7c006]
+- Updated dependencies [101c4cb]
+- Updated dependencies [b6efa3a]
+- Updated dependencies [3fbf556]
+- Updated dependencies [0d4c973]
+  - @neondatabase/config@0.8.0
+
 ## 0.2.2
 
 ### Patch Changes
