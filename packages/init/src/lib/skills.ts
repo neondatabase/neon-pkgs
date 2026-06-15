@@ -138,7 +138,7 @@ export async function installAgentSkills(
 					],
 					{
 						stdio: "pipe",
-						timeout: 10000,
+						timeout: 30000,
 					},
 				);
 			} catch (error) {
@@ -191,49 +191,45 @@ const GLOBAL_SKILLS_DIRS: Record<string, string[]> = (() => {
  * Checks whether skills were recently updated (within the freshness window).
  * Checks both project-level (skills-lock.json mtime) and global (skills dir mtime).
  */
-function skillsAreFresh(agent: string): boolean {
+function skillsAreFresh(agent: string, requiredSkills: string[]): boolean {
 	const now = Date.now();
 	const cwd = process.cwd();
-	const skillNames = ["neon", "neon-postgres"];
 	const projectSkillDirs = [".agents", ".cursor", ".claude"];
 
-	// Check project-level: skills-lock.json must reference a neon skill
-	// AND the skill file must actually exist on disk
+	// Check project-level: ALL required skills must exist on disk
+	// and skills-lock.json must be recent
 	const lockPath = resolve(cwd, "skills-lock.json");
 	if (existsSync(lockPath)) {
 		try {
-			const content = readFileSync(lockPath, "utf-8");
-			if (
-				content.includes("neon-postgres") ||
-				content.includes('"neon"')
-			) {
-				const skillExists = projectSkillDirs.some((dir) =>
-					skillNames.some((skill) =>
+			const mtime = statSync(lockPath).mtimeMs;
+			if (now - mtime < SKILLS_FRESHNESS_MS) {
+				const allExist = requiredSkills.every((skill) =>
+					projectSkillDirs.some((dir) =>
 						existsSync(
 							resolve(cwd, dir, "skills", skill, "SKILL.md"),
 						),
 					),
 				);
-				if (skillExists) {
-					const mtime = statSync(lockPath).mtimeMs;
-					if (now - mtime < SKILLS_FRESHNESS_MS) return true;
-				}
+				if (allExist) return true;
 			}
 		} catch {}
 	}
 
-	// Check global: neon skill SKILL.md inside agent-specific skills directories
+	// Check global: ALL required skills must exist in agent-specific dirs
 	const agentName = getSkillsAgentNameFromId(agent);
 	const globalDirs = GLOBAL_SKILLS_DIRS[agentName] ?? [];
 	for (const dir of globalDirs) {
-		for (const skill of skillNames) {
-			const skillMd = resolve(dir, skill, "SKILL.md");
-			if (existsSync(skillMd)) {
-				try {
-					const mtime = statSync(skillMd).mtimeMs;
-					if (now - mtime < SKILLS_FRESHNESS_MS) return true;
-				} catch {}
-			}
+		const allExist = requiredSkills.every((skill) =>
+			existsSync(resolve(dir, skill, "SKILL.md")),
+		);
+		if (allExist) {
+			// Check freshness of any one skill file
+			try {
+				const mtime = statSync(
+					resolve(dir, requiredSkills[0], "SKILL.md"),
+				).mtimeMs;
+				if (now - mtime < SKILLS_FRESHNESS_MS) return true;
+			} catch {}
 		}
 	}
 
@@ -252,10 +248,10 @@ export async function ensureSkillsUpToDate(
 	scope?: "global" | "project",
 	preview?: boolean,
 ): Promise<boolean> {
-	if (skillsAreFresh(agent)) return true;
+	const skills = getSkillList(preview);
+	if (skillsAreFresh(agent, skills)) return true;
 
 	const agentName = getSkillsAgentNameFromId(agent);
-	const skills = getSkillList(preview);
 	let allOk = true;
 
 	for (const skill of skills) {
