@@ -421,7 +421,7 @@ async function buildBulkInspection(
 	};
 }
 
-function buildModeQuestion(options: SetupPhaseOptions): PhaseResponse {
+function _buildModeQuestion(options: SetupPhaseOptions): PhaseResponse {
 	const agentArgs = options.agent ? ["--agent", options.agent] : [];
 
 	// Build a context summary from what the agent found
@@ -515,7 +515,7 @@ function buildModeQuestion(options: SetupPhaseOptions): PhaseResponse {
 	};
 }
 
-function buildCustomizeQuestions(options: SetupPhaseOptions): PhaseResponse {
+function _buildCustomizeQuestions(options: SetupPhaseOptions): PhaseResponse {
 	const agentArgs = options.agent ? ["--agent", options.agent] : [];
 	const inspectionArgs = buildInspectionArgs(options);
 
