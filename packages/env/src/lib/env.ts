@@ -708,11 +708,13 @@ async function resolveCredentialSecrets(args: {
 }
 
 /**
- * The AI Gateway is a **branch-scoped host** — `<branchId>-api.ai.<region-suffix>` — NOT the
- * control-plane API origin. Derive the `<region>.<cloud>.neon.<tld>` suffix from the branch's
- * own Postgres connection host (e.g. a connection host of `ep-x.us-east-2.aws.neon.build`
- * yields the gateway host `<branchId>-api.ai.us-east-2.aws.neon.build`). Any infra cell prefix
- * (`c-N.`) on the connection host is dropped — the gateway resolves with or without it.
+ * The AI Gateway is a **branch-scoped host** — `<branchId>-api.ai.<host-suffix>` — NOT the
+ * control-plane API origin. Derive the suffix from the branch's own Postgres connection host
+ * by dropping only the endpoint label (the first segment) and keeping everything after it,
+ * including any infra cell prefix (`c-N.`): a connection host of
+ * `ep-x.c-3.us-east-2.aws.neon.tech` yields the gateway host
+ * `<branchId>-api.ai.c-3.us-east-2.aws.neon.tech`. The cell prefix is **load-bearing** —
+ * the gateway is cell-routed, so dropping `c-N.` resolves to the wrong (or no) host.
  */
 function aiGatewayHost(branchId: string, connectionUri: string): string {
 	let connectionHost = "";
@@ -721,13 +723,10 @@ function aiGatewayHost(branchId: string, connectionUri: string): string {
 	} catch {
 		connectionHost = "";
 	}
-	// Drop the endpoint label (first segment, e.g. `ep-x` / `ep-x-pooler`) and any infra cell
-	// prefix (`c-N.`), keeping `<region>.<cloud>.neon.<tld>`.
-	const suffix = connectionHost
-		.split(".")
-		.slice(1)
-		.join(".")
-		.replace(/^c-\d+\./, "");
+	// Drop the endpoint label (first segment, e.g. `ep-x` / `ep-x-pooler`), keeping the rest
+	// of the host verbatim — including any infra cell prefix (`c-N.`) the gateway routes on:
+	// `[c-N.]<region>.<cloud>.neon.<tld>`.
+	const suffix = connectionHost.split(".").slice(1).join(".");
 	return `${branchId}-api.ai.${suffix}`;
 }
 

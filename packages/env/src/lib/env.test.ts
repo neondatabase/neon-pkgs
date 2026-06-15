@@ -1,4 +1,8 @@
-import { defineConfig, ErrorCode } from "@neondatabase/config/v1";
+import {
+	defineConfig,
+	ErrorCode,
+	type GetConnectionUriInput,
+} from "@neondatabase/config/v1";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import {
 	fetchEnv,
@@ -31,6 +35,24 @@ function seededFake() {
 		],
 	});
 	return { api, projectId };
+}
+
+/**
+ * A {@link FakeNeonApi} whose Postgres connection host carries an infra cell prefix
+ * (`<endpoint>.c-3.<region>.…`), mirroring production. The base fake omits the cell, so this
+ * is the only way to exercise the gateway host's cell-routing derivation end to end.
+ */
+class CellHostFakeNeonApi extends FakeNeonApi {
+	override async getConnectionUri(
+		projectId: string,
+		input: GetConnectionUriInput,
+	): Promise<{ uri: string }> {
+		const { uri } = await super.getConnectionUri(projectId, input);
+		const url = new URL(uri);
+		const [endpointLabel, ...rest] = url.hostname.split(".");
+		url.hostname = [endpointLabel, "c-3", ...rest].join(".");
+		return { uri: url.toString() };
+	}
 }
 
 /** Seed a single-branch project whose `main` branch carries the given role names. */
@@ -557,6 +579,38 @@ describe("branch storage + AI Gateway (Preview)", () => {
 			"https://br-main-api.ai.aws-us-east-1.fake.neon.tech/ai-gateway/openai/v1",
 		);
 		expect("storage" in env).toBe(false);
+	});
+
+	test("preserves the infra cell prefix (c-N.) from the connection host", async () => {
+		// Production connection hosts carry a cell segment (`ep-x.c-3.<region>.…`). The gateway
+		// is cell-routed, so that `c-3.` prefix must survive into the gateway host — dropping it
+		// (the previous behavior) yields a host that resolves to the wrong cell or not at all.
+		const api = new CellHostFakeNeonApi();
+		const projectId = "proj-cell";
+		api.seedProject({
+			project: {
+				id: projectId,
+				name: "cell-test",
+				regionId: "aws-us-east-2",
+				pgVersion: 17,
+			},
+			branches: [
+				{ branch: { id: "br-cell", name: "main", isDefault: true } },
+			],
+		});
+
+		const env = await fetchEnv(
+			defineConfig({ preview: { aiGateway: true } }),
+			{ api, projectId, branchId: "br-cell" },
+		);
+
+		expect(env.aiGateway.baseUrl).toBe(
+			"https://br-cell-api.ai.c-3.aws-us-east-2.fake.neon.tech/ai-gateway/openai/v1",
+		);
+		// The bare-host alias (`NEON_AI_GATEWAY_BASE_URL`) must carry the cell too.
+		expect(toEntries(env).NEON_AI_GATEWAY_BASE_URL).toBe(
+			"https://br-cell-api.ai.c-3.aws-us-east-2.fake.neon.tech",
+		);
 	});
 
 	test("functions ride along on the credential's scopes but never mint alone", async () => {
