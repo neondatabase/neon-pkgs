@@ -24,7 +24,7 @@ import {
 	fetchTemplates,
 	type NeonFeature,
 } from "./lib/bootstrap.js";
-import { detectAgent } from "./lib/detect-agent.js";
+import { detectAgent, detectIde } from "./lib/detect-agent.js";
 import { detectAvailableEditors } from "./lib/editors.js";
 import {
 	installExtension,
@@ -654,10 +654,27 @@ async function interactiveInitInner(
 		}
 	}
 
-	// Ensure all required skills are present (fills in any missing ones)
-	const agentForSkills = detectAgent();
+	// Ensure all required skills are present (fills in any missing ones).
+	// detectAgent() returns null in a human terminal (TTY), so fall back
+	// to IDE detection which works regardless of TTY.
+	const ide = detectIde();
+	const agentForSkills =
+		detectAgent() ??
+		(ide === "Cursor"
+			? "cursor"
+			: ide === "VS Code"
+				? "vscode"
+				: ide === "Windsurf"
+					? "windsurf"
+					: null);
 	if (agentForSkills) {
-		await ensureSkillsUpToDate(agentForSkills, undefined, options.preview);
+		const detectedSkillsScope =
+			inspection.skillsScope === "global" ? "global" : undefined;
+		await ensureSkillsUpToDate(
+			agentForSkills,
+			detectedSkillsScope,
+			options.preview,
+		);
 	}
 
 	// -----------------------------------------------------------------------

@@ -320,15 +320,16 @@ async function buildBulkInspection(
 					condition: { preferenceId: "mode", equals: "customize" },
 					group: "customize",
 				},
-				// Only show skills scope when there's an existing app (templates bundle skills)
-				...(hasApp
+				// Only show skills scope when there's an existing app AND skills aren't already detected.
+				// When skills are partially installed, missing skills are auto-installed to the same scope.
+				...(hasApp && !options.skillsInstalled
 					? [
 							{
 								id: "skillsScope",
 								question:
 									"Where should Neon agent skills be installed?",
 								context:
-									"Always ask this question — the CLI handles skill detection and freshness automatically.",
+									"Only ask if skills are not already installed.",
 								phase: "after_checks" as const,
 								options: [
 									{
@@ -371,7 +372,9 @@ async function buildBulkInspection(
 					"setup",
 					"--json",
 					"--data",
-					`<json: { agent: string, ide: string, mcpConfigured: bool, mode: string, mcpScope?: 'global'|'project'|'none', skillsScope?: string, installExtension?: bool${hasApp ? ", features?: string" : ", template: string"} }>`,
+					options.skillsInstalled
+						? `<json: { agent: string, ide: string, mcpConfigured: bool, skillsScope: "${options.skillsScope || "project"}", mode: string, mcpScope?: 'global'|'project'|'none', installExtension?: bool${hasApp ? ", features?: string" : ", template: string"} }>`
+						: `<json: { agent: string, ide: string, mcpConfigured: bool, mode: string, mcpScope?: 'global'|'project'|'none', skillsScope?: string, installExtension?: bool${hasApp ? ", features?: string" : ", template: string"} }>`,
 				],
 			},
 		},

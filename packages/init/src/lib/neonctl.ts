@@ -1,3 +1,4 @@
+import { lstatSync, realpathSync } from "node:fs";
 import { execa } from "execa";
 
 /**
@@ -133,10 +134,46 @@ export interface EnsureNeonctlResult {
 }
 
 /**
+ * Checks if neonctl is installed via a local dev symlink.
+ * If so, skip install/update — the developer manages it manually.
+ */
+function isLocalDevSymlink(): boolean {
+	try {
+		const home = process.env.HOME || process.env.USERPROFILE || "";
+		const nvmDir = process.env.NVM_DIR || `${home}/.nvm`;
+		// Check common global module locations for a symlink
+		const candidates = [
+			`${nvmDir}/versions/node/${process.version}/lib/node_modules/neonctl`,
+			`${home}/.nvm/versions/node/${process.version}/lib/node_modules/neonctl`,
+		];
+		for (const candidate of candidates) {
+			try {
+				const stat = lstatSync(candidate);
+				if (stat.isSymbolicLink()) return true;
+			} catch {
+				// path doesn't exist
+			}
+		}
+		return false;
+	} catch {
+		return false;
+	}
+}
+
+/**
  * Ensures neonctl is globally installed and up to date.
  * Uses the same package manager that invoked the init command.
  */
 export async function ensureNeonctl(): Promise<EnsureNeonctlResult> {
+	// Skip install for local dev symlinks to avoid permission errors
+	if (isLocalDevSymlink()) {
+		const version = await getNeonctlVersion();
+		return {
+			status: "already_current",
+			version: version ?? "dev",
+		};
+	}
+
 	const check = await checkNeonctl();
 
 	if (check.installed && !check.needsUpdate) {
