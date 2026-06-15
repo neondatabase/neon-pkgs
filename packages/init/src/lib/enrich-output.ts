@@ -35,7 +35,7 @@ function argsToCommand(args: string[]): string {
 		}
 	}
 
-	return `neonctl init --agent --json --data '${JSON.stringify(data)}'`;
+	return `neonctl init --agent --data '${JSON.stringify(data)}'`;
 }
 
 /**
