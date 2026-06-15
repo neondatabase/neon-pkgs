@@ -57,8 +57,35 @@ export async function orchestrate(
 
 	// Only detect empty projects when --preview is enabled
 	const hasApp = options.preview ? inspection.hasApp === true : true;
-	const toolingInstalled =
-		inspection.mcpConfigured && inspection.skillsInstalled;
+
+	// When preview is enabled, check that all preview skills are installed too
+	let skillsInstalled = inspection.skillsInstalled;
+	if (options.preview && skillsInstalled && inspection.skillsScope) {
+		const { getSkillList } = await import("./lib/skills.js");
+		const previewSkills = getSkillList(true);
+		const { existsSync: exists } = await import("node:fs");
+		const { resolve: resolvePath } = await import("node:path");
+		const home = process.env.HOME || process.env.USERPROFILE || "";
+		const scope = inspection.skillsScope;
+		const dirs =
+			scope === "project"
+				? [
+						resolvePath(cwd, ".cursor", "skills"),
+						resolvePath(cwd, ".claude", "skills"),
+						resolvePath(cwd, ".agents", "skills"),
+					]
+				: [
+						resolvePath(home, ".cursor", "skills"),
+						resolvePath(home, ".claude", "skills"),
+						resolvePath(home, ".agents", "skills"),
+					];
+		const allPresent = previewSkills.every((skill) =>
+			dirs.some((dir) => exists(resolvePath(dir, skill, "SKILL.md"))),
+		);
+		if (!allPresent) skillsInstalled = false;
+	}
+
+	const toolingInstalled = inspection.mcpConfigured && skillsInstalled;
 	const hasNeonConnection = inspection.connectionString === true;
 
 	// Phase 3a: No app or tooling not installed → setup flow
@@ -72,7 +99,7 @@ export async function orchestrate(
 			hasApp,
 			mcpConfigured: inspection.mcpConfigured ?? null,
 			mcpScope: inspection.mcpScope || undefined,
-			skillsInstalled: inspection.skillsInstalled ?? null,
+			skillsInstalled: skillsInstalled ?? null,
 			skillsScope: inspection.skillsScope || undefined,
 		});
 	}

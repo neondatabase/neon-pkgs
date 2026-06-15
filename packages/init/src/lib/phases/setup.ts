@@ -115,18 +115,6 @@ export async function handleSetupPhase(
 		});
 	}
 
-	// If both MCP and skills are already detected, skip mode question and go
-	// straight to execution — just fill in any missing skills silently.
-	if (options.mcpConfigured && options.skillsInstalled) {
-		return executeBatchedInstallation({
-			...(await mergeCliInspection(options)),
-			mcpScope: options.mcpScope ?? "global",
-			skillsScope: options.skillsScope ?? "project",
-			installExtension:
-				options.installExtension ?? isVscodeBasedIde(options),
-		});
-	}
-
 	// Default: send inspection checks with user preferences (all in one response)
 	return buildBulkInspection(options);
 }
@@ -318,9 +306,9 @@ async function buildBulkInspection(
 					condition: { preferenceId: "mode", equals: "customize" },
 					group: "customize",
 				},
-				// Only show skills scope when there's an existing app AND skills aren't already detected.
+				// Show skills scope when skills aren't already detected.
 				// When skills are partially installed, missing skills are auto-installed to the same scope.
-				...(hasApp && !options.skillsInstalled
+				...(!options.skillsInstalled
 					? [
 							{
 								id: "skillsScope",

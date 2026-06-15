@@ -146,10 +146,8 @@ export async function installAgentSkills(
 
 		try {
 			await execa(
-				"npx",
+				"skills",
 				[
-					"-y",
-					"skills",
 					"add",
 					"neondatabase/agent-skills",
 					...skillArgs,
@@ -282,10 +280,8 @@ export async function ensureSkillsUpToDate(
 	const skillArgs = skills.flatMap((s) => ["--skill", s]);
 	try {
 		await execa(
-			"npx",
+			"skills",
 			[
-				"-y",
-				"skills",
 				"add",
 				"neondatabase/agent-skills",
 				...skillArgs,

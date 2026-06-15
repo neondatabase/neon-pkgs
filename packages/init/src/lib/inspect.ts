@@ -254,42 +254,41 @@ function checkSkillsInstalled(cwd: string): DetectedScope {
 
 	const skillNames = ["neon", "neon-postgres"];
 
-	// Check project-level skill directories
+	// Check project-level skill directories — ALL base skills must exist
 	const projectDirs = [
 		resolve(cwd, ".cursor", "skills"),
 		resolve(cwd, ".claude", "skills"),
 		resolve(cwd, ".agents", "skills"),
 	];
-	for (const dir of projectDirs) {
-		for (const skill of skillNames) {
-			if (existsSync(resolve(dir, skill, "SKILL.md"))) return "project";
-		}
-	}
+	const allProjectSkills = skillNames.every((skill) =>
+		projectDirs.some((dir) => existsSync(resolve(dir, skill, "SKILL.md"))),
+	);
+	if (allProjectSkills) return "project";
 
 	// Check CLAUDE.md for neon skill references (injected by skills CLI)
+	// Only counts as installed if both skill names are referenced
 	const claudeMd = resolve(cwd, "CLAUDE.md");
 	if (existsSync(claudeMd)) {
 		try {
 			const content = readFileSync(claudeMd, "utf-8");
 			if (
-				content.includes("neon-postgres") ||
+				content.includes("neon-postgres") &&
 				content.includes("neon/SKILL.md")
 			)
 				return "project";
 		} catch {}
 	}
 
-	// Check global skill directories
+	// Check global skill directories — ALL base skills must exist
 	const globalDirs = [
 		resolve(home, ".cursor", "skills"),
 		resolve(home, ".claude", "skills"),
 		resolve(home, ".agents", "skills"),
 	];
-	for (const dir of globalDirs) {
-		for (const skill of skillNames) {
-			if (existsSync(resolve(dir, skill, "SKILL.md"))) return "global";
-		}
-	}
+	const allGlobalSkills = skillNames.every((skill) =>
+		globalDirs.some((dir) => existsSync(resolve(dir, skill, "SKILL.md"))),
+	);
+	if (allGlobalSkills) return "global";
 
 	return false;
 }
