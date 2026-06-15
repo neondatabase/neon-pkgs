@@ -244,14 +244,15 @@ function skillsAreFresh(agent: string, requiredSkills: string[]): boolean {
  * since it's a no-op when skills are fresh.
  */
 export async function ensureSkillsUpToDate(
-	agent: string,
+	agent: string | undefined,
 	scope?: "global" | "project",
 	preview?: boolean,
 ): Promise<boolean> {
+	const resolvedAgent = agent || "cursor";
 	const skills = getSkillList(preview);
-	if (skillsAreFresh(agent, skills)) return true;
+	if (skillsAreFresh(resolvedAgent, skills)) return true;
 
-	const agentName = getSkillsAgentNameFromId(agent);
+	const agentName = getSkillsAgentNameFromId(resolvedAgent);
 	let allOk = true;
 
 	for (const skill of skills) {

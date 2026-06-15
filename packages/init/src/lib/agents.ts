@@ -133,8 +133,9 @@ export function getSkillsAgentName(agent: string): string {
 		case "zed":
 			return "zed";
 		default:
-			throw new Error(
-				`Unknown agent for skills: "${agent}". Use a known agent identifier.`,
-			);
+			// Fall back to "cursor" as a safe default — skills CLI uses the
+			// agent name to pick the output directory (.agents/skills, .cursor/skills, etc.)
+			// and "cursor" uses .agents/skills which works for all agents.
+			return "cursor";
 	}
 }
