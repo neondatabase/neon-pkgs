@@ -122,8 +122,18 @@ export async function handleSetupPhase(
 		return buildCustomizeQuestions(options);
 	}
 
-	// Agent has reported inspection results (via legacy individual flags), but user hasn't chosen mode yet.
-	// Only go to mode question if the agent explicitly reported back (not pre-filled by orchestrator).
+	// If both MCP and skills are already detected, skip mode question and go
+	// straight to execution — just fill in any missing skills silently.
+	if (options.mcpConfigured && options.skillsInstalled) {
+		return executeBatchedInstallation({
+			...(await mergeCliInspection(options)),
+			mcpScope: options.mcpScope ?? "global",
+			skillsScope: options.skillsScope ?? "project",
+			installExtension:
+				options.installExtension ?? isVscodeBasedIde(options),
+		});
+	}
+
 	// Agent has reported inspection results (via legacy individual flags), but user hasn't chosen mode yet
 	if (options.mcpConfigured !== null && options.mcpConfigured !== undefined) {
 		return buildModeQuestion(options);
