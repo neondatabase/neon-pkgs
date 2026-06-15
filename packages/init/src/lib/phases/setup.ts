@@ -102,24 +102,17 @@ export async function handleSetupPhase(
 		});
 	}
 
-	// User chose "customize" with scopes already provided (via --data) — go straight to install
-	if (options.mode === "customize") {
-		if (
-			options.mcpScope !== undefined ||
-			options.skillsScope !== undefined
-		) {
-			const merged = await mergeCliInspection(options);
-			const shouldInstallExt =
-				merged.installExtension ?? isVscodeBasedIde(merged);
-			return executeBatchedInstallation({
-				...merged,
-				mcpScope: merged.mcpScope ?? "global",
-				skillsScope: merged.skillsScope ?? "project",
-				installExtension: shouldInstallExt,
-			});
-		}
-		// Legacy path: scopes not yet chosen, ask follow-up
-		return buildCustomizeQuestions(options);
+	// User chose "customize" (also accept "custom" — agents sometimes truncate)
+	if (options.mode === "customize" || options.mode === "custom") {
+		const merged = await mergeCliInspection(options);
+		const shouldInstallExt =
+			merged.installExtension ?? isVscodeBasedIde(merged);
+		return executeBatchedInstallation({
+			...merged,
+			mcpScope: merged.mcpScope ?? "global",
+			skillsScope: merged.skillsScope ?? "project",
+			installExtension: shouldInstallExt,
+		});
 	}
 
 	// If both MCP and skills are already detected, skip mode question and go
@@ -134,12 +127,7 @@ export async function handleSetupPhase(
 		});
 	}
 
-	// Agent has reported inspection results (via legacy individual flags), but user hasn't chosen mode yet
-	if (options.mcpConfigured !== null && options.mcpConfigured !== undefined) {
-		return buildModeQuestion(options);
-	}
-
-	// Default: send inspection checks with user preferences
+	// Default: send inspection checks with user preferences (all in one response)
 	return buildBulkInspection(options);
 }
 
@@ -383,8 +371,8 @@ async function buildBulkInspection(
 					"--json",
 					"--data",
 					options.skillsInstalled
-						? `<json: { agent: string, ide: string, mcpConfigured: bool, skillsScope: "${options.skillsScope || "project"}", mode: string, mcpScope?: 'global'|'project'|'none', installExtension?: bool${hasApp ? ", features?: string" : ", template: string"} }>`
-						: `<json: { agent: string, ide: string, mcpConfigured: bool, mode: string, mcpScope?: 'global'|'project'|'none', skillsScope?: string, installExtension?: bool${hasApp ? ", features?: string" : ", template: string"} }>`,
+						? `<json: { agent: string, ide: string, mcpConfigured: bool, skillsScope: "${options.skillsScope || "project"}"${options.preview ? ", preview: true" : ""}, mode: string, mcpScope?: 'global'|'project'|'none', installExtension?: bool${hasApp ? ", features?: string" : ", template: string"} }>`
+						: `<json: { agent: string, ide: string, mcpConfigured: bool${options.preview ? ", preview: true" : ""}, mode: string, mcpScope?: 'global'|'project'|'none', skillsScope?: string, installExtension?: bool${hasApp ? ", features?: string" : ", template: string"} }>`,
 				],
 			},
 		},

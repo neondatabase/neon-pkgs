@@ -6,6 +6,26 @@ import { dim } from "yoctocolors";
 import { getSkillsAgentName as getSkillsAgentNameFromId } from "./agents.js";
 import type { Editor } from "./types.js";
 
+/**
+ * Ensures the `skills` CLI is globally installed so npx doesn't need
+ * to download it (which can fail behind corporate proxies / sandboxes).
+ */
+async function ensureSkillsCli(): Promise<void> {
+	try {
+		await execa("skills", ["--version"], { stdio: "pipe", timeout: 5000 });
+	} catch {
+		// Not installed — install it globally
+		try {
+			await execa("npm", ["install", "-g", "skills"], {
+				stdio: "pipe",
+				timeout: 60000,
+			});
+		} catch {
+			// Best effort — npx will fall back to downloading
+		}
+	}
+}
+
 /** Base skills installed for all invocations */
 const BASE_SKILLS = ["neon", "neon-postgres"];
 
@@ -116,38 +136,39 @@ export async function installAgentSkills(
 
 	let anyFailed = false;
 
+	await ensureSkillsCli();
 	const skills = getSkillList(options?.preview);
+
+	const skillArgs = skills.flatMap((s) => ["--skill", s]);
 
 	for (const editor of editorsWithSkills) {
 		const agentName = editorToSkillsAgent(editor);
 
-		for (const skill of skills) {
-			try {
-				await execa(
-					"npx",
-					[
-						"skills",
-						"add",
-						"neondatabase/agent-skills",
-						"--skill",
-						skill,
-						"--agent",
-						agentName,
-						...(options?.scope === "global" ? ["-g"] : []),
-						"-y",
-					],
-					{
-						stdio: "pipe",
-						timeout: 30000,
-					},
+		try {
+			await execa(
+				"npx",
+				[
+					"-y",
+					"skills",
+					"add",
+					"neondatabase/agent-skills",
+					...skillArgs,
+					"--agent",
+					agentName,
+					...(options?.scope === "global" ? ["-g"] : []),
+					"-y",
+				],
+				{
+					stdio: "pipe",
+					timeout: 120000,
+				},
+			);
+		} catch (error) {
+			if (!quiet)
+				log.error(
+					`Failed to install skills for ${editor}: ${error instanceof Error ? error.message : "Unknown error"}`,
 				);
-			} catch (error) {
-				if (!quiet)
-					log.error(
-						`Failed to install skill ${skill} for ${editor}: ${error instanceof Error ? error.message : "Unknown error"}`,
-					);
-				anyFailed = true;
-			}
+			anyFailed = true;
 		}
 	}
 
@@ -254,28 +275,31 @@ export async function ensureSkillsUpToDate(
 	const skills = getSkillList(preview);
 	if (skillsAreFresh(resolvedAgent, skills)) return true;
 
+	await ensureSkillsCli();
 	const agentName = getSkillsAgentNameFromId(resolvedAgent);
 	let allOk = true;
 
-	for (const skill of skills) {
-		try {
-			await execa(
-				"npx",
-				[
-					"-y",
-					"skills",
-					"add",
-					"neondatabase/agent-skills",
-					"--skill",
-					skill,
-					"--agent",
-					agentName,
-					...(scope === "global" ? ["-g"] : []),
-					"-y",
-				],
-				{ stdio: "pipe", timeout: 60000 },
-			);
-		} catch {
+	const skillArgs = skills.flatMap((s) => ["--skill", s]);
+	try {
+		await execa(
+			"npx",
+			[
+				"-y",
+				"skills",
+				"add",
+				"neondatabase/agent-skills",
+				...skillArgs,
+				"--agent",
+				agentName,
+				...(scope === "global" ? ["-g"] : []),
+				"-y",
+			],
+			{ stdio: "pipe", timeout: 120000 },
+		);
+	} catch {
+		// Install may fail in sandboxed environments (e.g. Cursor sandbox).
+		// Check if any base skill already exists on disk — if so, treat as success.
+		if (!skillsAreFresh(resolvedAgent, BASE_SKILLS)) {
 			allOk = false;
 		}
 	}
