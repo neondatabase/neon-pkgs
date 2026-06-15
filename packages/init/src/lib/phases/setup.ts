@@ -34,6 +34,7 @@ export interface SetupPhaseOptions {
 	features?: NeonFeature[];
 	// Inspection results — pre-filled by orchestrator or reported by agent
 	mcpConfigured?: boolean | null;
+	skillsInstalled?: boolean | null;
 	connectionString?: boolean | null;
 	connectionParams?: string; // JSON with host/dbname/etc if found
 	framework?: string;
@@ -41,10 +42,10 @@ export interface SetupPhaseOptions {
 	migrationTool?: string;
 	migrationDir?: string;
 	isVscodeIde?: boolean | null;
-	// User preferences
+	// User preferences (also used for pre-detected scope from inspection)
 	mode?: "defaults" | "customize";
-	mcpScope?: "global" | "project" | "none";
-	skillsScope?: "global" | "project";
+	mcpScope?: string;
+	skillsScope?: string;
 	installExtension?: boolean;
 	// Execution flags
 	execute?: boolean;
@@ -183,6 +184,11 @@ async function buildBulkInspection(
 		status: hasApp ? "pending" : "bootstrap_needed",
 		detectedIde: detectedIde?.toLowerCase() ?? null,
 		installedEditors: installedEditors.length > 0 ? installedEditors : null,
+		// Pre-detected state from filesystem inspection
+		mcpConfigured: options.mcpConfigured ?? null,
+		mcpScope: options.mcpScope ?? null,
+		skillsInstalled: options.skillsInstalled ?? null,
+		skillsScope: options.skillsScope ?? null,
 		nextAction: {
 			type: "agent_check",
 			instructions: [
@@ -192,7 +198,7 @@ async function buildBulkInspection(
 					? "Perform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the `condition` field — only show a question if its condition is met."
 					: "No application was detected in this directory. Ask the user if they'd like to scaffold a new project from a template (the `template` preference). Present ALL template options and the 'No thanks' option — do NOT auto-select even if there is only one template. If the user selects a template, the scaffolded template includes agent skills so skills installation will be skipped. If the user chooses 'none', continue with the remaining setup preferences normally. Then perform the agent checks and present the remaining preferences ONE AT A TIME.",
 				"",
-				"If the MCP server is already configured, tell the user and note that it will be kept up to date. IMPORTANT: If you find neon-postgres in skills-lock.json, you MUST verify the actual SKILL.md file exists on disk (e.g. .agents/skills/neon-postgres/SKILL.md or .cursor/skills/neon-postgres/SKILL.md). If the lock file references it but the file is missing, report skills as NOT installed. Only ask about scope/options for components that are NOT already configured.",
+				`The CLI has pre-detected the following from the filesystem: MCP server: ${options.mcpConfigured ? `configured (${options.mcpScope})` : "not configured"}. Agent skills: ${options.skillsInstalled ? `installed (${options.skillsScope})` : "not installed"}. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured.`,
 				"",
 				"IMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.",
 				"",
@@ -731,7 +737,9 @@ async function executeBatchedInstallation(
 			status: "success",
 		});
 	} else {
-		const skillsScope = options.skillsScope ?? "project";
+		const skillsScope = (options.skillsScope ?? "project") as
+			| "global"
+			| "project";
 		const skillsOk = await ensureSkillsUpToDate(agentId, skillsScope);
 		results.push({
 			id: "install_skills",

@@ -66,7 +66,14 @@ export async function orchestrate(
 	// Clean up any stale _init state from a previous run.
 	if (!hasApp || !toolingInstalled) {
 		cleanupInitState(resolve(cwd, ".neon"));
-		return handleSetupPhase({ agent: options.agent, hasApp });
+		return handleSetupPhase({
+			agent: options.agent,
+			hasApp,
+			mcpConfigured: inspection.mcpConfigured ?? null,
+			mcpScope: inspection.mcpScope || undefined,
+			skillsInstalled: inspection.skillsInstalled ?? null,
+			skillsScope: inspection.skillsScope || undefined,
+		});
 	}
 
 	// Read .neon context early — needed for feature-based routing
