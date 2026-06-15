@@ -1,4 +1,4 @@
-import { lstatSync, realpathSync } from "node:fs";
+import { lstatSync } from "node:fs";
 import { execa } from "execa";
 
 /**

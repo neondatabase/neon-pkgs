@@ -685,7 +685,7 @@ const cli = yargs(hideBin(process.argv))
 		"status",
 		"Check the status of your Neon setup",
 		(y) => y.options(jsonOption).options(agentOption),
-		async (argv) => {
+		async (_argv) => {
 			const result = await handleStatusPhase({
 				agent: resolveAgent(),
 			});
