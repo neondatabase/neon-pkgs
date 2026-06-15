@@ -164,8 +164,9 @@ describe("setup phase", () => {
 		expect(result.nextAction.type).toBe("agent_check");
 
 		if (result.nextAction.type === "agent_check") {
-			const prefs = (result.nextAction as Record<string, unknown>)
-				.userPreferences as { id: string }[];
+			const prefs = (
+				result.nextAction as unknown as Record<string, unknown>
+			).userPreferences as { id: string }[];
 			expect(prefs.some((p) => p.id === "mode")).toBe(true);
 		}
 	});
