@@ -187,7 +187,7 @@ describe("v2 orchestrator", () => {
 		expect(result.nextAction.type).toBe("ask_user");
 	});
 
-	test("skips neon_auth when --skip-neon-auth is set", async () => {
+	test("skips neon_auth when features are empty", async () => {
 		mockIsAuthenticated.mockResolvedValue(true);
 		mockToolingInstalled({
 			".env": "DATABASE_URL=postgres://user:pass@ep-foo.us-east-2.aws.neon.tech/neondb",
@@ -196,7 +196,6 @@ describe("v2 orchestrator", () => {
 
 		const result = await orchestrate({
 			agent: "claude",
-			skipNeonAuth: true,
 		});
 
 		expect(result.phase).toBe("migrations");

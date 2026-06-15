@@ -12,7 +12,6 @@ import type { PhaseResponse } from "./lib/types.js";
 
 export interface OrchestratorOptions {
 	agent?: string;
-	skipNeonAuth?: boolean;
 	skipMigrations?: boolean;
 	/** Enable preview features (e.g. project bootstrapping from templates) */
 	preview?: boolean;
@@ -115,19 +114,13 @@ export async function orchestrate(
 		}
 	}
 
-	// Phase 4: Neon Auth — skip if template/user doesn't require it
-	const hasFeatureRequirements = features.length > 0;
-	const needsAuth = hasFeatureRequirements
-		? features.includes("auth")
-		: !options.skipNeonAuth;
-	if (needsAuth) {
+	// Phase 4: Neon Auth — only if features include "auth"
+	if (features.includes("auth")) {
 		const hasNeonAuth = checkNeonAuth(cwd);
 		if (!hasNeonAuth) {
-			// If auth was already selected via features, go straight to setup
-			// (don't re-ask the user)
 			return handleNeonAuthPhase({
 				agent: options.agent,
-				setup: hasFeatureRequirements,
+				setup: true,
 			});
 		}
 	}

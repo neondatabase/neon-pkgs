@@ -232,7 +232,6 @@ export async function routeCommand(args: string[]): Promise<PhaseResponse> {
 			const { orchestrate } = await import("../v2.js");
 			return orchestrate({
 				agent,
-				skipNeonAuth: parsed.skipNeonAuth === true,
 				skipMigrations: parsed.skipMigrations === true,
 				preview: parsed.preview === true,
 			});
