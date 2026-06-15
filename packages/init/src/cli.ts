@@ -31,8 +31,9 @@ const jsonOption = {
 const agentOption = {
 	agent: {
 		alias: "a",
-		type: "string" as const,
-		description: "Agent to configure (cursor, copilot, claude, etc.).",
+		type: "boolean" as const,
+		default: false,
+		description: "Enable agent/JSON mode (agent type is auto-detected).",
 	},
 };
 
@@ -47,11 +48,10 @@ function outputJson(data: unknown): void {
 }
 
 /**
- * Resolve the agent ID: use the explicit --agent value if provided,
- * otherwise auto-detect from the environment.
+ * Resolve the agent ID from the environment.
  */
-function resolveAgent(explicit: string | undefined): string | undefined {
-	return explicit ?? detectAgent() ?? undefined;
+function resolveAgent(): string | undefined {
+	return detectAgent() ?? undefined;
 }
 
 /**
@@ -125,11 +125,8 @@ const cli = yargs(hideBin(process.argv))
 				}),
 		async (argv) => {
 			const detectedAgent = detectAgentInvocation();
-			const agent = resolveAgent(
-				argv.agent ?? detectedAgent ?? undefined,
-			);
-			const jsonMode =
-				argv.json || argv.agent !== undefined || detectedAgent !== null;
+			const agent = resolveAgent();
+			const jsonMode = argv.json || argv.agent || detectedAgent !== null;
 
 			// --data with a "step" field routes to the appropriate phase
 			if (argv.data && jsonMode) {
@@ -196,7 +193,7 @@ const cli = yargs(hideBin(process.argv))
 				}),
 		async (argv) => {
 			const result = await handleAuthPhase({
-				agent: resolveAgent(argv.agent),
+				agent: resolveAgent(),
 				method: argv.method as "existing" | "new" | undefined,
 				verify: argv.verify,
 			});
@@ -247,7 +244,7 @@ const cli = yargs(hideBin(process.argv))
 			else if (argv.mcpConfigured === "false") mcpConfigured = false;
 
 			const result = await handleMcpPhase({
-				agent: resolveAgent(argv.agent),
+				agent: resolveAgent(),
 				status: argv.status,
 				install: argv.install || argv.update,
 				scope: argv.scope as "global" | "project",
@@ -285,7 +282,7 @@ const cli = yargs(hideBin(process.argv))
 				}),
 		async (argv) => {
 			const result = await handleSkillsPhase({
-				agent: resolveAgent(argv.agent),
+				agent: resolveAgent(),
 				status: argv.status,
 				install: argv.install,
 				update: argv.update,
@@ -400,7 +397,7 @@ const cli = yargs(hideBin(process.argv))
 				}
 
 				const result = await handleSetupPhase({
-					agent: resolveAgent(argv.agent),
+					agent: resolveAgent(),
 					...data,
 				} as import("./lib/phases/setup.js").SetupPhaseOptions);
 				outputJson(result);
@@ -423,7 +420,7 @@ const cli = yargs(hideBin(process.argv))
 			else if (argv.isVscodeIde === "false") isVscodeIde = false;
 
 			const result = await handleSetupPhase({
-				agent: resolveAgent(argv.agent),
+				agent: resolveAgent(),
 				mcpConfigured,
 				connectionString,
 				connectionParams: argv.connectionParams,
@@ -493,7 +490,7 @@ const cli = yargs(hideBin(process.argv))
 					return;
 				}
 				const result = await handleGettingStartedPhase({
-					agent: resolveAgent(argv.agent),
+					agent: resolveAgent(),
 					...data,
 				} as import("./lib/phases/getting-started.js").GettingStartedPhaseOptions);
 				outputJson(result);
@@ -502,7 +499,7 @@ const cli = yargs(hideBin(process.argv))
 			}
 
 			const result = await handleGettingStartedPhase({
-				agent: resolveAgent(argv.agent),
+				agent: resolveAgent(),
 				hasConnectionString: argv.hasConnectionString,
 				framework: argv.framework,
 				orm: argv.orm,
@@ -556,7 +553,7 @@ const cli = yargs(hideBin(process.argv))
 				}),
 		async (argv) => {
 			const result = await handleDbPhase({
-				agent: resolveAgent(argv.agent),
+				agent: resolveAgent(),
 				orgId: argv.orgId,
 				projectId: argv.projectId,
 				orgsResult: argv.orgsResult,
@@ -597,7 +594,7 @@ const cli = yargs(hideBin(process.argv))
 				}),
 		async (argv) => {
 			const result = await handleNeonAuthPhase({
-				agent: resolveAgent(argv.agent),
+				agent: resolveAgent(),
 				setup: argv.setup,
 				info: argv.info,
 				projectId: argv.projectId,
@@ -638,7 +635,7 @@ const cli = yargs(hideBin(process.argv))
 				}),
 		async (argv) => {
 			const result = await handleMigrationsPhase({
-				agent: resolveAgent(argv.agent),
+				agent: resolveAgent(),
 				tool: argv.tool,
 				migrationDir: argv.migrationDir,
 				scaffold: argv.scaffold as "prisma" | "drizzle" | undefined,
@@ -673,7 +670,7 @@ const cli = yargs(hideBin(process.argv))
 		(y) => y.options(jsonOption).options(agentOption),
 		async (argv) => {
 			const result = await handleStatusPhase({
-				agent: resolveAgent(argv.agent),
+				agent: resolveAgent(),
 			});
 			outputJson(result);
 			process.exit(0);
