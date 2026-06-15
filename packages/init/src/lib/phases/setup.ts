@@ -24,6 +24,8 @@ export interface SetupPhaseOptions {
 	agent?: string;
 	/** The IDE/editor the user is running in (e.g. "cursor", "vscode") — reported by agent */
 	ide?: string;
+	/** Enable preview skills (neon-object-storage, neon-functions, neon-ai-gateway) */
+	preview?: boolean;
 	/** Whether the directory already contains an application */
 	hasApp?: boolean;
 	/** Template ID to scaffold (when bootstrapping a new project) */
@@ -740,7 +742,11 @@ async function executeBatchedInstallation(
 		const skillsScope = (options.skillsScope ?? "project") as
 			| "global"
 			| "project";
-		const skillsOk = await ensureSkillsUpToDate(agentId, skillsScope);
+		const skillsOk = await ensureSkillsUpToDate(
+			agentId,
+			skillsScope,
+			options.preview,
+		);
 		results.push({
 			id: "install_skills",
 			description: skillsOk

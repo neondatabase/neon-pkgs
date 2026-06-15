@@ -68,6 +68,7 @@ export async function orchestrate(
 		cleanupInitState(resolve(cwd, ".neon"));
 		return handleSetupPhase({
 			agent: options.agent,
+			preview: options.preview,
 			hasApp,
 			mcpConfigured: inspection.mcpConfigured ?? null,
 			mcpScope: inspection.mcpScope || undefined,

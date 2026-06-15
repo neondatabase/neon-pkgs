@@ -633,7 +633,10 @@ async function interactiveInitInner(
 			}
 
 			if (needsSkills) {
-				await installAgentSkills([editor], { scope: skillsScope });
+				await installAgentSkills([editor], {
+					scope: skillsScope,
+					preview: options.preview,
+				});
 			}
 
 			if (doInstallExtension && usesExtension(editor)) {

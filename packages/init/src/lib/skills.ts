@@ -6,6 +6,21 @@ import { dim } from "yoctocolors";
 import { getSkillsAgentName as getSkillsAgentNameFromId } from "./agents.js";
 import type { Editor } from "./types.js";
 
+/** Base skills installed for all invocations */
+const BASE_SKILLS = ["neon", "neon-postgres"];
+
+/** Additional skills installed for preview (non-bootstrap) invocations */
+const PREVIEW_SKILLS = [
+	"neon-object-storage",
+	"neon-functions",
+	"neon-ai-gateway",
+];
+
+/** Returns the skill list based on whether preview mode is active */
+export function getSkillList(preview?: boolean): string[] {
+	return preview ? [...BASE_SKILLS, ...PREVIEW_SKILLS] : BASE_SKILLS;
+}
+
 const SKILL_BASE_URL =
 	"https://neon.com/docs/ai/skills/neon-postgres/references";
 
@@ -76,6 +91,7 @@ function editorToSkillsAgent(editor: Editor): string {
 export interface InstallSkillsOptions {
 	json?: boolean;
 	scope?: "global" | "project";
+	preview?: boolean;
 }
 
 /**
@@ -100,34 +116,38 @@ export async function installAgentSkills(
 
 	let anyFailed = false;
 
+	const skills = getSkillList(options?.preview);
+
 	for (const editor of editorsWithSkills) {
 		const agentName = editorToSkillsAgent(editor);
 
-		try {
-			await execa(
-				"npx",
-				[
-					"skills",
-					"add",
-					"neondatabase/agent-skills",
-					"--skill",
-					"neon-postgres",
-					"--agent",
-					agentName,
-					...(options?.scope === "global" ? ["-g"] : []),
-					"-y",
-				],
-				{
-					stdio: "pipe",
-					timeout: 10000,
-				},
-			);
-		} catch (error) {
-			if (!quiet)
-				log.error(
-					`Failed to install agent skills for ${editor}: ${error instanceof Error ? error.message : "Unknown error"}`,
+		for (const skill of skills) {
+			try {
+				await execa(
+					"npx",
+					[
+						"skills",
+						"add",
+						"neondatabase/agent-skills",
+						"--skill",
+						skill,
+						"--agent",
+						agentName,
+						...(options?.scope === "global" ? ["-g"] : []),
+						"-y",
+					],
+					{
+						stdio: "pipe",
+						timeout: 10000,
+					},
 				);
-			anyFailed = true;
+			} catch (error) {
+				if (!quiet)
+					log.error(
+						`Failed to install skill ${skill} for ${editor}: ${error instanceof Error ? error.message : "Unknown error"}`,
+					);
+				anyFailed = true;
+			}
 		}
 	}
 
@@ -137,7 +157,7 @@ export async function installAgentSkills(
 		);
 		if (!quiet)
 			log.info(
-				"You can manually install skills by running: npx skills add neondatabase/agent-skills --skill neon-postgres",
+				"You can manually install skills by running: npx skills add neondatabase/agent-skills --skill neon --skill neon-postgres",
 			);
 		return false;
 	}
@@ -174,43 +194,26 @@ const GLOBAL_SKILLS_DIRS: Record<string, string[]> = (() => {
 function skillsAreFresh(agent: string): boolean {
 	const now = Date.now();
 	const cwd = process.cwd();
+	const skillNames = ["neon", "neon-postgres"];
+	const projectSkillDirs = [".agents", ".cursor", ".claude"];
 
-	// Check project-level: skills-lock.json must reference neon-postgres
+	// Check project-level: skills-lock.json must reference a neon skill
 	// AND the skill file must actually exist on disk
 	const lockPath = resolve(cwd, "skills-lock.json");
 	if (existsSync(lockPath)) {
 		try {
 			const content = readFileSync(lockPath, "utf-8");
-			if (content.includes("neon-postgres")) {
-				// Verify the actual skill file exists (lock file can be stale)
-				const skillExists =
-					existsSync(
-						resolve(
-							cwd,
-							".agents",
-							"skills",
-							"neon-postgres",
-							"SKILL.md",
+			if (
+				content.includes("neon-postgres") ||
+				content.includes('"neon"')
+			) {
+				const skillExists = projectSkillDirs.some((dir) =>
+					skillNames.some((skill) =>
+						existsSync(
+							resolve(cwd, dir, "skills", skill, "SKILL.md"),
 						),
-					) ||
-					existsSync(
-						resolve(
-							cwd,
-							".cursor",
-							"skills",
-							"neon-postgres",
-							"SKILL.md",
-						),
-					) ||
-					existsSync(
-						resolve(
-							cwd,
-							".claude",
-							"skills",
-							"neon-postgres",
-							"SKILL.md",
-						),
-					);
+					),
+				);
 				if (skillExists) {
 					const mtime = statSync(lockPath).mtimeMs;
 					if (now - mtime < SKILLS_FRESHNESS_MS) return true;
@@ -219,16 +222,18 @@ function skillsAreFresh(agent: string): boolean {
 		} catch {}
 	}
 
-	// Check global: neon-postgres SKILL.md inside agent-specific skills directories
+	// Check global: neon skill SKILL.md inside agent-specific skills directories
 	const agentName = getSkillsAgentNameFromId(agent);
 	const globalDirs = GLOBAL_SKILLS_DIRS[agentName] ?? [];
 	for (const dir of globalDirs) {
-		const neonSkillMd = resolve(dir, "neon-postgres", "SKILL.md");
-		if (existsSync(neonSkillMd)) {
-			try {
-				const mtime = statSync(neonSkillMd).mtimeMs;
-				if (now - mtime < SKILLS_FRESHNESS_MS) return true;
-			} catch {}
+		for (const skill of skillNames) {
+			const skillMd = resolve(dir, skill, "SKILL.md");
+			if (existsSync(skillMd)) {
+				try {
+					const mtime = statSync(skillMd).mtimeMs;
+					if (now - mtime < SKILLS_FRESHNESS_MS) return true;
+				} catch {}
+			}
 		}
 	}
 
@@ -245,29 +250,36 @@ function skillsAreFresh(agent: string): boolean {
 export async function ensureSkillsUpToDate(
 	agent: string,
 	scope?: "global" | "project",
+	preview?: boolean,
 ): Promise<boolean> {
 	if (skillsAreFresh(agent)) return true;
 
 	const agentName = getSkillsAgentNameFromId(agent);
-	try {
-		await execa(
-			"npx",
-			[
-				"-y",
-				"skills",
-				"add",
-				"neondatabase/agent-skills",
-				"--skill",
-				"neon-postgres",
-				"--agent",
-				agentName,
-				...(scope === "global" ? ["-g"] : []),
-				"-y",
-			],
-			{ stdio: "pipe", timeout: 60000 },
-		);
-		return true;
-	} catch {
-		return false;
+	const skills = getSkillList(preview);
+	let allOk = true;
+
+	for (const skill of skills) {
+		try {
+			await execa(
+				"npx",
+				[
+					"-y",
+					"skills",
+					"add",
+					"neondatabase/agent-skills",
+					"--skill",
+					skill,
+					"--agent",
+					agentName,
+					...(scope === "global" ? ["-g"] : []),
+					"-y",
+				],
+				{ stdio: "pipe", timeout: 60000 },
+			);
+		} catch {
+			allOk = false;
+		}
 	}
+
+	return allOk;
 }
