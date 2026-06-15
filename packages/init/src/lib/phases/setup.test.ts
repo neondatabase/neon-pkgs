@@ -160,26 +160,13 @@ describe("setup phase", () => {
 		});
 
 		expect(result.phase).toBe("setup");
-		expect(result.status).toBe("preferences_needed");
-		expect(result.nextAction.type).toBe("ask_user");
+		expect(result.status).toBe("pending");
+		expect(result.nextAction.type).toBe("agent_check");
 
-		if (result.nextAction.type === "ask_user") {
-			expect(result.nextAction.question).toContain("default settings");
-			expect(result.nextAction.options.length).toBe(2);
-			expect(result.nextAction.responseMapping).toHaveProperty(
-				"defaults",
-			);
-			expect(result.nextAction.responseMapping).toHaveProperty(
-				"customize",
-			);
-			// Context should contain findings
-			expect(result.nextAction.context).toContain(
-				"Framework detected: next",
-			);
-			expect(result.nextAction.context).toContain("ORM detected: prisma");
-			expect(result.nextAction.context).toContain(
-				"VS Code-based IDE detected",
-			);
+		if (result.nextAction.type === "agent_check") {
+			const prefs = (result.nextAction as Record<string, unknown>)
+				.userPreferences as { id: string }[];
+			expect(prefs.some((p) => p.id === "mode")).toBe(true);
 		}
 	});
 
@@ -264,7 +251,7 @@ describe("setup phase", () => {
 		}
 	});
 
-	test("customize mode presents scope options (legacy no-scopes path)", async () => {
+	test("customize mode goes straight to execution", async () => {
 		const result = await handleSetupPhase({
 			agent: "claude",
 			mcpConfigured: false,
@@ -276,20 +263,7 @@ describe("setup phase", () => {
 		});
 
 		expect(result.phase).toBe("setup");
-		expect(result.status).toBe("customizing");
-		expect(result.nextAction.type).toBe("ask_user");
-
-		if (result.nextAction.type === "ask_user") {
-			expect(result.nextAction.question).toContain(
-				"installation configuration",
-			);
-			const optionValues = (
-				result.nextAction.options as { value: string; label: string }[]
-			).map((o) => o.value);
-			expect(optionValues).toContain("global_project_ext");
-			expect(optionValues).toContain("project_project_ext");
-			expect(optionValues).toContain("global_project_noext");
-		}
+		expect(result.status).toBe("installed");
 	});
 
 	test("customize mode without vscode IDE omits extension options", async () => {
@@ -424,7 +398,7 @@ describe("setup phase", () => {
 		expect(mcpCall?.[1]).not.toContain("-g");
 	});
 
-	test("--data with customize mode but no scopes falls back to customize questions", async () => {
+	test("--data with customize mode goes straight to execution", async () => {
 		const result = await handleSetupPhase({
 			agent: "claude",
 			mcpConfigured: false,
@@ -436,8 +410,7 @@ describe("setup phase", () => {
 		});
 
 		expect(result.phase).toBe("setup");
-		expect(result.status).toBe("customizing");
-		expect(result.nextAction.type).toBe("ask_user");
+		expect(result.status).toBe("installed");
 	});
 
 	test("execute flag triggers installation directly", async () => {

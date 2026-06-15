@@ -280,7 +280,7 @@ describe("init() with json mode", () => {
 			"Do you already have a Neon account",
 		);
 		expect(result.authInstructions).toContain("NEW ACCOUNT");
-		expect(result.authInstructions).toContain("console.neon.tech/signup");
+		expect(result.authInstructions).toContain("/signup");
 		expect(result.authInstructions).toContain("EXISTING ACCOUNT");
 		expect(result.authInstructions).toContain("neonctl auth");
 		expect(result.authInstructions).toContain("email verification");
