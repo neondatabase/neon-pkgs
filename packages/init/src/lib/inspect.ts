@@ -276,6 +276,7 @@ function checkSkillsInstalled(cwd: string): DetectedScope {
 	const globalDirs = [
 		resolve(home, ".cursor", "skills"),
 		resolve(home, ".claude", "skills"),
+		resolve(home, ".agents", "skills"),
 	];
 	for (const dir of globalDirs) {
 		const skillMd = resolve(dir, "neon-postgres", "SKILL.md");
