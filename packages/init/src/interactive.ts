@@ -33,7 +33,7 @@ import {
 } from "./lib/extension.js";
 import { inspectProject } from "./lib/inspect.js";
 import { ensureNeonctl } from "./lib/neonctl.js";
-import { installAgentSkills } from "./lib/skills.js";
+import { ensureSkillsUpToDate, installAgentSkills } from "./lib/skills.js";
 import type { Editor } from "./lib/types.js";
 
 function wordWrap(text: string, width: number): string {
@@ -652,6 +652,12 @@ async function interactiveInitInner(
 				}
 			}
 		}
+	}
+
+	// Ensure all required skills are present (fills in any missing ones)
+	const agentForSkills = detectAgent();
+	if (agentForSkills) {
+		await ensureSkillsUpToDate(agentForSkills, undefined, options.preview);
 	}
 
 	// -----------------------------------------------------------------------
