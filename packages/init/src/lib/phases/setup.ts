@@ -585,7 +585,7 @@ async function executeBatchedInstallation(
 	options: SetupPhaseOptions,
 ): Promise<PhaseResponse> {
 	const mcpScope = options.mcpScope ?? "global";
-	const agentId = options.agent ?? "claude-code";
+	const agentId = options.agent ?? "cursor";
 	const mcpAgentId = resolveAddMcpAgentId(agentId);
 	const installExt = options.installExtension === true;
 

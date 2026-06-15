@@ -178,12 +178,14 @@ const SKILLS_FRESHNESS_MS = 12 * 60 * 60 * 1000; // 12 hours
  */
 const GLOBAL_SKILLS_DIRS: Record<string, string[]> = (() => {
 	const home = process.env.HOME || process.env.USERPROFILE || "";
+	// .agents/skills is the generic directory used by multiple agents
+	const agentsDir = resolve(home, ".agents", "skills");
 	return {
-		cursor: [resolve(home, ".cursor", "skills")],
-		"claude-code": [resolve(home, ".claude", "skills")],
-		"github-copilot": [resolve(home, ".vscode", "skills")],
-		codex: [resolve(home, ".codex", "skills")],
-		cline: [resolve(home, ".cline", "skills")],
+		cursor: [resolve(home, ".cursor", "skills"), agentsDir],
+		"claude-code": [resolve(home, ".claude", "skills"), agentsDir],
+		"github-copilot": [resolve(home, ".vscode", "skills"), agentsDir],
+		codex: [resolve(home, ".codex", "skills"), agentsDir],
+		cline: [resolve(home, ".cline", "skills"), agentsDir],
 	};
 })();
 
