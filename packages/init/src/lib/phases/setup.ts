@@ -604,6 +604,8 @@ interface InstallResult {
 	error?: string;
 	/** True when the step wasn't automated — the description contains manual instructions for the user */
 	manualAction?: boolean;
+	/** Shell commands the agent can run to complete this step manually */
+	commands?: string[];
 }
 
 /**
@@ -790,13 +792,29 @@ async function executeBatchedInstallation(
 			skillsScope,
 			options.preview,
 		);
-		results.push({
-			id: "install_skills",
-			description: skillsOk
-				? "Neon agent skills installed"
-				: "Failed to install Neon agent skills",
-			status: skillsOk ? "success" : "failed",
-		});
+		if (skillsOk) {
+			results.push({
+				id: "install_skills",
+				description: "Neon agent skills installed",
+				status: "success",
+			});
+		} else {
+			// Build the install commands for the agent to run directly
+			// (sandboxed environments may block child process writes)
+			const { getSkillList } = await import("../skills.js");
+			const skillList = getSkillList(options.preview);
+			const cmds = skillList.map(
+				(s) =>
+					`skills add neondatabase/agent-skills --skill ${s} --agent ${agentId}${skillsScope === "global" ? " -g" : ""} -y`,
+			);
+			results.push({
+				id: "install_skills",
+				description:
+					"Failed to install Neon agent skills automatically. Run these commands to install manually:",
+				status: "failed",
+				commands: cmds,
+			});
+		}
 	}
 
 	// Step 4: Install editor extension if requested
