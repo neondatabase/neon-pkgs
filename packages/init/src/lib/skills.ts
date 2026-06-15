@@ -280,9 +280,35 @@ export async function ensureSkillsUpToDate(
 	const agentName = getSkillsAgentNameFromId(resolvedAgent);
 	let allOk = true;
 
+	// Only install skills that don't already have SKILL.md on disk.
+	// Re-installing existing skills can trigger sandbox permission prompts.
+	const home = process.env.HOME || process.env.USERPROFILE || "";
+	const cwd = process.cwd();
+	const checkDirs =
+		scope === "global"
+			? [
+					resolve(home, ".cursor", "skills"),
+					resolve(home, ".claude", "skills"),
+					resolve(home, ".agents", "skills"),
+				]
+			: [
+					resolve(cwd, ".cursor", "skills"),
+					resolve(cwd, ".claude", "skills"),
+					resolve(cwd, ".agents", "skills"),
+				];
+
+	const missingSkills = skills.filter(
+		(skill) =>
+			!checkDirs.some((dir) =>
+				existsSync(resolve(dir, skill, "SKILL.md")),
+			),
+	);
+
+	if (missingSkills.length === 0) return true;
+
 	// Install one skill at a time — the skills CLI has a bug with multiple
 	// --skill flags where it creates directories but doesn't copy all SKILL.md files.
-	for (const skill of skills) {
+	for (const skill of missingSkills) {
 		try {
 			await execa(
 				"skills",

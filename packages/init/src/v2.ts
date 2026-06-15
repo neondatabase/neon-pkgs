@@ -82,7 +82,12 @@ export async function orchestrate(
 		const allPresent = previewSkills.every((skill) =>
 			dirs.some((dir) => exists(resolvePath(dir, skill, "SKILL.md"))),
 		);
-		if (!allPresent) skillsInstalled = false;
+		if (!allPresent) {
+			skillsInstalled = false;
+			// Mark as partial so setup auto-completes to the same scope
+			inspection.skillsScope =
+				`${inspection.skillsScope}-partial` as typeof inspection.skillsScope;
+		}
 	}
 
 	const toolingInstalled = inspection.mcpConfigured && skillsInstalled;

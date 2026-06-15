@@ -45,7 +45,7 @@ export interface SetupPhaseOptions {
 	migrationDir?: string;
 	isVscodeIde?: boolean | null;
 	// User preferences (also used for pre-detected scope from inspection)
-	mode?: "defaults" | "customize";
+	mode?: string;
 	mcpScope?: string;
 	skillsScope?: string;
 	installExtension?: boolean;
@@ -71,6 +71,7 @@ export async function handleSetupPhase(
 	}
 
 	// Treat "none" as no template selected
+	const templateWasAnswered = options.template !== undefined;
 	if (options.template === "none") {
 		options.template = undefined;
 	}
@@ -89,8 +90,15 @@ export async function handleSetupPhase(
 		return executeBatchedInstallation(await mergeCliInspection(options));
 	}
 
-	// User chose "defaults" — batch install with default settings
-	if (options.mode === "defaults") {
+	// Treat any explicit mode value that isn't "customize"/"custom" as defaults.
+	// Also treat as defaults when mode is missing but agent reported back
+	// (template was answered, nothing left to customize).
+	const hasReportedBack = options.mode || templateWasAnswered;
+	if (
+		hasReportedBack &&
+		options.mode !== "customize" &&
+		options.mode !== "custom"
+	) {
 		const merged = await mergeCliInspection(options);
 		const shouldInstallExt =
 			merged.installExtension ?? isVscodeBasedIde(merged);
@@ -186,7 +194,7 @@ async function buildBulkInspection(
 					? "Perform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the `condition` field — only show a question if its condition is met."
 					: "No application was detected in this directory. Ask the user if they'd like to scaffold a new project from a template (the `template` preference). Present ALL template options and the 'No thanks' option — do NOT auto-select even if there is only one template. If the user selects a template, the scaffolded template includes agent skills so skills installation will be skipped. If the user chooses 'none', continue with the remaining setup preferences normally. Then perform the agent checks and present the remaining preferences ONE AT A TIME.",
 				"",
-				`The CLI has pre-detected the following from the filesystem: MCP server: ${options.mcpConfigured ? `configured (${options.mcpScope})` : "not configured"}. Agent skills: ${options.skillsInstalled ? `installed (${options.skillsScope})` : "not installed"}. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured.`,
+				`The CLI has pre-detected the following from the filesystem: MCP server: ${options.mcpConfigured ? `configured (${options.mcpScope})` : "not configured"}. Agent skills: ${options.skillsInstalled ? `installed (${options.skillsScope})` : String(options.skillsScope ?? "").includes("partial") ? `partially installed (${options.skillsScope}) — missing skills will be auto-installed to the same scope` : "not installed"}. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.`,
 				"",
 				"IMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.",
 				"",
@@ -264,24 +272,39 @@ async function buildBulkInspection(
 							},
 						]
 					: []),
-				{
-					id: "mode",
-					question: "Use default settings or customize?",
-					phase: "after_checks",
-					options: [
+				// Only show defaults/customize when there's something to customize:
+				// MCP not configured, skills need scope choice, or extension not detected.
+				...(() => {
+					const isPartialSkills = String(
+						options.skillsScope ?? "",
+					).includes("partial");
+					const needsMcpChoice = !options.mcpConfigured;
+					const needsSkillsChoice =
+						!options.skillsInstalled && !isPartialSkills;
+					const hasCustomizableOptions =
+						needsMcpChoice || needsSkillsChoice;
+					if (!hasCustomizableOptions) return [];
+					return [
 						{
-							value: "defaults",
-							label: hasApp
-								? "Use defaults (neonctl CLI, MCP: global, skills: project-level, extension if applicable — already-configured components will be skipped)"
-								: "Use defaults (neonctl CLI, MCP: global, extension if applicable — skills included in template)",
+							id: "mode",
+							question: "Use default settings or customize?",
+							phase: "after_checks" as const,
+							options: [
+								{
+									value: "defaults",
+									label: hasApp
+										? "Use defaults (neonctl CLI, MCP: global, skills: project-level, extension if applicable — already-configured components will be skipped)"
+										: "Use defaults (neonctl CLI, MCP: global, extension if applicable — skills included in template)",
+								},
+								{
+									value: "customize",
+									label: "Customize installation settings",
+								},
+							],
+							default: "defaults",
 						},
-						{
-							value: "customize",
-							label: "Customize installation settings",
-						},
-					],
-					default: "defaults",
-				},
+					];
+				})(),
 				{
 					id: "mcpScope",
 					question: "Where should the Neon MCP server be configured?",
@@ -306,9 +329,10 @@ async function buildBulkInspection(
 					condition: { preferenceId: "mode", equals: "customize" },
 					group: "customize",
 				},
-				// Show skills scope when skills aren't already detected.
-				// When skills are partially installed, missing skills are auto-installed to the same scope.
-				...(!options.skillsInstalled
+				// Show skills scope when skills aren't detected and no partial install exists.
+				// Partial installations are auto-completed to the same scope silently.
+				...(!options.skillsInstalled &&
+				!String(options.skillsScope ?? "").includes("partial")
 					? [
 							{
 								id: "skillsScope",
@@ -358,9 +382,39 @@ async function buildBulkInspection(
 					"setup",
 					"--json",
 					"--data",
-					options.skillsInstalled
-						? `<json: { agent: string, ide: string, mcpConfigured: bool, skillsScope: "${options.skillsScope || "project"}"${options.preview ? ", preview: true" : ""}, mode: string, mcpScope?: 'global'|'project'|'none', installExtension?: bool${hasApp ? ", features?: string" : ", template: string"} }>`
-						: `<json: { agent: string, ide: string, mcpConfigured: bool${options.preview ? ", preview: true" : ""}, mode: string, mcpScope?: 'global'|'project'|'none', skillsScope?: string, installExtension?: bool${hasApp ? ", features?: string" : ", template: string"} }>`,
+					(() => {
+						const partialScope = String(
+							options.skillsScope ?? "",
+						).replace("-partial", "");
+						const hasPartial = String(
+							options.skillsScope ?? "",
+						).includes("partial");
+						const previewFlag = options.preview
+							? ", preview: true"
+							: "";
+						const needsMcpChoice = !options.mcpConfigured;
+						const needsSkillsChoice =
+							!options.skillsInstalled && !hasPartial;
+						const hasModeQuestion =
+							needsMcpChoice || needsSkillsChoice;
+						const modeField = hasModeQuestion
+							? ", mode: string"
+							: "";
+						const mcpField = hasModeQuestion
+							? ", mcpScope?: 'global'|'project'|'none'"
+							: "";
+						const skillsField = needsSkillsChoice
+							? ", skillsScope?: string"
+							: "";
+						const extField = hasModeQuestion
+							? ", installExtension?: bool"
+							: "";
+						const prefilledSkills =
+							options.skillsInstalled || hasPartial
+								? `, skillsScope: "${options.skillsInstalled ? options.skillsScope || "project" : partialScope}"`
+								: skillsField;
+						return `<json: { agent: string, ide: string, mcpConfigured: bool${prefilledSkills}${previewFlag}${modeField}${mcpField}${extField}${hasApp ? ", features?: string" : ", template: string"} }>`;
+					})(),
 				],
 			},
 		},

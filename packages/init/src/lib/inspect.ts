@@ -7,7 +7,12 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { AgentCheck } from "./types.js";
 
-export type DetectedScope = "global" | "project" | false;
+export type DetectedScope =
+	| "global"
+	| "project"
+	| "global-partial"
+	| "project-partial"
+	| false;
 
 export interface InspectionResults {
 	[key: string]: unknown;
@@ -289,6 +294,17 @@ function checkSkillsInstalled(cwd: string): DetectedScope {
 		globalDirs.some((dir) => existsSync(resolve(dir, skill, "SKILL.md"))),
 	);
 	if (allGlobalSkills) return "global";
+
+	// Check for partial installations — ANY skill exists
+	const anyProjectSkill = skillNames.some((skill) =>
+		projectDirs.some((dir) => existsSync(resolve(dir, skill, "SKILL.md"))),
+	);
+	if (anyProjectSkill) return "project-partial";
+
+	const anyGlobalSkill = skillNames.some((skill) =>
+		globalDirs.some((dir) => existsSync(resolve(dir, skill, "SKILL.md"))),
+	);
+	if (anyGlobalSkill) return "global-partial";
 
 	return false;
 }
