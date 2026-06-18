@@ -87,6 +87,18 @@ for await (const part of result.fullStream) {
 
 - `generateImage()` and embeddings (`embed` / `embedMany`) are not offered by the gateway and throw `NoSuchModelError`.
 - `gpt-oss-*` models return a non-standard ("harmony") response shape on the unified endpoint and are not fully supported.
+- OpenAI Responses multi-turn tool flows (`generateText` + `stepCountIs`) can return 502 from the gateway; tool calling is covered on Anthropic/Google/Meta in e2e.
+
+## End-to-end tests
+
+Against a live branch with AI Gateway enabled:
+
+```bash
+cp .env.example .env   # fill NEON_AI_GATEWAY_BASE_URL + NEON_AI_GATEWAY_TOKEN from `neonctl env pull`
+pnpm test:e2e
+```
+
+The matrix covers one models.dev `neon` model per family (Anthropic, OpenAI, Codex, Gemini, Meta) across `generateText`, `streamText`, `generateObject`, tool calling, and `neon.tools.imageGeneration`. Skipped when gateway env vars are absent.
 
 ## Versioning
 

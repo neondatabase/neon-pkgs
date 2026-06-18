@@ -47,6 +47,7 @@
 		"test": "vitest --passWithNoTests",
 		"test:ci": "vitest run --passWithNoTests",
 		"test:drift": "NEON_DRIFT_CHECK=1 vitest run neon-catalog-drift",
+		"test:e2e": "vitest run --config vitest.e2e.config.ts",
 		"tsc": "tsc"
 	},
 	"devDependencies": {
