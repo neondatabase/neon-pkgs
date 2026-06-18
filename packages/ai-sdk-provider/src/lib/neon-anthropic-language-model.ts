@@ -1,9 +1,9 @@
-import { AnthropicLanguageModel } from "@ai-sdk/anthropic/internal";
+import { AnthropicMessagesLanguageModel } from "@ai-sdk/anthropic/internal";
 import type {
-	LanguageModelV4,
-	LanguageModelV4CallOptions,
-	LanguageModelV4GenerateResult,
-	LanguageModelV4StreamResult,
+	LanguageModelV3,
+	LanguageModelV3CallOptions,
+	LanguageModelV3GenerateResult,
+	LanguageModelV3StreamResult,
 } from "@ai-sdk/provider";
 
 /**
@@ -17,12 +17,12 @@ import type {
  * `toolStreaming` option so streaming tool calls work. Users can still override.
  */
 export class NeonAnthropicLanguageModel
-	extends AnthropicLanguageModel
-	implements LanguageModelV4
+	extends AnthropicMessagesLanguageModel
+	implements LanguageModelV3
 {
 	private withGatewayCompat(
-		options: LanguageModelV4CallOptions,
-	): LanguageModelV4CallOptions {
+		options: LanguageModelV3CallOptions,
+	): LanguageModelV3CallOptions {
 		const anthropic = options.providerOptions?.anthropic;
 		// Respect an explicit user setting.
 		if (anthropic != null && "toolStreaming" in anthropic) {
@@ -38,14 +38,14 @@ export class NeonAnthropicLanguageModel
 	}
 
 	override doGenerate(
-		options: LanguageModelV4CallOptions,
-	): Promise<LanguageModelV4GenerateResult> {
+		options: LanguageModelV3CallOptions,
+	): Promise<LanguageModelV3GenerateResult> {
 		return super.doGenerate(this.withGatewayCompat(options));
 	}
 
 	override doStream(
-		options: LanguageModelV4CallOptions,
-	): Promise<LanguageModelV4StreamResult> {
+		options: LanguageModelV3CallOptions,
+	): Promise<LanguageModelV3StreamResult> {
 		return super.doStream(this.withGatewayCompat(options));
 	}
 }

@@ -10,11 +10,12 @@
  * `NEON_AI_GATEWAY_TOKEN` emitted by `neonctl env pull` / `neon dev`, or pass
  * `baseURL` / `apiKey` explicitly.
  */
+import { openai as openaiProvider } from "@ai-sdk/openai";
 import type { ProviderErrorStructure } from "@ai-sdk/openai-compatible";
 import {
-	type LanguageModelV4,
+	type LanguageModelV3,
 	NoSuchModelError,
-	type ProviderV4,
+	type ProviderV3,
 } from "@ai-sdk/provider";
 import {
 	type FetchFunction,
@@ -106,15 +107,18 @@ export interface NeonProviderSettings {
 	fetch?: FetchFunction;
 }
 
-export interface NeonProvider extends ProviderV4 {
+export interface NeonProvider extends ProviderV3 {
 	/** Creates a Neon AI Gateway model for text generation. */
-	(modelId: NeonChatModelId): LanguageModelV4;
+	(modelId: NeonChatModelId): LanguageModelV3;
 
 	/** Creates a Neon AI Gateway model for text generation. */
-	languageModel(modelId: NeonChatModelId): LanguageModelV4;
+	languageModel(modelId: NeonChatModelId): LanguageModelV3;
 
 	/** Creates a Neon AI Gateway chat model for text generation. */
-	chat(modelId: NeonChatModelId): LanguageModelV4;
+	chat(modelId: NeonChatModelId): LanguageModelV3;
+
+	/** OpenAI Responses tools (e.g. `imageGeneration`) for OpenAI-routed models. */
+	tools: typeof openaiProvider.tools;
 
 	/** @deprecated Use `embeddingModel` instead. */
 	textEmbeddingModel(modelId: string): never;
@@ -180,7 +184,7 @@ export function createNeon(options: NeonProviderSettings = {}): NeonProvider {
 			supportsStructuredOutputs: true,
 		});
 
-	const createLanguageModel = (modelId: NeonChatModelId): LanguageModelV4 => {
+	const createLanguageModel = (modelId: NeonChatModelId): LanguageModelV3 => {
 		switch (getNeonModelRoute(modelId)) {
 			case "anthropic":
 				return createAnthropicModel(modelId);
@@ -193,9 +197,10 @@ export function createNeon(options: NeonProviderSettings = {}): NeonProvider {
 
 	const provider = (modelId: NeonChatModelId) => createLanguageModel(modelId);
 
-	provider.specificationVersion = "v4" as const;
+	provider.specificationVersion = "v3" as const;
 	provider.languageModel = createLanguageModel;
 	provider.chat = createLanguageModel;
+	provider.tools = openaiProvider.tools;
 
 	provider.embeddingModel = (modelId: string) => {
 		throw new NoSuchModelError({ modelId, modelType: "embeddingModel" });

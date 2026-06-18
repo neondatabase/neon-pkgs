@@ -1,9 +1,9 @@
 import { OpenAIResponsesLanguageModel } from "@ai-sdk/openai/internal";
 import type {
-	LanguageModelV4,
-	LanguageModelV4CallOptions,
-	LanguageModelV4GenerateResult,
-	LanguageModelV4StreamResult,
+	LanguageModelV3,
+	LanguageModelV3CallOptions,
+	LanguageModelV3GenerateResult,
+	LanguageModelV3StreamResult,
 } from "@ai-sdk/provider";
 
 /**
@@ -21,15 +21,15 @@ import type {
  */
 export class NeonResponsesLanguageModel
 	extends OpenAIResponsesLanguageModel
-	implements LanguageModelV4
+	implements LanguageModelV3
 {
 	private get isReasoningFamily(): boolean {
 		return /gpt-5/.test(this.modelId.toLowerCase());
 	}
 
 	private withForcedReasoning(
-		options: LanguageModelV4CallOptions,
-	): LanguageModelV4CallOptions {
+		options: LanguageModelV3CallOptions,
+	): LanguageModelV3CallOptions {
 		if (!this.isReasoningFamily) {
 			return options;
 		}
@@ -48,14 +48,14 @@ export class NeonResponsesLanguageModel
 	}
 
 	override doGenerate(
-		options: LanguageModelV4CallOptions,
-	): Promise<LanguageModelV4GenerateResult> {
+		options: LanguageModelV3CallOptions,
+	): Promise<LanguageModelV3GenerateResult> {
 		return super.doGenerate(this.withForcedReasoning(options));
 	}
 
 	override doStream(
-		options: LanguageModelV4CallOptions,
-	): Promise<LanguageModelV4StreamResult> {
+		options: LanguageModelV3CallOptions,
+	): Promise<LanguageModelV3StreamResult> {
 		return super.doStream(this.withForcedReasoning(options));
 	}
 }

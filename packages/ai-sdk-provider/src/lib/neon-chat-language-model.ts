@@ -1,9 +1,9 @@
 import { OpenAICompatibleChatLanguageModel } from "@ai-sdk/openai-compatible";
 import type {
-	LanguageModelV4,
-	LanguageModelV4CallOptions,
-	LanguageModelV4GenerateResult,
-	LanguageModelV4StreamResult,
+	LanguageModelV3,
+	LanguageModelV3CallOptions,
+	LanguageModelV3GenerateResult,
+	LanguageModelV3StreamResult,
 } from "@ai-sdk/provider";
 import {
 	applyNeonCapabilities,
@@ -21,11 +21,11 @@ import {
  */
 export class NeonChatLanguageModel
 	extends OpenAICompatibleChatLanguageModel
-	implements LanguageModelV4
+	implements LanguageModelV3
 {
 	override async doGenerate(
-		options: LanguageModelV4CallOptions,
-	): Promise<LanguageModelV4GenerateResult> {
+		options: LanguageModelV3CallOptions,
+	): Promise<LanguageModelV3GenerateResult> {
 		const { options: adjusted, warnings } = applyNeonCapabilities(
 			this.modelId,
 			options,
@@ -37,8 +37,8 @@ export class NeonChatLanguageModel
 	}
 
 	override async doStream(
-		options: LanguageModelV4CallOptions,
-	): Promise<LanguageModelV4StreamResult> {
+		options: LanguageModelV3CallOptions,
+	): Promise<LanguageModelV3StreamResult> {
 		const { options: adjusted, warnings } = applyNeonCapabilities(
 			this.modelId,
 			options,

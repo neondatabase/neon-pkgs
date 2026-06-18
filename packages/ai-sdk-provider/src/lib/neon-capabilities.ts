@@ -1,10 +1,9 @@
 import type {
-	LanguageModelV4CallOptions,
-	LanguageModelV4StreamPart,
-	SharedV4ProviderOptions,
-	SharedV4Warning,
+	LanguageModelV3CallOptions,
+	LanguageModelV3StreamPart,
+	SharedV3ProviderOptions,
+	SharedV3Warning,
 } from "@ai-sdk/provider";
-import { isCustomReasoning } from "@ai-sdk/provider-utils";
 import { getNeonModelCapabilities } from "./neon-model-capabilities.js";
 
 /**
@@ -14,11 +13,11 @@ import { getNeonModelCapabilities } from "./neon-model-capabilities.js";
  */
 export function applyNeonCapabilities(
 	modelId: string,
-	options: LanguageModelV4CallOptions,
-): { options: LanguageModelV4CallOptions; warnings: SharedV4Warning[] } {
+	options: LanguageModelV3CallOptions,
+): { options: LanguageModelV3CallOptions; warnings: SharedV3Warning[] } {
 	const caps = getNeonModelCapabilities(modelId);
-	const warnings: SharedV4Warning[] = [];
-	const patch: Partial<LanguageModelV4CallOptions> = {};
+	const warnings: SharedV3Warning[] = [];
+	const patch: Partial<LanguageModelV3CallOptions> = {};
 
 	const dropUnsupported = (feature: string) => {
 		warnings.push({
@@ -66,6 +65,7 @@ export function applyNeonCapabilities(
 		patch.seed = undefined;
 		dropUnsupported("seed");
 	}
+
 	if (options.stopSequences != null && !caps.supportsStopSequences) {
 		patch.stopSequences = undefined;
 		dropUnsupported("stopSequences");
@@ -79,14 +79,11 @@ export function applyNeonCapabilities(
 				(group) =>
 					"reasoningEffort" in group && group.reasoningEffort != null,
 			);
-		const hasReasoningOption =
-			isCustomReasoning(options.reasoning) &&
-			options.reasoning !== "none";
 
-		if (hasProviderEffort || hasReasoningOption) {
+		if (hasProviderEffort) {
 			dropUnsupported("reasoningEffort");
-			if (hasProviderEffort && providerOptions != null) {
-				const cleaned: SharedV4ProviderOptions = {};
+			if (providerOptions != null) {
+				const cleaned: SharedV3ProviderOptions = {};
 				for (const [key, group] of Object.entries(providerOptions)) {
 					if ("reasoningEffort" in group) {
 						const { reasoningEffort: _removed, ...rest } = group;
@@ -96,9 +93,6 @@ export function applyNeonCapabilities(
 					}
 				}
 				patch.providerOptions = cleaned;
-			}
-			if (hasReasoningOption) {
-				patch.reasoning = undefined;
 			}
 		}
 	}
@@ -112,11 +106,11 @@ export function applyNeonCapabilities(
 /**
  * Merge additional warnings into the `stream-start` part of a model stream.
  */
-export function mergeStreamStartWarnings(extra: SharedV4Warning[]) {
+export function mergeStreamStartWarnings(extra: SharedV3Warning[]) {
 	let merged = false;
 	return new TransformStream<
-		LanguageModelV4StreamPart,
-		LanguageModelV4StreamPart
+		LanguageModelV3StreamPart,
+		LanguageModelV3StreamPart
 	>({
 		transform(part, controller) {
 			if (!merged && part.type === "stream-start") {
