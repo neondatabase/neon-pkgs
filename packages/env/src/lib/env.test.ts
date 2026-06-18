@@ -775,7 +775,6 @@ describe("branch storage + AI Gateway (Preview)", () => {
 		expect(pairs.AWS_SECRET_ACCESS_KEY).toBe("secret");
 		expect(pairs.AWS_ENDPOINT_URL_S3).toBe("https://br.storage.neon.build");
 		expect(pairs.AWS_REGION).toBe("us-east-2");
-		expect(pairs.NEON_STORAGE_REGION).toBe("us-east-2");
 		expect(pairs.NEON_STORAGE_FORCE_PATH_STYLE).toBe("true");
 		expect(pairs.OPENAI_API_KEY).toBe("nt_live_x_y");
 		expect(pairs.OPENAI_BASE_URL).toBe(

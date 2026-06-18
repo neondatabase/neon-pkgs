@@ -57,7 +57,6 @@ const INPUT_ENV_KEYS = [
  */
 const OUTPUT_ONLY_ENV_VARS: ReadonlySet<string> = new Set([
 	"NEON_BRANCH",
-	"NEON_STORAGE_REGION",
 	"NEON_STORAGE_FORCE_PATH_STYLE",
 	"NEON_AI_GATEWAY_TOKEN",
 	"NEON_AI_GATEWAY_BASE_URL",
@@ -104,7 +103,6 @@ describe("NEON_ENV_VAR_KEYS (public OS env-var names)", () => {
 			    "endpoint": "AWS_ENDPOINT_URL_S3",
 			    "forcePathStyle": "NEON_STORAGE_FORCE_PATH_STYLE",
 			    "region": "AWS_REGION",
-			    "regionNeon": "NEON_STORAGE_REGION",
 			    "secretAccessKey": "AWS_SECRET_ACCESS_KEY",
 			  },
 			}
