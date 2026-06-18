@@ -555,7 +555,6 @@ describe("branch storage + AI Gateway (Preview)", () => {
 		expect(env.storage.accessKeyId).toContain("-fake-");
 		expect(env.storage.endpoint).toContain("storage");
 		expect(env.storage.region).toBe("us-east-1");
-		expect(env.storage.forcePathStyle).toBe(true);
 		expect("aiGateway" in env).toBe(false);
 	});
 
@@ -711,14 +710,12 @@ describe("branch storage + AI Gateway (Preview)", () => {
 		vi.stubEnv("AWS_SECRET_ACCESS_KEY", "s".repeat(64));
 		vi.stubEnv("AWS_ENDPOINT_URL_S3", "https://br.storage.neon.build");
 		vi.stubEnv("AWS_REGION", "us-east-2");
-		vi.stubEnv("NEON_STORAGE_FORCE_PATH_STYLE", "true");
 		const env = parseEnv(
 			defineConfig({ preview: { buckets: { uploads: {} } } }),
 		);
 		expect(env.storage.accessKeyId).toBe("abc123");
 		expect(env.storage.endpoint).toBe("https://br.storage.neon.build");
 		expect(env.storage.region).toBe("us-east-2");
-		expect(env.storage.forcePathStyle).toBe(true);
 	});
 
 	test("parseEnv reads injected AI Gateway env", () => {
@@ -763,7 +760,6 @@ describe("branch storage + AI Gateway (Preview)", () => {
 				secretAccessKey: "secret",
 				endpoint: "https://br.storage.neon.build",
 				region: "us-east-2",
-				forcePathStyle: true,
 			},
 			aiGateway: {
 				apiKey: "nt_live_x_y",
@@ -776,7 +772,6 @@ describe("branch storage + AI Gateway (Preview)", () => {
 		expect(pairs.AWS_ENDPOINT_URL_S3).toBe("https://br.storage.neon.build");
 		expect(pairs.AWS_REGION).toBe("us-east-2");
 		expect(pairs.NEON_STORAGE_REGION).toBe("us-east-2");
-		expect(pairs.NEON_STORAGE_FORCE_PATH_STYLE).toBe("true");
 		expect(pairs.OPENAI_API_KEY).toBe("nt_live_x_y");
 		expect(pairs.OPENAI_BASE_URL).toBe(
 			"https://x.neon.build/ai-gateway/openai/v1",
