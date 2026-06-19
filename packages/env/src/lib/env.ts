@@ -67,16 +67,13 @@ export const NEON_ENV_VAR_KEYS = {
 	/**
 	 * Object storage (Preview). The S3 SDKs read `AWS_*` from their standard config chain, so
 	 * a branch credential + `neon dev` / `env pull` makes object storage work from env alone.
-	 * `region` is injected under the SDK-standard `AWS_REGION`; `forcePathStyle` has no
-	 * cross-SDK AWS env var, so it keeps its `NEON_` name (the AWS SDKs default to path-style
-	 * for custom endpoints anyway).
+	 * `region` is injected under the SDK-standard `AWS_REGION`.
 	 */
 	storage: {
 		accessKeyId: "AWS_ACCESS_KEY_ID",
 		secretAccessKey: "AWS_SECRET_ACCESS_KEY",
 		endpoint: "AWS_ENDPOINT_URL_S3",
 		region: "AWS_REGION",
-		forcePathStyle: "NEON_STORAGE_FORCE_PATH_STYLE",
 	},
 	/**
 	 * AI Gateway (Preview). Mapped onto the OpenAI SDK's standard env vars so the OpenAI
@@ -148,9 +145,10 @@ export interface NeonDataApiEnv {
  * keys (`accessKeyId` = the credential's full token id, e.g. `nak_live_…`, which is what the
  * storage gateway authenticates against; `secretAccessKey` = its
  * `s3_secret_access_key`) with the branch's non-secret connection details
- * (`endpoint`/`region`/`forcePathStyle`, from `GET .../storage`). Projects to the AWS SDK's
+ * (`endpoint`/`region`, from `GET .../storage`). Projects to the AWS SDK's
  * standard config env (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_URL_S3`,
- * `AWS_REGION`) so the S3 client works from env alone.
+ * `AWS_REGION`) so the S3 client works from env alone. Neon's storage gateway always
+ * requires path-style addressing, so set `forcePathStyle: true` on your S3 client.
  */
 export interface NeonStorageEnv {
 	accessKeyId: string;
@@ -159,8 +157,6 @@ export interface NeonStorageEnv {
 	endpoint: string;
 	/** AWS region string (e.g. `us-east-2`). Injected as `AWS_REGION`. */
 	region: string;
-	/** Whether the S3 client must use path-style addressing (always `true` today). */
-	forcePathStyle: boolean;
 }
 
 /**
@@ -308,9 +304,9 @@ export type NeonFunctionEnv<C extends Config, S extends string> = {
 /**
  * OS-level env-var keys grouped by the {@link NeonEnv} namespace they populate. Only the
  * **input** vars `parseEnv` validates are listed — the output-only aliases in
- * {@link NEON_ENV_VAR_KEYS} (`NEON_AI_GATEWAY_TOKEN`, …) and the always-derived
- * `storage.forcePathStyle` are intentionally absent, so they are not selectable in a
- * `parseEnv(config, keys)` filter. Keep in sync with {@link EnvKeyToProp}.
+ * {@link NEON_ENV_VAR_KEYS} (`NEON_AI_GATEWAY_TOKEN`, …) are intentionally absent, so they
+ * are not selectable in a `parseEnv(config, keys)` filter. Keep in sync with
+ * {@link EnvKeyToProp}.
  */
 interface EnvKeysByNamespace {
 	postgres: "DATABASE_URL" | "DATABASE_URL_UNPOOLED";
@@ -614,7 +610,6 @@ export async function fetchEnv<const C extends Config>(
 				secretAccessKey: secrets.secretAccessKey,
 				endpoint: storage.s3Endpoint,
 				region: storage.region,
-				forcePathStyle: storage.forcePathStyle,
 			} satisfies NeonStorageEnv;
 		}
 		if (wantsAiGateway) {
@@ -976,12 +971,6 @@ function configWantsAiGateway(config: Config): boolean {
 	return isServiceEnabledInput(config.preview?.aiGateway);
 }
 
-/** Parse the `NEON_STORAGE_FORCE_PATH_STYLE` env string into a boolean (defaults to `true`). */
-function parseForcePathStyle(value: string | undefined): boolean {
-	if (value === undefined) return true;
-	return value.trim().toLowerCase() !== "false";
-}
-
 /** Static-toggle helper mirroring `config`'s `isServiceEnabled` for the env reader. */
 function isServiceEnabledInput(
 	toggle: ServiceToggleInput | undefined,
@@ -1126,9 +1115,6 @@ export function parseEnv(
 				secretAccessKey: storage.data.AWS_SECRET_ACCESS_KEY,
 				endpoint: storage.data.AWS_ENDPOINT_URL_S3,
 				region: storage.data.AWS_REGION,
-				forcePathStyle: parseForcePathStyle(
-					source.NEON_STORAGE_FORCE_PATH_STYLE,
-				),
 			} satisfies NeonStorageEnv;
 		} else {
 			for (const issue of storage.error.issues)
@@ -1202,7 +1188,7 @@ export function parseEnv(
  * Runtime reverse map for filtered `parseEnv`: OS-level env-var key → `[namespace, property]`
  * in the {@link NeonEnv} shape. The compile-time mirror is {@link EnvKeysByNamespace} /
  * {@link EnvKeyToProp}; keep all three in sync. Only input vars appear (no output-only
- * aliases, no derived `forcePathStyle`).
+ * aliases).
  */
 const FILTERABLE_ENV_KEYS: Record<string, readonly [string, string]> = {
 	DATABASE_URL: ["postgres", "databaseUrl"],
@@ -1308,7 +1294,6 @@ export function toEntries(env: NeonEnv<Config>): Record<string, string> {
 		out[keys.secretAccessKey] = s.secretAccessKey;
 		out[keys.endpoint] = s.endpoint;
 		out[keys.region] = s.region;
-		out[keys.forcePathStyle] = String(s.forcePathStyle);
 	}
 	const withAiGateway = env as { aiGateway?: NeonAiGatewayEnv };
 	if (withAiGateway.aiGateway) {

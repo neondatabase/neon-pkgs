@@ -51,13 +51,12 @@ const INPUT_ENV_KEYS = [
 
 /**
  * Env-vars `toEntries` emits but `parseEnv` never reads back: the branch name (optional), the
- * derived storage flag, the Neon-specific region alias, and the AI-gateway aliases. Listed so
- * the completeness check below can prove every *other* env-var in `NEON_ENV_VAR_KEYS` is a
- * covered input — i.e. adding a new input var without a test fails loudly.
+ * Neon-specific region alias, and the AI-gateway aliases. Listed so the completeness check
+ * below can prove every *other* env-var in `NEON_ENV_VAR_KEYS` is a covered input — i.e.
+ * adding a new input var without a test fails loudly.
  */
 const OUTPUT_ONLY_ENV_VARS: ReadonlySet<string> = new Set([
 	"NEON_BRANCH",
-	"NEON_STORAGE_FORCE_PATH_STYLE",
 	"NEON_AI_GATEWAY_TOKEN",
 	"NEON_AI_GATEWAY_BASE_URL",
 ]);
@@ -101,7 +100,6 @@ describe("NEON_ENV_VAR_KEYS (public OS env-var names)", () => {
 			  "storage": {
 			    "accessKeyId": "AWS_ACCESS_KEY_ID",
 			    "endpoint": "AWS_ENDPOINT_URL_S3",
-			    "forcePathStyle": "NEON_STORAGE_FORCE_PATH_STYLE",
 			    "region": "AWS_REGION",
 			    "secretAccessKey": "AWS_SECRET_ACCESS_KEY",
 			  },
@@ -177,7 +175,6 @@ describe("toEntries → parseEnv round-trip (cross-process transport)", () => {
 				secretAccessKey: "s".repeat(64),
 				endpoint: "https://br.storage.neon.build",
 				region: "us-east-2",
-				forcePathStyle: true,
 			},
 			aiGateway: {
 				apiKey: "nt_live_abc_def",
