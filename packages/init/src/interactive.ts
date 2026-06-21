@@ -23,6 +23,7 @@ import {
 	FALLBACK_TEMPLATES,
 	fetchTemplates,
 	type NeonFeature,
+	scaffoldTemplate,
 } from "./lib/bootstrap.js";
 import { detectAgent, detectIde } from "./lib/detect-agent.js";
 import { detectAvailableEditors } from "./lib/editors.js";
@@ -182,22 +183,9 @@ async function interactiveInitInner(
 					`Scaffolding project from template "${selectedTemplate.title}"...`,
 				);
 				try {
-					// Pin @latest (and -y) so a stale globally-installed neonctl
-					// can't be picked up by npx — bootstrap's rate-limit fix lives
-					// in recent neonctl.
-					await execa(
-						"npx",
-						[
-							"-y",
-							"neonctl@latest",
-							"bootstrap",
-							".",
-							"--template",
-							selectedTemplate.id,
-							"--force",
-						],
-						{ stdio: "pipe", timeout: 120000 },
-					);
+					await scaffoldTemplate(selectedTemplate, ".", {
+						onWarn: (message) => log.warn(message),
+					});
 					bootstrapS.stop(
 						dim(
 							`Scaffolded project from "${selectedTemplate.title}" ✓`,

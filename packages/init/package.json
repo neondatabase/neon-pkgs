@@ -26,6 +26,10 @@
 		".": {
 			"import": "./dist/index.js",
 			"types": "./dist/index.d.ts"
+		},
+		"./bootstrap": {
+			"import": "./dist/lib/bootstrap.js",
+			"types": "./dist/lib/bootstrap.d.ts"
 		}
 	},
 	"files": [
@@ -54,6 +58,7 @@
 		"@clack/prompts": "0.10.1",
 		"add-mcp": "^1.5.1",
 		"execa": "^9.5.2",
+		"fflate": "^0.8.3",
 		"picocolors": "^1.1.1",
 		"yaml": "^2.9.0",
 		"yargs": "^18.0.0",

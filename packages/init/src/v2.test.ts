@@ -45,6 +45,9 @@ vi.mock("./lib/bootstrap.js", () => {
 	return {
 		fetchTemplates: vi.fn().mockResolvedValue(templates),
 		FALLBACK_TEMPLATES: templates,
+		findTemplate: (ts: typeof templates, id: string) =>
+			ts.find((t) => t.id === id),
+		scaffoldTemplate: vi.fn().mockResolvedValue(1),
 	};
 });
 

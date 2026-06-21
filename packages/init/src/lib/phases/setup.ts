@@ -6,7 +6,9 @@ import { resolveAddMcpAgentId } from "../agents.js";
 import {
 	FALLBACK_TEMPLATES,
 	fetchTemplates,
+	findTemplate,
 	type NeonFeature,
+	scaffoldTemplate,
 } from "../bootstrap.js";
 import {
 	detectIde,
@@ -627,22 +629,14 @@ async function executeBatchedInstallation(
 	// Step 0: Bootstrap project from template if specified
 	if (isBootstrap && options.template) {
 		try {
-			// Pin @latest (and -y) so a stale globally-installed neonctl can't be
-			// picked up by npx — bootstrap's rate-limit fix lives in recent
-			// neonctl, and this runs before ensureNeonctl() updates the global.
-			await execa(
-				"npx",
-				[
-					"-y",
-					"neonctl@latest",
-					"bootstrap",
-					".",
-					"--template",
-					options.template,
-					"--force",
-				],
-				{ stdio: "pipe", timeout: 120000 },
-			);
+			const templates = await fetchTemplates();
+			const template =
+				findTemplate(templates, options.template) ??
+				findTemplate(FALLBACK_TEMPLATES, options.template);
+			if (!template) {
+				throw new Error(`Unknown template "${options.template}".`);
+			}
+			await scaffoldTemplate(template, ".");
 			results.push({
 				id: "bootstrap",
 				description: `Scaffolded project from template "${options.template}"`,
