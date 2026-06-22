@@ -13,6 +13,6 @@
 | `@neondatabase/ai-sdk-provider`| Community [Vercel AI SDK](https://ai-sdk.dev) provider for the Neon AI Gateway.                                       |
 | `@neondatabase/functions`      | Runtime helpers for Neon Functions (e.g. a `waitUntil` primitive for deferring work past a response).                |
 
-Each package's own `README` is the source of truth for its status — deprecated packages carry a deprecation banner at the top of theirs. A few renamed packages are still published as deprecated aliases (`get-db` / `neondb` → `neon-new`; `vite-plugin-db` / `@neondatabase/vite-plugin-postgres` → `vite-plugin-neon-new`); they re-export the new package and print a deprecation warning.
+A few renamed packages are still published as deprecated aliases (`get-db` / `neondb` → `neon-new`; `vite-plugin-db` / `@neondatabase/vite-plugin-postgres` → `vite-plugin-neon-new`); they re-export the new package and print a deprecation warning.
 
 Every package under this repository is licensed under **Apache-2.0**.
