@@ -8,6 +8,10 @@
 
   `@neondatabase/env/v1`, `@neondatabase/functions/v1`, and `@neondatabase/ai-sdk-provider/v1` are no longer published. Use the package root (`@neondatabase/env`, `@neondatabase/functions`, `@neondatabase/ai-sdk-provider`), which already exposed the full surface. Versioned subpath exports remain only on `@neondatabase/config` and `@neondatabase/config-runtime`, where pinning a policy-schema major is meaningful.
 
+- Widen the `@ai-sdk/*` dependencies from exact pins to caret ranges (`^`).
+
+  The exact pins (e.g. `@ai-sdk/provider-utils@4.0.27`) forced a second copy of `@ai-sdk/provider-utils` alongside the one a consumer's `ai@^6` resolves, and the duplicate module-local `Schema`/`Tool` symbols broke `neon.tools.imageGeneration()` against `streamText()`. Caret ranges let the provider's `@ai-sdk/*` dedupe with the consumer's `ai`, so consumers no longer need a `@ai-sdk/provider-utils` `overrides`/`resolutions` workaround.
+
 ## 0.4.0
 
 ### Minor Changes

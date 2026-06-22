@@ -161,19 +161,19 @@ importers:
   packages/ai-sdk-provider:
     dependencies:
       '@ai-sdk/anthropic':
-        specifier: 3.0.82
+        specifier: ^3.0.82
         version: 3.0.82(zod@4.4.3)
       '@ai-sdk/openai':
-        specifier: 3.0.69
+        specifier: ^3.0.69
         version: 3.0.69(zod@4.4.3)
       '@ai-sdk/openai-compatible':
-        specifier: 2.0.48
+        specifier: ^2.0.48
         version: 2.0.48(zod@4.4.3)
       '@ai-sdk/provider':
-        specifier: 3.0.10
+        specifier: ^3.0.10
         version: 3.0.10
       '@ai-sdk/provider-utils':
-        specifier: 4.0.27
+        specifier: ^4.0.27
         version: 4.0.27(zod@4.4.3)
     devDependencies:
       '@types/node':

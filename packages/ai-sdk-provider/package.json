@@ -63,11 +63,11 @@
 		"provenance": false
 	},
 	"dependencies": {
-		"@ai-sdk/anthropic": "3.0.82",
-		"@ai-sdk/openai": "3.0.69",
-		"@ai-sdk/openai-compatible": "2.0.48",
-		"@ai-sdk/provider": "3.0.10",
-		"@ai-sdk/provider-utils": "4.0.27"
+		"@ai-sdk/anthropic": "^3.0.82",
+		"@ai-sdk/openai": "^3.0.69",
+		"@ai-sdk/openai-compatible": "^2.0.48",
+		"@ai-sdk/provider": "^3.0.10",
+		"@ai-sdk/provider-utils": "^4.0.27"
 	},
 	"peerDependencies": {
 		"ai": "^6.0.0",
