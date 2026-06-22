@@ -1,5 +1,11 @@
 # @neondatabase/ai-sdk-provider
 
+## 0.4.0
+
+### Minor Changes
+
+- 9ac4b73: Upgrade `@neondatabase/ai-sdk-provider` to the AI SDK v6 provider specification (v3 language models). Requires `ai@^6`.
+
 ## 0.2.0
 
 ### Minor Changes

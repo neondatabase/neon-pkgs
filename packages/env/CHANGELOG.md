@@ -1,5 +1,17 @@
 # @neondatabase/env
 
+## 0.7.0
+
+### Minor Changes
+
+- fe5d092: Remove the `NEON_STORAGE_FORCE_PATH_STYLE` env var and the `storage.forcePathStyle` field from `NeonStorageEnv`.
+
+  It was always `true` and has no AWS-standard env name, so the S3 SDKs never read it automatically — you already had to wire `forcePathStyle` into your `S3Client` by hand. Neon's storage gateway always requires path-style addressing, so set `forcePathStyle: true` directly on your client. `env pull` no longer writes the variable, and `parseEnv` / `toEntries` no longer read or emit it. The raw `NeonBranchStorageSnapshot.forcePathStyle` from `@neondatabase/config` (the `GET .../storage` response) is unchanged.
+
+- 75abe16: Remove the `NEON_STORAGE_REGION` env var (the Neon-branded alias of `AWS_REGION`).
+
+  The region is already injected under the SDK-standard `AWS_REGION`, which the AWS S3 SDKs read automatically — the duplicate `NEON_STORAGE_REGION` alias was never read back by `parseEnv` and bought nothing. `env pull` no longer writes it and `toEntries` no longer emits it. `NeonStorageEnv.region` (mapped to `AWS_REGION`) is unchanged.
+
 ## 0.6.0
 
 ### Minor Changes

@@ -1,49 +1,30 @@
 # ⚠️ DEPRECATED: neondb
 
-**This package has been renamed to [`get-db`](https://www.npmjs.com/package/get-db).**
+> **This package is deprecated and no longer maintained.** It has been renamed to
+> [`neon-new`](https://www.npmjs.com/package/neon-new). It still works as an alias but prints a
+> deprecation warning at runtime — please migrate.
 
-## Migration Guide
+## Migration
 
-Please update your dependencies to use the new package name:
+Update your dependency:
 
-### CLI Usage
-
-**Before:**
-
-```bash
-npm install -g neondb
-neondb
+```diff
+- "neondb": "^0.x.x"
++ "neon-new": "^0.x.x"
 ```
 
-**After:**
+CLI usage:
 
-```bash
-npm install -g get-db
-get-db
+```diff
+- npx neondb
++ npx neon-new
 ```
 
-### Programmatic Usage
+Update your imports:
 
-**Before:**
-
-```javascript
-import { instantNeon } from "neondb/sdk";
+```diff
+- import { instantNeon } from "neondb/sdk";
++ import { instantNeon } from "neon-new/sdk";
 ```
 
-**After:**
-
-```javascript
-import { instantNeon } from "get-db/sdk";
-```
-
-### Vite Plugin
-
-The Vite plugin package (`@neondatabase/vite-plugin-postgres`) has been updated to use `get-db` internally. Make sure to update to the latest version.
-
-## Why the Rename?
-
-The package was renamed to `get-db` to better reflect its purpose and improve discoverability.
-
-## Support
-
-For issues, questions, or contributions, please visit the [get-db repository](https://github.com/neondatabase/neon-pkgs).
+For documentation, see the [`neon-new` README](https://github.com/neondatabase/neon-pkgs/tree/main/packages/neon-new).

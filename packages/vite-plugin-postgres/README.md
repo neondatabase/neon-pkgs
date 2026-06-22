@@ -1,55 +1,23 @@
 # ⚠️ DEPRECATED: @neondatabase/vite-plugin-postgres
 
-**This package has been renamed to [`vite-plugin-db`](https://www.npmjs.com/package/vite-plugin-db).**
+> **This package is deprecated and no longer maintained.** It has been renamed to
+> [`vite-plugin-neon-new`](https://www.npmjs.com/package/vite-plugin-neon-new). It still works as an
+> alias but prints a deprecation warning at runtime — please migrate.
 
-## Migration Guide
+## Migration
 
-Please update your dependencies to use the new package name:
+Update your dependency:
 
-### Installation
-
-**Before:**
-
-```bash
-npm install @neondatabase/vite-plugin-postgres
-# or
-pnpm add @neondatabase/vite-plugin-postgres
+```diff
+- "@neondatabase/vite-plugin-postgres": "^0.x.x"
++ "vite-plugin-neon-new": "^0.x.x"
 ```
 
-**After:**
+Update your imports:
 
-```bash
-npm install vite-plugin-db
-# or
-pnpm add vite-plugin-db
+```diff
+- import { postgres } from "@neondatabase/vite-plugin-postgres";
++ import { postgres } from "vite-plugin-neon-new";
 ```
 
-### Usage in vite.config.ts
-
-**Before:**
-
-```typescript
-import { postgres } from "@neondatabase/vite-plugin-postgres";
-
-export default defineConfig({
-	plugins: [postgres()],
-});
-```
-
-**After:**
-
-```typescript
-import { postgres } from "vite-plugin-db";
-
-export default defineConfig({
-	plugins: [postgres()],
-});
-```
-
-## Why the Rename?
-
-The package was renamed to `vite-plugin-db` to align with the CLI package rename from `neondb` to `get-db`, providing a more consistent and intuitive naming scheme.
-
-## Support
-
-For issues, questions, or contributions, please visit the [repository](https://github.com/neondatabase/neon-pkgs).
+For documentation, see the [`vite-plugin-neon-new` README](https://github.com/neondatabase/neon-pkgs/tree/main/packages/vite-plugin-neon-new).

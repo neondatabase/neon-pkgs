@@ -1,15 +1,19 @@
-# get-db (DEPRECATED)
+# ⚠️ DEPRECATED: get-db
 
-**This package has been renamed to [`neon-new`](https://www.npmjs.com/package/neon-new).**
+> **This package is deprecated and no longer maintained.** It has been renamed to
+> [`neon-new`](https://www.npmjs.com/package/neon-new). It still works as an alias but prints a
+> deprecation warning at runtime — please migrate.
 
-Please update your dependencies:
+## Migration
+
+Update your dependency:
 
 ```diff
 - "get-db": "^0.x.x"
 + "neon-new": "^0.x.x"
 ```
 
-And update your imports:
+Update your imports:
 
 ```diff
 - import { instantPostgres } from "get-db/sdk";
@@ -22,7 +26,5 @@ CLI usage:
 - npx get-db
 + npx neon-new
 ```
-
-This package will continue to work as an alias but will show deprecation warnings.
 
 For documentation, see the [`neon-new` README](https://github.com/neondatabase/neon-pkgs/tree/main/packages/neon-new).
