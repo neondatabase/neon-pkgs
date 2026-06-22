@@ -1,5 +1,13 @@
 # @neondatabase/env
 
+## 0.8.0
+
+### Minor Changes
+
+- Drop the `/v1` subpath export — import everything from the package root instead.
+
+  `@neondatabase/env/v1`, `@neondatabase/functions/v1`, and `@neondatabase/ai-sdk-provider/v1` are no longer published. Use the package root (`@neondatabase/env`, `@neondatabase/functions`, `@neondatabase/ai-sdk-provider`), which already exposed the full surface. Versioned subpath exports remain only on `@neondatabase/config` and `@neondatabase/config-runtime`, where pinning a policy-schema major is meaningful.
+
 ## 0.7.0
 
 ### Minor Changes

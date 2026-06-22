@@ -17,7 +17,7 @@ beforeEach(() => stubCleanNeonEnv());
 //      filter types. Adding a var to one and forgetting the others means `parseEnv` silently
 //      stops validating / returning it.
 //   3. The `toEntries` → `parseEnv` round-trip (the cross-process transport contract).
-//   4. The public value-export surface of `@neondatabase/env/v1`.
+//   4. The public value-export surface of `@neondatabase/env`.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -192,9 +192,9 @@ describe("toEntries → parseEnv round-trip (cross-process transport)", () => {
 	});
 });
 
-describe("@neondatabase/env/v1 public surface", () => {
+describe("@neondatabase/env public surface", () => {
 	test("value exports are stable (removing/renaming one is a breaking change)", async () => {
-		const surface = await import("../v1.js");
+		const surface = await import("../index.js");
 		expect(Object.keys(surface).sort()).toMatchInlineSnapshot(`
 			[
 			  "NEON_ENV_VAR_KEYS",
@@ -203,13 +203,5 @@ describe("@neondatabase/env/v1 public surface", () => {
 			  "toEntries",
 			]
 		`);
-	});
-
-	test("the default entry point re-exports exactly the v1 surface", async () => {
-		const [v1, index] = await Promise.all([
-			import("../v1.js"),
-			import("../index.js"),
-		]);
-		expect(Object.keys(index).sort()).toEqual(Object.keys(v1).sort());
 	});
 });

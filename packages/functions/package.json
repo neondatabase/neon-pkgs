@@ -1,6 +1,6 @@
 {
 	"name": "@neondatabase/functions",
-	"version": "0.2.0",
+	"version": "0.3.0",
 	"description": "Runtime helpers for Neon Functions. Currently provides a `waitUntil` primitive for deferring async work past a response.",
 	"keywords": [
 		"neon",
@@ -27,11 +27,6 @@
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js",
 			"default": "./dist/index.js"
-		},
-		"./v1": {
-			"types": "./dist/v1.d.ts",
-			"import": "./dist/v1.js",
-			"default": "./dist/v1.js"
 		}
 	},
 	"files": [

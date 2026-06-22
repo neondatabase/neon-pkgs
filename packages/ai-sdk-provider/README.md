@@ -24,7 +24,7 @@ NEON_AI_GATEWAY_TOKEN="nt_live_..."
 ## Usage
 
 ```ts
-import { neon } from "@neondatabase/ai-sdk-provider/v1";
+import { neon } from "@neondatabase/ai-sdk-provider";
 import { generateText } from "ai";
 
 // Reads NEON_AI_GATEWAY_BASE_URL + NEON_AI_GATEWAY_TOKEN from the environment.
@@ -37,7 +37,7 @@ const { text } = await generateText({
 Or configure explicitly with `createNeon`:
 
 ```ts
-import { createNeon } from "@neondatabase/ai-sdk-provider/v1";
+import { createNeon } from "@neondatabase/ai-sdk-provider";
 
 const neon = createNeon({
   baseURL: process.env.NEON_AI_GATEWAY_BASE_URL,
@@ -67,7 +67,7 @@ Available on OpenAI models via the Responses `image_generation` tool (there is n
 
 ```ts
 import { streamText } from "ai";
-import { neon } from "@neondatabase/ai-sdk-provider/v1";
+import { neon } from "@neondatabase/ai-sdk-provider";
 
 const result = streamText({
   model: neon("gpt-5-mini"),
@@ -99,7 +99,3 @@ pnpm test:e2e
 ```
 
 The matrix covers one models.dev `neon` model per family (Anthropic, OpenAI, Codex, Gemini, Meta) across `generateText`, `streamText`, `generateObject`, tool calling, and `neon.tools.imageGeneration`. Skipped when gateway env vars are absent.
-
-## Versioning
-
-Import from `@neondatabase/ai-sdk-provider/v1` to pin to a specific major. The default entry re-exports the latest stable version.

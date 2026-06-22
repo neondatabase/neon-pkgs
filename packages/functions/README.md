@@ -13,7 +13,7 @@ npm install @neondatabase/functions
 The API mirrors [`@vercel/functions`](https://vercel.com/docs/functions/functions-api-reference/vercel-functions-package): import `waitUntil` and call it directly with the promise you want to keep alive.
 
 ```ts
-import { waitUntil } from "@neondatabase/functions/v1";
+import { waitUntil } from "@neondatabase/functions";
 
 export default {
 	async fetch(req: Request): Promise<Response> {
@@ -42,7 +42,7 @@ To make `waitUntil` resolve to a given invocation, wrap the handler with
 code should not need it.
 
 ```ts
-import { runWithRequestContext } from "@neondatabase/functions/v1";
+import { runWithRequestContext } from "@neondatabase/functions";
 
 runWithRequestContext({ waitUntil: realWaitUntil }, () => handler(req));
 ```

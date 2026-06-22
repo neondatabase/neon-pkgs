@@ -18,7 +18,7 @@ The library functions are **filesystem- and env-agnostic**: `fetchEnv` requires 
 
 ```ts
 import config from "../neon";
-import { fetchEnv, parseEnv } from "@neondatabase/env/v1";
+import { fetchEnv, parseEnv } from "@neondatabase/env";
 
 // Async — calls the Neon API for live connection strings. Use in build scripts / top-level await.
 const env = await fetchEnv(config, { projectId: "patient-art-12345", branchId: "br-…" });

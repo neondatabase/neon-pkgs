@@ -1,6 +1,6 @@
 import { defineConfig } from "@neondatabase/config/v1";
 import { describe, expect } from "vitest";
-import { fetchEnv } from "../src/v1.js";
+import { fetchEnv } from "../src/index.js";
 import {
 	bootstrapProject,
 	DEFAULT_REGION,
