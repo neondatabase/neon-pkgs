@@ -1,16 +1,22 @@
 ---
 name: release
-description: Cut version bumps + changelogs for maintained packages in this monorepo. Detects which packages changed since their published npm version (git-vs-npm), reconciles against pending Changesets, runs `changeset version` to bump + cascade dependents, and opens a PR. This repo only produces version-bump commits — the actual npm publish happens externally (private mirror). Use when asked to "release", "cut a release", "bump versions", or "check what needs releasing".
+description: Cut version bumps + changelogs for maintained packages in this monorepo. Detects which packages changed since their published npm version (git-vs-npm), reconciles against pending Changesets, runs `changeset version` to bump + cascade dependents, and opens a PR. This repo only produces version-bump commits; the npm publish is then triggered manually from a separate Databricks releases repo. Use when asked to "release", "cut a release", "bump versions", or "check what needs releasing".
 ---
 
 # Release: version bumps + changelogs
 
 ## What a "release" means in this repo
 
-This repo does **not** publish to npm. Publishing happens from a **private mirror**
-(see `chore: disable npm provenance (published from a private mirror)`). Here a release
-is only a **version-bump + CHANGELOG commit on `main`**, landed via a PR. The mirror picks
-it up and publishes.
+This repo does **not** publish to npm from its own CI. A release is **two steps**:
+
+1. **Bump** — land a **version-bump + CHANGELOG commit on `main`** via a PR (the work this skill does).
+2. **Publish** — after that PR merges, **manually trigger** the npm publish workflow in the separate
+   Databricks releases repo (step 7):
+   <https://github.com/databricks/secure-public-registry-releases-eng/actions/workflows/neon-pkgs.yml>
+
+Nothing here publishes automatically — a merged bump just sits on `main` (and ahead of npm) until
+someone runs that workflow. Provenance is disabled because publishing runs from there, not from this
+repo (see `chore: disable npm provenance (published from a private mirror)`).
 
 Versioning is driven by **[Changesets](https://github.com/changesets/changesets)**
 (`.changeset/config.json`, per-package `CHANGELOG.md`). `AGENTS.md` mentions an automated
@@ -49,7 +55,7 @@ git log --oneline <npm-release-commit>..HEAD -- packages/<dir>
 ```
 
 A package **needs a release** if either:
-- `local version > npm version` (already bumped in `main`, not yet published — e.g. the mirror is behind), or
+- `local version > npm version` (already bumped in `main`, not yet published — e.g. the publish workflow hasn't been run yet), or
 - there are **source** commits to its folder after its last npm release.
 
 **Ignore packaging/CI-only commits** (e.g. `publishConfig.provenance` flips, lockfile-only,
@@ -93,15 +99,16 @@ pnpm lint:ci                    # biome checks formatting (incl. package.json) �
 
 ### 5. Report the release set + the publish backlog
 
-Remember this repo only produces the version bump — **nothing here pushes to npm; the external
-private mirror publishes on merge.** So report two distinct things, and say explicitly that the
-listed packages still need that external publish:
+Remember this repo only produces the version bump — **nothing here pushes to npm; the publish is a
+separate manual workflow trigger (step 7).** So report two distinct things, and say explicitly that
+the listed packages still need that external publish:
 
 1. **Bumped in this run** — `name: old → new` for each package `changeset version` touched (mark
-   which are dependent-cascade bumps). These get published once the mirror picks up the merge.
+   which are dependent-cascade bumps). These get published once the bump PR merges **and** the
+   publish workflow (step 7) runs.
 2. **Publish backlog** — every maintained package whose `main` version is now *ahead of* npm
    latest (`npm view <pkg> version`). This is what is actually awaiting publish: it includes the
-   packages bumped in this run **plus** any from earlier merges the mirror hasn't published yet
+   packages bumped in this run **plus** any from earlier merges not yet published
    (e.g. `main` at 0.4.0 while npm is at 0.1.1). Report it as `name: npm <published> → main <pending>`.
 
 Don't claim a package is "released" — at this stage it's *bumped and awaiting the external npm publish*.
@@ -117,7 +124,25 @@ gh pr create --title "chore: release pending changesets" --body "<summary>"
 ```
 
 The PR body should list the bumped packages and versions. Do **not** assign reviewers, request
-reviews, or post comments unless explicitly asked. The private-mirror CI publishes on merge.
+reviews, or post comments unless explicitly asked.
+
+### 7. Publish to npm (after the bump PR merges)
+
+The bump PR only lands versions on `main`. The actual npm publish is a **manual** GitHub Actions run
+in the Databricks releases repo — it is **not** triggered by merging here:
+
+<https://github.com/databricks/secure-public-registry-releases-eng/actions/workflows/neon-pkgs.yml>
+
+Trigger it once the bump is on `main`, via the **Run workflow** button in that UI, or:
+
+```bash
+gh workflow run neon-pkgs.yml --repo databricks/secure-public-registry-releases-eng
+```
+
+It publishes every maintained package whose `main` version is ahead of npm (the publish backlog from
+step 5), so it also clears any earlier un-published bumps. After the run succeeds, confirm with
+`npm view <pkg> version`. This requires access to that repo — if you don't have it, hand the publish
+backlog list to someone who does.
 
 ## Gotchas
 
