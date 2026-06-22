@@ -133,19 +133,33 @@ in the Databricks releases repo — it is **not** triggered by merging here:
 
 <https://github.com/databricks/secure-public-registry-releases-eng/actions/workflows/neon-pkgs.yml>
 
-Trigger it once the bump is on `main`, via the **Run workflow** button in that UI, or:
+Trigger it once the bump is on `main`, via the **Run workflow** button in that UI, or per package:
 
 ```bash
-gh workflow run neon-pkgs.yml --repo databricks/secure-public-registry-releases-eng
+gh workflow run neon-pkgs.yml --repo databricks/secure-public-registry-releases-eng \
+  -f package=<package-name> -f ref=main
 ```
 
-It publishes every maintained package whose `main` version is ahead of npm (the publish backlog from
-step 5), so it also clears any earlier un-published bumps. After the run succeeds, confirm with
-`npm view <pkg> version`. This requires access to that repo — if you don't have it, hand the publish
-backlog list to someone who does.
+> ⚠️ **`-f package=` is mandatory and the workflow input defaults to `dry-run`.** The workflow
+> publishes **exactly the one package** you select — there is **no "publish everything ahead of
+> npm" mode**. Dispatching with no `-f package=` (or `package=dry-run`) runs a smoke-test that
+> **publishes nothing**: the run still goes green and shows a "Publish …" step (that's
+> `npm publish --dry-run`), so it *looks* successful while npm stays on the old version. So for a
+> multi-package release, **dispatch this once per bumped package** (e.g. `@neondatabase/env`, then
+> `@neondatabase/functions`, then `@neondatabase/ai-sdk-provider`). Valid `package` values are the
+> choices in the workflow's `workflow_dispatch` input (each maintained package, plus `dry-run`).
+
+After each run succeeds, confirm with `npm view <pkg> version` — if it still shows the old version,
+you ran a dry-run (missing/`dry-run` `package` input); re-dispatch with the real `-f package=<name>`.
+This requires access to that repo — if you don't have it, hand the publish backlog list to someone
+who does.
 
 ## Gotchas
 
+- **The publish workflow defaults to `dry-run` and publishes ONE package per run.** Always pass
+  `-f package=<name>` (and `-f ref=main`), once per bumped package. A `dry-run` (or input-less)
+  dispatch goes green and prints a "Publish …" step but lands nothing on npm — verify with
+  `npm view <pkg> version`, not the green check.
 - **CHANGELOG version gaps** can happen when a prior PR bumped `package.json` directly without a
   changeset (e.g. `ai-sdk-provider` jumped 0.2.0 → 0.4.0 in the log, skipping 0.3.0). Surface it;
   don't try to backfill.
