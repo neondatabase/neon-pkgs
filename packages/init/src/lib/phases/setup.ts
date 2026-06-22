@@ -130,7 +130,12 @@ export async function handleSetupPhase(
 }
 
 function buildTemplatePreference(
-	templates: { id: string; title: string; description: string }[],
+	templates: {
+		id: string;
+		title: string;
+		description: string;
+		tools?: string[];
+	}[],
 ) {
 	return [
 		{
@@ -139,10 +144,16 @@ function buildTemplatePreference(
 				"No application was detected in this directory. Would you like to scaffold a new project from a template?",
 			phase: "before_checks" as const,
 			options: [
-				...templates.map((t) => ({
-					value: t.id,
-					label: `${t.title} — ${t.description}`,
-				})),
+				...templates.map((t) => {
+					const tools =
+						t.tools && t.tools.length > 0
+							? ` (${t.tools.join(", ")})`
+							: "";
+					return {
+						value: t.id,
+						label: `${t.title}${tools} — ${t.description}`,
+					};
+				}),
 				{
 					value: "none",
 					label: "No thanks — continue without scaffolding",

@@ -5,6 +5,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { SelectPrompt } from "@clack/core";
 import {
 	confirm,
 	isCancel,
@@ -15,7 +16,7 @@ import {
 	spinner,
 } from "@clack/prompts";
 import { execa } from "execa";
-import { bold, dim } from "yoctocolors";
+import { bold, dim, gray, italic } from "yoctocolors";
 import { ALL_CONFIGURABLE_AGENTS, getAddMcpAgentId } from "./lib/agents.js";
 import { ensureNeonctlAuth, isAuthenticated } from "./lib/auth.js";
 import {
@@ -78,6 +79,107 @@ function patchClackColors(): () => void {
 		pc.cyan = originalCyan;
 		pc.magenta = originalMagenta;
 	};
+}
+
+// clack box-drawing glyphs, mirrored from @clack/prompts so our custom
+// template picker lines up with every other step in the flow.
+const S_BAR = "│";
+const S_BAR_END = "└";
+const S_STEP_ACTIVE = "◆";
+const S_STEP_SUBMIT = "◇";
+const S_STEP_CANCEL = "■";
+const S_RADIO_ACTIVE = "●";
+const S_RADIO_INACTIVE = "○";
+
+interface TemplateOption {
+	value: string;
+	label: string;
+	tools?: string[];
+	description?: string;
+}
+
+const SENTINEL_NONE = "none";
+
+/**
+ * Bespoke template picker built on @clack/core's `SelectPrompt`.
+ *
+ * The stock `@clack/prompts` `select` can only render an option on a single
+ * line (title + a parenthesized hint on the focused row), which can't express
+ * what we want here: a clean title-only list, and a focused row that expands to
+ * `Title (tools)` with the description on its own italic line beneath. Driving
+ * the core prompt directly lets us own the frame, so we emit a second
+ * gutter-aligned line for the active option only.
+ */
+async function selectTemplate(
+	templates: BootstrapTemplate[],
+	message: string,
+): Promise<string | symbol> {
+	const options: TemplateOption[] = [
+		...templates.map((t) => ({
+			value: t.id,
+			label: t.title,
+			tools: t.tools,
+			description: t.description,
+		})),
+		{
+			value: SENTINEL_NONE,
+			label: "No thanks — continue without scaffolding",
+		},
+	];
+
+	const green = neonGreenFn;
+	// Title sits at column 6 ("│  ● "), so wrapped description lines indent four
+	// spaces past the gutter to line up under it.
+	const descIndent = "    ";
+	const descWidth = Math.max(24, (process.stdout.columns || 80) - 8);
+
+	const renderActive = (option: TemplateOption): string => {
+		const tools =
+			option.tools && option.tools.length > 0
+				? ` ${dim(`(${option.tools.join(", ")})`)}`
+				: "";
+		const head = `${green(S_RADIO_ACTIVE)} ${option.label}${tools}`;
+		if (!option.description) return head;
+		const body = wordWrap(option.description, descWidth)
+			.split("\n")
+			.map((line) => `${green(S_BAR)}${descIndent}${italic(dim(line))}`)
+			.join("\n");
+		return `${head}\n${body}`;
+	};
+
+	const prompt = new SelectPrompt<TemplateOption>({
+		options,
+		initialValue: options[0]?.value,
+		render() {
+			const active = this.options[this.cursor];
+			const heading = (symbol: string) =>
+				`${gray(S_BAR)}\n${symbol}  ${message}\n`;
+
+			if (this.state === "submit") {
+				return `${heading(green(S_STEP_SUBMIT))}${gray(S_BAR)}  ${dim(
+					active?.label ?? "",
+				)}`;
+			}
+			if (this.state === "cancel") {
+				return `${heading(green(S_STEP_CANCEL))}${gray(S_BAR)}  ${dim(
+					active?.label ?? "",
+				)}\n${gray(S_BAR)}`;
+			}
+
+			const body = this.options
+				.map((option) =>
+					option === active
+						? renderActive(option)
+						: `${dim(S_RADIO_INACTIVE)} ${dim(option.label)}`,
+				)
+				.join(`\n${green(S_BAR)}  `);
+			return `${heading(green(S_STEP_ACTIVE))}${green(S_BAR)}  ${body}\n${green(
+				S_BAR_END,
+			)}\n`;
+		},
+	});
+
+	return prompt.prompt();
 }
 
 export interface InteractiveInitOptions {
@@ -153,22 +255,10 @@ async function interactiveInitInner(
 			if (fetched && fetched.length > 0) templates = fetched;
 		} catch {}
 
-		const templateResult = await select({
-			message:
-				"No application detected. Would you like to scaffold a new project from a template?",
-			options: [
-				...templates.map((t) => ({
-					value: t.id,
-					label: t.title,
-					hint: t.description,
-				})),
-				{
-					value: "none",
-					label: "No thanks — continue without scaffolding",
-				},
-			],
-			initialValue: templates[0]?.id ?? "none",
-		});
+		const templateResult = await selectTemplate(
+			templates,
+			"No application detected. Would you like to scaffold a new project from a template?",
+		);
 		if (isCancel(templateResult)) {
 			outro("Setup cancelled.");
 			return;

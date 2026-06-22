@@ -284,11 +284,14 @@ describe("parseManifest", () => {
 		});
 	});
 
-	test("parses both the requires and the optional services lists", () => {
+	test("parses the tools, services, and requires lists", () => {
 		const yaml = `templates:
   - id: hono
     title: Hono API
     description: A Hono template.
+    tools:
+      - Hono
+      - Drizzle
     services:
       - Postgres
       - Functions
@@ -302,8 +305,41 @@ describe("parseManifest", () => {
       subdir: with-hono
 `;
 		const t = parseManifest(yaml)[0];
+		expect(t.tools).toEqual(["Hono", "Drizzle"]);
 		expect(t.services).toEqual(["Postgres", "Functions"]);
 		expect(t.requires).toEqual(["database", "functions"]);
+	});
+
+	test("drops non-string and blank tool entries, omitting when empty", () => {
+		const withTools = `templates:
+  - id: hono
+    title: Hono API
+    description: A Hono template.
+    tools:
+      - Hono
+      - ""
+      - 42
+      - Drizzle
+    source:
+      owner: neondatabase
+      repo: examples
+      ref: main
+      subdir: with-hono
+`;
+		expect(parseManifest(withTools)[0].tools).toEqual(["Hono", "Drizzle"]);
+
+		const badTools = `templates:
+  - id: hono
+    title: Hono API
+    description: A Hono template.
+    tools: nope
+    source:
+      owner: neondatabase
+      repo: examples
+      ref: main
+      subdir: with-hono
+`;
+		expect(parseManifest(badTools)[0]).not.toHaveProperty("tools");
 	});
 
 	test("defaults requires to ['database'] when not specified", () => {
@@ -408,11 +444,13 @@ describe("FALLBACK_TEMPLATES", () => {
 		]);
 	});
 
-	test("each template carries both services and requires", () => {
+	test("each template carries tools, services, and requires", () => {
 		for (const t of FALLBACK_TEMPLATES) {
 			expect(typeof t.id).toBe("string");
 			expect(typeof t.title).toBe("string");
 			expect(typeof t.description).toBe("string");
+			expect(Array.isArray(t.tools)).toBe(true);
+			expect((t.tools ?? []).length).toBeGreaterThan(0);
 			expect(Array.isArray(t.services)).toBe(true);
 			expect((t.services ?? []).length).toBeGreaterThan(0);
 			expect(Array.isArray(t.requires)).toBe(true);

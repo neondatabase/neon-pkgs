@@ -348,6 +348,9 @@ importers:
 
   packages/init:
     dependencies:
+      '@clack/core':
+        specifier: 0.4.2
+        version: 0.4.2
       '@clack/prompts':
         specifier: 0.10.1
         version: 0.10.1

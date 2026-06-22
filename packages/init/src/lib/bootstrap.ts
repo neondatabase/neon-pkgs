@@ -49,8 +49,15 @@ export interface BootstrapTemplate {
 	/** One-line description shown under the title in the selector. */
 	description: string;
 	/**
-	 * Neon services the template uses (e.g. "Postgres", "Functions"). Shown as a
-	 * badge next to the title in the picker. Optional — older manifests omit it.
+	 * Libraries/frameworks that shape the project (e.g. "Hono", "Drizzle").
+	 * Rendered next to the title in the picker so the row reads
+	 * "Title (tools)". Optional — older manifests omit it.
+	 */
+	tools?: string[];
+	/**
+	 * Neon services the template uses (e.g. "Postgres", "Functions"). Surfaced
+	 * alongside the description in the focused row's hint. Optional — older
+	 * manifests omit it.
 	 */
 	services?: string[];
 	/** Neon features this template needs (defaults to ["database"]). */
@@ -74,9 +81,10 @@ export interface BootstrapTemplate {
 export const FALLBACK_TEMPLATES: BootstrapTemplate[] = [
 	{
 		id: "hono",
-		title: "Hono API (Drizzle, Neon Postgres) on Neon Functions",
+		title: "REST API",
 		description:
-			"A Hono API using Drizzle ORM and Neon Postgres, ready to deploy as a Neon Function.",
+			"A Hono REST API on Neon Functions, backed by Neon Postgres via Drizzle.",
+		tools: ["Hono", "Drizzle"],
 		services: ["Postgres", "Functions"],
 		requires: ["database", "functions"],
 		source: {
@@ -88,9 +96,10 @@ export const FALLBACK_TEMPLATES: BootstrapTemplate[] = [
 	},
 	{
 		id: "ai-sdk",
-		title: "AI SDK agent (AI Gateway, object storage, Drizzle) on Neon Functions",
+		title: "Image-generation agent",
 		description:
-			"A Vercel AI SDK agent on Neon Functions: streams chat through the Neon AI Gateway, generates an image with OpenAI image generation, and stores it in Neon object storage indexed in Postgres via Drizzle.",
+			"A Vercel AI SDK agent that streams chat through the Neon AI Gateway and stores generated images in Neon object storage, indexed in Postgres via Drizzle.",
+		tools: ["AI SDK", "Drizzle"],
 		services: ["Postgres", "Functions", "Object Storage", "AI Gateway"],
 		requires: ["database", "functions", "object-storage", "ai-gateway"],
 		source: {
@@ -102,9 +111,10 @@ export const FALLBACK_TEMPLATES: BootstrapTemplate[] = [
 	},
 	{
 		id: "mastra",
-		title: "Mastra personal agent (AI Gateway, Mastra Memory) on Neon Functions",
+		title: "Personal-assistant agent",
 		description:
-			"A Mastra personal-assistant agent on Neon Functions: streams chat through the Neon AI Gateway and uses Mastra Memory — backed by Neon Postgres — to remember the user across conversation threads via resource-scoped working memory.",
+			"A Mastra agent that streams chat through the Neon AI Gateway and uses Mastra Memory on Neon Postgres to remember you across threads.",
+		tools: ["Mastra", "Mastra Memory"],
 		services: ["Postgres", "Functions", "AI Gateway"],
 		requires: ["database", "functions", "ai-gateway"],
 		source: {
@@ -160,18 +170,18 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null;
 
 /**
- * Normalize a manifest entry's `services` into a clean string list. Tolerant by
- * design: a missing or non-array value yields `undefined`, and non-string items
- * are dropped, so a malformed `services` never sinks an otherwise-valid
- * template (it just renders without its badge).
+ * Normalize a manifest entry's string list (`tools` or `services`) into a clean
+ * array. Tolerant by design: a missing or non-array value yields `undefined`,
+ * and non-string/blank items are dropped, so a malformed list never sinks an
+ * otherwise-valid template (it just renders without that detail).
  */
-const parseServices = (value: unknown): string[] | undefined => {
+const parseStringList = (value: unknown): string[] | undefined => {
 	if (!Array.isArray(value)) return undefined;
-	const services = value.filter(
+	const items = value.filter(
 		(item): item is string =>
 			typeof item === "string" && item.trim() !== "",
 	);
-	return services.length > 0 ? services : undefined;
+	return items.length > 0 ? items : undefined;
 };
 
 // ---------------------------------------------------------------------------
@@ -219,11 +229,13 @@ export function parseManifest(text: string): BootstrapTemplate[] {
 			item.requires.every((r: unknown) => typeof r === "string")
 				? (item.requires as NeonFeature[])
 				: DEFAULT_REQUIRES;
-		const services = parseServices(item.services);
+		const tools = parseStringList(item.tools);
+		const services = parseStringList(item.services);
 		templates.push({
 			id: item.id,
 			title: item.title,
 			description: item.description,
+			...(tools ? { tools } : {}),
 			...(services ? { services } : {}),
 			requires,
 			source: {
