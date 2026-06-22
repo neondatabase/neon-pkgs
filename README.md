@@ -1,18 +1,67 @@
-# Neon JavaScript Packages
+# Neon JavaScript/TypeScript packages
 
-[Neon](https://neon.com) open-source packages for the JavaScript/Typescript ecosystem.
+The monorepo for [Neon](https://neon.com)'s open-source JavaScript/TypeScript SDKs, libraries, CLIs, and framework plugins. Each folder under [`packages/`](./packages) is an independently versioned, separately published package; they share tooling (pnpm workspaces, Biome, tsdown, Vitest, Changesets) but ship on their own cadence.
 
-| Package Name                   | Description                                                                                                          |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| `neon-init`                    | Set up your project with Neon's MCP Server for AI-powered database operations.                                       |
-| `neon-new`                     | A CLI tool and SDK for creating claimable Neon databases instantly.                                                  |
-| `vite-plugin-neon-new`         | A Vite plugin that automatically provisions databases during development.                                            |
-| `@neondatabase/config`         | Config-as-Code for Neon: `defineConfig` types + the pure diff engine and Neon API adapter behind a `neon.ts` policy. |
-| `@neondatabase/config-runtime` | Runtime for `neon.ts` policies — `inspect` / `plan` / `apply` (push/pull) plus function bundling and deploy.         |
-| `@neondatabase/env`            | Resolve and inject a branch's Neon env (`fetchEnv` / `parseEnv`, `neon-env run`) from a `neon.ts` policy.            |
-| `@neondatabase/ai-sdk-provider`| Community [Vercel AI SDK](https://ai-sdk.dev) provider for the Neon AI Gateway.                                       |
-| `@neondatabase/functions`      | Runtime helpers for Neon Functions (e.g. a `waitUntil` primitive for deferring work past a response).                |
+If you're looking for a single package's docs, see its own `README.md` under `packages/<name>/`.
+
+## Packages
+
+### Provisioning & project setup
+
+| Package | Description |
+| --- | --- |
+| `neon-init` | Set up your project with Neon's MCP server for AI-powered database operations. |
+| `neon-new` | A CLI tool and SDK for creating claimable Neon databases instantly. |
+| `vite-plugin-neon-new` | A Vite plugin that automatically provisions databases during development. |
+
+### Config-as-Code (`neon.ts`)
+
+| Package | Description |
+| --- | --- |
+| `@neondatabase/config` | Config-as-Code for Neon: `defineConfig` types + the pure diff engine and Neon API adapter behind a `neon.ts` policy. |
+| `@neondatabase/config-runtime` | Runtime for `neon.ts` policies — `inspect` / `plan` / `apply` (push/pull) plus function bundling and deploy. |
+| `@neondatabase/env` | Resolve and inject a branch's Neon env (`fetchEnv` / `parseEnv`, `neon-env run`) from a `neon.ts` policy. |
+
+### Runtime & integrations
+
+| Package | Description |
+| --- | --- |
+| `@neondatabase/functions` | Runtime helpers for Neon Functions (e.g. a `waitUntil` primitive for deferring work past a response). |
+| `@neondatabase/ai-sdk-provider` | Community [Vercel AI SDK](https://ai-sdk.dev) provider for the Neon AI Gateway. |
 
 A few renamed packages are still published as deprecated aliases (`get-db` / `neondb` → `neon-new`; `vite-plugin-db` / `@neondatabase/vite-plugin-postgres` → `vite-plugin-neon-new`); they re-export the new package and print a deprecation warning.
 
-Every package under this repository is licensed under **Apache-2.0**.
+## Repository layout
+
+```
+packages/   # the published SDKs, libraries, CLIs, and plugins (one per folder)
+examples/   # runnable examples that consume the packages via the workspace
+```
+
+This is a [pnpm workspace](https://pnpm.io/workspaces). Internal dependencies are linked with `workspace:*`, so changes to one package are immediately visible to its dependents without republishing.
+
+## Development
+
+Requires Node.js >= 22 and [pnpm](https://pnpm.io). From the repo root:
+
+```bash
+pnpm install          # install all workspaces
+pnpm build            # build every package (tsc + tsdown)
+pnpm test:ci          # run the test suites (Vitest)
+pnpm lint:ci          # lint + format check (Biome)
+```
+
+Scope a command to a single package with a filter, e.g.:
+
+```bash
+pnpm --filter @neondatabase/env build
+pnpm --filter @neondatabase/env test:ci
+```
+
+## Releasing
+
+Versioning is driven by [Changesets](https://github.com/changesets/changesets). Add a changeset describing your change (`pnpm changeset`), and a maintainer applies the version bumps + changelogs (`pnpm changeset version`) on a release PR. Publishing to npm runs from a separate workflow once that PR lands on `main`.
+
+## License
+
+Every package in this repository is licensed under **Apache-2.0**.
