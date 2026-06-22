@@ -91,10 +91,20 @@ pnpm lint:ci                    # biome checks formatting (incl. package.json) �
 
 `workspace:*` deps mean `pnpm-lock.yaml` usually does not change. If it does, commit it too.
 
-### 5. List updated packages
+### 5. Report the release set + the publish backlog
 
-Report each bumped package as `name: old → new` (note which are dependent-cascade bumps), so
-the user sees the release set.
+Remember this repo only produces the version bump — **nothing here pushes to npm; the external
+private mirror publishes on merge.** So report two distinct things, and say explicitly that the
+listed packages still need that external publish:
+
+1. **Bumped in this run** — `name: old → new` for each package `changeset version` touched (mark
+   which are dependent-cascade bumps). These get published once the mirror picks up the merge.
+2. **Publish backlog** — every maintained package whose `main` version is now *ahead of* npm
+   latest (`npm view <pkg> version`). This is what is actually awaiting publish: it includes the
+   packages bumped in this run **plus** any from earlier merges the mirror hasn't published yet
+   (e.g. `main` at 0.4.0 while npm is at 0.1.1). Report it as `name: npm <published> → main <pending>`.
+
+Don't claim a package is "released" — at this stage it's *bumped and awaiting the external npm publish*.
 
 ### 6. Open the PR
 
