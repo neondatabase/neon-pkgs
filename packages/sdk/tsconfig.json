@@ -1,0 +1,8 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"module": "ESNext",
+		"moduleResolution": "Bundler"
+	},
+	"include": ["src", "vitest.config.ts", "tsdown.config.ts", "openapi-ts.config.ts"]
+}

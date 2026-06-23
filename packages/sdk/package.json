@@ -1,0 +1,71 @@
+{
+	"name": "@neondatabase/sdk",
+	"version": "0.0.0",
+	"description": "The official TypeScript SDK for the Neon API, generated from Neon's OpenAPI specification. A modern, fetch-based replacement for @neondatabase/api-client.",
+	"keywords": [
+		"neon",
+		"database",
+		"postgres",
+		"api",
+		"sdk",
+		"platform"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/neondatabase/neon-pkgs.git",
+		"directory": "packages/sdk"
+	},
+	"homepage": "https://github.com/neondatabase/neon-pkgs/tree/main/packages/sdk#readme",
+	"bugs": {
+		"url": "https://github.com/neondatabase/neon-pkgs/issues"
+	},
+	"license": "Apache-2.0",
+	"author": {
+		"name": "Neon",
+		"url": "https://neon.com"
+	},
+	"type": "module",
+	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		}
+	},
+	"files": [
+		"README.md",
+		"dist/",
+		"package.json"
+	],
+	"scripts": {
+		"build": "tsc --noEmit && tsdown",
+		"prepare": "npm run build",
+		"generate": "openapi-ts",
+		"spec:pull": "curl -fsSL https://neon.com/api_spec/release/v2.json -o spec/neon-openapi.json",
+		"test": "vitest --passWithNoTests",
+		"test:ci": "vitest run --passWithNoTests",
+		"test:e2e": "vitest run --config vitest.e2e.config.ts",
+		"tsc": "tsc"
+	},
+	"dependencies": {
+		"@hey-api/client-fetch": "0.13.1"
+	},
+	"devDependencies": {
+		"@hey-api/openapi-ts": "0.98.2",
+		"@types/node": "catalog:",
+		"@vitest/coverage-v8": "3.0.9",
+		"console-fail-test": "0.5.0",
+		"tsdown": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	},
+	"packageManager": "pnpm@10.4.0",
+	"engines": {
+		"node": ">=22"
+	},
+	"publishConfig": {
+		"provenance": false
+	}
+}

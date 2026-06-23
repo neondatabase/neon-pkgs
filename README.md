@@ -22,10 +22,11 @@ If you're looking for a single package's docs, see its own `README.md` under `pa
 | `@neondatabase/config-runtime` | Runtime for `neon.ts` policies — `inspect` / `plan` / `apply` (push/pull) plus function bundling and deploy. |
 | `@neondatabase/env` | Resolve and inject a branch's Neon env (`fetchEnv` / `parseEnv`, `neon-env run`) from a `neon.ts` policy. |
 
-### Runtime & integrations
+### API & integrations
 
 | Package | Description |
 | --- | --- |
+| `@neondatabase/sdk` | The official TypeScript SDK for the Neon API — a modern, Fetch-based client generated from Neon's OpenAPI spec (successor to `@neondatabase/api-client`). |
 | `@neondatabase/functions` | Runtime helpers for Neon Functions (e.g. a `waitUntil` primitive for deferring work past a response). |
 | `@neondatabase/ai-sdk-provider` | Community [Vercel AI SDK](https://ai-sdk.dev) provider for the Neon AI Gateway. |
 
