@@ -33,9 +33,10 @@ without branching. Passing a non-`Promise` throws a `TypeError`.
 ## Runtime integration
 
 The runtime carries the per-invocation context in an `AsyncLocalStorage` and publishes
-an accessor at `globalThis[NEON_FUNCTIONS_CONTEXT]` (a
-`Symbol.for("@neondatabase/functions/request-context")`) shaped like the providers used
-by Vercel and Next.js — a stable object exposing `get()`.
+it at `globalThis.NEON_REQUEST_CONTEXT` (the key exported as `NEON_REQUEST_CONTEXT_KEY`)
+as a getter that returns the live context object **directly** — `{ waitUntil }` during
+an invocation, `undefined` outside one. `waitUntil` reads that value straight off the
+key, so there is no `.get()` provider indirection.
 
 To make `waitUntil` resolve to a given invocation, wrap the handler with
 `runWithRequestContext`. This is intended for the Neon Functions runtime; application

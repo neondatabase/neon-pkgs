@@ -7,13 +7,13 @@
  * - `runWithRequestContext(context, fn)` — runtime entry point that binds a
  *   per-invocation context for the duration of `fn`. Used by the Neon Functions
  *   runtime; application code should not need it.
- * - `NEON_FUNCTIONS_CONTEXT` — the `globalThis` symbol under which the context
- *   provider is published.
+ * - `NEON_REQUEST_CONTEXT_KEY` — the `globalThis` key under which the runtime
+ *   publishes the current invocation context.
  */
 
 export type { NeonFunctionsContext, WaitUntil } from "./lib/wait-until.js";
 export {
-	NEON_FUNCTIONS_CONTEXT,
+	NEON_REQUEST_CONTEXT_KEY,
 	runWithRequestContext,
 	waitUntil,
 } from "./lib/wait-until.js";

@@ -1,8 +1,42 @@
 import { describe, expect, it } from "vitest";
 
-import { runWithRequestContext, waitUntil } from "./wait-until.js";
+import {
+	NEON_REQUEST_CONTEXT_KEY,
+	runWithRequestContext,
+	waitUntil,
+} from "./wait-until.js";
 
 describe("waitUntil", () => {
+	it("reads the context directly off globalThis[NEON_REQUEST_CONTEXT_KEY] (runtime shape)", () => {
+		// The runtime publishes the live context object DIRECTLY under this key (a
+		// getter returning `{ waitUntil }`), not a `.get()`-style provider. Simulate
+		// that and assert we forward to it.
+		const received: Promise<unknown>[] = [];
+		const promise = Promise.resolve();
+		const original = Object.getOwnPropertyDescriptor(
+			globalThis,
+			NEON_REQUEST_CONTEXT_KEY,
+		);
+		try {
+			Object.defineProperty(globalThis, NEON_REQUEST_CONTEXT_KEY, {
+				configurable: true,
+				get: () => ({
+					waitUntil: (p: Promise<unknown>) => received.push(p),
+				}),
+			});
+			waitUntil(promise);
+			expect(received).toEqual([promise]);
+		} finally {
+			if (original) {
+				Object.defineProperty(
+					globalThis,
+					NEON_REQUEST_CONTEXT_KEY,
+					original,
+				);
+			}
+		}
+	});
+
 	it("forwards the promise to the invocation context's waitUntil", () => {
 		const received: Promise<unknown>[] = [];
 		const promise = Promise.resolve("done");

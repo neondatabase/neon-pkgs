@@ -3,9 +3,9 @@
  * (logging, cache writes, analytics, …) can finish after the response has been sent.
  *
  * The public API mirrors Vercel's `@vercel/functions`: import `waitUntil` and call it
- * directly with a promise (`waitUntil(promise)`). Under the hood the per-invocation
- * context is carried by an `AsyncLocalStorage`, so concurrent invocations sharing the
- * same isolate never clobber each other's context.
+ * directly with a promise (`waitUntil(promise)`). The active invocation context is
+ * published by the runtime on `globalThis`, so it can be read without importing the
+ * runtime and stays correct under concurrency.
  */
 import { AsyncLocalStorage } from "node:async_hooks";
 
@@ -20,51 +20,42 @@ export type NeonFunctionsContext = {
 };
 
 /**
- * The accessor published on `globalThis` so consumers can read the current
- * invocation context without importing the runtime. Mirrors the provider shape
- * used by Vercel (`Symbol.for("@vercel/request-context")`) and Next.js
- * (`Symbol.for("@next/request-context")`): a stable object exposing `get()`.
+ * Well-known `globalThis` key under which the Neon Functions runtime publishes the
+ * current invocation context. The runtime installs it as a getter that returns the
+ * live context object DIRECTLY — `globalThis.NEON_REQUEST_CONTEXT` is `{ waitUntil }`
+ * during an invocation and `undefined` outside one — so it is read as the context
+ * itself, not via a `.get()`-style provider.
  */
-type RequestContextProvider = {
-	get(): NeonFunctionsContext | undefined;
-};
-
-/**
- * Well-known `globalThis` symbol under which the per-invocation context provider is
- * published. Mirrors the convention used by Vercel and Next.js.
- */
-export const NEON_FUNCTIONS_CONTEXT: unique symbol = Symbol.for(
-	"@neondatabase/functions/request-context",
-);
+export const NEON_REQUEST_CONTEXT_KEY = "NEON_REQUEST_CONTEXT";
 
 type GlobalWithContext = typeof globalThis & {
-	[NEON_FUNCTIONS_CONTEXT]?: RequestContextProvider;
+	[NEON_REQUEST_CONTEXT_KEY]?: NeonFunctionsContext;
 };
-
-/**
- * Holds the per-invocation context. Each `runWithRequestContext(...)` call binds a
- * fresh context for the duration of its callback (and any async work it spawns), so
- * `waitUntil` always resolves to the right invocation even under concurrency.
- */
-const requestContextStore = new AsyncLocalStorage<NeonFunctionsContext>();
 
 const globalWithContext: GlobalWithContext = globalThis;
 
 /**
- * Publish a stable provider whose `get()` reads the current store. Installed once;
- * if another copy of this module (or the host runtime) has already published a
- * provider, we leave it in place rather than clobber it.
+ * Backs `runWithRequestContext` for local dev and tests. When the runtime is present
+ * it has already published its own accessor under the same key, so we leave that in
+ * place and never publish over it.
  */
-globalWithContext[NEON_FUNCTIONS_CONTEXT] ??= {
-	get: () => requestContextStore.getStore(),
-};
+const requestContextStore = new AsyncLocalStorage<NeonFunctionsContext>();
+
+if (!(NEON_REQUEST_CONTEXT_KEY in globalWithContext)) {
+	Object.defineProperty(globalWithContext, NEON_REQUEST_CONTEXT_KEY, {
+		configurable: true,
+		get() {
+			return requestContextStore.getStore();
+		},
+	});
+}
 
 /**
- * Reads the current invocation context off the `globalThis` provider, falling back to
- * an empty context when no provider is published or no invocation is in scope.
+ * Reads the current invocation context off `globalThis.NEON_REQUEST_CONTEXT`, falling
+ * back to an empty context outside an invocation (local dev, tests, non-Neon hosts).
  */
 function getContext(): NeonFunctionsContext {
-	return globalWithContext[NEON_FUNCTIONS_CONTEXT]?.get?.() ?? {};
+	return globalWithContext[NEON_REQUEST_CONTEXT_KEY] ?? {};
 }
 
 function isPromise(value: unknown): value is Promise<unknown> {
@@ -82,7 +73,8 @@ function isPromise(value: unknown): value is Promise<unknown> {
  *
  * The context is resolved at call time from the enclosing invocation, so this stays
  * correct under concurrency. When no invocation context is in scope (local dev, tests,
- * non-Neon hosts), this is a no-op: the promise is accepted and ignored.
+ * non-Neon hosts), this is a no-op: the promise is accepted and ignored (it still runs
+ * on its own — the caller already started it — it just isn't tracked).
  */
 export function waitUntil(promise: Promise<unknown>): void {
 	if (!isPromise(promise)) {
