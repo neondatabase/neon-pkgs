@@ -1,5 +1,13 @@
 # @neondatabase/functions
 
+## 0.5.0
+
+### Minor Changes
+
+- Simplify the package to expose only `waitUntil`.
+
+  `waitUntil` now reads the runtime context straight off `globalThis.NEON_REQUEST_CONTEXT` with no internal `AsyncLocalStorage`. The unused `runWithRequestContext` export and the `NEON_REQUEST_CONTEXT_KEY` constant (plus the `NeonFunctionsContext`/`WaitUntil` type exports) are removed — the runtime publishes the context itself, so none of that surface was used. Behavior is unchanged: forwards to the runtime on-platform, no-op off-platform (matching `@vercel/functions`).
+
 ## 0.4.0
 
 ### Minor Changes
