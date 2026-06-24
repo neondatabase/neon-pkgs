@@ -1,4 +1,4 @@
-# @neondatabase/sdk
+# @neon/sdk
 
 The official TypeScript SDK for the [Neon API](https://api-docs.neon.tech/reference) — a modern, Fetch-based client generated from Neon's [OpenAPI specification](https://neon.com/api_spec/release/v2.json).
 
@@ -7,7 +7,7 @@ This is the successor to [`@neondatabase/api-client`](https://www.npmjs.com/pack
 ## Install
 
 ```bash
-npm install @neondatabase/sdk
+npm install @neon/sdk
 ```
 
 Requires Node.js >= 22 (or any runtime with a global `fetch`).
@@ -17,7 +17,7 @@ Requires Node.js >= 22 (or any runtime with a global `fetch`).
 Get an API key from the [Neon Console](https://console.neon.tech/app/settings#api-keys), then configure the default client and call any endpoint:
 
 ```ts
-import { client, listProjects } from "@neondatabase/sdk";
+import { client, listProjects } from "@neon/sdk";
 
 client.setConfig({
 	auth: () => process.env.NEON_API_KEY,
@@ -37,7 +37,7 @@ Each call returns `{ data, error, request, response }` by default — no `try/ca
 Path parameters, query parameters, and request bodies are fully typed per endpoint:
 
 ```ts
-import { createProject, getProject } from "@neondatabase/sdk";
+import { createProject, getProject } from "@neon/sdk";
 
 const created = await createProject({
 	body: { project: { name: "my-app", region_id: "aws-us-east-1" } },
@@ -55,7 +55,7 @@ configurations (different keys, base URLs, or a custom `fetch`), create your own
 and pass it per call:
 
 ```ts
-import { createClient, createConfig, listProjects } from "@neondatabase/sdk";
+import { createClient, createConfig, listProjects } from "@neon/sdk";
 
 const myClient = createClient(
 	createConfig({
@@ -80,9 +80,9 @@ This package re-exports the full generated surface from a single entry point:
 The client is generated from a vendored, pinned copy of the spec in [`spec/neon-openapi.json`](./spec/neon-openapi.json) using [`@hey-api/openapi-ts`](https://heyapi.dev).
 
 ```bash
-pnpm --filter @neondatabase/sdk spec:pull   # refresh the vendored spec from neon.com
-pnpm --filter @neondatabase/sdk generate     # regenerate src/client
-pnpm --filter @neondatabase/sdk build        # typecheck + bundle
+pnpm --filter @neon/sdk spec:pull   # refresh the vendored spec from neon.com
+pnpm --filter @neon/sdk generate     # regenerate src/client
+pnpm --filter @neon/sdk build        # typecheck + bundle
 ```
 
 ## License

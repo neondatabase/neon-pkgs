@@ -1,5 +1,5 @@
 /**
- * `@neondatabase/sdk` — the official TypeScript SDK for the Neon API.
+ * `@neon/sdk` — the official TypeScript SDK for the Neon API.
  *
  * Generated from Neon's OpenAPI specification with `@hey-api/openapi-ts` on top of
  * a Fetch-based client. This entry point re-exports the full generated surface:
@@ -12,7 +12,7 @@
  *
  * @example
  * ```ts
- * import { client, listProjects } from "@neondatabase/sdk";
+ * import { client, listProjects } from "@neon/sdk";
  *
  * client.setConfig({ auth: () => process.env.NEON_API_KEY });
  *
