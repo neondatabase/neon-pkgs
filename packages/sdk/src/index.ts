@@ -1,36 +1,43 @@
 /**
  * `@neon/sdk` — the official TypeScript SDK for the Neon API.
  *
- * Generated from Neon's OpenAPI specification with `@hey-api/openapi-ts` on top of
- * a Fetch-based client. This entry point re-exports the full generated surface:
+ * Two layers, one package:
  *
- * - every endpoint as a standalone, tree-shakeable function (`createProject`,
- *   `listProjects`, `createProjectBranch`, …);
- * - all request/response/error types (`Project`, `Branch`, `CreateProjectData`, …);
- * - the client primitives (`createClient`, `createConfig`) and the default `client`
- *   instance preconfigured for `https://console.neon.tech/api/v2`.
+ * - **`createNeonClient`** — the ergonomic client. Auth once, `{ data, error }` results
+ *   (or `throwOnError`), retries, readiness polling, auto-pagination, and typed errors,
+ *   organized into resource namespaces (`neon.projects.*`, `neon.operations.*`, …).
+ * - **`raw`** — the full generated 1:1 surface (every endpoint as a standalone,
+ *   tree-shakeable function + client primitives). Also at the `@neon/sdk/raw` subpath.
+ *
+ * All request/response/error types are re-exported flat for `import type { … }`.
  *
  * @example
  * ```ts
- * import { client, listProjects } from "@neon/sdk";
+ * import { createNeonClient } from "@neon/sdk";
  *
- * client.setConfig({ auth: () => process.env.NEON_API_KEY });
- *
- * const { data } = await listProjects();
- * console.log(data?.projects);
+ * const neon = createNeonClient({ apiKey: process.env.NEON_API_KEY! });
+ * const { data, error } = await neon.projects.list().all();
  * ```
  */
 
-// hey-api's generated entry only re-exports the endpoint functions and types, not
-// the client primitives. Surface them here so everything is reachable from the root.
-// (`ClientOptions` / `Options` are intentionally not re-exported here — the Neon API
-// spec defines its own types with those names, which the `export *` already provides.)
+export type { NeonClient } from "./neon/client.js";
+export { createNeonClient } from "./neon/client.js";
+export type { NeonConfig } from "./neon/config.js";
+export type { CallOptions } from "./neon/context.js";
 export {
-	type Client,
-	type Config,
-	type CreateClientConfig,
-	createClient,
-	createConfig,
-} from "./client/client/index.js";
-export { client } from "./client/client.gen.js";
-export * from "./client/index.js";
+	NeonApiError,
+	NeonAuthError,
+	NeonError,
+	type NeonErrorKind,
+	NeonNetworkError,
+	NeonNotFoundError,
+	NeonOperationError,
+	NeonRateLimitError,
+	NeonTimeoutError,
+} from "./neon/errors.js";
+export type { Page, Paginated } from "./neon/paginate.js";
+export type { NeonResult, Outcome } from "./neon/result.js";
+export type { WaitForOptions } from "./neon/wait.js";
+export type * from "./raw.js";
+// The raw 1:1 surface as a namespace, and all generated types flat.
+export * as raw from "./raw.js";

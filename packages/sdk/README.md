@@ -2,7 +2,15 @@
 
 The official TypeScript SDK for the [Neon API](https://api-docs.neon.tech/reference) — a modern, Fetch-based client generated from Neon's [OpenAPI specification](https://neon.com/api_spec/release/v2.json).
 
-This is the successor to [`@neondatabase/api-client`](https://www.npmjs.com/package/@neondatabase/api-client). It drops the `axios` dependency in favor of the platform `fetch`, so it runs unchanged on Node.js, Bun, Deno, edge runtimes, and the browser, and every endpoint is exposed as an individually importable, tree-shakeable function.
+This is the successor to [`@neondatabase/api-client`](https://www.npmjs.com/package/@neondatabase/api-client). It drops the `axios` dependency in favor of the platform `fetch`, so it runs unchanged on Node.js, Bun, Deno, edge runtimes, and the browser.
+
+It ships two layers in one package:
+
+- **`createNeonClient`** — an ergonomic client: authenticate once, get `{ data, error }`
+  results (or opt into throwing), automatic retries, readiness polling, auto-pagination,
+  and typed errors, organized into resource namespaces.
+- **`raw`** — the full generated 1:1 surface: every endpoint as a standalone,
+  tree-shakeable function. Also available at the `@neon/sdk/raw` subpath.
 
 ## Install
 
@@ -14,66 +22,81 @@ Requires Node.js >= 22 (or any runtime with a global `fetch`).
 
 ## Usage
 
-Get an API key from the [Neon Console](https://console.neon.tech/app/settings#api-keys), then configure the default client and call any endpoint:
+Get an API key from the [Neon Console](https://console.neon.tech/app/settings#api-keys), then create a client:
 
 ```ts
-import { client, listProjects } from "@neon/sdk";
+import { createNeonClient } from "@neon/sdk";
 
-client.setConfig({
-	auth: () => process.env.NEON_API_KEY,
-});
+const neon = createNeonClient({ apiKey: process.env.NEON_API_KEY! });
 
-const { data, error } = await listProjects();
+const { data, error } = await neon.projects.list().all();
 if (error) {
-	throw new Error(`Neon API error: ${JSON.stringify(error)}`);
+	// error is a typed NeonError union — switch on error.kind
+	throw error;
 }
-console.log(data.projects);
+console.log(data);
 ```
 
-Each call returns `{ data, error, request, response }` by default — no `try/catch` required for HTTP errors. Pass `throwOnError: true` (per call or on the client) if you prefer exceptions.
+Every method returns `{ data, error }` by default — no `try/catch` required. The `error`
+channel carries a typed `NeonError` (`NeonApiError`, `NeonNotFoundError`, …) you can branch
+on via `error.kind` or `instanceof`.
 
-### Per-call options
+### `throwOnError`
 
-Path parameters, query parameters, and request bodies are fully typed per endpoint:
+Prefer exceptions? Set it on the client (it **narrows the return types** to the bare
+resource) or per call:
 
 ```ts
-import { createProject, getProject } from "@neon/sdk";
+const neon = createNeonClient({ apiKey, throwOnError: true });
+const project = await neon.projects.get("late-frost-12345"); // Project, throws on error
 
-const created = await createProject({
-	body: { project: { name: "my-app", region_id: "aws-us-east-1" } },
-});
-
-const project = await getProject({
-	path: { project_id: created.data!.project.id },
-});
+// or per call, on a default client:
+const created = await neon.projects.create({ name: "my-app" }, { throwOnError: true });
 ```
 
-### Isolated clients
+### Readiness polling
 
-`client.setConfig` mutates a shared default client. To run multiple independent
-configurations (different keys, base URLs, or a custom `fetch`), create your own client
-and pass it per call:
+Neon mutations are asynchronous (they return provisioning `operations`). Set
+`waitForReadiness` to block until those finish, so the resource is usable when the call
+resolves:
 
 ```ts
-import { createClient, createConfig, listProjects } from "@neon/sdk";
+const neon = createNeonClient({ apiKey, waitForReadiness: true });
+const { data: project } = await neon.projects.create({ name: "my-app" }); // ready
+```
 
-const myClient = createClient(
-	createConfig({
-		auth: () => process.env.NEON_API_KEY,
-		baseUrl: "https://console.neon.tech/api/v2",
-	}),
-);
+The primitive is also exposed: `await neon.operations.waitFor(operations)`.
 
-const { data } = await listProjects({ client: myClient });
+### Pagination
+
+`list()` returns a lazy, cursor-paginated list:
+
+```ts
+const { data: all } = await neon.projects.list().all(); // every page
+for await (const project of neon.projects.list()) { /* stream, throws on error */ }
+```
+
+### Dropping to the raw layer
+
+Every endpoint is available 1:1 — reach it as a namespace or via the subpath, reusing the
+client's auth through `neon.client`:
+
+```ts
+import { raw } from "@neon/sdk";
+// or, for guaranteed tree-shaking: import { getProjectBranchSchema } from "@neon/sdk/raw";
+
+const { data } = await raw.getProjectBranchSchema({
+	client: neon.client,
+	path: { project_id, branch_id: "br-…" },
+});
 ```
 
 ## What's exported
 
-This package re-exports the full generated surface from a single entry point:
-
-- **Endpoint functions** — one per operation (`listProjects`, `createProject`, `createProjectBranch`, `getConnectionUri`, …).
-- **Types** — every request, response, and error shape (`Project`, `Branch`, `Endpoint`, `CreateProjectData`, …).
-- **Client primitives** — `createClient`, `createConfig`, and the preconfigured default `client` (base URL `https://console.neon.tech/api/v2`).
+- **`createNeonClient`** — the ergonomic client factory.
+- **`raw`** — namespace of every generated endpoint function + client primitives (also at `@neon/sdk/raw`).
+- **Error classes** — `NeonError`, `NeonApiError`, `NeonNotFoundError`, `NeonAuthError`, `NeonRateLimitError`, `NeonOperationError`, `NeonTimeoutError`, `NeonNetworkError`.
+- **Types** — every request/response/error shape, re-exported flat for `import type { … }`.
 
 ## Regenerating the client
 

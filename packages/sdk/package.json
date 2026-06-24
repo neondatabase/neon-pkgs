@@ -25,6 +25,7 @@
 		"url": "https://neon.com"
 	},
 	"type": "module",
+	"sideEffects": false,
 	"main": "dist/index.js",
 	"types": "dist/index.d.ts",
 	"exports": {
@@ -32,6 +33,11 @@
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js",
 			"default": "./dist/index.js"
+		},
+		"./raw": {
+			"types": "./dist/raw.d.ts",
+			"import": "./dist/raw.js",
+			"default": "./dist/raw.js"
 		}
 	},
 	"files": [
