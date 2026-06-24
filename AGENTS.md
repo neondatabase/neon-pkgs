@@ -67,6 +67,7 @@ pnpm --filter neon-new dry:run
 -   Builds with `tsdown` for bundling and `tsc --noEmit` for type-checking (see each package's `build` script)
 -   Package manager: pnpm@10.30.3, Node.js >=22
 -   **Dependency Installation**: Prefer `pnpm dedupe` over `pnpm install` - it deduplicates dependencies in node_modules, minimizing conflict issues and reducing filesystem space
+-   **Exception — `packages/cli`** (the Neon CLI): keeps its own upstream toolchain (`tsc` → `dist`, ESLint + Prettier, `@yao-pkg/pkg` binaries) rather than tsdown/Biome, so it is **excluded from root Biome** (`biome.json` `!packages/cli`). See "The CLI package" below.
 
 ### Per-package architecture
 
@@ -78,6 +79,17 @@ with `@neondatabase/config-runtime` (imperative `inspect`/`plan`/`apply` + funct
 `esbuild`, so import it from CLIs/CI, never from a `neon.ts` policy) and `@neondatabase/env` (resolve
 + inject a branch's env) both building on `config`; plus `neon-init`, `@neondatabase/ai-sdk-provider`,
 and `@neondatabase/functions`.
+
+### The CLI package (`packages/cli`)
+
+`packages/cli` is the **Neon CLI**, migrated from [`neondatabase/neonctl`](https://github.com/neondatabase/neonctl). It is published as **`neonctl`** today and is being rebranded to **`neon`** (with thin `neonctl`/`neoncli` packages that depend on it and forward to it). It is the one package that does **not** follow the repo's standard toolchain:
+
+-   **Build**: `pnpm --filter <name> build` runs swagger param generation (`generateOptionsFromSpec.ts` → `src/parameters.gen.ts`, a committed generated file), then `tsc -p tsconfig.build.json` to `dist/`, then copies `callback.html` into `dist/`. It compiles file-by-file with `tsc` (not bundled with tsdown) and **publishes from the package root** (`bin: dist/cli.js`, `files: ["dist", …]`). The param generator reads the OpenAPI spec from `node_modules/@neondatabase/api-client`, so it works offline after install.
+-   **Lint**: ESLint + Prettier (`eslint.config.js`, `.prettierrc.json`), not Biome — hence the root Biome exclusion. Run with `pnpm --filter <name> lint`.
+-   **Coverage**: needs `@vitest/coverage-v8` because the root CI runs `pnpm test:ci --coverage` (the flag is appended to every package's `test:ci`). Pin it to the package's `vitest` major.
+-   **Standalone binaries**: `pnpm --filter <name> bundle` (`node pkg.js`) Rollup-bundles `dist/cli.js` and cross-compiles `linux-x64`, `linux-arm64`, `macos-x64`, and `win-x64` via `@yao-pkg/pkg`; targets/assets are declared in the package's `pkg` block. `pkg.js` rewrites `bin` to the bundled entry, so it is name-agnostic (works as `neon` or `neonctl`).
+-   **Conformance tests** (`tests/psql-conformance`) need Docker/testcontainers and are excluded from the default Vitest run; run them explicitly with `pnpm --filter <name> test:conformance`.
+-   **Sibling deps**: `@neondatabase/*` + `neon-init` are currently pinned to published versions (not `workspace:*`); switching to `workspace:*` is a planned follow-up.
 
 ### Key Implementation Details
 
@@ -136,6 +148,20 @@ To cut one:
 
 The `release` Claude Code skill (`.claude/skills/release/`) automates this end to end,
 including a git-vs-npm check that flags packages which changed but lack a changeset.
+
+### Publishing the CLI (`packages/cli` + forwarders)
+
+The CLI publishes from this monorepo via the same external workflow as every other package
+(`databricks/secure-public-registry-releases-eng` → `neon-pkgs.yml`, dispatched per package with
+`-f package=<name>`). Two CLI-specific notes:
+
+- **Standalone binaries + GitHub release**: for the CLI package (the one with a `pkg` block), the
+  workflow also cross-compiles the `@yao-pkg/pkg` binaries and attaches them to a **GitHub release on
+  `neondatabase/neon-pkgs`** (tag `<name>@<version>`). The old standalone `neonctl` repo release
+  pipeline is retired.
+- **Forwarders**: `neonctl` and `neoncli` are thin packages that depend on `neon` (`workspace:*`);
+  publish them with the same workflow (`-f package=neonctl`, `-f package=neoncli`). They have no
+  binaries.
 
 ### Best Practices
 

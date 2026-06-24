@@ -1,5 +1,25 @@
 # @neondatabase/functions
 
+## 0.5.0
+
+### Minor Changes
+
+- Simplify the package to expose only `waitUntil`.
+
+  `waitUntil` now reads the runtime context straight off `globalThis.NEON_REQUEST_CONTEXT` with no internal `AsyncLocalStorage`. The unused `runWithRequestContext` export and the `NEON_REQUEST_CONTEXT_KEY` constant (plus the `NeonFunctionsContext`/`WaitUntil` type exports) are removed — the runtime publishes the context itself, so none of that surface was used. Behavior is unchanged: forwards to the runtime on-platform, no-op off-platform (matching `@vercel/functions`).
+
+## 0.4.0
+
+### Minor Changes
+
+- 75cf53a: Fix `waitUntil` so it actually picks up the runtime invocation context.
+
+  The package was looking for the context under a `Symbol.for("@neondatabase/functions/request-context")` key and expected a Vercel/Next-style provider object with a `.get()` method. The Neon Functions runtime instead publishes the context as a getter on the plain `globalThis.NEON_REQUEST_CONTEXT` key that returns the context object (`{ waitUntil }`) directly. Both the key and the shape were mismatched, so `getContext()` always returned `{}` and `waitUntil` silently no-op'd on-platform.
+
+  `waitUntil` now reads `globalThis.NEON_REQUEST_CONTEXT` directly (no `.get()` indirection). The off-platform no-op behavior is unchanged (matches `@vercel/functions`).
+
+  The exported `NEON_FUNCTIONS_CONTEXT` symbol is replaced by the `NEON_REQUEST_CONTEXT_KEY` string constant that reflects the real runtime key.
+
 ## 0.3.0
 
 ### Minor Changes

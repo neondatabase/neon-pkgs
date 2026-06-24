@@ -1,63 +1,46 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
-import { runWithRequestContext, waitUntil } from "./wait-until.js";
+import { waitUntil } from "./wait-until.js";
+
+afterEach(() => {
+	globalThis.NEON_REQUEST_CONTEXT = undefined;
+});
 
 describe("waitUntil", () => {
-	it("forwards the promise to the invocation context's waitUntil", () => {
+	it("forwards the promise to the runtime context's waitUntil", () => {
 		const received: Promise<unknown>[] = [];
+		globalThis.NEON_REQUEST_CONTEXT = {
+			waitUntil: (p) => received.push(p),
+		};
 		const promise = Promise.resolve("done");
 
-		runWithRequestContext({ waitUntil: (p) => received.push(p) }, () => {
-			waitUntil(promise);
-		});
+		waitUntil(promise);
 
 		expect(received).toEqual([promise]);
 	});
 
-	it("resolves the context at call time, including from nested async work", async () => {
+	it("reads the context at call time, so a later-published context is picked up", () => {
 		const received: Promise<unknown>[] = [];
 		const promise = Promise.resolve();
 
-		await runWithRequestContext(
-			{ waitUntil: (p) => received.push(p) },
-			async () => {
-				await Promise.resolve();
-				waitUntil(promise);
-			},
-		);
+		// No context published yet → no-op.
+		waitUntil(Promise.resolve());
+		expect(received).toEqual([]);
 
+		globalThis.NEON_REQUEST_CONTEXT = {
+			waitUntil: (p) => received.push(p),
+		};
+		waitUntil(promise);
 		expect(received).toEqual([promise]);
 	});
 
-	it("isolates context across concurrent invocations", async () => {
-		const a: Promise<unknown>[] = [];
-		const b: Promise<unknown>[] = [];
-		const pa = Promise.resolve("a");
-		const pb = Promise.resolve("b");
-
-		await Promise.all([
-			runWithRequestContext({ waitUntil: (p) => a.push(p) }, async () => {
-				await Promise.resolve();
-				waitUntil(pa);
-			}),
-			runWithRequestContext({ waitUntil: (p) => b.push(p) }, async () => {
-				await Promise.resolve();
-				waitUntil(pb);
-			}),
-		]);
-
-		expect(a).toEqual([pa]);
-		expect(b).toEqual([pb]);
-	});
-
-	it("is a no-op when no invocation context is in scope", () => {
+	it("is a no-op when no invocation context is published", () => {
 		expect(() => waitUntil(Promise.resolve())).not.toThrow();
 	});
 
 	it("is a no-op when the context exposes no waitUntil", () => {
-		runWithRequestContext({}, () => {
-			expect(() => waitUntil(Promise.resolve())).not.toThrow();
-		});
+		globalThis.NEON_REQUEST_CONTEXT = {};
+		expect(() => waitUntil(Promise.resolve())).not.toThrow();
 	});
 
 	it("throws a TypeError when called without a promise", () => {

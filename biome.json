@@ -6,7 +6,8 @@
 			"**/*.tsx",
 			"!**/routeTree.gen.ts",
 			"!packages/sdk/src/client",
-			"!examples"
+			"!examples",
+			"!packages/cli"
 		]
 	},
 	"vcs": {

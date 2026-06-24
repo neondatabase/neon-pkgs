@@ -1,0 +1,59 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ip-allow > Add IP allow - Error 1`] = `""`;
+
+exports[`ip-allow > Add IP allow - Protected 1`] = `
+"id: test
+name: test_project
+IP_addresses:
+  - 127.0.0.1
+  - 192.168.10.1-192.168.10.15
+  - 192.168.1.1
+protected_branches_only: true
+"
+`;
+
+exports[`ip-allow > Remove IP allow - Error 1`] = `""`;
+
+exports[`ip-allow > Remove IP allow 1`] = `
+"id: test
+name: test_project
+IP_addresses: []
+protected_branches_only: false
+"
+`;
+
+exports[`ip-allow > Reset IP allow 1`] = `
+"id: test
+name: test_project
+IP_addresses: []
+protected_branches_only: false
+"
+`;
+
+exports[`ip-allow > Reset IP allow to new list 1`] = `
+"id: test
+name: test_project
+IP_addresses:
+  - 192.168.2.2
+protected_branches_only: false
+"
+`;
+
+exports[`ip-allow > list IP Allow with single-project 1`] = `
+"id: test-project-123456
+name: test-project-123456
+IP_addresses:
+  - 192.168.1.1
+protected_branches_only: false
+"
+`;
+
+exports[`ip-allow > list IP allow 1`] = `
+"id: test
+name: test_project
+IP_addresses:
+  - 192.168.1.1
+protected_branches_only: false
+"
+`;

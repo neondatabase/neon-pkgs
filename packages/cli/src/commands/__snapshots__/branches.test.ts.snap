@@ -1,0 +1,396 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`branches > add compute 1`] = `
+"id: test_endpoint_id
+branch_id: br-sunny-branch-123456
+created_at: 2019-01-01T00:00:00Z
+type: read_only
+"
+`;
+
+exports[`branches > add compute with a name 1`] = `
+"id: test_endpoint_id
+branch_id: br-numbered-branch-123456
+created_at: 2019-01-01T00:00:00Z
+type: read_only
+"
+`;
+
+exports[`branches > add compute with autoscaled CU 1`] = `
+"id: test_endpoint_id
+branch_id: br-numbered-branch-123456
+created_at: 2019-01-01T00:00:00Z
+type: read_only
+"
+`;
+
+exports[`branches > add compute with fixed size CU 1`] = `
+"id: test_endpoint_id
+branch_id: br-numbered-branch-123456
+created_at: 2019-01-01T00:00:00Z
+type: read_only
+"
+`;
+
+exports[`branches > create branch and connect with psql 1`] = `
+"branch:
+  id: br-new-branch-123456
+  name: test_branch
+  created_at: 2021-01-01T00:00:00.000Z
+endpoints:
+  - id: ep-undefined-123456
+    type: read_write
+    created_at: 2021-01-01T00:00:00.000Z
+    host: undefined.example.com
+connection_uris:
+  - connection_uri: postgres://ep-undefined-123456.example.com:5432/test_project
+{"psql-cli-args":["postgres://ep-undefined-123456.example.com:5432/test_project"]}"
+`;
+
+exports[`branches > create branch and connect with psql and psql args 1`] = `
+"branch:
+  id: br-new-branch-123456
+  name: test_branch
+  created_at: 2021-01-01T00:00:00.000Z
+endpoints:
+  - id: ep-undefined-123456
+    type: read_write
+    created_at: 2021-01-01T00:00:00.000Z
+    host: undefined.example.com
+connection_uris:
+  - connection_uri: postgres://ep-undefined-123456.example.com:5432/test_project
+{"psql-cli-args":["postgres://ep-undefined-123456.example.com:5432/test_project","-c","SELECT 1"]}"
+`;
+
+exports[`branches > create by default with r/w endpoint 1`] = `
+"branch:
+  id: br-new-branch-123456
+  name: test_branch
+  created_at: 2021-01-01T00:00:00.000Z
+endpoints:
+  - id: ep-undefined-123456
+    type: read_write
+    created_at: 2021-01-01T00:00:00.000Z
+    host: undefined.example.com
+connection_uris:
+  - connection_uri: postgres://ep-undefined-123456.example.com:5432/test_project
+"
+`;
+
+exports[`branches > create schema-only branch 1`] = `
+"branch:
+  id: br-new-branch-123456
+  name: test_branch
+  created_at: 2021-01-01T00:00:00.000Z
+endpoints:
+  - id: ep-undefined-123456
+    type: read_write
+    created_at: 2021-01-01T00:00:00.000Z
+    host: undefined.example.com
+connection_uris:
+  - connection_uri: postgres://ep-undefined-123456.example.com:5432/test_project
+"
+`;
+
+exports[`branches > create schema-only branch fails with read-only compute 1`] = `""`;
+
+exports[`branches > create schema-only branch fails without compute 1`] = `""`;
+
+exports[`branches > create with autoscaled CU 1`] = `
+"id: br-new-branch-123456
+name: test_branch_with_autoscaling
+parent_id: br-main-branch-123456
+created_at: 2021-01-01T00:00:00.000Z
+"
+`;
+
+exports[`branches > create with expiration date 1`] = `
+"branch:
+  id: br-new-branch-123456
+  name: test_branch
+  created_at: 2021-01-01T00:00:00.000Z
+endpoints:
+  - id: ep-undefined-123456
+    type: read_write
+    created_at: 2021-01-01T00:00:00.000Z
+    host: undefined.example.com
+connection_uris:
+  - connection_uri: postgres://ep-undefined-123456.example.com:5432/test_project
+"
+`;
+
+exports[`branches > create with fixed size CU 1`] = `
+"id: br-new-branch-123456
+name: test_branch_with_fixed_cu
+parent_id: br-main-branch-123456
+created_at: 2021-01-01T00:00:00.000Z
+"
+`;
+
+exports[`branches > create with parent by lsn 1`] = `
+"id: br-new-branch-123456
+name: test_branch_with_parent_lsn
+parent_id: br-main-branch-123456
+created_at: 2021-01-01T00:00:00.000Z
+"
+`;
+
+exports[`branches > create with parent by name 1`] = `
+"id: br-new-branch-123456
+name: test_branch_with_parent_name
+parent_id: br-main-branch-123456
+created_at: 2021-01-01T00:00:00.000Z
+"
+`;
+
+exports[`branches > create with parent by timestamp 1`] = `
+"id: br-new-branch-123456
+name: test_branch_with_parent_timestamp
+parent_id: br-main-branch-123456
+created_at: 2021-01-01T00:00:00.000Z
+"
+`;
+
+exports[`branches > create with readonly endpoint 1`] = `
+"branch:
+  id: br-new-branch-123456
+  name: test_branch
+  created_at: 2021-01-01T00:00:00.000Z
+endpoints:
+  - id: ep-undefined-123456
+    type: read_only
+    created_at: 2021-01-01T00:00:00.000Z
+    host: undefined.example.com
+connection_uris:
+  - connection_uri: postgres://ep-undefined-123456.example.com:5432/test_project
+"
+`;
+
+exports[`branches > create with suspend timeout 1`] = `
+"id: br-new-branch-123456
+name: test_branch_with_suspend_timeout
+parent_id: br-main-branch-123456
+created_at: 2021-01-01T00:00:00.000Z
+suspend_timeout: 60
+"
+`;
+
+exports[`branches > create without endpoint 1`] = `
+"id: br-new-branch-123456
+name: test_branch
+created_at: 2021-01-01T00:00:00.000Z
+"
+`;
+
+exports[`branches > delete by id 1`] = `
+"id: br-sunny-branch-123456
+name: sunny-branch
+created_at: 2021-01-01T00:00:00.000Z
+"
+`;
+
+exports[`branches > get by id 1`] = `
+"name: test_branch
+id: br-sunny-branch-123456
+default: true
+parent_id: br-parent-branch-123456
+created_at: 2019-01-01T00:00:00Z
+updated_at: 2019-01-01T00:00:00Z
+"
+`;
+
+exports[`branches > get by id 2`] = `
+"name: test-branch-cloudy
+id: br-cloudy-branch-12345678
+default: true
+created_at: 2019-01-01T00:00:00Z
+updated_at: 2019-01-01T00:00:00Z
+"
+`;
+
+exports[`branches > get by name 1`] = `
+"name: test_branch
+id: br-sunny-branch-123456
+default: true
+parent_id: br-parent-branch-123456
+created_at: 2019-01-01T00:00:00Z
+updated_at: 2019-01-01T00:00:00Z
+"
+`;
+
+exports[`branches > get by name with numeric name 1`] = `
+"name: "123"
+id: br-numbered-branch-123456
+default: false
+parent_id: br-parent-branch-123456
+created_at: 2019-01-01T00:00:00Z
+updated_at: 2019-01-01T00:00:00Z
+"
+`;
+
+exports[`branches > list/table marks the branch pinned in .neon as [current] 1`] = `
+"┌──────────────────────────────┬────────────────────────────┬───────────────┬──────────────────────────┬──────────────────────────┐
+│ Name                         │ Id                         │ Current State │ Created At               │ Expires At               │
+├──────────────────────────────┼────────────────────────────┼───────────────┼──────────────────────────┼──────────────────────────┤
+│ [default] [current] main     │ br-main-branch-123456      │ ready         │ 2021-01-01T00:00:00.000Z │ never                    │
+├──────────────────────────────┼────────────────────────────┼───────────────┼──────────────────────────┼──────────────────────────┤
+│ test_branch                  │ br-sunny-branch-123456     │ ready         │ 2021-01-01T00:00:00.000Z │ 2022-01-01T00:00:00.000Z │
+├──────────────────────────────┼────────────────────────────┼───────────────┼──────────────────────────┼──────────────────────────┤
+│ 123                          │ br-numbered-branch-123456  │ ready         │ 2021-01-01T00:00:00.000Z │ never                    │
+├──────────────────────────────┼────────────────────────────┼───────────────┼──────────────────────────┼──────────────────────────┤
+│ test_branch_with_fixed_cu    │ br-numbered-branch-123456  │ ready         │ 2021-01-01T00:00:00.000Z │ never                    │
+├──────────────────────────────┼────────────────────────────┼───────────────┼──────────────────────────┼──────────────────────────┤
+│ test_branch_with_autoscaling │ br-numbered-branch-123456  │ ready         │ 2021-01-01T00:00:00.000Z │ never                    │
+├──────────────────────────────┼────────────────────────────┼───────────────┼──────────────────────────┼──────────────────────────┤
+│ [protected] protected_branch │ br-protected-branch-123456 │ ready         │ 2021-01-01T00:00:00.000Z │ never                    │
+└──────────────────────────────┴────────────────────────────┴───────────────┴──────────────────────────┴──────────────────────────┘
+"
+`;
+
+exports[`branches > list/table output 1`] = `
+"┌──────────────────────────────┬────────────────────────────┬───────────────┬──────────────────────────┬──────────────────────────┐
+│ Name                         │ Id                         │ Current State │ Created At               │ Expires At               │
+├──────────────────────────────┼────────────────────────────┼───────────────┼──────────────────────────┼──────────────────────────┤
+│ [default] main               │ br-main-branch-123456      │ ready         │ 2021-01-01T00:00:00.000Z │ never                    │
+├──────────────────────────────┼────────────────────────────┼───────────────┼──────────────────────────┼──────────────────────────┤
+│ test_branch                  │ br-sunny-branch-123456     │ ready         │ 2021-01-01T00:00:00.000Z │ 2022-01-01T00:00:00.000Z │
+├──────────────────────────────┼────────────────────────────┼───────────────┼──────────────────────────┼──────────────────────────┤
+│ 123                          │ br-numbered-branch-123456  │ ready         │ 2021-01-01T00:00:00.000Z │ never                    │
+├──────────────────────────────┼────────────────────────────┼───────────────┼──────────────────────────┼──────────────────────────┤
+│ test_branch_with_fixed_cu    │ br-numbered-branch-123456  │ ready         │ 2021-01-01T00:00:00.000Z │ never                    │
+├──────────────────────────────┼────────────────────────────┼───────────────┼──────────────────────────┼──────────────────────────┤
+│ test_branch_with_autoscaling │ br-numbered-branch-123456  │ ready         │ 2021-01-01T00:00:00.000Z │ never                    │
+├──────────────────────────────┼────────────────────────────┼───────────────┼──────────────────────────┼──────────────────────────┤
+│ [protected] protected_branch │ br-protected-branch-123456 │ ready         │ 2021-01-01T00:00:00.000Z │ never                    │
+└──────────────────────────────┴────────────────────────────┴───────────────┴──────────────────────────┴──────────────────────────┘
+"
+`;
+
+exports[`branches > list/yaml 1`] = `
+"- id: br-main-branch-123456
+  name: main
+  default: true
+  created_at: 2021-01-01T00:00:00.000Z
+  updated_at: 2021-01-01T00:00:00.000Z
+  current_state: ready
+- id: br-sunny-branch-123456
+  name: test_branch
+  parent_id: br-parent-branch-123456
+  created_at: 2021-01-01T00:00:00.000Z
+  updated_at: 2021-01-01T00:00:00.000Z
+  expires_at: 2022-01-01T00:00:00.000Z
+  current_state: ready
+- id: br-numbered-branch-123456
+  name: "123"
+  parent_id: br-parent-branch-123456
+  created_at: 2021-01-01T00:00:00.000Z
+  updated_at: 2021-01-01T00:00:00.000Z
+  current_state: ready
+- id: br-numbered-branch-123456
+  name: test_branch_with_fixed_cu
+  parent_id: br-parent-branch-123456
+  created_at: 2021-01-01T00:00:00.000Z
+  updated_at: 2021-01-01T00:00:00.000Z
+  current_state: ready
+- id: br-numbered-branch-123456
+  name: test_branch_with_autoscaling
+  parent_id: br-parent-branch-123456
+  created_at: 2021-01-01T00:00:00.000Z
+  updated_at: 2021-01-01T00:00:00.000Z
+  current_state: ready
+- id: br-protected-branch-123456
+  name: protected_branch
+  parent_id: br-main-branch-123456
+  protected: true
+  created_at: 2021-01-01T00:00:00.000Z
+  updated_at: 2021-01-01T00:00:00.000Z
+  current_state: ready
+"
+`;
+
+exports[`branches > remove expiration date 1`] = `
+"id: br-sunny-branch-123456
+name: test_branch
+created_at: 2021-01-01T00:00:00.000Z
+expires_at: null
+current_state: ready
+default: false
+"
+`;
+
+exports[`branches > rename 1`] = `
+"name: new_test_branch
+created_at: 2021-01-01T00:00:00.000Z
+"
+`;
+
+exports[`branches > reset branch to parent 1`] = `
+"id: br-branch-123456
+name: test-branch
+source_branch_id: br-parent-branch-123456
+project_id: pr-project-123456
+created_at: 2020-01-01T00:00:00.000Z
+updated_at: 2020-01-01T00:00:00.000Z
+last_reset_at: 2020-01-01T00:00:00.000Z
+"
+`;
+
+exports[`branches > restore branch to lsn 1`] = `
+"id: br-self-tolsn-123456
+name: self-tolsn
+last_reset_at: 2021-01-01T00:00:00Z
+"
+`;
+
+exports[`branches > restore to another branch head 1`] = `
+"id: br-another-branch-123456
+name: another-branch
+last_reset_at: 2021-01-01T00:00:00Z
+"
+`;
+
+exports[`branches > restore to parent branch timestamp by name 1`] = `
+"id: br-parent-tots-123456
+name: parent-tots
+last_reset_at: 2021-01-01T00:00:00Z
+"
+`;
+
+exports[`branches > restore with unexisted branch outputs error 1`] = `""`;
+
+exports[`branches > set default by id 1`] = `
+"name: test-branch-sunny
+id: br-sunny-branch-123456
+default: true
+created_at: 2019-01-01T00:00:00Z
+updated_at: 2019-01-01T00:00:00Z
+"
+`;
+
+exports[`branches > set expiration by branch name 1`] = `
+"id: br-sunny-branch-123456
+name: test_branch
+created_at: 2021-01-01T00:00:00.000Z
+expires_at: 2024-12-31T23:59:59.000Z
+current_state: ready
+default: false
+"
+`;
+
+exports[`branches > set expiration date 1`] = `
+"id: br-sunny-branch-123456
+name: test_branch
+created_at: 2021-01-01T00:00:00.000Z
+expires_at: 2024-12-31T23:59:59.000Z
+current_state: ready
+default: false
+"
+`;
+
+exports[`branches > set expiration fails on default branch 1`] = `""`;
+
+exports[`branches > set expiration fails on default branch by name 1`] = `""`;
+
+exports[`branches > set expiration fails on protected branch 1`] = `""`;
+
+exports[`branches > set expiration fails on protected branch by name 1`] = `""`;

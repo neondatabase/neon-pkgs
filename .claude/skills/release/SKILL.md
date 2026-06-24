@@ -39,6 +39,22 @@ So enumerate maintained packages as: every `packages/*/` with a `package.json` t
 Folders under `packages/` with only `dist/`/`node_modules/` and no `package.json` are build
 artifacts — ignore them.
 
+### The CLI package (`packages/cli`)
+
+`packages/cli` is the Neon CLI (published as `neonctl`, rebranding to `neon`). It is a normal
+Changesets package for versioning, but a few things differ from the rest of the repo:
+
+- It uses its own toolchain (`tsc` → `dist`, ESLint/Prettier, `@yao-pkg/pkg` binaries) and is
+  **excluded from root Biome** — don't try to `biome` it.
+- **`neonctl` and `neoncli` are thin forwarder packages** that depend on `neon` (`workspace:*`).
+  Bump them in lockstep with `neon` (a changeset listing all three). `neoncli` may sit at `0.0.0`
+  until its first real release — the git-vs-npm / dry-run checks skip `0.0.0`, so don't be alarmed
+  that it isn't flagged.
+- **Publishing the CLI also ships standalone binaries**: the external `neon-pkgs.yml` workflow
+  cross-compiles `@yao-pkg/pkg` binaries for the package with a `pkg` block and attaches them to a
+  GitHub release on `neondatabase/neon-pkgs` (tag `<name>@<version>`). Nothing to do at bump time;
+  just be aware the CLI publish does more than npm.
+
 ## Procedure
 
 ### 1. Detect what needs a release (git-vs-npm)
