@@ -89,9 +89,9 @@ const POLL_INTERVAL_MS =
 const POLL_TIMEOUT_MS =
   Number(process.env.NEON_FUNCTIONS_POLL_TIMEOUT_MS) || 600_000;
 
-export const command = 'function';
+export const command = 'functions';
 export const describe = 'Manage Neon Functions';
-export const aliases = ['functions'];
+export const aliases = ['function'];
 export const builder = (argv: yargs.Argv) =>
   argv
     .usage('$0 function <sub-command> [options]')

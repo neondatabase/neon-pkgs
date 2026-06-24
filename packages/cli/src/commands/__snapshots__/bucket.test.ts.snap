@@ -28,6 +28,14 @@ exports[`bucket > list with table output 1`] = `
 "
 `;
 
+exports[`bucket > buckets primary name lists buckets 1`] = `
+"- name: my-bucket
+  access_level: private
+- name: public-bucket
+  access_level: public_read
+"
+`;
+
 exports[`bucket > ls alias lists buckets 1`] = `
 "- name: my-bucket
   access_level: private

@@ -81,6 +81,12 @@ describe('bucket', () => {
     });
   });
 
+  test('buckets primary name lists buckets', async ({ testCliCommand }) => {
+    await testCliCommand(['buckets', 'list', ...SCOPE], {
+      mockDir: 'single_org',
+    });
+  });
+
   test('delete', async ({ testCliCommand }) => {
     await testCliCommand(['bucket', 'delete', 'my-bucket', ...SCOPE], {
       mockDir: 'single_org',

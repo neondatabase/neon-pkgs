@@ -62,9 +62,10 @@ export const splitBucketTarget = (
   };
 };
 
-export const command = 'bucket';
+export const command = 'buckets';
 export const describe =
   'Manage branch object-storage buckets and their objects';
+export const aliases = ['bucket'];
 export const builder = (argv: yargs.Argv) =>
   argv
     .usage('$0 bucket <sub-command> [options]')
