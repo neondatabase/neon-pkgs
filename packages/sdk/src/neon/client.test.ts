@@ -83,3 +83,25 @@ it("postgres namespace + tier-2/3 resources are reachable and typed", () => {
 		throwing.postgres.dataApi.delete("p", "br", "neondb"),
 	).resolves.toEqualTypeOf<void>();
 });
+
+it("agent-platform helpers (default org, default branch, transfer, finalize) are typed", () => {
+	const neon = createNeonClient({ apiKey: "x", orgId: "org-123" });
+	expectTypeOf(neon.branches.getDefault("p")).resolves.toEqualTypeOf<
+		NeonResult<Branch>
+	>();
+	expectTypeOf(neon.branches.setDefault("p", "br")).resolves.toEqualTypeOf<
+		NeonResult<Branch>
+	>();
+	expectTypeOf(
+		neon.branches.finalizeRestore("p", "br"),
+	).resolves.toEqualTypeOf<NeonResult<void>>();
+	expectTypeOf(
+		neon.projects.transfer({ toOrgId: "org-paid", projectIds: ["p"] }),
+	).resolves.toEqualTypeOf<NeonResult<void>>();
+	expectTypeOf(
+		neon.snapshots.create("p", "br", {
+			name: "baseline",
+			timestamp: "2026-01-01T00:00:00Z",
+		}),
+	).resolves.toEqualTypeOf<NeonResult<Snapshot>>();
+});

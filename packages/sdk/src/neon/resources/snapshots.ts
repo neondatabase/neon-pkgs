@@ -18,12 +18,30 @@ import type { NeonResult, Outcome } from "../result.js";
 
 type UpdateInput = SnapshotUpdateRequest["snapshot"];
 
+/** Options for {@link Snapshots.create} (point-in-time + naming). */
+export interface CreateSnapshotInput {
+	/** A name for the snapshot. */
+	name?: string;
+	/** Take the snapshot at this timestamp (ISO 8601). Mutually exclusive with `lsn`. */
+	timestamp?: string;
+	/** Take the snapshot at this LSN. Mutually exclusive with `timestamp`. */
+	lsn?: string;
+	/** When the snapshot is automatically deleted (ISO 8601). */
+	expiresAt?: string;
+}
+
 /** Input for {@link Snapshots.restore}. */
 export interface RestoreSnapshotInput {
-	/** Name for the newly restored branch. Auto-generated when omitted. */
+	/** Name for the restored branch. Auto-generated when omitted. */
 	name?: string;
-	/** Target branch to restore onto. Defaults to the snapshot's source branch. */
+	/** Branch to restore onto. Defaults to the snapshot's source branch. */
 	targetBranchId?: string;
+	/**
+	 * Finalize immediately (move computes onto the restored branch). Defaults to `false`,
+	 * which leaves the restore in a previewable state — complete it later with
+	 * `branches.finalizeRestore`.
+	 */
+	finalize?: boolean;
 }
 
 /** Snapshot resource. */
@@ -60,15 +78,18 @@ export class Snapshots<DThrow extends boolean> {
 	create(
 		projectId: string,
 		branchId: string,
+		input?: CreateSnapshotInput,
 	): Promise<Outcome<Snapshot, DThrow>>;
 	create<Throw extends boolean = DThrow>(
 		projectId: string,
 		branchId: string,
+		input: CreateSnapshotInput | undefined,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Snapshot, Throw>>;
 	create(
 		projectId: string,
 		branchId: string,
+		input?: CreateSnapshotInput,
 		opts?: CallOptions,
 	): Promise<Snapshot | NeonResult<Snapshot>> {
 		return this.#ctx.run(
@@ -77,6 +98,12 @@ export class Snapshots<DThrow extends boolean> {
 				createSnapshot({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
+					query: {
+						name: input?.name,
+						timestamp: input?.timestamp,
+						lsn: input?.lsn,
+						expires_at: input?.expiresAt,
+					},
 					throwOnError: false,
 				}),
 			(data) => data.snapshot,
@@ -172,6 +199,7 @@ export class Snapshots<DThrow extends boolean> {
 					body: {
 						name: input?.name,
 						target_branch_id: input?.targetBranchId,
+						finalize_restore: input?.finalize,
 					},
 					throwOnError: false,
 				}),

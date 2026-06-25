@@ -30,6 +30,11 @@ export interface NeonConfig<Throw extends boolean = false> {
 	baseUrl?: string;
 	/** Custom `fetch` implementation (e.g. for proxies, tests, or non-global runtimes). */
 	fetch?: typeof fetch;
+	/**
+	 * Default organization id. Applied to project creation/listing and as the source org
+	 * for transfers when not given explicitly; overridable on every call.
+	 */
+	orgId?: string;
 }
 
 export function resolveConfig(config: NeonConfig<boolean>): ResolvedConfig {
@@ -50,5 +55,6 @@ export function resolveConfig(config: NeonConfig<boolean>): ResolvedConfig {
 		retries: config.retries ?? 2,
 		waitForReadiness: config.waitForReadiness ?? false,
 		waitOptions: config.wait ?? {},
+		orgId: config.orgId,
 	};
 }

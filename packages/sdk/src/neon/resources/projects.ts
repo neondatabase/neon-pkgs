@@ -3,6 +3,8 @@ import {
 	deleteProject,
 	getProject,
 	listProjects,
+	transferProjectsFromOrgToOrg,
+	transferProjectsFromUserToOrg,
 	updateProject,
 } from "../../client/sdk.gen.js";
 import type {
@@ -14,8 +16,18 @@ import type {
 } from "../../client/types.gen.js";
 import { withConnectionString } from "../connection.js";
 import type { CallOptions, RequestContext } from "../context.js";
+import { NeonError } from "../errors.js";
 import { type Paginated, paginate } from "../paginate.js";
-import { finalize, type NeonResult, type Outcome } from "../result.js";
+import { err, finalize, type NeonResult, type Outcome } from "../result.js";
+
+/** Input for {@link Projects.transfer} (org → org). */
+export interface TransferProjectsInput {
+	/** Source org. Defaults to the client's `orgId`. */
+	fromOrgId?: string;
+	/** Destination org. */
+	toOrgId: string;
+	projectIds: string[];
+}
 
 type ListQuery = Omit<NonNullable<ListProjectsData["query"]>, "cursor">;
 type CreateInput = ProjectCreateRequest["project"];
@@ -52,7 +64,11 @@ export class Projects<DThrow extends boolean> {
 			(cursor, signal) =>
 				listProjects({
 					client: this.#ctx.client,
-					query: { ...query, cursor },
+					query: {
+						org_id: this.#ctx.defaults.orgId,
+						...query,
+						cursor,
+					},
 					throwOnError: false,
 					signal,
 				}),
@@ -100,7 +116,14 @@ export class Projects<DThrow extends boolean> {
 			(client) =>
 				createProject({
 					client,
-					body: { project: input ?? {} },
+					body: {
+						project: {
+							...(this.#ctx.defaults.orgId
+								? { org_id: this.#ctx.defaults.orgId }
+								: {}),
+							...input,
+						},
+					},
 					throwOnError: false,
 				}),
 			(data) => data.project,
@@ -132,7 +155,14 @@ export class Projects<DThrow extends boolean> {
 			(client) =>
 				createProject({
 					client,
-					body: { project: input ?? {} },
+					body: {
+						project: {
+							...(this.#ctx.defaults.orgId
+								? { org_id: this.#ctx.defaults.orgId }
+								: {}),
+							...input,
+						},
+					},
 					throwOnError: false,
 				}),
 			(data) => data,
@@ -193,6 +223,83 @@ export class Projects<DThrow extends boolean> {
 					throwOnError: false,
 				}),
 			(data) => data.project,
+		);
+	}
+
+	/**
+	 * Transfer projects from one organization to another (e.g. sponsored → paid). The
+	 * source org defaults to the client's `orgId`. Requires a key with access to both orgs.
+	 *
+	 * @apiCall POST /organizations/{source_org_id}/projects/transfer
+	 */
+	transfer(input: TransferProjectsInput): Promise<Outcome<void, DThrow>>;
+	transfer<Throw extends boolean = DThrow>(
+		input: TransferProjectsInput,
+		opts: CallOptions<Throw>,
+	): Promise<Outcome<void, Throw>>;
+	async transfer(
+		input: TransferProjectsInput,
+		opts?: CallOptions,
+	): Promise<void | NeonResult<void>> {
+		const shouldThrow =
+			opts?.throwOnError ?? this.#ctx.defaults.throwOnError;
+		const fromOrgId = input.fromOrgId ?? this.#ctx.defaults.orgId;
+		if (!fromOrgId) {
+			return finalize(
+				err<void>(
+					new NeonError(
+						"Pass fromOrgId or set orgId on the client.",
+						"client",
+					),
+				),
+				shouldThrow,
+			);
+		}
+		return this.#ctx.run(
+			opts,
+			(client) =>
+				transferProjectsFromOrgToOrg({
+					client,
+					path: { source_org_id: fromOrgId },
+					body: {
+						destination_org_id: input.toOrgId,
+						project_ids: input.projectIds,
+					},
+					throwOnError: false,
+				}),
+			() => undefined,
+		);
+	}
+
+	/**
+	 * Transfer projects from the personal account to an organization.
+	 *
+	 * @apiCall POST /users/me/projects/transfer
+	 */
+	transferFromUser(input: {
+		toOrgId: string;
+		projectIds: string[];
+	}): Promise<Outcome<void, DThrow>>;
+	transferFromUser<Throw extends boolean = DThrow>(
+		input: { toOrgId: string; projectIds: string[] },
+		opts: CallOptions<Throw>,
+	): Promise<Outcome<void, Throw>>;
+	transferFromUser(
+		input: { toOrgId: string; projectIds: string[] },
+		opts?: CallOptions,
+	): Promise<void | NeonResult<void>> {
+		return this.#ctx.run(
+			opts,
+			(client) =>
+				transferProjectsFromUserToOrg({
+					client,
+					body: {
+						destination_org_id: input.toOrgId,
+						project_ids: input.projectIds,
+					},
+					throwOnError: false,
+				}),
+			() => undefined,
 		);
 	}
 }

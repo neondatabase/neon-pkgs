@@ -1,8 +1,10 @@
 import {
 	createProjectBranch,
 	deleteProjectBranch,
+	finalizeRestoreBranch,
 	getProjectBranch,
 	listProjectBranches,
+	setDefaultProjectBranch,
 	updateProjectBranch,
 } from "../../client/sdk.gen.js";
 import type {
@@ -14,8 +16,9 @@ import type {
 } from "../../client/types.gen.js";
 import { withConnectionString } from "../connection.js";
 import type { CallOptions, RequestContext } from "../context.js";
+import { NeonError } from "../errors.js";
 import { type Paginated, paginate } from "../paginate.js";
-import { finalize, type NeonResult, type Outcome } from "../result.js";
+import { err, finalize, type NeonResult, type Outcome, ok } from "../result.js";
 
 type ListQuery = Omit<NonNullable<ListProjectBranchesData["query"]>, "cursor">;
 type CreateInput = NonNullable<BranchCreateRequest["branch"]>;
@@ -232,5 +235,111 @@ export class Branches<DThrow extends boolean> {
 			opts?.pooled ?? true,
 		);
 		return finalize(out, shouldThrow);
+	}
+
+	/**
+	 * Resolve the project's default branch (by the `default` flag — not by name).
+	 * Returns a `client`-kind {@link NeonError} when no default branch is found.
+	 */
+	getDefault(projectId: string): Promise<Outcome<Branch, DThrow>>;
+	getDefault<Throw extends boolean = DThrow>(
+		projectId: string,
+		opts: CallOptions<Throw>,
+	): Promise<Outcome<Branch, Throw>>;
+	async getDefault(
+		projectId: string,
+		opts?: CallOptions,
+	): Promise<Branch | NeonResult<Branch>> {
+		const shouldThrow =
+			opts?.throwOnError ?? this.#ctx.defaults.throwOnError;
+		const result = await this.#ctx.execute(
+			opts,
+			(client) =>
+				listProjectBranches({
+					client,
+					path: { project_id: projectId },
+					throwOnError: false,
+				}),
+			(data) => data.branches,
+		);
+		if (result.error)
+			return finalize(err<Branch>(result.error), shouldThrow);
+		const branch = result.data.find((candidate) => candidate.default);
+		if (!branch) {
+			return finalize(
+				err<Branch>(
+					new NeonError(
+						"No default branch found for the project.",
+						"client",
+					),
+				),
+				shouldThrow,
+			);
+		}
+		return finalize(ok(branch), shouldThrow);
+	}
+
+	/** @apiCall POST /projects/{project_id}/branches/{branch_id}/set_as_default */
+	setDefault(
+		projectId: string,
+		branchId: string,
+	): Promise<Outcome<Branch, DThrow>>;
+	setDefault<Throw extends boolean = DThrow>(
+		projectId: string,
+		branchId: string,
+		opts: CallOptions<Throw>,
+	): Promise<Outcome<Branch, Throw>>;
+	setDefault(
+		projectId: string,
+		branchId: string,
+		opts?: CallOptions,
+	): Promise<Branch | NeonResult<Branch>> {
+		return this.#ctx.run(
+			opts,
+			(client) =>
+				setDefaultProjectBranch({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+					throwOnError: false,
+				}),
+			(data) => data.branch,
+		);
+	}
+
+	/**
+	 * Complete (commit) a restore previously started with `snapshots.restore({ finalize: false })`:
+	 * moves computes onto the restored branch and renames the replaced one. This is **only**
+	 * the second step — it does not restore anything itself.
+	 *
+	 * @apiCall POST /projects/{project_id}/branches/{branch_id}/restore/finalize
+	 */
+	finalizeRestore(
+		projectId: string,
+		branchId: string,
+		input?: { name?: string },
+	): Promise<Outcome<void, DThrow>>;
+	finalizeRestore<Throw extends boolean = DThrow>(
+		projectId: string,
+		branchId: string,
+		input: { name?: string } | undefined,
+		opts: CallOptions<Throw>,
+	): Promise<Outcome<void, Throw>>;
+	finalizeRestore(
+		projectId: string,
+		branchId: string,
+		input?: { name?: string },
+		opts?: CallOptions,
+	): Promise<void | NeonResult<void>> {
+		return this.#ctx.run(
+			opts,
+			(client) =>
+				finalizeRestoreBranch({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+					body: { name: input?.name },
+					throwOnError: false,
+				}),
+			() => undefined,
+		);
 	}
 }

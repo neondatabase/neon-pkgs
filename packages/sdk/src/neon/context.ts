@@ -15,6 +15,7 @@ export interface ResolvedConfig {
 	retries: number;
 	waitForReadiness: boolean;
 	waitOptions: WaitForOptions;
+	orgId?: string;
 }
 
 /** Per-call overrides accepted by every ergonomic method. */
