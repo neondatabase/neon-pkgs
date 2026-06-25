@@ -47,6 +47,7 @@ export type {
 } from "./neon/resources/projects.js";
 export type {
 	CreateSnapshotInput,
+	RestorePreview,
 	RestoreSnapshotInput,
 } from "./neon/resources/snapshots.js";
 export type { NeonResult, Outcome } from "./neon/result.js";

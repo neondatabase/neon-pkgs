@@ -1,6 +1,8 @@
 import {
 	createSnapshot,
+	deleteProjectBranch,
 	deleteSnapshot,
+	finalizeRestoreBranch,
 	getSnapshotSchedule,
 	listSnapshots,
 	restoreSnapshot,
@@ -14,9 +16,15 @@ import type {
 	SnapshotUpdateRequest,
 } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
-import type { NeonResult, Outcome } from "../result.js";
+import { err, finalize, type NeonResult, type Outcome, ok } from "../result.js";
 
 type UpdateInput = SnapshotUpdateRequest["snapshot"];
+
+/**
+ * Inspect a freshly restored (not-yet-finalized) branch and decide whether to commit.
+ * Return `true` to finalize the restore, `false` to abort it.
+ */
+export type RestorePreview = (branch: Branch) => boolean | Promise<boolean>;
 
 /** Options for {@link Snapshots.create} (point-in-time + naming). */
 export interface CreateSnapshotInput {
@@ -37,11 +45,20 @@ export interface RestoreSnapshotInput {
 	/** Branch to restore onto. Defaults to the snapshot's source branch. */
 	targetBranchId?: string;
 	/**
-	 * Finalize immediately (move computes onto the restored branch). Defaults to `false`,
-	 * which leaves the restore in a previewable state — complete it later with
-	 * `branches.finalizeRestore`.
+	 * Finalize immediately (move computes onto the restored branch). Defaults to `true`
+	 * when restoring as a new branch (nothing to clobber) and `false` when restoring
+	 * **onto** an existing branch (`targetBranchId`), so you can preview before the swap.
+	 * Ignored when `preview` is set (the preview flow always restores un-finalized first).
 	 */
 	finalize?: boolean;
+	/**
+	 * Transaction-style restore: receives the restored (un-finalized) branch; return `true`
+	 * to finalize (commit) or `false` to abort. On abort the preview branch is deleted
+	 * unless `keepOnAbort` is set. Either way `restore` resolves to the restored `Branch`.
+	 */
+	preview?: RestorePreview;
+	/** Keep the preview branch when `preview` returns `false` (default: delete it). */
+	keepOnAbort?: boolean;
 }
 
 /** Snapshot resource. */
@@ -169,7 +186,16 @@ export class Snapshots<DThrow extends boolean> {
 	}
 
 	/**
-	 * Restore a snapshot into a branch (creating it). Returns the restored branch.
+	 * Restore a snapshot into a branch. Returns the restored branch.
+	 *
+	 * - **As a new branch** (no `targetBranchId`): finalizes by default — ready to use.
+	 * - **Onto an existing branch** (`targetBranchId`): does **not** finalize by default,
+	 *   so you can preview before the compute swap. Finish later with
+	 *   `branches.finalizeRestore`, or pass a `preview` callback to do it transactionally.
+	 *
+	 * With `preview`, this restores un-finalized, runs your callback against the restored
+	 * branch, then finalizes (commit) or deletes the preview branch (abort, unless
+	 * `keepOnAbort`). Either way it resolves to the restored `Branch`.
 	 *
 	 * @apiCall POST /projects/{project_id}/snapshots/{snapshot_id}/restore
 	 */
@@ -184,14 +210,26 @@ export class Snapshots<DThrow extends boolean> {
 		input: RestoreSnapshotInput | undefined,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Branch, Throw>>;
-	restore(
+	async restore(
 		projectId: string,
 		snapshotId: string,
 		input?: RestoreSnapshotInput,
 		opts?: CallOptions,
 	): Promise<Branch | NeonResult<Branch>> {
-		return this.#ctx.run(
-			opts,
+		const shouldThrow =
+			opts?.throwOnError ?? this.#ctx.defaults.throwOnError;
+		const preview = input?.preview;
+		// New branch → finalize by default; onto existing → preview-first by default.
+		// The preview flow always restores un-finalized so it can inspect first.
+		const finalizeNow = preview
+			? false
+			: (input?.finalize ?? input?.targetBranchId === undefined);
+
+		const restored = await this.#ctx.execute(
+			{
+				...opts,
+				waitForReadiness: preview ? true : opts?.waitForReadiness,
+			},
 			(client) =>
 				restoreSnapshot({
 					client,
@@ -199,12 +237,50 @@ export class Snapshots<DThrow extends boolean> {
 					body: {
 						name: input?.name,
 						target_branch_id: input?.targetBranchId,
-						finalize_restore: input?.finalize,
+						finalize_restore: finalizeNow,
 					},
 					throwOnError: false,
 				}),
 			(data) => data.branch,
 		);
+		if (restored.error || !preview) {
+			return finalize(restored, shouldThrow);
+		}
+
+		const branch = restored.data;
+		const commit = await preview(branch);
+		const step = commit
+			? await this.#ctx.execute(
+					{ ...opts, waitForReadiness: true },
+					(client) =>
+						finalizeRestoreBranch({
+							client,
+							path: {
+								project_id: projectId,
+								branch_id: branch.id,
+							},
+							throwOnError: false,
+						}),
+					() => undefined,
+				)
+			: input?.keepOnAbort
+				? ok(undefined)
+				: await this.#ctx.execute(
+						{ ...opts, waitForReadiness: true },
+						(client) =>
+							deleteProjectBranch({
+								client,
+								path: {
+									project_id: projectId,
+									branch_id: branch.id,
+								},
+								throwOnError: false,
+							}),
+						() => undefined,
+					);
+
+		if (step.error) return finalize(err<Branch>(step.error), shouldThrow);
+		return finalize(ok(branch), shouldThrow);
 	}
 
 	/** @apiCall GET /projects/{project_id}/branches/{branch_id}/backup_schedule */

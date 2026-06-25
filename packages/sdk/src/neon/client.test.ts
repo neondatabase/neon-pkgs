@@ -104,4 +104,13 @@ it("agent-platform helpers (default org, default branch, transfer, finalize) are
 			timestamp: "2026-01-01T00:00:00Z",
 		}),
 	).resolves.toEqualTypeOf<NeonResult<Snapshot>>();
+	expectTypeOf(
+		neon.snapshots.restore("p", "snap", {
+			targetBranchId: "br",
+			preview: (restored) => {
+				expectTypeOf(restored).toEqualTypeOf<Branch>();
+				return true;
+			},
+		}),
+	).resolves.toEqualTypeOf<NeonResult<Branch>>();
 });
