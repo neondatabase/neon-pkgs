@@ -12,13 +12,26 @@ import type {
 	ProjectListItem,
 	ProjectUpdateRequest,
 } from "../../client/types.gen.js";
+import { withConnectionString } from "../connection.js";
 import type { CallOptions, RequestContext } from "../context.js";
 import { type Paginated, paginate } from "../paginate.js";
-import type { NeonResult, Outcome } from "../result.js";
+import { finalize, type NeonResult, type Outcome } from "../result.js";
 
 type ListQuery = Omit<NonNullable<ListProjectsData["query"]>, "cursor">;
 type CreateInput = ProjectCreateRequest["project"];
 type UpdateInput = ProjectUpdateRequest["project"];
+
+/** Per-call options for the connect workflow. */
+interface WorkflowOptions<Throw extends boolean> extends CallOptions<Throw> {
+	/** Return a pooled connection string (default `true`). */
+	pooled?: boolean;
+}
+
+/** A project with a ready-to-use connection string to its default branch. */
+export interface ProjectConnection {
+	project: Project;
+	connectionString: string;
+}
 
 /** Project resource — one API call per method (`list` is cursor-paginated). */
 export class Projects<DThrow extends boolean> {
@@ -92,6 +105,48 @@ export class Projects<DThrow extends boolean> {
 				}),
 			(data) => data.project,
 		);
+	}
+
+	/**
+	 * Create a project and return a ready-to-use connection string to its default branch.
+	 * One API call plus readiness polling (the create response already carries the
+	 * connection URI).
+	 *
+	 * @workflow createProject + waitForReadiness
+	 */
+	createAndConnect(
+		input?: CreateInput,
+	): Promise<Outcome<ProjectConnection, DThrow>>;
+	createAndConnect<Throw extends boolean = DThrow>(
+		input: CreateInput | undefined,
+		opts: WorkflowOptions<Throw>,
+	): Promise<Outcome<ProjectConnection, Throw>>;
+	async createAndConnect(
+		input?: CreateInput,
+		opts?: WorkflowOptions<boolean>,
+	): Promise<ProjectConnection | NeonResult<ProjectConnection>> {
+		const shouldThrow =
+			opts?.throwOnError ?? this.#ctx.defaults.throwOnError;
+		const result = await this.#ctx.execute(
+			{ ...opts, waitForReadiness: opts?.waitForReadiness ?? true },
+			(client) =>
+				createProject({
+					client,
+					body: { project: input ?? {} },
+					throwOnError: false,
+				}),
+			(data) => data,
+		);
+		const out = withConnectionString(
+			result,
+			(data) => data.connection_uris,
+			(data, connectionString) => ({
+				project: data.project,
+				connectionString,
+			}),
+			opts?.pooled ?? true,
+		);
+		return finalize(out, shouldThrow);
 	}
 
 	/** @apiCall PATCH /projects/{project_id} */

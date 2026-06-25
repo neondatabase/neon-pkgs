@@ -1,17 +1,33 @@
 import type { Client } from "../client/client/index.js";
 import { type NeonConfig, resolveConfig } from "./config.js";
 import { RequestContext } from "./context.js";
+import { ApiKeys, Regions, User } from "./resources/account.js";
+import { Branches } from "./resources/branches.js";
+import { Consumption } from "./resources/consumption.js";
 import { Operations } from "./resources/operations.js";
+import { Postgres } from "./resources/postgres.js";
 import { Projects } from "./resources/projects.js";
+import { Snapshots } from "./resources/snapshots.js";
 
 /**
- * The ergonomic Neon client. Resource namespaces (`projects`, `operations`, …) wrap the
- * raw operations with auth-once, retries, the `{ data, error }` envelope, optional
- * readiness polling, and typed errors. Drop to the raw layer any time via `.client`.
+ * The ergonomic Neon client. Resource namespaces wrap the raw operations with auth-once,
+ * retries, the `{ data, error }` envelope, optional readiness polling, and typed errors.
+ * Drop to the raw layer any time via `.client`.
+ *
+ * `projects` and `branches` are top-level; the Postgres data plane (compute endpoints,
+ * roles, databases, the Data API, connection strings) is grouped under `postgres` so
+ * future top-level namespaces (e.g. functions, object storage) stay unambiguous.
  */
 export interface NeonClient<DThrow extends boolean> {
 	readonly projects: Projects<DThrow>;
+	readonly branches: Branches<DThrow>;
+	readonly postgres: Postgres<DThrow>;
+	readonly snapshots: Snapshots<DThrow>;
 	readonly operations: Operations<DThrow>;
+	readonly consumption: Consumption;
+	readonly apiKeys: ApiKeys<DThrow>;
+	readonly regions: Regions<DThrow>;
+	readonly user: User<DThrow>;
 	/**
 	 * The underlying configured raw client. Pass it to any raw function
 	 * (`import { raw } from "@neon/sdk"`) to reuse this client's auth + base URL.
@@ -36,7 +52,14 @@ export function createNeonClient<Throw extends boolean = false>(
 	const ctx = new RequestContext(resolveConfig(config));
 	return {
 		projects: new Projects<Throw>(ctx),
+		branches: new Branches<Throw>(ctx),
+		postgres: new Postgres<Throw>(ctx),
+		snapshots: new Snapshots<Throw>(ctx),
 		operations: new Operations<Throw>(ctx),
+		consumption: new Consumption(ctx),
+		apiKeys: new ApiKeys<Throw>(ctx),
+		regions: new Regions<Throw>(ctx),
+		user: new User<Throw>(ctx),
 		client: ctx.client,
 	};
 }
