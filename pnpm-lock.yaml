@@ -364,9 +364,9 @@ importers:
 
   packages/config:
     dependencies:
-      '@neondatabase/api-client':
-        specifier: ^2.7.1
-        version: 2.7.1
+      '@neon/sdk':
+        specifier: workspace:*
+        version: link:../sdk
       jiti:
         specifier: ^2.7.0
         version: 2.7.0
@@ -405,9 +405,9 @@ importers:
         specifier: ^0.8.2
         version: 0.8.3
     devDependencies:
-      '@neondatabase/api-client':
-        specifier: ^2.7.1
-        version: 2.7.1
+      '@neon/sdk':
+        specifier: workspace:*
+        version: link:../sdk
       '@types/node':
         specifier: 'catalog:'
         version: 20.19.17
@@ -439,9 +439,9 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
-      '@neondatabase/api-client':
-        specifier: ^2.7.1
-        version: 2.7.1
+      '@neon/sdk':
+        specifier: workspace:*
+        version: link:../sdk
       '@types/node':
         specifier: 'catalog:'
         version: 20.19.17

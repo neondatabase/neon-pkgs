@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { createApiClient } from "@neondatabase/api-client";
+import { createNeonClient } from "@neon/sdk";
+import {
+	deleteProject as rawDeleteProject,
+	getProject as rawGetProject,
+	listProjects as rawListProjects,
+} from "@neon/sdk/raw";
 import { createRealNeonApi, type NeonApi } from "@neondatabase/config/v1";
 import { test } from "vitest";
 
@@ -53,8 +58,24 @@ export async function bootstrapProject(
 }
 
 /** Lower-level Neon client. Used by cleanup and a few setup helpers. */
-function makeRawClient(): ReturnType<typeof createApiClient> {
-	return createApiClient({ apiKey: requireApiKey() });
+function makeRawClient(): ReturnType<typeof createNeonClient>["client"] {
+	return createNeonClient({ apiKey: requireApiKey() }).client;
+}
+
+/**
+ * Unwrap a `@neon/sdk` raw `{ data, error, response }` result into the bare body, throwing
+ * `{ response: { status } }` on a non-2xx so the status-based catches below keep working.
+ */
+function unwrap<T>(result: {
+	data?: T;
+	error?: unknown;
+	response?: Response;
+}): T {
+	const response = result.response;
+	if (!response || !response.ok) {
+		throw { response: { status: response?.status, data: result.error } };
+	}
+	return result.data as T;
 }
 
 /**
@@ -70,7 +91,7 @@ export async function detectApiKeyScope(): Promise<ApiKeyScope> {
 	if (cachedScope) return cachedScope;
 	const client = makeRawClient();
 	try {
-		await client.listProjects({ limit: 1 });
+		unwrap(await rawListProjects({ client, query: { limit: 1 } }));
 		cachedScope = { kind: "org-or-user", canCreate: true };
 		return cachedScope;
 	} catch (err) {
@@ -100,23 +121,34 @@ export async function detectApiKeyScope(): Promise<ApiKeyScope> {
  */
 async function deleteProject(projectId: string): Promise<void> {
 	const client = makeRawClient();
-	const project = await client.getProject(projectId).catch((err) => {
-		const status = (err as { response?: { status?: number } } | undefined)
-			?.response?.status;
-		if (status === 404 || status === 410) return null;
-		throw err;
-	});
+	const project = await rawGetProject({
+		client,
+		path: { project_id: projectId },
+	})
+		.then(unwrap)
+		.catch((err) => {
+			const status = (
+				err as { response?: { status?: number } } | undefined
+			)?.response?.status;
+			if (status === 404 || status === 410) return null;
+			throw err;
+		});
 	if (!project) return;
-	if (!project.data.project.name.startsWith(PROJECT_PREFIX)) {
+	if (!project.project.name.startsWith(PROJECT_PREFIX)) {
 		throw new Error(
-			`Refusing to delete project ${projectId} ("${project.data.project.name}"): does not match the e2e prefix.`,
+			`Refusing to delete project ${projectId} ("${project.project.name}"): does not match the e2e prefix.`,
 		);
 	}
 	const maxAttempts = 12;
 	let delay = 500;
 	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 		try {
-			await client.deleteProject(projectId);
+			unwrap(
+				await rawDeleteProject({
+					client,
+					path: { project_id: projectId },
+				}),
+			);
 			return;
 		} catch (err) {
 			const status = (
@@ -140,17 +172,19 @@ export async function sweepOrphans(): Promise<{ swept: string[] }> {
 	const swept: string[] = [];
 	let cursor: string | undefined;
 	while (true) {
-		const res = await client.listProjects({
-			limit: 100,
-			...(cursor ? { cursor } : {}),
-		});
-		for (const project of res.data.projects) {
+		const body = unwrap(
+			await rawListProjects({
+				client,
+				query: { limit: 100, ...(cursor ? { cursor } : {}) },
+			}),
+		);
+		for (const project of body.projects) {
 			if (project.name.startsWith(PROJECT_PREFIX)) {
 				await deleteProject(project.id);
 				swept.push(project.id);
 			}
 		}
-		const next = (res.data as { pagination?: { next?: string } }).pagination
+		const next = (body as { pagination?: { next?: string } }).pagination
 			?.next;
 		if (!next || next === cursor) break;
 		cursor = next;

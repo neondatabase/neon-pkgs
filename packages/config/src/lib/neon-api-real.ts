@@ -1,24 +1,41 @@
+import type {
+	DataApiSettings as ApiDataApiSettings,
+	Branch,
+	BranchCreateRequest,
+	BranchCreateRequestEndpointOptions,
+	BranchUpdateRequest,
+	DataApiCreateRequest,
+	DataApiReponse,
+	Database,
+	DefaultEndpointSettings,
+	Endpoint,
+	EndpointUpdateRequest,
+	PgVersion,
+	Project,
+	ProjectCreateRequest,
+	ProjectListItem,
+	ProjectUpdateRequest,
+	Role,
+} from "@neon/sdk";
+import { createNeonClient } from "@neon/sdk";
 import {
-	type Branch,
-	type BranchCreateRequest,
-	type BranchCreateRequestEndpointOptions,
-	type BranchUpdateRequest,
-	createApiClient,
-	type DataAPICreateRequest,
-	type DataAPIReponse,
-	type DataAPISettings,
-	type Database,
-	type DefaultEndpointSettings,
-	type Endpoint,
-	EndpointType,
-	type EndpointUpdateRequest,
-	type PgVersion,
-	type Project,
-	type ProjectCreateRequest,
-	type ProjectListItem,
-	type ProjectUpdateRequest,
-	type Role,
-} from "@neondatabase/api-client";
+	createProject as rawCreateProject,
+	createProjectBranch as rawCreateProjectBranch,
+	createProjectBranchDataApi as rawCreateProjectBranchDataApi,
+	getConnectionUri as rawGetConnectionUri,
+	getNeonAuth as rawGetNeonAuth,
+	getProject as rawGetProject,
+	getProjectBranchDataApi as rawGetProjectBranchDataApi,
+	listProjectBranchDatabases as rawListProjectBranchDatabases,
+	listProjectBranches as rawListProjectBranches,
+	listProjectBranchRoles as rawListProjectBranchRoles,
+	listProjectEndpoints as rawListProjectEndpoints,
+	listProjects as rawListProjects,
+	updateProject as rawUpdateProject,
+	updateProjectBranch as rawUpdateProjectBranch,
+	updateProjectBranchDataApi as rawUpdateProjectBranchDataApi,
+	updateProjectEndpoint as rawUpdateProjectEndpoint,
+} from "@neon/sdk/raw";
 import { z } from "zod";
 import { formatSuspendTimeout, parseSuspendTimeout } from "./duration.js";
 import { ErrorCode, PlatformError } from "./errors.js";
@@ -53,8 +70,31 @@ import type {
 } from "./types.js";
 import { wrapNeonError } from "./wrap-neon-error.js";
 
-type ApiClient = ReturnType<typeof createApiClient>;
+type ApiClient = ReturnType<typeof createNeonClient>["client"];
 const DEFAULT_NEON_API_BASE_URL = "https://console.neon.tech/api/v2";
+
+/**
+ * Unwrap a `@neon/sdk` raw `{ data, error, response }` result into the bare body, throwing
+ * on a non-2xx response. The thrown shape (`{ response: { status, data } }`) deliberately
+ * matches what the package's REST fallbacks already throw, so {@link wrapNeonError} and the
+ * 423 {@link retryOnLocked} retry keep working unchanged across both transports.
+ */
+function unwrap<T>(result: {
+	data?: T;
+	error?: unknown;
+	response?: Response;
+}): T {
+	const response = result.response;
+	if (!response || !response.ok) {
+		throw {
+			response: {
+				status: response?.status,
+				data: result.error,
+			},
+		};
+	}
+	return result.data as T;
+}
 
 const neonAuthResponseSchema = z.object({
 	auth_provider_project_id: z.string(),
@@ -67,8 +107,8 @@ const neonAuthResponseSchema = z.object({
 // ─── Data API mapping (camelCase neon.ts ↔ snake_case Neon API) ───────────────
 
 /** Map our camelCase {@link DataApiSettings} onto the Neon API's snake_case `DataAPISettings`. */
-function dataApiSettingsToApi(settings: DataApiSettings): DataAPISettings {
-	const out: DataAPISettings = {};
+function dataApiSettingsToApi(settings: DataApiSettings): ApiDataApiSettings {
+	const out: ApiDataApiSettings = {};
 	if (settings.dbAggregatesEnabled !== undefined)
 		out.db_aggregates_enabled = settings.dbAggregatesEnabled;
 	if (settings.dbAnonRole !== undefined)
@@ -101,7 +141,7 @@ function normalizeOpenapiMode(
 
 /** Map the Neon API's snake_case `DataAPISettings` back to our camelCase {@link DataApiSettings}. */
 function dataApiSettingsFromApi(
-	settings: DataAPISettings | null | undefined,
+	settings: ApiDataApiSettings | null | undefined,
 ): DataApiSettings | undefined {
 	if (!settings) return undefined;
 	const out: DataApiSettings = {};
@@ -132,8 +172,8 @@ function dataApiSettingsFromApi(
 /** Build the Neon API `DataAPICreateRequest` from our {@link EnableDataApiInput}. */
 function dataApiCreateRequest(
 	input: EnableDataApiInput | undefined,
-): DataAPICreateRequest {
-	const req: DataAPICreateRequest = {};
+): DataApiCreateRequest {
+	const req: DataApiCreateRequest = {};
 	if (!input) return req;
 	if (input.authProvider !== undefined)
 		req.auth_provider =
@@ -151,7 +191,7 @@ function dataApiCreateRequest(
 
 /** Map a `DataAPIReponse` (GET) onto our {@link NeonDataApiSnapshot}. */
 function dataApiSnapshotFromResponse(
-	data: DataAPIReponse,
+	data: DataApiReponse,
 ): NeonDataApiSnapshot {
 	const snapshot: NeonDataApiSnapshot = { url: data.url };
 	if (data.status !== undefined) snapshot.status = data.status;
@@ -242,7 +282,7 @@ interface RestConfig {
 }
 
 /**
- * Adapt `@neondatabase/api-client` to the narrow {@link NeonApi} façade used by the rest of
+ * Adapt `@neon/sdk` (raw layer) to the narrow {@link NeonApi} façade used by the rest of
  * this package. Constructs are restricted to whole-object read/write of just the fields we
  * model in {@link Config}; anything else stays untouched on the remote.
  */
@@ -270,10 +310,13 @@ export function createRealNeonApi(options: {
 		);
 	}
 
-	const client = createApiClient({
+	// The SDK runs its own retries by default; this adapter does its own 423-aware
+	// `retryOnLocked`, so disable the SDK's to avoid compounding backoff.
+	const client = createNeonClient({
 		apiKey: options.apiKey,
-		...(options.baseUrl ? { baseURL: options.baseUrl } : {}),
-	});
+		retries: 0,
+		...(options.baseUrl ? { baseUrl: options.baseUrl } : {}),
+	}).client;
 
 	return new RealNeonApi(
 		client,
@@ -372,15 +415,21 @@ class RealNeonApi implements NeonApi {
 				const projects: ProjectListItem[] = [];
 				let cursor: string | undefined;
 				while (true) {
-					const res = await this.client.listProjects({
-						...(filter.orgId ? { org_id: filter.orgId } : {}),
-						...(cursor ? { cursor } : {}),
-						limit: 100,
-					});
-					projects.push(...res.data.projects);
-					const next = (
-						res.data as { pagination?: { next?: string } }
-					).pagination?.next;
+					const body = unwrap(
+						await rawListProjects({
+							client: this.client,
+							query: {
+								...(filter.orgId
+									? { org_id: filter.orgId }
+									: {}),
+								...(cursor ? { cursor } : {}),
+								limit: 100,
+							},
+						}),
+					);
+					projects.push(...body.projects);
+					const next = (body as { pagination?: { next?: string } })
+						.pagination?.next;
 					if (!next || next === cursor) break;
 					cursor = next;
 				}
@@ -393,8 +442,13 @@ class RealNeonApi implements NeonApi {
 		return this.call(
 			`getProject(${projectId})`,
 			async () => {
-				const res = await this.client.getProject(projectId);
-				return projectToSnapshot(res.data.project);
+				const body = unwrap(
+					await rawGetProject({
+						client: this.client,
+						path: { project_id: projectId },
+					}),
+				);
+				return projectToSnapshot(body.project);
 			},
 			{ projectId },
 		);
@@ -427,8 +481,10 @@ class RealNeonApi implements NeonApi {
 		return this.call(
 			`createProject(${input.name})`,
 			async () => {
-				const res = await this.client.createProject(body);
-				return projectToSnapshot(res.data.project);
+				const data = unwrap(
+					await rawCreateProject({ client: this.client, body }),
+				);
+				return projectToSnapshot(data.project);
 			},
 			{ mutating: true },
 		);
@@ -454,8 +510,14 @@ class RealNeonApi implements NeonApi {
 		return this.call(
 			`updateProject(${projectId})`,
 			async () => {
-				const res = await this.client.updateProject(projectId, body);
-				return projectToSnapshot(res.data.project);
+				const data = unwrap(
+					await rawUpdateProject({
+						client: this.client,
+						path: { project_id: projectId },
+						body,
+					}),
+				);
+				return projectToSnapshot(data.project);
 			},
 			{ projectId, mutating: true },
 		);
@@ -468,15 +530,19 @@ class RealNeonApi implements NeonApi {
 				const branches: Branch[] = [];
 				let cursor: string | undefined;
 				while (true) {
-					const res = await this.client.listProjectBranches({
-						projectId,
-						limit: 100,
-						...(cursor ? { cursor } : {}),
-					});
-					branches.push(...(res.data.branches as Branch[]));
-					const next = (
-						res.data as { pagination?: { next?: string } }
-					).pagination?.next;
+					const body = unwrap(
+						await rawListProjectBranches({
+							client: this.client,
+							path: { project_id: projectId },
+							query: {
+								limit: 100,
+								...(cursor ? { cursor } : {}),
+							},
+						}),
+					);
+					branches.push(...(body.branches as Branch[]));
+					const next = (body as { pagination?: { next?: string } })
+						.pagination?.next;
 					if (!next || next === cursor) break;
 					cursor = next;
 				}
@@ -496,12 +562,12 @@ class RealNeonApi implements NeonApi {
 		const endpointOptions: BranchCreateRequestEndpointOptions | undefined =
 			input.computeSettings
 				? {
-						type: EndpointType.ReadWrite,
+						type: "read_write",
 						...computeSettingsToEndpointOptions(
 							input.computeSettings,
 						),
 					}
-				: { type: EndpointType.ReadWrite };
+				: { type: "read_write" };
 
 		const body: BranchCreateRequest = {
 			branch: {
@@ -517,15 +583,16 @@ class RealNeonApi implements NeonApi {
 		return this.call(
 			`createBranch(${projectId}/${input.name})`,
 			async () => {
-				const res = await this.client.createProjectBranch(
-					projectId,
-					body,
+				const data = unwrap(
+					await rawCreateProjectBranch({
+						client: this.client,
+						path: { project_id: projectId },
+						body,
+					}),
 				);
 				return {
-					branch: branchToSnapshot(res.data.branch),
-					endpoints: (res.data.endpoints ?? []).map(
-						endpointToSnapshot,
-					),
+					branch: branchToSnapshot(data.branch),
+					endpoints: (data.endpoints ?? []).map(endpointToSnapshot),
 				};
 			},
 			{ projectId, mutating: true },
@@ -544,12 +611,14 @@ class RealNeonApi implements NeonApi {
 		return this.call(
 			`updateBranch(${projectId}/${branchId})`,
 			async () => {
-				const res = await this.client.updateProjectBranch(
-					projectId,
-					branchId,
-					{ branch },
+				const data = unwrap(
+					await rawUpdateProjectBranch({
+						client: this.client,
+						path: { project_id: projectId, branch_id: branchId },
+						body: { branch },
+					}),
 				);
-				return branchToSnapshot(res.data.branch);
+				return branchToSnapshot(data.branch);
 			},
 			{ projectId, mutating: true },
 		);
@@ -559,10 +628,13 @@ class RealNeonApi implements NeonApi {
 		return this.call(
 			`listEndpoints(${projectId})`,
 			async () => {
-				const res = await this.client.listProjectEndpoints(projectId);
-				return (res.data.endpoints as Endpoint[]).map(
-					endpointToSnapshot,
+				const data = unwrap(
+					await rawListProjectEndpoints({
+						client: this.client,
+						path: { project_id: projectId },
+					}),
 				);
+				return (data.endpoints as Endpoint[]).map(endpointToSnapshot);
 			},
 			{ projectId },
 		);
@@ -578,12 +650,17 @@ class RealNeonApi implements NeonApi {
 		return this.call(
 			`updateEndpoint(${projectId}/${endpointId})`,
 			async () => {
-				const res = await this.client.updateProjectEndpoint(
-					projectId,
-					endpointId,
-					{ endpoint },
+				const data = unwrap(
+					await rawUpdateProjectEndpoint({
+						client: this.client,
+						path: {
+							project_id: projectId,
+							endpoint_id: endpointId,
+						},
+						body: { endpoint },
+					}),
 				);
-				return endpointToSnapshot(res.data.endpoint);
+				return endpointToSnapshot(data.endpoint);
 			},
 			{ projectId, mutating: true },
 		);
@@ -596,11 +673,13 @@ class RealNeonApi implements NeonApi {
 		return this.call(
 			`listBranchRoles(${projectId}/${branchId})`,
 			async () => {
-				const res = await this.client.listProjectBranchRoles(
-					projectId,
-					branchId,
+				const data = unwrap(
+					await rawListProjectBranchRoles({
+						client: this.client,
+						path: { project_id: projectId, branch_id: branchId },
+					}),
 				);
-				return (res.data.roles as Role[]).map(roleToSnapshot);
+				return (data.roles as Role[]).map(roleToSnapshot);
 			},
 			{ projectId },
 		);
@@ -613,13 +692,13 @@ class RealNeonApi implements NeonApi {
 		return this.call(
 			`listBranchDatabases(${projectId}/${branchId})`,
 			async () => {
-				const res = await this.client.listProjectBranchDatabases(
-					projectId,
-					branchId,
+				const data = unwrap(
+					await rawListProjectBranchDatabases({
+						client: this.client,
+						path: { project_id: projectId, branch_id: branchId },
+					}),
 				);
-				return (res.data.databases as Database[]).map(
-					databaseToSnapshot,
-				);
+				return (data.databases as Database[]).map(databaseToSnapshot);
 			},
 			{ projectId },
 		);
@@ -637,17 +716,24 @@ class RealNeonApi implements NeonApi {
 		return this.call(
 			op,
 			async () => {
-				const res = await this.client.getConnectionUri({
-					projectId,
-					database_name: input.databaseName,
-					role_name: input.roleName,
-					...(input.branchId ? { branch_id: input.branchId } : {}),
-					...(input.endpointId
-						? { endpoint_id: input.endpointId }
-						: {}),
-					pooled,
-				});
-				return { uri: res.data.uri };
+				const data = unwrap(
+					await rawGetConnectionUri({
+						client: this.client,
+						path: { project_id: projectId },
+						query: {
+							database_name: input.databaseName,
+							role_name: input.roleName,
+							...(input.branchId
+								? { branch_id: input.branchId }
+								: {}),
+							...(input.endpointId
+								? { endpoint_id: input.endpointId }
+								: {}),
+							pooled,
+						},
+					}),
+				);
+				return { uri: data.uri };
 			},
 			{ projectId },
 		);
@@ -663,11 +749,18 @@ class RealNeonApi implements NeonApi {
 			return await this.call(
 				`getNeonAuth(${projectId}/${branchId})`,
 				async () => {
-					const res = await this.client.getNeonAuth(
-						projectId,
-						branchId,
+					const data = unwrap(
+						await rawGetNeonAuth({
+							client: this.client,
+							path: {
+								project_id: projectId,
+								branch_id: branchId,
+							},
+						}),
 					);
-					return neonAuthResponseToSnapshot(res.data);
+					return neonAuthResponseToSnapshot(
+						neonAuthResponseSchema.parse(data),
+					);
 				},
 				{ projectId },
 			);
@@ -690,8 +783,8 @@ class RealNeonApi implements NeonApi {
 			return await this.call(
 				`enableNeonAuth(${projectId}/${branchId})`,
 				async () => {
-					// TODO: switch back to `this.client.createNeonAuth` once
-					// @neondatabase/api-client narrows this branch endpoint to `better_auth`.
+					// The generated `createNeonAuth` doesn't narrow this branch
+					// endpoint to `better_auth`, so post the REST body directly.
 					const data = await this.postJson(
 						`/projects/${encodeURIComponent(projectId)}/branches/${encodeURIComponent(branchId)}/auth`,
 						createNeonAuthRestInput(input),
@@ -780,13 +873,16 @@ class RealNeonApi implements NeonApi {
 				`getNeonDataApi(${projectId}/${branchId}/${databaseName})`,
 				async () =>
 					dataApiSnapshotFromResponse(
-						await this.client
-							.getProjectBranchDataApi(
-								projectId,
-								branchId,
-								databaseName,
-							)
-							.then((res) => res.data),
+						unwrap(
+							await rawGetProjectBranchDataApi({
+								client: this.client,
+								path: {
+									project_id: projectId,
+									branch_id: branchId,
+									database_name: databaseName,
+								},
+							}),
+						),
 					),
 				{ projectId },
 			);
@@ -809,15 +905,20 @@ class RealNeonApi implements NeonApi {
 			return await this.call(
 				`enableProjectBranchDataApi(${projectId}/${branchId}/${databaseName})`,
 				async () => {
-					const res = await this.client.createProjectBranchDataApi(
-						projectId,
-						branchId,
-						databaseName,
-						dataApiCreateRequest(input),
+					const data = unwrap(
+						await rawCreateProjectBranchDataApi({
+							client: this.client,
+							path: {
+								project_id: projectId,
+								branch_id: branchId,
+								database_name: databaseName,
+							},
+							body: dataApiCreateRequest(input),
+						}),
 					);
 					// The create response only carries `url`; settings/status come from a
 					// follow-up GET, which we leave to the caller when it needs them.
-					return { url: res.data.url };
+					return { url: data.url };
 				},
 				{ projectId, mutating: true },
 			);
@@ -846,20 +947,30 @@ class RealNeonApi implements NeonApi {
 		return await this.call(
 			`updateProjectBranchDataApi(${projectId}/${branchId}/${databaseName})`,
 			async () => {
-				await this.client.updateProjectBranchDataApi(
-					projectId,
-					branchId,
-					databaseName,
-					{ settings: dataApiSettingsToApi(settings) },
+				unwrap(
+					await rawUpdateProjectBranchDataApi({
+						client: this.client,
+						path: {
+							project_id: projectId,
+							branch_id: branchId,
+							database_name: databaseName,
+						},
+						body: { settings: dataApiSettingsToApi(settings) },
+					}),
 				);
 				// The PATCH returns an empty body; re-fetch so the caller sees the
 				// post-update url/status/settings.
-				const res = await this.client.getProjectBranchDataApi(
-					projectId,
-					branchId,
-					databaseName,
+				const data = unwrap(
+					await rawGetProjectBranchDataApi({
+						client: this.client,
+						path: {
+							project_id: projectId,
+							branch_id: branchId,
+							database_name: databaseName,
+						},
+					}),
 				);
-				return dataApiSnapshotFromResponse(res.data);
+				return dataApiSnapshotFromResponse(data);
 			},
 			{ projectId, mutating: true },
 		);
@@ -1445,10 +1556,7 @@ function endpointToSnapshot(endpoint: Endpoint): NeonEndpointSnapshot {
 	return {
 		id: endpoint.id,
 		branchId: endpoint.branch_id,
-		type:
-			endpoint.type === EndpointType.ReadOnly
-				? "read_only"
-				: "read_write",
+		type: endpoint.type === "read_only" ? "read_only" : "read_write",
 		autoscalingLimitMinCu:
 			endpoint.autoscaling_limit_min_cu as ComputeSettings["autoscalingLimitMinCu"],
 		autoscalingLimitMaxCu:
