@@ -12,7 +12,8 @@ export type NeonErrorKind =
 	| "rate_limit"
 	| "operation"
 	| "timeout"
-	| "network";
+	| "network"
+	| "client";
 
 /** Base class for every error the ergonomic layer produces. */
 export class NeonError extends Error {

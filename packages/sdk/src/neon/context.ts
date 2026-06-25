@@ -1,6 +1,6 @@
 import type { Client } from "../client/client/index.js";
 import { toNeonError } from "./errors.js";
-import { err, type NeonResult, ok } from "./result.js";
+import { err, finalize, type NeonResult, ok } from "./result.js";
 import { withRetries } from "./retry.js";
 import {
 	hasOperations,
@@ -52,19 +52,44 @@ export class RequestContext {
 		return this.#config;
 	}
 
+	/** Run a raw call and map its body; applies the resolved `throwOnError` policy. */
 	async run<D, T>(
 		opts: CallOptions | undefined,
 		exec: (client: Client) => Promise<RawResult<D>>,
 		map: (data: D) => T,
 	): Promise<T | NeonResult<T>> {
 		const shouldThrow = opts?.throwOnError ?? this.#config.throwOnError;
-		const result = await this.#execute(opts, exec, map);
-		if (!shouldThrow) return result;
-		if (result.error) throw result.error;
-		return result.data;
+		return finalize(await this.execute(opts, exec, map), shouldThrow);
 	}
 
-	async #execute<D, T>(
+	/** Like {@link run} but for endpoints that may return an empty (204) body. */
+	async runVoid<D>(
+		opts: CallOptions | undefined,
+		exec: (client: Client) => Promise<RawResult<D>>,
+	): Promise<void | NeonResult<void>> {
+		const shouldThrow = opts?.throwOnError ?? this.#config.throwOnError;
+		const raw = await withRetries(
+			() => exec(this.#config.client),
+			this.#config.retries,
+			opts?.signal,
+		);
+		if (raw.error !== undefined) {
+			return finalize(
+				err<void>(toNeonError(raw.error, raw.response)),
+				shouldThrow,
+			);
+		}
+		const readiness = await this.#maybeWait(opts, raw.data);
+		if (readiness?.error)
+			return finalize(err<void>(readiness.error), shouldThrow);
+		return finalize(ok(undefined), shouldThrow);
+	}
+
+	/**
+	 * Run a raw call and map its body, returning the {@link NeonResult} envelope (no
+	 * throw). Used by `run` and by workflows that post-process the result.
+	 */
+	async execute<D, T>(
 		opts: CallOptions | undefined,
 		exec: (client: Client) => Promise<RawResult<D>>,
 		map: (data: D) => T,
@@ -77,20 +102,21 @@ export class RequestContext {
 		if (raw.error || raw.data === undefined) {
 			return err(toNeonError(raw.error, raw.response));
 		}
-
-		const wait = opts?.waitForReadiness ?? this.#config.waitForReadiness;
-		if (wait && hasOperations(raw.data)) {
-			const waited = await waitForOperations(
-				this.#config.client,
-				raw.data.operations,
-				{
-					...this.#config.waitOptions,
-					signal: opts?.signal ?? this.#config.waitOptions.signal,
-				},
-			);
-			if (waited.error) return err(waited.error);
-		}
-
+		const readiness = await this.#maybeWait(opts, raw.data);
+		if (readiness?.error) return err(readiness.error);
 		return ok(map(raw.data));
+	}
+
+	/** Poll provisioning operations when `waitForReadiness` is on and the body has any. */
+	async #maybeWait(
+		opts: CallOptions | undefined,
+		data: unknown,
+	): Promise<NeonResult<void> | undefined> {
+		const wait = opts?.waitForReadiness ?? this.#config.waitForReadiness;
+		if (!wait || !hasOperations(data)) return undefined;
+		return waitForOperations(this.#config.client, data.operations, {
+			...this.#config.waitOptions,
+			signal: opts?.signal ?? this.#config.waitOptions.signal,
+		});
 	}
 }

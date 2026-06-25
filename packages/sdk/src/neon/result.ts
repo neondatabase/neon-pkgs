@@ -25,3 +25,16 @@ export function ok<T>(data: T): NeonResult<T> {
 export function err<T>(error: NeonError): NeonResult<T> {
 	return { data: undefined, error };
 }
+
+/**
+ * Apply the `throwOnError` policy to a result: return the bare value (throwing on error)
+ * when `shouldThrow`, otherwise return the {@link NeonResult} envelope.
+ */
+export function finalize<T>(
+	result: NeonResult<T>,
+	shouldThrow: boolean,
+): T | NeonResult<T> {
+	if (!shouldThrow) return result;
+	if (result.error) throw result.error;
+	return result.data;
+}

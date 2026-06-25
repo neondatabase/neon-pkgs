@@ -36,6 +36,11 @@ export {
 	NeonTimeoutError,
 } from "./neon/errors.js";
 export type { Page, Paginated } from "./neon/paginate.js";
+export type {
+	BranchWithCompute,
+	CreateWithComputeInput,
+} from "./neon/resources/branches.js";
+export type { ProjectConnection } from "./neon/resources/projects.js";
 export type { NeonResult, Outcome } from "./neon/result.js";
 export type { WaitForOptions } from "./neon/wait.js";
 export type * from "./raw.js";

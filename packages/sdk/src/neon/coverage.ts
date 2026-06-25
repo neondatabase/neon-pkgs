@@ -22,6 +22,12 @@ export const WRAPPED: ReadonlySet<string> = new Set([
 	"createProject",
 	"updateProject",
 	"deleteProject",
+	// branches
+	"listProjectBranches",
+	"getProjectBranch",
+	"createProjectBranch",
+	"updateProjectBranch",
+	"deleteProjectBranch",
 	// operations
 	"getProjectOperation",
 	"listProjectOperations",

@@ -1,6 +1,7 @@
 import type { Client } from "../client/client/index.js";
 import { type NeonConfig, resolveConfig } from "./config.js";
 import { RequestContext } from "./context.js";
+import { Branches } from "./resources/branches.js";
 import { Operations } from "./resources/operations.js";
 import { Projects } from "./resources/projects.js";
 
@@ -11,6 +12,7 @@ import { Projects } from "./resources/projects.js";
  */
 export interface NeonClient<DThrow extends boolean> {
 	readonly projects: Projects<DThrow>;
+	readonly branches: Branches<DThrow>;
 	readonly operations: Operations<DThrow>;
 	/**
 	 * The underlying configured raw client. Pass it to any raw function
@@ -36,6 +38,7 @@ export function createNeonClient<Throw extends boolean = false>(
 	const ctx = new RequestContext(resolveConfig(config));
 	return {
 		projects: new Projects<Throw>(ctx),
+		branches: new Branches<Throw>(ctx),
 		operations: new Operations<Throw>(ctx),
 		client: ctx.client,
 	};
