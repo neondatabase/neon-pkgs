@@ -31,6 +31,53 @@ export const WRAPPED: ReadonlySet<string> = new Set([
 	// operations
 	"getProjectOperation",
 	"listProjectOperations",
+	// postgres: endpoints
+	"listProjectEndpoints",
+	"getProjectEndpoint",
+	"createProjectEndpoint",
+	"updateProjectEndpoint",
+	"deleteProjectEndpoint",
+	"startProjectEndpoint",
+	"suspendProjectEndpoint",
+	"restartProjectEndpoint",
+	// postgres: databases
+	"listProjectBranchDatabases",
+	"getProjectBranchDatabase",
+	"createProjectBranchDatabase",
+	"updateProjectBranchDatabase",
+	"deleteProjectBranchDatabase",
+	// postgres: roles
+	"listProjectBranchRoles",
+	"getProjectBranchRole",
+	"createProjectBranchRole",
+	"deleteProjectBranchRole",
+	"getProjectBranchRolePassword",
+	"resetProjectBranchRolePassword",
+	// postgres: connection string + data api
+	"getConnectionUri",
+	"getProjectBranchDataApi",
+	"createProjectBranchDataApi",
+	"updateProjectBranchDataApi",
+	"deleteProjectBranchDataApi",
+	// snapshots
+	"listSnapshots",
+	"createSnapshot",
+	"updateSnapshot",
+	"deleteSnapshot",
+	"restoreSnapshot",
+	"getSnapshotSchedule",
+	"setSnapshotSchedule",
+	// consumption
+	"getConsumptionHistoryPerProject",
+	"getConsumptionHistoryPerProjectV2",
+	"getConsumptionHistoryPerBranchV2",
+	// account
+	"getCurrentUserInfo",
+	"getCurrentUserOrganizations",
+	"getActiveRegions",
+	"listApiKeys",
+	"createApiKey",
+	"revokeApiKey",
 ]);
 
 /**

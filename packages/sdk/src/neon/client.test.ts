@@ -1,5 +1,10 @@
 import { expectTypeOf, it } from "vitest";
-import type { Branch, Project } from "../client/types.gen.js";
+import type {
+	Branch,
+	Endpoint,
+	Project,
+	Snapshot,
+} from "../client/types.gen.js";
 import { createNeonClient } from "./client.js";
 import type { Paginated } from "./paginate.js";
 import type { BranchWithCompute } from "./resources/branches.js";
@@ -52,5 +57,29 @@ it("branches + workflows carry the envelope and narrow under throwOnError", () =
 	).resolves.toEqualTypeOf<BranchWithCompute>();
 	expectTypeOf(
 		throwing.branches.delete("p", "br"),
+	).resolves.toEqualTypeOf<void>();
+});
+
+it("postgres namespace + tier-2/3 resources are reachable and typed", () => {
+	const neon = createNeonClient({ apiKey: "x" });
+	expectTypeOf(neon.postgres.endpoints.list("p")).resolves.toEqualTypeOf<
+		NeonResult<Endpoint[]>
+	>();
+	expectTypeOf(
+		neon.postgres.roles.password("p", "br", "neondb_owner"),
+	).resolves.toEqualTypeOf<NeonResult<string>>();
+	expectTypeOf(
+		neon.postgres.connectionString({ projectId: "p" }),
+	).resolves.toEqualTypeOf<NeonResult<string>>();
+	expectTypeOf(neon.snapshots.list("p")).resolves.toEqualTypeOf<
+		NeonResult<Snapshot[]>
+	>();
+
+	const throwing = createNeonClient({ apiKey: "x", throwOnError: true });
+	expectTypeOf(
+		throwing.postgres.connectionString({ projectId: "p" }),
+	).resolves.toEqualTypeOf<string>();
+	expectTypeOf(
+		throwing.postgres.dataApi.delete("p", "br", "neondb"),
 	).resolves.toEqualTypeOf<void>();
 });

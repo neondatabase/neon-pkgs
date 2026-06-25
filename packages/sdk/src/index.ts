@@ -40,7 +40,9 @@ export type {
 	BranchWithCompute,
 	CreateWithComputeInput,
 } from "./neon/resources/branches.js";
+export type { ConnectionStringParams } from "./neon/resources/postgres.js";
 export type { ProjectConnection } from "./neon/resources/projects.js";
+export type { RestoreSnapshotInput } from "./neon/resources/snapshots.js";
 export type { NeonResult, Outcome } from "./neon/result.js";
 export type { WaitForOptions } from "./neon/wait.js";
 export type * from "./raw.js";
