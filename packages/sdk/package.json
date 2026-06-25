@@ -55,9 +55,6 @@
 		"test:e2e": "vitest run --config vitest.e2e.config.ts",
 		"tsc": "tsc"
 	},
-	"dependencies": {
-		"@hey-api/client-fetch": "0.13.1"
-	},
 	"devDependencies": {
 		"@hey-api/openapi-ts": "0.98.2",
 		"@types/node": "catalog:",
