@@ -15,9 +15,9 @@
  *   port='X'      -> port (numeric)
  *   sslmode='X'   -> ssl
  *
- * libpq-specific cases we cannot model (hostaddr=, multi-host, unix sockets,
- * percent-encoding validation, replication, service files) are kept as
- * `it.skip` entries with a comment so the upstream coverage is documented.
+ * libpq-specific cases that were once out of scope (hostaddr=, multi-host,
+ * unix sockets, percent-encoding validation, replication, service files) are
+ * now modeled — see the dedicated `describe` blocks further down.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';

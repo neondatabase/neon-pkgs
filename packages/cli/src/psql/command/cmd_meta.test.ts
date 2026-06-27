@@ -899,11 +899,11 @@ describe('\\!', () => {
     expect(r.status).toBe('ok');
   });
 
-  // Note: full stdio capture would require mocking `child_process.spawnSync`,
-  // which is doable but fragile. Documenting that gap here.
-  test.skip('captures stdout (skipped: requires child_process mock)', () => {
-    void vi;
-  });
+  // `\!` runs the child with `stdio: 'inherit'`, so its stdout goes straight to the
+  // terminal's fd — there's nothing for us to capture without either mocking
+  // child_process or driving the whole REPL as a subprocess, neither of which would test
+  // our code (only that Node's `inherit` works). The behavior we own — staying `ok`
+  // regardless of the child's exit status — is covered by the cases above.
 });
 
 describe('\\copyright', () => {
