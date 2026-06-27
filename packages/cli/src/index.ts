@@ -31,7 +31,11 @@ import {
   trackEvent,
 } from './analytics.js';
 import { isAxiosError } from 'axios';
-import { matchErrorCode } from './errors.js';
+import {
+  isNetworkError,
+  matchErrorCode,
+  NETWORK_ERROR_MESSAGE,
+} from './errors.js';
 import { showHelp } from './help.js';
 import { currentContextFile, enrichFromContext } from './context.js';
 
@@ -187,6 +191,19 @@ async function handleError(msg: string, err: unknown): Promise<boolean> {
   // Log stack trace if available
   if (err instanceof Error && err.stack) {
     log.debug('Stack: %s', err.stack);
+  }
+
+  // A connection-level failure (no response ever reached us) reads as a cryptic
+  // `fetch failed` on the @neon/sdk / fetch path (env pull / config / deploy and link's
+  // bundled env pull), or surfaces no user-facing message at all on the axios path. Detect
+  // it first — across either transport — and swap in one clear "check your connection" hint.
+  // We deliberately do not retry here: re-running the whole command could re-trigger a
+  // non-idempotent step (e.g. project create), so retries belong at the request layer.
+  if (isNetworkError(err)) {
+    log.error(NETWORK_ERROR_MESSAGE);
+    const error = err instanceof Error ? err : new Error(NETWORK_ERROR_MESSAGE);
+    sendError(error, 'NETWORK_ERROR');
+    return false;
   }
 
   if (isAxiosError(err)) {
