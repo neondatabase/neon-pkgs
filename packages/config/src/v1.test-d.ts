@@ -6,6 +6,10 @@ import type {
 	BranchTuningFn,
 	BucketAccessLevel,
 	BucketDef,
+	CheckoutAfterContext,
+	CheckoutBeforeContext,
+	CheckoutBeforeResult,
+	CheckoutHooks,
 	ComputeSettings,
 	ComputeUnit,
 	ConflictReport,
@@ -22,7 +26,10 @@ import type {
 	DataApiInput,
 	DataApiNeonAuthConfig,
 	DataApiSettings,
+	DeployAfterContext,
+	DeployBeforeContext,
 	DeployFunctionInput,
+	DeployHooks,
 	DiffOptions,
 	DiffResult,
 	DurationString,
@@ -31,23 +38,36 @@ import type {
 	FunctionDef,
 	FunctionDevConfig,
 	FunctionRuntime,
+	FunctionSlugOf,
 	FunctionTuning,
 	GetConnectionUriInput,
+	GitContext,
+	Hook,
+	HookBranch,
+	Hooks,
 	LoadConfigOptions,
+	NeonAiGatewayEnv,
 	NeonApi,
+	NeonAuthEnv,
 	NeonAuthSnapshot,
+	NeonBranchEnv,
 	NeonBranchSnapshot,
 	NeonBranchStorageSnapshot,
 	NeonBucketSnapshot,
 	NeonCredentialMeta,
 	NeonCredentialSecret,
+	NeonDataApiEnv,
 	NeonDataApiSnapshot,
 	NeonDatabaseSnapshot,
 	NeonEndpointSnapshot,
+	NeonEnv,
 	NeonFunctionDeploymentSnapshot,
+	NeonFunctionEnv,
 	NeonFunctionSnapshot,
+	NeonPostgresEnv,
 	NeonProjectSnapshot,
 	NeonRoleSnapshot,
+	NeonStorageEnv,
 	PlanStep,
 	PostgresConfig,
 	PreviewInput,
@@ -64,6 +84,8 @@ import type {
 	ServiceEnabled,
 	ServiceToggle,
 	ServiceToggleInput,
+	ShellHook,
+	ToNeonBranchNameOptions,
 	UpdateBranchInput,
 } from "./v1.js";
 import { type Config, defineConfig } from "./v1.js";
@@ -114,6 +136,34 @@ describe("config type-export surface", () => {
 		expectTypeOf<ServiceEnabled<true>>().not.toBeAny();
 		expectTypeOf<ServiceToggle>().not.toBeAny();
 		expectTypeOf<ServiceToggleInput>().not.toBeAny();
+	});
+
+	test("every public hooks + branch-name type is exported (compile-time tripwire)", () => {
+		expectTypeOf<Hooks>().not.toBeAny();
+		expectTypeOf<CheckoutHooks>().not.toBeAny();
+		expectTypeOf<DeployHooks>().not.toBeAny();
+		expectTypeOf<CheckoutBeforeContext>().not.toBeAny();
+		expectTypeOf<CheckoutBeforeResult>().not.toBeAny();
+		expectTypeOf<CheckoutAfterContext>().not.toBeAny();
+		expectTypeOf<DeployBeforeContext>().not.toBeAny();
+		expectTypeOf<DeployAfterContext>().not.toBeAny();
+		expectTypeOf<GitContext>().not.toBeAny();
+		expectTypeOf<HookBranch>().not.toBeAny();
+		expectTypeOf<Hook<CheckoutAfterContext>>().not.toBeAny();
+		expectTypeOf<ShellHook>().not.toBeAny();
+		expectTypeOf<ToNeonBranchNameOptions>().not.toBeAny();
+	});
+
+	test("every public resolved-env type is exported (compile-time tripwire)", () => {
+		expectTypeOf<NeonEnv>().not.toBeAny();
+		expectTypeOf<NeonPostgresEnv>().not.toBeAny();
+		expectTypeOf<NeonBranchEnv>().not.toBeAny();
+		expectTypeOf<NeonAuthEnv>().not.toBeAny();
+		expectTypeOf<NeonDataApiEnv>().not.toBeAny();
+		expectTypeOf<NeonStorageEnv>().not.toBeAny();
+		expectTypeOf<NeonAiGatewayEnv>().not.toBeAny();
+		expectTypeOf<FunctionSlugOf<Config>>().not.toBeAny();
+		expectTypeOf<NeonFunctionEnv<Config, never>>().not.toBeAny();
 	});
 
 	test("every public NeonApi adapter type is exported (compile-time tripwire)", () => {

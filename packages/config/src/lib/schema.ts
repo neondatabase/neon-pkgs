@@ -271,6 +271,46 @@ export const branchTuningSchema = z
 	});
 
 /**
+ * A single shell-command hook: a non-empty string, or a non-empty array of non-empty
+ * strings run sequentially. Mirrors {@link import("./types.js").ShellHook}.
+ */
+const shellHookSchema = z.union([
+	z.string().min(1, "a shell-command hook must be a non-empty string"),
+	z
+		.array(
+			z.string().min(1, "each shell command must be a non-empty string"),
+		)
+		.min(1, "a shell-command hook array must have at least one command"),
+]);
+
+/**
+ * A lifecycle hook value: a function (validated structurally — its argument/return are
+ * checked by TypeScript, and at call time by the runtime), or a {@link shellHookSchema}.
+ */
+const hookValueSchema = z.union([
+	z.custom<(...args: unknown[]) => unknown>(
+		(value) => typeof value === "function",
+		{
+			message:
+				"a hook must be a function `(ctx) => …` or a shell command string/array",
+		},
+	),
+	shellHookSchema,
+]);
+
+/** `before` / `after` pair shared by the `checkout` and `deploy` hook phases. */
+const hookPhaseSchema = z.strictObject({
+	before: hookValueSchema.optional(),
+	after: hookValueSchema.optional(),
+});
+
+/** Lifecycle hooks block (`hooks.checkout` / `hooks.deploy`, each `before` / `after`). */
+export const hooksSchema = z.strictObject({
+	checkout: hookPhaseSchema.optional(),
+	deploy: hookPhaseSchema.optional(),
+});
+
+/**
  * The top-level object accepted by `defineConfig`. The `branch` closure is validated
  * structurally as a function here; its returned tuning is validated per-evaluation by
  * {@link branchTuningSchema} inside `resolveConfig`.
@@ -289,6 +329,7 @@ export const configInputSchema = z
 				},
 			)
 			.optional(),
+		hooks: hooksSchema.optional(),
 	})
 	.superRefine((cfg, ctx) => {
 		// A Data API verified by Neon Auth (`authProvider: "neon"`, the default) needs Neon

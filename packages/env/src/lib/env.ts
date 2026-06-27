@@ -4,10 +4,19 @@ import {
 	createNeonApiFromOptions,
 	deriveCredentialScopes,
 	ErrorCode,
+	type FunctionSlugOf,
+	type NeonAiGatewayEnv,
 	type NeonApi,
+	type NeonAuthEnv,
+	type NeonBranchEnv,
 	type NeonBranchSnapshot,
+	type NeonDataApiEnv,
 	type NeonDatabaseSnapshot,
+	type NeonEnv,
+	type NeonFunctionEnv,
+	type NeonPostgresEnv,
 	type NeonRoleSnapshot,
+	type NeonStorageEnv,
 	PlatformError,
 	type ResolvedPreviewConfig,
 	resolveConfig,
@@ -95,208 +104,24 @@ export const NEON_ENV_VAR_KEYS = {
 const AI_GATEWAY_OPENAI_PATH = "/ai-gateway/openai/v1";
 
 /**
- * Branch identity for the resolved branch. Always present on a `fetchEnv` result (the branch
- * name is always known); on a `parseEnv` result it's present only when `NEON_BRANCH` was
- * injected into `process.env` (the Functions runtime injects it by default, as do `neon dev` /
- * `neon-env run` / `env pull`). `name` is the branch **name** (e.g. `main`, `preview/foo`).
+ * The resolved-env **types** (`NeonEnv<C>` and its per-namespace parts, plus `FunctionSlugOf`
+ * / `NeonFunctionEnv`) are defined canonically in `@neondatabase/config` — a pure, runtime-
+ * free shape derived from `Config`. That placement lets `@neondatabase/config` type a
+ * `neon.ts` hook's `env` as the exact `NeonEnv<typeof config>` without a `config` → `env`
+ * dependency cycle. We import them above for use here and re-export them so this package's
+ * public surface is unchanged; the runtime that *produces* a value of this shape
+ * (`fetchEnv` / `parseEnv` / `toEntries`, below) stays in this package.
  */
-export interface NeonBranchEnv {
-	name: string;
-}
-
-/** Per-namespace inner shapes. Exposed so consumers can name the parts independently. */
-export interface NeonPostgresEnv {
-	/**
-	 * Pooled connection string (via Neon's PgBouncer pooler). The right default for
-	 * serverless drivers (`@neondatabase/serverless`, edge runtimes, Postgres.js, …).
-	 */
-	databaseUrl: string;
-	/**
-	 * Direct (unpooled) connection string. Use this when you need session-level
-	 * features (`LISTEN`/`NOTIFY`, prepared statements across calls, transactions
-	 * spanning round-trips) that PgBouncer's transaction-mode pooling drops.
-	 */
-	databaseUrlUnpooled: string;
-}
-
-/**
- * Bits of a Neon Auth integration for the resolved branch. Only present on `NeonEnv`
- * when the branch policy enables `auth`.
- *
- * Neon Auth exposes the `baseUrl` (which doubles as the publishable client identifier) and
- * the `jwksUrl` used to verify tokens it issues. `fetchEnv` reads both from the live
- * integration; `parseEnv` reads them from `process.env` (`NEON_AUTH_BASE_URL` /
- * `NEON_AUTH_JWKS_URL`).
- */
-export interface NeonAuthEnv {
-	baseUrl: string;
-	/** JWKS URL for verifying tokens issued by Neon Auth (`NEON_AUTH_JWKS_URL`). */
-	jwksUrl: string;
-}
-
-/** Bits of a Neon Data API integration. Only present when the branch policy enables it. */
-export interface NeonDataApiEnv {
-	url: string;
-}
-
-/**
- * S3-compatible object-storage access for the branch (Preview). Present on `NeonEnv` only
- * when the policy declares `preview.buckets`. Combines a minted branch credential's access
- * keys (`accessKeyId` = the credential's full token id, e.g. `nak_live_…`, which is what the
- * storage gateway authenticates against; `secretAccessKey` = its
- * `s3_secret_access_key`) with the branch's non-secret connection details
- * (`endpoint`/`region`, from `GET .../storage`). Projects to the AWS SDK's
- * standard config env (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_URL_S3`,
- * `AWS_REGION`) so the S3 client works from env alone. Neon's storage gateway always
- * requires path-style addressing, so set `forcePathStyle: true` on your S3 client.
- */
-export interface NeonStorageEnv {
-	accessKeyId: string;
-	secretAccessKey: string;
-	/** S3-compatible endpoint URL for the branch. */
-	endpoint: string;
-	/** AWS region string (e.g. `us-east-2`). Injected as `AWS_REGION`. */
-	region: string;
-}
-
-/**
- * AI Gateway access for the branch (Preview). Present on `NeonEnv` only when the policy
- * enables `preview.aiGateway`. `apiKey` is the minted credential's bearer (`api_token`);
- * `baseUrl` is the gateway's OpenAI-dialect endpoint on the branch-scoped gateway host
- * (`https://<branchId>-api.ai.<region>.…/ai-gateway/openai/v1`). Projects to the OpenAI SDK's
- * standard env (`OPENAI_API_KEY`, `OPENAI_BASE_URL`), plus the `NEON_AI_GATEWAY_*` aliases.
- */
-export interface NeonAiGatewayEnv {
-	apiKey: string;
-	baseUrl: string;
-}
-
-/**
- * Empty record alias used as the "false" branch of the conditional namespace adds below.
- * `Record<never, never>` is the no-op for intersection — the cleaner alternative to `{}`,
- * which biome rejects (it means "any non-null", not "empty object").
- */
-type NoNamespace = Record<never, never>;
-
-/**
- * Resolve a **static** service toggle (the value of `config.auth` / `config.dataApi`) to a
- * type-level boolean. The whole-thing wrapping (`[T] extends […]`) turns off distribution
- * so a union/`undefined` is checked as one unit:
- *
- * - `false` / `{ enabled: false }` / `undefined` → `false`
- * - `true` / `{ enabled: true }` / any other object (`{}`, `{ enabled?: boolean }`) → `true`
- *   (a present toggle defaults to enabled)
- * - the bare `boolean | ServiceToggle | undefined` (the default `Config` param, no literal
- *   info) → `false`, so an untyped policy yields just `{ postgres }`.
- */
-type ServiceOn<T> = [T] extends [false]
-	? false
-	: [T] extends [{ enabled: false }]
-		? false
-		: [T] extends [undefined]
-			? false
-			: [T] extends [true]
-				? true
-				: [T] extends [{ enabled: true }]
-					? true
-					: [T] extends [object]
-						? true
-						: false;
-
-/** True when `T` has at least one known key; `false` for `{}` / `never`. */
-type HasKeys<T> = [keyof T] extends [never] ? false : true;
-
-/**
- * Whether the policy's **static** `preview` block declares at least one object-storage bucket
- * (`preview.buckets`). Drives whether {@link NeonEnv} carries the `storage` namespace.
- *
- * The leading `[never]` guard is load-bearing: when a policy has no `preview` at all,
- * `NonNullable<C["preview"]>` is `never`, and without the guard the `extends { … }` probe
- * below would vacuously match (everything extends `never`-derived shapes) and `HasKeys<never>`
- * would resolve `true`, wrongly adding the namespace. The guard short-circuits to `false`.
- */
-type HasBuckets<C extends Config> = [NonNullable<C["preview"]>] extends [never]
-	? false
-	: NonNullable<C["preview"]> extends { buckets: infer B }
-		? HasKeys<NonNullable<B>>
-		: false;
-
-/**
- * Whether the policy's **static** `preview` block enables the AI Gateway
- * (`preview.aiGateway`). Drives whether {@link NeonEnv} carries the `aiGateway` namespace.
- *
- * The leading `[never]` guard is load-bearing for the same reason as {@link HasBuckets}: when
- * a policy has no `preview`, `NonNullable<C["preview"]>` is `never`, and a naked `never` in the
- * `extends` below would *distribute* (collapsing the result — and the whole `NeonEnv`
- * intersection — to `never`). The tuple-wrapped guard short-circuits that to `false`.
- */
-type AiGatewayOn<C extends Config> = [NonNullable<C["preview"]>] extends [never]
-	? false
-	: NonNullable<C["preview"]> extends { aiGateway: infer A }
-		? ServiceOn<NonNullable<A>>
-		: false;
-
-/**
- * Static, namespaced shape of `fetchEnv` / `parseEnv`'s return value. Generic over the
- * {@link Config} so the type system knows which optional namespaces are present.
- *
- * Because the secret-bearing toggles now live in the **static** top-level `config.auth` /
- * `config.dataApi` (not inside a per-branch closure), the namespace presence is a direct
- * read of those fields — no union-across-branches, no default-config escape hatch:
- *
- * - `postgres` is always present.
- * - `auth` is added iff `config.auth` is statically enabled.
- * - `dataApi` is added iff `config.dataApi` is statically enabled.
- * - `storage` is added iff `config.preview.buckets` declares at least one bucket.
- * - `aiGateway` is added iff `config.preview.aiGateway` is statically enabled.
- */
-export type NeonEnv<C extends Config = Config> = {
-	postgres: NeonPostgresEnv;
-	/**
-	 * Branch identity (`NEON_BRANCH`). Optional because `parseEnv` only surfaces it when the
-	 * var was injected; `fetchEnv` always populates it.
-	 */
-	branch?: NeonBranchEnv;
-} & (ServiceOn<NonNullable<C["auth"]>> extends true
-	? { auth: NeonAuthEnv }
-	: NoNamespace) &
-	(ServiceOn<NonNullable<C["dataApi"]>> extends true
-		? { dataApi: NeonDataApiEnv }
-		: NoNamespace) &
-	(HasBuckets<C> extends true ? { storage: NeonStorageEnv } : NoNamespace) &
-	(AiGatewayOn<C> extends true
-		? { aiGateway: NeonAiGatewayEnv }
-		: NoNamespace);
-
-/** The static `preview.functions` record of a config, or an empty record when absent. */
-type PreviewFunctionsOf<C extends Config> = NonNullable<C["preview"]> extends {
-	functions: infer F;
-}
-	? F
-	: Record<never, never>;
-
-/** The declared function slugs of a config (record keys), as a string union. */
-export type FunctionSlugOf<C extends Config> = Extract<
-	keyof PreviewFunctionsOf<C>,
-	string
->;
-
-/** The declared env-var keys of one function `S`, as a string union. */
-type FunctionEnvKeysOf<
-	C extends Config,
-	S extends string,
-> = S extends keyof PreviewFunctionsOf<C>
-	? NonNullable<PreviewFunctionsOf<C>[S]> extends { env: infer E }
-		? Extract<keyof E, string>
-		: never
-	: never;
-
-/**
- * The extra `function` namespace added to `parseEnv`'s result when called with a function
- * slug scope: the declared env-var keys for that function, each resolved to a `string`.
- */
-export type NeonFunctionEnv<C extends Config, S extends string> = {
-	function: Record<FunctionEnvKeysOf<C, S>, string>;
+export type {
+	FunctionSlugOf,
+	NeonAiGatewayEnv,
+	NeonAuthEnv,
+	NeonBranchEnv,
+	NeonDataApiEnv,
+	NeonEnv,
+	NeonFunctionEnv,
+	NeonPostgresEnv,
+	NeonStorageEnv,
 };
 
 // ───────────────────────── parseEnv key filtering ─────────────────────────

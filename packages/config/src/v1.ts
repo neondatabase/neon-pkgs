@@ -57,6 +57,7 @@ import {
 	dataApiSettingsSchema,
 	functionDefSchema,
 	functionTuningSchema,
+	hooksSchema,
 	postgresConfigSchema,
 	previewInputSchema,
 	serviceToggleInputSchema,
@@ -89,6 +90,7 @@ export const schemas = {
 	dataApiSettings: dataApiSettingsSchema,
 	function: functionDefSchema,
 	functionTuning: functionTuningSchema,
+	hooks: hooksSchema,
 	postgres: postgresConfigSchema,
 	preview: previewInputSchema,
 	service: serviceToggleSchema,
@@ -97,6 +99,9 @@ export const schemas = {
 
 // ─── Lower-level adapters ──────────────────────────────────────────────────────
 export { createNeonApiFromOptions, resolveApiKey } from "./lib/auth.js";
+// ─── Branch-name helper (pure; shared with the CLI's git → Neon mapping) ──────
+export type { ToNeonBranchNameOptions } from "./lib/branch-name.js";
+export { toNeonBranchName } from "./lib/branch-name.js";
 // ─── Credentials (pure scope derivation; Preview) ─────────────────────────────
 export type { CredentialFeatureFlags } from "./lib/credentials.js";
 export {
@@ -114,6 +119,18 @@ export type {
 	RemoteState,
 } from "./lib/diff.js";
 export { diffConfig } from "./lib/diff.js";
+// ─── Resolved-env types (canonical home; re-exported by @neondatabase/env) ────
+export type {
+	FunctionSlugOf,
+	NeonAiGatewayEnv,
+	NeonAuthEnv,
+	NeonBranchEnv,
+	NeonDataApiEnv,
+	NeonEnv,
+	NeonFunctionEnv,
+	NeonPostgresEnv,
+	NeonStorageEnv,
+} from "./lib/env.js";
 // ─── Errors ────────────────────────────────────────────────────────────────────
 export {
 	ConfigLoadError,
@@ -160,6 +177,10 @@ export type {
 	BranchTuningFn,
 	BucketAccessLevel,
 	BucketDef,
+	CheckoutAfterContext,
+	CheckoutBeforeContext,
+	CheckoutBeforeResult,
+	CheckoutHooks,
 	ComputeSettings,
 	ComputeUnit,
 	Config,
@@ -172,12 +193,19 @@ export type {
 	DataApiInput,
 	DataApiNeonAuthConfig,
 	DataApiSettings,
+	DeployAfterContext,
+	DeployBeforeContext,
+	DeployHooks,
 	DurationString,
 	DurationUnit,
 	FunctionDef,
 	FunctionDevConfig,
 	FunctionRuntime,
 	FunctionTuning,
+	GitContext,
+	Hook,
+	HookBranch,
+	Hooks,
 	PostgresConfig,
 	PreviewInput,
 	PreviewTuning,
@@ -190,6 +218,7 @@ export type {
 	ServiceEnabled,
 	ServiceToggle,
 	ServiceToggleInput,
+	ShellHook,
 } from "./lib/types.js";
 // ─── Config types (used in neon.ts and in operation return values) ────────────
 export { DATA_API_AUTH_PROVIDERS } from "./lib/types.js";

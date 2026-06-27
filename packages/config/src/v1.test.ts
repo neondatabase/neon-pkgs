@@ -67,6 +67,7 @@ describe("@neondatabase/config public value surface", () => {
 			  "resolveApiKey",
 			  "resolveConfig",
 			  "schemas",
+			  "toNeonBranchName",
 			]
 		`);
 	});
@@ -98,6 +99,7 @@ describe("@neondatabase/config public value surface", () => {
 			  "dataApiSettings",
 			  "function",
 			  "functionTuning",
+			  "hooks",
 			  "postgres",
 			  "preview",
 			  "service",

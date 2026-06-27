@@ -28,11 +28,31 @@
 
 export type {
 	AppliedChange,
+	CheckoutAfterContext,
+	CheckoutBeforeContext,
+	CheckoutBeforeResult,
+	CheckoutHooks,
 	Config,
 	ConflictReport,
+	DeployAfterContext,
+	DeployBeforeContext,
+	DeployHooks,
+	GitContext,
+	Hook,
+	HookBranch,
+	Hooks,
 	LoadConfigOptions,
+	NeonAiGatewayEnv,
 	NeonApi,
+	NeonAuthEnv,
+	NeonBranchEnv,
+	NeonDataApiEnv,
+	NeonEnv,
+	NeonPostgresEnv,
+	NeonStorageEnv,
 	PushResult,
+	ShellHook,
+	ToNeonBranchNameOptions,
 } from "@neondatabase/config";
 // ─── Re-exports from @neondatabase/config for convenience ─────────────────────
 // Runtime callers usually want a few authoring-side symbols alongside the operations
@@ -52,6 +72,7 @@ export {
 	PlatformError,
 	PushAbortedError,
 	PushConflictError,
+	toNeonBranchName,
 } from "@neondatabase/config";
 export type { FunctionBundler } from "./lib/function-bundle.js";
 // ─── Function bundling (esbuild + zip) ────────────────────────────────────────
@@ -76,3 +97,6 @@ export type {
 	PushConfirmContext,
 } from "./lib/push-config.js";
 export { pushConfig } from "./lib/push-config.js";
+// ─── Lifecycle hook runner (function | shell; consumed by the CLI) ────────────
+export type { RunHookOptions } from "./lib/run-hook.js";
+export { HookExecutionError, runHook, runShellHook } from "./lib/run-hook.js";

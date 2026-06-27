@@ -134,6 +134,44 @@ import {
 } from "@neondatabase/config/v1";
 ```
 
+## Lifecycle hooks (Preview)
+
+`branch()` is the **declarative** layer — *what a branch should look like* — and is pure (it runs during `plan` / `status`, so it must stay side-effect free). `hooks` is its **imperative** companion: run side effects (migrations, seeding, notifications) on the real `checkout` / `deploy` commands. Hooks **never** run during `plan` / `status` / `inspect`, which is what keeps the diff engine deterministic and the typed env sound.
+
+```ts
+import { defineConfig, toNeonBranchName } from "@neondatabase/config/v1";
+
+export default defineConfig({
+  auth: true,
+  branch: (branch) => ({ protected: branch.name === "main" }),
+
+  hooks: {
+    checkout: {
+      // `before` may rewrite the branch name (function form) or abort (throw / non-zero exit).
+      // `git` is read-only facts injected by the CLI.
+      before: ({ inputName, git }) =>
+        git.triggeredByGitHook && git.branch
+          ? { name: toNeonBranchName(git.branch, { prefix: "preview/" }) }
+          : undefined,
+      // `after` observes; `branch.created` distinguishes a new branch from a selected one.
+      after: async ({ branch, env }) => {
+        if (branch.created) await migrate(env.postgres.databaseUrlUnpooled);
+      },
+    },
+    deploy: {
+      // Shell-command form: runs non-interactively (stdin detached, CI=1) with Neon env injected.
+      after: "drizzle-kit migrate",
+    },
+  },
+});
+```
+
+Each phase (`checkout`, `deploy`) exposes a `before` (influence/abort) and `after` (observe) hook. A hook is either a **function** `(ctx) => …` or a **shell command** (string or array run sequentially). `before` functions can return overrides (`checkout.before` → `{ name }`); any hook can throw / exit non-zero to abort a `before` phase. The `git` context is read-only — hooks never drive git.
+
+`toNeonBranchName(input, opts?)` derives a valid, stable Neon branch name from an arbitrary string (e.g. a git branch); options: `{ prefix, maxLength, lowercase, preserveSlashes }` (pass `preserveSlashes: false` for a single flat token).
+
+> The imperative runner that executes these hooks lives in `@neondatabase/config-runtime` (`runHook` / `runShellHook`); the CLI invokes it at the checkout/deploy seams. `neon.ts` only authors the hooks.
+
 ## Safety Rules
 
 - `apply` / `pushConfig` never creates projects or branches.
