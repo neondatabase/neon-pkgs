@@ -1,0 +1,5 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`top-level error handling > a network failure surfaces a friendly message and exits 1 1`] = `""`;
+
+exports[`top-level error handling > an unknown command exits 1 with a helpful message 1`] = `""`;

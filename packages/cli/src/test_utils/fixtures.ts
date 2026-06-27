@@ -1,4 +1,4 @@
-import { Server } from 'node:http';
+import { createServer, Server } from 'node:http';
 import { fork } from 'node:child_process';
 import { AddressInfo } from 'node:net';
 import { join } from 'node:path';
@@ -20,14 +20,42 @@ type Fixtures = {
       outputTable?: boolean;
       output?: 'json' | 'yaml' | 'table';
       env?: Record<string, string>;
+      /**
+       * Point the CLI at a port that is bound and then immediately released, so the
+       * request fails with a genuine connection error (ECONNREFUSED) instead of a slow
+       * DNS timeout. Used to exercise the CLI's network-error handling end to end without
+       * a mock server in the loop.
+       */
+      unreachableHost?: boolean;
     },
   ) => Promise<void>;
 };
 
+/**
+ * Reserve a localhost port and close its listener, returning a URL that is guaranteed to
+ * refuse connections right now. Lets a test drive the CLI into a real `ECONNREFUSED`
+ * (the same shape a network blip produces) deterministically and fast.
+ */
+const reserveClosedPort = (): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const probe = createServer();
+    probe.on('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const { port } = probe.address() as AddressInfo;
+      probe.close((err) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(`http://127.0.0.1:${port}`);
+        }
+      });
+    });
+  });
+
 export const test = originalTest.extend<Fixtures>({
   // eslint-disable-next-line no-empty-pattern
   runMockServer: async ({}, use) => {
-    let server: Server;
+    let startedServer: Server | undefined;
     await use(async (mockDir) => {
       const app = express();
       app.use(express.json());
@@ -38,31 +66,43 @@ export const test = originalTest.extend<Fixtures>({
         }),
       );
 
-      await new Promise<void>((resolve) => {
-        server = app.listen(0, () => {
-          resolve();
+      const server = await new Promise<Server>((resolve) => {
+        const s = app.listen(0, () => {
           log.debug(
             'Mock server listening at %d',
-            (server.address() as AddressInfo).port,
+            (s.address() as AddressInfo).port,
           );
+          resolve(s);
         });
       });
-
+      startedServer = server;
       return server;
     });
-    await new Promise<void>((resolve, reject) =>
-      server.close((err) => {
-        if (err) {
-          reject(err instanceof Error ? err : new Error(String(err)));
-        } else {
-          resolve();
-        }
-      }),
-    );
+    // `unreachableHost` tests never start the server, so only close it when it ran.
+    const server = startedServer;
+    if (server) {
+      await new Promise<void>((resolve, reject) => {
+        server.close((err) => {
+          if (err) {
+            reject(err instanceof Error ? err : new Error(String(err)));
+          } else {
+            resolve();
+          }
+        });
+      });
+    }
   },
   testCliCommand: async ({ runMockServer }, use) => {
     await use(async (args, options = {}) => {
-      const server = await runMockServer(options.mockDir || 'main');
+      const apiHost = options.unreachableHost
+        ? await reserveClosedPort()
+        : `http://localhost:${
+            (
+              (
+                await runMockServer(options.mockDir || 'main')
+              ).address() as AddressInfo
+            ).port
+          }`;
       let output = '';
       let error = '';
 
@@ -70,7 +110,7 @@ export const test = originalTest.extend<Fixtures>({
         join(process.cwd(), './dist/index.js'),
         [
           '--api-host',
-          `http://localhost:${(server.address() as AddressInfo).port}`,
+          apiHost,
           '--output',
           options.output ?? (options.outputTable ? 'table' : 'yaml'),
           '--api-key',
