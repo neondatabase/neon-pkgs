@@ -17,7 +17,7 @@ import {
 	type ResolvedFunctionConfig,
 	type ResolvedPreviewConfig,
 	resolveConfig,
-} from "@neondatabase/config";
+} from "@neon/config";
 import type { FunctionBundler } from "./function-bundle.js";
 
 /**
@@ -449,7 +449,7 @@ async function resolveServiceState(args: {
  *
  * The AI Gateway is not probed: it is always available (credential-gated, not per-branch
  * provisioned), so `preview.aiGateway` produces no plan step — it only drives the branch
- * credential's `ai_gateway:invoke` scope and the gateway env vars (`@neondatabase/env`).
+ * credential's `ai_gateway:invoke` scope and the gateway env vars (`@neon/env`).
  */
 async function resolvePreviewState(args: {
 	api: NeonApi;

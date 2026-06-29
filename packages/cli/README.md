@@ -361,7 +361,7 @@ neonctl env pull
 neonctl env pull --branch preview --file .env.preview
 ```
 
-If you'd rather not keep env vars on disk, inject them at runtime instead with `neon-env run -- <your dev command>` (from `@neondatabase/env`) or `neonctl dev`, and pass `--no-env-pull` to `link` / `checkout`.
+If you'd rather not keep env vars on disk, inject them at runtime instead with `neon-env run -- <your dev command>` (from `@neon/env`) or `neonctl dev`, and pass `--no-env-pull` to `link` / `checkout`.
 
 **Where `.neon` lives**: `link` writes `.neon` into the **current working directory** by default. If an existing `.neon` is found in any parent directory, that file is reused — so commands run from a sub-directory of a linked project still pick up the project's context. To pin the location explicitly, pass `--context-file <path>`.
 
@@ -373,7 +373,7 @@ Describe a branch's desired state in a `neon.ts` policy and reconcile it from th
 
 ```ts
 // neon.ts
-import { defineConfig } from '@neondatabase/config/v1';
+import { defineConfig } from '@neon/config/v1';
 
 export default defineConfig({
   // Static: what exists on every branch (drives the typed env).

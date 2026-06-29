@@ -5,7 +5,7 @@ import {
   resolveConfig,
   type Config,
   type FunctionDevConfig,
-} from '@neondatabase/config';
+} from '@neon/config';
 
 /**
  * A function from `neon.ts`, resolved into everything `neon dev` needs to serve it

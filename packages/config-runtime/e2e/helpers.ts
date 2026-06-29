@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
+import { createRealNeonApi, type NeonApi } from "@neon/config";
 import { createNeonClient } from "@neon/sdk";
 import {
 	deleteProject as rawDeleteProject,
 	getProject as rawGetProject,
 	listProjects as rawListProjects,
 } from "@neon/sdk/raw";
-import { createRealNeonApi, type NeonApi } from "@neondatabase/config";
 import { test } from "vitest";
 
 /**

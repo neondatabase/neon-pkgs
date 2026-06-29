@@ -3,9 +3,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@neondatabase/config-runtime', async (importOriginal) => {
+vi.mock('@neon/config-runtime', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@neondatabase/config-runtime')>();
+    await importOriginal<typeof import('@neon/config-runtime')>();
   return {
     ...actual,
     inspect: vi.fn(() => {
@@ -43,7 +43,7 @@ import {
   createBranch,
   inspect,
   plan,
-} from '@neondatabase/config-runtime';
+} from '@neon/config-runtime';
 import type { ConfigProps } from './config.js';
 import {
   applyCmd,

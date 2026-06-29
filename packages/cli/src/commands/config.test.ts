@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import stripAnsi from 'strip-ansi';
-import type { NeonApi } from '@neondatabase/config-runtime';
+import type { NeonApi } from '@neon/config-runtime';
 import type {
   CreateBucketInput,
   CreateCredentialInput,
@@ -30,7 +30,7 @@ import type {
   NeonFunctionSnapshot,
   NeonProjectSnapshot,
   NeonRoleSnapshot,
-} from '@neondatabase/config';
+} from '@neon/config';
 
 import type { ConfigProps } from './config.js';
 import { applyCmd, applyPolicyOnCreate, planCmd, status } from './config.js';

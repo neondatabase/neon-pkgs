@@ -1,8 +1,8 @@
 /**
- * `@neondatabase/config-runtime/v1` — the imperative runtime for Config-as-Code on the
+ * `@neon/config-runtime/v1` — the imperative runtime for Config-as-Code on the
  * Neon Platform.
  *
- * `@neondatabase/config` is the **authoring** surface: `defineConfig`, types, and schemas
+ * `@neon/config` is the **authoring** surface: `defineConfig`, types, and schemas
  * you import from `neon.ts`. It is intentionally free of heavy/native dependencies.
  *
  * This package is the **runtime**: it reads a branch's live state, diffs a policy against
@@ -13,7 +13,7 @@
  *
  * ```ts
  * import config from "../neon";
- * import { inspect, plan, apply } from "@neondatabase/config-runtime/v1";
+ * import { inspect, plan, apply } from "@neon/config-runtime/v1";
  *
  * const target = { projectId: "patient-art-12345", branchId: "main" };
  * const diff = await plan(config, target);     // dry-run plan, no mutations
@@ -33,12 +33,12 @@ export type {
 	LoadConfigOptions,
 	NeonApi,
 	PushResult,
-} from "@neondatabase/config";
-// ─── Re-exports from @neondatabase/config for convenience ─────────────────────
+} from "@neon/config";
+// ─── Re-exports from @neon/config for convenience ─────────────────────
 // Runtime callers usually want a few authoring-side symbols alongside the operations
 // (the errors `apply`/`pushConfig` throw, the result types they return, and the loader).
 // Re-export the common ones so a deploy script can import everything it needs from one
-// place, while `neon.ts` keeps importing the lean `@neondatabase/config`.
+// place, while `neon.ts` keeps importing the lean `@neon/config`.
 export {
 	ConfigLoadError,
 	ConfigValidationError,
@@ -52,7 +52,7 @@ export {
 	PlatformError,
 	PushAbortedError,
 	PushConflictError,
-} from "@neondatabase/config";
+} from "@neon/config";
 export type { FunctionBundler } from "./lib/function-bundle.js";
 // ─── Function bundling (esbuild + zip) ────────────────────────────────────────
 export { buildFunctionBundle } from "./lib/function-bundle.js";

@@ -12,7 +12,7 @@ import {
 	type ResolvedPreviewConfig,
 	resolveConfig,
 	type ServiceToggleInput,
-} from "@neondatabase/config/v1";
+} from "@neon/config/v1";
 import { z } from "zod";
 
 /**
@@ -441,7 +441,7 @@ export interface FetchEnvOptions {
  *
  * ```ts
  * import config from "../neon";
- * import { fetchEnv } from "@neondatabase/env";
+ * import { fetchEnv } from "@neon/env";
  *
  * const env = await fetchEnv(config, { projectId: "patient-art-12345", branchId: "br-…" });
  * const db = drizzle(neon(env.postgres.databaseUrl), { schema });
@@ -1013,7 +1013,7 @@ function isServiceEnabledInput(
  *
  * ```ts
  * import config from "../neon";
- * import { parseEnv } from "@neondatabase/env";
+ * import { parseEnv } from "@neon/env";
  *
  * // External (app / build):
  * const env = parseEnv(config);

@@ -1,4 +1,4 @@
-import { createNeonApiFromOptions } from "@neondatabase/config";
+import { createNeonApiFromOptions } from "@neon/config";
 import { describe, expect, test, vi } from "vitest";
 import { apply, inspect, plan } from "./operations.js";
 import { pullConfig } from "./pull-config.js";
@@ -8,9 +8,8 @@ const HOST = "https://stage.example/api/v2";
 
 // Throw immediately after the API client would be built. Every runtime entry builds its
 // API as its first statement, so this asserts the forwarded options without any network.
-vi.mock("@neondatabase/config", async (importOriginal) => {
-	const actual =
-		await importOriginal<typeof import("@neondatabase/config")>();
+vi.mock("@neon/config", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@neon/config")>();
 	return {
 		...actual,
 		createNeonApiFromOptions: vi.fn(() => {

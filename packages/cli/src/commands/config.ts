@@ -1,6 +1,6 @@
 import yargs from 'yargs';
 import chalk from 'chalk';
-import { resolveConfig } from '@neondatabase/config';
+import { resolveConfig } from '@neon/config';
 import {
   apply,
   createBranch as createBranchFromPolicy,
@@ -12,7 +12,7 @@ import {
   type FunctionBundler,
   type NeonApi,
   type PushResult,
-} from '@neondatabase/config-runtime';
+} from '@neon/config-runtime';
 import { toNeonConfigView } from '../config_format.js';
 
 import { contextBranch, readContextFile } from '../context.js';

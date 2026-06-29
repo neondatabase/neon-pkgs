@@ -1,5 +1,5 @@
 /**
- * `@neondatabase/ai-sdk-provider` — community Vercel AI SDK provider for the
+ * `@neon/ai-sdk-provider` — community Vercel AI SDK provider for the
  * Neon AI Gateway.
  *
  * - `createNeon()` / `neon` — the provider. Routes each model to the best

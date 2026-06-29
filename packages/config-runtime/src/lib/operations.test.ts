@@ -1,4 +1,4 @@
-import { defineConfig, ErrorCode } from "@neondatabase/config";
+import { defineConfig, ErrorCode } from "@neon/config";
 import { describe, expect, test } from "vitest";
 import { FakeNeonApi } from "./fake-neon-api.js";
 import { apply, createBranch, inspect, plan } from "./operations.js";

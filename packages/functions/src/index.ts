@@ -1,5 +1,5 @@
 /**
- * `@neondatabase/functions` — runtime helpers for Neon Functions.
+ * `@neon/functions` — runtime helpers for Neon Functions.
  *
  * - `waitUntil(promise)` — defers async work past the response by handing the promise to
  *   the current invocation context. No-op off-platform (local dev, tests, non-Neon hosts).

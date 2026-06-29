@@ -1,4 +1,4 @@
-import { defineConfig } from "@neondatabase/config/v1";
+import { defineConfig } from "@neon/config/v1";
 import { describe, expect } from "vitest";
 import { fetchEnv } from "../src/index.js";
 import {

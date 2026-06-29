@@ -1,13 +1,13 @@
-# @neondatabase/env
+# @neon/env
 
 Resolve and inject Neon connection strings for the branch selected by your `neon.ts` policy. Exposes `fetchEnv` / `parseEnv` functions plus a `neon-env` CLI with `run` (inject env into a command) and `export` (print env to stdout).
 
-Builds on [`@neondatabase/config`](../config) — it reuses the `Config` policy type and the Neon API client.
+Builds on [`@neon/config`](../config) — it reuses the `Config` policy type and the Neon API client.
 
 ## Install
 
 ```bash
-npm install @neondatabase/env
+npm install @neon/env
 ```
 
 ## Functions
@@ -18,7 +18,7 @@ The library functions are **filesystem- and env-agnostic**: `fetchEnv` requires 
 
 ```ts
 import config from "../neon";
-import { fetchEnv, parseEnv } from "@neondatabase/env";
+import { fetchEnv, parseEnv } from "@neon/env";
 
 // Async — calls the Neon API for live connection strings. Use in build scripts / top-level await.
 const env = await fetchEnv(config, { projectId: "patient-art-12345", branchId: "br-…" });

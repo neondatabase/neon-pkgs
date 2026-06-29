@@ -110,7 +110,7 @@ type PreviewAutocomplete<Preview> = (Preview extends { functions: infer F }
  *
  * Used at the top of `neon.ts`:
  * ```ts
- * import { defineConfig } from "@neondatabase/config/v1";
+ * import { defineConfig } from "@neon/config/v1";
  *
  * export default defineConfig({
  *   auth: true,

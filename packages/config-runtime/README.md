@@ -1,13 +1,13 @@
-# @neondatabase/config-runtime
+# @neon/config-runtime
 
-Imperative runtime for [`@neondatabase/config`](../config): run a `neon.ts` policy against the Neon API — `inspect`, `plan`, `apply` (push/pull) — and bundle + deploy Neon Functions.
+Imperative runtime for [`@neon/config`](../config): run a `neon.ts` policy against the Neon API — `inspect`, `plan`, `apply` (push/pull) — and bundle + deploy Neon Functions.
 
-> This package pulls in `esbuild`, so import it from your CLI or CI — **not** from a `neon.ts` policy. Keep policies side-effect-free; that's what `@neondatabase/config` is for. New code should import from `@neondatabase/config-runtime/v1` to pin a major.
+> This package pulls in `esbuild`, so import it from your CLI or CI — **not** from a `neon.ts` policy. Keep policies side-effect-free; that's what `@neon/config` is for. New code should import from `@neon/config-runtime/v1` to pin a major.
 
 ## Install
 
 ```bash
-npm install @neondatabase/config-runtime
+npm install @neon/config-runtime
 ```
 
 ## API
@@ -18,7 +18,7 @@ npm install @neondatabase/config-runtime
 - `buildFunctionBundle` — bundle Neon Functions for deploy.
 
 ```ts
-import { inspect, plan, apply } from "@neondatabase/config-runtime/v1";
+import { inspect, plan, apply } from "@neon/config-runtime/v1";
 ```
 
-See [`@neondatabase/config`](../config) for authoring the `neon.ts` policy these operate on.
+See [`@neon/config`](../config) for authoring the `neon.ts` policy these operate on.

@@ -1133,7 +1133,7 @@ class RealNeonApi implements NeonApi {
 	// per-branch provisioned). There is no control-plane enable/disable/status route — the
 	// gateway is reached at the branch host with a credential carrying `ai_gateway:invoke`.
 	// `preview.aiGateway` only drives that credential scope and the `OPENAI_*` /
-	// `NEON_AI_GATEWAY_*` env vars (see `@neondatabase/env`); nothing is provisioned here, so
+	// `NEON_AI_GATEWAY_*` env vars (see `@neon/env`); nothing is provisioned here, so
 	// `plan` / `apply` never touch an AI Gateway route and can't fail on its availability.
 
 	// ─── Preview: branch-scoped credentials ──────────────────────────────────

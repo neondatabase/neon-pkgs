@@ -3,7 +3,7 @@ import {
 	ErrorCode,
 	PlatformError,
 	type ResolvedFunctionConfig,
-} from "@neondatabase/config";
+} from "@neon/config";
 
 /**
  * Builds the deployable ZIP bundle for a single function. The default
@@ -31,8 +31,8 @@ const ESM_CJS_INTEROP_BANNER =
  * Build the deployable bundle (a ZIP archive of the esbuild-bundled source) for a function.
  *
  * This is the **imperative shell** step of function deploys, and the reason it lives in
- * `@neondatabase/config-runtime` rather than `@neondatabase/config`: it pulls in `esbuild`
- * (a native binary) and `fflate`. Keeping it out of `@neondatabase/config` means a `neon.ts`
+ * `@neon/config-runtime` rather than `@neon/config`: it pulls in `esbuild`
+ * (a native binary) and `fflate`. Keeping it out of `@neon/config` means a `neon.ts`
  * that only imports `defineConfig` never drags esbuild into the user's dependency tree or
  * bundle. Deploy-side consumers (the neonctl CLI, CI) import this package and get esbuild as
  * a normal, auto-installed dependency.
@@ -113,7 +113,7 @@ async function loadEsbuild(): Promise<typeof import("esbuild")> {
 			ErrorCode.InvalidConfig,
 			[
 				"Deploying Neon Functions requires `esbuild`, which could not be loaded.",
-				"It is a dependency of @neondatabase/config-runtime — reinstall your dependencies (`pnpm install` / `npm install`).",
+				"It is a dependency of @neon/config-runtime — reinstall your dependencies (`pnpm install` / `npm install`).",
 			].join(" "),
 			{ cause },
 		);
@@ -128,7 +128,7 @@ async function loadFflate(): Promise<typeof import("fflate")> {
 			ErrorCode.InvalidConfig,
 			[
 				"Deploying Neon Functions requires `fflate`, which could not be loaded.",
-				"It is a dependency of @neondatabase/config-runtime — reinstall your dependencies (`pnpm install` / `npm install`).",
+				"It is a dependency of @neon/config-runtime — reinstall your dependencies (`pnpm install` / `npm install`).",
 			].join(" "),
 			{ cause },
 		);

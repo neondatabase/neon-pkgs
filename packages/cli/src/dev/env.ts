@@ -2,13 +2,13 @@ import {
   loadConfigFromFile,
   type Config,
   type NeonApi,
-} from '@neondatabase/config';
+} from '@neon/config';
 import {
   plan,
   pullConfig,
   type AppliedChange,
-} from '@neondatabase/config-runtime';
-import { fetchEnv, toEntries } from '@neondatabase/env';
+} from '@neon/config-runtime';
+import { fetchEnv, toEntries } from '@neon/env';
 
 import { log } from '../log.js';
 
@@ -258,7 +258,7 @@ const fetchAndProject = async (
 /**
  * Substrings that mark a module-resolution failure while loading `neon.ts` —
  * almost always because the project's dependencies aren't installed yet (the
- * config imports `@neondatabase/config` & friends). Deliberately specific:
+ * config imports `@neon/config` & friends). Deliberately specific:
  * the generic "…or a missing dependency…" hint the loader always appends is
  * NOT in here, so a real syntax/runtime error doesn't get mislabeled.
  */

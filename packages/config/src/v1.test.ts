@@ -19,14 +19,14 @@ describe("v1 surface", () => {
 		expect(config.branch?.({ name: "dev", exists: false })).toEqual({
 			parent: "main",
 		});
-		// Authoring + pure core stays in @neondatabase/config.
+		// Authoring + pure core stays in @neon/config.
 		expect(resolveConfig).toBeTypeOf("function");
 		expect(diffConfig).toBeTypeOf("function");
 		expect(createRealNeonApi).toBeTypeOf("function");
 		expect(loadConfigFromFile).toBeTypeOf("function");
 	});
 
-	test("does not export the imperative operations (they live in @neondatabase/config-runtime)", async () => {
+	test("does not export the imperative operations (they live in @neon/config-runtime)", async () => {
 		const surface = await import("./v1.js");
 		expect("apply" in surface).toBe(false);
 		expect("plan" in surface).toBe(false);
@@ -38,11 +38,11 @@ describe("v1 surface", () => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public value-export surface lock. Removing or renaming an export is a breaking change
-// for everyone importing `@neondatabase/config`; these snapshots make that change explicit
+// for everyone importing `@neon/config`; these snapshots make that change explicit
 // and reviewable rather than silent. (Type-only exports are guarded in `v1.test-d.ts`.)
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("@neondatabase/config public value surface", () => {
+describe("@neon/config public value surface", () => {
 	test("v1 value exports are stable", async () => {
 		const surface = await import("./v1.js");
 		expect(Object.keys(surface).sort()).toMatchInlineSnapshot(`

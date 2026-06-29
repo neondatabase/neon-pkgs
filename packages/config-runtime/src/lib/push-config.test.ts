@@ -1,11 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-	defineConfig,
-	ErrorCode,
-	PushConflictError,
-} from "@neondatabase/config";
+import { defineConfig, ErrorCode, PushConflictError } from "@neon/config";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { FakeNeonApi } from "./fake-neon-api.js";
 import { pushConfig } from "./push-config.js";

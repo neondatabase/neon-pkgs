@@ -1,9 +1,9 @@
 /**
- * `@neondatabase/config/v1` — the v1 public API for Config-as-Code on the Neon Platform.
+ * `@neon/config/v1` — the v1 public API for Config-as-Code on the Neon Platform.
  *
  * Usage in `neon.ts`:
  * ```ts
- * import { defineConfig } from "@neondatabase/config/v1";
+ * import { defineConfig } from "@neon/config/v1";
  *
  * export default defineConfig({
  *   // Static: what *exists* on every branch (drives the typed env).
@@ -21,11 +21,11 @@
  * importing it from `neon.ts` stays cheap and bundler-safe.
  *
  * The imperative operations (`inspect` / `plan` / `apply`, `pushConfig` / `pullConfig`) and
- * function bundling/deploy live in **`@neondatabase/config-runtime`**, which depends on this
+ * function bundling/deploy live in **`@neon/config-runtime`**, which depends on this
  * package and pulls in `esbuild`. Import that from your CLI / CI, not from `neon.ts`:
  * ```ts
  * import config from "../neon";
- * import { inspect, plan, apply } from "@neondatabase/config-runtime/v1";
+ * import { inspect, plan, apply } from "@neon/config-runtime/v1";
  * ```
  *
  * Surface guidelines:
@@ -104,7 +104,7 @@ export {
 	deriveCredentialScopes,
 } from "./lib/credentials.js";
 export { defineConfig, resolveConfig } from "./lib/define-config.js";
-// ─── Diff engine (pure; consumed by @neondatabase/config-runtime) ─────────────
+// ─── Diff engine (pure; consumed by @neon/config-runtime) ─────────────
 export type {
 	DiffOptions,
 	DiffResult,

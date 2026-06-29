@@ -1,10 +1,10 @@
-import type { ResolvedBranchConfig } from '@neondatabase/config';
-import type { PulledBranchConfig } from '@neondatabase/config-runtime';
+import type { ResolvedBranchConfig } from '@neon/config';
+import type { PulledBranchConfig } from '@neon/config-runtime';
 
 /**
  * Render a TTL in whole seconds back to the canonical `neon.ts` duration string (e.g.
  * `604800` -> `"7d"`), falling back to seconds when no clean unit boundary matches. Mirrors
- * the formatter `@neondatabase/config` uses when it emits a TTL, so `config status` shows
+ * the formatter `@neon/config` uses when it emits a TTL, so `config status` shows
  * the same value a user would write in `neon.ts`.
  */
 export const formatDurationSeconds = (totalSeconds: number): string => {

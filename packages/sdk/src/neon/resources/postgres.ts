@@ -49,7 +49,7 @@ export class Postgres<DThrow extends boolean> {
 
 	/**
 	 * Resolve a Postgres connection string. Auto-selects the default branch and the sole
-	 * role/database when not specified (mirrors `@neondatabase/config`'s `fetchEnv`); returns
+	 * role/database when not specified (mirrors `@neon/config`'s `fetchEnv`); returns
 	 * a `client`-kind {@link NeonError} when the selection is ambiguous.
 	 */
 	connectionString(

@@ -8,7 +8,7 @@ import {
 	MissingContextError,
 	type NeonApi,
 	PlatformError,
-} from "@neondatabase/config/v1";
+} from "@neon/config/v1";
 import { fetchEnv, toEntries } from "../env.js";
 import { resolveContext } from "./resolve-context.js";
 

@@ -1,4 +1,4 @@
-import { defineConfig } from "@neondatabase/config/v1";
+import { defineConfig } from "@neon/config/v1";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { NEON_ENV_VAR_KEYS, type NeonEnv, parseEnv, toEntries } from "./env.js";
 import { stubCleanNeonEnv } from "./test-utils.js";
@@ -17,7 +17,7 @@ beforeEach(() => stubCleanNeonEnv());
 //      filter types. Adding a var to one and forgetting the others means `parseEnv` silently
 //      stops validating / returning it.
 //   3. The `toEntries` → `parseEnv` round-trip (the cross-process transport contract).
-//   4. The public value-export surface of `@neondatabase/env`.
+//   4. The public value-export surface of `@neon/env`.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -192,7 +192,7 @@ describe("toEntries → parseEnv round-trip (cross-process transport)", () => {
 	});
 });
 
-describe("@neondatabase/env public surface", () => {
+describe("@neon/env public surface", () => {
 	test("value exports are stable (removing/renaming one is a breaking change)", async () => {
 		const surface = await import("../index.js");
 		expect(Object.keys(surface).sort()).toMatchInlineSnapshot(`

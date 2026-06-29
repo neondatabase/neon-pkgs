@@ -23,7 +23,7 @@ import type {
 	NeonProjectSnapshot,
 	NeonRoleSnapshot,
 	UpdateBranchInput,
-} from "@neondatabase/config/v1";
+} from "@neon/config/v1";
 
 /**
  * Test-only branch seed shape. Permits omitting `protected` (defaults to `false`) so the

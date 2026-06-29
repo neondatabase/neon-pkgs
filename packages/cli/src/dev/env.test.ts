@@ -20,7 +20,7 @@ import type {
   NeonFunctionSnapshot,
   NeonProjectSnapshot,
   NeonRoleSnapshot,
-} from '@neondatabase/config';
+} from '@neon/config';
 
 import {
   DevEnvMismatchError,

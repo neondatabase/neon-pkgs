@@ -166,7 +166,7 @@ async function importModule(absPath: string): Promise<unknown> {
 		throw new ConfigLoadError(
 			[
 				"jiti is required to load TypeScript config files but could not be initialised.",
-				"Reinstall the package dependencies (`pnpm install` / `npm install`) — jiti is a runtime dependency of @neondatabase/config.",
+				"Reinstall the package dependencies (`pnpm install` / `npm install`) — jiti is a runtime dependency of @neon/config.",
 			].join(" "),
 		);
 	}

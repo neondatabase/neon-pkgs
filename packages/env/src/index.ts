@@ -1,5 +1,5 @@
 /**
- * `@neondatabase/env` — resolve and inject Neon connection strings for the branch
+ * `@neon/env` — resolve and inject Neon connection strings for the branch
  * selected by your `neon.ts` policy.
  *
  * - `fetchEnv(config)` — async; resolves the branch + calls the Neon API for live
@@ -8,7 +8,7 @@
  *   Use in app bootstrap (Drizzle config, Next.js, Vite, …).
  * - `toEntries(env)` — project a resolved env into `{ KEY: value }` pairs.
  *
- * The branch policy type (`Config`) and `defineConfig` come from `@neondatabase/config`.
+ * The branch policy type (`Config`) and `defineConfig` come from `@neon/config`.
  */
 
 export type {
@@ -32,8 +32,8 @@ export {
 	toEntries,
 } from "./lib/env.js";
 
-// The branch policy type (`Config`) and `defineConfig` live in `@neondatabase/config`.
+// The branch policy type (`Config`) and `defineConfig` live in `@neon/config`.
 // Import them from there directly:
-//   import { defineConfig } from "@neondatabase/config/v1";
+//   import { defineConfig } from "@neon/config/v1";
 // They are intentionally not re-exported here to keep this package's surface focused on
 // env resolution and to avoid coupling the two packages' type-declaration bundles.

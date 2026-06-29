@@ -9,7 +9,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { NeonApi } from '@neondatabase/config';
+import type { NeonApi } from '@neon/config';
 import type {
   CreateCredentialInput,
   GetConnectionUriInput,
@@ -26,7 +26,7 @@ import type {
   NeonFunctionSnapshot,
   NeonProjectSnapshot,
   NeonRoleSnapshot,
-} from '@neondatabase/config';
+} from '@neon/config';
 
 import { autoPullEnvAfterPin, pull, type EnvPullProps } from './env.js';
 

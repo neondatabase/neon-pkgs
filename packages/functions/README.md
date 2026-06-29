@@ -1,11 +1,11 @@
-# @neondatabase/functions
+# @neon/functions
 
 Runtime helpers for [Neon Functions](https://neon.com). Currently provides a `waitUntil` primitive for deferring background work past a response.
 
 ## Install
 
 ```bash
-npm install @neondatabase/functions
+npm install @neon/functions
 ```
 
 ## Usage
@@ -13,7 +13,7 @@ npm install @neondatabase/functions
 The API mirrors [`@vercel/functions`](https://vercel.com/docs/functions/functions-api-reference/vercel-functions-package): import `waitUntil` and call it directly with the promise you want to keep alive.
 
 ```ts
-import { waitUntil } from "@neondatabase/functions";
+import { waitUntil } from "@neon/functions";
 
 export default {
 	async fetch(req: Request): Promise<Response> {

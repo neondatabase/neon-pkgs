@@ -1,4 +1,4 @@
-# @neondatabase/ai-sdk-provider
+# @neon/ai-sdk-provider
 
 Community [Vercel AI SDK](https://ai-sdk.dev) provider for the [Neon](https://neon.com) AI Gateway. Requires **AI SDK v6** (`ai@^6`).
 
@@ -9,7 +9,7 @@ Model ids use the canonical Neon (unprefixed) form — `claude-sonnet-4-6`, `gpt
 ## Install
 
 ```bash
-npm install @neondatabase/ai-sdk-provider ai@^6
+npm install @neon/ai-sdk-provider ai@^6
 ```
 
 ## Configuration
@@ -24,7 +24,7 @@ NEON_AI_GATEWAY_TOKEN="nt_live_..."
 ## Usage
 
 ```ts
-import { neon } from "@neondatabase/ai-sdk-provider";
+import { neon } from "@neon/ai-sdk-provider";
 import { generateText } from "ai";
 
 // Reads NEON_AI_GATEWAY_BASE_URL + NEON_AI_GATEWAY_TOKEN from the environment.
@@ -37,7 +37,7 @@ const { text } = await generateText({
 Or configure explicitly with `createNeon`:
 
 ```ts
-import { createNeon } from "@neondatabase/ai-sdk-provider";
+import { createNeon } from "@neon/ai-sdk-provider";
 
 const neon = createNeon({
   baseURL: process.env.NEON_AI_GATEWAY_BASE_URL,
@@ -67,7 +67,7 @@ Available on OpenAI models via the Responses `image_generation` tool (there is n
 
 ```ts
 import { streamText } from "ai";
-import { neon } from "@neondatabase/ai-sdk-provider";
+import { neon } from "@neon/ai-sdk-provider";
 
 const result = streamText({
   model: neon("gpt-5-mini"),

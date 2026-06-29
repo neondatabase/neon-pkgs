@@ -14,7 +14,7 @@ import {
 	type NeonFunctionSnapshot,
 	type NeonProjectSnapshot,
 	PlatformError,
-} from "@neondatabase/config";
+} from "@neon/config";
 
 export interface PullConfigOptions {
 	/** Neon project id (`<project>`). Required — the API addresses branches by project. */

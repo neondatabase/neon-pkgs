@@ -1,7 +1,7 @@
 {
-	"name": "@neondatabase/config-runtime",
+	"name": "@neon/config-runtime",
 	"version": "0.8.1",
-	"description": "Imperative runtime for @neondatabase/config: inspect/plan/apply a neon.ts policy against the Neon API and bundle + deploy Neon Functions. Pulls in esbuild; import this from CLIs and CI, not from neon.ts.",
+	"description": "Imperative runtime for @neon/config: inspect/plan/apply a neon.ts policy against the Neon API and bundle + deploy Neon Functions. Pulls in esbuild; import this from CLIs and CI, not from neon.ts.",
 	"keywords": [
 		"neon",
 		"database",
@@ -58,7 +58,7 @@
 		"vitest": "catalog:"
 	},
 	"dependencies": {
-		"@neondatabase/config": "workspace:*",
+		"@neon/config": "workspace:*",
 		"esbuild": "^0.25.0",
 		"fflate": "^0.8.2"
 	},

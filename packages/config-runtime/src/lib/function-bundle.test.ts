@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ResolvedFunctionConfig } from "@neondatabase/config";
+import type { ResolvedFunctionConfig } from "@neon/config";
 import { unzipSync } from "fflate";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { buildFunctionBundle } from "./function-bundle.js";

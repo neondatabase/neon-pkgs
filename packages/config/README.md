@@ -1,4 +1,4 @@
-# @neondatabase/config
+# @neon/config
 
 Config-as-Code for the Neon Platform. A repo-local `neon.ts` exports a TypeScript policy function describing a branch's desired state. This package exposes **functions** to inspect, diff, and deploy that policy against the Neon API.
 
@@ -7,14 +7,14 @@ Config-as-Code for the Neon Platform. A repo-local `neon.ts` exports a TypeScrip
 ## Install
 
 ```bash
-npm install @neondatabase/config
+npm install @neon/config
 ```
 
 ## Define a policy
 
 ```ts
 // neon.ts
-import { defineConfig } from "@neondatabase/config/v1";
+import { defineConfig } from "@neon/config/v1";
 
 export default defineConfig({
   // Static: what *exists* on every branch. GA service toggles drive the typed env.
@@ -36,7 +36,7 @@ export default defineConfig({
 
 A policy is split into a **static** existential set and a **dynamic** `branch` closure:
 
-- **Static top-level** — `auth` / `dataApi` (GA service toggles) and the beta `preview` block (`aiGateway`, `functions` keyed by slug, `buckets` keyed by name). Because this is static, the secret set is known at the type level, so `parseEnv` / `fetchEnv` from `@neondatabase/env` return an exact `NeonEnv`.
+- **Static top-level** — `auth` / `dataApi` (GA service toggles) and the beta `preview` block (`aiGateway`, `functions` keyed by slug, `buckets` keyed by name). Because this is static, the secret set is known at the type level, so `parseEnv` / `fetchEnv` from `@neon/env` return an exact `NeonEnv`.
 - **`branch` closure** — receives a **read-only descriptor** (`BranchTarget`) of the branch being evaluated (`name`, `id`, `exists`, `isDefault`, `isProtected`, `parentId`, `expiresAt`) and returns per-branch *tuning*: `parent`, `ttl`, `protected`, `postgres.computeSettings`, and per-function `runtime`. Function memory is fixed at `2048` MiB for now and is not user-configurable. It runs both against existing branches and during pre-create evaluation (`exists: false`). It **cannot** change which services or functions exist — that is what keeps the static secret set sound.
 
 Service toggles accept `true` / `{}` / `{ enabled: true }` (enabled) and `false` / `{ enabled: false }` (disabled). Function slugs (record keys) must match `^[a-z0-9]{1,20}$`.
@@ -90,7 +90,7 @@ The three operations mirror the Terraform mental model: **`inspect`** (read live
 
 ```ts
 import config from "../neon";
-import { inspect, plan, apply } from "@neondatabase/config/v1";
+import { inspect, plan, apply } from "@neon/config/v1";
 
 const target = { projectId: "patient-art-12345", branchId: "main" };
 
@@ -131,7 +131,7 @@ import {
   ErrorCode,
   errors,
   schemas,
-} from "@neondatabase/config/v1";
+} from "@neon/config/v1";
 ```
 
 ## Safety Rules
@@ -143,4 +143,4 @@ import {
 
 ## Env vars
 
-Connection-string resolution/injection lives in the companion package [`@neondatabase/env`](../env), which depends on this package for the `Config` type and the Neon API client.
+Connection-string resolution/injection lives in the companion package [`@neon/env`](../env), which depends on this package for the `Config` type and the Neon API client.

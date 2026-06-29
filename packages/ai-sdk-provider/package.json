@@ -1,5 +1,5 @@
 {
-	"name": "@neondatabase/ai-sdk-provider",
+	"name": "@neon/ai-sdk-provider",
 	"version": "0.5.0",
 	"description": "Community Vercel AI SDK provider for the Neon AI Gateway.",
 	"keywords": [

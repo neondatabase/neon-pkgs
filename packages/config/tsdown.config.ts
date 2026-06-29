@@ -1,7 +1,7 @@
 import { defineConfig } from "tsdown";
 
 export default defineConfig({
-	name: "@neondatabase/config",
+	name: "@neon/config",
 	bundle: false,
 	clean: true,
 	dts: true,

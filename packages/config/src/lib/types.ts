@@ -156,7 +156,7 @@ export type ServiceToggleInput = boolean | ServiceToggle;
  *   (a present toggle defaults to enabled)
  * - the bare `boolean | … | undefined` (no literal info) → `false`
  *
- * Shared by the {@link Config} static cross-field checks and the `@neondatabase/env`
+ * Shared by the {@link Config} static cross-field checks and the `@neon/env`
  * `NeonEnv` namespace derivation, so both read "is this service on?" identically.
  */
 export type ServiceEnabled<T> = [T] extends [false]

@@ -19,7 +19,7 @@ describe("config-runtime v1 surface", () => {
 		expect(buildFunctionBundle).toBeTypeOf("function");
 	});
 
-	test("re-exports defineConfig from @neondatabase/config for one-stop deploy scripts", () => {
+	test("re-exports defineConfig from @neon/config for one-stop deploy scripts", () => {
 		const config = defineConfig({
 			branch: (branch) => ({
 				parent: branch.name === "main" ? undefined : "main",

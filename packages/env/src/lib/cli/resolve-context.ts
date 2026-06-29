@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 
 /**
  * Resolved project + branch context for the `neon-env` CLI. The CLI owns this resolution
- * (flags → `NEON_*` env → `.neon[/project.json]` file) so the `@neondatabase/env` library
+ * (flags → `NEON_*` env → `.neon[/project.json]` file) so the `@neon/env` library
  * functions can stay filesystem- and env-agnostic.
  */
 export interface ResolvedContext {

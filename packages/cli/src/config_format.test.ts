@@ -1,5 +1,5 @@
-import type { ResolvedBranchConfig } from '@neondatabase/config';
-import type { PulledBranchConfig } from '@neondatabase/config-runtime';
+import type { ResolvedBranchConfig } from '@neon/config';
+import type { PulledBranchConfig } from '@neon/config-runtime';
 import { describe, expect, it } from 'vitest';
 
 import { formatDurationSeconds, toNeonConfigView } from './config_format.js';

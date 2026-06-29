@@ -2,7 +2,7 @@ import {
 	defineConfig,
 	ErrorCode,
 	type GetConnectionUriInput,
-} from "@neondatabase/config/v1";
+} from "@neon/config/v1";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import {
 	fetchEnv,

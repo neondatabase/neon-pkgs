@@ -70,9 +70,9 @@ import { type Config, defineConfig } from "./v1.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public TYPE-export surface lock. Type-only exports cannot be enumerated at runtime, so
-// this file references every public type of `@neondatabase/config/v1`. Removing or renaming
+// this file references every public type of `@neon/config/v1`. Removing or renaming
 // any of them fails to compile here — a deliberate tripwire against an accidental breaking
-// change to the type surface. Run via `pnpm --filter @neondatabase/config test:types` and
+// change to the type surface. Run via `pnpm --filter @neon/config test:types` and
 // enforced by `tsc --noEmit` during the build (this file lives under `src`).
 // ─────────────────────────────────────────────────────────────────────────────
 

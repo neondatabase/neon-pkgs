@@ -1,8 +1,8 @@
 import chalk from 'chalk';
 import yargs from 'yargs';
 
-import { type NeonApi } from '@neondatabase/config';
-import { NEON_ENV_VAR_KEYS } from '@neondatabase/env';
+import { type NeonApi } from '@neon/config';
+import { NEON_ENV_VAR_KEYS } from '@neon/env';
 
 import { existsSync } from 'node:fs';
 
@@ -76,7 +76,7 @@ export const builder = (argv: yargs.Argv) =>
 
 export const handler = (args: yargs.Argv) => args;
 
-/** Every OS-level env var name `@neondatabase/env` can emit, used only for reporting. */
+/** Every OS-level env var name `@neon/env` can emit, used only for reporting. */
 const NEON_VAR_NAMES = Object.values(NEON_ENV_VAR_KEYS).flatMap((group) =>
   Object.values(group),
 );

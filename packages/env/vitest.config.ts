@@ -2,7 +2,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
-// Resolve the sibling `@neondatabase/config` workspace package to its TypeScript *source*
+// Resolve the sibling `@neon/config` workspace package to its TypeScript *source*
 // rather than its built `dist/`. By default `workspace:*` + the package's `exports` point at
 // `dist/`, so these cross-package tests silently run against a **stale** build whenever
 // `config/src` is ahead of `config/dist` (local edits between builds, or CI's `test` job,
@@ -17,9 +17,9 @@ export default defineConfig({
 	resolve: {
 		alias: [
 			// More specific subpath first; the bare-package alias is anchored so it
-			// matches `@neondatabase/config` exactly and never the `/v1` subpath.
+			// matches `@neon/config` exactly and never the `/v1` subpath.
 			{
-				find: "@neondatabase/config/v1",
+				find: "@neon/config/v1",
 				replacement: resolve(configSrc, "v1.ts"),
 			},
 			{

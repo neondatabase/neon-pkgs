@@ -7,7 +7,7 @@ import {
 	PlatformError,
 	type PushResult,
 	resolveConfig,
-} from "@neondatabase/config";
+} from "@neon/config";
 import type { FunctionBundler } from "./function-bundle.js";
 import { type PulledBranchConfig, pullConfig } from "./pull-config.js";
 import { type PushConfigOptions, pushConfig } from "./push-config.js";

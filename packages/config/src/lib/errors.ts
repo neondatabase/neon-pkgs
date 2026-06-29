@@ -48,7 +48,7 @@ export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
 const ISSUE_URL = "https://github.com/neondatabase/neon-pkgs/issues/new";
 
 /**
- * Base class for all errors thrown by `@neondatabase/config`. Always extend this so callers
+ * Base class for all errors thrown by `@neon/config`. Always extend this so callers
  * can catch every package-thrown error with a single `instanceof` check.
  *
  * Optional `details` carries structured context that the CLI prints under `--debug` and
@@ -94,7 +94,7 @@ export function isPlatformError(value: unknown): value is PlatformError {
  * is supposed to fix something on their end.
  */
 export function bugReportFooter(): string {
-	return `\nThis indicates a bug in @neondatabase/config. Please file an issue: ${ISSUE_URL}`;
+	return `\nThis indicates a bug in @neon/config. Please file an issue: ${ISSUE_URL}`;
 }
 
 /**

@@ -1,7 +1,7 @@
 import { defineConfig } from "tsdown";
 
 export default defineConfig({
-	name: "@neondatabase/config-runtime",
+	name: "@neon/config-runtime",
 	bundle: false,
 	clean: true,
 	dts: true,
@@ -18,5 +18,5 @@ export default defineConfig({
 	// esbuild and fflate are real, auto-installed dependencies of this package — but they
 	// must stay external so the published runtime resolves them from node_modules rather
 	// than inlining esbuild's native binary into the bundle.
-	external: ["esbuild", "fflate", "@neondatabase/config"],
+	external: ["esbuild", "fflate", "@neon/config"],
 });

@@ -7,7 +7,7 @@ import {
 import type { DataApiInput } from "./types.js";
 
 // Type-level tests for the Neon-Auth Data API cross-field guard. Run via
-// `pnpm --filter @neondatabase/config test:types` (Vitest typecheck mode) and additionally
+// `pnpm --filter @neon/config test:types` (Vitest typecheck mode) and additionally
 // enforced by `tsc --noEmit` during the build, since this file lives under `src`.
 //
 // These lock in the regression we just fixed: a Neon-Auth `dataApi` without `auth` must

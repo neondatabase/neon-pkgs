@@ -1,5 +1,5 @@
 {
-	"name": "@neondatabase/env",
+	"name": "@neon/env",
 	"version": "0.8.1",
 	"description": "Resolve and inject Neon connection strings for the branch selected by your neon.ts policy. fetchEnv / parseEnv plus a `neon-env` CLI with `run` and `export`.",
 	"keywords": [
@@ -57,7 +57,7 @@
 		"vitest": "catalog:"
 	},
 	"dependencies": {
-		"@neondatabase/config": "workspace:*",
+		"@neon/config": "workspace:*",
 		"zod": "^4.4.3",
 		"yargs": "^18.0.0"
 	},

@@ -425,7 +425,7 @@ const runDefaultSteps = async (
 
 const isGitRepo = (dir: string): boolean => existsSync(join(dir, '.git'));
 
-// Config filenames the runtime loads (mirrors @neondatabase/config). A scaffold
+// Config filenames the runtime loads (mirrors @neon/config). A scaffold
 // that ships one makes `neon link`'s env pull evaluate it — which needs deps.
 const NEON_CONFIG_FILENAMES = ['neon.ts', 'neon.mts', 'neon.js', 'neon.mjs'];
 

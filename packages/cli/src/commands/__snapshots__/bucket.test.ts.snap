@@ -1,5 +1,13 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`bucket > buckets primary name lists buckets 1`] = `
+"- name: my-bucket
+  access_level: private
+- name: public-bucket
+  access_level: public_read
+"
+`;
+
 exports[`bucket > create with default access level 1`] = `""`;
 
 exports[`bucket > create with public_read access level 1`] = `""`;
@@ -25,14 +33,6 @@ exports[`bucket > list with table output 1`] = `
 ├───────────────┼──────────────┤
 │ public-bucket │ public_read  │
 └───────────────┴──────────────┘
-"
-`;
-
-exports[`bucket > buckets primary name lists buckets 1`] = `
-"- name: my-bucket
-  access_level: private
-- name: public-bucket
-  access_level: public_read
 "
 `;
 

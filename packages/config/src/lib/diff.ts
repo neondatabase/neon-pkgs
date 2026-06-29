@@ -162,7 +162,7 @@ export function diffConfig(
  * The AI Gateway is intentionally NOT planned here: it is always available on a branch
  * (credential-gated, not per-branch provisioned), so `preview.aiGateway` produces no plan
  * step — it only drives the branch credential's `ai_gateway:invoke` scope and the gateway
- * env vars (`@neondatabase/env`). There is nothing to create, and nothing to probe.
+ * env vars (`@neon/env`). There is nothing to create, and nothing to probe.
  *
  * Functions are always (re-)deployed: deployments are versioned and the newest becomes
  * active, so each push ships the current source. There is no separate create step — Neon

@@ -1,4 +1,4 @@
-import { ErrorCode, PlatformError, resolveConfig } from "@neondatabase/config";
+import { ErrorCode, PlatformError, resolveConfig } from "@neon/config";
 import { describe, expect, test } from "vitest";
 import { FakeNeonApi } from "./fake-neon-api.js";
 import { pullConfig } from "./pull-config.js";
