@@ -31,7 +31,7 @@
     "package.json"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "scripts": {
     "generateParams": "tsx generateOptionsFromSpec.ts",
@@ -47,13 +47,11 @@
   },
   "dependencies": {
     "@hono/node-server": "2.0.4",
-    "@neondatabase/api-client": "2.7.1",
+    "@neon/sdk": "workspace:*",
     "@neondatabase/config": "0.8.0",
     "@neondatabase/config-runtime": "0.8.0",
     "@neondatabase/env": "0.7.0",
     "@segment/analytics-node": "1.3.0",
-    "axios": "1.7.2",
-    "axios-debug-log": "1.0.0",
     "chalk": "5.3.0",
     "chokidar": "5.0.0",
     "cli-table": "0.3.11",
@@ -65,6 +63,7 @@
     "openid-client": "6.8.1",
     "pg-protocol": "^1.14.0",
     "prompts": "2.4.2",
+    "undici": "^8.5.0",
     "which": "3.0.1",
     "yaml": "2.4.5",
     "yargs": "17.7.2"

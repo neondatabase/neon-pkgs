@@ -4,7 +4,7 @@ import { branchIdFromProps, fillSingleProject } from '../utils/enrichers.js';
 
 import { BranchScopeProps } from '../types.js';
 import { writer } from '../writer.js';
-import { Role } from '@neondatabase/api-client';
+import { Role } from '@neon/sdk';
 
 export const DATABASE_FIELDS = ['name', 'owner_name', 'created_at'] as const;
 
@@ -124,7 +124,10 @@ export const deleteDb = async (
     ),
   );
 
-  writer(props).end(data.database, {
-    fields: DATABASE_FIELDS,
-  });
+  // A 204 (database already gone) carries no body; only a 200 returns it.
+  if (data) {
+    writer(props).end(data.database, {
+      fields: DATABASE_FIELDS,
+    });
+  }
 };

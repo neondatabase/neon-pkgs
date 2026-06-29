@@ -1,15 +1,16 @@
-import {
-  NeonAuthSupportedAuthProvider,
+import type {
   NeonAuthCreateIntegrationResponse,
   NeonAuthIntegration,
+} from '@neon/sdk';
+import {
+  NeonAuthSupportedAuthProvider,
   NeonAuthOauthProviderId,
   NeonAuthOauthProviderType,
   NeonAuthEmailVerificationMethod,
-} from '@neondatabase/api-client';
-import { isAxiosError } from 'axios';
+} from '../utils/api_enums.js';
 import chalk from 'chalk';
 import yargs from 'yargs';
-import { retryOnLock } from '../api.js';
+import { codeFromBody, isNeonApiError, retryOnLock } from '../api.js';
 import { branchIdFromProps, fillSingleProject } from '../utils/enrichers.js';
 import { BranchScopeProps } from '../types.js';
 import { writer } from '../writer.js';
@@ -671,7 +672,7 @@ const enable = async (props: AuthBranchProps & { databaseName?: string }) => {
       }),
     ));
   } catch (err) {
-    if (isAxiosError(err) && err.response?.status === 409) {
+    if (isNeonApiError(err) && err.status === 409) {
       alreadyEnabled = true;
       ({ data } = await props.apiClient.getNeonAuth(props.projectId, branchId));
     } else {
@@ -715,7 +716,7 @@ const status = async (props: AuthBranchProps) => {
   try {
     ({ data } = await props.apiClient.getNeonAuth(props.projectId, branchId));
   } catch (err) {
-    if (isAxiosError(err) && err.response?.status === 404) {
+    if (isNeonApiError(err) && err.status === 404) {
       printMessage('Neon Auth is not configured for this branch');
       return;
     }
@@ -798,9 +799,8 @@ const oauthProviderAdd = async (
     ));
   } catch (err) {
     if (
-      isAxiosError(err) &&
-      (err.response?.data as { code?: string } | undefined)?.code ===
-        'INVALID_SHARED_OAUTH_PROVIDER'
+      isNeonApiError(err) &&
+      codeFromBody(err.data) === 'INVALID_SHARED_OAUTH_PROVIDER'
     ) {
       throw new Error(
         `The "${props.providerId}" provider requires your own OAuth app credentials.\n` +
@@ -847,9 +847,8 @@ const oauthProviderUpdate = async (
     ));
   } catch (err) {
     if (
-      isAxiosError(err) &&
-      (err.response?.data as { code?: string } | undefined)?.code ===
-        'INVALID_SHARED_OAUTH_PROVIDER'
+      isNeonApiError(err) &&
+      codeFromBody(err.data) === 'INVALID_SHARED_OAUTH_PROVIDER'
     ) {
       throw new Error(
         `The "${props.providerId}" provider requires your own OAuth app credentials.\n` +

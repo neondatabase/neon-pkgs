@@ -1,7 +1,6 @@
 import yargs from 'yargs';
-import { isAxiosError } from 'axios';
 
-import { retryOnLock } from '../api.js';
+import { isNeonApiError, retryOnLock } from '../api.js';
 import { BranchScopeProps } from '../types.js';
 import {
   branchIdFromProps,
@@ -11,10 +10,10 @@ import {
 import { log } from '../log.js';
 import { writer } from '../writer.js';
 import type {
-  DataAPICreateRequest,
-  DataAPISettings,
-  DataAPIUpdateRequest,
-} from '@neondatabase/api-client';
+  DataApiCreateRequest as DataAPICreateRequest,
+  DataApiSettings as DataAPISettings,
+  DataApiUpdateRequest as DataAPIUpdateRequest,
+} from '@neon/sdk';
 
 const SETTINGS_FIELDS = [
   'db_aggregates_enabled',
@@ -305,7 +304,7 @@ const update = async (
       );
       current = data.settings ?? undefined;
     } catch (err: unknown) {
-      if (isAxiosError(err) && err.response?.status === 404) {
+      if (isNeonApiError(err) && err.status === 404) {
         throw new Error(
           `Data API is not provisioned for ${database} on branch ${branchId}. Run \`neonctl data-api create\` first.`,
         );
@@ -333,7 +332,7 @@ const update = async (
       ),
     );
   } catch (err: unknown) {
-    if (isAxiosError(err) && err.response?.status === 404) {
+    if (isNeonApiError(err) && err.status === 404) {
       throw new Error(
         `Data API is not provisioned for ${database} on branch ${branchId}. Run \`neonctl data-api create\` first.`,
       );
@@ -361,7 +360,7 @@ const refreshSchema = async (props: DataApiProps): Promise<void> => {
       ),
     );
   } catch (err: unknown) {
-    if (isAxiosError(err) && err.response?.status === 404) {
+    if (isNeonApiError(err) && err.status === 404) {
       throw new Error(
         `Data API is not provisioned for ${database} on branch ${branchId}. Run \`neonctl data-api create\` first.`,
       );
@@ -390,7 +389,7 @@ const deleteDataApi = async (props: DataApiProps): Promise<void> => {
       ),
     );
   } catch (err: unknown) {
-    if (isAxiosError(err) && err.response?.status === 404) {
+    if (isNeonApiError(err) && err.status === 404) {
       throw new Error(
         `Data API is not provisioned for ${database} on branch ${branchId}.`,
       );

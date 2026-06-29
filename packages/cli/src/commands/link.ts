@@ -4,8 +4,8 @@ import {
   ProjectCreateRequest,
   ProjectListItem,
   RegionResponse,
-} from '@neondatabase/api-client';
-import { isAxiosError } from 'axios';
+} from '@neon/sdk';
+import { isNeonApiError, messageFromBody } from '../api.js';
 import prompts, { InitialReturnValue } from 'prompts';
 import yargs from 'yargs';
 
@@ -386,7 +386,7 @@ class LinkInputError extends Error {
 }
 
 const httpStatus = (err: unknown): number | undefined =>
-  isAxiosError(err) ? err.response?.status : undefined;
+  isNeonApiError(err) ? err.status : undefined;
 
 /**
  * Fetch a project, turning the common failure modes into clear, actionable
@@ -1053,12 +1053,8 @@ const emitAgent = (response: AgentResponse) => {
 const ORG_KEY_LIMITED_FRAGMENT = 'not allowed for organization API keys';
 
 const isOrgKeyLimitedError = (err: unknown): boolean => {
-  if (!isAxiosError(err)) return false;
-  const data = err.response?.data;
-  if (data === undefined || data === null || typeof data !== 'object') {
-    return false;
-  }
-  const message = (data as { message?: unknown }).message;
+  if (!isNeonApiError(err)) return false;
+  const message = messageFromBody(err.data);
   return (
     typeof message === 'string' && message.includes(ORG_KEY_LIMITED_FRAGMENT)
   );
@@ -1156,15 +1152,11 @@ const toAgentError = (
   if (err instanceof LinkInputError) {
     return { status: 'error', code: err.agentCode, message: err.message };
   }
-  if (isAxiosError(err)) {
-    const status = err.response?.status;
-    const data = err.response?.data;
-    const apiMessage =
-      typeof data === 'object' && data !== null
-        ? (data as { message?: unknown }).message
-        : undefined;
+  if (isNeonApiError(err)) {
+    const status = err.status;
+    const apiMessage = messageFromBody(err.data);
     const message =
-      typeof apiMessage === 'string' && apiMessage.length > 0
+      apiMessage !== undefined && apiMessage.length > 0
         ? apiMessage
         : err.message;
     let code = 'API_ERROR';
@@ -1255,10 +1247,10 @@ const fetchRegions = async (props: CommonProps): Promise<RegionResponse[]> => {
       return data.regions;
     }
   } catch (err) {
-    if (isAxiosError(err)) {
+    if (isNeonApiError(err)) {
       log.debug(
         'getActiveRegions failed (%s), falling back to the static region list.',
-        err.response?.status ?? err.code ?? err.message,
+        err.status ?? err.code ?? err.message,
       );
     } else {
       const message = err instanceof Error ? err.message : String(err);

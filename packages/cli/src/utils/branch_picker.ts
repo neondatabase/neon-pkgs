@@ -1,4 +1,6 @@
-import { Api, Branch, EndpointType } from '@neondatabase/api-client';
+import { Branch } from '@neon/sdk';
+import { EndpointType } from './api_enums.js';
+import type { NeonApiClient } from '../api.js';
 import prompts from 'prompts';
 
 import { retryOnLock } from '../api.js';
@@ -106,7 +108,7 @@ export const promptNewBranchName = async (
  * the new branch id.
  */
 export const createBranch = async (
-  apiClient: Api<unknown>,
+  apiClient: NeonApiClient,
   projectId: string,
   name: string,
   branches: Branch[],

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import yargs from 'yargs';
 
-import { Api } from '@neondatabase/api-client';
+import type { NeonApiClient } from '../api.js';
 
 import { getApiClient } from '../api.js';
 import { auth, refreshToken } from '../auth.js';
@@ -76,7 +76,7 @@ export const authFlow = async ({
 const preserveCredentials = async (
   path: string,
   credentials: ExtendedTokenSet,
-  apiClient: Api<unknown>,
+  apiClient: NeonApiClient,
 ) => {
   const {
     data: { id },
@@ -98,7 +98,7 @@ const handleExistingToken = async (
   tokenSet: ExtendedTokenSet,
   props: AuthProps,
   credentialsPath: string,
-): Promise<{ apiKey: string; apiClient: Api<unknown> } | null> => {
+): Promise<{ apiKey: string; apiClient: NeonApiClient } | null> => {
   // Use existing access_token, if present and valid
   if (tokenSet.access_token && tokenSet.expires_at > Date.now()) {
     log.debug('Using existing valid access_token');
@@ -155,7 +155,7 @@ const handleExistingToken = async (
 export const ensureAuth = async (
   props: AuthProps & {
     apiKey: string;
-    apiClient: Api<unknown>;
+    apiClient: NeonApiClient;
     help: boolean;
   },
 ) => {

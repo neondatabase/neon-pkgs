@@ -1,4 +1,4 @@
-import { ComputeUnit } from '@neondatabase/api-client';
+import { ComputeUnit } from '@neon/sdk';
 
 type Autoscaling = {
   autoscaling_limit_min_cu?: ComputeUnit;

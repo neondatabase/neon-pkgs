@@ -1,9 +1,5 @@
-import {
-  Database,
-  Endpoint,
-  EndpointType,
-  Role,
-} from '@neondatabase/api-client';
+import { Database, Endpoint, Role } from '@neon/sdk';
+import { EndpointType } from '../utils/api_enums.js';
 import yargs from 'yargs';
 import { branchIdFromProps, fillSingleProject } from '../utils/enrichers.js';
 import { BranchScopeProps } from '../types.js';

@@ -2,7 +2,7 @@ import { existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 import yargs from 'yargs';
-import { isAxiosError } from 'axios';
+import { isNeonApiError } from '../api.js';
 
 import { retryOnLock } from '../api.js';
 import { log } from '../log.js';
@@ -239,10 +239,8 @@ const emitDeployResult = (
 // A poll error worth retrying: a network error (no HTTP response), a 5xx, or a
 // 404 from eventual consistency. Anything else (e.g. 401/403) is surfaced.
 const isTransient = (err: unknown): boolean =>
-  isAxiosError(err) &&
-  (err.response === undefined ||
-    err.response.status === 404 ||
-    err.response.status >= 500);
+  isNeonApiError(err) &&
+  (err.status === undefined || err.status === 404 || err.status >= 500);
 
 const deploy = async (props: DeployProps) => {
   if (props.path !== undefined || props.entry !== undefined) {
@@ -306,7 +304,7 @@ const deploy = async (props: DeployProps) => {
     );
     before = fn.current_deployment?.id;
   } catch (err: unknown) {
-    if (!(isAxiosError(err) && err.response?.status === 404)) throw err;
+    if (!(isNeonApiError(err) && err.status === 404)) throw err;
   }
 
   await retryOnLock(() =>
@@ -467,7 +465,7 @@ const deleteFn = async (props: BranchScopeProps & { slug: string }) => {
       deleteFunction(props.apiClient, props.projectId, branchId, props.slug),
     );
   } catch (err: unknown) {
-    if (isAxiosError(err) && err.response?.status === 404) {
+    if (isNeonApiError(err) && err.status === 404) {
       throw new Error(
         `Function "${props.slug}" not found on branch ${branchId}.`,
       );

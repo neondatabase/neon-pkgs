@@ -15,7 +15,13 @@
     // the bare `neon-init/bootstrap` specifier untouched).
     "baseUrl": ".",
     "paths": {
-      "neon-init/bootstrap": ["node_modules/neon-init/dist/lib/bootstrap"]
+      "neon-init/bootstrap": ["node_modules/neon-init/dist/lib/bootstrap"],
+      // `@neon/sdk` ships its raw layer via the `@neon/sdk/raw` subpath export.
+      // Classic ("node") module resolution ignores package `exports`, so map the
+      // specifiers to their shipped types here for the type-checker; Node honors
+      // the export map at runtime (the emitted JS keeps the bare specifiers).
+      "@neon/sdk": ["node_modules/@neon/sdk/dist/index"],
+      "@neon/sdk/raw": ["node_modules/@neon/sdk/dist/raw"]
     },
     "resolveJsonModule": true,
     "noImplicitAny": true,

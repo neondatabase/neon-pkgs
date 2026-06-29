@@ -206,9 +206,9 @@ importers:
       '@hono/node-server':
         specifier: 2.0.4
         version: 2.0.4(hono@4.12.25)
-      '@neondatabase/api-client':
-        specifier: 2.7.1
-        version: 2.7.1
+      '@neon/sdk':
+        specifier: workspace:*
+        version: link:../sdk
       '@neondatabase/config':
         specifier: 0.8.0
         version: 0.8.0
@@ -221,12 +221,6 @@ importers:
       '@segment/analytics-node':
         specifier: 1.3.0
         version: 1.3.0
-      axios:
-        specifier: 1.7.2
-        version: 1.7.2
-      axios-debug-log:
-        specifier: 1.0.0
-        version: 1.0.0(axios@1.7.2)
       chalk:
         specifier: 5.3.0
         version: 5.3.0
@@ -260,6 +254,9 @@ importers:
       prompts:
         specifier: 2.4.2
         version: 2.4.2
+      undici:
+        specifier: ^8.5.0
+        version: 8.5.0
       which:
         specifier: 3.0.1
         version: 3.0.1
@@ -3092,16 +3089,8 @@ packages:
   asynckit@0.4.0:
     resolution: {integrity: sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q==}
 
-  axios-debug-log@1.0.0:
-    resolution: {integrity: sha512-ZjMaEBEij9w+Vbk2Uc3XflchTT7j9rZdYD/snN+XQ5FRDq1QjZNhh0Izb3KSyarU5vTkiCvJyg1xDiQBHZZB9w==}
-    peerDependencies:
-      axios: '>=1.0.0'
-
   axios@1.16.1:
     resolution: {integrity: sha512-caYkukvroVPO8KrzuJEb50Hm07KwfBZPEC3VeFHTsqWHvKTsy54hjJz9BS/cdaypROE2rH6xvm9mHX4fgWkr3A==}
-
-  axios@1.7.2:
-    resolution: {integrity: sha512-2A8QhOMrbomlDuiLeK9XibIBzuHeRcqqNOHp0Cyp5EoJ1IFDh+XZH3A6BkXtv0K4gFGCI0Y4BM7B1wOEi0Rmgw==}
 
   b4a@1.6.7:
     resolution: {integrity: sha512-OnAYlL5b7LEkALw87fUVafQw5rVR9RjwGd4KUwNQ6DrrNmaVaUCgLipfVlzrPQ4tWOR9P0IXGNOx50jYCCdSJg==}
@@ -5462,9 +5451,6 @@ packages:
     resolution: {integrity: sha512-llQsMLSUDUPT44jdrU/O37qlnifitDP+ZwrmmZcoSKyLKvtZxpyV0n2/bD/N4tBAAZ/gJEdZU7KMraoK1+XYAg==}
     engines: {node: '>= 0.10'}
 
-  proxy-from-env@1.1.0:
-    resolution: {integrity: sha512-D+zkORCbA9f1tdWRK0RaCR3GPv50cMxcrz4X8k5LTSUD1Dkw47mKJEZQNunItRTkWwgtaUSo1RVFRIG9ZXiFYg==}
-
   proxy-from-env@2.1.0:
     resolution: {integrity: sha512-cJ+oHTW1VAEa8cJslgmUZrc+sjRKgAKl3Zyse6+PV38hZe/V6Z14TbCuXcan9F9ghlz4QrFr2c92TNF82UkYHA==}
     engines: {node: '>=10'}
@@ -6216,13 +6202,13 @@ packages:
   undici-types@7.10.0:
     resolution: {integrity: sha512-t5Fy/nfn+14LuOc2KNYg75vZqClpAiqscVvMygNnlsHBFpSXdJaYtXMcdNLpl/Qvc3P2cB3s6lOV51nqsFq4ag==}
 
-  undici@7.16.0:
-    resolution: {integrity: sha512-QEg3HPMll0o3t2ourKwOeUAZ159Kn9mx5pnzHRQO8+Wixmh88YdZRiIwat0iNzNNXn0yoEtXJqFpyW7eM8BV7g==}
-    engines: {node: '>=20.18.1'}
-
   undici@7.28.0:
     resolution: {integrity: sha512-cRZYrTDwWznlnRiPjggAGxZXanty6M8RV1ff8Wm4LWXBp7/IG8v5DnOm74DtUBp9OONpK75YlPnIjQqX0dBDtA==}
     engines: {node: '>=20.18.1'}
+
+  undici@8.5.0:
+    resolution: {integrity: sha512-xamtWoB1EshgjpmlXd7GGm2VfdDtw1+rD8uhry8pSNW3If6S8E0m2T2+orSKeZXEn/aPJMviCpDBA65WJt8zhg==}
+    engines: {node: '>=22.19.0'}
 
   unenv@1.10.0:
     resolution: {integrity: sha512-wY5bskBQFL9n3Eca5XnhH6KbUo/tfvkwm9OpcdCvLaeA7piBNbavbOKJySEwQ1V0RH6HvNlSAFRTpvTqgKRQXQ==}
@@ -8732,6 +8718,7 @@ snapshots:
   '@types/debug@4.1.13':
     dependencies:
       '@types/ms': 2.1.0
+    optional: true
 
   '@types/diff@5.2.1': {}
 
@@ -8775,7 +8762,8 @@ snapshots:
 
   '@types/json-schema@7.0.15': {}
 
-  '@types/ms@2.1.0': {}
+  '@types/ms@2.1.0':
+    optional: true
 
   '@types/node@12.20.55': {}
 
@@ -9309,14 +9297,6 @@ snapshots:
 
   asynckit@0.4.0: {}
 
-  axios-debug-log@1.0.0(axios@1.7.2):
-    dependencies:
-      '@types/debug': 4.1.13
-      axios: 1.7.2
-      debug: 4.4.3
-    transitivePeerDependencies:
-      - supports-color
-
   axios@1.16.1:
     dependencies:
       follow-redirects: 1.16.0
@@ -9326,14 +9306,6 @@ snapshots:
     transitivePeerDependencies:
       - debug
       - supports-color
-
-  axios@1.7.2:
-    dependencies:
-      follow-redirects: 1.16.0
-      form-data: 4.0.5
-      proxy-from-env: 1.1.0
-    transitivePeerDependencies:
-      - debug
 
   b4a@1.6.7: {}
 
@@ -9633,7 +9605,7 @@ snapshots:
       parse5: 7.3.0
       parse5-htmlparser2-tree-adapter: 7.1.0
       parse5-parser-stream: 7.1.2
-      undici: 7.16.0
+      undici: 7.28.0
       whatwg-mimetype: 4.0.0
 
   chokidar@3.6.0:
@@ -11880,8 +11852,6 @@ snapshots:
       forwarded: 0.2.0
       ipaddr.js: 1.9.1
 
-  proxy-from-env@1.1.0: {}
-
   proxy-from-env@2.1.0: {}
 
   pump@3.0.4:
@@ -12726,9 +12696,9 @@ snapshots:
   undici-types@7.10.0:
     optional: true
 
-  undici@7.16.0: {}
-
   undici@7.28.0: {}
+
+  undici@8.5.0: {}
 
   unenv@1.10.0:
     dependencies:

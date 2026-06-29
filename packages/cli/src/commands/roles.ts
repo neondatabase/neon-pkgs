@@ -100,7 +100,10 @@ export const deleteRole = async (
       props.role,
     ),
   );
-  writer(props).end(data.role, {
-    fields: ROLES_FIELDS,
-  });
+  // A 204 (role already gone) carries no body; only a 200 returns the role.
+  if (data) {
+    writer(props).end(data.role, {
+      fields: ROLES_FIELDS,
+    });
+  }
 };

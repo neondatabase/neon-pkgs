@@ -1,8 +1,8 @@
-import { Api } from '@neondatabase/api-client';
 import { TokenEndpointResponse } from 'openid-client';
+import type { NeonApiClient } from './api.js';
 
 export type CommonProps = {
-  apiClient: Api<unknown>;
+  apiClient: NeonApiClient;
   apiKey: string;
   apiHost: string;
   output: 'yaml' | 'json' | 'table';

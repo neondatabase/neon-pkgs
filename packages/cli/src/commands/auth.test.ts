@@ -1,5 +1,4 @@
-import { Api } from '@neondatabase/api-client';
-import axios from 'axios';
+import type { NeonApiClient } from '../api.js';
 
 import {
   existsSync,
@@ -18,7 +17,7 @@ import { test } from '../test_utils/fixtures';
 import { startOauthServer } from '../test_utils/oauth_server';
 import { authFlow, ensureAuth, deleteCredentials } from './auth';
 
-vi.mock('open', () => ({ default: vi.fn((url: string) => axios.get(url)) }));
+vi.mock('open', () => ({ default: vi.fn((url: string) => fetch(url)) }));
 vi.mock('../pkg.ts', () => ({ default: { version: '0.0.0' } }));
 
 describe('auth', () => {
@@ -59,14 +58,14 @@ describe('auth', () => {
 describe('ensureAuth', () => {
   let configDir = '';
   let oauthServer: OAuth2Server;
-  let mockApiClient: Api<unknown>;
+  let mockApiClient: NeonApiClient;
   let authSpy: any;
   let refreshTokenSpy: any;
 
   beforeAll(async () => {
     configDir = mkdtempSync('test-config');
     oauthServer = await startOauthServer();
-    mockApiClient = {} as Api<unknown>;
+    mockApiClient = {} as NeonApiClient;
     authSpy = vi.spyOn(authModule, 'auth');
     refreshTokenSpy = vi.spyOn(authModule, 'refreshToken');
   });

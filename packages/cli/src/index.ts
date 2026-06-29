@@ -1,19 +1,7 @@
 import { basename } from 'node:path';
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
-import axiosDebug from 'axios-debug-log';
-axiosDebug({
-  request(debug, config) {
-    debug(`${config.method?.toUpperCase()} ${config.url}`);
-  },
-  response(debug, response) {
-    debug(`${response.status} ${response.statusText}`);
-  },
-  error(debug, error) {
-    debug(error);
-  },
-});
-import { Api } from '@neondatabase/api-client';
+import { isNeonApiError, messageFromBody, type NeonApiClient } from './api.js';
 
 import { ensureAuth, deleteCredentials } from './commands/auth.js';
 import { defaultDir, ensureConfigDir } from './config.js';
@@ -30,7 +18,6 @@ import {
   sendError,
   trackEvent,
 } from './analytics.js';
-import { isAxiosError } from 'axios';
 import {
   isNetworkError,
   matchErrorCode,
@@ -125,8 +112,8 @@ builder = builder
     },
     apiClient: {
       hidden: true,
-      coerce: (v) => v as Api<unknown>,
-      default: null as unknown as Api<unknown>,
+      coerce: (v) => v as NeonApiClient,
+      default: null as unknown as NeonApiClient,
     },
     'context-file': {
       describe: 'Context file',
@@ -195,11 +182,10 @@ async function handleError(msg: string, err: unknown): Promise<boolean> {
   }
 
   // A connection-level failure (no response ever reached us) reads as a cryptic
-  // `fetch failed` on the @neon/sdk / fetch path (env pull / config / deploy and link's
-  // bundled env pull), or surfaces no user-facing message at all on the axios path. Detect
-  // it first — across either transport — and swap in one clear "check your connection" hint.
-  // We deliberately do not retry here: re-running the whole command could re-trigger a
-  // non-idempotent step (e.g. project create), so retries belong at the request layer.
+  // `fetch failed` from the @neon/sdk / global `fetch` path. Detect it first and
+  // swap in one clear "check your connection" hint. We deliberately do not retry
+  // here: re-running the whole command could re-trigger a non-idempotent step
+  // (e.g. project create), so retries belong at the request layer.
   if (isNetworkError(err)) {
     log.error(NETWORK_ERROR_MESSAGE);
     const error = err instanceof Error ? err : new Error(NETWORK_ERROR_MESSAGE);
@@ -207,12 +193,12 @@ async function handleError(msg: string, err: unknown): Promise<boolean> {
     return false;
   }
 
-  if (isAxiosError(err)) {
+  if (isNeonApiError(err)) {
     if (err.code === 'ECONNABORTED') {
       log.error('Request timed out');
       sendError(err, 'REQUEST_TIMEOUT');
       return false;
-    } else if (err.response?.status === 401) {
+    } else if (err.status === 401) {
       sendError(err, 'AUTH_FAILED');
       log.info('Authentication failed, deleting credentials...');
       try {
@@ -226,14 +212,15 @@ async function handleError(msg: string, err: unknown): Promise<boolean> {
         return false;
       }
     } else {
-      if (err.response?.data?.message) {
-        log.error(err.response?.data?.message);
+      const serverMessage = messageFromBody(err.data);
+      if (serverMessage) {
+        log.error(serverMessage);
       }
       log.debug(
         'status: %d %s | path: %s',
-        err.response?.status,
-        err.response?.statusText,
-        err.request?.path,
+        err.status,
+        err.statusText,
+        err.requestPath,
       );
       sendError(err, 'API_ERROR');
       return false;

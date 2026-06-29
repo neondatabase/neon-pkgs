@@ -2,7 +2,7 @@ import yargs from 'yargs';
 import { CommonProps, ProjectScopeProps } from '../types';
 import { writer } from '../writer.js';
 import { fillSingleProject } from '../utils/enrichers.js';
-import { Project, ProjectUpdateRequest } from '@neondatabase/api-client';
+import { Project, ProjectUpdateRequest } from '@neon/sdk';
 import { projectUpdateRequest } from '../parameters.gen.js';
 import { log } from '../log.js';
 

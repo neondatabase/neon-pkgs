@@ -1,25 +1,23 @@
 // Typed client helpers for the branch object-storage (bucket/object) API.
 //
 // These endpoints are part of the Neon object-storage surface (the "Buckets"
-// tag in the public API). They are not yet exposed as typed methods on the
-// published `@neondatabase/api-client` package, so the request/response types
-// and the thin call helpers live here. They are implemented on top of the
-// api-client's public `request()` method, which means they reuse the exact
-// same authentication, base URL, headers and retry behaviour as every other
-// neonctl command. When the generated client gains these methods, the call
-// sites in `src/commands/bucket.ts` can switch over with no behavioural
-// change.
+// tag in the public API). They are not yet exposed as typed methods on
+// `@neon/sdk`, so the request/response types and the thin call helpers live
+// here. They are implemented on top of the API client's low-level `request()`
+// method, which reuses the exact same authentication, base URL, headers and
+// retry behaviour as every other neonctl command. When the SDK gains these
+// methods, the call sites in `src/commands/bucket.ts` can switch over with no
+// behavioural change.
 
 import { type Readable } from 'node:stream';
 
-import { type Api } from '@neondatabase/api-client';
+import type { NeonApiClient } from './api.js';
 
-export type ApiClient = Api<unknown>;
+export type ApiClient = NeonApiClient;
 
-// The api-client bundles its own axios version, whose `AxiosResponse` type is
-// not assignable to the one neonctl depends on directly. Callers only ever read
-// `.data` (and, for the download helper, `.headers`), so we expose that minimal
-// shape and let the helpers return the client's native promise unchanged.
+// Callers only ever read `.data` (and, for the download helper, `.headers`), so
+// we expose that minimal shape and let the helpers return the client's native
+// promise unchanged.
 type ApiResponse<T> = { data: T };
 type ApiResponseWithHeaders<T> = {
   data: T;

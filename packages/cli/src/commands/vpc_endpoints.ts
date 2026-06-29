@@ -1,4 +1,4 @@
-import { VPCEndpointAssignment } from '@neondatabase/api-client';
+import { VpcEndpointAssignment as VPCEndpointAssignment } from '@neon/sdk';
 import yargs from 'yargs';
 import {
   CommonProps,

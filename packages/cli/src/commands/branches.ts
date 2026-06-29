@@ -1,4 +1,5 @@
-import { Branch, EndpointType } from '@neondatabase/api-client';
+import { Branch } from '@neon/sdk';
+import { EndpointType } from '../utils/api_enums.js';
 import yargs from 'yargs';
 
 import { contextBranch, readContextFile } from '../context.js';
@@ -503,9 +504,12 @@ const deleteBranch = async (props: ProjectScopeProps & IdOrNameProps) => {
   const { data } = await retryOnLock(() =>
     props.apiClient.deleteProjectBranch(props.projectId, branchId),
   );
-  writer(props).end(data.branch, {
-    fields: BRANCH_FIELDS,
-  });
+  // A 204 (branch already gone) carries no body; only a 200 returns it.
+  if (data) {
+    writer(props).end(data.branch, {
+      fields: BRANCH_FIELDS,
+    });
+  }
 };
 
 const get = async (props: ProjectScopeProps & IdOrNameProps) => {

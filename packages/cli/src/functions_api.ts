@@ -1,4 +1,4 @@
-import { ContentType } from '@neondatabase/api-client';
+import { ContentType } from './api.js';
 import { CommonProps } from './types.js';
 
 export type DeploymentStatus = 'pending' | 'building' | 'completed' | 'failed';
@@ -84,7 +84,7 @@ export const deleteFunction = async (
   branchId: string,
   slug: string,
 ): Promise<void> => {
-  await apiClient.request<unknown>({
+  await apiClient.request({
     path: `${functionsPath(projectId, branchId)}/${encodeURIComponent(slug)}`,
     method: 'DELETE',
     secure: true,
@@ -111,7 +111,7 @@ export const createDeployment = async (
 
   // The deploy POST returns an operation the CLI cannot poll; the body is
   // ignored. We only need the request to succeed.
-  await apiClient.request<unknown>({
+  await apiClient.request({
     path: `${functionsPath(projectId, branchId)}/${encodeURIComponent(
       slug,
     )}/deployments`,

@@ -1,6 +1,6 @@
 import { BranchScopeProps } from '../types';
 import { createPatch } from 'diff';
-import { Branch, Database } from '@neondatabase/api-client';
+import { Branch, Database } from '@neon/sdk';
 import chalk from 'chalk';
 import { writer } from '../writer.js';
 import { branchIdFromProps } from '../utils/enrichers.js';
@@ -9,7 +9,7 @@ import {
   PointInTime,
   PointInTimeBranchId,
 } from '../utils/point_in_time.js';
-import { isAxiosError } from 'axios';
+import { isNeonApiError, messageFromBody } from '../api.js';
 import { sendError } from '../analytics.js';
 import { log } from '../log.js';
 
@@ -124,11 +124,10 @@ const fetchSchema = async (
     });
     return response.data.sql ?? '';
   } catch (error) {
-    if (isAxiosError(error)) {
-      const data = error.response?.data;
+    if (isNeonApiError(error)) {
       sendError(error, 'API_ERROR');
       throw new Error(
-        data.message ??
+        messageFromBody(error.data) ??
           `Error while fetching schema for branch ${pointInTime.branchId}`,
       );
     }

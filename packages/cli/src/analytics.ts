@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { Analytics, TrackParams } from '@segment/analytics-node';
-import { isAxiosError } from 'axios';
 
 import { CREDENTIALS_FILE } from './config.js';
 import { isCurrentBranchProbe } from './context.js';
@@ -10,7 +9,7 @@ import { getGithubEnvVars, isCi } from './env.js';
 import { ErrorCode } from './errors.js';
 import { log } from './log.js';
 import pkg from './pkg.js';
-import { getApiClient } from './api.js';
+import { getApiClient, isNeonApiError } from './api.js';
 
 const WRITE_KEY = '3SQXn5ejjXWLEJ8xU2PRYhAotLtTaeeV';
 
@@ -139,8 +138,8 @@ export const sendError = (err: Error, errCode: ErrorCode) => {
   if (!client) {
     return;
   }
-  const axiosError = isAxiosError(err) ? err : undefined;
-  const requestId = axiosError?.response?.headers['x-neon-ret-request-id'];
+  const apiError = isNeonApiError(err) ? err : undefined;
+  const requestId = apiError?.headers?.['x-neon-ret-request-id'];
   if (requestId) {
     log.debug('Failed request ID: %s', requestId);
   }
@@ -151,7 +150,7 @@ export const sendError = (err: Error, errCode: ErrorCode) => {
       message: err.message,
       stack: err.stack,
       errCode,
-      statusCode: axiosError?.response?.status,
+      statusCode: apiError?.status,
       requestId: requestId,
     },
   });

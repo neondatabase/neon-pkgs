@@ -3,9 +3,8 @@ import { stat, unlink } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import yargs from 'yargs';
-import axios, { isAxiosError } from 'axios';
 
-import { retryOnLock } from '../api.js';
+import { isNeonApiError, retryOnLock } from '../api.js';
 import { BranchScopeProps } from '../types.js';
 import { branchIdFromProps, fillSingleProject } from '../utils/enrichers.js';
 import { log } from '../log.js';
@@ -296,7 +295,7 @@ const deleteBucket = async (
       }),
     );
   } catch (err: unknown) {
-    if (isAxiosError(err) && err.response?.status === 404) {
+    if (isNeonApiError(err) && err.status === 404) {
       throw new Error(
         `Bucket "${props.name}" not found on branch ${branchId}.`,
       );
@@ -453,13 +452,41 @@ const objectNotFoundMessage = (
   bucket: string,
   branchId: string,
 ): string => {
-  if (isAxiosError(err)) {
-    const serverMessage = serverErrorMessage(err.response?.data);
+  if (isNeonApiError(err)) {
+    const serverMessage = serverErrorMessage(err.data);
     if (serverMessage !== undefined) {
       return serverMessage;
     }
   }
   return objectNotFoundFallback(key, bucket, branchId);
+};
+
+// Stream a file from disk as a WHATWG `ReadableStream` suitable for a `fetch`
+// request body, applying backpressure so we never read faster than the upload
+// drains. Uses the global `ReadableStream` (what `fetch` expects) directly, so
+// there's no Node-vs-DOM stream type bridging.
+const fileToWebStream = (path: string): ReadableStream<Uint8Array> => {
+  const source = createReadStream(path);
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      source.on('data', (chunk: Buffer) => {
+        controller.enqueue(new Uint8Array(chunk));
+        if ((controller.desiredSize ?? 0) <= 0) source.pause();
+      });
+      source.on('end', () => {
+        controller.close();
+      });
+      source.on('error', (err) => {
+        controller.error(err instanceof Error ? err : new Error(String(err)));
+      });
+    },
+    pull() {
+      source.resume();
+    },
+    cancel() {
+      source.destroy();
+    },
+  });
 };
 
 const getObject = async (
@@ -480,11 +507,11 @@ const getObject = async (
       objectKey: key,
     });
   } catch (err: unknown) {
-    if (isAxiosError(err) && err.response?.status === 404) {
+    if (isNeonApiError(err) && err.status === 404) {
       // The download response is a stream, so a 404 body arrives as a stream
       // too; drain and parse it to recover the server's message (which
       // distinguishes a missing bucket from a missing object).
-      const serverMessage = await streamErrorMessage(err.response.data);
+      const serverMessage = await streamErrorMessage(err.data);
       throw new Error(
         serverMessage ?? objectNotFoundFallback(key, bucket, branchId),
       );
@@ -559,16 +586,16 @@ const putObject = async (
       contentType: props.contentType,
     }));
   } catch (err: unknown) {
-    if (isAxiosError(err)) {
-      const status = err.response?.status;
+    if (isNeonApiError(err)) {
+      const status = err.status;
       if (status === 404) {
         throw new Error(objectNotFoundMessage(err, key, bucket, branchId));
       }
       // Any other HTTP error from the console (e.g. 403 when the caller lacks
       // write permission on the bucket) carries the same JSON `{ message }`
-      // body, so surface that rather than a bare axios message. When the body
-      // has no usable message, fall back to a clean status-bearing error.
-      const serverMessage = serverErrorMessage(err.response?.data);
+      // body, so surface that rather than a bare error. When the body has no
+      // usable message, fall back to a clean status-bearing error.
+      const serverMessage = serverErrorMessage(err.data);
       throw new Error(
         serverMessage ??
           `Failed to presign upload for "${key}" in bucket "${bucket}" on branch ${branchId}${
@@ -579,40 +606,46 @@ const putObject = async (
     throw err;
   }
 
-  // Stream the file straight into the PUT body; never buffer the whole file.
-  // The presigned URL targets the branch S3 data-plane endpoint directly, so
-  // this PUT goes through a plain axios call rather than the console api-client.
+  // Stream the file straight into the PUT body via `fetch`; never buffer the
+  // whole file. The presigned URL targets the branch S3 data-plane endpoint
+  // directly, so this PUT bypasses the console API entirely.
   //
   // `presign.headers` carries the signature-relevant headers (e.g. host,
   // content-type); the server does not sign Content-Length, so we set it
-  // ourselves from the stat'd size to keep the upload streamed, not chunked.
-  // `maxRedirects: 0` ensures we never resend the file bytes and signed headers
-  // to a different host if the data-plane endpoint were to answer with a
-  // redirect.
+  // ourselves from the stat'd size. `redirect: 'error'` ensures we never resend
+  // the file bytes and signed headers to a different host if the data-plane
+  // endpoint were to answer with a redirect. `duplex: 'half'` is required by
+  // fetch when streaming a request body.
+  const upload: RequestInit & { duplex: 'half' } = {
+    method: 'PUT',
+    headers: {
+      ...presign.headers,
+      'Content-Length': String(fileSize),
+    },
+    body: fileToWebStream(props.file),
+    redirect: 'error',
+    duplex: 'half',
+  };
+  let uploadResponse: Response;
   try {
-    await axios.put(presign.url, createReadStream(props.file), {
-      headers: {
-        ...presign.headers,
-        'Content-Length': fileSize,
-      },
-      maxBodyLength: Infinity,
-      maxContentLength: Infinity,
-      maxRedirects: 0,
-    });
+    uploadResponse = await fetch(presign.url, upload);
   } catch (err: unknown) {
+    // A transport-level failure (DNS, connection reset, redirect when none is
+    // allowed). Surface a clean message without leaking the signed URL.
+    throw new Error(
+      `Failed to upload "${props.file}" to "${key}" in bucket "${bucket}" on branch ${branchId}: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  }
+  if (!uploadResponse.ok) {
     // The upload targets the S3 data plane, whose error bodies are XML rather
     // than the JSON `{ message }` the console returns, so surface the status
-    // (and axios message) rather than leaking a raw error. Never include the
-    // presigned URL, which carries the signature.
-    if (isAxiosError(err)) {
-      const status = err.response?.status;
-      throw new Error(
-        `Failed to upload "${props.file}" to "${key}" in bucket "${bucket}" on branch ${branchId}${
-          status !== undefined ? ` (HTTP ${status})` : ''
-        }: ${err.message}`,
-      );
-    }
-    throw err;
+    // rather than the body. Never include the presigned URL, which carries the
+    // signature.
+    throw new Error(
+      `Failed to upload "${props.file}" to "${key}" in bucket "${bucket}" on branch ${branchId} (HTTP ${uploadResponse.status}): Request failed with status code ${uploadResponse.status}`,
+    );
   }
 
   log.info(
@@ -665,7 +698,7 @@ const deleteObject = async (
       }),
     );
   } catch (err: unknown) {
-    if (isAxiosError(err) && err.response?.status === 404) {
+    if (isNeonApiError(err) && err.status === 404) {
       throw new Error(objectNotFoundMessage(err, rest, bucket, branchId));
     }
     throw err;

@@ -24,8 +24,11 @@ const typesMapping = {
 } as const;
 
 (async () => {
+  // Source the Neon OpenAPI spec from the `@neon/sdk` workspace package, which
+  // vendors it under `spec/` (kept in sync via its `spec:pull` script). This
+  // replaces the spec that used to ship inside `@neondatabase/api-client`.
   const spec: OpenAPIV3.Document = (await SwaggerParser.dereference(
-    './node_modules/@neondatabase/api-client/public-v2-for-users.gen.yaml',
+    '../sdk/spec/neon-openapi.json',
   )) as any;
   const outFile = createWriteStream('./src/parameters.gen.ts', 'utf8');
   outFile.write('// FILE IS GENERATED, DO NOT EDIT\n\n');

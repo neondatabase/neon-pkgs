@@ -109,17 +109,17 @@ export const projectCreateRequest = {
   },
   'project.provisioner': {
               type: "string",
-              description: "The Neon compute provisioner.\nSpecify the `k8s-neonvm` provisioner to create a compute endpoint that supports Autoscaling.\n\nProvisioner can be one of the following values:\n* k8s-pod\n* k8s-neonvm\n\nClients must expect, that any string value that is not documented in the description above should be treated as a error. UNKNOWN value if safe to treat as an error too.\n",
+              description: "The Neon compute provisioner.\nSpecify the `k8s-neonvm` provisioner to create a compute endpoint that supports Autoscaling.\n\nProvisioner can be one of the following values:\n* k8s-pod\n* k8s-neonvm\n* serverless-platform\n\nClients must expect, that any string value that is not documented in the description above should be treated as a error. UNKNOWN value if safe to treat as an error too.\n",
               demandOption: false,
   },
   'project.region_id': {
               type: "string",
-              description: "The region identifier. Refer to our [Regions](https://neon.tech/docs/introduction/regions) documentation for supported regions. Values are specified in this format: `aws-us-east-1`\n",
+              description: "The region identifier. Refer to our [Regions](https://neon.com/docs/introduction/regions) documentation for supported regions. Values are specified in this format: `aws-us-east-1`\n",
               demandOption: false,
   },
   'project.default_endpoint_settings.suspend_timeout_seconds': {
               type: "number",
-              description: "Duration of inactivity in seconds after which the compute endpoint is\nautomatically suspended. The value `0` means use the default value.\nThe value `-1` means never suspend. The default value is `300` seconds (5 minutes).\nThe minimum value is `60` seconds (1 minute).\nThe maximum value is `604800` seconds (1 week). For more information, see\n[Scale to zero configuration](https://neon.tech/docs/manage/endpoints#scale-to-zero-configuration).\n",
+              description: "Duration of inactivity in seconds after which the compute endpoint is\nautomatically suspended. The value `0` means use the default value.\nThe value `-1` means never suspend. The default value is `300` seconds (5 minutes).\nThe minimum value is `60` seconds (1 minute).\nThe maximum value is `604800` seconds (1 week). For more information, see\n[Scale to zero configuration](https://neon.com/docs/manage/endpoints#scale-to-zero-configuration).\n",
               demandOption: false,
   },
   'project.pg_version': {
@@ -238,7 +238,7 @@ export const projectUpdateRequest = {
   },
   'project.default_endpoint_settings.suspend_timeout_seconds': {
               type: "number",
-              description: "Duration of inactivity in seconds after which the compute endpoint is\nautomatically suspended. The value `0` means use the default value.\nThe value `-1` means never suspend. The default value is `300` seconds (5 minutes).\nThe minimum value is `60` seconds (1 minute).\nThe maximum value is `604800` seconds (1 week). For more information, see\n[Scale to zero configuration](https://neon.tech/docs/manage/endpoints#scale-to-zero-configuration).\n",
+              description: "Duration of inactivity in seconds after which the compute endpoint is\nautomatically suspended. The value `0` means use the default value.\nThe value `-1` means never suspend. The default value is `300` seconds (5 minutes).\nThe minimum value is `60` seconds (1 minute).\nThe maximum value is `604800` seconds (1 week). For more information, see\n[Scale to zero configuration](https://neon.com/docs/manage/endpoints#scale-to-zero-configuration).\n",
               demandOption: false,
   },
   'project.history_retention_seconds': {
@@ -315,12 +315,12 @@ export const branchCreateRequestEndpointOptions = {
   },
   'provisioner': {
               type: "string",
-              description: "The Neon compute provisioner.\nSpecify the `k8s-neonvm` provisioner to create a compute endpoint that supports Autoscaling.\n\nProvisioner can be one of the following values:\n* k8s-pod\n* k8s-neonvm\n\nClients must expect, that any string value that is not documented in the description above should be treated as a error. UNKNOWN value if safe to treat as an error too.\n",
+              description: "The Neon compute provisioner.\nSpecify the `k8s-neonvm` provisioner to create a compute endpoint that supports Autoscaling.\n\nProvisioner can be one of the following values:\n* k8s-pod\n* k8s-neonvm\n* serverless-platform\n\nClients must expect, that any string value that is not documented in the description above should be treated as a error. UNKNOWN value if safe to treat as an error too.\n",
               demandOption: false,
   },
   'suspend_timeout_seconds': {
               type: "number",
-              description: "Duration of inactivity in seconds after which the compute endpoint is\nautomatically suspended. The value `0` means use the default value.\nThe value `-1` means never suspend. The default value is `300` seconds (5 minutes).\nThe minimum value is `60` seconds (1 minute).\nThe maximum value is `604800` seconds (1 week). For more information, see\n[Scale to zero configuration](https://neon.tech/docs/manage/endpoints#scale-to-zero-configuration).\n",
+              description: "Duration of inactivity in seconds after which the compute endpoint is\nautomatically suspended. The value `0` means use the default value.\nThe value `-1` means never suspend. The default value is `300` seconds (5 minutes).\nThe minimum value is `60` seconds (1 minute).\nThe maximum value is `604800` seconds (1 week). For more information, see\n[Scale to zero configuration](https://neon.com/docs/manage/endpoints#scale-to-zero-configuration).\n",
               demandOption: false,
   },
 } as const;
@@ -372,17 +372,17 @@ export const endpointCreateRequest = {
   },
   'endpoint.provisioner': {
               type: "string",
-              description: "The Neon compute provisioner.\nSpecify the `k8s-neonvm` provisioner to create a compute endpoint that supports Autoscaling.\n\nProvisioner can be one of the following values:\n* k8s-pod\n* k8s-neonvm\n\nClients must expect, that any string value that is not documented in the description above should be treated as a error. UNKNOWN value if safe to treat as an error too.\n",
+              description: "The Neon compute provisioner.\nSpecify the `k8s-neonvm` provisioner to create a compute endpoint that supports Autoscaling.\n\nProvisioner can be one of the following values:\n* k8s-pod\n* k8s-neonvm\n* serverless-platform\n\nClients must expect, that any string value that is not documented in the description above should be treated as a error. UNKNOWN value if safe to treat as an error too.\n",
               demandOption: false,
   },
   'endpoint.pooler_enabled': {
               type: "boolean",
-              description: "Whether to enable connection pooling for the compute endpoint\n",
+              description: "DEPRECATED. Whether to enable connection pooling for the compute endpoint.\nThe recommended way to enable connection pooling is to append `-pooler` to the endpoint ID in the connection string.\nSee [How to use connection pooling](https://neon.com/docs/connect/connection-pooling#how-to-use-connection-pooling)\n",
               demandOption: false,
   },
   'endpoint.pooler_mode': {
               type: "string",
-              description: "The connection pooler mode. Neon supports PgBouncer in `transaction` mode only.\n",
+              description: "DEPRECATED. The connection pooler mode. This field is deprecated and will be removed after 2026-06-20.\n",
               demandOption: false,
  choices: ["transaction"],
   },
@@ -398,7 +398,7 @@ export const endpointCreateRequest = {
   },
   'endpoint.suspend_timeout_seconds': {
               type: "number",
-              description: "Duration of inactivity in seconds after which the compute endpoint is\nautomatically suspended. The value `0` means use the default value.\nThe value `-1` means never suspend. The default value is `300` seconds (5 minutes).\nThe minimum value is `60` seconds (1 minute).\nThe maximum value is `604800` seconds (1 week). For more information, see\n[Scale to zero configuration](https://neon.tech/docs/manage/endpoints#scale-to-zero-configuration).\n",
+              description: "Duration of inactivity in seconds after which the compute endpoint is\nautomatically suspended. The value `0` means use the default value.\nThe value `-1` means never suspend. The default value is `300` seconds (5 minutes).\nThe minimum value is `60` seconds (1 minute).\nThe maximum value is `604800` seconds (1 week). For more information, see\n[Scale to zero configuration](https://neon.com/docs/manage/endpoints#scale-to-zero-configuration).\n",
               demandOption: false,
   },
   'endpoint.name': {
@@ -416,7 +416,7 @@ export const endpointUpdateRequest = {
   },
   'endpoint.provisioner': {
               type: "string",
-              description: "The Neon compute provisioner.\nSpecify the `k8s-neonvm` provisioner to create a compute endpoint that supports Autoscaling.\n\nProvisioner can be one of the following values:\n* k8s-pod\n* k8s-neonvm\n\nClients must expect, that any string value that is not documented in the description above should be treated as a error. UNKNOWN value if safe to treat as an error too.\n",
+              description: "The Neon compute provisioner.\nSpecify the `k8s-neonvm` provisioner to create a compute endpoint that supports Autoscaling.\n\nProvisioner can be one of the following values:\n* k8s-pod\n* k8s-neonvm\n* serverless-platform\n\nClients must expect, that any string value that is not documented in the description above should be treated as a error. UNKNOWN value if safe to treat as an error too.\n",
               demandOption: false,
   },
   'endpoint.settings.preload_libraries.use_defaults': {
@@ -431,12 +431,12 @@ export const endpointUpdateRequest = {
   },
   'endpoint.pooler_enabled': {
               type: "boolean",
-              description: "Whether to enable connection pooling for the compute endpoint\n",
+              description: "DEPRECATED. Whether to enable connection pooling for the compute endpoint.\nThe recommended way to enable connection pooling is to append `-pooler` to the endpoint ID in the connection string.\nSee [How to use connection pooling](https://neon.com/docs/connect/connection-pooling#how-to-use-connection-pooling)\n",
               demandOption: false,
   },
   'endpoint.pooler_mode': {
               type: "string",
-              description: "The connection pooler mode. Neon supports PgBouncer in `transaction` mode only.\n",
+              description: "DEPRECATED. The connection pooler mode. This field is deprecated and will be removed after 2026-06-20.\n",
               demandOption: false,
  choices: ["transaction"],
   },
@@ -452,7 +452,7 @@ export const endpointUpdateRequest = {
   },
   'endpoint.suspend_timeout_seconds': {
               type: "number",
-              description: "Duration of inactivity in seconds after which the compute endpoint is\nautomatically suspended. The value `0` means use the default value.\nThe value `-1` means never suspend. The default value is `300` seconds (5 minutes).\nThe minimum value is `60` seconds (1 minute).\nThe maximum value is `604800` seconds (1 week). For more information, see\n[Scale to zero configuration](https://neon.tech/docs/manage/endpoints#scale-to-zero-configuration).\n",
+              description: "Duration of inactivity in seconds after which the compute endpoint is\nautomatically suspended. The value `0` means use the default value.\nThe value `-1` means never suspend. The default value is `300` seconds (5 minutes).\nThe minimum value is `60` seconds (1 minute).\nThe maximum value is `604800` seconds (1 week). For more information, see\n[Scale to zero configuration](https://neon.com/docs/manage/endpoints#scale-to-zero-configuration).\n",
               demandOption: false,
   },
   'endpoint.name': {

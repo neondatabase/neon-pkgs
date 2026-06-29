@@ -1,4 +1,4 @@
-import { Api } from '@neondatabase/api-client';
+import type { NeonApiClient } from '../api.js';
 import { looksLikeLSN, looksLikeTimestamp } from './formats.js';
 import { branchIdResolve } from './enrichers.js';
 
@@ -26,7 +26,7 @@ export type PointInTimeProps = {
   targetBranchId: string;
   pointInTime: string;
   projectId: string;
-  api: Api<unknown>;
+  api: NeonApiClient;
 };
 
 export class PointInTimeParseError extends Error {

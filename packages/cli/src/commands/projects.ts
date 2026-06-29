@@ -3,7 +3,7 @@ import {
   ProjectListItem,
   ProjectUpdateRequest,
   Organization,
-} from '@neondatabase/api-client';
+} from '@neon/sdk';
 import yargs from 'yargs';
 
 import { log } from '../log.js';
@@ -16,7 +16,7 @@ import { writer } from '../writer.js';
 import { psql } from '../utils/psql.js';
 import { updateContextFile } from '../context.js';
 import { getComputeUnits } from '../utils/compute_units.js';
-import { isAxiosError } from 'axios';
+import { isNeonApiError, messageFromBody } from '../api.js';
 import prompts, { InitialReturnValue } from 'prompts';
 import { isCi } from '../env.js';
 
@@ -433,9 +433,9 @@ const handleMissingOrgId = async (
 
 const isOrgIdError = (err: any) => {
   return (
-    isAxiosError(err) &&
-    err.response?.status == 400 &&
-    err.response?.data?.message?.includes('org_id is required')
+    isNeonApiError(err) &&
+    err.status === 400 &&
+    messageFromBody(err.data)?.includes('org_id is required')
   );
 };
 
