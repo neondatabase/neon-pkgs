@@ -37,37 +37,37 @@
  * pattern parser.
  */
 
-import type { Connection, ResultSet } from '../types/connection.js';
-import type { PrintQueryOpts, Printer } from '../types/printer.js';
-
-import { processSQLNamePattern } from './processNamePattern.js';
-
-import { alignedPrinter } from '../print/aligned.js';
-import { asciidocPrinter } from '../print/asciidoc.js';
-import { csvPrinter } from '../print/csv.js';
-import { htmlPrinter } from '../print/html.js';
-import { jsonPrinter } from '../print/json.js';
-import { latexLongtablePrinter, latexPrinter } from '../print/latex.js';
-import { troffMsPrinter } from '../print/troff.js';
-import { unalignedPrinter } from '../print/unaligned.js';
-
-import type { DescribeQuery } from './queries.js';
+import { alignedPrinter } from "../print/aligned.js";
+import { asciidocPrinter } from "../print/asciidoc.js";
+import { csvPrinter } from "../print/csv.js";
+import { htmlPrinter } from "../print/html.js";
+import { jsonPrinter } from "../print/json.js";
+import { latexLongtablePrinter, latexPrinter } from "../print/latex.js";
+import { troffMsPrinter } from "../print/troff.js";
+import { unalignedPrinter } from "../print/unaligned.js";
+import type { Connection, ResultSet } from "../types/connection.js";
+import type { Printer, PrintQueryOpts } from "../types/printer.js";
 import {
-  fetchForeignTableInfo,
-  fetchInheritedBy,
-  fetchInherits,
-  fetchPartitionKey,
-  fetchPartitionOf,
-  fetchPerColumnFdwOptions,
-  fetchPolicies,
-  fetchStatisticsObjects,
-  fetchTableInfo,
-  fetchTablePublications,
-  fetchTableSubscriptions,
-} from './queries.js';
-import { applyPattern, type NamePatternResult } from './processNamePattern.js';
-import { fetchNotNullConstraints } from './queries.js';
-import { serverAtLeast, PG_14 } from './versionGate.js';
+	applyPattern,
+	type NamePatternResult,
+	processSQLNamePattern,
+} from "./processNamePattern.js";
+import type { DescribeQuery } from "./queries.js";
+import {
+	fetchForeignTableInfo,
+	fetchInheritedBy,
+	fetchInherits,
+	fetchNotNullConstraints,
+	fetchPartitionKey,
+	fetchPartitionOf,
+	fetchPerColumnFdwOptions,
+	fetchPolicies,
+	fetchStatisticsObjects,
+	fetchTableInfo,
+	fetchTablePublications,
+	fetchTableSubscriptions,
+} from "./queries.js";
+import { PG_14, serverAtLeast } from "./versionGate.js";
 
 /**
  * Pick the printer for the active output format. Mirrors `pickPrinter`
@@ -79,29 +79,29 @@ import { serverAtLeast, PG_14 } from './versionGate.js';
  * regular SELECTs do.
  */
 const pickPrinterForFormat = (opts: PrintQueryOpts): Printer => {
-  switch (opts.topt.format) {
-    case 'aligned':
-    case 'wrapped':
-      return alignedPrinter;
-    case 'unaligned':
-      return unalignedPrinter;
-    case 'csv':
-      return csvPrinter;
-    case 'json':
-      return jsonPrinter;
-    case 'html':
-      return htmlPrinter;
-    case 'asciidoc':
-      return asciidocPrinter;
-    case 'latex':
-      return latexPrinter;
-    case 'latex-longtable':
-      return latexLongtablePrinter;
-    case 'troff-ms':
-      return troffMsPrinter;
-    default:
-      return alignedPrinter;
-  }
+	switch (opts.topt.format) {
+		case "aligned":
+		case "wrapped":
+			return alignedPrinter;
+		case "unaligned":
+			return unalignedPrinter;
+		case "csv":
+			return csvPrinter;
+		case "json":
+			return jsonPrinter;
+		case "html":
+			return htmlPrinter;
+		case "asciidoc":
+			return asciidocPrinter;
+		case "latex":
+			return latexPrinter;
+		case "latex-longtable":
+			return latexLongtablePrinter;
+		case "troff-ms":
+			return troffMsPrinter;
+		default:
+			return alignedPrinter;
+	}
 };
 
 /**
@@ -110,24 +110,24 @@ const pickPrinterForFormat = (opts: PrintQueryOpts): Printer => {
  * everything to string for the printer.
  */
 const cellToString = (v: unknown): string => {
-  if (v === null || v === undefined) return '';
-  if (typeof v === 'string') return v;
-  if (Buffer.isBuffer(v)) return v.toString('utf-8');
-  if (
-    typeof v === 'number' ||
-    typeof v === 'boolean' ||
-    typeof v === 'bigint'
-  ) {
-    return String(v);
-  }
-  // Non-primitive fallback: encode JSON. This branch shouldn't be hit
-  // under the protocol layer (which decodes to strings) but we guard
-  // against future shape changes.
-  try {
-    return JSON.stringify(v);
-  } catch {
-    return '';
-  }
+	if (v === null || v === undefined) return "";
+	if (typeof v === "string") return v;
+	if (Buffer.isBuffer(v)) return v.toString("utf-8");
+	if (
+		typeof v === "number" ||
+		typeof v === "boolean" ||
+		typeof v === "bigint"
+	) {
+		return String(v);
+	}
+	// Non-primitive fallback: encode JSON. This branch shouldn't be hit
+	// under the protocol layer (which decodes to strings) but we guard
+	// against future shape changes.
+	try {
+		return JSON.stringify(v);
+	} catch {
+		return "";
+	}
 };
 
 /**
@@ -136,10 +136,12 @@ const cellToString = (v: unknown): string => {
  * shape but ensure cells are strings or null for the null-print logic.
  */
 const coerceResultSet = (rs: ResultSet): ResultSet => ({
-  ...rs,
-  rows: rs.rows.map((row) =>
-    row.map((c) => (c === null || c === undefined ? null : cellToString(c))),
-  ),
+	...rs,
+	rows: rs.rows.map((row) =>
+		row.map((c) =>
+			c === null || c === undefined ? null : cellToString(c),
+		),
+	),
 });
 
 /**
@@ -154,35 +156,35 @@ const coerceResultSet = (rs: ResultSet): ResultSet => ({
 type SectionBufferLike = NodeJS.WritableStream & { toString(): string };
 
 const makeSectionBuffer = (): SectionBufferLike => {
-  let buf = '';
-  const write = (chunk: string | Buffer): boolean => {
-    if (typeof chunk === 'string') {
-      buf += chunk;
-    } else {
-      buf += chunk.toString('utf-8');
-    }
-    return true;
-  };
-  // We only need `.write(chunk)` from the renderers; everything else on
-  // WritableStream is stubbed so the type checks pass.
-  const stub: unknown = {
-    write,
-    end: () => true,
-    on: () => stub,
-    once: () => stub,
-    emit: () => true,
-    removeListener: () => stub,
-    addListener: () => stub,
-    setDefaultEncoding: () => stub,
-    cork: () => undefined,
-    uncork: () => undefined,
-    destroy: () => stub,
-    writable: true,
-    writableEnded: false,
-    writableFinished: false,
-    toString: () => buf,
-  };
-  return stub as SectionBufferLike;
+	let buf = "";
+	const write = (chunk: string | Buffer): boolean => {
+		if (typeof chunk === "string") {
+			buf += chunk;
+		} else {
+			buf += chunk.toString("utf-8");
+		}
+		return true;
+	};
+	// We only need `.write(chunk)` from the renderers; everything else on
+	// WritableStream is stubbed so the type checks pass.
+	const stub: unknown = {
+		write,
+		end: () => true,
+		on: () => stub,
+		once: () => stub,
+		emit: () => true,
+		removeListener: () => stub,
+		addListener: () => stub,
+		setDefaultEncoding: () => stub,
+		cork: () => undefined,
+		uncork: () => undefined,
+		destroy: () => stub,
+		writable: true,
+		writableEnded: false,
+		writableFinished: false,
+		toString: () => buf,
+	};
+	return stub as SectionBufferLike;
 };
 
 /**
@@ -194,12 +196,12 @@ const makeSectionBuffer = (): SectionBufferLike => {
  * command) are emitted once by the printer's own footer-terminator.
  */
 const captureSection = async (
-  fn: (out: NodeJS.WritableStream) => void | Promise<void>,
+	fn: (out: NodeJS.WritableStream) => void | Promise<void>,
 ): Promise<string | null> => {
-  const buf = makeSectionBuffer();
-  await fn(buf);
-  const text = buf.toString().replace(/\n+$/, '');
-  return text === '' ? null : text;
+	const buf = makeSectionBuffer();
+	await fn(buf);
+	const text = buf.toString().replace(/\n+$/, "");
+	return text === "" ? null : text;
 };
 
 /**
@@ -208,29 +210,33 @@ const captureSection = async (
  * inspect or post-process. Used by `\dt`, `\df`, `\dn`, etc.
  */
 export const runListQuery = async (
-  conn: Connection,
-  query: DescribeQuery,
-  patternResult: NamePatternResult,
-  out: NodeJS.WritableStream,
-  popt: PrintQueryOpts,
+	conn: Connection,
+	query: DescribeQuery,
+	patternResult: NamePatternResult,
+	out: NodeJS.WritableStream,
+	popt: PrintQueryOpts,
 ): Promise<ResultSet> => {
-  const { sql, params } = applyPattern(query.sql, patternResult, query.params);
-  const rs = await conn.query(sql, params);
-  const coerced = coerceResultSet(rs);
-  const titleOverride = query.description ?? popt.title;
-  const opts: PrintQueryOpts = {
-    ...popt,
-    title: titleOverride,
-    topt: { ...popt.topt, title: titleOverride ?? popt.topt.title },
-    footers:
-      rs.rows.length === 0
-        ? popt.footers
-        : popt.footers !== null
-          ? popt.footers
-          : null,
-  };
-  await pickPrinterForFormat(opts).printQuery(coerced, opts, out);
-  return rs;
+	const { sql, params } = applyPattern(
+		query.sql,
+		patternResult,
+		query.params,
+	);
+	const rs = await conn.query(sql, params);
+	const coerced = coerceResultSet(rs);
+	const titleOverride = query.description ?? popt.title;
+	const opts: PrintQueryOpts = {
+		...popt,
+		title: titleOverride,
+		topt: { ...popt.topt, title: titleOverride ?? popt.topt.title },
+		footers:
+			rs.rows.length === 0
+				? popt.footers
+				: popt.footers !== null
+					? popt.footers
+					: null,
+	};
+	await pickPrinterForFormat(opts).printQuery(coerced, opts, out);
+	return rs;
 };
 
 /**
@@ -240,25 +246,29 @@ export const runListQuery = async (
  * per-object detail renderer.
  */
 export type RelationRow = {
-  oid: number;
-  nspname: string;
-  relname: string;
-  relkind: string;
+	oid: number;
+	nspname: string;
+	relname: string;
+	relkind: string;
 };
 
 export const lookupRelations = async (
-  conn: Connection,
-  query: DescribeQuery,
-  patternResult: NamePatternResult,
+	conn: Connection,
+	query: DescribeQuery,
+	patternResult: NamePatternResult,
 ): Promise<RelationRow[]> => {
-  const { sql, params } = applyPattern(query.sql, patternResult, query.params);
-  const rs = await conn.query(sql, params);
-  return rs.rows.map((row) => ({
-    oid: Number(cellToString(row[0])),
-    nspname: cellToString(row[1]),
-    relname: cellToString(row[2]),
-    relkind: cellToString(row[3] ?? ''),
-  }));
+	const { sql, params } = applyPattern(
+		query.sql,
+		patternResult,
+		query.params,
+	);
+	const rs = await conn.query(sql, params);
+	return rs.rows.map((row) => ({
+		oid: Number(cellToString(row[0])),
+		nspname: cellToString(row[1]),
+		relname: cellToString(row[2]),
+		relkind: cellToString(row[3] ?? ""),
+	}));
 };
 
 /**
@@ -268,48 +278,48 @@ export const lookupRelations = async (
  * a separate SELECT.
  */
 export const lookupOneRelation = async (
-  conn: Connection,
-  pattern: string,
+	conn: Connection,
+	pattern: string,
 ): Promise<RelationRow | null> => {
-  // Route the bare-name lookup through processSQLNamePattern so the name is
-  // case-folded (unquoted → lower) and dequoted exactly like the list views:
-  // `\d Foo` matches catalog relation `foo`, `\d "MyTable"` matches the
-  // mixed-case `MyTable`, and `schema.name` splits correctly. The old raw
-  // `^(name)$` interpolation matched neither (review item #22).
-  const np = processSQLNamePattern({
-    pattern,
-    namevar: 'c.relname',
-    schemavar: 'n.nspname',
-    visibilityrule: 'pg_catalog.pg_table_is_visible(c.oid)',
-  });
-  // A db-qualified pattern (3+ dotted components → dotCount > 1) is a
-  // cross-database reference that this single-DB detail short-circuit cannot
-  // honour. Return null so the caller falls through to the LIST path, which
-  // emits upstream's "cross-database references are not implemented" /
-  // "improper qualified name (too many dotted names)" diagnostic. Without
-  // this, the detail lookup ignored the db literal and wrongly matched
-  // (e.g. `\d nonesuch.pg_catalog.pg_class` rendered the table).
-  if (np.dotCount > 1) return null;
-  const conds = [
-    ...np.schemaConditions,
-    ...np.nameConditions,
-    ...np.visibilityConditions,
-  ];
-  let sql =
-    'SELECT c.oid, n.nspname, c.relname, c.relkind\n' +
-    'FROM pg_catalog.pg_class c\n' +
-    '     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace\n';
-  if (conds.length > 0) sql += `WHERE ${conds.join('\n  AND ')}\n`;
-  sql += 'ORDER BY 2, 3 LIMIT 1;';
-  const rs = await conn.query(sql, np.params);
-  if (rs.rows.length === 0) return null;
-  const row = rs.rows[0];
-  return {
-    oid: Number(cellToString(row[0])),
-    nspname: cellToString(row[1]),
-    relname: cellToString(row[2]),
-    relkind: cellToString(row[3]),
-  };
+	// Route the bare-name lookup through processSQLNamePattern so the name is
+	// case-folded (unquoted → lower) and dequoted exactly like the list views:
+	// `\d Foo` matches catalog relation `foo`, `\d "MyTable"` matches the
+	// mixed-case `MyTable`, and `schema.name` splits correctly. The old raw
+	// `^(name)$` interpolation matched neither (review item #22).
+	const np = processSQLNamePattern({
+		pattern,
+		namevar: "c.relname",
+		schemavar: "n.nspname",
+		visibilityrule: "pg_catalog.pg_table_is_visible(c.oid)",
+	});
+	// A db-qualified pattern (3+ dotted components → dotCount > 1) is a
+	// cross-database reference that this single-DB detail short-circuit cannot
+	// honour. Return null so the caller falls through to the LIST path, which
+	// emits upstream's "cross-database references are not implemented" /
+	// "improper qualified name (too many dotted names)" diagnostic. Without
+	// this, the detail lookup ignored the db literal and wrongly matched
+	// (e.g. `\d nonesuch.pg_catalog.pg_class` rendered the table).
+	if (np.dotCount > 1) return null;
+	const conds = [
+		...np.schemaConditions,
+		...np.nameConditions,
+		...np.visibilityConditions,
+	];
+	let sql =
+		"SELECT c.oid, n.nspname, c.relname, c.relkind\n" +
+		"FROM pg_catalog.pg_class c\n" +
+		"     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace\n";
+	if (conds.length > 0) sql += `WHERE ${conds.join("\n  AND ")}\n`;
+	sql += "ORDER BY 2, 3 LIMIT 1;";
+	const rs = await conn.query(sql, np.params);
+	if (rs.rows.length === 0) return null;
+	const row = rs.rows[0];
+	return {
+		oid: Number(cellToString(row[0])),
+		nspname: cellToString(row[1]),
+		relname: cellToString(row[2]),
+		relkind: cellToString(row[3]),
+	};
 };
 
 /**
@@ -325,409 +335,440 @@ export const lookupOneRelation = async (
  * queries.
  */
 export const describeOneTableDetails = async (
-  conn: Connection,
-  oid: number,
-  schema: string,
-  name: string,
-  relkind: string,
-  verbose: boolean,
-  out: NodeJS.WritableStream,
-  popt: PrintQueryOpts,
-  hideTableam = false,
-  hideCompression = false,
+	conn: Connection,
+	oid: number,
+	schema: string,
+	name: string,
+	relkind: string,
+	verbose: boolean,
+	out: NodeJS.WritableStream,
+	popt: PrintQueryOpts,
+	hideTableam = false,
+	hideCompression = false,
 ): Promise<void> => {
-  // ----- One-shot relation info (RLS flags, replica identity,
-  //       partition flag, tablespace, access method). Fetched before
-  //       columns so the matview header can carry an "Access method:"
-  //       line and the per-column FDW options can be merged inline.
-  const relInfo = await fetchRelationInfo(conn, oid);
+	// ----- One-shot relation info (RLS flags, replica identity,
+	//       partition flag, tablespace, access method). Fetched before
+	//       columns so the matview header can carry an "Access method:"
+	//       line and the per-column FDW options can be merged inline.
+	const relInfo = await fetchRelationInfo(conn, oid);
 
-  // Compose the title. Matviews with a non-default access method get
-  // a second line ("Access method: <amname>") between the header and
-  // the column table — see upstream `describeOneTableDetails`. The
-  // matview-inline form is also gated by `HIDE_TABLEAM` so the user can
-  // opt out of access-method noise.
-  const baseTitle = headerForRelkind(relkind, schema, name);
-  const title =
-    !hideTableam && relkind === 'm' && relInfo.relam !== 0 && relInfo.amname
-      ? `${baseTitle}\nAccess method: ${relInfo.amname}`
-      : baseTitle;
+	// Compose the title. Matviews with a non-default access method get
+	// a second line ("Access method: <amname>") between the header and
+	// the column table — see upstream `describeOneTableDetails`. The
+	// matview-inline form is also gated by `HIDE_TABLEAM` so the user can
+	// opt out of access-method noise.
+	const baseTitle = headerForRelkind(relkind, schema, name);
+	const title =
+		!hideTableam && relkind === "m" && relInfo.relam !== 0 && relInfo.amname
+			? `${baseTitle}\nAccess method: ${relInfo.amname}`
+			: baseTitle;
 
-  // ----- Pre-fetch per-column FDW options (foreign tables only) so we
-  //       can fold them into each column row. Upstream renders these
-  //       inline as a trailing "FDW options: (k 'v', ...)" annotation
-  //       rather than a separate footer section.
-  const fdwOptionsByColumn =
-    relkind === 'f'
-      ? await fetchPerColumnFdwOptionsMap(conn, oid)
-      : new Map<string, string>();
+	// ----- Pre-fetch per-column FDW options (foreign tables only) so we
+	//       can fold them into each column row. Upstream renders these
+	//       inline as a trailing "FDW options: (k 'v', ...)" annotation
+	//       rather than a separate footer section.
+	const fdwOptionsByColumn =
+		relkind === "f"
+			? await fetchPerColumnFdwOptionsMap(conn, oid)
+			: new Map<string, string>();
 
-  // ----- Columns -----
-  // Verbose mode adds Storage / Stats target / Description columns to
-  // mirror upstream's `\d+`. These apply to every relkind that carries
-  // a column listing, including views and materialized views (upstream
-  // `describeOneTableDetails` gates the verbose column block on `verbose`
-  // alone, not on relkind).
-  const verboseCols =
-    verbose &&
-    (relkind === 'r' ||
-      relkind === 'm' ||
-      relkind === 'p' ||
-      relkind === 'f' ||
-      relkind === 'v' ||
-      relkind === 'I' ||
-      relkind === 'i');
-  // Compression column (upstream `\d+`): present when the server is
-  // PG 14+, the `HIDE_TOAST_COMPRESSION` var is off, and the relkind is
-  // a regular table / partitioned table / materialized view (describe.c
-  // ~1953: `sversion >= 140000 && !hide_compression && relkind in
-  // (RELATION, PARTITIONED_TABLE, MATVIEW)`). When suppressed the column
-  // is dropped entirely — matching the conformance regress which runs
-  // with HIDE_TOAST_COMPRESSION=on.
-  const includeCompression =
-    verboseCols &&
-    serverAtLeast(conn.serverVersion, PG_14) &&
-    !hideCompression &&
-    (relkind === 'r' || relkind === 'p' || relkind === 'm');
-  // Stats target column (upstream `\d+`): every verbose relkind EXCEPT a
-  // plain view — views have no per-column statistics targets (describe.c
-  // ~1964: RELATION, INDEX, PARTITIONED_INDEX, MATVIEW, FOREIGN_TABLE,
-  // PARTITIONED_TABLE).
-  const includeStatsTarget =
-    verboseCols &&
-    (relkind === 'r' ||
-      relkind === 'i' ||
-      relkind === 'I' ||
-      relkind === 'm' ||
-      relkind === 'f' ||
-      relkind === 'p');
-  const colSql =
-    'SELECT a.attname,\n' +
-    '  pg_catalog.format_type(a.atttypid, a.atttypmod),\n' +
-    '  (SELECT pg_catalog.pg_get_expr(d.adbin, d.adrelid, true)\n' +
-    '   FROM pg_catalog.pg_attrdef d\n' +
-    '   WHERE d.adrelid = a.attrelid AND d.adnum = a.attnum AND a.atthasdef),\n' +
-    '  a.attnotnull,\n' +
-    '  (SELECT c.collname FROM pg_catalog.pg_collation c, pg_catalog.pg_type t\n' +
-    '   WHERE c.oid = a.attcollation AND t.oid = a.atttypid AND a.attcollation <> t.typcollation) AS attcollation,\n' +
-    '  a.attidentity,\n' +
-    '  a.attgenerated' +
-    (verboseCols
-      ? ',\n  CASE a.attstorage' +
-        "    WHEN 'p' THEN 'plain'" +
-        "    WHEN 'e' THEN 'external'" +
-        "    WHEN 'm' THEN 'main'" +
-        "    WHEN 'x' THEN 'extended'" +
-        "    ELSE '???'" +
-        '  END AS attstorage' +
-        (includeCompression
-          ? ',\n  CASE a.attcompression' +
-            "    WHEN 'p' THEN 'pglz'" +
-            "    WHEN 'l' THEN 'lz4'" +
-            "    WHEN '' THEN ''" +
-            "    ELSE '???'" +
-            '  END AS attcompression'
-          : '') +
-        (includeStatsTarget
-          ? ',\n  CASE WHEN a.attstattarget = -1 THEN NULL ELSE a.attstattarget::text END AS attstattarget'
-          : '') +
-        ',\n  pg_catalog.col_description(a.attrelid, a.attnum)'
-      : '') +
-    '\nFROM pg_catalog.pg_attribute a\n' +
-    `WHERE a.attrelid = '${oid}' AND a.attnum > 0 AND NOT a.attisdropped\n` +
-    'ORDER BY a.attnum;';
-  const colsRs = await conn.query(colSql, []);
+	// ----- Columns -----
+	// Verbose mode adds Storage / Stats target / Description columns to
+	// mirror upstream's `\d+`. These apply to every relkind that carries
+	// a column listing, including views and materialized views (upstream
+	// `describeOneTableDetails` gates the verbose column block on `verbose`
+	// alone, not on relkind).
+	const verboseCols =
+		verbose &&
+		(relkind === "r" ||
+			relkind === "m" ||
+			relkind === "p" ||
+			relkind === "f" ||
+			relkind === "v" ||
+			relkind === "I" ||
+			relkind === "i");
+	// Compression column (upstream `\d+`): present when the server is
+	// PG 14+, the `HIDE_TOAST_COMPRESSION` var is off, and the relkind is
+	// a regular table / partitioned table / materialized view (describe.c
+	// ~1953: `sversion >= 140000 && !hide_compression && relkind in
+	// (RELATION, PARTITIONED_TABLE, MATVIEW)`). When suppressed the column
+	// is dropped entirely — matching the conformance regress which runs
+	// with HIDE_TOAST_COMPRESSION=on.
+	const includeCompression =
+		verboseCols &&
+		serverAtLeast(conn.serverVersion, PG_14) &&
+		!hideCompression &&
+		(relkind === "r" || relkind === "p" || relkind === "m");
+	// Stats target column (upstream `\d+`): every verbose relkind EXCEPT a
+	// plain view — views have no per-column statistics targets (describe.c
+	// ~1964: RELATION, INDEX, PARTITIONED_INDEX, MATVIEW, FOREIGN_TABLE,
+	// PARTITIONED_TABLE).
+	const includeStatsTarget =
+		verboseCols &&
+		(relkind === "r" ||
+			relkind === "i" ||
+			relkind === "I" ||
+			relkind === "m" ||
+			relkind === "f" ||
+			relkind === "p");
+	const colSql =
+		"SELECT a.attname,\n" +
+		"  pg_catalog.format_type(a.atttypid, a.atttypmod),\n" +
+		"  (SELECT pg_catalog.pg_get_expr(d.adbin, d.adrelid, true)\n" +
+		"   FROM pg_catalog.pg_attrdef d\n" +
+		"   WHERE d.adrelid = a.attrelid AND d.adnum = a.attnum AND a.atthasdef),\n" +
+		"  a.attnotnull,\n" +
+		"  (SELECT c.collname FROM pg_catalog.pg_collation c, pg_catalog.pg_type t\n" +
+		"   WHERE c.oid = a.attcollation AND t.oid = a.atttypid AND a.attcollation <> t.typcollation) AS attcollation,\n" +
+		"  a.attidentity,\n" +
+		"  a.attgenerated" +
+		(verboseCols
+			? ",\n  CASE a.attstorage" +
+				"    WHEN 'p' THEN 'plain'" +
+				"    WHEN 'e' THEN 'external'" +
+				"    WHEN 'm' THEN 'main'" +
+				"    WHEN 'x' THEN 'extended'" +
+				"    ELSE '???'" +
+				"  END AS attstorage" +
+				(includeCompression
+					? ",\n  CASE a.attcompression" +
+						"    WHEN 'p' THEN 'pglz'" +
+						"    WHEN 'l' THEN 'lz4'" +
+						"    WHEN '' THEN ''" +
+						"    ELSE '???'" +
+						"  END AS attcompression"
+					: "") +
+				(includeStatsTarget
+					? ",\n  CASE WHEN a.attstattarget = -1 THEN NULL ELSE a.attstattarget::text END AS attstattarget"
+					: "") +
+				",\n  pg_catalog.col_description(a.attrelid, a.attnum)"
+			: "") +
+		"\nFROM pg_catalog.pg_attribute a\n" +
+		`WHERE a.attrelid = '${oid}' AND a.attnum > 0 AND NOT a.attisdropped\n` +
+		"ORDER BY a.attnum;";
+	const colsRs = await conn.query(colSql, []);
 
-  // Foreign tables get an extra "FDW options" column when at least one
-  // attribute actually has options set (matches upstream — the column
-  // slot is conditional on the row data, not just the relkind).
-  const hasAnyFdwOptions = fdwOptionsByColumn.size > 0;
+	// Foreign tables get an extra "FDW options" column when at least one
+	// attribute actually has options set (matches upstream — the column
+	// slot is conditional on the row data, not just the relkind).
+	const hasAnyFdwOptions = fdwOptionsByColumn.size > 0;
 
-  // TOAST tables show a slimmer column listing: Column + Type only, no
-  // Collation/Nullable/Default (those are uniformly empty for the three
-  // fixed columns chunk_id/chunk_seq/chunk_data). Matches upstream's
-  // `\d <toast>` output.
-  const isToast = relkind === 't';
+	// TOAST tables show a slimmer column listing: Column + Type only, no
+	// Collation/Nullable/Default (those are uniformly empty for the three
+	// fixed columns chunk_id/chunk_seq/chunk_data). Matches upstream's
+	// `\d <toast>` output.
+	const isToast = relkind === "t";
 
-  // Synthesize a printable result set: Column, Type[, Collation, Nullable,
-  // Default[, Storage[, Compression], Stats target, Description]][, FDW options].
-  const fields = [fakeField('Column'), fakeField('Type')];
-  if (!isToast) {
-    fields.push(fakeField('Collation'));
-    fields.push(fakeField('Nullable'));
-    fields.push(fakeField('Default'));
-  }
-  if (verboseCols) {
-    fields.push(fakeField('Storage'));
-    if (includeCompression) fields.push(fakeField('Compression'));
-    if (includeStatsTarget) fields.push(fakeField('Stats target'));
-    fields.push(fakeField('Description'));
-  }
-  if (hasAnyFdwOptions) fields.push(fakeField('FDW options'));
-  const rows: unknown[][] = colsRs.rows.map((r) => {
-    const colName = cellToString(r[0]);
-    const colType = cellToString(r[1]);
-    const colDefault = r[2] === null ? null : cellToString(r[2]);
-    const notnull = String(r[3]) === 't' || r[3] === true;
-    const collation = r[4] === null ? null : cellToString(r[4]);
-    const identity = cellToString(r[5] ?? '');
-    const generated = cellToString(r[6] ?? '');
-    const nullable = notnull ? 'not null' : '';
-    let dflt = colDefault ?? '';
-    if (identity === 'a') {
-      dflt = 'generated always as identity';
-    } else if (identity === 'd') {
-      dflt = 'generated by default as identity';
-    } else if (generated === 's') {
-      // STORED generated column (PG 12+).
-      dflt = dflt ? `generated always as (${dflt}) stored` : '';
-    } else if (generated === 'v') {
-      // VIRTUAL generated column (PG 18+). Same expression rendering as
-      // STORED but without the trailing keyword.
-      dflt = dflt ? `generated always as (${dflt})` : '';
-    }
-    const row: unknown[] = isToast
-      ? [colName, colType]
-      : [colName, colType, collation ?? '', nullable, dflt];
-    if (verboseCols) {
-      // Slot offsets: 7 = storage, [8 = compression if PG14+], stats, desc.
-      let idx = 7;
-      const storage = cellToString(r[idx++] ?? '');
-      row.push(storage);
-      if (includeCompression) {
-        const compression = cellToString(r[idx++] ?? '');
-        row.push(compression);
-      }
-      if (includeStatsTarget) {
-        const statsTarget = r[idx] === null ? '' : cellToString(r[idx] ?? '');
-        idx++;
-        row.push(statsTarget);
-      }
-      const description = r[idx] === null ? '' : cellToString(r[idx] ?? '');
-      row.push(description);
-    }
-    if (hasAnyFdwOptions) {
-      const opts = fdwOptionsByColumn.get(colName);
-      row.push(opts ? `(${opts})` : '');
-    }
-    return row;
-  });
-  const colsResult: ResultSet = {
-    command: 'SELECT',
-    rowCount: rows.length,
-    oid: null,
-    fields,
-    rows,
-    notices: [],
-  };
+	// Synthesize a printable result set: Column, Type[, Collation, Nullable,
+	// Default[, Storage[, Compression], Stats target, Description]][, FDW options].
+	const fields = [fakeField("Column"), fakeField("Type")];
+	if (!isToast) {
+		fields.push(fakeField("Collation"));
+		fields.push(fakeField("Nullable"));
+		fields.push(fakeField("Default"));
+	}
+	if (verboseCols) {
+		fields.push(fakeField("Storage"));
+		if (includeCompression) fields.push(fakeField("Compression"));
+		if (includeStatsTarget) fields.push(fakeField("Stats target"));
+		fields.push(fakeField("Description"));
+	}
+	if (hasAnyFdwOptions) fields.push(fakeField("FDW options"));
+	const rows: unknown[][] = colsRs.rows.map((r) => {
+		const colName = cellToString(r[0]);
+		const colType = cellToString(r[1]);
+		const colDefault = r[2] === null ? null : cellToString(r[2]);
+		const notnull = String(r[3]) === "t" || r[3] === true;
+		const collation = r[4] === null ? null : cellToString(r[4]);
+		const identity = cellToString(r[5] ?? "");
+		const generated = cellToString(r[6] ?? "");
+		const nullable = notnull ? "not null" : "";
+		let dflt = colDefault ?? "";
+		if (identity === "a") {
+			dflt = "generated always as identity";
+		} else if (identity === "d") {
+			dflt = "generated by default as identity";
+		} else if (generated === "s") {
+			// STORED generated column (PG 12+).
+			dflt = dflt ? `generated always as (${dflt}) stored` : "";
+		} else if (generated === "v") {
+			// VIRTUAL generated column (PG 18+). Same expression rendering as
+			// STORED but without the trailing keyword.
+			dflt = dflt ? `generated always as (${dflt})` : "";
+		}
+		const row: unknown[] = isToast
+			? [colName, colType]
+			: [colName, colType, collation ?? "", nullable, dflt];
+		if (verboseCols) {
+			// Slot offsets: 7 = storage, [8 = compression if PG14+], stats, desc.
+			let idx = 7;
+			const storage = cellToString(r[idx++] ?? "");
+			row.push(storage);
+			if (includeCompression) {
+				const compression = cellToString(r[idx++] ?? "");
+				row.push(compression);
+			}
+			if (includeStatsTarget) {
+				const statsTarget =
+					r[idx] === null ? "" : cellToString(r[idx] ?? "");
+				idx++;
+				row.push(statsTarget);
+			}
+			const description =
+				r[idx] === null ? "" : cellToString(r[idx] ?? "");
+			row.push(description);
+		}
+		if (hasAnyFdwOptions) {
+			const opts = fdwOptionsByColumn.get(colName);
+			row.push(opts ? `(${opts})` : "");
+		}
+		return row;
+	});
+	const colsResult: ResultSet = {
+		command: "SELECT",
+		rowCount: rows.length,
+		oid: null,
+		fields,
+		rows,
+		notices: [],
+	};
 
-  // ----- Per-section footers, accumulated *before* the column table is
-  //       printed. Upstream `describeOneTableDetails` attaches each
-  //       relkind-specific footer to the columns table via
-  //       `printTableAddFooter()`, then `printTable()` emits them flush
-  //       against the data rows with a single trailing blank line at the
-  //       end of the whole block. Routing every section through
-  //       `opts.footers` mirrors that layout — single-line annotations
-  //       (`Access method:`, `Tablespace:`, …) sit immediately under the
-  //       last data row, multi-line group footers (`Indexes:`,
-  //       `Foreign-key constraints:`, …) follow, and the trailing blank
-  //       only fires after the last footer rather than between data and
-  //       the first footer.
-  const footers: string[] = [];
-  const push = (s: string | null): void => {
-    if (s !== null) footers.push(s);
-  };
+	// ----- Per-section footers, accumulated *before* the column table is
+	//       printed. Upstream `describeOneTableDetails` attaches each
+	//       relkind-specific footer to the columns table via
+	//       `printTableAddFooter()`, then `printTable()` emits them flush
+	//       against the data rows with a single trailing blank line at the
+	//       end of the whole block. Routing every section through
+	//       `opts.footers` mirrors that layout — single-line annotations
+	//       (`Access method:`, `Tablespace:`, …) sit immediately under the
+	//       last data row, multi-line group footers (`Indexes:`,
+	//       `Foreign-key constraints:`, …) follow, and the trailing blank
+	//       only fires after the last footer rather than between data and
+	//       the first footer.
+	const footers: string[] = [];
+	const push = (s: string | null): void => {
+		if (s !== null) footers.push(s);
+	};
 
-  // ----- View definition (views / matviews, verbose only) -----
-  //       Upstream attaches this as a table FOOTER (describe.c ~3175), so it
-  //       renders flush against the column rows with the single trailing
-  //       blank line the footer machinery adds — not as a separate block.
-  if ((relkind === 'v' || relkind === 'm') && verbose) {
-    const vrs = await conn.query(
-      `SELECT pg_catalog.pg_get_viewdef('${oid}'::pg_catalog.oid, true);`,
-      [],
-    );
-    if (vrs.rows.length > 0) {
-      push(`View definition:\n${cellToString(vrs.rows[0][0])}`);
-    }
-  }
+	// ----- View definition (views / matviews, verbose only) -----
+	//       Upstream attaches this as a table FOOTER (describe.c ~3175), so it
+	//       renders flush against the column rows with the single trailing
+	//       blank line the footer machinery adds — not as a separate block.
+	if ((relkind === "v" || relkind === "m") && verbose) {
+		const vrs = await conn.query(
+			`SELECT pg_catalog.pg_get_viewdef('${oid}'::pg_catalog.oid, true);`,
+			[],
+		);
+		if (vrs.rows.length > 0) {
+			push(`View definition:\n${cellToString(vrs.rows[0][0])}`);
+		}
+	}
 
-  // ----- Partition-key (partitioned-table parent only) -----
-  if (relkind === 'p') {
-    push(await captureSection((b) => renderPartitionKeySection(conn, oid, b)));
-  }
+	// ----- Partition-key (partitioned-table parent only) -----
+	if (relkind === "p") {
+		push(
+			await captureSection((b) =>
+				renderPartitionKeySection(conn, oid, b),
+			),
+		);
+	}
 
-  // ----- Partition-of (child partition only) -----
-  if (relInfo.relispartition) {
-    push(
-      await captureSection((b) =>
-        renderPartitionOfSection(conn, oid, verbose, b),
-      ),
-    );
-  }
+	// ----- Partition-of (child partition only) -----
+	if (relInfo.relispartition) {
+		push(
+			await captureSection((b) =>
+				renderPartitionOfSection(conn, oid, verbose, b),
+			),
+		);
+	}
 
-  // ----- Owning table (TOAST tables only — printed before Indexes).
-  //       Upstream `describeOneTableDetails` adds the owning-table footer
-  //       prior to attaching the indexes footer for `RELKIND_TOASTVALUE`.
-  if (relkind === 't') {
-    push(
-      await captureSection((b) => renderToastOwningTableFooter(conn, oid, b)),
-    );
-  }
+	// ----- Owning table (TOAST tables only — printed before Indexes).
+	//       Upstream `describeOneTableDetails` adds the owning-table footer
+	//       prior to attaching the indexes footer for `RELKIND_TOASTVALUE`.
+	if (relkind === "t") {
+		push(
+			await captureSection((b) =>
+				renderToastOwningTableFooter(conn, oid, b),
+			),
+		);
+	}
 
-  // ----- Indexes (tables / matviews / partitioned tables / TOAST) -----
-  if (
-    relkind === 'r' ||
-    relkind === 'm' ||
-    relkind === 'p' ||
-    relkind === 't'
-  ) {
-    push(await captureSection((b) => renderIndexesSection(conn, oid, b)));
-  }
+	// ----- Indexes (tables / matviews / partitioned tables / TOAST) -----
+	if (
+		relkind === "r" ||
+		relkind === "m" ||
+		relkind === "p" ||
+		relkind === "t"
+	) {
+		push(await captureSection((b) => renderIndexesSection(conn, oid, b)));
+	}
 
-  // ----- Check constraints -----
-  if (relkind === 'r' || relkind === 'p' || relkind === 'f') {
-    push(
-      await captureSection((b) => renderCheckConstraintsSection(conn, oid, b)),
-    );
-  }
+	// ----- Check constraints -----
+	if (relkind === "r" || relkind === "p" || relkind === "f") {
+		push(
+			await captureSection((b) =>
+				renderCheckConstraintsSection(conn, oid, b),
+			),
+		);
+	}
 
-  // ----- Not-null constraints (PG 18+ named NOT NULL constraints) -----
-  //       Upstream renders this footer in verbose mode between Check
-  //       constraints and Foreign-key constraints (describe.c ~3104).
-  //       The query returns empty on pre-PG-18 servers (no contype = 'n'
-  //       rows), so the section is naturally absent there.
-  if (verbose && (relkind === 'r' || relkind === 'p' || relkind === 'f')) {
-    push(
-      await captureSection((b) =>
-        renderNotNullConstraintsSection(conn, oid, b),
-      ),
-    );
-  }
+	// ----- Not-null constraints (PG 18+ named NOT NULL constraints) -----
+	//       Upstream renders this footer in verbose mode between Check
+	//       constraints and Foreign-key constraints (describe.c ~3104).
+	//       The query returns empty on pre-PG-18 servers (no contype = 'n'
+	//       rows), so the section is naturally absent there.
+	if (verbose && (relkind === "r" || relkind === "p" || relkind === "f")) {
+		push(
+			await captureSection((b) =>
+				renderNotNullConstraintsSection(conn, oid, b),
+			),
+		);
+	}
 
-  // ----- Foreign-key constraints -----
-  if (relkind === 'r' || relkind === 'p') {
-    push(
-      await captureSection((b) =>
-        renderForeignKeyConstraintsSection(conn, oid, b),
-      ),
-    );
-    push(await captureSection((b) => renderReferencedBySection(conn, oid, b)));
-  }
+	// ----- Foreign-key constraints -----
+	if (relkind === "r" || relkind === "p") {
+		push(
+			await captureSection((b) =>
+				renderForeignKeyConstraintsSection(conn, oid, b),
+			),
+		);
+		push(
+			await captureSection((b) =>
+				renderReferencedBySection(conn, oid, b),
+			),
+		);
+	}
 
-  // ----- Triggers -----
-  if (relkind === 'r' || relkind === 'p' || relkind === 'v') {
-    push(await captureSection((b) => renderTriggersSection(conn, oid, b)));
-  }
+	// ----- Triggers -----
+	if (relkind === "r" || relkind === "p" || relkind === "v") {
+		push(await captureSection((b) => renderTriggersSection(conn, oid, b)));
+	}
 
-  // ----- RLS policies (regular + partitioned tables) -----
-  if (relkind === 'r' || relkind === 'p') {
-    push(
-      await captureSection((b) => renderPoliciesSection(conn, oid, relInfo, b)),
-    );
-  }
+	// ----- RLS policies (regular + partitioned tables) -----
+	if (relkind === "r" || relkind === "p") {
+		push(
+			await captureSection((b) =>
+				renderPoliciesSection(conn, oid, relInfo, b),
+			),
+		);
+	}
 
-  // ----- Foreign-table footer: Server + FDW options -----
-  // Per-column FDW options are rendered inline within the columns
-  // table (see fdwOptionsByColumn above); no separate footer here.
-  if (relkind === 'f') {
-    push(await captureSection((b) => renderForeignTableFooter(conn, oid, b)));
-  }
+	// ----- Foreign-table footer: Server + FDW options -----
+	// Per-column FDW options are rendered inline within the columns
+	// table (see fdwOptionsByColumn above); no separate footer here.
+	if (relkind === "f") {
+		push(
+			await captureSection((b) => renderForeignTableFooter(conn, oid, b)),
+		);
+	}
 
-  // ----- Inherits: (parents) — for tables, partitioned tables, foreign -----
-  if (relkind === 'r' || relkind === 'p' || relkind === 'f') {
-    push(await captureSection((b) => renderInheritsSection(conn, oid, b)));
-  }
+	// ----- Inherits: (parents) — for tables, partitioned tables, foreign -----
+	if (relkind === "r" || relkind === "p" || relkind === "f") {
+		push(await captureSection((b) => renderInheritsSection(conn, oid, b)));
+	}
 
-  // ----- Inherited by / Partitions / Number of [child tables|partitions] -----
-  if (relkind === 'r' || relkind === 'p' || relkind === 'f') {
-    push(
-      await captureSection((b) =>
-        renderInheritedBySection(conn, oid, relkind, verbose, b),
-      ),
-    );
-  }
+	// ----- Inherited by / Partitions / Number of [child tables|partitions] -----
+	if (relkind === "r" || relkind === "p" || relkind === "f") {
+		push(
+			await captureSection((b) =>
+				renderInheritedBySection(conn, oid, relkind, verbose, b),
+			),
+		);
+	}
 
-  // ----- Publications (any publishable relkind) -----
-  if (
-    relkind === 'r' ||
-    relkind === 'p' ||
-    relkind === 'm' ||
-    relkind === 'f'
-  ) {
-    push(await captureSection((b) => renderPublicationsSection(conn, oid, b)));
-  }
+	// ----- Publications (any publishable relkind) -----
+	if (
+		relkind === "r" ||
+		relkind === "p" ||
+		relkind === "m" ||
+		relkind === "f"
+	) {
+		push(
+			await captureSection((b) =>
+				renderPublicationsSection(conn, oid, b),
+			),
+		);
+	}
 
-  // ----- Subscriptions (any publishable relkind; permission-denied silent) -----
-  if (
-    relkind === 'r' ||
-    relkind === 'p' ||
-    relkind === 'm' ||
-    relkind === 'f'
-  ) {
-    push(await captureSection((b) => renderSubscriptionsSection(conn, oid, b)));
-  }
+	// ----- Subscriptions (any publishable relkind; permission-denied silent) -----
+	if (
+		relkind === "r" ||
+		relkind === "p" ||
+		relkind === "m" ||
+		relkind === "f"
+	) {
+		push(
+			await captureSection((b) =>
+				renderSubscriptionsSection(conn, oid, b),
+			),
+		);
+	}
 
-  // ----- Statistics objects (verbose; r/m/p/f) -----
-  if (
-    verbose &&
-    (relkind === 'r' || relkind === 'm' || relkind === 'p' || relkind === 'f')
-  ) {
-    push(
-      await captureSection((b) => renderStatisticsObjectsSection(conn, oid, b)),
-    );
-  }
+	// ----- Statistics objects (verbose; r/m/p/f) -----
+	if (
+		verbose &&
+		(relkind === "r" ||
+			relkind === "m" ||
+			relkind === "p" ||
+			relkind === "f")
+	) {
+		push(
+			await captureSection((b) =>
+				renderStatisticsObjectsSection(conn, oid, b),
+			),
+		);
+	}
 
-  // ----- Replica Identity (verbose, non-default, regular & matview).
-  //       INDEX mode is rendered inline within Indexes:, so the footer
-  //       is only emitted for FULL / NOTHING.
-  if (verbose && (relkind === 'r' || relkind === 'm')) {
-    push(
-      await captureSection((b) => {
-        renderReplicaIdentitySection(schema, relInfo, b);
-      }),
-    );
-  }
+	// ----- Replica Identity (verbose, non-default, regular & matview).
+	//       INDEX mode is rendered inline within Indexes:, so the footer
+	//       is only emitted for FULL / NOTHING.
+	if (verbose && (relkind === "r" || relkind === "m")) {
+		push(
+			await captureSection((b) => {
+				renderReplicaIdentitySection(schema, relInfo, b);
+			}),
+		);
+	}
 
-  // ----- Tablespace footer (verbose: explicit tablespace only) -----
-  if (verbose) {
-    push(
-      await captureSection((b) => {
-        renderTablespaceFooter(relkind, relInfo, b);
-      }),
-    );
-  }
+	// ----- Tablespace footer (verbose: explicit tablespace only) -----
+	if (verbose) {
+		push(
+			await captureSection((b) => {
+				renderTablespaceFooter(relkind, relInfo, b);
+			}),
+		);
+	}
 
-  // ----- Access method footer (verbose: relkind r/p with relam set).
-  //       Matviews ('m') show their access method inline in the header,
-  //       so we don't double up here. Gated by `HIDE_TABLEAM` to mirror
-  //       upstream — the per-test psql.sql toggles the variable to
-  //       suppress access-method noise.
-  if (!hideTableam && verbose && (relkind === 'r' || relkind === 'p')) {
-    push(
-      await captureSection((b) => {
-        renderAccessMethodFooter(relInfo, b);
-      }),
-    );
-  }
+	// ----- Access method footer (verbose: relkind r/p with relam set).
+	//       Matviews ('m') show their access method inline in the header,
+	//       so we don't double up here. Gated by `HIDE_TABLEAM` to mirror
+	//       upstream — the per-test psql.sql toggles the variable to
+	//       suppress access-method noise.
+	if (!hideTableam && verbose && (relkind === "r" || relkind === "p")) {
+		push(
+			await captureSection((b) => {
+				renderAccessMethodFooter(relInfo, b);
+			}),
+		);
+	}
 
-  // Upstream's `printTable` is invoked with `default_footer = false`
-  // for the column listing: the row-count footer ("(N rows)") is
-  // suppressed so the relkind-specific footers we just collected drive
-  // the post-table layout. Pass them via `opts.footers` so the printer
-  // emits each one flush against the data rows and ends the block with
-  // a single trailing blank line.
-  const colOpts: PrintQueryOpts = {
-    ...popt,
-    title,
-    topt: { ...popt.topt, title, defaultFooter: false },
-    footers: footers.length > 0 ? footers : null,
-  };
-  await pickPrinterForFormat(colOpts).printQuery(
-    coerceResultSet(colsResult),
-    colOpts,
-    out,
-  );
+	// Upstream's `printTable` is invoked with `default_footer = false`
+	// for the column listing: the row-count footer ("(N rows)") is
+	// suppressed so the relkind-specific footers we just collected drive
+	// the post-table layout. Pass them via `opts.footers` so the printer
+	// emits each one flush against the data rows and ends the block with
+	// a single trailing blank line.
+	const colOpts: PrintQueryOpts = {
+		...popt,
+		title,
+		topt: { ...popt.topt, title, defaultFooter: false },
+		footers: footers.length > 0 ? footers : null,
+	};
+	await pickPrinterForFormat(colOpts).printQuery(
+		coerceResultSet(colsResult),
+		colOpts,
+		out,
+	);
 };
 
 /**
@@ -735,14 +776,14 @@ export const describeOneTableDetails = async (
  * names mirror the C struct in upstream `describe.c`.
  */
 type RelationInfo = {
-  rowsecurity: boolean;
-  forcerowsecurity: boolean;
-  relreplident: string;
-  relispartition: boolean;
-  reltablespace: number;
-  relam: number;
-  spcname: string | null;
-  amname: string | null;
+	rowsecurity: boolean;
+	forcerowsecurity: boolean;
+	relreplident: string;
+	relispartition: boolean;
+	reltablespace: number;
+	relam: number;
+	spcname: string | null;
+	amname: string | null;
 };
 
 /**
@@ -752,54 +793,55 @@ type RelationInfo = {
  * the relation, but we don't want to throw mid-render).
  */
 const fetchRelationInfo = async (
-  conn: Connection,
-  oid: number,
+	conn: Connection,
+	oid: number,
 ): Promise<RelationInfo> => {
-  const q = fetchTableInfo({ oid, serverVersion: conn.serverVersion });
-  const rs = await conn.query(q.sql, q.params);
-  if (rs.rows.length === 0) {
-    return {
-      rowsecurity: false,
-      forcerowsecurity: false,
-      relreplident: 'd',
-      relispartition: false,
-      reltablespace: 0,
-      relam: 0,
-      spcname: null,
-      amname: null,
-    };
-  }
-  const r = rs.rows[0];
-  return {
-    rowsecurity: parseBool(r[0]),
-    forcerowsecurity: parseBool(r[1]),
-    relreplident: cellToString(r[2] ?? 'd') || 'd',
-    relispartition: parseBool(r[3]),
-    reltablespace: Number(cellToString(r[4] ?? '0')) || 0,
-    relam: Number(cellToString(r[5] ?? '0')) || 0,
-    spcname: r[6] === null || r[6] === undefined ? null : cellToString(r[6]),
-    amname: r[7] === null || r[7] === undefined ? null : cellToString(r[7]),
-  };
+	const q = fetchTableInfo({ oid, serverVersion: conn.serverVersion });
+	const rs = await conn.query(q.sql, q.params);
+	if (rs.rows.length === 0) {
+		return {
+			rowsecurity: false,
+			forcerowsecurity: false,
+			relreplident: "d",
+			relispartition: false,
+			reltablespace: 0,
+			relam: 0,
+			spcname: null,
+			amname: null,
+		};
+	}
+	const r = rs.rows[0];
+	return {
+		rowsecurity: parseBool(r[0]),
+		forcerowsecurity: parseBool(r[1]),
+		relreplident: cellToString(r[2] ?? "d") || "d",
+		relispartition: parseBool(r[3]),
+		reltablespace: Number(cellToString(r[4] ?? "0")) || 0,
+		relam: Number(cellToString(r[5] ?? "0")) || 0,
+		spcname:
+			r[6] === null || r[6] === undefined ? null : cellToString(r[6]),
+		amname: r[7] === null || r[7] === undefined ? null : cellToString(r[7]),
+	};
 };
 
 /** Coerce a Postgres "t"/"f" text-mode boolean (or a real bool) to JS. */
 const parseBool = (v: unknown): boolean =>
-  v === true || (typeof v === 'string' && (v === 't' || v === 'true'));
+	v === true || (typeof v === "string" && (v === "t" || v === "true"));
 
 /**
  * Render `Partition key: <partkeydef>` for partitioned-table parents.
  */
 const renderPartitionKeySection = async (
-  conn: Connection,
-  oid: number,
-  out: NodeJS.WritableStream,
+	conn: Connection,
+	oid: number,
+	out: NodeJS.WritableStream,
 ): Promise<void> => {
-  const q = fetchPartitionKey({ oid });
-  const rs = await conn.query(q.sql, q.params);
-  if (rs.rows.length === 0) return;
-  const def = cellToString(rs.rows[0][0] ?? '');
-  if (def === '') return;
-  out.write(`Partition key: ${def}\n`);
+	const q = fetchPartitionKey({ oid });
+	const rs = await conn.query(q.sql, q.params);
+	if (rs.rows.length === 0) return;
+	const def = cellToString(rs.rows[0][0] ?? "");
+	if (def === "") return;
+	out.write(`Partition key: ${def}\n`);
 };
 
 /**
@@ -808,33 +850,33 @@ const renderPartitionKeySection = async (
  * partition (`relispartition = true`).
  */
 const renderPartitionOfSection = async (
-  conn: Connection,
-  oid: number,
-  verbose: boolean,
-  out: NodeJS.WritableStream,
+	conn: Connection,
+	oid: number,
+	verbose: boolean,
+	out: NodeJS.WritableStream,
 ): Promise<void> => {
-  const q = fetchPartitionOf({
-    oid,
-    serverVersion: conn.serverVersion,
-    withConstraint: verbose,
-  });
-  const rs = await conn.query(q.sql, q.params);
-  if (rs.rows.length === 0) return;
-  const row = rs.rows[0];
-  const parent = cellToString(row[0] ?? '');
-  const bound = cellToString(row[1] ?? '');
-  const detached = parseBool(row[2]);
-  const tail = detached ? ' DETACH PENDING' : '';
-  out.write(`Partition of: ${parent} ${bound}${tail}\n`);
-  if (verbose) {
-    const constraintdef =
-      row[3] === null || row[3] === undefined ? '' : cellToString(row[3]);
-    if (constraintdef === '') {
-      out.write('No partition constraint\n');
-    } else {
-      out.write(`Partition constraint: ${constraintdef}\n`);
-    }
-  }
+	const q = fetchPartitionOf({
+		oid,
+		serverVersion: conn.serverVersion,
+		withConstraint: verbose,
+	});
+	const rs = await conn.query(q.sql, q.params);
+	if (rs.rows.length === 0) return;
+	const row = rs.rows[0];
+	const parent = cellToString(row[0] ?? "");
+	const bound = cellToString(row[1] ?? "");
+	const detached = parseBool(row[2]);
+	const tail = detached ? " DETACH PENDING" : "";
+	out.write(`Partition of: ${parent} ${bound}${tail}\n`);
+	if (verbose) {
+		const constraintdef =
+			row[3] === null || row[3] === undefined ? "" : cellToString(row[3]);
+		if (constraintdef === "") {
+			out.write("No partition constraint\n");
+		} else {
+			out.write(`Partition constraint: ${constraintdef}\n`);
+		}
+	}
 };
 
 /**
@@ -844,50 +886,51 @@ const renderPartitionOfSection = async (
  * enabled-but-no-policies cases.
  */
 const renderPoliciesSection = async (
-  conn: Connection,
-  oid: number,
-  relInfo: RelationInfo,
-  out: NodeJS.WritableStream,
+	conn: Connection,
+	oid: number,
+	relInfo: RelationInfo,
+	out: NodeJS.WritableStream,
 ): Promise<void> => {
-  const q = fetchPolicies({ oid, serverVersion: conn.serverVersion });
-  const rs = await conn.query(q.sql, q.params);
-  const tuples = rs.rows.length;
-  const { rowsecurity, forcerowsecurity } = relInfo;
+	const q = fetchPolicies({ oid, serverVersion: conn.serverVersion });
+	const rs = await conn.query(q.sql, q.params);
+	const tuples = rs.rows.length;
+	const { rowsecurity, forcerowsecurity } = relInfo;
 
-  let header: string | null = null;
-  if (rowsecurity && !forcerowsecurity && tuples > 0) {
-    header = 'Policies:';
-  } else if (rowsecurity && forcerowsecurity && tuples > 0) {
-    header = 'Policies (forced row security enabled):';
-  } else if (rowsecurity && !forcerowsecurity && tuples === 0) {
-    header = 'Policies (row security enabled): (none)';
-  } else if (rowsecurity && forcerowsecurity && tuples === 0) {
-    header = 'Policies (forced row security enabled): (none)';
-  } else if (!rowsecurity && tuples > 0) {
-    header = 'Policies (row security disabled):';
-  }
+	let header: string | null = null;
+	if (rowsecurity && !forcerowsecurity && tuples > 0) {
+		header = "Policies:";
+	} else if (rowsecurity && forcerowsecurity && tuples > 0) {
+		header = "Policies (forced row security enabled):";
+	} else if (rowsecurity && !forcerowsecurity && tuples === 0) {
+		header = "Policies (row security enabled): (none)";
+	} else if (rowsecurity && forcerowsecurity && tuples === 0) {
+		header = "Policies (forced row security enabled): (none)";
+	} else if (!rowsecurity && tuples > 0) {
+		header = "Policies (row security disabled):";
+	}
 
-  if (header === null) return;
-  out.write(`${header}\n`);
+	if (header === null) return;
+	out.write(`${header}\n`);
 
-  for (const r of rs.rows) {
-    const polname = cellToString(r[0]);
-    const permissive = parseBool(r[1]);
-    const roles =
-      r[2] === null || r[2] === undefined ? null : cellToString(r[2]);
-    const qual =
-      r[3] === null || r[3] === undefined ? null : cellToString(r[3]);
-    const withcheck =
-      r[4] === null || r[4] === undefined ? null : cellToString(r[4]);
-    const cmd = r[5] === null || r[5] === undefined ? null : cellToString(r[5]);
-    let line = `    POLICY "${polname}"`;
-    if (!permissive) line += ' AS RESTRICTIVE';
-    if (cmd !== null && cmd !== '') line += ` FOR ${cmd}`;
-    if (roles !== null) line += `\n      TO ${roles}`;
-    if (qual !== null) line += `\n      USING (${qual})`;
-    if (withcheck !== null) line += `\n      WITH CHECK (${withcheck})`;
-    out.write(`${line}\n`);
-  }
+	for (const r of rs.rows) {
+		const polname = cellToString(r[0]);
+		const permissive = parseBool(r[1]);
+		const roles =
+			r[2] === null || r[2] === undefined ? null : cellToString(r[2]);
+		const qual =
+			r[3] === null || r[3] === undefined ? null : cellToString(r[3]);
+		const withcheck =
+			r[4] === null || r[4] === undefined ? null : cellToString(r[4]);
+		const cmd =
+			r[5] === null || r[5] === undefined ? null : cellToString(r[5]);
+		let line = `    POLICY "${polname}"`;
+		if (!permissive) line += " AS RESTRICTIVE";
+		if (cmd !== null && cmd !== "") line += ` FOR ${cmd}`;
+		if (roles !== null) line += `\n      TO ${roles}`;
+		if (qual !== null) line += `\n      USING (${qual})`;
+		if (withcheck !== null) line += `\n      WITH CHECK (${withcheck})`;
+		out.write(`${line}\n`);
+	}
 };
 
 /**
@@ -897,19 +940,19 @@ const renderPoliciesSection = async (
  * {@link fetchForeignTableInfo}.
  */
 const renderForeignTableFooter = async (
-  conn: Connection,
-  oid: number,
-  out: NodeJS.WritableStream,
+	conn: Connection,
+	oid: number,
+	out: NodeJS.WritableStream,
 ): Promise<void> => {
-  const q = fetchForeignTableInfo({ oid });
-  const rs = await conn.query(q.sql, q.params);
-  if (rs.rows.length === 0) return;
-  const row = rs.rows[0];
-  const server = cellToString(row[0] ?? '');
-  const ftoptions =
-    row[1] === null || row[1] === undefined ? '' : cellToString(row[1]);
-  if (server !== '') out.write(`Server: ${server}\n`);
-  if (ftoptions !== '') out.write(`FDW options: (${ftoptions})\n`);
+	const q = fetchForeignTableInfo({ oid });
+	const rs = await conn.query(q.sql, q.params);
+	if (rs.rows.length === 0) return;
+	const row = rs.rows[0];
+	const server = cellToString(row[0] ?? "");
+	const ftoptions =
+		row[1] === null || row[1] === undefined ? "" : cellToString(row[1]);
+	if (server !== "") out.write(`Server: ${server}\n`);
+	if (ftoptions !== "") out.write(`FDW options: (${ftoptions})\n`);
 };
 
 /**
@@ -918,21 +961,21 @@ const renderForeignTableFooter = async (
  * `Partition of:` instead) inside the query builder.
  */
 const renderInheritsSection = async (
-  conn: Connection,
-  oid: number,
-  out: NodeJS.WritableStream,
+	conn: Connection,
+	oid: number,
+	out: NodeJS.WritableStream,
 ): Promise<void> => {
-  const q = fetchInherits({ oid });
-  const rs = await conn.query(q.sql, q.params);
-  if (rs.rows.length === 0) return;
-  const label = 'Inherits';
-  const indent = ' '.repeat(label.length);
-  rs.rows.forEach((r, idx) => {
-    const parent = cellToString(r[0]);
-    const prefix = idx === 0 ? `${label}: ` : `${indent}  `;
-    const trailing = idx < rs.rows.length - 1 ? ',' : '';
-    out.write(`${prefix}${parent}${trailing}\n`);
-  });
+	const q = fetchInherits({ oid });
+	const rs = await conn.query(q.sql, q.params);
+	if (rs.rows.length === 0) return;
+	const label = "Inherits";
+	const indent = " ".repeat(label.length);
+	rs.rows.forEach((r, idx) => {
+		const parent = cellToString(r[0]);
+		const prefix = idx === 0 ? `${label}: ` : `${indent}  `;
+		const trailing = idx < rs.rows.length - 1 ? "," : "";
+		out.write(`${prefix}${parent}${trailing}\n`);
+	});
 };
 
 /**
@@ -947,50 +990,55 @@ const renderInheritsSection = async (
  *   list (verbose).
  */
 const renderInheritedBySection = async (
-  conn: Connection,
-  oid: number,
-  relkind: string,
-  verbose: boolean,
-  out: NodeJS.WritableStream,
+	conn: Connection,
+	oid: number,
+	relkind: string,
+	verbose: boolean,
+	out: NodeJS.WritableStream,
 ): Promise<void> => {
-  const isPartitioned = relkind === 'p' || relkind === 'I';
-  const q = fetchInheritedBy({ oid, serverVersion: conn.serverVersion });
-  const rs = await conn.query(q.sql, q.params);
-  const tuples = rs.rows.length;
+	const isPartitioned = relkind === "p" || relkind === "I";
+	const q = fetchInheritedBy({ oid, serverVersion: conn.serverVersion });
+	const rs = await conn.query(q.sql, q.params);
+	const tuples = rs.rows.length;
 
-  if (isPartitioned && tuples === 0) {
-    out.write('Number of partitions: 0\n');
-    return;
-  }
+	if (isPartitioned && tuples === 0) {
+		out.write("Number of partitions: 0\n");
+		return;
+	}
 
-  if (!verbose) {
-    if (tuples === 0) return;
-    if (isPartitioned) {
-      out.write(`Number of partitions: ${tuples} (Use \\d+ to list them.)\n`);
-    } else {
-      out.write(`Number of child tables: ${tuples} (Use \\d+ to list them.)\n`);
-    }
-    return;
-  }
+	if (!verbose) {
+		if (tuples === 0) return;
+		if (isPartitioned) {
+			out.write(
+				`Number of partitions: ${tuples} (Use \\d+ to list them.)\n`,
+			);
+		} else {
+			out.write(
+				`Number of child tables: ${tuples} (Use \\d+ to list them.)\n`,
+			);
+		}
+		return;
+	}
 
-  // Verbose mode: list each child with its bound (for partitions) and
-  // child-relkind annotations.
-  const label = isPartitioned ? 'Partitions' : 'Child tables';
-  const indent = ' '.repeat(label.length);
-  rs.rows.forEach((r, idx) => {
-    const relname = cellToString(r[0]);
-    const childKind = cellToString(r[1] ?? '');
-    const detached = parseBool(r[2]);
-    const bound = r[3] === null || r[3] === undefined ? '' : cellToString(r[3]);
-    const prefix = idx === 0 ? `${label}: ` : `${indent}  `;
-    let line = `${prefix}${relname}`;
-    if (bound !== '') line += ` ${bound}`;
-    if (childKind === 'p' || childKind === 'I') line += ', PARTITIONED';
-    else if (childKind === 'f') line += ', FOREIGN';
-    if (detached) line += ' (DETACH PENDING)';
-    if (idx < rs.rows.length - 1) line += ',';
-    out.write(`${line}\n`);
-  });
+	// Verbose mode: list each child with its bound (for partitions) and
+	// child-relkind annotations.
+	const label = isPartitioned ? "Partitions" : "Child tables";
+	const indent = " ".repeat(label.length);
+	rs.rows.forEach((r, idx) => {
+		const relname = cellToString(r[0]);
+		const childKind = cellToString(r[1] ?? "");
+		const detached = parseBool(r[2]);
+		const bound =
+			r[3] === null || r[3] === undefined ? "" : cellToString(r[3]);
+		const prefix = idx === 0 ? `${label}: ` : `${indent}  `;
+		let line = `${prefix}${relname}`;
+		if (bound !== "") line += ` ${bound}`;
+		if (childKind === "p" || childKind === "I") line += ", PARTITIONED";
+		else if (childKind === "f") line += ", FOREIGN";
+		if (detached) line += " (DETACH PENDING)";
+		if (idx < rs.rows.length - 1) line += ",";
+		out.write(`${line}\n`);
+	});
 };
 
 /**
@@ -1002,27 +1050,27 @@ const renderInheritedBySection = async (
  * either.
  */
 const renderReplicaIdentitySection = (
-  schema: string,
-  relInfo: RelationInfo,
-  out: NodeJS.WritableStream,
+	schema: string,
+	relInfo: RelationInfo,
+	out: NodeJS.WritableStream,
 ): void => {
-  const ri = relInfo.relreplident;
-  // INDEX mode is rendered inline on the matching index — no footer.
-  if (ri === 'i') return;
-  // pg_catalog relations default to 'n', user relations to 'd' — both
-  // suppress the footer when the value matches the schema default.
-  const isCatalog = schema === 'pg_catalog';
-  if (!isCatalog && ri === 'd') return;
-  if (isCatalog && ri === 'n') return;
-  const label =
-    ri === 'f'
-      ? 'FULL'
-      : ri === 'd'
-        ? 'NOTHING'
-        : ri === 'n'
-          ? 'NOTHING'
-          : '???';
-  out.write(`Replica Identity: ${label}\n`);
+	const ri = relInfo.relreplident;
+	// INDEX mode is rendered inline on the matching index — no footer.
+	if (ri === "i") return;
+	// pg_catalog relations default to 'n', user relations to 'd' — both
+	// suppress the footer when the value matches the schema default.
+	const isCatalog = schema === "pg_catalog";
+	if (!isCatalog && ri === "d") return;
+	if (isCatalog && ri === "n") return;
+	const label =
+		ri === "f"
+			? "FULL"
+			: ri === "d"
+				? "NOTHING"
+				: ri === "n"
+					? "NOTHING"
+					: "???";
+	out.write(`Replica Identity: ${label}\n`);
 };
 
 /**
@@ -1031,20 +1079,20 @@ const renderReplicaIdentitySection = (
  * tablespaces — caller enforces the relkind filter.
  */
 const renderTablespaceFooter = (
-  relkind: string,
-  relInfo: RelationInfo,
-  out: NodeJS.WritableStream,
+	relkind: string,
+	relInfo: RelationInfo,
+	out: NodeJS.WritableStream,
 ): void => {
-  const tsSupported =
-    relkind === 'r' ||
-    relkind === 'm' ||
-    relkind === 'i' ||
-    relkind === 'I' ||
-    relkind === 'p' ||
-    relkind === 't';
-  if (!tsSupported) return;
-  if (relInfo.reltablespace === 0 || !relInfo.spcname) return;
-  out.write(`Tablespace: "${relInfo.spcname}"\n`);
+	const tsSupported =
+		relkind === "r" ||
+		relkind === "m" ||
+		relkind === "i" ||
+		relkind === "I" ||
+		relkind === "p" ||
+		relkind === "t";
+	if (!tsSupported) return;
+	if (relInfo.reltablespace === 0 || !relInfo.spcname) return;
+	out.write(`Tablespace: "${relInfo.spcname}"\n`);
 };
 
 /**
@@ -1054,11 +1102,11 @@ const renderTablespaceFooter = (
  * tables / materialized views / partitioned tables.
  */
 const renderAccessMethodFooter = (
-  relInfo: RelationInfo,
-  out: NodeJS.WritableStream,
+	relInfo: RelationInfo,
+	out: NodeJS.WritableStream,
 ): void => {
-  if (relInfo.relam === 0 || !relInfo.amname) return;
-  out.write(`Access method: ${relInfo.amname}\n`);
+	if (relInfo.relam === 0 || !relInfo.amname) return;
+	out.write(`Access method: ${relInfo.amname}\n`);
 };
 
 /**
@@ -1072,86 +1120,86 @@ const renderAccessMethodFooter = (
  * it, so no follow-up footer is needed for INDEX-mode RI.
  */
 const renderIndexesSection = async (
-  conn: Connection,
-  oid: number,
-  out: NodeJS.WritableStream,
+	conn: Connection,
+	oid: number,
+	out: NodeJS.WritableStream,
 ): Promise<void> => {
-  const sql =
-    'SELECT c2.relname, i.indisprimary, i.indisunique, i.indisclustered,\n' +
-    '  i.indisvalid,\n' +
-    '  pg_catalog.pg_get_indexdef(i.indexrelid, 0, true),\n' +
-    '  pg_catalog.pg_get_constraintdef(con.oid, true),\n' +
-    '  contype, condeferrable, condeferred,\n' +
-    '  i.indisreplident,\n' +
-    '  c2.reltablespace\n' +
-    'FROM pg_catalog.pg_class c, pg_catalog.pg_class c2, pg_catalog.pg_index i\n' +
-    `  LEFT JOIN pg_catalog.pg_constraint con ON (conrelid = i.indrelid AND conindid = i.indexrelid AND contype IN ('p','u','x'))\n` +
-    `WHERE c.oid = '${oid}' AND c.oid = i.indrelid AND i.indexrelid = c2.oid\n` +
-    'ORDER BY i.indisprimary DESC, c2.relname;';
-  const rs = await conn.query(sql, []);
-  if (rs.rows.length === 0) return;
-  out.write('Indexes:\n');
-  for (const r of rs.rows) {
-    const idxName = cellToString(r[0]);
-    const isPrimary = String(r[1]) === 't' || r[1] === true;
-    const isUnique = String(r[2]) === 't' || r[2] === true;
-    const isClustered = String(r[3]) === 't' || r[3] === true;
-    const isValid = String(r[4]) === 't' || r[4] === true;
-    const indexdef = cellToString(r[5]);
-    const constrDef = r[6] !== null ? cellToString(r[6]) : '';
-    const contype = r[7] === null ? '' : cellToString(r[7]);
-    const condeferrable = String(r[8]) === 't' || r[8] === true;
-    const condeferred = String(r[9]) === 't' || r[9] === true;
-    const isReplIdent = String(r[10]) === 't' || r[10] === true;
-    let line = `    "${idxName}"`;
-    // Strip everything up through " USING " from the indexdef so we get
-    // the trailing `btree (...)` clause.
-    const usingPos = indexdef.indexOf(' USING ');
-    const tail = usingPos >= 0 ? indexdef.slice(usingPos + 7) : indexdef;
-    if (contype === 'x') {
-      // Exclusion constraint: emit constraintdef verbatim, no tail.
-      line += ` ${constrDef}`;
-    } else {
-      // Prefix label per upstream describe.c:
-      //   indisprimary       -> " PRIMARY KEY,"
-      //   indisunique && contype=='u' -> " UNIQUE CONSTRAINT,"
-      //   indisunique        -> " UNIQUE,"
-      // No prefix for plain non-unique indexes.
-      if (isPrimary) {
-        line += ' PRIMARY KEY,';
-      } else if (isUnique) {
-        line += contype === 'u' ? ' UNIQUE CONSTRAINT,' : ' UNIQUE,';
-      }
-      line += ` ${tail}`;
-      if (condeferrable) line += ' DEFERRABLE';
-      if (condeferred) line += ' INITIALLY DEFERRED';
-    }
-    if (isClustered) line += ' CLUSTER';
-    if (!isValid) line += ' INVALID';
-    if (isReplIdent) line += ' REPLICA IDENTITY';
-    out.write(`${line}\n`);
-  }
+	const sql =
+		"SELECT c2.relname, i.indisprimary, i.indisunique, i.indisclustered,\n" +
+		"  i.indisvalid,\n" +
+		"  pg_catalog.pg_get_indexdef(i.indexrelid, 0, true),\n" +
+		"  pg_catalog.pg_get_constraintdef(con.oid, true),\n" +
+		"  contype, condeferrable, condeferred,\n" +
+		"  i.indisreplident,\n" +
+		"  c2.reltablespace\n" +
+		"FROM pg_catalog.pg_class c, pg_catalog.pg_class c2, pg_catalog.pg_index i\n" +
+		`  LEFT JOIN pg_catalog.pg_constraint con ON (conrelid = i.indrelid AND conindid = i.indexrelid AND contype IN ('p','u','x'))\n` +
+		`WHERE c.oid = '${oid}' AND c.oid = i.indrelid AND i.indexrelid = c2.oid\n` +
+		"ORDER BY i.indisprimary DESC, c2.relname;";
+	const rs = await conn.query(sql, []);
+	if (rs.rows.length === 0) return;
+	out.write("Indexes:\n");
+	for (const r of rs.rows) {
+		const idxName = cellToString(r[0]);
+		const isPrimary = String(r[1]) === "t" || r[1] === true;
+		const isUnique = String(r[2]) === "t" || r[2] === true;
+		const isClustered = String(r[3]) === "t" || r[3] === true;
+		const isValid = String(r[4]) === "t" || r[4] === true;
+		const indexdef = cellToString(r[5]);
+		const constrDef = r[6] !== null ? cellToString(r[6]) : "";
+		const contype = r[7] === null ? "" : cellToString(r[7]);
+		const condeferrable = String(r[8]) === "t" || r[8] === true;
+		const condeferred = String(r[9]) === "t" || r[9] === true;
+		const isReplIdent = String(r[10]) === "t" || r[10] === true;
+		let line = `    "${idxName}"`;
+		// Strip everything up through " USING " from the indexdef so we get
+		// the trailing `btree (...)` clause.
+		const usingPos = indexdef.indexOf(" USING ");
+		const tail = usingPos >= 0 ? indexdef.slice(usingPos + 7) : indexdef;
+		if (contype === "x") {
+			// Exclusion constraint: emit constraintdef verbatim, no tail.
+			line += ` ${constrDef}`;
+		} else {
+			// Prefix label per upstream describe.c:
+			//   indisprimary       -> " PRIMARY KEY,"
+			//   indisunique && contype=='u' -> " UNIQUE CONSTRAINT,"
+			//   indisunique        -> " UNIQUE,"
+			// No prefix for plain non-unique indexes.
+			if (isPrimary) {
+				line += " PRIMARY KEY,";
+			} else if (isUnique) {
+				line += contype === "u" ? " UNIQUE CONSTRAINT," : " UNIQUE,";
+			}
+			line += ` ${tail}`;
+			if (condeferrable) line += " DEFERRABLE";
+			if (condeferred) line += " INITIALLY DEFERRED";
+		}
+		if (isClustered) line += " CLUSTER";
+		if (!isValid) line += " INVALID";
+		if (isReplIdent) line += " REPLICA IDENTITY";
+		out.write(`${line}\n`);
+	}
 };
 
 /**
  * Render `Check constraints:\n    "name" CHECK (expr)` list.
  */
 const renderCheckConstraintsSection = async (
-  conn: Connection,
-  oid: number,
-  out: NodeJS.WritableStream,
+	conn: Connection,
+	oid: number,
+	out: NodeJS.WritableStream,
 ): Promise<void> => {
-  const sql =
-    'SELECT r.conname, pg_catalog.pg_get_constraintdef(r.oid, true)\n' +
-    'FROM pg_catalog.pg_constraint r\n' +
-    `WHERE r.conrelid = '${oid}' AND r.contype = 'c'\n` +
-    'ORDER BY 1;';
-  const rs = await conn.query(sql, []);
-  if (rs.rows.length === 0) return;
-  out.write('Check constraints:\n');
-  for (const r of rs.rows) {
-    out.write(`    "${cellToString(r[0])}" ${cellToString(r[1])}\n`);
-  }
+	const sql =
+		"SELECT r.conname, pg_catalog.pg_get_constraintdef(r.oid, true)\n" +
+		"FROM pg_catalog.pg_constraint r\n" +
+		`WHERE r.conrelid = '${oid}' AND r.contype = 'c'\n` +
+		"ORDER BY 1;";
+	const rs = await conn.query(sql, []);
+	if (rs.rows.length === 0) return;
+	out.write("Check constraints:\n");
+	for (const r of rs.rows) {
+		out.write(`    "${cellToString(r[0])}" ${cellToString(r[1])}\n`);
+	}
 };
 
 /**
@@ -1165,45 +1213,48 @@ const renderCheckConstraintsSection = async (
  * query returns no rows, so the whole section is suppressed.
  */
 const renderNotNullConstraintsSection = async (
-  conn: Connection,
-  oid: number,
-  out: NodeJS.WritableStream,
+	conn: Connection,
+	oid: number,
+	out: NodeJS.WritableStream,
 ): Promise<void> => {
-  const q = fetchNotNullConstraints({ oid, serverVersion: conn.serverVersion });
-  const rs = await conn.query(q.sql, q.params);
-  if (rs.rows.length === 0) return;
-  out.write('Not-null constraints:\n');
-  for (const r of rs.rows) {
-    const conname = cellToString(r[0]);
-    const attname = cellToString(r[1]);
-    const noInherit = parseBool(r[2]);
-    const isLocal = parseBool(r[3]);
-    let line = `    "${conname}" NOT NULL "${attname}"`;
-    if (noInherit) line += ' NO INHERIT';
-    else if (!isLocal) line += ' (inherited)';
-    out.write(`${line}\n`);
-  }
+	const q = fetchNotNullConstraints({
+		oid,
+		serverVersion: conn.serverVersion,
+	});
+	const rs = await conn.query(q.sql, q.params);
+	if (rs.rows.length === 0) return;
+	out.write("Not-null constraints:\n");
+	for (const r of rs.rows) {
+		const conname = cellToString(r[0]);
+		const attname = cellToString(r[1]);
+		const noInherit = parseBool(r[2]);
+		const isLocal = parseBool(r[3]);
+		let line = `    "${conname}" NOT NULL "${attname}"`;
+		if (noInherit) line += " NO INHERIT";
+		else if (!isLocal) line += " (inherited)";
+		out.write(`${line}\n`);
+	}
 };
 
 /**
  * Render `Foreign-key constraints:\n    "name" FOREIGN KEY ...` list.
  */
 const renderForeignKeyConstraintsSection = async (
-  conn: Connection,
-  oid: number,
-  out: NodeJS.WritableStream,
+	conn: Connection,
+	oid: number,
+	out: NodeJS.WritableStream,
 ): Promise<void> => {
-  const sql =
-    'SELECT conname, pg_catalog.pg_get_constraintdef(oid, true) AS condef\n' +
-    'FROM pg_catalog.pg_constraint\n' +
-    `WHERE conrelid = '${oid}' AND contype = 'f'\n` +
-    'ORDER BY conname;';
-  const rs = await conn.query(sql, []);
-  if (rs.rows.length === 0) return;
-  out.write('Foreign-key constraints:\n');
-  for (const r of rs.rows) {
-    out.write(`    "${cellToString(r[0])}" ${cellToString(r[1])}\n`);
-  }
+	const sql =
+		"SELECT conname, pg_catalog.pg_get_constraintdef(oid, true) AS condef\n" +
+		"FROM pg_catalog.pg_constraint\n" +
+		`WHERE conrelid = '${oid}' AND contype = 'f'\n` +
+		"ORDER BY conname;";
+	const rs = await conn.query(sql, []);
+	if (rs.rows.length === 0) return;
+	out.write("Foreign-key constraints:\n");
+	for (const r of rs.rows) {
+		out.write(`    "${cellToString(r[0])}" ${cellToString(r[1])}\n`);
+	}
 };
 
 /**
@@ -1211,45 +1262,45 @@ const renderForeignKeyConstraintsSection = async (
  * (incoming FKs from other tables).
  */
 const renderReferencedBySection = async (
-  conn: Connection,
-  oid: number,
-  out: NodeJS.WritableStream,
+	conn: Connection,
+	oid: number,
+	out: NodeJS.WritableStream,
 ): Promise<void> => {
-  const sql =
-    'SELECT conname, conrelid::pg_catalog.regclass,\n' +
-    '  pg_catalog.pg_get_constraintdef(oid, true) AS condef\n' +
-    'FROM pg_catalog.pg_constraint\n' +
-    `WHERE confrelid = '${oid}' AND contype = 'f'\n` +
-    'ORDER BY conname;';
-  const rs = await conn.query(sql, []);
-  if (rs.rows.length === 0) return;
-  out.write('Referenced by:\n');
-  for (const r of rs.rows) {
-    out.write(
-      `    TABLE "${cellToString(r[1])}" CONSTRAINT "${cellToString(r[0])}" ${cellToString(r[2])}\n`,
-    );
-  }
+	const sql =
+		"SELECT conname, conrelid::pg_catalog.regclass,\n" +
+		"  pg_catalog.pg_get_constraintdef(oid, true) AS condef\n" +
+		"FROM pg_catalog.pg_constraint\n" +
+		`WHERE confrelid = '${oid}' AND contype = 'f'\n` +
+		"ORDER BY conname;";
+	const rs = await conn.query(sql, []);
+	if (rs.rows.length === 0) return;
+	out.write("Referenced by:\n");
+	for (const r of rs.rows) {
+		out.write(
+			`    TABLE "${cellToString(r[1])}" CONSTRAINT "${cellToString(r[0])}" ${cellToString(r[2])}\n`,
+		);
+	}
 };
 
 /**
  * Render `Triggers:\n    name AFTER ... EXECUTE ...` list.
  */
 const renderTriggersSection = async (
-  conn: Connection,
-  oid: number,
-  out: NodeJS.WritableStream,
+	conn: Connection,
+	oid: number,
+	out: NodeJS.WritableStream,
 ): Promise<void> => {
-  const sql =
-    'SELECT t.tgname, pg_catalog.pg_get_triggerdef(t.oid, true) AS tgdef, t.tgenabled\n' +
-    'FROM pg_catalog.pg_trigger t\n' +
-    `WHERE t.tgrelid = '${oid}' AND NOT t.tgisinternal\n` +
-    'ORDER BY 1;';
-  const rs = await conn.query(sql, []);
-  if (rs.rows.length === 0) return;
-  out.write('Triggers:\n');
-  for (const r of rs.rows) {
-    out.write(`    ${cellToString(r[1])}\n`);
-  }
+	const sql =
+		"SELECT t.tgname, pg_catalog.pg_get_triggerdef(t.oid, true) AS tgdef, t.tgenabled\n" +
+		"FROM pg_catalog.pg_trigger t\n" +
+		`WHERE t.tgrelid = '${oid}' AND NOT t.tgisinternal\n` +
+		"ORDER BY 1;";
+	const rs = await conn.query(sql, []);
+	if (rs.rows.length === 0) return;
+	out.write("Triggers:\n");
+	for (const r of rs.rows) {
+		out.write(`    ${cellToString(r[1])}\n`);
+	}
 };
 
 /**
@@ -1260,31 +1311,34 @@ const renderTriggersSection = async (
  * inside parentheses; we preserve insertion order matching upstream.
  */
 const renderStatisticsObjectsSection = async (
-  conn: Connection,
-  oid: number,
-  out: NodeJS.WritableStream,
+	conn: Connection,
+	oid: number,
+	out: NodeJS.WritableStream,
 ): Promise<void> => {
-  const q = fetchStatisticsObjects({ oid, serverVersion: conn.serverVersion });
-  const rs = await conn.query(q.sql, q.params);
-  if (rs.rows.length === 0) return;
-  out.write('Statistics objects:\n');
-  for (const r of rs.rows) {
-    const nsp = cellToString(r[0] ?? '');
-    const name = cellToString(r[1] ?? '');
-    const ndist = parseBool(r[2]);
-    const deps = parseBool(r[3]);
-    const mcv = parseBool(r[4]);
-    const columns = cellToString(r[5] ?? '');
-    const relname = cellToString(r[6] ?? '');
-    const kinds: string[] = [];
-    if (ndist) kinds.push('ndistinct');
-    if (deps) kinds.push('dependencies');
-    if (mcv) kinds.push('mcv');
-    const kindStr = kinds.length > 0 ? ` (${kinds.join(', ')})` : '';
-    out.write(
-      `    "${nsp}"."${name}"${kindStr} ON ${columns} FROM ${relname}\n`,
-    );
-  }
+	const q = fetchStatisticsObjects({
+		oid,
+		serverVersion: conn.serverVersion,
+	});
+	const rs = await conn.query(q.sql, q.params);
+	if (rs.rows.length === 0) return;
+	out.write("Statistics objects:\n");
+	for (const r of rs.rows) {
+		const nsp = cellToString(r[0] ?? "");
+		const name = cellToString(r[1] ?? "");
+		const ndist = parseBool(r[2]);
+		const deps = parseBool(r[3]);
+		const mcv = parseBool(r[4]);
+		const columns = cellToString(r[5] ?? "");
+		const relname = cellToString(r[6] ?? "");
+		const kinds: string[] = [];
+		if (ndist) kinds.push("ndistinct");
+		if (deps) kinds.push("dependencies");
+		if (mcv) kinds.push("mcv");
+		const kindStr = kinds.length > 0 ? ` (${kinds.join(", ")})` : "";
+		out.write(
+			`    "${nsp}"."${name}"${kindStr} ON ${columns} FROM ${relname}\n`,
+		);
+	}
 };
 
 /**
@@ -1293,17 +1347,20 @@ const renderStatisticsObjectsSection = async (
  * IN SCHEMA). No-op when the result set is empty.
  */
 const renderPublicationsSection = async (
-  conn: Connection,
-  oid: number,
-  out: NodeJS.WritableStream,
+	conn: Connection,
+	oid: number,
+	out: NodeJS.WritableStream,
 ): Promise<void> => {
-  const q = fetchTablePublications({ oid, serverVersion: conn.serverVersion });
-  const rs = await conn.query(q.sql, q.params);
-  if (rs.rows.length === 0) return;
-  out.write('Publications:\n');
-  for (const r of rs.rows) {
-    out.write(`    "${cellToString(r[0] ?? '')}"\n`);
-  }
+	const q = fetchTablePublications({
+		oid,
+		serverVersion: conn.serverVersion,
+	});
+	const rs = await conn.query(q.sql, q.params);
+	if (rs.rows.length === 0) return;
+	out.write("Publications:\n");
+	for (const r of rs.rows) {
+		out.write(`    "${cellToString(r[0] ?? "")}"\n`);
+	}
 };
 
 /**
@@ -1312,23 +1369,26 @@ const renderPublicationsSection = async (
  * error, the section is silently omitted (mirroring upstream behaviour).
  */
 const renderSubscriptionsSection = async (
-  conn: Connection,
-  oid: number,
-  out: NodeJS.WritableStream,
+	conn: Connection,
+	oid: number,
+	out: NodeJS.WritableStream,
 ): Promise<void> => {
-  const q = fetchTableSubscriptions({ oid, serverVersion: conn.serverVersion });
-  let rs;
-  try {
-    rs = await conn.query(q.sql, q.params);
-  } catch (err) {
-    if (isPermissionDeniedError(err)) return;
-    throw err;
-  }
-  if (rs.rows.length === 0) return;
-  out.write('Subscriptions:\n');
-  for (const r of rs.rows) {
-    out.write(`    "${cellToString(r[0] ?? '')}"\n`);
-  }
+	const q = fetchTableSubscriptions({
+		oid,
+		serverVersion: conn.serverVersion,
+	});
+	let rs;
+	try {
+		rs = await conn.query(q.sql, q.params);
+	} catch (err) {
+		if (isPermissionDeniedError(err)) return;
+		throw err;
+	}
+	if (rs.rows.length === 0) return;
+	out.write("Subscriptions:\n");
+	for (const r of rs.rows) {
+		out.write(`    "${cellToString(r[0] ?? "")}"\n`);
+	}
 };
 
 /**
@@ -1338,18 +1398,18 @@ const renderSubscriptionsSection = async (
  * on each affected column row, not as a separate footer.
  */
 const fetchPerColumnFdwOptionsMap = async (
-  conn: Connection,
-  oid: number,
+	conn: Connection,
+	oid: number,
 ): Promise<Map<string, string>> => {
-  const q = fetchPerColumnFdwOptions({ oid });
-  const rs = await conn.query(q.sql, q.params);
-  const m = new Map<string, string>();
-  for (const r of rs.rows) {
-    const attname = cellToString(r[0] ?? '');
-    const opts = cellToString(r[1] ?? '');
-    if (attname !== '' && opts !== '') m.set(attname, opts);
-  }
-  return m;
+	const q = fetchPerColumnFdwOptions({ oid });
+	const rs = await conn.query(q.sql, q.params);
+	const m = new Map<string, string>();
+	for (const r of rs.rows) {
+		const attname = cellToString(r[0] ?? "");
+		const opts = cellToString(r[1] ?? "");
+		if (attname !== "" && opts !== "") m.set(attname, opts);
+	}
+	return m;
 };
 
 /**
@@ -1360,26 +1420,26 @@ const fetchPerColumnFdwOptionsMap = async (
  * directly rather than relying on regclass-cast text.
  */
 const renderToastOwningTableFooter = async (
-  conn: Connection,
-  oid: number,
-  out: NodeJS.WritableStream,
+	conn: Connection,
+	oid: number,
+	out: NodeJS.WritableStream,
 ): Promise<void> => {
-  // Side-step the regclass-cast query (which honours search_path and
-  // would drop the `pg_catalog.` prefix for pg_catalog parents). Look
-  // up the parent's schema + relname directly so we can render the
-  // schema-qualified form unconditionally.
-  const sql =
-    'SELECT n.nspname, c.relname\n' +
-    'FROM pg_catalog.pg_class c\n' +
-    'JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace\n' +
-    `WHERE c.reltoastrelid = '${oid}'\n` +
-    'LIMIT 1;';
-  const rs = await conn.query(sql, []);
-  if (rs.rows.length === 0) return;
-  const nspname = cellToString(rs.rows[0][0] ?? '');
-  const relname = cellToString(rs.rows[0][1] ?? '');
-  if (relname === '') return;
-  out.write(`Owning table: "${nspname}.${relname}"\n`);
+	// Side-step the regclass-cast query (which honours search_path and
+	// would drop the `pg_catalog.` prefix for pg_catalog parents). Look
+	// up the parent's schema + relname directly so we can render the
+	// schema-qualified form unconditionally.
+	const sql =
+		"SELECT n.nspname, c.relname\n" +
+		"FROM pg_catalog.pg_class c\n" +
+		"JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace\n" +
+		`WHERE c.reltoastrelid = '${oid}'\n` +
+		"LIMIT 1;";
+	const rs = await conn.query(sql, []);
+	if (rs.rows.length === 0) return;
+	const nspname = cellToString(rs.rows[0][0] ?? "");
+	const relname = cellToString(rs.rows[0][1] ?? "");
+	if (relname === "") return;
+	out.write(`Owning table: "${nspname}.${relname}"\n`);
 };
 
 /**
@@ -1390,14 +1450,14 @@ const renderToastOwningTableFooter = async (
  * errors, not arbitrary failures.
  */
 const isPermissionDeniedError = (err: unknown): boolean => {
-  if (err === null || typeof err !== 'object') return false;
-  const code = (err as { code?: unknown }).code;
-  if (typeof code === 'string' && code === '42501') return true;
-  const message = (err as { message?: unknown }).message;
-  if (typeof message === 'string' && /permission denied/i.test(message)) {
-    return true;
-  }
-  return false;
+	if (err === null || typeof err !== "object") return false;
+	const code = (err as { code?: unknown }).code;
+	if (typeof code === "string" && code === "42501") return true;
+	const message = (err as { message?: unknown }).message;
+	if (typeof message === "string" && /permission denied/i.test(message)) {
+		return true;
+	}
+	return false;
 };
 
 /**
@@ -1405,56 +1465,56 @@ const isPermissionDeniedError = (err: unknown): boolean => {
  * plus the `Owned by:` footer if applicable.
  */
 export const describeOneSequence = async (
-  conn: Connection,
-  oid: number,
-  schema: string,
-  name: string,
-  out: NodeJS.WritableStream,
-  popt: PrintQueryOpts,
+	conn: Connection,
+	oid: number,
+	schema: string,
+	name: string,
+	out: NodeJS.WritableStream,
+	popt: PrintQueryOpts,
 ): Promise<void> => {
-  const sql =
-    'SELECT pg_catalog.format_type(seqtypid, NULL) AS "Type",\n' +
-    '  seqstart AS "Start", seqmin AS "Minimum", seqmax AS "Maximum",\n' +
-    '  seqincrement AS "Increment",\n' +
-    "  CASE WHEN seqcycle THEN 'yes' ELSE 'no' END AS \"Cycles?\",\n" +
-    '  seqcache AS "Cache"\n' +
-    `FROM pg_catalog.pg_sequence WHERE seqrelid = '${oid}';`;
-  const rs = await conn.query(sql, []);
-  const title = `Sequence "${schema}.${name}"`;
+	const sql =
+		'SELECT pg_catalog.format_type(seqtypid, NULL) AS "Type",\n' +
+		'  seqstart AS "Start", seqmin AS "Minimum", seqmax AS "Maximum",\n' +
+		'  seqincrement AS "Increment",\n' +
+		"  CASE WHEN seqcycle THEN 'yes' ELSE 'no' END AS \"Cycles?\",\n" +
+		'  seqcache AS "Cache"\n' +
+		`FROM pg_catalog.pg_sequence WHERE seqrelid = '${oid}';`;
+	const rs = await conn.query(sql, []);
+	const title = `Sequence "${schema}.${name}"`;
 
-  // Owned-by footer text is collected up-front so the printer can place
-  // it inside the body of the result (between the data row and the
-  // trailing blank line), matching upstream where `\d <seq>` renders
-  // `Owned by:` AS a footer of the printed table — not as a separate
-  // post-table line.
-  const ownedSql =
-    "SELECT pg_catalog.quote_ident(nspname) || '.' || pg_catalog.quote_ident(relname) || '.' || pg_catalog.quote_ident(attname)\n" +
-    'FROM pg_catalog.pg_class c\n' +
-    'JOIN pg_catalog.pg_depend d ON c.oid = d.refobjid\n' +
-    'JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace\n' +
-    'JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid AND a.attnum = d.refobjsubid\n' +
-    `WHERE d.classid = 'pg_catalog.pg_class'::regclass AND d.refclassid = 'pg_catalog.pg_class'::regclass\n` +
-    `  AND d.objid = '${oid}' AND d.deptype IN ('a', 'i');`;
-  const ownRs = await conn.query(ownedSql, []);
-  const footers: string[] = [];
-  if (ownRs.rows.length > 0) {
-    footers.push(`Owned by: ${cellToString(ownRs.rows[0][0])}`);
-  }
+	// Owned-by footer text is collected up-front so the printer can place
+	// it inside the body of the result (between the data row and the
+	// trailing blank line), matching upstream where `\d <seq>` renders
+	// `Owned by:` AS a footer of the printed table — not as a separate
+	// post-table line.
+	const ownedSql =
+		"SELECT pg_catalog.quote_ident(nspname) || '.' || pg_catalog.quote_ident(relname) || '.' || pg_catalog.quote_ident(attname)\n" +
+		"FROM pg_catalog.pg_class c\n" +
+		"JOIN pg_catalog.pg_depend d ON c.oid = d.refobjid\n" +
+		"JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace\n" +
+		"JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid AND a.attnum = d.refobjsubid\n" +
+		`WHERE d.classid = 'pg_catalog.pg_class'::regclass AND d.refclassid = 'pg_catalog.pg_class'::regclass\n` +
+		`  AND d.objid = '${oid}' AND d.deptype IN ('a', 'i');`;
+	const ownRs = await conn.query(ownedSql, []);
+	const footers: string[] = [];
+	if (ownRs.rows.length > 0) {
+		footers.push(`Owned by: ${cellToString(ownRs.rows[0][0])}`);
+	}
 
-  // Suppress the row-count footer — upstream's sequence detail output is
-  // a single row with no `(1 row)` line. Pass the Owned-by line as a
-  // user footer so the printer places it before the trailing blank.
-  const seqOpts: PrintQueryOpts = {
-    ...popt,
-    title,
-    topt: { ...popt.topt, title, defaultFooter: false },
-    footers: footers.length > 0 ? footers : null,
-  };
-  await pickPrinterForFormat(seqOpts).printQuery(
-    coerceResultSet(rs),
-    seqOpts,
-    out,
-  );
+	// Suppress the row-count footer — upstream's sequence detail output is
+	// a single row with no `(1 row)` line. Pass the Owned-by line as a
+	// user footer so the printer places it before the trailing blank.
+	const seqOpts: PrintQueryOpts = {
+		...popt,
+		title,
+		topt: { ...popt.topt, title, defaultFooter: false },
+		footers: footers.length > 0 ? footers : null,
+	};
+	await pickPrinterForFormat(seqOpts).printQuery(
+		coerceResultSet(rs),
+		seqOpts,
+		out,
+	);
 };
 
 /**
@@ -1462,50 +1522,50 @@ export const describeOneSequence = async (
  * Renders the single-column result as raw text.
  */
 export const describeOneFunctionDetails = async (
-  conn: Connection,
-  oid: number,
-  out: NodeJS.WritableStream,
+	conn: Connection,
+	oid: number,
+	out: NodeJS.WritableStream,
 ): Promise<void> => {
-  const sql = `SELECT pg_catalog.pg_get_functiondef('${oid}'::pg_catalog.oid) AS def;`;
-  const rs = await conn.query(sql, []);
-  if (rs.rows.length > 0) {
-    out.write(cellToString(rs.rows[0][0]));
-    out.write('\n');
-  }
+	const sql = `SELECT pg_catalog.pg_get_functiondef('${oid}'::pg_catalog.oid) AS def;`;
+	const rs = await conn.query(sql, []);
+	if (rs.rows.length > 0) {
+		out.write(cellToString(rs.rows[0][0]));
+		out.write("\n");
+	}
 };
 
 /**
  * `\sv <name>` — show view definition.
  */
 export const describeOneViewDetails = async (
-  conn: Connection,
-  oid: number,
-  schema: string,
-  name: string,
-  out: NodeJS.WritableStream,
-  popt: PrintQueryOpts,
-  verbose = false,
-  hideCompression = false,
+	conn: Connection,
+	oid: number,
+	schema: string,
+	name: string,
+	out: NodeJS.WritableStream,
+	popt: PrintQueryOpts,
+	verbose = false,
+	hideCompression = false,
 ): Promise<void> => {
-  // Use the table renderer for columns first (views have columns). In
-  // verbose mode this also adds the Storage / Stats target / Description
-  // columns, matching upstream `\d+ <view>`.
-  await describeOneTableDetails(
-    conn,
-    oid,
-    schema,
-    name,
-    'v',
-    verbose,
-    out,
-    popt,
-    false,
-    hideCompression,
-  );
-  // The "View definition:" footer (verbose-only) is emitted by
-  // describeOneTableDetails as a table footer so it renders flush with the
-  // column rows and gets the single trailing blank — matching upstream
-  // `describeOneTableDetails` (describe.c ~3151/3175). Nothing more to do.
+	// Use the table renderer for columns first (views have columns). In
+	// verbose mode this also adds the Storage / Stats target / Description
+	// columns, matching upstream `\d+ <view>`.
+	await describeOneTableDetails(
+		conn,
+		oid,
+		schema,
+		name,
+		"v",
+		verbose,
+		out,
+		popt,
+		false,
+		hideCompression,
+	);
+	// The "View definition:" footer (verbose-only) is emitted by
+	// describeOneTableDetails as a table footer so it renders flush with the
+	// column rows and gets the single trailing blank — matching upstream
+	// `describeOneTableDetails` (describe.c ~3151/3175). Nothing more to do.
 };
 
 /**
@@ -1513,34 +1573,34 @@ export const describeOneViewDetails = async (
  * `\d <name>`. Examples: 'r' → `Table "schema.name"`; 'v' → `View "..."`.
  */
 const headerForRelkind = (
-  relkind: string,
-  schema: string,
-  name: string,
+	relkind: string,
+	schema: string,
+	name: string,
 ): string => {
-  switch (relkind) {
-    case 'r':
-      return `Table "${schema}.${name}"`;
-    case 'v':
-      return `View "${schema}.${name}"`;
-    case 'm':
-      return `Materialized view "${schema}.${name}"`;
-    case 'S':
-      return `Sequence "${schema}.${name}"`;
-    case 'i':
-      return `Index "${schema}.${name}"`;
-    case 'I':
-      return `Partitioned index "${schema}.${name}"`;
-    case 'p':
-      return `Partitioned table "${schema}.${name}"`;
-    case 'f':
-      return `Foreign table "${schema}.${name}"`;
-    case 't':
-      return `TOAST table "${schema}.${name}"`;
-    case 'c':
-      return `Composite type "${schema}.${name}"`;
-    default:
-      return `Relation "${schema}.${name}"`;
-  }
+	switch (relkind) {
+		case "r":
+			return `Table "${schema}.${name}"`;
+		case "v":
+			return `View "${schema}.${name}"`;
+		case "m":
+			return `Materialized view "${schema}.${name}"`;
+		case "S":
+			return `Sequence "${schema}.${name}"`;
+		case "i":
+			return `Index "${schema}.${name}"`;
+		case "I":
+			return `Partitioned index "${schema}.${name}"`;
+		case "p":
+			return `Partitioned table "${schema}.${name}"`;
+		case "f":
+			return `Foreign table "${schema}.${name}"`;
+		case "t":
+			return `TOAST table "${schema}.${name}"`;
+		case "c":
+			return `Composite type "${schema}.${name}"`;
+		default:
+			return `Relation "${schema}.${name}"`;
+	}
 };
 
 /**
@@ -1550,13 +1610,13 @@ const headerForRelkind = (
  * the layout from pg_attribute data.
  */
 const fakeField = (
-  name: string,
-): import('../types/connection.js').FieldDescription => ({
-  name,
-  tableID: 0,
-  columnID: 0,
-  dataTypeID: 25, // text
-  dataTypeSize: -1,
-  dataTypeModifier: -1,
-  format: 0,
+	name: string,
+): import("../types/connection.js").FieldDescription => ({
+	name,
+	tableID: 0,
+	columnID: 0,
+	dataTypeID: 25, // text
+	dataTypeSize: -1,
+	dataTypeModifier: -1,
+	format: 0,
 });

@@ -31,28 +31,30 @@
  * `core/mainloop.ts`).
  */
 
-import { runPsql, looksLikeConnectionString } from './index.js';
+import { looksLikeConnectionString, runPsql } from "./index.js";
 
 const main = async (): Promise<void> => {
-  const raw = process.argv.slice(2);
+	const raw = process.argv.slice(2);
 
-  // Detect whether the first arg is a connection URI/conninfo string.
-  // libpq's `recognized_connection_string()` covers both `postgres[ql]://…`
-  // URIs and bare `key=value` conninfo strings — `looksLikeConnectionString`
-  // mirrors that test.
-  const argv =
-    raw.length > 0 && looksLikeConnectionString(raw[0]) ? raw : ['', ...raw];
+	// Detect whether the first arg is a connection URI/conninfo string.
+	// libpq's `recognized_connection_string()` covers both `postgres[ql]://…`
+	// URIs and bare `key=value` conninfo strings — `looksLikeConnectionString`
+	// mirrors that test.
+	const argv =
+		raw.length > 0 && looksLikeConnectionString(raw[0])
+			? raw
+			: ["", ...raw];
 
-  const code = await runPsql(argv, {
-    stdin: process.stdin,
-    stdout: process.stdout,
-    stderr: process.stderr,
-  });
-  process.exit(code);
+	const code = await runPsql(argv, {
+		stdin: process.stdin,
+		stdout: process.stdout,
+		stderr: process.stderr,
+	});
+	process.exit(code);
 };
 
 main().catch((err: unknown) => {
-  const msg = err instanceof Error ? err.message : String(err);
-  process.stderr.write(`psql: fatal: ${msg}\n`);
-  process.exit(1);
+	const msg = err instanceof Error ? err.message : String(err);
+	process.stderr.write(`psql: fatal: ${msg}\n`);
+	process.exit(1);
 });

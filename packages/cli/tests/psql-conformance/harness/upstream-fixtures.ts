@@ -22,26 +22,26 @@
 // `.expected` strings. `regress.spec.ts` consumes the maps directly
 // instead of reading from disk.
 
-import { readFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const POSTGRES_REF_PATH = resolve(HERE, '..', 'POSTGRES_REF');
+const POSTGRES_REF_PATH = resolve(HERE, "..", "POSTGRES_REF");
 
-const RAW_BASE = 'https://raw.githubusercontent.com/postgres/postgres';
+const RAW_BASE = "https://raw.githubusercontent.com/postgres/postgres";
 
-export type RegressCaseName = 'psql' | 'psql_crosstab' | 'psql_pipeline';
+export type RegressCaseName = "psql" | "psql_crosstab" | "psql_pipeline";
 
 export type UpstreamRegressFixture = {
-  readonly sql: string;
-  readonly expected: string;
+	readonly sql: string;
+	readonly expected: string;
 };
 
 const REGRESS_CASES: readonly RegressCaseName[] = [
-  'psql',
-  'psql_crosstab',
-  'psql_pipeline',
+	"psql",
+	"psql_crosstab",
+	"psql_pipeline",
 ];
 
 /**
@@ -49,24 +49,24 @@ const REGRESS_CASES: readonly RegressCaseName[] = [
  * fetcher cannot work without a pin.
  */
 const readPgTag = (): string => {
-  const raw = readFileSync(POSTGRES_REF_PATH, 'utf8');
-  for (const line of raw.split('\n')) {
-    const trimmed = line.trim();
-    if (trimmed === '' || trimmed.startsWith('#')) continue;
-    const eq = trimmed.indexOf('=');
-    if (eq < 0) continue;
-    const key = trimmed.slice(0, eq).trim();
-    if (key === 'PG_TAG') return trimmed.slice(eq + 1).trim();
-  }
-  throw new Error(`PG_TAG missing from ${POSTGRES_REF_PATH}`);
+	const raw = readFileSync(POSTGRES_REF_PATH, "utf8");
+	for (const line of raw.split("\n")) {
+		const trimmed = line.trim();
+		if (trimmed === "" || trimmed.startsWith("#")) continue;
+		const eq = trimmed.indexOf("=");
+		if (eq < 0) continue;
+		const key = trimmed.slice(0, eq).trim();
+		if (key === "PG_TAG") return trimmed.slice(eq + 1).trim();
+	}
+	throw new Error(`PG_TAG missing from ${POSTGRES_REF_PATH}`);
 };
 
 const fetchText = async (url: string): Promise<string> => {
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status} ${res.statusText} for ${url}`);
-  }
-  return res.text();
+	const res = await fetch(url);
+	if (!res.ok) {
+		throw new Error(`HTTP ${res.status} ${res.statusText} for ${url}`);
+	}
+	return res.text();
 };
 
 /**
@@ -75,23 +75,25 @@ const fetchText = async (url: string): Promise<string> => {
  * success — a half-fetched fixture set would silently break tests).
  */
 export const fetchRegressFixtures = async (): Promise<
-  Map<RegressCaseName, UpstreamRegressFixture>
+	Map<RegressCaseName, UpstreamRegressFixture>
 > => {
-  const tag = readPgTag();
-  const requests: Promise<{
-    name: RegressCaseName;
-    fixture: UpstreamRegressFixture;
-  }>[] = REGRESS_CASES.map(async (name) => {
-    const [sql, expected] = await Promise.all([
-      fetchText(`${RAW_BASE}/${tag}/src/test/regress/sql/${name}.sql`),
-      fetchText(`${RAW_BASE}/${tag}/src/test/regress/expected/${name}.out`),
-    ]);
-    return { name, fixture: { sql, expected } };
-  });
-  const results = await Promise.all(requests);
-  const map = new Map<RegressCaseName, UpstreamRegressFixture>();
-  for (const r of results) map.set(r.name, r.fixture);
-  return map;
+	const tag = readPgTag();
+	const requests: Promise<{
+		name: RegressCaseName;
+		fixture: UpstreamRegressFixture;
+	}>[] = REGRESS_CASES.map(async (name) => {
+		const [sql, expected] = await Promise.all([
+			fetchText(`${RAW_BASE}/${tag}/src/test/regress/sql/${name}.sql`),
+			fetchText(
+				`${RAW_BASE}/${tag}/src/test/regress/expected/${name}.out`,
+			),
+		]);
+		return { name, fixture: { sql, expected } };
+	});
+	const results = await Promise.all(requests);
+	const map = new Map<RegressCaseName, UpstreamRegressFixture>();
+	for (const r of results) map.set(r.name, r.fixture);
+	return map;
 };
 
 /**
@@ -99,8 +101,8 @@ export const fetchRegressFixtures = async (): Promise<
  * upstream — we maintain it. Lives under `tests/psql-conformance/seed/`.
  */
 export const SEED_SCRIPT_HOST_PATH = join(
-  HERE,
-  '..',
-  'seed',
-  'test_setup_minimal.sql',
+	HERE,
+	"..",
+	"seed",
+	"test_setup_minimal.sql",
 );

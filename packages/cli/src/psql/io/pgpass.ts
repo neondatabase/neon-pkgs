@@ -26,31 +26,31 @@
  *   entirely (libpq does the same — `geteuid` / `S_IRWXG` aren't portable).
  */
 
-import { promises as fs } from 'node:fs';
-import * as os from 'node:os';
-import * as path from 'node:path';
+import { promises as fs } from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 
 export type PgPassEntry = {
-  /** Hostname to match, or `*` for any. */
-  host: string;
-  /** Port to match (string form), or `*` for any. */
-  port: string;
-  /** Database name to match, or `*` for any. */
-  database: string;
-  /** User name to match, or `*` for any. */
-  user: string;
-  /** The password to return on a match. */
-  password: string;
+	/** Hostname to match, or `*` for any. */
+	host: string;
+	/** Port to match (string form), or `*` for any. */
+	port: string;
+	/** Database name to match, or `*` for any. */
+	database: string;
+	/** User name to match, or `*` for any. */
+	user: string;
+	/** The password to return on a match. */
+	password: string;
 };
 
 export type PgPassLookupTarget = {
-  host: string;
-  port: number;
-  database: string;
-  user: string;
+	host: string;
+	port: number;
+	database: string;
+	user: string;
 };
 
-const isWindows = process.platform === 'win32';
+const isWindows = process.platform === "win32";
 
 /**
  * Return the default `.pgpass` path:
@@ -63,22 +63,22 @@ const isWindows = process.platform === 'win32';
  * tests.
  */
 export const defaultPgPassPath = (
-  env: NodeJS.ProcessEnv = process.env,
+	env: NodeJS.ProcessEnv = process.env,
 ): string => {
-  const explicit = env.PGPASSFILE;
-  if (explicit !== undefined && explicit.length > 0) return explicit;
+	const explicit = env.PGPASSFILE;
+	if (explicit !== undefined && explicit.length > 0) return explicit;
 
-  if (isWindows) {
-    const appdata = env.APPDATA;
-    if (appdata !== undefined && appdata.length > 0) {
-      return path.join(appdata, 'postgresql', 'pgpass.conf');
-    }
-    // Fall through to homedir() if APPDATA isn't set — degrade gracefully on
-    // a minimally configured Windows session.
-  }
+	if (isWindows) {
+		const appdata = env.APPDATA;
+		if (appdata !== undefined && appdata.length > 0) {
+			return path.join(appdata, "postgresql", "pgpass.conf");
+		}
+		// Fall through to homedir() if APPDATA isn't set — degrade gracefully on
+		// a minimally configured Windows session.
+	}
 
-  const home = env.HOME ?? os.homedir();
-  return path.join(home, '.pgpass');
+	const home = env.HOME ?? os.homedir();
+	return path.join(home, ".pgpass");
 };
 
 /**
@@ -94,51 +94,51 @@ export const defaultPgPassPath = (
  */
 /** Un-escape `\X` → `X` (a trailing lone backslash is kept). */
 const decodeBackslashes = (s: string): string => {
-  let out = '';
-  for (let i = 0; i < s.length; i++) {
-    if (s[i] === '\\' && i + 1 < s.length) {
-      out += s[i + 1];
-      i += 1;
-      continue;
-    }
-    out += s[i];
-  }
-  return out;
+	let out = "";
+	for (let i = 0; i < s.length; i++) {
+		if (s[i] === "\\" && i + 1 < s.length) {
+			out += s[i + 1];
+			i += 1;
+			continue;
+		}
+		out += s[i];
+	}
+	return out;
 };
 
 const splitLine = (line: string): PgPassEntry | null => {
-  // Split on UN-escaped `:` only, PRESERVING backslashes inside each field.
-  // The match fields (host/port/database/user) are kept RAW so the wildcard
-  // test can distinguish a bare `*` (wildcard) from `\*` (literal `*`) — see
-  // fieldMatches / review item #21. libpq does the same: its wildcard check
-  // is `strcmp(rawtoken, "*")`, and unescaping happens only during the
-  // char-by-char comparison. The password is the returned secret, so it is
-  // fully decoded here.
-  const fields: string[] = [];
-  let current = '';
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '\\' && i + 1 < line.length) {
-      current += '\\' + line[i + 1];
-      i += 1;
-      continue;
-    }
-    if (ch === ':') {
-      fields.push(current);
-      current = '';
-      continue;
-    }
-    current += ch;
-  }
-  fields.push(current);
-  if (fields.length !== 5) return null;
-  return {
-    host: fields[0],
-    port: fields[1],
-    database: fields[2],
-    user: fields[3],
-    password: decodeBackslashes(fields[4]),
-  };
+	// Split on UN-escaped `:` only, PRESERVING backslashes inside each field.
+	// The match fields (host/port/database/user) are kept RAW so the wildcard
+	// test can distinguish a bare `*` (wildcard) from `\*` (literal `*`) — see
+	// fieldMatches / review item #21. libpq does the same: its wildcard check
+	// is `strcmp(rawtoken, "*")`, and unescaping happens only during the
+	// char-by-char comparison. The password is the returned secret, so it is
+	// fully decoded here.
+	const fields: string[] = [];
+	let current = "";
+	for (let i = 0; i < line.length; i++) {
+		const ch = line[i];
+		if (ch === "\\" && i + 1 < line.length) {
+			current += "\\" + line[i + 1];
+			i += 1;
+			continue;
+		}
+		if (ch === ":") {
+			fields.push(current);
+			current = "";
+			continue;
+		}
+		current += ch;
+	}
+	fields.push(current);
+	if (fields.length !== 5) return null;
+	return {
+		host: fields[0],
+		port: fields[1],
+		database: fields[2],
+		user: fields[3],
+		password: decodeBackslashes(fields[4]),
+	};
 };
 
 /**
@@ -153,60 +153,60 @@ const splitLine = (line: string): PgPassEntry | null => {
  * unreadable file just falls through to the next password source.
  */
 export const loadPgPass = async (
-  filePath?: string,
-  opts?: {
-    env?: NodeJS.ProcessEnv;
-    stderr?: NodeJS.WritableStream;
-  },
+	filePath?: string,
+	opts?: {
+		env?: NodeJS.ProcessEnv;
+		stderr?: NodeJS.WritableStream;
+	},
 ): Promise<PgPassEntry[]> => {
-  const env = opts?.env ?? process.env;
-  const stderr = opts?.stderr ?? process.stderr;
-  const resolved = filePath ?? defaultPgPassPath(env);
+	const env = opts?.env ?? process.env;
+	const stderr = opts?.stderr ?? process.stderr;
+	const resolved = filePath ?? defaultPgPassPath(env);
 
-  // Stat the file first so we can do the permission check before opening it.
-  // If it doesn't exist, bail out silently.
-  let stat: Awaited<ReturnType<typeof fs.stat>>;
-  try {
-    stat = await fs.stat(resolved);
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT' || code === 'ENOTDIR') return [];
-    return [];
-  }
+	// Stat the file first so we can do the permission check before opening it.
+	// If it doesn't exist, bail out silently.
+	let stat: Awaited<ReturnType<typeof fs.stat>>;
+	try {
+		stat = await fs.stat(resolved);
+	} catch (err) {
+		const code = (err as NodeJS.ErrnoException).code;
+		if (code === "ENOENT" || code === "ENOTDIR") return [];
+		return [];
+	}
 
-  if (!stat.isFile()) return [];
+	if (!stat.isFile()) return [];
 
-  if (!isWindows && (stat.mode & 0o077) !== 0) {
-    stderr.write(
-      `WARNING: password file "${resolved}" has group or world access; permissions should be u=rw (0600) or less\n`,
-    );
-    return [];
-  }
+	if (!isWindows && (stat.mode & 0o077) !== 0) {
+		stderr.write(
+			`WARNING: password file "${resolved}" has group or world access; permissions should be u=rw (0600) or less\n`,
+		);
+		return [];
+	}
 
-  let raw: string;
-  try {
-    raw = await fs.readFile(resolved, 'utf8');
-  } catch {
-    return [];
-  }
+	let raw: string;
+	try {
+		raw = await fs.readFile(resolved, "utf8");
+	} catch {
+		return [];
+	}
 
-  const entries: PgPassEntry[] = [];
-  for (const line of raw.split(/\r?\n/)) {
-    const trimmed = line.replace(/^\s+/, '');
-    if (trimmed.length === 0) continue;
-    if (trimmed.startsWith('#')) continue;
-    const entry = splitLine(trimmed);
-    if (entry !== null) entries.push(entry);
-  }
-  return entries;
+	const entries: PgPassEntry[] = [];
+	for (const line of raw.split(/\r?\n/)) {
+		const trimmed = line.replace(/^\s+/, "");
+		if (trimmed.length === 0) continue;
+		if (trimmed.startsWith("#")) continue;
+		const entry = splitLine(trimmed);
+		if (entry !== null) entries.push(entry);
+	}
+	return entries;
 };
 
 /**
  * Match a single field. `*` matches anything; otherwise an exact comparison.
  */
 const fieldMatches = (pattern: string, value: string): boolean =>
-  // A bare `*` is the wildcard; `\*` decodes to a LITERAL `*` (review #21).
-  pattern === '*' || decodeBackslashes(pattern) === value;
+	// A bare `*` is the wildcard; `\*` decodes to a LITERAL `*` (review #21).
+	pattern === "*" || decodeBackslashes(pattern) === value;
 
 /**
  * Look up a password entry for the given `target`. Returns the first matching
@@ -219,19 +219,19 @@ const fieldMatches = (pattern: string, value: string): boolean =>
  *     should write specific entries before generic ones).
  */
 export const lookupPgPass = (
-  entries: readonly PgPassEntry[],
-  target: PgPassLookupTarget,
+	entries: readonly PgPassEntry[],
+	target: PgPassLookupTarget,
 ): string | undefined => {
-  const portStr = String(target.port);
-  for (const e of entries) {
-    if (!fieldMatches(e.host, target.host)) continue;
-    if (!fieldMatches(e.port, portStr)) continue;
-    if (!fieldMatches(e.database, target.database)) continue;
-    if (!fieldMatches(e.user, target.user)) continue;
-    // The password field is returned literally (already decoded by
-    // splitLine). It may be empty — libpq still treats that as "found a
-    // match"; we mirror that.
-    return e.password;
-  }
-  return undefined;
+	const portStr = String(target.port);
+	for (const e of entries) {
+		if (!fieldMatches(e.host, target.host)) continue;
+		if (!fieldMatches(e.port, portStr)) continue;
+		if (!fieldMatches(e.database, target.database)) continue;
+		if (!fieldMatches(e.user, target.user)) continue;
+		// The password field is returned literally (already decoded by
+		// splitLine). It may be empty — libpq still treats that as "found a
+		// match"; we mirror that.
+		return e.password;
+	}
+	return undefined;
 };

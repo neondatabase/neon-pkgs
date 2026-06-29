@@ -1,7 +1,7 @@
-import type { ResultSet } from '../types/connection.js';
-import type { PrintQueryOpts, Printer } from '../types/printer.js';
+import type { ResultSet } from "../types/connection.js";
+import type { Printer, PrintQueryOpts } from "../types/printer.js";
 
-import { formatNumericLocale } from './units.js';
+import { formatNumericLocale } from "./units.js";
 
 /**
  * AsciiDoc printer.
@@ -55,236 +55,236 @@ import { formatNumericLocale } from './units.js';
 const NUMERIC_OIDS = new Set<number>([21, 23, 20, 700, 701, 1700, 1186]);
 
 export const asciidocPrinter: Printer = {
-  format: 'asciidoc',
-  printQuery(
-    rs: ResultSet,
-    opts: PrintQueryOpts,
-    out: NodeJS.WritableStream,
-  ): Promise<void> {
-    const topt = opts.topt;
-    if (topt.expanded === 'on') {
-      return printExpanded(rs, opts, out);
-    }
-    return printFlat(rs, opts, out);
-  },
+	format: "asciidoc",
+	printQuery(
+		rs: ResultSet,
+		opts: PrintQueryOpts,
+		out: NodeJS.WritableStream,
+	): Promise<void> {
+		const topt = opts.topt;
+		if (topt.expanded === "on") {
+			return printExpanded(rs, opts, out);
+		}
+		return printFlat(rs, opts, out);
+	},
 };
 
 const printFlat = (
-  rs: ResultSet,
-  opts: PrintQueryOpts,
-  out: NodeJS.WritableStream,
+	rs: ResultSet,
+	opts: PrintQueryOpts,
+	out: NodeJS.WritableStream,
 ): Promise<void> => {
-  const topt = opts.topt;
-  const tuplesOnly = topt.tuplesOnly;
-  const startTable = topt.startTable;
-  const stopTable = topt.stopTable;
-  const nullPrint = opts.nullPrint !== '' ? opts.nullPrint : topt.nullPrint;
-  const title = opts.title ?? topt.title;
-  const footers = opts.footers ?? topt.footers;
+	const topt = opts.topt;
+	const tuplesOnly = topt.tuplesOnly;
+	const startTable = topt.startTable;
+	const stopTable = topt.stopTable;
+	const nullPrint = opts.nullPrint !== "" ? opts.nullPrint : topt.nullPrint;
+	const title = opts.title ?? topt.title;
+	const footers = opts.footers ?? topt.footers;
 
-  const headers = rs.fields.map((f) => f.name);
-  const aligns: ('l' | 'r')[] = rs.fields.map((f) =>
-    NUMERIC_OIDS.has(f.dataTypeID) ? 'r' : 'l',
-  );
-  const ncols = rs.fields.length;
-  const cells: string[][] = rs.rows.map((row) =>
-    row.map((cell) => renderCell(cell, nullPrint, topt.numericLocale)),
-  );
+	const headers = rs.fields.map((f) => f.name);
+	const aligns: ("l" | "r")[] = rs.fields.map((f) =>
+		NUMERIC_OIDS.has(f.dataTypeID) ? "r" : "l",
+	);
+	const ncols = rs.fields.length;
+	const cells: string[][] = rs.rows.map((row) =>
+		row.map((cell) => renderCell(cell, nullPrint, topt.numericLocale)),
+	);
 
-  let buf = '';
+	let buf = "";
 
-  if (startTable) {
-    // Force a paragraph break (upstream always emits a leading "\n").
-    buf += '\n';
+	if (startTable) {
+		// Force a paragraph break (upstream always emits a leading "\n").
+		buf += "\n";
 
-    if (!tuplesOnly && title) {
-      buf += '.' + title + '\n';
-    }
+		if (!tuplesOnly && title) {
+			buf += "." + title + "\n";
+		}
 
-    buf += '[';
-    if (!tuplesOnly) buf += 'options="header",';
-    buf += 'cols="';
-    buf += aligns.map((a) => (a === 'r' ? '>l' : '<l')).join(',');
-    buf += '"';
-    buf += borderClause(topt.border);
-    buf += ']\n';
-    buf += '|====\n';
+		buf += "[";
+		if (!tuplesOnly) buf += 'options="header",';
+		buf += 'cols="';
+		buf += aligns.map((a) => (a === "r" ? ">l" : "<l")).join(",");
+		buf += '"';
+		buf += borderClause(topt.border);
+		buf += "]\n";
+		buf += "|====\n";
 
-    if (!tuplesOnly) {
-      headers.forEach((h, idx) => {
-        if (idx !== 0) buf += ' ';
-        buf += '^l|' + escapeAsciidoc(h);
-      });
-      buf += '\n';
-    }
-  }
+		if (!tuplesOnly) {
+			headers.forEach((h, idx) => {
+				if (idx !== 0) buf += " ";
+				buf += "^l|" + escapeAsciidoc(h);
+			});
+			buf += "\n";
+		}
+	}
 
-  for (const row of cells) {
-    row.forEach((value, idx) => {
-      if (idx !== 0) buf += ' ';
-      buf += '|';
-      if (isWhitespaceOnly(value)) {
-        // The upstream code emits a trailing space only for cells
-        // that are not the last in their row.
-        if (idx !== ncols - 1) buf += ' ';
-      } else {
-        buf += escapeAsciidoc(value);
-      }
-    });
-    buf += '\n';
-  }
+	for (const row of cells) {
+		row.forEach((value, idx) => {
+			if (idx !== 0) buf += " ";
+			buf += "|";
+			if (isWhitespaceOnly(value)) {
+				// The upstream code emits a trailing space only for cells
+				// that are not the last in their row.
+				if (idx !== ncols - 1) buf += " ";
+			} else {
+				buf += escapeAsciidoc(value);
+			}
+		});
+		buf += "\n";
+	}
 
-  buf += '|====\n';
+	buf += "|====\n";
 
-  if (stopTable && !tuplesOnly) {
-    const effective = effectiveFooters(rs, topt, footers);
-    if (effective.length > 0) {
-      buf += '\n....\n';
-      for (const f of effective) buf += f + '\n';
-      buf += '....\n';
-    }
-  }
+	if (stopTable && !tuplesOnly) {
+		const effective = effectiveFooters(rs, topt, footers);
+		if (effective.length > 0) {
+			buf += "\n....\n";
+			for (const f of effective) buf += f + "\n";
+			buf += "....\n";
+		}
+	}
 
-  out.write(buf);
-  return Promise.resolve();
+	out.write(buf);
+	return Promise.resolve();
 };
 
 const printExpanded = (
-  rs: ResultSet,
-  opts: PrintQueryOpts,
-  out: NodeJS.WritableStream,
+	rs: ResultSet,
+	opts: PrintQueryOpts,
+	out: NodeJS.WritableStream,
 ): Promise<void> => {
-  const topt = opts.topt;
-  const tuplesOnly = topt.tuplesOnly;
-  const startTable = topt.startTable;
-  const stopTable = topt.stopTable;
-  const nullPrint = opts.nullPrint !== '' ? opts.nullPrint : topt.nullPrint;
-  const title = opts.title ?? topt.title;
-  const footers = opts.footers ?? topt.footers;
+	const topt = opts.topt;
+	const tuplesOnly = topt.tuplesOnly;
+	const startTable = topt.startTable;
+	const stopTable = topt.stopTable;
+	const nullPrint = opts.nullPrint !== "" ? opts.nullPrint : topt.nullPrint;
+	const title = opts.title ?? topt.title;
+	const footers = opts.footers ?? topt.footers;
 
-  const headers = rs.fields.map((f) => f.name);
-  const aligns: ('l' | 'r')[] = rs.fields.map((f) =>
-    NUMERIC_OIDS.has(f.dataTypeID) ? 'r' : 'l',
-  );
-  const cells: string[][] = rs.rows.map((row) =>
-    row.map((cell) => renderCell(cell, nullPrint, topt.numericLocale)),
-  );
+	const headers = rs.fields.map((f) => f.name);
+	const aligns: ("l" | "r")[] = rs.fields.map((f) =>
+		NUMERIC_OIDS.has(f.dataTypeID) ? "r" : "l",
+	);
+	const cells: string[][] = rs.rows.map((row) =>
+		row.map((cell) => renderCell(cell, nullPrint, topt.numericLocale)),
+	);
 
-  let buf = '';
+	let buf = "";
 
-  if (startTable) {
-    buf += '\n';
+	if (startTable) {
+		buf += "\n";
 
-    if (!tuplesOnly && title) {
-      buf += '.' + title + '\n';
-    }
+		if (!tuplesOnly && title) {
+			buf += "." + title + "\n";
+		}
 
-    buf += '[cols="h,l"';
-    buf += borderClause(topt.border);
-    buf += ']\n';
-    buf += '|====\n';
-  }
+		buf += '[cols="h,l"';
+		buf += borderClause(topt.border);
+		buf += "]\n";
+		buf += "|====\n";
+	}
 
-  let record = topt.prior + 1;
-  cells.forEach((row) => {
-    if (!tuplesOnly) {
-      buf += `2+^|Record ${String(record)}\n`;
-      record += 1;
-    } else {
-      buf += '2+|\n';
-    }
-    row.forEach((value, idx) => {
-      buf += '<l|' + escapeAsciidoc(headers[idx]);
-      buf += ' ' + (aligns[idx] === 'r' ? '>l' : '<l') + '|';
-      if (isWhitespaceOnly(value)) {
-        buf += ' ';
-      } else {
-        buf += escapeAsciidoc(value);
-      }
-      buf += '\n';
-    });
-  });
+	let record = topt.prior + 1;
+	cells.forEach((row) => {
+		if (!tuplesOnly) {
+			buf += `2+^|Record ${String(record)}\n`;
+			record += 1;
+		} else {
+			buf += "2+|\n";
+		}
+		row.forEach((value, idx) => {
+			buf += "<l|" + escapeAsciidoc(headers[idx]);
+			buf += " " + (aligns[idx] === "r" ? ">l" : "<l") + "|";
+			if (isWhitespaceOnly(value)) {
+				buf += " ";
+			} else {
+				buf += escapeAsciidoc(value);
+			}
+			buf += "\n";
+		});
+	});
 
-  buf += '|====\n';
+	buf += "|====\n";
 
-  if (stopTable && !tuplesOnly) {
-    // Expanded mode does NOT emit the default "(N rows)" footer —
-    // only user-supplied footers (matches print_asciidoc_vertical).
-    if (footers && footers.length > 0) {
-      buf += '\n....\n';
-      for (const f of footers) buf += f + '\n';
-      buf += '....\n';
-    }
-  }
+	if (stopTable && !tuplesOnly) {
+		// Expanded mode does NOT emit the default "(N rows)" footer —
+		// only user-supplied footers (matches print_asciidoc_vertical).
+		if (footers && footers.length > 0) {
+			buf += "\n....\n";
+			for (const f of footers) buf += f + "\n";
+			buf += "....\n";
+		}
+	}
 
-  out.write(buf);
-  return Promise.resolve();
+	out.write(buf);
+	return Promise.resolve();
 };
 
 const borderClause = (border: number): string => {
-  switch (border) {
-    case 0:
-      return ',frame="none",grid="none"';
-    case 1:
-      return ',frame="none"';
-    case 2:
-      return ',frame="all",grid="all"';
-    default:
-      return '';
-  }
+	switch (border) {
+		case 0:
+			return ',frame="none",grid="none"';
+		case 1:
+			return ',frame="none"';
+		case 2:
+			return ',frame="all",grid="all"';
+		default:
+			return "";
+	}
 };
 
 const effectiveFooters = (
-  rs: ResultSet,
-  topt: { defaultFooter: boolean },
-  footers: string[] | null,
+	rs: ResultSet,
+	topt: { defaultFooter: boolean },
+	footers: string[] | null,
 ): string[] => {
-  if (footers && footers.length > 0) return footers;
-  if (topt.defaultFooter) {
-    const n = rs.rows.length;
-    return [`(${String(n)} ${n === 1 ? 'row' : 'rows'})`];
-  }
-  return [];
+	if (footers && footers.length > 0) return footers;
+	if (topt.defaultFooter) {
+		const n = rs.rows.length;
+		return [`(${String(n)} ${n === 1 ? "row" : "rows"})`];
+	}
+	return [];
 };
 
 const isWhitespaceOnly = (s: string): boolean => {
-  if (s.length === 0) return true;
-  for (const ch of s) {
-    if (ch !== ' ' && ch !== '\t') return false;
-  }
-  return true;
+	if (s.length === 0) return true;
+	for (const ch of s) {
+		if (ch !== " " && ch !== "\t") return false;
+	}
+	return true;
 };
 
 const escapeAsciidoc = (input: string): string => {
-  // Only `|` is structurally hostile (closes a cell). Newlines and
-  // every other character pass through; AsciiDoc treats embedded `\n`
-  // as a soft line break within a cell.
-  let out = '';
-  for (const ch of input) {
-    if (ch === '|') out += '\\|';
-    else out += ch;
-  }
-  return out;
+	// Only `|` is structurally hostile (closes a cell). Newlines and
+	// every other character pass through; AsciiDoc treats embedded `\n`
+	// as a soft line break within a cell.
+	let out = "";
+	for (const ch of input) {
+		if (ch === "|") out += "\\|";
+		else out += ch;
+	}
+	return out;
 };
 
 const renderCell = (
-  cell: unknown,
-  nullPrint: string,
-  numericLocale: boolean,
+	cell: unknown,
+	nullPrint: string,
+	numericLocale: boolean,
 ): string => {
-  if (cell === null || cell === undefined) return nullPrint;
-  if (typeof cell === 'string') {
-    return formatNumericLocale(cell, numericLocale);
-  }
-  if (typeof cell === 'number' || typeof cell === 'bigint') {
-    return formatNumericLocale(cell.toString(), numericLocale);
-  }
-  if (typeof cell === 'boolean') return cell ? 't' : 'f';
-  if (cell instanceof Date) return cell.toISOString();
-  if (cell instanceof Uint8Array) {
-    let hex = '\\x';
-    for (const b of cell) hex += b.toString(16).padStart(2, '0');
-    return hex;
-  }
-  return JSON.stringify(cell);
+	if (cell === null || cell === undefined) return nullPrint;
+	if (typeof cell === "string") {
+		return formatNumericLocale(cell, numericLocale);
+	}
+	if (typeof cell === "number" || typeof cell === "bigint") {
+		return formatNumericLocale(cell.toString(), numericLocale);
+	}
+	if (typeof cell === "boolean") return cell ? "t" : "f";
+	if (cell instanceof Date) return cell.toISOString();
+	if (cell instanceof Uint8Array) {
+		let hex = "\\x";
+		for (const b of cell) hex += b.toString(16).padStart(2, "0");
+		return hex;
+	}
+	return JSON.stringify(cell);
 };

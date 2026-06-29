@@ -27,19 +27,19 @@
 
 export const MatchAny = null as unknown as string;
 
-export const MatchAnyExcept = (pattern: string): string => '!' + pattern;
+export const MatchAnyExcept = (pattern: string): string => "!" + pattern;
 
 const cimatch = (
-  s1: string,
-  s2: string,
-  n: number,
-  caseSensitive: boolean,
+	s1: string,
+	s2: string,
+	n: number,
+	caseSensitive: boolean,
 ): boolean => {
-  if (s1.length < n || s2.length < n) return false;
-  const a = s1.slice(0, n);
-  const b = s2.slice(0, n);
-  if (caseSensitive) return a === b;
-  return a.toLowerCase() === b.toLowerCase();
+	if (s1.length < n || s2.length < n) return false;
+	const a = s1.slice(0, n);
+	const b = s2.slice(0, n);
+	if (caseSensitive) return a === b;
+	return a.toLowerCase() === b.toLowerCase();
 };
 
 /**
@@ -48,47 +48,50 @@ const cimatch = (
  * `*` is a single-word wildcard.
  */
 export const wordMatches = (
-  pattern: string | null,
-  word: string,
-  caseSensitive = false,
+	pattern: string | null,
+	word: string,
+	caseSensitive = false,
 ): boolean => {
-  if (pattern === null) return true;
-  if (pattern.startsWith('!')) {
-    return !wordMatches(pattern.slice(1), word, caseSensitive);
-  }
-  const wordlen = word.length;
-  let cursor = pattern;
-  for (;;) {
-    let starIdx = -1;
-    let i = 0;
-    while (i < cursor.length && cursor[i] !== '|') {
-      if (cursor[i] === '*') starIdx = i;
-      i++;
-    }
-    if (starIdx >= 0) {
-      const beforeLen = starIdx;
-      const afterLen = i - starIdx - 1;
-      if (
-        wordlen >= beforeLen + afterLen &&
-        cimatch(word, cursor, beforeLen, caseSensitive) &&
-        cimatch(
-          word.slice(wordlen - afterLen),
-          cursor.slice(starIdx + 1),
-          afterLen,
-          caseSensitive,
-        )
-      ) {
-        return true;
-      }
-    } else {
-      if (wordlen === i && cimatch(word, cursor, wordlen, caseSensitive)) {
-        return true;
-      }
-    }
-    if (i >= cursor.length) break;
-    cursor = cursor.slice(i + 1);
-  }
-  return false;
+	if (pattern === null) return true;
+	if (pattern.startsWith("!")) {
+		return !wordMatches(pattern.slice(1), word, caseSensitive);
+	}
+	const wordlen = word.length;
+	let cursor = pattern;
+	for (;;) {
+		let starIdx = -1;
+		let i = 0;
+		while (i < cursor.length && cursor[i] !== "|") {
+			if (cursor[i] === "*") starIdx = i;
+			i++;
+		}
+		if (starIdx >= 0) {
+			const beforeLen = starIdx;
+			const afterLen = i - starIdx - 1;
+			if (
+				wordlen >= beforeLen + afterLen &&
+				cimatch(word, cursor, beforeLen, caseSensitive) &&
+				cimatch(
+					word.slice(wordlen - afterLen),
+					cursor.slice(starIdx + 1),
+					afterLen,
+					caseSensitive,
+				)
+			) {
+				return true;
+			}
+		} else {
+			if (
+				wordlen === i &&
+				cimatch(word, cursor, wordlen, caseSensitive)
+			) {
+				return true;
+			}
+		}
+		if (i >= cursor.length) break;
+		cursor = cursor.slice(i + 1);
+	}
+	return false;
 };
 
 /**
@@ -104,15 +107,15 @@ export const wordMatches = (
  *   prev = ['SELECT', 'a'], pattern = ['SELECT']    → false  (2 != 1)
  */
 export const Matches = (
-  prev: readonly string[],
-  patterns: readonly (string | null)[],
-  caseSensitive = false,
+	prev: readonly string[],
+	patterns: readonly (string | null)[],
+	caseSensitive = false,
 ): boolean => {
-  if (prev.length !== patterns.length) return false;
-  for (let k = 0; k < patterns.length; k++) {
-    if (!wordMatches(patterns[k], prev[k], caseSensitive)) return false;
-  }
-  return true;
+	if (prev.length !== patterns.length) return false;
+	for (let k = 0; k < patterns.length; k++) {
+		if (!wordMatches(patterns[k], prev[k], caseSensitive)) return false;
+	}
+	return true;
 };
 
 /**
@@ -122,17 +125,17 @@ export const Matches = (
  *   prev = ['SELECT'], patterns = ['SELECT', 'FROM']     → false (too few)
  */
 export const TailMatches = (
-  prev: readonly string[],
-  patterns: readonly (string | null)[],
-  caseSensitive = false,
+	prev: readonly string[],
+	patterns: readonly (string | null)[],
+	caseSensitive = false,
 ): boolean => {
-  if (prev.length < patterns.length) return false;
-  const offset = prev.length - patterns.length;
-  for (let k = 0; k < patterns.length; k++) {
-    if (!wordMatches(patterns[k], prev[offset + k], caseSensitive))
-      return false;
-  }
-  return true;
+	if (prev.length < patterns.length) return false;
+	const offset = prev.length - patterns.length;
+	for (let k = 0; k < patterns.length; k++) {
+		if (!wordMatches(patterns[k], prev[offset + k], caseSensitive))
+			return false;
+	}
+	return true;
 };
 
 /**
@@ -141,15 +144,15 @@ export const TailMatches = (
  *   prev = ['ALTER', 'TABLE', 'foo'], patterns = ['ALTER', 'TABLE']  → true
  */
 export const HeadMatches = (
-  prev: readonly string[],
-  patterns: readonly (string | null)[],
-  caseSensitive = false,
+	prev: readonly string[],
+	patterns: readonly (string | null)[],
+	caseSensitive = false,
 ): boolean => {
-  if (prev.length < patterns.length) return false;
-  for (let k = 0; k < patterns.length; k++) {
-    if (!wordMatches(patterns[k], prev[k], caseSensitive)) return false;
-  }
-  return true;
+	if (prev.length < patterns.length) return false;
+	for (let k = 0; k < patterns.length; k++) {
+		if (!wordMatches(patterns[k], prev[k], caseSensitive)) return false;
+	}
+	return true;
 };
 
 // ---------------------------------------------------------------------------
@@ -157,14 +160,14 @@ export const HeadMatches = (
 // ---------------------------------------------------------------------------
 
 export type Token = {
-  /** Display form of the word (quote-stripped). */
-  text: string;
-  /** Byte offset in the source string where the token starts. */
-  start: number;
-  /** Byte offset (exclusive) where it ends. */
-  end: number;
-  /** Original literal form including any quote characters. */
-  raw: string;
+	/** Display form of the word (quote-stripped). */
+	text: string;
+	/** Byte offset in the source string where the token starts. */
+	start: number;
+	/** Byte offset (exclusive) where it ends. */
+	end: number;
+	/** Original literal form including any quote characters. */
+	raw: string;
 };
 
 /**
@@ -182,142 +185,142 @@ export type Token = {
  * just slices well enough for the rule body to inspect previous words.
  */
 export const tokenize = (input: string): Token[] => {
-  const out: Token[] = [];
-  let i = 0;
-  while (i < input.length) {
-    const ch = input[i];
+	const out: Token[] = [];
+	let i = 0;
+	while (i < input.length) {
+		const ch = input[i];
 
-    // Whitespace.
-    if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r') {
-      i++;
-      continue;
-    }
+		// Whitespace.
+		if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
+			i++;
+			continue;
+		}
 
-    // Backslash command. Capture the entire backslash word as one token.
-    if (ch === '\\') {
-      const start = i;
-      i++;
-      // Single-char commands like `\!` and `\?` are valid; otherwise read
-      // letters until we hit whitespace or punctuation.
-      if (i < input.length && /[!?]/.test(input[i])) {
-        i++;
-      } else {
-        while (i < input.length && /[A-Za-z_]/.test(input[i])) i++;
-        // Fold a trailing `+` run (the verbose suffix) into the command word
-        // so `\dt+ <TAB>` tokenizes as a single word and the describe rules
-        // that key on `prevWords.length === 1` still fire. The
-        // `S` (system-objects) suffix is already a letter, so it's consumed
-        // above; only `+` needs explicit handling here.
-        while (i < input.length && input[i] === '+') i++;
-      }
-      out.push({
-        text: input.slice(start, i),
-        raw: input.slice(start, i),
-        start,
-        end: i,
-      });
-      continue;
-    }
+		// Backslash command. Capture the entire backslash word as one token.
+		if (ch === "\\") {
+			const start = i;
+			i++;
+			// Single-char commands like `\!` and `\?` are valid; otherwise read
+			// letters until we hit whitespace or punctuation.
+			if (i < input.length && /[!?]/.test(input[i])) {
+				i++;
+			} else {
+				while (i < input.length && /[A-Za-z_]/.test(input[i])) i++;
+				// Fold a trailing `+` run (the verbose suffix) into the command word
+				// so `\dt+ <TAB>` tokenizes as a single word and the describe rules
+				// that key on `prevWords.length === 1` still fire. The
+				// `S` (system-objects) suffix is already a letter, so it's consumed
+				// above; only `+` needs explicit handling here.
+				while (i < input.length && input[i] === "+") i++;
+			}
+			out.push({
+				text: input.slice(start, i),
+				raw: input.slice(start, i),
+				start,
+				end: i,
+			});
+			continue;
+		}
 
-    // Double-quoted identifier.
-    if (ch === '"') {
-      const start = i;
-      i++;
-      while (i < input.length) {
-        if (input[i] === '"') {
-          // "" inside quotes is an escaped quote.
-          if (input[i + 1] === '"') {
-            i += 2;
-            continue;
-          }
-          i++;
-          break;
-        }
-        i++;
-      }
-      out.push({
-        text: input.slice(start, i),
-        raw: input.slice(start, i),
-        start,
-        end: i,
-      });
-      continue;
-    }
+		// Double-quoted identifier.
+		if (ch === '"') {
+			const start = i;
+			i++;
+			while (i < input.length) {
+				if (input[i] === '"') {
+					// "" inside quotes is an escaped quote.
+					if (input[i + 1] === '"') {
+						i += 2;
+						continue;
+					}
+					i++;
+					break;
+				}
+				i++;
+			}
+			out.push({
+				text: input.slice(start, i),
+				raw: input.slice(start, i),
+				start,
+				end: i,
+			});
+			continue;
+		}
 
-    // Single-quoted string literal.
-    if (ch === "'") {
-      const start = i;
-      i++;
-      while (i < input.length) {
-        if (input[i] === '\\' && i + 1 < input.length) {
-          i += 2;
-          continue;
-        }
-        if (input[i] === "'") {
-          if (input[i + 1] === "'") {
-            i += 2;
-            continue;
-          }
-          i++;
-          break;
-        }
-        i++;
-      }
-      out.push({
-        text: input.slice(start, i),
-        raw: input.slice(start, i),
-        start,
-        end: i,
-      });
-      continue;
-    }
+		// Single-quoted string literal.
+		if (ch === "'") {
+			const start = i;
+			i++;
+			while (i < input.length) {
+				if (input[i] === "\\" && i + 1 < input.length) {
+					i += 2;
+					continue;
+				}
+				if (input[i] === "'") {
+					if (input[i + 1] === "'") {
+						i += 2;
+						continue;
+					}
+					i++;
+					break;
+				}
+				i++;
+			}
+			out.push({
+				text: input.slice(start, i),
+				raw: input.slice(start, i),
+				start,
+				end: i,
+			});
+			continue;
+		}
 
-    // Punctuation that splits words.
-    if (
-      ch === ',' ||
-      ch === ';' ||
-      ch === '(' ||
-      ch === ')' ||
-      ch === '[' ||
-      ch === ']'
-    ) {
-      out.push({ text: ch, raw: ch, start: i, end: i + 1 });
-      i++;
-      continue;
-    }
+		// Punctuation that splits words.
+		if (
+			ch === "," ||
+			ch === ";" ||
+			ch === "(" ||
+			ch === ")" ||
+			ch === "[" ||
+			ch === "]"
+		) {
+			out.push({ text: ch, raw: ch, start: i, end: i + 1 });
+			i++;
+			continue;
+		}
 
-    // Bareword: letters, digits, underscore, `.` (schema qualifier), `:` (var
-    // expansion marker is kept inside the word), `$` (positional param).
-    const start = i;
-    while (i < input.length) {
-      const c = input[i];
-      if (
-        c === ' ' ||
-        c === '\t' ||
-        c === '\n' ||
-        c === '\r' ||
-        c === ',' ||
-        c === ';' ||
-        c === '(' ||
-        c === ')' ||
-        c === '[' ||
-        c === ']' ||
-        c === '"' ||
-        c === "'" ||
-        c === '\\'
-      ) {
-        break;
-      }
-      i++;
-    }
-    out.push({
-      text: input.slice(start, i),
-      raw: input.slice(start, i),
-      start,
-      end: i,
-    });
-  }
-  return out;
+		// Bareword: letters, digits, underscore, `.` (schema qualifier), `:` (var
+		// expansion marker is kept inside the word), `$` (positional param).
+		const start = i;
+		while (i < input.length) {
+			const c = input[i];
+			if (
+				c === " " ||
+				c === "\t" ||
+				c === "\n" ||
+				c === "\r" ||
+				c === "," ||
+				c === ";" ||
+				c === "(" ||
+				c === ")" ||
+				c === "[" ||
+				c === "]" ||
+				c === '"' ||
+				c === "'" ||
+				c === "\\"
+			) {
+				break;
+			}
+			i++;
+		}
+		out.push({
+			text: input.slice(start, i),
+			raw: input.slice(start, i),
+			start,
+			end: i,
+		});
+	}
+	return out;
 };
 
 /**
@@ -334,34 +337,34 @@ export const tokenize = (input: string): Token[] => {
  * just typed a space and is starting a new word).
  */
 export const splitForCompletion = (
-  input: string,
-  cursor: number,
+	input: string,
+	cursor: number,
 ): { prevWords: string[]; currentWord: string; replaceLength: number } => {
-  const head = input.slice(0, cursor);
-  const tokens = tokenize(head);
-  if (tokens.length === 0) {
-    return { prevWords: [], currentWord: '', replaceLength: 0 };
-  }
-  const last = tokens[tokens.length - 1];
+	const head = input.slice(0, cursor);
+	const tokens = tokenize(head);
+	if (tokens.length === 0) {
+		return { prevWords: [], currentWord: "", replaceLength: 0 };
+	}
+	const last = tokens[tokens.length - 1];
 
-  // The cursor is sitting inside the last token if (a) it ends exactly at
-  // cursor AND (b) the last char before cursor isn't whitespace.
-  const charBefore = head[head.length - 1];
-  const inWhitespace =
-    charBefore === ' ' ||
-    charBefore === '\t' ||
-    charBefore === '\n' ||
-    charBefore === '\r';
-  if (last.end === head.length && !inWhitespace) {
-    return {
-      prevWords: tokens.slice(0, -1).map((t) => t.text),
-      currentWord: last.text,
-      replaceLength: Array.from(last.text).length,
-    };
-  }
-  return {
-    prevWords: tokens.map((t) => t.text),
-    currentWord: '',
-    replaceLength: 0,
-  };
+	// The cursor is sitting inside the last token if (a) it ends exactly at
+	// cursor AND (b) the last char before cursor isn't whitespace.
+	const charBefore = head[head.length - 1];
+	const inWhitespace =
+		charBefore === " " ||
+		charBefore === "\t" ||
+		charBefore === "\n" ||
+		charBefore === "\r";
+	if (last.end === head.length && !inWhitespace) {
+		return {
+			prevWords: tokens.slice(0, -1).map((t) => t.text),
+			currentWord: last.text,
+			replaceLength: Array.from(last.text).length,
+		};
+	}
+	return {
+		prevWords: tokens.map((t) => t.text),
+		currentWord: "",
+		replaceLength: 0,
+	};
 };

@@ -1,36 +1,36 @@
-import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 
-import chalk from 'chalk';
+import chalk from "chalk";
 import {
-  BootstrapInputError,
-  BootstrapTemplate,
-  FALLBACK_TEMPLATES,
-  ensureTargetUsable,
-  fetchTemplates,
-  findTemplate,
-  scaffoldTemplate,
-  templateIds,
-} from 'neon-init/bootstrap';
-import prompts, { InitialReturnValue } from 'prompts';
-import which from 'which';
-import yargs from 'yargs';
+	BootstrapInputError,
+	type BootstrapTemplate,
+	ensureTargetUsable,
+	FALLBACK_TEMPLATES,
+	fetchTemplates,
+	findTemplate,
+	scaffoldTemplate,
+	templateIds,
+} from "neon-init/bootstrap";
+import prompts, { type InitialReturnValue } from "prompts";
+import which from "which";
+import type yargs from "yargs";
 
-import { isCi } from '../env.js';
-import { log } from '../log.js';
-import { CommonProps } from '../types.js';
+import { isCi } from "../env.js";
+import { log } from "../log.js";
+import type { CommonProps } from "../types.js";
 
 type BootstrapProps = CommonProps & {
-  directory?: string;
-  template?: string;
-  force: boolean;
-  listTemplates: boolean;
-  agent: boolean;
-  default: boolean;
-  install: boolean;
-  git: boolean;
-  link: boolean;
+	directory?: string;
+	template?: string;
+	force: boolean;
+	listTemplates: boolean;
+	agent: boolean;
+	default: boolean;
+	install: boolean;
+	git: boolean;
+	link: boolean;
 };
 
 // ----------------------------------------------------------------------------
@@ -38,10 +38,10 @@ type BootstrapProps = CommonProps & {
 // ----------------------------------------------------------------------------
 
 type AgentTemplateOption = {
-  id: string;
-  title: string;
-  description: string;
-  services?: string[];
+	id: string;
+	title: string;
+	description: string;
+	services?: string[];
 };
 
 /**
@@ -51,144 +51,148 @@ type AgentTemplateOption = {
  * machine). Mirrors `link --agent`'s instruction/next_command_template style.
  */
 type AgentNextStep = {
-  action: 'install_dependencies' | 'initialize_git' | 'link_neon_project';
-  instruction: string;
-  command: string;
+	action: "install_dependencies" | "initialize_git" | "link_neon_project";
+	instruction: string;
+	command: string;
 };
 
 type AgentResponse =
-  | {
-      status: 'needs_template';
-      instruction: string;
-      options: AgentTemplateOption[];
-      next_command_template: string;
-    }
-  | {
-      status: 'needs_directory';
-      instruction: string;
-      next_command_template: string;
-    }
-  | {
-      status: 'scaffolded';
-      directory: string;
-      template: { id: string; title: string };
-      files_written: number;
-      next_steps: AgentNextStep[];
-      message: string;
-    }
-  | { status: 'error'; code: string; message: string };
+	| {
+			status: "needs_template";
+			instruction: string;
+			options: AgentTemplateOption[];
+			next_command_template: string;
+	  }
+	| {
+			status: "needs_directory";
+			instruction: string;
+			next_command_template: string;
+	  }
+	| {
+			status: "scaffolded";
+			directory: string;
+			template: { id: string; title: string };
+			files_written: number;
+			next_steps: AgentNextStep[];
+			message: string;
+	  }
+	| { status: "error"; code: string; message: string };
 
 // The directory positional is optional: omitting it in an interactive terminal
 // prompts for one. In a non-interactive context a missing directory is an error.
-export const command = 'bootstrap [directory]';
-export const describe = 'Scaffold a new project from a Neon starter template';
+export const command = "bootstrap [directory]";
+export const describe = "Scaffold a new project from a Neon starter template";
 
 export const builder = (argv: yargs.Argv) =>
-  argv
-    .usage('$0 bootstrap [directory] [options]')
-    .positional('directory', {
-      describe:
-        'Directory to scaffold into. Use "." for the current directory. Omit to be prompted.',
-      type: 'string',
-    })
-    .options({
-      template: {
-        describe:
-          'Template to use (skips the interactive picker). Run with --list-templates to see available templates.',
-        type: 'string',
-      },
-      'list-templates': {
-        alias: ['list', 'ls'],
-        describe: 'List available templates and exit.',
-        type: 'boolean',
-        default: false,
-      },
-      force: {
-        describe:
-          'Scaffold into the target directory even if it is not empty (colliding files are overwritten).',
-        type: 'boolean',
-        default: false,
-      },
-      agent: {
-        describe:
-          'Emit a JSON state-machine response designed for AI agents instead of prompting. The output is a single JSON object with a discriminated `status` field describing the next step.',
-        type: 'boolean',
-        default: false,
-      },
-      default: {
-        alias: 'y',
-        describe:
-          'Quick start: scaffold the default template (or --template) and run the usual setup (install dependencies, git init) without prompting. Linking is left to you since it needs a project choice.',
-        type: 'boolean',
-        default: false,
-      },
-      install: {
-        describe:
-          'Install dependencies after scaffolding. In interactive mode this is offered as a prompt; use --no-install to skip without being asked.',
-        type: 'boolean',
-        default: true,
-      },
-      git: {
-        describe:
-          'Initialize a git repository after scaffolding. In interactive mode this is offered as a prompt; use --no-git to skip without being asked.',
-        type: 'boolean',
-        default: true,
-      },
-      link: {
-        describe:
-          'Run `neon link` in the scaffolded directory after installing. In interactive mode this is offered as a prompt; use --no-link to skip without being asked.',
-        type: 'boolean',
-        default: true,
-      },
-    })
-    .example(
-      '$0 bootstrap my-app',
-      'Create ./my-app from an interactively chosen template',
-    )
-    .example(
-      '$0 bootstrap . --template hono',
-      'Scaffold the Hono template into the current directory',
-    )
-    .example(
-      '$0 bootstrap my-app --default',
-      'Quick start: scaffold the default template and run setup without prompting',
-    )
-    .example(
-      '$0 bootstrap my-app --template hono --agent',
-      'Scaffold without prompting and emit the JSON state machine for AI agents',
-    )
-    .strict();
+	argv
+		.usage("$0 bootstrap [directory] [options]")
+		.positional("directory", {
+			describe:
+				'Directory to scaffold into. Use "." for the current directory. Omit to be prompted.',
+			type: "string",
+		})
+		.options({
+			template: {
+				describe:
+					"Template to use (skips the interactive picker). Run with --list-templates to see available templates.",
+				type: "string",
+			},
+			"list-templates": {
+				alias: ["list", "ls"],
+				describe: "List available templates and exit.",
+				type: "boolean",
+				default: false,
+			},
+			force: {
+				describe:
+					"Scaffold into the target directory even if it is not empty (colliding files are overwritten).",
+				type: "boolean",
+				default: false,
+			},
+			agent: {
+				describe:
+					"Emit a JSON state-machine response designed for AI agents instead of prompting. The output is a single JSON object with a discriminated `status` field describing the next step.",
+				type: "boolean",
+				default: false,
+			},
+			default: {
+				alias: "y",
+				describe:
+					"Quick start: scaffold the default template (or --template) and run the usual setup (install dependencies, git init) without prompting. Linking is left to you since it needs a project choice.",
+				type: "boolean",
+				default: false,
+			},
+			install: {
+				describe:
+					"Install dependencies after scaffolding. In interactive mode this is offered as a prompt; use --no-install to skip without being asked.",
+				type: "boolean",
+				default: true,
+			},
+			git: {
+				describe:
+					"Initialize a git repository after scaffolding. In interactive mode this is offered as a prompt; use --no-git to skip without being asked.",
+				type: "boolean",
+				default: true,
+			},
+			link: {
+				describe:
+					"Run `neon link` in the scaffolded directory after installing. In interactive mode this is offered as a prompt; use --no-link to skip without being asked.",
+				type: "boolean",
+				default: true,
+			},
+		})
+		.example(
+			"$0 bootstrap my-app",
+			"Create ./my-app from an interactively chosen template",
+		)
+		.example(
+			"$0 bootstrap . --template hono",
+			"Scaffold the Hono template into the current directory",
+		)
+		.example(
+			"$0 bootstrap my-app --default",
+			"Quick start: scaffold the default template and run setup without prompting",
+		)
+		.example(
+			"$0 bootstrap my-app --template hono --agent",
+			"Scaffold without prompting and emit the JSON state machine for AI agents",
+		)
+		.strict();
 
 export const handler = async (props: BootstrapProps): Promise<void> => {
-  if (props.listTemplates) {
-    const templates = await fetchTemplates();
-    for (const t of templates) {
-      const services =
-        t.services && t.services.length > 0
-          ? ` [${t.services.join(' · ')}]`
-          : '';
-      process.stdout.write(`${t.id} — ${t.description}${services}\n`);
-    }
-    return;
-  }
+	if (props.listTemplates) {
+		const templates = await fetchTemplates();
+		for (const t of templates) {
+			const services =
+				t.services && t.services.length > 0
+					? ` [${t.services.join(" · ")}]`
+					: "";
+			process.stdout.write(`${t.id} — ${t.description}${services}\n`);
+		}
+		return;
+	}
 
-  if (props.agent) {
-    await runAgentSafely(props);
-    return;
-  }
+	if (props.agent) {
+		await runAgentSafely(props);
+		return;
+	}
 
-  const templates = await resolveTemplateList(props);
-  // --default is a non-interactive quick start: it fills in the template and
-  // directory and runs setup without asking, so it must not fall into the
-  // prompt path even on a TTY.
-  const interactive =
-    !props.default && Boolean(process.stdout.isTTY) && !isCi();
-  const template = await resolveSelectedTemplate(props, interactive, templates);
-  const targetDir = await resolveTargetDir(props, interactive, template);
-  ensureTargetUsable(targetDir, props.force);
-  await scaffold(template, targetDir);
-  printScaffolded(template, targetDir);
-  await runPostScaffoldSteps(props, targetDir, interactive);
+	const templates = await resolveTemplateList(props);
+	// --default is a non-interactive quick start: it fills in the template and
+	// directory and runs setup without asking, so it must not fall into the
+	// prompt path even on a TTY.
+	const interactive =
+		!props.default && Boolean(process.stdout.isTTY) && !isCi();
+	const template = await resolveSelectedTemplate(
+		props,
+		interactive,
+		templates,
+	);
+	const targetDir = await resolveTargetDir(props, interactive, template);
+	ensureTargetUsable(targetDir, props.force);
+	await scaffold(template, targetDir);
+	printScaffolded(template, targetDir);
+	await runPostScaffoldSteps(props, targetDir, interactive);
 };
 
 /**
@@ -197,11 +201,11 @@ export const handler = async (props: BootstrapProps): Promise<void> => {
  * remote manifest if the id isn't one of the defaults.
  */
 const resolveTemplateList = async (
-  props: BootstrapProps,
+	props: BootstrapProps,
 ): Promise<BootstrapTemplate[]> =>
-  props.template && findTemplate(FALLBACK_TEMPLATES, props.template)
-    ? FALLBACK_TEMPLATES
-    : fetchTemplates();
+	props.template && findTemplate(FALLBACK_TEMPLATES, props.template)
+		? FALLBACK_TEMPLATES
+		: fetchTemplates();
 
 /**
  * The picker label for a template: the title first, then the Neon services it
@@ -212,96 +216,96 @@ const resolveTemplateList = async (
  * intact. Descriptions are intentionally omitted to keep the picker uncluttered.
  */
 const formatTemplateTitle = (template: BootstrapTemplate): string => {
-  if (!template.services || template.services.length === 0) {
-    return template.title;
-  }
-  return `${template.title}  ${chalk.dim.italic(template.services.join(' · '))}`;
+	if (!template.services || template.services.length === 0) {
+		return template.title;
+	}
+	return `${template.title}  ${chalk.dim.italic(template.services.join(" · "))}`;
 };
 
 const resolveSelectedTemplate = async (
-  props: BootstrapProps,
-  interactive: boolean,
-  templates: BootstrapTemplate[],
+	props: BootstrapProps,
+	interactive: boolean,
+	templates: BootstrapTemplate[],
 ): Promise<BootstrapTemplate> => {
-  if (props.template) {
-    const template = findTemplate(templates, props.template);
-    if (!template) {
-      throw new Error(
-        `Unknown template "${props.template}". Available templates: ${templateIds(templates)}.`,
-      );
-    }
-    return template;
-  }
+	if (props.template) {
+		const template = findTemplate(templates, props.template);
+		if (!template) {
+			throw new Error(
+				`Unknown template "${props.template}". Available templates: ${templateIds(templates)}.`,
+			);
+		}
+		return template;
+	}
 
-  // --default with no --template falls back to the first (default) template so
-  // a bare `neon bootstrap my-app --default` works end to end.
-  if (props.default) {
-    const fallback = templates[0];
-    if (!fallback) {
-      throw new Error('No templates available to scaffold from.');
-    }
-    return fallback;
-  }
+	// --default with no --template falls back to the first (default) template so
+	// a bare `neon bootstrap my-app --default` works end to end.
+	if (props.default) {
+		const fallback = templates[0];
+		if (!fallback) {
+			throw new Error("No templates available to scaffold from.");
+		}
+		return fallback;
+	}
 
-  if (!interactive) {
-    throw new Error(
-      `No template selected. Re-run in an interactive terminal to pick one, or pass --template <id>. Available templates: ${templateIds(templates)}.`,
-    );
-  }
+	if (!interactive) {
+		throw new Error(
+			`No template selected. Re-run in an interactive terminal to pick one, or pass --template <id>. Available templates: ${templateIds(templates)}.`,
+		);
+	}
 
-  const { id } = await prompts({
-    onState: onPromptState,
-    type: 'select',
-    name: 'id',
-    message: 'Which template would you like to use?',
-    choices: templates.map((template) => ({
-      title: formatTemplateTitle(template),
-      value: template.id,
-    })),
-    initial: 0,
-  });
-  const template = findTemplate(templates, id);
-  if (!template) {
-    throw new Error('No template selected.');
-  }
-  return template;
+	const { id } = await prompts({
+		onState: onPromptState,
+		type: "select",
+		name: "id",
+		message: "Which template would you like to use?",
+		choices: templates.map((template) => ({
+			title: formatTemplateTitle(template),
+			value: template.id,
+		})),
+		initial: 0,
+	});
+	const template = findTemplate(templates, id);
+	if (!template) {
+		throw new Error("No template selected.");
+	}
+	return template;
 };
 
 const resolveTargetDir = async (
-  props: BootstrapProps,
-  interactive: boolean,
-  template: BootstrapTemplate,
+	props: BootstrapProps,
+	interactive: boolean,
+	template: BootstrapTemplate,
 ): Promise<string> => {
-  let dir = props.directory;
-  if (dir === undefined) {
-    // --default supplies a directory (the template's name) so the quick start
-    // needs nothing but a template.
-    if (props.default) {
-      return resolve(process.cwd(), defaultDirName(template));
-    }
-    if (!interactive) {
-      throw new Error(
-        'No target directory given. Pass one, e.g. `neon bootstrap my-app` (or "." for the current directory).',
-      );
-    }
-    const { value } = await prompts({
-      onState: onPromptState,
-      type: 'text',
-      name: 'value',
-      message: 'Where should we scaffold your project?',
-      initial: defaultDirName(template),
-      validate: (input: string) =>
-        input && input.trim().length > 0
-          ? true
-          : 'Enter a directory (use "." for the current directory).',
-    });
-    dir = String(value).trim();
-  }
-  return resolve(process.cwd(), dir === '.' ? '' : dir);
+	let dir = props.directory;
+	if (dir === undefined) {
+		// --default supplies a directory (the template's name) so the quick start
+		// needs nothing but a template.
+		if (props.default) {
+			return resolve(process.cwd(), defaultDirName(template));
+		}
+		if (!interactive) {
+			throw new Error(
+				'No target directory given. Pass one, e.g. `neon bootstrap my-app` (or "." for the current directory).',
+			);
+		}
+		const { value } = await prompts({
+			onState: onPromptState,
+			type: "text",
+			name: "value",
+			message: "Where should we scaffold your project?",
+			initial: defaultDirName(template),
+			validate: (input: string) =>
+				input && input.trim().length > 0
+					? true
+					: 'Enter a directory (use "." for the current directory).',
+		});
+		dir = String(value).trim();
+	}
+	return resolve(process.cwd(), dir === "." ? "" : dir);
 };
 
 const defaultDirName = (template: BootstrapTemplate): string =>
-  template.source.subdir.split('/').pop() || template.id;
+	template.source.subdir.split("/").pop() || template.id;
 
 /**
  * Download and materialize the template into `targetDir`. The actual
@@ -310,17 +314,17 @@ const defaultDirName = (template: BootstrapTemplate): string =>
  * frame it with progress logging. Returns the number of files written.
  */
 const scaffold = async (
-  template: BootstrapTemplate,
-  targetDir: string,
+	template: BootstrapTemplate,
+	targetDir: string,
 ): Promise<number> => {
-  log.info('Fetching template "%s" from GitHub…', template.id);
-  const filesWritten = await scaffoldTemplate(template, targetDir, {
-    onWarn: (message) => {
-      log.warning(message);
-    },
-  });
-  log.info('Scaffolded %d files into %s.', filesWritten, targetDir);
-  return filesWritten;
+	log.info('Fetching template "%s" from GitHub…', template.id);
+	const filesWritten = await scaffoldTemplate(template, targetDir, {
+		onWarn: (message) => {
+			log.warning(message);
+		},
+	});
+	log.info("Scaffolded %d files into %s.", filesWritten, targetDir);
+	return filesWritten;
 };
 
 // ----------------------------------------------------------------------------
@@ -337,69 +341,73 @@ const scaffold = async (
  * structured `next_steps` instead (see {@link runAgent}).
  */
 const runPostScaffoldSteps = async (
-  props: BootstrapProps,
-  targetDir: string,
-  interactive: boolean,
+	props: BootstrapProps,
+	targetDir: string,
+	interactive: boolean,
 ): Promise<void> => {
-  const detected = detectPackageManager();
+	const detected = detectPackageManager();
 
-  if (props.default) {
-    await runDefaultSteps(props, targetDir, detected ?? 'npm');
-    return;
-  }
+	if (props.default) {
+		await runDefaultSteps(props, targetDir, detected ?? "npm");
+		return;
+	}
 
-  if (!interactive) {
-    printNextSteps(targetDir, detected ?? 'npm', {
-      installed: false,
-      suggestLink: true,
-    });
-    return;
-  }
+	if (!interactive) {
+		printNextSteps(targetDir, detected ?? "npm", {
+			installed: false,
+			suggestLink: true,
+		});
+		return;
+	}
 
-  // The package manager used for the install (and shown in the closing hint).
-  // When we couldn't infer it from the invocation we ask, so a globally
-  // installed `neon` doesn't silently force npm on a bun/pnpm user.
-  let pm: PackageManager = detected ?? 'npm';
-  let installed = false;
-  if (props.install && (await confirm(installPrompt(detected)))) {
-    pm = detected ?? (await selectPackageManager());
-    installed = await runCommand(pm, ['install'], targetDir);
-  }
+	// The package manager used for the install (and shown in the closing hint).
+	// When we couldn't infer it from the invocation we ask, so a globally
+	// installed `neon` doesn't silently force npm on a bun/pnpm user.
+	let pm: PackageManager = detected ?? "npm";
+	let installed = false;
+	if (props.install && (await confirm(installPrompt(detected)))) {
+		pm = detected ?? (await selectPackageManager());
+		installed = await runCommand(pm, ["install"], targetDir);
+	}
 
-  if (
-    props.git &&
-    !isGitRepo(targetDir) &&
-    (await confirm('Initialize a git repository?'))
-  ) {
-    await initGitRepo(targetDir);
-  }
+	if (
+		props.git &&
+		!isGitRepo(targetDir) &&
+		(await confirm("Initialize a git repository?"))
+	) {
+		await initGitRepo(targetDir);
+	}
 
-  // `neon link` pulls env vars, which loads this project's neon.ts — and that
-  // evaluation needs the dependencies installed. So when deps weren't installed
-  // and the scaffold ships a neon.ts, skip the link prompt (it would just fail)
-  // and tell the user how to finish by hand.
-  if (props.link) {
-    if (!installed && hasNeonConfig(targetDir)) {
-      log.info(
-        "Skipping the Neon link step: `neon link` reads this project's neon.ts " +
-          `to pull env vars, which needs its dependencies. Run \`${pm} install\`, ` +
-          'then `neon link`.',
-      );
-    } else if (
-      await confirm('Link this project to a Neon project now? (runs neon link)')
-    ) {
-      await runNeonLink(props, targetDir);
-      // link prints its own summary (and pulls env), so end with just the run hint.
-      printNextSteps(targetDir, pm, { installed, suggestLink: false });
-      return;
-    }
-  }
+	// `neon link` pulls env vars, which loads this project's neon.ts — and that
+	// evaluation needs the dependencies installed. So when deps weren't installed
+	// and the scaffold ships a neon.ts, skip the link prompt (it would just fail)
+	// and tell the user how to finish by hand.
+	if (props.link) {
+		if (!installed && hasNeonConfig(targetDir)) {
+			log.info(
+				"Skipping the Neon link step: `neon link` reads this project's neon.ts " +
+					`to pull env vars, which needs its dependencies. Run \`${pm} install\`, ` +
+					"then `neon link`.",
+			);
+		} else if (
+			await confirm(
+				"Link this project to a Neon project now? (runs neon link)",
+			)
+		) {
+			await runNeonLink(props, targetDir);
+			// link prints its own summary (and pulls env), so end with just the run hint.
+			printNextSteps(targetDir, pm, { installed, suggestLink: false });
+			return;
+		}
+	}
 
-  printNextSteps(targetDir, pm, { installed, suggestLink: true });
+	printNextSteps(targetDir, pm, { installed, suggestLink: true });
 };
 
 const installPrompt = (detected: PackageManager | undefined): string =>
-  detected ? `Install dependencies with ${detected}?` : 'Install dependencies?';
+	detected
+		? `Install dependencies with ${detected}?`
+		: "Install dependencies?";
 
 /**
  * `--default` quick start: run install + git init without prompting, honoring
@@ -408,29 +416,29 @@ const installPrompt = (detected: PackageManager | undefined): string =>
  * closing hint instead.
  */
 const runDefaultSteps = async (
-  props: BootstrapProps,
-  targetDir: string,
-  pm: PackageManager,
+	props: BootstrapProps,
+	targetDir: string,
+	pm: PackageManager,
 ): Promise<void> => {
-  log.info('Quick start (--default): running setup without prompting.');
-  let installed = false;
-  if (props.install) {
-    installed = await runCommand(pm, ['install'], targetDir);
-  }
-  if (props.git && !isGitRepo(targetDir)) {
-    await initGitRepo(targetDir);
-  }
-  printNextSteps(targetDir, pm, { installed, suggestLink: true });
+	log.info("Quick start (--default): running setup without prompting.");
+	let installed = false;
+	if (props.install) {
+		installed = await runCommand(pm, ["install"], targetDir);
+	}
+	if (props.git && !isGitRepo(targetDir)) {
+		await initGitRepo(targetDir);
+	}
+	printNextSteps(targetDir, pm, { installed, suggestLink: true });
 };
 
-const isGitRepo = (dir: string): boolean => existsSync(join(dir, '.git'));
+const isGitRepo = (dir: string): boolean => existsSync(join(dir, ".git"));
 
 // Config filenames the runtime loads (mirrors @neon/config). A scaffold
 // that ships one makes `neon link`'s env pull evaluate it — which needs deps.
-const NEON_CONFIG_FILENAMES = ['neon.ts', 'neon.mts', 'neon.js', 'neon.mjs'];
+const NEON_CONFIG_FILENAMES = ["neon.ts", "neon.mts", "neon.js", "neon.mjs"];
 
 const hasNeonConfig = (dir: string): boolean =>
-  NEON_CONFIG_FILENAMES.some((name) => existsSync(join(dir, name)));
+	NEON_CONFIG_FILENAMES.some((name) => existsSync(join(dir, name)));
 
 /**
  * Initialize a git repository in the scaffolded directory. Just `git init` — we
@@ -438,25 +446,25 @@ const hasNeonConfig = (dir: string): boolean =>
  * git identity configured and to leave the first commit to the user.
  */
 const initGitRepo = async (dir: string): Promise<void> => {
-  await runCommand('git', ['init'], dir);
+	await runCommand("git", ["init"], dir);
 };
 
 const confirm = async (message: string): Promise<boolean> => {
-  const { value } = await prompts({
-    onState: onPromptState,
-    type: 'confirm',
-    name: 'value',
-    message,
-    initial: true,
-  });
-  return value === true;
+	const { value } = await prompts({
+		onState: onPromptState,
+		type: "confirm",
+		name: "value",
+		message,
+		initial: true,
+	});
+	return value === true;
 };
 
-type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun';
+type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
 
 // npm first so it's the default/preselected choice; the rest follow in rough
 // popularity order.
-const PACKAGE_MANAGERS: PackageManager[] = ['npm', 'pnpm', 'yarn', 'bun'];
+const PACKAGE_MANAGERS: PackageManager[] = ["npm", "pnpm", "yarn", "bun"];
 
 /**
  * The package manager the CLI was invoked through, read from the
@@ -467,17 +475,17 @@ const PACKAGE_MANAGERS: PackageManager[] = ['npm', 'pnpm', 'yarn', 'bun'];
  * silently assuming npm.
  */
 const detectPackageManager = (): PackageManager | undefined => {
-  const ua = process.env.npm_config_user_agent ?? '';
-  if (ua.startsWith('pnpm')) return 'pnpm';
-  if (ua.startsWith('yarn')) return 'yarn';
-  if (ua.startsWith('bun')) return 'bun';
-  if (ua.startsWith('npm')) return 'npm';
-  return undefined;
+	const ua = process.env.npm_config_user_agent ?? "";
+	if (ua.startsWith("pnpm")) return "pnpm";
+	if (ua.startsWith("yarn")) return "yarn";
+	if (ua.startsWith("bun")) return "bun";
+	if (ua.startsWith("npm")) return "npm";
+	return undefined;
 };
 
 /** The package managers actually on PATH, in {@link PACKAGE_MANAGERS} order. */
 const installedPackageManagers = (): PackageManager[] =>
-  PACKAGE_MANAGERS.filter((pm) => which.sync(pm, { nothrow: true }) !== null);
+	PACKAGE_MANAGERS.filter((pm) => which.sync(pm, { nothrow: true }) !== null);
 
 /**
  * Ask which package manager to install with when we couldn't infer one from the
@@ -486,22 +494,22 @@ const installedPackageManagers = (): PackageManager[] =>
  * npm) without prompting. A cancelled prompt falls back to npm.
  */
 const selectPackageManager = async (): Promise<PackageManager> => {
-  const installed = installedPackageManagers();
-  if (installed.length <= 1) {
-    return installed[0] ?? 'npm';
-  }
-  const { pm } = await prompts({
-    onState: onPromptState,
-    type: 'select',
-    name: 'pm',
-    message: 'Which package manager should we use?',
-    choices: installed.map((manager) => ({
-      title: manager,
-      value: manager,
-    })),
-    initial: Math.max(0, installed.indexOf('npm')),
-  });
-  return pm ?? 'npm';
+	const installed = installedPackageManagers();
+	if (installed.length <= 1) {
+		return installed[0] ?? "npm";
+	}
+	const { pm } = await prompts({
+		onState: onPromptState,
+		type: "select",
+		name: "pm",
+		message: "Which package manager should we use?",
+		choices: installed.map((manager) => ({
+			title: manager,
+			value: manager,
+		})),
+		initial: Math.max(0, installed.indexOf("npm")),
+	});
+	return pm ?? "npm";
 };
 
 /**
@@ -511,33 +519,38 @@ const selectPackageManager = async (): Promise<PackageManager> => {
  * scaffold already succeeded, so we let the user retry the step by hand.
  */
 const runCommand = (
-  cmd: string,
-  args: string[],
-  cwd: string,
+	cmd: string,
+	args: string[],
+	cwd: string,
 ): Promise<boolean> =>
-  new Promise((resolvePromise) => {
-    // npm/pnpm/yarn ship as .cmd shims on Windows, which need a shell to run.
-    const child = spawn(cmd, args, {
-      cwd,
-      stdio: 'inherit',
-      shell: process.platform === 'win32',
-    });
-    child.on('error', (err) => {
-      log.warning(
-        'Could not run `%s %s`: %s',
-        cmd,
-        args.join(' '),
-        err instanceof Error ? err.message : String(err),
-      );
-      resolvePromise(false);
-    });
-    child.on('close', (code) => {
-      if (code !== 0) {
-        log.warning('`%s %s` exited with code %d.', cmd, args.join(' '), code);
-      }
-      resolvePromise(code === 0);
-    });
-  });
+	new Promise((resolvePromise) => {
+		// npm/pnpm/yarn ship as .cmd shims on Windows, which need a shell to run.
+		const child = spawn(cmd, args, {
+			cwd,
+			stdio: "inherit",
+			shell: process.platform === "win32",
+		});
+		child.on("error", (err) => {
+			log.warning(
+				"Could not run `%s %s`: %s",
+				cmd,
+				args.join(" "),
+				err instanceof Error ? err.message : String(err),
+			);
+			resolvePromise(false);
+		});
+		child.on("close", (code) => {
+			if (code !== 0) {
+				log.warning(
+					"`%s %s` exited with code %d.",
+					cmd,
+					args.join(" "),
+					code,
+				);
+			}
+			resolvePromise(code === 0);
+		});
+	});
 
 /**
  * Re-invoke this same CLI as `neon link` inside the scaffolded directory, so the
@@ -547,27 +560,29 @@ const runCommand = (
  * to the target dir, which is where its env pull writes.
  */
 const runNeonLink = async (
-  props: BootstrapProps,
-  targetDir: string,
+	props: BootstrapProps,
+	targetDir: string,
 ): Promise<void> => {
-  const args = [process.argv[1], 'link'];
-  if (props.apiKey) {
-    args.push('--api-key', props.apiKey);
-  }
-  args.push('--api-host', props.apiHost, '--output', props.output);
-  await runCommand(process.execPath, args, targetDir);
+	const args = [process.argv[1], "link"];
+	if (props.apiKey) {
+		args.push("--api-key", props.apiKey);
+	}
+	args.push("--api-host", props.apiHost, "--output", props.output);
+	await runCommand(process.execPath, args, targetDir);
 };
 
 const printScaffolded = (
-  template: BootstrapTemplate,
-  targetDir: string,
+	template: BootstrapTemplate,
+	targetDir: string,
 ): void => {
-  log.info('');
-  log.info(
-    'Done. Scaffolded "%s" into %s.',
-    template.title,
-    isCurrentDir(targetDir) ? 'the current directory' : displayDir(targetDir),
-  );
+	log.info("");
+	log.info(
+		'Done. Scaffolded "%s" into %s.',
+		template.title,
+		isCurrentDir(targetDir)
+			? "the current directory"
+			: displayDir(targetDir),
+	);
 };
 
 /**
@@ -576,32 +591,32 @@ const printScaffolded = (
  * wasn't already offered/run — so the user never sees a step they just did.
  */
 const printNextSteps = (
-  targetDir: string,
-  pm: PackageManager,
-  opts: { installed: boolean; suggestLink: boolean },
+	targetDir: string,
+	pm: PackageManager,
+	opts: { installed: boolean; suggestLink: boolean },
 ): void => {
-  log.info('');
-  log.info('Next steps:');
-  if (!isCurrentDir(targetDir)) {
-    log.info('  cd %s', displayDir(targetDir));
-  }
-  if (!opts.installed) {
-    log.info('  %s install', pm);
-  }
-  if (opts.suggestLink) {
-    log.info('  neon link');
-  }
-  log.info('  See the README to run it.');
-  log.info('');
+	log.info("");
+	log.info("Next steps:");
+	if (!isCurrentDir(targetDir)) {
+		log.info("  cd %s", displayDir(targetDir));
+	}
+	if (!opts.installed) {
+		log.info("  %s install", pm);
+	}
+	if (opts.suggestLink) {
+		log.info("  neon link");
+	}
+	log.info("  See the README to run it.");
+	log.info("");
 };
 
 const runAgentSafely = async (props: BootstrapProps): Promise<void> => {
-  try {
-    await runAgent(props);
-  } catch (err) {
-    emitAgent(toAgentError(err));
-    process.exit(1);
-  }
+	try {
+		await runAgent(props);
+	} catch (err) {
+		emitAgent(toAgentError(err));
+		process.exit(1);
+	}
 };
 
 /**
@@ -613,99 +628,103 @@ const runAgentSafely = async (props: BootstrapProps): Promise<void> => {
  * step chains into `neon link --agent`).
  */
 const runAgent = async (props: BootstrapProps): Promise<void> => {
-  if (!props.template) {
-    const templates = await fetchTemplates();
-    emitAgent({
-      status: 'needs_template',
-      instruction: `Ask the user which template to scaffold, then re-run the next_command_template with the chosen --template value${
-        props.directory ? '' : ' and a target directory'
-      }.`,
-      options: templates.map((template) => ({
-        id: template.id,
-        title: template.title,
-        description: template.description,
-        ...(template.services ? { services: template.services } : {}),
-      })),
-      next_command_template: `neon bootstrap --agent ${
-        props.directory ? shellArg(props.directory) : '<directory>'
-      } --template <template_id>`,
-    });
-    return;
-  }
+	if (!props.template) {
+		const templates = await fetchTemplates();
+		emitAgent({
+			status: "needs_template",
+			instruction: `Ask the user which template to scaffold, then re-run the next_command_template with the chosen --template value${
+				props.directory ? "" : " and a target directory"
+			}.`,
+			options: templates.map((template) => ({
+				id: template.id,
+				title: template.title,
+				description: template.description,
+				...(template.services ? { services: template.services } : {}),
+			})),
+			next_command_template: `neon bootstrap --agent ${
+				props.directory ? shellArg(props.directory) : "<directory>"
+			} --template <template_id>`,
+		});
+		return;
+	}
 
-  const templates = await resolveTemplateList(props);
-  const template = findTemplate(templates, props.template);
-  if (!template) {
-    throw new BootstrapInputError(
-      `Unknown template "${props.template}". Available templates: ${templateIds(templates)}.`,
-      'UNKNOWN_TEMPLATE',
-    );
-  }
+	const templates = await resolveTemplateList(props);
+	const template = findTemplate(templates, props.template);
+	if (!template) {
+		throw new BootstrapInputError(
+			`Unknown template "${props.template}". Available templates: ${templateIds(templates)}.`,
+			"UNKNOWN_TEMPLATE",
+		);
+	}
 
-  if (props.directory === undefined) {
-    emitAgent({
-      status: 'needs_directory',
-      instruction:
-        'Ask the user which directory to scaffold into (use "." for the current directory), then re-run the next_command_template with it.',
-      next_command_template: `neon bootstrap --agent <directory> --template ${shellArg(
-        template.id,
-      )}`,
-    });
-    return;
-  }
+	if (props.directory === undefined) {
+		emitAgent({
+			status: "needs_directory",
+			instruction:
+				'Ask the user which directory to scaffold into (use "." for the current directory), then re-run the next_command_template with it.',
+			next_command_template: `neon bootstrap --agent <directory> --template ${shellArg(
+				template.id,
+			)}`,
+		});
+		return;
+	}
 
-  const targetDir = resolve(
-    process.cwd(),
-    props.directory === '.' ? '' : props.directory,
-  );
-  ensureTargetUsable(targetDir, props.force);
-  const filesWritten = await scaffold(template, targetDir);
+	const targetDir = resolve(
+		process.cwd(),
+		props.directory === "." ? "" : props.directory,
+	);
+	ensureTargetUsable(targetDir, props.force);
+	const filesWritten = await scaffold(template, targetDir);
 
-  const dir = displayDir(targetDir);
-  const runIn = isCurrentDir(targetDir) ? '' : `cd ${shellArg(dir)} && `;
-  emitAgent({
-    status: 'scaffolded',
-    directory: targetDir,
-    template: { id: template.id, title: template.title },
-    files_written: filesWritten,
-    next_steps: [
-      {
-        action: 'install_dependencies',
-        instruction:
-          'Ask the user whether to install dependencies, then run this in the project directory.',
-        command: `${runIn}npm install`,
-      },
-      {
-        action: 'initialize_git',
-        instruction:
-          'Ask the user whether to initialize a git repository in the project directory.',
-        command: `${runIn}git init`,
-      },
-      {
-        action: 'link_neon_project',
-        instruction:
-          'Ask the user whether to link the project to a Neon project now. This runs the link state machine — follow its JSON output for the next step.',
-        command: `${runIn}neon link --agent`,
-      },
-    ],
-    message: `Scaffolded "${template.title}" (${filesWritten} files) into ${dir}. Offer the next_steps to the user: install dependencies, initialize git, then link a Neon project.`,
-  });
+	const dir = displayDir(targetDir);
+	const runIn = isCurrentDir(targetDir) ? "" : `cd ${shellArg(dir)} && `;
+	emitAgent({
+		status: "scaffolded",
+		directory: targetDir,
+		template: { id: template.id, title: template.title },
+		files_written: filesWritten,
+		next_steps: [
+			{
+				action: "install_dependencies",
+				instruction:
+					"Ask the user whether to install dependencies, then run this in the project directory.",
+				command: `${runIn}npm install`,
+			},
+			{
+				action: "initialize_git",
+				instruction:
+					"Ask the user whether to initialize a git repository in the project directory.",
+				command: `${runIn}git init`,
+			},
+			{
+				action: "link_neon_project",
+				instruction:
+					"Ask the user whether to link the project to a Neon project now. This runs the link state machine — follow its JSON output for the next step.",
+				command: `${runIn}neon link --agent`,
+			},
+		],
+		message: `Scaffolded "${template.title}" (${filesWritten} files) into ${dir}. Offer the next_steps to the user: install dependencies, initialize git, then link a Neon project.`,
+	});
 };
 
 const emitAgent = (response: AgentResponse): void => {
-  process.stdout.write(`${JSON.stringify(response, null, 2)}\n`);
+	process.stdout.write(`${JSON.stringify(response, null, 2)}\n`);
 };
 
 const toAgentError = (
-  err: unknown,
-): Extract<AgentResponse, { status: 'error' }> => {
-  if (err instanceof BootstrapInputError) {
-    return { status: 'error', code: err.agentCode, message: err.message };
-  }
-  if (err instanceof Error) {
-    return { status: 'error', code: 'INTERNAL_ERROR', message: err.message };
-  }
-  return { status: 'error', code: 'INTERNAL_ERROR', message: String(err) };
+	err: unknown,
+): Extract<AgentResponse, { status: "error" }> => {
+	if (err instanceof BootstrapInputError) {
+		return { status: "error", code: err.agentCode, message: err.message };
+	}
+	if (err instanceof Error) {
+		return {
+			status: "error",
+			code: "INTERNAL_ERROR",
+			message: err.message,
+		};
+	}
+	return { status: "error", code: "INTERNAL_ERROR", message: String(err) };
 };
 
 // ----------------------------------------------------------------------------
@@ -713,7 +732,7 @@ const toAgentError = (
 // ----------------------------------------------------------------------------
 
 const isCurrentDir = (targetDir: string): boolean =>
-  relative(process.cwd(), targetDir) === '';
+	relative(process.cwd(), targetDir) === "";
 
 /**
  * The path to show the user: the bare relative path for the common
@@ -721,28 +740,28 @@ const isCurrentDir = (targetDir: string): boolean =>
  * cwd (a deep `../../..` is noise), and "." for the current directory.
  */
 const displayDir = (targetDir: string): string => {
-  const rel = relative(process.cwd(), targetDir);
-  if (rel === '') {
-    return '.';
-  }
-  return rel.startsWith('..') ? targetDir : rel;
+	const rel = relative(process.cwd(), targetDir);
+	if (rel === "") {
+		return ".";
+	}
+	return rel.startsWith("..") ? targetDir : rel;
 };
 
 const shellArg = (value: string): string => {
-  if (/^[A-Za-z0-9._:/-]+$/.test(value)) {
-    return value;
-  }
-  return `'${value.replace(/'/g, `'\\''`)}'`;
+	if (/^[A-Za-z0-9._:/-]+$/.test(value)) {
+		return value;
+	}
+	return `'${value.replace(/'/g, `'\\''`)}'`;
 };
 
 const onPromptState = (state: {
-  value: InitialReturnValue;
-  aborted: boolean;
-  exited: boolean;
+	value: InitialReturnValue;
+	aborted: boolean;
+	exited: boolean;
 }) => {
-  if (state.aborted) {
-    process.stdout.write('\x1B[?25h');
-    process.stdout.write('\n');
-    process.exit(1);
-  }
+	if (state.aborted) {
+		process.stdout.write("\x1B[?25h");
+		process.stdout.write("\n");
+		process.exit(1);
+	}
 };

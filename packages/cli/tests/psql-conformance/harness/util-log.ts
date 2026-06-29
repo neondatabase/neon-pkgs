@@ -3,5 +3,5 @@
 // applies to every .ts file in the project.
 
 export function log(msg: string): void {
-  process.stderr.write(`[psql-conformance] ${msg}\n`);
+	process.stderr.write(`[psql-conformance] ${msg}\n`);
 }

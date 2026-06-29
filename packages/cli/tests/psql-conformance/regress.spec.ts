@@ -19,28 +19,28 @@
 //   https://github.com/postgres/postgres/blob/REL_18_0/src/test/regress/sql/psql_pipeline.sql
 //   …and the matching expected/ outputs.
 
-import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { afterAll, beforeAll, describe, it, expect } from 'vitest';
-import { normalize } from './harness/normalize.js';
-import { getPgConn } from './harness/pg-fixture.js';
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { normalize } from "./harness/normalize.js";
+import { getPgConn } from "./harness/pg-fixture.js";
 import {
-  fetchRegressFixtures,
-  type RegressCaseName,
-  type UpstreamRegressFixture,
-} from './harness/upstream-fixtures.js';
-import { log } from './harness/util-log.js';
+	fetchRegressFixtures,
+	type RegressCaseName,
+	type UpstreamRegressFixture,
+} from "./harness/upstream-fixtures.js";
+import { log } from "./harness/util-log.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = join(HERE, '..', '..');
+const REPO_ROOT = join(HERE, "..", "..");
 
 const REGRESS_CASES: readonly RegressCaseName[] = [
-  'psql',
-  'psql_crosstab',
-  'psql_pipeline',
+	"psql",
+	"psql_crosstab",
+	"psql_pipeline",
 ];
 type RegressCase = RegressCaseName;
 
@@ -73,28 +73,28 @@ type RegressCase = RegressCaseName;
 // Cleanup is best-effort via `afterAll` — mkdtempSync collisions are
 // impossible, and leaving the dir behind on crash is harmless.
 const REGRESS_TMP = (() => {
-  const fromFixture = process.env.PGCONFORMANCE_ABS_BUILDDIR;
-  if (fromFixture) {
-    // The fixture already created this and the `results/` subdir.
-    return fromFixture;
-  }
-  const tmp = mkdtempSync(join(tmpdir(), 'psql-conformance-regress-'));
-  mkdirSync(join(tmp, 'results'), { recursive: true });
-  return tmp;
+	const fromFixture = process.env.PGCONFORMANCE_ABS_BUILDDIR;
+	if (fromFixture) {
+		// The fixture already created this and the `results/` subdir.
+		return fromFixture;
+	}
+	const tmp = mkdtempSync(join(tmpdir(), "psql-conformance-regress-"));
+	mkdirSync(join(tmp, "results"), { recursive: true });
+	return tmp;
 })();
 const REGRESS_TMP_OWNED_BY_SPEC = !process.env.PGCONFORMANCE_ABS_BUILDDIR;
 const REGRESS_ABS_SRCDIR = REGRESS_TMP;
 
 afterAll(() => {
-  // Only this file is allowed to remove the dir it created. When the
-  // fixture owns the tmp dir, globalTeardown handles cleanup so worker
-  // teardown doesn't pull the rug out from under other workers.
-  if (!REGRESS_TMP_OWNED_BY_SPEC) return;
-  try {
-    rmSync(REGRESS_TMP, { recursive: true, force: true });
-  } catch {
-    // best-effort
-  }
+	// Only this file is allowed to remove the dir it created. When the
+	// fixture owns the tmp dir, globalTeardown handles cleanup so worker
+	// teardown doesn't pull the rug out from under other workers.
+	if (!REGRESS_TMP_OWNED_BY_SPEC) return;
+	try {
+		rmSync(REGRESS_TMP, { recursive: true, force: true });
+	} catch {
+		// best-effort
+	}
 });
 
 // Resolve the psql binary the harness drives:
@@ -114,19 +114,19 @@ afterAll(() => {
 //
 // The `command` + `commandArgs` pair is what `spawnSync` ultimately runs.
 const resolvePsqlBinary = (): { command: string; commandArgs: string[] } => {
-  const shimPath = join(REPO_ROOT, 'dist', 'psql', 'cli.js');
-  const env = process.env.PSQL_BINARY;
-  if (!env || env.endsWith('/dist/cli.js') || env === 'dist/cli.js') {
-    return { command: process.execPath, commandArgs: [shimPath] };
-  }
-  if (env.endsWith('.js')) {
-    return { command: process.execPath, commandArgs: [env] };
-  }
-  return { command: env, commandArgs: [] };
+	const shimPath = join(REPO_ROOT, "dist", "psql", "cli.js");
+	const env = process.env.PSQL_BINARY;
+	if (!env || env.endsWith("/dist/cli.js") || env === "dist/cli.js") {
+		return { command: process.execPath, commandArgs: [shimPath] };
+	}
+	if (env.endsWith(".js")) {
+		return { command: process.execPath, commandArgs: [env] };
+	}
+	return { command: env, commandArgs: [] };
 };
 
 const { command: PSQL_COMMAND, commandArgs: PSQL_PREARGS } =
-  resolvePsqlBinary();
+	resolvePsqlBinary();
 
 // `regress/psql` is the only case in REGRESS_CASES whose vendored
 // expected output and vendored SQL depend on PG-18-only catalog shape
@@ -140,12 +140,12 @@ const { command: PSQL_COMMAND, commandArgs: PSQL_PREARGS } =
 // `regress/psql_crosstab` and `regress/psql_pipeline` still run on
 // every PG and remain green across the 14-18 matrix.
 const skipReasonForCase = (
-  name: RegressCase,
-  pgMajor?: number,
+	name: RegressCase,
+	pgMajor?: number,
 ): string | null =>
-  name === 'psql' && pgMajor !== undefined && pgMajor < 18
-    ? `regress/psql expected output is PG ${pgMajor < 18 ? '18-pinned' : '18'}; older server output diverges on PG-18-only features (Leakproof?, Generated columns, uuid_skipsupport, GRANT WITH ADMIN TRUE, …)`
-    : null;
+	name === "psql" && pgMajor !== undefined && pgMajor < 18
+		? `regress/psql expected output is PG ${pgMajor < 18 ? "18-pinned" : "18"}; older server output diverges on PG-18-only features (Leakproof?, Generated columns, uuid_skipsupport, GRANT WITH ADMIN TRUE, …)`
+		: null;
 
 // Fetch upstream SQL + expected outputs once per spec invocation. No
 // on-disk cache — we accept the ~1-2s of HTTPS round-trips in exchange
@@ -153,143 +153,148 @@ const skipReasonForCase = (
 // upstream content". Generous timeout because the network can be slow
 // in CI.
 let upstreamFixtures: Map<RegressCaseName, UpstreamRegressFixture> | null =
-  null;
+	null;
 beforeAll(async () => {
-  upstreamFixtures = await fetchRegressFixtures();
+	upstreamFixtures = await fetchRegressFixtures();
 }, 60_000);
 
-describe.each(REGRESS_CASES)('regress/%s', (name: RegressCase) => {
-  it('matches upstream expected output', (ctx) => {
-    const conn = getPgConn();
-    const skipReason = skipReasonForCase(name, conn.serverMajor ?? undefined);
-    if (skipReason) {
-      ctx.skip(skipReason);
-    }
-    if (!upstreamFixtures) {
-      throw new Error('upstream fixtures not loaded (beforeAll did not run)');
-    }
-    const fixture = upstreamFixtures.get(name);
-    if (!fixture) {
-      throw new Error(`upstream fixture missing for ${name}`);
-    }
-    const sql = fixture.sql;
-    // Apply the same normalize options to both sides of the diff so
-    // version-conditional rules can collapse PG 14-17 wording onto
-    // the PG 18 expected shape (rules only match older-PG output, so
-    // they are no-ops on expected).
-    const pgMajor = conn.serverMajor ?? undefined;
-    const expected = normalize(fixture.expected, { pgMajor });
+describe.each(REGRESS_CASES)("regress/%s", (name: RegressCase) => {
+	it("matches upstream expected output", (ctx) => {
+		const conn = getPgConn();
+		const skipReason = skipReasonForCase(
+			name,
+			conn.serverMajor ?? undefined,
+		);
+		if (skipReason) {
+			ctx.skip(skipReason);
+		}
+		if (!upstreamFixtures) {
+			throw new Error(
+				"upstream fixtures not loaded (beforeAll did not run)",
+			);
+		}
+		const fixture = upstreamFixtures.get(name);
+		if (!fixture) {
+			throw new Error(`upstream fixture missing for ${name}`);
+		}
+		const sql = fixture.sql;
+		// Apply the same normalize options to both sides of the diff so
+		// version-conditional rules can collapse PG 14-17 wording onto
+		// the PG 18 expected shape (rules only match older-PG output, so
+		// they are no-ops on expected).
+		const pgMajor = conn.serverMajor ?? undefined;
+		const expected = normalize(fixture.expected, { pgMajor });
 
-    const psqlArgs = [
-      '--no-psqlrc',
-      '--echo-all',
-      '--quiet',
-      '-X',
-      '-v',
-      'ON_ERROR_STOP=0',
-      // Seed abs_builddir / abs_srcdir even though the vendored scripts
-      // pull them from PG_ABS_BUILDDIR / PG_ABS_SRCDIR via `\getenv`.
-      // The `-v` form is the upstream pg_regress contract and is
-      // belt-and-suspenders against any script that uses `:abs_builddir`
-      // without a prior `\getenv`.
-      '-v',
-      `abs_builddir=${REGRESS_TMP}`,
-      '-v',
-      `abs_srcdir=${REGRESS_ABS_SRCDIR}`,
-      // Mirror upstream pg_regress: hide the per-relation access method
-      // and toast-compression markers from `\d+` output. pg_regress
-      // injects `\set HIDE_TABLEAM on` / `\set HIDE_TOAST_COMPRESSION on`
-      // into its session psqlrc before running each script; the vendored
-      // expected output therefore assumes both are `on`. Without these,
-      // we emit `Access method: heap` / `Access method: heap_psql`
-      // footers that diverge before the `\set HIDE_TABLEAM off` line in
-      // the psql.sql script. Passing via `-v` is equivalent and is
-      // robust against `--no-psqlrc`.
-      '-v',
-      'HIDE_TABLEAM=on',
-      '-v',
-      'HIDE_TOAST_COMPRESSION=on',
-      '-h',
-      conn.host,
-      '-p',
-      String(conn.port),
-      '-U',
-      conn.user,
-      '-d',
-      conn.db,
-    ];
-    const args = [...PSQL_PREARGS, ...psqlArgs];
-    log(`regress/${name}: invoking ${PSQL_COMMAND} ${args.join(' ')} 2>&1`);
-    // Upstream pg_regress invokes `psql 2>&1` so stderr is interleaved
-    // into stdout at the OS level — each write call is atomic on the
-    // shared pipe. spawnSync can't merge child stderr into stdout
-    // directly, so we run the whole thing under `sh -c` and let the
-    // shell do the `2>&1` redirect. The shell-quoting safety bar is
-    // low here: we control every arg (no user input).
-    const quote = (a: string): string => `'${a.replace(/'/g, "'\\''")}'`;
-    const cmdline = [PSQL_COMMAND, ...args].map(quote).join(' ') + ' 2>&1';
-    const result = spawnSync('sh', ['-c', cmdline], {
-      input: sql,
-      env: {
-        ...process.env,
-        PGPASSWORD: conn.password,
-        LC_ALL: 'C',
-        // `\getenv abs_builddir PG_ABS_BUILDDIR` reads these from the
-        // child's environment — see vendor/.../regress/sql/psql.sql.
-        PG_ABS_BUILDDIR: REGRESS_TMP,
-        PG_ABS_SRCDIR: REGRESS_ABS_SRCDIR,
-        // Mirror upstream pg_regress's process-environment seed. The
-        // regression test cluster is initdb'd with these as the GUC
-        // defaults; the vendored expected output captures the resulting
-        // rendering. Without `datestyle=Postgres,MDY`, `SELECT
-        // '2000-01-01'::date` renders as `2000-01-01` (ISO) rather than
-        // the vendored `01-01-2000`. `timezone=PST8PDT` is harmless for
-        // psql.sql (no `now()`-style queries in scope) but pairs with
-        // the date style as the upstream contract.
-        //
-        // Real libpq picks up `PGDATESTYLE` / `PGTIMEZONE` as known
-        // env-var keys. Our neonctl psql honours only the connection-info
-        // env-var subset (PGHOST/PGPORT/PGOPTIONS/...) and would silently
-        // ignore PGDATESTYLE, so we route both through `PGOPTIONS` —
-        // libpq's general-purpose options forwarder. The startup
-        // message stamps them as GUC overrides before the first query
-        // runs, equivalent to a leading `SET datestyle = ...` but without
-        // emitting a row in `--echo-all` output.
-        PGOPTIONS: '-c datestyle=Postgres,MDY -c timezone=PST8PDT',
-      },
-      encoding: 'utf8',
-      maxBuffer: 1024 * 1024 * 64,
-      // Hard kill if a buggy psql impl hangs (e.g., COPY-FROM-STDIN
-      // inside a multi-statement chain isn't currently driven by the
-      // mainloop — psql.sql line ~1468 triggers it). The test then
-      // fails on a real diff or a spawn error rather than freezing
-      // the whole suite.
-      timeout: 60_000,
-    });
+		const psqlArgs = [
+			"--no-psqlrc",
+			"--echo-all",
+			"--quiet",
+			"-X",
+			"-v",
+			"ON_ERROR_STOP=0",
+			// Seed abs_builddir / abs_srcdir even though the vendored scripts
+			// pull them from PG_ABS_BUILDDIR / PG_ABS_SRCDIR via `\getenv`.
+			// The `-v` form is the upstream pg_regress contract and is
+			// belt-and-suspenders against any script that uses `:abs_builddir`
+			// without a prior `\getenv`.
+			"-v",
+			`abs_builddir=${REGRESS_TMP}`,
+			"-v",
+			`abs_srcdir=${REGRESS_ABS_SRCDIR}`,
+			// Mirror upstream pg_regress: hide the per-relation access method
+			// and toast-compression markers from `\d+` output. pg_regress
+			// injects `\set HIDE_TABLEAM on` / `\set HIDE_TOAST_COMPRESSION on`
+			// into its session psqlrc before running each script; the vendored
+			// expected output therefore assumes both are `on`. Without these,
+			// we emit `Access method: heap` / `Access method: heap_psql`
+			// footers that diverge before the `\set HIDE_TABLEAM off` line in
+			// the psql.sql script. Passing via `-v` is equivalent and is
+			// robust against `--no-psqlrc`.
+			"-v",
+			"HIDE_TABLEAM=on",
+			"-v",
+			"HIDE_TOAST_COMPRESSION=on",
+			"-h",
+			conn.host,
+			"-p",
+			String(conn.port),
+			"-U",
+			conn.user,
+			"-d",
+			conn.db,
+		];
+		const args = [...PSQL_PREARGS, ...psqlArgs];
+		log(`regress/${name}: invoking ${PSQL_COMMAND} ${args.join(" ")} 2>&1`);
+		// Upstream pg_regress invokes `psql 2>&1` so stderr is interleaved
+		// into stdout at the OS level — each write call is atomic on the
+		// shared pipe. spawnSync can't merge child stderr into stdout
+		// directly, so we run the whole thing under `sh -c` and let the
+		// shell do the `2>&1` redirect. The shell-quoting safety bar is
+		// low here: we control every arg (no user input).
+		const quote = (a: string): string => `'${a.replace(/'/g, "'\\''")}'`;
+		const cmdline = [PSQL_COMMAND, ...args].map(quote).join(" ") + " 2>&1";
+		const result = spawnSync("sh", ["-c", cmdline], {
+			input: sql,
+			env: {
+				...process.env,
+				PGPASSWORD: conn.password,
+				LC_ALL: "C",
+				// `\getenv abs_builddir PG_ABS_BUILDDIR` reads these from the
+				// child's environment — see vendor/.../regress/sql/psql.sql.
+				PG_ABS_BUILDDIR: REGRESS_TMP,
+				PG_ABS_SRCDIR: REGRESS_ABS_SRCDIR,
+				// Mirror upstream pg_regress's process-environment seed. The
+				// regression test cluster is initdb'd with these as the GUC
+				// defaults; the vendored expected output captures the resulting
+				// rendering. Without `datestyle=Postgres,MDY`, `SELECT
+				// '2000-01-01'::date` renders as `2000-01-01` (ISO) rather than
+				// the vendored `01-01-2000`. `timezone=PST8PDT` is harmless for
+				// psql.sql (no `now()`-style queries in scope) but pairs with
+				// the date style as the upstream contract.
+				//
+				// Real libpq picks up `PGDATESTYLE` / `PGTIMEZONE` as known
+				// env-var keys. Our neonctl psql honours only the connection-info
+				// env-var subset (PGHOST/PGPORT/PGOPTIONS/...) and would silently
+				// ignore PGDATESTYLE, so we route both through `PGOPTIONS` —
+				// libpq's general-purpose options forwarder. The startup
+				// message stamps them as GUC overrides before the first query
+				// runs, equivalent to a leading `SET datestyle = ...` but without
+				// emitting a row in `--echo-all` output.
+				PGOPTIONS: "-c datestyle=Postgres,MDY -c timezone=PST8PDT",
+			},
+			encoding: "utf8",
+			maxBuffer: 1024 * 1024 * 64,
+			// Hard kill if a buggy psql impl hangs (e.g., COPY-FROM-STDIN
+			// inside a multi-statement chain isn't currently driven by the
+			// mainloop — psql.sql line ~1468 triggers it). The test then
+			// fails on a real diff or a spawn error rather than freezing
+			// the whole suite.
+			timeout: 60_000,
+		});
 
-    if (result.error) {
-      // Couldn't even spawn psql.
-      throw new Error(`spawn error: ${result.error.message}`);
-    }
+		if (result.error) {
+			// Couldn't even spawn psql.
+			throw new Error(`spawn error: ${result.error.message}`);
+		}
 
-    // With `sh -c "... 2>&1"`, all output lands in stdout in the order
-    // the child wrote it; stderr is empty (or holds shell errors only).
-    const stdout = result.stdout ?? '';
-    const stderr = result.stderr ?? '';
-    const actual = normalize(stdout, { pgMajor });
+		// With `sh -c "... 2>&1"`, all output lands in stdout in the order
+		// the child wrote it; stderr is empty (or holds shell errors only).
+		const stdout = result.stdout ?? "";
+		const stderr = result.stderr ?? "";
+		const actual = normalize(stdout, { pgMajor });
 
-    if (actual === expected) {
-      expect(actual).toBe(expected);
-      return;
-    }
+		if (actual === expected) {
+			expect(actual).toBe(expected);
+			return;
+		}
 
-    const diff = renderDiff(expected, actual);
-    const failureMessage =
-      `regress/${name} output differs from upstream expected.\n` +
-      `--- expected (normalized)\n+++ actual (normalized)\n${diff}\n` +
-      (stderr ? `--- stderr ---\n${stderr}\n` : '');
-    throw new Error(failureMessage);
-  });
+		const diff = renderDiff(expected, actual);
+		const failureMessage =
+			`regress/${name} output differs from upstream expected.\n` +
+			`--- expected (normalized)\n+++ actual (normalized)\n${diff}\n` +
+			(stderr ? `--- stderr ---\n${stderr}\n` : "");
+		throw new Error(failureMessage);
+	});
 });
 
 // Cheap line-oriented diff for failure messages — we do not pull in
@@ -297,21 +302,21 @@ describe.each(REGRESS_CASES)('regress/%s', (name: RegressCase) => {
 // reach for `git diff` on the saved actual output. The first N
 // differing lines is plenty for triage.
 function renderDiff(expected: string, actual: string, maxLines = 40): string {
-  const e = expected.split('\n');
-  const a = actual.split('\n');
-  const out: string[] = [];
-  const max = Math.max(e.length, a.length);
-  let printed = 0;
-  for (let i = 0; i < max && printed < maxLines; i++) {
-    if (e[i] !== a[i]) {
-      out.push(`@@ line ${i + 1}`);
-      out.push(`- ${e[i] ?? '<eof>'}`);
-      out.push(`+ ${a[i] ?? '<eof>'}`);
-      printed += 1;
-    }
-  }
-  if (printed === maxLines) {
-    out.push(`... diff truncated at ${maxLines} mismatched lines`);
-  }
-  return out.join('\n');
+	const e = expected.split("\n");
+	const a = actual.split("\n");
+	const out: string[] = [];
+	const max = Math.max(e.length, a.length);
+	let printed = 0;
+	for (let i = 0; i < max && printed < maxLines; i++) {
+		if (e[i] !== a[i]) {
+			out.push(`@@ line ${i + 1}`);
+			out.push(`- ${e[i] ?? "<eof>"}`);
+			out.push(`+ ${a[i] ?? "<eof>"}`);
+			printed += 1;
+		}
+	}
+	if (printed === maxLines) {
+		out.push(`... diff truncated at ${maxLines} mismatched lines`);
+	}
+	return out.join("\n");
 }

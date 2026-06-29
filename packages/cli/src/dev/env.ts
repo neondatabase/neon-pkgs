@@ -1,40 +1,32 @@
-import {
-  loadConfigFromFile,
-  type Config,
-  type NeonApi,
-} from '@neon/config';
-import {
-  plan,
-  pullConfig,
-  type AppliedChange,
-} from '@neon/config-runtime';
-import { fetchEnv, toEntries } from '@neon/env';
+import { type Config, loadConfigFromFile, type NeonApi } from "@neon/config";
+import { type AppliedChange, plan, pullConfig } from "@neon/config-runtime";
+import { fetchEnv, toEntries } from "@neon/env";
 
-import { log } from '../log.js';
+import { log } from "../log.js";
 
 export type DevEnvContext = {
-  cwd: string;
-  projectId?: string;
-  branchId?: string;
-  apiKey?: string;
-  /** Neon API base URL. Falls back to `NEON_API_HOST`, then production. */
-  apiHost?: string;
-  /** Injected NeonApi adapter (tests). Production builds it from `apiKey`. */
-  api?: NeonApi;
-  /**
-   * Env source layered under `process.env` when resolving the branch env. Lets callers
-   * supply already-persisted values (e.g. the existing `.env` for `env pull`) so one-time
-   * secrets — Neon Auth keys and the unified branch credential's `api_token` /
-   * `s3_secret_access_key` — are **reused** rather than re-minted on every run.
-   */
-  env?: NodeJS.ProcessEnv;
+	cwd: string;
+	projectId?: string;
+	branchId?: string;
+	apiKey?: string;
+	/** Neon API base URL. Falls back to `NEON_API_HOST`, then production. */
+	apiHost?: string;
+	/** Injected NeonApi adapter (tests). Production builds it from `apiKey`. */
+	api?: NeonApi;
+	/**
+	 * Env source layered under `process.env` when resolving the branch env. Lets callers
+	 * supply already-persisted values (e.g. the existing `.env` for `env pull`) so one-time
+	 * secrets — Neon Auth keys and the unified branch credential's `api_token` /
+	 * `s3_secret_access_key` — are **reused** rather than re-minted on every run.
+	 */
+	env?: NodeJS.ProcessEnv;
 };
 
 /** The API-targeting options every runtime call forwards from the context. */
 const apiOptions = (ctx: DevEnvContext) => ({
-  ...(ctx.apiKey ? { apiKey: ctx.apiKey } : {}),
-  ...(ctx.apiHost ? { apiHost: ctx.apiHost } : {}),
-  ...(ctx.api ? { api: ctx.api } : {}),
+	...(ctx.apiKey ? { apiKey: ctx.apiKey } : {}),
+	...(ctx.apiHost ? { apiHost: ctx.apiHost } : {}),
+	...(ctx.api ? { api: ctx.api } : {}),
 });
 
 /**
@@ -46,7 +38,7 @@ const apiOptions = (ctx: DevEnvContext) => ({
  * than refusing to start. The fix is to provision the resource first.
  */
 export class DevEnvMismatchError extends Error {
-  override readonly name = 'DevEnvMismatchError';
+	override readonly name = "DevEnvMismatchError";
 }
 
 /**
@@ -55,7 +47,7 @@ export class DevEnvMismatchError extends Error {
  * `env pull` surfaces it (an explicit pull needs a branch).
  */
 export class MissingBranchContextError extends Error {
-  override readonly name = 'MissingBranchContextError';
+	override readonly name = "MissingBranchContextError";
 }
 
 /**
@@ -78,46 +70,46 @@ export class MissingBranchContextError extends Error {
  * handle them.
  */
 export const resolveNeonEnvVars = async (
-  ctx: DevEnvContext,
+	ctx: DevEnvContext,
 ): Promise<Record<string, string>> => {
-  const config = await loadNeonConfig(ctx.cwd);
+	const config = await loadNeonConfig(ctx.cwd);
 
-  if (config) {
-    if (!ctx.projectId || !ctx.branchId) {
-      throw new MissingBranchContextError(
-        'Found a neon.ts but could not resolve the project/branch. ' +
-          'Run `neonctl link` and `neonctl checkout <branch>`, or pass ' +
-          '--project-id / --branch.',
-      );
-    }
-    // Resolve env from the policy with its `preview.functions` removed. Functions carry no
-    // branch-level secrets — their env comes from the local `neon.ts` `functions.<slug>.env`,
-    // layered per-function by the dev server — so env resolution never needs the functions
-    // API. Probing it (via `plan`/`fetchEnv`) only adds a failure mode: an undeployed
-    // function, or a project where the Functions Preview isn't enabled, would error and sink
-    // ALL injection (including DATABASE_URL). Stripping functions keeps env resolution honest
-    // while leaving buckets / AI Gateway / Auth / Data API fully checked — those DO carry
-    // secrets, so a declared-but-missing one still hard-stops (see assertPolicyMatchesBranch).
-    const envConfig = withoutPreviewFunctions(config);
-    await assertPolicyMatchesBranch(envConfig, ctx);
-    return await fetchAndProject(envConfig, ctx);
-  }
+	if (config) {
+		if (!ctx.projectId || !ctx.branchId) {
+			throw new MissingBranchContextError(
+				"Found a neon.ts but could not resolve the project/branch. " +
+					"Run `neonctl link` and `neonctl checkout <branch>`, or pass " +
+					"--project-id / --branch.",
+			);
+		}
+		// Resolve env from the policy with its `preview.functions` removed. Functions carry no
+		// branch-level secrets — their env comes from the local `neon.ts` `functions.<slug>.env`,
+		// layered per-function by the dev server — so env resolution never needs the functions
+		// API. Probing it (via `plan`/`fetchEnv`) only adds a failure mode: an undeployed
+		// function, or a project where the Functions Preview isn't enabled, would error and sink
+		// ALL injection (including DATABASE_URL). Stripping functions keeps env resolution honest
+		// while leaving buckets / AI Gateway / Auth / Data API fully checked — those DO carry
+		// secrets, so a declared-but-missing one still hard-stops (see assertPolicyMatchesBranch).
+		const envConfig = withoutPreviewFunctions(config);
+		await assertPolicyMatchesBranch(envConfig, ctx);
+		return await fetchAndProject(envConfig, ctx);
+	}
 
-  if (ctx.projectId && ctx.branchId) {
-    const pulled = await pullConfig({
-      projectId: ctx.projectId,
-      branchId: ctx.branchId,
-      ...apiOptions(ctx),
-    });
-    // `pulled.config` is already a `Config` (static auth/dataApi toggles + a branch
-    // tuning closure), so it feeds straight into fetchEnv — no wrapping needed.
-    return await fetchAndProject(pulled.config, ctx);
-  }
+	if (ctx.projectId && ctx.branchId) {
+		const pulled = await pullConfig({
+			projectId: ctx.projectId,
+			branchId: ctx.branchId,
+			...apiOptions(ctx),
+		});
+		// `pulled.config` is already a `Config` (static auth/dataApi toggles + a branch
+		// tuning closure), so it feeds straight into fetchEnv — no wrapping needed.
+		return await fetchAndProject(pulled.config, ctx);
+	}
 
-  throw new MissingBranchContextError(
-    'No project/branch context found. Link a branch (`neonctl link` / ' +
-      '`neonctl checkout`) or pass --project-id and --branch.',
-  );
+	throw new MissingBranchContextError(
+		"No project/branch context found. Link a branch (`neonctl link` / " +
+			"`neonctl checkout`) or pass --project-id and --branch.",
+	);
 };
 
 /**
@@ -128,13 +120,13 @@ export const resolveNeonEnvVars = async (
  * "compute what env we have" function.
  */
 export type DevEnvResolution = {
-  /** Neon branch env vars to inject (DATABASE_URL[_UNPOOLED], NEON_AUTH_BASE_URL, …). */
-  vars: Record<string, string>;
-  /**
-   * Present only when `vars` is empty *because* resolution was skipped/degraded (not when
-   * the branch legitimately has no extra services). A short, actionable explanation.
-   */
-  skipped?: { reason: string };
+	/** Neon branch env vars to inject (DATABASE_URL[_UNPOOLED], NEON_AUTH_BASE_URL, …). */
+	vars: Record<string, string>;
+	/**
+	 * Present only when `vars` is empty *because* resolution was skipped/degraded (not when
+	 * the branch legitimately has no extra services). A short, actionable explanation.
+	 */
+	skipped?: { reason: string };
 };
 
 /**
@@ -149,32 +141,32 @@ export type DevEnvResolution = {
  *   is the one hard stop and is re-thrown for the caller to surface.
  */
 export const resolveDevEnv = async (
-  ctx: DevEnvContext,
+	ctx: DevEnvContext,
 ): Promise<DevEnvResolution> => {
-  try {
-    return { vars: await resolveNeonEnvVars(ctx) };
-  } catch (err) {
-    if (err instanceof DevEnvMismatchError) throw err;
-    if (err instanceof MissingBranchContextError) {
-      log.debug('dev: %s; skipping env injection', err.message);
-      return {
-        vars: {},
-        skipped: {
-          reason:
-            'no linked Neon branch — run `neonctl link`, then ' +
-            '`neonctl checkout <branch>`, to inject DATABASE_URL and friends',
-        },
-      };
-    }
-    const detail = err instanceof Error ? err.message : String(err);
-    log.debug('dev: env resolution failed: %s', detail);
-    return {
-      vars: {},
-      skipped: {
-        reason: `could not reach Neon (${detail}); running without Neon env`,
-      },
-    };
-  }
+	try {
+		return { vars: await resolveNeonEnvVars(ctx) };
+	} catch (err) {
+		if (err instanceof DevEnvMismatchError) throw err;
+		if (err instanceof MissingBranchContextError) {
+			log.debug("dev: %s; skipping env injection", err.message);
+			return {
+				vars: {},
+				skipped: {
+					reason:
+						"no linked Neon branch — run `neonctl link`, then " +
+						"`neonctl checkout <branch>`, to inject DATABASE_URL and friends",
+				},
+			};
+		}
+		const detail = err instanceof Error ? err.message : String(err);
+		log.debug("dev: env resolution failed: %s", detail);
+		return {
+			vars: {},
+			skipped: {
+				reason: `could not reach Neon (${detail}); running without Neon env`,
+			},
+		};
+	}
 };
 
 /**
@@ -187,11 +179,11 @@ export const resolveDevEnv = async (
  * unchanged when it declares no functions.
  */
 const withoutPreviewFunctions = (config: Config): Config => {
-  const preview = config.preview;
-  if (!preview?.functions) return config;
-  const previewWithoutFunctions = { ...preview };
-  delete previewWithoutFunctions.functions;
-  return { ...config, preview: previewWithoutFunctions };
+	const preview = config.preview;
+	if (!preview?.functions) return config;
+	const previewWithoutFunctions = { ...preview };
+	delete previewWithoutFunctions.functions;
+	return { ...config, preview: previewWithoutFunctions };
 };
 
 /**
@@ -205,25 +197,25 @@ const withoutPreviewFunctions = (config: Config): Config => {
  * without the Functions Preview, must never block local dev or sink env injection.
  */
 const assertPolicyMatchesBranch = async (
-  config: Config,
-  ctx: DevEnvContext,
+	config: Config,
+	ctx: DevEnvContext,
 ): Promise<void> => {
-  const result = await plan(config, {
-    projectId: ctx.projectId as string,
-    branchId: ctx.branchId as string,
-    ...apiOptions(ctx),
-  });
+	const result = await plan(config, {
+		projectId: ctx.projectId as string,
+		branchId: ctx.branchId as string,
+		...apiOptions(ctx),
+	});
 
-  const missing = result.applied.filter(isMissingResource);
-  if (missing.length === 0) return;
+	const missing = result.applied.filter(isMissingResource);
+	if (missing.length === 0) return;
 
-  const names = missing.map((change) => change.identifier).join(', ');
-  throw new DevEnvMismatchError(
-    `Your neon.ts declares ${names} for branch ${ctx.branchId}, but the branch ` +
-      'does not have it yet, so the matching env vars cannot be injected. ' +
-      'Provision it first with `neonctl deploy` (or `neonctl config apply`), ' +
-      'then re-run `neonctl dev`.',
-  );
+	const names = missing.map((change) => change.identifier).join(", ");
+	throw new DevEnvMismatchError(
+		`Your neon.ts declares ${names} for branch ${ctx.branchId}, but the branch ` +
+			"does not have it yet, so the matching env vars cannot be injected. " +
+			"Provision it first with `neonctl deploy` (or `neonctl config apply`), " +
+			"then re-run `neonctl dev`.",
+	);
 };
 
 /**
@@ -233,21 +225,21 @@ const assertPolicyMatchesBranch = async (
  * — and functions are excluded (see {@link assertPolicyMatchesBranch}).
  */
 const isMissingResource = (change: AppliedChange): boolean =>
-  change.kind === 'service' &&
-  change.action === 'create' &&
-  !change.identifier.startsWith('function:');
+	change.kind === "service" &&
+	change.action === "create" &&
+	!change.identifier.startsWith("function:");
 
 const fetchAndProject = async (
-  config: Config,
-  ctx: DevEnvContext,
+	config: Config,
+	ctx: DevEnvContext,
 ): Promise<Record<string, string>> => {
-  const env = await fetchEnv(config, {
-    projectId: ctx.projectId as string,
-    branchId: ctx.branchId as string,
-    ...apiOptions(ctx),
-    ...(ctx.env ? { env: ctx.env } : {}),
-  });
-  return toEntries(env);
+	const env = await fetchEnv(config, {
+		projectId: ctx.projectId as string,
+		branchId: ctx.branchId as string,
+		...apiOptions(ctx),
+		...(ctx.env ? { env: ctx.env } : {}),
+	});
+	return toEntries(env);
 };
 
 /**
@@ -263,49 +255,49 @@ const fetchAndProject = async (
  * NOT in here, so a real syntax/runtime error doesn't get mislabeled.
  */
 const MISSING_DEPENDENCY_HINTS = [
-  'cannot find module',
-  'cannot find package',
-  'err_module_not_found',
-  'failed to resolve',
-  'could not resolve',
-  'module not found',
+	"cannot find module",
+	"cannot find package",
+	"err_module_not_found",
+	"failed to resolve",
+	"could not resolve",
+	"module not found",
 ];
 
 /** Flatten an error and its `cause` chain to one lowercased string for matching. */
 const errorChainText = (err: unknown): string => {
-  const parts: string[] = [];
-  let current: unknown = err;
-  for (let depth = 0; current instanceof Error && depth < 6; depth++) {
-    parts.push(current.message);
-    current = (current as { cause?: unknown }).cause;
-  }
-  return parts.join('\n').toLowerCase();
+	const parts: string[] = [];
+	let current: unknown = err;
+	for (let depth = 0; current instanceof Error && depth < 6; depth++) {
+		parts.push(current.message);
+		current = (current as { cause?: unknown }).cause;
+	}
+	return parts.join("\n").toLowerCase();
 };
 
 const looksLikeMissingDependency = (err: unknown): boolean => {
-  const text = errorChainText(err);
-  return MISSING_DEPENDENCY_HINTS.some((hint) => text.includes(hint));
+	const text = errorChainText(err);
+	return MISSING_DEPENDENCY_HINTS.some((hint) => text.includes(hint));
 };
 
 const loadNeonConfig = async (cwd: string): Promise<Config | null> => {
-  try {
-    const { config } = await loadConfigFromFile({ cwd });
-    return config;
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    if (/Could not find a Neon config file/i.test(message)) {
-      return null;
-    }
-    // A neon.ts that imports a package which isn't installed fails here with a
-    // cryptic "Cannot find module …". Turn that into the actionable thing to do.
-    if (looksLikeMissingDependency(err)) {
-      throw new Error(
-        'Could not load neon.ts: a package it imports is not installed. ' +
-          'Did you run `npm install`? Install your dependencies ' +
-          '(npm / pnpm / yarn / bun), then try again.\n' +
-          `Original error: ${message}`,
-      );
-    }
-    throw err;
-  }
+	try {
+		const { config } = await loadConfigFromFile({ cwd });
+		return config;
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		if (/Could not find a Neon config file/i.test(message)) {
+			return null;
+		}
+		// A neon.ts that imports a package which isn't installed fails here with a
+		// cryptic "Cannot find module …". Turn that into the actionable thing to do.
+		if (looksLikeMissingDependency(err)) {
+			throw new Error(
+				"Could not load neon.ts: a package it imports is not installed. " +
+					"Did you run `npm install`? Install your dependencies " +
+					"(npm / pnpm / yarn / bun), then try again.\n" +
+					`Original error: ${message}`,
+			);
+		}
+		throw err;
+	}
 };

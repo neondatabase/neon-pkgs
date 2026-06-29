@@ -20,21 +20,21 @@ export type ServerVersion = number;
  * major number (e.g. `11`) or one of the `PG_*` constants (e.g. `PG_11`).
  */
 const encode = (major: number, minor = 0): ServerVersion => {
-  if (major >= 10000) return major; // already encoded
-  if (major >= 10) return major * 10000;
-  return major * 10000 + minor * 100;
+	if (major >= 10000) return major; // already encoded
+	if (major >= 10) return major * 10000;
+	return major * 10000 + minor * 100;
 };
 
 export const serverAtLeast = (
-  actual: ServerVersion,
-  major: number,
-  minor = 0,
+	actual: ServerVersion,
+	major: number,
+	minor = 0,
 ): boolean => actual >= encode(major, minor);
 
 export const serverLess = (
-  actual: ServerVersion,
-  major: number,
-  minor = 0,
+	actual: ServerVersion,
+	major: number,
+	minor = 0,
 ): boolean => actual < encode(major, minor);
 
 export const PG_9_0: ServerVersion = 90000;

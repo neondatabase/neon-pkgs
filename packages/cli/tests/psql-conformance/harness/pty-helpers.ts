@@ -26,22 +26,22 @@
 //   - Windows uses ConPTY rather than a real PTY; we don't gate on it
 //     here because the conformance run is linux/macOS-only in CI.
 
-import { spawnSync } from 'node:child_process';
+import { spawnSync } from "node:child_process";
 import {
-  chmodSync,
-  existsSync,
-  readdirSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs';
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+	chmodSync,
+	existsSync,
+	mkdtempSync,
+	readdirSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-import stripAnsi from 'strip-ansi';
+import stripAnsi from "strip-ansi";
 
-import { getPgConn, setupPg } from './pg-fixture.js';
+import { getPgConn, setupPg } from "./pg-fixture.js";
 
 // ---------------------------------------------------------------------------
 // One-time setup: make sure the prebuilt spawn-helper for every platform
@@ -55,31 +55,31 @@ import { getPgConn, setupPg } from './pg-fixture.js';
 // ---------------------------------------------------------------------------
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-export const REPO_ROOT = resolve(HERE, '..', '..', '..');
-export const DIST_PSQL = join(REPO_ROOT, 'dist', 'psql', 'index.js');
+export const REPO_ROOT = resolve(HERE, "..", "..", "..");
+export const DIST_PSQL = join(REPO_ROOT, "dist", "psql", "index.js");
 
 const ensurePtyHelpersExecutable = (): void => {
-  const root = join(REPO_ROOT, 'node_modules', 'node-pty', 'prebuilds');
-  if (!existsSync(root)) return;
-  let dirs: string[];
-  try {
-    dirs = readdirSync(root);
-  } catch {
-    return;
-  }
-  for (const d of dirs) {
-    const helper = join(root, d, 'spawn-helper');
-    if (!existsSync(helper)) continue;
-    try {
-      const st = statSync(helper);
-      // Only chmod if it isn't already +x.
-      if ((st.mode & 0o111) === 0) {
-        chmodSync(helper, 0o755);
-      }
-    } catch {
-      // best-effort
-    }
-  }
+	const root = join(REPO_ROOT, "node_modules", "node-pty", "prebuilds");
+	if (!existsSync(root)) return;
+	let dirs: string[];
+	try {
+		dirs = readdirSync(root);
+	} catch {
+		return;
+	}
+	for (const d of dirs) {
+		const helper = join(root, d, "spawn-helper");
+		if (!existsSync(helper)) continue;
+		try {
+			const st = statSync(helper);
+			// Only chmod if it isn't already +x.
+			if ((st.mode & 0o111) === 0) {
+				chmodSync(helper, 0o755);
+			}
+		} catch {
+			// best-effort
+		}
+	}
 };
 
 ensurePtyHelpersExecutable();
@@ -88,7 +88,7 @@ ensurePtyHelpersExecutable();
 // Run condition shared with the other TAP specs.
 // ---------------------------------------------------------------------------
 
-export const RUN_INTEGRATION = process.env.RUN_INTEGRATION === '1';
+export const RUN_INTEGRATION = process.env.RUN_INTEGRATION === "1";
 export const DIST_EXISTS = existsSync(DIST_PSQL);
 export const SHOULD_RUN_INTEGRATION = RUN_INTEGRATION && DIST_EXISTS;
 
@@ -102,40 +102,40 @@ export const SHOULD_RUN_INTEGRATION = RUN_INTEGRATION && DIST_EXISTS;
 // ---------------------------------------------------------------------------
 
 type IPty = {
-  write(data: string): void;
-  kill(signal?: string): void;
-  resize(cols: number, rows: number): void;
-  onData(cb: (data: string) => void): { dispose(): void };
-  onExit(cb: (e: { exitCode: number; signal?: number }) => void): {
-    dispose(): void;
-  };
+	write(data: string): void;
+	kill(signal?: string): void;
+	resize(cols: number, rows: number): void;
+	onData(cb: (data: string) => void): { dispose(): void };
+	onExit(cb: (e: { exitCode: number; signal?: number }) => void): {
+		dispose(): void;
+	};
 };
 
 type PtyModule = {
-  spawn(
-    file: string,
-    args: string[],
-    opts: {
-      name?: string;
-      cols?: number;
-      rows?: number;
-      cwd?: string;
-      env?: Record<string, string | undefined>;
-    },
-  ): IPty;
+	spawn(
+		file: string,
+		args: string[],
+		opts: {
+			name?: string;
+			cols?: number;
+			rows?: number;
+			cwd?: string;
+			env?: Record<string, string | undefined>;
+		},
+	): IPty;
 };
 
 let ptyMod: PtyModule | null = null;
 
 const loadPty = async (): Promise<PtyModule> => {
-  if (ptyMod) return ptyMod;
-  // Built at runtime so tsc doesn't choke if the package is missing.
-  const moduleName = 'node-pty';
-  const m = (await import(moduleName)) as unknown as
-    | PtyModule
-    | { default: PtyModule };
-  ptyMod = 'spawn' in m ? m : m.default;
-  return ptyMod;
+	if (ptyMod) return ptyMod;
+	// Built at runtime so tsc doesn't choke if the package is missing.
+	const moduleName = "node-pty";
+	const m = (await import(moduleName)) as unknown as
+		| PtyModule
+		| { default: PtyModule };
+	ptyMod = "spawn" in m ? m : m.default;
+	return ptyMod;
 };
 
 // ---------------------------------------------------------------------------
@@ -143,16 +143,16 @@ const loadPty = async (): Promise<PtyModule> => {
 // ---------------------------------------------------------------------------
 
 export const ensureFixture = async (): Promise<void> => {
-  await setupPg();
+	await setupPg();
 };
 
 export const buildUri = (): string => {
-  const conn = getPgConn();
-  const u = new URL(`postgresql://${conn.host}:${conn.port}/${conn.db}`);
-  u.username = conn.user;
-  u.password = conn.password;
-  u.searchParams.set('sslmode', 'disable');
-  return u.toString();
+	const conn = getPgConn();
+	const u = new URL(`postgresql://${conn.host}:${conn.port}/${conn.db}`);
+	u.username = conn.user;
+	u.password = conn.password;
+	u.searchParams.set("sslmode", "disable");
+	return u.toString();
 };
 
 // ---------------------------------------------------------------------------
@@ -167,22 +167,22 @@ export const buildUri = (): string => {
 // ---------------------------------------------------------------------------
 
 type LauncherPaths = {
-  dir: string;
-  launcher: string;
+	dir: string;
+	launcher: string;
 };
 
-export const makeLauncher = (prefix = 'pty-launcher'): LauncherPaths => {
-  const dir = mkdtempSync(join(tmpdir(), `${prefix}-`));
-  const launcher = join(dir, 'launcher.mjs');
-  const distUrl = new URL(`file://${DIST_PSQL}`).href;
-  const code = `
+export const makeLauncher = (prefix = "pty-launcher"): LauncherPaths => {
+	const dir = mkdtempSync(join(tmpdir(), `${prefix}-`));
+	const launcher = join(dir, "launcher.mjs");
+	const distUrl = new URL(`file://${DIST_PSQL}`).href;
+	const code = `
 import { runPsql } from ${JSON.stringify(distUrl)};
 const argv = process.argv.slice(2);
 const code = await runPsql(argv);
 process.exit(code);
 `;
-  writeFileSync(launcher, code, 'utf8');
-  return { dir, launcher };
+	writeFileSync(launcher, code, "utf8");
+	return { dir, launcher };
 };
 
 // ---------------------------------------------------------------------------
@@ -190,37 +190,37 @@ process.exit(code);
 // ---------------------------------------------------------------------------
 
 export type PtyHandle = {
-  term: IPty;
-  /** Cumulative raw output (with ANSI escapes). */
-  output: () => string;
-  /** Cumulative ANSI-stripped output. */
-  clean: () => string;
-  /** Reset the cumulative buffers. */
-  clear: () => void;
-  /** Resolves when the child exits. */
-  exited: Promise<{ exitCode: number; signal?: number }>;
+	term: IPty;
+	/** Cumulative raw output (with ANSI escapes). */
+	output: () => string;
+	/** Cumulative ANSI-stripped output. */
+	clean: () => string;
+	/** Reset the cumulative buffers. */
+	clear: () => void;
+	/** Resolves when the child exits. */
+	exited: Promise<{ exitCode: number; signal?: number }>;
 };
 
 export type SpawnPsqlOpts = {
-  /**
-   * Override the binary invocation. The default uses the TS psql via the
-   * dist launcher (`node <launcher> <uri>`). Setting `PSQL_BINARY` in the
-   * environment lets you run the same spec against vanilla psql:
-   *   PSQL_BINARY=/usr/local/bin/psql RUN_INTEGRATION=1 vitest run ...
-   * The wrapper invokes it as `<bin> <uri> <args...>`.
-   */
-  binary?: string;
-  /** Extra args passed after the URI. */
-  args?: string[];
-  /** Connection URI. Defaults to `buildUri()`. */
-  uri?: string;
-  /** Cwd for the child. Defaults to a fresh mkdtemp. */
-  cwd?: string;
-  /** Initial terminal size. */
-  cols?: number;
-  rows?: number;
-  /** Extra env vars merged on top of process.env. */
-  env?: Record<string, string | undefined>;
+	/**
+	 * Override the binary invocation. The default uses the TS psql via the
+	 * dist launcher (`node <launcher> <uri>`). Setting `PSQL_BINARY` in the
+	 * environment lets you run the same spec against vanilla psql:
+	 *   PSQL_BINARY=/usr/local/bin/psql RUN_INTEGRATION=1 vitest run ...
+	 * The wrapper invokes it as `<bin> <uri> <args...>`.
+	 */
+	binary?: string;
+	/** Extra args passed after the URI. */
+	args?: string[];
+	/** Connection URI. Defaults to `buildUri()`. */
+	uri?: string;
+	/** Cwd for the child. Defaults to a fresh mkdtemp. */
+	cwd?: string;
+	/** Initial terminal size. */
+	cols?: number;
+	rows?: number;
+	/** Extra env vars merged on top of process.env. */
+	env?: Record<string, string | undefined>;
 };
 
 /**
@@ -232,73 +232,73 @@ export type SpawnPsqlOpts = {
  * once and dropped under tmpdir().
  */
 export const spawnPsql = async (
-  opts: SpawnPsqlOpts = {},
+	opts: SpawnPsqlOpts = {},
 ): Promise<PtyHandle> => {
-  const pty = await loadPty();
-  const env: Record<string, string | undefined> = {
-    ...process.env,
-    LC_ALL: 'C',
-    LANG: 'C',
-    PAGER: '',
-    PSQL_PAGER: '',
-    TERM: 'xterm-256color',
-    // Disable any startup banner / pager / pset side-effects that would
-    // race the prompt-detection logic. -X also keeps history isolated.
-    PSQL_HISTORY: '/dev/null',
-    PSQLRC: '/dev/null',
-    ...opts.env,
-  };
-  const uri = opts.uri ?? buildUri();
-  const args = opts.args ?? ['-X'];
-  const cwd = opts.cwd ?? mkdtempSync(join(tmpdir(), 'psql-pty-cwd-'));
+	const pty = await loadPty();
+	const env: Record<string, string | undefined> = {
+		...process.env,
+		LC_ALL: "C",
+		LANG: "C",
+		PAGER: "",
+		PSQL_PAGER: "",
+		TERM: "xterm-256color",
+		// Disable any startup banner / pager / pset side-effects that would
+		// race the prompt-detection logic. -X also keeps history isolated.
+		PSQL_HISTORY: "/dev/null",
+		PSQLRC: "/dev/null",
+		...opts.env,
+	};
+	const uri = opts.uri ?? buildUri();
+	const args = opts.args ?? ["-X"];
+	const cwd = opts.cwd ?? mkdtempSync(join(tmpdir(), "psql-pty-cwd-"));
 
-  const externalBinary = opts.binary ?? process.env.PSQL_BINARY ?? '';
-  // Three shapes for `file`/`argv` depending on what PSQL_BINARY points
-  // at — same logic as `regress.spec.ts`'s `resolvePsqlBinary`:
-  //   - unset:              `<node> <launcher.js> <uri>`
-  //   - `*.js` (our dist):  `<node> <path-to-js> <uri>`
-  //   - anything else (vanilla psql binary or wrapper):  `<binary> <uri>`
-  let file: string;
-  let argv: string[];
-  if (externalBinary === '') {
-    file = process.execPath;
-    argv = [makeLauncher().launcher, uri, ...args];
-  } else if (externalBinary.endsWith('.js')) {
-    file = process.execPath;
-    argv = [externalBinary, uri, ...args];
-  } else {
-    file = externalBinary;
-    argv = [uri, ...args];
-  }
+	const externalBinary = opts.binary ?? process.env.PSQL_BINARY ?? "";
+	// Three shapes for `file`/`argv` depending on what PSQL_BINARY points
+	// at — same logic as `regress.spec.ts`'s `resolvePsqlBinary`:
+	//   - unset:              `<node> <launcher.js> <uri>`
+	//   - `*.js` (our dist):  `<node> <path-to-js> <uri>`
+	//   - anything else (vanilla psql binary or wrapper):  `<binary> <uri>`
+	let file: string;
+	let argv: string[];
+	if (externalBinary === "") {
+		file = process.execPath;
+		argv = [makeLauncher().launcher, uri, ...args];
+	} else if (externalBinary.endsWith(".js")) {
+		file = process.execPath;
+		argv = [externalBinary, uri, ...args];
+	} else {
+		file = externalBinary;
+		argv = [uri, ...args];
+	}
 
-  const term = pty.spawn(file, argv, {
-    name: 'xterm-256color',
-    cols: opts.cols ?? 120,
-    rows: opts.rows ?? 30,
-    cwd,
-    env,
-  });
+	const term = pty.spawn(file, argv, {
+		name: "xterm-256color",
+		cols: opts.cols ?? 120,
+		rows: opts.rows ?? 30,
+		cwd,
+		env,
+	});
 
-  let raw = '';
-  term.onData((d) => {
-    raw += d;
-  });
+	let raw = "";
+	term.onData((d) => {
+		raw += d;
+	});
 
-  const exited = new Promise<{ exitCode: number; signal?: number }>((res) => {
-    term.onExit((e) => {
-      res({ exitCode: e.exitCode, signal: e.signal });
-    });
-  });
+	const exited = new Promise<{ exitCode: number; signal?: number }>((res) => {
+		term.onExit((e) => {
+			res({ exitCode: e.exitCode, signal: e.signal });
+		});
+	});
 
-  return {
-    term,
-    output: () => raw,
-    clean: () => stripAnsi(raw),
-    clear: () => {
-      raw = '';
-    },
-    exited,
-  };
+	return {
+		term,
+		output: () => raw,
+		clean: () => stripAnsi(raw),
+		clear: () => {
+			raw = "";
+		},
+		exited,
+	};
 };
 
 /**
@@ -325,11 +325,11 @@ export const spawnPsql = async (
 export const DEFAULT_PROMPT_RE = /\b\w+[=\-'"(][>#]\s/;
 
 export const waitForPrompt = async (
-  handle: PtyHandle,
-  opts: { timeoutMs?: number; pattern?: RegExp } = {},
+	handle: PtyHandle,
+	opts: { timeoutMs?: number; pattern?: RegExp } = {},
 ): Promise<string> => {
-  const pattern = opts.pattern ?? DEFAULT_PROMPT_RE;
-  return waitForOutput(handle, pattern, opts.timeoutMs);
+	const pattern = opts.pattern ?? DEFAULT_PROMPT_RE;
+	return waitForOutput(handle, pattern, opts.timeoutMs);
 };
 
 /**
@@ -337,30 +337,30 @@ export const waitForPrompt = async (
  * Polls every 25ms. Resolves with the matched-so-far clean buffer.
  */
 export const waitForOutput = (
-  handle: PtyHandle,
-  pattern: RegExp,
-  timeoutMs = 5_000,
+	handle: PtyHandle,
+	pattern: RegExp,
+	timeoutMs = 5_000,
 ): Promise<string> => {
-  return new Promise((res, rej) => {
-    const t0 = Date.now();
-    const tick = setInterval(() => {
-      const buf = handle.clean();
-      if (pattern.test(buf)) {
-        clearInterval(tick);
-        res(buf);
-        return;
-      }
-      if (Date.now() - t0 > timeoutMs) {
-        clearInterval(tick);
-        rej(
-          new Error(
-            `waitForOutput timed out after ${timeoutMs}ms waiting for ${pattern}\n` +
-              `--- last 1000 chars of clean output ---\n${buf.slice(-1000)}`,
-          ),
-        );
-      }
-    }, 25);
-  });
+	return new Promise((res, rej) => {
+		const t0 = Date.now();
+		const tick = setInterval(() => {
+			const buf = handle.clean();
+			if (pattern.test(buf)) {
+				clearInterval(tick);
+				res(buf);
+				return;
+			}
+			if (Date.now() - t0 > timeoutMs) {
+				clearInterval(tick);
+				rej(
+					new Error(
+						`waitForOutput timed out after ${timeoutMs}ms waiting for ${pattern}\n` +
+							`--- last 1000 chars of clean output ---\n${buf.slice(-1000)}`,
+					),
+				);
+			}
+		}, 25);
+	});
 };
 
 /**
@@ -374,7 +374,7 @@ export const waitForOutput = (
  *   - Backspace:  '\x7f'
  */
 export const sendKeys = (handle: PtyHandle, text: string): void => {
-  handle.term.write(text);
+	handle.term.write(text);
 };
 
 /**
@@ -386,16 +386,16 @@ export const sendKeys = (handle: PtyHandle, text: string): void => {
  * we capture from the LAST prompt onward.
  */
 export const captureLine = (
-  handle: PtyHandle,
-  promptRe = DEFAULT_PROMPT_RE,
+	handle: PtyHandle,
+	promptRe = DEFAULT_PROMPT_RE,
 ): string => {
-  const buf = handle.clean();
-  // Find the index just past the last prompt match.
-  let lastMatchEnd = 0;
-  for (const m of buf.matchAll(new RegExp(promptRe.source, 'g'))) {
-    lastMatchEnd = (m.index ?? 0) + m[0].length;
-  }
-  return buf.slice(lastMatchEnd);
+	const buf = handle.clean();
+	// Find the index just past the last prompt match.
+	let lastMatchEnd = 0;
+	for (const m of buf.matchAll(new RegExp(promptRe.source, "g"))) {
+		lastMatchEnd = (m.index ?? 0) + m[0].length;
+	}
+	return buf.slice(lastMatchEnd);
 };
 
 /**
@@ -403,30 +403,30 @@ export const captureLine = (
  * SIGKILL if it doesn't exit within `graceMs`.
  */
 export const kill = async (
-  handle: PtyHandle,
-  graceMs = 1_000,
+	handle: PtyHandle,
+	graceMs = 1_000,
 ): Promise<void> => {
-  try {
-    handle.term.write('\\q\r');
-  } catch {
-    // ignore
-  }
-  const timed = new Promise<'timeout'>((res) =>
-    setTimeout(() => {
-      res('timeout');
-    }, graceMs),
-  );
-  const outcome = await Promise.race([
-    handle.exited.then(() => 'exited' as const),
-    timed,
-  ]);
-  if (outcome === 'timeout') {
-    try {
-      handle.term.kill('SIGKILL');
-    } catch {
-      // ignore
-    }
-  }
+	try {
+		handle.term.write("\\q\r");
+	} catch {
+		// ignore
+	}
+	const timed = new Promise<"timeout">((res) =>
+		setTimeout(() => {
+			res("timeout");
+		}, graceMs),
+	);
+	const outcome = await Promise.race([
+		handle.exited.then(() => "exited" as const),
+		timed,
+	]);
+	if (outcome === "timeout") {
+		try {
+			handle.term.kill("SIGKILL");
+		} catch {
+			// ignore
+		}
+	}
 };
 
 // ---------------------------------------------------------------------------
@@ -435,11 +435,11 @@ export const kill = async (
 
 /** Resolve a binary on PATH, returning the absolute path or null. */
 export const which = (cmd: string): string | null => {
-  const r = spawnSync('command', ['-v', cmd], {
-    stdio: ['ignore', 'pipe', 'ignore'],
-    shell: '/bin/sh',
-  });
-  if (r.status !== 0) return null;
-  const out = r.stdout.toString('utf8').trim();
-  return out === '' ? null : out;
+	const r = spawnSync("command", ["-v", cmd], {
+		stdio: ["ignore", "pipe", "ignore"],
+		shell: "/bin/sh",
+	});
+	if (r.status !== 0) return null;
+	const out = r.stdout.toString("utf8").trim();
+	return out === "" ? null : out;
 };

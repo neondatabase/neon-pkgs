@@ -55,39 +55,38 @@
  *     `execSimple`.
  */
 
-import type { Connection, ResultSet } from '../types/connection.js';
-import type { Printer } from '../types/printer.js';
-import type { REPLContext } from '../types/repl.js';
-import type { LastErrorResult, PsqlSettings } from '../types/settings.js';
-
-import { alignedPrinter } from '../print/aligned.js';
-import { asciidocPrinter } from '../print/asciidoc.js';
-import { csvPrinter } from '../print/csv.js';
-import { htmlPrinter } from '../print/html.js';
-import { jsonPrinter } from '../print/json.js';
-import { latexLongtablePrinter, latexPrinter } from '../print/latex.js';
-import { troffMsPrinter } from '../print/troff.js';
-import { unalignedPrinter } from '../print/unaligned.js';
-import { formatDurationMs } from '../print/units.js';
-import { openPager, shouldPage } from '../print/pager.js';
-import { getQueryFout } from '../command/cmd_io.js';
-import { formatErrorReport, psqlErrorPrefix } from '../command/cmd_meta.js';
+import { getQueryFout } from "../command/cmd_io.js";
+import { formatErrorReport, psqlErrorPrefix } from "../command/cmd_meta.js";
+import { alignedPrinter } from "../print/aligned.js";
+import { asciidocPrinter } from "../print/asciidoc.js";
+import { csvPrinter } from "../print/csv.js";
+import { htmlPrinter } from "../print/html.js";
+import { jsonPrinter } from "../print/json.js";
+import { latexLongtablePrinter, latexPrinter } from "../print/latex.js";
+import { openPager, shouldPage } from "../print/pager.js";
+import { troffMsPrinter } from "../print/troff.js";
+import { unalignedPrinter } from "../print/unaligned.js";
+import { formatDurationMs } from "../print/units.js";
+import type { Connection, ResultSet } from "../types/connection.js";
+import type { Printer } from "../types/printer.js";
+import type { REPLContext } from "../types/repl.js";
+import type { LastErrorResult, PsqlSettings } from "../types/settings.js";
 
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
 
 export type QueryStats = {
-  rowsAffected: number;
-  rowsPrinted: number;
-  fetched: boolean;
-  hadError: boolean;
-  durationMs: number;
+	rowsAffected: number;
+	rowsPrinted: number;
+	fetched: boolean;
+	hadError: boolean;
+	durationMs: number;
 };
 
 export type SendQueryOpts = {
-  /** Optional one-shot output redirect (e.g., `\g FILE`). */
-  oneShotOut?: NodeJS.WritableStream;
+	/** Optional one-shot output redirect (e.g., `\g FILE`). */
+	oneShotOut?: NodeJS.WritableStream;
 };
 
 // ---------------------------------------------------------------------------
@@ -99,12 +98,12 @@ export type SendQueryOpts = {
 // to 'idle' (== 'I') keeps the simple path behaving exactly as it did before.
 // ---------------------------------------------------------------------------
 
-type TxStatusByte = 'I' | 'T' | 'E';
+type TxStatusByte = "I" | "T" | "E";
 type ConnWithTx = { txStatus?: TxStatusByte };
 
 const readTxStatus = (conn: Connection): TxStatusByte => {
-  const status = (conn as unknown as ConnWithTx).txStatus;
-  return status ?? 'I';
+	const status = (conn as unknown as ConnWithTx).txStatus;
+	return status ?? "I";
 };
 
 // ---------------------------------------------------------------------------
@@ -117,8 +116,8 @@ const readTxStatus = (conn: Connection): TxStatusByte => {
 // normalised by the scanner before reaching us.
 // ---------------------------------------------------------------------------
 
-const SAVEPOINT_NAME = 'pg_psql_temporary_savepoint';
-const CURSOR_NAME = '_psql_cursor';
+const SAVEPOINT_NAME = "pg_psql_temporary_savepoint";
+const CURSOR_NAME = "_psql_cursor";
 
 /**
  * Strip leading whitespace and `--` line / slash-star block comments from
@@ -137,142 +136,147 @@ const CURSOR_NAME = '_psql_cursor';
  * receive.
  */
 export const stripLeadingCommentsAndWS = (sql: string): string => {
-  let i = 0;
-  const n = sql.length;
-  while (i < n) {
-    const c = sql.charCodeAt(i);
-    // Whitespace per psql_scan: space, tab, CR, LF, form-feed, vertical-tab.
-    if (
-      c === 0x20 ||
-      c === 0x09 ||
-      c === 0x0a ||
-      c === 0x0d ||
-      c === 0x0c ||
-      c === 0x0b
-    ) {
-      i++;
-      continue;
-    }
-    // `--` line comment: consume up to (but not including) the next \n.
-    if (c === 0x2d && sql.charCodeAt(i + 1) === 0x2d) {
-      i += 2;
-      while (i < n && sql.charCodeAt(i) !== 0x0a) i++;
-      continue;
-    }
-    // `/* … */` block comment with nested depth tracking.
-    if (c === 0x2f && sql.charCodeAt(i + 1) === 0x2a) {
-      i += 2;
-      let depth = 1;
-      while (i < n && depth > 0) {
-        if (sql.charCodeAt(i) === 0x2f && sql.charCodeAt(i + 1) === 0x2a) {
-          depth++;
-          i += 2;
-        } else if (
-          sql.charCodeAt(i) === 0x2a &&
-          sql.charCodeAt(i + 1) === 0x2f
-        ) {
-          depth--;
-          i += 2;
-        } else {
-          i++;
-        }
-      }
-      continue;
-    }
-    break;
-  }
-  return i === 0 ? sql : sql.slice(i);
+	let i = 0;
+	const n = sql.length;
+	while (i < n) {
+		const c = sql.charCodeAt(i);
+		// Whitespace per psql_scan: space, tab, CR, LF, form-feed, vertical-tab.
+		if (
+			c === 0x20 ||
+			c === 0x09 ||
+			c === 0x0a ||
+			c === 0x0d ||
+			c === 0x0c ||
+			c === 0x0b
+		) {
+			i++;
+			continue;
+		}
+		// `--` line comment: consume up to (but not including) the next \n.
+		if (c === 0x2d && sql.charCodeAt(i + 1) === 0x2d) {
+			i += 2;
+			while (i < n && sql.charCodeAt(i) !== 0x0a) i++;
+			continue;
+		}
+		// `/* … */` block comment with nested depth tracking.
+		if (c === 0x2f && sql.charCodeAt(i + 1) === 0x2a) {
+			i += 2;
+			let depth = 1;
+			while (i < n && depth > 0) {
+				if (
+					sql.charCodeAt(i) === 0x2f &&
+					sql.charCodeAt(i + 1) === 0x2a
+				) {
+					depth++;
+					i += 2;
+				} else if (
+					sql.charCodeAt(i) === 0x2a &&
+					sql.charCodeAt(i + 1) === 0x2f
+				) {
+					depth--;
+					i += 2;
+				} else {
+					i++;
+				}
+			}
+			continue;
+		}
+		break;
+	}
+	return i === 0 ? sql : sql.slice(i);
 };
 
 /** Strip leading whitespace and SQL comments, then upper-case for matching. */
 const peekKeywords = (sql: string, count = 3): string[] => {
-  // Skip leading whitespace / SQL line + block comments so we look at the
-  // statement's verb regardless of surrounding boilerplate.
-  let i = 0;
-  while (i < sql.length) {
-    const ch = sql[i];
-    if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r') {
-      i++;
-      continue;
-    }
-    if (ch === '-' && sql[i + 1] === '-') {
-      const nl = sql.indexOf('\n', i + 2);
-      if (nl === -1) return [];
-      i = nl + 1;
-      continue;
-    }
-    if (ch === '/' && sql[i + 1] === '*') {
-      const end = sql.indexOf('*/', i + 2);
-      if (end === -1) return [];
-      i = end + 2;
-      continue;
-    }
-    break;
-  }
-  const tail = sql.slice(i);
-  // Tokenise on whitespace + a small set of punctuation that can immediately
-  // follow a keyword (semicolon, comma, open-paren).
-  const words = tail.split(/[\s,;()]+/u, count + 1);
-  return words.slice(0, count).map((w) => w.toUpperCase());
+	// Skip leading whitespace / SQL line + block comments so we look at the
+	// statement's verb regardless of surrounding boilerplate.
+	let i = 0;
+	while (i < sql.length) {
+		const ch = sql[i];
+		if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
+			i++;
+			continue;
+		}
+		if (ch === "-" && sql[i + 1] === "-") {
+			const nl = sql.indexOf("\n", i + 2);
+			if (nl === -1) return [];
+			i = nl + 1;
+			continue;
+		}
+		if (ch === "/" && sql[i + 1] === "*") {
+			const end = sql.indexOf("*/", i + 2);
+			if (end === -1) return [];
+			i = end + 2;
+			continue;
+		}
+		break;
+	}
+	const tail = sql.slice(i);
+	// Tokenise on whitespace + a small set of punctuation that can immediately
+	// follow a keyword (semicolon, comma, open-paren).
+	const words = tail.split(/[\s,;()]+/u, count + 1);
+	return words.slice(0, count).map((w) => w.toUpperCase());
 };
 
 /** Mirror of `command_no_begin()` in psql/common.c. */
 const commandNoBegin = (sql: string): boolean => {
-  const [w0, w1, w2, w3] = peekKeywords(sql, 4);
-  if (!w0) return false;
-  switch (w0) {
-    case 'ABORT':
-    case 'BEGIN':
-    case 'COMMIT':
-    case 'END':
-    case 'ROLLBACK':
-    case 'START':
-    case 'SAVEPOINT':
-    case 'RELEASE':
-      return true;
-    case 'PREPARE':
-      return w1 === 'TRANSACTION';
-    case 'VACUUM':
-      return true;
-    case 'CLUSTER':
-      // CLUSTER without an explicit argument runs over the whole DB and
-      // cannot be transactional.
-      return w1 === undefined || w1 === '';
-    case 'CREATE':
-      if (w1 === 'DATABASE' || w1 === 'TABLESPACE') return true;
-      // CREATE INDEX CONCURRENTLY / CREATE UNIQUE INDEX CONCURRENTLY cannot
-      // run inside a transaction block — psql must send them bare even with
-      // AUTOCOMMIT=off (review item #24).
-      if (w1 === 'INDEX' && w2 === 'CONCURRENTLY') return true;
-      if (w1 === 'UNIQUE' && w2 === 'INDEX' && w3 === 'CONCURRENTLY') {
-        return true;
-      }
-      return false;
-    case 'DROP':
-      // DROP DATABASE / TABLESPACE / INDEX CONCURRENTLY. (There is no
-      // `DROP TABLE … CONCURRENTLY` in PostgreSQL — removed that bogus case.)
-      if (w1 === 'DATABASE' || w1 === 'TABLESPACE') return true;
-      if (w1 === 'INDEX' && w2 === 'CONCURRENTLY') return true;
-      return false;
-    case 'REINDEX':
-      // REINDEX DATABASE / SYSTEM / INDEX CONCURRENTLY / TABLE CONCURRENTLY.
-      if (w1 === 'DATABASE' || w1 === 'SYSTEM') return true;
-      if (w1 === 'INDEX' && w2 === 'CONCURRENTLY') return true;
-      if (w1 === 'TABLE' && w2 === 'CONCURRENTLY') return true;
-      return false;
-    case 'ALTER':
-      return w1 === 'SYSTEM';
-    case 'DISCARD':
-      return w1 === 'ALL';
-    default:
-      return false;
-  }
+	const [w0, w1, w2, w3] = peekKeywords(sql, 4);
+	if (!w0) return false;
+	switch (w0) {
+		case "ABORT":
+		case "BEGIN":
+		case "COMMIT":
+		case "END":
+		case "ROLLBACK":
+		case "START":
+		case "SAVEPOINT":
+		case "RELEASE":
+			return true;
+		case "PREPARE":
+			return w1 === "TRANSACTION";
+		case "VACUUM":
+			return true;
+		case "CLUSTER":
+			// CLUSTER without an explicit argument runs over the whole DB and
+			// cannot be transactional.
+			return w1 === undefined || w1 === "";
+		case "CREATE":
+			if (w1 === "DATABASE" || w1 === "TABLESPACE") return true;
+			// CREATE INDEX CONCURRENTLY / CREATE UNIQUE INDEX CONCURRENTLY cannot
+			// run inside a transaction block — psql must send them bare even with
+			// AUTOCOMMIT=off (review item #24).
+			if (w1 === "INDEX" && w2 === "CONCURRENTLY") return true;
+			if (w1 === "UNIQUE" && w2 === "INDEX" && w3 === "CONCURRENTLY") {
+				return true;
+			}
+			return false;
+		case "DROP":
+			// DROP DATABASE / TABLESPACE / INDEX CONCURRENTLY. (There is no
+			// `DROP TABLE … CONCURRENTLY` in PostgreSQL — removed that bogus case.)
+			if (w1 === "DATABASE" || w1 === "TABLESPACE") return true;
+			if (w1 === "INDEX" && w2 === "CONCURRENTLY") return true;
+			return false;
+		case "REINDEX":
+			// REINDEX DATABASE / SYSTEM / INDEX CONCURRENTLY / TABLE CONCURRENTLY.
+			if (w1 === "DATABASE" || w1 === "SYSTEM") return true;
+			if (w1 === "INDEX" && w2 === "CONCURRENTLY") return true;
+			if (w1 === "TABLE" && w2 === "CONCURRENTLY") return true;
+			return false;
+		case "ALTER":
+			return w1 === "SYSTEM";
+		case "DISCARD":
+			return w1 === "ALL";
+		default:
+			return false;
+	}
 };
 
 /** True when the statement opens with SELECT / VALUES / TABLE / WITH. */
 const isSelectCommand = (sql: string): boolean => {
-  const [w0] = peekKeywords(sql, 1);
-  return w0 === 'SELECT' || w0 === 'VALUES' || w0 === 'TABLE' || w0 === 'WITH';
+	const [w0] = peekKeywords(sql, 1);
+	return (
+		w0 === "SELECT" || w0 === "VALUES" || w0 === "TABLE" || w0 === "WITH"
+	);
 };
 
 /**
@@ -282,13 +286,13 @@ const isSelectCommand = (sql: string): boolean => {
  * matching RELEASE because the named savepoint no longer exists.
  */
 const destroysSavepoint = (sql: string): boolean => {
-  const [w0] = peekKeywords(sql, 1);
-  return (
-    w0 === 'COMMIT' ||
-    w0 === 'ROLLBACK' ||
-    w0 === 'SAVEPOINT' ||
-    w0 === 'RELEASE'
-  );
+	const [w0] = peekKeywords(sql, 1);
+	return (
+		w0 === "COMMIT" ||
+		w0 === "ROLLBACK" ||
+		w0 === "SAVEPOINT" ||
+		w0 === "RELEASE"
+	);
 };
 
 // ---------------------------------------------------------------------------
@@ -299,29 +303,29 @@ const destroysSavepoint = (sql: string): boolean => {
 // ---------------------------------------------------------------------------
 
 const pickPrinter = (settings: PsqlSettings): Printer => {
-  switch (settings.popt.topt.format) {
-    case 'aligned':
-    case 'wrapped':
-      return alignedPrinter;
-    case 'unaligned':
-      return unalignedPrinter;
-    case 'csv':
-      return csvPrinter;
-    case 'json':
-      return jsonPrinter;
-    case 'html':
-      return htmlPrinter;
-    case 'asciidoc':
-      return asciidocPrinter;
-    case 'latex':
-      return latexPrinter;
-    case 'latex-longtable':
-      return latexLongtablePrinter;
-    case 'troff-ms':
-      return troffMsPrinter;
-    default:
-      return alignedPrinter;
-  }
+	switch (settings.popt.topt.format) {
+		case "aligned":
+		case "wrapped":
+			return alignedPrinter;
+		case "unaligned":
+			return unalignedPrinter;
+		case "csv":
+			return csvPrinter;
+		case "json":
+			return jsonPrinter;
+		case "html":
+			return htmlPrinter;
+		case "asciidoc":
+			return asciidocPrinter;
+		case "latex":
+			return latexPrinter;
+		case "latex-longtable":
+			return latexLongtablePrinter;
+		case "troff-ms":
+			return troffMsPrinter;
+		default:
+			return alignedPrinter;
+	}
 };
 
 /**
@@ -331,11 +335,11 @@ const pickPrinter = (settings: PsqlSettings): Printer => {
  * `\o FILE` (WP-15) > the REPL context's `stdout`.
  */
 export const pickOut = (
-  ctx: REPLContext,
-  oneShot?: NodeJS.WritableStream,
+	ctx: REPLContext,
+	oneShot?: NodeJS.WritableStream,
 ): NodeJS.WritableStream => {
-  if (oneShot) return oneShot;
-  return getQueryFout(ctx.settings) ?? ctx.stdout;
+	if (oneShot) return oneShot;
+	return getQueryFout(ctx.settings) ?? ctx.stdout;
 };
 
 // ---------------------------------------------------------------------------
@@ -347,27 +351,27 @@ export const pickOut = (
 // ---------------------------------------------------------------------------
 
 const readAutocommit = (settings: PsqlSettings): boolean =>
-  settings.vars.asBool('AUTOCOMMIT', true);
+	settings.vars.asBool("AUTOCOMMIT", true);
 
 const readOnErrorRollback = (
-  settings: PsqlSettings,
-): 'off' | 'on' | 'interactive' => {
-  const raw = settings.vars.get('ON_ERROR_ROLLBACK');
-  if (raw === undefined) return settings.onErrorRollback;
-  const v = raw.toLowerCase();
-  if (v === 'interactive') return 'interactive';
-  if (v === 'on' || v === 'true' || v === 'yes' || v === '1') return 'on';
-  return 'off';
+	settings: PsqlSettings,
+): "off" | "on" | "interactive" => {
+	const raw = settings.vars.get("ON_ERROR_ROLLBACK");
+	if (raw === undefined) return settings.onErrorRollback;
+	const v = raw.toLowerCase();
+	if (v === "interactive") return "interactive";
+	if (v === "on" || v === "true" || v === "yes" || v === "1") return "on";
+	return "off";
 };
 
 const readFetchCount = (settings: PsqlSettings): number => {
-  const v = settings.vars.asInt('FETCH_COUNT', settings.fetchCount);
-  if (typeof v !== 'number') return 0;
-  return Math.max(0, v | 0);
+	const v = settings.vars.asInt("FETCH_COUNT", settings.fetchCount);
+	if (typeof v !== "number") return 0;
+	return Math.max(0, v | 0);
 };
 
 const readSinglestep = (settings: PsqlSettings): boolean =>
-  settings.singlestep || settings.vars.asBool('SINGLESTEP', false);
+	settings.singlestep || settings.vars.asBool("SINGLESTEP", false);
 
 /**
  * SHOW_ALL_RESULTS controls multi-statement `\;` printing. Default 'on' —
@@ -376,7 +380,7 @@ const readSinglestep = (settings: PsqlSettings): boolean =>
  * `PrintQueryResults` in common.c).
  */
 const readShowAllResults = (settings: PsqlSettings): boolean =>
-  settings.vars.asBool('SHOW_ALL_RESULTS', true);
+	settings.vars.asBool("SHOW_ALL_RESULTS", true);
 
 // ---------------------------------------------------------------------------
 // Error printing — mirrors mainloop's `writeError` format. We keep it local
@@ -395,7 +399,7 @@ const readShowAllResults = (settings: PsqlSettings): boolean =>
 // ---------------------------------------------------------------------------
 
 const writeError = (ctx: REPLContext, message: string): void => {
-  ctx.stderr.write(`psql: ERROR:  ${message}\n`);
+	ctx.stderr.write(`psql: ERROR:  ${message}\n`);
 };
 
 /**
@@ -414,22 +418,22 @@ const writeError = (ctx: REPLContext, message: string): void => {
  * Exported so the bind-path in mainloop can share the renderer.
  */
 export const writeQueryError = (
-  ctx: REPLContext,
-  fallbackMessage: string,
+	ctx: REPLContext,
+	fallbackMessage: string,
 ): void => {
-  const e = ctx.settings.lastErrorResult;
-  if (!e || (!e.message && !e.code && !e.sqlstate)) {
-    writeError(ctx, fallbackMessage);
-    return;
-  }
-  const lines = formatErrorReport(
-    e,
-    ctx.settings.verbosity,
-    ctx.settings.showContext,
-  );
-  const prefix = psqlErrorPrefix(ctx.settings);
-  const prefixed = [prefix + lines[0], ...lines.slice(1)];
-  ctx.stderr.write(prefixed.join('\n') + '\n');
+	const e = ctx.settings.lastErrorResult;
+	if (!e || (!e.message && !e.code && !e.sqlstate)) {
+		writeError(ctx, fallbackMessage);
+		return;
+	}
+	const lines = formatErrorReport(
+		e,
+		ctx.settings.verbosity,
+		ctx.settings.showContext,
+	);
+	const prefix = psqlErrorPrefix(ctx.settings);
+	const prefixed = [prefix + lines[0], ...lines.slice(1)];
+	ctx.stderr.write(prefixed.join("\n") + "\n");
 };
 
 /**
@@ -447,38 +451,38 @@ export const writeQueryError = (
  * formatter skips the `LINE`/caret block instead of mis-pointing.
  */
 const normaliseSqlAndPosition = (
-  sqlText: string,
-  position: string | undefined,
+	sqlText: string,
+	position: string | undefined,
 ): { sqlText: string; position: string | undefined } => {
-  let leading = 0;
-  while (leading < sqlText.length) {
-    const ch = sqlText.charCodeAt(leading);
-    // Match psql_scan's whitespace set: space, tab, CR, LF, form-feed.
-    if (
-      ch !== 0x20 &&
-      ch !== 0x09 &&
-      ch !== 0x0a &&
-      ch !== 0x0d &&
-      ch !== 0x0c
-    ) {
-      break;
-    }
-    leading++;
-  }
-  if (leading === 0) return { sqlText, position };
+	let leading = 0;
+	while (leading < sqlText.length) {
+		const ch = sqlText.charCodeAt(leading);
+		// Match psql_scan's whitespace set: space, tab, CR, LF, form-feed.
+		if (
+			ch !== 0x20 &&
+			ch !== 0x09 &&
+			ch !== 0x0a &&
+			ch !== 0x0d &&
+			ch !== 0x0c
+		) {
+			break;
+		}
+		leading++;
+	}
+	if (leading === 0) return { sqlText, position };
 
-  const trimmed = sqlText.slice(leading);
-  if (typeof position !== 'string') return { sqlText: trimmed, position };
+	const trimmed = sqlText.slice(leading);
+	if (typeof position !== "string") return { sqlText: trimmed, position };
 
-  const original = parseInt(position, 10);
-  if (!Number.isFinite(original) || original <= 0) {
-    return { sqlText: trimmed, position };
-  }
-  const rebased = original - leading;
-  if (rebased <= 0 || rebased > trimmed.length) {
-    return { sqlText: trimmed, position: undefined };
-  }
-  return { sqlText: trimmed, position: String(rebased) };
+	const original = parseInt(position, 10);
+	if (!Number.isFinite(original) || original <= 0) {
+		return { sqlText: trimmed, position };
+	}
+	const rebased = original - leading;
+	if (rebased <= 0 || rebased > trimmed.length) {
+		return { sqlText: trimmed, position: undefined };
+	}
+	return { sqlText: trimmed, position: String(rebased) };
 };
 
 /**
@@ -498,41 +502,41 @@ const normaliseSqlAndPosition = (
  * buffer noise carried over from prior backslash commands.
  */
 export const captureLastError = (
-  settings: PsqlSettings,
-  err: unknown,
-  sqlText: string,
+	settings: PsqlSettings,
+	err: unknown,
+	sqlText: string,
 ): string => {
-  const fallbackMessage = err instanceof Error ? err.message : String(err);
-  const e = (err ?? {}) as Partial<LastErrorResult> & { message?: string };
-  const code = e.code;
-  const normalised = normaliseSqlAndPosition(sqlText, e.position);
-  settings.lastErrorResult = {
-    severity: e.severity,
-    code,
-    // Keep `sqlstate` as an alias for legacy callers / tests.
-    sqlstate: code,
-    message: e.message ?? fallbackMessage,
-    detail: e.detail,
-    hint: e.hint,
-    position: normalised.position,
-    internalPosition: e.internalPosition,
-    internalQuery: e.internalQuery,
-    where: e.where,
-    schema: e.schema,
-    table: e.table,
-    column: e.column,
-    dataType: e.dataType,
-    constraint: e.constraint,
-    file: e.file,
-    line: e.line,
-    routine: e.routine,
-    sqlText: normalised.sqlText,
-  };
-  return settings.lastErrorResult.message ?? fallbackMessage;
+	const fallbackMessage = err instanceof Error ? err.message : String(err);
+	const e = (err ?? {}) as Partial<LastErrorResult> & { message?: string };
+	const code = e.code;
+	const normalised = normaliseSqlAndPosition(sqlText, e.position);
+	settings.lastErrorResult = {
+		severity: e.severity,
+		code,
+		// Keep `sqlstate` as an alias for legacy callers / tests.
+		sqlstate: code,
+		message: e.message ?? fallbackMessage,
+		detail: e.detail,
+		hint: e.hint,
+		position: normalised.position,
+		internalPosition: e.internalPosition,
+		internalQuery: e.internalQuery,
+		where: e.where,
+		schema: e.schema,
+		table: e.table,
+		column: e.column,
+		dataType: e.dataType,
+		constraint: e.constraint,
+		file: e.file,
+		line: e.line,
+		routine: e.routine,
+		sqlText: normalised.sqlText,
+	};
+	return settings.lastErrorResult.message ?? fallbackMessage;
 };
 
-const recordError = (ctx: REPLContext, err: unknown, sqlText = ''): string =>
-  captureLastError(ctx.settings, err, sqlText);
+const recordError = (ctx: REPLContext, err: unknown, sqlText = ""): string =>
+	captureLastError(ctx.settings, err, sqlText);
 
 /**
  * Update the per-statement diagnostic psql variables that upstream's
@@ -558,25 +562,25 @@ const recordError = (ctx: REPLContext, err: unknown, sqlText = ''): string =>
  * sendQuery}) can share the same updater.
  */
 export const refreshErrorVars = (
-  settings: PsqlSettings,
-  outcome: { kind: 'success'; rowCount?: number | null } | { kind: 'error' },
+	settings: PsqlSettings,
+	outcome: { kind: "success"; rowCount?: number | null } | { kind: "error" },
 ): void => {
-  const { vars } = settings;
-  if (outcome.kind === 'error') {
-    const last = settings.lastErrorResult;
-    const code = last?.code ?? last?.sqlstate ?? 'XX000';
-    const message = last?.message ?? '';
-    vars.set('LAST_ERROR_MESSAGE', message);
-    vars.set('LAST_ERROR_SQLSTATE', code);
-    vars.set('SQLSTATE', code);
-    vars.set('ERROR', 'true');
-    vars.set('ROW_COUNT', '0');
-    return;
-  }
-  vars.set('SQLSTATE', '00000');
-  vars.set('ERROR', 'false');
-  const rc = outcome.rowCount ?? 0;
-  vars.set('ROW_COUNT', String(rc));
+	const { vars } = settings;
+	if (outcome.kind === "error") {
+		const last = settings.lastErrorResult;
+		const code = last?.code ?? last?.sqlstate ?? "XX000";
+		const message = last?.message ?? "";
+		vars.set("LAST_ERROR_MESSAGE", message);
+		vars.set("LAST_ERROR_SQLSTATE", code);
+		vars.set("SQLSTATE", code);
+		vars.set("ERROR", "true");
+		vars.set("ROW_COUNT", "0");
+		return;
+	}
+	vars.set("SQLSTATE", "00000");
+	vars.set("ERROR", "false");
+	const rc = outcome.rowCount ?? 0;
+	vars.set("ROW_COUNT", String(rc));
 };
 
 // ---------------------------------------------------------------------------
@@ -588,49 +592,49 @@ export const refreshErrorVars = (
 // ---------------------------------------------------------------------------
 
 const readOneLine = (stdin: NodeJS.ReadableStream): Promise<string> =>
-  new Promise<string>((resolve) => {
-    let buf = '';
-    let resolved = false;
-    const onData = (chunk: Buffer | string): void => {
-      buf += chunk.toString();
-      const nl = buf.indexOf('\n');
-      if (nl !== -1) {
-        const line = buf.slice(0, nl);
-        cleanup();
-        if (!resolved) {
-          resolved = true;
-          resolve(line);
-        }
-      }
-    };
-    const onEnd = (): void => {
-      cleanup();
-      if (!resolved) {
-        resolved = true;
-        resolve(buf);
-      }
-    };
-    const cleanup = (): void => {
-      stdin.off('data', onData);
-      stdin.off('end', onEnd);
-      stdin.off('close', onEnd);
-    };
-    stdin.on('data', onData);
-    stdin.once('end', onEnd);
-    stdin.once('close', onEnd);
-  });
+	new Promise<string>((resolve) => {
+		let buf = "";
+		let resolved = false;
+		const onData = (chunk: Buffer | string): void => {
+			buf += chunk.toString();
+			const nl = buf.indexOf("\n");
+			if (nl !== -1) {
+				const line = buf.slice(0, nl);
+				cleanup();
+				if (!resolved) {
+					resolved = true;
+					resolve(line);
+				}
+			}
+		};
+		const onEnd = (): void => {
+			cleanup();
+			if (!resolved) {
+				resolved = true;
+				resolve(buf);
+			}
+		};
+		const cleanup = (): void => {
+			stdin.off("data", onData);
+			stdin.off("end", onEnd);
+			stdin.off("close", onEnd);
+		};
+		stdin.on("data", onData);
+		stdin.once("end", onEnd);
+		stdin.once("close", onEnd);
+	});
 
 const confirmSinglestep = async (
-  ctx: REPLContext,
-  sql: string,
+	ctx: REPLContext,
+	sql: string,
 ): Promise<boolean> => {
-  ctx.stderr.write(
-    `***(Single step mode: verify command)*******************************************\n` +
-      `${sql}\n` +
-      `***(press return to proceed or enter x and return to cancel)********************\n`,
-  );
-  const line = await readOneLine(ctx.stdin);
-  return !line.trim().toLowerCase().startsWith('x');
+	ctx.stderr.write(
+		`***(Single step mode: verify command)*******************************************\n` +
+			`${sql}\n` +
+			`***(press return to proceed or enter x and return to cancel)********************\n`,
+	);
+	const line = await readOneLine(ctx.stdin);
+	return !line.trim().toLowerCase().startsWith("x");
 };
 
 // ---------------------------------------------------------------------------
@@ -649,16 +653,16 @@ const confirmSinglestep = async (
  * the server sent — we round-trip it through our parser).
  */
 const formatCommandTag = (rs: ResultSet): string => {
-  const command = (rs.command || '').trim();
-  if (command.length === 0) return '';
-  if (command === 'INSERT') {
-    // INSERT is the only tag with the legacy oid in front of rowCount.
-    return `INSERT ${rs.oid ?? 0} ${rs.rowCount ?? 0}`;
-  }
-  if (rs.rowCount !== null && rs.rowCount !== undefined) {
-    return `${command} ${rs.rowCount}`;
-  }
-  return command;
+	const command = (rs.command || "").trim();
+	if (command.length === 0) return "";
+	if (command === "INSERT") {
+		// INSERT is the only tag with the legacy oid in front of rowCount.
+		return `INSERT ${rs.oid ?? 0} ${rs.rowCount ?? 0}`;
+	}
+	if (rs.rowCount !== null && rs.rowCount !== undefined) {
+		return `${command} ${rs.rowCount}`;
+	}
+	return command;
 };
 
 /**
@@ -669,146 +673,146 @@ const formatCommandTag = (rs: ResultSet): string => {
  * decision inputs (e.g. tests that inject a fake `output`).
  */
 const pickPagerDecision = (
-  ctx: REPLContext,
-  results: ResultSet[],
-  out: NodeJS.WritableStream,
+	ctx: REPLContext,
+	results: ResultSet[],
+	out: NodeJS.WritableStream,
 ): boolean => {
-  const popt = ctx.settings.popt.topt;
-  // Pager off → never page (cheap exit, no looping needed).
-  if (popt.pager === 'off') return false;
-  // `\o FILE` (or `\g FILE`) wins over pager. If the queryFout is set, the
-  // pager must not activate even when popt.pager === 'always'.
-  const redirectedOutput = getQueryFout(ctx.settings) !== null;
-  if (redirectedOutput) return false;
+	const popt = ctx.settings.popt.topt;
+	// Pager off → never page (cheap exit, no looping needed).
+	if (popt.pager === "off") return false;
+	// `\o FILE` (or `\g FILE`) wins over pager. If the queryFout is set, the
+	// pager must not activate even when popt.pager === 'always'.
+	const redirectedOutput = getQueryFout(ctx.settings) !== null;
+	if (redirectedOutput) return false;
 
-  const showAll = readShowAllResults(ctx.settings);
-  const lastIdx = results.length - 1;
-  for (let i = 0; i < results.length; i++) {
-    const rs = results[i];
-    if (rs.fields.length === 0) continue;
-    if (!(showAll || i === lastIdx)) continue;
-    const decision = shouldPage({
-      pager: popt.pager,
-      pagerMinLines: popt.pagerMinLines,
-      rowCount: rs.rows.length,
-      colCount: rs.fields.length,
-      output: out,
-      redirectedOutput,
-    });
-    if (decision) return true;
-  }
-  return false;
+	const showAll = readShowAllResults(ctx.settings);
+	const lastIdx = results.length - 1;
+	for (let i = 0; i < results.length; i++) {
+		const rs = results[i];
+		if (rs.fields.length === 0) continue;
+		if (!(showAll || i === lastIdx)) continue;
+		const decision = shouldPage({
+			pager: popt.pager,
+			pagerMinLines: popt.pagerMinLines,
+			rowCount: rs.rows.length,
+			colCount: rs.fields.length,
+			output: out,
+			redirectedOutput,
+		});
+		if (decision) return true;
+	}
+	return false;
 };
 
 const renderResultSets = async (
-  ctx: REPLContext,
-  results: ResultSet[],
-  out: NodeJS.WritableStream,
+	ctx: REPLContext,
+	results: ResultSet[],
+	out: NodeJS.WritableStream,
 ): Promise<{
-  rowsAffected: number;
-  rowsPrinted: number;
-  lastRowCount: number | null;
+	rowsAffected: number;
+	rowsPrinted: number;
+	lastRowCount: number | null;
 }> => {
-  const printer = pickPrinter(ctx.settings);
-  let rowsAffected = 0;
-  let rowsPrinted = 0;
-  // When SHOW_ALL_RESULTS is off and we have a `\;`-separated batch, upstream
-  // only prints the LAST result set. The tally counters still walk every
-  // result so QueryStats stays consistent — only the printer call is gated.
-  const showAll = readShowAllResults(ctx.settings);
-  const lastIdx = results.length - 1;
-  const tuplesOnly = ctx.settings.popt.topt.tuplesOnly;
+	const printer = pickPrinter(ctx.settings);
+	let rowsAffected = 0;
+	let rowsPrinted = 0;
+	// When SHOW_ALL_RESULTS is off and we have a `\;`-separated batch, upstream
+	// only prints the LAST result set. The tally counters still walk every
+	// result so QueryStats stays consistent — only the printer call is gated.
+	const showAll = readShowAllResults(ctx.settings);
+	const lastIdx = results.length - 1;
+	const tuplesOnly = ctx.settings.popt.topt.tuplesOnly;
 
-  // Pager wrapping. If the active topt.pager + heuristics call for it, route
-  // the printer through a spawned pager (PAGER / PSQL_PAGER, default `less`
-  // on POSIX). The pager is opened ONCE per renderResultSets call so a `\;`
-  // batch ends up in a single pager session, matching upstream. SIGPIPE /
-  // EPIPE handling lives inside the pager module.
-  const wantPager = pickPagerDecision(ctx, results, out);
-  const pager = wantPager
-    ? openPager({
-        pager: ctx.settings.popt.topt.pager,
-        pagerMinLines: ctx.settings.popt.topt.pagerMinLines,
-        stdout: out,
-        // shouldPage already verified pager-on conditions; force-spawn at
-        // the openPager level by re-passing the topt setting.
-      })
-    : null;
-  const sink: NodeJS.WritableStream = pager?.spawned ? pager.out : out;
+	// Pager wrapping. If the active topt.pager + heuristics call for it, route
+	// the printer through a spawned pager (PAGER / PSQL_PAGER, default `less`
+	// on POSIX). The pager is opened ONCE per renderResultSets call so a `\;`
+	// batch ends up in a single pager session, matching upstream. SIGPIPE /
+	// EPIPE handling lives inside the pager module.
+	const wantPager = pickPagerDecision(ctx, results, out);
+	const pager = wantPager
+		? openPager({
+				pager: ctx.settings.popt.topt.pager,
+				pagerMinLines: ctx.settings.popt.topt.pagerMinLines,
+				stdout: out,
+				// shouldPage already verified pager-on conditions; force-spawn at
+				// the openPager level by re-passing the topt setting.
+			})
+		: null;
+	const sink: NodeJS.WritableStream = pager?.spawned ? pager.out : out;
 
-  try {
-    for (let i = 0; i < results.length; i++) {
-      const rs = results[i];
-      const shouldEmit = showAll || i === lastIdx;
-      if (rs.copyOutBytes && rs.copyOutBytes.length > 0) {
-        // `COPY ... TO STDOUT` segment of a `\;`-chained batch — emit the
-        // accumulated CopyData payloads at the result's position in the
-        // chain (upstream `handleCopyOut` writes the bytes to
-        // `pset.queryFout`, which under a normal dispatch is the active
-        // stdout). Render unconditionally regardless of SHOW_ALL_RESULTS:
-        // upstream gates `\;`-chain row tables on `show_all_results`, but
-        // the COPY data flows directly to the output stream and is not
-        // affected by the flag. Matches the regress baseline ordering for
-        // `... \; COPY x TO STDOUT \; ...`.
-        for (const chunk of rs.copyOutBytes) {
-          sink.write(chunk);
-        }
-      }
-      if (rs.fields.length === 0) {
-        // Non-tuples-producing commands (INSERT/UPDATE/DELETE/DDL) — emit the
-        // CommandComplete tag instead of running the table printer (which
-        // would render an empty `(0 rows)` block). Suppressed in tuples-only
-        // mode (`\t`) and in `--quiet` mode to match upstream
-        // (PSQLexec calls SetResultVariables which only prints the tag
-        // when !pset.quiet). Also suppressed when the result represents a
-        // COPY-out segment whose bytes we already streamed above —
-        // upstream's `handleCopyOut` doesn't emit the `COPY N` tag on the
-        // queryFout stream; the tag goes to the status stream which we
-        // route through the diagnostic vars rather than stdout.
-        if (
-          shouldEmit &&
-          !tuplesOnly &&
-          !ctx.settings.quiet &&
-          !rs.copyOutBytes
-        ) {
-          const tag = formatCommandTag(rs);
-          if (tag.length > 0) sink.write(`${tag}\n`);
-        }
-        // rowCount is the affected-row total when libpq sets it.
-        rowsAffected += rs.rowCount ?? 0;
-      } else {
-        if (shouldEmit) {
-          await printer.printQuery(rs, ctx.settings.popt, sink);
-        }
-        rowsPrinted += rs.rows.length;
-      }
-    }
-  } finally {
-    if (pager?.spawned) {
-      // End the pager stdin and wait for it to exit. We swallow errors here:
-      // the user may have closed the pager early (SIGPIPE → EPIPE) and our
-      // callers should not see that as a query failure.
-      try {
-        await pager.close();
-      } catch {
-        // ignore
-      }
-    }
-  }
-  // libpq's `PQcmdTuples(lastResult)` semantic: ROW_COUNT mirrors the LAST
-  // result set's affected-row count (or returned-row count for tuples-
-  // producing commands). For SELECT-shaped results the wire layer doesn't
-  // populate rs.rowCount until CommandComplete arrives, but the array shape
-  // (`rs.rows.length`) is the authoritative count.
-  const lastRowCount =
-    results.length === 0
-      ? null
-      : (() => {
-          const rs = results[results.length - 1];
-          if (rs.fields.length > 0) return rs.rows.length;
-          return rs.rowCount ?? null;
-        })();
-  return { rowsAffected, rowsPrinted, lastRowCount };
+	try {
+		for (let i = 0; i < results.length; i++) {
+			const rs = results[i];
+			const shouldEmit = showAll || i === lastIdx;
+			if (rs.copyOutBytes && rs.copyOutBytes.length > 0) {
+				// `COPY ... TO STDOUT` segment of a `\;`-chained batch — emit the
+				// accumulated CopyData payloads at the result's position in the
+				// chain (upstream `handleCopyOut` writes the bytes to
+				// `pset.queryFout`, which under a normal dispatch is the active
+				// stdout). Render unconditionally regardless of SHOW_ALL_RESULTS:
+				// upstream gates `\;`-chain row tables on `show_all_results`, but
+				// the COPY data flows directly to the output stream and is not
+				// affected by the flag. Matches the regress baseline ordering for
+				// `... \; COPY x TO STDOUT \; ...`.
+				for (const chunk of rs.copyOutBytes) {
+					sink.write(chunk);
+				}
+			}
+			if (rs.fields.length === 0) {
+				// Non-tuples-producing commands (INSERT/UPDATE/DELETE/DDL) — emit the
+				// CommandComplete tag instead of running the table printer (which
+				// would render an empty `(0 rows)` block). Suppressed in tuples-only
+				// mode (`\t`) and in `--quiet` mode to match upstream
+				// (PSQLexec calls SetResultVariables which only prints the tag
+				// when !pset.quiet). Also suppressed when the result represents a
+				// COPY-out segment whose bytes we already streamed above —
+				// upstream's `handleCopyOut` doesn't emit the `COPY N` tag on the
+				// queryFout stream; the tag goes to the status stream which we
+				// route through the diagnostic vars rather than stdout.
+				if (
+					shouldEmit &&
+					!tuplesOnly &&
+					!ctx.settings.quiet &&
+					!rs.copyOutBytes
+				) {
+					const tag = formatCommandTag(rs);
+					if (tag.length > 0) sink.write(`${tag}\n`);
+				}
+				// rowCount is the affected-row total when libpq sets it.
+				rowsAffected += rs.rowCount ?? 0;
+			} else {
+				if (shouldEmit) {
+					await printer.printQuery(rs, ctx.settings.popt, sink);
+				}
+				rowsPrinted += rs.rows.length;
+			}
+		}
+	} finally {
+		if (pager?.spawned) {
+			// End the pager stdin and wait for it to exit. We swallow errors here:
+			// the user may have closed the pager early (SIGPIPE → EPIPE) and our
+			// callers should not see that as a query failure.
+			try {
+				await pager.close();
+			} catch {
+				// ignore
+			}
+		}
+	}
+	// libpq's `PQcmdTuples(lastResult)` semantic: ROW_COUNT mirrors the LAST
+	// result set's affected-row count (or returned-row count for tuples-
+	// producing commands). For SELECT-shaped results the wire layer doesn't
+	// populate rs.rowCount until CommandComplete arrives, but the array shape
+	// (`rs.rows.length`) is the authoritative count.
+	const lastRowCount =
+		results.length === 0
+			? null
+			: (() => {
+					const rs = results[results.length - 1];
+					if (rs.fields.length > 0) return rs.rows.length;
+					return rs.rowCount ?? null;
+				})();
+	return { rowsAffected, rowsPrinted, lastRowCount };
 };
 
 /**
@@ -819,15 +823,15 @@ const renderResultSets = async (
  * produces. Returns a tally consistent with {@link renderResultSets}.
  */
 export const renderResultSet = (
-  ctx: REPLContext,
-  rs: ResultSet,
-  out?: NodeJS.WritableStream,
+	ctx: REPLContext,
+	rs: ResultSet,
+	out?: NodeJS.WritableStream,
 ): Promise<{
-  rowsAffected: number;
-  rowsPrinted: number;
-  lastRowCount: number | null;
+	rowsAffected: number;
+	rowsPrinted: number;
+	lastRowCount: number | null;
 }> => {
-  return renderResultSets(ctx, [rs], out ?? pickOut(ctx));
+	return renderResultSets(ctx, [rs], out ?? pickOut(ctx));
 };
 
 // ---------------------------------------------------------------------------
@@ -861,179 +865,179 @@ export const renderResultSet = (
  * strip it rather than render a caret pointing past end-of-line.
  */
 const rebasePositionForCursor = (
-  err: unknown,
-  wrapper: string,
-  userSql: string,
+	err: unknown,
+	wrapper: string,
+	userSql: string,
 ): void => {
-  if (!err || typeof err !== 'object') return;
-  const e = err as { position?: string };
-  if (typeof e.position !== 'string') return;
-  const original = parseInt(e.position, 10);
-  if (!Number.isFinite(original) || original <= 0) return;
+	if (!err || typeof err !== "object") return;
+	const e = err as { position?: string };
+	if (typeof e.position !== "string") return;
+	const original = parseInt(e.position, 10);
+	if (!Number.isFinite(original) || original <= 0) return;
 
-  // Find the user's SQL inside the wrapper. If the wrapper *contains* the
-  // user's SQL verbatim (the DECLARE case), the prefix length tells us how
-  // far to shift. The trailing `;` is stripped before wrapping, so we
-  // search for the stripped form.
-  const stripped = userSql.replace(/;\s*$/u, '');
-  const offset = wrapper.indexOf(stripped);
-  if (offset === -1) {
-    // FETCH-leg failures: the wrapper is `FETCH FORWARD …` and the server
-    // reports the position relative to the cursor's underlying query
-    // (i.e. `userSql`), not the FETCH text. Leave the position alone —
-    // assuming it's already in user-sql coordinates is the right call,
-    // and if it isn't, the LINE/caret renderer clamps gracefully.
-    return;
-  }
+	// Find the user's SQL inside the wrapper. If the wrapper *contains* the
+	// user's SQL verbatim (the DECLARE case), the prefix length tells us how
+	// far to shift. The trailing `;` is stripped before wrapping, so we
+	// search for the stripped form.
+	const stripped = userSql.replace(/;\s*$/u, "");
+	const offset = wrapper.indexOf(stripped);
+	if (offset === -1) {
+		// FETCH-leg failures: the wrapper is `FETCH FORWARD …` and the server
+		// reports the position relative to the cursor's underlying query
+		// (i.e. `userSql`), not the FETCH text. Leave the position alone —
+		// assuming it's already in user-sql coordinates is the right call,
+		// and if it isn't, the LINE/caret renderer clamps gracefully.
+		return;
+	}
 
-  const rebased = original - offset;
-  if (rebased <= 0 || rebased > userSql.length) {
-    // Position points outside the user's SQL — likely the parser blamed
-    // something inside the wrapper. Drop the field so the formatter skips
-    // the `LINE`/caret block instead of mis-pointing.
-    delete e.position;
-    return;
-  }
-  e.position = String(rebased);
+	const rebased = original - offset;
+	if (rebased <= 0 || rebased > userSql.length) {
+		// Position points outside the user's SQL — likely the parser blamed
+		// something inside the wrapper. Drop the field so the formatter skips
+		// the `LINE`/caret block instead of mis-pointing.
+		delete e.position;
+		return;
+	}
+	e.position = String(rebased);
 };
 
 const runCursorLoop = async (
-  ctx: REPLContext,
-  sql: string,
-  fetchCount: number,
-  out: NodeJS.WritableStream,
+	ctx: REPLContext,
+	sql: string,
+	fetchCount: number,
+	out: NodeJS.WritableStream,
 ): Promise<{
-  rowsAffected: number;
-  rowsPrinted: number;
-  lastRowCount: number;
+	rowsAffected: number;
+	rowsPrinted: number;
+	lastRowCount: number;
 }> => {
-  if (!ctx.settings.db) throw new Error('no connection to the server');
-  const db = ctx.settings.db;
+	if (!ctx.settings.db) throw new Error("no connection to the server");
+	const db = ctx.settings.db;
 
-  // Make sure we're in a transaction so the cursor survives between FETCH
-  // calls. If we're idle, open one here and remember to close it.
-  const initiallyIdle = readTxStatus(db) === 'I';
-  if (initiallyIdle) {
-    await db.execSimple('BEGIN');
-  }
+	// Make sure we're in a transaction so the cursor survives between FETCH
+	// calls. If we're idle, open one here and remember to close it.
+	const initiallyIdle = readTxStatus(db) === "I";
+	if (initiallyIdle) {
+		await db.execSimple("BEGIN");
+	}
 
-  // Strip trailing ';' from the user SQL so DECLARE CURSOR FOR <stmt> parses.
-  const stripped = sql.replace(/;\s*$/u, '');
-  const declared = `DECLARE ${CURSOR_NAME} NO SCROLL CURSOR FOR ${stripped}`;
-  const fetchSql = `FETCH FORWARD ${String(fetchCount)} FROM ${CURSOR_NAME}`;
+	// Strip trailing ';' from the user SQL so DECLARE CURSOR FOR <stmt> parses.
+	const stripped = sql.replace(/;\s*$/u, "");
+	const declared = `DECLARE ${CURSOR_NAME} NO SCROLL CURSOR FOR ${stripped}`;
+	const fetchSql = `FETCH FORWARD ${String(fetchCount)} FROM ${CURSOR_NAME}`;
 
-  const rowsAffected = 0;
-  let rowsPrinted = 0;
-  let cursorOpen = false;
-  // Track which synthetic statement is currently running so the catch block
-  // can rebase the server-side `position` into the user's SQL coordinates
-  // before throwing. Without this, `\errverbose` renders `LINE 1: <user-sql>`
-  // with the caret pointing past end-of-line.
-  let currentWrapper = declared;
+	const rowsAffected = 0;
+	let rowsPrinted = 0;
+	let cursorOpen = false;
+	// Track which synthetic statement is currently running so the catch block
+	// can rebase the server-side `position` into the user's SQL coordinates
+	// before throwing. Without this, `\errverbose` renders `LINE 1: <user-sql>`
+	// with the caret pointing past end-of-line.
+	let currentWrapper = declared;
 
-  const printer = pickPrinter(ctx.settings);
-  // Upstream's print_cursor.c walks the cursor in chunks and toggles libpq's
-  // `flag.start_table` / `flag.stop_table` so the table renders as one
-  // continuous block — header on the first chunk, footer on the last. Our
-  // `aligned` printer doesn't (yet) honour those toggles, so we merge every
-  // chunk into a single synthetic ResultSet and hand it to the printer once.
-  // The user-facing output is identical to the non-chunked path, which is
-  // what the regress baseline expects (one `(19 rows)` footer instead of
-  // `(10 rows)` + `(9 rows)`).
-  let merged: ResultSet | null = null;
-  try {
-    await db.execSimple(declared);
-    cursorOpen = true;
-    while (true) {
-      currentWrapper = fetchSql;
-      const sets = await db.execSimple(fetchSql);
-      if (sets.length === 0) break;
-      const rs = sets[sets.length - 1];
-      const chunkRows = rs.rows.length;
-      if (chunkRows === 0) break;
-      if (merged === null) {
-        merged = {
-          command: rs.command,
-          fields: rs.fields,
-          rows: rs.rows.slice(),
-          rowCount: rs.rowCount,
-          oid: rs.oid,
-          notices: rs.notices,
-        };
-      } else {
-        for (const row of rs.rows) merged.rows.push(row);
-      }
-      rowsPrinted += chunkRows;
-      if (chunkRows < fetchCount) break;
-    }
-    if (merged !== null) {
-      // Patch the merged rowCount to reflect the actual aggregated row
-      // total so command-tag / `(N rows)` footers match the upstream
-      // single-statement output.
-      merged.rowCount = merged.rows.length;
-      await printer.printQuery(merged, ctx.settings.popt, out);
-    }
-    await db.execSimple(`CLOSE ${CURSOR_NAME}`);
-    cursorOpen = false;
-    if (initiallyIdle) {
-      await db.execSimple('COMMIT');
-    }
-    return { rowsAffected, rowsPrinted, lastRowCount: rowsPrinted };
-  } catch (err) {
-    // Flush whatever chunks we successfully fetched before the error so the
-    // partial output lands ahead of the ERROR line. Mirrors upstream
-    // print_cursor.c: each chunk renders incrementally — when a later FETCH
-    // raises (e.g. division by zero on row 16 of a 10-row chunked stream),
-    // the first chunk's rows have already been printed. We accumulate into
-    // a single merged ResultSet here, so the partial flush is "print the
-    // merged buffer once, without the `(N rows)` footer the happy-path
-    // emits when the cursor completes cleanly". The footer is suppressed
-    // because the table is conceptually incomplete (upstream renders no
-    // `(N rows)` for the truncated chunk either).
-    if (merged !== null) {
-      merged.rowCount = merged.rows.length;
-      const partialOpts = {
-        ...ctx.settings.popt,
-        // `stopTable: false` mirrors upstream `print_cursor.c`'s
-        // mid-error flush: no `(N rows)` auto-footer, no trailing
-        // blank — the ERROR line should land flush against the last
-        // data row, not separated by an extra empty line.
-        topt: {
-          ...ctx.settings.popt.topt,
-          defaultFooter: false,
-          stopTable: false,
-        },
-      };
-      try {
-        await printer.printQuery(merged, partialOpts, out);
-      } catch {
-        // ignore — surface the original error
-      }
-    }
-    // Rebase the server-reported `position` from the synthetic wrapper's
-    // coordinates into the user's SQL coordinates in place. Server error
-    // positions come back relative to whatever statement we sent (DECLARE
-    // `… FOR <user-sql>` or FETCH FORWARD `…`). Without this rewrite, the
-    // caller's `recordError(ctx, err, sql)` would stash a position that
-    // points past the end of `sql`, and `\errverbose` would render
-    // `LINE 1: <user-sql>` with the `^` caret in the wrong column.
-    rebasePositionForCursor(err, currentWrapper, sql);
-    if (cursorOpen) {
-      try {
-        await db.execSimple(`CLOSE ${CURSOR_NAME}`);
-      } catch {
-        // ignore — surface the original error
-      }
-    }
-    if (initiallyIdle) {
-      try {
-        await db.execSimple('ROLLBACK');
-      } catch {
-        // ignore
-      }
-    }
-    throw err;
-  }
+	const printer = pickPrinter(ctx.settings);
+	// Upstream's print_cursor.c walks the cursor in chunks and toggles libpq's
+	// `flag.start_table` / `flag.stop_table` so the table renders as one
+	// continuous block — header on the first chunk, footer on the last. Our
+	// `aligned` printer doesn't (yet) honour those toggles, so we merge every
+	// chunk into a single synthetic ResultSet and hand it to the printer once.
+	// The user-facing output is identical to the non-chunked path, which is
+	// what the regress baseline expects (one `(19 rows)` footer instead of
+	// `(10 rows)` + `(9 rows)`).
+	let merged: ResultSet | null = null;
+	try {
+		await db.execSimple(declared);
+		cursorOpen = true;
+		while (true) {
+			currentWrapper = fetchSql;
+			const sets = await db.execSimple(fetchSql);
+			if (sets.length === 0) break;
+			const rs = sets[sets.length - 1];
+			const chunkRows = rs.rows.length;
+			if (chunkRows === 0) break;
+			if (merged === null) {
+				merged = {
+					command: rs.command,
+					fields: rs.fields,
+					rows: rs.rows.slice(),
+					rowCount: rs.rowCount,
+					oid: rs.oid,
+					notices: rs.notices,
+				};
+			} else {
+				for (const row of rs.rows) merged.rows.push(row);
+			}
+			rowsPrinted += chunkRows;
+			if (chunkRows < fetchCount) break;
+		}
+		if (merged !== null) {
+			// Patch the merged rowCount to reflect the actual aggregated row
+			// total so command-tag / `(N rows)` footers match the upstream
+			// single-statement output.
+			merged.rowCount = merged.rows.length;
+			await printer.printQuery(merged, ctx.settings.popt, out);
+		}
+		await db.execSimple(`CLOSE ${CURSOR_NAME}`);
+		cursorOpen = false;
+		if (initiallyIdle) {
+			await db.execSimple("COMMIT");
+		}
+		return { rowsAffected, rowsPrinted, lastRowCount: rowsPrinted };
+	} catch (err) {
+		// Flush whatever chunks we successfully fetched before the error so the
+		// partial output lands ahead of the ERROR line. Mirrors upstream
+		// print_cursor.c: each chunk renders incrementally — when a later FETCH
+		// raises (e.g. division by zero on row 16 of a 10-row chunked stream),
+		// the first chunk's rows have already been printed. We accumulate into
+		// a single merged ResultSet here, so the partial flush is "print the
+		// merged buffer once, without the `(N rows)` footer the happy-path
+		// emits when the cursor completes cleanly". The footer is suppressed
+		// because the table is conceptually incomplete (upstream renders no
+		// `(N rows)` for the truncated chunk either).
+		if (merged !== null) {
+			merged.rowCount = merged.rows.length;
+			const partialOpts = {
+				...ctx.settings.popt,
+				// `stopTable: false` mirrors upstream `print_cursor.c`'s
+				// mid-error flush: no `(N rows)` auto-footer, no trailing
+				// blank — the ERROR line should land flush against the last
+				// data row, not separated by an extra empty line.
+				topt: {
+					...ctx.settings.popt.topt,
+					defaultFooter: false,
+					stopTable: false,
+				},
+			};
+			try {
+				await printer.printQuery(merged, partialOpts, out);
+			} catch {
+				// ignore — surface the original error
+			}
+		}
+		// Rebase the server-reported `position` from the synthetic wrapper's
+		// coordinates into the user's SQL coordinates in place. Server error
+		// positions come back relative to whatever statement we sent (DECLARE
+		// `… FOR <user-sql>` or FETCH FORWARD `…`). Without this rewrite, the
+		// caller's `recordError(ctx, err, sql)` would stash a position that
+		// points past the end of `sql`, and `\errverbose` would render
+		// `LINE 1: <user-sql>` with the `^` caret in the wrong column.
+		rebasePositionForCursor(err, currentWrapper, sql);
+		if (cursorOpen) {
+			try {
+				await db.execSimple(`CLOSE ${CURSOR_NAME}`);
+			} catch {
+				// ignore — surface the original error
+			}
+		}
+		if (initiallyIdle) {
+			try {
+				await db.execSimple("ROLLBACK");
+			} catch {
+				// ignore
+			}
+		}
+		throw err;
+	}
 };
 
 // ---------------------------------------------------------------------------
@@ -1043,85 +1047,85 @@ const runCursorLoop = async (
 // ---------------------------------------------------------------------------
 
 export const executeAndPrint = async (
-  ctx: REPLContext,
-  sqlRaw: string,
-  opts: SendQueryOpts = {},
+	ctx: REPLContext,
+	sqlRaw: string,
+	opts: SendQueryOpts = {},
 ): Promise<QueryStats> => {
-  // Strip leading whitespace + `--` line / slash-star block comments before
-  // the wire send so server-reported `position` (1-based offset) and
-  // `LINE N:` re-prints align with upstream — vanilla psql's scanner
-  // advances past the same prelude before handing the buffer to `PQexec`.
-  const sql = stripLeadingCommentsAndWS(sqlRaw);
-  const started = ctx.settings.timing ? performance.now() : 0;
-  const stats: QueryStats = {
-    rowsAffected: 0,
-    rowsPrinted: 0,
-    fetched: false,
-    hadError: false,
-    durationMs: 0,
-  };
+	// Strip leading whitespace + `--` line / slash-star block comments before
+	// the wire send so server-reported `position` (1-based offset) and
+	// `LINE N:` re-prints align with upstream — vanilla psql's scanner
+	// advances past the same prelude before handing the buffer to `PQexec`.
+	const sql = stripLeadingCommentsAndWS(sqlRaw);
+	const started = ctx.settings.timing ? performance.now() : 0;
+	const stats: QueryStats = {
+		rowsAffected: 0,
+		rowsPrinted: 0,
+		fetched: false,
+		hadError: false,
+		durationMs: 0,
+	};
 
-  if (!ctx.settings.db) {
-    writeError(ctx, 'no connection to the server');
-    stats.hadError = true;
-    return stats;
-  }
+	if (!ctx.settings.db) {
+		writeError(ctx, "no connection to the server");
+		stats.hadError = true;
+		return stats;
+	}
 
-  const out = pickOut(ctx, opts.oneShotOut);
-  const fetchCount = readFetchCount(ctx.settings);
+	const out = pickOut(ctx, opts.oneShotOut);
+	const fetchCount = readFetchCount(ctx.settings);
 
-  let lastRowCount: number | null = null;
-  try {
-    if (fetchCount > 0 && isSelectCommand(sql)) {
-      const r = await runCursorLoop(ctx, sql, fetchCount, out);
-      stats.rowsAffected = r.rowsAffected;
-      stats.rowsPrinted = r.rowsPrinted;
-      stats.fetched = true;
-      lastRowCount = r.lastRowCount;
-    } else {
-      const results = await ctx.settings.db.execSimple(sql);
-      const r = await renderResultSets(ctx, results, out);
-      stats.rowsAffected = r.rowsAffected;
-      stats.rowsPrinted = r.rowsPrinted;
-      lastRowCount = r.lastRowCount;
-    }
-  } catch (err) {
-    // `\;`-chained batches surface every result the server produced before
-    // the ErrorResponse on the thrown Error's `partialResults` field (set
-    // by the wire layer's ReadyForQuery handler). Render them in order
-    // before printing the error itself so the user sees the same shape
-    // upstream `PQgetResult` walks produce.
-    const partial = (err as Error & { partialResults?: ResultSet[] })
-      .partialResults;
-    if (partial && partial.length > 0) {
-      try {
-        const r = await renderResultSets(ctx, partial, out);
-        stats.rowsAffected = r.rowsAffected;
-        stats.rowsPrinted = r.rowsPrinted;
-      } catch {
-        // Surface the original error; don't shadow it with a render failure.
-      }
-    }
-    const message = recordError(ctx, err, sql);
-    writeQueryError(ctx, message);
-    stats.hadError = true;
-  } finally {
-    if (ctx.settings.timing) {
-      stats.durationMs = performance.now() - started;
-      ctx.stdout.write('\n' + formatDurationMs(stats.durationMs) + '\n');
-    }
-  }
-  // Mirror upstream's `SetResultVariables` / `SetErrorVariables` call at the
-  // tail of `SendQuery`: refresh the per-statement diagnostic psql vars so
-  // `\echo :SQLSTATE` and friends see the most recent outcome. ROW_COUNT
-  // tracks libpq's `PQcmdTuples` on the LAST result of a `\;` batch.
-  refreshErrorVars(
-    ctx.settings,
-    stats.hadError
-      ? { kind: 'error' }
-      : { kind: 'success', rowCount: lastRowCount },
-  );
-  return stats;
+	let lastRowCount: number | null = null;
+	try {
+		if (fetchCount > 0 && isSelectCommand(sql)) {
+			const r = await runCursorLoop(ctx, sql, fetchCount, out);
+			stats.rowsAffected = r.rowsAffected;
+			stats.rowsPrinted = r.rowsPrinted;
+			stats.fetched = true;
+			lastRowCount = r.lastRowCount;
+		} else {
+			const results = await ctx.settings.db.execSimple(sql);
+			const r = await renderResultSets(ctx, results, out);
+			stats.rowsAffected = r.rowsAffected;
+			stats.rowsPrinted = r.rowsPrinted;
+			lastRowCount = r.lastRowCount;
+		}
+	} catch (err) {
+		// `\;`-chained batches surface every result the server produced before
+		// the ErrorResponse on the thrown Error's `partialResults` field (set
+		// by the wire layer's ReadyForQuery handler). Render them in order
+		// before printing the error itself so the user sees the same shape
+		// upstream `PQgetResult` walks produce.
+		const partial = (err as Error & { partialResults?: ResultSet[] })
+			.partialResults;
+		if (partial && partial.length > 0) {
+			try {
+				const r = await renderResultSets(ctx, partial, out);
+				stats.rowsAffected = r.rowsAffected;
+				stats.rowsPrinted = r.rowsPrinted;
+			} catch {
+				// Surface the original error; don't shadow it with a render failure.
+			}
+		}
+		const message = recordError(ctx, err, sql);
+		writeQueryError(ctx, message);
+		stats.hadError = true;
+	} finally {
+		if (ctx.settings.timing) {
+			stats.durationMs = performance.now() - started;
+			ctx.stdout.write("\n" + formatDurationMs(stats.durationMs) + "\n");
+		}
+	}
+	// Mirror upstream's `SetResultVariables` / `SetErrorVariables` call at the
+	// tail of `SendQuery`: refresh the per-statement diagnostic psql vars so
+	// `\echo :SQLSTATE` and friends see the most recent outcome. ROW_COUNT
+	// tracks libpq's `PQcmdTuples` on the LAST result of a `\;` batch.
+	refreshErrorVars(
+		ctx.settings,
+		stats.hadError
+			? { kind: "error" }
+			: { kind: "success", rowCount: lastRowCount },
+	);
+	return stats;
 };
 
 // ---------------------------------------------------------------------------
@@ -1131,229 +1135,235 @@ export const executeAndPrint = async (
 // ---------------------------------------------------------------------------
 
 export const sendQuery = async (
-  ctx: REPLContext,
-  sqlRaw: string,
-  opts: SendQueryOpts = {},
+	ctx: REPLContext,
+	sqlRaw: string,
+	opts: SendQueryOpts = {},
 ): Promise<QueryStats> => {
-  // Strip leading whitespace + `--` line / slash-star block comments before
-  // the wire send AND before storing into `pset.last_query`. Vanilla psql's
-  // scanner advances past the same prelude before handing the buffer to
-  // `PQexec`, so server-reported `position` (1-based) and `LINE N:`
-  // re-prints align with vanilla only after we trim here. `\p` (which falls
-  // back to `lastQuery`) also prints the stripped form so the regress
-  // baseline's `\p` after `-- comment\nSELECT 1;` emits just `SELECT 1;`.
-  const sql = stripLeadingCommentsAndWS(sqlRaw);
-  const stats: QueryStats = {
-    rowsAffected: 0,
-    rowsPrinted: 0,
-    fetched: false,
-    hadError: false,
-    durationMs: 0,
-  };
+	// Strip leading whitespace + `--` line / slash-star block comments before
+	// the wire send AND before storing into `pset.last_query`. Vanilla psql's
+	// scanner advances past the same prelude before handing the buffer to
+	// `PQexec`, so server-reported `position` (1-based) and `LINE N:`
+	// re-prints align with vanilla only after we trim here. `\p` (which falls
+	// back to `lastQuery`) also prints the stripped form so the regress
+	// baseline's `\p` after `-- comment\nSELECT 1;` emits just `SELECT 1;`.
+	const sql = stripLeadingCommentsAndWS(sqlRaw);
+	const stats: QueryStats = {
+		rowsAffected: 0,
+		rowsPrinted: 0,
+		fetched: false,
+		hadError: false,
+		durationMs: 0,
+	};
 
-  // Track the most recent SQL we're about to ship so `\g` / `\gx` with an
-  // empty buffer can re-run it (upstream `pset.last_query`). Capture even
-  // if the dispatch fails — upstream populates `last_query` before
-  // `PSQLexec` and leaves it set on error.
-  ctx.settings.lastQuery = sql;
+	// Track the most recent SQL we're about to ship so `\g` / `\gx` with an
+	// empty buffer can re-run it (upstream `pset.last_query`). Capture even
+	// if the dispatch fails — upstream populates `last_query` before
+	// `PSQLexec` and leaves it set on error.
+	ctx.settings.lastQuery = sql;
 
-  if (!ctx.settings.db) {
-    writeError(ctx, 'no connection to the server');
-    stats.hadError = true;
-    return stats;
-  }
+	if (!ctx.settings.db) {
+		writeError(ctx, "no connection to the server");
+		stats.hadError = true;
+		return stats;
+	}
 
-  // SINGLESTEP: prompt before executing. 'x' aborts; anything else proceeds.
-  if (readSinglestep(ctx.settings)) {
-    const proceed = await confirmSinglestep(ctx, sql);
-    if (!proceed) {
-      // Upstream marks the statement as failed when the user cancels. We
-      // mirror that so ON_ERROR_STOP halts a script.
-      stats.hadError = true;
-      ctx.settings.lastErrorResult = { message: 'command cancelled by user' };
-      return stats;
-    }
-  }
+	// SINGLESTEP: prompt before executing. 'x' aborts; anything else proceeds.
+	if (readSinglestep(ctx.settings)) {
+		const proceed = await confirmSinglestep(ctx, sql);
+		if (!proceed) {
+			// Upstream marks the statement as failed when the user cancels. We
+			// mirror that so ON_ERROR_STOP halts a script.
+			stats.hadError = true;
+			ctx.settings.lastErrorResult = {
+				message: "command cancelled by user",
+			};
+			return stats;
+		}
+	}
 
-  // SINGLELINE (-S): treating a newline as a semicolon is a scanner concern
-  // and is wired through `scanSql`'s `ScanOptions.singleline` (the mainloop
-  // forwards `ctx.settings.singleline` on each pass). No work is required in
-  // `sendQuery`: the statement boundary has already been drawn before we get
-  // here.
+	// SINGLELINE (-S): treating a newline as a semicolon is a scanner concern
+	// and is wired through `scanSql`'s `ScanOptions.singleline` (the mainloop
+	// forwards `ctx.settings.singleline` on each pass). No work is required in
+	// `sendQuery`: the statement boundary has already been drawn before we get
+	// here.
 
-  const db = ctx.settings.db;
-  const autocommit = readAutocommit(ctx.settings);
-  const onErrorRollback = readOnErrorRollback(ctx.settings);
-  const interactive = !ctx.settings.notty;
+	const db = ctx.settings.db;
+	const autocommit = readAutocommit(ctx.settings);
+	const onErrorRollback = readOnErrorRollback(ctx.settings);
+	const interactive = !ctx.settings.notty;
 
-  const started = ctx.settings.timing ? performance.now() : 0;
+	const started = ctx.settings.timing ? performance.now() : 0;
 
-  // ----- AUTOCOMMIT: implicit BEGIN ----------------------------------------
-  let implicitBeginIssued = false;
-  if (!autocommit && readTxStatus(db) === 'I' && !commandNoBegin(sql)) {
-    try {
-      await db.execSimple('BEGIN');
-      implicitBeginIssued = true;
-    } catch (err) {
-      const message = recordError(ctx, err);
-      writeQueryError(ctx, message);
-      stats.hadError = true;
-      if (ctx.settings.timing) {
-        stats.durationMs = performance.now() - started;
-        ctx.stdout.write('\n' + formatDurationMs(stats.durationMs) + '\n');
-      }
-      return stats;
-    }
-  }
+	// ----- AUTOCOMMIT: implicit BEGIN ----------------------------------------
+	let implicitBeginIssued = false;
+	if (!autocommit && readTxStatus(db) === "I" && !commandNoBegin(sql)) {
+		try {
+			await db.execSimple("BEGIN");
+			implicitBeginIssued = true;
+		} catch (err) {
+			const message = recordError(ctx, err);
+			writeQueryError(ctx, message);
+			stats.hadError = true;
+			if (ctx.settings.timing) {
+				stats.durationMs = performance.now() - started;
+				ctx.stdout.write(
+					"\n" + formatDurationMs(stats.durationMs) + "\n",
+				);
+			}
+			return stats;
+		}
+	}
 
-  // ----- ON_ERROR_ROLLBACK: SAVEPOINT --------------------------------------
-  const savepointActive =
-    onErrorRollback !== 'off' &&
-    (onErrorRollback === 'on' ||
-      (onErrorRollback === 'interactive' && interactive)) &&
-    readTxStatus(db) === 'T';
+	// ----- ON_ERROR_ROLLBACK: SAVEPOINT --------------------------------------
+	const savepointActive =
+		onErrorRollback !== "off" &&
+		(onErrorRollback === "on" ||
+			(onErrorRollback === "interactive" && interactive)) &&
+		readTxStatus(db) === "T";
 
-  let savepointIssued = false;
-  if (savepointActive) {
-    try {
-      await db.execSimple(`SAVEPOINT ${SAVEPOINT_NAME}`);
-      savepointIssued = true;
-    } catch (err) {
-      // Mirror upstream: failure to install the savepoint is a hard error.
-      const message = recordError(ctx, err);
-      writeQueryError(ctx, message);
-      stats.hadError = true;
-      if (ctx.settings.timing) {
-        stats.durationMs = performance.now() - started;
-        ctx.stdout.write('\n' + formatDurationMs(stats.durationMs) + '\n');
-      }
-      return stats;
-    }
-  }
+	let savepointIssued = false;
+	if (savepointActive) {
+		try {
+			await db.execSimple(`SAVEPOINT ${SAVEPOINT_NAME}`);
+			savepointIssued = true;
+		} catch (err) {
+			// Mirror upstream: failure to install the savepoint is a hard error.
+			const message = recordError(ctx, err);
+			writeQueryError(ctx, message);
+			stats.hadError = true;
+			if (ctx.settings.timing) {
+				stats.durationMs = performance.now() - started;
+				ctx.stdout.write(
+					"\n" + formatDurationMs(stats.durationMs) + "\n",
+				);
+			}
+			return stats;
+		}
+	}
 
-  // ----- Execute + print ---------------------------------------------------
-  const out = pickOut(ctx, opts.oneShotOut);
-  const fetchCount = readFetchCount(ctx.settings);
+	// ----- Execute + print ---------------------------------------------------
+	const out = pickOut(ctx, opts.oneShotOut);
+	const fetchCount = readFetchCount(ctx.settings);
 
-  let lastRowCount: number | null = null;
-  try {
-    if (fetchCount > 0 && isSelectCommand(sql)) {
-      const r = await runCursorLoop(ctx, sql, fetchCount, out);
-      stats.rowsAffected = r.rowsAffected;
-      stats.rowsPrinted = r.rowsPrinted;
-      stats.fetched = true;
-      lastRowCount = r.lastRowCount;
-    } else {
-      const results = await db.execSimple(sql);
-      const r = await renderResultSets(ctx, results, out);
-      stats.rowsAffected = r.rowsAffected;
-      stats.rowsPrinted = r.rowsPrinted;
-      lastRowCount = r.lastRowCount;
-    }
-  } catch (err) {
-    // `\;`-chained batches surface every result the server produced before
-    // the ErrorResponse on the thrown Error's `partialResults` field (set
-    // by the wire layer's ReadyForQuery handler). Render them in order
-    // before printing the error itself so the user sees the same shape
-    // upstream `PQgetResult` walks produce.
-    const partial = (err as Error & { partialResults?: ResultSet[] })
-      .partialResults;
-    if (partial && partial.length > 0) {
-      try {
-        const r = await renderResultSets(ctx, partial, out);
-        stats.rowsAffected = r.rowsAffected;
-        stats.rowsPrinted = r.rowsPrinted;
-      } catch {
-        // Surface the original error; don't shadow it with a render failure.
-      }
-    }
-    const message = recordError(ctx, err, sql);
-    writeQueryError(ctx, message);
-    stats.hadError = true;
-  }
+	let lastRowCount: number | null = null;
+	try {
+		if (fetchCount > 0 && isSelectCommand(sql)) {
+			const r = await runCursorLoop(ctx, sql, fetchCount, out);
+			stats.rowsAffected = r.rowsAffected;
+			stats.rowsPrinted = r.rowsPrinted;
+			stats.fetched = true;
+			lastRowCount = r.lastRowCount;
+		} else {
+			const results = await db.execSimple(sql);
+			const r = await renderResultSets(ctx, results, out);
+			stats.rowsAffected = r.rowsAffected;
+			stats.rowsPrinted = r.rowsPrinted;
+			lastRowCount = r.lastRowCount;
+		}
+	} catch (err) {
+		// `\;`-chained batches surface every result the server produced before
+		// the ErrorResponse on the thrown Error's `partialResults` field (set
+		// by the wire layer's ReadyForQuery handler). Render them in order
+		// before printing the error itself so the user sees the same shape
+		// upstream `PQgetResult` walks produce.
+		const partial = (err as Error & { partialResults?: ResultSet[] })
+			.partialResults;
+		if (partial && partial.length > 0) {
+			try {
+				const r = await renderResultSets(ctx, partial, out);
+				stats.rowsAffected = r.rowsAffected;
+				stats.rowsPrinted = r.rowsPrinted;
+			} catch {
+				// Surface the original error; don't shadow it with a render failure.
+			}
+		}
+		const message = recordError(ctx, err, sql);
+		writeQueryError(ctx, message);
+		stats.hadError = true;
+	}
 
-  // ----- ON_ERROR_ROLLBACK: resolve the savepoint --------------------------
-  if (savepointIssued) {
-    try {
-      if (stats.hadError) {
-        await db.execSimple(`ROLLBACK TO SAVEPOINT ${SAVEPOINT_NAME}`);
-        // Release the now-empty savepoint too, matching upstream.
-        await db.execSimple(`RELEASE SAVEPOINT ${SAVEPOINT_NAME}`);
-      } else if (!destroysSavepoint(sql) && readTxStatus(db) === 'T') {
-        await db.execSimple(`RELEASE SAVEPOINT ${SAVEPOINT_NAME}`);
-      }
-    } catch (err) {
-      // Don't shadow the original error; just record this one if we don't
-      // already have one to report.
-      if (!stats.hadError) {
-        const message = recordError(ctx, err);
-        writeQueryError(ctx, message);
-        stats.hadError = true;
-      }
-    }
-  }
+	// ----- ON_ERROR_ROLLBACK: resolve the savepoint --------------------------
+	if (savepointIssued) {
+		try {
+			if (stats.hadError) {
+				await db.execSimple(`ROLLBACK TO SAVEPOINT ${SAVEPOINT_NAME}`);
+				// Release the now-empty savepoint too, matching upstream.
+				await db.execSimple(`RELEASE SAVEPOINT ${SAVEPOINT_NAME}`);
+			} else if (!destroysSavepoint(sql) && readTxStatus(db) === "T") {
+				await db.execSimple(`RELEASE SAVEPOINT ${SAVEPOINT_NAME}`);
+			}
+		} catch (err) {
+			// Don't shadow the original error; just record this one if we don't
+			// already have one to report.
+			if (!stats.hadError) {
+				const message = recordError(ctx, err);
+				writeQueryError(ctx, message);
+				stats.hadError = true;
+			}
+		}
+	}
 
-  // If we issued an implicit BEGIN for AUTOCOMMIT=off and the statement
-  // itself failed in such a way that we ended up idle again, there is
-  // nothing to clean up — the server has already rolled back. We
-  // intentionally do not COMMIT here: that's the user's responsibility under
-  // AUTOCOMMIT=off.
-  void implicitBeginIssued;
+	// If we issued an implicit BEGIN for AUTOCOMMIT=off and the statement
+	// itself failed in such a way that we ended up idle again, there is
+	// nothing to clean up — the server has already rolled back. We
+	// intentionally do not COMMIT here: that's the user's responsibility under
+	// AUTOCOMMIT=off.
+	void implicitBeginIssued;
 
-  // Mirror upstream `SendQuery` tail (common.c lines 1217-1218):
-  //
-  //   if (!OK && pset.echo == PSQL_ECHO_ERRORS)
-  //     pg_log_info("STATEMENT:  %s", query);
-  //
-  // When ECHO=errors and the dispatch failed, emit a `STATEMENT:  <sql>`
-  // line so the user can correlate the error with the input statement.
-  // `pg_log_info` writes to stderr in upstream and strips one trailing
-  // newline before tacking its own `\n` on the message — we mirror by
-  // going through ctx.stderr and the explicit trim.
-  if (stats.hadError && ctx.settings.echo === 'errors') {
-    // Strip leading whitespace + `--`-style comments from queryBuf so the
-    // STATEMENT echo matches upstream's shape. Upstream `psqlscan.l`'s
-    // `{whitespace}` rule (which includes line comments) SUPPRESSES
-    // queryBuf appends until non-whitespace content has been collected;
-    // our scanner accumulates verbatim. The server still ignores the
-    // leading noise for `LINE N:` counting, but the STATEMENT echo
-    // re-prints the buffer as we hold it. Bring them in line by
-    // stripping here. Also strip one trailing `\n` to match
-    // `pg_log_info("STATEMENT:  %s", query)` (one-newline-strip +
-    // explicit `\n` append).
-    let stmt = sql;
+	// Mirror upstream `SendQuery` tail (common.c lines 1217-1218):
+	//
+	//   if (!OK && pset.echo == PSQL_ECHO_ERRORS)
+	//     pg_log_info("STATEMENT:  %s", query);
+	//
+	// When ECHO=errors and the dispatch failed, emit a `STATEMENT:  <sql>`
+	// line so the user can correlate the error with the input statement.
+	// `pg_log_info` writes to stderr in upstream and strips one trailing
+	// newline before tacking its own `\n` on the message — we mirror by
+	// going through ctx.stderr and the explicit trim.
+	if (stats.hadError && ctx.settings.echo === "errors") {
+		// Strip leading whitespace + `--`-style comments from queryBuf so the
+		// STATEMENT echo matches upstream's shape. Upstream `psqlscan.l`'s
+		// `{whitespace}` rule (which includes line comments) SUPPRESSES
+		// queryBuf appends until non-whitespace content has been collected;
+		// our scanner accumulates verbatim. The server still ignores the
+		// leading noise for `LINE N:` counting, but the STATEMENT echo
+		// re-prints the buffer as we hold it. Bring them in line by
+		// stripping here. Also strip one trailing `\n` to match
+		// `pg_log_info("STATEMENT:  %s", query)` (one-newline-strip +
+		// explicit `\n` append).
+		let stmt = sql;
 
-    while (true) {
-      const before = stmt.length;
-      // Leading whitespace including form-feed (matches psqlscan's
-      // {space} = [ \t\n\r\f]).
-      stmt = stmt.replace(/^[ \t\n\r\f]+/, '');
-      // Leading `--`-style line comment, up to (but not including) the
-      // next newline. The trailing newline is then eaten by the next
-      // whitespace pass.
-      stmt = stmt.replace(/^--[^\n\r]*/, '');
-      if (stmt.length === before) break;
-    }
-    if (stmt.endsWith('\n')) stmt = stmt.slice(0, -1);
-    ctx.stderr.write(`STATEMENT:  ${stmt}\n`);
-  }
+		while (true) {
+			const before = stmt.length;
+			// Leading whitespace including form-feed (matches psqlscan's
+			// {space} = [ \t\n\r\f]).
+			stmt = stmt.replace(/^[ \t\n\r\f]+/, "");
+			// Leading `--`-style line comment, up to (but not including) the
+			// next newline. The trailing newline is then eaten by the next
+			// whitespace pass.
+			stmt = stmt.replace(/^--[^\n\r]*/, "");
+			if (stmt.length === before) break;
+		}
+		if (stmt.endsWith("\n")) stmt = stmt.slice(0, -1);
+		ctx.stderr.write(`STATEMENT:  ${stmt}\n`);
+	}
 
-  // Mirror upstream's `SetResultVariables` / `SetErrorVariables` call at the
-  // tail of `SendQuery`. ROW_COUNT mirrors libpq's `PQcmdTuples` on the LAST
-  // result of a `\;` batch; SQLSTATE / ERROR reset every statement; the
-  // LAST_ERROR_* pair only changes on failure (sticky on success).
-  refreshErrorVars(
-    ctx.settings,
-    stats.hadError
-      ? { kind: 'error' }
-      : { kind: 'success', rowCount: lastRowCount },
-  );
+	// Mirror upstream's `SetResultVariables` / `SetErrorVariables` call at the
+	// tail of `SendQuery`. ROW_COUNT mirrors libpq's `PQcmdTuples` on the LAST
+	// result of a `\;` batch; SQLSTATE / ERROR reset every statement; the
+	// LAST_ERROR_* pair only changes on failure (sticky on success).
+	refreshErrorVars(
+		ctx.settings,
+		stats.hadError
+			? { kind: "error" }
+			: { kind: "success", rowCount: lastRowCount },
+	);
 
-  if (ctx.settings.timing) {
-    stats.durationMs = performance.now() - started;
-    ctx.stdout.write('\n' + formatDurationMs(stats.durationMs) + '\n');
-  }
-  return stats;
+	if (ctx.settings.timing) {
+		stats.durationMs = performance.now() - started;
+		ctx.stdout.write("\n" + formatDurationMs(stats.durationMs) + "\n");
+	}
+	return stats;
 };
 
 // ---------------------------------------------------------------------------
@@ -1366,28 +1376,28 @@ export const sendQuery = async (
 // ---------------------------------------------------------------------------
 
 export const psqlExec = async (
-  conn: Connection,
-  sql: string,
-  ignoreError = false,
+	conn: Connection,
+	sql: string,
+	ignoreError = false,
 ): Promise<ResultSet | null> => {
-  try {
-    const sets = await conn.execSimple(sql);
-    if (sets.length === 0) return null;
-    return sets[sets.length - 1];
-  } catch (err) {
-    if (ignoreError) return null;
-    throw err;
-  }
+	try {
+		const sets = await conn.execSimple(sql);
+		if (sets.length === 0) return null;
+		return sets[sets.length - 1];
+	} catch (err) {
+		if (ignoreError) return null;
+		throw err;
+	}
 };
 
 // Internal exports re-used by mainloop. Kept on the public surface so other
 // future call sites (cmd_io for \gexec, cmd_describe for catalog queries)
 // can lean on the same primitives.
 export const __testing = {
-  commandNoBegin,
-  isSelectCommand,
-  destroysSavepoint,
-  peekKeywords,
-  SAVEPOINT_NAME,
-  CURSOR_NAME,
+	commandNoBegin,
+	isSelectCommand,
+	destroysSavepoint,
+	peekKeywords,
+	SAVEPOINT_NAME,
+	CURSOR_NAME,
 };

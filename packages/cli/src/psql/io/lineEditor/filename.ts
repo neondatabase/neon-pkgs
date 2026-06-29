@@ -21,8 +21,8 @@ const NEEDS_QUOTE_RE = /[\s"'\\$`*?[\](){}<>|;&!~#]/;
 
 /** Characters that always require quoting (whitespace or shell-special). */
 export const needsQuoting = (s: string): boolean => {
-  if (s.length === 0) return true;
-  return NEEDS_QUOTE_RE.test(s);
+	if (s.length === 0) return true;
+	return NEEDS_QUOTE_RE.test(s);
 };
 
 /**
@@ -30,61 +30,61 @@ export const needsQuoting = (s: string): boolean => {
  * `'\''` trick used by POSIX shells (close, literal backslash-quote, reopen).
  */
 export const singleQuote = (s: string): string =>
-  `'${s.replace(/'/g, "'\\''")}'`;
+	`'${s.replace(/'/g, "'\\''")}'`;
 
 /**
  * Wrap a filename in double quotes, escaping `"`, `\`, `$`, and backticks.
  */
 export const doubleQuote = (s: string): string =>
-  `"${s.replace(/[\\"$`]/g, (m) => `\\${m}`)}"`;
+	`"${s.replace(/[\\"$`]/g, (m) => `\\${m}`)}"`;
 
 /** Detect the quoting style of the partial token the user typed. */
-export type QuoteStyle = 'none' | 'single' | 'double';
+export type QuoteStyle = "none" | "single" | "double";
 
 export const detectQuoteStyle = (prefix: string): QuoteStyle => {
-  // Walk left-to-right tracking the current quote state. A naive last-quote
-  // approach gets fooled by escaped quotes inside doublequotes.
-  let style: QuoteStyle = 'none';
-  let i = 0;
-  while (i < prefix.length) {
-    const ch = prefix[i];
-    if (style === 'none') {
-      if (ch === "'") {
-        style = 'single';
-        i++;
-        continue;
-      }
-      if (ch === '"') {
-        style = 'double';
-        i++;
-        continue;
-      }
-      if (ch === '\\' && i + 1 < prefix.length) {
-        // Escaped char outside quotes: skip the escape.
-        i += 2;
-        continue;
-      }
-      i++;
-      continue;
-    }
-    if (style === 'single') {
-      if (ch === "'") style = 'none';
-      i++;
-      continue;
-    }
-    // double-quoted
-    if (ch === '"') {
-      style = 'none';
-      i++;
-      continue;
-    }
-    if (ch === '\\' && i + 1 < prefix.length) {
-      i += 2;
-      continue;
-    }
-    i++;
-  }
-  return style;
+	// Walk left-to-right tracking the current quote state. A naive last-quote
+	// approach gets fooled by escaped quotes inside doublequotes.
+	let style: QuoteStyle = "none";
+	let i = 0;
+	while (i < prefix.length) {
+		const ch = prefix[i];
+		if (style === "none") {
+			if (ch === "'") {
+				style = "single";
+				i++;
+				continue;
+			}
+			if (ch === '"') {
+				style = "double";
+				i++;
+				continue;
+			}
+			if (ch === "\\" && i + 1 < prefix.length) {
+				// Escaped char outside quotes: skip the escape.
+				i += 2;
+				continue;
+			}
+			i++;
+			continue;
+		}
+		if (style === "single") {
+			if (ch === "'") style = "none";
+			i++;
+			continue;
+		}
+		// double-quoted
+		if (ch === '"') {
+			style = "none";
+			i++;
+			continue;
+		}
+		if (ch === "\\" && i + 1 < prefix.length) {
+			i += 2;
+			continue;
+		}
+		i++;
+	}
+	return style;
 };
 
 /**
@@ -99,16 +99,16 @@ export const detectQuoteStyle = (prefix: string): QuoteStyle => {
  *   quote.
  */
 export const quoteForCompletion = (name: string, style: QuoteStyle): string => {
-  switch (style) {
-    case 'none':
-      return needsQuoting(name) ? singleQuote(name) : name;
-    case 'single':
-      // Inside single quotes, only `'` is special.
-      return name.replace(/'/g, "'\\''");
-    case 'double':
-      // Inside double quotes: \, ", $, ` need escaping.
-      return name.replace(/[\\"$`]/g, (m) => `\\${m}`);
-  }
+	switch (style) {
+		case "none":
+			return needsQuoting(name) ? singleQuote(name) : name;
+		case "single":
+			// Inside single quotes, only `'` is special.
+			return name.replace(/'/g, "'\\''");
+		case "double":
+			// Inside double quotes: \, ", $, ` need escaping.
+			return name.replace(/[\\"$`]/g, (m) => `\\${m}`);
+	}
 };
 
 /**
@@ -116,54 +116,54 @@ export const quoteForCompletion = (name: string, style: QuoteStyle): string => {
  * the caller wants to feed the partial input to a filesystem lookup.
  */
 export const unquote = (s: string): string => {
-  let out = '';
-  let style: QuoteStyle = 'none';
-  let i = 0;
-  while (i < s.length) {
-    const ch = s[i];
-    if (style === 'none') {
-      if (ch === "'") {
-        style = 'single';
-        i++;
-        continue;
-      }
-      if (ch === '"') {
-        style = 'double';
-        i++;
-        continue;
-      }
-      if (ch === '\\' && i + 1 < s.length) {
-        out += s[i + 1];
-        i += 2;
-        continue;
-      }
-      out += ch;
-      i++;
-      continue;
-    }
-    if (style === 'single') {
-      if (ch === "'") {
-        style = 'none';
-        i++;
-        continue;
-      }
-      out += ch;
-      i++;
-      continue;
-    }
-    // double-quoted
-    if (ch === '"') {
-      style = 'none';
-      i++;
-      continue;
-    }
-    if (ch === '\\' && i + 1 < s.length) {
-      out += s[i + 1];
-      i += 2;
-      continue;
-    }
-    out += ch;
-    i++;
-  }
-  return out;
+	let out = "";
+	let style: QuoteStyle = "none";
+	let i = 0;
+	while (i < s.length) {
+		const ch = s[i];
+		if (style === "none") {
+			if (ch === "'") {
+				style = "single";
+				i++;
+				continue;
+			}
+			if (ch === '"') {
+				style = "double";
+				i++;
+				continue;
+			}
+			if (ch === "\\" && i + 1 < s.length) {
+				out += s[i + 1];
+				i += 2;
+				continue;
+			}
+			out += ch;
+			i++;
+			continue;
+		}
+		if (style === "single") {
+			if (ch === "'") {
+				style = "none";
+				i++;
+				continue;
+			}
+			out += ch;
+			i++;
+			continue;
+		}
+		// double-quoted
+		if (ch === '"') {
+			style = "none";
+			i++;
+			continue;
+		}
+		if (ch === "\\" && i + 1 < s.length) {
+			out += s[i + 1];
+			i += 2;
+			continue;
+		}
+		out += ch;
+		i++;
+	}
+	return out;
 };

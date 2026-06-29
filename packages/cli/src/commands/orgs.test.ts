@@ -1,9 +1,9 @@
-import { describe } from 'vitest';
+import { describe } from "vitest";
 
-import { test } from '../test_utils/fixtures';
+import { test } from "../test_utils/fixtures";
 
-describe('orgs', () => {
-  test('list', async ({ testCliCommand }) => {
-    await testCliCommand(['orgs', 'list']);
-  });
+describe("orgs", () => {
+	test("list", async ({ testCliCommand }) => {
+		await testCliCommand(["orgs", "list"]);
+	});
 });

@@ -35,21 +35,19 @@
  * (mirrors `do_lo_import`'s `SetVariable(pset.vars, "LASTOID", oidbuf)`).
  */
 
-import { promises as fsPromises } from 'node:fs';
-import { Buffer } from 'node:buffer';
-
+import { Buffer } from "node:buffer";
+import { promises as fsPromises } from "node:fs";
+import { listLargeObjects } from "../describe/queries.js";
+import { alignedPrinter } from "../print/aligned.js";
 import type {
-  BackslashCmdSpec,
-  BackslashContext,
-  BackslashRegistry,
-  BackslashResult,
-} from '../types/backslash.js';
-import type { Connection } from '../types/connection.js';
+	BackslashCmdSpec,
+	BackslashContext,
+	BackslashRegistry,
+	BackslashResult,
+} from "../types/backslash.js";
+import type { Connection } from "../types/connection.js";
 
-import { alignedPrinter } from '../print/aligned.js';
-import { listLargeObjects } from '../describe/queries.js';
-
-import { writeErr, writeOut } from './shared.js';
+import { writeErr, writeOut } from "./shared.js";
 
 // ---------------------------------------------------------------------------
 // Helpers shared by all four commands
@@ -60,21 +58,21 @@ const conn = (ctx: BackslashContext): Connection | null => ctx.settings.db;
 
 /** Emit "no current connection" error in the psql style. */
 const noConn = (ctx: BackslashContext): BackslashResult => {
-  writeErr(`\\${ctx.cmdName}: no connection to the server\n`);
-  ctx.settings.lastErrorResult = { message: 'no connection to the server' };
-  return { status: 'error' };
+	writeErr(`\\${ctx.cmdName}: no connection to the server\n`);
+	ctx.settings.lastErrorResult = { message: "no connection to the server" };
+	return { status: "error" };
 };
 
 /** Pull the diagnostic-style error message off a thrown value. */
 const errMsg = (err: unknown): string =>
-  err instanceof Error ? err.message : String(err);
+	err instanceof Error ? err.message : String(err);
 
 /**
  * Encode a `Buffer` as a Postgres text-format bytea literal: `\x<hex>`.
  * Hex form is unambiguous and works regardless of `bytea_output` or
  * `standard_conforming_strings`.
  */
-const byteaText = (buf: Buffer): string => `\\x${buf.toString('hex')}`;
+const byteaText = (buf: Buffer): string => `\\x${buf.toString("hex")}`;
 
 /**
  * Parse a string argument as an unsigned 32-bit OID. Returns `null` on
@@ -83,10 +81,10 @@ const byteaText = (buf: Buffer): string => `\\x${buf.toString('hex')}`;
  * digit run.
  */
 const parseOid = (raw: string): number | null => {
-  if (!/^\d+$/.test(raw)) return null;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n < 0 || n > 0xffffffff) return null;
-  return n;
+	if (!/^\d+$/.test(raw)) return null;
+	const n = Number(raw);
+	if (!Number.isFinite(n) || n < 0 || n > 0xffffffff) return null;
+	return n;
 };
 
 /**
@@ -95,21 +93,21 @@ const parseOid = (raw: string): number | null => {
  * `describe/formatters.ts`.
  */
 const cellToString = (v: unknown): string => {
-  if (v === null || v === undefined) return '';
-  if (typeof v === 'string') return v;
-  if (Buffer.isBuffer(v)) return v.toString('utf-8');
-  if (
-    typeof v === 'number' ||
-    typeof v === 'boolean' ||
-    typeof v === 'bigint'
-  ) {
-    return String(v);
-  }
-  try {
-    return JSON.stringify(v);
-  } catch {
-    return '';
-  }
+	if (v === null || v === undefined) return "";
+	if (typeof v === "string") return v;
+	if (Buffer.isBuffer(v)) return v.toString("utf-8");
+	if (
+		typeof v === "number" ||
+		typeof v === "boolean" ||
+		typeof v === "bigint"
+	) {
+		return String(v);
+	}
+	try {
+		return JSON.stringify(v);
+	} catch {
+		return "";
+	}
 };
 
 // ---------------------------------------------------------------------------
@@ -123,52 +121,52 @@ const cellToString = (v: unknown): string => {
  * upstream "Large objects" title.
  */
 const runLoList = async (
-  ctx: BackslashContext,
-  verbose: boolean,
+	ctx: BackslashContext,
+	verbose: boolean,
 ): Promise<BackslashResult> => {
-  const c = conn(ctx);
-  if (!c) return noConn(ctx);
-  const query = listLargeObjects({ verbose, serverVersion: c.serverVersion });
-  try {
-    const rs = await c.query(query.sql, query.params);
-    const coerced = {
-      ...rs,
-      rows: rs.rows.map((row) =>
-        row.map((v) =>
-          v === null || v === undefined ? null : cellToString(v),
-        ),
-      ),
-    };
-    const titleOverride = query.description ?? ctx.settings.popt.title;
-    const opts = {
-      ...ctx.settings.popt,
-      title: titleOverride,
-      topt: {
-        ...ctx.settings.popt.topt,
-        title: titleOverride ?? ctx.settings.popt.topt.title,
-      },
-    };
-    await alignedPrinter.printQuery(coerced, opts, process.stdout);
-    return { status: 'ok' };
-  } catch (err) {
-    writeErr(`\\${ctx.cmdName}: ${errMsg(err)}\n`);
-    ctx.settings.lastErrorResult = { message: errMsg(err) };
-    return { status: 'error' };
-  }
+	const c = conn(ctx);
+	if (!c) return noConn(ctx);
+	const query = listLargeObjects({ verbose, serverVersion: c.serverVersion });
+	try {
+		const rs = await c.query(query.sql, query.params);
+		const coerced = {
+			...rs,
+			rows: rs.rows.map((row) =>
+				row.map((v) =>
+					v === null || v === undefined ? null : cellToString(v),
+				),
+			),
+		};
+		const titleOverride = query.description ?? ctx.settings.popt.title;
+		const opts = {
+			...ctx.settings.popt,
+			title: titleOverride,
+			topt: {
+				...ctx.settings.popt.topt,
+				title: titleOverride ?? ctx.settings.popt.topt.title,
+			},
+		};
+		await alignedPrinter.printQuery(coerced, opts, process.stdout);
+		return { status: "ok" };
+	} catch (err) {
+		writeErr(`\\${ctx.cmdName}: ${errMsg(err)}\n`);
+		ctx.settings.lastErrorResult = { message: errMsg(err) };
+		return { status: "error" };
+	}
 };
 
 /** `\lo_list` — non-verbose listing. */
 export const cmdLoList: BackslashCmdSpec = {
-  name: 'lo_list',
-  helpKey: 'lo_list',
-  run: (ctx) => runLoList(ctx, false),
+	name: "lo_list",
+	helpKey: "lo_list",
+	run: (ctx) => runLoList(ctx, false),
 };
 
 /** `\lo_list+` — verbose listing (adds Access privileges column). */
 export const cmdLoListPlus: BackslashCmdSpec = {
-  name: 'lo_list+',
-  helpKey: 'lo_list',
-  run: (ctx) => runLoList(ctx, true),
+	name: "lo_list+",
+	helpKey: "lo_list",
+	run: (ctx) => runLoList(ctx, true),
 };
 
 // ---------------------------------------------------------------------------
@@ -190,73 +188,77 @@ export const cmdLoListPlus: BackslashCmdSpec = {
  * Errors fall through to the standard `\lo_import: <msg>` diagnostic.
  */
 export const cmdLoImport: BackslashCmdSpec = {
-  name: 'lo_import',
-  helpKey: 'lo_import',
-  run: async (ctx) => {
-    const c = conn(ctx);
-    if (!c) return noConn(ctx);
+	name: "lo_import",
+	helpKey: "lo_import",
+	run: async (ctx) => {
+		const c = conn(ctx);
+		if (!c) return noConn(ctx);
 
-    const file = ctx.nextArg('normal');
-    if (file === null || file.length === 0) {
-      writeErr('\\lo_import: missing required argument\n');
-      ctx.settings.lastErrorResult = { message: 'missing required argument' };
-      return { status: 'error' };
-    }
-    // Comment is the next lexed slash-arg token, mirroring upstream
-    // `do_lo_import`'s second `psql_scan_slash_option(OT_NORMAL)`. Using the
-    // lexer (not the raw line) means it picks up the token AFTER the file —
-    // `restOfLine()` ignored the read cursor and re-included the filename
-    // itself in the comment.
-    const commentRaw = ctx.nextArg('normal');
-    const comment =
-      commentRaw !== null && commentRaw.length > 0 ? commentRaw : null;
+		const file = ctx.nextArg("normal");
+		if (file === null || file.length === 0) {
+			writeErr("\\lo_import: missing required argument\n");
+			ctx.settings.lastErrorResult = {
+				message: "missing required argument",
+			};
+			return { status: "error" };
+		}
+		// Comment is the next lexed slash-arg token, mirroring upstream
+		// `do_lo_import`'s second `psql_scan_slash_option(OT_NORMAL)`. Using the
+		// lexer (not the raw line) means it picks up the token AFTER the file —
+		// `restOfLine()` ignored the read cursor and re-included the filename
+		// itself in the comment.
+		const commentRaw = ctx.nextArg("normal");
+		const comment =
+			commentRaw !== null && commentRaw.length > 0 ? commentRaw : null;
 
-    let bytes: Buffer;
-    try {
-      bytes = await fsPromises.readFile(file);
-    } catch (err) {
-      writeErr(`\\lo_import: ${errMsg(err)}\n`);
-      ctx.settings.lastErrorResult = { message: errMsg(err) };
-      return { status: 'error' };
-    }
+		let bytes: Buffer;
+		try {
+			bytes = await fsPromises.readFile(file);
+		} catch (err) {
+			writeErr(`\\lo_import: ${errMsg(err)}\n`);
+			ctx.settings.lastErrorResult = { message: errMsg(err) };
+			return { status: "error" };
+		}
 
-    let oidStr: string;
-    try {
-      const rs = await c.query(
-        'SELECT pg_catalog.lo_from_bytea(0, $1::bytea)',
-        [byteaText(bytes)],
-      );
-      if (rs.rows.length === 0) {
-        throw new Error('lo_from_bytea returned no rows');
-      }
-      oidStr = cellToString(rs.rows[0][0]);
-      if (!/^\d+$/.test(oidStr)) {
-        throw new Error(`lo_from_bytea returned invalid oid: ${oidStr}`);
-      }
-    } catch (err) {
-      writeErr(`\\lo_import: ${errMsg(err)}\n`);
-      ctx.settings.lastErrorResult = { message: errMsg(err) };
-      return { status: 'error' };
-    }
+		let oidStr: string;
+		try {
+			const rs = await c.query(
+				"SELECT pg_catalog.lo_from_bytea(0, $1::bytea)",
+				[byteaText(bytes)],
+			);
+			if (rs.rows.length === 0) {
+				throw new Error("lo_from_bytea returned no rows");
+			}
+			oidStr = cellToString(rs.rows[0][0]);
+			if (!/^\d+$/.test(oidStr)) {
+				throw new Error(
+					`lo_from_bytea returned invalid oid: ${oidStr}`,
+				);
+			}
+		} catch (err) {
+			writeErr(`\\lo_import: ${errMsg(err)}\n`);
+			ctx.settings.lastErrorResult = { message: errMsg(err) };
+			return { status: "error" };
+		}
 
-    if (comment !== null) {
-      try {
-        await c.execSimple(
-          `COMMENT ON LARGE OBJECT ${oidStr} IS ${c.escapeLiteral(comment)}`,
-        );
-      } catch (err) {
-        writeErr(`\\lo_import: ${errMsg(err)}\n`);
-        ctx.settings.lastErrorResult = { message: errMsg(err) };
-        return { status: 'error' };
-      }
-    }
+		if (comment !== null) {
+			try {
+				await c.execSimple(
+					`COMMENT ON LARGE OBJECT ${oidStr} IS ${c.escapeLiteral(comment)}`,
+				);
+			} catch (err) {
+				writeErr(`\\lo_import: ${errMsg(err)}\n`);
+				ctx.settings.lastErrorResult = { message: errMsg(err) };
+				return { status: "error" };
+			}
+		}
 
-    // Side effect: set LASTOID (matches upstream `do_lo_import`).
-    ctx.settings.vars.set('LASTOID', oidStr);
+		// Side effect: set LASTOID (matches upstream `do_lo_import`).
+		ctx.settings.vars.set("LASTOID", oidStr);
 
-    writeOut(`lo_import ${oidStr}\n`);
-    return { status: 'ok' };
-  },
+		writeOut(`lo_import ${oidStr}\n`);
+		return { status: "ok" };
+	},
 };
 
 // ---------------------------------------------------------------------------
@@ -275,51 +277,57 @@ export const cmdLoImport: BackslashCmdSpec = {
  * Print `lo_export\n` on success — matches upstream `do_lo_export`.
  */
 export const cmdLoExport: BackslashCmdSpec = {
-  name: 'lo_export',
-  helpKey: 'lo_export',
-  run: async (ctx) => {
-    const c = conn(ctx);
-    if (!c) return noConn(ctx);
+	name: "lo_export",
+	helpKey: "lo_export",
+	run: async (ctx) => {
+		const c = conn(ctx);
+		if (!c) return noConn(ctx);
 
-    const oidArg = ctx.nextArg('normal');
-    const file = ctx.nextArg('normal');
-    if (oidArg === null || file === null || file.length === 0) {
-      writeErr('\\lo_export: missing required argument\n');
-      ctx.settings.lastErrorResult = { message: 'missing required argument' };
-      return { status: 'error' };
-    }
-    const oid = parseOid(oidArg);
-    if (oid === null) {
-      writeErr(`\\lo_export: "${oidArg}" is not a valid large object OID\n`);
-      ctx.settings.lastErrorResult = { message: 'invalid OID' };
-      return { status: 'error' };
-    }
+		const oidArg = ctx.nextArg("normal");
+		const file = ctx.nextArg("normal");
+		if (oidArg === null || file === null || file.length === 0) {
+			writeErr("\\lo_export: missing required argument\n");
+			ctx.settings.lastErrorResult = {
+				message: "missing required argument",
+			};
+			return { status: "error" };
+		}
+		const oid = parseOid(oidArg);
+		if (oid === null) {
+			writeErr(
+				`\\lo_export: "${oidArg}" is not a valid large object OID\n`,
+			);
+			ctx.settings.lastErrorResult = { message: "invalid OID" };
+			return { status: "error" };
+		}
 
-    let bytes: Buffer;
-    try {
-      const rs = await c.query('SELECT pg_catalog.lo_get($1::oid)', [oid]);
-      if (rs.rows.length === 0) {
-        throw new Error('lo_get returned no rows');
-      }
-      const cell = rs.rows[0][0];
-      bytes = coerceBytea(cell);
-    } catch (err) {
-      writeErr(`\\lo_export: ${errMsg(err)}\n`);
-      ctx.settings.lastErrorResult = { message: errMsg(err) };
-      return { status: 'error' };
-    }
+		let bytes: Buffer;
+		try {
+			const rs = await c.query("SELECT pg_catalog.lo_get($1::oid)", [
+				oid,
+			]);
+			if (rs.rows.length === 0) {
+				throw new Error("lo_get returned no rows");
+			}
+			const cell = rs.rows[0][0];
+			bytes = coerceBytea(cell);
+		} catch (err) {
+			writeErr(`\\lo_export: ${errMsg(err)}\n`);
+			ctx.settings.lastErrorResult = { message: errMsg(err) };
+			return { status: "error" };
+		}
 
-    try {
-      await fsPromises.writeFile(file, bytes);
-    } catch (err) {
-      writeErr(`\\lo_export: ${errMsg(err)}\n`);
-      ctx.settings.lastErrorResult = { message: errMsg(err) };
-      return { status: 'error' };
-    }
+		try {
+			await fsPromises.writeFile(file, bytes);
+		} catch (err) {
+			writeErr(`\\lo_export: ${errMsg(err)}\n`);
+			ctx.settings.lastErrorResult = { message: errMsg(err) };
+			return { status: "error" };
+		}
 
-    writeOut('lo_export\n');
-    return { status: 'ok' };
-  },
+		writeOut("lo_export\n");
+		return { status: "ok" };
+	},
 };
 
 /**
@@ -331,34 +339,34 @@ export const cmdLoExport: BackslashCmdSpec = {
  *     don't generate this but it's the historical default).
  */
 const coerceBytea = (cell: unknown): Buffer => {
-  if (Buffer.isBuffer(cell)) return cell;
-  if (typeof cell !== 'string') {
-    throw new Error(`lo_get returned unexpected cell type: ${typeof cell}`);
-  }
-  if (cell.startsWith('\\x')) {
-    return Buffer.from(cell.slice(2), 'hex');
-  }
-  // Legacy octal-escape decode (`\\\\NNN` → byte, `\\\\` → `\\`, others
-  // pass through). Upstream `PQunescapeBytea` does the same.
-  const out: number[] = [];
-  let i = 0;
-  while (i < cell.length) {
-    if (cell[i] === '\\') {
-      if (cell[i + 1] === '\\') {
-        out.push(0x5c);
-        i += 2;
-        continue;
-      }
-      if (/^[0-7][0-7][0-7]$/.test(cell.slice(i + 1, i + 4))) {
-        out.push(parseInt(cell.slice(i + 1, i + 4), 8));
-        i += 4;
-        continue;
-      }
-    }
-    out.push(cell.charCodeAt(i));
-    i++;
-  }
-  return Buffer.from(out);
+	if (Buffer.isBuffer(cell)) return cell;
+	if (typeof cell !== "string") {
+		throw new Error(`lo_get returned unexpected cell type: ${typeof cell}`);
+	}
+	if (cell.startsWith("\\x")) {
+		return Buffer.from(cell.slice(2), "hex");
+	}
+	// Legacy octal-escape decode (`\\\\NNN` → byte, `\\\\` → `\\`, others
+	// pass through). Upstream `PQunescapeBytea` does the same.
+	const out: number[] = [];
+	let i = 0;
+	while (i < cell.length) {
+		if (cell[i] === "\\") {
+			if (cell[i + 1] === "\\") {
+				out.push(0x5c);
+				i += 2;
+				continue;
+			}
+			if (/^[0-7][0-7][0-7]$/.test(cell.slice(i + 1, i + 4))) {
+				out.push(parseInt(cell.slice(i + 1, i + 4), 8));
+				i += 4;
+				continue;
+			}
+		}
+		out.push(cell.charCodeAt(i));
+		i++;
+	}
+	return Buffer.from(out);
 };
 
 // ---------------------------------------------------------------------------
@@ -374,36 +382,40 @@ const coerceBytea = (cell: unknown): Buffer => {
  * Print `lo_unlink <oid>\n` on success.
  */
 export const cmdLoUnlink: BackslashCmdSpec = {
-  name: 'lo_unlink',
-  helpKey: 'lo_unlink',
-  run: async (ctx) => {
-    const c = conn(ctx);
-    if (!c) return noConn(ctx);
+	name: "lo_unlink",
+	helpKey: "lo_unlink",
+	run: async (ctx) => {
+		const c = conn(ctx);
+		if (!c) return noConn(ctx);
 
-    const oidArg = ctx.nextArg('normal');
-    if (oidArg === null) {
-      writeErr('\\lo_unlink: missing required argument\n');
-      ctx.settings.lastErrorResult = { message: 'missing required argument' };
-      return { status: 'error' };
-    }
-    const oid = parseOid(oidArg);
-    if (oid === null) {
-      writeErr(`\\lo_unlink: "${oidArg}" is not a valid large object OID\n`);
-      ctx.settings.lastErrorResult = { message: 'invalid OID' };
-      return { status: 'error' };
-    }
+		const oidArg = ctx.nextArg("normal");
+		if (oidArg === null) {
+			writeErr("\\lo_unlink: missing required argument\n");
+			ctx.settings.lastErrorResult = {
+				message: "missing required argument",
+			};
+			return { status: "error" };
+		}
+		const oid = parseOid(oidArg);
+		if (oid === null) {
+			writeErr(
+				`\\lo_unlink: "${oidArg}" is not a valid large object OID\n`,
+			);
+			ctx.settings.lastErrorResult = { message: "invalid OID" };
+			return { status: "error" };
+		}
 
-    try {
-      await c.query('SELECT pg_catalog.lo_unlink($1::oid)', [oid]);
-    } catch (err) {
-      writeErr(`\\lo_unlink: ${errMsg(err)}\n`);
-      ctx.settings.lastErrorResult = { message: errMsg(err) };
-      return { status: 'error' };
-    }
+		try {
+			await c.query("SELECT pg_catalog.lo_unlink($1::oid)", [oid]);
+		} catch (err) {
+			writeErr(`\\lo_unlink: ${errMsg(err)}\n`);
+			ctx.settings.lastErrorResult = { message: errMsg(err) };
+			return { status: "error" };
+		}
 
-    writeOut(`lo_unlink ${String(oid)}\n`);
-    return { status: 'ok' };
-  },
+		writeOut(`lo_unlink ${String(oid)}\n`);
+		return { status: "ok" };
+	},
 };
 
 // ---------------------------------------------------------------------------
@@ -419,11 +431,11 @@ export const cmdLoUnlink: BackslashCmdSpec = {
  * names before alias mappings, so this registration is the winning one.
  */
 export const registerLargeObjectCommands = (
-  registry: BackslashRegistry,
+	registry: BackslashRegistry,
 ): void => {
-  registry.register(cmdLoList);
-  registry.register(cmdLoListPlus);
-  registry.register(cmdLoImport);
-  registry.register(cmdLoExport);
-  registry.register(cmdLoUnlink);
+	registry.register(cmdLoList);
+	registry.register(cmdLoListPlus);
+	registry.register(cmdLoImport);
+	registry.register(cmdLoExport);
+	registry.register(cmdLoUnlink);
 };

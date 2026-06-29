@@ -30,47 +30,47 @@
 // by the root, then mint individual leaf certs with assorted CN / SAN
 // shapes. Accessors expose the absolute file paths to the spec.
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync } from "node:child_process";
 import {
-  existsSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+	existsSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import { log } from './util-log.js';
+import { log } from "./util-log.js";
 
 export type TlsPgConn = {
-  host: string;
-  port: number;
-  db: string;
-  /**
-   * Default `testuser` (host all all trust). Other usernames
-   * (`ssluser`, `nossluser`, `ssltestuser`, `anotheruser`) are created at
-   * startup and have different HBA rules — use them by overriding `user`
-   * on the {@link PgConnection.connect} options.
-   */
-  user: string;
-  password: string;
-  /**
-   * Path to the *active* server cert on the host filesystem (initially the
-   * CN-and-SAN variant). Preserved for backward compatibility with the 005
-   * spec which uses this as the self-signed root for `sslrootcert`.
-   */
-  serverCertPath: string;
-  /** Path to the active server private key on the host filesystem. */
-  serverKeyPath: string;
-  /** Working directory used for cert generation; cleaned up on teardown. */
-  workDir: string;
-  /**
-   * Full cert vault. Cert vault accessors expose the individual leaf
-   * certs minted by {@link CertVault}; the 001 spec drives the cert-shape
-   * subtests through this. Always present.
-   */
-  vault: CertVault;
+	host: string;
+	port: number;
+	db: string;
+	/**
+	 * Default `testuser` (host all all trust). Other usernames
+	 * (`ssluser`, `nossluser`, `ssltestuser`, `anotheruser`) are created at
+	 * startup and have different HBA rules — use them by overriding `user`
+	 * on the {@link PgConnection.connect} options.
+	 */
+	user: string;
+	password: string;
+	/**
+	 * Path to the *active* server cert on the host filesystem (initially the
+	 * CN-and-SAN variant). Preserved for backward compatibility with the 005
+	 * spec which uses this as the self-signed root for `sslrootcert`.
+	 */
+	serverCertPath: string;
+	/** Path to the active server private key on the host filesystem. */
+	serverKeyPath: string;
+	/** Working directory used for cert generation; cleaned up on teardown. */
+	workDir: string;
+	/**
+	 * Full cert vault. Cert vault accessors expose the individual leaf
+	 * certs minted by {@link CertVault}; the 001 spec drives the cert-shape
+	 * subtests through this. Always present.
+	 */
+	vault: CertVault;
 };
 
 type StoppableContainer = { stop(): Promise<unknown> };
@@ -78,7 +78,7 @@ type StoppableContainer = { stop(): Promise<unknown> };
 let containerRef: StoppableContainer | null = null;
 let workDirRef: string | null = null;
 
-const PG_IMAGE_DEFAULT = 'postgres:18.0';
+const PG_IMAGE_DEFAULT = "postgres:18.0";
 
 // ---------------------------------------------------------------------------
 // CertVault — openssl-driven mint workflow for the upstream-style cert tree.
@@ -113,38 +113,38 @@ const PG_IMAGE_DEFAULT = 'postgres:18.0';
 
 /** Identifier for a server cert that the spec can mount onto the server. */
 export type ServerCertName =
-  | 'cn-only'
-  | 'cn-and-san'
-  | 'san-only'
-  | 'ip-in-san'
-  | 'multi-name'
-  /**
-   * RSA-PSS keyed leaf, signed by the (RSA-PKCS1) server CA. Exists so
-   * the 002_scram spec can verify that SCRAM-SHA-256-PLUS channel
-   * binding works against a server presenting an `rsassaPss`-signed
-   * certificate (upstream bug #17760 + the `HAVE_X509_GET_SIGNATURE_INFO`
-   * branch in libpq). SAN matches `cn-and-san` so verify-full works.
-   */
-  | 'pss';
+	| "cn-only"
+	| "cn-and-san"
+	| "san-only"
+	| "ip-in-san"
+	| "multi-name"
+	/**
+	 * RSA-PSS keyed leaf, signed by the (RSA-PKCS1) server CA. Exists so
+	 * the 002_scram spec can verify that SCRAM-SHA-256-PLUS channel
+	 * binding works against a server presenting an `rsassaPss`-signed
+	 * certificate (upstream bug #17760 + the `HAVE_X509_GET_SIGNATURE_INFO`
+	 * branch in libpq). SAN matches `cn-and-san` so verify-full works.
+	 */
+	| "pss";
 
 /** Identifier for a client cert the spec can pass via sslcert/sslkey. */
 export type ClientCertName =
-  | 'ssltestuser'
-  | 'anotheruser'
-  | 'revokeduser'
-  /** Non-ASCII (UTF-8) CN; revoked by the client-CA CRL — exercises CRL
-   * handling of non-ASCII subjects (`server-side CRL non-ASCII` test). */
-  | 'nonascii'
-  /** CN longer than NAMEDATALEN-1 (63 bytes); valid + trusted but its
-   * subject cannot round-trip to a role, so verify-full must reject it. */
-  | 'longsubject';
+	| "ssltestuser"
+	| "anotheruser"
+	| "revokeduser"
+	/** Non-ASCII (UTF-8) CN; revoked by the client-CA CRL — exercises CRL
+	 * handling of non-ASCII subjects (`server-side CRL non-ASCII` test). */
+	| "nonascii"
+	/** CN longer than NAMEDATALEN-1 (63 bytes); valid + trusted but its
+	 * subject cannot round-trip to a role, so verify-full must reject it. */
+	| "longsubject";
 
 /**
  * CN of the `longsubject` client cert: `ssl-` + 60 chars = 64 bytes, one
  * past PostgreSQL's NAMEDATALEN-1 (63) identifier limit. Mirrors upstream
  * `client-long`'s `ssl-1234…` subject.
  */
-export const LONG_CERT_CN = 'ssl-' + '1234567890'.repeat(6);
+export const LONG_CERT_CN = "ssl-" + "1234567890".repeat(6);
 /**
  * The role/HBA name a 64-byte CN collapses to once stored as a PG `name`
  * (truncated to 63 bytes). The full-length cert CN can never equal this,
@@ -152,7 +152,7 @@ export const LONG_CERT_CN = 'ssl-' + '1234567890'.repeat(6);
  */
 export const LONG_CERT_USER = LONG_CERT_CN.slice(0, 63);
 /** CN of the non-ASCII client cert revoked by the client-CA CRL. */
-export const NONASCII_CERT_CN = 'révoqué-Ünïcode-Пользователь';
+export const NONASCII_CERT_CN = "révoqué-Ünïcode-Пользователь";
 
 /**
  * Container-side paths the server reads its TLS material from. The init
@@ -161,14 +161,14 @@ export const NONASCII_CERT_CN = 'révoqué-Ünïcode-Пользователь';
  * client certs). Switching cert at runtime is done by `ALTER SYSTEM SET
  * ssl_cert_file = '<other.crt>'` + pg_reload_conf().
  */
-const SERVER_CERT_TARGET_DIR = '/etc/postgresql-tls';
+const SERVER_CERT_TARGET_DIR = "/etc/postgresql-tls";
 
 /**
  * In-container path the server reads to validate client certificates.
  * Populated by `ssl_ca_file` in postgresql.conf. Generated by the init
  * script from the host-side `root+client_ca.crt`.
  */
-const CLIENT_CA_CONTAINER_PATH = '/etc/postgresql-tls/client-ca.crt';
+const CLIENT_CA_CONTAINER_PATH = "/etc/postgresql-tls/client-ca.crt";
 
 /**
  * Manage the cert tree for the TLS fixture. One instance owns a tmp
@@ -176,553 +176,570 @@ const CLIENT_CA_CONTAINER_PATH = '/etc/postgresql-tls/client-ca.crt';
  * spec then reads files via the accessors (or by joining workDir/<name>).
  */
 export class CertVault {
-  public readonly workDir: string;
+	public readonly workDir: string;
 
-  private readonly serverCerts = new Map<
-    ServerCertName,
-    { cert: string; key: string }
-  >();
-  private readonly clientCerts = new Map<
-    ClientCertName,
-    { cert: string; key: string; encryptedKey?: string }
-  >();
-  private rootCaCertPath: string | null = null;
-  private serverCaCertPath: string | null = null;
-  private clientCaCertPath: string | null = null;
-  private bundleRootServerPath: string | null = null;
-  private bundleRootClientPath: string | null = null;
-  private serverCrlPath: string | null = null;
-  private clientCrlPath: string | null = null;
+	private readonly serverCerts = new Map<
+		ServerCertName,
+		{ cert: string; key: string }
+	>();
+	private readonly clientCerts = new Map<
+		ClientCertName,
+		{ cert: string; key: string; encryptedKey?: string }
+	>();
+	private rootCaCertPath: string | null = null;
+	private serverCaCertPath: string | null = null;
+	private clientCaCertPath: string | null = null;
+	private bundleRootServerPath: string | null = null;
+	private bundleRootClientPath: string | null = null;
+	private serverCrlPath: string | null = null;
+	private clientCrlPath: string | null = null;
 
-  public constructor(workDir: string) {
-    this.workDir = workDir;
-  }
+	public constructor(workDir: string) {
+		this.workDir = workDir;
+	}
 
-  /** Mint every cert in the vault. Idempotent — calling twice overwrites. */
-  public mint(): void {
-    // 1. Root CA — self-signed.
-    const rootKey = this.path('root_ca.key');
-    const rootCert = this.path('root_ca.crt');
-    runOpenssl([
-      'req',
-      '-x509',
-      '-nodes',
-      '-newkey',
-      'rsa:2048',
-      '-keyout',
-      rootKey,
-      '-out',
-      rootCert,
-      '-days',
-      '30',
-      '-subj',
-      '/CN=Test CA Root',
-    ]);
-    this.rootCaCertPath = rootCert;
+	/** Mint every cert in the vault. Idempotent — calling twice overwrites. */
+	public mint(): void {
+		// 1. Root CA — self-signed.
+		const rootKey = this.path("root_ca.key");
+		const rootCert = this.path("root_ca.crt");
+		runOpenssl([
+			"req",
+			"-x509",
+			"-nodes",
+			"-newkey",
+			"rsa:2048",
+			"-keyout",
+			rootKey,
+			"-out",
+			rootCert,
+			"-days",
+			"30",
+			"-subj",
+			"/CN=Test CA Root",
+		]);
+		this.rootCaCertPath = rootCert;
 
-    // 2. Server CA — signed by the root.
-    const serverCaCert = this.signCa('server_ca', 'Test Server CA');
-    this.serverCaCertPath = serverCaCert;
+		// 2. Server CA — signed by the root.
+		const serverCaCert = this.signCa("server_ca", "Test Server CA");
+		this.serverCaCertPath = serverCaCert;
 
-    // 3. Client CA — signed by the root.
-    const clientCaCert = this.signCa('client_ca', 'Test Client CA');
-    this.clientCaCertPath = clientCaCert;
+		// 3. Client CA — signed by the root.
+		const clientCaCert = this.signCa("client_ca", "Test Client CA");
+		this.clientCaCertPath = clientCaCert;
 
-    // 4. PEM bundles — `root+server_ca.crt` is what the client passes as
-    // `sslrootcert` for verify-ca/full; `root+client_ca.crt` is what the
-    // server reads via `ssl_ca_file` to validate incoming client certs.
-    this.bundleRootServerPath = this.path('root+server_ca.crt');
-    writeFileSync(
-      this.bundleRootServerPath,
-      readUtf8(rootCert) + '\n' + readUtf8(serverCaCert),
-    );
-    this.bundleRootClientPath = this.path('root+client_ca.crt');
-    writeFileSync(
-      this.bundleRootClientPath,
-      readUtf8(rootCert) + '\n' + readUtf8(clientCaCert),
-    );
+		// 4. PEM bundles — `root+server_ca.crt` is what the client passes as
+		// `sslrootcert` for verify-ca/full; `root+client_ca.crt` is what the
+		// server reads via `ssl_ca_file` to validate incoming client certs.
+		this.bundleRootServerPath = this.path("root+server_ca.crt");
+		writeFileSync(
+			this.bundleRootServerPath,
+			readUtf8(rootCert) + "\n" + readUtf8(serverCaCert),
+		);
+		this.bundleRootClientPath = this.path("root+client_ca.crt");
+		writeFileSync(
+			this.bundleRootClientPath,
+			readUtf8(rootCert) + "\n" + readUtf8(clientCaCert),
+		);
 
-    // 5. Server leaf certs — signed by the server CA.
-    this.mintServerCert('cn-only', '/CN=localhost', []);
-    this.mintServerCert('cn-and-san', '/CN=localhost', [
-      'DNS:localhost',
-      'DNS:127.0.0.1',
-      'DNS:*.localhost',
-    ]);
-    this.mintServerCert('san-only', '/CN=server-with-no-cn', ['DNS:localhost']);
-    this.mintServerCert('ip-in-san', '/CN=server-ip', ['IP:127.0.0.1']);
-    this.mintServerCert('multi-name', '/CN=server-multi', [
-      'DNS:dns1.localhost',
-      'DNS:dns2.localhost',
-      'DNS:*.wildcard.localhost',
-    ]);
-    this.mintRsaPssServerCert();
+		// 5. Server leaf certs — signed by the server CA.
+		this.mintServerCert("cn-only", "/CN=localhost", []);
+		this.mintServerCert("cn-and-san", "/CN=localhost", [
+			"DNS:localhost",
+			"DNS:127.0.0.1",
+			"DNS:*.localhost",
+		]);
+		this.mintServerCert("san-only", "/CN=server-with-no-cn", [
+			"DNS:localhost",
+		]);
+		this.mintServerCert("ip-in-san", "/CN=server-ip", ["IP:127.0.0.1"]);
+		this.mintServerCert("multi-name", "/CN=server-multi", [
+			"DNS:dns1.localhost",
+			"DNS:dns2.localhost",
+			"DNS:*.wildcard.localhost",
+		]);
+		this.mintRsaPssServerCert();
 
-    // 6. Client leaf certs — signed by the client CA.
-    this.mintClientCert('ssltestuser', '/CN=ssltestuser');
-    this.mintClientCert('anotheruser', '/CN=anotheruser');
-    // `revokeduser` exists solely to be revoked by the client-CA CRL the
-    // server loads via `ssl_crl_file` (server-side revocation test).
-    this.mintClientCert('revokeduser', '/CN=revokeduser');
-    // Non-ASCII CN, also revoked — exercises CRL handling of UTF-8 subjects.
-    this.mintClientCert('nonascii', `/CN=${NONASCII_CERT_CN}`);
-    // Over-long CN (64 bytes) — valid + trusted, NOT revoked; used to prove
-    // a subject too long to store as a role can't authenticate.
-    this.mintClientCert('longsubject', `/CN=${LONG_CERT_CN}`);
+		// 6. Client leaf certs — signed by the client CA.
+		this.mintClientCert("ssltestuser", "/CN=ssltestuser");
+		this.mintClientCert("anotheruser", "/CN=anotheruser");
+		// `revokeduser` exists solely to be revoked by the client-CA CRL the
+		// server loads via `ssl_crl_file` (server-side revocation test).
+		this.mintClientCert("revokeduser", "/CN=revokeduser");
+		// Non-ASCII CN, also revoked — exercises CRL handling of UTF-8 subjects.
+		this.mintClientCert("nonascii", `/CN=${NONASCII_CERT_CN}`);
+		// Over-long CN (64 bytes) — valid + trusted, NOT revoked; used to prove
+		// a subject too long to store as a role can't authenticate.
+		this.mintClientCert("longsubject", `/CN=${LONG_CERT_CN}`);
 
-    // 7. Encrypted variant of ssltestuser's key. PKCS#8 AES-256, passphrase
-    // "testpw". We don't keep the unencrypted key path under a different
-    // name — the spec passes the *encrypted* key as sslkey + sslpassword
-    // to exercise the wire-layer passphrase path.
-    const userCert = this.clientCerts.get('ssltestuser');
-    if (!userCert) throw new Error('CertVault: ssltestuser was not minted');
-    const encryptedKey = this.path('client-ssltestuser-encrypted.key');
-    runOpenssl([
-      'pkcs8',
-      '-topk8',
-      '-in',
-      userCert.key,
-      '-out',
-      encryptedKey,
-      '-passout',
-      'pass:testpw',
-      '-v2',
-      'aes-256-cbc',
-    ]);
-    userCert.encryptedKey = encryptedKey;
+		// 7. Encrypted variant of ssltestuser's key. PKCS#8 AES-256, passphrase
+		// "testpw". We don't keep the unencrypted key path under a different
+		// name — the spec passes the *encrypted* key as sslkey + sslpassword
+		// to exercise the wire-layer passphrase path.
+		const userCert = this.clientCerts.get("ssltestuser");
+		if (!userCert) throw new Error("CertVault: ssltestuser was not minted");
+		const encryptedKey = this.path("client-ssltestuser-encrypted.key");
+		runOpenssl([
+			"pkcs8",
+			"-topk8",
+			"-in",
+			userCert.key,
+			"-out",
+			encryptedKey,
+			"-passout",
+			"pass:testpw",
+			"-v2",
+			"aes-256-cbc",
+		]);
+		userCert.encryptedKey = encryptedKey;
 
-    // 8. CRL bundles. PG and Node both enable OpenSSL's CRL_CHECK_ALL, which
-    // requires a CRL for EVERY CA in the chain being verified — including an
-    // (empty) CRL for the issuing intermediate so its own revocation status
-    // is checkable. Without it, verifying a non-revoked cert fails with
-    // "unknown ca". So each `sslcrl` / `ssl_crl_file` is a PEM bundle of the
-    // revoking CA's CRL + the root CA's empty CRL.
-    const rootCaCrl = this.mintCrl('root', rootCert, rootKey, [], 'root.crl');
+		// 8. CRL bundles. PG and Node both enable OpenSSL's CRL_CHECK_ALL, which
+		// requires a CRL for EVERY CA in the chain being verified — including an
+		// (empty) CRL for the issuing intermediate so its own revocation status
+		// is checkable. Without it, verifying a non-revoked cert fails with
+		// "unknown ca". So each `sslcrl` / `ssl_crl_file` is a PEM bundle of the
+		// revoking CA's CRL + the root CA's empty CRL.
+		const rootCaCrl = this.mintCrl(
+			"root",
+			rootCert,
+			rootKey,
+			[],
+			"root.crl",
+		);
 
-    // 8a. Client-side `sslcrl`: server_ca CRL revoking the active server leaf
-    // (cn-and-san) + root CRL. The client passes this to reject a revoked
-    // server certificate at verify time.
-    const serverLeaf = this.serverCerts.get('cn-and-san');
-    if (!serverLeaf) throw new Error('CertVault: cn-and-san cert not minted');
-    const serverCaCrl = this.mintCrl(
-      'server',
-      this.serverCaCertPath,
-      this.path('server_ca.key'),
-      [serverLeaf.cert],
-      'server_ca_only.crl',
-    );
-    this.serverCrlPath = this.path('server_ca.crl');
-    writeFileSync(
-      this.serverCrlPath,
-      readUtf8(serverCaCrl) + '\n' + readUtf8(rootCaCrl),
-    );
+		// 8a. Client-side `sslcrl`: server_ca CRL revoking the active server leaf
+		// (cn-and-san) + root CRL. The client passes this to reject a revoked
+		// server certificate at verify time.
+		const serverLeaf = this.serverCerts.get("cn-and-san");
+		if (!serverLeaf)
+			throw new Error("CertVault: cn-and-san cert not minted");
+		const serverCaCrl = this.mintCrl(
+			"server",
+			this.serverCaCertPath,
+			this.path("server_ca.key"),
+			[serverLeaf.cert],
+			"server_ca_only.crl",
+		);
+		this.serverCrlPath = this.path("server_ca.crl");
+		writeFileSync(
+			this.serverCrlPath,
+			readUtf8(serverCaCrl) + "\n" + readUtf8(rootCaCrl),
+		);
 
-    // 8b. Server-side `ssl_crl_file`: client_ca CRL revoking `revokeduser`
-    // AND the non-ASCII-CN cert (proves the CRL path handles UTF-8 subjects)
-    // + root CRL. The server loads this to reject the revoked client certs.
-    const revoked = this.clientCerts.get('revokeduser');
-    const nonascii = this.clientCerts.get('nonascii');
-    if (!revoked || !nonascii) {
-      throw new Error('CertVault: revoked client certs not minted');
-    }
-    if (!this.clientCaCertPath) throw new Error('CertVault: client CA missing');
-    const clientCaCrl = this.mintCrl(
-      'client',
-      this.clientCaCertPath,
-      this.path('client_ca.key'),
-      [revoked.cert, nonascii.cert],
-      'client_ca_only.crl',
-    );
-    this.clientCrlPath = this.path('client_ca.crl');
-    writeFileSync(
-      this.clientCrlPath,
-      readUtf8(clientCaCrl) + '\n' + readUtf8(rootCaCrl),
-    );
-  }
+		// 8b. Server-side `ssl_crl_file`: client_ca CRL revoking `revokeduser`
+		// AND the non-ASCII-CN cert (proves the CRL path handles UTF-8 subjects)
+		// + root CRL. The server loads this to reject the revoked client certs.
+		const revoked = this.clientCerts.get("revokeduser");
+		const nonascii = this.clientCerts.get("nonascii");
+		if (!revoked || !nonascii) {
+			throw new Error("CertVault: revoked client certs not minted");
+		}
+		if (!this.clientCaCertPath)
+			throw new Error("CertVault: client CA missing");
+		const clientCaCrl = this.mintCrl(
+			"client",
+			this.clientCaCertPath,
+			this.path("client_ca.key"),
+			[revoked.cert, nonascii.cert],
+			"client_ca_only.crl",
+		);
+		this.clientCrlPath = this.path("client_ca.crl");
+		writeFileSync(
+			this.clientCrlPath,
+			readUtf8(clientCaCrl) + "\n" + readUtf8(rootCaCrl),
+		);
+	}
 
-  /**
-   * Generate a CRL signed by `caCertPath`/`caKeyPath` that lists
-   * `revokeCertPath` as revoked, written to `<workDir>/<outName>`. Uses the
-   * `openssl ca -gencrl` workflow, which needs a tiny per-CA database
-   * (index + crlnumber + serial) and a config naming the issuing cert/key.
-   * `slug` namespaces those scratch files so multiple CRLs don't collide.
-   * Returns the absolute CRL path.
-   */
-  private mintCrl(
-    slug: string,
-    caCertPath: string,
-    caKeyPath: string,
-    revokeCertPaths: string[],
-    outName: string,
-  ): string {
-    const indexPath = this.path(`crl-${slug}-index.txt`);
-    const crlNumberPath = this.path(`crl-${slug}-number.txt`);
-    const serialPath = this.path(`crl-${slug}-serial.txt`);
-    const configPath = this.path(`crl-${slug}-ca.cnf`);
-    const crlPath = this.path(outName);
+	/**
+	 * Generate a CRL signed by `caCertPath`/`caKeyPath` that lists
+	 * `revokeCertPath` as revoked, written to `<workDir>/<outName>`. Uses the
+	 * `openssl ca -gencrl` workflow, which needs a tiny per-CA database
+	 * (index + crlnumber + serial) and a config naming the issuing cert/key.
+	 * `slug` namespaces those scratch files so multiple CRLs don't collide.
+	 * Returns the absolute CRL path.
+	 */
+	private mintCrl(
+		slug: string,
+		caCertPath: string,
+		caKeyPath: string,
+		revokeCertPaths: string[],
+		outName: string,
+	): string {
+		const indexPath = this.path(`crl-${slug}-index.txt`);
+		const crlNumberPath = this.path(`crl-${slug}-number.txt`);
+		const serialPath = this.path(`crl-${slug}-serial.txt`);
+		const configPath = this.path(`crl-${slug}-ca.cnf`);
+		const crlPath = this.path(outName);
 
-    writeFileSync(indexPath, '');
-    writeFileSync(crlNumberPath, '1000\n');
-    writeFileSync(serialPath, '1000\n');
-    // Minimal `openssl ca` config: just enough for -revoke and -gencrl.
-    writeFileSync(
-      configPath,
-      [
-        '[ca]',
-        'default_ca = CA_default',
-        '',
-        '[CA_default]',
-        `dir = ${this.workDir}`,
-        `database = ${indexPath}`,
-        `crlnumber = ${crlNumberPath}`,
-        `serial = ${serialPath}`,
-        `new_certs_dir = ${this.workDir}`,
-        `certificate = ${caCertPath}`,
-        `private_key = ${caKeyPath}`,
-        'default_md = sha256',
-        'default_crl_days = 30',
-        'default_days = 30',
-        'policy = policy_any',
-        '',
-        '[policy_any]',
-        'commonName = optional',
-        'countryName = optional',
-        'stateOrProvinceName = optional',
-        'organizationName = optional',
-        'organizationalUnitName = optional',
-      ].join('\n') + '\n',
-    );
+		writeFileSync(indexPath, "");
+		writeFileSync(crlNumberPath, "1000\n");
+		writeFileSync(serialPath, "1000\n");
+		// Minimal `openssl ca` config: just enough for -revoke and -gencrl.
+		writeFileSync(
+			configPath,
+			[
+				"[ca]",
+				"default_ca = CA_default",
+				"",
+				"[CA_default]",
+				`dir = ${this.workDir}`,
+				`database = ${indexPath}`,
+				`crlnumber = ${crlNumberPath}`,
+				`serial = ${serialPath}`,
+				`new_certs_dir = ${this.workDir}`,
+				`certificate = ${caCertPath}`,
+				`private_key = ${caKeyPath}`,
+				"default_md = sha256",
+				"default_crl_days = 30",
+				"default_days = 30",
+				"policy = policy_any",
+				"",
+				"[policy_any]",
+				"commonName = optional",
+				"countryName = optional",
+				"stateOrProvinceName = optional",
+				"organizationName = optional",
+				"organizationalUnitName = optional",
+			].join("\n") + "\n",
+		);
 
-    // Mark each cert revoked in the CA database, then emit the CRL. An empty
-    // `revokeCertPaths` yields an EMPTY CRL — needed for intermediate CAs so
-    // OpenSSL's CRL_CHECK_ALL can confirm they aren't revoked.
-    for (const certPath of revokeCertPaths) {
-      runOpenssl(['ca', '-config', configPath, '-revoke', certPath]);
-    }
-    runOpenssl(['ca', '-config', configPath, '-gencrl', '-out', crlPath]);
-    return crlPath;
-  }
+		// Mark each cert revoked in the CA database, then emit the CRL. An empty
+		// `revokeCertPaths` yields an EMPTY CRL — needed for intermediate CAs so
+		// OpenSSL's CRL_CHECK_ALL can confirm they aren't revoked.
+		for (const certPath of revokeCertPaths) {
+			runOpenssl(["ca", "-config", configPath, "-revoke", certPath]);
+		}
+		runOpenssl(["ca", "-config", configPath, "-gencrl", "-out", crlPath]);
+		return crlPath;
+	}
 
-  // -------------------------------------------------------------------------
-  // Accessors
-  // -------------------------------------------------------------------------
+	// -------------------------------------------------------------------------
+	// Accessors
+	// -------------------------------------------------------------------------
 
-  public getRootCa(): string {
-    if (!this.rootCaCertPath) throw new Error('CertVault: not minted');
-    return this.rootCaCertPath;
-  }
-  public getServerCa(): string {
-    if (!this.serverCaCertPath) throw new Error('CertVault: not minted');
-    return this.serverCaCertPath;
-  }
-  public getClientCa(): string {
-    if (!this.clientCaCertPath) throw new Error('CertVault: not minted');
-    return this.clientCaCertPath;
-  }
-  /** PEM bundle of root_ca + server_ca — the spec's `sslrootcert`. */
-  public getRootServerBundle(): string {
-    if (!this.bundleRootServerPath) throw new Error('CertVault: not minted');
-    return this.bundleRootServerPath;
-  }
-  /** CRL (signed by server CA) revoking the active `cn-and-san` server cert. */
-  public getServerCrl(): string {
-    if (!this.serverCrlPath) throw new Error('CertVault: CRL not minted');
-    return this.serverCrlPath;
-  }
-  /** CRL (signed by client CA) revoking the `revokeduser` client cert. */
-  public getClientCrl(): string {
-    if (!this.clientCrlPath)
-      throw new Error('CertVault: client CRL not minted');
-    return this.clientCrlPath;
-  }
-  /** PEM bundle of root_ca + client_ca — the server's `ssl_ca_file`. */
-  public getRootClientBundle(): string {
-    if (!this.bundleRootClientPath) throw new Error('CertVault: not minted');
-    return this.bundleRootClientPath;
-  }
-  public getServerCert(name: ServerCertName): { cert: string; key: string } {
-    const entry = this.serverCerts.get(name);
-    if (!entry) throw new Error(`CertVault: server cert "${name}" not minted`);
-    return entry;
-  }
-  public getClientCert(name: ClientCertName): {
-    cert: string;
-    key: string;
-    /** Encrypted variant if minted (only for `ssltestuser`). */
-    encryptedKey?: string;
-  } {
-    const entry = this.clientCerts.get(name);
-    if (!entry) throw new Error(`CertVault: client cert "${name}" not minted`);
-    return entry;
-  }
+	public getRootCa(): string {
+		if (!this.rootCaCertPath) throw new Error("CertVault: not minted");
+		return this.rootCaCertPath;
+	}
+	public getServerCa(): string {
+		if (!this.serverCaCertPath) throw new Error("CertVault: not minted");
+		return this.serverCaCertPath;
+	}
+	public getClientCa(): string {
+		if (!this.clientCaCertPath) throw new Error("CertVault: not minted");
+		return this.clientCaCertPath;
+	}
+	/** PEM bundle of root_ca + server_ca — the spec's `sslrootcert`. */
+	public getRootServerBundle(): string {
+		if (!this.bundleRootServerPath)
+			throw new Error("CertVault: not minted");
+		return this.bundleRootServerPath;
+	}
+	/** CRL (signed by server CA) revoking the active `cn-and-san` server cert. */
+	public getServerCrl(): string {
+		if (!this.serverCrlPath) throw new Error("CertVault: CRL not minted");
+		return this.serverCrlPath;
+	}
+	/** CRL (signed by client CA) revoking the `revokeduser` client cert. */
+	public getClientCrl(): string {
+		if (!this.clientCrlPath)
+			throw new Error("CertVault: client CRL not minted");
+		return this.clientCrlPath;
+	}
+	/** PEM bundle of root_ca + client_ca — the server's `ssl_ca_file`. */
+	public getRootClientBundle(): string {
+		if (!this.bundleRootClientPath)
+			throw new Error("CertVault: not minted");
+		return this.bundleRootClientPath;
+	}
+	public getServerCert(name: ServerCertName): { cert: string; key: string } {
+		const entry = this.serverCerts.get(name);
+		if (!entry)
+			throw new Error(`CertVault: server cert "${name}" not minted`);
+		return entry;
+	}
+	public getClientCert(name: ClientCertName): {
+		cert: string;
+		key: string;
+		/** Encrypted variant if minted (only for `ssltestuser`). */
+		encryptedKey?: string;
+	} {
+		const entry = this.clientCerts.get(name);
+		if (!entry)
+			throw new Error(`CertVault: client cert "${name}" not minted`);
+		return entry;
+	}
 
-  // -------------------------------------------------------------------------
-  // Internal helpers
-  // -------------------------------------------------------------------------
+	// -------------------------------------------------------------------------
+	// Internal helpers
+	// -------------------------------------------------------------------------
 
-  /** Resolve a filename relative to {@link workDir}. */
-  private path(name: string): string {
-    return join(this.workDir, name);
-  }
+	/** Resolve a filename relative to {@link workDir}. */
+	private path(name: string): string {
+		return join(this.workDir, name);
+	}
 
-  /**
-   * Mint a CA cert signed by the root: generate a CSR, then x509 -req
-   * against the root with the v3_ca extension so the cert is usable as a
-   * signer. Returns the absolute path to the produced cert.
-   */
-  private signCa(slug: string, cn: string): string {
-    const csr = this.path(`${slug}.csr`);
-    const key = this.path(`${slug}.key`);
-    const cert = this.path(`${slug}.crt`);
-    runOpenssl([
-      'req',
-      '-nodes',
-      '-newkey',
-      'rsa:2048',
-      '-keyout',
-      key,
-      '-out',
-      csr,
-      '-subj',
-      `/CN=${cn}`,
-    ]);
-    const ext = this.path(`${slug}.ext`);
-    writeFileSync(
-      ext,
-      [
-        'basicConstraints=critical,CA:TRUE,pathlen:0',
-        'keyUsage=critical,keyCertSign,cRLSign',
-        'subjectKeyIdentifier=hash',
-        'authorityKeyIdentifier=keyid,issuer',
-      ].join('\n') + '\n',
-    );
-    runOpenssl([
-      'x509',
-      '-req',
-      '-in',
-      csr,
-      '-CA',
-      this.getRootCa(),
-      '-CAkey',
-      this.path('root_ca.key'),
-      '-CAcreateserial',
-      '-out',
-      cert,
-      '-days',
-      '30',
-      '-extfile',
-      ext,
-    ]);
-    return cert;
-  }
+	/**
+	 * Mint a CA cert signed by the root: generate a CSR, then x509 -req
+	 * against the root with the v3_ca extension so the cert is usable as a
+	 * signer. Returns the absolute path to the produced cert.
+	 */
+	private signCa(slug: string, cn: string): string {
+		const csr = this.path(`${slug}.csr`);
+		const key = this.path(`${slug}.key`);
+		const cert = this.path(`${slug}.crt`);
+		runOpenssl([
+			"req",
+			"-nodes",
+			"-newkey",
+			"rsa:2048",
+			"-keyout",
+			key,
+			"-out",
+			csr,
+			"-subj",
+			`/CN=${cn}`,
+		]);
+		const ext = this.path(`${slug}.ext`);
+		writeFileSync(
+			ext,
+			[
+				"basicConstraints=critical,CA:TRUE,pathlen:0",
+				"keyUsage=critical,keyCertSign,cRLSign",
+				"subjectKeyIdentifier=hash",
+				"authorityKeyIdentifier=keyid,issuer",
+			].join("\n") + "\n",
+		);
+		runOpenssl([
+			"x509",
+			"-req",
+			"-in",
+			csr,
+			"-CA",
+			this.getRootCa(),
+			"-CAkey",
+			this.path("root_ca.key"),
+			"-CAcreateserial",
+			"-out",
+			cert,
+			"-days",
+			"30",
+			"-extfile",
+			ext,
+		]);
+		return cert;
+	}
 
-  /**
-   * Mint a server leaf cert signed by the server CA. `sanEntries` is a
-   * list of openssl-style entries like `'DNS:localhost'` /
-   * `'IP:127.0.0.1'`. Empty list means "no SAN extension".
-   */
-  private mintServerCert(
-    name: ServerCertName,
-    subj: string,
-    sanEntries: string[],
-  ): void {
-    const slug = `server-${name}`;
-    const key = this.path(`${slug}.key`);
-    const csr = this.path(`${slug}.csr`);
-    const cert = this.path(`${slug}.crt`);
-    runOpenssl([
-      'req',
-      '-nodes',
-      '-newkey',
-      'rsa:2048',
-      '-keyout',
-      key,
-      '-out',
-      csr,
-      '-subj',
-      subj,
-    ]);
-    const ext = this.path(`${slug}.ext`);
-    const extLines = [
-      'basicConstraints=CA:FALSE',
-      'keyUsage=critical,digitalSignature,keyEncipherment',
-      'extendedKeyUsage=serverAuth',
-      'subjectKeyIdentifier=hash',
-      'authorityKeyIdentifier=keyid,issuer',
-    ];
-    if (sanEntries.length > 0) {
-      extLines.push(`subjectAltName=${sanEntries.join(',')}`);
-    }
-    writeFileSync(ext, extLines.join('\n') + '\n');
-    if (!this.serverCaCertPath) throw new Error('CertVault: server CA missing');
-    runOpenssl([
-      'x509',
-      '-req',
-      '-in',
-      csr,
-      '-CA',
-      this.serverCaCertPath,
-      '-CAkey',
-      this.path('server_ca.key'),
-      '-CAcreateserial',
-      '-out',
-      cert,
-      '-days',
-      '30',
-      '-extfile',
-      ext,
-    ]);
-    this.serverCerts.set(name, { cert, key });
-  }
+	/**
+	 * Mint a server leaf cert signed by the server CA. `sanEntries` is a
+	 * list of openssl-style entries like `'DNS:localhost'` /
+	 * `'IP:127.0.0.1'`. Empty list means "no SAN extension".
+	 */
+	private mintServerCert(
+		name: ServerCertName,
+		subj: string,
+		sanEntries: string[],
+	): void {
+		const slug = `server-${name}`;
+		const key = this.path(`${slug}.key`);
+		const csr = this.path(`${slug}.csr`);
+		const cert = this.path(`${slug}.crt`);
+		runOpenssl([
+			"req",
+			"-nodes",
+			"-newkey",
+			"rsa:2048",
+			"-keyout",
+			key,
+			"-out",
+			csr,
+			"-subj",
+			subj,
+		]);
+		const ext = this.path(`${slug}.ext`);
+		const extLines = [
+			"basicConstraints=CA:FALSE",
+			"keyUsage=critical,digitalSignature,keyEncipherment",
+			"extendedKeyUsage=serverAuth",
+			"subjectKeyIdentifier=hash",
+			"authorityKeyIdentifier=keyid,issuer",
+		];
+		if (sanEntries.length > 0) {
+			extLines.push(`subjectAltName=${sanEntries.join(",")}`);
+		}
+		writeFileSync(ext, extLines.join("\n") + "\n");
+		if (!this.serverCaCertPath)
+			throw new Error("CertVault: server CA missing");
+		runOpenssl([
+			"x509",
+			"-req",
+			"-in",
+			csr,
+			"-CA",
+			this.serverCaCertPath,
+			"-CAkey",
+			this.path("server_ca.key"),
+			"-CAcreateserial",
+			"-out",
+			cert,
+			"-days",
+			"30",
+			"-extfile",
+			ext,
+		]);
+		this.serverCerts.set(name, { cert, key });
+	}
 
-  /**
-   * Mint an RSA-PSS keyed server leaf cert (`rsassaPss` signature algorithm
-   * on the public key — the issuing CA still uses RSA-PKCS1, which is a
-   * valid X.509 mix). Used by 002_scram to verify that SCRAM-SHA-256-PLUS
-   * channel binding works against an RSA-PSS server certificate.
-   *
-   * Key generation uses `openssl genpkey` because `openssl req -newkey
-   * rsa-pss` exists but is finicky about pkeyopt parsing across versions
-   * (and silently falls back to RSA-PKCS1 on older OpenSSL builds). A
-   * separate keygen step is explicit and portable.
-   *
-   * SAN matches `cn-and-san` so the cert satisfies `sslmode=verify-full`.
-   */
-  private mintRsaPssServerCert(): void {
-    const slug = 'server-pss';
-    const key = this.path(`${slug}.key`);
-    const csr = this.path(`${slug}.csr`);
-    const cert = this.path(`${slug}.crt`);
+	/**
+	 * Mint an RSA-PSS keyed server leaf cert (`rsassaPss` signature algorithm
+	 * on the public key — the issuing CA still uses RSA-PKCS1, which is a
+	 * valid X.509 mix). Used by 002_scram to verify that SCRAM-SHA-256-PLUS
+	 * channel binding works against an RSA-PSS server certificate.
+	 *
+	 * Key generation uses `openssl genpkey` because `openssl req -newkey
+	 * rsa-pss` exists but is finicky about pkeyopt parsing across versions
+	 * (and silently falls back to RSA-PKCS1 on older OpenSSL builds). A
+	 * separate keygen step is explicit and portable.
+	 *
+	 * SAN matches `cn-and-san` so the cert satisfies `sslmode=verify-full`.
+	 */
+	private mintRsaPssServerCert(): void {
+		const slug = "server-pss";
+		const key = this.path(`${slug}.key`);
+		const csr = this.path(`${slug}.csr`);
+		const cert = this.path(`${slug}.crt`);
 
-    // 1. Generate an RSA-PSS keypair. `rsa_pss_keygen_md:sha256` pins the
-    // permitted digest so the cert's signature algorithm is rsassaPss
-    // with SHA-256 — the exact shape libpq's HAVE_X509_GET_SIGNATURE_INFO
-    // path expects to detect for channel-binding hash selection.
-    runOpenssl([
-      'genpkey',
-      '-algorithm',
-      'rsa-pss',
-      '-pkeyopt',
-      'rsa_keygen_bits:2048',
-      '-pkeyopt',
-      'rsa_pss_keygen_md:sha256',
-      '-pkeyopt',
-      'rsa_pss_keygen_saltlen:32',
-      '-out',
-      key,
-    ]);
+		// 1. Generate an RSA-PSS keypair. `rsa_pss_keygen_md:sha256` pins the
+		// permitted digest so the cert's signature algorithm is rsassaPss
+		// with SHA-256 — the exact shape libpq's HAVE_X509_GET_SIGNATURE_INFO
+		// path expects to detect for channel-binding hash selection.
+		runOpenssl([
+			"genpkey",
+			"-algorithm",
+			"rsa-pss",
+			"-pkeyopt",
+			"rsa_keygen_bits:2048",
+			"-pkeyopt",
+			"rsa_pss_keygen_md:sha256",
+			"-pkeyopt",
+			"rsa_pss_keygen_saltlen:32",
+			"-out",
+			key,
+		]);
 
-    // 2. Build a CSR against the RSA-PSS key. The signature on the CSR
-    // itself will be rsassaPss (since the key is rsa-pss); openssl picks
-    // the digest from `rsa_pss_keygen_md`.
-    runOpenssl([
-      'req',
-      '-new',
-      '-key',
-      key,
-      '-out',
-      csr,
-      '-subj',
-      '/CN=localhost',
-    ]);
+		// 2. Build a CSR against the RSA-PSS key. The signature on the CSR
+		// itself will be rsassaPss (since the key is rsa-pss); openssl picks
+		// the digest from `rsa_pss_keygen_md`.
+		runOpenssl([
+			"req",
+			"-new",
+			"-key",
+			key,
+			"-out",
+			csr,
+			"-subj",
+			"/CN=localhost",
+		]);
 
-    // 3. Sign the CSR with the existing server CA (still RSA-PKCS1).
-    // The resulting cert has an rsassaPss SubjectPublicKeyInfo but its
-    // issuer-signature uses the CA's signature algorithm — that's a
-    // valid X.509 mix and matches the upstream test fixture's setup.
-    const ext = this.path(`${slug}.ext`);
-    writeFileSync(
-      ext,
-      [
-        'basicConstraints=CA:FALSE',
-        'keyUsage=critical,digitalSignature,keyEncipherment',
-        'extendedKeyUsage=serverAuth',
-        'subjectKeyIdentifier=hash',
-        'authorityKeyIdentifier=keyid,issuer',
-        'subjectAltName=DNS:localhost,DNS:127.0.0.1,DNS:*.localhost',
-      ].join('\n') + '\n',
-    );
-    if (!this.serverCaCertPath) throw new Error('CertVault: server CA missing');
-    runOpenssl([
-      'x509',
-      '-req',
-      '-in',
-      csr,
-      '-CA',
-      this.serverCaCertPath,
-      '-CAkey',
-      this.path('server_ca.key'),
-      '-CAcreateserial',
-      '-out',
-      cert,
-      '-days',
-      '30',
-      '-extfile',
-      ext,
-    ]);
-    this.serverCerts.set('pss', { cert, key });
-  }
+		// 3. Sign the CSR with the existing server CA (still RSA-PKCS1).
+		// The resulting cert has an rsassaPss SubjectPublicKeyInfo but its
+		// issuer-signature uses the CA's signature algorithm — that's a
+		// valid X.509 mix and matches the upstream test fixture's setup.
+		const ext = this.path(`${slug}.ext`);
+		writeFileSync(
+			ext,
+			[
+				"basicConstraints=CA:FALSE",
+				"keyUsage=critical,digitalSignature,keyEncipherment",
+				"extendedKeyUsage=serverAuth",
+				"subjectKeyIdentifier=hash",
+				"authorityKeyIdentifier=keyid,issuer",
+				"subjectAltName=DNS:localhost,DNS:127.0.0.1,DNS:*.localhost",
+			].join("\n") + "\n",
+		);
+		if (!this.serverCaCertPath)
+			throw new Error("CertVault: server CA missing");
+		runOpenssl([
+			"x509",
+			"-req",
+			"-in",
+			csr,
+			"-CA",
+			this.serverCaCertPath,
+			"-CAkey",
+			this.path("server_ca.key"),
+			"-CAcreateserial",
+			"-out",
+			cert,
+			"-days",
+			"30",
+			"-extfile",
+			ext,
+		]);
+		this.serverCerts.set("pss", { cert, key });
+	}
 
-  /** Mint a client leaf cert signed by the client CA. */
-  private mintClientCert(name: ClientCertName, subj: string): void {
-    const slug = `client-${name}`;
-    const key = this.path(`${slug}.key`);
-    const csr = this.path(`${slug}.csr`);
-    const cert = this.path(`${slug}.crt`);
-    runOpenssl([
-      'req',
-      '-nodes',
-      '-newkey',
-      'rsa:2048',
-      '-keyout',
-      key,
-      '-out',
-      csr,
-      // `-utf8` so a non-ASCII CN (the `nonascii` client cert) is encoded as
-      // UTF8String rather than mangled; harmless for ASCII subjects.
-      '-utf8',
-      '-subj',
-      subj,
-    ]);
-    const ext = this.path(`${slug}.ext`);
-    writeFileSync(
-      ext,
-      [
-        'basicConstraints=CA:FALSE',
-        'keyUsage=critical,digitalSignature,keyEncipherment',
-        'extendedKeyUsage=clientAuth',
-        'subjectKeyIdentifier=hash',
-        'authorityKeyIdentifier=keyid,issuer',
-      ].join('\n') + '\n',
-    );
-    if (!this.clientCaCertPath) throw new Error('CertVault: client CA missing');
-    runOpenssl([
-      'x509',
-      '-req',
-      '-in',
-      csr,
-      '-CA',
-      this.clientCaCertPath,
-      '-CAkey',
-      this.path('client_ca.key'),
-      '-CAcreateserial',
-      '-out',
-      cert,
-      '-days',
-      '30',
-      '-extfile',
-      ext,
-    ]);
-    this.clientCerts.set(name, { cert, key });
-  }
+	/** Mint a client leaf cert signed by the client CA. */
+	private mintClientCert(name: ClientCertName, subj: string): void {
+		const slug = `client-${name}`;
+		const key = this.path(`${slug}.key`);
+		const csr = this.path(`${slug}.csr`);
+		const cert = this.path(`${slug}.crt`);
+		runOpenssl([
+			"req",
+			"-nodes",
+			"-newkey",
+			"rsa:2048",
+			"-keyout",
+			key,
+			"-out",
+			csr,
+			// `-utf8` so a non-ASCII CN (the `nonascii` client cert) is encoded as
+			// UTF8String rather than mangled; harmless for ASCII subjects.
+			"-utf8",
+			"-subj",
+			subj,
+		]);
+		const ext = this.path(`${slug}.ext`);
+		writeFileSync(
+			ext,
+			[
+				"basicConstraints=CA:FALSE",
+				"keyUsage=critical,digitalSignature,keyEncipherment",
+				"extendedKeyUsage=clientAuth",
+				"subjectKeyIdentifier=hash",
+				"authorityKeyIdentifier=keyid,issuer",
+			].join("\n") + "\n",
+		);
+		if (!this.clientCaCertPath)
+			throw new Error("CertVault: client CA missing");
+		runOpenssl([
+			"x509",
+			"-req",
+			"-in",
+			csr,
+			"-CA",
+			this.clientCaCertPath,
+			"-CAkey",
+			this.path("client_ca.key"),
+			"-CAcreateserial",
+			"-out",
+			cert,
+			"-days",
+			"30",
+			"-extfile",
+			ext,
+		]);
+		this.clientCerts.set(name, { cert, key });
+	}
 }
 
 function runOpenssl(args: string[]): void {
-  execFileSync('openssl', args, { stdio: 'pipe' });
+	execFileSync("openssl", args, { stdio: "pipe" });
 }
 
 function readUtf8(path: string): string {
-  return readFileSync(path, 'utf8');
+	return readFileSync(path, "utf8");
 }
 
 /**
@@ -736,27 +753,27 @@ function readUtf8(path: string): string {
  * the dependency is missing.
  */
 export function generateSelfSignedCert(workDir: string): {
-  certPath: string;
-  keyPath: string;
+	certPath: string;
+	keyPath: string;
 } {
-  const keyPath = join(workDir, 'server.key');
-  const certPath = join(workDir, 'server.crt');
-  runOpenssl([
-    'req',
-    '-x509',
-    '-nodes',
-    '-newkey',
-    'rsa:2048',
-    '-keyout',
-    keyPath,
-    '-out',
-    certPath,
-    '-days',
-    '30',
-    '-subj',
-    '/CN=localhost',
-  ]);
-  return { certPath, keyPath };
+	const keyPath = join(workDir, "server.key");
+	const certPath = join(workDir, "server.crt");
+	runOpenssl([
+		"req",
+		"-x509",
+		"-nodes",
+		"-newkey",
+		"rsa:2048",
+		"-keyout",
+		keyPath,
+		"-out",
+		certPath,
+		"-days",
+		"30",
+		"-subj",
+		"/CN=localhost",
+	]);
+	return { certPath, keyPath };
 }
 
 /**
@@ -878,9 +895,9 @@ host           all       test         ::/0            trust
 `;
 
 /** In-container target for the *initially active* server cert. */
-const ACTIVE_CERT_TARGET = '/etc/postgresql-tls/server.crt';
+const ACTIVE_CERT_TARGET = "/etc/postgresql-tls/server.crt";
 /** In-container target for the *initially active* server key. */
-const ACTIVE_KEY_TARGET = '/etc/postgresql-tls/server.key';
+const ACTIVE_KEY_TARGET = "/etc/postgresql-tls/server.key";
 
 /**
  * Init script that rewrites pg_hba.conf with the suite's ruleset AND
@@ -953,7 +970,7 @@ ${HBA_CONF.trim()}
 __HBA_EOF__
 
 # pg_ident.conf — maps the ssltestuser cert CN to the mappeduser role for
-# the map=certmap HBA rule above. PG reads \$PGDATA/pg_ident.conf by default.
+# the map=certmap HBA rule above. PG reads $PGDATA/pg_ident.conf by default.
 cat > "$PGDATA/pg_ident.conf" <<'__IDENT_EOF__'
 # MAPNAME   SYSTEM-USERNAME   PG-USERNAME
 certmap     ssltestuser       mappeduser
@@ -968,137 +985,137 @@ __IDENT_EOF__
  * {@link switchServerCert} (which the fixture exposes for tests).
  */
 export async function setupTlsPg(): Promise<TlsPgConn> {
-  const workDir = mkdtempSync(join(tmpdir(), 'psql-conformance-tls-'));
-  workDirRef = workDir;
+	const workDir = mkdtempSync(join(tmpdir(), "psql-conformance-tls-"));
+	workDirRef = workDir;
 
-  // Mint the cert vault.
-  const vault = new CertVault(workDir);
-  vault.mint();
-  // Active server cert = CN+SAN variant. It satisfies both `verify-ca`
-  // (chain) and `verify-full` (SAN DNS:localhost), and is also a SAN
-  // superset of the 005 spec's expectations (which only need a working
-  // server cert — it never reads the chain).
-  const active = vault.getServerCert('cn-and-san');
+	// Mint the cert vault.
+	const vault = new CertVault(workDir);
+	vault.mint();
+	// Active server cert = CN+SAN variant. It satisfies both `verify-ca`
+	// (chain) and `verify-full` (SAN DNS:localhost), and is also a SAN
+	// superset of the 005 spec's expectations (which only need a working
+	// server cert — it never reads the chain).
+	const active = vault.getServerCert("cn-and-san");
 
-  const initSqlPath = join(workDir, 'init-users.sql');
-  writeFileSync(initSqlPath, INIT_SQL, 'utf8');
-  const initHbaPath = join(workDir, 'init-hba.sh');
-  writeFileSync(initHbaPath, HBA_INIT_SH, { mode: 0o755 });
+	const initSqlPath = join(workDir, "init-users.sql");
+	writeFileSync(initSqlPath, INIT_SQL, "utf8");
+	const initHbaPath = join(workDir, "init-hba.sh");
+	writeFileSync(initHbaPath, HBA_INIT_SH, { mode: 0o755 });
 
-  // The testcontainers builder is fluent; every `with*` returns `this`.
-  type ContentToCopy = {
-    content: string;
-    target: string;
-    mode?: number;
-  };
-  type Builder = {
-    withCopyFilesToContainer(
-      files: { source: string; target: string; mode?: number }[],
-    ): Builder;
-    withCopyContentToContainer(contents: ContentToCopy[]): Builder;
-    start(): Promise<StartedContainer>;
-  };
-  type StartedContainer = {
-    stop(): Promise<void>;
-    getHost(): string;
-    getPort(): number;
-    getDatabase(): string;
-    getUsername(): string;
-    getPassword(): string;
-  };
+	// The testcontainers builder is fluent; every `with*` returns `this`.
+	type ContentToCopy = {
+		content: string;
+		target: string;
+		mode?: number;
+	};
+	type Builder = {
+		withCopyFilesToContainer(
+			files: { source: string; target: string; mode?: number }[],
+		): Builder;
+		withCopyContentToContainer(contents: ContentToCopy[]): Builder;
+		start(): Promise<StartedContainer>;
+	};
+	type StartedContainer = {
+		stop(): Promise<void>;
+		getHost(): string;
+		getPort(): number;
+		getDatabase(): string;
+		getUsername(): string;
+		getPassword(): string;
+	};
 
-  // Dynamic import so the harness still loads when @testcontainers/postgresql
-  // is absent (mirrors pg-fixture.ts).
-  const moduleName = '@testcontainers/postgresql';
-  let mod: { PostgreSqlContainer?: unknown };
-  try {
-    mod = (await import(moduleName)) as { PostgreSqlContainer?: unknown };
-  } catch {
-    throw new Error(
-      'pg-fixture-tls: @testcontainers/postgresql is not installed. ' +
-        'Install with `bun add -d @testcontainers/postgresql` (one-time).',
-    );
-  }
-  type ContainerCtor = new (image: string) => Builder;
-  const ctor = mod.PostgreSqlContainer as ContainerCtor | undefined;
-  if (typeof ctor !== 'function') {
-    throw new Error(
-      'pg-fixture-tls: @testcontainers/postgresql is installed but does not ' +
-        'export PostgreSqlContainer — your version is incompatible.',
-    );
-  }
-  // The TLS specs exercise CLIENT TLS behaviour (channel binding, direct-SSL
-  // ALPN, sslinfo) against PG 17+/18-only server features, so this fixture is
-  // pinned to PG 18 independent of the matrix `PGCONFORMANCE_PG_IMAGE` that
-  // versions the shared regress/describe fixture. (Following the matrix here
-  // would boot e.g. PG 14, where `sslnegotiation=direct` does not exist and
-  // the direct-SSL subtests fail.) A dedicated override is kept for the rare
-  // case of deliberately testing the TLS path against another major.
-  const image = process.env.PGCONFORMANCE_TLS_PG_IMAGE ?? PG_IMAGE_DEFAULT;
-  log(`pg-fixture-tls: booting ${image} with TLS enabled...`);
+	// Dynamic import so the harness still loads when @testcontainers/postgresql
+	// is absent (mirrors pg-fixture.ts).
+	const moduleName = "@testcontainers/postgresql";
+	let mod: { PostgreSqlContainer?: unknown };
+	try {
+		mod = (await import(moduleName)) as { PostgreSqlContainer?: unknown };
+	} catch {
+		throw new Error(
+			"pg-fixture-tls: @testcontainers/postgresql is not installed. " +
+				"Install with `bun add -d @testcontainers/postgresql` (one-time).",
+		);
+	}
+	type ContainerCtor = new (image: string) => Builder;
+	const ctor = mod.PostgreSqlContainer as ContainerCtor | undefined;
+	if (typeof ctor !== "function") {
+		throw new Error(
+			"pg-fixture-tls: @testcontainers/postgresql is installed but does not " +
+				"export PostgreSqlContainer — your version is incompatible.",
+		);
+	}
+	// The TLS specs exercise CLIENT TLS behaviour (channel binding, direct-SSL
+	// ALPN, sslinfo) against PG 17+/18-only server features, so this fixture is
+	// pinned to PG 18 independent of the matrix `PGCONFORMANCE_PG_IMAGE` that
+	// versions the shared regress/describe fixture. (Following the matrix here
+	// would boot e.g. PG 14, where `sslnegotiation=direct` does not exist and
+	// the direct-SSL subtests fail.) A dedicated override is kept for the rare
+	// case of deliberately testing the TLS path against another major.
+	const image = process.env.PGCONFORMANCE_TLS_PG_IMAGE ?? PG_IMAGE_DEFAULT;
+	log(`pg-fixture-tls: booting ${image} with TLS enabled...`);
 
-  // Bind-mount the full minted cert tree. Every leaf server cert + key,
-  // every CA bundle, plus the active cert/key under the `server.crt` /
-  // `server.key` filenames postgresql.conf will read. The init script
-  // copies these into PGDATA and chown's them to the postgres user.
-  const filesToCopy: { source: string; target: string; mode?: number }[] = [
-    // Active cert as `server.crt` / `server.key` (what postgresql.conf
-    // initially points at). Keeping backward-compat with the 005 spec's
-    // assumption that the fixture exposes ONE server.crt / server.key.
-    { source: active.cert, target: ACTIVE_CERT_TARGET, mode: 0o644 },
-    { source: active.key, target: ACTIVE_KEY_TARGET, mode: 0o644 },
-    // Every alternate server cert + key the spec might switch to.
-    ...allServerCertFiles(vault).map((p) => ({
-      source: p.host,
-      target: p.container,
-      mode: 0o644,
-    })),
-    // Client CA bundle so the server can validate client certs.
-    {
-      source: vault.getRootClientBundle(),
-      target: CLIENT_CA_CONTAINER_PATH,
-      mode: 0o644,
-    },
-    // Client-CA CRL (revokes `revokeduser`); the server-side CRL test wires
-    // it in via `ALTER SYSTEM SET ssl_crl_file = 'client_ca.crl'`.
-    {
-      source: vault.getClientCrl(),
-      target: `${SERVER_CERT_TARGET_DIR}/client_ca.crl`,
-      mode: 0o644,
-    },
-    // Init scripts run in alphabetical order — `01-users.sql` creates
-    // the suite users via SQL; `02-hba.sh` then rewrites pg_hba.conf
-    // and enables SSL via postgresql.conf.
-    {
-      source: initSqlPath,
-      target: '/docker-entrypoint-initdb.d/01-users.sql',
-      mode: 0o644,
-    },
-    {
-      source: initHbaPath,
-      target: '/docker-entrypoint-initdb.d/02-hba.sh',
-      mode: 0o755,
-    },
-  ];
+	// Bind-mount the full minted cert tree. Every leaf server cert + key,
+	// every CA bundle, plus the active cert/key under the `server.crt` /
+	// `server.key` filenames postgresql.conf will read. The init script
+	// copies these into PGDATA and chown's them to the postgres user.
+	const filesToCopy: { source: string; target: string; mode?: number }[] = [
+		// Active cert as `server.crt` / `server.key` (what postgresql.conf
+		// initially points at). Keeping backward-compat with the 005 spec's
+		// assumption that the fixture exposes ONE server.crt / server.key.
+		{ source: active.cert, target: ACTIVE_CERT_TARGET, mode: 0o644 },
+		{ source: active.key, target: ACTIVE_KEY_TARGET, mode: 0o644 },
+		// Every alternate server cert + key the spec might switch to.
+		...allServerCertFiles(vault).map((p) => ({
+			source: p.host,
+			target: p.container,
+			mode: 0o644,
+		})),
+		// Client CA bundle so the server can validate client certs.
+		{
+			source: vault.getRootClientBundle(),
+			target: CLIENT_CA_CONTAINER_PATH,
+			mode: 0o644,
+		},
+		// Client-CA CRL (revokes `revokeduser`); the server-side CRL test wires
+		// it in via `ALTER SYSTEM SET ssl_crl_file = 'client_ca.crl'`.
+		{
+			source: vault.getClientCrl(),
+			target: `${SERVER_CERT_TARGET_DIR}/client_ca.crl`,
+			mode: 0o644,
+		},
+		// Init scripts run in alphabetical order — `01-users.sql` creates
+		// the suite users via SQL; `02-hba.sh` then rewrites pg_hba.conf
+		// and enables SSL via postgresql.conf.
+		{
+			source: initSqlPath,
+			target: "/docker-entrypoint-initdb.d/01-users.sql",
+			mode: 0o644,
+		},
+		{
+			source: initHbaPath,
+			target: "/docker-entrypoint-initdb.d/02-hba.sh",
+			mode: 0o755,
+		},
+	];
 
-  const builder: Builder = new ctor(image).withCopyFilesToContainer(
-    filesToCopy,
-  );
-  const started = await builder.start();
-  containerRef = started;
-  const conn: TlsPgConn = {
-    host: started.getHost(),
-    port: started.getPort(),
-    db: started.getDatabase(),
-    user: started.getUsername(),
-    password: started.getPassword(),
-    serverCertPath: active.cert,
-    serverKeyPath: active.key,
-    workDir,
-    vault,
-  };
-  log(`pg-fixture-tls: ready at ${conn.host}:${conn.port} (db=${conn.db})`);
-  return conn;
+	const builder: Builder = new ctor(image).withCopyFilesToContainer(
+		filesToCopy,
+	);
+	const started = await builder.start();
+	containerRef = started;
+	const conn: TlsPgConn = {
+		host: started.getHost(),
+		port: started.getPort(),
+		db: started.getDatabase(),
+		user: started.getUsername(),
+		password: started.getPassword(),
+		serverCertPath: active.cert,
+		serverKeyPath: active.key,
+		workDir,
+		vault,
+	};
+	log(`pg-fixture-tls: ready at ${conn.host}:${conn.port} (db=${conn.db})`);
+	return conn;
 }
 
 /**
@@ -1109,29 +1126,29 @@ export async function setupTlsPg(): Promise<TlsPgConn> {
  * each pair into PGDATA so the postgres user owns the files.
  */
 function allServerCertFiles(
-  vault: CertVault,
+	vault: CertVault,
 ): { host: string; container: string }[] {
-  const names: ServerCertName[] = [
-    'cn-only',
-    'cn-and-san',
-    'san-only',
-    'ip-in-san',
-    'multi-name',
-    'pss',
-  ];
-  const out: { host: string; container: string }[] = [];
-  for (const n of names) {
-    const c = vault.getServerCert(n);
-    out.push({
-      host: c.cert,
-      container: `${SERVER_CERT_TARGET_DIR}/server-${n}.crt`,
-    });
-    out.push({
-      host: c.key,
-      container: `${SERVER_CERT_TARGET_DIR}/server-${n}.key`,
-    });
-  }
-  return out;
+	const names: ServerCertName[] = [
+		"cn-only",
+		"cn-and-san",
+		"san-only",
+		"ip-in-san",
+		"multi-name",
+		"pss",
+	];
+	const out: { host: string; container: string }[] = [];
+	for (const n of names) {
+		const c = vault.getServerCert(n);
+		out.push({
+			host: c.cert,
+			container: `${SERVER_CERT_TARGET_DIR}/server-${n}.crt`,
+		});
+		out.push({
+			host: c.key,
+			container: `${SERVER_CERT_TARGET_DIR}/server-${n}.key`,
+		});
+	}
+	return out;
 }
 
 /**
@@ -1140,38 +1157,38 @@ function allServerCertFiles(
  * the 001 spec for the helper.
  */
 export function switchServerCertSql(name: ServerCertName): string[] {
-  return [
-    `ALTER SYSTEM SET ssl_cert_file = 'server-${name}.crt'`,
-    `ALTER SYSTEM SET ssl_key_file = 'server-${name}.key'`,
-  ];
+	return [
+		`ALTER SYSTEM SET ssl_cert_file = 'server-${name}.crt'`,
+		`ALTER SYSTEM SET ssl_key_file = 'server-${name}.key'`,
+	];
 }
 
 /** Tear down the container and remove the temp dir. */
 export async function teardownTlsPg(): Promise<void> {
-  if (containerRef) {
-    try {
-      await containerRef.stop();
-    } catch (err) {
-      log(`pg-fixture-tls: stop() failed (${String(err)}); continuing`);
-    }
-    containerRef = null;
-  }
-  if (workDirRef && existsSync(workDirRef)) {
-    try {
-      rmSync(workDirRef, { recursive: true, force: true });
-    } catch {
-      // best-effort
-    }
-    workDirRef = null;
-  }
+	if (containerRef) {
+		try {
+			await containerRef.stop();
+		} catch (err) {
+			log(`pg-fixture-tls: stop() failed (${String(err)}); continuing`);
+		}
+		containerRef = null;
+	}
+	if (workDirRef && existsSync(workDirRef)) {
+		try {
+			rmSync(workDirRef, { recursive: true, force: true });
+		} catch {
+			// best-effort
+		}
+		workDirRef = null;
+	}
 }
 
 /** True iff `openssl` is on PATH (the cert-generation prerequisite). */
 export function isOpensslAvailable(): boolean {
-  try {
-    execFileSync('openssl', ['version'], { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
+	try {
+		execFileSync("openssl", ["version"], { stdio: "ignore" });
+		return true;
+	} catch {
+		return false;
+	}
 }

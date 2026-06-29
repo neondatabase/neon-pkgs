@@ -28,13 +28,13 @@ const pending: string[] = [];
 
 /** Append a string of input to the back of the queue. */
 export const enqueue = (content: string): void => {
-  pending.push(content);
+	pending.push(content);
 };
 
 /** Return and remove the next pending input, or `null` if none. */
 export const consumeNext = (): string | null => {
-  if (pending.length === 0) return null;
-  return pending.shift() ?? null;
+	if (pending.length === 0) return null;
+	return pending.shift() ?? null;
 };
 
 /** Number of items currently in the queue. */
@@ -42,5 +42,5 @@ export const size = (): number => pending.length;
 
 /** Empty the queue. Tests should call this in cleanup. */
 export const reset = (): void => {
-  pending.length = 0;
+	pending.length = 0;
 };

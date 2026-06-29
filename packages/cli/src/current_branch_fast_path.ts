@@ -1,5 +1,9 @@
-import { contextBranch, currentContextFile, readContextFile } from './context.js';
-import { log } from './log.js';
+import {
+	contextBranch,
+	currentContextFile,
+	readContextFile,
+} from "./context.js";
+import { log } from "./log.js";
 
 /**
  * Offline fast path for `(config) status --current-branch` (used by shell prompts).
@@ -24,26 +28,26 @@ import { log } from './log.js';
  * @returns `true` if it handled the invocation (caller should NOT load the full CLI).
  */
 export const tryCurrentBranchFastPath = (
-  argv: string[],
-  // `cwd` is overridable so tests can exercise the `.neon` walk-up without mutating
-  // `process.cwd()` (which isn't allowed in vitest workers), mirroring currentContextFile.
-  cwd: string = process.cwd(),
+	argv: string[],
+	// `cwd` is overridable so tests can exercise the `.neon` walk-up without mutating
+	// `process.cwd()` (which isn't allowed in vitest workers), mirroring currentContextFile.
+	cwd: string = process.cwd(),
 ): boolean => {
-  // argv is [execPath, scriptPath, ...userArgs].
-  if (!isExactCurrentBranchInvocation(argv.slice(2))) {
-    return false;
-  }
+	// argv is [execPath, scriptPath, ...userArgs].
+	if (!isExactCurrentBranchInvocation(argv.slice(2))) {
+		return false;
+	}
 
-  const branch = contextBranch(readContextFile(currentContextFile(cwd)));
-  if (branch) {
-    process.stdout.write(`${branch}\n`);
-  } else {
-    log.info(
-      'No branch pinned. Run `neonctl checkout <branch>` to pin a branch and pull its env vars.',
-    );
-    process.exitCode = 1;
-  }
-  return true;
+	const branch = contextBranch(readContextFile(currentContextFile(cwd)));
+	if (branch) {
+		process.stdout.write(`${branch}\n`);
+	} else {
+		log.info(
+			"No branch pinned. Run `neonctl checkout <branch>` to pin a branch and pull its env vars.",
+		);
+		process.exitCode = 1;
+	}
+	return true;
 };
 
 /**
@@ -52,11 +56,11 @@ export const tryCurrentBranchFastPath = (
  * positional args) makes this false so the full CLI handles it.
  */
 const isExactCurrentBranchInvocation = (args: string[]): boolean => {
-  const rest =
-    args[0] === 'status'
-      ? args.slice(1)
-      : args[0] === 'config' && args[1] === 'status'
-        ? args.slice(2)
-        : null;
-  return rest !== null && rest.length === 1 && rest[0] === '--current-branch';
+	const rest =
+		args[0] === "status"
+			? args.slice(1)
+			: args[0] === "config" && args[1] === "status"
+				? args.slice(2)
+				: null;
+	return rest !== null && rest.length === 1 && rest[0] === "--current-branch";
 };

@@ -34,12 +34,12 @@
  *     deduped, not the escaped on-disk form.
  */
 
-import { promises as fs } from 'node:fs';
-import * as os from 'node:os';
-import * as path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from "node:crypto";
+import { promises as fs } from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 
-import type { HistControl } from '../types/settings.js';
+import type { HistControl } from "../types/settings.js";
 
 /** psql's compiled-in default for HISTSIZE (see `src/bin/psql/settings.h`). */
 const DEFAULT_HISTSIZE = 500;
@@ -68,9 +68,9 @@ let inMemoryHistory: string[] = [];
  * ({@link appendHistory}) before this is reached.
  */
 export const recordHistory = (entry: string): void => {
-  if (entry.length === 0) return;
-  if (inMemoryHistory[inMemoryHistory.length - 1] === entry) return;
-  inMemoryHistory.push(entry);
+	if (entry.length === 0) return;
+	if (inMemoryHistory[inMemoryHistory.length - 1] === entry) return;
+	inMemoryHistory.push(entry);
 };
 
 /**
@@ -81,12 +81,12 @@ export const getHistory = (): string[] => inMemoryHistory.slice();
 
 /** Reset the in-memory history. Primarily for tests and `\s`-less restarts. */
 export const clearHistory = (): void => {
-  inMemoryHistory = [];
+	inMemoryHistory = [];
 };
 
 /** Encode a single in-memory entry to the on-disk libreadline form. */
 const encodeEntry = (entry: string): string =>
-  entry.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
+	entry.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/\r/g, "\\r");
 
 /**
  * Decode a single on-disk libreadline line back to its in-memory form.
@@ -96,30 +96,30 @@ const encodeEntry = (entry: string): string =>
  * a stray backslash at the end of the file does not eat the next entry.
  */
 const decodeEntry = (line: string): string => {
-  let out = '';
-  for (let i = 0; i < line.length; i++) {
-    const c = line.charCodeAt(i);
-    if (c === 0x5c /* '\\' */ && i + 1 < line.length) {
-      const next = line[i + 1];
-      if (next === 'n') {
-        out += '\n';
-        i++;
-        continue;
-      }
-      if (next === 'r') {
-        out += '\r';
-        i++;
-        continue;
-      }
-      if (next === '\\') {
-        out += '\\';
-        i++;
-        continue;
-      }
-    }
-    out += line[i];
-  }
-  return out;
+	let out = "";
+	for (let i = 0; i < line.length; i++) {
+		const c = line.charCodeAt(i);
+		if (c === 0x5c /* '\\' */ && i + 1 < line.length) {
+			const next = line[i + 1];
+			if (next === "n") {
+				out += "\n";
+				i++;
+				continue;
+			}
+			if (next === "r") {
+				out += "\r";
+				i++;
+				continue;
+			}
+			if (next === "\\") {
+				out += "\\";
+				i++;
+				continue;
+			}
+		}
+		out += line[i];
+	}
+	return out;
 };
 
 /**
@@ -129,18 +129,18 @@ const decodeEntry = (line: string): string => {
  * Mirrors `pg_send_history()`'s filter in `input.c`.
  */
 const shouldIgnore = (
-  entry: string,
-  prev: string | undefined,
-  histcontrol: HistControl,
+	entry: string,
+	prev: string | undefined,
+	histcontrol: HistControl,
 ): boolean => {
-  const ignoreSpace =
-    histcontrol === 'ignorespace' || histcontrol === 'ignoreboth';
-  const ignoreDups =
-    histcontrol === 'ignoredups' || histcontrol === 'ignoreboth';
+	const ignoreSpace =
+		histcontrol === "ignorespace" || histcontrol === "ignoreboth";
+	const ignoreDups =
+		histcontrol === "ignoredups" || histcontrol === "ignoreboth";
 
-  if (ignoreSpace && entry.length > 0 && /^\s/.test(entry)) return true;
-  if (ignoreDups && prev !== undefined && prev === entry) return true;
-  return false;
+	if (ignoreSpace && entry.length > 0 && /^\s/.test(entry)) return true;
+	if (ignoreDups && prev !== undefined && prev === entry) return true;
+	return false;
 };
 
 /**
@@ -154,34 +154,34 @@ const shouldIgnore = (
  * Other I/O errors (EACCES, EISDIR, …) propagate to the caller.
  */
 export const loadHistory = async (filePath: string): Promise<string[]> => {
-  let raw: string;
-  try {
-    raw = await fs.readFile(filePath, 'utf8');
-  } catch (err) {
-    if (
-      err &&
-      typeof err === 'object' &&
-      'code' in err &&
-      (err as NodeJS.ErrnoException).code === 'ENOENT'
-    ) {
-      return [];
-    }
-    throw err;
-  }
+	let raw: string;
+	try {
+		raw = await fs.readFile(filePath, "utf8");
+	} catch (err) {
+		if (
+			err &&
+			typeof err === "object" &&
+			"code" in err &&
+			(err as NodeJS.ErrnoException).code === "ENOENT"
+		) {
+			return [];
+		}
+		throw err;
+	}
 
-  // Strip a single trailing newline so a well-formed file ending in `\n`
-  // doesn't produce a phantom empty entry. Don't strip more than one — a
-  // blank line in the middle of the file represents an entry that was
-  // literally the empty string (rare but possible), and we round-trip it.
-  if (raw.endsWith('\n')) raw = raw.slice(0, -1);
-  if (raw.length === 0) return [];
+	// Strip a single trailing newline so a well-formed file ending in `\n`
+	// doesn't produce a phantom empty entry. Don't strip more than one — a
+	// blank line in the middle of the file represents an entry that was
+	// literally the empty string (rare but possible), and we round-trip it.
+	if (raw.endsWith("\n")) raw = raw.slice(0, -1);
+	if (raw.length === 0) return [];
 
-  const entries: string[] = [];
-  for (const line of raw.split('\n')) {
-    if (line.startsWith('#')) continue;
-    entries.push(decodeEntry(line));
-  }
-  return entries;
+	const entries: string[] = [];
+	for (const line of raw.split("\n")) {
+		if (line.startsWith("#")) continue;
+		entries.push(decodeEntry(line));
+	}
+	return entries;
 };
 
 /**
@@ -201,30 +201,30 @@ export const loadHistory = async (filePath: string): Promise<string[]> => {
  *     under 1 MiB.
  */
 export const appendHistory = async (
-  filePath: string,
-  entry: string,
-  histcontrol: HistControl = 'none',
+	filePath: string,
+	entry: string,
+	histcontrol: HistControl = "none",
 ): Promise<void> => {
-  if (
-    histcontrol === 'ignoredups' ||
-    histcontrol === 'ignoreboth' ||
-    histcontrol === 'ignorespace'
-  ) {
-    let prev: string | undefined;
-    if (histcontrol === 'ignoredups' || histcontrol === 'ignoreboth') {
-      const existing = await loadHistory(filePath);
-      prev = existing[existing.length - 1];
-    }
-    if (shouldIgnore(entry, prev, histcontrol)) return;
-  }
+	if (
+		histcontrol === "ignoredups" ||
+		histcontrol === "ignoreboth" ||
+		histcontrol === "ignorespace"
+	) {
+		let prev: string | undefined;
+		if (histcontrol === "ignoredups" || histcontrol === "ignoreboth") {
+			const existing = await loadHistory(filePath);
+			prev = existing[existing.length - 1];
+		}
+		if (shouldIgnore(entry, prev, histcontrol)) return;
+	}
 
-  // Mirror the line into the session's in-memory history (what `\s` prints)
-  // using the same funnel that persists it to disk, so the two stay in
-  // lock-step under HISTCONTROL. Recording happens AFTER the ignore check
-  // so an ignored line is absent from both.
-  recordHistory(entry);
+	// Mirror the line into the session's in-memory history (what `\s` prints)
+	// using the same funnel that persists it to disk, so the two stay in
+	// lock-step under HISTCONTROL. Recording happens AFTER the ignore check
+	// so an ignored line is absent from both.
+	recordHistory(entry);
 
-  await fs.appendFile(filePath, encodeEntry(entry) + '\n', 'utf8');
+	await fs.appendFile(filePath, encodeEntry(entry) + "\n", "utf8");
 };
 
 /**
@@ -240,48 +240,48 @@ export const appendHistory = async (
  * process has the destination open, in which case the error propagates.
  */
 export const truncateHistory = async (
-  filePath: string,
-  maxLines: number,
+	filePath: string,
+	maxLines: number,
 ): Promise<void> => {
-  if (maxLines <= 0) {
-    try {
-      await fs.unlink(filePath);
-    } catch (err) {
-      if (
-        err &&
-        typeof err === 'object' &&
-        'code' in err &&
-        (err as NodeJS.ErrnoException).code === 'ENOENT'
-      ) {
-        return;
-      }
-      throw err;
-    }
-    return;
-  }
+	if (maxLines <= 0) {
+		try {
+			await fs.unlink(filePath);
+		} catch (err) {
+			if (
+				err &&
+				typeof err === "object" &&
+				"code" in err &&
+				(err as NodeJS.ErrnoException).code === "ENOENT"
+			) {
+				return;
+			}
+			throw err;
+		}
+		return;
+	}
 
-  const entries = await loadHistory(filePath);
-  if (entries.length <= maxLines) return;
+	const entries = await loadHistory(filePath);
+	if (entries.length <= maxLines) return;
 
-  const kept = entries.slice(entries.length - maxLines);
-  const body = kept.map(encodeEntry).join('\n') + '\n';
+	const kept = entries.slice(entries.length - maxLines);
+	const body = kept.map(encodeEntry).join("\n") + "\n";
 
-  const dir = path.dirname(filePath);
-  const base = path.basename(filePath);
-  const tmpPath = path.join(dir, `.${base}.${randomUUID()}.tmp`);
+	const dir = path.dirname(filePath);
+	const base = path.basename(filePath);
+	const tmpPath = path.join(dir, `.${base}.${randomUUID()}.tmp`);
 
-  await fs.writeFile(tmpPath, body, { encoding: 'utf8', mode: 0o600 });
-  try {
-    await fs.rename(tmpPath, filePath);
-  } catch (err) {
-    // Best-effort cleanup; the temp file is harmless but noisy.
-    try {
-      await fs.unlink(tmpPath);
-    } catch {
-      /* ignore */
-    }
-    throw err;
-  }
+	await fs.writeFile(tmpPath, body, { encoding: "utf8", mode: 0o600 });
+	try {
+		await fs.rename(tmpPath, filePath);
+	} catch (err) {
+		// Best-effort cleanup; the temp file is harmless but noisy.
+		try {
+			await fs.unlink(tmpPath);
+		} catch {
+			/* ignore */
+		}
+		throw err;
+	}
 };
 
 /**
@@ -297,22 +297,22 @@ export const truncateHistory = async (
  * for tests.
  */
 export const defaultHistoryPath = (
-  env: Record<string, string | undefined> = process.env,
+	env: Record<string, string | undefined> = process.env,
 ): string => {
-  const explicit = env.PSQL_HISTORY;
-  if (explicit !== undefined && explicit.length > 0) return explicit;
+	const explicit = env.PSQL_HISTORY;
+	if (explicit !== undefined && explicit.length > 0) return explicit;
 
-  if (process.platform === 'win32') {
-    const appdata = env.APPDATA;
-    if (appdata !== undefined && appdata.length > 0) {
-      return path.join(appdata, 'postgresql', 'psql_history');
-    }
-    // Fall through to homedir() if APPDATA isn't set; matches psql's
-    // graceful degradation on a minimally-configured Windows session.
-  }
+	if (process.platform === "win32") {
+		const appdata = env.APPDATA;
+		if (appdata !== undefined && appdata.length > 0) {
+			return path.join(appdata, "postgresql", "psql_history");
+		}
+		// Fall through to homedir() if APPDATA isn't set; matches psql's
+		// graceful degradation on a minimally-configured Windows session.
+	}
 
-  const home = env.HOME ?? os.homedir();
-  return path.join(home, '.psql_history');
+	const home = env.HOME ?? os.homedir();
+	return path.join(home, ".psql_history");
 };
 
 /**
@@ -324,11 +324,11 @@ export const defaultHistoryPath = (
  * this layer we don't have a logger.
  */
 export const resolveHistSize = (
-  env: Record<string, string | undefined> = process.env,
+	env: Record<string, string | undefined> = process.env,
 ): number => {
-  const raw = env.HISTSIZE;
-  if (raw === undefined || raw === '') return DEFAULT_HISTSIZE;
-  const n = Number(raw);
-  if (!Number.isInteger(n) || n < 0) return DEFAULT_HISTSIZE;
-  return n;
+	const raw = env.HISTSIZE;
+	if (raw === undefined || raw === "") return DEFAULT_HISTSIZE;
+	const n = Number(raw);
+	if (!Number.isInteger(n) || n < 0) return DEFAULT_HISTSIZE;
+	return n;
 };

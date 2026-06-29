@@ -10,38 +10,38 @@
 // type, so values stay assignable in both directions.
 
 export const EndpointType = {
-  ReadOnly: 'read_only',
-  ReadWrite: 'read_write',
+	ReadOnly: "read_only",
+	ReadWrite: "read_write",
 } as const;
 export type EndpointType = (typeof EndpointType)[keyof typeof EndpointType];
 
 export const NeonAuthOauthProviderId = {
-  Google: 'google',
-  Github: 'github',
-  Microsoft: 'microsoft',
-  Vercel: 'vercel',
+	Google: "google",
+	Github: "github",
+	Microsoft: "microsoft",
+	Vercel: "vercel",
 } as const;
 export type NeonAuthOauthProviderId =
-  (typeof NeonAuthOauthProviderId)[keyof typeof NeonAuthOauthProviderId];
+	(typeof NeonAuthOauthProviderId)[keyof typeof NeonAuthOauthProviderId];
 
 export const NeonAuthOauthProviderType = {
-  Standard: 'standard',
-  Shared: 'shared',
+	Standard: "standard",
+	Shared: "shared",
 } as const;
 export type NeonAuthOauthProviderType =
-  (typeof NeonAuthOauthProviderType)[keyof typeof NeonAuthOauthProviderType];
+	(typeof NeonAuthOauthProviderType)[keyof typeof NeonAuthOauthProviderType];
 
 export const NeonAuthSupportedAuthProvider = {
-  Mock: 'mock',
-  Stack: 'stack',
-  BetterAuth: 'better_auth',
+	Mock: "mock",
+	Stack: "stack",
+	BetterAuth: "better_auth",
 } as const;
 export type NeonAuthSupportedAuthProvider =
-  (typeof NeonAuthSupportedAuthProvider)[keyof typeof NeonAuthSupportedAuthProvider];
+	(typeof NeonAuthSupportedAuthProvider)[keyof typeof NeonAuthSupportedAuthProvider];
 
 export const NeonAuthEmailVerificationMethod = {
-  Link: 'link',
-  Otp: 'otp',
+	Link: "link",
+	Otp: "otp",
 } as const;
 export type NeonAuthEmailVerificationMethod =
-  (typeof NeonAuthEmailVerificationMethod)[keyof typeof NeonAuthEmailVerificationMethod];
+	(typeof NeonAuthEmailVerificationMethod)[keyof typeof NeonAuthEmailVerificationMethod];

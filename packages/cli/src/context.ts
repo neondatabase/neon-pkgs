@@ -1,25 +1,25 @@
-import { accessSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { dirname, normalize, resolve } from 'node:path';
-import yargs from 'yargs';
+import { accessSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, normalize, resolve } from "node:path";
+import type yargs from "yargs";
 
-import { log } from './log.js';
+import { log } from "./log.js";
 
 export type Context = {
-  orgId?: string;
-  projectId?: string;
-  /**
-   * The pinned branch, stored as its **name** when known (nicer to read in
-   * `.neon`) or its id otherwise. Resolved to an id by the usual name-or-id
-   * resolution wherever a branch id is needed.
-   */
-  branch?: string;
-  /**
-   * Legacy field. Still read via {@link contextBranch} so older `.neon` files
-   * keep working, but new writes use {@link Context.branch}; the legacy field is
-   * dropped the next time the context is written.
-   */
-  branchId?: string;
+	orgId?: string;
+	projectId?: string;
+	/**
+	 * The pinned branch, stored as its **name** when known (nicer to read in
+	 * `.neon`) or its id otherwise. Resolved to an id by the usual name-or-id
+	 * resolution wherever a branch id is needed.
+	 */
+	branch?: string;
+	/**
+	 * Legacy field. Still read via {@link contextBranch} so older `.neon` files
+	 * keep working, but new writes use {@link Context.branch}; the legacy field is
+	 * dropped the next time the context is written.
+	 */
+	branchId?: string;
 };
 
 /**
@@ -28,7 +28,7 @@ export type Context = {
  * working.
  */
 export const contextBranch = (context: Context): string | undefined =>
-  context.branch ?? context.branchId;
+	context.branch ?? context.branchId;
 
 /**
  * True when the invocation is the offline "current branch" probe:
@@ -44,15 +44,15 @@ export const contextBranch = (context: Context): string | undefined =>
  * `config status` (`_ = ['config', 'status']`).
  */
 export const isCurrentBranchProbe = (args: {
-  _: (string | number)[];
-  currentBranch?: boolean;
+	_: (string | number)[];
+	currentBranch?: boolean;
 }): boolean =>
-  args.currentBranch === true &&
-  (args._[0] === 'status' ||
-    (args._[0] === 'config' && args._[1] === 'status'));
+	args.currentBranch === true &&
+	(args._[0] === "status" ||
+		(args._[0] === "config" && args._[1] === "status"));
 
-const CONTEXT_FILE = '.neon';
-const GITIGNORE_FILE = '.gitignore';
+const CONTEXT_FILE = ".neon";
+const GITIGNORE_FILE = ".gitignore";
 
 const wrapWithContextFile = (dir: string) => resolve(dir, CONTEXT_FILE);
 
@@ -75,58 +75,58 @@ const wrapWithContextFile = (dir: string) => resolve(dir, CONTEXT_FILE);
  * `process.cwd()` (which would race with other tests running in parallel).
  */
 export const currentContextFile = (cwd: string = process.cwd()) => {
-  let currentDir = cwd;
-  const root = normalize('/');
-  const home = homedir();
-  while (currentDir !== root && currentDir !== home) {
-    try {
-      accessSync(resolve(currentDir, CONTEXT_FILE));
-      return wrapWithContextFile(currentDir);
-    } catch {
-      // ignore
-    }
-    currentDir = resolve(currentDir, '..');
-  }
+	let currentDir = cwd;
+	const root = normalize("/");
+	const home = homedir();
+	while (currentDir !== root && currentDir !== home) {
+		try {
+			accessSync(resolve(currentDir, CONTEXT_FILE));
+			return wrapWithContextFile(currentDir);
+		} catch {
+			// ignore
+		}
+		currentDir = resolve(currentDir, "..");
+	}
 
-  return wrapWithContextFile(cwd);
+	return wrapWithContextFile(cwd);
 };
 
 export const readContextFile = (file: string): Context => {
-  try {
-    return JSON.parse(readFileSync(file, 'utf-8'));
-  } catch {
-    return {};
-  }
+	try {
+		return JSON.parse(readFileSync(file, "utf-8"));
+	} catch {
+		return {};
+	}
 };
 
 export const enrichFromContext = (
-  args: yargs.Arguments<{ contextFile: string }>,
+	args: yargs.Arguments<{ contextFile: string }>,
 ) => {
-  // `link` and the deprecated `set-context` manage the context file themselves
-  // and must see the raw flags rather than values pre-filled from an existing
-  // `.neon`, so skip enrichment for both.
-  if (args._[0] === 'link' || args._[0] === 'set-context') {
-    return;
-  }
-  const context = readContextFile(args.contextFile);
-  if (!args.orgId) {
-    args.orgId = context.orgId;
-  }
-  if (!args.projectId) {
-    args.projectId = context.projectId;
-  }
-  if (
-    !args.branch &&
-    !args.id &&
-    !args.name &&
-    context.projectId === args.projectId
-  ) {
-    args.branch = contextBranch(context);
-  }
+	// `link` and the deprecated `set-context` manage the context file themselves
+	// and must see the raw flags rather than values pre-filled from an existing
+	// `.neon`, so skip enrichment for both.
+	if (args._[0] === "link" || args._[0] === "set-context") {
+		return;
+	}
+	const context = readContextFile(args.contextFile);
+	if (!args.orgId) {
+		args.orgId = context.orgId;
+	}
+	if (!args.projectId) {
+		args.projectId = context.projectId;
+	}
+	if (
+		!args.branch &&
+		!args.id &&
+		!args.name &&
+		context.projectId === args.projectId
+	) {
+		args.branch = contextBranch(context);
+	}
 };
 
 export const updateContextFile = (file: string, context: Context) => {
-  writeFileSync(file, JSON.stringify(context, null, 2));
+	writeFileSync(file, JSON.stringify(context, null, 2));
 };
 
 /**
@@ -142,11 +142,11 @@ export const updateContextFile = (file: string, context: Context) => {
  * every subsequent command.
  */
 export const applyContext = (file: string, context: Context) => {
-  const isNewFile = !existsSync(file);
-  updateContextFile(file, context);
-  if (isNewFile) {
-    ensureGitignored(file);
-  }
+	const isNewFile = !existsSync(file);
+	updateContextFile(file, context);
+	if (isNewFile) {
+		ensureGitignored(file);
+	}
 };
 
 /**
@@ -154,10 +154,10 @@ export const applyContext = (file: string, context: Context) => {
  * branch optionally so (pin one later with `neonctl checkout`).
  */
 export type ResolvedContext = {
-  orgId: string;
-  projectId: string;
-  /** Branch name (preferred) or id. Optional. */
-  branch?: string;
+	orgId: string;
+	projectId: string;
+	/** Branch name (preferred) or id. Optional. */
+	branch?: string;
 };
 
 /**
@@ -172,11 +172,11 @@ export type ResolvedContext = {
  * {@link applyContext}, so the same `.gitignore` scaffolding applies.
  */
 export const setContext = (file: string, context: ResolvedContext) => {
-  applyContext(file, {
-    orgId: context.orgId,
-    projectId: context.projectId,
-    branch: context.branch,
-  });
+	applyContext(file, {
+		orgId: context.orgId,
+		projectId: context.projectId,
+		branch: context.branch,
+	});
 };
 
 /**
@@ -189,35 +189,36 @@ export const setContext = (file: string, context: ResolvedContext) => {
  * must not be blocked by a `.gitignore` write error.
  */
 export const ensureGitignored = (file: string): void => {
-  try {
-    const dir = dirname(file);
-    const entry = basenameOf(file);
-    const gitignorePath = resolve(dir, GITIGNORE_FILE);
+	try {
+		const dir = dirname(file);
+		const entry = basenameOf(file);
+		const gitignorePath = resolve(dir, GITIGNORE_FILE);
 
-    if (!existsSync(gitignorePath)) {
-      writeFileSync(gitignorePath, `${entry}\n`);
-      return;
-    }
+		if (!existsSync(gitignorePath)) {
+			writeFileSync(gitignorePath, `${entry}\n`);
+			return;
+		}
 
-    const current = readFileSync(gitignorePath, 'utf-8');
-    if (hasGitignoreEntry(current, entry)) {
-      return;
-    }
+		const current = readFileSync(gitignorePath, "utf-8");
+		if (hasGitignoreEntry(current, entry)) {
+			return;
+		}
 
-    const needsLeadingNewline = current.length > 0 && !current.endsWith('\n');
-    const addition = `${needsLeadingNewline ? '\n' : ''}${entry}\n`;
-    writeFileSync(gitignorePath, current + addition);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    log.debug('Failed to update .gitignore next to %s: %s', file, message);
-  }
+		const needsLeadingNewline =
+			current.length > 0 && !current.endsWith("\n");
+		const addition = `${needsLeadingNewline ? "\n" : ""}${entry}\n`;
+		writeFileSync(gitignorePath, current + addition);
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		log.debug("Failed to update .gitignore next to %s: %s", file, message);
+	}
 };
 
 const basenameOf = (file: string): string => {
-  const parts = file.split(/[\\/]/);
-  return parts[parts.length - 1] || CONTEXT_FILE;
+	const parts = file.split(/[\\/]/);
+	return parts[parts.length - 1] || CONTEXT_FILE;
 };
 
 const hasGitignoreEntry = (content: string, entry: string): boolean => {
-  return content.split(/\r?\n/).some((line) => line.trim() === entry);
+	return content.split(/\r?\n/).some((line) => line.trim() === entry);
 };

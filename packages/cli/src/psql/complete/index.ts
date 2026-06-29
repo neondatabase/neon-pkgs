@@ -21,26 +21,26 @@
  * `splitForCompletion` during tokenization.
  */
 
-import type { Completer, CompletionResult } from '../io/lineEditor/complete.js';
-import type { PsqlSettings } from '../types/settings.js';
+import type { Completer, CompletionResult } from "../io/lineEditor/complete.js";
+import type { PsqlSettings } from "../types/settings.js";
 
-import { splitForCompletion } from './matcher.js';
-import { findCompletions, type CompleteContext } from './rules.js';
+import { splitForCompletion } from "./matcher.js";
+import { type CompleteContext, findCompletions } from "./rules.js";
 
 export type PsqlCompleterContext = {
-  settings: PsqlSettings;
-  /**
-   * Accessor for the in-flight multi-line query buffer. Called on every
-   * completion to fetch the raw, pre-scan text of the lines already submitted
-   * for the current statement. Lets rules that need cross-line context (e.g.
-   * `ANALYZE (` opened on the previous line) see beyond what the line editor
-   * currently has in its single-line buffer.
-   *
-   * Optional: omitted (or returning `''`) puts the completer in the
-   * single-line-only mode that existed before WP-25's multi-line plumbing,
-   * matching what unit tests typically want.
-   */
-  getQueryBuf?: () => string;
+	settings: PsqlSettings;
+	/**
+	 * Accessor for the in-flight multi-line query buffer. Called on every
+	 * completion to fetch the raw, pre-scan text of the lines already submitted
+	 * for the current statement. Lets rules that need cross-line context (e.g.
+	 * `ANALYZE (` opened on the previous line) see beyond what the line editor
+	 * currently has in its single-line buffer.
+	 *
+	 * Optional: omitted (or returning `''`) puts the completer in the
+	 * single-line-only mode that existed before WP-25's multi-line plumbing,
+	 * matching what unit tests typically want.
+	 */
+	getQueryBuf?: () => string;
 };
 
 /**
@@ -49,52 +49,52 @@ export type PsqlCompleterContext = {
  * `\c`) take effect immediately.
  */
 export const psqlCompleter = (ctx: PsqlCompleterContext): Completer => {
-  const completer: Completer = async (
-    input: string,
-    cursor: number,
-  ): Promise<CompletionResult> => {
-    const { prevWords, currentWord, replaceLength } = splitForCompletion(
-      input,
-      cursor,
-    );
-    const ruleCtx: CompleteContext = {
-      settings: ctx.settings,
-      queryBuf: ctx.getQueryBuf?.() ?? '',
-    };
-    const { candidates } = await findCompletions(
-      prevWords,
-      currentWord,
-      ruleCtx,
-    );
+	const completer: Completer = async (
+		input: string,
+		cursor: number,
+	): Promise<CompletionResult> => {
+		const { prevWords, currentWord, replaceLength } = splitForCompletion(
+			input,
+			cursor,
+		);
+		const ruleCtx: CompleteContext = {
+			settings: ctx.settings,
+			queryBuf: ctx.getQueryBuf?.() ?? "",
+		};
+		const { candidates } = await findCompletions(
+			prevWords,
+			currentWord,
+			ruleCtx,
+		);
 
-    // De-duplicate while preserving order.
-    const seen = new Set<string>();
-    const deduped: string[] = [];
-    for (const c of candidates) {
-      if (!seen.has(c)) {
-        seen.add(c);
-        deduped.push(c);
-      }
-    }
-    // Stable sort so the listing is predictable. The first-character sort
-    // key uses lowercase so case-mixed candidate lists don't look chaotic.
-    deduped.sort((a, b) => {
-      const la = a.toLowerCase();
-      const lb = b.toLowerCase();
-      if (la < lb) return -1;
-      if (la > lb) return 1;
-      return 0;
-    });
+		// De-duplicate while preserving order.
+		const seen = new Set<string>();
+		const deduped: string[] = [];
+		for (const c of candidates) {
+			if (!seen.has(c)) {
+				seen.add(c);
+				deduped.push(c);
+			}
+		}
+		// Stable sort so the listing is predictable. The first-character sort
+		// key uses lowercase so case-mixed candidate lists don't look chaotic.
+		deduped.sort((a, b) => {
+			const la = a.toLowerCase();
+			const lb = b.toLowerCase();
+			if (la < lb) return -1;
+			if (la > lb) return 1;
+			return 0;
+		});
 
-    const commonPrefix = longestCommonPrefix(deduped, currentWord);
+		const commonPrefix = longestCommonPrefix(deduped, currentWord);
 
-    return {
-      candidates: deduped,
-      commonPrefix,
-      replaceLength,
-    };
-  };
-  return completer;
+		return {
+			candidates: deduped,
+			commonPrefix,
+			replaceLength,
+		};
+	};
+	return completer;
 };
 
 // ---------------------------------------------------------------------------
@@ -109,29 +109,29 @@ export const psqlCompleter = (ctx: PsqlCompleterContext): Completer => {
  * If there's a single candidate, returns it whole.
  */
 const longestCommonPrefix = (
-  candidates: readonly string[],
-  fallback: string,
+	candidates: readonly string[],
+	fallback: string,
 ): string => {
-  if (candidates.length === 0) return fallback;
-  if (candidates.length === 1) return candidates[0];
-  // Use code-point iteration so multi-byte characters don't get cut.
-  const arrs = candidates.map((c) => Array.from(c));
-  const minLen = arrs.reduce((m, a) => Math.min(m, a.length), Infinity);
-  const out: string[] = [];
-  for (let i = 0; i < minLen; i++) {
-    const first = arrs[0][i];
-    let ok = true;
-    for (let j = 1; j < arrs.length; j++) {
-      if (arrs[j][i] !== first) {
-        ok = false;
-        break;
-      }
-    }
-    if (!ok) break;
-    out.push(first);
-  }
-  // Common prefix should not be shorter than what's already typed.
-  const candidatePrefix = out.join('');
-  if (candidatePrefix.length >= fallback.length) return candidatePrefix;
-  return fallback;
+	if (candidates.length === 0) return fallback;
+	if (candidates.length === 1) return candidates[0];
+	// Use code-point iteration so multi-byte characters don't get cut.
+	const arrs = candidates.map((c) => Array.from(c));
+	const minLen = arrs.reduce((m, a) => Math.min(m, a.length), Infinity);
+	const out: string[] = [];
+	for (let i = 0; i < minLen; i++) {
+		const first = arrs[0][i];
+		let ok = true;
+		for (let j = 1; j < arrs.length; j++) {
+			if (arrs[j][i] !== first) {
+				ok = false;
+				break;
+			}
+		}
+		if (!ok) break;
+		out.push(first);
+	}
+	// Common prefix should not be shorter than what's already typed.
+	const candidatePrefix = out.join("");
+	if (candidatePrefix.length >= fallback.length) return candidatePrefix;
+	return fallback;
 };

@@ -79,109 +79,113 @@
  * @returns `{ token, rest }` where `token` is `null` at end of input.
  */
 export const strtokx = (
-  input: string,
-  whitespace: string,
-  delim: string,
-  quote: string,
-  escape: string,
-  eAcceptInUnquoted: string | null,
-  atEol: boolean,
-  encoding?: string,
+	input: string,
+	whitespace: string,
+	delim: string,
+	quote: string,
+	escape: string,
+	eAcceptInUnquoted: string | null,
+	atEol: boolean,
+	encoding?: string,
 ): { token: string | null; rest: string } => {
-  void encoding; // documented as unused
+	void encoding; // documented as unused
 
-  let i = 0;
-  const n = input.length;
+	let i = 0;
+	const n = input.length;
 
-  // 1. Skip leading whitespace.
-  while (i < n && whitespace.includes(input[i])) i++;
+	// 1. Skip leading whitespace.
+	while (i < n && whitespace.includes(input[i])) i++;
 
-  if (i >= n) {
-    return { token: null, rest: '' };
-  }
+	if (i >= n) {
+		return { token: null, rest: "" };
+	}
 
-  // 2. Single-character delim token.
-  if (delim.length > 0 && delim.includes(input[i])) {
-    const token = input[i];
-    i++;
-    if (!atEol) {
-      // Consume one immediately-following separator (whitespace) so the next
-      // call lands cleanly on the next real token. Upstream achieves the
-      // same effect by inserting a null after the delim and advancing
-      // `string` past it.
-      while (i < n && whitespace.includes(input[i])) i++;
-    }
-    return { token, rest: input.slice(i) };
-  }
+	// 2. Single-character delim token.
+	if (delim.length > 0 && delim.includes(input[i])) {
+		const token = input[i];
+		i++;
+		if (!atEol) {
+			// Consume one immediately-following separator (whitespace) so the next
+			// call lands cleanly on the next real token. Upstream achieves the
+			// same effect by inserting a null after the delim and advancing
+			// `string` past it.
+			while (i < n && whitespace.includes(input[i])) i++;
+		}
+		return { token, rest: input.slice(i) };
+	}
 
-  // 3. Quoted token.
-  let p = i;
-  let effectiveQuote = quote;
-  let effectiveEscape = escape;
+	// 3. Quoted token.
+	let p = i;
+	let effectiveQuote = quote;
+	let effectiveEscape = escape;
 
-  // E-string prefix handling — upstream's `if (e_strings && (*p == 'E' ||
-  // *p == 'e') && p[1] == '\'') { quote = "'"; escape = '\\'; p++; }`.
-  if (
-    eAcceptInUnquoted &&
-    p + 1 < n &&
-    eAcceptInUnquoted.includes(input[p]) &&
-    input[p + 1] === "'"
-  ) {
-    effectiveQuote = "'";
-    effectiveEscape = '\\';
-    p++;
-  }
+	// E-string prefix handling — upstream's `if (e_strings && (*p == 'E' ||
+	// *p == 'e') && p[1] == '\'') { quote = "'"; escape = '\\'; p++; }`.
+	if (
+		eAcceptInUnquoted &&
+		p + 1 < n &&
+		eAcceptInUnquoted.includes(input[p]) &&
+		input[p + 1] === "'"
+	) {
+		effectiveQuote = "'";
+		effectiveEscape = "\\";
+		p++;
+	}
 
-  if (effectiveQuote.length > 0 && effectiveQuote.includes(input[p])) {
-    const thisQuote = input[p];
-    const start = p;
-    p++; // step over opening quote
-    while (p < n) {
-      const c = input[p];
-      if (effectiveEscape.length > 0 && c === effectiveEscape && p + 1 < n) {
-        // escape + anything (except end-of-input) is a literal data char
-        p += 2;
-        continue;
-      }
-      if (c === thisQuote && input[p + 1] === thisQuote) {
-        // doubled quote — keep both in the returned token; the caller can
-        // dequote() if they want a clean value.
-        p += 2;
-        continue;
-      }
-      if (c === thisQuote) {
-        p++; // step over closing quote
-        break;
-      }
-      p++;
-    }
-    const token = input.slice(start, p);
-    if (!atEol) {
-      while (p < n && whitespace.includes(input[p])) p++;
-    }
-    return { token, rest: input.slice(p) };
-  }
+	if (effectiveQuote.length > 0 && effectiveQuote.includes(input[p])) {
+		const thisQuote = input[p];
+		const start = p;
+		p++; // step over opening quote
+		while (p < n) {
+			const c = input[p];
+			if (
+				effectiveEscape.length > 0 &&
+				c === effectiveEscape &&
+				p + 1 < n
+			) {
+				// escape + anything (except end-of-input) is a literal data char
+				p += 2;
+				continue;
+			}
+			if (c === thisQuote && input[p + 1] === thisQuote) {
+				// doubled quote — keep both in the returned token; the caller can
+				// dequote() if they want a clean value.
+				p += 2;
+				continue;
+			}
+			if (c === thisQuote) {
+				p++; // step over closing quote
+				break;
+			}
+			p++;
+		}
+		const token = input.slice(start, p);
+		if (!atEol) {
+			while (p < n && whitespace.includes(input[p])) p++;
+		}
+		return { token, rest: input.slice(p) };
+	}
 
-  // 4. Bareword: scan to next whitespace, delim, or quote.
-  const start = p;
-  while (p < n) {
-    const c = input[p];
-    if (whitespace.includes(c)) break;
-    if (delim.length > 0 && delim.includes(c)) break;
-    if (quote.length > 0 && quote.includes(c)) break;
-    p++;
-  }
-  const token = input.slice(start, p);
-  // Always skip trailing whitespace so the next call lands on the next
-  // non-blank character. When `atEol` is `false` we additionally consume a
-  // single trailing delim — the caller has told us delims are line-internal
-  // separators rather than significant tokens.
-  while (p < n && whitespace.includes(input[p])) p++;
-  if (!atEol && p < n && delim.length > 0 && delim.includes(input[p])) {
-    p++;
-    while (p < n && whitespace.includes(input[p])) p++;
-  }
-  return { token, rest: input.slice(p) };
+	// 4. Bareword: scan to next whitespace, delim, or quote.
+	const start = p;
+	while (p < n) {
+		const c = input[p];
+		if (whitespace.includes(c)) break;
+		if (delim.length > 0 && delim.includes(c)) break;
+		if (quote.length > 0 && quote.includes(c)) break;
+		p++;
+	}
+	const token = input.slice(start, p);
+	// Always skip trailing whitespace so the next call lands on the next
+	// non-blank character. When `atEol` is `false` we additionally consume a
+	// single trailing delim — the caller has told us delims are line-internal
+	// separators rather than significant tokens.
+	while (p < n && whitespace.includes(input[p])) p++;
+	if (!atEol && p < n && delim.length > 0 && delim.includes(input[p])) {
+		p++;
+		while (p < n && whitespace.includes(input[p])) p++;
+	}
+	return { token, rest: input.slice(p) };
 };
 
 /**
@@ -197,26 +201,26 @@ export const strtokx = (
  * @param quote       quote character to wrap with (e.g. `'` or `"`)
  */
 export const quoteIfNeeded = (
-  value: string,
-  escapeChars: string,
-  quote: string,
+	value: string,
+	escapeChars: string,
+	quote: string,
 ): string => {
-  if (quote.length !== 1) {
-    throw new Error('quoteIfNeeded: quote must be exactly one character');
-  }
-  let needsQuotes = false;
-  let escaped = '';
-  for (const c of value) {
-    if (c === quote) {
-      needsQuotes = true;
-      escaped += quote + quote;
-    } else {
-      if (escapeChars.includes(c)) needsQuotes = true;
-      escaped += c;
-    }
-  }
-  if (!needsQuotes) return value;
-  return quote + escaped + quote;
+	if (quote.length !== 1) {
+		throw new Error("quoteIfNeeded: quote must be exactly one character");
+	}
+	let needsQuotes = false;
+	let escaped = "";
+	for (const c of value) {
+		if (c === quote) {
+			needsQuotes = true;
+			escaped += quote + quote;
+		} else {
+			if (escapeChars.includes(c)) needsQuotes = true;
+			escaped += c;
+		}
+	}
+	if (!needsQuotes) return value;
+	return quote + escaped + quote;
 };
 
 /**
@@ -228,26 +232,30 @@ export const quoteIfNeeded = (
  * @param quote quote character used to wrap (e.g. `'` or `"`)
  */
 export const dequote = (value: string, quote: string): string => {
-  if (quote.length !== 1) {
-    throw new Error('dequote: quote must be exactly one character');
-  }
-  if (value.length < 2 || !value.startsWith(quote) || !value.endsWith(quote)) {
-    return value;
-  }
-  const inner = value.slice(1, -1);
-  // Undouble embedded quote chars.
-  let out = '';
-  let i = 0;
-  while (i < inner.length) {
-    if (inner[i] === quote && inner[i + 1] === quote) {
-      out += quote;
-      i += 2;
-    } else {
-      out += inner[i];
-      i++;
-    }
-  }
-  return out;
+	if (quote.length !== 1) {
+		throw new Error("dequote: quote must be exactly one character");
+	}
+	if (
+		value.length < 2 ||
+		!value.startsWith(quote) ||
+		!value.endsWith(quote)
+	) {
+		return value;
+	}
+	const inner = value.slice(1, -1);
+	// Undouble embedded quote chars.
+	let out = "";
+	let i = 0;
+	while (i < inner.length) {
+		if (inner[i] === quote && inner[i + 1] === quote) {
+			out += quote;
+			i += 2;
+		} else {
+			out += inner[i];
+			i++;
+		}
+	}
+	return out;
 };
 
 // ---------------------------------------------------------------------------
@@ -277,18 +285,18 @@ export type VarLookup = (name: string) => string | undefined;
  * through the SQL parser.
  */
 export const quoteSqlLiteral = (value: string): string => {
-  let needsEscape = false;
-  let inner = '';
-  for (const c of value) {
-    if (c === "'") inner += "''";
-    else if (c === '\\') {
-      inner += '\\\\';
-      needsEscape = true;
-    } else {
-      inner += c;
-    }
-  }
-  return needsEscape ? `E'${inner}'` : `'${inner}'`;
+	let needsEscape = false;
+	let inner = "";
+	for (const c of value) {
+		if (c === "'") inner += "''";
+		else if (c === "\\") {
+			inner += "\\\\";
+			needsEscape = true;
+		} else {
+			inner += c;
+		}
+	}
+	return needsEscape ? `E'${inner}'` : `'${inner}'`;
 };
 
 /**
@@ -296,11 +304,11 @@ export const quoteSqlLiteral = (value: string): string => {
  * Wraps the value in `"…"` and doubles any embedded `"`.
  */
 export const quoteSqlIdent = (value: string): string => {
-  let inner = '';
-  for (const c of value) {
-    inner += c === '"' ? '""' : c;
-  }
-  return `"${inner}"`;
+	let inner = "";
+	for (const c of value) {
+		inner += c === '"' ? '""' : c;
+	}
+	return `"${inner}"`;
 };
 
 // Variable-name character class. Upstream's `variable_char` flex rule matches
@@ -316,10 +324,10 @@ const VAR_NAME_CONT_RE = /[A-Za-z0-9_\x80-\xff]/;
 const VAR_NAME_START_RE = /[A-Za-z_\x80-\xff]/;
 
 const isVarNameStart = (c: string | undefined): boolean =>
-  c !== undefined && VAR_NAME_START_RE.test(c);
+	c !== undefined && VAR_NAME_START_RE.test(c);
 
 const isVarNameCont = (c: string | undefined): boolean =>
-  c !== undefined && VAR_NAME_CONT_RE.test(c);
+	c !== undefined && VAR_NAME_CONT_RE.test(c);
 
 /**
  * Attempt to consume one of the `:NAME`, `:'NAME'`, `:"NAME"` variable
@@ -347,82 +355,82 @@ const isVarNameCont = (c: string | undefined): boolean =>
  *    closed quote, matching upstream's flex rules.
  */
 export const tryConsumeVarSubstitution = (
-  s: string,
-  i: number,
-  varLookup: VarLookup | undefined,
+	s: string,
+	i: number,
+	varLookup: VarLookup | undefined,
 ): { end: number; text: string } | null => {
-  if (varLookup === undefined) return null;
-  if (s[i] !== ':') return null;
-  const next = s[i + 1];
-  if (next === undefined) return null;
-  // `::` cast operator — never a substitution.
-  if (next === ':') return null;
+	if (varLookup === undefined) return null;
+	if (s[i] !== ":") return null;
+	const next = s[i + 1];
+	if (next === undefined) return null;
+	// `::` cast operator — never a substitution.
+	if (next === ":") return null;
 
-  // :{?NAME} — defined-variable test. Emits literal `TRUE` if the named
-  // variable is set, `FALSE` otherwise. Mirrors upstream's
-  // `psqlscan_test_variable` (flex rule `:\{\?{variable_char}+\}` in
-  // `psqlscan.l`). Unlike the other forms we recognise here, an unset variable
-  // is NOT echoed back as a literal — the whole point of `:{?NAME}` is to
-  // produce a boolean regardless of definedness. A malformed brace expression
-  // (missing closing `}`, empty NAME, or non-variable_char content) returns
-  // `null` so the caller emits the literal `:` and continues, matching the
-  // upstream flex fallback rule `:\{\?{variable_char}*`.
-  if (next === '{' && s[i + 2] === '?') {
-    let j = i + 3;
-    while (j < s.length && isVarNameCont(s[j])) j++;
-    if (j > i + 3 && s[j] === '}') {
-      const name = s.slice(i + 3, j);
-      const value = varLookup(name);
-      return { end: j + 1, text: value !== undefined ? 'TRUE' : 'FALSE' };
-    }
-    return null;
-  }
+	// :{?NAME} — defined-variable test. Emits literal `TRUE` if the named
+	// variable is set, `FALSE` otherwise. Mirrors upstream's
+	// `psqlscan_test_variable` (flex rule `:\{\?{variable_char}+\}` in
+	// `psqlscan.l`). Unlike the other forms we recognise here, an unset variable
+	// is NOT echoed back as a literal — the whole point of `:{?NAME}` is to
+	// produce a boolean regardless of definedness. A malformed brace expression
+	// (missing closing `}`, empty NAME, or non-variable_char content) returns
+	// `null` so the caller emits the literal `:` and continues, matching the
+	// upstream flex fallback rule `:\{\?{variable_char}*`.
+	if (next === "{" && s[i + 2] === "?") {
+		let j = i + 3;
+		while (j < s.length && isVarNameCont(s[j])) j++;
+		if (j > i + 3 && s[j] === "}") {
+			const name = s.slice(i + 3, j);
+			const value = varLookup(name);
+			return { end: j + 1, text: value !== undefined ? "TRUE" : "FALSE" };
+		}
+		return null;
+	}
 
-  // :"NAME" — SQL identifier quote
-  if (next === '"') {
-    let j = i + 2;
-    while (j < s.length && isVarNameCont(s[j])) j++;
-    if (j > i + 2 && s[j] === '"') {
-      const name = s.slice(i + 2, j);
-      const value = varLookup(name);
-      if (value === undefined) {
-        // Echo the literal `:"NAME"` for visibility.
-        return { end: j + 1, text: s.slice(i, j + 1) };
-      }
-      return { end: j + 1, text: quoteSqlIdent(value) };
-    }
-    return null;
-  }
+	// :"NAME" — SQL identifier quote
+	if (next === '"') {
+		let j = i + 2;
+		while (j < s.length && isVarNameCont(s[j])) j++;
+		if (j > i + 2 && s[j] === '"') {
+			const name = s.slice(i + 2, j);
+			const value = varLookup(name);
+			if (value === undefined) {
+				// Echo the literal `:"NAME"` for visibility.
+				return { end: j + 1, text: s.slice(i, j + 1) };
+			}
+			return { end: j + 1, text: quoteSqlIdent(value) };
+		}
+		return null;
+	}
 
-  // :'NAME' — SQL literal quote
-  if (next === "'") {
-    let j = i + 2;
-    while (j < s.length && isVarNameCont(s[j])) j++;
-    if (j > i + 2 && s[j] === "'") {
-      const name = s.slice(i + 2, j);
-      const value = varLookup(name);
-      if (value === undefined) {
-        return { end: j + 1, text: s.slice(i, j + 1) };
-      }
-      return { end: j + 1, text: quoteSqlLiteral(value) };
-    }
-    return null;
-  }
+	// :'NAME' — SQL literal quote
+	if (next === "'") {
+		let j = i + 2;
+		while (j < s.length && isVarNameCont(s[j])) j++;
+		if (j > i + 2 && s[j] === "'") {
+			const name = s.slice(i + 2, j);
+			const value = varLookup(name);
+			if (value === undefined) {
+				return { end: j + 1, text: s.slice(i, j + 1) };
+			}
+			return { end: j + 1, text: quoteSqlLiteral(value) };
+		}
+		return null;
+	}
 
-  // :NAME — plain substitution. We require the first char to be an
-  // identifier-start char (no leading digit) to avoid eating `:1` etc.
-  if (isVarNameStart(next)) {
-    let j = i + 1;
-    while (j < s.length && isVarNameCont(s[j])) j++;
-    const name = s.slice(i + 1, j);
-    const value = varLookup(name);
-    if (value === undefined) {
-      // Unset → emit literally so it stays visible. Upstream ECHOes the
-      // entire `:name` text in this case.
-      return { end: j, text: s.slice(i, j) };
-    }
-    return { end: j, text: value };
-  }
+	// :NAME — plain substitution. We require the first char to be an
+	// identifier-start char (no leading digit) to avoid eating `:1` etc.
+	if (isVarNameStart(next)) {
+		let j = i + 1;
+		while (j < s.length && isVarNameCont(s[j])) j++;
+		const name = s.slice(i + 1, j);
+		const value = varLookup(name);
+		if (value === undefined) {
+			// Unset → emit literally so it stays visible. Upstream ECHOes the
+			// entire `:name` text in this case.
+			return { end: j, text: s.slice(i, j) };
+		}
+		return { end: j, text: value };
+	}
 
-  return null;
+	return null;
 };

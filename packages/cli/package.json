@@ -39,8 +39,8 @@
     "build": "pnpm generateParams && pnpm clean && tsc -p tsconfig.build.json && cp src/*.html ./dist",
     "bundle": "node pkg.js",
     "typecheck": "tsc --noEmit",
-    "lint": "pnpm typecheck && eslint src && prettier --check .",
-    "lint:fix": "pnpm typecheck && eslint src --fix && prettier --w .",
+    "lint": "pnpm typecheck && eslint src",
+    "lint:fix": "pnpm typecheck && eslint src --fix",
     "test": "pnpm build && vitest run",
     "test:ci": "pnpm build && vitest run",
     "test:conformance": "vitest run --config tests/psql-conformance/vitest.config.ts"
@@ -94,7 +94,6 @@
     "node-pty": "1.1.0",
     "oauth2-mock-server": "8.1.0",
     "openapi-types": "12.1.3",
-    "prettier": "3.3.3",
     "rollup": "3.29.4",
     "strip-ansi": "7.1.0",
     "tsx": "4.22.3",

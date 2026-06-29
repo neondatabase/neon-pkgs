@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 /**
  * Default dotenv file `env pull` writes to: `.env` when one already exists in the working
@@ -7,23 +7,23 @@ import { join } from 'node:path';
  * `vercel env pull` convention. An explicit `--file` always wins over this.
  */
 export const resolveEnvFilePath = (cwd: string, file?: string): string => {
-  if (file) return join(cwd, file);
-  if (existsSync(join(cwd, '.env'))) return join(cwd, '.env');
-  return join(cwd, '.env.local');
+	if (file) return join(cwd, file);
+	if (existsSync(join(cwd, ".env"))) return join(cwd, ".env");
+	return join(cwd, ".env.local");
 };
 
 /**
  * Options for {@link mergeEnvFile} / {@link mergeEnvContent}.
  */
 export type MergeEnvOptions = {
-  /**
-   * Keys the writer *owns*, so any that appear on disk but are absent from `updates` are
-   * removed (rather than preserved). Used by `env pull` to prune Neon-managed vars the
-   * branch no longer has — e.g. `NEON_AUTH_*` / `NEON_DATA_API_*` left behind after the
-   * working directory is pointed at a project/branch without those features. Keys outside
-   * this set are always preserved, so a user's own lines are never touched.
-   */
-  managedKeys?: Iterable<string>;
+	/**
+	 * Keys the writer *owns*, so any that appear on disk but are absent from `updates` are
+	 * removed (rather than preserved). Used by `env pull` to prune Neon-managed vars the
+	 * branch no longer has — e.g. `NEON_AUTH_*` / `NEON_DATA_API_*` left behind after the
+	 * working directory is pointed at a project/branch without those features. Keys outside
+	 * this set are always preserved, so a user's own lines are never touched.
+	 */
+	managedKeys?: Iterable<string>;
 };
 
 /**
@@ -34,18 +34,18 @@ export type MergeEnvOptions = {
  * `updates` is removed. Returns the keys written and the (managed) keys removed.
  */
 export const mergeEnvFile = (
-  path: string,
-  updates: Record<string, string>,
-  options: MergeEnvOptions = {},
+	path: string,
+	updates: Record<string, string>,
+	options: MergeEnvOptions = {},
 ): { written: string[]; removed: string[] } => {
-  const original = existsSync(path) ? readFileSync(path, 'utf8') : '';
-  const { content, written, removed } = mergeEnvContent(
-    original,
-    updates,
-    options,
-  );
-  writeFileSync(path, content);
-  return { written, removed };
+	const original = existsSync(path) ? readFileSync(path, "utf8") : "";
+	const { content, written, removed } = mergeEnvContent(
+		original,
+		updates,
+		options,
+	);
+	writeFileSync(path, content);
+	return { written, removed };
 };
 
 /**
@@ -54,56 +54,56 @@ export const mergeEnvFile = (
  * it can be unit-tested without touching the filesystem.
  */
 export const mergeEnvContent = (
-  original: string,
-  updates: Record<string, string>,
-  options: MergeEnvOptions = {},
+	original: string,
+	updates: Record<string, string>,
+	options: MergeEnvOptions = {},
 ): { content: string; written: string[]; removed: string[] } => {
-  const keys = Object.keys(updates);
+	const keys = Object.keys(updates);
 
-  // Owned keys the current pull did not produce: stale Neon-managed vars to prune. Anything
-  // not in `managedKeys` is always kept, so a user's own lines are never removed.
-  const stale = new Set(
-    [...(options.managedKeys ?? [])].filter((key) => !(key in updates)),
-  );
+	// Owned keys the current pull did not produce: stale Neon-managed vars to prune. Anything
+	// not in `managedKeys` is always kept, so a user's own lines are never removed.
+	const stale = new Set(
+		[...(options.managedKeys ?? [])].filter((key) => !(key in updates)),
+	);
 
-  if (keys.length === 0 && stale.size === 0) {
-    return { content: original, written: [], removed: [] };
-  }
+	if (keys.length === 0 && stale.size === 0) {
+		return { content: original, written: [], removed: [] };
+	}
 
-  const remaining = new Set(keys);
-  const removed: string[] = [];
-  const lines = original === '' ? [] : original.split('\n');
+	const remaining = new Set(keys);
+	const removed: string[] = [];
+	const lines = original === "" ? [] : original.split("\n");
 
-  // Walk the file: drop stale owned lines, update existing keys in place (so their position
-  // and any surrounding comments are preserved), and pass everything else through untouched.
-  const updatedLines: string[] = [];
-  for (const line of lines) {
-    const key = parseKey(line);
-    if (key !== null && stale.has(key)) {
-      removed.push(key);
-      continue;
-    }
-    if (key !== null && remaining.has(key)) {
-      remaining.delete(key);
-      updatedLines.push(formatLine(key, updates[key]));
-      continue;
-    }
-    updatedLines.push(line);
-  }
+	// Walk the file: drop stale owned lines, update existing keys in place (so their position
+	// and any surrounding comments are preserved), and pass everything else through untouched.
+	const updatedLines: string[] = [];
+	for (const line of lines) {
+		const key = parseKey(line);
+		if (key !== null && stale.has(key)) {
+			removed.push(key);
+			continue;
+		}
+		if (key !== null && remaining.has(key)) {
+			remaining.delete(key);
+			updatedLines.push(formatLine(key, updates[key]));
+			continue;
+		}
+		updatedLines.push(line);
+	}
 
-  // Append keys that weren't already present, in the order they were given.
-  const appended = keys
-    .filter((key) => remaining.has(key))
-    .map((key) => formatLine(key, updates[key]));
+	// Append keys that weren't already present, in the order they were given.
+	const appended = keys
+		.filter((key) => remaining.has(key))
+		.map((key) => formatLine(key, updates[key]));
 
-  const body = trimTrailingBlank(updatedLines);
-  const content = [...body, ...appended].join('\n');
-  return {
-    // A dotenv file ends with a trailing newline.
-    content: content === '' ? '' : `${content}\n`,
-    written: keys,
-    removed,
-  };
+	const body = trimTrailingBlank(updatedLines);
+	const content = [...body, ...appended].join("\n");
+	return {
+		// A dotenv file ends with a trailing newline.
+		content: content === "" ? "" : `${content}\n`,
+		written: keys,
+		removed,
+	};
 };
 
 /**
@@ -114,15 +114,15 @@ export const mergeEnvContent = (
  * ignored.
  */
 export const readEnvFile = (path: string): Record<string, string> => {
-  if (!existsSync(path)) {
-    throw new Error(`Env file not found: ${path}`);
-  }
-  const out: Record<string, string> = {};
-  for (const line of readFileSync(path, 'utf8').split('\n')) {
-    const parsed = parseAssignment(line);
-    if (parsed) out[parsed.key] = parsed.value;
-  }
-  return out;
+	if (!existsSync(path)) {
+		throw new Error(`Env file not found: ${path}`);
+	}
+	const out: Record<string, string> = {};
+	for (const line of readFileSync(path, "utf8").split("\n")) {
+		const parsed = parseAssignment(line);
+		if (parsed) out[parsed.key] = parsed.value;
+	}
+	return out;
 };
 
 /**
@@ -132,15 +132,15 @@ export const readEnvFile = (path: string): Record<string, string> => {
  * file, matching dotenv's default. Returns the keys that were applied.
  */
 export const loadEnvFileIntoProcess = (path: string): string[] => {
-  const parsed = readEnvFile(path);
-  const applied: string[] = [];
-  for (const [key, value] of Object.entries(parsed)) {
-    if (process.env[key] === undefined) {
-      process.env[key] = value;
-      applied.push(key);
-    }
-  }
-  return applied;
+	const parsed = readEnvFile(path);
+	const applied: string[] = [];
+	for (const [key, value] of Object.entries(parsed)) {
+		if (process.env[key] === undefined) {
+			process.env[key] = value;
+			applied.push(key);
+		}
+	}
+	return applied;
 };
 
 /**
@@ -149,8 +149,8 @@ export const loadEnvFileIntoProcess = (path: string): string[] => {
  * whitespace, matching common `.env` styles.
  */
 const parseKey = (line: string): string | null => {
-  const match = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(line);
-  return match ? match[1] : null;
+	const match = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(line);
+	return match ? match[1] : null;
 };
 
 /**
@@ -158,26 +158,26 @@ const parseKey = (line: string): string | null => {
  * comments / blank lines / non-assignments. Mirrors {@link formatLine}'s quoting.
  */
 const parseAssignment = (
-  line: string,
+	line: string,
 ): { key: string; value: string } | null => {
-  const match = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(
-    line,
-  );
-  const key = match?.[1];
-  const raw = match?.[2];
-  if (key === undefined || raw === undefined) return null;
-  return { key, value: unquote(raw.trim()) };
+	const match = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(
+		line,
+	);
+	const key = match?.[1];
+	const raw = match?.[2];
+	if (key === undefined || raw === undefined) return null;
+	return { key, value: unquote(raw.trim()) };
 };
 
 /** Strip matching surrounding quotes and unescape `\"` / `\\` inside double quotes. */
 const unquote = (value: string): string => {
-  if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
-    return value.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-  }
-  if (value.length >= 2 && value.startsWith("'") && value.endsWith("'")) {
-    return value.slice(1, -1);
-  }
-  return value;
+	if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
+		return value.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+	}
+	if (value.length >= 2 && value.startsWith("'") && value.endsWith("'")) {
+		return value.slice(1, -1);
+	}
+	return value;
 };
 
 /**
@@ -187,15 +187,15 @@ const unquote = (value: string): string => {
  * quoting defensively avoids surprises for tools that re-parse the file.
  */
 const formatLine = (key: string, value: string): string => {
-  const needsQuotes = /[\s#"'=]/.test(value);
-  if (!needsQuotes) return `${key}=${value}`;
-  const escaped = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-  return `${key}="${escaped}"`;
+	const needsQuotes = /[\s#"'=]/.test(value);
+	if (!needsQuotes) return `${key}=${value}`;
+	const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+	return `${key}="${escaped}"`;
 };
 
 /** Drop trailing blank lines so we don't accumulate them across repeated merges. */
 const trimTrailingBlank = (lines: string[]): string[] => {
-  const out = [...lines];
-  while (out.length > 0 && out[out.length - 1]?.trim() === '') out.pop();
-  return out;
+	const out = [...lines];
+	while (out.length > 0 && out[out.length - 1]?.trim() === "") out.pop();
+	return out;
 };

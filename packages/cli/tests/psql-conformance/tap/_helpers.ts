@@ -11,21 +11,21 @@
 // `030_pager.spec.ts` is kept untouched (separate WP, smaller blast
 // radius); future ports should reuse this module.
 
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-import { getPgConn, setupPg } from '../harness/pg-fixture.js';
+import { getPgConn, setupPg } from "../harness/pg-fixture.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = resolve(HERE, '..', '..', '..');
+const REPO_ROOT = resolve(HERE, "..", "..", "..");
 /** Path to the built TS psql entry module. */
-export const DIST_PSQL = join(REPO_ROOT, 'dist', 'psql', 'index.js');
+export const DIST_PSQL = join(REPO_ROOT, "dist", "psql", "index.js");
 
 /** True when `RUN_INTEGRATION=1` is set. */
-export const RUN_INTEGRATION = process.env.RUN_INTEGRATION === '1';
+export const RUN_INTEGRATION = process.env.RUN_INTEGRATION === "1";
 
 /** True when the TS psql dist build exists at the expected path. */
 export const DIST_EXISTS = existsSync(DIST_PSQL);
@@ -34,10 +34,10 @@ export const DIST_EXISTS = existsSync(DIST_PSQL);
 export const SHOULD_RUN_INTEGRATION = RUN_INTEGRATION && DIST_EXISTS;
 
 export type LauncherPaths = {
-  /** A unique tmp dir owned by the spec; safe to drop artefacts in. */
-  dir: string;
-  /** Absolute path to the `node`-runnable launcher. */
-  launcher: string;
+	/** A unique tmp dir owned by the spec; safe to drop artefacts in. */
+	dir: string;
+	/** Absolute path to the `node`-runnable launcher. */
+	launcher: string;
 };
 
 /**
@@ -48,18 +48,18 @@ export type LauncherPaths = {
  * spec readable.
  */
 export const makeLauncher = (prefix: string): LauncherPaths => {
-  const dir = mkdtempSync(join(tmpdir(), `${prefix}-`));
-  const launcher = join(dir, 'launcher.mjs');
-  // file:// URL keeps the dynamic import platform-portable.
-  const distUrl = new URL(`file://${DIST_PSQL}`).href;
-  const code = `
+	const dir = mkdtempSync(join(tmpdir(), `${prefix}-`));
+	const launcher = join(dir, "launcher.mjs");
+	// file:// URL keeps the dynamic import platform-portable.
+	const distUrl = new URL(`file://${DIST_PSQL}`).href;
+	const code = `
 import { runPsql } from ${JSON.stringify(distUrl)};
 const argv = process.argv.slice(2);
 const code = await runPsql(argv);
 process.exit(code);
 `;
-  writeFileSync(launcher, code, 'utf8');
-  return { dir, launcher };
+	writeFileSync(launcher, code, "utf8");
+	return { dir, launcher };
 };
 
 /**
@@ -74,37 +74,37 @@ process.exit(code);
  * within their `beforeAll` callback.
  */
 export const ensureFixture = async (): Promise<void> => {
-  // setupPg() is idempotent — returns the cached PgConn when already
-  // initialised, otherwise reads the env vars set by globalSetup.
-  await setupPg();
+	// setupPg() is idempotent — returns the cached PgConn when already
+	// initialised, otherwise reads the env vars set by globalSetup.
+	await setupPg();
 };
 
 export const buildUri = (): string => {
-  const conn = getPgConn();
-  const u = new URL(`postgresql://${conn.host}:${conn.port}/${conn.db}`);
-  u.username = conn.user;
-  u.password = conn.password;
-  u.searchParams.set('sslmode', 'disable');
-  return u.toString();
+	const conn = getPgConn();
+	const u = new URL(`postgresql://${conn.host}:${conn.port}/${conn.db}`);
+	u.username = conn.user;
+	u.password = conn.password;
+	u.searchParams.set("sslmode", "disable");
+	return u.toString();
 };
 
 export type RunResult = {
-  stdout: string;
-  stderr: string;
-  exitCode: number | null;
+	stdout: string;
+	stderr: string;
+	exitCode: number | null;
 };
 
 export type RunChildOpts = {
-  /** Absolute path to the launcher created via `makeLauncher`. */
-  launcher: string;
-  /** argv passed to the launcher (first item is normally the URI). */
-  argv: string[];
-  /** SQL or psql script to feed via stdin; closes stdin afterwards. */
-  stdin?: string;
-  /** Extra env vars merged on top of process.env. */
-  env?: NodeJS.ProcessEnv;
-  /** Max ms before SIGKILL. Defaults to 30s. */
-  timeoutMs?: number;
+	/** Absolute path to the launcher created via `makeLauncher`. */
+	launcher: string;
+	/** argv passed to the launcher (first item is normally the URI). */
+	argv: string[];
+	/** SQL or psql script to feed via stdin; closes stdin afterwards. */
+	stdin?: string;
+	/** Extra env vars merged on top of process.env. */
+	env?: NodeJS.ProcessEnv;
+	/** Max ms before SIGKILL. Defaults to 30s. */
+	timeoutMs?: number;
 };
 
 /**
@@ -114,53 +114,57 @@ export type RunChildOpts = {
  * upstream psql invocations).
  */
 export const runChild = (opts: RunChildOpts): Promise<RunResult> => {
-  return new Promise<RunResult>((resolveResult, reject) => {
-    const env: NodeJS.ProcessEnv = {
-      ...process.env,
-      LC_ALL: 'C',
-      PAGER: '',
-      PSQL_PAGER: '',
-      ...opts.env,
-    };
-    const child: ChildProcessWithoutNullStreams = spawn(
-      process.execPath,
-      [opts.launcher, ...opts.argv],
-      {
-        env,
-        stdio: ['pipe', 'pipe', 'pipe'],
-      },
-    );
+	return new Promise<RunResult>((resolveResult, reject) => {
+		const env: NodeJS.ProcessEnv = {
+			...process.env,
+			LC_ALL: "C",
+			PAGER: "",
+			PSQL_PAGER: "",
+			...opts.env,
+		};
+		const child: ChildProcessWithoutNullStreams = spawn(
+			process.execPath,
+			[opts.launcher, ...opts.argv],
+			{
+				env,
+				stdio: ["pipe", "pipe", "pipe"],
+			},
+		);
 
-    let stdout = '';
-    let stderr = '';
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (chunk: string) => {
-      stdout += chunk;
-    });
-    child.stderr.on('data', (chunk: string) => {
-      stderr += chunk;
-    });
+		let stdout = "";
+		let stderr = "";
+		child.stdout.setEncoding("utf8");
+		child.stderr.setEncoding("utf8");
+		child.stdout.on("data", (chunk: string) => {
+			stdout += chunk;
+		});
+		child.stderr.on("data", (chunk: string) => {
+			stderr += chunk;
+		});
 
-    const timer = setTimeout(() => {
-      child.kill('SIGKILL');
-      reject(new Error(`child timed out after ${opts.timeoutMs ?? 30_000}ms`));
-    }, opts.timeoutMs ?? 30_000);
+		const timer = setTimeout(() => {
+			child.kill("SIGKILL");
+			reject(
+				new Error(
+					`child timed out after ${opts.timeoutMs ?? 30_000}ms`,
+				),
+			);
+		}, opts.timeoutMs ?? 30_000);
 
-    child.once('error', (err) => {
-      clearTimeout(timer);
-      reject(err);
-    });
-    child.once('exit', (code) => {
-      clearTimeout(timer);
-      resolveResult({ stdout, stderr, exitCode: code });
-    });
+		child.once("error", (err) => {
+			clearTimeout(timer);
+			reject(err);
+		});
+		child.once("exit", (code) => {
+			clearTimeout(timer);
+			resolveResult({ stdout, stderr, exitCode: code });
+		});
 
-    if (opts.stdin !== undefined) {
-      child.stdin.write(opts.stdin);
-    }
-    child.stdin.end();
-  });
+		if (opts.stdin !== undefined) {
+			child.stdin.write(opts.stdin);
+		}
+		child.stdin.end();
+	});
 };
 
 /**
@@ -172,18 +176,18 @@ export const runChild = (opts: RunChildOpts): Promise<RunResult> => {
  * tuples-only output is what the upstream regexes are written against.
  */
 export const runPsqlScript = async (opts: {
-  launcher: string;
-  uri: string;
-  script: string;
-  extraArgs?: string[];
-  env?: NodeJS.ProcessEnv;
-  timeoutMs?: number;
+	launcher: string;
+	uri: string;
+	script: string;
+	extraArgs?: string[];
+	env?: NodeJS.ProcessEnv;
+	timeoutMs?: number;
 }): Promise<RunResult> => {
-  return runChild({
-    launcher: opts.launcher,
-    argv: [opts.uri, '-X', '-A', '-t', '-q', ...(opts.extraArgs ?? [])],
-    stdin: opts.script,
-    env: opts.env,
-    timeoutMs: opts.timeoutMs,
-  });
+	return runChild({
+		launcher: opts.launcher,
+		argv: [opts.uri, "-X", "-A", "-t", "-q", ...(opts.extraArgs ?? [])],
+		stdin: opts.script,
+		env: opts.env,
+		timeoutMs: opts.timeoutMs,
+	});
 };

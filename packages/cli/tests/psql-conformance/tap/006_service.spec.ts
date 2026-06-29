@@ -57,23 +57,23 @@
 // upstream URI-form subtest is therefore deferred too. See the bug
 // note inline below.
 
-import { existsSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { getPgConn } from '../harness/pg-fixture.js';
+import { getPgConn } from "../harness/pg-fixture.js";
 
 import {
-  DIST_EXISTS,
-  RUN_INTEGRATION,
-  SHOULD_RUN_INTEGRATION,
-  ensureFixture,
-  makeLauncher,
-  runChild,
-  type LauncherPaths,
-  type RunResult,
-} from './_helpers.js';
+	DIST_EXISTS,
+	ensureFixture,
+	type LauncherPaths,
+	makeLauncher,
+	RUN_INTEGRATION,
+	type RunResult,
+	runChild,
+	SHOULD_RUN_INTEGRATION,
+} from "./_helpers.js";
 
 // ---------------------------------------------------------------------------
 // Local helpers.
@@ -85,18 +85,18 @@ import {
  * line under the section header. Includes `sslmode=disable` to match the
  * fixture's non-TLS container.
  */
-const renderServiceSection = (name = 'my_srv'): string => {
-  const conn = getPgConn();
-  return [
-    `[${name}]`,
-    `host=${conn.host}`,
-    `port=${String(conn.port)}`,
-    `user=${conn.user}`,
-    `password=${conn.password}`,
-    `dbname=${conn.db}`,
-    'sslmode=disable',
-    '',
-  ].join('\n');
+const renderServiceSection = (name = "my_srv"): string => {
+	const conn = getPgConn();
+	return [
+		`[${name}]`,
+		`host=${conn.host}`,
+		`port=${String(conn.port)}`,
+		`user=${conn.user}`,
+		`password=${conn.password}`,
+		`dbname=${conn.db}`,
+		"sslmode=disable",
+		"",
+	].join("\n");
 };
 
 /**
@@ -110,350 +110,390 @@ const renderServiceSection = (name = 'my_srv'): string => {
  * `$PGSYSCONFDIR/pg_service.conf`).
  */
 const cleanPgEnv = (overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv => ({
-  PGHOST: '',
-  PGPORT: '',
-  PGUSER: '',
-  PGPASSWORD: '',
-  PGDATABASE: '',
-  PGSERVICE: '',
-  PGSERVICEFILE: '',
-  PGSYSCONFDIR: '',
-  ...overrides,
+	PGHOST: "",
+	PGPORT: "",
+	PGUSER: "",
+	PGPASSWORD: "",
+	PGDATABASE: "",
+	PGSERVICE: "",
+	PGSERVICEFILE: "",
+	PGSYSCONFDIR: "",
+	...overrides,
 });
 
 /** Assert the probe connected and printed `expected` on stdout. */
 const expectConnectOk = (
-  r: RunResult,
-  expected: RegExp,
-  label: string,
+	r: RunResult,
+	expected: RegExp,
+	label: string,
 ): void => {
-  expect(r.exitCode, `${label} exit (stderr=${r.stderr})`).toBe(0);
-  expect(r.stdout, `${label} stdout`).toMatch(expected);
+	expect(r.exitCode, `${label} exit (stderr=${r.stderr})`).toBe(0);
+	expect(r.stdout, `${label} stdout`).toMatch(expected);
 };
 
 /** Assert the probe failed and stderr matches `expected`. */
 const expectConnectFails = (
-  r: RunResult,
-  expected: RegExp,
-  label: string,
+	r: RunResult,
+	expected: RegExp,
+	label: string,
 ): void => {
-  expect(r.exitCode, `${label} exit (stderr=${r.stderr})`).not.toBe(0);
-  expect(r.stderr, `${label} stderr`).toMatch(expected);
+	expect(r.exitCode, `${label} exit (stderr=${r.stderr})`).not.toBe(0);
+	expect(r.stderr, `${label} stderr`).toMatch(expected);
 };
 
-describe.skipIf(!SHOULD_RUN_INTEGRATION)('tap/006_service', () => {
-  let paths: LauncherPaths;
-  let workdir: string;
-  // Paths populated in beforeAll for clarity; each test references the
-  // pre-built files instead of regenerating them mid-test.
-  let srvfileValid: string;
-  let srvfileMissing: string;
-  let emptyHome: string;
-  let emptySysconfdir: string;
-  // PGSYSCONFDIR that DOES contain a valid `pg_service.conf` (for the
-  // upstream "default service file" subtest group).
-  let sysconfdirWithDefault: string;
+describe.skipIf(!SHOULD_RUN_INTEGRATION)("tap/006_service", () => {
+	let paths: LauncherPaths;
+	let workdir: string;
+	// Paths populated in beforeAll for clarity; each test references the
+	// pre-built files instead of regenerating them mid-test.
+	let srvfileValid: string;
+	let srvfileMissing: string;
+	let emptyHome: string;
+	let emptySysconfdir: string;
+	// PGSYSCONFDIR that DOES contain a valid `pg_service.conf` (for the
+	// upstream "default service file" subtest group).
+	let sysconfdirWithDefault: string;
 
-  beforeAll(async () => {
-    await ensureFixture();
-    paths = makeLauncher('006-service-spec');
-    workdir = mkdtempSync(join(tmpdir(), '006-service-work-'));
+	beforeAll(async () => {
+		await ensureFixture();
+		paths = makeLauncher("006-service-spec");
+		workdir = mkdtempSync(join(tmpdir(), "006-service-work-"));
 
-    srvfileValid = join(workdir, 'pg_service_valid.conf');
-    writeFileSync(srvfileValid, renderServiceSection('my_srv'), 'utf8');
+		srvfileValid = join(workdir, "pg_service_valid.conf");
+		writeFileSync(srvfileValid, renderServiceSection("my_srv"), "utf8");
 
-    srvfileMissing = join(workdir, 'pg_service_missing.conf');
-    // Intentionally NOT created — its absence is the test condition for
-    // the deferred "missing PGSERVICEFILE" subtest.
+		srvfileMissing = join(workdir, "pg_service_missing.conf");
+		// Intentionally NOT created — its absence is the test condition for
+		// the deferred "missing PGSERVICEFILE" subtest.
 
-    // Empty HOME and empty PGSYSCONFDIR. The `pg_service.conf` discovery
-    // chain reaches into both; we point them at fresh dirs so neither
-    // resolves. We do NOT depend on the user's real $HOME or /etc.
-    emptyHome = join(workdir, 'home-empty');
-    mkdirSync(emptyHome, { recursive: true });
-    emptySysconfdir = join(workdir, 'sysconfdir-empty');
-    mkdirSync(emptySysconfdir, { recursive: true });
+		// Empty HOME and empty PGSYSCONFDIR. The `pg_service.conf` discovery
+		// chain reaches into both; we point them at fresh dirs so neither
+		// resolves. We do NOT depend on the user's real $HOME or /etc.
+		emptyHome = join(workdir, "home-empty");
+		mkdirSync(emptyHome, { recursive: true });
+		emptySysconfdir = join(workdir, "sysconfdir-empty");
+		mkdirSync(emptySysconfdir, { recursive: true });
 
-    sysconfdirWithDefault = join(workdir, 'sysconfdir-default');
-    mkdirSync(sysconfdirWithDefault, { recursive: true });
-    writeFileSync(
-      join(sysconfdirWithDefault, 'pg_service.conf'),
-      renderServiceSection('my_srv'),
-      'utf8',
-    );
-  });
+		sysconfdirWithDefault = join(workdir, "sysconfdir-default");
+		mkdirSync(sysconfdirWithDefault, { recursive: true });
+		writeFileSync(
+			join(sysconfdirWithDefault, "pg_service.conf"),
+			renderServiceSection("my_srv"),
+			"utf8",
+		);
+	});
 
-  afterAll(() => {
-    // Best-effort: tmpdir is owned by us; leave it on test failure so
-    // a maintainer can inspect the rendered service files. Vitest does
-    // not reclaim mkdtempSync dirs automatically.
-    void workdir;
-  });
+	afterAll(() => {
+		// Best-effort: tmpdir is owned by us; leave it on test failure so
+		// a maintainer can inspect the rendered service files. Vitest does
+		// not reclaim mkdtempSync dirs automatically.
+		void workdir;
+	});
 
-  // -------------------------------------------------------------------------
-  // Group 1: PGSERVICEFILE pointing at a valid file (upstream lines 60-92).
-  // -------------------------------------------------------------------------
+	// -------------------------------------------------------------------------
+	// Group 1: PGSERVICEFILE pointing at a valid file (upstream lines 60-92).
+	// -------------------------------------------------------------------------
 
-  describe('PGSERVICEFILE → valid service entry', () => {
-    /** Shared env: PGSERVICEFILE points at the valid file. */
-    const baseEnv = (): NodeJS.ProcessEnv =>
-      cleanPgEnv({
-        PGSERVICEFILE: srvfileValid,
-        HOME: emptyHome,
-        PGSYSCONFDIR: emptySysconfdir,
-      });
+	describe("PGSERVICEFILE → valid service entry", () => {
+		/** Shared env: PGSERVICEFILE points at the valid file. */
+		const baseEnv = (): NodeJS.ProcessEnv =>
+			cleanPgEnv({
+				PGSERVICEFILE: srvfileValid,
+				HOME: emptyHome,
+				PGSYSCONFDIR: emptySysconfdir,
+			});
 
-    it('connection with correct PGSERVICE env + PGSERVICEFILE (connect1_3)', async () => {
-      // Mirrors upstream lines 76-83: empty conninfo arg, PGSERVICE in env.
-      const r = await runChild({
-        launcher: paths.launcher,
-        argv: ['', '-X', '-A', '-t', '-c', "SELECT 'connect1_3'"],
-        env: { ...baseEnv(), PGSERVICE: 'my_srv' },
-      });
-      expectConnectOk(r, /connect1_3/, 'PGSERVICE=my_srv');
-    });
+		it("connection with correct PGSERVICE env + PGSERVICEFILE (connect1_3)", async () => {
+			// Mirrors upstream lines 76-83: empty conninfo arg, PGSERVICE in env.
+			const r = await runChild({
+				launcher: paths.launcher,
+				argv: ["", "-X", "-A", "-t", "-c", "SELECT 'connect1_3'"],
+				env: { ...baseEnv(), PGSERVICE: "my_srv" },
+			});
+			expectConnectOk(r, /connect1_3/, "PGSERVICE=my_srv");
+		});
 
-    it('connection with correct "service" URI + PGSERVICEFILE (connect1_2)', async () => {
-      // Upstream lines 65-68: `psql 'postgresql:///?service=my_srv'`. URI
-      // authority is empty so the URI-partial layer must NOT inject a
-      // default port; otherwise it would override the service-file's
-      // host:port and the connect would land on `localhost:5432`.
-      const r = await runChild({
-        launcher: paths.launcher,
-        argv: [
-          'postgresql:///?service=my_srv',
-          '-X',
-          '-A',
-          '-t',
-          '-c',
-          "SELECT 'connect1_2'",
-        ],
-        env: baseEnv(),
-      });
-      expectConnectOk(r, /connect1_2/, 'URI ?service= + PGSERVICEFILE');
-    });
+		it('connection with correct "service" URI + PGSERVICEFILE (connect1_2)', async () => {
+			// Upstream lines 65-68: `psql 'postgresql:///?service=my_srv'`. URI
+			// authority is empty so the URI-partial layer must NOT inject a
+			// default port; otherwise it would override the service-file's
+			// host:port and the connect would land on `localhost:5432`.
+			const r = await runChild({
+				launcher: paths.launcher,
+				argv: [
+					"postgresql:///?service=my_srv",
+					"-X",
+					"-A",
+					"-t",
+					"-c",
+					"SELECT 'connect1_2'",
+				],
+				env: baseEnv(),
+			});
+			expectConnectOk(r, /connect1_2/, "URI ?service= + PGSERVICEFILE");
+		});
 
-    it('connection with correct "service" conninfo string + PGSERVICEFILE (connect1_1)', async () => {
-      // Upstream lines 60-64: `psql 'service=my_srv'`. Bare conninfo
-      // strings (no URI scheme) at argv[0] used to be rejected; runPsql
-      // now dispatches them through parseConninfo, which stages the
-      // service name on `_service`.
-      const r = await runChild({
-        launcher: paths.launcher,
-        argv: ['service=my_srv', '-X', '-A', '-t', '-c', "SELECT 'connect1_1'"],
-        env: baseEnv(),
-      });
-      expectConnectOk(r, /connect1_1/, 'conninfo service= + PGSERVICEFILE');
-    });
+		it('connection with correct "service" conninfo string + PGSERVICEFILE (connect1_1)', async () => {
+			// Upstream lines 60-64: `psql 'service=my_srv'`. Bare conninfo
+			// strings (no URI scheme) at argv[0] used to be rejected; runPsql
+			// now dispatches them through parseConninfo, which stages the
+			// service name on `_service`.
+			const r = await runChild({
+				launcher: paths.launcher,
+				argv: [
+					"service=my_srv",
+					"-X",
+					"-A",
+					"-t",
+					"-c",
+					"SELECT 'connect1_1'",
+				],
+				env: baseEnv(),
+			});
+			expectConnectOk(
+				r,
+				/connect1_1/,
+				"conninfo service= + PGSERVICEFILE",
+			);
+		});
 
-    it('connection with incorrect "service" string and PGSERVICEFILE', async () => {
-      // Upstream emits `definition of service "<name>" not found` and
-      // exits non-zero. We now mirror that in resolveLayeredConnect when
-      // services.get(<name>) is undefined.
-      const r = await runChild({
-        launcher: paths.launcher,
-        argv: ['service=nonexistent_srv', '-X', '-A', '-t', '-c', 'SELECT 1'],
-        env: baseEnv(),
-      });
-      expectConnectFails(
-        r,
-        /definition of service "nonexistent_srv" not found/,
-        'unknown service via conninfo',
-      );
-    });
+		it('connection with incorrect "service" string and PGSERVICEFILE', async () => {
+			// Upstream emits `definition of service "<name>" not found` and
+			// exits non-zero. We now mirror that in resolveLayeredConnect when
+			// services.get(<name>) is undefined.
+			const r = await runChild({
+				launcher: paths.launcher,
+				argv: [
+					"service=nonexistent_srv",
+					"-X",
+					"-A",
+					"-t",
+					"-c",
+					"SELECT 1",
+				],
+				env: baseEnv(),
+			});
+			expectConnectFails(
+				r,
+				/definition of service "nonexistent_srv" not found/,
+				"unknown service via conninfo",
+			);
+		});
 
-    it('connection with incorrect PGSERVICE and PGSERVICEFILE', async () => {
-      // Same gap as the conninfo variant — PGSERVICE picks up the
-      // unknown name; resolveLayeredConnect aborts with the libpq
-      // diagnostic.
-      const r = await runChild({
-        launcher: paths.launcher,
-        argv: ['', '-X', '-A', '-t', '-c', 'SELECT 1'],
-        env: { ...baseEnv(), PGSERVICE: 'nonexistent_srv' },
-      });
-      expectConnectFails(
-        r,
-        /definition of service "nonexistent_srv" not found/,
-        'unknown service via PGSERVICE',
-      );
-    });
-  });
+		it("connection with incorrect PGSERVICE and PGSERVICEFILE", async () => {
+			// Same gap as the conninfo variant — PGSERVICE picks up the
+			// unknown name; resolveLayeredConnect aborts with the libpq
+			// diagnostic.
+			const r = await runChild({
+				launcher: paths.launcher,
+				argv: ["", "-X", "-A", "-t", "-c", "SELECT 1"],
+				env: { ...baseEnv(), PGSERVICE: "nonexistent_srv" },
+			});
+			expectConnectFails(
+				r,
+				/definition of service "nonexistent_srv" not found/,
+				"unknown service via PGSERVICE",
+			);
+		});
+	});
 
-  // -------------------------------------------------------------------------
-  // Group 2: Missing PGSERVICEFILE (upstream lines 95-104).
-  // -------------------------------------------------------------------------
+	// -------------------------------------------------------------------------
+	// Group 2: Missing PGSERVICEFILE (upstream lines 95-104).
+	// -------------------------------------------------------------------------
 
-  describe('PGSERVICEFILE pointing at a missing file', () => {
-    it('connection with "service" string + missing PGSERVICEFILE', async () => {
-      // Upstream lines 95-104: explicit PGSERVICEFILE that doesn't exist
-      // is a hard failure with `service file "<path>" not found`. Now
-      // mirrored in loadPgServices, which throws when `process.env.
-      // PGSERVICEFILE` is set and the file is missing (silent ENOENT is
-      // still fine for any candidate the discovery chain landed on
-      // without the user naming it).
-      const r = await runChild({
-        launcher: paths.launcher,
-        argv: ['service=my_srv', '-X', '-A', '-t', '-c', 'SELECT 1'],
-        env: cleanPgEnv({
-          PGSERVICEFILE: srvfileMissing,
-          HOME: emptyHome,
-          PGSYSCONFDIR: emptySysconfdir,
-        }),
-      });
-      expectConnectFails(
-        r,
-        /service file ".*pg_service_missing\.conf" not found/,
-        'missing PGSERVICEFILE',
-      );
-    });
+	describe("PGSERVICEFILE pointing at a missing file", () => {
+		it('connection with "service" string + missing PGSERVICEFILE', async () => {
+			// Upstream lines 95-104: explicit PGSERVICEFILE that doesn't exist
+			// is a hard failure with `service file "<path>" not found`. Now
+			// mirrored in loadPgServices, which throws when `process.env.
+			// PGSERVICEFILE` is set and the file is missing (silent ENOENT is
+			// still fine for any candidate the discovery chain landed on
+			// without the user naming it).
+			const r = await runChild({
+				launcher: paths.launcher,
+				argv: ["service=my_srv", "-X", "-A", "-t", "-c", "SELECT 1"],
+				env: cleanPgEnv({
+					PGSERVICEFILE: srvfileMissing,
+					HOME: emptyHome,
+					PGSYSCONFDIR: emptySysconfdir,
+				}),
+			});
+			expectConnectFails(
+				r,
+				/service file ".*pg_service_missing\.conf" not found/,
+				"missing PGSERVICEFILE",
+			);
+		});
 
-    // Verify the missing file path really is missing — a sanity probe.
-    it('sanity: srvfileMissing path is not on disk', () => {
-      expect(existsSync(srvfileMissing)).toBe(false);
-    });
-  });
+		// Verify the missing file path really is missing — a sanity probe.
+		it("sanity: srvfileMissing path is not on disk", () => {
+			expect(existsSync(srvfileMissing)).toBe(false);
+		});
+	});
 
-  // -------------------------------------------------------------------------
-  // Group 3: Default `pg_service.conf` in PGSYSCONFDIR (upstream lines
-  // 107-145).
-  // -------------------------------------------------------------------------
+	// -------------------------------------------------------------------------
+	// Group 3: Default `pg_service.conf` in PGSYSCONFDIR (upstream lines
+	// 107-145).
+	// -------------------------------------------------------------------------
 
-  describe('default pg_service.conf in PGSYSCONFDIR', () => {
-    /**
-     * Env where PGSYSCONFDIR contains a default `pg_service.conf`. With
-     * PGSERVICEFILE unset (empty string in our cleanPgEnv) and HOME
-     * pointed at an empty dir, the only resolvable candidate is
-     * `$PGSYSCONFDIR/pg_service.conf` — mirrors upstream's setup in
-     * lines 107-145 where PGSERVICEFILE was assigned the empty-file
-     * baseline at the top of the script and HOME never resolves.
-     */
-    const baseEnv = (): NodeJS.ProcessEnv =>
-      cleanPgEnv({
-        HOME: emptyHome,
-        PGSYSCONFDIR: sysconfdirWithDefault,
-      });
+	describe("default pg_service.conf in PGSYSCONFDIR", () => {
+		/**
+		 * Env where PGSYSCONFDIR contains a default `pg_service.conf`. With
+		 * PGSERVICEFILE unset (empty string in our cleanPgEnv) and HOME
+		 * pointed at an empty dir, the only resolvable candidate is
+		 * `$PGSYSCONFDIR/pg_service.conf` — mirrors upstream's setup in
+		 * lines 107-145 where PGSERVICEFILE was assigned the empty-file
+		 * baseline at the top of the script and HOME never resolves.
+		 */
+		const baseEnv = (): NodeJS.ProcessEnv =>
+			cleanPgEnv({
+				HOME: emptyHome,
+				PGSYSCONFDIR: sysconfdirWithDefault,
+			});
 
-    it('connection with correct PGSERVICE + default pg_service.conf (connect2_3)', async () => {
-      const r = await runChild({
-        launcher: paths.launcher,
-        argv: ['', '-X', '-A', '-t', '-c', "SELECT 'connect2_3'"],
-        env: { ...baseEnv(), PGSERVICE: 'my_srv' },
-      });
-      expectConnectOk(r, /connect2_3/, 'default pg_service.conf + PGSERVICE');
-    });
+		it("connection with correct PGSERVICE + default pg_service.conf (connect2_3)", async () => {
+			const r = await runChild({
+				launcher: paths.launcher,
+				argv: ["", "-X", "-A", "-t", "-c", "SELECT 'connect2_3'"],
+				env: { ...baseEnv(), PGSERVICE: "my_srv" },
+			});
+			expectConnectOk(
+				r,
+				/connect2_3/,
+				"default pg_service.conf + PGSERVICE",
+			);
+		});
 
-    it('connection with "service" URI + default pg_service.conf (connect2_2)', async () => {
-      const r = await runChild({
-        launcher: paths.launcher,
-        argv: [
-          'postgresql:///?service=my_srv',
-          '-X',
-          '-A',
-          '-t',
-          '-c',
-          "SELECT 'connect2_2'",
-        ],
-        env: baseEnv(),
-      });
-      expectConnectOk(r, /connect2_2/, 'URI ?service= + default file');
-    });
+		it('connection with "service" URI + default pg_service.conf (connect2_2)', async () => {
+			const r = await runChild({
+				launcher: paths.launcher,
+				argv: [
+					"postgresql:///?service=my_srv",
+					"-X",
+					"-A",
+					"-t",
+					"-c",
+					"SELECT 'connect2_2'",
+				],
+				env: baseEnv(),
+			});
+			expectConnectOk(r, /connect2_2/, "URI ?service= + default file");
+		});
 
-    it('connection with "service" conninfo string + default pg_service.conf (connect2_1)', async () => {
-      const r = await runChild({
-        launcher: paths.launcher,
-        argv: ['service=my_srv', '-X', '-A', '-t', '-c', "SELECT 'connect2_1'"],
-        env: baseEnv(),
-      });
-      expectConnectOk(r, /connect2_1/, 'conninfo service= + default file');
-    });
+		it('connection with "service" conninfo string + default pg_service.conf (connect2_1)', async () => {
+			const r = await runChild({
+				launcher: paths.launcher,
+				argv: [
+					"service=my_srv",
+					"-X",
+					"-A",
+					"-t",
+					"-c",
+					"SELECT 'connect2_1'",
+				],
+				env: baseEnv(),
+			});
+			expectConnectOk(
+				r,
+				/connect2_1/,
+				"conninfo service= + default file",
+			);
+		});
 
-    it('connection with incorrect "service" string + default pg_service.conf', async () => {
-      const r = await runChild({
-        launcher: paths.launcher,
-        argv: ['service=nonexistent_srv', '-X', '-A', '-t', '-c', 'SELECT 1'],
-        env: baseEnv(),
-      });
-      expectConnectFails(
-        r,
-        /definition of service "nonexistent_srv" not found/,
-        'unknown service via conninfo + default file',
-      );
-    });
+		it('connection with incorrect "service" string + default pg_service.conf', async () => {
+			const r = await runChild({
+				launcher: paths.launcher,
+				argv: [
+					"service=nonexistent_srv",
+					"-X",
+					"-A",
+					"-t",
+					"-c",
+					"SELECT 1",
+				],
+				env: baseEnv(),
+			});
+			expectConnectFails(
+				r,
+				/definition of service "nonexistent_srv" not found/,
+				"unknown service via conninfo + default file",
+			);
+		});
 
-    it('connection with incorrect PGSERVICE + default pg_service.conf', async () => {
-      const r = await runChild({
-        launcher: paths.launcher,
-        argv: ['', '-X', '-A', '-t', '-c', 'SELECT 1'],
-        env: { ...baseEnv(), PGSERVICE: 'nonexistent_srv' },
-      });
-      expectConnectFails(
-        r,
-        /definition of service "nonexistent_srv" not found/,
-        'unknown PGSERVICE + default file',
-      );
-    });
-  });
+		it("connection with incorrect PGSERVICE + default pg_service.conf", async () => {
+			const r = await runChild({
+				launcher: paths.launcher,
+				argv: ["", "-X", "-A", "-t", "-c", "SELECT 1"],
+				env: { ...baseEnv(), PGSERVICE: "nonexistent_srv" },
+			});
+			expectConnectFails(
+				r,
+				/definition of service "nonexistent_srv" not found/,
+				"unknown PGSERVICE + default file",
+			);
+		});
+	});
 
-  // -------------------------------------------------------------------------
-  // Parser-tolerance probes (NOT in upstream's 006_service.pl but exercise
-  // the file-format spec from the upstream docs — see src/psql/io/pgservice.ts
-  // header doc for the format reference). Kept here because the parser is
-  // wired through the same connection-resolution chain.
-  // -------------------------------------------------------------------------
+	// -------------------------------------------------------------------------
+	// Parser-tolerance probes (NOT in upstream's 006_service.pl but exercise
+	// the file-format spec from the upstream docs — see src/psql/io/pgservice.ts
+	// header doc for the format reference). Kept here because the parser is
+	// wired through the same connection-resolution chain.
+	// -------------------------------------------------------------------------
 
-  describe('parser tolerance (comments, blanks, unknown keys)', () => {
-    it('service file with `#` comments, blank lines, and unknown keys still resolves', async () => {
-      const noisyFile = join(workdir, 'pg_service_noisy.conf');
-      const conn = getPgConn();
-      const body = [
-        '# leading comment',
-        '',
-        '   # indented comment',
-        '[my_srv]',
-        `host=${conn.host}`,
-        '# inline-section comment',
-        `port=${String(conn.port)}`,
-        '',
-        `user=${conn.user}`,
-        `password=${conn.password}`,
-        `dbname=${conn.db}`,
-        'sslmode=disable',
-        // Recognised-but-not-mapped keys are silently dropped by
-        // `serviceEntryToConnectOptions`. Drop one in here to confirm.
-        'krbsrvname=postgres',
-        // Wholly unknown key — also silently dropped.
-        'completely_unknown_key=ignored',
-        '',
-      ].join('\n');
-      writeFileSync(noisyFile, body, 'utf8');
+	describe("parser tolerance (comments, blanks, unknown keys)", () => {
+		it("service file with `#` comments, blank lines, and unknown keys still resolves", async () => {
+			const noisyFile = join(workdir, "pg_service_noisy.conf");
+			const conn = getPgConn();
+			const body = [
+				"# leading comment",
+				"",
+				"   # indented comment",
+				"[my_srv]",
+				`host=${conn.host}`,
+				"# inline-section comment",
+				`port=${String(conn.port)}`,
+				"",
+				`user=${conn.user}`,
+				`password=${conn.password}`,
+				`dbname=${conn.db}`,
+				"sslmode=disable",
+				// Recognised-but-not-mapped keys are silently dropped by
+				// `serviceEntryToConnectOptions`. Drop one in here to confirm.
+				"krbsrvname=postgres",
+				// Wholly unknown key — also silently dropped.
+				"completely_unknown_key=ignored",
+				"",
+			].join("\n");
+			writeFileSync(noisyFile, body, "utf8");
 
-      const r = await runChild({
-        launcher: paths.launcher,
-        argv: ['', '-X', '-A', '-t', '-c', "SELECT 'noisy_ok'"],
-        env: cleanPgEnv({
-          PGSERVICEFILE: noisyFile,
-          HOME: emptyHome,
-          PGSYSCONFDIR: emptySysconfdir,
-          PGSERVICE: 'my_srv',
-        }),
-      });
-      expect(r.exitCode, `stderr=${r.stderr}`).toBe(0);
-      expect(r.stdout).toMatch(/noisy_ok/);
-    });
-  });
+			const r = await runChild({
+				launcher: paths.launcher,
+				argv: ["", "-X", "-A", "-t", "-c", "SELECT 'noisy_ok'"],
+				env: cleanPgEnv({
+					PGSERVICEFILE: noisyFile,
+					HOME: emptyHome,
+					PGSYSCONFDIR: emptySysconfdir,
+					PGSERVICE: "my_srv",
+				}),
+			});
+			expect(r.exitCode, `stderr=${r.stderr}`).toBe(0);
+			expect(r.stdout).toMatch(/noisy_ok/);
+		});
+	});
 });
 
 // Skip-guard mirroring the pattern used by the other TAP specs.
-describe('tap/006_service: skip guard', () => {
-  it('reports the resolved run condition', () => {
-    expect(typeof RUN_INTEGRATION).toBe('boolean');
-    expect(typeof DIST_EXISTS).toBe('boolean');
-    expect(typeof SHOULD_RUN_INTEGRATION).toBe('boolean');
-  });
+describe("tap/006_service: skip guard", () => {
+	it("reports the resolved run condition", () => {
+		expect(typeof RUN_INTEGRATION).toBe("boolean");
+		expect(typeof DIST_EXISTS).toBe("boolean");
+		expect(typeof SHOULD_RUN_INTEGRATION).toBe("boolean");
+	});
 
-  it('records that the spec exists even when its body is gated off', () => {
-    // No-op, but useful when reading the reporter output to confirm the
-    // file was loaded at all.
-    expect(true).toBe(true);
-  });
+	it("records that the spec exists even when its body is gated off", () => {
+		// No-op, but useful when reading the reporter output to confirm the
+		// file was loaded at all.
+		expect(true).toBe(true);
+	});
 });

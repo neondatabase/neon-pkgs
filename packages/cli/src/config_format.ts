@@ -1,5 +1,5 @@
-import type { ResolvedBranchConfig } from '@neon/config';
-import type { PulledBranchConfig } from '@neon/config-runtime';
+import type { ResolvedBranchConfig } from "@neon/config";
+import type { PulledBranchConfig } from "@neon/config-runtime";
 
 /**
  * Render a TTL in whole seconds back to the canonical `neon.ts` duration string (e.g.
@@ -8,16 +8,17 @@ import type { PulledBranchConfig } from '@neon/config-runtime';
  * the same value a user would write in `neon.ts`.
  */
 export const formatDurationSeconds = (totalSeconds: number): string => {
-  const units = [
-    ['w', 7 * 24 * 60 * 60],
-    ['d', 24 * 60 * 60],
-    ['h', 60 * 60],
-    ['m', 60],
-  ] as const;
-  for (const [unit, perUnit] of units) {
-    if (totalSeconds % perUnit === 0) return `${totalSeconds / perUnit}${unit}`;
-  }
-  return `${totalSeconds}s`;
+	const units = [
+		["w", 7 * 24 * 60 * 60],
+		["d", 24 * 60 * 60],
+		["h", 60 * 60],
+		["m", 60],
+	] as const;
+	for (const [unit, perUnit] of units) {
+		if (totalSeconds % perUnit === 0)
+			return `${totalSeconds / perUnit}${unit}`;
+	}
+	return `${totalSeconds}s`;
 };
 
 /**
@@ -28,29 +29,29 @@ export const formatDurationSeconds = (totalSeconds: number): string => {
  * `neon.ts`.
  */
 export type NeonConfigView = {
-  auth?: true;
-  dataApi?: true;
-  preview?: {
-    functions?: Record<string, { name: string }>;
-    buckets?: Record<string, { access: string }>;
-    /**
-     * Issued branch credentials, secret-free (id / name / scopes / last-used). Read-only
-     * live state — credentials are minted by `env pull` / `fetchEnv`, not authored in
-     * `neon.ts` — surfaced here so `config status` shows what's been issued on the branch.
-     */
-    credentials?: {
-      id: string;
-      name?: string;
-      scopes: string[];
-      lastUsedAt?: string;
-    }[];
-  };
-  branch?: {
-    parent?: string;
-    ttl?: string;
-    protected?: boolean;
-    postgres?: ResolvedBranchConfig['postgres'];
-  };
+	auth?: true;
+	dataApi?: true;
+	preview?: {
+		functions?: Record<string, { name: string }>;
+		buckets?: Record<string, { access: string }>;
+		/**
+		 * Issued branch credentials, secret-free (id / name / scopes / last-used). Read-only
+		 * live state — credentials are minted by `env pull` / `fetchEnv`, not authored in
+		 * `neon.ts` — surfaced here so `config status` shows what's been issued on the branch.
+		 */
+		credentials?: {
+			id: string;
+			name?: string;
+			scopes: string[];
+			lastUsedAt?: string;
+		}[];
+	};
+	branch?: {
+		parent?: string;
+		ttl?: string;
+		protected?: boolean;
+		postgres?: ResolvedBranchConfig["postgres"];
+	};
 };
 
 /**
@@ -65,50 +66,50 @@ export type NeonConfigView = {
  * - `branch` and `preview` are omitted entirely when they would be empty.
  */
 export const toNeonConfigView = (
-  resolved: ResolvedBranchConfig,
-  preview: PulledBranchConfig['preview'],
+	resolved: ResolvedBranchConfig,
+	preview: PulledBranchConfig["preview"],
 ): NeonConfigView => {
-  const view: NeonConfigView = {};
+	const view: NeonConfigView = {};
 
-  if (resolved.authEnabled) view.auth = true;
-  if (resolved.dataApiEnabled) view.dataApi = true;
+	if (resolved.authEnabled) view.auth = true;
+	if (resolved.dataApiEnabled) view.dataApi = true;
 
-  const previewView = toPreviewView(preview);
-  if (previewView) view.preview = previewView;
+	const previewView = toPreviewView(preview);
+	if (previewView) view.preview = previewView;
 
-  const branch: NeonConfigView['branch'] = {};
-  if (resolved.parent !== undefined) branch.parent = resolved.parent;
-  if (resolved.ttlSeconds !== undefined)
-    branch.ttl = formatDurationSeconds(resolved.ttlSeconds);
-  if (resolved.protected !== undefined) branch.protected = resolved.protected;
-  if (resolved.postgres?.computeSettings) branch.postgres = resolved.postgres;
-  if (Object.keys(branch).length > 0) view.branch = branch;
+	const branch: NeonConfigView["branch"] = {};
+	if (resolved.parent !== undefined) branch.parent = resolved.parent;
+	if (resolved.ttlSeconds !== undefined)
+		branch.ttl = formatDurationSeconds(resolved.ttlSeconds);
+	if (resolved.protected !== undefined) branch.protected = resolved.protected;
+	if (resolved.postgres?.computeSettings) branch.postgres = resolved.postgres;
+	if (Object.keys(branch).length > 0) view.branch = branch;
 
-  return view;
+	return view;
 };
 
 const toPreviewView = (
-  preview: PulledBranchConfig['preview'],
-): NeonConfigView['preview'] | undefined => {
-  if (!preview) return undefined;
-  const out: NonNullable<NeonConfigView['preview']> = {};
-  if (preview.functions.length > 0) {
-    out.functions = Object.fromEntries(
-      preview.functions.map((fn) => [fn.slug, { name: fn.name }]),
-    );
-  }
-  if (preview.buckets.length > 0) {
-    out.buckets = Object.fromEntries(
-      preview.buckets.map((b) => [b.name, { access: b.access }]),
-    );
-  }
-  if (preview.credentials.length > 0) {
-    out.credentials = preview.credentials.map((c) => ({
-      id: c.tokenIdShort,
-      ...(c.name ? { name: c.name } : {}),
-      scopes: c.scopes,
-      ...(c.lastUsedAt ? { lastUsedAt: c.lastUsedAt } : {}),
-    }));
-  }
-  return Object.keys(out).length > 0 ? out : undefined;
+	preview: PulledBranchConfig["preview"],
+): NeonConfigView["preview"] | undefined => {
+	if (!preview) return undefined;
+	const out: NonNullable<NeonConfigView["preview"]> = {};
+	if (preview.functions.length > 0) {
+		out.functions = Object.fromEntries(
+			preview.functions.map((fn) => [fn.slug, { name: fn.name }]),
+		);
+	}
+	if (preview.buckets.length > 0) {
+		out.buckets = Object.fromEntries(
+			preview.buckets.map((b) => [b.name, { access: b.access }]),
+		);
+	}
+	if (preview.credentials.length > 0) {
+		out.credentials = preview.credentials.map((c) => ({
+			id: c.tokenIdShort,
+			...(c.name ? { name: c.name } : {}),
+			scopes: c.scopes,
+			...(c.lastUsedAt ? { lastUsedAt: c.lastUsedAt } : {}),
+		}));
+	}
+	return Object.keys(out).length > 0 ? out : undefined;
 };

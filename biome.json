@@ -4,10 +4,8 @@
 		"includes": [
 			"**/*.ts",
 			"**/*.tsx",
-			"!**/routeTree.gen.ts",
-			"!packages/sdk/src/client",
-			"!examples",
-			"!packages/cli"
+			"!**/*.gen.ts",
+			"!packages/sdk/src/client"
 		]
 	},
 	"vcs": {
@@ -29,5 +27,36 @@
 		"rules": {
 			"recommended": true
 		}
-	}
+	},
+	"overrides": [
+		{
+			"includes": ["packages/cli/**", "examples/**"],
+			"linter": {
+				"rules": {
+					"suspicious": {
+						"noExplicitAny": "off",
+						"noImplicitAnyLet": "off",
+						"noDoubleEquals": "off",
+						"noGlobalIsNan": "off",
+						"noControlCharactersInRegex": "off",
+						"noShadowRestrictedNames": "off",
+						"noAssignInExpressions": "off",
+						"noPrototypeBuiltins": "off"
+					},
+					"style": {
+						"useTemplate": "off",
+						"noNonNullAssertion": "off",
+						"useNodejsImportProtocol": "off"
+					},
+					"correctness": {
+						"noEmptyPattern": "off",
+						"noUnusedFunctionParameters": "off",
+						"noUnusedVariables": "off",
+						"noUnusedPrivateClassMembers": "off",
+						"useParseIntRadix": "off"
+					}
+				}
+			}
+		}
+	]
 }

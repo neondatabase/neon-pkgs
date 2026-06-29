@@ -37,14 +37,14 @@
  */
 
 import type {
-  BackslashCmdSpec,
-  BackslashContext,
-  BackslashRegistry,
-  BackslashResult,
-} from '../types/backslash.js';
-import type { Connection } from '../types/connection.js';
+	BackslashCmdSpec,
+	BackslashContext,
+	BackslashRegistry,
+	BackslashResult,
+} from "../types/backslash.js";
+import type { Connection } from "../types/connection.js";
 
-import { writeErr, writeOut } from './shared.js';
+import { writeErr, writeOut } from "./shared.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -57,9 +57,9 @@ import { writeErr, writeOut } from './shared.js';
  * double-print.
  */
 const errResult = (ctx: BackslashContext, message: string): BackslashResult => {
-  ctx.settings.lastErrorResult = { message };
-  writeErr(`\\${ctx.cmdName}: ${message}\n`);
-  return { status: 'error', errorWritten: true };
+	ctx.settings.lastErrorResult = { message };
+	writeErr(`\\${ctx.cmdName}: ${message}\n`);
+	return { status: "error", errorWritten: true };
 };
 
 /**
@@ -69,15 +69,16 @@ const errResult = (ctx: BackslashContext, message: string): BackslashResult => {
  * message fields (e.g. a wire-layer rejection).
  */
 const formatServerError = (err: unknown): string => {
-  if (err && typeof err === 'object') {
-    const e = err as { severity?: string; message?: string };
-    const sev = e.severity ?? 'ERROR';
-    const msg =
-      e.message ?? (err instanceof Error ? err.message : safeToString(err));
-    return `${sev}:  ${msg}`;
-  }
-  if (err instanceof Error) return `ERROR:  ${err.message}`;
-  return `ERROR:  ${safeToString(err)}`;
+	if (err && typeof err === "object") {
+		const e = err as { severity?: string; message?: string };
+		const sev = e.severity ?? "ERROR";
+		const msg =
+			e.message ??
+			(err instanceof Error ? err.message : safeToString(err));
+		return `${sev}:  ${msg}`;
+	}
+	if (err instanceof Error) return `ERROR:  ${err.message}`;
+	return `ERROR:  ${safeToString(err)}`;
 };
 
 /**
@@ -87,21 +88,21 @@ const formatServerError = (err: unknown): string => {
  * the typeof when JSON throws — e.g. circular structures).
  */
 const safeToString = (v: unknown): string => {
-  if (v === null) return 'null';
-  if (v === undefined) return 'undefined';
-  if (typeof v === 'string') return v;
-  if (
-    typeof v === 'number' ||
-    typeof v === 'boolean' ||
-    typeof v === 'bigint'
-  ) {
-    return String(v);
-  }
-  try {
-    return JSON.stringify(v) ?? typeof v;
-  } catch {
-    return typeof v;
-  }
+	if (v === null) return "null";
+	if (v === undefined) return "undefined";
+	if (typeof v === "string") return v;
+	if (
+		typeof v === "number" ||
+		typeof v === "boolean" ||
+		typeof v === "bigint"
+	) {
+		return String(v);
+	}
+	try {
+		return JSON.stringify(v) ?? typeof v;
+	} catch {
+		return typeof v;
+	}
 };
 
 /**
@@ -111,26 +112,28 @@ const safeToString = (v: unknown): string => {
  * survives.
  */
 const queryErrResult = (
-  ctx: BackslashContext,
-  err: unknown,
+	ctx: BackslashContext,
+	err: unknown,
 ): BackslashResult => {
-  const line = formatServerError(err);
-  ctx.settings.lastErrorResult = {
-    message:
-      err && typeof err === 'object' && (err as { message?: string }).message
-        ? (err as { message: string }).message
-        : err instanceof Error
-          ? err.message
-          : safeToString(err),
-  };
-  writeErr(`${line}\n`);
-  return { status: 'error', errorWritten: true };
+	const line = formatServerError(err);
+	ctx.settings.lastErrorResult = {
+		message:
+			err &&
+			typeof err === "object" &&
+			(err as { message?: string }).message
+				? (err as { message: string }).message
+				: err instanceof Error
+					? err.message
+					: safeToString(err),
+	};
+	writeErr(`${line}\n`);
+	return { status: "error", errorWritten: true };
 };
 
 const conn = (ctx: BackslashContext): Connection | null => ctx.settings.db;
 
 const noConn = (ctx: BackslashContext): BackslashResult =>
-  errResult(ctx, 'no connection to the server');
+	errResult(ctx, "no connection to the server");
 
 /**
  * Read the object descriptor as a whole-line argument with surrounding
@@ -146,11 +149,11 @@ const noConn = (ctx: BackslashContext): BackslashResult =>
  * regprocedure input parser rejects with "expected a right parenthesis".
  */
 const readObjDesc = (ctx: BackslashContext): string | null => {
-  const raw = ctx.restOfLine();
-  // Strip trailing whitespace and `;` (in any order, any count) so
-  // `\sf foo(arg) ;; ` round-trips like vanilla psql.
-  const trimmed = raw.replace(/[\s;]+$/, '').trimStart();
-  return trimmed.length === 0 ? null : trimmed;
+	const raw = ctx.restOfLine();
+	// Strip trailing whitespace and `;` (in any order, any count) so
+	// `\sf foo(arg) ;; ` round-trips like vanilla psql.
+	const trimmed = raw.replace(/[\s;]+$/, "").trimStart();
+	return trimmed.length === 0 ? null : trimmed;
 };
 
 /**
@@ -159,8 +162,8 @@ const readObjDesc = (ctx: BackslashContext): string | null => {
  * are looked at for a literal `+`.
  */
 const decodeShowSuffix = (cmdName: string, base: string): { plus: boolean } => {
-  const tail = cmdName.slice(base.length);
-  return { plus: tail.includes('+') };
+	const tail = cmdName.slice(base.length);
+	return { plus: tail.includes("+") };
 };
 
 /**
@@ -176,28 +179,31 @@ const decodeShowSuffix = (cmdName: string, base: string): { plus: boolean } => {
  * `escapeLiteral` to mirror libpq's `appendStringLiteralConn`.
  */
 const lookupFunctionOid = async (
-  c: Connection,
-  desc: string,
+	c: Connection,
+	desc: string,
 ): Promise<{ ok: true; oid: number } | { ok: false; err: unknown }> => {
-  const cast = desc.includes('(') ? 'regprocedure' : 'regproc';
-  const sql = `SELECT ${c.escapeLiteral(desc)}::pg_catalog.${cast}::pg_catalog.oid`;
-  try {
-    const rs = await c.query(sql, []);
-    if (rs.rows.length !== 1 || rs.rows[0][0] === null) {
-      return { ok: false, err: new Error('object lookup returned no rows') };
-    }
-    const raw = cellToString(rs.rows[0][0]);
-    const oid = Number(raw);
-    if (!Number.isFinite(oid)) {
-      return {
-        ok: false,
-        err: new Error(`invalid oid in lookup result: ${raw}`),
-      };
-    }
-    return { ok: true, oid };
-  } catch (err) {
-    return { ok: false, err };
-  }
+	const cast = desc.includes("(") ? "regprocedure" : "regproc";
+	const sql = `SELECT ${c.escapeLiteral(desc)}::pg_catalog.${cast}::pg_catalog.oid`;
+	try {
+		const rs = await c.query(sql, []);
+		if (rs.rows.length !== 1 || rs.rows[0][0] === null) {
+			return {
+				ok: false,
+				err: new Error("object lookup returned no rows"),
+			};
+		}
+		const raw = cellToString(rs.rows[0][0]);
+		const oid = Number(raw);
+		if (!Number.isFinite(oid)) {
+			return {
+				ok: false,
+				err: new Error(`invalid oid in lookup result: ${raw}`),
+			};
+		}
+		return { ok: true, oid };
+	} catch (err) {
+		return { ok: false, err };
+	}
 };
 
 /**
@@ -207,27 +213,30 @@ const lookupFunctionOid = async (
  * `getViewCreateCmd` where upstream catches it via the relkind column.
  */
 const lookupRelationOid = async (
-  c: Connection,
-  desc: string,
+	c: Connection,
+	desc: string,
 ): Promise<{ ok: true; oid: number } | { ok: false; err: unknown }> => {
-  const sql = `SELECT ${c.escapeLiteral(desc)}::pg_catalog.regclass::pg_catalog.oid`;
-  try {
-    const rs = await c.query(sql, []);
-    if (rs.rows.length !== 1 || rs.rows[0][0] === null) {
-      return { ok: false, err: new Error('object lookup returned no rows') };
-    }
-    const raw = cellToString(rs.rows[0][0]);
-    const oid = Number(raw);
-    if (!Number.isFinite(oid)) {
-      return {
-        ok: false,
-        err: new Error(`invalid oid in lookup result: ${raw}`),
-      };
-    }
-    return { ok: true, oid };
-  } catch (err) {
-    return { ok: false, err };
-  }
+	const sql = `SELECT ${c.escapeLiteral(desc)}::pg_catalog.regclass::pg_catalog.oid`;
+	try {
+		const rs = await c.query(sql, []);
+		if (rs.rows.length !== 1 || rs.rows[0][0] === null) {
+			return {
+				ok: false,
+				err: new Error("object lookup returned no rows"),
+			};
+		}
+		const raw = cellToString(rs.rows[0][0]);
+		const oid = Number(raw);
+		if (!Number.isFinite(oid)) {
+			return {
+				ok: false,
+				err: new Error(`invalid oid in lookup result: ${raw}`),
+			};
+		}
+		return { ok: true, oid };
+	} catch (err) {
+		return { ok: false, err };
+	}
 };
 
 /**
@@ -236,24 +245,24 @@ const lookupRelationOid = async (
  * empty output instead of crashing.
  */
 const cellToString = (v: unknown): string => {
-  if (v === null || v === undefined) return '';
-  if (typeof v === 'string') return v;
-  if (Buffer.isBuffer(v)) return v.toString('utf-8');
-  if (
-    typeof v === 'number' ||
-    typeof v === 'boolean' ||
-    typeof v === 'bigint'
-  ) {
-    return String(v);
-  }
-  // Non-primitive fallback: encode JSON so we never emit a stray
-  // `[object Object]`. The wire layer hands us strings or nulls in
-  // practice, so this branch is defensive only.
-  try {
-    return JSON.stringify(v) ?? '';
-  } catch {
-    return '';
-  }
+	if (v === null || v === undefined) return "";
+	if (typeof v === "string") return v;
+	if (Buffer.isBuffer(v)) return v.toString("utf-8");
+	if (
+		typeof v === "number" ||
+		typeof v === "boolean" ||
+		typeof v === "bigint"
+	) {
+		return String(v);
+	}
+	// Non-primitive fallback: encode JSON so we never emit a stray
+	// `[object Object]`. The wire layer hands us strings or nulls in
+	// practice, so this branch is defensive only.
+	try {
+		return JSON.stringify(v) ?? "";
+	} catch {
+		return "";
+	}
 };
 
 /**
@@ -263,21 +272,24 @@ const cellToString = (v: unknown): string => {
  * straight to stdout (or hand to the line-number formatter).
  */
 const getFunctionCreateCmd = async (
-  c: Connection,
-  oid: number,
+	c: Connection,
+	oid: number,
 ): Promise<{ ok: true; def: string } | { ok: false; err: unknown }> => {
-  const sql = `SELECT pg_catalog.pg_get_functiondef(${oid})`;
-  try {
-    const rs = await c.query(sql, []);
-    if (rs.rows.length !== 1) {
-      return { ok: false, err: new Error('function definition not found') };
-    }
-    let def = cellToString(rs.rows[0][0]);
-    if (def.length > 0 && !def.endsWith('\n')) def += '\n';
-    return { ok: true, def };
-  } catch (err) {
-    return { ok: false, err };
-  }
+	const sql = `SELECT pg_catalog.pg_get_functiondef(${oid})`;
+	try {
+		const rs = await c.query(sql, []);
+		if (rs.rows.length !== 1) {
+			return {
+				ok: false,
+				err: new Error("function definition not found"),
+			};
+		}
+		let def = cellToString(rs.rows[0][0]);
+		if (def.length > 0 && !def.endsWith("\n")) def += "\n";
+		return { ok: true, def };
+	} catch (err) {
+		return { ok: false, err };
+	}
 };
 
 /**
@@ -288,10 +300,10 @@ const getFunctionCreateCmd = async (
  * the synthesised `CREATE OR REPLACE VIEW …` head.
  */
 const fmtId = (ident: string): string => {
-  if (/^[a-z_][a-z0-9_$]*$/.test(ident) && !RESERVED_WORDS.has(ident)) {
-    return ident;
-  }
-  return `"${ident.replace(/"/g, '""')}"`;
+	if (/^[a-z_][a-z0-9_$]*$/.test(ident) && !RESERVED_WORDS.has(ident)) {
+		return ident;
+	}
+	return `"${ident.replace(/"/g, '""')}"`;
 };
 
 /**
@@ -304,83 +316,83 @@ const fmtId = (ident: string): string => {
  * double-quote pair, which is still valid SQL.
  */
 const RESERVED_WORDS = new Set<string>([
-  'all',
-  'analyse',
-  'analyze',
-  'and',
-  'any',
-  'array',
-  'as',
-  'asc',
-  'asymmetric',
-  'both',
-  'case',
-  'cast',
-  'check',
-  'collate',
-  'column',
-  'constraint',
-  'create',
-  'current_catalog',
-  'current_date',
-  'current_role',
-  'current_time',
-  'current_timestamp',
-  'current_user',
-  'default',
-  'deferrable',
-  'desc',
-  'distinct',
-  'do',
-  'else',
-  'end',
-  'except',
-  'false',
-  'fetch',
-  'for',
-  'foreign',
-  'from',
-  'grant',
-  'group',
-  'having',
-  'in',
-  'initially',
-  'intersect',
-  'into',
-  'lateral',
-  'leading',
-  'limit',
-  'localtime',
-  'localtimestamp',
-  'not',
-  'null',
-  'offset',
-  'on',
-  'only',
-  'or',
-  'order',
-  'placing',
-  'primary',
-  'references',
-  'returning',
-  'select',
-  'session_user',
-  'some',
-  'symmetric',
-  'table',
-  'then',
-  'to',
-  'trailing',
-  'true',
-  'union',
-  'unique',
-  'user',
-  'using',
-  'variadic',
-  'when',
-  'where',
-  'window',
-  'with',
+	"all",
+	"analyse",
+	"analyze",
+	"and",
+	"any",
+	"array",
+	"as",
+	"asc",
+	"asymmetric",
+	"both",
+	"case",
+	"cast",
+	"check",
+	"collate",
+	"column",
+	"constraint",
+	"create",
+	"current_catalog",
+	"current_date",
+	"current_role",
+	"current_time",
+	"current_timestamp",
+	"current_user",
+	"default",
+	"deferrable",
+	"desc",
+	"distinct",
+	"do",
+	"else",
+	"end",
+	"except",
+	"false",
+	"fetch",
+	"for",
+	"foreign",
+	"from",
+	"grant",
+	"group",
+	"having",
+	"in",
+	"initially",
+	"intersect",
+	"into",
+	"lateral",
+	"leading",
+	"limit",
+	"localtime",
+	"localtimestamp",
+	"not",
+	"null",
+	"offset",
+	"on",
+	"only",
+	"or",
+	"order",
+	"placing",
+	"primary",
+	"references",
+	"returning",
+	"select",
+	"session_user",
+	"some",
+	"symmetric",
+	"table",
+	"then",
+	"to",
+	"trailing",
+	"true",
+	"union",
+	"unique",
+	"user",
+	"using",
+	"variadic",
+	"when",
+	"where",
+	"window",
+	"with",
 ]);
 
 /**
@@ -391,77 +403,77 @@ const RESERVED_WORDS = new Set<string>([
  * actually a view.
  */
 const getViewCreateCmd = async (
-  c: Connection,
-  oid: number,
+	c: Connection,
+	oid: number,
 ): Promise<{ ok: true; def: string } | { ok: false; err: unknown }> => {
-  const ver = c.serverVersion >= 90400 ? 'modern' : 'legacy';
-  const sql =
-    ver === 'modern'
-      ? `SELECT nspname, relname, relkind, ` +
-        `pg_catalog.pg_get_viewdef(c.oid, true), ` +
-        `pg_catalog.array_remove(pg_catalog.array_remove(c.reloptions,'check_option=local'),'check_option=cascaded') AS reloptions, ` +
-        `CASE WHEN 'check_option=local' = ANY (c.reloptions) THEN 'LOCAL'::text ` +
-        `WHEN 'check_option=cascaded' = ANY (c.reloptions) THEN 'CASCADED'::text ELSE NULL END AS checkoption ` +
-        `FROM pg_catalog.pg_class c ` +
-        `LEFT JOIN pg_catalog.pg_namespace n ` +
-        `ON c.relnamespace = n.oid WHERE c.oid = ${oid}`
-      : `SELECT nspname, relname, relkind, ` +
-        `pg_catalog.pg_get_viewdef(c.oid, true), ` +
-        `c.reloptions AS reloptions, ` +
-        `NULL AS checkoption ` +
-        `FROM pg_catalog.pg_class c ` +
-        `LEFT JOIN pg_catalog.pg_namespace n ` +
-        `ON c.relnamespace = n.oid WHERE c.oid = ${oid}`;
-  let rs;
-  try {
-    rs = await c.query(sql, []);
-  } catch (err) {
-    return { ok: false, err };
-  }
-  if (rs.rows.length !== 1) {
-    return { ok: false, err: new Error('view definition not found') };
-  }
-  const row = rs.rows[0];
-  const nspname = cellToString(row[0]);
-  const relname = cellToString(row[1]);
-  const relkind = cellToString(row[2]);
-  const viewdef = cellToString(row[3]);
-  const reloptions = row[4]; // may be string ("{a=b,c=d}") or null
-  const checkoption = cellToString(row[5]);
+	const ver = c.serverVersion >= 90400 ? "modern" : "legacy";
+	const sql =
+		ver === "modern"
+			? `SELECT nspname, relname, relkind, ` +
+				`pg_catalog.pg_get_viewdef(c.oid, true), ` +
+				`pg_catalog.array_remove(pg_catalog.array_remove(c.reloptions,'check_option=local'),'check_option=cascaded') AS reloptions, ` +
+				`CASE WHEN 'check_option=local' = ANY (c.reloptions) THEN 'LOCAL'::text ` +
+				`WHEN 'check_option=cascaded' = ANY (c.reloptions) THEN 'CASCADED'::text ELSE NULL END AS checkoption ` +
+				`FROM pg_catalog.pg_class c ` +
+				`LEFT JOIN pg_catalog.pg_namespace n ` +
+				`ON c.relnamespace = n.oid WHERE c.oid = ${oid}`
+			: `SELECT nspname, relname, relkind, ` +
+				`pg_catalog.pg_get_viewdef(c.oid, true), ` +
+				`c.reloptions AS reloptions, ` +
+				`NULL AS checkoption ` +
+				`FROM pg_catalog.pg_class c ` +
+				`LEFT JOIN pg_catalog.pg_namespace n ` +
+				`ON c.relnamespace = n.oid WHERE c.oid = ${oid}`;
+	let rs;
+	try {
+		rs = await c.query(sql, []);
+	} catch (err) {
+		return { ok: false, err };
+	}
+	if (rs.rows.length !== 1) {
+		return { ok: false, err: new Error("view definition not found") };
+	}
+	const row = rs.rows[0];
+	const nspname = cellToString(row[0]);
+	const relname = cellToString(row[1]);
+	const relkind = cellToString(row[2]);
+	const viewdef = cellToString(row[3]);
+	const reloptions = row[4]; // may be string ("{a=b,c=d}") or null
+	const checkoption = cellToString(row[5]);
 
-  if (relkind !== 'v') {
-    return {
-      ok: false,
-      err: new Error(`"${nspname}.${relname}" is not a view`),
-    };
-  }
+	if (relkind !== "v") {
+		return {
+			ok: false,
+			err: new Error(`"${nspname}.${relname}" is not a view`),
+		};
+	}
 
-  let out = 'CREATE OR REPLACE VIEW ';
-  out += `${fmtId(nspname)}.${fmtId(relname)}`;
+	let out = "CREATE OR REPLACE VIEW ";
+	out += `${fmtId(nspname)}.${fmtId(relname)}`;
 
-  // reloptions: postgres returns it as a text-mode array literal like
-  // `{foo=bar,baz=qux}`; we only need to detect non-empty (different
-  // from the literal `{}`) and split entries on `,` outside quotes.
-  const reloptStr = reloptions === null ? null : cellToString(reloptions);
-  if (reloptStr !== null && reloptStr.length > 2) {
-    out += '\n WITH (';
-    out += renderReloptions(reloptStr);
-    out += ')';
-  }
+	// reloptions: postgres returns it as a text-mode array literal like
+	// `{foo=bar,baz=qux}`; we only need to detect non-empty (different
+	// from the literal `{}`) and split entries on `,` outside quotes.
+	const reloptStr = reloptions === null ? null : cellToString(reloptions);
+	if (reloptStr !== null && reloptStr.length > 2) {
+		out += "\n WITH (";
+		out += renderReloptions(reloptStr);
+		out += ")";
+	}
 
-  out += ` AS\n${viewdef}`;
+	out += ` AS\n${viewdef}`;
 
-  // Strip trailing semicolon from pg_get_viewdef.
-  if (out.endsWith(';')) {
-    out = out.slice(0, -1);
-  }
+	// Strip trailing semicolon from pg_get_viewdef.
+	if (out.endsWith(";")) {
+		out = out.slice(0, -1);
+	}
 
-  if (checkoption !== '') {
-    out += `\n WITH ${checkoption} CHECK OPTION`;
-  }
+	if (checkoption !== "") {
+		out += `\n WITH ${checkoption} CHECK OPTION`;
+	}
 
-  if (!out.endsWith('\n')) out += '\n';
-  return { ok: true, def: out };
+	if (!out.endsWith("\n")) out += "\n";
+	return { ok: true, def: out };
 };
 
 /**
@@ -478,70 +490,73 @@ const getViewCreateCmd = async (
  * fallback.
  */
 const renderReloptions = (literal: string): string => {
-  // Strip surrounding `{}`.
-  if (!literal.startsWith('{') || !literal.endsWith('}')) {
-    return literal;
-  }
-  const inside = literal.slice(1, -1);
-  if (inside.length === 0) return '';
-  // Postgres array literals quote individual elements with `"…"` when
-  // they contain commas or special chars. For reloptions on a view the
-  // values are typically bare `key=value` strings, but we still need to
-  // tolerate the quoted form.
-  const entries = splitArrayElems(inside);
-  const out: string[] = [];
-  for (let entry of entries) {
-    // unquote double-quoted entries
-    if (entry.startsWith('"') && entry.endsWith('"')) {
-      entry = entry.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-    }
-    const eq = entry.indexOf('=');
-    if (eq < 0) {
-      out.push(entry);
-      continue;
-    }
-    const key = entry.slice(0, eq);
-    const value = entry.slice(eq + 1);
-    if (/^[A-Za-z0-9_.-]+$/.test(value)) {
-      out.push(`${key}=${value}`);
-    } else {
-      // Quote the value as a SQL string literal.
-      out.push(`${key}='${value.replace(/'/g, "''")}'`);
-    }
-  }
-  return out.join(', ');
+	// Strip surrounding `{}`.
+	if (!literal.startsWith("{") || !literal.endsWith("}")) {
+		return literal;
+	}
+	const inside = literal.slice(1, -1);
+	if (inside.length === 0) return "";
+	// Postgres array literals quote individual elements with `"…"` when
+	// they contain commas or special chars. For reloptions on a view the
+	// values are typically bare `key=value` strings, but we still need to
+	// tolerate the quoted form.
+	const entries = splitArrayElems(inside);
+	const out: string[] = [];
+	for (let entry of entries) {
+		// unquote double-quoted entries
+		if (entry.startsWith('"') && entry.endsWith('"')) {
+			entry = entry
+				.slice(1, -1)
+				.replace(/\\"/g, '"')
+				.replace(/\\\\/g, "\\");
+		}
+		const eq = entry.indexOf("=");
+		if (eq < 0) {
+			out.push(entry);
+			continue;
+		}
+		const key = entry.slice(0, eq);
+		const value = entry.slice(eq + 1);
+		if (/^[A-Za-z0-9_.-]+$/.test(value)) {
+			out.push(`${key}=${value}`);
+		} else {
+			// Quote the value as a SQL string literal.
+			out.push(`${key}='${value.replace(/'/g, "''")}'`);
+		}
+	}
+	return out.join(", ");
 };
 
 /** Split a Postgres text-mode array's inner content on top-level commas. */
 const splitArrayElems = (s: string): string[] => {
-  const out: string[] = [];
-  let i = 0;
-  let cur = '';
-  let inQuote = false;
-  while (i < s.length) {
-    const ch = s[i];
-    if (ch === '\\' && i + 1 < s.length) {
-      cur += s[i] + s[i + 1];
-      i += 2;
-      continue;
-    }
-    if (ch === '"') {
-      inQuote = !inQuote;
-      cur += ch;
-      i++;
-      continue;
-    }
-    if (ch === ',' && !inQuote) {
-      out.push(cur);
-      cur = '';
-      i++;
-      continue;
-    }
-    cur += ch;
-    i++;
-  }
-  if (cur.length > 0 || s.endsWith(',')) out.push(cur);
-  return out;
+	const out: string[] = [];
+	let i = 0;
+	let cur = "";
+	let inQuote = false;
+	while (i < s.length) {
+		const ch = s[i];
+		if (ch === "\\" && i + 1 < s.length) {
+			cur += s[i] + s[i + 1];
+			i += 2;
+			continue;
+		}
+		if (ch === '"') {
+			inQuote = !inQuote;
+			cur += ch;
+			i++;
+			continue;
+		}
+		if (ch === "," && !inQuote) {
+			out.push(cur);
+			cur = "";
+			i++;
+			continue;
+		}
+		cur += ch;
+		i++;
+	}
+	if (cur.length > 0 || s.endsWith(",")) out.push(cur);
+	return out;
 };
 
 /**
@@ -557,50 +572,50 @@ const splitArrayElems = (s: string): string[] => {
  *     1 and increments per output line.
  */
 const writeWithLineNumbers = (
-  buf: string,
-  isFunc: boolean,
-  out: (s: string) => void,
+	buf: string,
+	isFunc: boolean,
+	out: (s: string) => void,
 ): void => {
-  let inHeader = isFunc;
-  let lineno = 0;
-  let i = 0;
-  while (i < buf.length) {
-    // Find end-of-line.
-    const eol = buf.indexOf('\n', i);
-    const line = eol === -1 ? buf.slice(i) : buf.slice(i, eol);
+	let inHeader = isFunc;
+	let lineno = 0;
+	let i = 0;
+	while (i < buf.length) {
+		// Find end-of-line.
+		const eol = buf.indexOf("\n", i);
+		const line = eol === -1 ? buf.slice(i) : buf.slice(i, eol);
 
-    if (
-      inHeader &&
-      (line.startsWith('AS ') ||
-        line.startsWith('BEGIN ') ||
-        line.startsWith('RETURN '))
-    ) {
-      inHeader = false;
-    }
+		if (
+			inHeader &&
+			(line.startsWith("AS ") ||
+				line.startsWith("BEGIN ") ||
+				line.startsWith("RETURN "))
+		) {
+			inHeader = false;
+		}
 
-    if (!inHeader) lineno++;
+		if (!inHeader) lineno++;
 
-    if (inHeader) {
-      out(`        ${line}\n`);
-    } else {
-      // %-7d → left-justified, padded to 7. Then literal space, then line.
-      const numStr = String(lineno);
-      const pad = numStr.length >= 7 ? '' : ' '.repeat(7 - numStr.length);
-      out(`${numStr}${pad} ${line}\n`);
-    }
+		if (inHeader) {
+			out(`        ${line}\n`);
+		} else {
+			// %-7d → left-justified, padded to 7. Then literal space, then line.
+			const numStr = String(lineno);
+			const pad = numStr.length >= 7 ? "" : " ".repeat(7 - numStr.length);
+			out(`${numStr}${pad} ${line}\n`);
+		}
 
-    if (eol === -1) break;
-    i = eol + 1;
-  }
+		if (eol === -1) break;
+		i = eol + 1;
+	}
 };
 
 /** Stream the definition (with or without line numbers) to stdout. */
 const emitDefinition = (def: string, plus: boolean, isFunc: boolean): void => {
-  if (plus) {
-    writeWithLineNumbers(def, isFunc, writeOut);
-  } else {
-    writeOut(def);
-  }
+	if (plus) {
+		writeWithLineNumbers(def, isFunc, writeOut);
+	} else {
+		writeOut(def);
+	}
 };
 
 // ---------------------------------------------------------------------------
@@ -613,43 +628,43 @@ const emitDefinition = (def: string, plus: boolean, isFunc: boolean): void => {
  * when the user supplies a name.
  */
 const runShowFunction = async (
-  ctx: BackslashContext,
-  cmdName: string,
-  base: 'sf' | 'ef',
+	ctx: BackslashContext,
+	cmdName: string,
+	base: "sf" | "ef",
 ): Promise<BackslashResult> => {
-  const c = conn(ctx);
-  if (!c) return noConn(ctx);
-  const { plus } = decodeShowSuffix(cmdName, base);
-  const desc = readObjDesc(ctx);
-  if (desc === null) {
-    return errResult(ctx, 'function name is required');
-  }
-  const oidLookup = await lookupFunctionOid(c, desc);
-  if (!oidLookup.ok) return queryErrResult(ctx, oidLookup.err);
-  const defLookup = await getFunctionCreateCmd(c, oidLookup.oid);
-  if (!defLookup.ok) return queryErrResult(ctx, defLookup.err);
-  emitDefinition(defLookup.def, plus, /*isFunc=*/ true);
-  return { status: 'ok' };
+	const c = conn(ctx);
+	if (!c) return noConn(ctx);
+	const { plus } = decodeShowSuffix(cmdName, base);
+	const desc = readObjDesc(ctx);
+	if (desc === null) {
+		return errResult(ctx, "function name is required");
+	}
+	const oidLookup = await lookupFunctionOid(c, desc);
+	if (!oidLookup.ok) return queryErrResult(ctx, oidLookup.err);
+	const defLookup = await getFunctionCreateCmd(c, oidLookup.oid);
+	if (!defLookup.ok) return queryErrResult(ctx, defLookup.err);
+	emitDefinition(defLookup.def, plus, /*isFunc=*/ true);
+	return { status: "ok" };
 };
 
 const runShowView = async (
-  ctx: BackslashContext,
-  cmdName: string,
-  base: 'sv' | 'ev',
+	ctx: BackslashContext,
+	cmdName: string,
+	base: "sv" | "ev",
 ): Promise<BackslashResult> => {
-  const c = conn(ctx);
-  if (!c) return noConn(ctx);
-  const { plus } = decodeShowSuffix(cmdName, base);
-  const desc = readObjDesc(ctx);
-  if (desc === null) {
-    return errResult(ctx, 'view name is required');
-  }
-  const oidLookup = await lookupRelationOid(c, desc);
-  if (!oidLookup.ok) return queryErrResult(ctx, oidLookup.err);
-  const defLookup = await getViewCreateCmd(c, oidLookup.oid);
-  if (!defLookup.ok) return queryErrResult(ctx, defLookup.err);
-  emitDefinition(defLookup.def, plus, /*isFunc=*/ false);
-  return { status: 'ok' };
+	const c = conn(ctx);
+	if (!c) return noConn(ctx);
+	const { plus } = decodeShowSuffix(cmdName, base);
+	const desc = readObjDesc(ctx);
+	if (desc === null) {
+		return errResult(ctx, "view name is required");
+	}
+	const oidLookup = await lookupRelationOid(c, desc);
+	if (!oidLookup.ok) return queryErrResult(ctx, oidLookup.err);
+	const defLookup = await getViewCreateCmd(c, oidLookup.oid);
+	if (!defLookup.ok) return queryErrResult(ctx, defLookup.err);
+	emitDefinition(defLookup.def, plus, /*isFunc=*/ false);
+	return { status: "ok" };
 };
 
 // ---------------------------------------------------------------------------
@@ -658,34 +673,34 @@ const runShowView = async (
 
 /** `\sf [+] FUNCNAME` — show function source. */
 export const cmdShowFunction: BackslashCmdSpec = {
-  name: 'sf',
-  argMode: 'whole-line',
-  helpKey: 'sf',
-  run: (ctx) => runShowFunction(ctx, ctx.cmdName, 'sf'),
+	name: "sf",
+	argMode: "whole-line",
+	helpKey: "sf",
+	run: (ctx) => runShowFunction(ctx, ctx.cmdName, "sf"),
 };
 
 /** `\sf+ FUNCNAME` — show function source with line numbers. */
 export const cmdShowFunctionPlus: BackslashCmdSpec = {
-  name: 'sf+',
-  argMode: 'whole-line',
-  helpKey: 'sf',
-  run: (ctx) => runShowFunction(ctx, ctx.cmdName, 'sf'),
+	name: "sf+",
+	argMode: "whole-line",
+	helpKey: "sf",
+	run: (ctx) => runShowFunction(ctx, ctx.cmdName, "sf"),
 };
 
 /** `\sv [+] VIEWNAME` — show view source. */
 export const cmdShowView: BackslashCmdSpec = {
-  name: 'sv',
-  argMode: 'whole-line',
-  helpKey: 'sv',
-  run: (ctx) => runShowView(ctx, ctx.cmdName, 'sv'),
+	name: "sv",
+	argMode: "whole-line",
+	helpKey: "sv",
+	run: (ctx) => runShowView(ctx, ctx.cmdName, "sv"),
 };
 
 /** `\sv+ VIEWNAME` — show view source with line numbers. */
 export const cmdShowViewPlus: BackslashCmdSpec = {
-  name: 'sv+',
-  argMode: 'whole-line',
-  helpKey: 'sv',
-  run: (ctx) => runShowView(ctx, ctx.cmdName, 'sv'),
+	name: "sv+",
+	argMode: "whole-line",
+	helpKey: "sv",
+	run: (ctx) => runShowView(ctx, ctx.cmdName, "sv"),
 };
 
 /**
@@ -696,58 +711,58 @@ export const cmdShowViewPlus: BackslashCmdSpec = {
  * with a hint pointing at `\sf`.
  */
 export const cmdEditFunction: BackslashCmdSpec = {
-  name: 'ef',
-  argMode: 'whole-line',
-  helpKey: 'ef',
-  async run(ctx: BackslashContext): Promise<BackslashResult> {
-    const c = conn(ctx);
-    if (!c) return noConn(ctx);
-    const { plus } = decodeShowSuffix(ctx.cmdName, 'ef');
-    const desc = readObjDesc(ctx);
-    if (desc === null) {
-      return errResult(
-        ctx,
-        'editing not supported in embedded psql; supply a name to display the source',
-      );
-    }
-    // Strip a possible trailing LINE number (upstream behaviour for \ef
-    // FUNCNAME LINE — the editor opens at that line; we just discard it).
-    const objDesc = stripTrailingLine(desc);
-    const oidLookup = await lookupFunctionOid(c, objDesc);
-    if (!oidLookup.ok) return queryErrResult(ctx, oidLookup.err);
-    const defLookup = await getFunctionCreateCmd(c, oidLookup.oid);
-    if (!defLookup.ok) return queryErrResult(ctx, defLookup.err);
-    emitDefinition(defLookup.def, plus, /*isFunc=*/ true);
-    return { status: 'ok' };
-  },
+	name: "ef",
+	argMode: "whole-line",
+	helpKey: "ef",
+	async run(ctx: BackslashContext): Promise<BackslashResult> {
+		const c = conn(ctx);
+		if (!c) return noConn(ctx);
+		const { plus } = decodeShowSuffix(ctx.cmdName, "ef");
+		const desc = readObjDesc(ctx);
+		if (desc === null) {
+			return errResult(
+				ctx,
+				"editing not supported in embedded psql; supply a name to display the source",
+			);
+		}
+		// Strip a possible trailing LINE number (upstream behaviour for \ef
+		// FUNCNAME LINE — the editor opens at that line; we just discard it).
+		const objDesc = stripTrailingLine(desc);
+		const oidLookup = await lookupFunctionOid(c, objDesc);
+		if (!oidLookup.ok) return queryErrResult(ctx, oidLookup.err);
+		const defLookup = await getFunctionCreateCmd(c, oidLookup.oid);
+		if (!defLookup.ok) return queryErrResult(ctx, defLookup.err);
+		emitDefinition(defLookup.def, plus, /*isFunc=*/ true);
+		return { status: "ok" };
+	},
 };
 
 /**
  * `\ev [+] [VIEWNAME [LINE]]` — same contract as `\ef` but for views.
  */
 export const cmdEditView: BackslashCmdSpec = {
-  name: 'ev',
-  argMode: 'whole-line',
-  helpKey: 'ev',
-  async run(ctx: BackslashContext): Promise<BackslashResult> {
-    const c = conn(ctx);
-    if (!c) return noConn(ctx);
-    const { plus } = decodeShowSuffix(ctx.cmdName, 'ev');
-    const desc = readObjDesc(ctx);
-    if (desc === null) {
-      return errResult(
-        ctx,
-        'editing not supported in embedded psql; supply a name to display the source',
-      );
-    }
-    const objDesc = stripTrailingLine(desc);
-    const oidLookup = await lookupRelationOid(c, objDesc);
-    if (!oidLookup.ok) return queryErrResult(ctx, oidLookup.err);
-    const defLookup = await getViewCreateCmd(c, oidLookup.oid);
-    if (!defLookup.ok) return queryErrResult(ctx, defLookup.err);
-    emitDefinition(defLookup.def, plus, /*isFunc=*/ false);
-    return { status: 'ok' };
-  },
+	name: "ev",
+	argMode: "whole-line",
+	helpKey: "ev",
+	async run(ctx: BackslashContext): Promise<BackslashResult> {
+		const c = conn(ctx);
+		if (!c) return noConn(ctx);
+		const { plus } = decodeShowSuffix(ctx.cmdName, "ev");
+		const desc = readObjDesc(ctx);
+		if (desc === null) {
+			return errResult(
+				ctx,
+				"editing not supported in embedded psql; supply a name to display the source",
+			);
+		}
+		const objDesc = stripTrailingLine(desc);
+		const oidLookup = await lookupRelationOid(c, objDesc);
+		if (!oidLookup.ok) return queryErrResult(ctx, oidLookup.err);
+		const defLookup = await getViewCreateCmd(c, oidLookup.oid);
+		if (!defLookup.ok) return queryErrResult(ctx, defLookup.err);
+		emitDefinition(defLookup.def, plus, /*isFunc=*/ false);
+		return { status: "ok" };
+	},
 };
 
 /**
@@ -756,12 +771,12 @@ export const cmdEditView: BackslashCmdSpec = {
  * by full name.
  */
 export const cmdEditFunctionPlus: BackslashCmdSpec = {
-  ...cmdEditFunction,
-  name: 'ef+',
+	...cmdEditFunction,
+	name: "ef+",
 };
 export const cmdEditViewPlus: BackslashCmdSpec = {
-  ...cmdEditView,
-  name: 'ev+',
+	...cmdEditView,
+	name: "ev+",
 };
 
 /**
@@ -777,16 +792,16 @@ export const cmdEditViewPlus: BackslashCmdSpec = {
  * show-only impl.
  */
 const stripTrailingLine = (desc: string): string => {
-  let i = desc.length - 1;
-  while (i > 0 && /\s/.test(desc[i])) i--;
-  if (i <= 0 || !/[0-9]/.test(desc[i])) return desc;
-  while (i > 0 && /[0-9]/.test(desc[i])) i--;
-  // The char before the digit run must be whitespace or `)` and not the
-  // very first char.
-  if (i <= 0) return desc;
-  const sep = desc[i];
-  if (!(/\s/.test(sep) || sep === ')')) return desc;
-  return desc.slice(0, i + 1).trimEnd();
+	let i = desc.length - 1;
+	while (i > 0 && /\s/.test(desc[i])) i--;
+	if (i <= 0 || !/[0-9]/.test(desc[i])) return desc;
+	while (i > 0 && /[0-9]/.test(desc[i])) i--;
+	// The char before the digit run must be whitespace or `)` and not the
+	// very first char.
+	if (i <= 0) return desc;
+	const sep = desc[i];
+	if (!(/\s/.test(sep) || sep === ")")) return desc;
+	return desc.slice(0, i + 1).trimEnd();
 };
 
 // ---------------------------------------------------------------------------
@@ -798,12 +813,12 @@ const stripTrailingLine = (desc: string): string => {
  * the supplied registry. Wired into `defaultRegistry()` from `dispatch.ts`.
  */
 export const registerShowCommands = (registry: BackslashRegistry): void => {
-  registry.register(cmdShowFunction);
-  registry.register(cmdShowFunctionPlus);
-  registry.register(cmdShowView);
-  registry.register(cmdShowViewPlus);
-  registry.register(cmdEditFunction);
-  registry.register(cmdEditFunctionPlus);
-  registry.register(cmdEditView);
-  registry.register(cmdEditViewPlus);
+	registry.register(cmdShowFunction);
+	registry.register(cmdShowFunctionPlus);
+	registry.register(cmdShowView);
+	registry.register(cmdShowViewPlus);
+	registry.register(cmdEditFunction);
+	registry.register(cmdEditFunctionPlus);
+	registry.register(cmdEditView);
+	registry.register(cmdEditViewPlus);
 };

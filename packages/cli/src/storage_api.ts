@@ -9,9 +9,9 @@
 // methods, the call sites in `src/commands/bucket.ts` can switch over with no
 // behavioural change.
 
-import { type Readable } from 'node:stream';
+import type { Readable } from "node:stream";
 
-import type { NeonApiClient } from './api.js';
+import type { NeonApiClient } from "./api.js";
 
 export type ApiClient = NeonApiClient;
 
@@ -20,51 +20,51 @@ export type ApiClient = NeonApiClient;
 // promise unchanged.
 type ApiResponse<T> = { data: T };
 type ApiResponseWithHeaders<T> = {
-  data: T;
-  headers: Record<string, unknown>;
+	data: T;
+	headers: Record<string, unknown>;
 };
 
 /** The visibility level of a bucket. Mirrors the `access_level` enum. */
-export type BucketAccessLevel = 'private' | 'public_read';
+export type BucketAccessLevel = "private" | "public_read";
 
 /** A single bucket on a branch. Mirrors the `Bucket` schema. */
 export type Bucket = {
-  /** The bucket name (DNS-safe, unique within the branch). */
-  name: string;
-  /** Whether the bucket is private or publicly readable. */
-  access_level: BucketAccessLevel;
+	/** The bucket name (DNS-safe, unique within the branch). */
+	name: string;
+	/** Whether the bucket is private or publicly readable. */
+	access_level: BucketAccessLevel;
 };
 
 /** Response body of the create-bucket endpoint. Mirrors `BucketResponse`. */
 export type BucketResponse = {
-  /** The bucket that was created. */
-  bucket: Bucket;
+	/** The bucket that was created. */
+	bucket: Bucket;
 };
 
 /** Response body of the list-buckets endpoint. Mirrors `BucketsListResponse`. */
 export type BucketsListResponse = {
-  /** The buckets on the branch. */
-  buckets: Bucket[];
+	/** The buckets on the branch. */
+	buckets: Bucket[];
 };
 
 /** Request body of the create-bucket endpoint. Mirrors `BucketCreateRequest`. */
 export type BucketCreateRequest = {
-  /** The bucket name to create. */
-  name: string;
-  /** The visibility level. Defaults to `private` server-side when omitted. */
-  access_level?: BucketAccessLevel;
+	/** The bucket name to create. */
+	name: string;
+	/** The visibility level. Defaults to `private` server-side when omitted. */
+	access_level?: BucketAccessLevel;
 };
 
 /** A single object stored in a bucket. Mirrors the `BucketObject` schema. */
 export type BucketObject = {
-  /** The full object key. */
-  key: string;
-  /** The object size in bytes. */
-  size: number;
-  /** The time the object was last modified (RFC 3339). */
-  last_modified: string;
-  /** The object's entity tag (content hash). */
-  etag: string;
+	/** The full object key. */
+	key: string;
+	/** The object size in bytes. */
+	size: number;
+	/** The time the object was last modified (RFC 3339). */
+	last_modified: string;
+	/** The object's entity tag (content hash). */
+	etag: string;
 };
 
 /**
@@ -72,22 +72,22 @@ export type BucketObject = {
  * `BucketObjectsListResponse`.
  */
 export type BucketObjectsListResponse = {
-  /**
-   * Common prefixes (folder names) collapsed under the requested delimiter.
-   * Empty when no delimiter was supplied.
-   */
-  folders: string[];
-  /** Objects whose keys did not collapse into a folder. */
-  objects: BucketObject[];
-  /** The prefix that was applied to this listing (echoed back). */
-  prefix: string;
-  /**
-   * Pagination cursor to pass as `cursor` on the next request. Empty when the
-   * listing is not truncated.
-   */
-  next_cursor?: string;
-  /** True when more results exist beyond this page. */
-  is_truncated: boolean;
+	/**
+	 * Common prefixes (folder names) collapsed under the requested delimiter.
+	 * Empty when no delimiter was supplied.
+	 */
+	folders: string[];
+	/** Objects whose keys did not collapse into a folder. */
+	objects: BucketObject[];
+	/** The prefix that was applied to this listing (echoed back). */
+	prefix: string;
+	/**
+	 * Pagination cursor to pass as `cursor` on the next request. Empty when the
+	 * listing is not truncated.
+	 */
+	next_cursor?: string;
+	/** True when more results exist beyond this page. */
+	is_truncated: boolean;
 };
 
 /**
@@ -95,21 +95,21 @@ export type BucketObjectsListResponse = {
  * `BucketObjectsDeletePrefixResponse`.
  */
 export type BucketObjectsDeletePrefixResponse = {
-  /** The number of objects soft-deleted under the prefix. */
-  deleted: number;
+	/** The number of objects soft-deleted under the prefix. */
+	deleted: number;
 };
 
 /** Request body of the unified presign endpoint. */
 export type PresignRequest = {
-  /**
-   * The operation to presign. neonctl only ever uploads, so this is always
-   * `upload`; the backend also supports `download`, which is API-only.
-   */
-  operation: 'upload';
-  /** The Content-Type to sign into the upload (echoed back in `headers`). */
-  content_type?: string;
-  /** How long the presigned URL stays valid. Server default applies when omitted. */
-  expires_in_seconds?: number;
+	/**
+	 * The operation to presign. neonctl only ever uploads, so this is always
+	 * `upload`; the backend also supports `download`, which is API-only.
+	 */
+	operation: "upload";
+	/** The Content-Type to sign into the upload (echoed back in `headers`). */
+	content_type?: string;
+	/** How long the presigned URL stays valid. Server default applies when omitted. */
+	expires_in_seconds?: number;
 };
 
 /**
@@ -117,37 +117,37 @@ export type PresignRequest = {
  * schema.
  */
 export type PresignResponse = {
-  /** The presigned URL to PUT the object bytes to. */
-  url: string;
-  /** Always `PUT` for the single-PUT upload path. */
-  method: 'PUT';
-  /** Headers that must be sent verbatim with the PUT for the signature to verify. */
-  headers: Record<string, string>;
-  /** When the presigned URL expires (RFC 3339). */
-  expires_at: string;
+	/** The presigned URL to PUT the object bytes to. */
+	url: string;
+	/** Always `PUT` for the single-PUT upload path. */
+	method: "PUT";
+	/** Headers that must be sent verbatim with the PUT for the signature to verify. */
+	headers: Record<string, string>;
+	/** When the presigned URL expires (RFC 3339). */
+	expires_at: string;
 };
 
 export type ListObjectsParams = {
-  projectId: string;
-  branchId: string;
-  bucketName: string;
-  /** Only list objects whose key starts with this prefix. */
-  prefix?: string;
-  /** Collapse keys sharing a common prefix into the `folders` array. */
-  delimiter?: string;
-  /** Opaque pagination cursor returned as `next_cursor` by a previous call. */
-  cursor?: string;
-  /** Maximum number of items (objects + folders) to return. */
-  limit?: number;
+	projectId: string;
+	branchId: string;
+	bucketName: string;
+	/** Only list objects whose key starts with this prefix. */
+	prefix?: string;
+	/** Collapse keys sharing a common prefix into the `folders` array. */
+	delimiter?: string;
+	/** Opaque pagination cursor returned as `next_cursor` by a previous call. */
+	cursor?: string;
+	/** Maximum number of items (objects + folders) to return. */
+	limit?: number;
 };
 
 const bucketsPath = (projectId: string, branchId: string) =>
-  `/projects/${encodeURIComponent(projectId)}/branches/${encodeURIComponent(
-    branchId,
-  )}/buckets`;
+	`/projects/${encodeURIComponent(projectId)}/branches/${encodeURIComponent(
+		branchId,
+	)}/buckets`;
 
 const bucketPath = (projectId: string, branchId: string, bucketName: string) =>
-  `${bucketsPath(projectId, branchId)}/${encodeURIComponent(bucketName)}`;
+	`${bucketsPath(projectId, branchId)}/${encodeURIComponent(bucketName)}`;
 
 /**
  * Create a bucket on a branch.
@@ -155,31 +155,31 @@ const bucketPath = (projectId: string, branchId: string, bucketName: string) =>
  * @request POST /projects/{project_id}/branches/{branch_id}/buckets
  */
 export const createProjectBranchBucket = (
-  apiClient: ApiClient,
-  {
-    projectId,
-    branchId,
-    name,
-    accessLevel,
-  }: {
-    projectId: string;
-    branchId: string;
-    name: string;
-    accessLevel?: BucketAccessLevel;
-  },
+	apiClient: ApiClient,
+	{
+		projectId,
+		branchId,
+		name,
+		accessLevel,
+	}: {
+		projectId: string;
+		branchId: string;
+		name: string;
+		accessLevel?: BucketAccessLevel;
+	},
 ): Promise<ApiResponse<BucketResponse>> => {
-  const body: BucketCreateRequest = { name };
-  // Omit access_level entirely so the server default (`private`) applies.
-  if (accessLevel !== undefined) {
-    body.access_level = accessLevel;
-  }
-  return apiClient.request<BucketResponse>({
-    path: bucketsPath(projectId, branchId),
-    method: 'POST',
-    body,
-    format: 'json',
-    secure: true,
-  });
+	const body: BucketCreateRequest = { name };
+	// Omit access_level entirely so the server default (`private`) applies.
+	if (accessLevel !== undefined) {
+		body.access_level = accessLevel;
+	}
+	return apiClient.request<BucketResponse>({
+		path: bucketsPath(projectId, branchId),
+		method: "POST",
+		body,
+		format: "json",
+		secure: true,
+	});
 };
 
 /**
@@ -188,15 +188,15 @@ export const createProjectBranchBucket = (
  * @request GET /projects/{project_id}/branches/{branch_id}/buckets
  */
 export const listProjectBranchBuckets = (
-  apiClient: ApiClient,
-  { projectId, branchId }: { projectId: string; branchId: string },
+	apiClient: ApiClient,
+	{ projectId, branchId }: { projectId: string; branchId: string },
 ): Promise<ApiResponse<BucketsListResponse>> =>
-  apiClient.request<BucketsListResponse>({
-    path: bucketsPath(projectId, branchId),
-    method: 'GET',
-    format: 'json',
-    secure: true,
-  });
+	apiClient.request<BucketsListResponse>({
+		path: bucketsPath(projectId, branchId),
+		method: "GET",
+		format: "json",
+		secure: true,
+	});
 
 /**
  * Delete a bucket from a branch.
@@ -204,18 +204,18 @@ export const listProjectBranchBuckets = (
  * @request DELETE /projects/{project_id}/branches/{branch_id}/buckets/{bucket_name}
  */
 export const deleteProjectBranchBucket = (
-  apiClient: ApiClient,
-  {
-    projectId,
-    branchId,
-    bucketName,
-  }: { projectId: string; branchId: string; bucketName: string },
+	apiClient: ApiClient,
+	{
+		projectId,
+		branchId,
+		bucketName,
+	}: { projectId: string; branchId: string; bucketName: string },
 ): Promise<ApiResponse<undefined>> =>
-  apiClient.request<undefined>({
-    path: bucketPath(projectId, branchId, bucketName),
-    method: 'DELETE',
-    secure: true,
-  });
+	apiClient.request<undefined>({
+		path: bucketPath(projectId, branchId, bucketName),
+		method: "DELETE",
+		secure: true,
+	});
 
 /**
  * List objects (and collapsed folders) in a bucket on a branch.
@@ -223,16 +223,16 @@ export const deleteProjectBranchBucket = (
  * @request GET /projects/{project_id}/branches/{branch_id}/buckets/{bucket_name}/objects
  */
 export const listProjectBranchBucketObjects = (
-  apiClient: ApiClient,
-  { projectId, branchId, bucketName, ...query }: ListObjectsParams,
+	apiClient: ApiClient,
+	{ projectId, branchId, bucketName, ...query }: ListObjectsParams,
 ): Promise<ApiResponse<BucketObjectsListResponse>> =>
-  apiClient.request<BucketObjectsListResponse>({
-    path: `${bucketPath(projectId, branchId, bucketName)}/objects`,
-    method: 'GET',
-    query,
-    format: 'json',
-    secure: true,
-  });
+	apiClient.request<BucketObjectsListResponse>({
+		path: `${bucketPath(projectId, branchId, bucketName)}/objects`,
+		method: "GET",
+		query,
+		format: "json",
+		secure: true,
+	});
 
 /**
  * Download an object's raw bytes from a bucket on a branch.
@@ -250,27 +250,27 @@ export const listProjectBranchBucketObjects = (
  * @request GET /projects/{project_id}/branches/{branch_id}/buckets/{bucket_name}/objects/{object_key}/download
  */
 export const getProjectBranchBucketObject = (
-  apiClient: ApiClient,
-  {
-    projectId,
-    branchId,
-    bucketName,
-    objectKey,
-  }: {
-    projectId: string;
-    branchId: string;
-    bucketName: string;
-    objectKey: string;
-  },
+	apiClient: ApiClient,
+	{
+		projectId,
+		branchId,
+		bucketName,
+		objectKey,
+	}: {
+		projectId: string;
+		branchId: string;
+		bucketName: string;
+		objectKey: string;
+	},
 ): Promise<ApiResponseWithHeaders<Readable>> =>
-  apiClient.request<Readable>({
-    path: `${bucketPath(projectId, branchId, bucketName)}/objects/${encodeURIComponent(
-      objectKey,
-    )}/download`,
-    method: 'GET',
-    format: 'stream',
-    secure: true,
-  }) as Promise<ApiResponseWithHeaders<Readable>>;
+	apiClient.request<Readable>({
+		path: `${bucketPath(projectId, branchId, bucketName)}/objects/${encodeURIComponent(
+			objectKey,
+		)}/download`,
+		method: "GET",
+		format: "stream",
+		secure: true,
+	}) as Promise<ApiResponseWithHeaders<Readable>>;
 
 /**
  * Delete an object from a bucket on a branch.
@@ -281,26 +281,26 @@ export const getProjectBranchBucketObject = (
  * @request DELETE /projects/{project_id}/branches/{branch_id}/buckets/{bucket_name}/objects/{object_key}
  */
 export const deleteProjectBranchBucketObject = (
-  apiClient: ApiClient,
-  {
-    projectId,
-    branchId,
-    bucketName,
-    objectKey,
-  }: {
-    projectId: string;
-    branchId: string;
-    bucketName: string;
-    objectKey: string;
-  },
+	apiClient: ApiClient,
+	{
+		projectId,
+		branchId,
+		bucketName,
+		objectKey,
+	}: {
+		projectId: string;
+		branchId: string;
+		bucketName: string;
+		objectKey: string;
+	},
 ): Promise<ApiResponse<undefined>> =>
-  apiClient.request<undefined>({
-    path: `${bucketPath(projectId, branchId, bucketName)}/objects/${encodeURIComponent(
-      objectKey,
-    )}`,
-    method: 'DELETE',
-    secure: true,
-  });
+	apiClient.request<undefined>({
+		path: `${bucketPath(projectId, branchId, bucketName)}/objects/${encodeURIComponent(
+			objectKey,
+		)}`,
+		method: "DELETE",
+		secure: true,
+	});
 
 /**
  * Delete every object under a key prefix (folder) in a bucket on a branch.
@@ -311,26 +311,26 @@ export const deleteProjectBranchBucketObject = (
  * @request DELETE /projects/{project_id}/branches/{branch_id}/buckets/{bucket_name}/objects-by-prefix
  */
 export const deleteProjectBranchBucketObjectsByPrefix = (
-  apiClient: ApiClient,
-  {
-    projectId,
-    branchId,
-    bucketName,
-    prefix,
-  }: {
-    projectId: string;
-    branchId: string;
-    bucketName: string;
-    prefix: string;
-  },
+	apiClient: ApiClient,
+	{
+		projectId,
+		branchId,
+		bucketName,
+		prefix,
+	}: {
+		projectId: string;
+		branchId: string;
+		bucketName: string;
+		prefix: string;
+	},
 ): Promise<ApiResponse<BucketObjectsDeletePrefixResponse>> =>
-  apiClient.request<BucketObjectsDeletePrefixResponse>({
-    path: `${bucketPath(projectId, branchId, bucketName)}/objects-by-prefix`,
-    method: 'DELETE',
-    query: { prefix },
-    format: 'json',
-    secure: true,
-  });
+	apiClient.request<BucketObjectsDeletePrefixResponse>({
+		path: `${bucketPath(projectId, branchId, bucketName)}/objects-by-prefix`,
+		method: "DELETE",
+		query: { prefix },
+		format: "json",
+		secure: true,
+	});
 
 /**
  * Request a presigned PUT URL for uploading an object to a bucket on a branch.
@@ -351,37 +351,37 @@ export const deleteProjectBranchBucketObjectsByPrefix = (
  * @request POST /projects/{project_id}/branches/{branch_id}/buckets/{bucket_name}/objects/{object_key}/presign
  */
 export const presignUpload = (
-  apiClient: ApiClient,
-  {
-    projectId,
-    branchId,
-    bucketName,
-    objectKey,
-    contentType,
-    expiresInSeconds,
-  }: {
-    projectId: string;
-    branchId: string;
-    bucketName: string;
-    objectKey: string;
-    contentType?: string;
-    expiresInSeconds?: number;
-  },
+	apiClient: ApiClient,
+	{
+		projectId,
+		branchId,
+		bucketName,
+		objectKey,
+		contentType,
+		expiresInSeconds,
+	}: {
+		projectId: string;
+		branchId: string;
+		bucketName: string;
+		objectKey: string;
+		contentType?: string;
+		expiresInSeconds?: number;
+	},
 ): Promise<ApiResponse<PresignResponse>> => {
-  const body: PresignRequest = { operation: 'upload' };
-  if (contentType !== undefined) {
-    body.content_type = contentType;
-  }
-  if (expiresInSeconds !== undefined) {
-    body.expires_in_seconds = expiresInSeconds;
-  }
-  return apiClient.request<PresignResponse>({
-    path: `${bucketPath(projectId, branchId, bucketName)}/objects/${encodeURIComponent(
-      objectKey,
-    )}/presign`,
-    method: 'POST',
-    body,
-    format: 'json',
-    secure: true,
-  });
+	const body: PresignRequest = { operation: "upload" };
+	if (contentType !== undefined) {
+		body.content_type = contentType;
+	}
+	if (expiresInSeconds !== undefined) {
+		body.expires_in_seconds = expiresInSeconds;
+	}
+	return apiClient.request<PresignResponse>({
+		path: `${bucketPath(projectId, branchId, bucketName)}/objects/${encodeURIComponent(
+			objectKey,
+		)}/presign`,
+		method: "POST",
+		body,
+		format: "json",
+		secure: true,
+	});
 };

@@ -59,20 +59,20 @@
  *    apply them in-line so the returned arg contains the decoded value.
  */
 
-import { execSync } from 'node:child_process';
+import { execSync } from "node:child_process";
 
-import type { SlashArgMode } from '../types/scanner.js';
+import type { SlashArgMode } from "../types/scanner.js";
 
-import { dequote } from './stringutils.js';
+import { dequote } from "./stringutils.js";
 
-const WHITESPACE = ' \t\n\r\f\v';
+const WHITESPACE = " \t\n\r\f\v";
 const VARIABLE_CHAR_RE = /[A-Za-z0-9_\x80-\xff]/;
 
 const isVarChar = (c: string | undefined): boolean =>
-  c !== undefined && VARIABLE_CHAR_RE.test(c);
+	c !== undefined && VARIABLE_CHAR_RE.test(c);
 
 const isWhitespace = (c: string | undefined): boolean =>
-  c !== undefined && WHITESPACE.includes(c);
+	c !== undefined && WHITESPACE.includes(c);
 
 /**
  * SQL-literal-quote a value for the `:'varname'` substitution form.
@@ -83,18 +83,18 @@ const isWhitespace = (c: string | undefined): boolean =>
  * through the SQL parser.
  */
 const quoteSqlLiteral = (value: string): string => {
-  let needsEscape = false;
-  let inner = '';
-  for (const c of value) {
-    if (c === "'") inner += "''";
-    else if (c === '\\') {
-      inner += '\\\\';
-      needsEscape = true;
-    } else {
-      inner += c;
-    }
-  }
-  return needsEscape ? `E'${inner}'` : `'${inner}'`;
+	let needsEscape = false;
+	let inner = "";
+	for (const c of value) {
+		if (c === "'") inner += "''";
+		else if (c === "\\") {
+			inner += "\\\\";
+			needsEscape = true;
+		} else {
+			inner += c;
+		}
+	}
+	return needsEscape ? `E'${inner}'` : `'${inner}'`;
 };
 
 /**
@@ -102,11 +102,11 @@ const quoteSqlLiteral = (value: string): string => {
  * Wraps the value in `"…"` and doubles any embedded `"`.
  */
 const quoteSqlIdent = (value: string): string => {
-  let inner = '';
-  for (const c of value) {
-    inner += c === '"' ? '""' : c;
-  }
-  return `"${inner}"`;
+	let inner = "";
+	for (const c of value) {
+		inner += c === '"' ? '""' : c;
+	}
+	return `"${inner}"`;
 };
 
 /**
@@ -117,26 +117,26 @@ const quoteSqlIdent = (value: string): string => {
  * (otherwise).
  */
 const dequoteDowncaseIdentifier = (str: string, downcase: boolean): string => {
-  let out = '';
-  let inquotes = false;
-  let i = 0;
-  while (i < str.length) {
-    const c = str[i];
-    if (c === '"') {
-      if (inquotes && str[i + 1] === '"') {
-        // Keep one quote, drop the other.
-        out += '"';
-        i += 2;
-        continue;
-      }
-      inquotes = !inquotes;
-      i++;
-      continue;
-    }
-    out += downcase && !inquotes ? c.toLowerCase() : c;
-    i++;
-  }
-  return out;
+	let out = "";
+	let inquotes = false;
+	let i = 0;
+	while (i < str.length) {
+		const c = str[i];
+		if (c === '"') {
+			if (inquotes && str[i + 1] === '"') {
+				// Keep one quote, drop the other.
+				out += '"';
+				i += 2;
+				continue;
+			}
+			inquotes = !inquotes;
+			i++;
+			continue;
+		}
+		out += downcase && !inquotes ? c.toLowerCase() : c;
+		i++;
+	}
+	return out;
 };
 
 /**
@@ -149,78 +149,78 @@ const dequoteDowncaseIdentifier = (str: string, downcase: boolean): string => {
  * mode).
  */
 const tryConsumeVarSubstitution = (
-  s: string,
-  i: number,
-  varLookup: ((name: string) => string | undefined) | undefined,
+	s: string,
+	i: number,
+	varLookup: ((name: string) => string | undefined) | undefined,
 ): { end: number; text: string } | null => {
-  if (varLookup === undefined) return null;
-  if (s[i] !== ':') return null;
+	if (varLookup === undefined) return null;
+	if (s[i] !== ":") return null;
 
-  // :{?varname} — defined-variable test, emits literal TRUE / FALSE.
-  // Mirrors upstream `psqlscanslash.l`'s `:\{\?{variable_char}+\}` rule
-  // (calls `psqlscan_test_variable`). A malformed expression (missing
-  // closing `}` or empty name) falls through to `null` so the caller emits
-  // the literal `:` and continues.
-  if (s[i + 1] === '{' && s[i + 2] === '?') {
-    let j = i + 3;
-    while (j < s.length && isVarChar(s[j])) j++;
-    if (j > i + 3 && s[j] === '}') {
-      const name = s.slice(i + 3, j);
-      const value = varLookup(name);
-      return { end: j + 1, text: value !== undefined ? 'TRUE' : 'FALSE' };
-    }
-    return null;
-  }
+	// :{?varname} — defined-variable test, emits literal TRUE / FALSE.
+	// Mirrors upstream `psqlscanslash.l`'s `:\{\?{variable_char}+\}` rule
+	// (calls `psqlscan_test_variable`). A malformed expression (missing
+	// closing `}` or empty name) falls through to `null` so the caller emits
+	// the literal `:` and continues.
+	if (s[i + 1] === "{" && s[i + 2] === "?") {
+		let j = i + 3;
+		while (j < s.length && isVarChar(s[j])) j++;
+		if (j > i + 3 && s[j] === "}") {
+			const name = s.slice(i + 3, j);
+			const value = varLookup(name);
+			return { end: j + 1, text: value !== undefined ? "TRUE" : "FALSE" };
+		}
+		return null;
+	}
 
-  // :"varname" — SQL identifier quote
-  if (s[i + 1] === '"') {
-    let j = i + 2;
-    while (j < s.length && isVarChar(s[j])) j++;
-    if (j > i + 2 && s[j] === '"') {
-      const name = s.slice(i + 2, j);
-      const value = varLookup(name);
-      if (value === undefined) {
-        // Upstream still substitutes — passing an empty string would quietly
-        // misparse downstream. We instead pass through the literal so the
-        // caller can see (and report) the unset reference. This matches the
-        // ECHO fallback used by upstream's plain `:varname` form.
-        return { end: j + 1, text: s.slice(i, j + 1) };
-      }
-      return { end: j + 1, text: quoteSqlIdent(value) };
-    }
-    return null;
-  }
+	// :"varname" — SQL identifier quote
+	if (s[i + 1] === '"') {
+		let j = i + 2;
+		while (j < s.length && isVarChar(s[j])) j++;
+		if (j > i + 2 && s[j] === '"') {
+			const name = s.slice(i + 2, j);
+			const value = varLookup(name);
+			if (value === undefined) {
+				// Upstream still substitutes — passing an empty string would quietly
+				// misparse downstream. We instead pass through the literal so the
+				// caller can see (and report) the unset reference. This matches the
+				// ECHO fallback used by upstream's plain `:varname` form.
+				return { end: j + 1, text: s.slice(i, j + 1) };
+			}
+			return { end: j + 1, text: quoteSqlIdent(value) };
+		}
+		return null;
+	}
 
-  // :'varname' — SQL literal quote
-  if (s[i + 1] === "'") {
-    let j = i + 2;
-    while (j < s.length && isVarChar(s[j])) j++;
-    if (j > i + 2 && s[j] === "'") {
-      const name = s.slice(i + 2, j);
-      const value = varLookup(name);
-      if (value === undefined) {
-        return { end: j + 1, text: s.slice(i, j + 1) };
-      }
-      return { end: j + 1, text: quoteSqlLiteral(value) };
-    }
-    return null;
-  }
+	// :'varname' — SQL literal quote
+	if (s[i + 1] === "'") {
+		let j = i + 2;
+		while (j < s.length && isVarChar(s[j])) j++;
+		if (j > i + 2 && s[j] === "'") {
+			const name = s.slice(i + 2, j);
+			const value = varLookup(name);
+			if (value === undefined) {
+				return { end: j + 1, text: s.slice(i, j + 1) };
+			}
+			return { end: j + 1, text: quoteSqlLiteral(value) };
+		}
+		return null;
+	}
 
-  // :varname — plain substitution
-  if (isVarChar(s[i + 1])) {
-    let j = i + 1;
-    while (j < s.length && isVarChar(s[j])) j++;
-    const name = s.slice(i + 1, j);
-    const value = varLookup(name);
-    if (value === undefined) {
-      // Unset → emit literally so it stays visible. Upstream ECHOes the
-      // entire `:name` text in this case.
-      return { end: j, text: s.slice(i, j) };
-    }
-    return { end: j, text: value };
-  }
+	// :varname — plain substitution
+	if (isVarChar(s[i + 1])) {
+		let j = i + 1;
+		while (j < s.length && isVarChar(s[j])) j++;
+		const name = s.slice(i + 1, j);
+		const value = varLookup(name);
+		if (value === undefined) {
+			// Unset → emit literally so it stays visible. Upstream ECHOes the
+			// entire `:name` text in this case.
+			return { end: j, text: s.slice(i, j) };
+		}
+		return { end: j, text: value };
+	}
 
-  return null;
+	return null;
 };
 
 /**
@@ -231,92 +231,96 @@ const tryConsumeVarSubstitution = (
  * just past the closing quote).
  */
 const consumeSingleQuoted = (
-  s: string,
-  start: number,
+	s: string,
+	start: number,
 ): { end: number; text: string } => {
-  let out = '';
-  let i = start;
-  while (i < s.length) {
-    const c = s[i];
-    if (c === "'") {
-      if (s[i + 1] === "'") {
-        out += "'";
-        i += 2;
-        continue;
-      }
-      return { end: i + 1, text: out };
-    }
-    if (c === '\\' && i + 1 < s.length) {
-      const next = s[i + 1];
-      if (next === 'n') {
-        out += '\n';
-        i += 2;
-        continue;
-      }
-      if (next === 't') {
-        out += '\t';
-        i += 2;
-        continue;
-      }
-      if (next === 'b') {
-        out += '\b';
-        i += 2;
-        continue;
-      }
-      if (next === 'r') {
-        out += '\r';
-        i += 2;
-        continue;
-      }
-      if (next === 'f') {
-        out += '\f';
-        i += 2;
-        continue;
-      }
-      // Octal: \ooo (1–3 digits)
-      if (next >= '0' && next <= '7') {
-        const j = i + 1;
-        let octEnd = j;
-        while (
-          octEnd < s.length &&
-          octEnd - j < 3 &&
-          s[octEnd] >= '0' &&
-          s[octEnd] <= '7'
-        ) {
-          octEnd++;
-        }
-        const code = parseInt(s.slice(j, octEnd), 8);
-        out += String.fromCharCode(code);
-        i = octEnd;
-        continue;
-      }
-      // Hex: \xhh (1–2 digits)
-      if (next === 'x') {
-        const j = i + 2;
-        const hexRe = /[0-9a-fA-F]/;
-        let hexEnd = j;
-        while (hexEnd < s.length && hexEnd - j < 2 && hexRe.test(s[hexEnd])) {
-          hexEnd++;
-        }
-        if (hexEnd > j) {
-          const code = parseInt(s.slice(j, hexEnd), 16);
-          out += String.fromCharCode(code);
-          i = hexEnd;
-          continue;
-        }
-      }
-      // \<other> → literal next char
-      out += next;
-      i += 2;
-      continue;
-    }
-    out += c;
-    i++;
-  }
-  // Unterminated — return what we have. Upstream reports an error; for the
-  // scanner-as-library shape we'd rather surface the partial text and let
-  // the caller decide. Tests cover both well-formed and unterminated cases.
-  return { end: i, text: out };
+	let out = "";
+	let i = start;
+	while (i < s.length) {
+		const c = s[i];
+		if (c === "'") {
+			if (s[i + 1] === "'") {
+				out += "'";
+				i += 2;
+				continue;
+			}
+			return { end: i + 1, text: out };
+		}
+		if (c === "\\" && i + 1 < s.length) {
+			const next = s[i + 1];
+			if (next === "n") {
+				out += "\n";
+				i += 2;
+				continue;
+			}
+			if (next === "t") {
+				out += "\t";
+				i += 2;
+				continue;
+			}
+			if (next === "b") {
+				out += "\b";
+				i += 2;
+				continue;
+			}
+			if (next === "r") {
+				out += "\r";
+				i += 2;
+				continue;
+			}
+			if (next === "f") {
+				out += "\f";
+				i += 2;
+				continue;
+			}
+			// Octal: \ooo (1–3 digits)
+			if (next >= "0" && next <= "7") {
+				const j = i + 1;
+				let octEnd = j;
+				while (
+					octEnd < s.length &&
+					octEnd - j < 3 &&
+					s[octEnd] >= "0" &&
+					s[octEnd] <= "7"
+				) {
+					octEnd++;
+				}
+				const code = parseInt(s.slice(j, octEnd), 8);
+				out += String.fromCharCode(code);
+				i = octEnd;
+				continue;
+			}
+			// Hex: \xhh (1–2 digits)
+			if (next === "x") {
+				const j = i + 2;
+				const hexRe = /[0-9a-fA-F]/;
+				let hexEnd = j;
+				while (
+					hexEnd < s.length &&
+					hexEnd - j < 2 &&
+					hexRe.test(s[hexEnd])
+				) {
+					hexEnd++;
+				}
+				if (hexEnd > j) {
+					const code = parseInt(s.slice(j, hexEnd), 16);
+					out += String.fromCharCode(code);
+					i = hexEnd;
+					continue;
+				}
+			}
+			// \<other> → literal next char
+			out += next;
+			i += 2;
+			continue;
+		}
+		out += c;
+		i++;
+	}
+	// Unterminated — return what we have. Upstream reports an error; for the
+	// scanner-as-library shape we'd rather surface the partial text and let
+	// the caller decide. Tests cover both well-formed and unterminated cases.
+	return { end: i, text: out };
 };
 
 /**
@@ -327,18 +331,18 @@ const consumeSingleQuoted = (
  * what eventually unwraps the quotes for `sql-id` modes.
  */
 const consumeDoubleQuoted = (
-  s: string,
-  start: number,
+	s: string,
+	start: number,
 ): { end: number; text: string } => {
-  let i = start;
-  while (i < s.length) {
-    if (s[i] === '"') {
-      return { end: i + 1, text: s.slice(start - 1, i + 1) };
-    }
-    i++;
-  }
-  // Unterminated — return what we have, including the opening quote.
-  return { end: i, text: s.slice(start - 1, i) };
+	let i = start;
+	while (i < s.length) {
+		if (s[i] === '"') {
+			return { end: i + 1, text: s.slice(start - 1, i + 1) };
+		}
+		i++;
+	}
+	// Unterminated — return what we have, including the opening quote.
+	return { end: i, text: s.slice(start - 1, i) };
 };
 
 /**
@@ -348,20 +352,20 @@ const consumeDoubleQuoted = (
  * patching `child_process`.
  */
 export const BACKTICK_EXECUTOR: {
-  current: (cmd: string) => string;
+	current: (cmd: string) => string;
 } = {
-  current: (cmd: string) =>
-    execSync(cmd, {
-      shell: '/bin/sh',
-      encoding: 'utf8',
-      // Children inherit the parent env but get no stdin pipe — matches
-      // upstream's `popen(cmd, "r")` semantics. stderr passes through so
-      // shell error output is visible to the user.
-      stdio: ['ignore', 'pipe', 'inherit'],
-      // Defensive cap: backtick output goes into a slash arg, so a runaway
-      // command shouldn't be able to fill arbitrary memory.
-      maxBuffer: 1 << 20,
-    }),
+	current: (cmd: string) =>
+		execSync(cmd, {
+			shell: "/bin/sh",
+			encoding: "utf8",
+			// Children inherit the parent env but get no stdin pipe — matches
+			// upstream's `popen(cmd, "r")` semantics. stderr passes through so
+			// shell error output is visible to the user.
+			stdio: ["ignore", "pipe", "inherit"],
+			// Defensive cap: backtick output goes into a slash arg, so a runaway
+			// command shouldn't be able to fill arbitrary memory.
+			maxBuffer: 1 << 20,
+		}),
 };
 
 /**
@@ -376,20 +380,20 @@ export const BACKTICK_EXECUTOR: {
  * {@link BACKTICK_EXECUTOR}.
  */
 const runBacktickCommand = (cmd: string): string => {
-  if (cmd.length === 0) return '';
-  try {
-    const out = BACKTICK_EXECUTOR.current(cmd);
-    // Trim a single trailing newline; preserve interior newlines so multi-line
-    // output (e.g. `\set FOO `cat file``) lands as-is.
-    return out.endsWith('\n') ? out.slice(0, -1) : out;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    // Upstream prints `psql:file:line: error: \!: <cmd>: <msg>`. We don't
-    // have file/line context in the scanner; emit the prefix verbatim and
-    // include the command for diagnosis.
-    process.stderr.write(`psql: error: \\!: ${cmd}: ${msg}\n`);
-    return '';
-  }
+	if (cmd.length === 0) return "";
+	try {
+		const out = BACKTICK_EXECUTOR.current(cmd);
+		// Trim a single trailing newline; preserve interior newlines so multi-line
+		// output (e.g. `\set FOO `cat file``) lands as-is.
+		return out.endsWith("\n") ? out.slice(0, -1) : out;
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : String(err);
+		// Upstream prints `psql:file:line: error: \!: <cmd>: <msg>`. We don't
+		// have file/line context in the scanner; emit the prefix verbatim and
+		// include the command for diagnosis.
+		process.stderr.write(`psql: error: \\!: ${cmd}: ${msg}\n`);
+		return "";
+	}
 };
 
 /**
@@ -406,29 +410,29 @@ const runBacktickCommand = (cmd: string): string => {
  * succeed; tests cover both well-formed and unterminated cases.
  */
 const consumeBackQuoted = (
-  s: string,
-  start: number,
-  varLookup: ((name: string) => string | undefined) | undefined,
+	s: string,
+	start: number,
+	varLookup: ((name: string) => string | undefined) | undefined,
 ): { end: number; text: string } => {
-  let inner = '';
-  let i = start;
-  while (i < s.length) {
-    const c = s[i];
-    if (c === '`') {
-      return { end: i + 1, text: runBacktickCommand(inner) };
-    }
-    const sub = tryConsumeVarSubstitution(s, i, varLookup);
-    if (sub !== null) {
-      inner += sub.text;
-      i = sub.end;
-      continue;
-    }
-    inner += c;
-    i++;
-  }
-  // Unterminated — still run what we accumulated so the user can see the
-  // error from `sh` itself rather than silently dropping the command.
-  return { end: i, text: runBacktickCommand(inner) };
+	let inner = "";
+	let i = start;
+	while (i < s.length) {
+		const c = s[i];
+		if (c === "`") {
+			return { end: i + 1, text: runBacktickCommand(inner) };
+		}
+		const sub = tryConsumeVarSubstitution(s, i, varLookup);
+		if (sub !== null) {
+			inner += sub.text;
+			i = sub.end;
+			continue;
+		}
+		inner += c;
+		i++;
+	}
+	// Unterminated — still run what we accumulated so the user can see the
+	// error from `sh` itself rather than silently dropping the command.
+	return { end: i, text: runBacktickCommand(inner) };
 };
 
 /**
@@ -437,65 +441,65 @@ const consumeBackQuoted = (
  * available before end of input.
  */
 const scanOneArg = (
-  s: string,
-  i: number,
-  mode: SlashArgMode,
-  varLookup: ((name: string) => string | undefined) | undefined,
+	s: string,
+	i: number,
+	mode: SlashArgMode,
+	varLookup: ((name: string) => string | undefined) | undefined,
 ): { end: number; arg: string } | null => {
-  // Skip leading whitespace (xslashargstart).
-  while (i < s.length && isWhitespace(s[i])) i++;
-  if (i >= s.length) return null;
+	// Skip leading whitespace (xslashargstart).
+	while (i < s.length && isWhitespace(s[i])) i++;
+	if (i >= s.length) return null;
 
-  // filepipe special: a leading `|` flips into whole-line mode for this arg.
-  if (mode === 'filepipe' && s[i] === '|') {
-    const rest = s.slice(i);
-    return { end: s.length, arg: rest };
-  }
+	// filepipe special: a leading `|` flips into whole-line mode for this arg.
+	if (mode === "filepipe" && s[i] === "|") {
+		const rest = s.slice(i);
+		return { end: s.length, arg: rest };
+	}
 
-  // Accumulate the argument piece by piece. Each iteration consumes either:
-  //  - a single-quoted run
-  //  - a double-quoted run
-  //  - a backticked run
-  //  - a :var / :'var' / :"var" substitution
-  //  - a literal character (the catch-all)
-  // We stop on whitespace or `\` (which begins the next slash command).
-  let out = '';
-  while (i < s.length) {
-    const c = s[i];
-    if (isWhitespace(c)) break;
-    if (c === '\\') break;
+	// Accumulate the argument piece by piece. Each iteration consumes either:
+	//  - a single-quoted run
+	//  - a double-quoted run
+	//  - a backticked run
+	//  - a :var / :'var' / :"var" substitution
+	//  - a literal character (the catch-all)
+	// We stop on whitespace or `\` (which begins the next slash command).
+	let out = "";
+	while (i < s.length) {
+		const c = s[i];
+		if (isWhitespace(c)) break;
+		if (c === "\\") break;
 
-    if (c === "'") {
-      const r = consumeSingleQuoted(s, i + 1);
-      out += r.text;
-      i = r.end;
-      continue;
-    }
-    if (c === '"') {
-      const r = consumeDoubleQuoted(s, i + 1);
-      out += r.text;
-      i = r.end;
-      continue;
-    }
-    if (c === '`') {
-      const r = consumeBackQuoted(s, i + 1, varLookup);
-      out += r.text;
-      i = r.end;
-      continue;
-    }
+		if (c === "'") {
+			const r = consumeSingleQuoted(s, i + 1);
+			out += r.text;
+			i = r.end;
+			continue;
+		}
+		if (c === '"') {
+			const r = consumeDoubleQuoted(s, i + 1);
+			out += r.text;
+			i = r.end;
+			continue;
+		}
+		if (c === "`") {
+			const r = consumeBackQuoted(s, i + 1, varLookup);
+			out += r.text;
+			i = r.end;
+			continue;
+		}
 
-    const sub = tryConsumeVarSubstitution(s, i, varLookup);
-    if (sub !== null) {
-      out += sub.text;
-      i = sub.end;
-      continue;
-    }
+		const sub = tryConsumeVarSubstitution(s, i, varLookup);
+		if (sub !== null) {
+			out += sub.text;
+			i = sub.end;
+			continue;
+		}
 
-    out += c;
-    i++;
-  }
+		out += c;
+		i++;
+	}
 
-  return { end: i, arg: out };
+	return { end: i, arg: out };
 };
 
 /**
@@ -511,44 +515,44 @@ const scanOneArg = (
  * @returns array of parsed argument strings; empty input yields `[]`.
  */
 export const scanSlashArgs = (
-  input: string,
-  mode: SlashArgMode,
-  varLookup?: (name: string) => string | undefined,
+	input: string,
+	mode: SlashArgMode,
+	varLookup?: (name: string) => string | undefined,
 ): string[] => {
-  // Whole-line: return everything, with leading whitespace suppressed and a
-  // single trailing newline (if any) preserved verbatim. Empty (or
-  // whitespace-only) input yields no args.
-  if (mode === 'whole-line') {
-    let start = 0;
-    while (start < input.length && isWhitespace(input[start])) start++;
-    if (start >= input.length) return [];
-    return [input.slice(start)];
-  }
+	// Whole-line: return everything, with leading whitespace suppressed and a
+	// single trailing newline (if any) preserved verbatim. Empty (or
+	// whitespace-only) input yields no args.
+	if (mode === "whole-line") {
+		let start = 0;
+		while (start < input.length && isWhitespace(input[start])) start++;
+		if (start >= input.length) return [];
+		return [input.slice(start)];
+	}
 
-  const effectiveLookup = mode === 'no-vars' ? undefined : varLookup;
-  const args: string[] = [];
-  let i = 0;
-  while (i < input.length) {
-    const result = scanOneArg(input, i, mode, effectiveLookup);
-    if (result === null) break;
-    let arg = result.arg;
+	const effectiveLookup = mode === "no-vars" ? undefined : varLookup;
+	const args: string[] = [];
+	let i = 0;
+	while (i < input.length) {
+		const result = scanOneArg(input, i, mode, effectiveLookup);
+		if (result === null) break;
+		let arg = result.arg;
 
-    // sql-id / sql-id-keep-case post-process: collapse SQL-identifier
-    // quoting, optionally downcasing unquoted letters.
-    if (mode === 'sql-id') {
-      arg = dequoteDowncaseIdentifier(arg, true);
-    } else if (mode === 'sql-id-keep-case') {
-      arg = dequoteDowncaseIdentifier(arg, false);
-    }
+		// sql-id / sql-id-keep-case post-process: collapse SQL-identifier
+		// quoting, optionally downcasing unquoted letters.
+		if (mode === "sql-id") {
+			arg = dequoteDowncaseIdentifier(arg, true);
+		} else if (mode === "sql-id-keep-case") {
+			arg = dequoteDowncaseIdentifier(arg, false);
+		}
 
-    args.push(arg);
-    i = result.end;
-    // Consume the inter-arg whitespace so the next iteration starts cleanly.
-    while (i < input.length && isWhitespace(input[i])) i++;
-    // Stop on a `\` — start of the next backslash command.
-    if (input[i] === '\\') break;
-  }
-  return args;
+		args.push(arg);
+		i = result.end;
+		// Consume the inter-arg whitespace so the next iteration starts cleanly.
+		while (i < input.length && isWhitespace(input[i])) i++;
+		// Stop on a `\` — start of the next backslash command.
+		if (input[i] === "\\") break;
+	}
+	return args;
 };
 
 // Re-export `dequote` for callers that want to undo `quoteIfNeeded` on

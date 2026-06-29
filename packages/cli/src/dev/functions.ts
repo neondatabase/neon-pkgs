@@ -1,11 +1,11 @@
-import { dirname, isAbsolute, resolve } from 'node:path';
-import { existsSync } from 'node:fs';
+import { existsSync } from "node:fs";
+import { dirname, isAbsolute, resolve } from "node:path";
 import {
-  loadConfigFromFile,
-  resolveConfig,
-  type Config,
-  type FunctionDevConfig,
-} from '@neon/config';
+	type Config,
+	type FunctionDevConfig,
+	loadConfigFromFile,
+	resolveConfig,
+} from "@neon/config";
 
 /**
  * A function from `neon.ts`, resolved into everything `neon dev` needs to serve it
@@ -14,11 +14,11 @@ import {
  * `env` is the function's own `neon.ts` env, layered over the shared branch env per child.
  */
 export type PlannedFunction = {
-  slug: string;
-  name: string;
-  source: string;
-  port?: number;
-  env: Record<string, string>;
+	slug: string;
+	name: string;
+	source: string;
+	port?: number;
+	env: Record<string, string>;
 };
 
 /**
@@ -27,9 +27,9 @@ export type PlannedFunction = {
  * it declares.
  */
 export type ResolvedConfigFunctions = {
-  /** Absolute path to the loaded `neon.ts` (or `.mts`/`.js`/`.mjs`). */
-  configPath: string;
-  functions: PlannedFunction[];
+	/** Absolute path to the loaded `neon.ts` (or `.mts`/`.js`/`.mjs`). */
+	configPath: string;
+	functions: PlannedFunction[];
 };
 
 /**
@@ -42,41 +42,41 @@ export type ResolvedConfigFunctions = {
  * function list is otherwise branch-independent, so a placeholder is fine when unknown.
  */
 export const resolveFunctionsFromConfig = async (
-  cwd: string,
-  branchName?: string,
+	cwd: string,
+	branchName?: string,
 ): Promise<ResolvedConfigFunctions | null> => {
-  const loaded = await loadNeonConfig(cwd);
-  if (!loaded) return null;
+	const loaded = await loadNeonConfig(cwd);
+	if (!loaded) return null;
 
-  const { config, configDir, configPath } = loaded;
-  const resolved = resolveConfig(config, {
-    name: branchName ?? 'local',
-    exists: branchName !== undefined,
-  });
+	const { config, configDir, configPath } = loaded;
+	const resolved = resolveConfig(config, {
+		name: branchName ?? "local",
+		exists: branchName !== undefined,
+	});
 
-  const functions = resolved.preview?.functions ?? [];
-  const planned = functions.map((fn) => {
-    const source = isAbsolute(fn.source)
-      ? fn.source
-      : resolve(configDir, fn.source);
-    if (!existsSync(source)) {
-      throw new Error(
-        `Function "${fn.slug}" points at a source that does not exist: ${source} ` +
-          `(from neon.ts "${fn.source}"). Fix the source path and re-run.`,
-      );
-    }
-    return {
-      slug: fn.slug,
-      name: fn.name,
-      source,
-      ...(devPort(fn.dev) !== undefined
-        ? { port: devPort(fn.dev) as number }
-        : {}),
-      env: { ...fn.env },
-    };
-  });
+	const functions = resolved.preview?.functions ?? [];
+	const planned = functions.map((fn) => {
+		const source = isAbsolute(fn.source)
+			? fn.source
+			: resolve(configDir, fn.source);
+		if (!existsSync(source)) {
+			throw new Error(
+				`Function "${fn.slug}" points at a source that does not exist: ${source} ` +
+					`(from neon.ts "${fn.source}"). Fix the source path and re-run.`,
+			);
+		}
+		return {
+			slug: fn.slug,
+			name: fn.name,
+			source,
+			...(devPort(fn.dev) !== undefined
+				? { port: devPort(fn.dev) as number }
+				: {}),
+			env: { ...fn.env },
+		};
+	});
 
-  return { configPath, functions: planned };
+	return { configPath, functions: planned };
 };
 
 /**
@@ -84,7 +84,7 @@ export const resolveFunctionsFromConfig = async (
  * (the supervisor then searches for a free port).
  */
 const devPort = (dev: FunctionDevConfig | undefined): number | undefined =>
-  dev?.port;
+	dev?.port;
 
 type LoadedConfig = { config: Config; configDir: string; configPath: string };
 
@@ -95,18 +95,18 @@ type LoadedConfig = { config: Config; configDir: string; configPath: string };
  * found; surfaces real load errors (e.g. a syntax error).
  */
 const loadNeonConfig = async (cwd: string): Promise<LoadedConfig | null> => {
-  try {
-    const { config, resolvedPath } = await loadConfigFromFile({ cwd });
-    return {
-      config,
-      configDir: dirname(resolvedPath),
-      configPath: resolvedPath,
-    };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    if (/Could not find a Neon config file/i.test(message)) {
-      return null;
-    }
-    throw err;
-  }
+	try {
+		const { config, resolvedPath } = await loadConfigFromFile({ cwd });
+		return {
+			config,
+			configDir: dirname(resolvedPath),
+			configPath: resolvedPath,
+		};
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		if (/Could not find a Neon config file/i.test(message)) {
+			return null;
+		}
+		throw err;
+	}
 };

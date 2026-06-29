@@ -1,33 +1,33 @@
 export type ErrorCode =
-  | 'REQUEST_TIMEOUT'
-  | 'NETWORK_ERROR'
-  | 'AUTH_FAILED'
-  | 'AUTH_BROWSER_FAILED'
-  | 'API_ERROR'
-  | 'UNKNOWN_COMMAND'
-  | 'MISSING_ARGUMENT'
-  | 'CREDENTIALS_DELETE_FAILED'
-  | 'NPX_NOT_FOUND'
-  | 'NEON_INIT_FAILED'
-  | 'UNKNOWN_ERROR';
+	| "REQUEST_TIMEOUT"
+	| "NETWORK_ERROR"
+	| "AUTH_FAILED"
+	| "AUTH_BROWSER_FAILED"
+	| "API_ERROR"
+	| "UNKNOWN_COMMAND"
+	| "MISSING_ARGUMENT"
+	| "CREDENTIALS_DELETE_FAILED"
+	| "NPX_NOT_FOUND"
+	| "NEON_INIT_FAILED"
+	| "UNKNOWN_ERROR";
 
 const ERROR_MATCHERS = [
-  [/^Unknown command: (.*)$/, 'UNKNOWN_COMMAND'],
-  [/^Missing required argument: (.*)$/, 'MISSING_ARGUMENT'],
-  [/^Failed to open web browser. (.*)$/, 'AUTH_BROWSER_FAILED'],
+	[/^Unknown command: (.*)$/, "UNKNOWN_COMMAND"],
+	[/^Missing required argument: (.*)$/, "MISSING_ARGUMENT"],
+	[/^Failed to open web browser. (.*)$/, "AUTH_BROWSER_FAILED"],
 ] as const;
 
 export const matchErrorCode = (message?: string): ErrorCode => {
-  if (!message) {
-    return 'UNKNOWN_ERROR';
-  }
-  for (const [matcher, code] of ERROR_MATCHERS) {
-    const match = message.match(matcher);
-    if (match) {
-      return code;
-    }
-  }
-  return 'UNKNOWN_ERROR';
+	if (!message) {
+		return "UNKNOWN_ERROR";
+	}
+	for (const [matcher, code] of ERROR_MATCHERS) {
+		const match = message.match(matcher);
+		if (match) {
+			return code;
+		}
+	}
+	return "UNKNOWN_ERROR";
 };
 
 /**
@@ -37,8 +37,8 @@ export const matchErrorCode = (message?: string): ErrorCode => {
  * {@link isNetworkError}), pointing at the two things the user can actually check.
  */
 export const NETWORK_ERROR_MESSAGE =
-  'Could not reach the Neon API. Please check your internet connection and try again. ' +
-  'If your connection is fine and this keeps happening, check https://neonstatus.com for ongoing incidents.';
+	"Could not reach the Neon API. Please check your internet connection and try again. " +
+	"If your connection is fine and this keeps happening, check https://neonstatus.com for ongoing incidents.";
 
 /**
  * Node-level socket/DNS error codes that mean the request never reached the server — a
@@ -46,16 +46,16 @@ export const NETWORK_ERROR_MESSAGE =
  * excludes `ECONNABORTED` (axios' timeout), which the CLI already reports as a timeout.
  */
 const NETWORK_ERROR_CODES = new Set([
-  'ECONNREFUSED',
-  'ECONNRESET',
-  'ETIMEDOUT',
-  'ENOTFOUND',
-  'EAI_AGAIN',
-  'EPIPE',
-  'EHOSTUNREACH',
-  'ENETUNREACH',
-  'EHOSTDOWN',
-  'ENETDOWN',
+	"ECONNREFUSED",
+	"ECONNRESET",
+	"ETIMEDOUT",
+	"ENOTFOUND",
+	"EAI_AGAIN",
+	"EPIPE",
+	"EHOSTUNREACH",
+	"ENETUNREACH",
+	"EHOSTDOWN",
+	"ENETDOWN",
 ]);
 
 /**
@@ -65,12 +65,12 @@ const NETWORK_ERROR_CODES = new Set([
  * axios `api-client` path throws an `AxiosError` whose message is "Network Error".
  */
 const NETWORK_ERROR_MESSAGE_PATTERN =
-  /fetch failed|failed to fetch|network error/i;
+	/fetch failed|failed to fetch|network error/i;
 
 const readErrorCode = (value: unknown): string | undefined => {
-  if (value === null || typeof value !== 'object') return undefined;
-  const code = (value as { code?: unknown }).code;
-  return typeof code === 'string' ? code : undefined;
+	if (value === null || typeof value !== "object") return undefined;
+	const code = (value as { code?: unknown }).code;
+	return typeof code === "string" ? code : undefined;
 };
 
 /**
@@ -84,23 +84,23 @@ const readErrorCode = (value: unknown): string | undefined => {
  * response was ever received, so it never masks a real 4xx/5xx the user needs to see.
  */
 export const isNetworkError = (err: unknown): boolean => {
-  let current: unknown = err;
-  for (
-    let depth = 0;
-    depth < 6 && current !== null && current !== undefined;
-    depth++
-  ) {
-    const code = readErrorCode(current);
-    if (code !== undefined && NETWORK_ERROR_CODES.has(code)) {
-      return true;
-    }
-    if (
-      current instanceof Error &&
-      NETWORK_ERROR_MESSAGE_PATTERN.test(current.message)
-    ) {
-      return true;
-    }
-    current = (current as { cause?: unknown }).cause;
-  }
-  return false;
+	let current: unknown = err;
+	for (
+		let depth = 0;
+		depth < 6 && current !== null && current !== undefined;
+		depth++
+	) {
+		const code = readErrorCode(current);
+		if (code !== undefined && NETWORK_ERROR_CODES.has(code)) {
+			return true;
+		}
+		if (
+			current instanceof Error &&
+			NETWORK_ERROR_MESSAGE_PATTERN.test(current.message)
+		) {
+			return true;
+		}
+		current = (current as { cause?: unknown }).cause;
+	}
+	return false;
 };

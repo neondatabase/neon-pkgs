@@ -28,8 +28,8 @@
  * {@link setStartupVars}.
  */
 
-import type { Connection } from '../types/connection.js';
-import type { VarStore } from '../types/variables.js';
+import type { Connection } from "../types/connection.js";
+import type { VarStore } from "../types/variables.js";
 
 /**
  * The connection-target accessors `PgConnection` exposes but the frozen
@@ -39,19 +39,19 @@ import type { VarStore } from '../types/variables.js';
  * for the `password` getter — rather than widening the shared interface.
  */
 type ConnTarget = {
-  database?: unknown;
-  user?: unknown;
-  host?: unknown;
-  port?: unknown;
+	database?: unknown;
+	user?: unknown;
+	host?: unknown;
+	port?: unknown;
 };
 
 const asString = (value: unknown): string | undefined =>
-  typeof value === 'string' ? value : undefined;
+	typeof value === "string" ? value : undefined;
 
 const asPort = (value: unknown): string | undefined =>
-  typeof value === 'number' && Number.isFinite(value)
-    ? String(value)
-    : undefined;
+	typeof value === "number" && Number.isFinite(value)
+		? String(value)
+		: undefined;
 
 /**
  * Refresh the connection variables (`DBNAME`, `USER`, `HOST`, `PORT`,
@@ -63,36 +63,36 @@ const asPort = (value: unknown): string | undefined =>
  * leaves any user-set value untouched if the connection cannot report one.
  */
 export const syncConnectionVars = (vars: VarStore, conn: Connection): void => {
-  const target = conn as unknown as ConnTarget;
+	const target = conn as unknown as ConnTarget;
 
-  const database = asString(target.database);
-  if (database !== undefined) vars.set('DBNAME', database);
+	const database = asString(target.database);
+	if (database !== undefined) vars.set("DBNAME", database);
 
-  const user = asString(target.user);
-  if (user !== undefined) vars.set('USER', user);
+	const user = asString(target.user);
+	if (user !== undefined) vars.set("USER", user);
 
-  const host = asString(target.host);
-  if (host !== undefined) vars.set('HOST', host);
+	const host = asString(target.host);
+	if (host !== undefined) vars.set("HOST", host);
 
-  const port = asPort(target.port);
-  if (port !== undefined) vars.set('PORT', port);
+	const port = asPort(target.port);
+	if (port !== undefined) vars.set("PORT", port);
 
-  // ENCODING tracks the server's `client_encoding` ParameterStatus. The
-  // mainloop refreshes it after each `SET client_encoding`; seed it here so
-  // it is populated from the very first prompt (and re-seeded after `\c`).
-  const encoding = conn.parameterStatus('client_encoding');
-  if (encoding !== undefined) vars.set('ENCODING', encoding);
+	// ENCODING tracks the server's `client_encoding` ParameterStatus. The
+	// mainloop refreshes it after each `SET client_encoding`; seed it here so
+	// it is populated from the very first prompt (and re-seeded after `\c`).
+	const encoding = conn.parameterStatus("client_encoding");
+	if (encoding !== undefined) vars.set("ENCODING", encoding);
 
-  const serverVersionName = conn.parameterStatus('server_version');
-  if (serverVersionName !== undefined) {
-    vars.set('SERVER_VERSION_NAME', serverVersionName);
-  }
+	const serverVersionName = conn.parameterStatus("server_version");
+	if (serverVersionName !== undefined) {
+		vars.set("SERVER_VERSION_NAME", serverVersionName);
+	}
 
-  // `Connection.serverVersion` is the libpq-style integer (e.g. 180004 for
-  // 18.4); 0 means "not yet reported" — skip it so we don't write a bogus 0.
-  if (conn.serverVersion > 0) {
-    vars.set('SERVER_VERSION_NUM', String(conn.serverVersion));
-  }
+	// `Connection.serverVersion` is the libpq-style integer (e.g. 180004 for
+	// 18.4); 0 means "not yet reported" — skip it so we don't write a bogus 0.
+	if (conn.serverVersion > 0) {
+		vars.set("SERVER_VERSION_NUM", String(conn.serverVersion));
+	}
 };
 
 /**
@@ -119,9 +119,9 @@ export const syncConnectionVars = (vars: VarStore, conn: Connection): void => {
  *     numeric `:VERSION_NUM` comparison gets a monotonic integer.
  */
 export const setStartupVars = (vars: VarStore, clientVersion: string): void => {
-  vars.set('VERSION', `psql-ts (neonctl) ${clientVersion}`);
-  vars.set('VERSION_NAME', clientVersion);
-  vars.set('VERSION_NUM', String(clientVersionNum(clientVersion)));
+	vars.set("VERSION", `psql-ts (neonctl) ${clientVersion}`);
+	vars.set("VERSION_NAME", clientVersion);
+	vars.set("VERSION_NUM", String(clientVersionNum(clientVersion)));
 };
 
 /**
@@ -132,10 +132,10 @@ export const setStartupVars = (vars: VarStore, clientVersion: string): void => {
  * needs to be a monotonic integer for `:VERSION_NUM` comparisons.
  */
 export const clientVersionNum = (version: string): number => {
-  const m = /^(\d+)(?:\.(\d+))?(?:\.(\d+))?/.exec(version.trim());
-  if (!m) return 0;
-  const major = parseInt(m[1], 10);
-  const minor = m[2] !== undefined ? parseInt(m[2], 10) : 0;
-  const patch = m[3] !== undefined ? parseInt(m[3], 10) : 0;
-  return major * 10000 + minor * 100 + patch;
+	const m = /^(\d+)(?:\.(\d+))?(?:\.(\d+))?/.exec(version.trim());
+	if (!m) return 0;
+	const major = parseInt(m[1], 10);
+	const minor = m[2] !== undefined ? parseInt(m[2], 10) : 0;
+	const patch = m[3] !== undefined ? parseInt(m[3], 10) : 0;
+	return major * 10000 + minor * 100 + patch;
 };

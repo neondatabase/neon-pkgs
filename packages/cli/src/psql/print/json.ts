@@ -1,5 +1,5 @@
-import type { ResultSet } from '../types/connection.js';
-import type { PrintQueryOpts, Printer } from '../types/printer.js';
+import type { ResultSet } from "../types/connection.js";
+import type { Printer, PrintQueryOpts } from "../types/printer.js";
 
 /**
  * JSON printer (used by `\gset`, `\gdesc`, and `--json` callers later
@@ -26,67 +26,67 @@ import type { PrintQueryOpts, Printer } from '../types/printer.js';
 // PostgreSQL type OIDs for the numeric family that map cleanly to
 // JSON numbers. NUMERIC is included but guarded by isFinite().
 const NUMERIC_TYPE_OIDS: ReadonlySet<number> = new Set([
-  21, // INT2
-  23, // INT4
-  20, // INT8
-  700, // FLOAT4
-  701, // FLOAT8
-  1700, // NUMERIC
+	21, // INT2
+	23, // INT4
+	20, // INT8
+	700, // FLOAT4
+	701, // FLOAT8
+	1700, // NUMERIC
 ]);
 
 export const jsonPrinter: Printer = {
-  format: 'json',
-  printQuery(
-    rs: ResultSet,
-    opts: PrintQueryOpts,
-    out: NodeJS.WritableStream,
-  ): Promise<void> {
-    const pretty = opts.topt.expanded === 'on';
+	format: "json",
+	printQuery(
+		rs: ResultSet,
+		opts: PrintQueryOpts,
+		out: NodeJS.WritableStream,
+	): Promise<void> {
+		const pretty = opts.topt.expanded === "on";
 
-    const objects: Record<string, unknown>[] = rs.rows.map((row) => {
-      const obj: Record<string, unknown> = {};
-      rs.fields.forEach((field, idx) => {
-        obj[field.name] = renderCell(row[idx], field.dataTypeID);
-      });
-      return obj;
-    });
+		const objects: Record<string, unknown>[] = rs.rows.map((row) => {
+			const obj: Record<string, unknown> = {};
+			rs.fields.forEach((field, idx) => {
+				obj[field.name] = renderCell(row[idx], field.dataTypeID);
+			});
+			return obj;
+		});
 
-    const serialized = pretty
-      ? JSON.stringify(objects, null, 2)
-      : JSON.stringify(objects);
+		const serialized = pretty
+			? JSON.stringify(objects, null, 2)
+			: JSON.stringify(objects);
 
-    out.write(serialized + '\n');
-    return Promise.resolve();
-  },
+		out.write(serialized + "\n");
+		return Promise.resolve();
+	},
 };
 
 const renderCell = (cell: unknown, dataTypeID: number): unknown => {
-  if (cell === null || cell === undefined) return null;
-  if (typeof cell === 'number') {
-    return Number.isFinite(cell) ? cell : cell.toString();
-  }
-  if (typeof cell === 'bigint') {
-    // Preserve as string when outside safe integer range.
-    const asNum = Number(cell);
-    return BigInt(asNum) === cell ? asNum : cell.toString();
-  }
-  if (typeof cell === 'boolean') return cell;
-  if (cell instanceof Date) return cell.toISOString();
-  if (cell instanceof Uint8Array) {
-    let hex = '\\x';
-    for (const b of cell) hex += b.toString(16).padStart(2, '0');
-    return hex;
-  }
-  if (typeof cell === 'string') {
-    if (NUMERIC_TYPE_OIDS.has(dataTypeID)) {
-      const parsed = Number(cell);
-      if (Number.isFinite(parsed) && String(parsed) === normalize(cell)) {
-        return parsed;
-      }
-    }
-    return cell;
-  }
-  return cell;
+	if (cell === null || cell === undefined) return null;
+	if (typeof cell === "number") {
+		return Number.isFinite(cell) ? cell : cell.toString();
+	}
+	if (typeof cell === "bigint") {
+		// Preserve as string when outside safe integer range.
+		const asNum = Number(cell);
+		return BigInt(asNum) === cell ? asNum : cell.toString();
+	}
+	if (typeof cell === "boolean") return cell;
+	if (cell instanceof Date) return cell.toISOString();
+	if (cell instanceof Uint8Array) {
+		let hex = "\\x";
+		for (const b of cell) hex += b.toString(16).padStart(2, "0");
+		return hex;
+	}
+	if (typeof cell === "string") {
+		if (NUMERIC_TYPE_OIDS.has(dataTypeID)) {
+			const parsed = Number(cell);
+			if (Number.isFinite(parsed) && String(parsed) === normalize(cell)) {
+				return parsed;
+			}
+		}
+		return cell;
+	}
+	return cell;
 };
 
 /**
@@ -96,10 +96,10 @@ const renderCell = (cell: unknown, dataTypeID: number): unknown => {
  * leading zero before a multi-digit integer.
  */
 const normalize = (s: string): string => {
-  let v = s;
-  if (v.startsWith('+')) v = v.slice(1);
-  if (v.includes('.')) {
-    v = v.replace(/0+$/, '').replace(/\.$/, '');
-  }
-  return v;
+	let v = s;
+	if (v.startsWith("+")) v = v.slice(1);
+	if (v.includes(".")) {
+		v = v.replace(/0+$/, "").replace(/\.$/, "");
+	}
+	return v;
 };

@@ -31,63 +31,61 @@
  * naturally fall through to the scanner's existing behaviour.
  */
 
+import { scanSlashArgs } from "../scanner/slash.js";
 import type {
-  BackslashCmdSpec,
-  BackslashContext,
-  BackslashRegistry,
-  BackslashResult,
-} from '../types/backslash.js';
-import type { PsqlSettings } from '../types/settings.js';
-import type { SlashArgMode } from '../types/scanner.js';
-
-import { scanSlashArgs } from '../scanner/slash.js';
-
+	BackslashCmdSpec,
+	BackslashContext,
+	BackslashRegistry,
+	BackslashResult,
+} from "../types/backslash.js";
+import type { SlashArgMode } from "../types/scanner.js";
+import type { PsqlSettings } from "../types/settings.js";
+import { registerConnectCommands } from "./cmd_connect.js";
+import { registerCopyCommands } from "./cmd_copy.js";
+import { registerDescribeCommands } from "./cmd_describe.js";
 import {
-  cmdCd,
-  cmdCopyright,
-  cmdEcho,
-  cmdEdit,
-  cmdErrverbose,
-  cmdGetenv,
-  cmdHelpSQL,
-  cmdPrompt,
-  cmdQecho,
-  cmdQuit,
-  cmdReset,
-  cmdS,
-  cmdSet,
-  cmdSetenv,
-  cmdShell,
-  cmdSlashHelp,
-  cmdTiming,
-  cmdUnset,
-  cmdWarn,
-} from './cmd_meta.js';
+	cmdA,
+	cmdC,
+	cmdEncoding,
+	cmdF,
+	cmdH,
+	cmdPset,
+	cmdT,
+	cmdTitleAttr,
+	cmdX,
+} from "./cmd_format.js";
+import { registerIoCommands } from "./cmd_io.js";
+import { registerLargeObjectCommands } from "./cmd_lo.js";
 import {
-  cmdA,
-  cmdC,
-  cmdEncoding,
-  cmdF,
-  cmdH,
-  cmdPset,
-  cmdT,
-  cmdTitleAttr,
-  cmdX,
-} from './cmd_format.js';
-import { registerIoCommands } from './cmd_io.js';
-import { registerConnectCommands } from './cmd_connect.js';
-import { registerCopyCommands } from './cmd_copy.js';
-import { registerDescribeCommands } from './cmd_describe.js';
-import { registerPipelineCommands } from './cmd_pipeline.js';
-import { registerMiscCommands } from './cmd_misc.js';
-import { registerLargeObjectCommands } from './cmd_lo.js';
-import { registerShowCommands } from './cmd_show.js';
+	cmdCd,
+	cmdCopyright,
+	cmdEcho,
+	cmdEdit,
+	cmdErrverbose,
+	cmdGetenv,
+	cmdHelpSQL,
+	cmdPrompt,
+	cmdQecho,
+	cmdQuit,
+	cmdReset,
+	cmdS,
+	cmdSet,
+	cmdSetenv,
+	cmdShell,
+	cmdSlashHelp,
+	cmdTiming,
+	cmdUnset,
+	cmdWarn,
+} from "./cmd_meta.js";
+import { registerMiscCommands } from "./cmd_misc.js";
+import { registerPipelineCommands } from "./cmd_pipeline.js";
 import {
-  isCommandRestricted,
-  registerRestrictCommands,
-  wrapRestrictedCommands,
-} from './cmd_restrict.js';
-import { writeErr } from './shared.js';
+	isCommandRestricted,
+	registerRestrictCommands,
+	wrapRestrictedCommands,
+} from "./cmd_restrict.js";
+import { registerShowCommands } from "./cmd_show.js";
+import { writeErr } from "./shared.js";
 
 /**
  * Concrete `BackslashRegistry`: a primary-name → spec map plus a parallel
@@ -98,29 +96,29 @@ import { writeErr } from './shared.js';
  * downstream WPs a clean way to override a default if they need to.
  */
 class Registry implements BackslashRegistry {
-  private readonly specs = new Map<string, BackslashCmdSpec>();
-  private readonly aliases = new Map<string, string>();
+	private readonly specs = new Map<string, BackslashCmdSpec>();
+	private readonly aliases = new Map<string, string>();
 
-  register(spec: BackslashCmdSpec): void {
-    this.specs.set(spec.name, spec);
-    if (spec.aliases) {
-      for (const alias of spec.aliases) {
-        this.aliases.set(alias, spec.name);
-      }
-    }
-  }
+	register(spec: BackslashCmdSpec): void {
+		this.specs.set(spec.name, spec);
+		if (spec.aliases) {
+			for (const alias of spec.aliases) {
+				this.aliases.set(alias, spec.name);
+			}
+		}
+	}
 
-  lookup(name: string): BackslashCmdSpec | undefined {
-    const direct = this.specs.get(name);
-    if (direct) return direct;
-    const aliased = this.aliases.get(name);
-    if (aliased) return this.specs.get(aliased);
-    return undefined;
-  }
+	lookup(name: string): BackslashCmdSpec | undefined {
+		const direct = this.specs.get(name);
+		if (direct) return direct;
+		const aliased = this.aliases.get(name);
+		if (aliased) return this.specs.get(aliased);
+		return undefined;
+	}
 
-  all(): IterableIterator<BackslashCmdSpec> {
-    return this.specs.values();
-  }
+	all(): IterableIterator<BackslashCmdSpec> {
+		return this.specs.values();
+	}
 }
 
 /** Construct a fresh, empty registry. */
@@ -147,66 +145,66 @@ export const createBackslashRegistry = (): BackslashRegistry => new Registry();
  * so the cursor is never observed to lag in the calls we ship.
  */
 export const makeContext = (opts: {
-  settings: PsqlSettings;
-  cmdName: string;
-  rawArgs: string;
-  queryBuf: string;
+	settings: PsqlSettings;
+	cmdName: string;
+	rawArgs: string;
+	queryBuf: string;
 }): BackslashContext => {
-  let cursor = 0;
-  const rawArgs = opts.rawArgs;
-  const varLookup = (name: string): string | undefined =>
-    opts.settings.vars.get(name);
+	let cursor = 0;
+	const rawArgs = opts.rawArgs;
+	const varLookup = (name: string): string | undefined =>
+		opts.settings.vars.get(name);
 
-  const nextArg = (mode: SlashArgMode = 'normal'): string | null => {
-    // Find the next non-whitespace byte from the cursor; we use it both to
-    // know whether anything remains and as the basis for span tracking.
-    let i = cursor;
-    while (i < rawArgs.length && /[\s]/.test(rawArgs[i])) i++;
-    if (i >= rawArgs.length) return null;
+	const nextArg = (mode: SlashArgMode = "normal"): string | null => {
+		// Find the next non-whitespace byte from the cursor; we use it both to
+		// know whether anything remains and as the basis for span tracking.
+		let i = cursor;
+		while (i < rawArgs.length && /[\s]/.test(rawArgs[i])) i++;
+		if (i >= rawArgs.length) return null;
 
-    if (mode === 'whole-line') {
-      const tail = rawArgs.slice(i);
-      cursor = rawArgs.length;
-      return tail;
-    }
+		if (mode === "whole-line") {
+			const tail = rawArgs.slice(i);
+			cursor = rawArgs.length;
+			return tail;
+		}
 
-    // Scan just the tail and pick the first arg. The scanner consumes one
-    // arg's worth of input; we need to advance `cursor` past it so the next
-    // call sees the remaining tail. We do that by rescanning the tail again
-    // with a one-token cap and comparing lengths.
-    const tail = rawArgs.slice(i);
-    const args = scanSlashArgs(tail, mode, varLookup);
-    if (args.length === 0) {
-      cursor = rawArgs.length;
-      return null;
-    }
-    const first = args[0];
+		// Scan just the tail and pick the first arg. The scanner consumes one
+		// arg's worth of input; we need to advance `cursor` past it so the next
+		// call sees the remaining tail. We do that by rescanning the tail again
+		// with a one-token cap and comparing lengths.
+		const tail = rawArgs.slice(i);
+		const args = scanSlashArgs(tail, mode, varLookup);
+		if (args.length === 0) {
+			cursor = rawArgs.length;
+			return null;
+		}
+		const first = args[0];
 
-    // Compute the consumed span by scanning the original tail in normal
-    // mode and finding where the second arg would start. We don't have a
-    // direct API for that, so we walk character-by-character using the
-    // same termination rules as the scanner.
-    const span = consumedSpan(tail, mode, varLookup);
-    cursor = i + span;
-    return first;
-  };
+		// Compute the consumed span by scanning the original tail in normal
+		// mode and finding where the second arg would start. We don't have a
+		// direct API for that, so we walk character-by-character using the
+		// same termination rules as the scanner.
+		const span = consumedSpan(tail, mode, varLookup);
+		cursor = i + span;
+		return first;
+	};
 
-  const restOfLine = (): string => {
-    let i = cursor;
-    while (i < rawArgs.length && /[\s]/.test(rawArgs[i])) i++;
-    const tail = rawArgs.slice(i);
-    cursor = rawArgs.length;
-    return tail;
-  };
+	const restOfLine = (): string => {
+		let i = cursor;
+		while (i < rawArgs.length && /[\s]/.test(rawArgs[i])) i++;
+		const tail = rawArgs.slice(i);
+		cursor = rawArgs.length;
+		return tail;
+	};
 
-  return {
-    settings: opts.settings,
-    cmdName: opts.cmdName,
-    queryBuf: opts.queryBuf,
-    rawArgs,
-    nextArg,
-    restOfLine,
-  };
+	return {
+		settings: opts.settings,
+		cmdName: opts.cmdName,
+		queryBuf: opts.queryBuf,
+		rawArgs,
+		nextArg,
+		restOfLine,
+	};
 };
 
 /**
@@ -219,77 +217,79 @@ export const makeContext = (opts: {
  * past the original `:name` form regardless of expansion size.
  */
 const consumedSpan = (
-  tail: string,
-  mode: SlashArgMode,
-  varLookup: (name: string) => string | undefined,
+	tail: string,
+	mode: SlashArgMode,
+	varLookup: (name: string) => string | undefined,
 ): number => {
-  if (mode === 'whole-line') return tail.length;
+	if (mode === "whole-line") return tail.length;
 
-  let i = 0;
-  // Skip leading whitespace inside the tail (already trimmed by caller, but
-  // safe to repeat).
-  while (i < tail.length && /[\s]/.test(tail[i])) i++;
+	let i = 0;
+	// Skip leading whitespace inside the tail (already trimmed by caller, but
+	// safe to repeat).
+	while (i < tail.length && /[\s]/.test(tail[i])) i++;
 
-  // filepipe special: a leading `|` slurps to EOL.
-  if (mode === 'filepipe' && tail[i] === '|') return tail.length;
+	// filepipe special: a leading `|` slurps to EOL.
+	if (mode === "filepipe" && tail[i] === "|") return tail.length;
 
-  while (i < tail.length) {
-    const c = tail[i];
-    if (/[\s]/.test(c) || c === '\\') break;
-    if (c === "'") {
-      i++;
-      while (i < tail.length) {
-        if (tail[i] === '\\' && i + 1 < tail.length) {
-          i += 2;
-          continue;
-        }
-        if (tail[i] === "'") {
-          if (tail[i + 1] === "'") {
-            i += 2;
-            continue;
-          }
-          i++;
-          break;
-        }
-        i++;
-      }
-      continue;
-    }
-    if (c === '"') {
-      i++;
-      while (i < tail.length && tail[i] !== '"') i++;
-      if (i < tail.length) i++;
-      continue;
-    }
-    if (c === '`') {
-      i++;
-      while (i < tail.length && tail[i] !== '`') i++;
-      if (i < tail.length) i++;
-      continue;
-    }
-    if (c === ':' && mode !== 'no-vars') {
-      // :"name" / :'name' / :name — advance past the source form. We don't
-      // actually call varLookup here; we just measure the lexical span.
-      void varLookup;
-      const next = tail[i + 1];
-      if (next === '"' || next === "'") {
-        let j = i + 2;
-        while (j < tail.length && /[A-Za-z0-9_\x80-\xff]/.test(tail[j])) j++;
-        if (j > i + 2 && tail[j] === next) {
-          i = j + 1;
-          continue;
-        }
-      }
-      if (next && /[A-Za-z0-9_\x80-\xff]/.test(next)) {
-        let j = i + 1;
-        while (j < tail.length && /[A-Za-z0-9_\x80-\xff]/.test(tail[j])) j++;
-        i = j;
-        continue;
-      }
-    }
-    i++;
-  }
-  return i;
+	while (i < tail.length) {
+		const c = tail[i];
+		if (/[\s]/.test(c) || c === "\\") break;
+		if (c === "'") {
+			i++;
+			while (i < tail.length) {
+				if (tail[i] === "\\" && i + 1 < tail.length) {
+					i += 2;
+					continue;
+				}
+				if (tail[i] === "'") {
+					if (tail[i + 1] === "'") {
+						i += 2;
+						continue;
+					}
+					i++;
+					break;
+				}
+				i++;
+			}
+			continue;
+		}
+		if (c === '"') {
+			i++;
+			while (i < tail.length && tail[i] !== '"') i++;
+			if (i < tail.length) i++;
+			continue;
+		}
+		if (c === "`") {
+			i++;
+			while (i < tail.length && tail[i] !== "`") i++;
+			if (i < tail.length) i++;
+			continue;
+		}
+		if (c === ":" && mode !== "no-vars") {
+			// :"name" / :'name' / :name — advance past the source form. We don't
+			// actually call varLookup here; we just measure the lexical span.
+			void varLookup;
+			const next = tail[i + 1];
+			if (next === '"' || next === "'") {
+				let j = i + 2;
+				while (j < tail.length && /[A-Za-z0-9_\x80-\xff]/.test(tail[j]))
+					j++;
+				if (j > i + 2 && tail[j] === next) {
+					i = j + 1;
+					continue;
+				}
+			}
+			if (next && /[A-Za-z0-9_\x80-\xff]/.test(next)) {
+				let j = i + 1;
+				while (j < tail.length && /[A-Za-z0-9_\x80-\xff]/.test(tail[j]))
+					j++;
+				i = j;
+				continue;
+			}
+		}
+		i++;
+	}
+	return i;
 };
 
 /**
@@ -301,23 +301,23 @@ const consumedSpan = (
  * don't print here; the caller owns stderr.
  */
 export const dispatchBackslash = async (
-  registry: BackslashRegistry,
-  cmdName: string,
-  ctx: BackslashContext,
+	registry: BackslashRegistry,
+	cmdName: string,
+	ctx: BackslashContext,
 ): Promise<BackslashResult> => {
-  const spec = registry.lookup(cmdName);
-  if (!spec) return { status: 'error' };
-  // PG 18: refuse shell/filesystem-touching commands while restricted.
-  // We check against the resolved *primary* name so aliases like
-  // `\write` → `w` are caught.
-  if (isCommandRestricted(ctx.settings, spec.name)) {
-    writeErr(
-      `\\${cmdName}: command is not allowed in restricted mode; ` +
-        `use \\unrestrict to leave restricted mode\n`,
-    );
-    return { status: 'error' };
-  }
-  return spec.run(ctx);
+	const spec = registry.lookup(cmdName);
+	if (!spec) return { status: "error" };
+	// PG 18: refuse shell/filesystem-touching commands while restricted.
+	// We check against the resolved *primary* name so aliases like
+	// `\write` → `w` are caught.
+	if (isCommandRestricted(ctx.settings, spec.name)) {
+		writeErr(
+			`\\${cmdName}: command is not allowed in restricted mode; ` +
+				`use \\unrestrict to leave restricted mode\n`,
+		);
+		return { status: "error" };
+	}
+	return spec.run(ctx);
 };
 
 /**
@@ -331,74 +331,74 @@ export const dispatchBackslash = async (
  * the returned registry — see the plan for the full mapping.
  */
 export const defaultRegistry = (): BackslashRegistry => {
-  const r = createBackslashRegistry();
-  // Meta.
-  r.register(cmdQuit);
-  r.register(cmdReset);
-  r.register(cmdShell);
-  r.register(cmdCd);
-  r.register(cmdEcho);
-  r.register(cmdQecho);
-  r.register(cmdWarn);
-  r.register(cmdPrompt);
-  r.register(cmdSet);
-  r.register(cmdUnset);
-  r.register(cmdGetenv);
-  r.register(cmdSetenv);
-  r.register(cmdErrverbose);
-  r.register(cmdTiming);
-  r.register(cmdCopyright);
-  r.register(cmdHelpSQL);
-  // `\?` (backslash-command help), `\e`/`\edit` (edit query buffer in an
-  // external editor), and `\s` (print/save command history) are full
-  // implementations living in `cmd_meta.ts`. They previously sat here as
-  // no-op stubs only so the `\if false ... <cmd> ... \endif` inactive-branch
-  // enumeration didn't emit spurious "invalid command" diagnostics; now that
-  // they do real work the inactive-branch guard still skips them (it only
-  // checks that the name is registered).
-  r.register(cmdSlashHelp);
-  r.register(cmdEdit);
-  r.register(cmdS);
-  // `\html` is NOT a real psql command (HTML output is the `\H` toggle in
-  // `cmd_format.ts`) — but it MUST stay registered as a recognized no-op.
-  // Upstream `psql.sql`'s inactive-branch enumeration test (`\if false …
-  // \html … \endif`, regress line 1062) requires every backslash name in
-  // that dump to be recognized: our inactive-branch guard skips a command
-  // only when its name is registered, and silently emits "invalid command"
-  // otherwise. An unregistered `\html` therefore breaks the regress diff.
-  // Upstream skips ALL commands (known or not) in a false branch; until our
-  // mainloop matches that, the recognized-name stub is the load-bearing
-  // shim. (In an active branch this makes `\html` a silent no-op rather than
-  // upstream's "invalid command", but no test exercises that path.)
-  r.register({
-    name: 'html',
-    run: (): Promise<BackslashResult> => Promise.resolve({ status: 'ok' }),
-  });
-  // Format.
-  r.register(cmdA);
-  r.register(cmdC);
-  r.register(cmdF);
-  r.register(cmdH);
-  r.register(cmdT);
-  r.register(cmdTitleAttr);
-  r.register(cmdX);
-  r.register(cmdEncoding);
-  r.register(cmdPset);
-  // I/O & control (WP-15).
-  registerIoCommands(r);
-  registerConnectCommands(r);
-  registerCopyCommands(r);
-  registerDescribeCommands(r);
-  registerPipelineCommands(r);
-  registerMiscCommands(r);
-  registerLargeObjectCommands(r);
-  registerShowCommands(r);
-  registerRestrictCommands(r);
-  // Must run after every other `register*` call so the wrappers see the
-  // final specs for the restricted command names (e.g. `\!`, `\cd`, `\copy`,
-  // `\setenv`, `\w`). Without this, the REPL mainloop's direct
-  // `spec.run(ctx)` invocation bypasses the gate that lives in
-  // `dispatchBackslash`.
-  wrapRestrictedCommands(r);
-  return r;
+	const r = createBackslashRegistry();
+	// Meta.
+	r.register(cmdQuit);
+	r.register(cmdReset);
+	r.register(cmdShell);
+	r.register(cmdCd);
+	r.register(cmdEcho);
+	r.register(cmdQecho);
+	r.register(cmdWarn);
+	r.register(cmdPrompt);
+	r.register(cmdSet);
+	r.register(cmdUnset);
+	r.register(cmdGetenv);
+	r.register(cmdSetenv);
+	r.register(cmdErrverbose);
+	r.register(cmdTiming);
+	r.register(cmdCopyright);
+	r.register(cmdHelpSQL);
+	// `\?` (backslash-command help), `\e`/`\edit` (edit query buffer in an
+	// external editor), and `\s` (print/save command history) are full
+	// implementations living in `cmd_meta.ts`. They previously sat here as
+	// no-op stubs only so the `\if false ... <cmd> ... \endif` inactive-branch
+	// enumeration didn't emit spurious "invalid command" diagnostics; now that
+	// they do real work the inactive-branch guard still skips them (it only
+	// checks that the name is registered).
+	r.register(cmdSlashHelp);
+	r.register(cmdEdit);
+	r.register(cmdS);
+	// `\html` is NOT a real psql command (HTML output is the `\H` toggle in
+	// `cmd_format.ts`) — but it MUST stay registered as a recognized no-op.
+	// Upstream `psql.sql`'s inactive-branch enumeration test (`\if false …
+	// \html … \endif`, regress line 1062) requires every backslash name in
+	// that dump to be recognized: our inactive-branch guard skips a command
+	// only when its name is registered, and silently emits "invalid command"
+	// otherwise. An unregistered `\html` therefore breaks the regress diff.
+	// Upstream skips ALL commands (known or not) in a false branch; until our
+	// mainloop matches that, the recognized-name stub is the load-bearing
+	// shim. (In an active branch this makes `\html` a silent no-op rather than
+	// upstream's "invalid command", but no test exercises that path.)
+	r.register({
+		name: "html",
+		run: (): Promise<BackslashResult> => Promise.resolve({ status: "ok" }),
+	});
+	// Format.
+	r.register(cmdA);
+	r.register(cmdC);
+	r.register(cmdF);
+	r.register(cmdH);
+	r.register(cmdT);
+	r.register(cmdTitleAttr);
+	r.register(cmdX);
+	r.register(cmdEncoding);
+	r.register(cmdPset);
+	// I/O & control (WP-15).
+	registerIoCommands(r);
+	registerConnectCommands(r);
+	registerCopyCommands(r);
+	registerDescribeCommands(r);
+	registerPipelineCommands(r);
+	registerMiscCommands(r);
+	registerLargeObjectCommands(r);
+	registerShowCommands(r);
+	registerRestrictCommands(r);
+	// Must run after every other `register*` call so the wrappers see the
+	// final specs for the restricted command names (e.g. `\!`, `\cd`, `\copy`,
+	// `\setenv`, `\w`). Without this, the REPL mainloop's direct
+	// `spec.run(ctx)` invocation bypasses the gate that lives in
+	// `dispatchBackslash`.
+	wrapRestrictedCommands(r);
+	return r;
 };

@@ -37,13 +37,13 @@
  * which is responsible for the recognised-key gate.
  */
 
-import { promises as fs } from 'node:fs';
-import * as os from 'node:os';
-import * as path from 'node:path';
+import { promises as fs } from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 
 export type ServiceEntry = Record<string, string>;
 
-const isWindows = process.platform === 'win32';
+const isWindows = process.platform === "win32";
 
 /**
  * Return the ordered list of candidate `pg_service.conf` paths to try. The
@@ -51,43 +51,43 @@ const isWindows = process.platform === 'win32';
  * to `process.env` for ergonomics but can be injected for tests.
  */
 export const defaultPgServiceFilePath = (
-  env: NodeJS.ProcessEnv = process.env,
+	env: NodeJS.ProcessEnv = process.env,
 ): string[] => {
-  const out: string[] = [];
+	const out: string[] = [];
 
-  const explicit = env.PGSERVICEFILE;
-  if (explicit !== undefined && explicit.length > 0) {
-    out.push(explicit);
-  }
+	const explicit = env.PGSERVICEFILE;
+	if (explicit !== undefined && explicit.length > 0) {
+		out.push(explicit);
+	}
 
-  // User-level: `~/.pg_service.conf` (POSIX) or
-  // `%APPDATA%/postgresql/.pg_service.conf` (Windows). Matches libpq.
-  if (isWindows) {
-    const appdata = env.APPDATA;
-    if (appdata !== undefined && appdata.length > 0) {
-      out.push(path.join(appdata, 'postgresql', '.pg_service.conf'));
-    }
-  } else {
-    const home = env.HOME ?? os.homedir();
-    if (home.length > 0) {
-      out.push(path.join(home, '.pg_service.conf'));
-    }
-  }
+	// User-level: `~/.pg_service.conf` (POSIX) or
+	// `%APPDATA%/postgresql/.pg_service.conf` (Windows). Matches libpq.
+	if (isWindows) {
+		const appdata = env.APPDATA;
+		if (appdata !== undefined && appdata.length > 0) {
+			out.push(path.join(appdata, "postgresql", ".pg_service.conf"));
+		}
+	} else {
+		const home = env.HOME ?? os.homedir();
+		if (home.length > 0) {
+			out.push(path.join(home, ".pg_service.conf"));
+		}
+	}
 
-  // System-level: `$PGSYSCONFDIR/pg_service.conf`.
-  const sysDir = env.PGSYSCONFDIR;
-  if (sysDir !== undefined && sysDir.length > 0) {
-    out.push(path.join(sysDir, 'pg_service.conf'));
-  }
+	// System-level: `$PGSYSCONFDIR/pg_service.conf`.
+	const sysDir = env.PGSYSCONFDIR;
+	if (sysDir !== undefined && sysDir.length > 0) {
+		out.push(path.join(sysDir, "pg_service.conf"));
+	}
 
-  // Platform-default system path. libpq's autoconf picks SYSCONFDIR at build
-  // time; for a portable TS implementation we use `/etc/pg_service.conf` on
-  // POSIX. Windows has no canonical equivalent.
-  if (!isWindows) {
-    out.push('/etc/pg_service.conf');
-  }
+	// Platform-default system path. libpq's autoconf picks SYSCONFDIR at build
+	// time; for a portable TS implementation we use `/etc/pg_service.conf` on
+	// POSIX. Windows has no canonical equivalent.
+	if (!isWindows) {
+		out.push("/etc/pg_service.conf");
+	}
 
-  return out;
+	return out;
 };
 
 /**
@@ -107,63 +107,63 @@ export const defaultPgServiceFilePath = (
  *   - Lines outside any section header are silently ignored.
  */
 export const parsePgServiceContent = (
-  content: string,
+	content: string,
 ): Map<string, ServiceEntry> => {
-  const services = new Map<string, ServiceEntry>();
-  let current: ServiceEntry | undefined;
+	const services = new Map<string, ServiceEntry>();
+	let current: ServiceEntry | undefined;
 
-  for (const rawLine of content.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (line.length === 0) continue;
-    if (line.startsWith('#')) continue;
+	for (const rawLine of content.split(/\r?\n/)) {
+		const line = rawLine.trim();
+		if (line.length === 0) continue;
+		if (line.startsWith("#")) continue;
 
-    if (line.startsWith('[')) {
-      const close = line.indexOf(']');
-      if (close < 0) {
-        // Malformed header — libpq aborts the file; we mirror by ending the
-        // current section so the bogus line doesn't bleed into it.
-        current = undefined;
-        continue;
-      }
-      const name = line.slice(1, close).trim();
-      if (name.length === 0) {
-        current = undefined;
-        continue;
-      }
-      current = {};
-      services.set(name, current);
-      continue;
-    }
+		if (line.startsWith("[")) {
+			const close = line.indexOf("]");
+			if (close < 0) {
+				// Malformed header — libpq aborts the file; we mirror by ending the
+				// current section so the bogus line doesn't bleed into it.
+				current = undefined;
+				continue;
+			}
+			const name = line.slice(1, close).trim();
+			if (name.length === 0) {
+				current = undefined;
+				continue;
+			}
+			current = {};
+			services.set(name, current);
+			continue;
+		}
 
-    if (current === undefined) {
-      // Stray key=value before any [section] header — libpq treats this as
-      // an error; we silently skip so a misformatted file doesn't refuse to
-      // resolve services that appear after the noise.
-      continue;
-    }
+		if (current === undefined) {
+			// Stray key=value before any [section] header — libpq treats this as
+			// an error; we silently skip so a misformatted file doesn't refuse to
+			// resolve services that appear after the noise.
+			continue;
+		}
 
-    const eq = line.indexOf('=');
-    if (eq < 0) continue;
-    const key = line.slice(0, eq).trim();
-    const value = line.slice(eq + 1).trim();
-    if (key.length === 0) continue;
-    current[key] = value;
-  }
+		const eq = line.indexOf("=");
+		if (eq < 0) continue;
+		const key = line.slice(0, eq).trim();
+		const value = line.slice(eq + 1).trim();
+		if (key.length === 0) continue;
+		current[key] = value;
+	}
 
-  return services;
+	return services;
 };
 
 const readIfExists = async (filePath: string): Promise<string | null> => {
-  try {
-    return await fs.readFile(filePath, 'utf8');
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT' || code === 'ENOTDIR') return null;
-    // Permission / I/O errors silently degrade — libpq treats an unreadable
-    // service file the same as a missing one (the connection falls back to
-    // other parameter sources).
-    return null;
-  }
+	try {
+		return await fs.readFile(filePath, "utf8");
+	} catch (err) {
+		const code = (err as NodeJS.ErrnoException).code;
+		if (code === "ENOENT" || code === "ENOTDIR") return null;
+		// Permission / I/O errors silently degrade — libpq treats an unreadable
+		// service file the same as a missing one (the connection falls back to
+		// other parameter sources).
+		return null;
+	}
 };
 
 /**
@@ -181,29 +181,29 @@ const readIfExists = async (filePath: string): Promise<string | null> => {
  * defaulting to `process.env`.
  */
 export const loadPgServices = async (
-  paths?: string[],
-  env: NodeJS.ProcessEnv = process.env,
+	paths?: string[],
+	env: NodeJS.ProcessEnv = process.env,
 ): Promise<Map<string, ServiceEntry>> => {
-  const candidates = paths ?? defaultPgServiceFilePath(env);
-  const userSpecified = env.PGSERVICEFILE;
-  const userSpecifiedAbs =
-    userSpecified !== undefined && userSpecified.length > 0
-      ? userSpecified
-      : null;
-  for (const p of candidates) {
-    const content = await readIfExists(p);
-    if (content === null) {
-      // Hard-fail when the user explicitly named this file (via
-      // PGSERVICEFILE) and it's missing. Silent ENOENT is fine for the
-      // discovery-chain candidates the user didn't ask for.
-      if (userSpecifiedAbs !== null && p === userSpecifiedAbs) {
-        throw new Error(`service file "${p}" not found`);
-      }
-      continue;
-    }
-    return parsePgServiceContent(content);
-  }
-  return new Map();
+	const candidates = paths ?? defaultPgServiceFilePath(env);
+	const userSpecified = env.PGSERVICEFILE;
+	const userSpecifiedAbs =
+		userSpecified !== undefined && userSpecified.length > 0
+			? userSpecified
+			: null;
+	for (const p of candidates) {
+		const content = await readIfExists(p);
+		if (content === null) {
+			// Hard-fail when the user explicitly named this file (via
+			// PGSERVICEFILE) and it's missing. Silent ENOENT is fine for the
+			// discovery-chain candidates the user didn't ask for.
+			if (userSpecifiedAbs !== null && p === userSpecifiedAbs) {
+				throw new Error(`service file "${p}" not found`);
+			}
+			continue;
+		}
+		return parsePgServiceContent(content);
+	}
+	return new Map();
 };
 
 /**
@@ -212,6 +212,6 @@ export const loadPgServices = async (
  * Service names are case-sensitive (libpq does not normalise).
  */
 export const lookupService = (
-  services: Map<string, ServiceEntry>,
-  name: string,
+	services: Map<string, ServiceEntry>,
+	name: string,
 ): ServiceEntry | undefined => services.get(name);

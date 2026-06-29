@@ -27,14 +27,14 @@
  * pipe a Readable into it via `pumpReadable()`.
  */
 
-import { Buffer } from 'node:buffer';
-import type { Readable } from 'node:stream';
+import { Buffer } from "node:buffer";
+import type { Readable } from "node:stream";
 
 import type {
-  Connection,
-  CopyInStream,
-  CopyOutStream,
-} from '../types/connection.js';
+	Connection,
+	CopyInStream,
+	CopyOutStream,
+} from "../types/connection.js";
 
 /**
  * Pump every chunk from a Node Readable into a CopyInStream, then end it.
@@ -49,39 +49,39 @@ import type {
  * options the caller stamped on the SQL string).
  */
 export const pumpReadable = async (
-  conn: Connection,
-  readable: Readable,
-  copyIn: CopyInStream,
+	conn: Connection,
+	readable: Readable,
+	copyIn: CopyInStream,
 ): Promise<void> => {
-  let aborted: unknown = null;
-  try {
-    for await (const chunk of readable) {
-      const buf =
-        typeof chunk === 'string'
-          ? Buffer.from(chunk, 'utf8')
-          : Buffer.isBuffer(chunk)
-            ? chunk
-            : Buffer.from(chunk as ArrayBufferLike);
-      await copyIn.write(buf);
-    }
-  } catch (err) {
-    aborted = err;
-  }
+	let aborted: unknown = null;
+	try {
+		for await (const chunk of readable) {
+			const buf =
+				typeof chunk === "string"
+					? Buffer.from(chunk, "utf8")
+					: Buffer.isBuffer(chunk)
+						? chunk
+						: Buffer.from(chunk as ArrayBufferLike);
+			await copyIn.write(buf);
+		}
+	} catch (err) {
+		aborted = err;
+	}
 
-  if (aborted !== null) {
-    const reason = abortReason(aborted);
-    try {
-      await copyIn.fail(reason);
-    } catch {
-      // ignore — the original read error is what we want to surface.
-    }
-    throw aborted instanceof Error ? aborted : new Error(reason);
-  }
+	if (aborted !== null) {
+		const reason = abortReason(aborted);
+		try {
+			await copyIn.fail(reason);
+		} catch {
+			// ignore — the original read error is what we want to surface.
+		}
+		throw aborted instanceof Error ? aborted : new Error(reason);
+	}
 
-  await copyIn.end();
-  // Keep the Connection type as a structural reference so prod consumers
-  // import this module even when only using `conn.startCopyIn` directly.
-  void conn;
+	await copyIn.end();
+	// Keep the Connection type as a structural reference so prod consumers
+	// import this module even when only using `conn.startCopyIn` directly.
+	void conn;
 };
 
 /**
@@ -90,21 +90,21 @@ export const pumpReadable = async (
  * function — the caller owns its lifetime.
  */
 export const drainCopyOut = async (
-  copyOut: CopyOutStream,
-  writable: NodeJS.WritableStream,
+	copyOut: CopyOutStream,
+	writable: NodeJS.WritableStream,
 ): Promise<void> => {
-  for await (const chunk of copyOut) {
-    await new Promise<void>((resolve, reject) => {
-      writable.write(chunk, (err) => {
-        if (err !== null && err !== undefined) reject(err);
-        else resolve();
-      });
-    });
-  }
+	for await (const chunk of copyOut) {
+		await new Promise<void>((resolve, reject) => {
+			writable.write(chunk, (err) => {
+				if (err !== null && err !== undefined) reject(err);
+				else resolve();
+			});
+		});
+	}
 };
 
 // Re-export the stream types so callers don't have to reach into types/.
-export type { CopyInStream, CopyOutStream } from '../types/connection.js';
+export type { CopyInStream, CopyOutStream } from "../types/connection.js";
 
 /**
  * Coerce an arbitrary thrown value into a string suitable for `CopyFail`
@@ -113,12 +113,12 @@ export type { CopyInStream, CopyOutStream } from '../types/connection.js';
  * objects safely.
  */
 const abortReason = (v: unknown): string => {
-  if (v instanceof Error) return v.message;
-  if (typeof v === 'string') return v;
-  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
-  try {
-    return JSON.stringify(v) ?? 'unknown error';
-  } catch {
-    return 'unknown error';
-  }
+	if (v instanceof Error) return v.message;
+	if (typeof v === "string") return v;
+	if (typeof v === "number" || typeof v === "boolean") return String(v);
+	try {
+		return JSON.stringify(v) ?? "unknown error";
+	} catch {
+		return "unknown error";
+	}
 };

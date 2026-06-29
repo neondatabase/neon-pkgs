@@ -1,11 +1,10 @@
-import { Branch } from '@neon/sdk';
-import { EndpointType } from './api_enums.js';
-import type { NeonApiClient } from '../api.js';
-import prompts from 'prompts';
-
-import { retryOnLock } from '../api.js';
-import { log } from '../log.js';
-import { isCi } from '../env.js';
+import type { Branch } from "@neon/sdk";
+import prompts from "prompts";
+import type { NeonApiClient } from "../api.js";
+import { retryOnLock } from "../api.js";
+import { isCi } from "../env.js";
+import { log } from "../log.js";
+import { EndpointType } from "./api_enums.js";
 
 /**
  * Outcome of the interactive branch picker: either an existing branch's id was chosen, or
@@ -13,26 +12,26 @@ import { isCi } from '../env.js';
  * and `neonctl link` so both offer the same "create or pick" experience.
  */
 export type PickedBranch =
-  | { kind: 'existing'; branchId: string }
-  | { kind: 'create'; name: string };
+	| { kind: "existing"; branchId: string }
+	| { kind: "create"; name: string };
 
 /** Sentinel `value` for the "create a new branch" choice (no branch id can collide). */
-const CREATE_BRANCH_CHOICE = Symbol('create-branch');
+const CREATE_BRANCH_CHOICE = Symbol("create-branch");
 
 /**
  * Render a branch's display name with the same word labels as `neonctl branch list`
  * (`[default]`, `[protected]`) instead of symbols, so the picker reads clearly.
  */
 const branchLabel = (branch: Branch): string => {
-  const labels: string[] = [];
-  if (branch.default) {
-    labels.push('[default]');
-  }
-  if (branch.protected) {
-    labels.push('[protected]');
-  }
-  labels.push(branch.name);
-  return labels.join(' ');
+	const labels: string[] = [];
+	if (branch.default) {
+		labels.push("[default]");
+	}
+	if (branch.protected) {
+		labels.push("[protected]");
+	}
+	labels.push(branch.name);
+	return labels.join(" ");
 };
 
 /**
@@ -45,34 +44,34 @@ const branchLabel = (branch: Branch): string => {
  * right guidance for its command, so the message is supplied rather than hard-coded here.
  */
 export const pickBranchInteractively = async (
-  branches: Branch[],
-  opts: { message: string; nonInteractiveMessage: string },
+	branches: Branch[],
+	opts: { message: string; nonInteractiveMessage: string },
 ): Promise<PickedBranch> => {
-  if (isCi() || !process.stdout.isTTY) {
-    throw new Error(opts.nonInteractiveMessage);
-  }
-  const defaultBranchIndex = branches.findIndex((b: Branch) => b.default);
-  const initial = defaultBranchIndex >= 0 ? defaultBranchIndex + 1 : 0;
-  const { choice } = await prompts({
-    type: 'select',
-    name: 'choice',
-    message: opts.message,
-    choices: [
-      { title: '＋ Create a new branch…', value: CREATE_BRANCH_CHOICE },
-      ...branches.map((b: Branch) => ({
-        title: `${branchLabel(b)} (${b.id})`,
-        value: b.id,
-      })),
-    ],
-    initial,
-  });
-  if (choice === undefined) {
-    throw new Error('Aborted: no branch selected.');
-  }
-  if (choice === CREATE_BRANCH_CHOICE) {
-    return { kind: 'create', name: await promptNewBranchName(branches) };
-  }
-  return { kind: 'existing', branchId: choice as string };
+	if (isCi() || !process.stdout.isTTY) {
+		throw new Error(opts.nonInteractiveMessage);
+	}
+	const defaultBranchIndex = branches.findIndex((b: Branch) => b.default);
+	const initial = defaultBranchIndex >= 0 ? defaultBranchIndex + 1 : 0;
+	const { choice } = await prompts({
+		type: "select",
+		name: "choice",
+		message: opts.message,
+		choices: [
+			{ title: "＋ Create a new branch…", value: CREATE_BRANCH_CHOICE },
+			...branches.map((b: Branch) => ({
+				title: `${branchLabel(b)} (${b.id})`,
+				value: b.id,
+			})),
+		],
+		initial,
+	});
+	if (choice === undefined) {
+		throw new Error("Aborted: no branch selected.");
+	}
+	if (choice === CREATE_BRANCH_CHOICE) {
+		return { kind: "create", name: await promptNewBranchName(branches) };
+	}
+	return { kind: "existing", branchId: choice as string };
 };
 
 /**
@@ -80,26 +79,26 @@ export const pickBranchInteractively = async (
  * project (so we never silently select a different, pre-existing branch).
  */
 export const promptNewBranchName = async (
-  branches: Branch[],
+	branches: Branch[],
 ): Promise<string> => {
-  const existing = new Set(branches.map((b: Branch) => b.name));
-  const { name } = await prompts({
-    type: 'text',
-    name: 'name',
-    message: 'New branch name:',
-    validate: (value: string) => {
-      const trimmed = value.trim();
-      if (trimmed === '') return 'Branch name cannot be empty.';
-      if (existing.has(trimmed))
-        return `A branch named "${trimmed}" already exists.`;
-      return true;
-    },
-  });
-  const trimmed = typeof name === 'string' ? name.trim() : '';
-  if (trimmed === '') {
-    throw new Error('Aborted: no branch name provided.');
-  }
-  return trimmed;
+	const existing = new Set(branches.map((b: Branch) => b.name));
+	const { name } = await prompts({
+		type: "text",
+		name: "name",
+		message: "New branch name:",
+		validate: (value: string) => {
+			const trimmed = value.trim();
+			if (trimmed === "") return "Branch name cannot be empty.";
+			if (existing.has(trimmed))
+				return `A branch named "${trimmed}" already exists.`;
+			return true;
+		},
+	});
+	const trimmed = typeof name === "string" ? name.trim() : "";
+	if (trimmed === "") {
+		throw new Error("Aborted: no branch name provided.");
+	}
+	return trimmed;
 };
 
 /**
@@ -108,26 +107,26 @@ export const promptNewBranchName = async (
  * the new branch id.
  */
 export const createBranch = async (
-  apiClient: NeonApiClient,
-  projectId: string,
-  name: string,
-  branches: Branch[],
+	apiClient: NeonApiClient,
+	projectId: string,
+	name: string,
+	branches: Branch[],
 ): Promise<string> => {
-  const defaultBranch = branches.find((b: Branch) => b.default);
-  if (!defaultBranch) {
-    throw new Error('No default branch found');
-  }
-  const { data } = await retryOnLock(() =>
-    apiClient.createProjectBranch(projectId, {
-      branch: { name, parent_id: defaultBranch.id },
-      endpoints: [{ type: EndpointType.ReadWrite }],
-    }),
-  );
-  if (defaultBranch.protected) {
-    log.warning(
-      'The parent branch is protected; a unique role password has been generated for the new branch.',
-    );
-  }
-  log.info('Created branch %s (%s).', data.branch.name, data.branch.id);
-  return data.branch.id;
+	const defaultBranch = branches.find((b: Branch) => b.default);
+	if (!defaultBranch) {
+		throw new Error("No default branch found");
+	}
+	const { data } = await retryOnLock(() =>
+		apiClient.createProjectBranch(projectId, {
+			branch: { name, parent_id: defaultBranch.id },
+			endpoints: [{ type: EndpointType.ReadWrite }],
+		}),
+	);
+	if (defaultBranch.protected) {
+		log.warning(
+			"The parent branch is protected; a unique role password has been generated for the new branch.",
+		);
+	}
+	log.info("Created branch %s (%s).", data.branch.name, data.branch.id);
+	return data.branch.id;
 };

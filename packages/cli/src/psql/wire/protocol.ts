@@ -40,7 +40,7 @@
  *     them into the Map<tag,value> shape our `fieldsToNotice` helper consumes.
  */
 
-import { Buffer } from 'node:buffer';
+import { Buffer } from "node:buffer";
 // pg-protocol@1.14 ships two entry points via its `exports` map:
 //   - `./esm/index.js` (the `"import"` key) — a thin ESM wrapper that does
 //     `import * as protocol from '../dist/index.js'`.
@@ -54,9 +54,11 @@ import { Buffer } from 'node:buffer';
 // key as a forced-ESM hint and avoids this. To stay portable across both,
 // we import the CJS implementation directly — same pattern node-postgres
 // uses for the `Parser` subpath, and what we already do on the next line.
-import pgProtocol from 'pg-protocol/dist/index.js';
+import pgProtocol from "pg-protocol/dist/index.js";
+
 const { serialize } = pgProtocol;
-import { Parser } from 'pg-protocol/dist/parser.js';
+
+import { Parser } from "pg-protocol/dist/parser.js";
 
 // ---------------------------------------------------------------------------
 // Backend message types (unchanged from the hand-rolled codec — this is the
@@ -64,73 +66,73 @@ import { Parser } from 'pg-protocol/dist/parser.js';
 // ---------------------------------------------------------------------------
 
 export type FieldDescription = {
-  name: string;
-  tableID: number;
-  columnID: number;
-  dataTypeID: number;
-  dataTypeSize: number;
-  dataTypeModifier: number;
-  format: 0 | 1;
+	name: string;
+	tableID: number;
+	columnID: number;
+	dataTypeID: number;
+	dataTypeSize: number;
+	dataTypeModifier: number;
+	format: 0 | 1;
 };
 
 export type BackendMessage =
-  | { type: 'AuthenticationOk' }
-  | { type: 'AuthenticationCleartextPassword' }
-  | { type: 'AuthenticationMD5Password'; salt: Buffer }
-  | { type: 'AuthenticationSASL'; mechanisms: string[] }
-  | { type: 'AuthenticationSASLContinue'; data: Buffer }
-  | { type: 'AuthenticationSASLFinal'; data: Buffer }
-  | { type: 'ParameterStatus'; name: string; value: string }
-  | { type: 'BackendKeyData'; processId: number; secretKey: number }
-  | { type: 'ReadyForQuery'; status: 'I' | 'T' | 'E' }
-  | { type: 'RowDescription'; fields: FieldDescription[] }
-  | { type: 'DataRow'; values: (Buffer | null)[] }
-  | { type: 'CommandComplete'; tag: string }
-  | { type: 'EmptyQueryResponse' }
-  | { type: 'ErrorResponse'; fields: Map<string, string> }
-  | { type: 'NoticeResponse'; fields: Map<string, string> }
-  | {
-      type: 'NotificationResponse';
-      processId: number;
-      channel: string;
-      payload: string;
-    }
-  | {
-      type: 'CopyInResponse';
-      overallFormat: 0 | 1;
-      columnFormats: (0 | 1)[];
-    }
-  | {
-      type: 'CopyOutResponse';
-      overallFormat: 0 | 1;
-      columnFormats: (0 | 1)[];
-    }
-  | { type: 'CopyData'; data: Buffer }
-  | { type: 'CopyDone' }
-  /**
-   * Server response to a walsender command such as `START_REPLICATION` /
-   * `CREATE_REPLICATION_SLOT … LOGICAL`. The server transitions to a
-   * CopyBoth streaming phase (WAL records flowing from server, keepalive
-   * replies flowing from client). pg-protocol surfaces this as a bare
-   * marker (no payload fields decoded); the format / column-formats body
-   * is identical in shape to {@link CopyInResponse} / {@link CopyOutResponse}
-   * but is not currently parsed since this client does not implement
-   * streaming replication. The connection layer surfaces this as a clean
-   * syntax-error-like diagnostic instead of crashing the protocol parser.
-   */
-  | { type: 'CopyBothResponse' }
-  | { type: 'NoData' }
-  | { type: 'ParseComplete' }
-  | { type: 'BindComplete' }
-  | { type: 'CloseComplete' }
-  | { type: 'PortalSuspended' }
-  | { type: 'ParameterDescription'; oids: number[] };
+	| { type: "AuthenticationOk" }
+	| { type: "AuthenticationCleartextPassword" }
+	| { type: "AuthenticationMD5Password"; salt: Buffer }
+	| { type: "AuthenticationSASL"; mechanisms: string[] }
+	| { type: "AuthenticationSASLContinue"; data: Buffer }
+	| { type: "AuthenticationSASLFinal"; data: Buffer }
+	| { type: "ParameterStatus"; name: string; value: string }
+	| { type: "BackendKeyData"; processId: number; secretKey: number }
+	| { type: "ReadyForQuery"; status: "I" | "T" | "E" }
+	| { type: "RowDescription"; fields: FieldDescription[] }
+	| { type: "DataRow"; values: (Buffer | null)[] }
+	| { type: "CommandComplete"; tag: string }
+	| { type: "EmptyQueryResponse" }
+	| { type: "ErrorResponse"; fields: Map<string, string> }
+	| { type: "NoticeResponse"; fields: Map<string, string> }
+	| {
+			type: "NotificationResponse";
+			processId: number;
+			channel: string;
+			payload: string;
+	  }
+	| {
+			type: "CopyInResponse";
+			overallFormat: 0 | 1;
+			columnFormats: (0 | 1)[];
+	  }
+	| {
+			type: "CopyOutResponse";
+			overallFormat: 0 | 1;
+			columnFormats: (0 | 1)[];
+	  }
+	| { type: "CopyData"; data: Buffer }
+	| { type: "CopyDone" }
+	/**
+	 * Server response to a walsender command such as `START_REPLICATION` /
+	 * `CREATE_REPLICATION_SLOT … LOGICAL`. The server transitions to a
+	 * CopyBoth streaming phase (WAL records flowing from server, keepalive
+	 * replies flowing from client). pg-protocol surfaces this as a bare
+	 * marker (no payload fields decoded); the format / column-formats body
+	 * is identical in shape to {@link CopyInResponse} / {@link CopyOutResponse}
+	 * but is not currently parsed since this client does not implement
+	 * streaming replication. The connection layer surfaces this as a clean
+	 * syntax-error-like diagnostic instead of crashing the protocol parser.
+	 */
+	| { type: "CopyBothResponse" }
+	| { type: "NoData" }
+	| { type: "ParseComplete" }
+	| { type: "BindComplete" }
+	| { type: "CloseComplete" }
+	| { type: "PortalSuspended" }
+	| { type: "ParameterDescription"; oids: number[] };
 
 export class ProtocolError extends Error {
-  public constructor(message: string) {
-    super(message);
-    this.name = 'ProtocolError';
-  }
+	public constructor(message: string) {
+		super(message);
+		this.name = "ProtocolError";
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -147,48 +149,48 @@ export class ProtocolError extends Error {
  * Our connect layer always sets UTF8 anyway, so this is a no-op in practice.
  */
 export function StartupMessage(params: Record<string, string>): Buffer {
-  const filtered: Record<string, string> = {};
-  for (const [key, value] of Object.entries(params)) {
-    if (value === undefined) continue;
-    if (key === 'client_encoding') continue;
-    filtered[key] = value;
-  }
-  return serialize.startup(filtered);
+	const filtered: Record<string, string> = {};
+	for (const [key, value] of Object.entries(params)) {
+		if (value === undefined) continue;
+		if (key === "client_encoding") continue;
+		filtered[key] = value;
+	}
+	return serialize.startup(filtered);
 }
 
 /** SSLRequest — pg-protocol exposes this as `requestSsl`. */
 export function SSLRequest(): Buffer {
-  return serialize.requestSsl();
+	return serialize.requestSsl();
 }
 
 /** CancelRequest — pg-protocol's `cancel` is layout-compatible. */
 export function CancelRequest(processId: number, secretKey: number): Buffer {
-  return serialize.cancel(processId, secretKey);
+	return serialize.cancel(processId, secretKey);
 }
 
 /** Query: 'Q' + cstring(sql). */
 export function Query(sql: string): Buffer {
-  return serialize.query(sql);
+	return serialize.query(sql);
 }
 
 /** Terminate: 'X' + 4-byte length. */
 export function Terminate(): Buffer {
-  return serialize.end();
+	return serialize.end();
 }
 
 /** Sync: 'S' + 4-byte length. */
 export function Sync(): Buffer {
-  return serialize.sync();
+	return serialize.sync();
 }
 
 /** Flush: 'H' + 4-byte length. */
 export function Flush(): Buffer {
-  return serialize.flush();
+	return serialize.flush();
 }
 
 /** Parse: 'P' + cstring(name) + cstring(sql) + Int16 nparam + {Int32 oid}*. */
 export function Parse(name: string, sql: string, paramTypes: number[]): Buffer {
-  return serialize.parse({ name, text: sql, types: paramTypes });
+	return serialize.parse({ name, text: sql, types: paramTypes });
 }
 
 /**
@@ -208,43 +210,43 @@ export function Parse(name: string, sql: string, paramTypes: number[]): Buffer {
  * regardless of the caller-supplied `resultFormats` array.
  */
 export function Bind(
-  portal: string,
-  stmt: string,
-  paramFormats: (0 | 1)[],
-  params: (Buffer | string | null)[],
-  resultFormats: (0 | 1)[],
+	portal: string,
+	stmt: string,
+	paramFormats: (0 | 1)[],
+	params: (Buffer | string | null)[],
+	resultFormats: (0 | 1)[],
 ): Buffer {
-  // `paramFormats` and `resultFormats` are read for the rare future caller
-  // that might want explicit control; pg-protocol's `serialize.bind` doesn't
-  // expose either, so we intentionally drop them on the floor for now.
-  void paramFormats;
-  void resultFormats;
-  return serialize.bind({
-    portal,
-    statement: stmt,
-    values: params,
-    binary: false,
-  });
+	// `paramFormats` and `resultFormats` are read for the rare future caller
+	// that might want explicit control; pg-protocol's `serialize.bind` doesn't
+	// expose either, so we intentionally drop them on the floor for now.
+	void paramFormats;
+	void resultFormats;
+	return serialize.bind({
+		portal,
+		statement: stmt,
+		values: params,
+		binary: false,
+	});
 }
 
 /** Describe: 'D' + byte('S'|'P') + cstring(name). */
-export function Describe(target: 'S' | 'P', name: string): Buffer {
-  return serialize.describe({ type: target, name });
+export function Describe(target: "S" | "P", name: string): Buffer {
+	return serialize.describe({ type: target, name });
 }
 
 /** Execute: 'E' + cstring(portal) + Int32 maxRows. */
 export function Execute(portal: string, maxRows: number): Buffer {
-  return serialize.execute({ portal, rows: maxRows });
+	return serialize.execute({ portal, rows: maxRows });
 }
 
 /** Close: 'C' + byte('S'|'P') + cstring(name). */
-export function Close(target: 'S' | 'P', name: string): Buffer {
-  return serialize.close({ type: target, name });
+export function Close(target: "S" | "P", name: string): Buffer {
+	return serialize.close({ type: target, name });
 }
 
 /** PasswordMessage: 'p' + cstring(password). */
 export function PasswordMessage(password: string): Buffer {
-  return serialize.password(password);
+	return serialize.password(password);
 }
 
 /**
@@ -255,33 +257,33 @@ export function PasswordMessage(password: string): Buffer {
  * losslessly via UTF-8.
  */
 export function SASLInitialResponse(
-  mechanism: string,
-  response: Buffer,
+	mechanism: string,
+	response: Buffer,
 ): Buffer {
-  return serialize.sendSASLInitialResponseMessage(
-    mechanism,
-    response.toString('utf8'),
-  );
+	return serialize.sendSASLInitialResponseMessage(
+		mechanism,
+		response.toString("utf8"),
+	);
 }
 
 /** SASLResponse: 'p' + opaque body (no NUL terminator). */
 export function SASLResponse(response: Buffer): Buffer {
-  return serialize.sendSCRAMClientFinalMessage(response.toString('utf8'));
+	return serialize.sendSCRAMClientFinalMessage(response.toString("utf8"));
 }
 
 /** CopyData: 'd' + opaque bytes. */
 export function CopyData(data: Buffer): Buffer {
-  return serialize.copyData(data);
+	return serialize.copyData(data);
 }
 
 /** CopyDone: 'c' + 4-byte length. */
 export function CopyDone(): Buffer {
-  return serialize.copyDone();
+	return serialize.copyDone();
 }
 
 /** CopyFail: 'f' + cstring(reason). */
 export function CopyFail(message: string): Buffer {
-  return serialize.copyFail(message);
+	return serialize.copyFail(message);
 }
 
 // ---------------------------------------------------------------------------
@@ -302,37 +304,39 @@ export function CopyFail(message: string): Buffer {
  * That's a near-perfect match for our previous hand-rolled `MessageParser`.
  */
 export class MessageParser {
-  private readonly inner = new Parser();
-  /** Bytes buffered inside `inner` but not yet emitted. Diagnostic only. */
-  private buffered = 0;
+	private readonly inner = new Parser();
+	/** Bytes buffered inside `inner` but not yet emitted. Diagnostic only. */
+	private buffered = 0;
 
-  public feed(chunk: Buffer): BackendMessage[] {
-    const out: BackendMessage[] = [];
-    try {
-      this.inner.parse(chunk, (msg) => {
-        out.push(adaptBackendMessage(msg));
-      });
-    } catch (err) {
-      // pg-protocol throws plain `Error` on bad input (unknown auth
-      // subtype, truncated frames, …). Normalize to our type.
-      throw err instanceof ProtocolError
-        ? err
-        : new ProtocolError(err instanceof Error ? err.message : String(err));
-    }
-    // Probe the parser's leftover length via its internal field. Used by a
-    // handful of tests for diagnostics; not relied on in production code.
-    const probe = this.inner as unknown as { bufferLength?: number };
-    this.buffered = probe.bufferLength ?? 0;
-    return out;
-  }
+	public feed(chunk: Buffer): BackendMessage[] {
+		const out: BackendMessage[] = [];
+		try {
+			this.inner.parse(chunk, (msg) => {
+				out.push(adaptBackendMessage(msg));
+			});
+		} catch (err) {
+			// pg-protocol throws plain `Error` on bad input (unknown auth
+			// subtype, truncated frames, …). Normalize to our type.
+			throw err instanceof ProtocolError
+				? err
+				: new ProtocolError(
+						err instanceof Error ? err.message : String(err),
+					);
+		}
+		// Probe the parser's leftover length via its internal field. Used by a
+		// handful of tests for diagnostics; not relied on in production code.
+		const probe = this.inner as unknown as { bufferLength?: number };
+		this.buffered = probe.bufferLength ?? 0;
+		return out;
+	}
 
-  /**
-   * Number of bytes buffered but not yet emitted (e.g. partial trailing
-   * message). Exposed for tests / diagnostics.
-   */
-  public get bufferedBytes(): number {
-    return this.buffered;
-  }
+	/**
+	 * Number of bytes buffered but not yet emitted (e.g. partial trailing
+	 * message). Exposed for tests / diagnostics.
+	 */
+	public get bufferedBytes(): number {
+		return this.buffered;
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -345,156 +349,158 @@ export class MessageParser {
  * fields we care about and falls through to a ProtocolError otherwise.
  */
 type AnyPgMessage = {
-  name: string;
+	name: string;
 } & Record<string, unknown>;
 
 function adaptBackendMessage(raw: unknown): BackendMessage {
-  const msg = raw as AnyPgMessage;
-  switch (msg.name) {
-    case 'authenticationOk':
-      return { type: 'AuthenticationOk' };
-    case 'authenticationCleartextPassword':
-      return { type: 'AuthenticationCleartextPassword' };
-    case 'authenticationMD5Password':
-      return {
-        type: 'AuthenticationMD5Password',
-        salt: Buffer.from(msg.salt as Buffer),
-      };
-    case 'authenticationSASL':
-      return {
-        type: 'AuthenticationSASL',
-        mechanisms: msg.mechanisms as string[],
-      };
-    case 'authenticationSASLContinue':
-      return {
-        type: 'AuthenticationSASLContinue',
-        data: Buffer.from(msg.data as string, 'utf8'),
-      };
-    case 'authenticationSASLFinal':
-      return {
-        type: 'AuthenticationSASLFinal',
-        data: Buffer.from(msg.data as string, 'utf8'),
-      };
-    case 'parameterStatus':
-      return {
-        type: 'ParameterStatus',
-        name: msg.parameterName as string,
-        value: msg.parameterValue as string,
-      };
-    case 'backendKeyData':
-      return {
-        type: 'BackendKeyData',
-        processId: msg.processID as number,
-        secretKey: msg.secretKey as number,
-      };
-    case 'readyForQuery': {
-      const status = msg.status as string;
-      if (status !== 'I' && status !== 'T' && status !== 'E') {
-        throw new ProtocolError(
-          `ReadyForQuery: unexpected status ${JSON.stringify(status)}`,
-        );
-      }
-      return { type: 'ReadyForQuery', status };
-    }
-    case 'rowDescription': {
-      const fields: FieldDescription[] = (
-        msg.fields as {
-          name: string;
-          tableID: number;
-          columnID: number;
-          dataTypeID: number;
-          dataTypeSize: number;
-          dataTypeModifier: number;
-          format: 'text' | 'binary';
-        }[]
-      ).map((f) => ({
-        name: f.name,
-        tableID: f.tableID,
-        columnID: f.columnID,
-        dataTypeID: f.dataTypeID,
-        dataTypeSize: f.dataTypeSize,
-        dataTypeModifier: f.dataTypeModifier,
-        format: f.format === 'binary' ? 1 : 0,
-      }));
-      return { type: 'RowDescription', fields };
-    }
-    case 'dataRow': {
-      // pg-protocol always parses values as UTF-8 strings (or null for SQL
-      // NULL). Our connection layer expects (Buffer | null)[] so it can hand
-      // text-format columns through `.toString('utf8')` and pass binary
-      // columns through unchanged. Re-encode here.
-      const fields = msg.fields as (string | null)[];
-      const values: (Buffer | null)[] = new Array(fields.length);
-      for (let i = 0; i < fields.length; i++) {
-        const v = fields[i];
-        values[i] = v === null ? null : Buffer.from(v, 'utf8');
-      }
-      return { type: 'DataRow', values };
-    }
-    case 'commandComplete':
-      return { type: 'CommandComplete', tag: msg.text as string };
-    case 'emptyQuery':
-      return { type: 'EmptyQueryResponse' };
-    case 'error':
-      return { type: 'ErrorResponse', fields: errorOrNoticeFields(msg) };
-    case 'notice':
-      return { type: 'NoticeResponse', fields: errorOrNoticeFields(msg) };
-    case 'notification':
-      return {
-        type: 'NotificationResponse',
-        processId: msg.processId as number,
-        channel: msg.channel as string,
-        payload: msg.payload as string,
-      };
-    case 'copyInResponse':
-      return adaptCopyResponse('CopyInResponse', msg);
-    case 'copyOutResponse':
-      return adaptCopyResponse('CopyOutResponse', msg);
-    case 'replicationStart':
-      // pg-protocol emits a bare marker for the 'W' (CopyBothResponse) byte
-      // — its `Parser` recognises the message code but does not decode the
-      // payload (overall format + per-column format bytes). The body shape
-      // is identical to CopyInResponse / CopyOutResponse but we don't need
-      // those fields: the connection layer reacts to CopyBothResponse by
-      // raising a clean diagnostic because this client does not implement
-      // CopyBoth streaming.
-      return { type: 'CopyBothResponse' };
-    case 'copyData':
-      return { type: 'CopyData', data: Buffer.from(msg.chunk as Buffer) };
-    case 'copyDone':
-      return { type: 'CopyDone' };
-    case 'noData':
-      return { type: 'NoData' };
-    case 'parseComplete':
-      return { type: 'ParseComplete' };
-    case 'bindComplete':
-      return { type: 'BindComplete' };
-    case 'closeComplete':
-      return { type: 'CloseComplete' };
-    case 'portalSuspended':
-      return { type: 'PortalSuspended' };
-    case 'parameterDescription':
-      return {
-        type: 'ParameterDescription',
-        oids: msg.dataTypeIDs as number[],
-      };
-    default:
-      throw new ProtocolError(`Unknown backend message: ${String(msg.name)}`);
-  }
+	const msg = raw as AnyPgMessage;
+	switch (msg.name) {
+		case "authenticationOk":
+			return { type: "AuthenticationOk" };
+		case "authenticationCleartextPassword":
+			return { type: "AuthenticationCleartextPassword" };
+		case "authenticationMD5Password":
+			return {
+				type: "AuthenticationMD5Password",
+				salt: Buffer.from(msg.salt as Buffer),
+			};
+		case "authenticationSASL":
+			return {
+				type: "AuthenticationSASL",
+				mechanisms: msg.mechanisms as string[],
+			};
+		case "authenticationSASLContinue":
+			return {
+				type: "AuthenticationSASLContinue",
+				data: Buffer.from(msg.data as string, "utf8"),
+			};
+		case "authenticationSASLFinal":
+			return {
+				type: "AuthenticationSASLFinal",
+				data: Buffer.from(msg.data as string, "utf8"),
+			};
+		case "parameterStatus":
+			return {
+				type: "ParameterStatus",
+				name: msg.parameterName as string,
+				value: msg.parameterValue as string,
+			};
+		case "backendKeyData":
+			return {
+				type: "BackendKeyData",
+				processId: msg.processID as number,
+				secretKey: msg.secretKey as number,
+			};
+		case "readyForQuery": {
+			const status = msg.status as string;
+			if (status !== "I" && status !== "T" && status !== "E") {
+				throw new ProtocolError(
+					`ReadyForQuery: unexpected status ${JSON.stringify(status)}`,
+				);
+			}
+			return { type: "ReadyForQuery", status };
+		}
+		case "rowDescription": {
+			const fields: FieldDescription[] = (
+				msg.fields as {
+					name: string;
+					tableID: number;
+					columnID: number;
+					dataTypeID: number;
+					dataTypeSize: number;
+					dataTypeModifier: number;
+					format: "text" | "binary";
+				}[]
+			).map((f) => ({
+				name: f.name,
+				tableID: f.tableID,
+				columnID: f.columnID,
+				dataTypeID: f.dataTypeID,
+				dataTypeSize: f.dataTypeSize,
+				dataTypeModifier: f.dataTypeModifier,
+				format: f.format === "binary" ? 1 : 0,
+			}));
+			return { type: "RowDescription", fields };
+		}
+		case "dataRow": {
+			// pg-protocol always parses values as UTF-8 strings (or null for SQL
+			// NULL). Our connection layer expects (Buffer | null)[] so it can hand
+			// text-format columns through `.toString('utf8')` and pass binary
+			// columns through unchanged. Re-encode here.
+			const fields = msg.fields as (string | null)[];
+			const values: (Buffer | null)[] = new Array(fields.length);
+			for (let i = 0; i < fields.length; i++) {
+				const v = fields[i];
+				values[i] = v === null ? null : Buffer.from(v, "utf8");
+			}
+			return { type: "DataRow", values };
+		}
+		case "commandComplete":
+			return { type: "CommandComplete", tag: msg.text as string };
+		case "emptyQuery":
+			return { type: "EmptyQueryResponse" };
+		case "error":
+			return { type: "ErrorResponse", fields: errorOrNoticeFields(msg) };
+		case "notice":
+			return { type: "NoticeResponse", fields: errorOrNoticeFields(msg) };
+		case "notification":
+			return {
+				type: "NotificationResponse",
+				processId: msg.processId as number,
+				channel: msg.channel as string,
+				payload: msg.payload as string,
+			};
+		case "copyInResponse":
+			return adaptCopyResponse("CopyInResponse", msg);
+		case "copyOutResponse":
+			return adaptCopyResponse("CopyOutResponse", msg);
+		case "replicationStart":
+			// pg-protocol emits a bare marker for the 'W' (CopyBothResponse) byte
+			// — its `Parser` recognises the message code but does not decode the
+			// payload (overall format + per-column format bytes). The body shape
+			// is identical to CopyInResponse / CopyOutResponse but we don't need
+			// those fields: the connection layer reacts to CopyBothResponse by
+			// raising a clean diagnostic because this client does not implement
+			// CopyBoth streaming.
+			return { type: "CopyBothResponse" };
+		case "copyData":
+			return { type: "CopyData", data: Buffer.from(msg.chunk as Buffer) };
+		case "copyDone":
+			return { type: "CopyDone" };
+		case "noData":
+			return { type: "NoData" };
+		case "parseComplete":
+			return { type: "ParseComplete" };
+		case "bindComplete":
+			return { type: "BindComplete" };
+		case "closeComplete":
+			return { type: "CloseComplete" };
+		case "portalSuspended":
+			return { type: "PortalSuspended" };
+		case "parameterDescription":
+			return {
+				type: "ParameterDescription",
+				oids: msg.dataTypeIDs as number[],
+			};
+		default:
+			throw new ProtocolError(
+				`Unknown backend message: ${String(msg.name)}`,
+			);
+	}
 }
 
 function adaptCopyResponse(
-  type: 'CopyInResponse' | 'CopyOutResponse',
-  msg: AnyPgMessage,
+	type: "CopyInResponse" | "CopyOutResponse",
+	msg: AnyPgMessage,
 ): BackendMessage {
-  const binary = msg.binary as boolean;
-  const columnTypes = msg.columnTypes as number[];
-  const columnFormats: (0 | 1)[] = columnTypes.map((f) => (f === 1 ? 1 : 0));
-  return {
-    type,
-    overallFormat: binary ? 1 : 0,
-    columnFormats,
-  };
+	const binary = msg.binary as boolean;
+	const columnTypes = msg.columnTypes as number[];
+	const columnFormats: (0 | 1)[] = columnTypes.map((f) => (f === 1 ? 1 : 0));
+	return {
+		type,
+		overallFormat: binary ? 1 : 0,
+		columnFormats,
+	};
 }
 
 /**
@@ -504,34 +510,34 @@ function adaptCopyResponse(
  * `fieldsToNotice` below.
  */
 function errorOrNoticeFields(msg: AnyPgMessage): Map<string, string> {
-  const out = new Map<string, string>();
-  // The on-wire tag → field-name mapping is per PG docs §53.8. pg-protocol
-  // stores `severity` from BOTH `S` and `V` (it overwrites with `V` if present)
-  // — to preserve our previous behaviour (where the map carried both raw
-  // tags), we copy S = V = severity when severity is defined. Consumers like
-  // `fieldsToNotice` look at V then S so this matches.
-  const set = (tag: string, value: unknown): void => {
-    if (typeof value === 'string') out.set(tag, value);
-  };
-  set('S', msg.severity);
-  set('V', msg.severity);
-  set('C', msg.code);
-  set('M', msg.message);
-  set('D', msg.detail);
-  set('H', msg.hint);
-  set('P', msg.position);
-  set('p', msg.internalPosition);
-  set('q', msg.internalQuery);
-  set('W', msg.where);
-  set('s', msg.schema);
-  set('t', msg.table);
-  set('c', msg.column);
-  set('d', msg.dataType);
-  set('n', msg.constraint);
-  set('F', msg.file);
-  set('L', msg.line);
-  set('R', msg.routine);
-  return out;
+	const out = new Map<string, string>();
+	// The on-wire tag → field-name mapping is per PG docs §53.8. pg-protocol
+	// stores `severity` from BOTH `S` and `V` (it overwrites with `V` if present)
+	// — to preserve our previous behaviour (where the map carried both raw
+	// tags), we copy S = V = severity when severity is defined. Consumers like
+	// `fieldsToNotice` look at V then S so this matches.
+	const set = (tag: string, value: unknown): void => {
+		if (typeof value === "string") out.set(tag, value);
+	};
+	set("S", msg.severity);
+	set("V", msg.severity);
+	set("C", msg.code);
+	set("M", msg.message);
+	set("D", msg.detail);
+	set("H", msg.hint);
+	set("P", msg.position);
+	set("p", msg.internalPosition);
+	set("q", msg.internalQuery);
+	set("W", msg.where);
+	set("s", msg.schema);
+	set("t", msg.table);
+	set("c", msg.column);
+	set("d", msg.dataType);
+	set("n", msg.constraint);
+	set("F", msg.file);
+	set("L", msg.line);
+	set("R", msg.routine);
+	return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -544,58 +550,58 @@ function errorOrNoticeFields(msg: AnyPgMessage): Map<string, string> {
  * interface exposes.
  */
 export function fieldsToNotice(fields: Map<string, string>): {
-  severity: string;
-  code?: string;
-  message: string;
-  detail?: string;
-  hint?: string;
-  position?: string;
-  internalPosition?: string;
-  internalQuery?: string;
-  where?: string;
-  schema?: string;
-  table?: string;
-  column?: string;
-  dataType?: string;
-  constraint?: string;
-  file?: string;
-  line?: string;
-  routine?: string;
+	severity: string;
+	code?: string;
+	message: string;
+	detail?: string;
+	hint?: string;
+	position?: string;
+	internalPosition?: string;
+	internalQuery?: string;
+	where?: string;
+	schema?: string;
+	table?: string;
+	column?: string;
+	dataType?: string;
+	constraint?: string;
+	file?: string;
+	line?: string;
+	routine?: string;
 } {
-  // Per PG docs: V is the non-localized severity (preferred when present),
-  // S is the localized severity (always present). Message M is mandatory.
-  const severity = fields.get('V') ?? fields.get('S') ?? '';
-  const message = fields.get('M') ?? '';
-  const out: ReturnType<typeof fieldsToNotice> = { severity, message };
-  const code = fields.get('C');
-  if (code !== undefined) out.code = code;
-  const detail = fields.get('D');
-  if (detail !== undefined) out.detail = detail;
-  const hint = fields.get('H');
-  if (hint !== undefined) out.hint = hint;
-  const position = fields.get('P');
-  if (position !== undefined) out.position = position;
-  const internalPosition = fields.get('p');
-  if (internalPosition !== undefined) out.internalPosition = internalPosition;
-  const internalQuery = fields.get('q');
-  if (internalQuery !== undefined) out.internalQuery = internalQuery;
-  const where = fields.get('W');
-  if (where !== undefined) out.where = where;
-  const schema = fields.get('s');
-  if (schema !== undefined) out.schema = schema;
-  const table = fields.get('t');
-  if (table !== undefined) out.table = table;
-  const column = fields.get('c');
-  if (column !== undefined) out.column = column;
-  const dataType = fields.get('d');
-  if (dataType !== undefined) out.dataType = dataType;
-  const constraint = fields.get('n');
-  if (constraint !== undefined) out.constraint = constraint;
-  const file = fields.get('F');
-  if (file !== undefined) out.file = file;
-  const line = fields.get('L');
-  if (line !== undefined) out.line = line;
-  const routine = fields.get('R');
-  if (routine !== undefined) out.routine = routine;
-  return out;
+	// Per PG docs: V is the non-localized severity (preferred when present),
+	// S is the localized severity (always present). Message M is mandatory.
+	const severity = fields.get("V") ?? fields.get("S") ?? "";
+	const message = fields.get("M") ?? "";
+	const out: ReturnType<typeof fieldsToNotice> = { severity, message };
+	const code = fields.get("C");
+	if (code !== undefined) out.code = code;
+	const detail = fields.get("D");
+	if (detail !== undefined) out.detail = detail;
+	const hint = fields.get("H");
+	if (hint !== undefined) out.hint = hint;
+	const position = fields.get("P");
+	if (position !== undefined) out.position = position;
+	const internalPosition = fields.get("p");
+	if (internalPosition !== undefined) out.internalPosition = internalPosition;
+	const internalQuery = fields.get("q");
+	if (internalQuery !== undefined) out.internalQuery = internalQuery;
+	const where = fields.get("W");
+	if (where !== undefined) out.where = where;
+	const schema = fields.get("s");
+	if (schema !== undefined) out.schema = schema;
+	const table = fields.get("t");
+	if (table !== undefined) out.table = table;
+	const column = fields.get("c");
+	if (column !== undefined) out.column = column;
+	const dataType = fields.get("d");
+	if (dataType !== undefined) out.dataType = dataType;
+	const constraint = fields.get("n");
+	if (constraint !== undefined) out.constraint = constraint;
+	const file = fields.get("F");
+	if (file !== undefined) out.file = file;
+	const line = fields.get("L");
+	if (line !== undefined) out.line = line;
+	const routine = fields.get("R");
+	if (routine !== undefined) out.routine = routine;
+	return out;
 }

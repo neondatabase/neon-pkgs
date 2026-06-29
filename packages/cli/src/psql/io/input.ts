@@ -18,26 +18,26 @@
  * defaults.
  */
 
-import { createInterface } from 'node:readline';
+import { createInterface } from "node:readline";
 
 /** A TTY-capable readable stream. */
 type RawCapableInput = NodeJS.ReadStream;
 
 export type ReadLineOpts = {
-  /** Whether to echo typed characters. `false` requests a no-echo read. */
-  echo: boolean;
-  /** Input stream (default: `process.stdin`). Injectable for tests. */
-  input?: NodeJS.ReadableStream;
-  /** Prompt / echo output stream (default: `process.stderr`). */
-  output?: NodeJS.WritableStream;
+	/** Whether to echo typed characters. `false` requests a no-echo read. */
+	echo: boolean;
+	/** Input stream (default: `process.stdin`). Injectable for tests. */
+	input?: NodeJS.ReadableStream;
+	/** Prompt / echo output stream (default: `process.stderr`). */
+	output?: NodeJS.WritableStream;
 };
 
 /** True when `stream` is a TTY whose echo we can suppress via raw mode. */
 const isRawCapableTty = (
-  stream: NodeJS.ReadableStream,
+	stream: NodeJS.ReadableStream,
 ): stream is RawCapableInput => {
-  const s = stream as RawCapableInput;
-  return Boolean(s.isTTY) && typeof s.setRawMode === 'function';
+	const s = stream as RawCapableInput;
+	return Boolean(s.isTTY) && typeof s.setRawMode === "function";
 };
 
 /**
@@ -54,44 +54,44 @@ const isRawCapableTty = (
  * resolves to whatever was typed so far (empty string if nothing).
  */
 export const readLine = (
-  prompt: string,
-  opts: ReadLineOpts,
+	prompt: string,
+	opts: ReadLineOpts,
 ): Promise<string> => {
-  const input = opts.input ?? process.stdin;
-  const output = opts.output ?? process.stderr;
+	const input = opts.input ?? process.stdin;
+	const output = opts.output ?? process.stderr;
 
-  if (!opts.echo && isRawCapableTty(input)) {
-    return readNoEchoTty(prompt, input, output);
-  }
-  return readEchoLine(prompt, input, output);
+	if (!opts.echo && isRawCapableTty(input)) {
+		return readNoEchoTty(prompt, input, output);
+	}
+	return readEchoLine(prompt, input, output);
 };
 
 /** Plain, echoing (or non-TTY) line read via `node:readline`. */
 const readEchoLine = (
-  prompt: string,
-  input: NodeJS.ReadableStream,
-  output: NodeJS.WritableStream,
+	prompt: string,
+	input: NodeJS.ReadableStream,
+	output: NodeJS.WritableStream,
 ): Promise<string> => {
-  const rl = createInterface({ input, output, terminal: false });
-  return new Promise<string>((resolve) => {
-    let settled = false;
-    const settle = (line: string): void => {
-      if (settled) return;
-      settled = true;
-      rl.close();
-      resolve(line);
-    };
-    if (prompt.length > 0) output.write(prompt);
-    // Resolve on the first complete line. Closing without one (EOF) yields ''.
-    // We don't rely on `line` firing before `close`: whichever lands first
-    // wins, and a buffered final line is delivered as a `line` event.
-    rl.on('line', (l) => {
-      settle(l);
-    });
-    rl.on('close', () => {
-      settle('');
-    });
-  });
+	const rl = createInterface({ input, output, terminal: false });
+	return new Promise<string>((resolve) => {
+		let settled = false;
+		const settle = (line: string): void => {
+			if (settled) return;
+			settled = true;
+			rl.close();
+			resolve(line);
+		};
+		if (prompt.length > 0) output.write(prompt);
+		// Resolve on the first complete line. Closing without one (EOF) yields ''.
+		// We don't rely on `line` firing before `close`: whichever lands first
+		// wins, and a buffered final line is delivered as a `line` event.
+		rl.on("line", (l) => {
+			settle(l);
+		});
+		rl.on("close", () => {
+			settle("");
+		});
+	});
 };
 
 /**
@@ -101,51 +101,51 @@ const readEchoLine = (
  * Ctrl-D abort with whatever has been typed (empty on a clean Ctrl-C).
  */
 const readNoEchoTty = (
-  prompt: string,
-  input: RawCapableInput,
-  output: NodeJS.WritableStream,
+	prompt: string,
+	input: RawCapableInput,
+	output: NodeJS.WritableStream,
 ): Promise<string> => {
-  return new Promise<string>((resolve) => {
-    if (prompt.length > 0) output.write(prompt);
-    input.setRawMode(true);
-    input.resume();
-    input.setEncoding('utf8');
+	return new Promise<string>((resolve) => {
+		if (prompt.length > 0) output.write(prompt);
+		input.setRawMode(true);
+		input.resume();
+		input.setEncoding("utf8");
 
-    let buf = '';
-    const finish = (result: string): void => {
-      input.setRawMode(false);
-      input.pause();
-      input.removeListener('data', onData);
-      // Terminate the (un-echoed) line the user couldn't see themselves type.
-      output.write('\n');
-      resolve(result);
-    };
+		let buf = "";
+		const finish = (result: string): void => {
+			input.setRawMode(false);
+			input.pause();
+			input.removeListener("data", onData);
+			// Terminate the (un-echoed) line the user couldn't see themselves type.
+			output.write("\n");
+			resolve(result);
+		};
 
-    const onData = (chunk: string): void => {
-      for (const ch of chunk) {
-        if (ch === '\n' || ch === '\r') {
-          finish(buf);
-          return;
-        }
-        if (ch === '') {
-          // Ctrl-C: cancel, return nothing.
-          finish('');
-          return;
-        }
-        if (ch === '') {
-          // Ctrl-D (EOF): return what we have.
-          finish(buf);
-          return;
-        }
-        if (ch === '' || ch === '\b') {
-          // DEL / Backspace: drop the last character.
-          buf = buf.slice(0, -1);
-          continue;
-        }
-        buf += ch;
-      }
-    };
+		const onData = (chunk: string): void => {
+			for (const ch of chunk) {
+				if (ch === "\n" || ch === "\r") {
+					finish(buf);
+					return;
+				}
+				if (ch === "") {
+					// Ctrl-C: cancel, return nothing.
+					finish("");
+					return;
+				}
+				if (ch === "") {
+					// Ctrl-D (EOF): return what we have.
+					finish(buf);
+					return;
+				}
+				if (ch === "" || ch === "\b") {
+					// DEL / Backspace: drop the last character.
+					buf = buf.slice(0, -1);
+					continue;
+				}
+				buf += ch;
+			}
+		};
 
-    input.on('data', onData);
-  });
+		input.on("data", onData);
+	});
 };

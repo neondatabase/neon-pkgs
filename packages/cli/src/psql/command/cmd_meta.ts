@@ -35,36 +35,33 @@
  *     that wiring lives in WP-15 and we leave the hook in place.
  */
 
-import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-
-import { readLine } from '../io/input.js';
-import { getHistory } from '../io/history.js';
-import { slashUsage } from '../core/help.js';
-
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { helpSQL, slashUsage } from "../core/help.js";
+import { getHistory } from "../io/history.js";
+import { readLine } from "../io/input.js";
 import type {
-  BackslashCmdSpec,
-  BackslashContext,
-  BackslashResult,
-} from '../types/backslash.js';
+	BackslashCmdSpec,
+	BackslashContext,
+	BackslashResult,
+} from "../types/backslash.js";
 import type {
-  LastErrorResult,
-  PsqlSettings,
-  ShowContext,
-  VerbosityLevel,
-} from '../types/settings.js';
-import { helpSQL } from '../core/help.js';
+	LastErrorResult,
+	PsqlSettings,
+	ShowContext,
+	VerbosityLevel,
+} from "../types/settings.js";
 
-import { writeOut, writeErr, parseBool } from './shared.js';
+import { parseBool, writeErr, writeOut } from "./shared.js";
 
 /** `\q` / `\quit` — exit the REPL. */
 export const cmdQuit: BackslashCmdSpec = {
-  name: 'q',
-  aliases: ['quit'],
-  helpKey: 'q',
-  run: (): Promise<BackslashResult> => Promise.resolve({ status: 'exit' }),
+	name: "q",
+	aliases: ["quit"],
+	helpKey: "q",
+	run: (): Promise<BackslashResult> => Promise.resolve({ status: "exit" }),
 };
 
 /**
@@ -81,47 +78,47 @@ export const cmdQuit: BackslashCmdSpec = {
  * resilient against environments where `sh` is unavailable.
  */
 export const cmdShell: BackslashCmdSpec = {
-  name: '!',
-  argMode: 'whole-line',
-  helpKey: '!',
-  run: (ctx: BackslashContext): Promise<BackslashResult> => {
-    const line = ctx.restOfLine().trim();
-    try {
-      if (line.length === 0) {
-        const shell = process.env.SHELL ?? '/bin/sh';
-        spawnSync(shell, ['-i'], { stdio: 'inherit' });
-      } else {
-        spawnSync('sh', ['-c', line], { stdio: 'inherit' });
-      }
-    } catch {
-      // Upstream `do_shell` swallows shell-spawn failures: the REPL has to
-      // keep running even when the child won't start. Status stays `ok` so
-      // a failing `\!` is purely informational.
-    }
-    return Promise.resolve({ status: 'ok' });
-  },
+	name: "!",
+	argMode: "whole-line",
+	helpKey: "!",
+	run: (ctx: BackslashContext): Promise<BackslashResult> => {
+		const line = ctx.restOfLine().trim();
+		try {
+			if (line.length === 0) {
+				const shell = process.env.SHELL ?? "/bin/sh";
+				spawnSync(shell, ["-i"], { stdio: "inherit" });
+			} else {
+				spawnSync("sh", ["-c", line], { stdio: "inherit" });
+			}
+		} catch {
+			// Upstream `do_shell` swallows shell-spawn failures: the REPL has to
+			// keep running even when the child won't start. Status stays `ok` so
+			// a failing `\!` is purely informational.
+		}
+		return Promise.resolve({ status: "ok" });
+	},
 };
 
 /** `\cd [dir]` — change cwd. No arg falls back to `$HOME`. */
 export const cmdCd: BackslashCmdSpec = {
-  name: 'cd',
-  helpKey: 'cd',
-  run: (ctx: BackslashContext): Promise<BackslashResult> => {
-    const dir = ctx.nextArg('normal');
-    const target = dir && dir.length > 0 ? dir : (process.env.HOME ?? null);
-    if (!target) {
-      writeErr(`\\${ctx.cmdName}: could not determine home directory\n`);
-      return Promise.resolve({ status: 'error' });
-    }
-    try {
-      process.chdir(target);
-      return Promise.resolve({ status: 'ok' });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      writeErr(`\\${ctx.cmdName}: ${msg}\n`);
-      return Promise.resolve({ status: 'error' });
-    }
-  },
+	name: "cd",
+	helpKey: "cd",
+	run: (ctx: BackslashContext): Promise<BackslashResult> => {
+		const dir = ctx.nextArg("normal");
+		const target = dir && dir.length > 0 ? dir : (process.env.HOME ?? null);
+		if (!target) {
+			writeErr(`\\${ctx.cmdName}: could not determine home directory\n`);
+			return Promise.resolve({ status: "error" });
+		}
+		try {
+			process.chdir(target);
+			return Promise.resolve({ status: "ok" });
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			writeErr(`\\${ctx.cmdName}: ${msg}\n`);
+			return Promise.resolve({ status: "error" });
+		}
+	},
 };
 
 /**
@@ -136,70 +133,70 @@ export const cmdCd: BackslashCmdSpec = {
  * metadata after lexing.
  */
 const runEcho = (
-  ctx: BackslashContext,
-  write: (s: string) => void,
+	ctx: BackslashContext,
+	write: (s: string) => void,
 ): BackslashResult => {
-  const parts: string[] = [];
-  let noNewline = false;
-  let first = true;
-  // Pre-scan the raw text to decide whether the first arg was the
-  // unquoted `-n` token. We can't rely on the lexed arg value alone:
-  // `'-n'` / `"-n"` produce the same string but must be treated as data.
-  const firstArgIsUnquotedDashN = ((): boolean => {
-    let i = 0;
-    while (i < ctx.rawArgs.length && /\s/.test(ctx.rawArgs[i])) i++;
-    return (
-      ctx.rawArgs.slice(i, i + 2) === '-n' &&
-      (i + 2 === ctx.rawArgs.length || /\s/.test(ctx.rawArgs[i + 2]))
-    );
-  })();
-  for (;;) {
-    const arg = ctx.nextArg('normal');
-    if (arg === null) break;
-    if (first && firstArgIsUnquotedDashN && arg === '-n') {
-      noNewline = true;
-      first = false;
-      continue;
-    }
-    first = false;
-    parts.push(arg);
-  }
-  const out = parts.join(' ') + (noNewline ? '' : '\n');
-  write(out);
-  return { status: 'ok' };
+	const parts: string[] = [];
+	let noNewline = false;
+	let first = true;
+	// Pre-scan the raw text to decide whether the first arg was the
+	// unquoted `-n` token. We can't rely on the lexed arg value alone:
+	// `'-n'` / `"-n"` produce the same string but must be treated as data.
+	const firstArgIsUnquotedDashN = ((): boolean => {
+		let i = 0;
+		while (i < ctx.rawArgs.length && /\s/.test(ctx.rawArgs[i])) i++;
+		return (
+			ctx.rawArgs.slice(i, i + 2) === "-n" &&
+			(i + 2 === ctx.rawArgs.length || /\s/.test(ctx.rawArgs[i + 2]))
+		);
+	})();
+	for (;;) {
+		const arg = ctx.nextArg("normal");
+		if (arg === null) break;
+		if (first && firstArgIsUnquotedDashN && arg === "-n") {
+			noNewline = true;
+			first = false;
+			continue;
+		}
+		first = false;
+		parts.push(arg);
+	}
+	const out = parts.join(" ") + (noNewline ? "" : "\n");
+	write(out);
+	return { status: "ok" };
 };
 
 /** `\echo` — write args to stdout. */
 export const cmdEcho: BackslashCmdSpec = {
-  name: 'echo',
-  helpKey: 'echo',
-  run: (ctx: BackslashContext): Promise<BackslashResult> =>
-    Promise.resolve(runEcho(ctx, writeOut)),
+	name: "echo",
+	helpKey: "echo",
+	run: (ctx: BackslashContext): Promise<BackslashResult> =>
+		Promise.resolve(runEcho(ctx, writeOut)),
 };
 
 /** `\qecho` — write args to the query output (logfile if set, else stdout). */
 export const cmdQecho: BackslashCmdSpec = {
-  name: 'qecho',
-  helpKey: 'qecho',
-  run: (ctx: BackslashContext): Promise<BackslashResult> => {
-    const { logfile } = ctx.settings;
-    const write = (s: string): void => {
-      if (logfile) {
-        logfile.write(s);
-      } else {
-        writeOut(s);
-      }
-    };
-    return Promise.resolve(runEcho(ctx, write));
-  },
+	name: "qecho",
+	helpKey: "qecho",
+	run: (ctx: BackslashContext): Promise<BackslashResult> => {
+		const { logfile } = ctx.settings;
+		const write = (s: string): void => {
+			if (logfile) {
+				logfile.write(s);
+			} else {
+				writeOut(s);
+			}
+		};
+		return Promise.resolve(runEcho(ctx, write));
+	},
 };
 
 /** `\warn` — write args to stderr. */
 export const cmdWarn: BackslashCmdSpec = {
-  name: 'warn',
-  helpKey: 'warn',
-  run: (ctx: BackslashContext): Promise<BackslashResult> =>
-    Promise.resolve(runEcho(ctx, writeErr)),
+	name: "warn",
+	helpKey: "warn",
+	run: (ctx: BackslashContext): Promise<BackslashResult> =>
+		Promise.resolve(runEcho(ctx, writeErr)),
 };
 
 /**
@@ -217,44 +214,44 @@ export const cmdWarn: BackslashCmdSpec = {
  * the first is the prompt and the second the variable.
  */
 export const cmdPrompt: BackslashCmdSpec = {
-  name: 'prompt',
-  helpKey: 'prompt',
-  run: async (ctx: BackslashContext): Promise<BackslashResult> => {
-    const args: string[] = [];
-    for (;;) {
-      const a = ctx.nextArg('normal');
-      if (a === null) break;
-      args.push(a);
-    }
+	name: "prompt",
+	helpKey: "prompt",
+	run: async (ctx: BackslashContext): Promise<BackslashResult> => {
+		const args: string[] = [];
+		for (;;) {
+			const a = ctx.nextArg("normal");
+			if (a === null) break;
+			args.push(a);
+		}
 
-    // A leading `-` selects the no-echo (password) read path.
-    let echo = true;
-    if (args.length > 0 && args[0] === '-') {
-      echo = false;
-      args.shift();
-    }
+		// A leading `-` selects the no-echo (password) read path.
+		let echo = true;
+		if (args.length > 0 && args[0] === "-") {
+			echo = false;
+			args.shift();
+		}
 
-    if (args.length === 0) {
-      writeErr(`\\${ctx.cmdName}: missing required argument\n`);
-      return { status: 'error' };
-    }
+		if (args.length === 0) {
+			writeErr(`\\${ctx.cmdName}: missing required argument\n`);
+			return { status: "error" };
+		}
 
-    let promptText = '';
-    let varname: string;
-    if (args.length === 1) {
-      varname = args[0];
-    } else {
-      promptText = args[0];
-      varname = args[1];
-    }
+		let promptText = "";
+		let varname: string;
+		if (args.length === 1) {
+			varname = args[0];
+		} else {
+			promptText = args[0];
+			varname = args[1];
+		}
 
-    const line = await readLine(promptText, { echo });
-    if (!ctx.settings.vars.set(varname, line)) {
-      writeErr(`\\${ctx.cmdName}: invalid variable name "${varname}"\n`);
-      return { status: 'error' };
-    }
-    return { status: 'ok' };
-  },
+		const line = await readLine(promptText, { echo });
+		if (!ctx.settings.vars.set(varname, line)) {
+			writeErr(`\\${ctx.cmdName}: invalid variable name "${varname}"\n`);
+			return { status: "error" };
+		}
+		return { status: "ok" };
+	},
 };
 
 /**
@@ -277,49 +274,49 @@ export const cmdPrompt: BackslashCmdSpec = {
  *     accepts or returns a wording string.
  */
 export const cmdSet: BackslashCmdSpec = {
-  name: 'set',
-  helpKey: 'set',
-  run: (ctx: BackslashContext): Promise<BackslashResult> => {
-    const name = ctx.nextArg('normal');
-    if (name === null) {
-      // List all vars sorted by name.
-      const entries = [...ctx.settings.vars.entries()].sort(([a], [b]) =>
-        a < b ? -1 : a > b ? 1 : 0,
-      );
-      for (const [k, v] of entries) {
-        writeOut(`${k} = '${v}'\n`);
-      }
-      return Promise.resolve({ status: 'ok' });
-    }
+	name: "set",
+	helpKey: "set",
+	run: (ctx: BackslashContext): Promise<BackslashResult> => {
+		const name = ctx.nextArg("normal");
+		if (name === null) {
+			// List all vars sorted by name.
+			const entries = [...ctx.settings.vars.entries()].sort(([a], [b]) =>
+				a < b ? -1 : a > b ? 1 : 0,
+			);
+			for (const [k, v] of entries) {
+				writeOut(`${k} = '${v}'\n`);
+			}
+			return Promise.resolve({ status: "ok" });
+		}
 
-    const values: string[] = [];
-    for (;;) {
-      const a = ctx.nextArg('normal');
-      if (a === null) break;
-      values.push(a);
-    }
-    const value = values.join('');
-    const result = ctx.settings.vars.trySet(name, value);
-    if (!result.ok) {
-      const prefix = psqlErrorPrefix(ctx.settings);
-      if (result.reason === 'invalid-name') {
-        writeErr(`${prefix}invalid variable name: "${name}"\n`);
-      } else if (result.error !== undefined) {
-        // Hook supplied its own wording — emit verbatim, prefixed with
-        // `psql: `. The message intentionally does NOT carry a severity
-        // (`error:` / `ERROR:`) because upstream's per-variable hooks
-        // also emit just `psql: <msg>` (see `bool_substitute_hook` etc.).
-        writeErr(`${prefix}${result.error}\n`);
-      } else {
-        // Hook returned `false` without a message — fall back to a
-        // generic line so callers still see something. None of the
-        // built-in hooks take this path, but third-party callers might.
-        writeErr(`${prefix}error while setting variable "${name}"\n`);
-      }
-      return Promise.resolve({ status: 'error' });
-    }
-    return Promise.resolve({ status: 'ok' });
-  },
+		const values: string[] = [];
+		for (;;) {
+			const a = ctx.nextArg("normal");
+			if (a === null) break;
+			values.push(a);
+		}
+		const value = values.join("");
+		const result = ctx.settings.vars.trySet(name, value);
+		if (!result.ok) {
+			const prefix = psqlErrorPrefix(ctx.settings);
+			if (result.reason === "invalid-name") {
+				writeErr(`${prefix}invalid variable name: "${name}"\n`);
+			} else if (result.error !== undefined) {
+				// Hook supplied its own wording — emit verbatim, prefixed with
+				// `psql: `. The message intentionally does NOT carry a severity
+				// (`error:` / `ERROR:`) because upstream's per-variable hooks
+				// also emit just `psql: <msg>` (see `bool_substitute_hook` etc.).
+				writeErr(`${prefix}${result.error}\n`);
+			} else {
+				// Hook returned `false` without a message — fall back to a
+				// generic line so callers still see something. None of the
+				// built-in hooks take this path, but third-party callers might.
+				writeErr(`${prefix}error while setting variable "${name}"\n`);
+			}
+			return Promise.resolve({ status: "error" });
+		}
+		return Promise.resolve({ status: "ok" });
+	},
 };
 
 /**
@@ -338,52 +335,52 @@ export const cmdSet: BackslashCmdSpec = {
  * the regress harness, which passes `--quiet`) produces no output.
  */
 export const cmdReset: BackslashCmdSpec = {
-  name: 'r',
-  aliases: ['reset'],
-  helpKey: 'r',
-  run: (ctx: BackslashContext): Promise<BackslashResult> => {
-    if (!ctx.settings.quiet) {
-      writeOut('Query buffer reset (cleared).\n');
-    }
-    return Promise.resolve({ status: 'reset-buf', newBuf: '' });
-  },
+	name: "r",
+	aliases: ["reset"],
+	helpKey: "r",
+	run: (ctx: BackslashContext): Promise<BackslashResult> => {
+		if (!ctx.settings.quiet) {
+			writeOut("Query buffer reset (cleared).\n");
+		}
+		return Promise.resolve({ status: "reset-buf", newBuf: "" });
+	},
 };
 
 /** `\unset varname` — unset a psql variable. */
 export const cmdUnset: BackslashCmdSpec = {
-  name: 'unset',
-  helpKey: 'unset',
-  run: (ctx: BackslashContext): Promise<BackslashResult> => {
-    const name = ctx.nextArg('normal');
-    if (name === null) {
-      writeErr(`\\${ctx.cmdName}: missing required argument\n`);
-      return Promise.resolve({ status: 'error' });
-    }
-    ctx.settings.vars.unset(name);
-    return Promise.resolve({ status: 'ok' });
-  },
+	name: "unset",
+	helpKey: "unset",
+	run: (ctx: BackslashContext): Promise<BackslashResult> => {
+		const name = ctx.nextArg("normal");
+		if (name === null) {
+			writeErr(`\\${ctx.cmdName}: missing required argument\n`);
+			return Promise.resolve({ status: "error" });
+		}
+		ctx.settings.vars.unset(name);
+		return Promise.resolve({ status: "ok" });
+	},
 };
 
 export const cmdGetenv: BackslashCmdSpec = {
-  name: 'getenv',
-  helpKey: 'getenv',
-  run: (ctx: BackslashContext): Promise<BackslashResult> => {
-    const varname = ctx.nextArg('normal');
-    const envname = ctx.nextArg('normal');
-    if (varname === null || envname === null) {
-      writeErr(`\\${ctx.cmdName}: missing required argument\n`);
-      return Promise.resolve({ status: 'error' });
-    }
-    const value = process.env[envname];
-    if (value === undefined) {
-      return Promise.resolve({ status: 'ok' });
-    }
-    if (!ctx.settings.vars.set(varname, value)) {
-      writeErr(`\\${ctx.cmdName}: invalid variable name "${varname}"\n`);
-      return Promise.resolve({ status: 'error' });
-    }
-    return Promise.resolve({ status: 'ok' });
-  },
+	name: "getenv",
+	helpKey: "getenv",
+	run: (ctx: BackslashContext): Promise<BackslashResult> => {
+		const varname = ctx.nextArg("normal");
+		const envname = ctx.nextArg("normal");
+		if (varname === null || envname === null) {
+			writeErr(`\\${ctx.cmdName}: missing required argument\n`);
+			return Promise.resolve({ status: "error" });
+		}
+		const value = process.env[envname];
+		if (value === undefined) {
+			return Promise.resolve({ status: "ok" });
+		}
+		if (!ctx.settings.vars.set(varname, value)) {
+			writeErr(`\\${ctx.cmdName}: invalid variable name "${varname}"\n`);
+			return Promise.resolve({ status: "error" });
+		}
+		return Promise.resolve({ status: "ok" });
+	},
 };
 
 /**
@@ -393,36 +390,36 @@ export const cmdGetenv: BackslashCmdSpec = {
  * rejects names containing `=`.
  */
 export const cmdSetenv: BackslashCmdSpec = {
-  name: 'setenv',
-  helpKey: 'setenv',
-  run: (ctx: BackslashContext): Promise<BackslashResult> => {
-    const envname = ctx.nextArg('normal');
-    if (envname === null) {
-      writeErr(`\\${ctx.cmdName}: missing required argument\n`);
-      return Promise.resolve({ status: 'error' });
-    }
-    if (envname.includes('=')) {
-      writeErr(
-        `\\${ctx.cmdName}: environment variable name must not contain "="\n`,
-      );
-      return Promise.resolve({ status: 'error' });
-    }
-    // Upstream `exec_command_setenv` reads BOTH the name AND the value with
-    // OT_NORMAL — `:VAR` substitution applies to the value so
-    // `\setenv FOO :BAR` propagates the psql-variable value into the env.
-    // (Earlier 'no-vars' was a misread; vanilla psql expands inside the
-    // value.) The mainloop context maintains a per-mode cursor, so using
-    // a single mode for both calls also keeps positional reads in sync —
-    // each cursor advances exactly once per call.
-    const value = ctx.nextArg('normal');
-    if (value === null) {
-      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
-      delete process.env[envname];
-    } else {
-      process.env[envname] = value;
-    }
-    return Promise.resolve({ status: 'ok' });
-  },
+	name: "setenv",
+	helpKey: "setenv",
+	run: (ctx: BackslashContext): Promise<BackslashResult> => {
+		const envname = ctx.nextArg("normal");
+		if (envname === null) {
+			writeErr(`\\${ctx.cmdName}: missing required argument\n`);
+			return Promise.resolve({ status: "error" });
+		}
+		if (envname.includes("=")) {
+			writeErr(
+				`\\${ctx.cmdName}: environment variable name must not contain "="\n`,
+			);
+			return Promise.resolve({ status: "error" });
+		}
+		// Upstream `exec_command_setenv` reads BOTH the name AND the value with
+		// OT_NORMAL — `:VAR` substitution applies to the value so
+		// `\setenv FOO :BAR` propagates the psql-variable value into the env.
+		// (Earlier 'no-vars' was a misread; vanilla psql expands inside the
+		// value.) The mainloop context maintains a per-mode cursor, so using
+		// a single mode for both calls also keeps positional reads in sync —
+		// each cursor advances exactly once per call.
+		const value = ctx.nextArg("normal");
+		if (value === null) {
+			// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+			delete process.env[envname];
+		} else {
+			process.env[envname] = value;
+		}
+		return Promise.resolve({ status: "ok" });
+	},
 };
 
 /**
@@ -442,14 +439,14 @@ export const cmdSetenv: BackslashCmdSpec = {
  * concatenate the severity directly (`prefix + 'ERROR:  msg'`).
  */
 export const psqlErrorPrefix = (
-  settings: PsqlSettings,
-  lineNumber?: number,
+	settings: PsqlSettings,
+	lineNumber?: number,
 ): string => {
-  if (settings.curCmdSource === 'file' && settings.inputfile) {
-    const lineSuffix = lineNumber !== undefined ? String(lineNumber) : '';
-    return `psql:${settings.inputfile}:${lineSuffix}: `;
-  }
-  return '';
+	if (settings.curCmdSource === "file" && settings.inputfile) {
+		const lineSuffix = lineNumber !== undefined ? String(lineNumber) : "";
+		return `psql:${settings.inputfile}:${lineSuffix}: `;
+	}
+	return "";
 };
 
 /**
@@ -470,51 +467,51 @@ export const psqlErrorPrefix = (
  * `position - 1`.
  */
 const skipLeadingPrelude = (sqlText: string): number => {
-  let i = 0;
-  const n = sqlText.length;
-  while (i < n) {
-    const c = sqlText.charCodeAt(i);
-    if (
-      c === 0x20 ||
-      c === 0x09 ||
-      c === 0x0a ||
-      c === 0x0d ||
-      c === 0x0c ||
-      c === 0x0b
-    ) {
-      i++;
-      continue;
-    }
-    if (c === 0x2d && sqlText.charCodeAt(i + 1) === 0x2d) {
-      i += 2;
-      while (i < n && sqlText.charCodeAt(i) !== 0x0a) i++;
-      continue;
-    }
-    if (c === 0x2f && sqlText.charCodeAt(i + 1) === 0x2a) {
-      i += 2;
-      let depth = 1;
-      while (i < n && depth > 0) {
-        if (
-          sqlText.charCodeAt(i) === 0x2f &&
-          sqlText.charCodeAt(i + 1) === 0x2a
-        ) {
-          depth++;
-          i += 2;
-        } else if (
-          sqlText.charCodeAt(i) === 0x2a &&
-          sqlText.charCodeAt(i + 1) === 0x2f
-        ) {
-          depth--;
-          i += 2;
-        } else {
-          i++;
-        }
-      }
-      continue;
-    }
-    break;
-  }
-  return i;
+	let i = 0;
+	const n = sqlText.length;
+	while (i < n) {
+		const c = sqlText.charCodeAt(i);
+		if (
+			c === 0x20 ||
+			c === 0x09 ||
+			c === 0x0a ||
+			c === 0x0d ||
+			c === 0x0c ||
+			c === 0x0b
+		) {
+			i++;
+			continue;
+		}
+		if (c === 0x2d && sqlText.charCodeAt(i + 1) === 0x2d) {
+			i += 2;
+			while (i < n && sqlText.charCodeAt(i) !== 0x0a) i++;
+			continue;
+		}
+		if (c === 0x2f && sqlText.charCodeAt(i + 1) === 0x2a) {
+			i += 2;
+			let depth = 1;
+			while (i < n && depth > 0) {
+				if (
+					sqlText.charCodeAt(i) === 0x2f &&
+					sqlText.charCodeAt(i + 1) === 0x2a
+				) {
+					depth++;
+					i += 2;
+				} else if (
+					sqlText.charCodeAt(i) === 0x2a &&
+					sqlText.charCodeAt(i + 1) === 0x2f
+				) {
+					depth--;
+					i += 2;
+				} else {
+					i++;
+				}
+			}
+			continue;
+		}
+		break;
+	}
+	return i;
 };
 
 /**
@@ -558,48 +555,48 @@ const skipLeadingPrelude = (sqlText: string): number => {
  * share the helper with `\errverbose`.
  */
 export const renderLineAndCaret = (
-  sqlText: string | undefined,
-  position: string | undefined,
+	sqlText: string | undefined,
+	position: string | undefined,
 ): { line: string; caret: string } | null => {
-  if (!sqlText || !position) return null;
-  const pos = parseInt(position, 10);
-  if (!Number.isFinite(pos) || pos <= 0) return null;
-  // Advance past leading WS + comments so the LINE count starts at the
-  // first content line. The server's position is into the on-the-wire
-  // bytes — typically already past these, so rebasing keeps it inside
-  // the content range; if the rebased position would underflow we drop
-  // the LINE/caret block rather than mis-pointing.
-  const skip = skipLeadingPrelude(sqlText);
-  const trimmed = skip === 0 ? sqlText : sqlText.slice(skip);
-  const rebasedPos = pos - skip;
-  if (rebasedPos <= 0) return null;
-  // The server's offset is 1-based and points at the failing character.
-  const idx = Math.min(rebasedPos - 1, trimmed.length);
-  // Find the line containing `idx`.
-  let lineStart = trimmed.lastIndexOf('\n', idx - 1);
-  lineStart = lineStart === -1 ? 0 : lineStart + 1;
-  let lineEnd = trimmed.indexOf('\n', lineStart);
-  if (lineEnd === -1) lineEnd = trimmed.length;
-  const lineText = trimmed.slice(lineStart, lineEnd);
-  // Line number for the `LINE N:` prefix — 1-based.
-  const before = trimmed.slice(0, lineStart);
-  const lineNumber = (before.match(/\n/gu)?.length ?? 0) + 1;
-  // Column inside the picked line (0-based) where the `^` goes. Tabs
-  // upstream are expanded to a fixed width; we approximate with a
-  // single space so the pointer at least lands in the right ballpark.
-  let col = idx - lineStart;
-  // Snap past trailing whitespace when the position lands inside it —
-  // see the function header for the rationale (trim-on-send delta).
-  const lineTrimEndLen = lineText.replace(/[ \t\f\v]+$/u, '').length;
-  if (col >= lineTrimEndLen && col < lineText.length) {
-    col = lineText.length;
-  }
-  const caretIndent = ' '.repeat(Math.max(0, col));
-  const prefix = `LINE ${String(lineNumber)}: `;
-  return {
-    line: `${prefix}${lineText}`,
-    caret: `${' '.repeat(prefix.length)}${caretIndent}^`,
-  };
+	if (!sqlText || !position) return null;
+	const pos = parseInt(position, 10);
+	if (!Number.isFinite(pos) || pos <= 0) return null;
+	// Advance past leading WS + comments so the LINE count starts at the
+	// first content line. The server's position is into the on-the-wire
+	// bytes — typically already past these, so rebasing keeps it inside
+	// the content range; if the rebased position would underflow we drop
+	// the LINE/caret block rather than mis-pointing.
+	const skip = skipLeadingPrelude(sqlText);
+	const trimmed = skip === 0 ? sqlText : sqlText.slice(skip);
+	const rebasedPos = pos - skip;
+	if (rebasedPos <= 0) return null;
+	// The server's offset is 1-based and points at the failing character.
+	const idx = Math.min(rebasedPos - 1, trimmed.length);
+	// Find the line containing `idx`.
+	let lineStart = trimmed.lastIndexOf("\n", idx - 1);
+	lineStart = lineStart === -1 ? 0 : lineStart + 1;
+	let lineEnd = trimmed.indexOf("\n", lineStart);
+	if (lineEnd === -1) lineEnd = trimmed.length;
+	const lineText = trimmed.slice(lineStart, lineEnd);
+	// Line number for the `LINE N:` prefix — 1-based.
+	const before = trimmed.slice(0, lineStart);
+	const lineNumber = (before.match(/\n/gu)?.length ?? 0) + 1;
+	// Column inside the picked line (0-based) where the `^` goes. Tabs
+	// upstream are expanded to a fixed width; we approximate with a
+	// single space so the pointer at least lands in the right ballpark.
+	let col = idx - lineStart;
+	// Snap past trailing whitespace when the position lands inside it —
+	// see the function header for the rationale (trim-on-send delta).
+	const lineTrimEndLen = lineText.replace(/[ \t\f\v]+$/u, "").length;
+	if (col >= lineTrimEndLen && col < lineText.length) {
+		col = lineText.length;
+	}
+	const caretIndent = " ".repeat(Math.max(0, col));
+	const prefix = `LINE ${String(lineNumber)}: `;
+	return {
+		line: `${prefix}${lineText}`,
+		caret: `${" ".repeat(prefix.length)}${caretIndent}^`,
+	};
 };
 
 /**
@@ -630,69 +627,69 @@ export const renderLineAndCaret = (
  * pointing inside it.
  */
 export const formatErrorReport = (
-  e: LastErrorResult,
-  verbosity: VerbosityLevel = 'default',
-  showContext: ShowContext = 'errors',
+	e: LastErrorResult,
+	verbosity: VerbosityLevel = "default",
+	showContext: ShowContext = "errors",
 ): string[] => {
-  const severity = e.severity ?? 'ERROR';
-  const sqlstate = e.code ?? e.sqlstate ?? 'XX000';
-  const message = e.message ?? '';
-  const out: string[] = [];
+	const severity = e.severity ?? "ERROR";
+	const sqlstate = e.code ?? e.sqlstate ?? "XX000";
+	const message = e.message ?? "";
+	const out: string[] = [];
 
-  // `sqlstate` mode is the upstream "just give me the code" flavour:
-  // emit `<severity>:  <sqlstate>` with NO message body. `verbose` mode
-  // adds the SQLSTATE prefix and keeps the message + LINE/DETAIL/HINT
-  // layers below. Default/terse omit the SQLSTATE entirely.
-  //
-  // Reference: upstream `pg_log_pre_callback` / `PQresultErrorMessage`
-  // with `verbosity = PQERRORS_SQLSTATE`, which formats just
-  // `severity: sqlstate\n` and stops.
-  if (verbosity === 'sqlstate') {
-    out.push(`${severity}:  ${sqlstate}`);
-    return out;
-  }
-  if (verbosity === 'verbose') {
-    out.push(`${severity}:  ${sqlstate}: ${message}`);
-  } else if (verbosity === 'terse') {
-    // Terse suppresses LINE/caret/DETAIL/HINT/CONTEXT, but it merges the
-    // server's `position` into the severity line as `at character N` —
-    // matches libpq's `pqGetErrorNotice3` with `PQERRORS_TERSE` (and
-    // vanilla psql in the regress fixture). Only fires when position is a
-    // positive integer; the LINE/caret block below would have shown the
-    // same anchor for default verbosity.
-    const pos = e.position ? Number.parseInt(e.position, 10) : NaN;
-    if (Number.isFinite(pos) && pos > 0) {
-      out.push(`${severity}:  ${message} at character ${String(pos)}`);
-    } else {
-      out.push(`${severity}:  ${message}`);
-    }
-    return out;
-  } else {
-    out.push(`${severity}:  ${message}`);
-  }
+	// `sqlstate` mode is the upstream "just give me the code" flavour:
+	// emit `<severity>:  <sqlstate>` with NO message body. `verbose` mode
+	// adds the SQLSTATE prefix and keeps the message + LINE/DETAIL/HINT
+	// layers below. Default/terse omit the SQLSTATE entirely.
+	//
+	// Reference: upstream `pg_log_pre_callback` / `PQresultErrorMessage`
+	// with `verbosity = PQERRORS_SQLSTATE`, which formats just
+	// `severity: sqlstate\n` and stops.
+	if (verbosity === "sqlstate") {
+		out.push(`${severity}:  ${sqlstate}`);
+		return out;
+	}
+	if (verbosity === "verbose") {
+		out.push(`${severity}:  ${sqlstate}: ${message}`);
+	} else if (verbosity === "terse") {
+		// Terse suppresses LINE/caret/DETAIL/HINT/CONTEXT, but it merges the
+		// server's `position` into the severity line as `at character N` —
+		// matches libpq's `pqGetErrorNotice3` with `PQERRORS_TERSE` (and
+		// vanilla psql in the regress fixture). Only fires when position is a
+		// positive integer; the LINE/caret block below would have shown the
+		// same anchor for default verbosity.
+		const pos = e.position ? Number.parseInt(e.position, 10) : NaN;
+		if (Number.isFinite(pos) && pos > 0) {
+			out.push(`${severity}:  ${message} at character ${String(pos)}`);
+		} else {
+			out.push(`${severity}:  ${message}`);
+		}
+		return out;
+	} else {
+		out.push(`${severity}:  ${message}`);
+	}
 
-  const lineCaret = renderLineAndCaret(e.sqlText, e.position);
-  if (lineCaret) {
-    out.push(lineCaret.line);
-    out.push(lineCaret.caret);
-  }
-  if (e.detail) out.push(`DETAIL:  ${e.detail}`);
-  if (e.hint) out.push(`HINT:  ${e.hint}`);
-  // CONTEXT under default verbosity follows SHOW_CONTEXT: 'never' / 'errors'
-  // (the default — show on errors) / 'always'. We treat every call into the
-  // formatter as an error report, so 'errors' and 'always' both include
-  // CONTEXT, while 'never' suppresses it. Verbose verbosity unconditionally
-  // includes CONTEXT.
-  const includeContext = verbosity === 'verbose' || showContext !== 'never';
-  if (includeContext && e.where) {
-    out.push(`CONTEXT:  ${e.where}`);
-  }
-  if (verbosity === 'verbose' && (e.routine || e.file || e.line)) {
-    const location =
-      (e.routine ?? '') + (e.file ? `, ${e.file}:${e.line ?? ''}` : '');
-    out.push(`LOCATION:  ${location}`);
-  }
-  return out;
+	const lineCaret = renderLineAndCaret(e.sqlText, e.position);
+	if (lineCaret) {
+		out.push(lineCaret.line);
+		out.push(lineCaret.caret);
+	}
+	if (e.detail) out.push(`DETAIL:  ${e.detail}`);
+	if (e.hint) out.push(`HINT:  ${e.hint}`);
+	// CONTEXT under default verbosity follows SHOW_CONTEXT: 'never' / 'errors'
+	// (the default — show on errors) / 'always'. We treat every call into the
+	// formatter as an error report, so 'errors' and 'always' both include
+	// CONTEXT, while 'never' suppresses it. Verbose verbosity unconditionally
+	// includes CONTEXT.
+	const includeContext = verbosity === "verbose" || showContext !== "never";
+	if (includeContext && e.where) {
+		out.push(`CONTEXT:  ${e.where}`);
+	}
+	if (verbosity === "verbose" && (e.routine || e.file || e.line)) {
+		const location =
+			(e.routine ?? "") + (e.file ? `, ${e.file}:${e.line ?? ""}` : "");
+		out.push(`LOCATION:  ${location}`);
+	}
+	return out;
 };
 
 /**
@@ -715,28 +712,28 @@ export const formatErrorReport = (
  * we have both the originating SQL text and a server-provided position.
  */
 export const cmdErrverbose: BackslashCmdSpec = {
-  name: 'errverbose',
-  helpKey: 'errverbose',
-  run: (ctx: BackslashContext): Promise<BackslashResult> => {
-    const e = ctx.settings.lastErrorResult;
-    if (!e || (!e.message && !e.sqlstate && !e.code)) {
-      // Upstream `exec_command_errverbose` writes the "no previous error"
-      // notice to stdout (via `printf`); only the verbose re-render goes to
-      // stderr (via `pg_log_error`).
-      writeOut('There is no previous error.\n');
-      return Promise.resolve({ status: 'ok' });
-    }
-    // `\errverbose` always emits the full verbose form regardless of the
-    // currently active VERBOSITY setting. Output is prefixed with the same
-    // `psql:[<file>:<n>]:` tag upstream's `pg_log_pre_callback` adds — only
-    // on the leading severity line; subsequent layers (LINE / caret / DETAIL
-    // / HINT / LOCATION) stay unprefixed to match libpq's `PQresultErrorMessage`.
-    const lines = formatErrorReport(e, 'verbose', 'always');
-    const prefix = psqlErrorPrefix(ctx.settings);
-    const prefixed = [prefix + lines[0], ...lines.slice(1)];
-    writeErr(prefixed.join('\n') + '\n');
-    return Promise.resolve({ status: 'ok' });
-  },
+	name: "errverbose",
+	helpKey: "errverbose",
+	run: (ctx: BackslashContext): Promise<BackslashResult> => {
+		const e = ctx.settings.lastErrorResult;
+		if (!e || (!e.message && !e.sqlstate && !e.code)) {
+			// Upstream `exec_command_errverbose` writes the "no previous error"
+			// notice to stdout (via `printf`); only the verbose re-render goes to
+			// stderr (via `pg_log_error`).
+			writeOut("There is no previous error.\n");
+			return Promise.resolve({ status: "ok" });
+		}
+		// `\errverbose` always emits the full verbose form regardless of the
+		// currently active VERBOSITY setting. Output is prefixed with the same
+		// `psql:[<file>:<n>]:` tag upstream's `pg_log_pre_callback` adds — only
+		// on the leading severity line; subsequent layers (LINE / caret / DETAIL
+		// / HINT / LOCATION) stay unprefixed to match libpq's `PQresultErrorMessage`.
+		const lines = formatErrorReport(e, "verbose", "always");
+		const prefix = psqlErrorPrefix(ctx.settings);
+		const prefixed = [prefix + lines[0], ...lines.slice(1)];
+		writeErr(prefixed.join("\n") + "\n");
+		return Promise.resolve({ status: "ok" });
+	},
 };
 
 /**
@@ -745,27 +742,27 @@ export const cmdErrverbose: BackslashCmdSpec = {
  * upstream errors "Boolean expected" (review: minor divergences).
  */
 export const cmdTiming: BackslashCmdSpec = {
-  name: 'timing',
-  helpKey: 'timing',
-  run: (ctx: BackslashContext): Promise<BackslashResult> => {
-    const arg = ctx.nextArg('normal');
-    let next: boolean;
-    if (arg === null) {
-      next = !ctx.settings.timing;
-    } else {
-      const parsed = parseBool(arg);
-      if (parsed === null) {
-        writeErr(
-          `\\${ctx.cmdName}: unrecognized value "${arg}" for "\\timing": Boolean expected\n`,
-        );
-        return Promise.resolve({ status: 'error' });
-      }
-      next = parsed;
-    }
-    ctx.settings.timing = next;
-    writeOut(`Timing is ${next ? 'on' : 'off'}.\n`);
-    return Promise.resolve({ status: 'ok' });
-  },
+	name: "timing",
+	helpKey: "timing",
+	run: (ctx: BackslashContext): Promise<BackslashResult> => {
+		const arg = ctx.nextArg("normal");
+		let next: boolean;
+		if (arg === null) {
+			next = !ctx.settings.timing;
+		} else {
+			const parsed = parseBool(arg);
+			if (parsed === null) {
+				writeErr(
+					`\\${ctx.cmdName}: unrecognized value "${arg}" for "\\timing": Boolean expected\n`,
+				);
+				return Promise.resolve({ status: "error" });
+			}
+			next = parsed;
+		}
+		ctx.settings.timing = next;
+		writeOut(`Timing is ${next ? "on" : "off"}.\n`);
+		return Promise.resolve({ status: "ok" });
+	},
 };
 
 /**
@@ -821,12 +818,12 @@ LICENSE file for distribution terms.
  * Neon notice is appended after it.
  */
 export const cmdCopyright: BackslashCmdSpec = {
-  name: 'copyright',
-  helpKey: 'copyright',
-  run: (): Promise<BackslashResult> => {
-    writeOut(COPYRIGHT_TEXT + NEON_NOTICE);
-    return Promise.resolve({ status: 'ok' });
-  },
+	name: "copyright",
+	helpKey: "copyright",
+	run: (): Promise<BackslashResult> => {
+		writeOut(COPYRIGHT_TEXT + NEON_NOTICE);
+		return Promise.resolve({ status: "ok" });
+	},
 };
 
 /**
@@ -836,8 +833,8 @@ export const cmdCopyright: BackslashCmdSpec = {
  * default to 80 if absent (non-TTY, piped output, etc.).
  */
 const screenWidth = (): number => {
-  const cols = process.stdout.columns;
-  return typeof cols === 'number' && cols > 0 ? cols : 80;
+	const cols = process.stdout.columns;
+	return typeof cols === "number" && cols > 0 ? cols : 80;
 };
 
 /**
@@ -849,16 +846,20 @@ const screenWidth = (): number => {
  * matches. Mirrors upstream `exec_command_help` in `command.c`.
  */
 export const cmdHelpSQL: BackslashCmdSpec = {
-  name: 'h',
-  aliases: ['help'],
-  helpKey: 'h',
-  run: (ctx: BackslashContext): Promise<BackslashResult> => {
-    // Upstream consumes the rest of the line in `OT_WHOLE_LINE` mode so
-    // multi-word topics like "CREATE TABLE" come through intact.
-    const topic = ctx.restOfLine();
-    helpSQL(process.stdout, topic.length === 0 ? null : topic, screenWidth());
-    return Promise.resolve({ status: 'ok' });
-  },
+	name: "h",
+	aliases: ["help"],
+	helpKey: "h",
+	run: (ctx: BackslashContext): Promise<BackslashResult> => {
+		// Upstream consumes the rest of the line in `OT_WHOLE_LINE` mode so
+		// multi-word topics like "CREATE TABLE" come through intact.
+		const topic = ctx.restOfLine();
+		helpSQL(
+			process.stdout,
+			topic.length === 0 ? null : topic,
+			screenWidth(),
+		);
+		return Promise.resolve({ status: "ok" });
+	},
 };
 
 /**
@@ -876,18 +877,18 @@ export const cmdHelpSQL: BackslashCmdSpec = {
  * so a stray topic doesn't leak into the next command.
  */
 export const cmdSlashHelp: BackslashCmdSpec = {
-  name: '?',
-  argMode: 'whole-line',
-  helpKey: '?',
-  run: (ctx: BackslashContext): Promise<BackslashResult> => {
-    // Consume the rest of the line (`\? options`, `\? variables`) so the
-    // cursor doesn't strand trailing text; we only render the command help.
-    ctx.restOfLine();
-    const out = process.stdout;
-    const pager = Boolean((out as NodeJS.WriteStream).isTTY);
-    slashUsage(out, pager);
-    return Promise.resolve({ status: 'ok' });
-  },
+	name: "?",
+	argMode: "whole-line",
+	helpKey: "?",
+	run: (ctx: BackslashContext): Promise<BackslashResult> => {
+		// Consume the rest of the line (`\? options`, `\? variables`) so the
+		// cursor doesn't strand trailing text; we only render the command help.
+		ctx.restOfLine();
+		const out = process.stdout;
+		const pager = Boolean((out as NodeJS.WriteStream).isTTY);
+		slashUsage(out, pager);
+		return Promise.resolve({ status: "ok" });
+	},
 };
 
 /**
@@ -900,11 +901,11 @@ export const cmdSlashHelp: BackslashCmdSpec = {
  * matching upstream's `DEFAULT_EDITOR`.
  */
 export const resolveEditor = (
-  env: Record<string, string | undefined> = process.env,
+	env: Record<string, string | undefined> = process.env,
 ): string => {
-  const explicit = env.PSQL_EDITOR ?? env.EDITOR ?? env.VISUAL;
-  if (explicit !== undefined && explicit.length > 0) return explicit;
-  return process.platform === 'win32' ? 'notepad.exe' : 'vi';
+	const explicit = env.PSQL_EDITOR ?? env.EDITOR ?? env.VISUAL;
+	if (explicit !== undefined && explicit.length > 0) return explicit;
+	return process.platform === "win32" ? "notepad.exe" : "vi";
 };
 
 /**
@@ -930,56 +931,59 @@ export const resolveEditor = (
  * (`\e file`) and `\ef`/`\ev` on top.
  */
 export const cmdEdit: BackslashCmdSpec = {
-  name: 'e',
-  aliases: ['edit'],
-  argMode: 'whole-line',
-  helpKey: 'e',
-  run: (ctx: BackslashContext): Promise<BackslashResult> => {
-    // We don't yet support `\e FILE`; consume the args so they don't strand.
-    ctx.restOfLine();
+	name: "e",
+	aliases: ["edit"],
+	argMode: "whole-line",
+	helpKey: "e",
+	run: (ctx: BackslashContext): Promise<BackslashResult> => {
+		// We don't yet support `\e FILE`; consume the args so they don't strand.
+		ctx.restOfLine();
 
-    const editor = resolveEditor();
-    // psql seeds the temp file with the current query buffer. A trailing
-    // newline keeps editors that expect newline-terminated files happy.
-    const seed =
-      ctx.queryBuf.length > 0 && !ctx.queryBuf.endsWith('\n')
-        ? ctx.queryBuf + '\n'
-        : ctx.queryBuf;
+		const editor = resolveEditor();
+		// psql seeds the temp file with the current query buffer. A trailing
+		// newline keeps editors that expect newline-terminated files happy.
+		const seed =
+			ctx.queryBuf.length > 0 && !ctx.queryBuf.endsWith("\n")
+				? ctx.queryBuf + "\n"
+				: ctx.queryBuf;
 
-    let dir: string | null = null;
-    try {
-      dir = mkdtempSync(join(tmpdir(), 'psql.edit.'));
-      const file = join(dir, 'edit.sql');
-      writeFileSync(file, seed, 'utf8');
+		let dir: string | null = null;
+		try {
+			dir = mkdtempSync(join(tmpdir(), "psql.edit."));
+			const file = join(dir, "edit.sql");
+			writeFileSync(file, seed, "utf8");
 
-      const result = spawnSync(editor, [file], { stdio: 'inherit' });
-      if (result.error || (result.status !== null && result.status !== 0)) {
-        const why = result.error
-          ? result.error.message
-          : `editor exited with status ${String(result.status)}`;
-        writeErr(`\\${ctx.cmdName}: ${why}\n`);
-        return Promise.resolve({ status: 'error' });
-      }
+			const result = spawnSync(editor, [file], { stdio: "inherit" });
+			if (
+				result.error ||
+				(result.status !== null && result.status !== 0)
+			) {
+				const why = result.error
+					? result.error.message
+					: `editor exited with status ${String(result.status)}`;
+				writeErr(`\\${ctx.cmdName}: ${why}\n`);
+				return Promise.resolve({ status: "error" });
+			}
 
-      let edited = readFileSync(file, 'utf8');
-      // Upstream drops a single trailing newline the editor may have added
-      // so an unchanged round-trip restores the original buffer exactly.
-      if (edited.endsWith('\n')) edited = edited.slice(0, -1);
-      return Promise.resolve({ status: 'reset-buf', newBuf: edited });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      writeErr(`\\${ctx.cmdName}: ${msg}\n`);
-      return Promise.resolve({ status: 'error' });
-    } finally {
-      if (dir) {
-        try {
-          rmSync(dir, { recursive: true, force: true });
-        } catch {
-          // Temp-dir cleanup is best-effort; a leftover dir is harmless.
-        }
-      }
-    }
-  },
+			let edited = readFileSync(file, "utf8");
+			// Upstream drops a single trailing newline the editor may have added
+			// so an unchanged round-trip restores the original buffer exactly.
+			if (edited.endsWith("\n")) edited = edited.slice(0, -1);
+			return Promise.resolve({ status: "reset-buf", newBuf: edited });
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			writeErr(`\\${ctx.cmdName}: ${msg}\n`);
+			return Promise.resolve({ status: "error" });
+		} finally {
+			if (dir) {
+				try {
+					rmSync(dir, { recursive: true, force: true });
+				} catch {
+					// Temp-dir cleanup is best-effort; a leftover dir is harmless.
+				}
+			}
+		}
+	},
 };
 
 /**
@@ -999,30 +1003,30 @@ export const cmdEdit: BackslashCmdSpec = {
  * populated as each line is submitted (see `io/history.ts`).
  */
 export const cmdS: BackslashCmdSpec = {
-  name: 's',
-  helpKey: 's',
-  run: (ctx: BackslashContext): Promise<BackslashResult> => {
-    const fname = ctx.nextArg('normal');
-    const entries = getHistory();
-    // Each entry is one logical command; readline's `\s` prints them one
-    // per line, so a trailing newline per entry reproduces that layout.
-    const body = entries.map((e) => e + '\n').join('');
+	name: "s",
+	helpKey: "s",
+	run: (ctx: BackslashContext): Promise<BackslashResult> => {
+		const fname = ctx.nextArg("normal");
+		const entries = getHistory();
+		// Each entry is one logical command; readline's `\s` prints them one
+		// per line, so a trailing newline per entry reproduces that layout.
+		const body = entries.map((e) => e + "\n").join("");
 
-    if (fname === null || fname.length === 0) {
-      writeOut(body);
-      return Promise.resolve({ status: 'ok' });
-    }
+		if (fname === null || fname.length === 0) {
+			writeOut(body);
+			return Promise.resolve({ status: "ok" });
+		}
 
-    try {
-      writeFileSync(fname, body, 'utf8');
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      writeErr(`\\${ctx.cmdName}: ${msg}\n`);
-      return Promise.resolve({ status: 'error' });
-    }
-    if (!ctx.settings.quiet) {
-      writeOut(`Wrote history to file "${fname}".\n`);
-    }
-    return Promise.resolve({ status: 'ok' });
-  },
+		try {
+			writeFileSync(fname, body, "utf8");
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			writeErr(`\\${ctx.cmdName}: ${msg}\n`);
+			return Promise.resolve({ status: "error" });
+		}
+		if (!ctx.settings.quiet) {
+			writeOut(`Wrote history to file "${fname}".\n`);
+		}
+		return Promise.resolve({ status: "ok" });
+	},
 };

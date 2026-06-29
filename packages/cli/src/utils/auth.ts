@@ -1,10 +1,10 @@
-import { TokenEndpointResponse } from 'openid-client';
-import { ExtendedTokenSet } from '../types';
+import type { TokenEndpointResponse } from "openid-client";
+import type { ExtendedTokenSet } from "../types";
 
 export const extendTokenSet = (
-  tokenSet: TokenEndpointResponse,
+	tokenSet: TokenEndpointResponse,
 ): ExtendedTokenSet => {
-  const exp = new Date();
-  exp.setSeconds(exp.getSeconds() + (tokenSet.expires_in ?? 0));
-  return { ...tokenSet, expires_at: exp.getTime() };
+	const exp = new Date();
+	exp.setSeconds(exp.getSeconds() + (tokenSet.expires_in ?? 0));
+	return { ...tokenSet, expires_at: exp.getTime() };
 };

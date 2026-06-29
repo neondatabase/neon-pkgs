@@ -1,7 +1,7 @@
-import chalk from 'chalk';
+import chalk from "chalk";
 
-import { log } from '../log.js';
-import type { ResolvedBranchRef } from './enrichers.js';
+import { log } from "../log.js";
+import type { ResolvedBranchRef } from "./enrichers.js";
 
 /**
  * Print a one-line "this command is targeting <branch>" notice to **stderr** so
@@ -17,20 +17,20 @@ import type { ResolvedBranchRef } from './enrichers.js';
  *   `→ Planning against branch main (br-…)`.
  */
 export const announceTargetBranch = (
-  props: { output?: 'json' | 'yaml' | 'table' },
-  branch: ResolvedBranchRef,
-  verb: string,
+	props: { output?: "json" | "yaml" | "table" },
+	branch: ResolvedBranchRef,
+	verb: string,
 ): void => {
-  if (props.output === 'json' || props.output === 'yaml') {
-    return;
-  }
-  const suffix = branch.usedDefault ? chalk.dim(' · project default') : '';
-  log.info(
-    '%s %s %s %s%s',
-    chalk.dim('→'),
-    verb,
-    chalk.cyan.bold(branch.branchName),
-    chalk.dim(`(${branch.branchId})`),
-    suffix,
-  );
+	if (props.output === "json" || props.output === "yaml") {
+		return;
+	}
+	const suffix = branch.usedDefault ? chalk.dim(" · project default") : "";
+	log.info(
+		"%s %s %s %s%s",
+		chalk.dim("→"),
+		verb,
+		chalk.cyan.bold(branch.branchName),
+		chalk.dim(`(${branch.branchId})`),
+		suffix,
+	);
 };

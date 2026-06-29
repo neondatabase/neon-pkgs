@@ -16,7 +16,7 @@
  * capped at 1000 rows so a wildcard `%` doesn't dump entire databases.
  */
 
-import type { Connection } from '../types/connection.js';
+import type { Connection } from "../types/connection.js";
 
 const LIMIT = 1000;
 
@@ -513,23 +513,25 @@ export const Query_for_list_of_timezone_names_quoted_in = `
  * `pattern` is the user's partial input; we append `%` automatically.
  */
 export const runCatalogQuery = async (
-  conn: Connection,
-  sql: string,
-  pattern: string,
-  extraParams: string[] = [],
+	conn: Connection,
+	sql: string,
+	pattern: string,
+	extraParams: string[] = [],
 ): Promise<string[]> => {
-  try {
-    const likePattern = pattern + '%';
-    const params =
-      extraParams.length > 0 ? [...extraParams, likePattern] : [likePattern];
-    const rs = await conn.query(sql, params);
-    const out: string[] = [];
-    for (const row of rs.rows) {
-      const v = row[0];
-      if (typeof v === 'string') out.push(v);
-    }
-    return out;
-  } catch {
-    return [];
-  }
+	try {
+		const likePattern = pattern + "%";
+		const params =
+			extraParams.length > 0
+				? [...extraParams, likePattern]
+				: [likePattern];
+		const rs = await conn.query(sql, params);
+		const out: string[] = [];
+		for (const row of rs.rows) {
+			const v = row[0];
+			if (typeof v === "string") out.push(v);
+		}
+		return out;
+	} catch {
+		return [];
+	}
 };

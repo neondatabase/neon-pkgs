@@ -1,34 +1,34 @@
-import { TokenEndpointResponse } from 'openid-client';
-import type { NeonApiClient } from './api.js';
+import type { TokenEndpointResponse } from "openid-client";
+import type { NeonApiClient } from "./api.js";
 
 export type CommonProps = {
-  apiClient: NeonApiClient;
-  apiKey: string;
-  apiHost: string;
-  output: 'yaml' | 'json' | 'table';
-  contextFile: string;
+	apiClient: NeonApiClient;
+	apiKey: string;
+	apiHost: string;
+	output: "yaml" | "json" | "table";
+	contextFile: string;
 };
 
 export type ProjectScopeProps = CommonProps & {
-  projectId: string;
+	projectId: string;
 };
 
 export type OrgScopeProps = CommonProps & {
-  orgId: string;
+	orgId: string;
 };
 
 export type IdOrNameProps = {
-  id: string;
+	id: string;
 };
 
 export type BranchScopeProps = ProjectScopeProps &
-  (
-    | {
-        branch: string;
-      }
-    | IdOrNameProps
-  );
+	(
+		| {
+				branch: string;
+		  }
+		| IdOrNameProps
+	);
 
 export type ExtendedTokenSet = TokenEndpointResponse & {
-  expires_at: number;
+	expires_at: number;
 };
