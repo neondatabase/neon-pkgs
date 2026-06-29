@@ -30,6 +30,27 @@ export type Context = {
 export const contextBranch = (context: Context): string | undefined =>
   context.branch ?? context.branchId;
 
+/**
+ * True when the invocation is the offline "current branch" probe:
+ * `(config) status --current-branch`. This mode only reads the pinned branch
+ * from the local `.neon` file (for shell prompts like starship), so it MUST
+ * NOT touch the network — several middlewares (auth, analytics, single-project
+ * resolution) consult this to early-return and skip their API calls / login.
+ *
+ * Gated on the exact command as well as the flag so an accidental
+ * `--current-branch` on an unrelated command (e.g. `config plan`, where the flag
+ * is undefined but non-strict yargs still parses it) can't silently skip
+ * auth/analytics. The probe is only `status` (the top-level alias) or
+ * `config status` (`_ = ['config', 'status']`).
+ */
+export const isCurrentBranchProbe = (args: {
+  _: (string | number)[];
+  currentBranch?: boolean;
+}): boolean =>
+  args.currentBranch === true &&
+  (args._[0] === 'status' ||
+    (args._[0] === 'config' && args._[1] === 'status'));
+
 const CONTEXT_FILE = '.neon';
 const GITIGNORE_FILE = '.gitignore';
 

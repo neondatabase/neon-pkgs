@@ -388,11 +388,14 @@ export default defineConfig({
 });
 ```
 
-Three sub-commands plus a top-level alias drive it:
+Three sub-commands plus two top-level aliases drive it:
 
 ```bash
 # Inspect the branch's live Neon state (read-only — never mutates)
 neon config status
+
+# `neon status` is an alias for `neon config status`
+neon status
 
 # Dry-run diff: show exactly what `apply` would change
 neon config plan
@@ -418,6 +421,35 @@ The branch is chosen with `--branch <id|name>`; without it the project's default
 - `--allow-protected` — auto-confirm applying to a branch Neon marks as protected. Without it, `apply` refuses to touch a protected branch.
 
 **Output**: `status` prints the project, branch, and reverse-engineered config; `plan` / `apply` print the planned/applied changes and any conflicts as tables. Pass `--output json` (or `--output yaml`) to emit the full machine-readable result (`PushResult`) for piping into other tools or CI.
+
+**`config status --current-branch`** (alias `neon status --current-branch`) prints _only_ the branch pinned in the local `.neon` file — no network, no auth, no analytics — and exits non-zero when none is pinned. This behavior lets it safely drive a shell prompt. Example [starship](https://starship.rs) segment:
+
+```toml
+[custom.neon]
+description = "Current Neon database branch"
+format = "[$symbol$output]($style) "
+style = "bold green"
+# `symbol` below uses a Nerd Font glyph; swap it for a plain
+# label/emoji if you don't have a Nerd Font installed.
+symbol = " "
+command = "neon status --current-branch"
+# Starship evaluates this on EVERY prompt render. To keep prompts instant
+# everywhere outside a Neon project, do a zero-subprocess walk-up for an
+# ancestor `.neon` first (the same walk the CLI does, stopping at $HOME and /).
+# Only when one is found do we invoke the CLI, whose exit code is the real
+# gate: non-zero (no branch pinned) hides the segment cleanly.
+when = '''
+d="$PWD"
+while [ "$d" != "$HOME" ] && [ "$d" != / ]; do
+  if [ -e "$d/.neon" ]; then
+    neon status --current-branch >/dev/null 2>&1
+    exit $?
+  fi
+  d=$(dirname "$d")
+done
+exit 1
+'''
+```
 
 ```bash
 # CI gate: fail the build if the branch has drifted from the policy

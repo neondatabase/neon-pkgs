@@ -5,6 +5,7 @@ import { Analytics, TrackParams } from '@segment/analytics-node';
 import { isAxiosError } from 'axios';
 
 import { CREDENTIALS_FILE } from './config.js';
+import { isCurrentBranchProbe } from './context.js';
 import { getGithubEnvVars, isCi } from './env.js';
 import { ErrorCode } from './errors.js';
 import { log } from './log.js';
@@ -12,6 +13,14 @@ import pkg from './pkg.js';
 import { getApiClient } from './api.js';
 
 const WRITE_KEY = '3SQXn5ejjXWLEJ8xU2PRYhAotLtTaeeV';
+
+/**
+ * Raw-argv fallback for the offline `--current-branch` probe. The init
+ * middleware runs before validation, where the parsed `currentBranch` flag may
+ * not be populated yet, so we also scan `process.argv` directly to be safe.
+ */
+const hasCurrentBranchArgv = (): boolean =>
+  process.argv.includes('--current-branch');
 
 let client: Analytics | undefined;
 let clientInitialized = false;
@@ -27,6 +36,13 @@ export const initAnalyticsClientMiddleware = (args: {
   [key: string]: unknown;
 }) => {
   if (!args.analytics || clientInitialized) {
+    return;
+  }
+  // The offline `--current-branch` probe must make zero network calls. This
+  // middleware runs before validation, so guard on the raw argv too (in case
+  // the parsed `currentBranch` flag isn't populated this early): never create
+  // the Segment client, which keeps trackEvent/closeAnalytics no-ops downstream.
+  if (isCurrentBranchProbe(args as any) || hasCurrentBranchArgv()) {
     return;
   }
   clientInitialized = true;
@@ -53,6 +69,9 @@ export const analyticsMiddleware = async (args: {
   [key: string]: unknown;
 }) => {
   if (!client || !args.analytics) {
+    return;
+  }
+  if (isCurrentBranchProbe(args)) {
     return;
   }
 

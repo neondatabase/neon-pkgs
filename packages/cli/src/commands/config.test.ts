@@ -372,6 +372,119 @@ describe('config commands', () => {
     expect(json.branch.postgres.computeSettings.suspendTimeout).toBe('5m');
   });
 
+  it('status --current-branch prints only the pinned branch from .neon and never touches the API', async () => {
+    const { stream, read } = captureOut();
+    const contextFile = join(cwd, '.neon');
+    writeFileSync(
+      contextFile,
+      JSON.stringify({
+        orgId: 'org-x',
+        projectId: 'proj-x',
+        branch: 'my-feature',
+      }),
+    );
+
+    // Any API access in this mode is a bug: the branch comes purely from `.neon`.
+    const throwingApi = new Proxy(
+      {},
+      {
+        get() {
+          throw new Error('apiClient must not be called for --current-branch');
+        },
+      },
+    );
+
+    const chunks: string[] = [];
+    const orig = process.stdout.write.bind(process.stdout);
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      chunks.push(chunk.toString());
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await status({
+        ...baseProps(new FakeNeonApi(), stream),
+        apiClient: throwingApi as never,
+        contextFile,
+        currentBranch: true,
+      });
+    } finally {
+      process.stdout.write = orig;
+    }
+
+    // Branch present: exactly the branch name + newline, exit 0 (like `git
+    // branch --show-current` for this case); the writer is unused.
+    expect(chunks.join('')).toBe('my-feature\n');
+    expect(read()).toBe('');
+  });
+
+  it('status --current-branch prints nothing to stdout, hints on stderr, and exits non-zero when no branch is pinned', async () => {
+    const { stream } = captureOut();
+    const contextFile = join(cwd, '.neon');
+    // A linked project but no pinned branch — the unset case.
+    writeFileSync(
+      contextFile,
+      JSON.stringify({ orgId: 'org-x', projectId: 'proj-x' }),
+    );
+
+    const stdoutChunks: string[] = [];
+    const stderrChunks: string[] = [];
+    const origOut = process.stdout.write.bind(process.stdout);
+    const origErr = process.stderr.write.bind(process.stderr);
+    const origExitCode = process.exitCode;
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      stdoutChunks.push(chunk.toString());
+      return true;
+    }) as typeof process.stdout.write;
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      stderrChunks.push(chunk.toString());
+      return true;
+    }) as typeof process.stderr.write;
+    try {
+      await status({
+        ...baseProps(new FakeNeonApi(), stream),
+        contextFile,
+        currentBranch: true,
+      });
+
+      // stdout stays empty; the hint goes to stderr only.
+      expect(stdoutChunks.join('')).toBe('');
+      expect(stderrChunks.join('')).toContain('Run `neonctl checkout <branch>`');
+      // Non-zero exit (grep-style) so a shell prompt can guard on it directly.
+      expect(process.exitCode).toBe(1);
+    } finally {
+      process.stdout.write = origOut;
+      process.stderr.write = origErr;
+      // Restore so a failing exit code doesn't leak into the vitest process.
+      process.exitCode = origExitCode;
+    }
+  });
+
+  it('status --current-branch treats a missing .neon as no branch (empty stdout, non-zero exit)', async () => {
+    const { stream } = captureOut();
+    const contextFile = join(cwd, 'does-not-exist', '.neon');
+
+    const stdoutChunks: string[] = [];
+    const orig = process.stdout.write.bind(process.stdout);
+    const origExitCode = process.exitCode;
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      stdoutChunks.push(chunk.toString());
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await status({
+        ...baseProps(new FakeNeonApi(), stream),
+        contextFile,
+        currentBranch: true,
+      });
+
+      expect(stdoutChunks.join('')).toBe('');
+      expect(process.exitCode).toBe(1);
+    } finally {
+      process.stdout.write = orig;
+      process.exitCode = origExitCode;
+    }
+  });
+
   it('plan is a dry run whose applied list includes the auth service change', async () => {
     const api = new FakeNeonApi();
     const { stream, read } = captureOut();

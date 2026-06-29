@@ -1,0 +1,6 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`status (alias of config status) > \`status --current-branch\` prints the pinned branch offline 1`] = `
+"feat-alias
+"
+`;

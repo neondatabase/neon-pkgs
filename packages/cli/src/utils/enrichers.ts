@@ -1,4 +1,5 @@
 import { BranchScopeProps, CommonProps, OrgScopeProps } from '../types.js';
+import { isCurrentBranchProbe } from '../context.js';
 import { looksLikeBranchId } from './formats.js';
 import { Branch, Database } from '@neondatabase/api-client';
 import { isAxiosError } from 'axios';
@@ -166,6 +167,12 @@ export const resolveSingleDatabase = async (props: {
 export const fillSingleProject = async (
   props: CommonProps & { projectId?: string; orgId?: string },
 ) => {
+  // The offline `--current-branch` probe needs no project at all and runs with no
+  // API client (auth was skipped), so resolving a single project here would both
+  // hit the network and dereference a null client. Skip it entirely.
+  if (isCurrentBranchProbe(props as any)) {
+    return props;
+  }
   if (props.projectId) {
     return { ...props, projectId: props.projectId };
   }

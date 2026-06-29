@@ -15,6 +15,7 @@ import {
 } from '@neondatabase/config-runtime';
 import { toNeonConfigView } from '../config_format.js';
 
+import { contextBranch, readContextFile } from '../context.js';
 import { log } from '../log.js';
 import { isCi } from '../env.js';
 import { BranchScopeProps } from '../types.js';
@@ -66,6 +67,14 @@ export type ConfigProps = BranchScopeProps & {
   allowProtected?: boolean;
   /** `status` only: print just the neon.ts-shaped config JSON to stdout. */
   configJson?: boolean;
+  /**
+   * `status` only: print ONLY the linked branch name from the local `.neon` file
+   * (no network). Prints the branch and exits 0 when one is pinned; exits non-zero
+   * when none is (so a shell prompt can guard on it) — unlike `git branch
+   * --show-current`, which exits 0 when detached. Wins over `--config-json` and
+   * ignores `--output`. See {@link isCurrentBranchProbe} for the offline guard.
+   */
+  currentBranch?: boolean;
   /**
    * After a successful `config apply` / `deploy`, pull the branch's Neon env vars into a
    * local `.env` (DATABASE_URL, AI Gateway, object storage, …) — the same convenience as
@@ -153,6 +162,13 @@ export const builder = (argv: yargs.Argv) =>
             type: 'boolean',
             default: false,
           },
+          'current-branch': {
+            describe:
+              'Print only the linked branch name from the local .neon file ' +
+              '(no network). Exits non-zero when no branch is pinned.',
+            type: 'boolean',
+            default: false,
+          },
         }),
       (args) => status(args as any),
     )
@@ -210,6 +226,23 @@ const loadConfig = async (props: ConfigProps): Promise<Config> => {
 };
 
 export const status = async (props: ConfigProps): Promise<void> => {
+  // `--current-branch` short-circuits here (before resolveBranchRef), so it wins
+  // over --config-json and ignores --output. See ConfigProps.currentBranch / isCurrentBranchProbe.
+  if (props.currentBranch) {
+    const branch = contextBranch(readContextFile(props.contextFile));
+    if (branch) {
+      process.stdout.write(`${branch}\n`);
+    } else {
+      // No branch pinned: hint on stderr and exit non-zero (grep-style) so a prompt's
+      // `when` hides the segment cleanly instead of rendering a bare icon.
+      log.info(
+        'No branch pinned. Run `neonctl checkout <branch>` to pin a branch and pull its env vars.',
+      );
+      process.exitCode = 1;
+    }
+    return;
+  }
+
   const branch = await resolveBranchRef(props);
   // `--config-json` is a script-friendly mode that emits only JSON to stdout, so keep it
   // pristine; the regular human view gets the "which branch am I inspecting" guardrail.

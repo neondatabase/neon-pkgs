@@ -7,6 +7,7 @@ import { Api } from '@neondatabase/api-client';
 
 import { getApiClient } from '../api.js';
 import { auth, refreshToken } from '../auth.js';
+import { isCurrentBranchProbe } from '../context.js';
 import { CREDENTIALS_FILE } from '../config.js';
 import { isCi } from '../env.js';
 import { log } from '../log.js';
@@ -160,6 +161,13 @@ export const ensureAuth = async (
 ) => {
   // Skip auth for help command or no command
   if (props._.length === 0 || props.help) {
+    return;
+  }
+
+  // `(config) status --current-branch` is a purely-local read of `.neon`; it must
+  // never refresh a token or pop a browser login. Skip auth entirely (the handler
+  // doesn't use an API client in this mode).
+  if (isCurrentBranchProbe(props)) {
     return;
   }
 

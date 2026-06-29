@@ -65,7 +65,8 @@ const NO_SUBCOMMANDS_VERBS = [
 
   'bootstrap',
 
-  // aliases
+  // alias of `config status`
+  'status',
 ];
 
 let builder = yargs(hideBin(process.argv));

@@ -1,0 +1,8 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`config status --current-branch (offline, end to end) > exits non-zero with empty stdout when no branch is pinned (no network access) 1`] = `""`;
+
+exports[`config status --current-branch (offline, end to end) > prints the pinned branch with no network access 1`] = `
+"my-feature
+"
+`;

@@ -13,7 +13,47 @@ import {
   applyContext,
   currentContextFile,
   ensureGitignored,
+  isCurrentBranchProbe,
 } from './context.js';
+
+describe('isCurrentBranchProbe', () => {
+  test('true only when --current-branch is set on `status` or `config`', () => {
+    expect(isCurrentBranchProbe({ _: ['status'], currentBranch: true })).toBe(
+      true,
+    );
+    expect(
+      isCurrentBranchProbe({ _: ['config', 'status'], currentBranch: true }),
+    ).toBe(true);
+  });
+
+  test('false without the flag', () => {
+    expect(isCurrentBranchProbe({ _: ['status'] })).toBe(false);
+    expect(
+      isCurrentBranchProbe({ _: ['config', 'status'], currentBranch: false }),
+    ).toBe(false);
+  });
+
+  test('false for unrelated commands even with the flag (no auth/analytics skip)', () => {
+    expect(
+      isCurrentBranchProbe({ _: ['projects', 'list'], currentBranch: true }),
+    ).toBe(false);
+    expect(isCurrentBranchProbe({ _: [], currentBranch: true })).toBe(false);
+  });
+
+  test('false for other `config` subcommands even with the flag (config plan/apply)', () => {
+    // `--current-branch` is undefined on these, but non-strict yargs still parses
+    // it; the probe must NOT match, or `config plan` would skip auth and crash.
+    expect(
+      isCurrentBranchProbe({ _: ['config', 'plan'], currentBranch: true }),
+    ).toBe(false);
+    expect(
+      isCurrentBranchProbe({ _: ['config', 'apply'], currentBranch: true }),
+    ).toBe(false);
+    expect(isCurrentBranchProbe({ _: ['config'], currentBranch: true })).toBe(
+      false,
+    );
+  });
+});
 
 describe('currentContextFile', () => {
   let workspace: string;
