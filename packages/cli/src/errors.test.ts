@@ -1,4 +1,3 @@
-import { AxiosError } from 'axios';
 import { describe, expect, it } from 'vitest';
 
 import { isNetworkError, matchErrorCode } from './errors.js';
@@ -34,8 +33,8 @@ describe('isNetworkError', () => {
     expect(isNetworkError(new TypeError('Failed to fetch'))).toBe(true);
   });
 
-  it('detects an axios "Network Error"', () => {
-    expect(isNetworkError(new AxiosError('Network Error'))).toBe(true);
+  it('detects a "Network Error" message', () => {
+    expect(isNetworkError(new Error('Network Error'))).toBe(true);
   });
 
   it('detects a top-level socket code without a wrapping message', () => {
