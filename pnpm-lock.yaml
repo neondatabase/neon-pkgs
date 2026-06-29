@@ -210,14 +210,14 @@ importers:
         specifier: workspace:*
         version: link:../sdk
       '@neondatabase/config':
-        specifier: 0.8.1
-        version: 0.8.1
+        specifier: workspace:*
+        version: link:../config
       '@neondatabase/config-runtime':
-        specifier: 0.8.1
-        version: 0.8.1
+        specifier: workspace:*
+        version: link:../config-runtime
       '@neondatabase/env':
-        specifier: 0.8.1
-        version: 0.8.1
+        specifier: workspace:*
+        version: link:../env
       '@segment/analytics-node':
         specifier: 1.3.0
         version: 1.3.0
@@ -1804,23 +1804,6 @@ packages:
     peerDependencies:
       '@emnapi/core': ^1.7.1
       '@emnapi/runtime': ^1.7.1
-
-  '@neon/sdk@0.1.0':
-    resolution: {integrity: sha512-PCm/flt3IfLsY7SddwwCu8hbid+xPaB5GiQYYcRBFCkHNUX52LwrciZECMz574O0QmmijY4f6WdTSpjS4SMaHw==}
-    engines: {node: '>=22'}
-
-  '@neondatabase/config-runtime@0.8.1':
-    resolution: {integrity: sha512-X6eBHsqjwcM0826kvRfyfK6iR1vMjXfdJJy+2q+DWPfP+WRmYgQtIXhQJ86oUNZVQP6TIV8k/kCs93y0l/Mrzw==}
-    engines: {node: '>=22'}
-
-  '@neondatabase/config@0.8.1':
-    resolution: {integrity: sha512-y0ZkTV5WTi1IzXDpfhsutAYkyRieNcbdvzyyTAKTf7CWc9M7BqjzpK/ez5POEZaIen1g07mIdED91F8294T8eA==}
-    engines: {node: '>=22'}
-
-  '@neondatabase/env@0.8.1':
-    resolution: {integrity: sha512-cKX+iu4y7cMe79edTD8qK4qZiQ2xDix896lKIJ7xxImZkyIEOG4kOX/C2k8rfFtBnLxOYT68we8cfm5/GUIHQg==}
-    engines: {node: '>=22'}
-    hasBin: true
 
   '@neondatabase/serverless@1.0.1':
     resolution: {integrity: sha512-O6yC5TT0jbw86VZVkmnzCZJB0hfxBl0JJz6f+3KHoZabjb/X08r9eFA+vuY06z1/qaovykvdkrXYq3SPUuvogA==}
@@ -7721,26 +7704,6 @@ snapshots:
       '@emnapi/runtime': 1.11.1
       '@tybys/wasm-util': 0.10.2
     optional: true
-
-  '@neon/sdk@0.1.0': {}
-
-  '@neondatabase/config-runtime@0.8.1':
-    dependencies:
-      '@neondatabase/config': 0.8.1
-      esbuild: 0.25.9
-      fflate: 0.8.3
-
-  '@neondatabase/config@0.8.1':
-    dependencies:
-      '@neon/sdk': 0.1.0
-      jiti: 2.7.0
-      zod: 4.4.3
-
-  '@neondatabase/env@0.8.1':
-    dependencies:
-      '@neondatabase/config': 0.8.1
-      yargs: 18.0.0
-      zod: 4.4.3
 
   '@neondatabase/serverless@1.0.1':
     dependencies:
