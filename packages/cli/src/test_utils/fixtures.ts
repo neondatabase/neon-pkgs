@@ -20,6 +20,8 @@ type Fixtures = {
 			outputTable?: boolean;
 			output?: "json" | "yaml" | "table";
 			env?: Record<string, string>;
+			/** Working directory to run the forked CLI in (e.g. a temp dir a command scaffolds into). */
+			cwd?: string;
 			/**
 			 * Point the CLI at a port that is bound and then immediately released, so the
 			 * request fails with a genuine connection error (ECONNREFUSED) instead of a slow
@@ -123,8 +125,9 @@ export const test = originalTest.extend<Fixtures>({
 				],
 				{
 					stdio: "pipe",
+					...(options.cwd ? { cwd: options.cwd } : {}),
 					env: {
-						PATH: `mocks/bin:${process.env.PATH}`,
+						PATH: `${join(process.cwd(), "mocks/bin")}:${process.env.PATH}`,
 						...(options.env ?? {}),
 					},
 				},

@@ -8,7 +8,7 @@ import type { NeonApiClient } from "../api.js";
 import { getApiClient } from "../api.js";
 import { auth, refreshToken } from "../auth.js";
 import { CREDENTIALS_FILE } from "../config.js";
-import { isCurrentBranchProbe } from "../context.js";
+import { isConfigInit, isCurrentBranchProbe } from "../context.js";
 import { isCi } from "../env.js";
 import { log } from "../log.js";
 import type { ExtendedTokenSet } from "../types.js";
@@ -169,6 +169,12 @@ export const ensureAuth = async (
 	// never refresh a token or pop a browser login. Skip auth entirely (the handler
 	// doesn't use an API client in this mode).
 	if (isCurrentBranchProbe(props)) {
+		return;
+	}
+
+	// `config init` only scaffolds a neon.ts and installs npm packages locally; it
+	// never calls the Neon API, so skip auth entirely — no token refresh, no login.
+	if (isConfigInit(props)) {
 		return;
 	}
 

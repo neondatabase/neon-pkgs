@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
@@ -14,12 +13,17 @@ import {
 	templateIds,
 } from "neon-init/bootstrap";
 import prompts, { type InitialReturnValue } from "prompts";
-import which from "which";
 import type yargs from "yargs";
 
 import { isCi } from "../env.js";
 import { log } from "../log.js";
 import type { CommonProps } from "../types.js";
+import {
+	detectPackageManager,
+	installedPackageManagers,
+	type PackageManager,
+	runCommand,
+} from "../utils/package_manager.js";
 
 type BootstrapProps = CommonProps & {
 	directory?: string;
@@ -460,33 +464,6 @@ const confirm = async (message: string): Promise<boolean> => {
 	return value === true;
 };
 
-type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
-
-// npm first so it's the default/preselected choice; the rest follow in rough
-// popularity order.
-const PACKAGE_MANAGERS: PackageManager[] = ["npm", "pnpm", "yarn", "bun"];
-
-/**
- * The package manager the CLI was invoked through, read from the
- * `npm_config_user_agent` npm sets for `npm exec`/`npx`, `pnpm dlx`, `yarn
- * dlx`, and `bunx` (so `pnpm dlx neonctl bootstrap` installs with pnpm).
- * Returns undefined when there's nothing to infer from — e.g. a
- * globally-installed `neon`/`neonctl` — so the caller can ask instead of
- * silently assuming npm.
- */
-const detectPackageManager = (): PackageManager | undefined => {
-	const ua = process.env.npm_config_user_agent ?? "";
-	if (ua.startsWith("pnpm")) return "pnpm";
-	if (ua.startsWith("yarn")) return "yarn";
-	if (ua.startsWith("bun")) return "bun";
-	if (ua.startsWith("npm")) return "npm";
-	return undefined;
-};
-
-/** The package managers actually on PATH, in {@link PACKAGE_MANAGERS} order. */
-const installedPackageManagers = (): PackageManager[] =>
-	PACKAGE_MANAGERS.filter((pm) => which.sync(pm, { nothrow: true }) !== null);
-
 /**
  * Ask which package manager to install with when we couldn't infer one from the
  * invocation. Offers the managers actually installed (npm preselected); with
@@ -511,46 +488,6 @@ const selectPackageManager = async (): Promise<PackageManager> => {
 	});
 	return pm ?? "npm";
 };
-
-/**
- * Run a command inheriting our stdio so the user sees install / link output
- * live and can answer any prompts the child raises. Resolves to whether it
- * exited cleanly; a non-zero exit is reported but never aborts bootstrap — the
- * scaffold already succeeded, so we let the user retry the step by hand.
- */
-const runCommand = (
-	cmd: string,
-	args: string[],
-	cwd: string,
-): Promise<boolean> =>
-	new Promise((resolvePromise) => {
-		// npm/pnpm/yarn ship as .cmd shims on Windows, which need a shell to run.
-		const child = spawn(cmd, args, {
-			cwd,
-			stdio: "inherit",
-			shell: process.platform === "win32",
-		});
-		child.on("error", (err) => {
-			log.warning(
-				"Could not run `%s %s`: %s",
-				cmd,
-				args.join(" "),
-				err instanceof Error ? err.message : String(err),
-			);
-			resolvePromise(false);
-		});
-		child.on("close", (code) => {
-			if (code !== 0) {
-				log.warning(
-					"`%s %s` exited with code %d.",
-					cmd,
-					args.join(" "),
-					code,
-				);
-			}
-			resolvePromise(code === 0);
-		});
-	});
 
 /**
  * Re-invoke this same CLI as `neon link` inside the scaffolded directory, so the

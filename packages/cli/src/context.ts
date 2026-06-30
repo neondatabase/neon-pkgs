@@ -51,6 +51,15 @@ export const isCurrentBranchProbe = (args: {
 	(args._[0] === "status" ||
 		(args._[0] === "config" && args._[1] === "status"));
 
+/**
+ * `config init` only scaffolds a local `neon.ts` and installs npm packages — it
+ * never calls the Neon API. Gated on the exact command path so the global auth
+ * middleware and the single-project resolver can skip it (it runs with no API
+ * client), mirroring {@link isCurrentBranchProbe}.
+ */
+export const isConfigInit = (args: { _: (string | number)[] }): boolean =>
+	args._[0] === "config" && args._[1] === "init";
+
 const CONTEXT_FILE = ".neon";
 const GITIGNORE_FILE = ".gitignore";
 

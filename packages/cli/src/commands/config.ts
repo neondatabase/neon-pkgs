@@ -1,3 +1,5 @@
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { resolveConfig } from "@neon/config";
 import {
 	apply,
@@ -23,6 +25,11 @@ import type { BranchScopeProps } from "../types.js";
 import { announceTargetBranch } from "../utils/branch_notice.js";
 import { fillSingleProject, resolveBranchRef } from "../utils/enrichers.js";
 import { bundleEntry } from "../utils/esbuild.js";
+import {
+	addDependenciesArgs,
+	resolvePackageManager,
+	runCommand,
+} from "../utils/package_manager.js";
 import { zipBundle } from "../utils/zip.js";
 import { writer } from "../writer.js";
 import { autoPullEnvAfterPin } from "./env.js";
@@ -134,6 +141,144 @@ export const envPullFlag = {
 	},
 } as const;
 
+// ── `config init` ─────────────────────────────────────────────────────────────
+
+/**
+ * The published npm packages a `neon.ts` project needs. The library sources live
+ * under the `@neon/*` org now, but those aren't on npm yet — consumers install the
+ * still-published `@neondatabase/*` names. Flip these to `@neon/*` once published.
+ */
+const CONFIG_PACKAGE = "@neondatabase/config";
+const ENV_PACKAGE = "@neondatabase/env";
+const REQUIRED_PACKAGES = [CONFIG_PACKAGE, ENV_PACKAGE] as const;
+
+/** package.json fields a dependency can be declared in. */
+const DEPENDENCY_FIELDS = [
+	"dependencies",
+	"devDependencies",
+	"peerDependencies",
+	"optionalDependencies",
+] as const;
+
+/** Config filenames the runtime loads (mirrors @neon/config's loader). */
+const NEON_CONFIG_FILENAMES = ["neon.ts", "neon.mts", "neon.js", "neon.mjs"];
+
+/** Starter `neon.ts` written by `config init` when a project has none. */
+const NEON_CONFIG_TEMPLATE = `import { defineConfig } from "${CONFIG_PACKAGE}/v1";
+
+export default defineConfig({
+  // Declare your Neon services here
+  auth: false,
+  // Branch policy: per-branch tuning
+  branch: (branch) => {
+    if (branch.isDefault) {
+      // Default branch: no overrides, uses project defaults
+      return {};
+    }
+    if (!branch.exists) {
+      // New non-default branches: auto-expire
+      // Run \`neon checkout <name>\` to create a new branch with these settings
+      return { ttl: "7d" };
+    }
+    // Existing branch: no changes
+    return {};
+  },
+});
+`;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+	typeof value === "object" && value !== null;
+
+/**
+ * The {@link REQUIRED_PACKAGES} not already declared in the project's package.json
+ * (any dependency field). A missing or malformed package.json means none are
+ * declared, so all are reported missing.
+ */
+const missingDependencies = (cwd: string): string[] => {
+	const declared = new Set<string>();
+	const pkgPath = join(cwd, "package.json");
+	if (existsSync(pkgPath)) {
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(readFileSync(pkgPath, "utf8"));
+		} catch {
+			parsed = undefined;
+		}
+		if (isRecord(parsed)) {
+			for (const field of DEPENDENCY_FIELDS) {
+				const deps = parsed[field];
+				if (isRecord(deps)) {
+					for (const name of Object.keys(deps)) declared.add(name);
+				}
+			}
+		}
+	}
+	return REQUIRED_PACKAGES.filter((pkg) => !declared.has(pkg));
+};
+
+export type ConfigInitProps = {
+	/** Directory to scaffold into / resolve package.json from. Defaults to cwd. */
+	cwd?: string;
+	/**
+	 * Install the missing config packages. On by default; `--no-install` just
+	 * prints the command to run by hand.
+	 */
+	install?: boolean;
+	/** Injected command runner (tests). Defaults to the real spawn-based runner. */
+	run?: typeof runCommand;
+};
+
+/**
+ * Scaffold a `neon.ts` policy and make sure the Neon config packages are
+ * installed, so a project can go straight to `neon config plan` / `apply`.
+ * Purely local — it never touches the Neon API (see {@link isConfigInit}).
+ */
+export const initCmd = async (props: ConfigInitProps): Promise<void> => {
+	const cwd = props.cwd ?? process.cwd();
+	const run = props.run ?? runCommand;
+
+	// 1. Scaffold neon.ts unless the project already has a Neon config file.
+	const existing = NEON_CONFIG_FILENAMES.find((name) =>
+		existsSync(join(cwd, name)),
+	);
+	if (existing) {
+		log.info("Found an existing %s — leaving it untouched.", existing);
+	} else {
+		writeFileSync(join(cwd, "neon.ts"), NEON_CONFIG_TEMPLATE);
+		log.info("Created neon.ts with a starter policy.");
+	}
+
+	// 2. Make sure the config packages are installed.
+	const missing = missingDependencies(cwd);
+	if (missing.length === 0) {
+		log.info("%s are already installed.", REQUIRED_PACKAGES.join(" and "));
+	} else {
+		const pm = resolvePackageManager();
+		const args = addDependenciesArgs(pm, missing);
+		if (props.install === false) {
+			log.info(
+				"Install the Neon config packages to use neon.ts: %s %s",
+				pm,
+				args.join(" "),
+			);
+		} else {
+			log.info("Installing %s with %s…", missing.join(", "), pm);
+			const ok = await run(pm, args, cwd);
+			if (!ok) {
+				log.warning(
+					"Could not install the config packages automatically. Run by hand: %s %s",
+					pm,
+					args.join(" "),
+				);
+			}
+		}
+	}
+
+	log.info(
+		"Next: edit neon.ts, then run `neon config plan` to preview and `neon config apply`.",
+	);
+};
+
 export const command = "config";
 export const describe = "Manage a branch with a neon.ts policy";
 export const builder = (argv: yargs.Argv) =>
@@ -202,6 +347,21 @@ export const builder = (argv: yargs.Argv) =>
 					...envPullFlag,
 				}),
 			(args) => applyCmd(args as any),
+		)
+		.command(
+			"init",
+			"Scaffold a neon.ts policy and install the Neon config packages",
+			(yargs) =>
+				yargs.options({
+					install: {
+						describe:
+							"Install @neondatabase/config and @neondatabase/env if they're missing. " +
+							"On by default; use --no-install to just print the command.",
+						type: "boolean",
+						default: true,
+					},
+				}),
+			(args) => initCmd(args as any),
 		);
 
 export const handler = (args: yargs.Argv) => {
