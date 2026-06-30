@@ -146,9 +146,11 @@ export const envPullFlag = {
 /**
  * The published npm packages a `neon.ts` project needs — the `@neon/*` org names.
  *
- * ⚠️ DO NOT MERGE until `@neon/config` and `@neon/env` are actually published to
- * npm. Until then `config init` must keep installing the `@neondatabase/*` names
- * (see main), or it would try to install packages that don't exist yet.
+ * ⚠️ These ship to users the next time `neonctl` is released, so do NOT release
+ * neonctl until `@neon/config` and `@neon/env` are published to npm — otherwise
+ * `config init` would install packages that don't exist yet. (The libraries are
+ * mid-migration from `@neondatabase/*`; track their publish before cutting a CLI
+ * release.)
  */
 const CONFIG_PACKAGE = "@neon/config";
 const ENV_PACKAGE = "@neon/env";
