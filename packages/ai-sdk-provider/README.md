@@ -14,7 +14,7 @@ npm install @neon/ai-sdk-provider ai@^6
 
 ## Configuration
 
-The gateway URL is branch-scoped, so both values come from the Neon Console (your project → a branch → **AI Gateway** tab), or from `neonctl env pull` / `neon dev`:
+The gateway URL is branch-scoped, so both values come from the Neon Console (your project → a branch → **AI Gateway** tab), or from `neon env pull` / `neon dev`:
 
 ```bash
 NEON_AI_GATEWAY_BASE_URL="https://<branch-id>-api.ai.<region>.aws.neon.tech"
@@ -94,7 +94,7 @@ for await (const part of result.fullStream) {
 Against a live branch with AI Gateway enabled:
 
 ```bash
-cp .env.example .env   # fill NEON_AI_GATEWAY_BASE_URL + NEON_AI_GATEWAY_TOKEN from `neonctl env pull`
+cp .env.example .env   # fill NEON_AI_GATEWAY_BASE_URL + NEON_AI_GATEWAY_TOKEN from `neon env pull`
 pnpm test:e2e
 ```
 
