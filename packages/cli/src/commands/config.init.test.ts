@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect } from "vitest";
 import { test } from "../test_utils/fixtures";
-import { initCmd } from "./config";
+import { hasNeonConfigFile, initCmd } from "./config";
 
 describe("config init", () => {
 	let workspace: string;
@@ -127,6 +127,18 @@ describe("config init", () => {
 
 		expect(calls).toHaveLength(0);
 		expect(existsSync(join(workspace, "neon.ts"))).toBe(true);
+	});
+
+	test("hasNeonConfigFile detects each supported config filename", () => {
+		expect(hasNeonConfigFile(workspace)).toBe(false);
+		for (const name of ["neon.ts", "neon.mts", "neon.js", "neon.mjs"]) {
+			rmSync(join(workspace, "neon.ts"), { force: true });
+			rmSync(join(workspace, name), { force: true });
+			writeFileSync(join(workspace, name), "export default {};\n");
+			expect(hasNeonConfigFile(workspace)).toBe(true);
+			rmSync(join(workspace, name), { force: true });
+		}
+		expect(hasNeonConfigFile(workspace)).toBe(false);
 	});
 
 	// End-to-end: `config init` must run with NO auth and NO network — it only

@@ -24,6 +24,7 @@ import {
 	createBranch,
 	pickBranchInteractively,
 } from "../utils/branch_picker.js";
+import { hasNeonConfigFile, initCmd } from "./config.js";
 import { autoPullEnvAfterPin, renderAgentPullNote } from "./env.js";
 import { REGIONS } from "./projects.js";
 
@@ -713,7 +714,7 @@ const runInteractive = async (props: LinkProps, inputs: Inputs) => {
 			projectId: created.project.id,
 			branch: created.branchName,
 		});
-		await finalizeLink(props, {
+		await finalizeInteractiveLink(props, {
 			contextFile: props.contextFile,
 			orgId,
 			projectId: created.project.id,
@@ -736,7 +737,7 @@ const runInteractive = async (props: LinkProps, inputs: Inputs) => {
 			projectId: action.projectId,
 			branch,
 		});
-		await finalizeLink(props, {
+		await finalizeInteractiveLink(props, {
 			contextFile: props.contextFile,
 			orgId,
 			projectId: action.projectId,
@@ -761,7 +762,7 @@ const runInteractive = async (props: LinkProps, inputs: Inputs) => {
 		projectId: created.project.id,
 		branch: created.branchName,
 	});
-	await finalizeLink(props, {
+	await finalizeInteractiveLink(props, {
 		contextFile: props.contextFile,
 		orgId,
 		projectId: created.project.id,
@@ -1391,6 +1392,64 @@ const finalizeLink = async (
 		branch: summary.branch,
 		envPull: props.envPull,
 	});
+};
+
+/**
+ * Interactive `link` finalize: the shared {@link finalizeLink} (summary + env
+ * pull), then — as the last step — offer to manage the project's Neon setup as
+ * code with a `neon.ts`. Kept out of {@link finalizeLink} so the non-interactive
+ * paths never prompt.
+ */
+const finalizeInteractiveLink = async (
+	props: LinkProps,
+	summary: HumanSummary,
+): Promise<void> => {
+	await finalizeLink(props, summary);
+	await maybeOfferConfigInit(props, summary);
+};
+
+/**
+ * Offer to set up infrastructure-as-code at the end of an interactive `link` —
+ * the natural moment, since the project is now linked. Skipped when the project
+ * already has a `neon.ts` (nothing to scaffold). On yes, `config init` writes the
+ * starter `neon.ts` and installs the config packages, then env is pulled again so
+ * the local `.env` reflects the policy — the same pull `link` runs when a project
+ * already ships a `neon.ts`.
+ */
+const maybeOfferConfigInit = async (
+	props: LinkProps,
+	summary: HumanSummary,
+): Promise<void> => {
+	const cwd = process.cwd();
+	if (hasNeonConfigFile(cwd)) {
+		return;
+	}
+
+	const { value } = await prompts({
+		onState: onPromptState,
+		type: "confirm",
+		name: "value",
+		message:
+			"Manage this project's Neon setup as code? Adds a neon.ts you can edit and apply with `neon config apply`.",
+		initial: true,
+	});
+	if (value !== true) {
+		return;
+	}
+
+	await initCmd({ cwd, install: true });
+
+	// The neon.ts (and its deps) now exist — pull env again so the local .env
+	// reflects the policy, matching how `link` pulls when a project already ships
+	// a neon.ts. Only meaningful when a branch was pinned (same guard as finalize).
+	if (summary.branch && summary.projectId) {
+		await autoPullEnvAfterPin({
+			...props,
+			projectId: summary.projectId,
+			branch: summary.branch,
+			envPull: props.envPull,
+		});
+	}
 };
 
 const onPromptState = (state: {

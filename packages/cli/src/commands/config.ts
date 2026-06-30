@@ -163,6 +163,10 @@ const DEPENDENCY_FIELDS = [
 /** Config filenames the runtime loads (mirrors @neon/config's loader). */
 const NEON_CONFIG_FILENAMES = ["neon.ts", "neon.mts", "neon.js", "neon.mjs"];
 
+/** Whether `dir` already has a Neon config file the runtime would load. */
+export const hasNeonConfigFile = (dir: string): boolean =>
+	NEON_CONFIG_FILENAMES.some((name) => existsSync(join(dir, name)));
+
 /** Starter `neon.ts` written by `config init` when a project has none. */
 const NEON_CONFIG_TEMPLATE = `import { defineConfig } from "${CONFIG_PACKAGE}/v1";
 
