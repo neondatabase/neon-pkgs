@@ -74,11 +74,11 @@ pnpm --filter neon-new dry:run
 Each package documents its own purpose, entry points, and API in its `README.md` — read the
 relevant package's README rather than maintaining a duplicate (and drift-prone) inventory here.
 At a high level: `neon-new` is the CLI + SDK, and `vite-plugin-neon-new` builds on it; the Config-as-Code
-toolchain centers on `@neondatabase/config` (pure, side-effect-free policy types + diff engine),
-with `@neondatabase/config-runtime` (imperative `inspect`/`plan`/`apply` + function deploy; pulls in
-`esbuild`, so import it from CLIs/CI, never from a `neon.ts` policy) and `@neondatabase/env` (resolve
-+ inject a branch's env) both building on `config`; plus `neon-init`, `@neondatabase/ai-sdk-provider`,
-and `@neondatabase/functions`.
+toolchain centers on `@neon/config` (pure, side-effect-free policy types + diff engine),
+with `@neon/config-runtime` (imperative `inspect`/`plan`/`apply` + function deploy; pulls in
+`esbuild`, so import it from CLIs/CI, never from a `neon.ts` policy) and `@neon/env` (resolve
++ inject a branch's env) both building on `config`; plus `neon-init`, `@neon/ai-sdk-provider`,
+and `@neon/functions`.
 
 ### The CLI package (`packages/cli`)
 

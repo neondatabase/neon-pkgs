@@ -161,8 +161,8 @@ gh workflow run neon-pkgs.yml --repo databricks/secure-public-registry-releases-
 > npm" mode**. Dispatching with no `-f package=` (or `package=dry-run`) runs a smoke-test that
 > **publishes nothing**: the run still goes green and shows a "Publish …" step (that's
 > `npm publish --dry-run`), so it *looks* successful while npm stays on the old version. So for a
-> multi-package release, **dispatch this once per bumped package** (e.g. `@neondatabase/env`, then
-> `@neondatabase/functions`, then `@neondatabase/ai-sdk-provider`). Valid `package` values are the
+> multi-package release, **dispatch this once per bumped package** (e.g. `@neon/env`, then
+> `@neon/functions`, then `@neon/ai-sdk-provider`). Valid `package` values are the
 > choices in the workflow's `workflow_dispatch` input (each maintained package, plus `dry-run`).
 
 After each run succeeds, confirm with `npm view <pkg> version` — if it still shows the old version,

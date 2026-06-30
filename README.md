@@ -18,17 +18,17 @@ If you're looking for a single package's docs, see its own `README.md` under `pa
 
 | Package | Description |
 | --- | --- |
-| `@neondatabase/config` | Config-as-Code for Neon: `defineConfig` types + the pure diff engine and Neon API adapter behind a `neon.ts` policy. |
-| `@neondatabase/config-runtime` | Runtime for `neon.ts` policies — `inspect` / `plan` / `apply` (push/pull) plus function bundling and deploy. |
-| `@neondatabase/env` | Resolve and inject a branch's Neon env (`fetchEnv` / `parseEnv`, `neon-env run`) from a `neon.ts` policy. |
+| `@neon/config` | Config-as-Code for Neon: `defineConfig` types + the pure diff engine and Neon API adapter behind a `neon.ts` policy. |
+| `@neon/config-runtime` | Runtime for `neon.ts` policies — `inspect` / `plan` / `apply` (push/pull) plus function bundling and deploy. |
+| `@neon/env` | Resolve and inject a branch's Neon env (`fetchEnv` / `parseEnv`, `neon-env run`) from a `neon.ts` policy. |
 
 ### API & integrations
 
 | Package | Description |
 | --- | --- |
 | `@neon/sdk` | The official TypeScript SDK for the Neon API — a modern, Fetch-based client generated from Neon's OpenAPI spec (successor to `@neondatabase/api-client`). |
-| `@neondatabase/functions` | Runtime helpers for Neon Functions (e.g. a `waitUntil` primitive for deferring work past a response). |
-| `@neondatabase/ai-sdk-provider` | Community [Vercel AI SDK](https://ai-sdk.dev) provider for the Neon AI Gateway. |
+| `@neon/functions` | Runtime helpers for Neon Functions (e.g. a `waitUntil` primitive for deferring work past a response). |
+| `@neon/ai-sdk-provider` | Community [Vercel AI SDK](https://ai-sdk.dev) provider for the Neon AI Gateway. |
 
 A few renamed packages are still published as deprecated aliases (`get-db` / `neondb` → `neon-new`; `vite-plugin-db` / `@neondatabase/vite-plugin-postgres` → `vite-plugin-neon-new`); they re-export the new package and print a deprecation warning.
 
@@ -55,8 +55,8 @@ pnpm lint:ci          # lint + format check (Biome)
 Scope a command to a single package with a filter, e.g.:
 
 ```bash
-pnpm --filter @neondatabase/env build
-pnpm --filter @neondatabase/env test:ci
+pnpm --filter @neon/env build
+pnpm --filter @neon/env test:ci
 ```
 
 ## Releasing

@@ -1,6 +1,6 @@
 name: Catalog Drift
 
-# Maintainer guard: fails when @neondatabase/ai-sdk-provider's pinned model
+# Maintainer guard: fails when @neon/ai-sdk-provider's pinned model
 # catalog (NEON_MODELS_DEV_IDS) drifts from the live models.dev `neon` provider.
 # Runs on a GitHub-hosted runner because it must reach the public internet
 # (models.dev); the protected runner group has no public egress.
@@ -25,4 +25,4 @@ jobs:
                   cache: pnpm
                   node-version-file: .node-version
             - run: pnpm install --frozen-lockfile
-            - run: pnpm --filter @neondatabase/ai-sdk-provider test:drift
+            - run: pnpm --filter @neon/ai-sdk-provider test:drift

@@ -23,15 +23,15 @@ jobs:
                       dir: neon-new
                     - name: vite-plugin-neon-new
                       dir: vite-plugin-neon-new
-                    - name: "@neondatabase/config"
+                    - name: "@neon/config"
                       dir: config
-                    - name: "@neondatabase/config-runtime"
+                    - name: "@neon/config-runtime"
                       dir: config-runtime
-                    - name: "@neondatabase/env"
+                    - name: "@neon/env"
                       dir: env
-                    - name: "@neondatabase/functions"
+                    - name: "@neon/functions"
                       dir: functions
-                    - name: "@neondatabase/ai-sdk-provider"
+                    - name: "@neon/ai-sdk-provider"
                       dir: ai-sdk-provider
         steps:
             - name: Harden the runner (Audit all outbound calls)
