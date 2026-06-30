@@ -27,7 +27,7 @@ describe("config init", () => {
 
 		const content = readFileSync(join(workspace, "neon.ts"), "utf8");
 		expect(content).toContain(
-			'import { defineConfig } from "@neondatabase/config/v1"',
+			'import { defineConfig } from "@neon/config/v1"',
 		);
 		expect(content).toContain("export default defineConfig({");
 		expect(content).toContain("auth: false");
@@ -59,10 +59,7 @@ describe("config init", () => {
 		// npm spells it `install`, pnpm/yarn/bun use `add` — assert on the packages,
 		// which are the same regardless of the resolved package manager.
 		expect(calls[0].args).toEqual(
-			expect.arrayContaining([
-				"@neondatabase/config",
-				"@neondatabase/env",
-			]),
+			expect.arrayContaining(["@neon/config", "@neon/env"]),
 		);
 		expect(calls[0].cwd).toBe(workspace);
 	});
@@ -71,7 +68,7 @@ describe("config init", () => {
 		writeFileSync(
 			join(workspace, "package.json"),
 			JSON.stringify({
-				dependencies: { "@neondatabase/config": "^0.8.1" },
+				dependencies: { "@neon/config": "^0.8.1" },
 			}),
 		);
 		const calls: string[][] = [];
@@ -86,8 +83,8 @@ describe("config init", () => {
 		});
 
 		expect(calls).toHaveLength(1);
-		expect(calls[0]).toContain("@neondatabase/env");
-		expect(calls[0]).not.toContain("@neondatabase/config");
+		expect(calls[0]).toContain("@neon/env");
+		expect(calls[0]).not.toContain("@neon/config");
 	});
 
 	test("does nothing to install when both packages are already declared", async () => {
@@ -95,8 +92,8 @@ describe("config init", () => {
 			join(workspace, "package.json"),
 			JSON.stringify({
 				dependencies: {
-					"@neondatabase/config": "^0.8.1",
-					"@neondatabase/env": "^0.8.1",
+					"@neon/config": "^0.8.1",
+					"@neon/env": "^0.8.1",
 				},
 			}),
 		);
@@ -155,6 +152,6 @@ describe("config init", () => {
 		});
 
 		const content = readFileSync(join(workspace, "neon.ts"), "utf8");
-		expect(content).toContain("@neondatabase/config/v1");
+		expect(content).toContain("@neon/config/v1");
 	});
 });
