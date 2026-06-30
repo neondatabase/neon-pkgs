@@ -89,6 +89,42 @@ describe("fetchEnv", () => {
 		expect(env.postgres.databaseUrl).toContain("-pooler");
 	});
 
+	test("resolves the branch by name via `branch`", async () => {
+		const { api, projectId } = seededFake();
+		const env = await fetchEnv(defineConfig({}), {
+			api,
+			projectId,
+			branch: "main",
+		});
+		expect(env.branch?.name).toBe("main");
+		expect(env.postgres.databaseUrl).toContain("postgresql://");
+	});
+
+	test("`branch` (id) wins over the legacy `branchId`", async () => {
+		const { api, projectId } = seededFake();
+		const env = await fetchEnv(defineConfig({}), {
+			api,
+			projectId,
+			branch: "main",
+			branchId: "br-does-not-exist",
+		});
+		expect(env.branch?.name).toBe("main");
+	});
+
+	test("throws a clear error for an unknown branch name or id", async () => {
+		const { api, projectId } = seededFake();
+		await expect(
+			fetchEnv(defineConfig({}), { api, projectId, branch: "nope" }),
+		).rejects.toMatchObject({ code: ErrorCode.BranchNotFound });
+	});
+
+	test("throws when no branch is provided", async () => {
+		const { api, projectId } = seededFake();
+		await expect(
+			fetchEnv(defineConfig({}), { api, projectId }),
+		).rejects.toMatchObject({ code: ErrorCode.BranchNotFound });
+	});
+
 	test("surfaces the branch name as NEON_BRANCH", async () => {
 		const { api, projectId } = seededFake();
 		const env = await fetchEnv(defineConfig({}), {

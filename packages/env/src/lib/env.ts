@@ -387,8 +387,18 @@ export interface FetchEnvOptions {
 	 * project. Resolve it in your CLI (e.g. neonctl) and pass it in.
 	 */
 	projectId: string;
-	/** Neon branch id (`br-…`). **Required.** Resolve names to ids before calling. */
-	branchId: string;
+	/**
+	 * Neon branch — its **name** (e.g. `main`) or its id (`br-…`). **Required** (or pass the
+	 * legacy {@link FetchEnvOptions.branchId}). Resolved against the project's branches by
+	 * id first, then by name, so either form works.
+	 */
+	branch?: string;
+	/**
+	 * @deprecated Legacy id-only field. Prefer {@link FetchEnvOptions.branch}, which accepts
+	 * a branch name or id. Still honored for backward compatibility; ignored when `branch`
+	 * is set.
+	 */
+	branchId?: string;
 	/**
 	 * Neon API key. Resolved via the standard chain (option → `NEON_API_KEY` →
 	 * `~/.config/neonctl/credentials.json`) when omitted. Ignored when a custom `api`
@@ -436,14 +446,14 @@ export interface FetchEnvOptions {
  * {@link parseEnv} instead — same {@link NeonEnv} shape, but a sync call against
  * `process.env`.
  *
- * Filesystem- and env-agnostic: pass `projectId` and the target `branchId` explicitly
- * (resolve them in your CLI, e.g. neonctl).
+ * Filesystem- and env-agnostic: pass `projectId` and the target `branch` (name or id)
+ * explicitly (resolve them in your CLI, e.g. neonctl).
  *
  * ```ts
  * import config from "../neon";
  * import { fetchEnv } from "@neon/env";
  *
- * const env = await fetchEnv(config, { projectId: "patient-art-12345", branchId: "br-…" });
+ * const env = await fetchEnv(config, { projectId: "patient-art-12345", branch: "main" });
  * const db = drizzle(neon(env.postgres.databaseUrl), { schema });
  * ```
  *
@@ -468,7 +478,18 @@ export async function fetchEnv<const C extends Config>(
 		);
 	}
 
-	const branch = resolveBranch(options.branchId, branches);
+	const branchRef = options.branch ?? options.branchId;
+	if (!branchRef) {
+		throw new PlatformError(
+			ErrorCode.BranchNotFound,
+			[
+				"fetchEnv: no branch provided.",
+				"Pass `branch` with a branch name (e.g. `main`) or id (`br-…`).",
+			].join(" "),
+			{ details: { projectId } },
+		);
+	}
+	const branch = resolveBranch(branchRef, branches);
 	const desired = resolveConfig(config, {
 		name: branch.name,
 		id: branch.id,
@@ -763,22 +784,30 @@ function createApiFromOptions(options: FetchEnvOptions): NeonApi {
 	});
 }
 
+/**
+ * Resolve a branch ref — a name or an id — to a concrete branch. Matches by id first
+ * (exact `br-…`), then by name; both are unique within a project, so the lookup is
+ * unambiguous. This lets `.neon` files written by `neonctl` (which pin the branch *name*)
+ * and explicit `br-…` ids both work.
+ */
 function resolveBranch(
-	branchId: string,
+	branch: string,
 	branches: NeonBranchSnapshot[],
 ): NeonBranchSnapshot {
-	const match = branches.find((b) => b.id === branchId);
+	const match =
+		branches.find((b) => b.id === branch) ??
+		branches.find((b) => b.name === branch);
 	if (match) return match;
 	throw new PlatformError(
 		ErrorCode.BranchNotFound,
 		[
-			`fetchEnv: branch id ${JSON.stringify(branchId)} not found on project.`,
+			`fetchEnv: branch ${JSON.stringify(branch)} not found on project (matched by id or name).`,
 			`Existing branches: ${branches.map((b) => `${b.name} (${b.id})`).join(", ")}.`,
 		].join(" "),
 		{
 			details: {
-				branchId,
-				available: branches.map((b) => b.id),
+				branch,
+				available: branches.map((b) => `${b.name} (${b.id})`),
 			},
 		},
 	);

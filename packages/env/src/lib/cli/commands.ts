@@ -182,7 +182,7 @@ function formatDotenvLine(key: string, value: string): string {
 async function loadConfigAndFetchEnv(
 	options: EnvResolveOptions,
 	ctx: CommandEnv,
-	resolved: { projectId: string; branchId: string },
+	resolved: { projectId: string; branch: string },
 ): Promise<Awaited<ReturnType<typeof fetchEnv>>> {
 	const { config, resolvedPath } = await loadConfigFromFile({
 		...(options.configPath ? { path: options.configPath } : {}),
@@ -194,7 +194,7 @@ async function loadConfigAndFetchEnv(
 		: {};
 	return fetchEnv(config, {
 		projectId: resolved.projectId,
-		branchId: resolved.branchId,
+		branch: resolved.branch,
 		env: { ...process.env, ...fileEnv },
 		...(ctx.api ? { api: ctx.api } : {}),
 		...(options.apiKey ? { apiKey: options.apiKey } : {}),

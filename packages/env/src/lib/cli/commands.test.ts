@@ -44,13 +44,15 @@ export default defineConfig({});`;
 }
 
 describe("runEnvRun", () => {
-	test("injects DATABASE_URL into the spawned command", async () => {
+	// Regression: `neonctl link` writes a flat `.neon` pinning the branch *name*
+	// (`branch: "main"`), not a `br-…` id. fetchEnv must resolve that to the branch.
+	test("injects DATABASE_URL when .neon pins the branch by name", async () => {
 		const { api, projectId } = seededFake();
 		const root = setup({
 			"package.json": "{}",
-			".neon/project.json": JSON.stringify({
+			".neon": JSON.stringify({
 				projectId,
-				branchId: "br-main",
+				branch: "main",
 			}),
 			"neon.ts": policy(),
 		});

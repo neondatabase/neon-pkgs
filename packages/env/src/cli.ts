@@ -39,7 +39,7 @@ const argv = yargs(hideBin(process.argv))
 				.option("branch", {
 					type: "string",
 					describe:
-						"Override the .neon/project.json branchId / NEON_BRANCH_ID",
+						"Branch name or id to target (overrides .neon / NEON_BRANCH / NEON_BRANCH_ID)",
 				})
 				.option("api-key", {
 					type: "string",
@@ -68,7 +68,7 @@ const argv = yargs(hideBin(process.argv))
 				.option("branch", {
 					type: "string",
 					describe:
-						"Override the .neon/project.json branchId / NEON_BRANCH_ID",
+						"Branch name or id to target (overrides .neon / NEON_BRANCH / NEON_BRANCH_ID)",
 				})
 				.option("api-key", {
 					type: "string",

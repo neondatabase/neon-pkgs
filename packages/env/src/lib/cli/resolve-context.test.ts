@@ -36,7 +36,7 @@ describe("resolveContext — precedence", () => {
 		});
 		expect(result).toEqual({
 			ok: true,
-			context: { projectId: "proj-opt", branchId: "br-opt" },
+			context: { projectId: "proj-opt", branch: "br-opt" },
 		});
 	});
 
@@ -57,11 +57,29 @@ describe("resolveContext — precedence", () => {
 		});
 		expect(result).toMatchObject({
 			ok: true,
-			context: { projectId: "proj-env", branchId: "br-env" },
+			context: { projectId: "proj-env", branch: "br-env" },
 		});
 	});
 
-	test("falls back to .neon/project.json when no option or env", () => {
+	test("NEON_BRANCH (name) resolves and wins over the file", () => {
+		const root = setup({
+			"package.json": "{}",
+			".neon": JSON.stringify({
+				projectId: "proj-file",
+				branch: "br-file",
+			}),
+		});
+		const result = resolveContext({
+			cwd: root,
+			env: { NEON_PROJECT_ID: "proj-env", NEON_BRANCH: "feature-x" },
+		});
+		expect(result).toMatchObject({
+			ok: true,
+			context: { projectId: "proj-env", branch: "feature-x" },
+		});
+	});
+
+	test("falls back to the legacy `branchId` field in the .neon file", () => {
 		const root = setup({
 			"package.json": "{}",
 			".neon/project.json": JSON.stringify({
@@ -74,25 +92,42 @@ describe("resolveContext — precedence", () => {
 			ok: true,
 			context: {
 				projectId: "proj-file",
-				branchId: "br-file",
+				branch: "br-file",
 			},
+		});
+	});
+
+	test("prefers the `branch` field over the legacy `branchId`", () => {
+		const root = setup({
+			"package.json": "{}",
+			".neon": JSON.stringify({
+				projectId: "proj-file",
+				branch: "main",
+				branchId: "br-legacy",
+			}),
+		});
+		const result = resolveContext({ cwd: root, env: EMPTY_ENV });
+		expect(result).toEqual({
+			ok: true,
+			context: { projectId: "proj-file", branch: "main" },
 		});
 	});
 });
 
 describe("resolveContext — .neon file discovery", () => {
-	test("reads the bare `.neon` neonctl-convention file", () => {
+	test("reads the bare `.neon` neonctl-convention file (branch name)", () => {
+		// `neonctl link` writes a flat `.neon` with `branch` holding the branch *name*.
 		const root = setup({
 			"package.json": "{}",
 			".neon": JSON.stringify({
 				projectId: "p-bare",
-				branchId: "br-bare",
+				branch: "main",
 			}),
 		});
 		const result = resolveContext({ cwd: root, env: EMPTY_ENV });
 		expect(result).toMatchObject({
 			ok: true,
-			context: { projectId: "p-bare", branchId: "br-bare" },
+			context: { projectId: "p-bare", branch: "main" },
 		});
 	});
 
@@ -128,7 +163,7 @@ describe("resolveContext — .neon file discovery", () => {
 		});
 		expect(result).toMatchObject({
 			ok: true,
-			context: { projectId: "p-root", branchId: "br-root" },
+			context: { projectId: "p-root", branch: "br-root" },
 		});
 	});
 

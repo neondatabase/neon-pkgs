@@ -235,7 +235,7 @@ const fetchAndProject = async (
 ): Promise<Record<string, string>> => {
 	const env = await fetchEnv(config, {
 		projectId: ctx.projectId as string,
-		branchId: ctx.branchId as string,
+		branch: ctx.branchId as string,
 		...apiOptions(ctx),
 		...(ctx.env ? { env: ctx.env } : {}),
 	});

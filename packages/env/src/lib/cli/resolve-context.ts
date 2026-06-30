@@ -9,7 +9,8 @@ import { dirname, resolve } from "node:path";
  */
 export interface ResolvedContext {
 	projectId: string;
-	branchId: string;
+	/** Branch ref — a name (preferred for readability) or an id (`br-…`). */
+	branch: string;
 }
 
 export interface ResolveContextOptions {
@@ -37,33 +38,38 @@ export function resolveContext(
 		nonEmpty(env.NEON_PROJECT_ID) ??
 		file?.projectId;
 
-	const branchId =
+	// A branch ref — name (preferred) or id. `NEON_BRANCH` carries the name; `NEON_BRANCH_ID`
+	// is the legacy id-only var. The `.neon` file pins `branch` (name) via `neonctl link`,
+	// with legacy `branchId` still honored. fetchEnv resolves either form by name or id.
+	const branch =
 		nonEmpty(options.branch) ??
+		nonEmpty(env.NEON_BRANCH) ??
 		nonEmpty(env.NEON_BRANCH_ID) ??
-		file?.branchId;
+		file?.branch;
 
 	const missing: string[] = [];
 	if (!projectId) {
 		missing.push(
-			"project id — pass `--project-id`, set `NEON_PROJECT_ID`, or add `projectId` to `.neon/project.json` (run `npx neonctl link`).",
+			"project id — pass `--project-id`, set `NEON_PROJECT_ID`, or add `projectId` to `.neon` (run `npx neonctl link`).",
 		);
 	}
-	if (!branchId) {
+	if (!branch) {
 		missing.push(
-			"branch — pass `--branch`, set `NEON_BRANCH_ID`, or add `branchId` to `.neon/project.json` (run `npx neonctl checkout <branch>`).",
+			"branch — pass `--branch`, set `NEON_BRANCH`/`NEON_BRANCH_ID`, or add `branch` to `.neon` (run `npx neonctl link` / `neonctl checkout <branch>`).",
 		);
 	}
-	if (!projectId || !branchId) return { ok: false, missing };
+	if (!projectId || !branch) return { ok: false, missing };
 
 	return {
 		ok: true,
-		context: { projectId, branchId },
+		context: { projectId, branch },
 	};
 }
 
 interface NeonFile {
 	projectId?: string;
-	branchId?: string;
+	/** Branch ref — name (preferred) or id. Reads `branch`, falling back to legacy `branchId`. */
+	branch?: string;
 }
 
 /**
@@ -111,8 +117,15 @@ function readNeonFileAt(path: string): NeonFile | null {
 	const out: NeonFile = {};
 	if (typeof obj.projectId === "string" && obj.projectId !== "")
 		out.projectId = obj.projectId;
-	if (typeof obj.branchId === "string" && obj.branchId !== "")
-		out.branchId = obj.branchId;
+	// Prefer the `branch` field (name or id, written by `neonctl link`); fall back to the
+	// legacy id-only `branchId`.
+	const branch =
+		typeof obj.branch === "string" && obj.branch !== ""
+			? obj.branch
+			: typeof obj.branchId === "string" && obj.branchId !== ""
+				? obj.branchId
+				: undefined;
+	if (branch) out.branch = branch;
 	return out;
 }
 
