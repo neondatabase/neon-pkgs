@@ -52,6 +52,7 @@
 		"spec:pull": "curl -fsSL https://neon.com/api_spec/release/v2.json -o spec/neon-openapi.json",
 		"test": "vitest --passWithNoTests",
 		"test:ci": "vitest run --passWithNoTests",
+		"test:types": "vitest run --typecheck.enabled --typecheck.only",
 		"test:e2e": "vitest run --config vitest.e2e.config.ts",
 		"tsc": "tsc"
 	},

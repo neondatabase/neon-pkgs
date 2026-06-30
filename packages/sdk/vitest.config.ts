@@ -8,7 +8,11 @@ export default defineConfig({
 		coverage: {
 			all: true,
 			include: ["src"],
-			exclude: ["src/**/*.test.ts", "src/client/**"],
+			exclude: [
+				"src/**/*.test.ts",
+				"src/**/*.test-d.ts",
+				"src/client/**",
+			],
 			reporter: ["html", "lcov"],
 		},
 		exclude: ["lib", "node_modules", "dist", "e2e"],
