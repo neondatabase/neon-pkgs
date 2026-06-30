@@ -1,5 +1,12 @@
 # neonctl
 
+## 2.29.1
+
+### Patch Changes
+
+- Updated dependencies [b78ced2]
+  - @neon/env@0.9.0
+
 ## 2.29.0
 
 ### Minor Changes
