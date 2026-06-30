@@ -1,5 +1,11 @@
 # neonctl
 
+## 2.29.0
+
+### Minor Changes
+
+- Add `neon config init`: scaffold a starter `neon.ts` policy and install the Neon config packages (`@neon/config` + `@neon/env`), detecting the project's package manager. Also offer it as the final step of an interactive `neon link` (then pull env so the local `.env` reflects the new policy).
+
 ## 2.28.0
 
 ### Minor Changes
