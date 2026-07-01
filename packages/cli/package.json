@@ -1,6 +1,6 @@
 {
   "name": "neonctl",
-  "version": "2.29.1",
+  "version": "2.29.2",
   "description": "CLI tool for Neon Serverless Postgres",
   "keywords": [
     "neon",
@@ -31,7 +31,7 @@
     "package.json"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=20.18.1"
   },
   "scripts": {
     "generateParams": "tsx generateOptionsFromSpec.ts",
@@ -63,7 +63,7 @@
     "openid-client": "6.8.1",
     "pg-protocol": "^1.14.0",
     "prompts": "2.4.2",
-    "undici": "^8.5.0",
+    "undici": "^7.28.0",
     "which": "3.0.1",
     "yaml": "2.4.5",
     "yargs": "17.7.2"

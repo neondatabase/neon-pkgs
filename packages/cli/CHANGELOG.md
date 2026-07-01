@@ -1,5 +1,11 @@
 # neonctl
 
+## 2.29.2
+
+### Patch Changes
+
+- Lower the Node requirement from `>=22` back to `>=20.18.1` by pinning `undici` to `^7.28.0` (undici 8 requires Node 22.19+). undici is only used for `HTTP(S)_PROXY` support via `EnvHttpProxyAgent`, which is available in undici 7, so there is no behavioral change — this just restores Node 20 compatibility for the CLI.
+
 ## 2.29.1
 
 ### Patch Changes
