@@ -15,7 +15,7 @@ Two layers, one package:
 npm install @neon/sdk
 ```
 
-Requires Node.js ≥ 22 (or any runtime with a global `fetch` — Bun, Deno, edge, browser).
+Requires Node.js ≥ 20.19 (or any runtime with a global `fetch` — Bun, Deno, edge, browser).
 
 ## Quick start
 

@@ -4,6 +4,8 @@
 
 ---
 
+> **Requirements:** Node.js >= 20.19.
+
 ## CLI Usage
 
 The CLI provides a default referrer value, so the `--ref` flag is optional.

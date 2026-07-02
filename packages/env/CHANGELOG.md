@@ -1,5 +1,20 @@
 # @neondatabase/env
 
+## 0.10.0
+
+### Minor Changes
+
+- Support Node.js >= 20.19 at runtime. Every published package now declares
+  `engines.node: ">=20.19.0"` — the real floor of its dependency tree — instead of `>=22`, so the
+  packages install and run cleanly on Node 20 without any dependency downgrades (`neonctl` moves
+  from `>=20.18.1` to `>=20.19.0` to match `chokidar@5`). Contributing to the repo still requires
+  Node 22 (pnpm + SDK codegen); see `CONTRIBUTING.md`.
+
+### Patch Changes
+
+- Updated dependencies
+  - @neon/config@0.9.0
+
 ## 0.9.0
 
 ### Minor Changes

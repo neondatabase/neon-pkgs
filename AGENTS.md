@@ -65,7 +65,7 @@ pnpm --filter neon-new dry:run
 -   Uses pnpm workspaces (`packages/*`); shared dependency versions are pinned via the pnpm catalog (`pnpm-workspace.yaml`)
 -   Uses Biome for linting/formatting instead of ESLint/Prettier
 -   Builds with `tsdown` for bundling and `tsc --noEmit` for type-checking (see each package's `build` script)
--   Package manager: pnpm@10.30.3, Node.js >=22
+-   Package manager: pnpm@10.30.3. **Node.js requirements are split** (see `CONTRIBUTING.md`): contributors need **Node >=22** (pnpm needs 22.13+; regenerating `@neon/sdk` via `@hey-api/openapi-ts` needs 22.18+), while every **published package** targets **Node >=20.19** at runtime (`engines.node: ">=20.19.0"` — the real floor of the dependency trees, driven by `chokidar@5`/`yargs@18`). The repo-root `package.json` keeps `engines.node: ">=22"` on purpose: it describes the contributor environment, not the shipped packages.
 -   **Dependency Installation**: Prefer `pnpm dedupe` over `pnpm install` - it deduplicates dependencies in node_modules, minimizing conflict issues and reducing filesystem space
 -   **Exception — `packages/cli`** (the Neon CLI): keeps its own upstream toolchain (`tsc` → `dist`, ESLint + Prettier, `@yao-pkg/pkg` binaries) rather than tsdown/Biome, so it is **excluded from root Biome** (`biome.json` `!packages/cli`). See "The CLI package" below.
 

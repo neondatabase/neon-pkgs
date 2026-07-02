@@ -1,6 +1,6 @@
 {
 	"name": "@neon/config-runtime",
-	"version": "0.8.1",
+	"version": "0.9.0",
 	"description": "Imperative runtime for @neon/config: inspect/plan/apply a neon.ts policy against the Neon API and bundle + deploy Neon Functions. Pulls in esbuild; import this from CLIs and CI, not from neon.ts.",
 	"keywords": [
 		"neon",
@@ -64,7 +64,7 @@
 	},
 	"packageManager": "pnpm@10.4.0",
 	"engines": {
-		"node": ">=22"
+		"node": ">=20.19.0"
 	},
 	"publishConfig": {
 		"provenance": false

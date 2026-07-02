@@ -8,6 +8,8 @@ Runtime helpers for [Neon Functions](https://neon.com). Currently provides a `wa
 npm install @neon/functions
 ```
 
+> **Requirements:** Node.js >= 20.19.
+
 ## Usage
 
 The API mirrors [`@vercel/functions`](https://vercel.com/docs/functions/functions-api-reference/vercel-functions-package): import `waitUntil` and call it directly with the promise you want to keep alive.

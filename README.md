@@ -43,7 +43,7 @@ This is a [pnpm workspace](https://pnpm.io/workspaces). Internal dependencies ar
 
 ## Development
 
-Requires Node.js >= 22 and [pnpm](https://pnpm.io). From the repo root:
+Contributing to this repo requires **Node.js >= 22** and [pnpm](https://pnpm.io) — pnpm itself needs Node 22.13+, and regenerating the `@neon/sdk` types needs Node 22.18+. The **published packages** support **Node.js >= 20.19** at runtime (see each package's README and `CONTRIBUTING.md`). From the repo root:
 
 ```bash
 pnpm install          # install all workspaces
