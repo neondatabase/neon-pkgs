@@ -13,6 +13,11 @@ jobs:
             - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
             - uses: ./.github/actions/prepare
             - run: pnpm build
+            # `pnpm build` compiles neonctl via tsconfig.build.json, which
+            # excludes *.test.ts. Type-check the full source (tsconfig.json
+            # includes src/**/*.ts, i.e. tests) so type regressions in cli test
+            # files can't slip through — no other CI job type-checks them.
+            - run: pnpm --filter neonctl typecheck
     lint:
         name: Lint
         runs-on:
