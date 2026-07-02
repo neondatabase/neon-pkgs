@@ -4,77 +4,6 @@ export type ClientOptions = {
     baseUrl: 'https://console.neon.tech/api/v2' | (string & {});
 };
 
-export type Features = {
-    [key: string]: boolean;
-};
-
-export type FeatureFlags = {
-    [key: string]: boolean | string;
-};
-
-export type TelemetryConnection = {
-    /**
-     * Required. Communication protocol used to send telemetry data. Options: grpc, http.
-     * For gRPC, the endpoint must include an explicit port.
-     *
-     */
-    protocol: 'grpc' | 'http';
-    /**
-     * Required. URI of the OpenTelemetry Collector (e.g., https://collector.customer.com:4317).
-     *
-     */
-    endpoint: string;
-    authentication: TelemetryAuthentication;
-};
-
-export type TelemetryAuthentication = {
-    bearer_token?: {
-        token: string;
-    };
-    basic?: {
-        username: string;
-        password: string;
-    };
-    api_key?: {
-        key: string;
-        /**
-         * Optional. Custom header name for the API key. If not specified, defaults to "X-API-Key".
-         * This allows using custom header names like "Authorization", "X-Custom-Key", etc.
-         *
-         */
-        header_name?: string;
-    };
-};
-
-export type TelemetryConfig = {
-    /**
-     * Required. The telemetry data types to enable. One or both of: metrics, logs.
-     *
-     */
-    types: Array<'metrics' | 'logs'>;
-    /**
-     * Optional. Overrides the default endpoint for metrics (e.g., https://metrics.customer.com:4317).
-     *
-     */
-    metrics_endpoint_override?: string;
-    /**
-     * Optional. Overrides the default endpoint for logs (e.g., https://logs.customer.com:4318).
-     *
-     */
-    logs_endpoint_override?: string;
-};
-
-export type TelemetryResource = {
-    /**
-     * Optional. Key-value attributes that describe the source of telemetry (e.g., service.name: neon-test).
-     * See: @https://opentelemetry.io/docs/specs/semconv/resource/#services
-     *
-     */
-    attributes?: {
-        [key: string]: string;
-    };
-};
-
 export type ComputeUnit = number;
 
 /**
@@ -434,7 +363,7 @@ export type OperationsResponse = {
 /**
  * The action performed by the operation
  */
-export type OperationAction = 'create_compute' | 'create_timeline' | 'start_compute' | 'suspend_compute' | 'apply_config' | 'check_availability' | 'delete_timeline' | 'create_branch' | 'import_data' | 'tenant_ignore' | 'tenant_attach' | 'tenant_detach' | 'tenant_reattach' | 'replace_safekeeper' | 'disable_maintenance' | 'apply_storage_config' | 'prepare_secondary_pageserver' | 'switch_pageserver' | 'detach_parent_branch' | 'timeline_archive' | 'timeline_unarchive' | 'start_reserved_compute' | 'sync_dbs_and_roles_from_compute' | 'apply_schema_from_branch' | 'timeline_mark_invisible' | 'timeline_update_protected_config' | 'prewarm_replica' | 'promote_replica' | 'set_storage_non_dirty' | 'swap_binding_id' | 'finalize_migration' | 'mark_migration_prepared';
+export type OperationAction = 'create_compute' | 'create_timeline' | 'start_compute' | 'suspend_compute' | 'apply_config' | 'check_availability' | 'delete_timeline' | 'create_branch' | 'import_data' | 'tenant_ignore' | 'tenant_attach' | 'tenant_detach' | 'tenant_reattach' | 'replace_safekeeper' | 'disable_maintenance' | 'apply_storage_config' | 'prepare_secondary_pageserver' | 'switch_pageserver' | 'detach_parent_branch' | 'timeline_archive' | 'timeline_unarchive' | 'start_reserved_compute' | 'sync_dbs_and_roles_from_compute' | 'apply_schema_from_branch' | 'timeline_mark_invisible' | 'timeline_update_protected_config' | 'prewarm_replica' | 'promote_replica' | 'set_storage_non_dirty' | 'swap_binding_id' | 'finalize_migration' | 'mark_migration_prepared' | 'update_catalog';
 
 /**
  * The status of the operation
@@ -878,13 +807,6 @@ export type ProjectsResponse = {
     unavailable_project_ids?: Array<string>;
 };
 
-export type ProjectsCountResponse = {
-    /**
-     * The total number of projects matching the query criteria.
-     */
-    count: number;
-};
-
 export type ProjectPermission = {
     id: string;
     granted_to_email: string;
@@ -1063,54 +985,6 @@ export type ConsumptionMetricValue = {
 export type ConsumptionHistoryGranularity = 'hourly' | 'daily' | 'monthly';
 
 export type ConsumptionHistoryQueryMetrics = Array<string>;
-
-export type ProjectLimits = {
-    limits: Limits;
-    features: Features;
-};
-
-export type Limits = {
-    active_time: number;
-    max_projects: number;
-    max_branches: number;
-    max_snapshots: number;
-    max_protected_branches: number;
-    max_autoscaling_cu: number;
-    max_fixed_size_cu: number;
-    cpu_seconds: number;
-    max_compute_time_non_primary: number;
-    max_active_endpoints: number;
-    max_read_only_endpoints: number;
-    max_read_computes_per_branch?: number;
-    max_allowed_ips: number;
-    max_vpc_endpoints_per_region: number;
-    max_monitoring_retention_hours: number;
-    max_history_retention_seconds: number;
-    min_autosuspend_seconds: number;
-    max_data_transfer: number;
-    min_idle_seconds_to_autoarchive: number;
-    min_age_seconds_to_autoarchive: number;
-    max_branch_roles: number;
-    max_branch_databases: number;
-    max_concurrent_scheduled_operation_chains_per_project: number;
-    max_concurrent_executing_operation_chains_per_project: number;
-    max_root_branches: number;
-    max_import_size: number;
-    max_organization_members: number;
-    schema_only_branches_size_limit: number;
-    per_project: {
-        compute_time_seconds: number;
-        written_data_bytes: number;
-        data_transfer_bytes: number;
-        /**
-         * Soft limit on PITR history size per project, in bytes. Display-only nudge —
-         * not enforced server-side. Value <= 0 means unlimited.
-         *
-         */
-        history_size_bytes: number;
-        suspend_default_branch: boolean;
-    };
-};
 
 export type ProjectAuditLogLevel = 'base' | 'extended' | 'full';
 
@@ -1341,34 +1215,6 @@ export type BranchRecoveryInfo = {
     deletion_method: 'user' | 'ttl';
 };
 
-export type BranchConsumption = {
-    /**
-     * Seconds. The number of CPU seconds used by the branch's compute endpoints, including compute endpoints that have been deleted.
-     *
-     */
-    compute_time_seconds: number;
-    /**
-     * Bytes. The number of bytes transferred to and from the branch.
-     *
-     */
-    data_transfer_bytes: number;
-    /**
-     * Bytes. The logical size of the branch.
-     *
-     */
-    logical_size_bytes: number;
-    /**
-     * Bytes. The number of bytes written to the branch since the parent branch.
-     *
-     */
-    written_size_since_parent_bytes: number;
-    /**
-     * Bytes. The number of bytes in the PITR history of the branch since the parent branch.
-     *
-     */
-    pitr_history_size_since_parent_bytes: number;
-};
-
 export type BranchCreateRequestEndpointOptions = {
     type: EndpointType;
     settings?: EndpointSettingsData;
@@ -1489,10 +1335,6 @@ export type BranchResponse = {
     branch: Branch;
 };
 
-export type BranchConsumptionResponse = {
-    consumption: BranchConsumption;
-};
-
 export type BranchSchemaResponse = {
     sql?: string;
     json?: BranchSchemaJson;
@@ -1508,14 +1350,6 @@ export type BranchesResponse = {
 
 export type BranchesCountResponse = {
     count: number;
-};
-
-export type ProjectsBranchesCountResponse = {
-    projects: {
-        [key: string]: {
-            count: number;
-        };
-    };
 };
 
 export type MaskingRule = {
@@ -2050,34 +1884,6 @@ export type EndpointsOptionalResponse = {
     endpoints?: Array<Endpoint>;
 };
 
-export type EndpointPasswordlessSessionAuthRequest = {
-    session_id: string;
-};
-
-/**
- * A Duration represents the elapsed time between two instants
- * as an int64 nanosecond count. The representation limits the
- * largest representable duration to approximately 290 years.
- */
-export type Duration = number;
-
-export type StatementResult = {
-    data?: StatementData;
-    error?: string;
-    explain_data?: Array<ExplainData>;
-    query: string;
-};
-
-export type StatementData = {
-    fields?: Array<string>;
-    rows?: Array<Array<string>>;
-    truncated: boolean;
-};
-
-export type ExplainData = {
-    'QUERY PLAN': string;
-};
-
 export type Role = {
     /**
      * The ID of the branch to which the role belongs
@@ -2462,32 +2268,8 @@ export type Organization = {
     require_mfa?: boolean;
 };
 
-export type EnableOrganizationFeatureRequest = {
-    /**
-     * The feature to enable for the organization
-     */
-    feature: 'allow_hipaa_projects';
-};
-
 export type OrganizationsResponse = {
     organizations: Array<Organization>;
-};
-
-export type OrganizationMembership = {
-    organization: Organization;
-    role: MemberRole;
-};
-
-export type OrganizationMembershipsResponse = {
-    memberships: Array<OrganizationMembership>;
-};
-
-export type OrganizationsUpdateRequest = {
-    name?: string;
-    /**
-     * If true, all members must have MFA enabled to access this organization
-     */
-    require_mfa?: boolean;
 };
 
 export type OrganizationInvitationsResponse = {
@@ -2503,63 +2285,12 @@ export type OrganizationInvitesCreateRequest = {
     invitations: Array<OrganizationInviteCreateRequest>;
 };
 
-export type OrganizationInviteUpdateRequest = {
-    email?: string;
-    role?: MemberRole;
-    resend?: boolean;
-};
-
-/**
- * A list of details for guests of an organization
- *
- */
-export type OrganizationGuestsResponse = Array<OrganizationGuest>;
-
-/**
- * Details of an organization guest, who is not directly a member of
- * an organization but has been shared one of the projects it owns
- *
- */
-export type OrganizationGuest = {
-    permission_id: string;
-    user_email: string;
-    project_id: string;
-    project_name: string;
-};
-
 export type OrganizationMemberUpdateRequest = {
     role: MemberRole;
 };
 
 export type OrganizationMembersResponse = {
     members: Array<MemberWithUser>;
-};
-
-export type InvitationCreateRequest = {
-    /**
-     * Email to invite
-     */
-    email: string;
-    role: MemberRole;
-};
-
-export type OrganizationCreateRequest = {
-    organization: {
-        /**
-         * The organization name
-         */
-        name?: string;
-        /**
-         * Emails with roles to invite to the organization
-         */
-        invitations?: Array<InvitationCreateRequest>;
-    };
-    subscription_type: BillingSubscriptionType;
-    /**
-     * Whether to transfer credits from the user account to the newly created organization account.
-     *
-     */
-    transfer_credits?: boolean;
 };
 
 export type ActiveRegionsResponse = {
@@ -2606,28 +2337,6 @@ export type CurrentUserAuthAccount = {
     provider: IdentityProviderId;
 };
 
-export type LinkedAuthAccount = {
-    provider: IdentityProviderId;
-    provider_display_name: string;
-    username: string;
-};
-
-export type UpdateUserInfoRequest = {
-    email?: string;
-    id: string;
-    /**
-     * DEPRECATED. This field is ignored.
-     *
-     *
-     * @deprecated
-     */
-    image?: string;
-    first_name?: string;
-    last_name?: string;
-    password?: string;
-    new_password?: string;
-};
-
 export type CurrentUserInfoResponse = {
     /**
      * Control plane observes active endpoints of a user this amount of wall-clock time.
@@ -2660,17 +2369,6 @@ export type CurrentUserInfoResponse = {
     plan: string;
 };
 
-export type ConvertUserToOrgRequest = {
-    name: string;
-};
-
-export type CurrentUserInfoAuthResponse = {
-    password_stored: boolean;
-    auth_accounts: Array<CurrentUserAuthAccount>;
-    linked_accounts: Array<LinkedAuthAccount>;
-    provider: string;
-};
-
 export type AuthDetailsResponse = {
     account_id: string;
     auth_method: 'keycloak' | 'session_cookie' | 'api_key_user' | 'api_key_org' | 'oauth';
@@ -2686,10 +2384,6 @@ export type TransferProjectsToOrganizationRequest = {
      * The list of projects ids to transfer. Maximum of 400 project ids
      */
     project_ids: Array<string>;
-};
-
-export type VerifyUserPasswordRequest = {
-    password: string;
 };
 
 /**
@@ -2791,13 +2485,6 @@ export type PgbouncerSettingsData = {
  */
 export type PgVersion = number;
 
-export type HealthCheck = {
-    /**
-     * Service status
-     */
-    status: string;
-};
-
 export type ProjectOwnerData = {
     email: string;
     name: string;
@@ -2826,10 +2513,6 @@ export type ProjectsWithIntegrationResponse = {
         integration: string;
     }>;
 };
-
-export type UserDeletionConditionName = 'project_count' | 'org_admin_membership_count' | 'subscription_type';
-
-export type OrgDeletionConditionName = 'project_count';
 
 /**
  * Configuration settings for the Neon Data API
@@ -3377,8 +3060,6 @@ export type RoleOperations = RoleResponse & OperationsResponse;
 
 export type JwksCreationOperation = JwksResponse & OperationsResponse;
 
-export type SupportTicketSeverity = 'low' | 'normal' | 'high' | 'critical' | 'urgent';
-
 export type AnnotationData = {
     object: AnnotationObjectData;
     value: AnnotationValueData;
@@ -3521,11 +3202,6 @@ export type BackupSchedule = {
     schedule: Array<BackupScheduleItem>;
 };
 
-export type SupportTicket = {
-    salesforce_id?: string;
-    failed_uploads?: Array<string>;
-};
-
 export type BranchSchemaJson = {
     tables: Array<{
         schema: string;
@@ -3577,10 +3253,428 @@ export type BranchSchemaJson = {
     }>;
 };
 
-export type SystemStatusSummaryResponse = {
-    ongoing_incidents: number;
-    in_progress_maintenances: number;
-    scheduled_maintenances: number;
+/**
+ * Controls anonymous access to objects in the bucket.
+ * - `private`: all reads and writes require authenticated requests (default).
+ * - `public_read`: anonymous `GetObject`/`HeadObject` requests succeed; listing,
+ * writes, and deletes still require authenticated requests.
+ *
+ */
+export type BucketAccessLevel = 'private' | 'public_read';
+
+export type Bucket = {
+    /**
+     * The bucket name (unique within a branch).
+     */
+    name: string;
+    access_level: BucketAccessLevel;
+    /**
+     * When the bucket was created. For a bucket inherited from an
+     * ancestor branch this is the ancestor's creation time (the branch
+     * fork never re-creates the bucket).
+     *
+     */
+    created_at: string;
+};
+
+export type BucketCreateRequest = {
+    /**
+     * The bucket name.
+     */
+    name: string;
+    /**
+     * Access level for the bucket. Defaults to `private`. Set to `public_read`
+     * to allow anonymous `GetObject`/`HeadObject` on objects in this bucket.
+     *
+     */
+    access_level?: 'private' | 'public_read';
+};
+
+export type BucketResponse = {
+    bucket: Bucket;
+};
+
+export type BucketsListResponse = {
+    buckets: Array<Bucket>;
+};
+
+export type BranchStorage = {
+    /**
+     * Always `true` in 200 responses. Present for forward compatibility: a
+     * future version may add intermediate states; callers should treat `true`
+     * as "storage is usable for this branch right now."
+     *
+     */
+    enabled: boolean;
+    /**
+     * The S3-compatible endpoint URL for this branch.
+     */
+    s3_endpoint: string;
+    /**
+     * The AWS region for this branch's storage. The platform normalizes
+     * the us-east-1 convention server-side: a non-empty region string is
+     * always returned in 200 responses (e.g. `"us-east-1"` for the S3
+     * default region).
+     *
+     */
+    region: string;
+    /**
+     * Whether the S3 client must use path-style addressing
+     * (bucket-in-path rather than virtual-hosted subdomain).
+     * Always true: the wildcard TLS cert covers one level of subdomain
+     * (*.storage.<suffix>), so the branch ID occupies that label and the
+     * bucket name must travel in the request path, not as a further
+     * subdomain. Callers must set the S3 SDK's ForcePathStyle (or
+     * equivalent) to true.
+     *
+     */
+    force_path_style: boolean;
+};
+
+export type BranchStorageNotEnabled = {
+    code: string;
+    message: string;
+    /**
+     * Machine-readable reason why storage is unavailable:
+     * - `org_not_entitled`: the org's `PlatformBranchableStorage` feature flag is off.
+     * - `region_unavailable`: the project's region has no storage admin service wired.
+     * - `branch_directory_missing`: the branch is not registered in the storage service.
+     * - `branch_not_found`: the project or branch does not exist, or the caller does not
+     * have access to it.
+     *
+     */
+    reason: 'org_not_entitled' | 'region_unavailable' | 'branch_directory_missing' | 'branch_not_found';
+};
+
+export type BranchAiGateway = {
+    /**
+     * Always `true` in 200 responses. Present for forward compatibility,
+     * mirroring BranchStorage.enabled.
+     *
+     */
+    enabled: boolean;
+    /**
+     * The AI-gateway endpoint root for this branch — an OpenAI-compatible
+     * base URL. No dialect path is included; clients append the route
+     * (e.g. `/ai-gateway/openai/v1/responses`) themselves.
+     *
+     */
+    base_url: string;
+};
+
+export type BranchAiGatewayNotEnabled = {
+    code: string;
+    message: string;
+    /**
+     * Machine-readable reason why the AI gateway is unavailable:
+     * - `ai_gateway_unavailable`: the project's region/cell has no AI gateway configured.
+     * - `branch_not_found`: the project or branch does not exist, or the caller does not
+     * have access to it.
+     *
+     */
+    reason: 'ai_gateway_unavailable' | 'branch_not_found';
+};
+
+export type BucketObject = {
+    /**
+     * The full object key.
+     */
+    key: string;
+    /**
+     * The object size in bytes.
+     */
+    size: number;
+    /**
+     * The time the object was last modified.
+     */
+    last_modified: string;
+    /**
+     * The object's entity tag (content hash).
+     */
+    etag: string;
+};
+
+export type BucketObjectsListResponse = {
+    /**
+     * Common prefixes (folder names) collapsed under the requested
+     * `delimiter`. Empty when no `delimiter` was supplied.
+     *
+     */
+    folders: Array<string>;
+    /**
+     * Objects whose keys did not collapse into a folder.
+     */
+    objects: Array<BucketObject>;
+    /**
+     * The prefix that was applied to this listing (echoed back).
+     */
+    prefix: string;
+    /**
+     * Pagination cursor to pass as `cursor` on the next request. Empty
+     * when the listing is not truncated.
+     *
+     */
+    next_cursor?: string;
+    /**
+     * True when more results exist beyond this page.
+     */
+    is_truncated: boolean;
+};
+
+export type BucketObjectsDeletePrefixResponse = {
+    /**
+     * The number of objects soft-deleted under the prefix. 0 when no live
+     * object matched the prefix on this branch.
+     *
+     */
+    deleted: number;
+};
+
+/**
+ * Options for the presigned URL. The `operation` selects upload (`PUT`)
+ * or download (`GET`); the remaining fields are optional.
+ *
+ */
+export type PresignRequest = {
+    /**
+     * The transfer direction. `upload` returns a presigned `PUT` URL;
+     * `download` returns a presigned `GET` URL.
+     *
+     */
+    operation: 'upload' | 'download';
+    /**
+     * The `Content-Type` to bind into the signed request. Only meaningful
+     * for `upload`: when set, the caller MUST send the same `Content-Type`
+     * header on the `PUT`, and the value is echoed back in the response
+     * `headers`. Ignored for `download`.
+     *
+     */
+    content_type?: string;
+    /**
+     * How long the presigned URL stays valid, in seconds. Defaults to 900
+     * (15 minutes); capped at 604800 (7 days).
+     *
+     */
+    expires_in_seconds?: number;
+};
+
+export type PresignResponse = {
+    /**
+     * The presigned URL. Transfer the object bytes by issuing
+     * `method url` with the returned `headers`.
+     *
+     */
+    url: string;
+    /**
+     * The HTTP method to use against `url`: `PUT` for an upload,
+     * `GET` for a download.
+     *
+     */
+    method: string;
+    /**
+     * Headers the caller MUST send verbatim on the request (e.g.
+     * `Content-Type` when it was signed on an upload). May be empty.
+     *
+     */
+    headers: {
+        [key: string]: string;
+    };
+    /**
+     * When the presigned URL stops being valid.
+     */
+    expires_at: string;
+};
+
+/**
+ * A single capability a credential may exercise. A credential is granted
+ * a set of these; it may only perform actions explicitly listed in its
+ * scopes.
+ *
+ */
+export type CredentialScope = 'storage:read' | 'storage:write' | 'ai_gateway:invoke' | 'functions:invoke';
+
+export type CreateCredentialRequest = {
+    /**
+     * Free-form customer label for the credential.
+     */
+    name?: string;
+    scopes: Array<CredentialScope>;
+    /**
+     * Principal type for the credential. Only `user` is customer-managed
+     * and accepted here. `function` and `system` credentials are
+     * platform-internal (e.g. function-serve auto-mint, presign signer)
+     * and are never issued through the customer-facing API.
+     *
+     */
+    principal_type: 'user';
+};
+
+export type CreateCredentialResponse = {
+    /**
+     * Opaque credential id (e.g. nak_live_<32hex>).
+     */
+    token_id: string;
+    /**
+     * First 12 hex chars of token_id; safe to log.
+     */
+    token_id_short: string;
+    /**
+     * Customer-supplied label, echoed back from the request. Absent when not provided.
+     */
+    name?: string;
+    /**
+     * Bearer token; returned exactly once.
+     */
+    api_token: string;
+    /**
+     * nsk_live_<64 hex>; the AWS_SECRET_ACCESS_KEY, returned exactly once.
+     */
+    s3_secret_access_key: string;
+    scopes: Array<CredentialScope>;
+    branch_id: string;
+    created_at: string;
+    /**
+     * When the credential expires; absent means never expires.
+     *
+     */
+    expires_at?: string;
+};
+
+export type CredentialMeta = {
+    /**
+     * Opaque credential id (e.g. nak_live_<32hex>).
+     */
+    token_id: string;
+    token_id_short: string;
+    /**
+     * Customer-supplied label; absent when not provided at issuance.
+     */
+    name?: string;
+    scopes: Array<CredentialScope>;
+    branch_id?: string;
+    principal_type: string;
+    function_id?: string;
+    created_at: string;
+    last_used_at?: string;
+    revoked_at?: string;
+    /**
+     * When the credential expires; absent means never expires. The
+     * verifier refuses to authenticate after `expires_at <= now()`.
+     *
+     */
+    expires_at?: string;
+};
+
+export type ListCredentialsResponse = {
+    credentials: Array<CredentialMeta>;
+};
+
+export type NeonFunction = {
+    /**
+     * Opaque, stable function identifier.
+     */
+    id: string;
+    /**
+     * Branch-unique, lowercase DNS-label. Forms the invocation URL's host together with the branch id. Immutable.
+     */
+    slug: string;
+    /**
+     * Free-form display name.
+     */
+    name: string;
+    /**
+     * URL at which the function is invoked. The host carries `<branch_id>-<slug>` as its first DNS label under a Neon-managed functions domain, and the URL ends with a trailing slash so paths concatenate onto it. Empty string when the function has no servable invoke host (e.g. a deployment without an invocation front-door).
+     */
+    invocation_url: string;
+    /**
+     * The most recent deployment, regardless of build status. It may
+     * still be building or it may have failed. Omitted until the first
+     * deployment is created.
+     *
+     */
+    current_deployment?: NeonFunctionDeployment;
+    /**
+     * The most recent deployment whose build completed successfully.
+     * This is the deployment that serves invocations. Omitted until a
+     * deployment succeeds.
+     *
+     */
+    active_deployment?: NeonFunctionDeployment;
+    created_at: string;
+};
+
+export type NeonFunctionDeployment = {
+    /**
+     * The deployment id, which is the platform version number (monotonic per function).
+     */
+    id: number;
+    /**
+     * Build lifecycle status of the deployment.
+     */
+    status: 'pending' | 'building' | 'completed' | 'failed';
+    memory_mib: number;
+    runtime: string;
+    created_at: string;
+    /**
+     * The NAMES of the deployment's environment variables, sorted.
+     * Values are encrypted at rest and are never returned — they are
+     * write-only. To change a value, deploy the variable with the new
+     * value; to remove a variable, deploy it with an empty value.
+     *
+     */
+    environment?: Array<string>;
+    /**
+     * Human-readable reason the deployment build failed. Present only
+     * when `status` is `failed`.
+     *
+     */
+    error?: string;
+};
+
+export type NeonFunctionResponse = {
+    function: NeonFunction;
+};
+
+export type NeonFunctionsListResponse = {
+    functions: Array<NeonFunction>;
+};
+
+export type NeonFunctionUpdateRequest = {
+    /**
+     * New display name for the function. `null` clears the display
+     * name; the function's `name` then falls back to its slug. Leading
+     * and trailing whitespace is trimmed; a whitespace-only name is
+     * rejected.
+     *
+     */
+    name: string | null;
+};
+
+export type NeonFunctionDeploymentResponse = {
+    deployment: NeonFunctionDeployment;
+};
+
+export type FunctionDeployRequest = {
+    /**
+     * Optional ZIP archive of the function source code. Omit to reuse the
+     * latest version's bundle (a config-only change). Required for the
+     * first deployment of a function.
+     *
+     */
+    zip?: Blob | File;
+    runtime?: 'nodejs24';
+    /**
+     * Optional JSON object (a string-to-string map) of environment
+     * variables for the deployment, e.g. {"KEY":"VALUE"}. Carried as a
+     * JSON-encoded string because multipart form data does not support
+     * typed object parts.
+     *
+     * Values are write-only: they are encrypted at rest, and responses
+     * carry only the variable names (the `environment` array), never the
+     * values.
+     *
+     */
+    environment?: string;
 };
 
 /**
@@ -7782,6 +7876,54 @@ export type SetDefaultProjectBranchResponses = {
 
 export type SetDefaultProjectBranchResponse = SetDefaultProjectBranchResponses[keyof SetDefaultProjectBranchResponses];
 
+export type RecoverProjectBranchData = {
+    body?: never;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The branch ID
+         */
+        branch_id: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/recover';
+};
+
+export type RecoverProjectBranchErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type RecoverProjectBranchError = RecoverProjectBranchErrors[keyof RecoverProjectBranchErrors];
+
+export type RecoverProjectBranchResponses = {
+    /**
+     * Recovered the specified branch
+     */
+    200: BranchRecoverResponse;
+};
+
+export type RecoverProjectBranchResponse = RecoverProjectBranchResponses[keyof RecoverProjectBranchResponses];
+
 export type FinalizeRestoreBranchData = {
     body?: {
         /**
@@ -10906,3 +11048,1017 @@ export type SetSnapshotScheduleResponses = {
 };
 
 export type SetSnapshotScheduleResponse = SetSnapshotScheduleResponses[keyof SetSnapshotScheduleResponses];
+
+export type ListProjectBranchBucketsData = {
+    body?: never;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/buckets';
+};
+
+export type ListProjectBranchBucketsErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type ListProjectBranchBucketsError = ListProjectBranchBucketsErrors[keyof ListProjectBranchBucketsErrors];
+
+export type ListProjectBranchBucketsResponses = {
+    /**
+     * The list of buckets
+     */
+    200: BucketsListResponse;
+};
+
+export type ListProjectBranchBucketsResponse = ListProjectBranchBucketsResponses[keyof ListProjectBranchBucketsResponses];
+
+export type CreateProjectBranchBucketData = {
+    body: BucketCreateRequest;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/buckets';
+};
+
+export type CreateProjectBranchBucketErrors = {
+    /**
+     * The project has been deleted
+     */
+    410: GeneralError;
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type CreateProjectBranchBucketError = CreateProjectBranchBucketErrors[keyof CreateProjectBranchBucketErrors];
+
+export type CreateProjectBranchBucketResponses = {
+    /**
+     * Bucket created
+     */
+    201: BucketResponse;
+};
+
+export type CreateProjectBranchBucketResponse = CreateProjectBranchBucketResponses[keyof CreateProjectBranchBucketResponses];
+
+export type DeleteProjectBranchBucketData = {
+    body?: never;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+        /**
+         * The bucket name
+         */
+        bucket_name: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/buckets/{bucket_name}';
+};
+
+export type DeleteProjectBranchBucketErrors = {
+    /**
+     * Bucket not found
+     */
+    404: GeneralError;
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type DeleteProjectBranchBucketError = DeleteProjectBranchBucketErrors[keyof DeleteProjectBranchBucketErrors];
+
+export type DeleteProjectBranchBucketResponses = {
+    /**
+     * Bucket deleted
+     */
+    204: void;
+};
+
+export type DeleteProjectBranchBucketResponse = DeleteProjectBranchBucketResponses[keyof DeleteProjectBranchBucketResponses];
+
+export type GetProjectBranchStorageData = {
+    body?: never;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/storage';
+};
+
+export type GetProjectBranchStorageErrors = {
+    /**
+     * Storage is not enabled for this branch, or the project/branch was not
+     * found. The body is always `BranchStorageNotEnabled` — see `reason` for
+     * the exact cause.
+     *
+     */
+    404: BranchStorageNotEnabled;
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type GetProjectBranchStorageError = GetProjectBranchStorageErrors[keyof GetProjectBranchStorageErrors];
+
+export type GetProjectBranchStorageResponses = {
+    /**
+     * Storage is enabled for this branch
+     */
+    200: BranchStorage;
+};
+
+export type GetProjectBranchStorageResponse = GetProjectBranchStorageResponses[keyof GetProjectBranchStorageResponses];
+
+export type GetProjectBranchAiGatewayData = {
+    body?: never;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/ai_gateway';
+};
+
+export type GetProjectBranchAiGatewayErrors = {
+    /**
+     * AI Gateway is not available for this branch, or the project/branch
+     * was not found. The body is always `BranchAiGatewayNotEnabled` — see
+     * `reason` for the exact cause.
+     *
+     */
+    404: BranchAiGatewayNotEnabled;
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type GetProjectBranchAiGatewayError = GetProjectBranchAiGatewayErrors[keyof GetProjectBranchAiGatewayErrors];
+
+export type GetProjectBranchAiGatewayResponses = {
+    /**
+     * AI Gateway is enabled for this branch
+     */
+    200: BranchAiGateway;
+};
+
+export type GetProjectBranchAiGatewayResponse = GetProjectBranchAiGatewayResponses[keyof GetProjectBranchAiGatewayResponses];
+
+export type ListProjectBranchBucketObjectsData = {
+    body?: never;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+        /**
+         * The bucket name
+         */
+        bucket_name: string;
+    };
+    query?: {
+        /**
+         * Only list objects whose key starts with this prefix.
+         */
+        prefix?: string;
+        /**
+         * Collapse keys sharing a common prefix up to the first occurrence of
+         * this delimiter (typically `/`) into the `folders` array.
+         *
+         */
+        delimiter?: string;
+        /**
+         * Opaque pagination cursor returned as `next_cursor` by a previous
+         * call. Resume listing after the last item of the previous page.
+         *
+         */
+        cursor?: string;
+        /**
+         * Maximum number of items (objects + folders) to return.
+         */
+        limit?: number;
+    };
+    url: '/projects/{project_id}/branches/{branch_id}/buckets/{bucket_name}/objects';
+};
+
+export type ListProjectBranchBucketObjectsErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type ListProjectBranchBucketObjectsError = ListProjectBranchBucketObjectsErrors[keyof ListProjectBranchBucketObjectsErrors];
+
+export type ListProjectBranchBucketObjectsResponses = {
+    /**
+     * The list of objects and folders
+     */
+    200: BucketObjectsListResponse;
+};
+
+export type ListProjectBranchBucketObjectsResponse = ListProjectBranchBucketObjectsResponses[keyof ListProjectBranchBucketObjectsResponses];
+
+export type DeleteProjectBranchBucketObjectData = {
+    body?: never;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+        /**
+         * The bucket name
+         */
+        bucket_name: string;
+        /**
+         * The object key. Keys may contain `/`; the `/` characters of nested
+         * keys must be percent-encoded (`%2F`) in the path segment.
+         *
+         */
+        object_key: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/buckets/{bucket_name}/objects/{object_key}';
+};
+
+export type DeleteProjectBranchBucketObjectErrors = {
+    /**
+     * Object not found
+     */
+    404: GeneralError;
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type DeleteProjectBranchBucketObjectError = DeleteProjectBranchBucketObjectErrors[keyof DeleteProjectBranchBucketObjectErrors];
+
+export type DeleteProjectBranchBucketObjectResponses = {
+    /**
+     * Object deleted
+     */
+    204: void;
+};
+
+export type DeleteProjectBranchBucketObjectResponse = DeleteProjectBranchBucketObjectResponses[keyof DeleteProjectBranchBucketObjectResponses];
+
+export type GetProjectBranchBucketObjectData = {
+    body?: never;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+        /**
+         * The bucket name
+         */
+        bucket_name: string;
+        /**
+         * The object key. Keys may contain `/`; the `/` characters of nested
+         * keys must be percent-encoded (`%2F`) in the path segment.
+         *
+         */
+        object_key: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/buckets/{bucket_name}/objects/{object_key}/download';
+};
+
+export type GetProjectBranchBucketObjectErrors = {
+    /**
+     * Object not found
+     */
+    404: GeneralError;
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type GetProjectBranchBucketObjectError = GetProjectBranchBucketObjectErrors[keyof GetProjectBranchBucketObjectErrors];
+
+export type GetProjectBranchBucketObjectResponses = {
+    /**
+     * The object's raw bytes, streamed verbatim. `Content-Length` and
+     * `ETag` headers are set from the stored object metadata;
+     * `X-Content-Type-Options` and `Content-Disposition` harden the
+     * browser against the caller-controlled bytes.
+     *
+     */
+    200: Blob | File;
+};
+
+export type GetProjectBranchBucketObjectResponse = GetProjectBranchBucketObjectResponses[keyof GetProjectBranchBucketObjectResponses];
+
+export type DeleteProjectBranchBucketObjectsByPrefixData = {
+    body?: never;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+        /**
+         * The bucket name
+         */
+        bucket_name: string;
+    };
+    query: {
+        /**
+         * The key prefix (folder) to delete. Must be non-empty and end with
+         * `/`. Every object on this branch whose key starts with this prefix
+         * is soft-deleted.
+         *
+         */
+        prefix: string;
+    };
+    url: '/projects/{project_id}/branches/{branch_id}/buckets/{bucket_name}/objects-by-prefix';
+};
+
+export type DeleteProjectBranchBucketObjectsByPrefixErrors = {
+    /**
+     * Bucket not found
+     */
+    404: GeneralError;
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type DeleteProjectBranchBucketObjectsByPrefixError = DeleteProjectBranchBucketObjectsByPrefixErrors[keyof DeleteProjectBranchBucketObjectsByPrefixErrors];
+
+export type DeleteProjectBranchBucketObjectsByPrefixResponses = {
+    /**
+     * The prefix was soft-deleted. `deleted` is the number of objects
+     * tombstoned (may be 0 when nothing live matched on this branch).
+     *
+     */
+    200: BucketObjectsDeletePrefixResponse;
+};
+
+export type DeleteProjectBranchBucketObjectsByPrefixResponse = DeleteProjectBranchBucketObjectsByPrefixResponses[keyof DeleteProjectBranchBucketObjectsByPrefixResponses];
+
+export type PresignProjectBranchBucketObjectData = {
+    body: PresignRequest;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+        /**
+         * The bucket name
+         */
+        bucket_name: string;
+        /**
+         * The object key. Keys may contain `/`; the `/` characters of nested
+         * keys must be percent-encoded (`%2F`) in the path segment.
+         *
+         */
+        object_key: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/buckets/{bucket_name}/objects/{object_key}/presign';
+};
+
+export type PresignProjectBranchBucketObjectErrors = {
+    /**
+     * Bucket or branch not found
+     */
+    404: GeneralError;
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type PresignProjectBranchBucketObjectError = PresignProjectBranchBucketObjectErrors[keyof PresignProjectBranchBucketObjectErrors];
+
+export type PresignProjectBranchBucketObjectResponses = {
+    /**
+     * A presigned URL valid until `expires_at`. The caller transfers the
+     * object bytes by issuing `method url` with the returned `headers`.
+     *
+     */
+    200: PresignResponse;
+};
+
+export type PresignProjectBranchBucketObjectResponse = PresignProjectBranchBucketObjectResponses[keyof PresignProjectBranchBucketObjectResponses];
+
+export type ListCredentialsData = {
+    body?: never;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/credentials';
+};
+
+export type ListCredentialsErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type ListCredentialsError = ListCredentialsErrors[keyof ListCredentialsErrors];
+
+export type ListCredentialsResponses = {
+    /**
+     * The list of credentials
+     */
+    200: ListCredentialsResponse;
+};
+
+export type ListCredentialsResponse2 = ListCredentialsResponses[keyof ListCredentialsResponses];
+
+export type CreateCredentialData = {
+    body: CreateCredentialRequest;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/credentials';
+};
+
+export type CreateCredentialErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type CreateCredentialError = CreateCredentialErrors[keyof CreateCredentialErrors];
+
+export type CreateCredentialResponses = {
+    /**
+     * Credential issued — secrets shown once.
+     */
+    201: CreateCredentialResponse;
+};
+
+export type CreateCredentialResponse2 = CreateCredentialResponses[keyof CreateCredentialResponses];
+
+export type RevokeCredentialData = {
+    body?: never;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+        /**
+         * The opaque credential id (e.g. nak_live_<32hex>).
+         */
+        token_id: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/credentials/{token_id}';
+};
+
+export type RevokeCredentialErrors = {
+    /**
+     * Credential not found
+     */
+    404: GeneralError;
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type RevokeCredentialError = RevokeCredentialErrors[keyof RevokeCredentialErrors];
+
+export type RevokeCredentialResponses = {
+    /**
+     * Credential revoked
+     */
+    204: void;
+};
+
+export type RevokeCredentialResponse = RevokeCredentialResponses[keyof RevokeCredentialResponses];
+
+export type ListProjectBranchFunctionsData = {
+    body?: never;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+    };
+    query?: {
+        /**
+         * A cursor to use in pagination. A cursor defines your place in the data list. Include `response.pagination.next` in subsequent API calls to fetch next page of the list.
+         */
+        cursor?: string;
+        /**
+         * Specify a value from 1 to 1000 to limit number of functions in the response
+         */
+        limit?: number;
+    };
+    url: '/projects/{project_id}/branches/{branch_id}/functions';
+};
+
+export type ListProjectBranchFunctionsErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type ListProjectBranchFunctionsError = ListProjectBranchFunctionsErrors[keyof ListProjectBranchFunctionsErrors];
+
+export type ListProjectBranchFunctionsResponses = {
+    /**
+     * The list of functions
+     */
+    200: NeonFunctionsListResponse & CursorPaginationResponse;
+};
+
+export type ListProjectBranchFunctionsResponse = ListProjectBranchFunctionsResponses[keyof ListProjectBranchFunctionsResponses];
+
+export type DeleteProjectBranchFunctionData = {
+    body?: never;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+        /**
+         * The function slug
+         */
+        slug: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/functions/{slug}';
+};
+
+export type DeleteProjectBranchFunctionErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type DeleteProjectBranchFunctionError = DeleteProjectBranchFunctionErrors[keyof DeleteProjectBranchFunctionErrors];
+
+export type DeleteProjectBranchFunctionResponses = {
+    /**
+     * Function deleted
+     */
+    204: void;
+};
+
+export type DeleteProjectBranchFunctionResponse = DeleteProjectBranchFunctionResponses[keyof DeleteProjectBranchFunctionResponses];
+
+export type GetProjectBranchFunctionData = {
+    body?: never;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+        /**
+         * The function slug
+         */
+        slug: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/functions/{slug}';
+};
+
+export type GetProjectBranchFunctionErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type GetProjectBranchFunctionError = GetProjectBranchFunctionErrors[keyof GetProjectBranchFunctionErrors];
+
+export type GetProjectBranchFunctionResponses = {
+    /**
+     * The function details
+     */
+    200: NeonFunctionResponse;
+};
+
+export type GetProjectBranchFunctionResponse = GetProjectBranchFunctionResponses[keyof GetProjectBranchFunctionResponses];
+
+export type UpdateProjectBranchFunctionData = {
+    body: NeonFunctionUpdateRequest;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+        /**
+         * The function slug
+         */
+        slug: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/functions/{slug}';
+};
+
+export type UpdateProjectBranchFunctionErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type UpdateProjectBranchFunctionError = UpdateProjectBranchFunctionErrors[keyof UpdateProjectBranchFunctionErrors];
+
+export type UpdateProjectBranchFunctionResponses = {
+    /**
+     * The updated function
+     */
+    200: NeonFunctionResponse;
+};
+
+export type UpdateProjectBranchFunctionResponse = UpdateProjectBranchFunctionResponses[keyof UpdateProjectBranchFunctionResponses];
+
+export type CreateProjectBranchFunctionDeploymentData = {
+    body: FunctionDeployRequest;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+        /**
+         * The function slug
+         */
+        slug: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/functions/{slug}/deployments';
+};
+
+export type CreateProjectBranchFunctionDeploymentErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type CreateProjectBranchFunctionDeploymentError = CreateProjectBranchFunctionDeploymentErrors[keyof CreateProjectBranchFunctionDeploymentErrors];
+
+export type CreateProjectBranchFunctionDeploymentResponses = {
+    /**
+     * The created deployment
+     */
+    201: NeonFunctionDeploymentResponse;
+};
+
+export type CreateProjectBranchFunctionDeploymentResponse = CreateProjectBranchFunctionDeploymentResponses[keyof CreateProjectBranchFunctionDeploymentResponses];
