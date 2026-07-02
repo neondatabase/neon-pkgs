@@ -194,7 +194,6 @@ const makeRegistry = (specs: BackslashCmdSpec[] = []): BackslashRegistry => {
 const echoSpec: BackslashCmdSpec = {
 	name: "echo",
 	argMode: "lex",
-	// eslint-disable-next-line @typescript-eslint/require-await
 	async run(ctx) {
 		const args: string[] = [];
 		let next = ctx.nextArg("normal");
@@ -374,7 +373,6 @@ describe("runMainLoop — backslash commands", () => {
 		const captured: string[] = [];
 		const captureSpec: BackslashCmdSpec = {
 			name: "capture",
-			// eslint-disable-next-line @typescript-eslint/require-await
 			async run(ctx) {
 				captured.push(ctx.queryBuf);
 				return { status: "reset-buf", newBuf: "" };
@@ -422,7 +420,6 @@ describe("runMainLoop — backslash commands", () => {
 		const captured: string[] = [];
 		const captureSpec: BackslashCmdSpec = {
 			name: "capture",
-			// eslint-disable-next-line @typescript-eslint/require-await
 			async run(ctx) {
 				captured.push(ctx.queryBuf);
 				return { status: "reset-buf", newBuf: "" };
@@ -446,14 +443,12 @@ describe("runMainLoop — backslash commands", () => {
 		const captured: string[] = [];
 		const errSpec: BackslashCmdSpec = {
 			name: "failsafe",
-			// eslint-disable-next-line @typescript-eslint/require-await
 			async run() {
 				return { status: "error", errorWritten: true };
 			},
 		};
 		const captureSpec: BackslashCmdSpec = {
 			name: "capture",
-			// eslint-disable-next-line @typescript-eslint/require-await
 			async run(ctx) {
 				captured.push(ctx.queryBuf);
 				return { status: "reset-buf", newBuf: "" };

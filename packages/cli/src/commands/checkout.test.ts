@@ -24,11 +24,9 @@ const test = originalTest.extend<{
 	// scaffolded next to the `.neon` written by one test doesn't affect another.
 	tmpContext: (label: string, seed?: Record<string, unknown>) => string;
 }>({
-	// eslint-disable-next-line no-empty-pattern
 	readFile: async ({}, use) => {
 		await use((name) => readFileSync(name, "utf-8"));
 	},
-	// eslint-disable-next-line no-empty-pattern
 	removeFile: async ({}, use) => {
 		await use((name) => {
 			try {
@@ -38,7 +36,6 @@ const test = originalTest.extend<{
 			}
 		});
 	},
-	// eslint-disable-next-line no-empty-pattern
 	tmpContext: async ({}, use) => {
 		await use((label, seed) => {
 			const dir = join(TEST_TMP, label);

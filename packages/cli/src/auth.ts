@@ -58,8 +58,7 @@ export const refreshToken = async (
 		{
 			timeout: SERVER_TIMEOUT,
 			execute: allowUnsafeTls
-				? // eslint-disable-next-line @typescript-eslint/no-deprecated
-					[client.allowInsecureRequests]
+				? [client.allowInsecureRequests]
 				: undefined,
 		},
 	);
@@ -84,8 +83,7 @@ export const auth = async ({
 		{
 			timeout: SERVER_TIMEOUT,
 			execute: allowUnsafeTls
-				? // eslint-disable-next-line @typescript-eslint/no-deprecated
-					[client.allowInsecureRequests]
+				? [client.allowInsecureRequests]
 				: undefined,
 		},
 	);

@@ -8,8 +8,8 @@
  *
  * Why a shared file: the WP spec asks for cmd-isolated test factories, not
  * for the command implementations themselves to duplicate one-line
- * primitives. Going through these helpers also keeps the eslint
- * `no-console` rule satisfied — every write touches `process.stdout` /
+ * primitives. Going through these helpers also keeps the `noConsole`
+ * lint rule satisfied — every write touches `process.stdout` /
  * `process.stderr` directly rather than `console.log` / `console.error`.
  */
 

@@ -11,7 +11,6 @@ import {
 
 /** A push-driven readable stream used as a fake TTY input. */
 class FakeStdin extends Readable {
-	// eslint-disable-next-line @typescript-eslint/no-empty-function
 	_read(): void {}
 
 	feed(bytes: string | Uint8Array): void {
@@ -326,9 +325,7 @@ describe("Tab cycle rewrites the candidate listing in place", () => {
 			.slice(markerLen);
 		// In-place rewrite signature: cursor-up to navigate past the listing,
 		// erase-to-eol on each rewritten row.
-		// eslint-disable-next-line no-control-regex
 		expect(after).toMatch(/\x1b\[\d+A/); // CSI cursor up
-		// eslint-disable-next-line no-control-regex
 		expect(after).toMatch(/\x1b\[K/); // CSI erase-to-eol
 		// The highlighted (reverse-video) candidate must appear in the rewritten
 		// block — that's the proof we rewrote, not just moved the cursor.

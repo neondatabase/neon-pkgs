@@ -55,7 +55,6 @@ const reserveClosedPort = (): Promise<string> =>
 	});
 
 export const test = originalTest.extend<Fixtures>({
-	// eslint-disable-next-line no-empty-pattern
 	runMockServer: async ({}, use) => {
 		let startedServer: Server | undefined;
 		await use(async (mockDir) => {

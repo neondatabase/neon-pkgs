@@ -413,7 +413,6 @@ export const cmdSetenv: BackslashCmdSpec = {
 		// each cursor advances exactly once per call.
 		const value = ctx.nextArg("normal");
 		if (value === null) {
-			// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
 			delete process.env[envname];
 		} else {
 			process.env[envname] = value;

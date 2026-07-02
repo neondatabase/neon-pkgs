@@ -67,7 +67,7 @@ pnpm --filter neon-new dry:run
 -   Builds with `tsdown` for bundling and `tsc --noEmit` for type-checking (see each package's `build` script)
 -   Package manager: pnpm@10.30.3. **Node.js requirements are split** (see `CONTRIBUTING.md`): contributors need **Node >=22** (pnpm needs 22.13+; regenerating `@neon/sdk` via `@hey-api/openapi-ts` needs 22.18+), while every **published package** targets **Node >=20.19** at runtime (`engines.node: ">=20.19.0"` — the real floor of the dependency trees, driven by `chokidar@5`/`yargs@18`). The repo-root `package.json` keeps `engines.node: ">=22"` on purpose: it describes the contributor environment, not the shipped packages.
 -   **Dependency Installation**: Prefer `pnpm dedupe` over `pnpm install` - it deduplicates dependencies in node_modules, minimizing conflict issues and reducing filesystem space
--   **Exception — `packages/cli`** (the Neon CLI): keeps its own upstream toolchain (`tsc` → `dist`, ESLint + Prettier, `@yao-pkg/pkg` binaries) rather than tsdown/Biome, so it is **excluded from root Biome** (`biome.json` `!packages/cli`). See "The CLI package" below.
+-   **Exception — `packages/cli`** (the Neon CLI): keeps its own upstream *build* toolchain (`tsc` → `dist`, `@yao-pkg/pkg` binaries) rather than tsdown. It is linted and formatted by **Biome** like every other package (via a `packages/cli/**` override in `biome.json` that relaxes some rules and enforces `noConsole`), not ESLint/Prettier. See "The CLI package" below.
 
 ### Per-package architecture
 
@@ -82,10 +82,10 @@ and `@neon/functions`.
 
 ### The CLI package (`packages/cli`)
 
-`packages/cli` is the **Neon CLI**, migrated from [`neondatabase/neonctl`](https://github.com/neondatabase/neonctl). It is published as **`neonctl`** today and is being rebranded to **`neon`** (with thin `neonctl`/`neoncli` packages that depend on it and forward to it). It is the one package that does **not** follow the repo's standard toolchain:
+`packages/cli` is the **Neon CLI**, migrated from [`neondatabase/neonctl`](https://github.com/neondatabase/neonctl). It is published as **`neonctl`** today and is being rebranded to **`neon`** (with thin `neonctl`/`neoncli` packages that depend on it and forward to it). It is linted/formatted with Biome like the rest of the repo, but its **build** toolchain differs:
 
 -   **Build**: `pnpm --filter <name> build` runs swagger param generation (`generateOptionsFromSpec.ts` → `src/parameters.gen.ts`, a committed generated file), then `tsc -p tsconfig.build.json` to `dist/`, then copies `callback.html` into `dist/`. It compiles file-by-file with `tsc` (not bundled with tsdown) and **publishes from the package root** (`bin: dist/cli.js`, `files: ["dist", …]`). The param generator reads the OpenAPI spec from `node_modules/@neondatabase/api-client`, so it works offline after install.
--   **Lint**: ESLint + Prettier (`eslint.config.js`, `.prettierrc.json`), not Biome — hence the root Biome exclusion. Run with `pnpm --filter <name> lint`.
+-   **Lint**: Biome, via a `packages/cli/**` override in the root `biome.json` (relaxes some rules for the migrated upstream code, and enforces `noConsole` since the CLI routes all output through its writer/logger). Root `pnpm lint:ci` (`biome ci`) covers it. `pnpm --filter <name> lint` additionally runs `tsc --noEmit` then `biome check src`.
 -   **Coverage**: needs `@vitest/coverage-v8` because the root CI runs `pnpm test:ci --coverage` (the flag is appended to every package's `test:ci`). Pin it to the package's `vitest` major.
 -   **Standalone binaries**: `pnpm --filter <name> bundle` (`node pkg.js`) Rollup-bundles `dist/cli.js` and cross-compiles `linux-x64`, `linux-arm64`, `macos-x64`, and `win-x64` via `@yao-pkg/pkg`; targets/assets are declared in the package's `pkg` block. `pkg.js` rewrites `bin` to the bundled entry, so it is name-agnostic (works as `neon` or `neonctl`).
 -   **Conformance tests** (`tests/psql-conformance`) need Docker/testcontainers and are excluded from the default Vitest run; run them explicitly with `pnpm --filter <name> test:conformance`.

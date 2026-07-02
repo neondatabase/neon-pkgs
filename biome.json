@@ -30,6 +30,29 @@
 	},
 	"overrides": [
 		{
+			"includes": ["packages/cli/**"],
+			"linter": {
+				"rules": {
+					"suspicious": {
+						"noConsole": "error"
+					}
+				}
+			}
+		},
+		{
+			"includes": [
+				"packages/cli/**/*.test.ts",
+				"packages/cli/**/test_utils/**"
+			],
+			"linter": {
+				"rules": {
+					"suspicious": {
+						"noConsole": "off"
+					}
+				}
+			}
+		},
+		{
 			"includes": ["packages/cli/**", "examples/**"],
 			"linter": {
 				"rules": {

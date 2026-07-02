@@ -442,7 +442,6 @@ const NON_ASCII_SPACE_RE = new RegExp(
 );
 // Combining marks and ZWJ are intentionally in this class; RFC 3454 Table B.1
 // strips them precisely because they combine with neighbouring code points.
-/* eslint-disable no-misleading-character-class */
 const MAPPED_TO_NOTHING_RE = new RegExp(
 	"[" +
 		"\u00AD\u034F\u1806" +
@@ -453,7 +452,6 @@ const MAPPED_TO_NOTHING_RE = new RegExp(
 		"]",
 	"g",
 );
-/* eslint-enable no-misleading-character-class */
 
 function saslprep(password: string): string {
 	return password
