@@ -321,6 +321,12 @@ export type RequestParams = {
 	type?: ContentType;
 	format?: "json" | "stream";
 	secure?: boolean;
+	/**
+	 * Extra request headers, merged on top of the defaults (`User-Agent`,
+	 * `Authorization`, and `Content-Type`). Later keys win, so callers can
+	 * override any default when they need to.
+	 */
+	headers?: Record<string, string>;
 };
 
 export const getApiClient = ({ apiKey, apiHost }: ApiCallProps) => {
@@ -385,6 +391,13 @@ export const getApiClient = ({ apiKey, apiHost }: ApiCallProps) => {
 		} else if (params.body !== undefined) {
 			headers["Content-Type"] = ContentType.Json;
 			payload = JSON.stringify(params.body);
+		}
+
+		// Caller-supplied headers win over the defaults set above.
+		if (params.headers) {
+			for (const [key, value] of Object.entries(params.headers)) {
+				headers[key] = value;
+			}
 		}
 
 		let response: Response;
