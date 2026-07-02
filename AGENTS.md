@@ -91,6 +91,51 @@ and `@neon/functions`.
 -   **Conformance tests** (`tests/psql-conformance`) need Docker/testcontainers and are excluded from the default Vitest run; run them explicitly with `pnpm --filter <name> test:conformance`.
 -   **Sibling deps**: `@neondatabase/*` + `neon-init` are currently pinned to published versions (not `workspace:*`); switching to `workspace:*` is a planned follow-up.
 
+### The SDK package (`packages/sdk`)
+
+`@neon/sdk` is the official TypeScript SDK for the Neon API — a Fetch-based client
+generated from Neon's OpenAPI spec, with a hand-authored ergonomic layer on top. See
+`packages/sdk/README.md` for the public API.
+
+**Regenerating the client (local):**
+
+```bash
+pnpm --filter @neon/sdk spec:pull   # refresh vendored spec from neon.com
+pnpm --filter @neon/sdk generate    # regenerate packages/sdk/src/client
+pnpm --filter @neon/sdk build       # typecheck + bundle
+pnpm --filter @neon/sdk test:ci     # coverage guard — see below
+```
+
+The vendored spec lives at `packages/sdk/spec/neon-openapi.json`. Codegen is
+`@hey-api/openapi-ts` (`packages/sdk/openapi-ts.config.ts`).
+
+**Automated spec refresh (`.github/workflows/sdk-spec-refresh.yml`):**
+
+The live spec at https://neon.com/api_spec/release/v2.json can drift ahead of the
+vendored copy on `main`. A scheduled workflow keeps maintainers aware:
+
+| | |
+| --- | --- |
+| **When** | Daily at 09:00 UTC; also `workflow_dispatch` |
+| **What** | `spec:pull` → `generate` → `build` on `@neon/sdk` |
+| **Output** | Opens or updates a PR on branch `bot/sdk-spec-refresh` titled `chore(@neon/sdk): refresh OpenAPI spec` — **only when something changed** |
+| **Runner** | `ubuntu-latest` (public egress to `neon.com`). CI uses the protected runner group + JFrog mirror and **cannot** reach the public spec URL — same constraint as `catalog-drift.yml` |
+
+**The bot PR is a starting point, not merge-ready.** The workflow deliberately does
+not run `test:ci`. CI will fail on `packages/sdk/src/neon/coverage.test.ts` until
+someone updates `packages/sdk/src/neon/coverage.ts`:
+
+1. Review added/removed operations in `sdk.gen.ts`.
+2. Wrap new ops in the ergonomic layer where warranted (and add them to `WRAPPED`),
+   or accept them as raw-only.
+3. Update `EXPECTED_OPERATIONS` to match the new generated set.
+4. Run `pnpm --filter @neon/sdk test:ci` locally.
+5. Add a changeset if the refresh should ship a new `@neon/sdk` version.
+
+`hey-api` does not treat Neon's `x-stability-level` (alpha/beta) differently — beta
+and private-preview endpoints are generated identically to stable ones. Access
+control stays on the API side.
+
 ### Key Implementation Details
 
 -   `neon-new` (CLI) and `vite-plugin-neon-new` (plugin) both support SQL seeding via the `--seed` flag (CLI) or `seed.path` option (plugin)
