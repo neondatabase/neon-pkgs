@@ -9,3 +9,5 @@ catalog:
     "@biomejs/biome": ^2.5.1
     "vite": ^6.4.1
     "@types/node": ^20.19.0
+    "@vitest/coverage-v8": ^3.0.9
+    console-fail-test: 0.5.0

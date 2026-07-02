@@ -84,7 +84,7 @@
     "@types/prompts": "2.4.9",
     "@types/which": "3.0.4",
     "@types/yargs": "^17.0.35",
-    "@vitest/coverage-v8": "1.6.1",
+    "@vitest/coverage-v8": "catalog:",
     "@yao-pkg/pkg": "6.10.0",
     "emocks": "3.0.4",
     "express": "4.19.2",
@@ -95,7 +95,7 @@
     "strip-ansi": "7.1.0",
     "tsx": "4.22.3",
     "typescript": "catalog:",
-    "vitest": "1.6.1"
+    "vitest": "catalog:"
   },
   "publishConfig": {
     "access": "public",

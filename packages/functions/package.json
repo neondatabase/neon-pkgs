@@ -43,8 +43,8 @@
 	},
 	"devDependencies": {
 		"@types/node": "catalog:",
-		"@vitest/coverage-v8": "3.0.9",
-		"console-fail-test": "0.5.0",
+		"@vitest/coverage-v8": "catalog:",
+		"console-fail-test": "catalog:",
 		"tsdown": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"
