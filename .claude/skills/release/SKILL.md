@@ -44,8 +44,9 @@ artifacts — ignore them.
 `packages/cli` is the Neon CLI (published as `neonctl`, rebranding to `neon`). It is a normal
 Changesets package for versioning, but a few things differ from the rest of the repo:
 
-- It uses its own toolchain (`tsc` → `dist`, ESLint/Prettier, `@yao-pkg/pkg` binaries) and is
-  **excluded from root Biome** — don't try to `biome` it.
+- It uses its own **build** toolchain (`tsc` → `dist`, `@yao-pkg/pkg` binaries) rather than tsdown,
+  but is linted/formatted by Biome like every other package (via a `packages/cli/**` override in
+  `biome.json`) and is covered by root `biome ci`.
 - **`neonctl` and `neoncli` are thin forwarder packages** that depend on `neon` (`workspace:*`).
   Bump them in lockstep with `neon` (a changeset listing all three). `neoncli` may sit at `0.0.0`
   until its first real release — the git-vs-npm / dry-run checks skip `0.0.0`, so don't be alarmed

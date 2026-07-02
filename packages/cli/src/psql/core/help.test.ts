@@ -121,7 +121,7 @@ describe("slashUsage pager routing", () => {
 
 	/** A capturing PagerHandle plus a spy opener that returns it. */
 	const fakePager = (): {
-		opener: Mock<Parameters<PagerOpener>, PagerHandle>;
+		opener: Mock<(...args: Parameters<PagerOpener>) => PagerHandle>;
 		captured: string[];
 		closed: () => boolean;
 	} => {
@@ -142,7 +142,7 @@ describe("slashUsage pager routing", () => {
 				return Promise.resolve(0);
 			},
 		};
-		const opener = vi.fn<Parameters<PagerOpener>, PagerHandle>(
+		const opener = vi.fn<(...args: Parameters<PagerOpener>) => PagerHandle>(
 			() => handle,
 		);
 		return { opener, captured, closed: () => didClose };

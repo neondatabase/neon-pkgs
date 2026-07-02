@@ -16,7 +16,8 @@ import type { PsqlSettings } from "../types/settings.js";
 
 // Stub the shared input layer so `\prompt` doesn't touch the real stdin and we
 // can assert which echo mode it selects.
-const readLineMock = vi.fn<[string, { echo: boolean }], Promise<string>>();
+const readLineMock =
+	vi.fn<(prompt: string, opts: { echo: boolean }) => Promise<string>>();
 vi.mock("../io/input.js", () => ({
 	readLine: (prompt: string, opts: { echo: boolean }) =>
 		readLineMock(prompt, opts),
