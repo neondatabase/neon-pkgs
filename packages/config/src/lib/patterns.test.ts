@@ -38,12 +38,15 @@ describe("matchPattern", () => {
 });
 
 describe("validatePattern", () => {
-	test.each(["production", "preview-*", "a_b.c-*", "feat-123", "*"])(
-		"accepts %s",
-		(pattern) => {
-			expect(validatePattern(pattern)).toEqual({ ok: true });
-		},
-	);
+	test.each([
+		"production",
+		"preview-*",
+		"a_b.c-*",
+		"feat-123",
+		"*",
+	])("accepts %s", (pattern) => {
+		expect(validatePattern(pattern)).toEqual({ ok: true });
+	});
 
 	test.each([
 		["", "branch pattern is empty"],

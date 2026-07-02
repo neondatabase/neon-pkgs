@@ -269,11 +269,12 @@ export type NeonEnv<C extends Config = Config> = {
 		: NoNamespace);
 
 /** The static `preview.functions` record of a config, or an empty record when absent. */
-type PreviewFunctionsOf<C extends Config> = NonNullable<C["preview"]> extends {
-	functions: infer F;
-}
-	? F
-	: Record<never, never>;
+type PreviewFunctionsOf<C extends Config> =
+	NonNullable<C["preview"]> extends {
+		functions: infer F;
+	}
+		? F
+		: Record<never, never>;
 
 /** The declared function slugs of a config (record keys), as a string union. */
 export type FunctionSlugOf<C extends Config> = Extract<

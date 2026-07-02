@@ -34,11 +34,12 @@ const REGION_PREFIX = /^(aws|azure|gcp)-/;
  * on (see {@link ServiceEnabled}) and not the explicit `authProvider: "external"` variant
  * (so the default / `"neon"` provider). This is the case that requires top-level Neon Auth.
  */
-type DataApiUsesNeonAuth<DataApi> = ServiceEnabled<DataApi> extends true
-	? [DataApi] extends [{ authProvider: "external" }]
-		? false
-		: true
-	: false;
+type DataApiUsesNeonAuth<DataApi> =
+	ServiceEnabled<DataApi> extends true
+		? [DataApi] extends [{ authProvider: "external" }]
+			? false
+			: true
+		: false;
 
 /**
  * Human-readable hint surfaced as the **expected type** of `dataApi` when a Neon-Auth Data

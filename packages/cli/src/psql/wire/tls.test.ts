@@ -608,39 +608,34 @@ describe("loadTlsFileOptions", () => {
 	// that is actually PKCS#1/SEC1 (and on what OpenSSL 3.0.x's
 	// `openssl pkey -outform der` emits for RSA) with `DECODER unsupported`.
 	// We assert BOTH input encodings round-trip to a loadable PKCS#8 PEM.
-	test.each(["pkcs8", "pkcs1"] as const)(
-		"decodes a DER (%s) sslkey into loadable PKCS#8 PEM",
-		async (derType) => {
-			const dir = fs.mkdtempSync(
-				path.join(os.tmpdir(), "neonctl-psql-der-"),
-			);
-			try {
-				const { privateKey } = generateKeyPairSync("rsa", {
-					modulusLength: 2048,
-				});
-				const der = privateKey.export({
-					format: "der",
-					type: derType,
-				});
-				const keyPath = path.join(dir, "client.key.der");
-				fs.writeFileSync(keyPath, der);
-				fs.chmodSync(keyPath, 0o600);
-				const merged = await loadTlsFileOptions(
-					{},
-					{ sslkey: keyPath },
-				);
-				const pem = (merged.key as Buffer).toString("ascii");
-				// Always normalized to PKCS#8 armor regardless of input encoding.
-				expect(pem).toContain("-----BEGIN PRIVATE KEY-----");
-				expect(pem).toContain("-----END PRIVATE KEY-----");
-				// The re-exported PEM is a real key OpenSSL accepts (the bug surfaced
-				// as a throw at this exact decode step under the old blind wrapping).
-				expect(() => createPrivateKey(pem)).not.toThrow();
-			} finally {
-				fs.rmSync(dir, { recursive: true, force: true });
-			}
-		},
-	);
+	test.each([
+		"pkcs8",
+		"pkcs1",
+	] as const)("decodes a DER (%s) sslkey into loadable PKCS#8 PEM", async (derType) => {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "neonctl-psql-der-"));
+		try {
+			const { privateKey } = generateKeyPairSync("rsa", {
+				modulusLength: 2048,
+			});
+			const der = privateKey.export({
+				format: "der",
+				type: derType,
+			});
+			const keyPath = path.join(dir, "client.key.der");
+			fs.writeFileSync(keyPath, der);
+			fs.chmodSync(keyPath, 0o600);
+			const merged = await loadTlsFileOptions({}, { sslkey: keyPath });
+			const pem = (merged.key as Buffer).toString("ascii");
+			// Always normalized to PKCS#8 armor regardless of input encoding.
+			expect(pem).toContain("-----BEGIN PRIVATE KEY-----");
+			expect(pem).toContain("-----END PRIVATE KEY-----");
+			// The re-exported PEM is a real key OpenSSL accepts (the bug surfaced
+			// as a throw at this exact decode step under the old blind wrapping).
+			expect(() => createPrivateKey(pem)).not.toThrow();
+		} finally {
+			fs.rmSync(dir, { recursive: true, force: true });
+		}
+	});
 
 	test("rejects a DER sslkey that is not a valid private key", async () => {
 		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "neonctl-psql-der-"));

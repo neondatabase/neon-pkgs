@@ -55,7 +55,7 @@ const typesMapping = {
               description: ${JSON.stringify(value.description)},
               demandOption: ${
 					schema.required?.includes(key) ? "true" : "false"
-				},\n`,
+},\n`,
 					);
 					if (value.enum) {
 						outFile.write(

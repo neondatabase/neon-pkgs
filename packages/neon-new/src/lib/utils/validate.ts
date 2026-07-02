@@ -31,4 +31,4 @@ function validateEnvKey(value: string) {
 	return undefined;
 }
 
-export { validateEnvPath, validateEnvKey };
+export { validateEnvKey, validateEnvPath };

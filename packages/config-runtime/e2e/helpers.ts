@@ -75,7 +75,7 @@ function unwrap<T>(result: {
 	response?: Response;
 }): T {
 	const response = result.response;
-	if (!response || !response.ok) {
+	if (!response?.ok) {
 		throw { response: { status: response?.status, data: result.error } };
 	}
 	return result.data as T;
