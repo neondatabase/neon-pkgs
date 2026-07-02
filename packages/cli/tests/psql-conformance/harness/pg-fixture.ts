@@ -60,7 +60,9 @@ export type PgConn = {
 	serverMajor: number | null;
 };
 
-const PG_IMAGE_DEFAULT = "postgres:18.0";
+// Fallback when PGCONFORMANCE_PG_IMAGE is unset; kept in sync with the
+// PG_IMAGE pin in tests/psql-conformance/POSTGRES_REF.
+const PG_IMAGE_DEFAULT = "postgres:19beta1";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // Our own seed script (NOT vendored from upstream — we trimmed it down

@@ -7,6 +7,74 @@
 
 const NUMERIC_RE = /^-?\d+(\.\d+)?$/;
 
+/** PostgreSQL `bool` type OID. Cells of this column type honour the
+ * `\pset display_true` / `\pset display_false` strings (PG 19+). */
+export const BOOLOID = 16;
+
+/**
+ * Boolean display strings for `\pset display_true` / `display_false`.
+ * Defaults to psql's literal `'t'` / `'f'` when a printer is called with
+ * a `topt` that predates the fields (older literal fixtures).
+ */
+export type BoolDisplay = { readonly true: string; readonly false: string };
+
+/**
+ * Extract the `\pset display_true`/`display_false` pair from a print-table
+ * options object, defaulting to psql's `'t'`/`'f'`. Kept here so every
+ * printer derives `boolDisplay` the same way.
+ */
+export const boolDisplayOf = (topt: {
+	truePrint?: string;
+	falsePrint?: string;
+}): BoolDisplay => ({
+	true: topt.truePrint ?? "t",
+	false: topt.falsePrint ?? "f",
+});
+
+/**
+ * Render a single result cell to its display string, shared by every
+ * table-format printer (aligned/unaligned/csv/html/latex/troff/asciidoc).
+ *
+ * Boolean handling mirrors upstream print.c: a cell in a BOOLOID column
+ * arriving over the wire as the text `'t'`/`'f'` (or a JS boolean, for
+ * synthetic result sets) renders through `boolDisplay`, which carries the
+ * `\pset display_true`/`display_false` values. `dataTypeID`/`boolDisplay`
+ * are optional so existing callers that don't thread column type through
+ * keep the prior behaviour (`'t'`/`'f'`).
+ */
+export const renderCellValue = (
+	cell: unknown,
+	nullPrint: string,
+	numericLocale: boolean,
+	dataTypeID?: number,
+	boolDisplay?: BoolDisplay,
+	locale?: string,
+): string => {
+	if (cell === null || cell === undefined) return nullPrint;
+	const trueStr = boolDisplay?.true ?? "t";
+	const falseStr = boolDisplay?.false ?? "f";
+	// BOOLOID column: the text-format wire value is 't'/'f'. Map through the
+	// configured display strings (upstream keys on the 't' first byte).
+	if (dataTypeID === BOOLOID && typeof cell === "string") {
+		if (cell === "t" || cell === "f") return cell === "t" ? trueStr : falseStr;
+	}
+	if (typeof cell === "string") {
+		return formatNumericLocale(cell, numericLocale, locale);
+	}
+	if (typeof cell === "number" || typeof cell === "bigint") {
+		return formatNumericLocale(cell.toString(), numericLocale, locale);
+	}
+	if (typeof cell === "boolean") return cell ? trueStr : falseStr;
+	if (cell instanceof Date) return cell.toISOString();
+	if (cell instanceof Uint8Array) {
+		// Bytea -> hex escape, matching libpq's `\x` form.
+		let hex = "\\x";
+		for (const b of cell) hex += b.toString(16).padStart(2, "0");
+		return hex;
+	}
+	return JSON.stringify(cell);
+};
+
 /**
  * Format a numeric string using locale-aware thousand separators and
  * decimal point. Equivalent to print.c `format_numeric_locale` but

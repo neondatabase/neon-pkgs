@@ -70,6 +70,16 @@ export type PrintTableOpts = {
 	translateHeader: boolean;
 	translateColumns: boolean[] | null;
 	nullPrint: string;
+	/**
+	 * `\pset display_true` / `\pset display_false` — the strings used to
+	 * render boolean (BOOLOID) cell values (PG 19+). Default `'t'` / `'f'`,
+	 * matching upstream `popt.truePrint`/`popt.falsePrint` (which are NULL
+	 * there and fall back to the same literals at render time). Optional so
+	 * existing literal-`topt` fixtures in `print/*` still satisfy the shape;
+	 * production constructors (`defaultSettings`) always set them.
+	 */
+	truePrint?: string;
+	falsePrint?: string;
 	csvFieldSep: string;
 	/**
 	 * `\pset xheader_width` — controls expanded-format header width. Upstream

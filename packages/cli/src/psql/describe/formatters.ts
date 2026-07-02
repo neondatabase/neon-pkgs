@@ -60,8 +60,10 @@ import {
 	fetchNotNullConstraints,
 	fetchPartitionKey,
 	fetchPartitionOf,
+	fetchExcludedFromPublications,
 	fetchPerColumnFdwOptions,
 	fetchPolicies,
+	fetchSequencePublications,
 	fetchStatisticsObjects,
 	fetchTableInfo,
 	fetchTablePublications,
@@ -686,6 +688,20 @@ export const describeOneTableDetails = async (
 		push(
 			await captureSection((b) =>
 				renderPublicationsSection(conn, oid, b),
+			),
+		);
+	}
+
+	// ----- Excluded from publications (PG 19+ FOR ALL TABLES ... EXCEPT) -----
+	if (
+		relkind === "r" ||
+		relkind === "p" ||
+		relkind === "m" ||
+		relkind === "f"
+	) {
+		push(
+			await captureSection((b) =>
+				renderExcludedFromPublicationsSection(conn, oid, b),
 			),
 		);
 	}
@@ -1364,6 +1380,29 @@ const renderPublicationsSection = async (
 };
 
 /**
+ * Render `Excluded from publications:\n    "name"` (one per row) for any
+ * FOR ALL TABLES publication that excludes this relation via an EXCEPT
+ * clause (PG 19+). No-op when the result set is empty, which includes all
+ * pre-PG-19 servers (the query builder returns an empty set there).
+ */
+const renderExcludedFromPublicationsSection = async (
+	conn: Connection,
+	oid: number,
+	out: NodeJS.WritableStream,
+): Promise<void> => {
+	const q = fetchExcludedFromPublications({
+		oid,
+		serverVersion: conn.serverVersion,
+	});
+	const rs = await conn.query(q.sql, q.params);
+	if (rs.rows.length === 0) return;
+	out.write("Excluded from publications:\n");
+	for (const r of rs.rows) {
+		out.write(`    "${cellToString(r[0] ?? "")}"\n`);
+	}
+};
+
+/**
  * Render `Subscriptions:\n    "name"` (one per row). Requires superuser
  * access to `pg_subscription` — when the query fails with a permission
  * error, the section is silently omitted (mirroring upstream behaviour).
@@ -1499,6 +1538,21 @@ export const describeOneSequence = async (
 	const footers: string[] = [];
 	if (ownRs.rows.length > 0) {
 		footers.push(`Owned by: ${cellToString(ownRs.rows[0][0])}`);
+	}
+
+	// PG 19 replicates sequences via FOR ALL SEQUENCES publications; upstream
+	// appends an "Included in publications:" footer listing them (one pub per
+	// indented line). The query builder returns an empty set pre-PG-19.
+	const pubQ = fetchSequencePublications({
+		oid,
+		serverVersion: conn.serverVersion,
+	});
+	const pubRs = await conn.query(pubQ.sql, pubQ.params);
+	if (pubRs.rows.length > 0) {
+		const lines = pubRs.rows
+			.map((r) => `    "${cellToString(r[0] ?? "")}"`)
+			.join("\n");
+		footers.push(`Included in publications:\n${lines}`);
 	}
 
 	// Suppress the row-count footer — upstream's sequence detail output is

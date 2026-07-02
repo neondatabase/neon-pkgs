@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import * as q from "./queries.js";
-import { PG_12, PG_17, PG_18 } from "./versionGate.js";
+import { PG_12, PG_17, PG_18, PG_19 } from "./versionGate.js";
 
 describe("describe/queries — pg17 snapshots", () => {
 	/* ----- Representative subset: both verbose=false and verbose=true ----- */
@@ -387,5 +387,115 @@ describe("describe/queries — pg18 snapshots (PG-18-only branches)", () => {
 		// emits a zero-row stub rather than querying pg_constraint.
 		expect(sql).toContain("WHERE false");
 		expect(sql).not.toContain("contype = 'n'");
+	});
+});
+
+// PG-19-only branches: sequence replication (puballsequences), publication
+// EXCEPT lists (prexcept), and the new \dRs+ subscription columns.
+describe("describe/queries — pg19 snapshots (PG-19-only branches)", () => {
+	it("listPublications / pg19 (All sequences)", () => {
+		expect(q.listPublications({ serverVersion: PG_19 })).toMatchSnapshot();
+	});
+
+	it("describePublications / pg19 (puballsequences)", () => {
+		expect(q.describePublications({ serverVersion: PG_19 })).toMatchSnapshot();
+	});
+
+	it("describeSubscriptions / pg19 / verbose=true (Server, retention, receiver timeout)", () => {
+		expect(
+			q.describeSubscriptions({ serverVersion: PG_19, verbose: true }),
+		).toMatchSnapshot();
+	});
+
+	it("listPublications / pg19 surfaces the All sequences column", () => {
+		const { sql } = q.listPublications({ serverVersion: PG_19 });
+		expect(sql).toContain('puballsequences AS "All sequences"');
+	});
+
+	it("listPublications / pre-pg19 omits the All sequences column", () => {
+		const { sql } = q.listPublications({ serverVersion: PG_18 });
+		expect(sql).not.toContain("puballsequences");
+	});
+
+	it("describeSubscriptions / pg19 adds retention + server + receiver-timeout columns", () => {
+		const { sql } = q.describeSubscriptions({
+			serverVersion: PG_19,
+			verbose: true,
+		});
+		expect(sql).toContain('subretaindeadtuples AS "Retain dead tuples"');
+		expect(sql).toContain('submaxretention AS "Max retention duration"');
+		expect(sql).toContain('subretentionactive AS "Retention active"');
+		expect(sql).toContain('subwalrcvtimeout AS "Receiver timeout"');
+		expect(sql).toContain("oid=subserver");
+		// Receiver timeout is emitted after Conninfo, matching describe.c.
+		expect(sql.indexOf("Conninfo")).toBeLessThan(
+			sql.indexOf("Receiver timeout"),
+		);
+	});
+
+	it("describeSubscriptions / pre-pg19 omits the new columns", () => {
+		const { sql } = q.describeSubscriptions({
+			serverVersion: PG_18,
+			verbose: true,
+		});
+		expect(sql).not.toContain("subretaindeadtuples");
+		expect(sql).not.toContain("subwalrcvtimeout");
+		expect(sql).not.toContain("oid=subserver");
+	});
+
+	it("fetchTablePublications / pg19 skips EXCEPT rows", () => {
+		const { sql } = q.fetchTablePublications({
+			oid: 42,
+			serverVersion: PG_19,
+		});
+		expect(sql).toContain("AND NOT pr.prexcept");
+		expect(sql).toContain("pr.prrelid = '42'");
+	});
+
+	it("fetchTablePublications / pre-pg19 has no EXCEPT guard", () => {
+		const { sql } = q.fetchTablePublications({
+			oid: 42,
+			serverVersion: PG_18,
+		});
+		expect(sql).not.toContain("prexcept");
+	});
+
+	it("fetchExcludedFromPublications / pg19 queries prexcept + partition root", () => {
+		const { sql } = q.fetchExcludedFromPublications({
+			oid: 42,
+			serverVersion: PG_19,
+		});
+		expect(sql).toContain("AND pr.prexcept");
+		expect(sql).toContain("pr.prrelid = '42'");
+		expect(sql).toContain("pg_catalog.pg_partition_root");
+		expect(sql).toContain("ORDER BY 1");
+	});
+
+	it("fetchExcludedFromPublications / pre-pg19 returns an empty stub", () => {
+		const { sql } = q.fetchExcludedFromPublications({
+			oid: 42,
+			serverVersion: PG_18,
+		});
+		expect(sql).toContain("WHERE false");
+		expect(sql).not.toContain("prexcept");
+	});
+
+	it("fetchSequencePublications / pg19 queries puballsequences + publishable", () => {
+		const { sql } = q.fetchSequencePublications({
+			oid: 42,
+			serverVersion: PG_19,
+		});
+		expect(sql).toContain("p.puballsequences");
+		expect(sql).toContain("pg_catalog.pg_relation_is_publishable('42')");
+		expect(sql).toContain("ORDER BY 1");
+	});
+
+	it("fetchSequencePublications / pre-pg19 returns an empty stub", () => {
+		const { sql } = q.fetchSequencePublications({
+			oid: 42,
+			serverVersion: PG_18,
+		});
+		expect(sql).toContain("WHERE false");
+		expect(sql).not.toContain("puballsequences");
 	});
 });

@@ -1393,3 +1393,55 @@ describe("alignedPrinter multi-line and wrap markers", () => {
 		expect(lines[4]).toBe("| line2 |   |");
 	});
 });
+
+describe("boolean display (\\pset display_true / display_false)", () => {
+	// BOOLOID = 16; text-format wire values are 't' / 'f'.
+	const boolRs = () =>
+		makeResultSet({
+			columns: [
+				{ name: "t", oid: 16 },
+				{ name: "f", oid: 16 },
+			],
+			rows: [["t", "f"]],
+		});
+
+	test("defaults render t / f", async () => {
+		const out = await capture((s) =>
+			alignedPrinter.printQuery(boolRs(), defaultOpts(), s),
+		);
+		// Data row shows the raw t/f.
+		expect(out).toContain(" t | f ");
+	});
+
+	test("custom truePrint/falsePrint map t->true, f->false", async () => {
+		const out = await capture((s) =>
+			alignedPrinter.printQuery(
+				boolRs(),
+				defaultOpts(undefined, { truePrint: "true", falsePrint: "false" }),
+				s,
+			),
+		);
+		// Data row renders the display strings; columns widen to fit them.
+		expect(out).toContain(" true | false\n");
+		// The raw 't'/'f' no longer appear as data cells.
+		expect(out).not.toContain(" t | f\n");
+	});
+
+	test("non-boolean columns are unaffected by display strings", async () => {
+		const rs = makeResultSet({
+			columns: [{ name: "s", oid: 25 }], // text
+			rows: [["t"]], // literal text 't', NOT a bool
+		});
+		const out = await capture((s) =>
+			alignedPrinter.printQuery(
+				rs,
+				defaultOpts(undefined, { truePrint: "true", falsePrint: "false" }),
+				s,
+			),
+		);
+		// A text 't' stays 't' — only BOOLOID columns honour display_true.
+		// Column `s` is 1 char wide, so the value renders as " t".
+		expect(out).toContain(" t\n");
+		expect(out).not.toContain("true");
+	});
+});

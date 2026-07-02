@@ -622,8 +622,34 @@ export const applyPset = (
 			return { status: "ok" };
 		}
 		case "null": {
-			topt.nullPrint = value ?? "";
+			// Upstream guards the assignment with `if (value)`: the bare form
+			// (`\pset null`, value === null) prints the current setting WITHOUT
+			// resetting it. Only an explicit value (including the empty string,
+			// `\pset null ''`) changes nullPrint.
+			if (value !== null) {
+				topt.nullPrint = value;
+			}
 			writeOutMaybe(`Null display is "${topt.nullPrint}".\n`);
+			return { status: "ok" };
+		}
+		// `\pset display_true` / `\pset display_false` (PG 19+). Upstream guards
+		// the assignment with `if (value)` — the bare form (no value) prints the
+		// current setting WITHOUT resetting it, unlike `null`. The default when
+		// unset is the literal 't' / 'f'.
+		case "display_true": {
+			if (value !== null) {
+				topt.truePrint = value;
+			}
+			writeOutMaybe(`Boolean true display is "${topt.truePrint ?? "t"}".\n`);
+			return { status: "ok" };
+		}
+		case "display_false": {
+			if (value !== null) {
+				topt.falsePrint = value;
+			}
+			writeOutMaybe(
+				`Boolean false display is "${topt.falsePrint ?? "f"}".\n`,
+			);
 			return { status: "ok" };
 		}
 		case "csv_fieldsep": {
@@ -851,6 +877,12 @@ const printAllPset = (topt: PrintTableOpts): void => {
 	writeOut(`columns                  ${topt.columns}\n`);
 	writeOut(
 		`csv_fieldsep             ${psetQuotedString(topt.csvFieldSep)}\n`,
+	);
+	writeOut(
+		`display_false            ${psetQuotedString(topt.falsePrint ?? "f")}\n`,
+	);
+	writeOut(
+		`display_true             ${psetQuotedString(topt.truePrint ?? "t")}\n`,
 	);
 	writeOut(`expanded                 ${topt.expanded}\n`);
 	writeOut(`fieldsep                 ${psetQuotedString(topt.fieldSep)}\n`);

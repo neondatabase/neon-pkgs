@@ -405,6 +405,31 @@ describe("\\pset null", () => {
 	});
 });
 
+describe("\\pset display_true / display_false (PG19)", () => {
+	test("sets truePrint / falsePrint", async () => {
+		const settings = defaultSettings(createVarStore());
+		await run(cmdPset, makeMockCtx("pset", "display_true 'true'", settings));
+		await run(cmdPset, makeMockCtx("pset", "display_false 'false'", settings));
+		expect(settings.popt.topt.truePrint).toBe("true");
+		expect(settings.popt.topt.falsePrint).toBe("false");
+	});
+
+	test("defaults are t / f", () => {
+		const settings = defaultSettings(createVarStore());
+		expect(settings.popt.topt.truePrint).toBe("t");
+		expect(settings.popt.topt.falsePrint).toBe("f");
+	});
+
+	test("bare form does NOT reset (unlike \\pset null)", () => {
+		const settings = defaultSettings(createVarStore());
+		// Set, then invoke bare (value === null) — value must survive.
+		applyPset(settings.popt.topt, "display_true", "yes", "pset");
+		const r = applyPset(settings.popt.topt, "display_true", null, "pset");
+		expect(r.status).toBe("ok");
+		expect(settings.popt.topt.truePrint).toBe("yes");
+	});
+});
+
 describe("\\pset misc", () => {
 	test("expanded toggle", async () => {
 		const settings = defaultSettings(createVarStore());

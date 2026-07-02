@@ -5,6 +5,7 @@ import type { Connection, ResultSet } from "../types/connection.js";
 import type { PrintQueryOpts } from "../types/printer.js";
 
 import {
+	describeOneSequence,
 	describeOneTableDetails,
 	describeOneViewDetails,
 	lookupOneRelation,
@@ -1908,5 +1909,125 @@ describe("describeOneViewDetails — view definition gating + verbose columns", 
 		expect(text).toContain("SELECT acct.id FROM acct;");
 		// Views never carry the Compression column even in verbose mode.
 		expect(text).not.toContain("Compression");
+	});
+});
+
+describe("describeOneTableDetails — publication EXCEPT footer (PG19)", () => {
+	const pg19Conn = (
+		responses: { match: (sql: string) => boolean; rs: ResultSet }[],
+	): Connection => ({ ...mkConnection(responses), serverVersion: 190000 });
+
+	const boringCols = (): ResultSet =>
+		mkResultSet(
+			[
+				"attname",
+				"type",
+				"default",
+				"attnotnull",
+				"collation",
+				"identity",
+				"generated",
+			],
+			[["id", "int", null, "f", null, "", ""]],
+		);
+
+	it('renders "Excluded from publications:" footer when the table is excepted', async () => {
+		const cols = boringCols();
+		const excluded = mkResultSet(["pubname"], [["pub_all_except"]]);
+		const empty = mkResultSet([], []);
+		const conn = pg19Conn([
+			{ match: (s) => s.includes("FROM pg_catalog.pg_attribute"), rs: cols },
+			tableInfoMatch(),
+			{ match: (s) => s.includes("AND pr.prexcept"), rs: excluded },
+			{ match: () => true, rs: empty },
+		]);
+		const cap = captureStream();
+		await describeOneTableDetails(
+			conn,
+			1,
+			"public",
+			"foo",
+			"r",
+			false,
+			cap.out,
+			defaultPopt(),
+		);
+		const text = cap.text();
+		expect(text).toContain("Excluded from publications:");
+		expect(text).toContain('"pub_all_except"');
+	});
+
+	it("omits the Excluded footer when there are no EXCEPT rows", async () => {
+		const cols = boringCols();
+		const empty = mkResultSet([], []);
+		const conn = pg19Conn([
+			{ match: (s) => s.includes("FROM pg_catalog.pg_attribute"), rs: cols },
+			tableInfoMatch(),
+			{ match: () => true, rs: empty },
+		]);
+		const cap = captureStream();
+		await describeOneTableDetails(
+			conn,
+			1,
+			"public",
+			"foo",
+			"r",
+			false,
+			cap.out,
+			defaultPopt(),
+		);
+		expect(cap.text()).not.toContain("Excluded from publications:");
+	});
+});
+
+describe("describeOneSequence — Included in publications footer (PG19)", () => {
+	const pg19Conn = (
+		responses: { match: (sql: string) => boolean; rs: ResultSet }[],
+	): Connection => ({ ...mkConnection(responses), serverVersion: 190000 });
+
+	const seqRow = () =>
+		mkResultSet(
+			["Type", "Start", "Minimum", "Maximum", "Increment", "Cycles?", "Cache"],
+			[["bigint", "1", "1", "9223372036854775807", "1", "no", "1"]],
+		);
+
+	it("appends the sequence publications it belongs to (FOR ALL SEQUENCES)", async () => {
+		const empty = mkResultSet([], []);
+		const pubs = mkResultSet(["pubname"], [["pub_all_seqs"]]);
+		const conn = pg19Conn([
+			{
+				match: (s) => s.includes("FROM pg_catalog.pg_sequence"),
+				rs: seqRow(),
+			},
+			{ match: (s) => s.includes("p.puballsequences"), rs: pubs },
+			{ match: () => true, rs: empty },
+		]);
+		const cap = captureStream();
+		await describeOneSequence(conn, 1, "public", "sq", cap.out, defaultPopt());
+		const text = cap.text();
+		expect(text).toContain("Included in publications:");
+		expect(text).toContain('"pub_all_seqs"');
+	});
+
+	it("pre-PG19 never queries sequence publications", async () => {
+		const empty = mkResultSet([], []);
+		const conn: Connection = {
+			...mkConnection([
+				{
+					match: (s) => s.includes("FROM pg_catalog.pg_sequence"),
+					rs: seqRow(),
+				},
+				{ match: () => true, rs: empty },
+			]),
+			serverVersion: 180000,
+		};
+		const cap = captureStream();
+		await describeOneSequence(conn, 1, "public", "sq", cap.out, defaultPopt());
+		expect(cap.text()).not.toContain("Included in publications:");
+		// The empty-stub query never touches puballsequences.
+		const calls = (conn.query as ReturnType<typeof vi.fn>).mock.calls.map(
+			(c) => c[0] as string,
+		);
+		expect(calls.some((s) => s.includes("p.puballsequences"))).toBe(false);
 	});
 });

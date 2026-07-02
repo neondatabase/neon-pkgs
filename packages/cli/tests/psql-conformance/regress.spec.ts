@@ -14,9 +14,9 @@
 // or `it.skip("reason")` (out of scope) in their spec file.
 //
 // Upstream sources fetched at runtime (see harness/upstream-fixtures.ts):
-//   https://github.com/postgres/postgres/blob/REL_18_0/src/test/regress/sql/psql.sql
-//   https://github.com/postgres/postgres/blob/REL_18_0/src/test/regress/sql/psql_crosstab.sql
-//   https://github.com/postgres/postgres/blob/REL_18_0/src/test/regress/sql/psql_pipeline.sql
+//   https://github.com/postgres/postgres/blob/REL_19_BETA1/src/test/regress/sql/psql.sql
+//   https://github.com/postgres/postgres/blob/REL_19_BETA1/src/test/regress/sql/psql_crosstab.sql
+//   https://github.com/postgres/postgres/blob/REL_19_BETA1/src/test/regress/sql/psql_pipeline.sql
 //   …and the matching expected/ outputs.
 
 import { spawnSync } from "node:child_process";
@@ -128,23 +128,26 @@ const resolvePsqlBinary = (): { command: string; commandArgs: string[] } => {
 const { command: PSQL_COMMAND, commandArgs: PSQL_PREARGS } =
 	resolvePsqlBinary();
 
-// `regress/psql` is the only case in REGRESS_CASES whose vendored
-// expected output and vendored SQL depend on PG-18-only catalog shape
-// and SQL syntax: `\dAo+ Leakproof?`, `\df+ Leakproof?`, `\dRp+ Generated
+// `regress/psql` is the only case in REGRESS_CASES whose expected output
+// and SQL depend on the pinned major's catalog shape and SQL syntax. The
+// pin (POSTGRES_REF) is REL_19_BETA1, so the expected output carries the
+// PG-19-only shape on top of the PG-18-only shape: `\dRp All sequences`
+// and the `\pset display_true`/`display_false` block (PG 19), plus the
+// PG-18 additions (`\dAo+ Leakproof?`, `\df+ Leakproof?`, `\dRp+ Generated
 // columns`, `\dx Default version`, `\dAp uuid_skipsupport`,
-// `debug_parallel_query` GUC, and `GRANT ... WITH ADMIN TRUE` syntax.
-// Folding every diverging output block onto PG 18 shape is feasible but
-// fragile (each PG minor that drops a row would cascade through the
-// rest of the script via downstream state). We keep the test
-// authoritative on PG 18 (byte-perfect) and skip it on older servers;
-// `regress/psql_crosstab` and `regress/psql_pipeline` still run on
-// every PG and remain green across the 14-18 matrix.
+// `debug_parallel_query` GUC, `GRANT ... WITH ADMIN TRUE`). Folding every
+// diverging block back onto older shapes is feasible but fragile (each
+// dropped row cascades through downstream script state). We keep the test
+// authoritative on the pinned major (byte-perfect) and skip it on older
+// servers; `regress/psql_crosstab` and `regress/psql_pipeline` still run
+// on every PG and remain green across the whole matrix.
+const PINNED_REGRESS_MAJOR = 19;
 const skipReasonForCase = (
 	name: RegressCase,
 	pgMajor?: number,
 ): string | null =>
-	name === "psql" && pgMajor !== undefined && pgMajor < 18
-		? `regress/psql expected output is PG ${pgMajor < 18 ? "18-pinned" : "18"}; older server output diverges on PG-18-only features (Leakproof?, Generated columns, uuid_skipsupport, GRANT WITH ADMIN TRUE, …)`
+	name === "psql" && pgMajor !== undefined && pgMajor < PINNED_REGRESS_MAJOR
+		? `regress/psql expected output is pinned to PG ${PINNED_REGRESS_MAJOR} (REL_19_BETA1); PG ${pgMajor} server output diverges on version-gated features (All sequences, display_true/false, Leakproof?, Generated columns, uuid_skipsupport, GRANT WITH ADMIN TRUE, …)`
 		: null;
 
 // Fetch upstream SQL + expected outputs once per spec invocation. No

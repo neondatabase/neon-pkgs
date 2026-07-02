@@ -109,6 +109,8 @@ const buildDefaultPrintOpts = (): PrintQueryOpts => ({
 		translateHeader: false,
 		translateColumns: null,
 		nullPrint: "",
+		truePrint: "t",
+		falsePrint: "f",
 		csvFieldSep: DEFAULT_CSV_FIELD_SEP,
 		// Upstream `pset.popt.topt.expanded_header_width_type =
 		// PRINT_XHEADER_FULL` — default rendered as the literal "full" in the

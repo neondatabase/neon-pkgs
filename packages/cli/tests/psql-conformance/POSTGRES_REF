@@ -10,11 +10,11 @@
 # update PG_IMAGE / PG_IMAGE_DIGEST to a matching docker tag. The next
 # `bun run test:conformance` re-fetches against the new tag.
 
-PG_VERSION=18.0
-PG_TAG=REL_18_0
-PG_COMMIT=3d6a828938a5fa0444275d3d2f67b64ec3199eb7
+PG_VERSION=19beta1
+PG_TAG=REL_19_BETA1
+PG_COMMIT=4b0bf0788b066a4ca1d4f959566678e44ec93422
 
-# Image digest for docker.io/library/postgres:18.0 (used by GHA service
+# Image digest for docker.io/library/postgres:19beta1 (used by GHA service
 # container and by @testcontainers/postgresql when running locally).
-PG_IMAGE=postgres:18.0
-PG_IMAGE_DIGEST=sha256:41fc5342eefba6cc2ccda736aaf034bbbb7c3df0fdb81516eba1ba33f360162c
+PG_IMAGE=postgres:19beta1
+PG_IMAGE_DIGEST=sha256:a6bdd01b51b115f446a03135f9395575b3eb6ba90a92bfb692da82088f8820f8

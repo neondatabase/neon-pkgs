@@ -56,6 +56,8 @@ export const PSET_OPTIONS: readonly string[] = [
 	"border",
 	"columns",
 	"csv_fieldsep",
+	"display_false",
+	"display_true",
 	"expanded",
 	"fieldsep",
 	"fieldsep_zero",

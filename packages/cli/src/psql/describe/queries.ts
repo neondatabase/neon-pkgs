@@ -31,6 +31,7 @@ import {
 	PG_16,
 	PG_17,
 	PG_18,
+	PG_19,
 	serverAtLeast,
 	serverLess,
 } from "./versionGate.js";
@@ -1834,7 +1835,7 @@ export const listPublications = (opts: CommonOpts): DescribeQuery => {
 		'SELECT pubname AS "Name",\n' +
 		'  pg_catalog.pg_get_userbyid(pubowner) AS "Owner",\n' +
 		'  puballtables AS "All tables"';
-	if (serverAtLeast(serverVersion, 19)) {
+	if (serverAtLeast(serverVersion, PG_19)) {
 		sql += ',\n  puballsequences AS "All sequences"';
 	}
 	sql +=
@@ -1872,7 +1873,7 @@ export const describePublications = (opts: CommonOpts): DescribeQuery => {
 			description: "Details of publications",
 		};
 	}
-	const hasSeq = serverAtLeast(serverVersion, 19);
+	const hasSeq = serverAtLeast(serverVersion, PG_19);
 	const hasTrunc = serverAtLeast(serverVersion, PG_11);
 	const hasGen = serverAtLeast(serverVersion, PG_18);
 	const hasViaRoot = serverAtLeast(serverVersion, PG_13);
@@ -1940,9 +1941,24 @@ export const describeSubscriptions = (opts: CommonOpts): DescribeQuery => {
 		if (serverAtLeast(serverVersion, PG_17)) {
 			sql += ', subfailover AS "Failover"\n';
 		}
+		// PG 19 added foreign-server-backed subscriptions and dead-tuple
+		// retention. Upstream surfaces these five columns in `\dRs+`:
+		// the source server name (resolved from subserver), the retention
+		// toggles/limits, and the WAL-receiver timeout (placed after
+		// Conninfo, matching describe.c).
+		if (serverAtLeast(serverVersion, PG_19)) {
+			sql +=
+				', (select srvname from pg_foreign_server where oid=subserver) AS "Server"\n' +
+				', subretaindeadtuples AS "Retain dead tuples"\n' +
+				', submaxretention AS "Max retention duration"\n' +
+				', subretentionactive AS "Retention active"\n';
+		}
 		sql +=
 			',  subsynccommit AS "Synchronous commit"\n' +
 			',  subconninfo AS "Conninfo"\n';
+		if (serverAtLeast(serverVersion, PG_19)) {
+			sql += ', subwalrcvtimeout AS "Receiver timeout"\n';
+		}
 		if (serverAtLeast(serverVersion, PG_15)) {
 			sql += ', subskiplsn AS "Skip LSN"\n';
 		}
@@ -2552,13 +2568,20 @@ export const fetchTablePublications = (opts: {
 		};
 	}
 	const hasPubNs = serverAtLeast(serverVersion, PG_15);
+	// PG 19 added publication EXCEPT lists (`pg_publication_rel.prexcept`).
+	// An excepted relation still has a `pg_publication_rel` row, so the
+	// explicit-membership check must skip those rows or the table would be
+	// wrongly reported as "Included in publications". The excepted set is
+	// surfaced separately via `fetchExcludedFromPublications`.
+	const hasExcept = serverAtLeast(serverVersion, PG_19);
+	const exceptGuard = hasExcept ? " AND NOT pr.prexcept" : "";
 	let sql =
 		"SELECT pub.pubname\n" +
 		"FROM pg_catalog.pg_publication pub\n" +
 		"WHERE pub.puballtables\n" +
 		"   OR EXISTS (\n" +
 		"     SELECT 1 FROM pg_catalog.pg_publication_rel pr\n" +
-		`     WHERE pr.prpubid = pub.oid AND pr.prrelid = '${oid}'\n` +
+		`     WHERE pr.prpubid = pub.oid AND pr.prrelid = '${oid}'${exceptGuard}\n` +
 		"   )";
 	if (hasPubNs) {
 		sql +=
@@ -2599,6 +2622,68 @@ export const fetchTableSubscriptions = (opts: {
 		`WHERE sr.srrelid = '${oid}'\n` +
 		"ORDER BY 1;";
 	return { sql, params: [], description: "Table subscriptions" };
+};
+
+/**
+ * Publications that exclude this relation via a FOR ALL TABLES ... EXCEPT
+ * clause (PG 19+, `pg_publication_rel.prexcept`). Mirrors the upstream
+ * "Excluded from publications:" footer in `describeOneTableDetails`.
+ * Considers the partition root as well, since an EXCEPT can be declared on
+ * the root of a partitioned table.
+ *
+ * Returns an empty set on servers older than PG 19 (the column and the
+ * feature don't exist), so the caller suppresses the footer without a
+ * separate version branch at the call site.
+ */
+export const fetchExcludedFromPublications = (opts: {
+	oid: number;
+	serverVersion: ServerVersion;
+}): DescribeQuery => {
+	const { oid, serverVersion } = opts;
+	if (serverLess(serverVersion, PG_19)) {
+		return {
+			sql: "/* server < 19 does not support publication EXCEPT lists */ SELECT 1 WHERE false;",
+			params: [],
+			description: "Excluded from publications",
+		};
+	}
+	const sql =
+		"SELECT pubname\n" +
+		"FROM pg_catalog.pg_publication p\n" +
+		"JOIN pg_catalog.pg_publication_rel pr ON p.oid = pr.prpubid\n" +
+		`WHERE (pr.prrelid = '${oid}' OR pr.prrelid = pg_catalog.pg_partition_root('${oid}'))\n` +
+		"AND pr.prexcept\n" +
+		"ORDER BY 1;";
+	return { sql, params: [], description: "Excluded from publications" };
+};
+
+/**
+ * Publications a sequence belongs to. PG 19 added sequence replication
+ * (`pg_publication.puballsequences`); a sequence is included when a
+ * publication is declared FOR ALL SEQUENCES and the sequence itself is
+ * publishable. Mirrors the "Included in publications:" footer emitted for
+ * sequences in upstream `describeOneTableDetails`.
+ *
+ * Returns an empty set on servers older than PG 19.
+ */
+export const fetchSequencePublications = (opts: {
+	oid: number;
+	serverVersion: ServerVersion;
+}): DescribeQuery => {
+	const { oid, serverVersion } = opts;
+	if (serverLess(serverVersion, PG_19)) {
+		return {
+			sql: "/* server < 19 does not support sequence publications */ SELECT 1 WHERE false;",
+			params: [],
+			description: "Sequence publications",
+		};
+	}
+	const sql =
+		"SELECT pubname FROM pg_catalog.pg_publication p\n" +
+		"WHERE p.puballsequences\n" +
+		` AND pg_catalog.pg_relation_is_publishable('${oid}')\n` +
+		"ORDER BY 1;";
+	return { sql, params: [], description: "Sequence publications" };
 };
 
 /**

@@ -7,7 +7,7 @@ import type {
 	Unicode2LineStyle,
 } from "../types/printer.js";
 
-import { formatNumericLocale } from "./units.js";
+import { boolDisplayOf, renderCellValue, type BoolDisplay } from "./units.js";
 
 /**
  * Aligned tabular printer (psql's default output mode).
@@ -377,23 +377,10 @@ const renderCell = (
 	cell: unknown,
 	nullPrint: string,
 	numericLocale: boolean,
-): string => {
-	if (cell === null || cell === undefined) return nullPrint;
-	if (typeof cell === "string") {
-		return formatNumericLocale(cell, numericLocale);
-	}
-	if (typeof cell === "number" || typeof cell === "bigint") {
-		return formatNumericLocale(cell.toString(), numericLocale);
-	}
-	if (typeof cell === "boolean") return cell ? "t" : "f";
-	if (cell instanceof Date) return cell.toISOString();
-	if (cell instanceof Uint8Array) {
-		let hex = "\\x";
-		for (const b of cell) hex += b.toString(16).padStart(2, "0");
-		return hex;
-	}
-	return JSON.stringify(cell);
-};
+	dataTypeID?: number,
+	boolDisplay?: BoolDisplay,
+): string =>
+	renderCellValue(cell, nullPrint, numericLocale, dataTypeID, boolDisplay);
 
 // ---------------------------------------------------------------------------
 // Border / line-format glyphs.
@@ -573,10 +560,17 @@ export const computeColumnWidths = (
 ): number[] => {
 	const nullPrint = topt.nullPrint;
 	const numericLocale = topt.numericLocale;
+	const boolDisplay = boolDisplayOf(topt);
 	const widths = rs.fields.map((f) => displayWidth(f.name));
 	for (const row of rs.rows) {
 		for (let i = 0; i < rs.fields.length; i++) {
-			const cellText = renderCell(row[i], nullPrint, numericLocale);
+			const cellText = renderCell(
+				row[i],
+				nullPrint,
+				numericLocale,
+				rs.fields[i]?.dataTypeID,
+				boolDisplay,
+			);
 			for (const line of cellText.split("\n")) {
 				const w = displayWidth(line);
 				if (w > widths[i]) widths[i] = w;
@@ -685,9 +679,18 @@ const renderHorizontal = (
 	);
 
 	// Pre-render & measure every cell.
+	const boolDisplay = boolDisplayOf(topt);
 	const cellGrid: FormattedCell[][] = rs.rows.map((row) =>
-		row.map((cell) =>
-			formatCell(renderCell(cell, nullPrint, topt.numericLocale)),
+		row.map((cell, i) =>
+			formatCell(
+				renderCell(
+					cell,
+					nullPrint,
+					topt.numericLocale,
+					rs.fields[i]?.dataTypeID,
+					boolDisplay,
+				),
+			),
 		),
 	);
 	const headerCells = headers.map((h) => formatCell(h));
@@ -1313,8 +1316,17 @@ const renderVertical = (rs: ResultSet, opts: PrintQueryOpts): string => {
 	// Width of the value column = max value width across all rows.
 	let valueWidth = 0;
 	let dmultiline = false;
+	const boolDisplay = boolDisplayOf(topt);
 	const cellGrid: string[][] = rs.rows.map((row) =>
-		row.map((cell) => renderCell(cell, nullPrint, topt.numericLocale)),
+		row.map((cell, i) =>
+			renderCell(
+				cell,
+				nullPrint,
+				topt.numericLocale,
+				rs.fields[i]?.dataTypeID,
+				boolDisplay,
+			),
+		),
 	);
 	for (const row of cellGrid) {
 		for (const v of row) {

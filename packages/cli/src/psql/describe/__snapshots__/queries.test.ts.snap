@@ -1299,3 +1299,71 @@ WHERE true /* TODO(WP-20): pattern matching */
 ORDER BY 1;",
 }
 `;
+
+exports[`describe/queries — pg19 snapshots (PG-19-only branches) > describePublications / pg19 (puballsequences) 1`] = `
+{
+  "description": "Details of publications",
+  "params": [],
+  "sql": "SELECT oid, pubname,
+  pg_catalog.pg_get_userbyid(pubowner) AS owner,
+  puballtables, puballsequences, pubinsert, pubupdate, pubdelete, pubtruncate, (CASE pubgencols WHEN 'n' THEN 'none' WHEN 's' THEN 'stored' END) AS pubgencols, pubviaroot, pg_catalog.obj_description(oid, 'pg_publication')
+FROM pg_catalog.pg_publication
+WHERE true /* TODO(WP-20): pattern matching */
+ORDER BY 2;",
+}
+`;
+
+exports[`describe/queries — pg19 snapshots (PG-19-only branches) > describeSubscriptions / pg19 / verbose=true (Server, retention, receiver timeout) 1`] = `
+{
+  "description": "List of subscriptions",
+  "params": [],
+  "sql": "SELECT subname AS "Name"
+,  pg_catalog.pg_get_userbyid(subowner) AS "Owner"
+,  subenabled AS "Enabled"
+,  subpublications AS "Publication"
+, subbinary AS "Binary"
+, (CASE substream
+    WHEN 'f' THEN 'off'
+    WHEN 't' THEN 'on'
+    WHEN 'p' THEN 'parallel'
+   END) AS "Streaming"
+, subtwophasestate AS "Two-phase commit"
+, subdisableonerr AS "Disable on error"
+, suborigin AS "Origin"
+, subpasswordrequired AS "Password required"
+, subrunasowner AS "Run as owner?"
+, subfailover AS "Failover"
+, (select srvname from pg_foreign_server where oid=subserver) AS "Server"
+, subretaindeadtuples AS "Retain dead tuples"
+, submaxretention AS "Max retention duration"
+, subretentionactive AS "Retention active"
+,  subsynccommit AS "Synchronous commit"
+,  subconninfo AS "Conninfo"
+, subwalrcvtimeout AS "Receiver timeout"
+, subskiplsn AS "Skip LSN"
+,  pg_catalog.obj_description(oid, 'pg_subscription') AS "Description"
+FROM pg_catalog.pg_subscription
+WHERE subdbid = (SELECT oid FROM pg_catalog.pg_database WHERE datname = pg_catalog.current_database())  AND true /* TODO(WP-20): pattern matching */
+ORDER BY 1;",
+}
+`;
+
+exports[`describe/queries — pg19 snapshots (PG-19-only branches) > listPublications / pg19 (All sequences) 1`] = `
+{
+  "description": "List of publications",
+  "params": [],
+  "sql": "SELECT pubname AS "Name",
+  pg_catalog.pg_get_userbyid(pubowner) AS "Owner",
+  puballtables AS "All tables",
+  puballsequences AS "All sequences",
+  pubinsert AS "Inserts",
+  pubupdate AS "Updates",
+  pubdelete AS "Deletes",
+  pubtruncate AS "Truncates",
+ (CASE pubgencols WHEN 'n' THEN 'none' WHEN 's' THEN 'stored' END) AS "Generated columns",
+  pubviaroot AS "Via root"
+FROM pg_catalog.pg_publication
+WHERE true /* TODO(WP-20): pattern matching */
+ORDER BY 1;",
+}
+`;

@@ -1,7 +1,7 @@
 import type { ResultSet } from "../types/connection.js";
 import type { Printer, PrintQueryOpts } from "../types/printer.js";
 
-import { formatNumericLocale } from "./units.js";
+import { boolDisplayOf, renderCellValue, type BoolDisplay } from "./units.js";
 
 /**
  * AsciiDoc printer.
@@ -87,8 +87,17 @@ const printFlat = (
 		NUMERIC_OIDS.has(f.dataTypeID) ? "r" : "l",
 	);
 	const ncols = rs.fields.length;
+	const boolDisplay = boolDisplayOf(topt);
 	const cells: string[][] = rs.rows.map((row) =>
-		row.map((cell) => renderCell(cell, nullPrint, topt.numericLocale)),
+		row.map((cell, i) =>
+			renderCell(
+				cell,
+				nullPrint,
+				topt.numericLocale,
+				rs.fields[i]?.dataTypeID,
+				boolDisplay,
+			),
+		),
 	);
 
 	let buf = "";
@@ -166,8 +175,17 @@ const printExpanded = (
 	const aligns: ("l" | "r")[] = rs.fields.map((f) =>
 		NUMERIC_OIDS.has(f.dataTypeID) ? "r" : "l",
 	);
+	const boolDisplay = boolDisplayOf(topt);
 	const cells: string[][] = rs.rows.map((row) =>
-		row.map((cell) => renderCell(cell, nullPrint, topt.numericLocale)),
+		row.map((cell, i) =>
+			renderCell(
+				cell,
+				nullPrint,
+				topt.numericLocale,
+				rs.fields[i]?.dataTypeID,
+				boolDisplay,
+			),
+		),
 	);
 
 	let buf = "";
@@ -271,20 +289,7 @@ const renderCell = (
 	cell: unknown,
 	nullPrint: string,
 	numericLocale: boolean,
-): string => {
-	if (cell === null || cell === undefined) return nullPrint;
-	if (typeof cell === "string") {
-		return formatNumericLocale(cell, numericLocale);
-	}
-	if (typeof cell === "number" || typeof cell === "bigint") {
-		return formatNumericLocale(cell.toString(), numericLocale);
-	}
-	if (typeof cell === "boolean") return cell ? "t" : "f";
-	if (cell instanceof Date) return cell.toISOString();
-	if (cell instanceof Uint8Array) {
-		let hex = "\\x";
-		for (const b of cell) hex += b.toString(16).padStart(2, "0");
-		return hex;
-	}
-	return JSON.stringify(cell);
-};
+	dataTypeID?: number,
+	boolDisplay?: BoolDisplay,
+): string =>
+	renderCellValue(cell, nullPrint, numericLocale, dataTypeID, boolDisplay);

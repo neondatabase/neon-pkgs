@@ -32,7 +32,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-type MajorVersion = "14" | "15" | "16" | "17" | "18";
+type MajorVersion = "14" | "15" | "16" | "17" | "18" | "19beta1";
 
 const DEFAULT_MATRIX: readonly { pg: MajorVersion; image: string }[] = [
 	{ pg: "14", image: "postgres:14.13" },
@@ -40,6 +40,7 @@ const DEFAULT_MATRIX: readonly { pg: MajorVersion; image: string }[] = [
 	{ pg: "16", image: "postgres:16.4" },
 	{ pg: "17", image: "postgres:17.4" },
 	{ pg: "18", image: "postgres:18.0" },
+	{ pg: "19beta1", image: "postgres:19beta1" },
 ];
 
 type PerSpecRollup = {
