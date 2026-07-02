@@ -8,10 +8,12 @@ export const branchIdResolve = async ({
 	branch,
 	apiClient,
 	projectId,
+	includeDeleted = false,
 }: {
 	branch: string | number;
 	apiClient: CommonProps["apiClient"];
 	projectId: string;
+	includeDeleted?: boolean;
 }) => {
 	branch = branch.toString();
 	if (looksLikeBranchId(branch)) {
@@ -20,6 +22,7 @@ export const branchIdResolve = async ({
 
 	const { data } = await apiClient.listProjectBranches({
 		projectId,
+		...(includeDeleted ? { include_deleted: true } : {}),
 	});
 	const branchData = data.branches.find((b: Branch) => b.name === branch);
 	if (!branchData) {

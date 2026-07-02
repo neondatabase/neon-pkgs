@@ -119,5 +119,23 @@ describe("writer", () => {
 			).end();
 			expect(getData()).toMatchSnapshot();
 		});
+
+		it("outputs table with custom header label", () => {
+			const { stream, getData } = getMockWritable();
+			const out = writer({
+				output: "table",
+				out: stream,
+			});
+			out.write(
+				{ recovery: "2026-07-07T00:00:00.000Z" },
+				{
+					fields: ["recovery"],
+					renderHeaders: {
+						recovery: "Recoverable Until",
+					},
+				},
+			).end();
+			expect(getData()).toMatchSnapshot();
+		});
 	});
 });

@@ -58,6 +58,15 @@ exports[`writer > outputs table > outputs single data with title 1`] = `
 "
 `;
 
+exports[`writer > outputs table > outputs table with custom header label 1`] = `
+"┌──────────────────────────┐
+│ Recoverable Until        │
+├──────────────────────────┤
+│ 2026-07-07T00:00:00.000Z │
+└──────────────────────────┘
+"
+`;
+
 exports[`writer > outputs table > outputs table with custom renderer 1`] = `
 "T1
 ┌──────────────┐

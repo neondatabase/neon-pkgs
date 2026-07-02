@@ -541,9 +541,21 @@ export const getApiClient = ({ apiKey, apiHost }: ApiCallProps) => {
 					body: data,
 				}),
 			),
-		deleteProjectBranch: (projectId: string, branchId: string) =>
+		deleteProjectBranch: (
+			projectId: string,
+			branchId: string,
+			hardDelete?: boolean,
+		) =>
 			call(() =>
 				raw.deleteProjectBranch({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+					...(hardDelete ? { query: { hard_delete: true } } : {}),
+				}),
+			),
+		recoverProjectBranch: (projectId: string, branchId: string) =>
+			call(() =>
+				raw.recoverProjectBranch({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
 				}),

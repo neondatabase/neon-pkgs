@@ -18,6 +18,24 @@ describe("branches", () => {
 		});
 	});
 
+	test("list with include-deleted shows deleted state and recovery", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			["branches", "list", "--project-id", "test", "--include-deleted"],
+			{ mockDir: "deleted_branches", outputTable: true },
+		);
+	});
+
+	test("list without include-deleted omits deleted branches", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["branches", "list", "--project-id", "test"], {
+			mockDir: "deleted_branches",
+			outputTable: true,
+		});
+	});
+
 	test("list/table marks the branch pinned in .neon as [current]", async ({
 		testCliCommand,
 	}) => {
@@ -273,6 +291,49 @@ describe("branches", () => {
 			"--project-id",
 			"test",
 		]);
+	});
+
+	test("delete by id with hard-delete", async ({ testCliCommand }) => {
+		await testCliCommand([
+			"branches",
+			"delete",
+			"br-harddel-branch-123456",
+			"--project-id",
+			"test",
+			"--hard-delete",
+		]);
+	});
+
+	/* recover */
+
+	test("recover by id", async ({ testCliCommand }) => {
+		await testCliCommand([
+			"branches",
+			"recover",
+			"br-sunny-branch-123456",
+			"--project-id",
+			"test",
+		]);
+	});
+
+	test("recover by id/table output", async ({ testCliCommand }) => {
+		await testCliCommand(
+			[
+				"branches",
+				"recover",
+				"br-sunny-branch-123456",
+				"--project-id",
+				"test",
+			],
+			{ outputTable: true },
+		);
+	});
+
+	test("recover by name", async ({ testCliCommand }) => {
+		await testCliCommand(
+			["branches", "recover", "gone-branch", "--project-id", "test"],
+			{ mockDir: "deleted_branches" },
+		);
 	});
 
 	/* rename */

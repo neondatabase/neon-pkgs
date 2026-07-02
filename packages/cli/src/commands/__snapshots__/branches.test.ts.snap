@@ -189,6 +189,13 @@ created_at: 2021-01-01T00:00:00.000Z
 "
 `;
 
+exports[`branches > delete by id with hard-delete 1`] = `
+"id: br-harddel-branch-123456
+name: harddel-branch
+created_at: 2021-01-01T00:00:00.000Z
+"
+`;
+
 exports[`branches > get by id 1`] = `
 "name: test_branch
 id: br-sunny-branch-123456
@@ -225,6 +232,26 @@ default: false
 parent_id: br-parent-branch-123456
 created_at: 2019-01-01T00:00:00Z
 updated_at: 2019-01-01T00:00:00Z
+"
+`;
+
+exports[`branches > list with include-deleted shows deleted state and recovery 1`] = `
+"┌────────────────┬───────────────────────┬───────────────┬──────────────────────────┬──────────────────────────┐
+│ Name           │ Id                    │ Current State │ Created At               │ Recoverable Until        │
+├────────────────┼───────────────────────┼───────────────┼──────────────────────────┼──────────────────────────┤
+│ [default] main │ br-main-branch-123456 │ ready         │ 2021-01-01T00:00:00.000Z │                          │
+├────────────────┼───────────────────────┼───────────────┼──────────────────────────┼──────────────────────────┤
+│ gone-branch    │ br-gone-branch-123456 │ deleted       │ 2021-01-01T00:00:00.000Z │ 2026-07-07T00:00:00.000Z │
+└────────────────┴───────────────────────┴───────────────┴──────────────────────────┴──────────────────────────┘
+"
+`;
+
+exports[`branches > list without include-deleted omits deleted branches 1`] = `
+"┌────────────────┬───────────────────────┬───────────────┬──────────────────────────┐
+│ Name           │ Id                    │ Current State │ Created At               │
+├────────────────┼───────────────────────┼───────────────┼──────────────────────────┤
+│ [default] main │ br-main-branch-123456 │ ready         │ 2021-01-01T00:00:00.000Z │
+└────────────────┴───────────────────────┴───────────────┴──────────────────────────┘
 "
 `;
 
@@ -305,6 +332,32 @@ exports[`branches > list/yaml 1`] = `
   created_at: 2021-01-01T00:00:00.000Z
   updated_at: 2021-01-01T00:00:00.000Z
   current_state: ready
+"
+`;
+
+exports[`branches > recover by id 1`] = `
+"id: br-sunny-branch-123456
+name: sunny-branch
+current_state: ready
+created_at: 2021-01-01T00:00:00.000Z
+"
+`;
+
+exports[`branches > recover by id/table output 1`] = `
+"branch
+┌──────────────┬────────────────────────┬───────────────┬──────────────────────────┐
+│ Name         │ Id                     │ Current State │ Created At               │
+├──────────────┼────────────────────────┼───────────────┼──────────────────────────┤
+│ sunny-branch │ br-sunny-branch-123456 │ ready         │ 2021-01-01T00:00:00.000Z │
+└──────────────┴────────────────────────┴───────────────┴──────────────────────────┘
+"
+`;
+
+exports[`branches > recover by name 1`] = `
+"id: br-gone-branch-123456
+name: gone-branch
+current_state: ready
+created_at: 2021-01-01T00:00:00.000Z
 "
 `;
 

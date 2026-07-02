@@ -29,6 +29,7 @@ export const BRANCH_FIELDS: readonly (keyof Branch)[] = [
 	"current_state",
 	"created_at",
 	"expires_at",
+	"recovery",
 ];
 
 const BRANCH_FIELDS_RESET: readonly (keyof Branch)[] = [
@@ -60,7 +61,15 @@ export const builder = (argv: yargs.Argv) =>
 		.command(
 			"list",
 			"List branches",
-			(yargs) => yargs,
+			(yargs) =>
+				yargs.options({
+					"include-deleted": {
+						describe:
+							"Include deleted branches that are still recoverable",
+						type: "boolean",
+						default: false,
+					},
+				}),
 			(args) => list(args as any),
 		)
 		.command(
@@ -243,8 +252,22 @@ export const builder = (argv: yargs.Argv) =>
 		.command(
 			"delete <id|name>",
 			"Delete a branch",
-			(yargs) => yargs,
+			(yargs) =>
+				yargs.options({
+					"hard-delete": {
+						describe:
+							"Permanently delete the branch immediately, skipping the 7-day recovery window",
+						type: "boolean",
+						default: false,
+					},
+				}),
 			(args) => deleteBranch(args as any),
+		)
+		.command(
+			"recover <id|name>",
+			"Recover a deleted branch within its recovery window",
+			(yargs) => yargs,
+			(args) => recover(args as any),
 		)
 		.command(
 			"get <id|name>",
@@ -305,11 +328,12 @@ export const handler = (args: yargs.Argv) => {
 	return args;
 };
 
-const list = async (props: ProjectScopeProps) => {
+const list = async (props: ProjectScopeProps & { includeDeleted: boolean }) => {
 	const {
 		data: { branches, annotations },
 	} = await props.apiClient.listProjectBranches({
 		projectId: props.projectId,
+		include_deleted: props.includeDeleted,
 	});
 	// The branch pinned in the local context (.neon), so we can flag it as `[current]` — the
 	// one commands target by default and that `neonctl env pull` would read. The context
@@ -317,8 +341,14 @@ const list = async (props: ProjectScopeProps) => {
 	const currentBranch = contextBranch(readContextFile(props.contextFile));
 	writer(props).end(branches, {
 		fields: BRANCH_FIELDS,
+		renderHeaders: {
+			recovery: "Recoverable Until",
+		},
 		renderColumns: {
 			expires_at: (br) => br.expires_at || "never",
+			current_state: (br) =>
+				br.recovery ? "deleted" : (br.current_state ?? ""),
+			recovery: (br) => br.recovery?.recoverable_until ?? "",
 			// Word labels (not symbols) so they read clearly and match the existing `[anon]`.
 			name: (br) => {
 				const annotation = annotations[br.id];
@@ -512,10 +542,16 @@ const setDefault = async (props: ProjectScopeProps & IdOrNameProps) => {
 	});
 };
 
-const deleteBranch = async (props: ProjectScopeProps & IdOrNameProps) => {
+const deleteBranch = async (
+	props: ProjectScopeProps & IdOrNameProps & { hardDelete: boolean },
+) => {
 	const branchId = await branchIdFromProps(props);
 	const { data } = await retryOnLock(() =>
-		props.apiClient.deleteProjectBranch(props.projectId, branchId),
+		props.apiClient.deleteProjectBranch(
+			props.projectId,
+			branchId,
+			props.hardDelete,
+		),
 	);
 	// A 204 (branch already gone) carries no body; only a 200 returns it.
 	if (data) {
@@ -523,6 +559,32 @@ const deleteBranch = async (props: ProjectScopeProps & IdOrNameProps) => {
 			fields: BRANCH_FIELDS,
 		});
 	}
+};
+
+const recover = async (props: ProjectScopeProps & IdOrNameProps) => {
+	const branchId = await branchIdResolve({
+		branch: props.id,
+		apiClient: props.apiClient,
+		projectId: props.projectId,
+		includeDeleted: true,
+	});
+	const { data } = await retryOnLock(() =>
+		props.apiClient.recoverProjectBranch(props.projectId, branchId),
+	);
+	const out = writer(props);
+	out.write(data.branch, {
+		fields: BRANCH_FIELDS,
+		title: "branch",
+		emptyMessage: "No branches have been found.",
+	});
+	if (data.endpoints?.length) {
+		out.write(data.endpoints, {
+			fields: ["id", "created_at"],
+			title: "endpoints",
+			emptyMessage: "No endpoints have been found.",
+		});
+	}
+	out.end();
 };
 
 const get = async (props: ProjectScopeProps & IdOrNameProps) => {

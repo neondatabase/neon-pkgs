@@ -21,6 +21,8 @@ type WriteOutConfig<T> = {
 	renderColumns?: Partial<
 		Record<FullExtract<T>, (value: ExtractFromArray<T>) => string>
 	>;
+	// Custom header labels for specific columns (overrides the auto-derived name)
+	renderHeaders?: Partial<Record<FullExtract<T>, string>>;
 };
 
 type Chunk = { data: any; config: WriteOutConfig<any> };
@@ -62,7 +64,13 @@ const writeTable = (
 	chunks.forEach(
 		({
 			data,
-			config: { emptyMessage, fields, title, renderColumns = {} },
+			config: {
+				emptyMessage,
+				fields,
+				title,
+				renderColumns = {},
+				renderHeaders = {},
+			},
 		}) => {
 			const arrayData = Array.isArray(data) ? data : [data];
 			if (!arrayData.length && emptyMessage) {
@@ -79,11 +87,15 @@ const writeTable = (
 				style: {
 					head: ["green"],
 				},
-				head: fieldsFiltered.map((field: string) =>
-					field
-						.split("_")
-						.map((word) => word[0].toUpperCase() + word.slice(1))
-						.join(" "),
+				head: fieldsFiltered.map(
+					(field: string) =>
+						renderHeaders[field] ??
+						field
+							.split("_")
+							.map(
+								(word) => word[0].toUpperCase() + word.slice(1),
+							)
+							.join(" "),
 				),
 			});
 			arrayData.forEach((item) => {
