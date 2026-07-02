@@ -69,7 +69,7 @@
     "yargs": "17.7.2"
   },
   "optionalDependencies": {
-    "esbuild": "0.28.0"
+    "esbuild": "0.28.1"
   },
   "devDependencies": {
     "@apidevtools/swagger-parser": "12.1.0",

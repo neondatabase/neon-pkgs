@@ -59,7 +59,7 @@
 	},
 	"dependencies": {
 		"@neon/config": "workspace:*",
-		"esbuild": "^0.25.0",
+		"esbuild": "^0.28.1",
 		"fflate": "^0.8.2"
 	},
 	"packageManager": "pnpm@10.4.0",
