@@ -647,9 +647,7 @@ export const applyPset = (
 			if (value !== null) {
 				topt.falsePrint = value;
 			}
-			writeOutMaybe(
-				`Boolean false display is "${topt.falsePrint ?? "f"}".\n`,
-			);
+			writeOutMaybe(`Boolean false display is "${topt.falsePrint ?? "f"}".\n`);
 			return { status: "ok" };
 		}
 		case "csv_fieldsep": {

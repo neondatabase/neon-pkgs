@@ -1,7 +1,7 @@
 import type { ResultSet } from "../types/connection.js";
 import type { Printer, PrintQueryOpts } from "../types/printer.js";
 
-import { boolDisplayOf, renderCellValue, type BoolDisplay } from "./units.js";
+import { type BoolDisplay, boolDisplayOf, renderCellValue } from "./units.js";
 
 /**
  * Troff MS printer.

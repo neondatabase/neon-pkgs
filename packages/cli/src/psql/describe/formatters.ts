@@ -54,13 +54,13 @@ import {
 } from "./processNamePattern.js";
 import type { DescribeQuery } from "./queries.js";
 import {
+	fetchExcludedFromPublications,
 	fetchForeignTableInfo,
 	fetchInheritedBy,
 	fetchInherits,
 	fetchNotNullConstraints,
 	fetchPartitionKey,
 	fetchPartitionOf,
-	fetchExcludedFromPublications,
 	fetchPerColumnFdwOptions,
 	fetchPolicies,
 	fetchSequencePublications,

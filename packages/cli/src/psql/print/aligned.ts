@@ -7,7 +7,7 @@ import type {
 	Unicode2LineStyle,
 } from "../types/printer.js";
 
-import { boolDisplayOf, renderCellValue, type BoolDisplay } from "./units.js";
+import { type BoolDisplay, boolDisplayOf, renderCellValue } from "./units.js";
 
 /**
  * Aligned tabular printer (psql's default output mode).
