@@ -1,5 +1,14 @@
 # neonctl
 
+## 2.29.3
+
+### Patch Changes
+
+- Support Node.js >= 20.19 for the CLI. Bump `engines.node` from `>=20.18.1` to `>=20.19.0`
+  (matching `chokidar@5`) and upgrade the pinned `neon-init` dependency to `0.20.0`, which now
+  declares `engines.node: ">=20.19.0"` — this removes the `EBADENGINE`/`>=22` install warning that
+  `neonctl` previously surfaced on Node 20 via the older `neon-init`.
+
 ## 2.29.2
 
 ### Patch Changes
