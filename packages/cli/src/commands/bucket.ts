@@ -489,8 +489,15 @@ const fileToWebStream = (path: string): ReadableStream<Uint8Array> => {
 	const source = createReadStream(path);
 	return new ReadableStream<Uint8Array>({
 		start(controller) {
-			source.on("data", (chunk: Buffer) => {
-				controller.enqueue(new Uint8Array(chunk));
+			source.on("data", (chunk: string | Buffer) => {
+				// `createReadStream` with no encoding always emits Buffers at
+				// runtime; @types/node types the `data` chunk as `string | Buffer`,
+				// so normalize (a string would only appear if an encoding were set).
+				const bytes =
+					typeof chunk === "string"
+						? new TextEncoder().encode(chunk)
+						: new Uint8Array(chunk);
+				controller.enqueue(bytes);
 				if ((controller.desiredSize ?? 0) <= 0) source.pause();
 			});
 			source.on("end", () => {
