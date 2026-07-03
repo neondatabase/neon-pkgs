@@ -2,6 +2,13 @@ packages:
     - "packages/*"
     - "examples/*"
 
+# pnpm 10 blocks dependency lifecycle/build scripts by default. node-pty has
+# no linux-x64 prebuild, so it must run its `install` (node-gyp) step to
+# compile `pty.node`; without this the psql-conformance tab-completion spec
+# cannot load it on Linux CI. Allow just that package to build.
+onlyBuiltDependencies:
+    - node-pty
+
 catalog:
     typescript: ^5.8.2
     vitest: ^3.0.9
