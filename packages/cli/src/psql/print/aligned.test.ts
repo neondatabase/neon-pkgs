@@ -1417,7 +1417,10 @@ describe("boolean display (\\pset display_true / display_false)", () => {
 		const out = await capture((s) =>
 			alignedPrinter.printQuery(
 				boolRs(),
-				defaultOpts(undefined, { truePrint: "true", falsePrint: "false" }),
+				defaultOpts(undefined, {
+					truePrint: "true",
+					falsePrint: "false",
+				}),
 				s,
 			),
 		);
@@ -1435,7 +1438,10 @@ describe("boolean display (\\pset display_true / display_false)", () => {
 		const out = await capture((s) =>
 			alignedPrinter.printQuery(
 				rs,
-				defaultOpts(undefined, { truePrint: "true", falsePrint: "false" }),
+				defaultOpts(undefined, {
+					truePrint: "true",
+					falsePrint: "false",
+				}),
 				s,
 			),
 		);

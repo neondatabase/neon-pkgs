@@ -640,14 +640,18 @@ export const applyPset = (
 			if (value !== null) {
 				topt.truePrint = value;
 			}
-			writeOutMaybe(`Boolean true display is "${topt.truePrint ?? "t"}".\n`);
+			writeOutMaybe(
+				`Boolean true display is "${topt.truePrint ?? "t"}".\n`,
+			);
 			return { status: "ok" };
 		}
 		case "display_false": {
 			if (value !== null) {
 				topt.falsePrint = value;
 			}
-			writeOutMaybe(`Boolean false display is "${topt.falsePrint ?? "f"}".\n`);
+			writeOutMaybe(
+				`Boolean false display is "${topt.falsePrint ?? "f"}".\n`,
+			);
 			return { status: "ok" };
 		}
 		case "csv_fieldsep": {

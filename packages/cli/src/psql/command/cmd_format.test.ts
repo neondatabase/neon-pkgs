@@ -408,8 +408,14 @@ describe("\\pset null", () => {
 describe("\\pset display_true / display_false (PG19)", () => {
 	test("sets truePrint / falsePrint", async () => {
 		const settings = defaultSettings(createVarStore());
-		await run(cmdPset, makeMockCtx("pset", "display_true 'true'", settings));
-		await run(cmdPset, makeMockCtx("pset", "display_false 'false'", settings));
+		await run(
+			cmdPset,
+			makeMockCtx("pset", "display_true 'true'", settings),
+		);
+		await run(
+			cmdPset,
+			makeMockCtx("pset", "display_false 'false'", settings),
+		);
 		expect(settings.popt.topt.truePrint).toBe("true");
 		expect(settings.popt.topt.falsePrint).toBe("false");
 	});

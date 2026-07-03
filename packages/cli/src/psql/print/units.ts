@@ -56,7 +56,8 @@ export const renderCellValue = (
 	// BOOLOID column: the text-format wire value is 't'/'f'. Map through the
 	// configured display strings (upstream keys on the 't' first byte).
 	if (dataTypeID === BOOLOID && typeof cell === "string") {
-		if (cell === "t" || cell === "f") return cell === "t" ? trueStr : falseStr;
+		if (cell === "t" || cell === "f")
+			return cell === "t" ? trueStr : falseStr;
 	}
 	if (typeof cell === "string") {
 		return formatNumericLocale(cell, numericLocale, locale);

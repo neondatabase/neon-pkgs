@@ -1936,7 +1936,10 @@ describe("describeOneTableDetails — publication EXCEPT footer (PG19)", () => {
 		const excluded = mkResultSet(["pubname"], [["pub_all_except"]]);
 		const empty = mkResultSet([], []);
 		const conn = pg19Conn([
-			{ match: (s) => s.includes("FROM pg_catalog.pg_attribute"), rs: cols },
+			{
+				match: (s) => s.includes("FROM pg_catalog.pg_attribute"),
+				rs: cols,
+			},
 			tableInfoMatch(),
 			{ match: (s) => s.includes("AND pr.prexcept"), rs: excluded },
 			{ match: () => true, rs: empty },
@@ -1961,7 +1964,10 @@ describe("describeOneTableDetails — publication EXCEPT footer (PG19)", () => {
 		const cols = boringCols();
 		const empty = mkResultSet([], []);
 		const conn = pg19Conn([
-			{ match: (s) => s.includes("FROM pg_catalog.pg_attribute"), rs: cols },
+			{
+				match: (s) => s.includes("FROM pg_catalog.pg_attribute"),
+				rs: cols,
+			},
 			tableInfoMatch(),
 			{ match: () => true, rs: empty },
 		]);
@@ -1987,7 +1993,15 @@ describe("describeOneSequence — Included in publications footer (PG19)", () =>
 
 	const seqRow = () =>
 		mkResultSet(
-			["Type", "Start", "Minimum", "Maximum", "Increment", "Cycles?", "Cache"],
+			[
+				"Type",
+				"Start",
+				"Minimum",
+				"Maximum",
+				"Increment",
+				"Cycles?",
+				"Cache",
+			],
 			[["bigint", "1", "1", "9223372036854775807", "1", "no", "1"]],
 		);
 
@@ -2003,7 +2017,14 @@ describe("describeOneSequence — Included in publications footer (PG19)", () =>
 			{ match: () => true, rs: empty },
 		]);
 		const cap = captureStream();
-		await describeOneSequence(conn, 1, "public", "sq", cap.out, defaultPopt());
+		await describeOneSequence(
+			conn,
+			1,
+			"public",
+			"sq",
+			cap.out,
+			defaultPopt(),
+		);
 		const text = cap.text();
 		expect(text).toContain("Included in publications:");
 		expect(text).toContain('"pub_all_seqs"');
@@ -2022,7 +2043,14 @@ describe("describeOneSequence — Included in publications footer (PG19)", () =>
 			serverVersion: 180000,
 		};
 		const cap = captureStream();
-		await describeOneSequence(conn, 1, "public", "sq", cap.out, defaultPopt());
+		await describeOneSequence(
+			conn,
+			1,
+			"public",
+			"sq",
+			cap.out,
+			defaultPopt(),
+		);
 		expect(cap.text()).not.toContain("Included in publications:");
 		// The empty-stub query never touches puballsequences.
 		const calls = (conn.query as ReturnType<typeof vi.fn>).mock.calls.map(

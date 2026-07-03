@@ -398,7 +398,9 @@ describe("describe/queries — pg19 snapshots (PG-19-only branches)", () => {
 	});
 
 	it("describePublications / pg19 (puballsequences)", () => {
-		expect(q.describePublications({ serverVersion: PG_19 })).toMatchSnapshot();
+		expect(
+			q.describePublications({ serverVersion: PG_19 }),
+		).toMatchSnapshot();
 	});
 
 	it("describeSubscriptions / pg19 / verbose=true (Server, retention, receiver timeout)", () => {
