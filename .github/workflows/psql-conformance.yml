@@ -59,7 +59,9 @@ jobs:
             - uses: ./.github/actions/prepare
 
             - name: Build neonctl (+ deps)
-              run: pnpm --filter neonctl build
+              # `...` force-builds neonctl's workspace deps too (matches
+              # dist-typecheck.yml); neonctl's tsc needs their dist/ output.
+              run: pnpm --filter neonctl... build
 
             - name: Run conformance suite
               working-directory: packages/cli
