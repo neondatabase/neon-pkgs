@@ -1,26 +1,27 @@
-// Runtime fetcher for upstream PostgreSQL regression SQL + expected
-// outputs. We deliberately do NOT vendor these files; the version pin
-// lives in `tests/psql-conformance/POSTGRES_REF` and the fetch happens
-// once at test bootstrap.
+// Loader for upstream PostgreSQL regression SQL + expected outputs, used
+// as ground truth by `regress.spec.ts`. The files are VENDORED under
+// `tests/psql-conformance/fixtures/upstream/<PG_TAG>/` (see that dir's
+// README.md) and the pinned tag lives in `tests/psql-conformance/POSTGRES_REF`.
 //
-// No on-disk cache: every `vitest run` invocation re-fetches. The 6
-// files total ~400 KB, ~1-2 s of HTTPS round-trips. Trading speed for
-// the simpler invariant "the harness always exercises the exact pinned
-// upstream content, no stale local copy can drift".
+// Why vendored rather than fetched: the harness previously downloaded these
+// from raw.githubusercontent.com at bootstrap, which needs public egress at
+// test time. The Databricks protected CI runner group has no such egress
+// (JFrog mirror only), so conformance could not run there. Vendoring the six
+// files removes the network dependency; bumping the pin is a documented
+// re-fetch step (fixtures/upstream/README.md).
 //
-// Files fetched (paths under https://raw.githubusercontent.com/postgres/postgres/<tag>/):
+// Files read (relative to fixtures/upstream/<tag>/):
 //
-//   src/test/regress/sql/psql.sql
-//   src/test/regress/sql/psql_crosstab.sql
-//   src/test/regress/sql/psql_pipeline.sql
-//   src/test/regress/expected/psql.out
-//   src/test/regress/expected/psql_crosstab.out
-//   src/test/regress/expected/psql_pipeline.out
+//   sql/psql.sql
+//   sql/psql_crosstab.sql
+//   sql/psql_pipeline.sql
+//   expected/psql.out
+//   expected/psql_crosstab.out
+//   expected/psql_pipeline.out
 //
 // Returns a map keyed by the SHORT NAME used by `regress.spec.ts`
 // (`'psql' | 'psql_crosstab' | 'psql_pipeline'`) with both `.sql` and
-// `.expected` strings. `regress.spec.ts` consumes the maps directly
-// instead of reading from disk.
+// `.expected` strings.
 
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -28,8 +29,7 @@ import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const POSTGRES_REF_PATH = resolve(HERE, "..", "POSTGRES_REF");
-
-const RAW_BASE = "https://raw.githubusercontent.com/postgres/postgres";
+const FIXTURES_ROOT = resolve(HERE, "..", "fixtures", "upstream");
 
 export type RegressCaseName = "psql" | "psql_crosstab" | "psql_pipeline";
 
@@ -46,7 +46,7 @@ const REGRESS_CASES: readonly RegressCaseName[] = [
 
 /**
  * Parse `POSTGRES_REF` for the pinned tag. Throws if missing — the
- * fetcher cannot work without a pin.
+ * loader cannot pick a fixture directory without a pin.
  */
 const readPgTag = (): string => {
 	const raw = readFileSync(POSTGRES_REF_PATH, "utf8");
@@ -61,38 +61,40 @@ const readPgTag = (): string => {
 	throw new Error(`PG_TAG missing from ${POSTGRES_REF_PATH}`);
 };
 
-const fetchText = async (url: string): Promise<string> => {
-	const res = await fetch(url);
-	if (!res.ok) {
-		throw new Error(`HTTP ${res.status} ${res.statusText} for ${url}`);
+const readFixture = (
+	tag: string,
+	kind: "sql" | "expected",
+	name: string,
+): string => {
+	const ext = kind === "sql" ? "sql" : "out";
+	const path = join(FIXTURES_ROOT, tag, kind, `${name}.${ext}`);
+	try {
+		return readFileSync(path, "utf8");
+	} catch (err) {
+		throw new Error(
+			`vendored regress fixture missing: ${path} — re-fetch for PG_TAG=${tag} ` +
+				`(see tests/psql-conformance/fixtures/upstream/README.md). Cause: ${String(err)}`,
+		);
 	}
-	return res.text();
 };
 
 /**
- * Download SQL + expected for every regress case in parallel. Returns
- * a map keyed by short name. Throws if any fetch fails (no partial
- * success — a half-fetched fixture set would silently break tests).
+ * Load SQL + expected for every regress case from the vendored fixtures for
+ * the pinned tag. Returns a map keyed by short name. Throws if any file is
+ * missing (no partial success — a half-loaded fixture set would silently
+ * break tests). Async signature is retained so callers' `await` is unchanged.
  */
 export const fetchRegressFixtures = async (): Promise<
 	Map<RegressCaseName, UpstreamRegressFixture>
 > => {
 	const tag = readPgTag();
-	const requests: Promise<{
-		name: RegressCaseName;
-		fixture: UpstreamRegressFixture;
-	}>[] = REGRESS_CASES.map(async (name) => {
-		const [sql, expected] = await Promise.all([
-			fetchText(`${RAW_BASE}/${tag}/src/test/regress/sql/${name}.sql`),
-			fetchText(
-				`${RAW_BASE}/${tag}/src/test/regress/expected/${name}.out`,
-			),
-		]);
-		return { name, fixture: { sql, expected } };
-	});
-	const results = await Promise.all(requests);
 	const map = new Map<RegressCaseName, UpstreamRegressFixture>();
-	for (const r of results) map.set(r.name, r.fixture);
+	for (const name of REGRESS_CASES) {
+		map.set(name, {
+			sql: readFixture(tag, "sql", name),
+			expected: readFixture(tag, "expected", name),
+		});
+	}
 	return map;
 };
 

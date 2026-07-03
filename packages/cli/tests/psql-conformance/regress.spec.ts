@@ -1,11 +1,11 @@
 // SQL regression driver. For each upstream regress case we:
 //   1. boot postgres (via globalSetup -> pg-fixture)
-//   2. fetch the SQL + expected output from upstream PostgreSQL at the
-//      commit pinned in `tests/psql-conformance/POSTGRES_REF` (no on-disk
-//      vendor copy — the harness owns the fetch via
-//      `harness/upstream-fixtures.ts`)
-//   3. shell out to $PSQL_BINARY with the fetched SQL on stdin
-//   4. normalize stdout and diff against the fetched expected file
+//   2. load the SQL + expected output for the tag pinned in
+//      `tests/psql-conformance/POSTGRES_REF` from the vendored fixtures
+//      (`harness/upstream-fixtures.ts` reads them from
+//      `tests/psql-conformance/fixtures/upstream/<PG_TAG>/`)
+//   3. shell out to $PSQL_BINARY with the loaded SQL on stdin
+//   4. normalize stdout and diff against the expected file
 //   5. assert the diff is empty
 //
 // Day-1 invariant: with PSQL_BINARY pointing at the system psql, all
@@ -13,11 +13,10 @@
 // TS implementation should be marked `it.todo("reason")` (engine gap)
 // or `it.skip("reason")` (out of scope) in their spec file.
 //
-// Upstream sources fetched at runtime (see harness/upstream-fixtures.ts):
-//   https://github.com/postgres/postgres/blob/REL_19_BETA1/src/test/regress/sql/psql.sql
-//   https://github.com/postgres/postgres/blob/REL_19_BETA1/src/test/regress/sql/psql_crosstab.sql
-//   https://github.com/postgres/postgres/blob/REL_19_BETA1/src/test/regress/sql/psql_pipeline.sql
-//   …and the matching expected/ outputs.
+// Upstream sources are vendored (no network at test time) from
+// REL_19_BETA1 — see fixtures/upstream/README.md:
+//   src/test/regress/sql/{psql,psql_crosstab,psql_pipeline}.sql
+//   src/test/regress/expected/{psql,psql_crosstab,psql_pipeline}.out
 
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";

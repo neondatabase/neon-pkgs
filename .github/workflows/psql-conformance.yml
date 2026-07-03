@@ -1,0 +1,95 @@
+# psql conformance harness (packages/cli).
+#
+# Drives packages/cli/tests/psql-conformance against the TypeScript psql
+# implementation, using upstream PostgreSQL regression scripts as ground
+# truth. The scripts are VENDORED under
+# packages/cli/tests/psql-conformance/fixtures/upstream/<PG_TAG>/ (pinned
+# in POSTGRES_REF, currently REL_19_BETA1) so no public egress is needed at
+# test time — the protected runner group can only reach the JFrog mirror.
+#
+# MATRIX: Neon supports PG 14-18; we also exercise 19beta1 to track upstream
+# psql parity ahead of the server GA. Per-subtest deferred work is tracked
+# inline in the spec files via it.todo/it.skip — see the suite README.
+#
+# BLOCKING: green across the matrix, so failures gate merge. The harness
+# boots its own postgres via @testcontainers/postgresql (Docker is available
+# on the runner group — the existing Test job already uses testcontainers for
+# the *.integration.test.ts suites).
+
+name: psql conformance
+
+on:
+    pull_request:
+        paths:
+            - "packages/cli/src/psql/**"
+            - "packages/cli/tests/psql-conformance/**"
+            - ".github/workflows/psql-conformance.yml"
+    push:
+        branches:
+            - main
+
+permissions:
+    contents: read
+    id-token: write # mint the JFrog OIDC token in ./.github/actions/prepare
+
+# Cancel superseded runs on the same ref so re-pushed branches do not pile
+# up matrix jobs.
+concurrency:
+    group: psql-conformance-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    psql-conformance:
+        name: psql-conformance (pg-${{ matrix.pg }})
+        runs-on:
+            group: neondatabase-protected-runner-group
+            labels: linux-ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                pg: ["14", "15", "16", "17", "18", "19beta1"]
+
+        steps:
+            - name: Harden the runner (Audit all outbound calls)
+              uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
+              with:
+                  egress-policy: audit
+
+            - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+            - uses: ./.github/actions/prepare
+
+            - name: Build neonctl (+ deps)
+              run: pnpm --filter neonctl build
+
+            - name: Run conformance suite
+              working-directory: packages/cli
+              env:
+                  # dist/psql/cli.js is the standalone psql shim — the yargs
+                  # CLI (dist/cli.js) intercepts libpq flags like -v, so the
+                  # harness routes through the shim.
+                  PSQL_BINARY: ${{ github.workspace }}/packages/cli/dist/psql/cli.js
+                  # Opt in to the TAP-style integration specs (they self-skip
+                  # otherwise — see tap/_helpers.ts:RUN_INTEGRATION).
+                  RUN_INTEGRATION: "1"
+                  # Pin the testcontainers image to this matrix row's PG major;
+                  # pg-fixture.ts boots it with the full seed + bind-mount and
+                  # probes the server major from the running container.
+                  PGCONFORMANCE_PG_IMAGE: postgres:${{ matrix.pg }}
+              run: |
+                  set -o pipefail
+                  # Log lands under tests/psql-conformance/ where the suite's
+                  # .gitignore already excludes *.log, so a stray local run
+                  # never gets committed.
+                  pnpm test:conformance 2>&1 \
+                    | tee tests/psql-conformance/psql-conformance.log
+
+            - name: Upload conformance log
+              if: always()
+              uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+              with:
+                  # Artifact names must be unique within a run; suffix with the
+                  # matrix PG major.
+                  name: psql-conformance-pg-${{ matrix.pg }}
+                  path: packages/cli/tests/psql-conformance/psql-conformance.log
+                  if-no-files-found: warn
+                  retention-days: 14
