@@ -54,6 +54,7 @@ jobs:
 
                       - [ ] Review added/removed operations in `packages/sdk/src/client/sdk.gen.ts`
                       - [ ] Update `packages/sdk/src/neon/coverage.ts` (`EXPECTED_OPERATIONS`; wrap new ops in `WRAPPED` where ergonomic treatment is warranted)
+                      - [ ] Update `packages/sdk/README.md` API reference for any new ergonomic wrappers
                       - [ ] Run `pnpm --filter @neon/sdk test:ci` locally
                       - [ ] Add a changeset if this should ship a new `@neon/sdk` version
 

@@ -144,7 +144,7 @@ await neon.projects.transfer({
 
 | Method | Returns | Notes |
 | --- | --- | --- |
-| `list(projectId, query?)` | **[P]** `Branch` | `query`: `{ search?, sort_by?, sort_order? }` |
+| `list(projectId, query?)` | **[P]** `Branch` | `query`: `{ search?, sort_by?, sort_order?, include_deleted? }` |
 | `get(projectId, branchId)` | `Branch` | |
 | `create(projectId, input?)` | `Branch` | `input`: `{ name?, parent_id?, parent_lsn?, parent_timestamp?, protected? }` |
 | `update(projectId, branchId, input)` | `Branch` | `input`: `{ name?, protected?, expires_at? }` |
@@ -152,6 +152,7 @@ await neon.projects.transfer({
 | `createWithCompute(projectId, input, { pooled? })` | **[W]** `{ branch, endpoint, connectionString }` | `input`: `{ name?, parentId?, compute?: { minCu?, maxCu?, suspendTimeoutSeconds? } }` |
 | `getDefault(projectId)` | `Branch` | resolves the default branch by the `default` flag |
 | `setDefault(projectId, branchId)` | `Branch` | |
+| `recover(projectId, branchId)` | `Branch` | beta — recover a soft-deleted branch within the 7-day window |
 | `finalizeRestore(projectId, branchId, { name? }?)` | **→void** | commits a restore previewed with `snapshots.restore({ finalize: false })` |
 
 ```ts
@@ -225,6 +226,91 @@ const { data: role } = await neon.postgres.roles.resetPassword(projectId, branch
 | `create(projectId, branchId, databaseName, input?)` | `DataApiCreateResponse` |
 | `update(projectId, branchId, databaseName, input?)` | **→void** |
 | `delete(projectId, branchId, databaseName)` | **→void** |
+
+### `neon.storage`
+
+Branch-scoped object storage (beta). `neon.storage.get` returns whether storage is
+enabled and the branch S3 endpoint metadata; buckets and objects are nested underneath.
+
+#### `neon.storage` (branch state)
+
+| Method | Returns |
+| --- | --- |
+| `get(projectId, branchId)` | `BranchStorage` |
+
+#### `neon.storage.buckets`
+
+| Method | Returns |
+| --- | --- |
+| `list(projectId, branchId)` | `Bucket[]` |
+| `create(projectId, branchId, { name, access_level? })` | `Bucket` — `access_level`: `"private"` \| `"public_read"` |
+| `delete(projectId, branchId, bucketName)` | **→void** |
+
+#### `neon.storage.objects`
+
+| Method | Returns | Notes |
+| --- | --- | --- |
+| `list(projectId, branchId, bucketName, query?)` | `BucketObjectsListResponse` | `query`: `{ prefix?, delimiter?, cursor?, limit? }` — one page (`folders`, `objects`, `next_cursor`) |
+| `get(projectId, branchId, bucketName, objectKey)` | `Blob` | raw object bytes |
+| `delete(projectId, branchId, bucketName, objectKey)` | **→void** | |
+| `deleteByPrefix(projectId, branchId, bucketName, prefix)` | `{ deleted: number }` | `prefix` must end with `/` |
+| `presign(projectId, branchId, bucketName, objectKey, input)` | `PresignResponse` | `input`: `{ operation: "upload" \| "download", content_type?, expires_in_seconds? }` |
+
+```ts
+// Upload via presigned PUT (same flow as neonctl bucket object put)
+const { data: presign } = await neon.storage.objects.presign(
+  projectId, branchId, "avatars", "user-1.png",
+  { operation: "upload", content_type: "image/png" },
+);
+if (!presign) throw new Error("presign failed");
+
+await fetch(presign.url, {
+  method: "PUT",
+  headers: { ...presign.headers, "Content-Length": String(bytes.length) },
+  body: bytes,
+});
+```
+
+### `neon.functions`
+
+Branch-scoped Neon Functions (beta).
+
+| Method | Returns | Notes |
+| --- | --- | --- |
+| `list(projectId, branchId, query?)` | **[P]** `NeonFunction` | `query`: `{ limit? }` |
+| `get(projectId, branchId, slug)` | `NeonFunction` | |
+| `update(projectId, branchId, slug, input)` | `NeonFunction` | `input`: `{ name? }` |
+| `delete(projectId, branchId, slug)` | **→void** | |
+| `deploy(projectId, branchId, slug, input?)` | `NeonFunctionDeployment` | multipart — `input`: `{ zip?: Blob \| File, runtime?: "nodejs24", environment?: string }` (`environment` is a JSON-encoded `Record<string, string>`) |
+
+```ts
+// Deploy a bundled index.mjs inside a zip (first deploy must include zip)
+const zip = await Bun.file("bundle.zip").arrayBuffer();
+const { data: deployment } = await neon.functions.deploy(projectId, branchId, "api", {
+  zip: new File([zip], "bundle.zip", { type: "application/zip" }),
+  runtime: "nodejs24",
+});
+// Poll neon.functions.get until current_deployment.status is "completed"
+```
+
+### `neon.credentials`
+
+Branch-scoped scoped credentials (beta). Secrets (`api_token`, `s3_secret_access_key`)
+are returned **once** on `create`.
+
+| Method | Returns | Notes |
+| --- | --- | --- |
+| `list(projectId, branchId)` | `CredentialMeta[]` | |
+| `create(projectId, branchId, input)` | `CreateCredentialResponse` | `input`: `{ name?, scopes, principal_type: "user" }` — scopes: `storage:read`, `storage:write`, `ai_gateway:invoke`, `functions:invoke` |
+| `revoke(projectId, branchId, tokenId)` | **→void** | |
+
+### `neon.aiGateway`
+
+Branch-scoped AI Gateway endpoint metadata (beta).
+
+| Method | Returns | Notes |
+| --- | --- | --- |
+| `get(projectId, branchId)` | `BranchAiGateway` | 404 when AI Gateway is not enabled on the branch |
 
 ### `neon.snapshots`
 
@@ -342,7 +428,7 @@ pnpm --filter @neon/sdk generate     # regenerate src/client
 pnpm --filter @neon/sdk build        # typecheck + bundle
 ```
 
-A coverage test (`src/neon/coverage.test.ts`) fails CI whenever the generated operation set changes, so every new endpoint is consciously wrapped or left raw-only.
+A coverage test (`src/neon/coverage.test.ts`) fails CI whenever the generated operation set changes, so every new endpoint is consciously wrapped or left raw-only. When you wrap new endpoints, also update this README (see `AGENTS.md` → **The SDK package**).
 
 ## License
 

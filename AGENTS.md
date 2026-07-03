@@ -129,8 +129,25 @@ someone updates `packages/sdk/src/neon/coverage.ts`:
 2. Wrap new ops in the ergonomic layer where warranted (and add them to `WRAPPED`),
    or accept them as raw-only.
 3. Update `EXPECTED_OPERATIONS` to match the new generated set.
-4. Run `pnpm --filter @neon/sdk test:ci` locally.
-5. Add a changeset if the refresh should ship a new `@neon/sdk` version.
+4. **Update `packages/sdk/README.md`** — the API reference section must stay in sync
+   with every new ergonomic namespace/method (see below).
+5. Run `pnpm --filter @neon/sdk test:ci` locally.
+6. Add a changeset if the refresh should ship a new `@neon/sdk` version.
+
+**Adding or changing ergonomic APIs — always update the README:**
+
+`packages/sdk/README.md` is the public API reference for `createNeonClient`. Whenever
+you add, rename, or remove an ergonomic wrapper (not raw-only endpoints), update the
+README in the **same PR**:
+
+1. Add or edit the matching section under **API reference** (method tables + a short
+   example when the call shape is non-obvious — e.g. multipart deploy, presigned upload).
+2. Keep the same conventions as existing sections: **[P]** for paginated `list()`,
+   **→void**, nested sub-resources (`neon.storage.buckets`, `neon.postgres.roles`, …).
+3. If a namespace is new, add a `### neon.<namespace>` heading in logical order
+   (branch-scoped features after `neon.branches` / `neon.postgres`).
+4. Do **not** duplicate the full raw inventory — raw-only endpoints stay documented
+   implicitly via the **Raw layer** section.
 
 `hey-api` does not treat Neon's `x-stability-level` (alpha/beta) differently — beta
 and private-preview endpoints are generated identically to stable ones. Access
