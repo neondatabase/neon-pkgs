@@ -410,13 +410,55 @@ Anything not wrapped above is available raw. Pass `neon.client` to reuse the cli
 import { raw } from "@neon/sdk";
 // or, for guaranteed tree-shaking: import { getProjectBranchSchema } from "@neon/sdk/raw";
 
-const { data } = await raw.getProjectBranchSchema({
+const { data, error } = await raw.getProjectBranchSchema({
   client: neon.client,
   path: { project_id, branch_id },
 });
 ```
 
-`neon.client` is the underlying configured Fetch client; `raw.*` are the generated functions, and all request/response/error **types** are re-exported flat from `@neon/sdk` for `import type { Project, Branch, … }`.
+**The raw layer speaks the exact same result contract as the ergonomic client.** By default a
+raw call resolves to a `{ data, error }` `NeonResult` with the typed `NeonError` on the error
+channel; pass `throwOnError: true` to get the bare resource and throw instead — and the
+return type narrows accordingly:
+
+```ts
+// bare resource, throws the typed NeonError on failure
+const { project } = await raw.getProject({
+  client: neon.client,
+  path: { project_id },
+  throwOnError: true,
+});
+```
+
+There is no `responseStyle` switch — `throwOnError` is the only one. `neon.client` is the
+underlying configured Fetch client; `raw.*` are the wrapped generated functions, and all
+request/response/error **types** are re-exported flat from `@neon/sdk` for
+`import type { Project, Branch, … }`.
+
+### `neon.auth`
+
+Branch-scoped Neon Auth (the legacy project-scoped endpoints are deprecated and stay raw-only).
+
+| Method | Returns | Notes |
+| --- | --- | --- |
+| `get(projectId, branchId)` | `NeonAuthIntegration` | |
+| `create(projectId, branchId, input)` | `NeonAuthCreateIntegrationResponse` | enable the integration |
+| `disable(projectId, branchId, { deleteData? }?)` | **→void** | |
+| `updateConfig(projectId, branchId, input)` | `NeonAuthConfigResponse` | |
+| `oauthProviders.list / add / update / delete` | `NeonAuthOauthProvider`(`[]`) / **→void** | |
+| `trustedDomains.list / add / delete` | `NeonAuthRedirectUriWhitelistDomain[]` / **→void** | redirect-URI whitelist |
+| `users.create / delete / updateRole` | `NeonAuthCreateNewUserResponse` / **→void** / role | |
+
+### `neon.projects.permissions`
+
+| Method | Returns |
+| --- | --- |
+| `list(projectId)` | `ProjectPermission[]` |
+| `grant(projectId, email)` | `ProjectPermission` |
+| `revoke(projectId, permissionId)` | `ProjectPermission` |
+
+Also on `neon.projects`: `recover(id)` (beta — recover a soft-deleted project), and on
+`neon.postgres.endpoints`: `listByBranch(projectId, branchId)` → `Endpoint[]`.
 
 ## Regenerating the client
 

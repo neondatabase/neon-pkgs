@@ -3,6 +3,7 @@ import { type NeonConfig, resolveConfig } from "./config.js";
 import { RequestContext } from "./context.js";
 import { ApiKeys, Regions, User } from "./resources/account.js";
 import { AiGateway } from "./resources/ai-gateway.js";
+import { Auth } from "./resources/auth.js";
 import { Branches } from "./resources/branches.js";
 import { Consumption } from "./resources/consumption.js";
 import { Credentials } from "./resources/credentials.js";
@@ -32,6 +33,7 @@ export interface NeonClient<DThrow extends boolean> {
 	readonly aiGateway: AiGateway<DThrow>;
 	readonly snapshots: Snapshots<DThrow>;
 	readonly operations: Operations<DThrow>;
+	readonly auth: Auth<DThrow>;
 	readonly consumption: Consumption;
 	readonly apiKeys: ApiKeys<DThrow>;
 	readonly regions: Regions<DThrow>;
@@ -68,6 +70,7 @@ export function createNeonClient<Throw extends boolean = false>(
 		aiGateway: new AiGateway<Throw>(ctx),
 		snapshots: new Snapshots<Throw>(ctx),
 		operations: new Operations<Throw>(ctx),
+		auth: new Auth<Throw>(ctx),
 		consumption: new Consumption(ctx),
 		apiKeys: new ApiKeys<Throw>(ctx),
 		regions: new Regions<Throw>(ctx),

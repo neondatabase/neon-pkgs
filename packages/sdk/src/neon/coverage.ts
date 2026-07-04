@@ -25,6 +25,11 @@ export const WRAPPED: ReadonlySet<string> = new Set([
 	// projects: transfer
 	"transferProjectsFromOrgToOrg",
 	"transferProjectsFromUserToOrg",
+	// projects: recover + permissions
+	"recoverProject",
+	"listProjectPermissions",
+	"grantPermissionToProject",
+	"revokePermissionFromProject",
 	// branches
 	"listProjectBranches",
 	"getProjectBranch",
@@ -34,6 +39,21 @@ export const WRAPPED: ReadonlySet<string> = new Set([
 	"setDefaultProjectBranch",
 	"finalizeRestoreBranch",
 	"recoverProjectBranch",
+	// neon auth (branch-scoped)
+	"getNeonAuth",
+	"createNeonAuth",
+	"disableNeonAuth",
+	"updateNeonAuthConfig",
+	"listBranchNeonAuthOauthProviders",
+	"addBranchNeonAuthOauthProvider",
+	"updateBranchNeonAuthOauthProvider",
+	"deleteBranchNeonAuthOauthProvider",
+	"listBranchNeonAuthTrustedDomains",
+	"addBranchNeonAuthTrustedDomain",
+	"deleteBranchNeonAuthTrustedDomain",
+	"createBranchNeonAuthNewUser",
+	"deleteBranchNeonAuthUser",
+	"updateNeonAuthUserRole",
 	// storage
 	"getProjectBranchStorage",
 	"listProjectBranchBuckets",
@@ -61,6 +81,7 @@ export const WRAPPED: ReadonlySet<string> = new Set([
 	"listProjectOperations",
 	// postgres: endpoints
 	"listProjectEndpoints",
+	"listProjectBranchEndpoints",
 	"getProjectEndpoint",
 	"createProjectEndpoint",
 	"updateProjectEndpoint",

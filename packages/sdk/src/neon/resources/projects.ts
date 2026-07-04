@@ -2,7 +2,11 @@ import {
 	createProject,
 	deleteProject,
 	getProject,
+	grantPermissionToProject,
+	listProjectPermissions,
 	listProjects,
+	recoverProject,
+	revokePermissionFromProject,
 	transferProjectsFromOrgToOrg,
 	transferProjectsFromUserToOrg,
 	updateProject,
@@ -12,6 +16,7 @@ import type {
 	Project,
 	ProjectCreateRequest,
 	ProjectListItem,
+	ProjectPermission,
 	ProjectUpdateRequest,
 } from "../../client/types.gen.js";
 import { withConnectionString } from "../connection.js";
@@ -45,12 +50,104 @@ export interface ProjectConnection {
 	connectionString: string;
 }
 
-/** Project resource — one API call per method (`list` is cursor-paginated). */
-export class Projects<DThrow extends boolean> {
+/** Project access grants (share a project with additional users by email). */
+export class Permissions<DThrow extends boolean> {
 	readonly #ctx: RequestContext;
 
 	constructor(ctx: RequestContext) {
 		this.#ctx = ctx;
+	}
+
+	/** @apiCall GET /projects/{project_id}/permissions */
+	list(projectId: string): Promise<Outcome<ProjectPermission[], DThrow>>;
+	list<Throw extends boolean = DThrow>(
+		projectId: string,
+		opts: CallOptions<Throw>,
+	): Promise<Outcome<ProjectPermission[], Throw>>;
+	list(
+		projectId: string,
+		opts?: CallOptions,
+	): Promise<ProjectPermission[] | NeonResult<ProjectPermission[]>> {
+		return this.#ctx.run(
+			opts,
+			(client) =>
+				listProjectPermissions({
+					client,
+					path: { project_id: projectId },
+					throwOnError: false,
+				}),
+			(data) => data.project_permissions,
+		);
+	}
+
+	/** @apiCall POST /projects/{project_id}/permissions */
+	grant(
+		projectId: string,
+		email: string,
+	): Promise<Outcome<ProjectPermission, DThrow>>;
+	grant<Throw extends boolean = DThrow>(
+		projectId: string,
+		email: string,
+		opts: CallOptions<Throw>,
+	): Promise<Outcome<ProjectPermission, Throw>>;
+	grant(
+		projectId: string,
+		email: string,
+		opts?: CallOptions,
+	): Promise<ProjectPermission | NeonResult<ProjectPermission>> {
+		return this.#ctx.run(
+			opts,
+			(client) =>
+				grantPermissionToProject({
+					client,
+					path: { project_id: projectId },
+					body: { email },
+					throwOnError: false,
+				}),
+			(data) => data,
+		);
+	}
+
+	/** @apiCall DELETE /projects/{project_id}/permissions/{permission_id} */
+	revoke(
+		projectId: string,
+		permissionId: string,
+	): Promise<Outcome<ProjectPermission, DThrow>>;
+	revoke<Throw extends boolean = DThrow>(
+		projectId: string,
+		permissionId: string,
+		opts: CallOptions<Throw>,
+	): Promise<Outcome<ProjectPermission, Throw>>;
+	revoke(
+		projectId: string,
+		permissionId: string,
+		opts?: CallOptions,
+	): Promise<ProjectPermission | NeonResult<ProjectPermission>> {
+		return this.#ctx.run(
+			opts,
+			(client) =>
+				revokePermissionFromProject({
+					client,
+					path: {
+						project_id: projectId,
+						permission_id: permissionId,
+					},
+					throwOnError: false,
+				}),
+			(data) => data,
+		);
+	}
+}
+
+/** Project resource — one API call per method (`list` is cursor-paginated). */
+export class Projects<DThrow extends boolean> {
+	readonly #ctx: RequestContext;
+	/** Project access grants (share by email). */
+	readonly permissions: Permissions<DThrow>;
+
+	constructor(ctx: RequestContext) {
+		this.#ctx = ctx;
+		this.permissions = new Permissions<DThrow>(ctx);
 	}
 
 	/**
@@ -218,6 +315,33 @@ export class Projects<DThrow extends boolean> {
 			opts,
 			(client) =>
 				deleteProject({
+					client,
+					path: { project_id: id },
+					throwOnError: false,
+				}),
+			(data) => data.project,
+		);
+	}
+
+	/**
+	 * Recover a soft-deleted project within its retention window (beta). Mirrors
+	 * `branches.recover` at the project level.
+	 *
+	 * @apiCall POST /projects/{project_id}/recover
+	 */
+	recover(id: string): Promise<Outcome<Project, DThrow>>;
+	recover<Throw extends boolean = DThrow>(
+		id: string,
+		opts: CallOptions<Throw>,
+	): Promise<Outcome<Project, Throw>>;
+	recover(
+		id: string,
+		opts?: CallOptions,
+	): Promise<Project | NeonResult<Project>> {
+		return this.#ctx.run(
+			opts,
+			(client) =>
+				recoverProject({
 					client,
 					path: { project_id: id },
 					throwOnError: false,
