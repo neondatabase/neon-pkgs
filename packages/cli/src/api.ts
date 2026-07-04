@@ -192,6 +192,18 @@ function readSocketCode(err: unknown): string | undefined {
 	return undefined;
 }
 
+/**
+ * The wrapped `@neon/sdk/raw` layer surfaces a typed `NeonError` on `.error`, whose `.body`
+ * holds the original parsed API error body. Unwrap it so {@link httpError} sees the body
+ * (message/code) rather than the SDK wrapper object.
+ */
+function rawErrorBody(error: unknown): unknown {
+	if (error && typeof error === "object" && "body" in error) {
+		return error.body;
+	}
+	return error;
+}
+
 /** Build a {@link NeonApiError} from a non-2xx `Response` and its parsed body. */
 function httpError(response: Response, body: unknown): NeonApiError {
 	let requestPath: string | undefined;
@@ -357,7 +369,10 @@ export const getApiClient = ({ apiKey, apiHost }: ApiCallProps) => {
 			);
 		}
 		if (!response.ok) {
-			throw httpError(response, result.error ?? result.data);
+			throw httpError(
+				response,
+				rawErrorBody(result.error) ?? result.data,
+			);
 		}
 		return {
 			data: result.data as T,

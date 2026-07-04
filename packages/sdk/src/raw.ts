@@ -26,4 +26,9 @@ export * from "./client/raw.gen.js";
 // Every generated request/response/schema type, flat.
 export type * from "./client/types.gen.js";
 // The wrapper primitive, for advanced users composing their own raw calls.
-export { type RawData, type RawOptions, wrapRaw } from "./neon/raw-wrap.js";
+export {
+	type RawData,
+	type RawOptions,
+	type RawResult,
+	wrapRaw,
+} from "./neon/raw-wrap.js";

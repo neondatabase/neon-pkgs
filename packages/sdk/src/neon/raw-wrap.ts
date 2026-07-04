@@ -3,15 +3,19 @@
  *
  * The generated `client/sdk.gen.ts` functions return hey-api's `{ data, error, request,
  * response }` envelope and are driven by two orthogonal switches (`throwOnError` and
- * `responseStyle`). {@link wrapRaw} collapses that onto the *same* contract the ergonomic
- * client uses: a {@link NeonResult} by default, the bare resource under `throwOnError`, and
- * the typed {@link NeonError} hierarchy on the error channel either way. `responseStyle` is
- * intentionally removed from the public raw surface — `throwOnError` is the only switch, and
- * the return type always tracks it.
+ * `responseStyle`). {@link wrapRaw} collapses that onto the ergonomic client's contract: a
+ * `{ data, error }` result by default (with the typed {@link NeonError} on the error
+ * channel), or the bare resource when you pass `throwOnError: true`. `responseStyle` is
+ * removed from the public raw surface — `throwOnError` is the only switch and the return
+ * type always tracks it.
+ *
+ * The one difference from the ergonomic `NeonResult` is that the raw result also exposes the
+ * underlying `response`/`request`, so power users (and the neonctl CLI) can read HTTP status
+ * and headers without dropping to the low-level client.
  */
 
+import type { NeonError } from "./errors.js";
 import { toNeonError } from "./errors.js";
-import { err, type NeonResult, ok } from "./result.js";
 
 /**
  * Structural shape of any generated raw function: generic over `throwOnError`, resolving to
@@ -49,15 +53,19 @@ export type RawOptions<F extends AnyRawFn> = Omit<
 	"throwOnError" | "responseStyle"
 >;
 
-/** Normalize a generated envelope into a {@link NeonResult}. */
-function toOutcome<T>(raw: RawFieldsResult<T>): NeonResult<T> {
-	if (raw.error !== undefined && raw.error !== null) {
-		return err(toNeonError(raw.error, raw.response));
-	}
-	// On success the payload is present (or `void`/`undefined` for 204 endpoints); it is the
-	// declared `T` by construction of the generated function's response types.
-	return ok(raw.data as T);
-}
+/**
+ * The non-throwing result of a wrapped raw call: the ergonomic `{ data, error }` union
+ * (typed {@link NeonError}), plus the underlying `response`/`request` for HTTP status and
+ * headers.
+ */
+export type RawResult<T> =
+	| { data: T; error: undefined; response?: Response; request?: Request }
+	| {
+			data: undefined;
+			error: NeonError;
+			response?: Response;
+			request?: Request;
+	  };
 
 /**
  * Wrap a generated raw function so it speaks the ergonomic result contract.
@@ -77,20 +85,36 @@ export function wrapRaw<F extends AnyRawFn>(fn: F & AnyRawFn) {
 	): Promise<RawData<F>>;
 	function call(
 		options: RawOptions<F> & { throwOnError?: false },
-	): Promise<NeonResult<RawData<F>>>;
+	): Promise<RawResult<RawData<F>>>;
 	async function call(
 		options: RawOptions<F> & { throwOnError?: boolean },
-	): Promise<RawData<F> | NeonResult<RawData<F>>> {
+	): Promise<RawData<F> | RawResult<RawData<F>>> {
 		const shouldThrow = options.throwOnError === true;
 		const raw: RawFieldsResult<RawData<F>> = await fn({
 			...options,
 			throwOnError: false,
 			responseStyle: "fields",
 		});
-		const outcome = toOutcome(raw);
-		if (!shouldThrow) return outcome;
-		if (outcome.error) throw outcome.error;
-		return outcome.data;
+		if (raw.error !== undefined && raw.error !== null) {
+			const error = toNeonError(raw.error, raw.response);
+			if (shouldThrow) throw error;
+			return {
+				data: undefined,
+				error,
+				response: raw.response,
+				request: raw.request,
+			};
+		}
+		// On success the payload is present (or `void`/`undefined` for 204 endpoints); it is
+		// the declared `RawData<F>` by construction of the generated response types.
+		const data = raw.data as RawData<F>;
+		if (shouldThrow) return data;
+		return {
+			data,
+			error: undefined,
+			response: raw.response,
+			request: raw.request,
+		};
 	}
 	return call;
 }
