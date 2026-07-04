@@ -1,5 +1,19 @@
 # neonctl
 
+## 2.30.1
+
+### Patch Changes
+
+- d511ca4: Adapt the API layer to `@neon/sdk@1.0.0`'s unified raw contract: raw calls now resolve to
+  `{ data, error }` with a typed `NeonError`, and the CLI unwraps the error body accordingly.
+  No user-facing behavior change.
+- Updated dependencies [9b2794e]
+- Updated dependencies [d511ca4]
+  - @neon/sdk@1.0.0
+  - @neon/config@0.9.1
+  - @neon/config-runtime@0.9.1
+  - @neon/env@0.10.1
+
 ## 2.30.0
 
 ### Minor Changes
