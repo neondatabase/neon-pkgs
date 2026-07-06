@@ -2,12 +2,17 @@ import type { Client } from "../client/client/index.js";
 import { type NeonConfig, resolveConfig } from "./config.js";
 import { RequestContext } from "./context.js";
 import { ApiKeys, Regions, User } from "./resources/account.js";
+import { AiGateway } from "./resources/ai-gateway.js";
+import { Auth } from "./resources/auth.js";
 import { Branches } from "./resources/branches.js";
 import { Consumption } from "./resources/consumption.js";
+import { Credentials } from "./resources/credentials.js";
+import { Functions } from "./resources/functions.js";
 import { Operations } from "./resources/operations.js";
 import { Postgres } from "./resources/postgres.js";
 import { Projects } from "./resources/projects.js";
 import { Snapshots } from "./resources/snapshots.js";
+import { Storage } from "./resources/storage.js";
 
 /**
  * The ergonomic Neon client. Resource namespaces wrap the raw operations with auth-once,
@@ -22,8 +27,13 @@ export interface NeonClient<DThrow extends boolean> {
 	readonly projects: Projects<DThrow>;
 	readonly branches: Branches<DThrow>;
 	readonly postgres: Postgres<DThrow>;
+	readonly storage: Storage<DThrow>;
+	readonly functions: Functions<DThrow>;
+	readonly credentials: Credentials<DThrow>;
+	readonly aiGateway: AiGateway<DThrow>;
 	readonly snapshots: Snapshots<DThrow>;
 	readonly operations: Operations<DThrow>;
+	readonly auth: Auth<DThrow>;
 	readonly consumption: Consumption;
 	readonly apiKeys: ApiKeys<DThrow>;
 	readonly regions: Regions<DThrow>;
@@ -54,8 +64,13 @@ export function createNeonClient<Throw extends boolean = false>(
 		projects: new Projects<Throw>(ctx),
 		branches: new Branches<Throw>(ctx),
 		postgres: new Postgres<Throw>(ctx),
+		storage: new Storage<Throw>(ctx),
+		functions: new Functions<Throw>(ctx),
+		credentials: new Credentials<Throw>(ctx),
+		aiGateway: new AiGateway<Throw>(ctx),
 		snapshots: new Snapshots<Throw>(ctx),
 		operations: new Operations<Throw>(ctx),
+		auth: new Auth<Throw>(ctx),
 		consumption: new Consumption(ctx),
 		apiKeys: new ApiKeys<Throw>(ctx),
 		regions: new Regions<Throw>(ctx),

@@ -910,7 +910,6 @@ export const renderSearchLine = (pattern: string, entry: string): string => {
 const stripAnsi = (text: string): string =>
 	// Targets the SGR forms we emit (e.g. \x1b[7m, \x1b[27m). Kept narrow on
 	// purpose so it doesn't accidentally eat legitimate `[` characters.
-	// eslint-disable-next-line no-control-regex
 	text.replace(/\x1b\[[0-9;]*m/g, "");
 
 // ---------------------------------------------------------------------------

@@ -255,7 +255,6 @@ const get = async (props: DataApiProps): Promise<void> => {
 	);
 
 	// Drop available_schemas from json/yaml output (not part of the public surface).
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	const { available_schemas: _ignored, ...publicData } = data;
 
 	// For table output, flatten db_schemas onto the top-level for column rendering.

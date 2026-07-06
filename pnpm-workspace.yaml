@@ -10,9 +10,11 @@ onlyBuiltDependencies:
     - node-pty
 
 catalog:
-    typescript: ^5.8.2
+    typescript: ^5.9.0
     vitest: ^3.0.9
     tsdown: ^0.14.1
-    "@biomejs/biome": ^2.0.0-beta.1
+    "@biomejs/biome": ^2.5.1
     "vite": ^6.4.1
     "@types/node": ^20.19.0
+    "@vitest/coverage-v8": ^3.0.9
+    console-fail-test: 0.5.0

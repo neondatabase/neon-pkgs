@@ -1,6 +1,6 @@
 {
 	"name": "@neon/functions",
-	"version": "0.5.0",
+	"version": "0.6.0",
 	"description": "Runtime helpers for Neon Functions. Currently provides a `waitUntil` primitive for deferring async work past a response.",
 	"keywords": [
 		"neon",
@@ -43,15 +43,15 @@
 	},
 	"devDependencies": {
 		"@types/node": "catalog:",
-		"@vitest/coverage-v8": "3.0.9",
-		"console-fail-test": "0.5.0",
+		"@vitest/coverage-v8": "catalog:",
+		"console-fail-test": "catalog:",
 		"tsdown": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"
 	},
 	"packageManager": "pnpm@10.4.0",
 	"engines": {
-		"node": ">=22"
+		"node": ">=20.19.0"
 	},
 	"publishConfig": {
 		"provenance": false

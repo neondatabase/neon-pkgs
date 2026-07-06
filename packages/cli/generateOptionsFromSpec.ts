@@ -1,6 +1,3 @@
-/* eslint-disable @typescript-eslint/no-non-null-asserted-optional-chain */
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
-
 import { createWriteStream } from "node:fs";
 import SwaggerParser from "@apidevtools/swagger-parser";
 import type { OpenAPIV3 } from "openapi-types";
@@ -55,7 +52,7 @@ const typesMapping = {
               description: ${JSON.stringify(value.description)},
               demandOption: ${
 					schema.required?.includes(key) ? "true" : "false"
-				},\n`,
+},\n`,
 					);
 					if (value.enum) {
 						outFile.write(

@@ -65,9 +65,9 @@ pnpm --filter neon-new dry:run
 -   Uses pnpm workspaces (`packages/*`); shared dependency versions are pinned via the pnpm catalog (`pnpm-workspace.yaml`)
 -   Uses Biome for linting/formatting instead of ESLint/Prettier
 -   Builds with `tsdown` for bundling and `tsc --noEmit` for type-checking (see each package's `build` script)
--   Package manager: pnpm@10.30.3, Node.js >=22
+-   Package manager: pnpm@10.30.3. **Node.js requirements are split** (see `CONTRIBUTING.md`): contributors need **Node >=22** (pnpm needs 22.13+; regenerating `@neon/sdk` via `@hey-api/openapi-ts` needs 22.18+), while every **published package** targets **Node >=20.19** at runtime (`engines.node: ">=20.19.0"` — the real floor of the dependency trees, driven by `chokidar@5`/`yargs@18`). The repo-root `package.json` keeps `engines.node: ">=22"` on purpose: it describes the contributor environment, not the shipped packages.
 -   **Dependency Installation**: Prefer `pnpm dedupe` over `pnpm install` - it deduplicates dependencies in node_modules, minimizing conflict issues and reducing filesystem space
--   **Exception — `packages/cli`** (the Neon CLI): keeps its own upstream *build* toolchain (`tsc` → `dist`, `@yao-pkg/pkg` binaries) rather than tsdown. It is **still formatted and linted by root Biome** — `biome.json` includes `packages/cli/**` and only relaxes some lint rules for it via an `overrides` block (it is not excluded). See "The CLI package" below.
+-   **Exception — `packages/cli`** (the Neon CLI): keeps its own upstream *build* toolchain (`tsc` → `dist`, `@yao-pkg/pkg` binaries) rather than tsdown. It is linted and formatted by **Biome** like every other package (via a `packages/cli/**` override in `biome.json` that relaxes some rules and enforces `noConsole`), not ESLint/Prettier. See "The CLI package" below.
 
 ### Per-package architecture
 
@@ -82,14 +82,76 @@ and `@neon/functions`.
 
 ### The CLI package (`packages/cli`)
 
-`packages/cli` is the **Neon CLI**, migrated from [`neondatabase/neonctl`](https://github.com/neondatabase/neonctl). It is published as **`neonctl`** today and is being rebranded to **`neon`** (with thin `neonctl`/`neoncli` packages that depend on it and forward to it). It is the one package that does **not** follow the repo's standard toolchain:
+`packages/cli` is the **Neon CLI**, migrated from [`neondatabase/neonctl`](https://github.com/neondatabase/neonctl). It is published as **`neonctl`** today and is being rebranded to **`neon`** (with thin `neonctl`/`neoncli` packages that depend on it and forward to it). It is linted/formatted with Biome like the rest of the repo, but its **build** toolchain differs:
 
 -   **Build**: `pnpm --filter <name> build` runs swagger param generation (`generateOptionsFromSpec.ts` → `src/parameters.gen.ts`, a committed generated file), then `tsc -p tsconfig.build.json` to `dist/`, then copies `callback.html` into `dist/`. It compiles file-by-file with `tsc` (not bundled with tsdown) and **publishes from the package root** (`bin: dist/cli.js`, `files: ["dist", …]`). The param generator reads the OpenAPI spec from `node_modules/@neondatabase/api-client`, so it works offline after install.
--   **Formatting & lint**: root **Biome** governs this package (formatting + linting) and is the gate in CI (`pnpm lint:ci` → `biome ci`); the `overrides` block in `biome.json` relaxes a handful of lint rules for `packages/cli/**` + `examples/**` but the formatter still applies, so match the surrounding Biome style (tabs, double quotes, sorted imports). The package additionally ships its own `eslint.config.js` (run via `pnpm --filter <name> lint`), but that is a supplementary local check — it is **not** wired into CI. There is no Prettier here.
+-   **Lint**: Biome, via a `packages/cli/**` override in the root `biome.json` (relaxes some rules for the migrated upstream code, and enforces `noConsole` since the CLI routes all output through its writer/logger). Root `pnpm lint:ci` (`biome ci`) covers it. `pnpm --filter <name> lint` additionally runs `tsc --noEmit` then `biome check src`.
 -   **Coverage**: needs `@vitest/coverage-v8` because the root CI runs `pnpm test:ci --coverage` (the flag is appended to every package's `test:ci`). Pin it to the package's `vitest` major.
 -   **Standalone binaries**: `pnpm --filter <name> bundle` (`node pkg.js`) Rollup-bundles `dist/cli.js` and cross-compiles `linux-x64`, `linux-arm64`, `macos-x64`, and `win-x64` via `@yao-pkg/pkg`; targets/assets are declared in the package's `pkg` block. `pkg.js` rewrites `bin` to the bundled entry, so it is name-agnostic (works as `neon` or `neonctl`).
 -   **Conformance tests** (`tests/psql-conformance`) need Docker/testcontainers and are excluded from the default Vitest run; run them explicitly with `pnpm --filter <name> test:conformance`.
 -   **Sibling deps**: `@neondatabase/*` + `neon-init` are currently pinned to published versions (not `workspace:*`); switching to `workspace:*` is a planned follow-up.
+
+### The SDK package (`packages/sdk`)
+
+`@neon/sdk` is the official TypeScript SDK for the Neon API — a Fetch-based client
+generated from Neon's OpenAPI spec, with a hand-authored ergonomic layer on top. See
+`packages/sdk/README.md` for the public API.
+
+**Regenerating the client (local):**
+
+```bash
+pnpm --filter @neon/sdk spec:pull   # refresh vendored spec from neon.com
+pnpm --filter @neon/sdk generate    # regenerate packages/sdk/src/client
+pnpm --filter @neon/sdk build       # typecheck + bundle
+pnpm --filter @neon/sdk test:ci     # coverage guard — see below
+```
+
+The vendored spec lives at `packages/sdk/spec/neon-openapi.json`. Codegen is
+`@hey-api/openapi-ts` (`packages/sdk/openapi-ts.config.ts`).
+
+**Automated spec refresh (`.github/workflows/sdk-spec-refresh.yml`):**
+
+The live spec at https://neon.com/api_spec/release/v2.json can drift ahead of the
+vendored copy on `main`. A scheduled workflow keeps maintainers aware:
+
+| | |
+| --- | --- |
+| **When** | Daily at 09:00 UTC; also `workflow_dispatch` |
+| **What** | `spec:pull` → `generate` → `build` on `@neon/sdk` |
+| **Output** | Opens or updates a PR on branch `bot/sdk-spec-refresh` titled `chore(@neon/sdk): refresh OpenAPI spec` — **only when something changed** |
+| **Runner** | `ubuntu-latest` (public egress to `neon.com`). CI uses the protected runner group + JFrog mirror and **cannot** reach the public spec URL — same constraint as `catalog-drift.yml` |
+
+**The bot PR is a starting point, not merge-ready.** The workflow deliberately does
+not run `test:ci`. CI will fail on `packages/sdk/src/neon/coverage.test.ts` until
+someone updates `packages/sdk/src/neon/coverage.ts`:
+
+1. Review added/removed operations in `sdk.gen.ts`.
+2. Wrap new ops in the ergonomic layer where warranted (and add them to `WRAPPED`),
+   or accept them as raw-only.
+3. Update `EXPECTED_OPERATIONS` to match the new generated set.
+4. **Update `packages/sdk/README.md`** — the API reference section must stay in sync
+   with every new ergonomic namespace/method (see below).
+5. Run `pnpm --filter @neon/sdk test:ci` locally.
+6. Add a changeset if the refresh should ship a new `@neon/sdk` version.
+
+**Adding or changing ergonomic APIs — always update the README:**
+
+`packages/sdk/README.md` is the public API reference for `createNeonClient`. Whenever
+you add, rename, or remove an ergonomic wrapper (not raw-only endpoints), update the
+README in the **same PR**:
+
+1. Add or edit the matching section under **API reference** (method tables + a short
+   example when the call shape is non-obvious — e.g. multipart deploy, presigned upload).
+2. Keep the same conventions as existing sections: **[P]** for paginated `list()`,
+   **→void**, nested sub-resources (`neon.storage.buckets`, `neon.postgres.roles`, …).
+3. If a namespace is new, add a `### neon.<namespace>` heading in logical order
+   (branch-scoped features after `neon.branches` / `neon.postgres`).
+4. Do **not** duplicate the full raw inventory — raw-only endpoints stay documented
+   implicitly via the **Raw layer** section.
+
+`hey-api` does not treat Neon's `x-stability-level` (alpha/beta) differently — beta
+and private-preview endpoints are generated identically to stable ones. Access
+control stays on the API side.
 
 ### Key Implementation Details
 

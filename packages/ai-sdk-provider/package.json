@@ -1,6 +1,6 @@
 {
 	"name": "@neon/ai-sdk-provider",
-	"version": "0.5.0",
+	"version": "0.6.0",
 	"description": "Community Vercel AI SDK provider for the Neon AI Gateway.",
 	"keywords": [
 		"neon",
@@ -47,9 +47,9 @@
 	},
 	"devDependencies": {
 		"@types/node": "catalog:",
-		"@vitest/coverage-v8": "3.0.9",
+		"@vitest/coverage-v8": "catalog:",
 		"ai": "6.0.132",
-		"console-fail-test": "0.5.0",
+		"console-fail-test": "catalog:",
 		"tsdown": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:",
@@ -57,7 +57,7 @@
 	},
 	"packageManager": "pnpm@10.4.0",
 	"engines": {
-		"node": ">=22"
+		"node": ">=20.19.0"
 	},
 	"publishConfig": {
 		"provenance": false

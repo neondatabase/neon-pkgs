@@ -102,7 +102,6 @@ const makeRegistry = (): BackslashRegistry => {
 	const map = new Map<string, BackslashCmdSpec>();
 	const setVarSpec: BackslashCmdSpec = {
 		name: "set",
-		// eslint-disable-next-line @typescript-eslint/require-await
 		async run(ctx) {
 			const name = ctx.nextArg("normal");
 			const value = ctx.nextArg("normal");
@@ -339,7 +338,6 @@ describe("executeInputString", () => {
 		let observedBuf: string | null = null;
 		const probe: BackslashCmdSpec = {
 			name: "parsebuf",
-			// eslint-disable-next-line @typescript-eslint/require-await
 			async run(bctx) {
 				observedBuf = bctx.queryBuf;
 				return { status: "reset-buf", newBuf: "" };
@@ -381,7 +379,6 @@ describe("executeInputString", () => {
 		const { ctx, conn } = buildCtx();
 		const failer: BackslashCmdSpec = {
 			name: "boom",
-			// eslint-disable-next-line @typescript-eslint/require-await
 			async run() {
 				return { status: "error", errorWritten: true };
 			},

@@ -1,6 +1,6 @@
 {
 	"name": "neon-init",
-	"version": "0.19.0",
+	"version": "0.20.0",
 	"description": "Initialize Neon projects",
 	"keywords": [
 		"neon",
@@ -48,8 +48,8 @@
 	"devDependencies": {
 		"@types/node": "catalog:",
 		"@types/yargs": "^17.0.35",
-		"@vitest/coverage-v8": "3.0.9",
-		"console-fail-test": "0.5.0",
+		"@vitest/coverage-v8": "catalog:",
+		"console-fail-test": "catalog:",
 		"tsdown": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"
@@ -67,7 +67,7 @@
 	},
 	"packageManager": "pnpm@10.4.0",
 	"engines": {
-		"node": ">=22"
+		"node": ">=20.19.0"
 	},
 	"publishConfig": {
 		"provenance": false

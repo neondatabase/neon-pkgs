@@ -1063,7 +1063,6 @@ export class PgConnection implements Connection {
 			);
 		}
 		const { paramOids, fields } = descResult;
-		// eslint-disable-next-line @typescript-eslint/no-this-alias
 		const conn = this;
 		return {
 			name,

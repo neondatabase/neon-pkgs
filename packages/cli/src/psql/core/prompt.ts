@@ -410,7 +410,6 @@ const isConditionalActive = (cond: CondStack): boolean => {
 const visibleWidth = (s: string): number => {
 	// Strip CSI escapes (ESC `[` … letter). Conservative — only trims the
 	// common ANSI color form psql emits. Newlines reset the count.
-	// eslint-disable-next-line no-control-regex
 	const stripped = s.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
 	const lastNl = stripped.lastIndexOf("\n");
 	const tail = lastNl === -1 ? stripped : stripped.slice(lastNl + 1);

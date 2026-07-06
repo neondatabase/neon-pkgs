@@ -20,6 +20,8 @@ This Vite plugin instantly provisions a Postgres instance (via Neon) and injects
 | **bun**         | `bun add -D vite-plugin-neon-new`      |
 | **deno**        | `deno add -D npm:vite-plugin-neon-new` |
 
+> **Requirements:** Node.js >= 20.19.
+
 ## Usage
 
 > **BREAKING CHANGE in v3.0.0**: The `referrer` option is now **required**.

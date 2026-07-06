@@ -8,7 +8,7 @@ The Neon CLI is a command-line interface that lets you manage [Neon Serverless P
 npm i -g neon
 ```
 
-Requires Node.js 18.0 or higher.
+Requires Node.js 20.19 or higher.
 
 **Howebrew**
 
@@ -28,7 +28,7 @@ Download a binary file [here](https://github.com/neondatabase/neonctl/releases).
 npm update -g neon
 ```
 
-Requires Node.js 18.0 or higher.
+Requires Node.js 20.19 or higher.
 
 **Howebrew**
 

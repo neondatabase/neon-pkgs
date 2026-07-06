@@ -1,6 +1,6 @@
 {
 	"name": "@neon/sdk",
-	"version": "0.1.0",
+	"version": "1.0.0",
 	"description": "The official TypeScript SDK for the Neon API, generated from Neon's OpenAPI specification. A modern, fetch-based replacement for @neondatabase/api-client.",
 	"keywords": [
 		"neon",
@@ -48,7 +48,7 @@
 	"scripts": {
 		"build": "tsc --noEmit && tsdown",
 		"prepare": "npm run build",
-		"generate": "openapi-ts",
+		"generate": "openapi-ts && node scripts/generate-raw.mjs",
 		"spec:pull": "curl -fsSL https://neon.com/api_spec/release/v2.json -o spec/neon-openapi.json",
 		"test": "vitest --passWithNoTests",
 		"test:ci": "vitest run --passWithNoTests",
@@ -59,15 +59,15 @@
 	"devDependencies": {
 		"@hey-api/openapi-ts": "0.98.2",
 		"@types/node": "catalog:",
-		"@vitest/coverage-v8": "3.0.9",
-		"console-fail-test": "0.5.0",
+		"@vitest/coverage-v8": "catalog:",
+		"console-fail-test": "catalog:",
 		"tsdown": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"
 	},
 	"packageManager": "pnpm@10.4.0",
 	"engines": {
-		"node": ">=22"
+		"node": ">=20.19.0"
 	},
 	"publishConfig": {
 		"provenance": false

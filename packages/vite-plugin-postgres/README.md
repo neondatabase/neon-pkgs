@@ -4,6 +4,8 @@
 > [`vite-plugin-neon-new`](https://www.npmjs.com/package/vite-plugin-neon-new). It still works as an
 > alias but prints a deprecation warning at runtime — please migrate.
 
+> **Requirements:** Node.js >= 20.19 (same as the package it forwards to).
+
 ## Migration
 
 Update your dependency:

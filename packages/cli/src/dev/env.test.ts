@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/require-await */
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

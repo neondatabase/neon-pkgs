@@ -10,6 +10,8 @@ Builds on [`@neon/config`](../config) — it reuses the `Config` policy type and
 npm install @neon/env
 ```
 
+> **Requirements:** Node.js >= 20.19.
+
 ## Functions
 
 The library functions are **filesystem- and env-agnostic**: `fetchEnv` requires an explicit `projectId` + `branch` (a branch **name** like `main`, or a `br-…` id). (The `neon-env` CLI does the `.neon`/`NEON_*` resolution and passes these in.)

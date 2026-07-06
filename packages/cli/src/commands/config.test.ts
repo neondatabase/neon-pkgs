@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/require-await */
 import {
 	existsSync,
 	mkdtempSync,

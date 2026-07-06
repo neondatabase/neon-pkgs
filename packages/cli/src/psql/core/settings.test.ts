@@ -687,16 +687,18 @@ describe("defaultSettings — special-variable hooks", () => {
 
 		// PROMPT1/2/3 and HISTFILE use NULL substitute hooks upstream — `\unset`
 		// genuinely clears the slot; `\echo :NAME` prints the literal token.
-		test.each([["PROMPT1"], ["PROMPT2"], ["PROMPT3"], ["HISTFILE"]])(
-			"\\unset %s genuinely clears the slot",
-			(name) => {
-				const v = createVarStore();
-				defaultSettings(v);
-				v.set(name, "value");
-				v.unset(name);
-				expect(v.has(name)).toBe(false);
-			},
-		);
+		test.each([
+			["PROMPT1"],
+			["PROMPT2"],
+			["PROMPT3"],
+			["HISTFILE"],
+		])("\\unset %s genuinely clears the slot", (name) => {
+			const v = createVarStore();
+			defaultSettings(v);
+			v.set(name, "value");
+			v.unset(name);
+			expect(v.has(name)).toBe(false);
+		});
 
 		// TIMING has no hook upstream — initial value is literal `:TIMING`,
 		// unset clears the slot. We deliberately do not register a hook so

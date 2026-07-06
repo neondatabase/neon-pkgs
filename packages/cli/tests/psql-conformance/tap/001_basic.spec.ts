@@ -278,18 +278,18 @@ describe.skipIf(!SHOULD_RUN_INTEGRATION)("tap/001_basic", () => {
 			expect(r.stderr).toMatch(/psql/);
 		});
 
-		it.each(["commands", "variables"] as const)(
-			"--help=%s exits 0 with output on stdout",
-			async (topic) => {
-				const r = await runChild({
-					launcher: paths.launcher,
-					argv: [uri, `--help=${topic}`],
-				});
-				expect(r.exitCode).toBe(0);
-				expect(r.stdout.length).toBeGreaterThan(0);
-				expect(r.stderr).toBe("");
-			},
-		);
+		it.each([
+			"commands",
+			"variables",
+		] as const)("--help=%s exits 0 with output on stdout", async (topic) => {
+			const r = await runChild({
+				launcher: paths.launcher,
+				argv: [uri, `--help=${topic}`],
+			});
+			expect(r.exitCode).toBe(0);
+			expect(r.stdout.length).toBeGreaterThan(0);
+			expect(r.stderr).toBe("");
+		});
 	});
 
 	// -------------------------------------------------------------------------

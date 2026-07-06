@@ -12,7 +12,6 @@ const test = originalTest.extend<{
 	writeFile: (name: string, content: unknown) => void;
 	readFile: (name: string) => string;
 }>({
-	// eslint-disable-next-line no-empty-pattern
 	cleanupFile: async ({}, use) => {
 		let writtenFilename: string | undefined;
 		await use((name) => (writtenFilename = name));

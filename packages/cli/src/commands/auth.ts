@@ -82,7 +82,7 @@ const preserveCredentials = async (
 		data: { id },
 	} = await apiClient.getCurrentUserInfo();
 	const contents = JSON.stringify({
-		// Making the linter happy by explicitly confirming we don't care about @typescript-eslint/no-misused-spread
+		// Cast to a plain record: we intentionally spread the credentials object.
 		...(credentials as Record<string, unknown>),
 		user_id: id,
 	});

@@ -47,7 +47,6 @@ const test = originalTest.extend<{
 		stderr: string;
 	}>;
 }>({
-	// eslint-disable-next-line no-empty-pattern
 	cleanupFile: async ({}, use) => {
 		let writtenFilename: string | undefined;
 		await use((name) => (writtenFilename = name));
@@ -66,7 +65,6 @@ const test = originalTest.extend<{
 			return content;
 		});
 	},
-	// eslint-disable-next-line no-empty-pattern
 	removeFile: async ({}, use) => {
 		await use((name) => {
 			try {
@@ -79,7 +77,6 @@ const test = originalTest.extend<{
 	// Each test gets its OWN sub-directory under TEST_TMP so the
 	// `.gitignore` scaffolded next to the `.neon` written by one test doesn't
 	// affect another test in the same file.
-	// eslint-disable-next-line no-empty-pattern
 	tmpContext: async ({}, use) => {
 		await use((label) => {
 			const dir = join(TEST_TMP, label);

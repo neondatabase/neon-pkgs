@@ -6,7 +6,6 @@ import { readLine } from "./input.js";
 
 /** A push-driven readable used as a non-TTY input source. */
 class FakeStdin extends Readable {
-	// eslint-disable-next-line @typescript-eslint/no-empty-function
 	_read(): void {}
 
 	feed(text: string): void {

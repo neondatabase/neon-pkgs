@@ -1,5 +1,34 @@
 # neonctl
 
+## 2.30.1
+
+### Patch Changes
+
+- d511ca4: Adapt the API layer to `@neon/sdk@1.0.0`'s unified raw contract: raw calls now resolve to
+  `{ data, error }` with a typed `NeonError`, and the CLI unwraps the error body accordingly.
+  No user-facing behavior change.
+- Updated dependencies [9b2794e]
+- Updated dependencies [d511ca4]
+  - @neon/sdk@1.0.0
+  - @neon/config@0.9.1
+  - @neon/config-runtime@0.9.1
+  - @neon/env@0.10.1
+
+## 2.30.0
+
+### Minor Changes
+
+- Add `neon api <path>`, a passthrough command for calling any Neon API route directly from the CLI. It reuses your existing authentication, so requests are automatically authorized, and maps flags to the request: `-X/--method`, `-F/--field` (typed, dot-notation nested body), `-f/--raw-field`, `-d/--data` (`@file`/stdin/JSON), `-Q/--query`, `-H/--header`, and `-i/--include`. Run `neon api --list` to browse every available endpoint from the Neon OpenAPI spec. Because request mode calls the API directly, newly added or updated endpoints work immediately.
+
+## 2.29.3
+
+### Patch Changes
+
+- Support Node.js >= 20.19 for the CLI. Bump `engines.node` from `>=20.18.1` to `>=20.19.0`
+  (matching `chokidar@5`) and upgrade the pinned `neon-init` dependency to `0.20.0`, which now
+  declares `engines.node: ">=20.19.0"` — this removes the `EBADENGINE`/`>=22` install warning that
+  `neonctl` previously surfaced on Node 20 via the older `neon-init`.
+
 ## 2.29.2
 
 ### Patch Changes

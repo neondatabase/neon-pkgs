@@ -1,5 +1,5 @@
 {
-	"$schema": "https://biomejs.dev/schemas/2.0.0-beta.1/schema.json",
+	"$schema": "https://biomejs.dev/schemas/2.5.1/schema.json",
 	"files": {
 		"includes": [
 			"**/*.ts",
@@ -19,16 +19,45 @@
 	},
 	"assist": {
 		"actions": {
-			"recommended": true
+			"preset": "recommended"
 		}
 	},
 	"linter": {
 		"enabled": true,
 		"rules": {
-			"recommended": true
+			"preset": "recommended"
 		}
 	},
 	"overrides": [
+		{
+			"includes": ["packages/cli/**"],
+			"linter": {
+				"rules": {
+					"suspicious": {
+						"noConsole": "error"
+					},
+					"style": {
+						"useConsistentTypeDefinitions": {
+							"level": "error",
+							"options": { "style": "type" }
+						}
+					}
+				}
+			}
+		},
+		{
+			"includes": [
+				"packages/cli/**/*.test.ts",
+				"packages/cli/**/test_utils/**"
+			],
+			"linter": {
+				"rules": {
+					"suspicious": {
+						"noConsole": "off"
+					}
+				}
+			}
+		},
 		{
 			"includes": ["packages/cli/**", "examples/**"],
 			"linter": {

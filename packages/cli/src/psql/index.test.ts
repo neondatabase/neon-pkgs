@@ -364,38 +364,40 @@ describe("parseConnectionUri — upstream 001_uri.pl conformance", () => {
 // (Node still negotiates 1.2/1.3, like libpq on a modern OpenSSL).
 // ---------------------------------------------------------------------------
 describe("parseConnectionUri — ssl_{min,max}_protocol_version", () => {
-	it.each(["TLSv1", "TLSv1.1"])(
-		"rejects ssl_max_protocol_version=%s with an actionable message",
-		(v) => {
-			expect(() =>
-				parseConnectionUri(
-					`postgresql://h/db?ssl_max_protocol_version=${v}`,
-				),
-			).toThrow(/not supported by this runtime's TLS library/);
-		},
-	);
+	it.each([
+		"TLSv1",
+		"TLSv1.1",
+	])("rejects ssl_max_protocol_version=%s with an actionable message", (v) => {
+		expect(() =>
+			parseConnectionUri(
+				`postgresql://h/db?ssl_max_protocol_version=${v}`,
+			),
+		).toThrow(/not supported by this runtime's TLS library/);
+	});
 
-	it.each(["TLSv1", "TLSv1.1", "TLSv1.2", "TLSv1.3"])(
-		"permits ssl_min_protocol_version=%s (negotiates up to 1.2/1.3)",
-		(v) => {
-			expect(() =>
-				parseConnectionUri(
-					`postgresql://h/db?ssl_min_protocol_version=${v}`,
-				),
-			).not.toThrow();
-		},
-	);
+	it.each([
+		"TLSv1",
+		"TLSv1.1",
+		"TLSv1.2",
+		"TLSv1.3",
+	])("permits ssl_min_protocol_version=%s (negotiates up to 1.2/1.3)", (v) => {
+		expect(() =>
+			parseConnectionUri(
+				`postgresql://h/db?ssl_min_protocol_version=${v}`,
+			),
+		).not.toThrow();
+	});
 
-	it.each(["TLSv1.2", "TLSv1.3"])(
-		"accepts ssl_max_protocol_version=%s",
-		(v) => {
-			expect(() =>
-				parseConnectionUri(
-					`postgresql://h/db?ssl_max_protocol_version=${v}`,
-				),
-			).not.toThrow();
-		},
-	);
+	it.each([
+		"TLSv1.2",
+		"TLSv1.3",
+	])("accepts ssl_max_protocol_version=%s", (v) => {
+		expect(() =>
+			parseConnectionUri(
+				`postgresql://h/db?ssl_max_protocol_version=${v}`,
+			),
+		).not.toThrow();
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -404,14 +406,17 @@ describe("parseConnectionUri — ssl_{min,max}_protocol_version", () => {
 // cert-chain / hostname verification (TLS downgrade). Review item #1.
 // ---------------------------------------------------------------------------
 describe("parseConnectionUri — sslmode validation", () => {
-	it.each(["verify-ful", "verifyfull", "bogus", "on", "true"])(
-		"rejects invalid sslmode=%s",
-		(v) => {
-			expect(() =>
-				parseConnectionUri(`postgresql://h/db?sslmode=${v}`),
-			).toThrow(/invalid sslmode value/);
-		},
-	);
+	it.each([
+		"verify-ful",
+		"verifyfull",
+		"bogus",
+		"on",
+		"true",
+	])("rejects invalid sslmode=%s", (v) => {
+		expect(() =>
+			parseConnectionUri(`postgresql://h/db?sslmode=${v}`),
+		).toThrow(/invalid sslmode value/);
+	});
 
 	it.each([
 		"disable",
@@ -947,18 +952,19 @@ describe("parseConnectionUri — sslnegotiation", () => {
 		).toThrow('invalid sslnegotiation value: "bogus"');
 	});
 
-	it.each(["disable", "allow", "prefer"] as const)(
-		"rejects sslnegotiation=direct with weak sslmode=%s",
-		(mode) => {
-			expect(() =>
-				parseConnectionUri(
-					`postgresql://u@h/db?sslnegotiation=direct&sslmode=${mode}`,
-				),
-			).toThrow(
-				`weak sslmode "${mode}" may not be used with sslnegotiation=direct`,
-			);
-		},
-	);
+	it.each([
+		"disable",
+		"allow",
+		"prefer",
+	] as const)("rejects sslnegotiation=direct with weak sslmode=%s", (mode) => {
+		expect(() =>
+			parseConnectionUri(
+				`postgresql://u@h/db?sslnegotiation=direct&sslmode=${mode}`,
+			),
+		).toThrow(
+			`weak sslmode "${mode}" may not be used with sslnegotiation=direct`,
+		);
+	});
 
 	it("rejects sslnegotiation=direct with the default (prefer) sslmode", () => {
 		expect(() =>
@@ -968,15 +974,16 @@ describe("parseConnectionUri — sslnegotiation", () => {
 		);
 	});
 
-	it.each(["require", "verify-ca", "verify-full"] as const)(
-		"accepts sslnegotiation=direct with encrypted sslmode=%s",
-		(mode) => {
-			const got = parseConnectionUri(
-				`postgresql://u@h/db?sslnegotiation=direct&sslmode=${mode}`,
-			);
-			expect(got).toMatchObject({ sslnegotiation: "direct", ssl: mode });
-		},
-	);
+	it.each([
+		"require",
+		"verify-ca",
+		"verify-full",
+	] as const)("accepts sslnegotiation=direct with encrypted sslmode=%s", (mode) => {
+		const got = parseConnectionUri(
+			`postgresql://u@h/db?sslnegotiation=direct&sslmode=${mode}`,
+		);
+		expect(got).toMatchObject({ sslnegotiation: "direct", ssl: mode });
+	});
 
 	it("accepts direct when sslrootcert=system raises sslmode to verify-full", () => {
 		const got = parseConnectionUri(

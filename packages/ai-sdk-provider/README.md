@@ -12,6 +12,8 @@ Model ids use the canonical Neon (unprefixed) form — `claude-sonnet-4-6`, `gpt
 npm install @neon/ai-sdk-provider ai@^6
 ```
 
+> **Requirements:** Node.js >= 20.19.
+
 ## Configuration
 
 The gateway URL is branch-scoped, so both values come from the Neon Console (your project → a branch → **AI Gateway** tab), or from `neon env pull` / `neon dev`:

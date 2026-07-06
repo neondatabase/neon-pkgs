@@ -2,7 +2,10 @@ import { expectTypeOf, it } from "vitest";
 import type {
 	Branch,
 	Endpoint,
+	NeonAuthIntegration,
+	NeonAuthOauthProvider,
 	Project,
+	ProjectPermission,
 	Snapshot,
 } from "../client/types.gen.js";
 import { createNeonClient } from "./client.js";
@@ -113,4 +116,40 @@ it("agent-platform helpers (default org, default branch, transfer, finalize) are
 			},
 		}),
 	).resolves.toEqualTypeOf<NeonResult<Branch>>();
+});
+
+it("phase-1 namespaces (auth, permissions, recover, branch endpoints) are typed", () => {
+	const neon = createNeonClient({ apiKey: "x" });
+	expectTypeOf(neon.auth.get("p", "br")).resolves.toEqualTypeOf<
+		NeonResult<NeonAuthIntegration>
+	>();
+	expectTypeOf(
+		neon.auth.oauthProviders.list("p", "br"),
+	).resolves.toEqualTypeOf<NeonResult<NeonAuthOauthProvider[]>>();
+	expectTypeOf(
+		neon.auth.oauthProviders.add("p", "br", { id: "google" }),
+	).resolves.toEqualTypeOf<NeonResult<NeonAuthOauthProvider>>();
+	expectTypeOf(neon.projects.permissions.list("p")).resolves.toEqualTypeOf<
+		NeonResult<ProjectPermission[]>
+	>();
+	expectTypeOf(
+		neon.projects.permissions.grant("p", "user@example.com"),
+	).resolves.toEqualTypeOf<NeonResult<ProjectPermission>>();
+	expectTypeOf(neon.projects.recover("p")).resolves.toEqualTypeOf<
+		NeonResult<Project>
+	>();
+	expectTypeOf(
+		neon.postgres.endpoints.listByBranch("p", "br"),
+	).resolves.toEqualTypeOf<NeonResult<Endpoint[]>>();
+
+	const throwing = createNeonClient({ apiKey: "x", throwOnError: true });
+	expectTypeOf(
+		throwing.auth.get("p", "br"),
+	).resolves.toEqualTypeOf<NeonAuthIntegration>();
+	expectTypeOf(
+		throwing.auth.oauthProviders.delete("p", "br", "google"),
+	).resolves.toEqualTypeOf<void>();
+	expectTypeOf(
+		throwing.projects.permissions.list("p"),
+	).resolves.toEqualTypeOf<ProjectPermission[]>();
 });

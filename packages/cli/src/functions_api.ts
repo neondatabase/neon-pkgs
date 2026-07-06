@@ -105,7 +105,11 @@ export const createDeployment = async (
 	params: DeployParams,
 ): Promise<void> => {
 	const form = new FormData();
-	form.append("zip", new Blob([params.zip]), "bundle.zip");
+	// TS 5.9 types `Uint8Array` as `Uint8Array<ArrayBufferLike>`, which is not
+	// assignable to `BlobPart` (it wants an `ArrayBuffer`-backed view, not a
+	// possibly-`SharedArrayBuffer` one). The bundle is always a plain
+	// `Uint8Array` over a regular `ArrayBuffer`, so the cast is safe.
+	form.append("zip", new Blob([params.zip as BlobPart]), "bundle.zip");
 	form.append("runtime", params.runtime);
 	if (params.environment) form.append("environment", params.environment);
 

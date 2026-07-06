@@ -8,6 +8,8 @@ Set up Neon for AI-powered database operations in VS Code, Cursor, and Claude CL
 npm add neon-init
 ```
 
+> **Requirements:** Node.js >= 20.19.
+
 ## Usage
 
 ```ts

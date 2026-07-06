@@ -1,6 +1,6 @@
 {
 	"name": "@neon/config-runtime",
-	"version": "0.8.1",
+	"version": "0.9.1",
 	"description": "Imperative runtime for @neon/config: inspect/plan/apply a neon.ts policy against the Neon API and bundle + deploy Neon Functions. Pulls in esbuild; import this from CLIs and CI, not from neon.ts.",
 	"keywords": [
 		"neon",
@@ -51,20 +51,20 @@
 	"devDependencies": {
 		"@neon/sdk": "workspace:*",
 		"@types/node": "catalog:",
-		"@vitest/coverage-v8": "3.0.9",
-		"console-fail-test": "0.5.0",
+		"@vitest/coverage-v8": "catalog:",
+		"console-fail-test": "catalog:",
 		"tsdown": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"
 	},
 	"dependencies": {
 		"@neon/config": "workspace:*",
-		"esbuild": "^0.25.0",
-		"fflate": "^0.8.2"
+		"esbuild": "^0.28.1",
+		"fflate": "^0.8.3"
 	},
 	"packageManager": "pnpm@10.4.0",
 	"engines": {
-		"node": ">=22"
+		"node": ">=20.19.0"
 	},
 	"publishConfig": {
 		"provenance": false

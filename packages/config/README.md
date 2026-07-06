@@ -10,6 +10,8 @@ Config-as-Code for the Neon Platform. A repo-local `neon.ts` exports a TypeScrip
 npm install @neon/config
 ```
 
+> **Requirements:** Node.js >= 20.19.
+
 ## Define a policy
 
 ```ts

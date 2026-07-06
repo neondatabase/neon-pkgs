@@ -2,6 +2,7 @@ import {
 	createProjectEndpoint,
 	deleteProjectEndpoint,
 	getProjectEndpoint,
+	listProjectBranchEndpoints,
 	listProjectEndpoints,
 	restartProjectEndpoint,
 	startProjectEndpoint,
@@ -43,6 +44,33 @@ export class Endpoints<DThrow extends boolean> {
 				listProjectEndpoints({
 					client,
 					path: { project_id: projectId },
+					throwOnError: false,
+				}),
+			(data) => data.endpoints,
+		);
+	}
+
+	/** @apiCall GET /projects/{project_id}/branches/{branch_id}/endpoints */
+	listByBranch(
+		projectId: string,
+		branchId: string,
+	): Promise<Outcome<Endpoint[], DThrow>>;
+	listByBranch<Throw extends boolean = DThrow>(
+		projectId: string,
+		branchId: string,
+		opts: CallOptions<Throw>,
+	): Promise<Outcome<Endpoint[], Throw>>;
+	listByBranch(
+		projectId: string,
+		branchId: string,
+		opts?: CallOptions,
+	): Promise<Endpoint[] | NeonResult<Endpoint[]>> {
+		return this.#ctx.run(
+			opts,
+			(client) =>
+				listProjectBranchEndpoints({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
 					throwOnError: false,
 				}),
 			(data) => data.endpoints,

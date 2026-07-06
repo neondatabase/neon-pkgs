@@ -109,34 +109,32 @@ describe("NEON_ENV_VAR_KEYS (public OS env-var names)", () => {
 });
 
 describe("env-var map consistency (names ↔ schemas ↔ filter)", () => {
-	test.each(INPUT_ENV_KEYS)(
-		"$key maps to $namespace.$prop and round-trips through the parseEnv filter",
-		(entry) => {
-			// (a) The OS name matches NEON_ENV_VAR_KEYS for that namespace/property.
-			expect(NEON_ENV_VAR_KEYS).toHaveProperty(
-				[entry.namespace, entry.prop],
-				entry.key,
-			);
-			// (b) Selecting the key returns its value under the right namespace/property —
-			//     this exercises the runtime filter reverse map + the filter result type.
-			vi.stubEnv(entry.key, `value-${entry.key}`);
-			expect(parseEnv(allNamespacesConfig, [entry.key])).toHaveProperty(
-				[entry.namespace, entry.prop],
-				`value-${entry.key}`,
-			);
-		},
-	);
+	test.each(
+		INPUT_ENV_KEYS,
+	)("$key maps to $namespace.$prop and round-trips through the parseEnv filter", (entry) => {
+		// (a) The OS name matches NEON_ENV_VAR_KEYS for that namespace/property.
+		expect(NEON_ENV_VAR_KEYS).toHaveProperty(
+			[entry.namespace, entry.prop],
+			entry.key,
+		);
+		// (b) Selecting the key returns its value under the right namespace/property —
+		//     this exercises the runtime filter reverse map + the filter result type.
+		vi.stubEnv(entry.key, `value-${entry.key}`);
+		expect(parseEnv(allNamespacesConfig, [entry.key])).toHaveProperty(
+			[entry.namespace, entry.prop],
+			`value-${entry.key}`,
+		);
+	});
 
-	test.each(INPUT_ENV_KEYS)(
-		"$key is required when selected (unset → EnvNotInjected naming it)",
-		(entry) => {
-			// No stub: the var is unset, so selecting it must throw and name it (this drives
-			// the per-namespace zod `min(1)` / required check via the filter path).
-			expect(() =>
-				parseEnv(allNamespacesConfig, [entry.key]),
-			).toThrowError(new RegExp(`${entry.key} is missing`));
-		},
-	);
+	test.each(
+		INPUT_ENV_KEYS,
+	)("$key is required when selected (unset → EnvNotInjected naming it)", (entry) => {
+		// No stub: the var is unset, so selecting it must throw and name it (this drives
+		// the per-namespace zod `min(1)` / required check via the filter path).
+		expect(() => parseEnv(allNamespacesConfig, [entry.key])).toThrowError(
+			new RegExp(`${entry.key} is missing`),
+		);
+	});
 
 	test("every input env-var in NEON_ENV_VAR_KEYS is covered by a map test", () => {
 		// Catches *additions*: a new input var added to NEON_ENV_VAR_KEYS (but not to

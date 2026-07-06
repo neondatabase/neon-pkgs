@@ -10,6 +10,8 @@ Imperative runtime for [`@neon/config`](../config): run a `neon.ts` policy again
 npm install @neon/config-runtime
 ```
 
+> **Requirements:** Node.js >= 20.19.
+
 ## API
 
 - `inspect` / `plan` / `apply` — read the current branch state, diff a policy against it, and apply the changes.
