@@ -1,0 +1,21 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`inspect db > bloat --db-url bypasses the API and reports a Postgres connection error 1`] = `""`;
+
+exports[`inspect db > cache-hit --db-url bypasses the API and reports a Postgres connection error 1`] = `""`;
+
+exports[`inspect db > calls --db-url bypasses the API and reports a Postgres connection error 1`] = `""`;
+
+exports[`inspect db > locks --db-url bypasses the API and reports a Postgres connection error 1`] = `""`;
+
+exports[`inspect db > outliers --db-url bypasses the API and reports a Postgres connection error 1`] = `""`;
+
+exports[`inspect db > replication-slots --db-url bypasses the API and reports a Postgres connection error 1`] = `""`;
+
+exports[`inspect db > seq-scans --db-url bypasses the API and reports a Postgres connection error 1`] = `""`;
+
+exports[`inspect db > subscriptions --db-url bypasses the API and reports a Postgres connection error 1`] = `""`;
+
+exports[`inspect db > table-sizes --db-url bypasses the API and reports a Postgres connection error 1`] = `""`;
+
+exports[`inspect db > vacuum-stats --db-url bypasses the API and reports a Postgres connection error 1`] = `""`;

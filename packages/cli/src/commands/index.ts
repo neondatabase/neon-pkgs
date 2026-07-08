@@ -14,6 +14,7 @@ import * as diff from "./diff.js";
 import * as env from "./env.js";
 import * as functions from "./functions.js";
 import * as init from "./init.js";
+import * as inspect from "./inspect.js";
 import * as ipAllow from "./ip_allow.js";
 import * as link from "./link.js";
 import * as neonAuth from "./neon_auth.js";
@@ -42,6 +43,7 @@ export default [
 	roles,
 	operations,
 	snapshots,
+	inspect,
 	cs,
 	psql,
 	setContext,

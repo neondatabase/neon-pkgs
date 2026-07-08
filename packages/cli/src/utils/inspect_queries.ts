@@ -1,0 +1,361 @@
+/**
+ * Diagnostic SQL for `neon inspect db`. Each entry is a read-only query against
+ * Postgres' own statistics/catalog views plus the output columns (in display
+ * order) the table/json/yaml formatter should show.
+ *
+ * Most queries need no extra extension. The few that do (currently `outliers`
+ * and `calls`, which read `pg_stat_statements`) declare it via
+ * `requiresExtension`; the runner checks for it and fails with an actionable
+ * hint when it's missing.
+ */
+
+export type InspectQuery = {
+	/** One-line description shown in `--help`. */
+	describe: string;
+	/** The read-only SQL to execute. */
+	sql: string;
+	/** Output columns, in display order (also the object keys after mapping). */
+	fields: readonly string[];
+	/** Friendly message when the result set is empty (table output only). */
+	emptyMessage?: string;
+	/**
+	 * Postgres extension the query needs (e.g. `pg_stat_statements`). When set,
+	 * the runner verifies the extension is installed first and fails with an
+	 * actionable "enable it with CREATE EXTENSION …" message if it isn't.
+	 */
+	requiresExtension?: string;
+};
+
+export const INSPECT_QUERIES = {
+	"cache-hit": {
+		describe:
+			"Buffer-cache hit rates for indexes and tables (pg_statio_user_*)",
+		fields: ["name", "ratio"],
+		sql: /* sql */ `
+			SELECT
+				'index hit rate' AS name,
+				sum(idx_blks_hit)::float
+					/ nullif(sum(idx_blks_hit + idx_blks_read), 0) AS ratio
+			FROM pg_statio_user_indexes
+			UNION ALL
+			SELECT
+				'table hit rate' AS name,
+				sum(heap_blks_hit)::float
+					/ nullif(sum(heap_blks_hit + heap_blks_read), 0) AS ratio
+			FROM pg_statio_user_tables;
+		`,
+	},
+	"table-sizes": {
+		describe:
+			"Size of each table (including TOAST), largest first (pg_table_size)",
+		fields: ["schema", "name", "size"],
+		emptyMessage: "No user tables found.",
+		sql: /* sql */ `
+			SELECT
+				n.nspname AS schema,
+				c.relname AS name,
+				pg_size_pretty(pg_table_size(c.oid)) AS size
+			FROM pg_class c
+			LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
+			WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+				AND n.nspname !~ '^pg_toast'
+				AND c.relkind = 'r'
+			ORDER BY pg_table_size(c.oid) DESC;
+		`,
+	},
+	"index-sizes": {
+		describe: "Size of each index, largest first (pg_relation_size)",
+		fields: ["schema", "name", "size"],
+		emptyMessage: "No indexes found.",
+		sql: /* sql */ `
+			SELECT
+				n.nspname AS schema,
+				c.relname AS name,
+				pg_size_pretty(pg_relation_size(c.oid)) AS size
+			FROM pg_class c
+			LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
+			WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+				AND n.nspname !~ '^pg_toast'
+				AND c.relkind = 'i'
+			ORDER BY pg_relation_size(c.oid) DESC;
+		`,
+	},
+	"unused-indexes": {
+		describe:
+			"Non-unique indexes with few scans — candidates for removal (pg_stat_user_indexes)",
+		fields: ["table", "index", "index_size", "index_scans"],
+		emptyMessage: "No unused indexes detected.",
+		sql: /* sql */ `
+			SELECT
+				s.schemaname || '.' || s.relname AS "table",
+				s.indexrelname AS index,
+				pg_size_pretty(pg_relation_size(s.indexrelid)) AS index_size,
+				s.idx_scan AS index_scans
+			FROM pg_stat_user_indexes s
+			JOIN pg_index i ON i.indexrelid = s.indexrelid
+			WHERE NOT i.indisunique
+				AND NOT i.indisprimary
+				AND s.idx_scan < 50
+			ORDER BY pg_relation_size(s.indexrelid) DESC, s.idx_scan ASC;
+		`,
+	},
+	"seq-scans": {
+		describe:
+			"Number of sequential scans recorded against each table (pg_stat_user_tables)",
+		fields: ["schema", "name", "count"],
+		emptyMessage: "No user tables found.",
+		sql: /* sql */ `
+			SELECT
+				schemaname AS schema,
+				relname AS name,
+				seq_scan AS count
+			FROM pg_stat_user_tables
+			ORDER BY seq_scan DESC;
+		`,
+	},
+	"long-running-queries": {
+		describe: "Queries running longer than 5 minutes (pg_stat_activity)",
+		fields: ["pid", "duration", "state", "query"],
+		emptyMessage: "No long-running queries.",
+		sql: /* sql */ `
+			SELECT
+				pid,
+				(now() - query_start)::text AS duration,
+				state,
+				query
+			FROM pg_stat_activity
+			WHERE state <> 'idle'
+				AND query NOT ILIKE '%pg_stat_activity%'
+				AND now() - query_start > interval '5 minutes'
+			ORDER BY now() - query_start DESC;
+		`,
+	},
+	locks: {
+		describe:
+			"Locks held with the acquiring query and its age (pg_locks + pg_stat_activity)",
+		fields: [
+			"pid",
+			"relname",
+			"mode",
+			"locktype",
+			"granted",
+			"age",
+			"query",
+		],
+		emptyMessage: "No locks held.",
+		sql: /* sql */ `
+			SELECT
+				a.pid,
+				c.relname,
+				l.mode,
+				l.locktype,
+				l.granted,
+				(now() - a.query_start)::text AS age,
+				a.query
+			FROM pg_locks l
+			JOIN pg_stat_activity a ON a.pid = l.pid
+			LEFT JOIN pg_class c ON c.oid = l.relation
+			WHERE a.query <> '<insufficient privilege>'
+				AND l.pid <> pg_backend_pid()
+			ORDER BY a.query_start;
+		`,
+	},
+	outliers: {
+		describe:
+			"Queries taking the most cumulative execution time (needs pg_stat_statements)",
+		fields: ["total_exec_time", "prop_exec_time", "ncalls", "query"],
+		emptyMessage: "No statements recorded yet.",
+		requiresExtension: "pg_stat_statements",
+		sql: /* sql */ `
+			SELECT
+				(interval '1 millisecond' * total_exec_time)::text AS total_exec_time,
+				to_char(
+					(total_exec_time / nullif(sum(total_exec_time) OVER (), 0)) * 100,
+					'FM990D0'
+				) || '%' AS prop_exec_time,
+				calls AS ncalls,
+				query
+			FROM pg_stat_statements s
+			JOIN pg_database d ON d.oid = s.dbid
+			WHERE d.datname = current_database()
+			ORDER BY total_exec_time DESC
+			LIMIT 25;
+		`,
+	},
+	calls: {
+		describe: "Most frequently called queries (needs pg_stat_statements)",
+		fields: ["ncalls", "total_exec_time", "prop_exec_time", "query"],
+		emptyMessage: "No statements recorded yet.",
+		requiresExtension: "pg_stat_statements",
+		sql: /* sql */ `
+			SELECT
+				calls AS ncalls,
+				(interval '1 millisecond' * total_exec_time)::text AS total_exec_time,
+				to_char(
+					(calls / nullif(sum(calls) OVER (), 0)::float) * 100,
+					'FM990D0'
+				) || '%' AS prop_exec_time,
+				query
+			FROM pg_stat_statements s
+			JOIN pg_database d ON d.oid = s.dbid
+			WHERE d.datname = current_database()
+			ORDER BY calls DESC
+			LIMIT 25;
+		`,
+	},
+	"vacuum-stats": {
+		describe:
+			"Autovacuum status per table: last (auto)vacuum, dead tuples, threshold",
+		fields: [
+			"schema",
+			"table",
+			"last_vacuum",
+			"last_autovacuum",
+			"rowcount",
+			"dead_rowcount",
+			"expect_autovacuum",
+		],
+		emptyMessage: "No user tables found.",
+		sql: /* sql */ `
+			SELECT
+				n.nspname AS schema,
+				c.relname AS "table",
+				to_char(psut.last_vacuum, 'YYYY-MM-DD HH24:MI') AS last_vacuum,
+				to_char(psut.last_autovacuum, 'YYYY-MM-DD HH24:MI') AS last_autovacuum,
+				c.reltuples::bigint AS rowcount,
+				psut.n_dead_tup AS dead_rowcount,
+				CASE
+					WHEN current_setting('autovacuum_vacuum_threshold')::bigint
+						+ current_setting('autovacuum_vacuum_scale_factor')::numeric
+							* c.reltuples
+						< psut.n_dead_tup
+					THEN 'yes'
+					ELSE 'no'
+				END AS expect_autovacuum
+			FROM pg_stat_user_tables psut
+			JOIN pg_class c ON psut.relid = c.oid
+			JOIN pg_namespace n ON c.relnamespace = n.oid
+			ORDER BY psut.n_dead_tup DESC;
+		`,
+	},
+	bloat: {
+		describe:
+			"Estimated table/index bloat (statistical estimate, no extension needed)",
+		fields: ["type", "schema", "object_name", "bloat", "waste"],
+		emptyMessage: "No bloat estimate available.",
+		sql: /* sql */ `
+			WITH constants AS (
+				SELECT current_setting('block_size')::numeric AS bs, 23 AS hdr, 8 AS ma
+			),
+			bloat_info AS (
+				SELECT
+					ma, bs, schemaname, tablename,
+					(datawidth + (hdr + ma - (CASE WHEN hdr % ma = 0 THEN ma ELSE hdr % ma END)))::numeric AS datahdr,
+					(maxfracsum * (nullhdr + ma - (CASE WHEN nullhdr % ma = 0 THEN ma ELSE nullhdr % ma END))) AS nullhdr2
+				FROM (
+					SELECT
+						schemaname, tablename, hdr, ma, bs,
+						SUM((1 - null_frac) * avg_width) AS datawidth,
+						MAX(null_frac) AS maxfracsum,
+						hdr + (
+							SELECT 1 + count(*) / 8
+							FROM pg_stats s2
+							WHERE null_frac <> 0
+								AND s2.schemaname = s.schemaname
+								AND s2.tablename = s.tablename
+						) AS nullhdr
+					FROM pg_stats s, constants
+					GROUP BY 1, 2, 3, 4, 5
+				) AS foo
+			),
+			table_bloat AS (
+				SELECT
+					schemaname, tablename, cc.relpages, bs,
+					CEIL((cc.reltuples * ((datahdr + ma
+						- (CASE WHEN datahdr % ma = 0 THEN ma ELSE datahdr % ma END))
+						+ nullhdr2 + 4)) / (bs - 20::float)) AS otta
+				FROM bloat_info
+				JOIN pg_class cc ON cc.relname = bloat_info.tablename
+				JOIN pg_namespace nn ON cc.relnamespace = nn.oid
+					AND nn.nspname = bloat_info.schemaname
+					AND nn.nspname NOT IN ('information_schema', 'pg_catalog')
+				WHERE cc.relkind = 'r'
+			)
+			SELECT
+				'table' AS type,
+				schemaname AS schema,
+				tablename AS object_name,
+				round(CASE WHEN otta = 0 THEN 0.0 ELSE relpages::numeric / otta::numeric END, 1) AS bloat,
+				pg_size_pretty(
+					(CASE WHEN relpages < otta THEN 0 ELSE (bs * (relpages - otta))::bigint END)
+				) AS waste
+			FROM table_bloat
+			ORDER BY (CASE WHEN relpages < otta THEN 0 ELSE bs * (relpages - otta) END) DESC
+			LIMIT 25;
+		`,
+	},
+	"replication-slots": {
+		describe:
+			"Replication slots: status, client, restart/confirmed-flush LSNs, and lag (pg_replication_slots + pg_stat_replication)",
+		fields: [
+			"slot_name",
+			"slot_type",
+			"status",
+			"client_addr",
+			"restart_lsn",
+			"confirmed_flush_lsn",
+			"replication_lag",
+		],
+		emptyMessage: "No replication slots found.",
+		sql: /* sql */ `
+			SELECT
+				s.slot_name,
+				s.slot_type,
+				CASE
+					WHEN r.state IS NOT NULL THEN r.state
+					WHEN s.active THEN 'active (no walsender)'
+					ELSE 'inactive'
+				END AS status,
+				r.client_addr,
+				s.restart_lsn,
+				s.confirmed_flush_lsn,
+				pg_size_pretty(
+					pg_wal_lsn_diff(
+						CASE
+							WHEN pg_is_in_recovery() THEN pg_last_wal_receive_lsn()
+							ELSE pg_current_wal_lsn()
+						END,
+						COALESCE(s.confirmed_flush_lsn, s.restart_lsn)
+					)
+				) AS replication_lag
+			FROM pg_replication_slots s
+			LEFT JOIN pg_stat_replication r ON r.pid = s.active_pid
+			ORDER BY s.slot_name;
+		`,
+	},
+	subscriptions: {
+		describe:
+			"Per-table logical replication progress on this subscriber (pg_subscription_rel)",
+		fields: ["subscription", "table_name", "status", "lsn"],
+		emptyMessage: "No subscriptions found on this database.",
+		sql: /* sql */ `
+			SELECT
+				sub.subname AS subscription,
+				sr.srrelid::regclass::text AS table_name,
+				CASE sr.srsubstate
+					WHEN 'i' THEN 'initialize'
+					WHEN 'd' THEN 'data being copied'
+					WHEN 'f' THEN 'finished table copy'
+					WHEN 's' THEN 'synchronized'
+					WHEN 'r' THEN 'ready'
+					ELSE sr.srsubstate::text
+				END AS status,
+				sr.srsublsn AS lsn
+			FROM pg_subscription_rel sr
+			JOIN pg_subscription sub ON sub.oid = sr.srsubid
+			ORDER BY sub.subname, table_name;
+		`,
+	},
+} as const satisfies Record<string, InspectQuery>;
+
+export type InspectSubcommand = keyof typeof INSPECT_QUERIES;
