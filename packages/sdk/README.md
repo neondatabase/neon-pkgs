@@ -379,6 +379,7 @@ for await (const project of neon.consumption.perProject({
   from: "2026-06-01T00:00:00Z",
   to: "2026-06-30T00:00:00Z",
   granularity: "daily",
+  org_id: "org-...", // the org to report on; consumption requires a Scale plan or above
 })) {
   console.log(project);
 }
@@ -413,6 +414,7 @@ import { raw } from "@neon/sdk";
 const { data, error } = await raw.getProjectBranchSchema({
   client: neon.client,
   path: { project_id, branch_id },
+  query: { db_name: "neondb" }, // db_name is required
 });
 ```
 
