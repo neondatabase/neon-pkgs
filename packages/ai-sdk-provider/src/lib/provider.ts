@@ -3,7 +3,7 @@
  *
  * `createNeon()` returns a provider that routes each model to the best gateway
  * endpoint based on its id (Anthropic → native Messages, OpenAI → native
- * Responses incl. Codex, everything else → unified MLflow), so a single
+ * Responses incl. Codex, everything else → unified Chat Completions), so a single
  * `neon('claude-...')` call (same base URL + token) reaches the whole catalog.
  * Ids use the canonical Neon (unprefixed) form; the legacy `databricks-` prefix
  * is also accepted. Configure with the branch-scoped `NEON_AI_GATEWAY_BASE_URL` +
@@ -155,7 +155,7 @@ export function createNeon(options: NeonProviderSettings = {}): NeonProvider {
 	const createAnthropicModel = (modelId: NeonChatModelId) =>
 		new NeonAnthropicLanguageModel(modelId, {
 			provider: "neon.anthropic",
-			baseURL: `${getHost()}/ai-gateway/anthropic/v1`,
+			baseURL: `${getHost()}/anthropic/v1`,
 			headers: () => getHeaders({ "anthropic-version": "2023-06-01" }),
 			fetch: options.fetch,
 			generateId,
@@ -165,18 +165,18 @@ export function createNeon(options: NeonProviderSettings = {}): NeonProvider {
 	const createOpenAIModel = (modelId: NeonChatModelId) =>
 		new NeonResponsesLanguageModel(modelId, {
 			provider: "neon.openai.responses",
-			url: ({ path }) => `${getHost()}/ai-gateway/openai/v1${path}`,
+			url: ({ path }) => `${getHost()}/openai/v1${path}`,
 			headers: getHeaders,
 			fetch: options.fetch,
 			fileIdPrefixes: ["file-"],
 		});
 
-	// Everything else (Gemini, Llama, Qwen, gpt-oss, ...) -> unified MLflow
-	// endpoint. Gemini is here because its native endpoint can't stream.
+	// Everything else (Gemini, Llama, Qwen, gpt-oss, ...) -> unified Chat
+	// Completions endpoint. Gemini is here because its native endpoint can't stream.
 	const createChatModel = (modelId: NeonChatModelId) =>
 		new NeonChatLanguageModel(modelId, {
 			provider: "neon.chat",
-			url: ({ path }) => `${getHost()}/ai-gateway/mlflow/v1${path}`,
+			url: ({ path }) => `${getHost()}/v1${path}`,
 			headers: getHeaders,
 			fetch: options.fetch,
 			errorStructure: neonErrorStructure,

@@ -8,7 +8,7 @@ import type {
 
 /**
  * Language model for Anthropic models served via the Neon AI Gateway's native
- * Messages API (`/ai-gateway/anthropic/v1/messages`). Unlocks streaming
+ * Messages API (`/anthropic/v1/messages`). Unlocks streaming
  * structured output and native reasoning for Claude.
  *
  * The shared Anthropic model defaults to fine-grained tool-input streaming

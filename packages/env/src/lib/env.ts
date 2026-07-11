@@ -80,7 +80,7 @@ export const NEON_ENV_VAR_KEYS = {
 	 * runtime injects: `apiKey` is the minted credential's bearer (`NEON_AI_GATEWAY_TOKEN`)
 	 * and `baseUrl` is the bare branch gateway host (`NEON_AI_GATEWAY_BASE_URL`,
 	 * `scheme://host`, no path). Clients like `@neon/ai-sdk-provider` read these and append the
-	 * `/ai-gateway/<dialect>/…` routes themselves (https://github.com/vercel/ai/pull/15997).
+	 * dialect route (`/v1`, `/openai/v1`, `/anthropic/v1`) themselves (https://github.com/vercel/ai/pull/15997).
 	 */
 	aiGateway: {
 		apiKey: "NEON_AI_GATEWAY_TOKEN",
@@ -159,7 +159,7 @@ export interface NeonStorageEnv {
  * `baseUrl` is the bare branch-scoped gateway host
  * (`https://<branchId>-api.ai.<region>.…`, no path). Projects to the Neon-branded env
  * (`NEON_AI_GATEWAY_TOKEN`, `NEON_AI_GATEWAY_BASE_URL`); clients like `@neon/ai-sdk-provider`
- * append the `/ai-gateway/<dialect>/…` routes themselves.
+ * append the dialect route (`/v1`, `/openai/v1`, `/anthropic/v1`) themselves.
  */
 export interface NeonAiGatewayEnv {
 	apiKey: string;
@@ -634,7 +634,7 @@ export async function fetchEnv<const C extends Config>(
 				apiKey: secrets.apiToken,
 				// Bare branch-scoped gateway host derived from the branch's connection URI —
 				// not the control-plane API origin (which doesn't serve the gateway). Clients
-				// append the /ai-gateway/<dialect>/… routes themselves.
+				// append the dialect route (/v1, /openai/v1, /anthropic/v1) themselves.
 				baseUrl: aiGatewayBaseUrl(branch.id, unpooled.uri),
 			} satisfies NeonAiGatewayEnv;
 		}
@@ -1327,7 +1327,7 @@ export function toEntries(env: NeonEnv<Config>): Record<string, string> {
 		const ai = withAiGateway.aiGateway;
 		// Neon-branded vars only: the bearer and the bare branch gateway host
 		// (scheme://host, no path) — the @neon/ai-sdk-provider appends the
-		// /ai-gateway/<dialect>/… routes itself (https://github.com/vercel/ai/pull/15997).
+		// dialect route (/v1, /openai/v1, /anthropic/v1) itself (https://github.com/vercel/ai/pull/15997).
 		out[keys.apiKey] = ai.apiKey;
 		out[keys.baseUrl] = ai.baseUrl;
 	}

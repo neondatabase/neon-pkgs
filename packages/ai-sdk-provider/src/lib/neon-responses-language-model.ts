@@ -8,7 +8,7 @@ import type {
 
 /**
  * Language model for OpenAI models served via the Neon AI Gateway's native
- * Responses API (`/ai-gateway/openai/v1/responses`). This route is required for
+ * Responses API (`/openai/v1/responses`). This route is required for
  * models that are only served natively (e.g. Codex) and unlocks native
  * reasoning and the image-generation tool.
  *
