@@ -60,7 +60,7 @@ neon-env run -- npm run dev
 neon-env run -- pnpm dev
 ```
 
-`run` loads `neon.ts`, resolves the branch (via `--branch`, `NEON_BRANCH` / `NEON_BRANCH_ID`, or the `branch` field in `.neon[/project.json]` — by name or id), fetches the connection strings from Neon, and spawns the command with `NEON_BRANCH` / `DATABASE_URL` / `DATABASE_URL_UNPOOLED` (and `NEON_AUTH_BASE_URL` / `NEON_AUTH_JWKS_URL` / `NEON_DATA_API_URL` when the policy enables them) injected on top of the inherited environment. Stdio is inherited so interactive dev servers keep working, and the parent exits with the child's exit code.
+`run` loads `neon.ts`, resolves the branch (via `--branch`, `NEON_BRANCH` / `NEON_BRANCH_ID`, or the `branch` field in `.neon[/project.json]` — by name or id), fetches the connection strings from Neon, and spawns the command with `NEON_BRANCH` / `DATABASE_URL` / `DATABASE_URL_UNPOOLED` (plus the Auth, Data API, object-storage `AWS_*`, and AI Gateway `NEON_AI_GATEWAY_*` vars when the policy enables them — see [Env vars produced](#env-vars-produced)) injected on top of the inherited environment. Stdio is inherited so interactive dev servers keep working, and the parent exits with the child's exit code.
 
 ### `export` — print env to stdout
 
@@ -82,14 +82,44 @@ Flags (both commands): `--config <path>`, `--project-id`, `--branch`, `--api-key
 
 ## Env vars produced
 
+These are the OS-level vars `fetchEnv` / `parseEnv` read and `toEntries` (so `neon-env run` / `neon-env export` / `neonctl env pull`) emit. Which ones appear depends on what your `neon.ts` policy enables — grouped by service below.
+
+**Branch identity + Postgres** (always present):
+
 | Key | From |
 | --- | --- |
 | `NEON_BRANCH` | the resolved branch **name** — mirrors what the Neon Functions runtime injects on every branch, so local dev matches the deployed runtime |
 | `DATABASE_URL` | pooled connection string |
 | `DATABASE_URL_UNPOOLED` | direct connection string |
-| `NEON_AUTH_BASE_URL` | Neon Auth integration (when `auth` is enabled) |
-| `NEON_AUTH_JWKS_URL` | Neon Auth JWKS endpoint for verifying issued tokens (when `auth` is enabled) |
-| `NEON_DATA_API_URL` | Data API integration (when `dataApi` is enabled) |
+
+**Neon Auth** (when `auth` is enabled):
+
+| Key | From |
+| --- | --- |
+| `NEON_AUTH_BASE_URL` | Neon Auth integration base URL (doubles as the publishable client identifier) |
+| `NEON_AUTH_JWKS_URL` | Neon Auth JWKS endpoint for verifying issued tokens |
+
+**Data API** (when `dataApi` is enabled):
+
+| Key | From |
+| --- | --- |
+| `NEON_DATA_API_URL` | Data API (PostgREST) integration URL |
+
+**Object storage** (Preview — when `preview.buckets` declares at least one bucket). Projected onto the AWS SDK's standard config vars so an S3 client works from env alone (set `forcePathStyle: true`):
+
+| Key | From |
+| --- | --- |
+| `AWS_ACCESS_KEY_ID` | branch credential's full token id (e.g. `nak_live_…`) |
+| `AWS_SECRET_ACCESS_KEY` | branch credential's S3 secret access key |
+| `AWS_ENDPOINT_URL_S3` | branch's S3-compatible endpoint URL |
+| `AWS_REGION` | branch region (e.g. `us-east-2`) |
+
+**AI Gateway** (Preview — when `preview.aiGateway` is enabled). Emitted under the Neon-branded vars the deployed Functions runtime injects; clients like [`@neon/ai-sdk-provider`](../ai-sdk-provider) read these and append the `/ai-gateway/<dialect>/…` routes themselves:
+
+| Key | From |
+| --- | --- |
+| `NEON_AI_GATEWAY_TOKEN` | branch credential's API token (bearer) |
+| `NEON_AI_GATEWAY_BASE_URL` | bare branch gateway host (`https://<branch>-api.ai.<region>.…`, no path) |
 
 ## Resolution
 
