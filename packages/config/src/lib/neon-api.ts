@@ -466,7 +466,7 @@ export interface NeonApi {
 	// provisioned): there is no control-plane enable/disable/status route. Declaring
 	// `preview.aiGateway` in a policy therefore provisions nothing — it only adds the
 	// `ai_gateway:invoke` scope to the branch credential and surfaces the gateway env vars
-	// (`OPENAI_*` / `NEON_AI_GATEWAY_*`) on `fetchEnv` / `env pull`. So this interface
+	// (`NEON_AI_GATEWAY_*`) on `fetchEnv` / `env pull`. So this interface
 	// intentionally exposes no AI Gateway methods.
 
 	// ─── Preview: branch-scoped credentials ──────────────────────────────────

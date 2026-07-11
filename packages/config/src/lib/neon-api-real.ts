@@ -1132,7 +1132,7 @@ class RealNeonApi implements NeonApi {
 	// No methods: the AI Gateway is always available on a branch (credential-gated, not
 	// per-branch provisioned). There is no control-plane enable/disable/status route — the
 	// gateway is reached at the branch host with a credential carrying `ai_gateway:invoke`.
-	// `preview.aiGateway` only drives that credential scope and the `OPENAI_*` /
+	// `preview.aiGateway` only drives that credential scope and the
 	// `NEON_AI_GATEWAY_*` env vars (see `@neon/env`); nothing is provisioned here, so
 	// `plan` / `apply` never touch an AI Gateway route and can't fail on its availability.
 

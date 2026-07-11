@@ -594,7 +594,7 @@ describe("branch storage + AI Gateway (Preview)", () => {
 		expect("aiGateway" in env).toBe(false);
 	});
 
-	test("aiGateway policy surfaces the OpenAI env (key + OpenAI-dialect base URL)", async () => {
+	test("aiGateway policy surfaces the Neon AI Gateway env (token + bare base URL)", async () => {
 		const { api, projectId } = seededFake();
 		const env = await fetchEnv(
 			defineConfig({ preview: { aiGateway: true } }),
@@ -609,9 +609,10 @@ describe("branch storage + AI Gateway (Preview)", () => {
 		// AI Gateway needs no S3 connection info.
 		expect(callsTo(api, "getProjectBranchStorage")).toBe(0);
 		expect(env.aiGateway.apiKey).toMatch(/^nt_live_/);
-		// Branch-scoped gateway host derived from the branch connection URI, NOT the API origin.
+		// Bare branch-scoped gateway host derived from the branch connection URI, NOT the API
+		// origin — the provider appends the /ai-gateway/<dialect>/… routes itself.
 		expect(env.aiGateway.baseUrl).toBe(
-			"https://br-main-api.ai.aws-us-east-1.fake.neon.tech/ai-gateway/openai/v1",
+			"https://br-main-api.ai.aws-us-east-1.fake.neon.tech",
 		);
 		expect("storage" in env).toBe(false);
 	});
@@ -640,9 +641,9 @@ describe("branch storage + AI Gateway (Preview)", () => {
 		);
 
 		expect(env.aiGateway.baseUrl).toBe(
-			"https://br-cell-api.ai.c-3.aws-us-east-2.fake.neon.tech/ai-gateway/openai/v1",
+			"https://br-cell-api.ai.c-3.aws-us-east-2.fake.neon.tech",
 		);
-		// The bare-host alias (`NEON_AI_GATEWAY_BASE_URL`) must carry the cell too.
+		// The emitted `NEON_AI_GATEWAY_BASE_URL` must carry the cell too.
 		expect(toEntries(env).NEON_AI_GATEWAY_BASE_URL).toBe(
 			"https://br-cell-api.ai.c-3.aws-us-east-2.fake.neon.tech",
 		);
@@ -705,7 +706,7 @@ describe("branch storage + AI Gateway (Preview)", () => {
 	test("re-mints when a newly-enabled feature's secret is absent", async () => {
 		const { api, projectId } = seededFake();
 		// Persist a storage-only credential, then ask for a policy that also needs the AI Gateway
-		// (OPENAI_API_KEY is absent from the persisted env, so the credential must be re-minted).
+		// (NEON_AI_GATEWAY_TOKEN is absent from the persisted env, so the credential must be re-minted).
 		const storageOnly = await fetchEnv(
 			defineConfig({ preview: { buckets: { uploads: {} } } }),
 			{ api, projectId, branchId: "br-main" },
@@ -757,16 +758,11 @@ describe("branch storage + AI Gateway (Preview)", () => {
 	test("parseEnv reads injected AI Gateway env", () => {
 		vi.stubEnv("DATABASE_URL", "postgres://pooled");
 		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
-		vi.stubEnv("OPENAI_API_KEY", "nt_live_abc_def");
-		vi.stubEnv(
-			"OPENAI_BASE_URL",
-			"https://x.neon.build/ai-gateway/openai/v1",
-		);
+		vi.stubEnv("NEON_AI_GATEWAY_TOKEN", "nt_live_abc_def");
+		vi.stubEnv("NEON_AI_GATEWAY_BASE_URL", "https://x.neon.build");
 		const env = parseEnv(defineConfig({ preview: { aiGateway: true } }));
 		expect(env.aiGateway.apiKey).toBe("nt_live_abc_def");
-		expect(env.aiGateway.baseUrl).toBe(
-			"https://x.neon.build/ai-gateway/openai/v1",
-		);
+		expect(env.aiGateway.baseUrl).toBe("https://x.neon.build");
 	});
 
 	test("parseEnv throws EnvNotInjected listing missing storage vars", () => {
@@ -785,7 +781,7 @@ describe("branch storage + AI Gateway (Preview)", () => {
 		expect("aiGateway" in env).toBe(false);
 	});
 
-	test("toEntries projects storage to AWS_* (+ NEON_STORAGE_*) and aiGateway to OPENAI_* (+ NEON_AI_GATEWAY_*)", () => {
+	test("toEntries projects storage to AWS_* and aiGateway to NEON_AI_GATEWAY_*", () => {
 		const config = defineConfig({
 			preview: { buckets: { uploads: {} }, aiGateway: true },
 		});
@@ -799,7 +795,7 @@ describe("branch storage + AI Gateway (Preview)", () => {
 			},
 			aiGateway: {
 				apiKey: "nt_live_x_y",
-				baseUrl: "https://x.neon.build/ai-gateway/openai/v1",
+				baseUrl: "https://x.neon.build",
 			},
 		};
 		const pairs = toEntries(env);
@@ -807,13 +803,13 @@ describe("branch storage + AI Gateway (Preview)", () => {
 		expect(pairs.AWS_SECRET_ACCESS_KEY).toBe("secret");
 		expect(pairs.AWS_ENDPOINT_URL_S3).toBe("https://br.storage.neon.build");
 		expect(pairs.AWS_REGION).toBe("us-east-2");
-		expect(pairs.OPENAI_API_KEY).toBe("nt_live_x_y");
-		expect(pairs.OPENAI_BASE_URL).toBe(
-			"https://x.neon.build/ai-gateway/openai/v1",
-		);
-		// Neon-branded aliases: same token, plus the bare branch gateway host (no path) —
-		// the @ai-sdk/neon provider appends the /ai-gateway/<dialect>/… routes itself.
+		// Neon-branded vars only (no OpenAI projection): the token plus the bare branch
+		// gateway host (no path) — the @neon/ai-sdk-provider appends the
+		// /ai-gateway/<dialect>/… routes itself.
 		expect(pairs.NEON_AI_GATEWAY_TOKEN).toBe("nt_live_x_y");
 		expect(pairs.NEON_AI_GATEWAY_BASE_URL).toBe("https://x.neon.build");
+		// The OpenAI SDK vars are no longer emitted.
+		expect(pairs.OPENAI_API_KEY).toBeUndefined();
+		expect(pairs.OPENAI_BASE_URL).toBeUndefined();
 	});
 });

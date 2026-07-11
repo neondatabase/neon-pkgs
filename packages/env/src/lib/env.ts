@@ -76,23 +76,17 @@ export const NEON_ENV_VAR_KEYS = {
 		region: "AWS_REGION",
 	},
 	/**
-	 * AI Gateway (Preview). Mapped onto the OpenAI SDK's standard env vars so the OpenAI
-	 * clients work from env alone; `baseUrl` carries the gateway's OpenAI-dialect route prefix
-	 * (`/ai-gateway/openai/v1`). The `NEON_AI_GATEWAY_*` aliases are also emitted: `neonToken`
-	 * mirrors the OpenAI key, and `neonBaseUrl` is the bare branch gateway host
-	 * (`scheme://host`, no path) — the `@ai-sdk/neon` provider appends the
-	 * `/ai-gateway/<dialect>/…` routes itself (https://github.com/vercel/ai/pull/15997).
+	 * AI Gateway (Preview). Exposed under the Neon-branded env vars the deployed Functions
+	 * runtime injects: `apiKey` is the minted credential's bearer (`NEON_AI_GATEWAY_TOKEN`)
+	 * and `baseUrl` is the bare branch gateway host (`NEON_AI_GATEWAY_BASE_URL`,
+	 * `scheme://host`, no path). Clients like `@neon/ai-sdk-provider` read these and append the
+	 * `/ai-gateway/<dialect>/…` routes themselves (https://github.com/vercel/ai/pull/15997).
 	 */
 	aiGateway: {
-		apiKey: "OPENAI_API_KEY",
-		baseUrl: "OPENAI_BASE_URL",
-		neonToken: "NEON_AI_GATEWAY_TOKEN",
-		neonBaseUrl: "NEON_AI_GATEWAY_BASE_URL",
+		apiKey: "NEON_AI_GATEWAY_TOKEN",
+		baseUrl: "NEON_AI_GATEWAY_BASE_URL",
 	},
 } as const;
-
-/** OpenAI-dialect route prefix on the branch AI Gateway host. */
-const AI_GATEWAY_OPENAI_PATH = "/ai-gateway/openai/v1";
 
 /**
  * Branch identity for the resolved branch. Always present on a `fetchEnv` result (the branch
@@ -162,9 +156,10 @@ export interface NeonStorageEnv {
 /**
  * AI Gateway access for the branch (Preview). Present on `NeonEnv` only when the policy
  * enables `preview.aiGateway`. `apiKey` is the minted credential's bearer (`api_token`);
- * `baseUrl` is the gateway's OpenAI-dialect endpoint on the branch-scoped gateway host
- * (`https://<branchId>-api.ai.<region>.…/ai-gateway/openai/v1`). Projects to the OpenAI SDK's
- * standard env (`OPENAI_API_KEY`, `OPENAI_BASE_URL`), plus the `NEON_AI_GATEWAY_*` aliases.
+ * `baseUrl` is the bare branch-scoped gateway host
+ * (`https://<branchId>-api.ai.<region>.…`, no path). Projects to the Neon-branded env
+ * (`NEON_AI_GATEWAY_TOKEN`, `NEON_AI_GATEWAY_BASE_URL`); clients like `@neon/ai-sdk-provider`
+ * append the `/ai-gateway/<dialect>/…` routes themselves.
  */
 export interface NeonAiGatewayEnv {
 	apiKey: string;
@@ -318,7 +313,7 @@ interface EnvKeysByNamespace {
 		| "AWS_SECRET_ACCESS_KEY"
 		| "AWS_ENDPOINT_URL_S3"
 		| "AWS_REGION";
-	aiGateway: "OPENAI_API_KEY" | "OPENAI_BASE_URL";
+	aiGateway: "NEON_AI_GATEWAY_TOKEN" | "NEON_AI_GATEWAY_BASE_URL";
 }
 
 /** The {@link NeonEnv} namespace interface backing each namespace key. */
@@ -341,8 +336,8 @@ interface EnvKeyToProp {
 	AWS_SECRET_ACCESS_KEY: "secretAccessKey";
 	AWS_ENDPOINT_URL_S3: "endpoint";
 	AWS_REGION: "region";
-	OPENAI_API_KEY: "apiKey";
-	OPENAI_BASE_URL: "baseUrl";
+	NEON_AI_GATEWAY_TOKEN: "apiKey";
+	NEON_AI_GATEWAY_BASE_URL: "baseUrl";
 }
 
 /**
@@ -637,8 +632,9 @@ export async function fetchEnv<const C extends Config>(
 		if (wantsAiGateway) {
 			result.aiGateway = {
 				apiKey: secrets.apiToken,
-				// Branch-scoped gateway host derived from the branch's connection URI — not the
-				// control-plane API origin (which doesn't serve the gateway).
+				// Bare branch-scoped gateway host derived from the branch's connection URI —
+				// not the control-plane API origin (which doesn't serve the gateway). Clients
+				// append the /ai-gateway/<dialect>/… routes themselves.
 				baseUrl: aiGatewayBaseUrl(branch.id, unpooled.uri),
 			} satisfies NeonAiGatewayEnv;
 		}
@@ -672,7 +668,7 @@ function previewCredentialScopes(
  * Resolve the branch credential's secrets, reusing the ones already in the env source when
  * present and minting a fresh `user` credential otherwise. The Neon API returns `api_token` /
  * `s3_secret_access_key` exactly once at mint time, so the persisted copies (e.g. in
- * `.env.local`, surfaced as `OPENAI_API_KEY` / `AWS_SECRET_ACCESS_KEY`) are the only way to
+ * `.env.local`, surfaced as `NEON_AI_GATEWAY_TOKEN` / `AWS_SECRET_ACCESS_KEY`) are the only way to
  * recover them — exactly how one-time Auth keys are round-tripped. Reuse is presence-based
  * (no extra bookkeeping vars): if every secret the enabled features need is already present,
  * reuse it; otherwise mint one credential covering all currently-needed scopes.
@@ -746,9 +742,9 @@ function aiGatewayHost(branchId: string, connectionUri: string): string {
 	return `${branchId}-api.ai.${suffix}`;
 }
 
-/** The AI Gateway's OpenAI-dialect base URL (`OPENAI_BASE_URL`) on the branch gateway host. */
+/** The AI Gateway's bare base URL (`NEON_AI_GATEWAY_BASE_URL`) on the branch gateway host. */
 function aiGatewayBaseUrl(branchId: string, connectionUri: string): string {
-	return `https://${aiGatewayHost(branchId, connectionUri)}${AI_GATEWAY_OPENAI_PATH}`;
+	return `https://${aiGatewayHost(branchId, connectionUri)}`;
 }
 
 /**
@@ -983,12 +979,12 @@ const storageEnvSchema = z.object({
 });
 
 const aiGatewayEnvSchema = z.object({
-	OPENAI_API_KEY: z
-		.string({ message: "OPENAI_API_KEY is missing" })
-		.min(1, "OPENAI_API_KEY must not be empty"),
-	OPENAI_BASE_URL: z
-		.string({ message: "OPENAI_BASE_URL is missing" })
-		.min(1, "OPENAI_BASE_URL must not be empty"),
+	NEON_AI_GATEWAY_TOKEN: z
+		.string({ message: "NEON_AI_GATEWAY_TOKEN is missing" })
+		.min(1, "NEON_AI_GATEWAY_TOKEN must not be empty"),
+	NEON_AI_GATEWAY_BASE_URL: z
+		.string({ message: "NEON_AI_GATEWAY_BASE_URL is missing" })
+		.min(1, "NEON_AI_GATEWAY_BASE_URL must not be empty"),
 });
 
 /** Whether a **static** policy declares object storage (`preview.buckets`). No network. */
@@ -1154,13 +1150,13 @@ export function parseEnv(
 
 	if (configWantsAiGateway(config)) {
 		const aiGateway = aiGatewayEnvSchema.safeParse({
-			OPENAI_API_KEY: source.OPENAI_API_KEY,
-			OPENAI_BASE_URL: source.OPENAI_BASE_URL,
+			NEON_AI_GATEWAY_TOKEN: source.NEON_AI_GATEWAY_TOKEN,
+			NEON_AI_GATEWAY_BASE_URL: source.NEON_AI_GATEWAY_BASE_URL,
 		});
 		if (aiGateway.success) {
 			result.aiGateway = {
-				apiKey: aiGateway.data.OPENAI_API_KEY,
-				baseUrl: aiGateway.data.OPENAI_BASE_URL,
+				apiKey: aiGateway.data.NEON_AI_GATEWAY_TOKEN,
+				baseUrl: aiGateway.data.NEON_AI_GATEWAY_BASE_URL,
 			} satisfies NeonAiGatewayEnv;
 		} else {
 			for (const issue of aiGateway.error.issues)
@@ -1230,8 +1226,8 @@ const FILTERABLE_ENV_KEYS: Record<string, readonly [string, string]> = {
 	AWS_SECRET_ACCESS_KEY: ["storage", "secretAccessKey"],
 	AWS_ENDPOINT_URL_S3: ["storage", "endpoint"],
 	AWS_REGION: ["storage", "region"],
-	OPENAI_API_KEY: ["aiGateway", "apiKey"],
-	OPENAI_BASE_URL: ["aiGateway", "baseUrl"],
+	NEON_AI_GATEWAY_TOKEN: ["aiGateway", "apiKey"],
+	NEON_AI_GATEWAY_BASE_URL: ["aiGateway", "baseUrl"],
 };
 
 /**
@@ -1329,13 +1325,11 @@ export function toEntries(env: NeonEnv<Config>): Record<string, string> {
 	if (withAiGateway.aiGateway) {
 		const keys = NEON_ENV_VAR_KEYS.aiGateway;
 		const ai = withAiGateway.aiGateway;
+		// Neon-branded vars only: the bearer and the bare branch gateway host
+		// (scheme://host, no path) — the @neon/ai-sdk-provider appends the
+		// /ai-gateway/<dialect>/… routes itself (https://github.com/vercel/ai/pull/15997).
 		out[keys.apiKey] = ai.apiKey;
 		out[keys.baseUrl] = ai.baseUrl;
-		// Neon-branded aliases: the same bearer, plus the bare branch gateway host
-		// (scheme://host, no path) — the @ai-sdk/neon provider appends the
-		// /ai-gateway/<dialect>/… routes itself (https://github.com/vercel/ai/pull/15997).
-		out[keys.neonToken] = ai.apiKey;
-		out[keys.neonBaseUrl] = new URL(ai.baseUrl).origin;
 	}
 	return out;
 }

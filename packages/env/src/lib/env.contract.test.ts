@@ -45,21 +45,25 @@ const INPUT_ENV_KEYS = [
 	},
 	{ key: "AWS_ENDPOINT_URL_S3", namespace: "storage", prop: "endpoint" },
 	{ key: "AWS_REGION", namespace: "storage", prop: "region" },
-	{ key: "OPENAI_API_KEY", namespace: "aiGateway", prop: "apiKey" },
-	{ key: "OPENAI_BASE_URL", namespace: "aiGateway", prop: "baseUrl" },
+	{
+		key: "NEON_AI_GATEWAY_TOKEN",
+		namespace: "aiGateway",
+		prop: "apiKey",
+	},
+	{
+		key: "NEON_AI_GATEWAY_BASE_URL",
+		namespace: "aiGateway",
+		prop: "baseUrl",
+	},
 ] as const;
 
 /**
- * Env-vars `toEntries` emits but `parseEnv` never reads back: the branch name (optional), the
- * Neon-specific region alias, and the AI-gateway aliases. Listed so the completeness check
- * below can prove every *other* env-var in `NEON_ENV_VAR_KEYS` is a covered input — i.e.
- * adding a new input var without a test fails loudly.
+ * Env-vars `toEntries` emits but `parseEnv` never reads back: only the branch name, which is
+ * optional on parse. Listed so the completeness check below can prove every *other* env-var in
+ * `NEON_ENV_VAR_KEYS` is a covered input — i.e. adding a new input var without a test fails
+ * loudly.
  */
-const OUTPUT_ONLY_ENV_VARS: ReadonlySet<string> = new Set([
-	"NEON_BRANCH",
-	"NEON_AI_GATEWAY_TOKEN",
-	"NEON_AI_GATEWAY_BASE_URL",
-]);
+const OUTPUT_ONLY_ENV_VARS: ReadonlySet<string> = new Set(["NEON_BRANCH"]);
 
 /**
  * A policy that turns on every secret-bearing namespace, so every input env-var above is
@@ -78,10 +82,8 @@ describe("NEON_ENV_VAR_KEYS (public OS env-var names)", () => {
 		expect(NEON_ENV_VAR_KEYS).toMatchInlineSnapshot(`
 			{
 			  "aiGateway": {
-			    "apiKey": "OPENAI_API_KEY",
-			    "baseUrl": "OPENAI_BASE_URL",
-			    "neonBaseUrl": "NEON_AI_GATEWAY_BASE_URL",
-			    "neonToken": "NEON_AI_GATEWAY_TOKEN",
+			    "apiKey": "NEON_AI_GATEWAY_TOKEN",
+			    "baseUrl": "NEON_AI_GATEWAY_BASE_URL",
 			  },
 			  "auth": {
 			    "baseUrl": "NEON_AUTH_BASE_URL",
@@ -176,7 +178,7 @@ describe("toEntries → parseEnv round-trip (cross-process transport)", () => {
 			},
 			aiGateway: {
 				apiKey: "nt_live_abc_def",
-				baseUrl: "https://x.neon.build/ai-gateway/openai/v1",
+				baseUrl: "https://x.neon.build",
 			},
 		};
 

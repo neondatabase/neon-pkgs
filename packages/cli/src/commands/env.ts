@@ -86,17 +86,16 @@ const NEON_VAR_NAMES = Object.values(NEON_ENV_VAR_KEYS).flatMap((group) =>
  * `NEON_AUTH_*` / `NEON_DATA_API_*` lines instead of leaving credentials for features that
  * aren't enabled.
  *
- * Deliberately **excludes** the storage / AI Gateway vars Neon projects onto third-party SDK
- * names (`AWS_*`, `OPENAI_*`): those collide with credentials a user may set by hand, so
- * `env pull` only ever writes them, never prunes them. (Their Neon-branded siblings —
- * `NEON_STORAGE_*` / `NEON_AI_GATEWAY_*` — are owned and pruned.)
+ * Deliberately **excludes** the storage vars Neon projects onto third-party SDK names
+ * (`AWS_*`): those collide with credentials a user may set by hand, so `env pull` only ever
+ * writes them, never prunes them. The AI Gateway is emitted solely under its Neon-branded
+ * vars (`NEON_AI_GATEWAY_*`), which are owned and pruned.
  */
 const NEON_OWNED_ENV_KEYS: readonly string[] = [
 	...Object.values(NEON_ENV_VAR_KEYS.postgres),
 	...Object.values(NEON_ENV_VAR_KEYS.auth),
 	...Object.values(NEON_ENV_VAR_KEYS.dataApi),
-	NEON_ENV_VAR_KEYS.aiGateway.neonToken,
-	NEON_ENV_VAR_KEYS.aiGateway.neonBaseUrl,
+	...Object.values(NEON_ENV_VAR_KEYS.aiGateway),
 ];
 
 /**
