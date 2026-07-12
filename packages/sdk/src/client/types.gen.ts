@@ -824,12 +824,13 @@ export type GrantPermissionToProjectRequest = {
 
 /**
  * The caller's effective permission for a project when
- * per-project permissions are enabled. Values correspond to viewer,
- * editor, and admin/manage project access levels. Omitted for personal
- * projects, flag-off organizations, and non-user subjects.
+ * per-project permissions are enabled. `VIEWER` grants read access,
+ * `EDITOR` adds update access, and `ADMIN` grants full management.
+ * Omitted for personal projects, flag-off organizations, and non-user
+ * subjects.
  *
  */
-export type ProjectPermissionLevel = 'CAN_VIEW' | 'CAN_EDIT' | 'CAN_MANAGE';
+export type ProjectPermissionLevel = 'VIEWER' | 'EDITOR' | 'ADMIN';
 
 export type ConsumptionHistoryPerProjectResponse = {
     projects: Array<ConsumptionHistoryPerProject>;
@@ -3161,6 +3162,15 @@ export type Snapshot = {
 export type SnapshotUpdateRequest = {
     snapshot: {
         name?: string;
+        /**
+         * The date and time when the snapshot will expire.
+         *
+         * Omit to leave the current expiration unchanged. Send `null` to
+         * clear the expiration so the snapshot never expires. A future
+         * timestamp sets the absolute expiration.
+         *
+         */
+        expires_at?: string | null;
     };
 };
 

@@ -13,12 +13,9 @@ import type {
 	BackupSchedule,
 	Branch,
 	Snapshot,
-	SnapshotUpdateRequest,
 } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
 import { err, finalize, type NeonResult, type Outcome, ok } from "../result.js";
-
-type UpdateInput = SnapshotUpdateRequest["snapshot"];
 
 /**
  * Inspect a freshly restored (not-yet-finalized) branch and decide whether to commit.
@@ -36,6 +33,18 @@ export interface CreateSnapshotInput {
 	lsn?: string;
 	/** When the snapshot is automatically deleted (ISO 8601). */
 	expiresAt?: string;
+}
+
+/** Input for {@link Snapshots.update}. */
+export interface UpdateSnapshotInput {
+	/** Rename the snapshot. */
+	name?: string;
+	/**
+	 * Change when the snapshot expires (ISO 8601). Omit to leave the current
+	 * expiration unchanged, pass `null` to clear it so the snapshot never
+	 * expires, or a future timestamp to set an absolute expiration.
+	 */
+	expiresAt?: string | null;
 }
 
 /** Input for {@link Snapshots.restore}. */
@@ -131,18 +140,18 @@ export class Snapshots<DThrow extends boolean> {
 	update(
 		projectId: string,
 		snapshotId: string,
-		input: UpdateInput,
+		input: UpdateSnapshotInput,
 	): Promise<Outcome<Snapshot, DThrow>>;
 	update<Throw extends boolean = DThrow>(
 		projectId: string,
 		snapshotId: string,
-		input: UpdateInput,
+		input: UpdateSnapshotInput,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Snapshot, Throw>>;
 	update(
 		projectId: string,
 		snapshotId: string,
-		input: UpdateInput,
+		input: UpdateSnapshotInput,
 		opts?: CallOptions,
 	): Promise<Snapshot | NeonResult<Snapshot>> {
 		return this.#ctx.run(
@@ -151,7 +160,15 @@ export class Snapshots<DThrow extends boolean> {
 				updateSnapshot({
 					client,
 					path: { project_id: projectId, snapshot_id: snapshotId },
-					body: { snapshot: input },
+					// `undefined` fields are dropped by JSON serialization, so an
+					// omitted `expiresAt` leaves the expiration unchanged while an
+					// explicit `null` clears it.
+					body: {
+						snapshot: {
+							name: input.name,
+							expires_at: input.expiresAt,
+						},
+					},
 					throwOnError: false,
 				}),
 			(data) => data.snapshot,

@@ -10818,11 +10818,11 @@
             "ProjectPermissionLevel": {
                 "type": "string",
                 "enum": [
-                    "CAN_VIEW",
-                    "CAN_EDIT",
-                    "CAN_MANAGE"
+                    "VIEWER",
+                    "EDITOR",
+                    "ADMIN"
                 ],
-                "description": "The caller's effective permission for a project when\nper-project permissions are enabled. Values correspond to viewer,\neditor, and admin/manage project access levels. Omitted for personal\nprojects, flag-off organizations, and non-user subjects.\n"
+                "description": "The caller's effective permission for a project when\nper-project permissions are enabled. `VIEWER` grants read access,\n`EDITOR` adds update access, and `ADMIN` grants full management.\nOmitted for personal projects, flag-off organizations, and non-user\nsubjects.\n"
             },
             "ConsumptionHistoryPerProjectResponse": {
                 "type": "object",
@@ -15128,6 +15128,13 @@
                         "properties": {
                             "name": {
                                 "type": "string"
+                            },
+                            "expires_at": {
+                                "description": "The date and time when the snapshot will expire.\n\nOmit to leave the current expiration unchanged. Send `null` to\nclear the expiration so the snapshot never expires. A future\ntimestamp sets the absolute expiration.\n",
+                                "type": "string",
+                                "format": "date-time",
+                                "nullable": true,
+                                "example": "2030-06-09T18:02:16Z"
                             }
                         }
                     }

@@ -318,7 +318,7 @@ Branch-scoped AI Gateway endpoint metadata (beta).
 | --- | --- | --- |
 | `list(projectId)` | `Snapshot[]` | |
 | `create(projectId, branchId, input?)` | `Snapshot` | `input`: `{ name?, timestamp?, lsn?, expiresAt? }` (point-in-time) |
-| `update(projectId, snapshotId, { name? })` | `Snapshot` | |
+| `update(projectId, snapshotId, input)` | `Snapshot` | `input`: `{ name?, expiresAt? }` — pass `expiresAt: null` to clear the expiration |
 | `delete(projectId, snapshotId)` | **→void** | |
 | `restore(projectId, snapshotId, input?)` | `Branch` | see below |
 | `getSchedule(projectId, branchId)` | `BackupSchedule` | |
