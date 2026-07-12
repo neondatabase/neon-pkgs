@@ -1,5 +1,15 @@
 # neonctl
 
+## 2.31.1
+
+### Patch Changes
+
+- Updated dependencies [dba7d3f]
+  - @neon/sdk@1.1.0
+  - @neon/config@0.9.2
+  - @neon/config-runtime@0.9.2
+  - @neon/env@0.11.1
+
 ## 2.31.0
 
 ### Minor Changes
