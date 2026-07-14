@@ -23,20 +23,6 @@ describe("inspect db", () => {
 		);
 	});
 
-	test("cache-hit --db-url bypasses the API and reports a Postgres connection error", async ({
-		testCliCommand,
-	}) => {
-		await testCliCommand(
-			["inspect", "db", "cache-hit", "--db-url", UNREACHABLE_DB_URL],
-			{
-				code: 1,
-				stderr: expect.stringMatching(
-					/Could not connect to Postgres at 127\.0\.0\.1:1/,
-				),
-			},
-		);
-	});
-
 	test("locks --db-url bypasses the API and reports a Postgres connection error", async ({
 		testCliCommand,
 	}) => {

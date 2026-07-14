@@ -27,24 +27,6 @@ export type InspectQuery = {
 };
 
 export const INSPECT_QUERIES = {
-	"cache-hit": {
-		describe:
-			"Buffer-cache hit rates for indexes and tables (pg_statio_user_*)",
-		fields: ["name", "ratio"],
-		sql: /* sql */ `
-			SELECT
-				'index hit rate' AS name,
-				sum(idx_blks_hit)::float
-					/ nullif(sum(idx_blks_hit + idx_blks_read), 0) AS ratio
-			FROM pg_statio_user_indexes
-			UNION ALL
-			SELECT
-				'table hit rate' AS name,
-				sum(heap_blks_hit)::float
-					/ nullif(sum(heap_blks_hit + heap_blks_read), 0) AS ratio
-			FROM pg_statio_user_tables;
-		`,
-	},
 	"table-sizes": {
 		describe:
 			"Size of each table (including TOAST), largest first (pg_table_size)",
