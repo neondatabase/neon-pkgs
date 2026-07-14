@@ -347,6 +347,34 @@ $ cat .neon
 
 After pinning the branch, `checkout` also runs [`env pull`](#env-pull) by default, so the branch's Neon env vars are written to your local `.env` and you can start building right away — the branch-first loop is just `link` + `checkout`. Pass `--no-env-pull` to skip it (for example when env is injected at runtime via `neon-env run` / `neon dev`, or to keep secrets out of the working tree). A pull failure never undoes the checkout: the branch stays pinned and the failure is surfaced as a warning pointing you at `neon env pull` (or `neon deploy` if a `neon.ts`-declared service is missing).
 
+### diff
+
+`diff [compare-branch]` prints a **git-style** schema diff between the branch you're on and another branch — the top-level companion to `checkout`. It reads the branch pinned in `.neon` as the side under review (the `+++` side) and compares it against the branch you name (the `---`, reference side), so `+` lines are what your current branch adds on top of the reference:
+
+```bash
+# On feature/add-comments (pinned in .neon), see how it differs from main:
+$ neon diff main
+→ Comparing schema main → feature/add-comments
+diff --neon database neondb
+--- main (br-crimson-snow-12345678)
++++ feature/add-comments (br-dry-salad-87654321)
+@@ -63,7 +64,8 @@
+ CREATE TABLE public.users (
+     id integer NOT NULL,
+     email text NOT NULL,
+-    created_at timestamp with time zone DEFAULT now()
++    created_at timestamp with time zone DEFAULT now(),
++    display_name text
+ );
+```
+
+- **`compare-branch`** is optional. Omit it to compare the current branch against its **parent** (`neon diff` answers "what did I change since branching?"). It accepts a branch **name** or `br-…` **id**.
+- **`--branch, -b <name|id>`** overrides the side under review instead of reading `.neon` — e.g. `neon diff main --branch feature/checkout` diffs an explicit branch against `main`.
+- **`--database, --db <name>`** limits the diff to one database; by default every database on the current branch is compared (each rendered as its own `diff --neon database <name>` block). A database missing on the reference side shows as fully added.
+- **`--output json|yaml`** emits a structured result per database (`{ database, base_branch, compare_branch, has_changes, diff }`) for scripting; the default renders the colorized git-style diff (respecting `--no-color` and non-TTY pipes).
+
+The human-readable summary line goes to stderr and the diff body to stdout, so `neon diff main > changes.patch` captures just the diff. When the schemas match, `diff` prints `No schema differences …` and writes nothing to stdout. For history-aware comparisons (a branch against its own past state at a timestamp or LSN), use [`branches schema-diff`](https://neon.com/docs/reference/cli-branches#schema-diff).
+
 ### env pull
 
 `env pull` writes the linked branch's Neon environment variables into a local dotenv file: an existing `.env` if you have one, otherwise `.env.local` (override with `--file <path>`). Only Neon-managed keys (`DATABASE_URL`, `DATABASE_URL_UNPOOLED`, and the Neon Auth / Data API URLs when those services are enabled) are written; any other lines in the file are preserved. The branch comes from the closest `.neon` file, so no `--branch` is needed (pass `--branch <id|name>` to target another branch).
@@ -495,6 +523,7 @@ The target directory must be empty unless you pass `--force` (a lone `.git` is i
 | set-context                                                                |                                                                                                              | Deprecated; use `link`             |
 | env                                                                        | `pull`                                                                                                       | Manage a branch's env vars         |
 | checkout                                                                   |                                                                                                              | Pin a branch in `.neon`            |
+| diff                                                                       |                                                                                                              | Git-style schema diff vs a branch  |
 | [link](https://neon.com/docs/reference/cli-link)                           |                                                                                                              | Link a directory to a project      |
 | config                                                                     | `status`, `plan`, `apply`                                                                                    | Drive a branch from `neon.ts`      |
 | deploy                                                                     |                                                                                                              | Alias for `config apply`           |

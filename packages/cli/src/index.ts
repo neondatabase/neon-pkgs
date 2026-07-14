@@ -53,6 +53,10 @@ const NO_SUBCOMMANDS_VERBS = [
 
 	"deploy",
 
+	// `diff <compare-branch>` has a handler but no subcommands (like `status`),
+	// so the help-fallback middleware must not intercept a bare `neon diff main`.
+	"diff",
+
 	"bootstrap",
 
 	// alias of `config status`

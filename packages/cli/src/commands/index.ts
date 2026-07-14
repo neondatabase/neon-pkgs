@@ -10,6 +10,7 @@ import * as dataApi from "./data_api.js";
 import * as databases from "./databases.js";
 import * as deploy from "./deploy.js";
 import * as dev from "./dev.js";
+import * as diff from "./diff.js";
 import * as env from "./env.js";
 import * as functions from "./functions.js";
 import * as init from "./init.js";
@@ -48,6 +49,7 @@ export default [
 	dataApi,
 	functions,
 	dev,
+	diff,
 	config,
 	status,
 	deploy,
