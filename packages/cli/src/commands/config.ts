@@ -10,6 +10,7 @@ import {
 	inspect,
 	loadConfigFromFile,
 	type NeonApi,
+	PushConflictError,
 	type PushResult,
 	plan,
 } from "@neon/config-runtime";
@@ -23,6 +24,10 @@ import { loadEnvFileIntoProcess } from "../env_file.js";
 import { log } from "../log.js";
 import type { BranchScopeProps } from "../types.js";
 import { announceTargetBranch } from "../utils/branch_notice.js";
+import {
+	renderAppliedChanges,
+	renderBranchSettingConflicts,
+} from "../utils/config_diff.js";
 import { fillSingleProject, resolveBranchRef } from "../utils/enrichers.js";
 import { bundleEntry } from "../utils/esbuild.js";
 import {
@@ -44,19 +49,6 @@ const neonctlBundler: FunctionBundler = async (fn) =>
 	zipBundle(await bundleEntry(fn.source));
 
 const INSPECT_FIELDS = ["project", "branch", "config"] as const;
-// Deliberately minimal: action/kind/identifier are short and fixed-ish, so the table can
-// never overflow. Per-change `details` (a function's long invocationUrl in particular) are
-// intentionally NOT a column — they used to be JSON-stringified into a cell and blew the
-// table past 190 cols. Function URLs are printed below as a plain list (see reportPushResult),
-// and the full details are still available via `--output json`.
-const APPLIED_FIELDS = ["action", "kind", "identifier"] as const;
-const CONFLICT_FIELDS = [
-	"identifier",
-	"field",
-	"current",
-	"desired",
-	"reason",
-] as const;
 
 export type ConfigProps = BranchScopeProps & {
 	/** Explicit path to a neon.ts policy. When omitted, loadConfigFromFile walks up from cwd. */
@@ -95,6 +87,8 @@ export type ConfigProps = BranchScopeProps & {
 	cwd?: string;
 	/** Injected NeonApi adapter (tests). Production omits it so the real adapter is built from credentials. */
 	runtimeApi?: NeonApi;
+	/** Global `--color` flag (default true); `--no-color` sets it false to force plain output. */
+	color?: boolean;
 };
 
 /**
@@ -478,16 +472,30 @@ export const applyCmd = async (props: ConfigProps): Promise<void> => {
 	const branch = await resolveBranchRef(props);
 	announceTargetBranch(props, branch, "Applying to branch");
 	const branchId = branch.branchId;
-	const result = await apply(config, {
-		projectId: props.projectId,
-		branchId,
-		...(props.apiKey ? { apiKey: props.apiKey } : {}),
-		...(props.apiHost ? { apiHost: props.apiHost } : {}),
-		...(props.runtimeApi ? { api: props.runtimeApi } : {}),
-		...(props.updateExisting ? { updateExisting: true } : {}),
-		...(props.allowProtected ? { allowProtectedBranch: true } : {}),
-		bundleFunction: neonctlBundler,
-	});
+	let result: PushResult;
+	try {
+		result = await apply(config, {
+			projectId: props.projectId,
+			branchId,
+			...(props.apiKey ? { apiKey: props.apiKey } : {}),
+			...(props.apiHost ? { apiHost: props.apiHost } : {}),
+			...(props.runtimeApi ? { api: props.runtimeApi } : {}),
+			...(props.updateExisting ? { updateExisting: true } : {}),
+			...(props.allowProtected ? { allowProtectedBranch: true } : {}),
+			bundleFunction: neonctlBundler,
+		});
+	} catch (err) {
+		// Drift without `--update-existing` throws with the conflicting fields attached.
+		// Render them as the same git-style before→after diff, then fail with a concise
+		// message (the detailed diff above replaces the library's long multi-line text).
+		if (err instanceof PushConflictError) {
+			reportConflicts(props, err.conflicts);
+			throw new Error(
+				"Branch settings conflict with the policy. Re-run with --update-existing to apply the changes shown above.",
+			);
+		}
+		throw err;
+	}
 	reportPushResult(props, result, "apply", utilizedServices(config));
 
 	// After a successful apply/deploy, write the branch's Neon env vars to a local .env —
@@ -539,10 +547,16 @@ const utilizedServices = (config: Config): string[] => {
 /**
  * Render a {@link PushResult}. JSON/YAML output emits the raw result (plus a `services`
  * summary) verbatim so it can be piped; the human-readable path renders the actual changes
- * (dropping noops) and any blocking conflicts as tables, or a "nothing to do" line when both
- * are empty — and always closes with the list of services the policy utilizes so a service
- * that produces no plan step (Postgres, or the credential-gated AI Gateway) isn't mistaken
- * for being missing from the plan above.
+ * (dropping noops) and any blocking conflicts as a `git diff`-style report, or a "nothing to
+ * do" line when both are empty — and always closes with the list of services the policy
+ * utilizes so a service that produces no plan step (Postgres, or the credential-gated AI
+ * Gateway) isn't mistaken for being missing from the plan above.
+ *
+ * The diff is asymmetric on purpose (see the CLI's `neon diff`): **service** changes are
+ * additions with no "before", so they list as `+`/`~` lines; **branch setting** changes have
+ * a natural before→after, so conflicts render as a sorted `current → desired` diff. Planned
+ * branch updates (under `--update-existing`) carry only the new value, so they render
+ * desired-only for now (the previous value isn't threaded through the runtime yet).
  */
 const reportPushResult = (
 	props: ConfigProps,
@@ -555,27 +569,15 @@ const reportPushResult = (
 		return;
 	}
 
-	const changes = result.applied
-		.filter((change) => change.action !== "noop")
-		.map((change) => ({
-			action: change.action,
-			kind: change.kind,
-			identifier: change.identifier,
-		}));
-	const conflicts = result.conflicts.map((conflict: ConflictReport) => ({
-		identifier: conflict.identifier,
-		field: conflict.field,
-		current: stringify(conflict.current),
-		desired: stringify(conflict.desired),
-		reason: conflict.reason,
-	}));
+	const appliedChanges = result.applied.filter(
+		(change) => change.action !== "noop",
+	);
 
 	// Deployed functions carry their invocation URL in the change details — collect them so
 	// we can list where to call each function without digging through the raw details blob.
 	// Keyed by slug so a function never shows twice.
 	const functionUrlBySlug = new Map<string, string>();
-	for (const change of result.applied) {
-		if (change.action === "noop") continue;
+	for (const change of appliedChanges) {
 		const slug = change.details?.slug;
 		const invocationUrl = change.details?.invocationUrl;
 		if (typeof slug === "string" && typeof invocationUrl === "string") {
@@ -583,19 +585,20 @@ const reportPushResult = (
 		}
 	}
 
+	// chalk self-detects TTY/NO_COLOR; `--no-color` (props.color === false) forces plain.
+	const color = props.color !== false;
 	const out = writer(props);
-	const noChanges = changes.length === 0 && conflicts.length === 0;
-	if (changes.length > 0) {
-		out.write(changes, {
-			fields: APPLIED_FIELDS,
-			title: mode === "plan" ? "Planned changes" : "Applied changes",
-		});
-	}
-	if (conflicts.length > 0) {
-		out.write(conflicts, { fields: CONFLICT_FIELDS, title: "Conflicts" });
-	}
-	// Flush any tables, then append the lists/summary so they read directly below them.
-	out.end();
+	// Conflicts never reach here in the CLI: `plan` runs with updateExisting on, and a bare
+	// `apply` throws PushConflictError (rendered by reportConflicts). So an empty applied set
+	// is the whole story here.
+	const noChanges = appliedChanges.length === 0;
+
+	const appliedText = renderAppliedChanges(
+		appliedChanges,
+		mode === "plan" ? "Planned changes" : "Applied changes",
+		{ color },
+	);
+	if (appliedText) out.text(`${appliedText}\n`);
 
 	// Function URLs are a plain list rather than a table: an invocation URL can be 70+ chars,
 	// which makes any bordered table overflow and wrap awkwardly in a normal terminal. A list
@@ -615,20 +618,34 @@ const reportPushResult = (
 		);
 	}
 	out.text(`\nUtilized services: ${services.join(", ")}\n`);
-
-	if (conflicts.length > 0) {
-		log.info(
-			"Resolve the conflicts above, or re-run with --update-existing to override the current remote settings.",
-		);
-	}
 };
 
-const stringify = (value: unknown): string =>
-	value === undefined
-		? ""
-		: typeof value === "string"
-			? value
-			: JSON.stringify(value);
+/**
+ * Render the branch-setting {@link ConflictReport}s a bare `apply` refused to override (drift
+ * without `--update-existing`) as the git-style before→after diff. JSON/YAML output emits the
+ * structured conflicts so it can be piped; the human path prints the sorted diff followed by
+ * any conflict whose fix is *not* `--update-existing` (e.g. an immutable "no endpoint" case),
+ * so nothing the library's error message carried is lost.
+ */
+const reportConflicts = (
+	props: ConfigProps,
+	conflicts: readonly ConflictReport[],
+): void => {
+	if (props.output === "json" || props.output === "yaml") {
+		writer(props).end({ conflicts }, { fields: [] });
+		return;
+	}
+	const out = writer(props);
+	const text = renderBranchSettingConflicts([...conflicts], {
+		color: props.color !== false,
+	});
+	if (text) out.text(`${text}\n`);
+	for (const conflict of conflicts) {
+		if (!/updateExisting/i.test(conflict.reason)) {
+			out.text(`  ! ${conflict.field}: ${conflict.reason}\n`);
+		}
+	}
+};
 
 /**
  * Apply a `neon.ts` policy to a **freshly created** branch (used by `neonctl checkout`
