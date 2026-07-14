@@ -90,15 +90,15 @@ describe("init() with json mode", () => {
 			{ editor: "Claude CLI", status: "success", type: "mcp" },
 		]);
 		expect(result.neonctl.authenticated).toBe(true);
-		expect(result.neonctl.commands.listOrgs).toContain("neonctl orgs list");
+		expect(result.neonctl.commands.listOrgs).toContain("neon orgs list");
 		expect(result.neonctl.commands.listProjects).toContain(
-			"neonctl projects list",
+			"neon projects list",
 		);
 		expect(result.neonctl.commands.createProject).toContain(
-			"neonctl projects create",
+			"neon projects create",
 		);
 		expect(result.neonctl.commands.getConnectionString).toContain(
-			"neonctl connection-string",
+			"neon connection-string",
 		);
 		expect(result.mcpServer.configured).toBe(true);
 		expect(result.mcpServer.requiresRestart).toBe(true);
@@ -282,13 +282,13 @@ describe("init() with json mode", () => {
 		expect(result.authInstructions).toContain("NEW ACCOUNT");
 		expect(result.authInstructions).toContain("/signup");
 		expect(result.authInstructions).toContain("EXISTING ACCOUNT");
-		expect(result.authInstructions).toContain("neonctl auth");
+		expect(result.authInstructions).toContain("neon auth");
 		expect(result.authInstructions).toContain("email verification");
 		expect(result.authInstructions).toContain(
 			"Do NOT write wrapper scripts",
 		);
 		expect(result.authInstructions).toContain("exit code 2");
-		expect(result.authInstructions).toContain("Re-run neonctl init");
+		expect(result.authInstructions).toContain("Re-run neon init");
 		expect(mockInstallNeon).not.toHaveBeenCalled();
 	});
 

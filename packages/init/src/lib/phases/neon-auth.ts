@@ -77,7 +77,7 @@ export async function handleNeonAuthPhase(
 					{
 						id: "provision",
 						description:
-							"Enable Neon Auth on the project using the neonctl CLI. " +
+							"Enable Neon Auth on the project using the Neon CLI. " +
 							`Run: \`${neonctlCmd()} neon-auth enable --project-id <project-id> --output json\`. ` +
 							`You can check current status with: \`${neonctlCmd()} neon-auth status --project-id <project-id> --output json\`.` +
 							(options.projectId

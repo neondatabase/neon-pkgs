@@ -20,7 +20,7 @@ export interface GettingStartedPhaseOptions {
  *
  * Steps are concrete and executable — each has a CLI command to run
  * or a specific file operation. The agent should attempt each step
- * in order and actually perform the action using the neonctl CLI.
+ * in order and actually perform the action using the Neon CLI.
  */
 export async function handleGettingStartedPhase(
 	options: GettingStartedPhaseOptions,
@@ -119,7 +119,7 @@ export async function handleGettingStartedPhase(
 			description: [
 				"Check if node_modules exists in the project root.",
 				"If not, install project dependencies using the appropriate package manager (check for pnpm-lock.yaml, yarn.lock, bun.lockb, or default to npm).",
-				"This must be done before `neonctl env pull` because the project's Neon config file may import packages that need to be installed first.",
+				"This must be done before `neon env pull` because the project's Neon config file may import packages that need to be installed first.",
 			].join(" "),
 			command: "npm install",
 		});
@@ -128,7 +128,7 @@ export async function handleGettingStartedPhase(
 		steps.push({
 			id: "pull_env",
 			description: [
-				"Now that the .neon context file is in place and dependencies are installed, run `neonctl env pull` to populate the project's environment variables.",
+				"Now that the .neon context file is in place and dependencies are installed, run `neon env pull` to populate the project's environment variables.",
 				"This automatically writes the database connection string (and any other Neon-managed env vars) to the correct env file.",
 				"It reads the .neon context file to determine the project, and writes to the appropriate env file for the project.",
 				"Ensure the target env file is listed in .gitignore.",
@@ -223,7 +223,7 @@ export async function handleGettingStartedPhase(
 		description: [
 			"Verify the database connection works by running a SQL query against the Neon database.",
 			"Write and run a short script that connects using DATABASE_URL from the project's env file and executes `SELECT 1` (or queries a table from the migration if migrations were run).",
-			"Do NOT use the neonctl CLI or MCP tools for this — use a direct database connection to verify end-to-end connectivity.",
+			"Do NOT use the Neon CLI or MCP tools for this — use a direct database connection to verify end-to-end connectivity.",
 		].join(" "),
 	});
 

@@ -39,7 +39,7 @@ describe("getting-started phase", () => {
 			const orgStep = result.nextAction.steps.find(
 				(s) => s.id === "select_org",
 			);
-			expect(orgStep?.command).toContain("neonctl orgs list");
+			expect(orgStep?.command).toContain("neon orgs list");
 			expect(orgStep?.description).toContain("CLI");
 			// Create step should include --org-id
 			const createStep = result.nextAction.steps.find(

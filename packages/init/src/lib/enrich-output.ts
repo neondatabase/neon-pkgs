@@ -1,6 +1,6 @@
 /**
  * Converts neon-init args (e.g. ["neon-auth", "--json", "--setup"]) to a
- * neonctl init --data command using the step routing pattern.
+ * neon init --data command using the step routing pattern.
  */
 function argsToCommand(args: string[]): string {
 	const data: Record<string, unknown> = {};
@@ -35,12 +35,12 @@ function argsToCommand(args: string[]): string {
 		}
 	}
 
-	return `neonctl init --agent --data '${JSON.stringify(data)}'`;
+	return `neon init --agent --data '${JSON.stringify(data)}'`;
 }
 
 /**
  * Walks a phase response object and:
- * 1. Replaces `args` arrays with `command` strings (neonctl init --data format)
+ * 1. Replaces `args` arrays with `command` strings (neon init --data format)
  * 2. Renames `run_neon_init` → `run_shell_command`
  * 3. Adds a description to finalize steps
  */
@@ -70,7 +70,7 @@ export function enrichResponse(obj: unknown): unknown {
 			result.command.includes('"step":"finalize"')
 		) {
 			result.description =
-				"Run this command to complete the setup. This is the final step — do not run any other neonctl init commands after this.";
+				"Run this command to complete the setup. This is the final step — do not run any other neon init commands after this.";
 		}
 	}
 

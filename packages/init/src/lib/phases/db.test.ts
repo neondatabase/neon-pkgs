@@ -9,7 +9,7 @@ describe("handleDbPhase", () => {
 		expect(result.status).toBe("ready");
 		expect(result.nextAction.type).toBe("run_command");
 		if (result.nextAction.type === "run_command") {
-			expect(result.nextAction.command).toContain("neonctl orgs list");
+			expect(result.nextAction.command).toContain("neon orgs list");
 			expect(result.nextAction.onSuccess.args).toContain("--orgs-result");
 		}
 	});

@@ -82,7 +82,7 @@ Flags (both commands): `--config <path>`, `--project-id`, `--branch`, `--api-key
 
 ## Env vars produced
 
-These are the OS-level vars `fetchEnv` / `parseEnv` read and `toEntries` (so `neon-env run` / `neon-env export` / `neonctl env pull`) emit. Which ones appear depends on what your `neon.ts` policy enables — grouped by service below.
+These are the OS-level vars `fetchEnv` / `parseEnv` read and `toEntries` (so `neon-env run` / `neon-env export` / `neon env pull`) emit. Which ones appear depends on what your `neon.ts` policy enables — grouped by service below.
 
 **Branch identity + Postgres** (always present):
 
@@ -125,4 +125,4 @@ These are the OS-level vars `fetchEnv` / `parseEnv` read and `toEntries` (so `ne
 
 The **CLI** (`neon-env run`) resolves project + branch itself: `--project-id` / `--branch` flag → `NEON_PROJECT_ID` / `NEON_BRANCH` (name) / `NEON_BRANCH_ID` (legacy id) env → `.neon[/project.json]` walked up from the working directory (its `branch` field, name or id; legacy `branchId` still read). The API key resolves via `--api-key` → `NEON_API_KEY` → `~/.config/neonctl/credentials.json`.
 
-The **library functions** do none of this — pass `projectId` / `branch` explicitly. This keeps `.neon` parsing in one place (the CLI / neonctl) and the functions pure.
+The **library functions** do none of this — pass `projectId` / `branch` explicitly. This keeps `.neon` parsing in one place (the CLI / neon) and the functions pure.

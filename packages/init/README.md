@@ -53,7 +53,7 @@ Then:
 
 The tool automatically detects which editors are installed on your system and you'll be prompted to choose which one(s) to configure.
 
-**Authentication:** Uses OAuth via `neonctl` and creates an API key for you - opens your browser, no manual API keys needed.
+**Authentication:** Uses OAuth via the Neon CLI (`neon`) and creates an API key for you - opens your browser, no manual API keys needed.
 
 **Agent Guidelines:** The Neon MCP Server includes built-in agent guidelines as an MCP resource. Your AI assistant will automatically have access to:
 

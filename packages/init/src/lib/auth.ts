@@ -34,7 +34,7 @@ export async function ensureNeonctlAuth(
 		if (!quiet) {
 			if (msg.includes("interactive auth") || msg.includes("CI")) {
 				log.error(
-					"Auth requires an interactive terminal. Run neonctl init in your system terminal (outside the chat) to sign in.",
+					"Auth requires an interactive terminal. Run neon init in your system terminal (outside the chat) to sign in.",
 				);
 			} else {
 				log.error(`Authentication failed: ${msg}`);
@@ -86,7 +86,8 @@ export async function createApiKeyFromNeonctl(
 	try {
 		const accessToken = await getNeonctlAccessToken();
 		if (!accessToken) {
-			if (!quiet) log.error("Could not find OAuth token from neonctl");
+			if (!quiet)
+				log.error("Could not find OAuth token from the Neon CLI");
 			return null;
 		}
 

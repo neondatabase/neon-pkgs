@@ -72,7 +72,7 @@ describe("handleAuthPhase", () => {
 		expect(result.status).toBe("in_progress");
 		expect(result.nextAction.type).toBe("run_command");
 		if (result.nextAction.type === "run_command") {
-			expect(result.nextAction.command).toContain("neonctl auth");
+			expect(result.nextAction.command).toContain("neon auth");
 			expect(result.nextAction.timeout).toBe(120000);
 			expect(result.nextAction.onFailure).toHaveProperty("2");
 		}

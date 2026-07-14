@@ -257,7 +257,7 @@ enabled and the branch S3 endpoint metadata; buckets and objects are nested unde
 | `presign(projectId, branchId, bucketName, objectKey, input)` | `PresignResponse` | `input`: `{ operation: "upload" \| "download", content_type?, expires_in_seconds? }` |
 
 ```ts
-// Upload via presigned PUT (same flow as neonctl bucket object put)
+// Upload via presigned PUT (same flow as neon bucket object put)
 const { data: presign } = await neon.storage.objects.presign(
   projectId, branchId, "avatars", "user-1.png",
   { operation: "upload", content_type: "image/png" },

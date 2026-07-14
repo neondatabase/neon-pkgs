@@ -2,15 +2,17 @@ import { lstatSync } from "node:fs";
 import { execa } from "execa";
 
 /**
- * Returns the neonctl command prefix: "CI= npx -y neonctl".
+ * Returns the Neon CLI command prefix: "CI= npx -y neon".
  *
- * neonctl reads NEON_API_HOST and NEON_OAUTH_HOST from the environment
- * directly, so no extra flags are needed.
+ * The CLI reads NEON_API_HOST and NEON_OAUTH_HOST from the environment
+ * directly, so no extra flags are needed. The `neon` package ships both the
+ * `neon` and `neonctl` binaries; we surface the cleaner `neon` command in the
+ * examples emitted to users and agents.
  *
  * Usage: `${neonctlCmd()} orgs list --output json`
  */
 export function neonctlCmd(): string {
-	return "CI= npx -y neonctl";
+	return "CI= npx -y neon";
 }
 
 /**

@@ -413,7 +413,7 @@ async function interactiveInitInner(
 		if (isCancel(authResult) || authResult === "no") {
 			outro(
 				dim(
-					`Your project is configured with Neon. You can set up Neon Auth later by having your agent run: neonctl init --agent --data '{"step":"neon-auth"}'`,
+					`Your project is configured with Neon. You can set up Neon Auth later by having your agent run: neon init --agent --data '{"step":"neon-auth"}'`,
 				),
 			);
 			return;
@@ -646,30 +646,28 @@ async function interactiveInitInner(
 			authS.stop("Authenticated.");
 		}
 
-		// Ensure neonctl CLI is installed and up to date
+		// Ensure the Neon CLI is installed and up to date
 		const nctlS = spinner();
-		nctlS.start("Checking neonctl CLI...");
+		nctlS.start("Checking Neon CLI...");
 		const nctlResult = await ensureNeonctl();
 		switch (nctlResult.status) {
 			case "already_current":
 				nctlS.stop(
-					dim(`neonctl CLI is up to date (v${nctlResult.version}) ✓`),
+					dim(`Neon CLI is up to date (v${nctlResult.version}) ✓`),
 				);
 				break;
 			case "installed":
 				nctlS.stop(
-					dim(`Installed neonctl CLI (v${nctlResult.version}) ✓`),
+					dim(`Installed Neon CLI (v${nctlResult.version}) ✓`),
 				);
 				break;
 			case "updated":
-				nctlS.stop(
-					dim(`Updated neonctl CLI to v${nctlResult.version} ✓`),
-				);
+				nctlS.stop(dim(`Updated Neon CLI to v${nctlResult.version} ✓`));
 				break;
 			case "failed":
-				nctlS.stop("Failed to install neonctl CLI");
+				nctlS.stop("Failed to install Neon CLI");
 				log.warn(
-					"neonctl could not be installed automatically. The setup will continue using npx.",
+					"The Neon CLI could not be installed automatically. The setup will continue using npx.",
 				);
 				break;
 		}
@@ -775,7 +773,7 @@ async function interactiveInitInner(
 	if (options.preview) gettingStartedData.preview = true;
 
 	// Build a prompt for the user to paste into their agent chat
-	const cmd = `neonctl init --agent --data '${JSON.stringify({ step: "getting-started", ...gettingStartedData })}'`;
+	const cmd = `neon init --agent --data '${JSON.stringify({ step: "getting-started", ...gettingStartedData })}'`;
 	// Account for clack's "│  " prefix (3 chars) when wrapping
 	const cols = (process.stdout.columns || 80) - 3;
 	const promptText = `To finish setting up Neon using Neon's agent-guided onboarding experience, have your agent run this shell command: ${cmd}`;

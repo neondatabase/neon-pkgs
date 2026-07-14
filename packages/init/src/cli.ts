@@ -549,12 +549,12 @@ const cli = yargs(hideBin(process.argv))
 				.option("orgs-result", {
 					type: "string",
 					description:
-						"JSON output from neonctl orgs list (agent passes back).",
+						"JSON output from neon orgs list (agent passes back).",
 				})
 				.option("projects-result", {
 					type: "string",
 					description:
-						"JSON output from neonctl projects list (agent passes back).",
+						"JSON output from neon projects list (agent passes back).",
 				})
 				.option("framework", {
 					type: "string",

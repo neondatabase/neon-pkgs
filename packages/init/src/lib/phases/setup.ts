@@ -225,7 +225,7 @@ async function buildBulkInspection(
 				{
 					id: "neonctl",
 					description:
-						"The neonctl CLI will be installed or updated automatically (no action needed from the agent)",
+						"The Neon CLI will be installed or updated automatically (no action needed from the agent)",
 					lookFor: [],
 				},
 				{
@@ -306,8 +306,8 @@ async function buildBulkInspection(
 								{
 									value: "defaults",
 									label: hasApp
-										? "Use defaults (neonctl CLI, MCP: global, skills: project-level, extension if applicable — already-configured components will be skipped)"
-										: "Use defaults (neonctl CLI, MCP: global, extension if applicable — skills included in template)",
+										? "Use defaults (Neon CLI, MCP: global, skills: project-level, extension if applicable — already-configured components will be skipped)"
+										: "Use defaults (Neon CLI, MCP: global, extension if applicable — skills included in template)",
 								},
 								{
 									value: "customize",
@@ -467,7 +467,7 @@ function _buildModeQuestion(options: SetupPhaseOptions): PhaseResponse {
 	const inspectionArgs = buildInspectionArgs(options);
 
 	// Build defaults label showing only what will be installed
-	const defaultsParts: string[] = ["neonctl CLI"];
+	const defaultsParts: string[] = ["Neon CLI"];
 	if (!options.mcpConfigured) defaultsParts.push("MCP global");
 	defaultsParts.push("skills in project");
 	if (options.isVscodeIde) defaultsParts.push("install extension");
@@ -675,34 +675,34 @@ async function executeBatchedInstallation(
 		}
 	}
 
-	// Step 1: Ensure neonctl CLI is installed and up to date
+	// Step 1: Ensure the Neon CLI is installed and up to date
 	const neonctlResult = await ensureNeonctl();
 	switch (neonctlResult.status) {
 		case "already_current":
 			results.push({
 				id: "neonctl",
-				description: `neonctl CLI is up to date (v${neonctlResult.version})`,
+				description: `Neon CLI is up to date (v${neonctlResult.version})`,
 				status: "success",
 			});
 			break;
 		case "installed":
 			results.push({
 				id: "neonctl",
-				description: `Installed neonctl CLI (v${neonctlResult.version})`,
+				description: `Installed Neon CLI (v${neonctlResult.version})`,
 				status: "success",
 			});
 			break;
 		case "updated":
 			results.push({
 				id: "neonctl",
-				description: `Updated neonctl CLI to v${neonctlResult.version}`,
+				description: `Updated Neon CLI to v${neonctlResult.version}`,
 				status: "success",
 			});
 			break;
 		case "failed":
 			results.push({
 				id: "neonctl",
-				description: "Failed to install neonctl CLI",
+				description: "Failed to install Neon CLI",
 				status: "failed",
 				error: neonctlResult.error,
 			});

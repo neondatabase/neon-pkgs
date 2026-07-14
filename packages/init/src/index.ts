@@ -53,7 +53,7 @@ export interface InitOptions {
 }
 
 function getNeonctlCommands() {
-	const base = "npx neonctl";
+	const base = "npx neon";
 	return {
 		listOrgs: `${base} orgs list --output json`,
 		listProjects: `${base} projects list --output json`,
@@ -70,8 +70,8 @@ function getAuthInstructions(): string {
 	return [
 		"YOU (the agent) must handle authentication. Do NOT ask the user to run commands themselves.",
 		"Do NOT write wrapper scripts (Python, shell, etc.) — use simple shell commands only.",
-		"IMPORTANT: Unset the CI environment variable for all neonctl commands below,",
-		"otherwise neonctl will refuse to open the browser.",
+		"IMPORTANT: Unset the CI environment variable for all neon commands below,",
+		"otherwise the Neon CLI will refuse to open the browser.",
 		"",
 		'Step 1: Ask the user: "Do you already have a Neon account, or do you need to create one?"',
 		"",
@@ -98,7 +98,7 @@ function getAuthInstructions(): string {
 		"=== AFTER SUCCESSFUL AUTH ===",
 		`Step 5: Verify by running: ${cmd} me`,
 		"   This should print the user's account info and exit with code 0.",
-		"Step 6: Re-run neonctl init with the same --agent and --json flags to complete setup.",
+		"Step 6: Re-run neon init with the same --agent and --json flags to complete setup.",
 	].join("\n");
 }
 
