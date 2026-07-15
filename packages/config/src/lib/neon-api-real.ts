@@ -1357,8 +1357,16 @@ const HTTP_STATUS_TEXT: Record<number, string> = {
 	503: "Service Unavailable",
 };
 
-/** AWS region where Neon platform features are available during the public beta. */
+/** AWS region where Neon platform features are currently available in beta. */
 const PLATFORM_BETA_REGION_ID = "aws-us-east-2";
+
+const PLATFORM_BETA_REGION_GUIDANCE =
+	"Neon platform features (Functions, object storage, and the AI Gateway) are currently in beta and only available in the AWS US East (Ohio) region " +
+	`(\`${PLATFORM_BETA_REGION_ID}\`); more regions are coming shortly. Create a project in that region — e.g. \`neon link --org-id <org> --project-name <name> --region-id ${PLATFORM_BETA_REGION_ID}\`.`;
+
+const PLATFORM_BETA_REGION_GUIDANCE_SHORT =
+	"Neon platform features are currently in beta and only available in the AWS US East (Ohio) region " +
+	`(\`${PLATFORM_BETA_REGION_ID}\`); more regions are coming shortly. Create a project in that region to use it.`;
 
 /**
  * True when the Neon API body indicates the feature isn't deployed for this project's
@@ -1378,8 +1386,8 @@ function isRegionUnavailableNeonMessage(
 }
 
 /**
- * Per-status guidance for a platform feature that came back "unavailable". During the
- * public beta these features roll out region by region — today only in
+ * Per-status guidance for a platform feature that came back "unavailable". These features
+ * are currently in beta and rolling out region by region — today only in
  * {@link PLATFORM_BETA_REGION_ID} — so we tailor the next step instead of emitting one
  * catch-all:
  *
@@ -1387,7 +1395,7 @@ function isRegionUnavailableNeonMessage(
  *   isn't deployed for this project's region: create a project in `aws-us-east-2`.
  * - 503 without a region-unavailable body — the route exists but is refusing right now;
  *   Neon may be having a transient incident. Retry; if it persists check neonstatus.com.
- * - anything else — point at the public-beta region requirement.
+ * - anything else — point at the beta region requirement.
  *
  * Only statuses {@link isPreviewFeatureUnavailable} accepts (404/501/503) actually reach
  * this, so there is intentionally no 401/403 branch — those never classify as "unavailable".
@@ -1401,18 +1409,12 @@ function platformFeatureUnavailableHint(
 		status === 404 ||
 		status === 501
 	) {
-		return (
-			"During the public beta, Neon platform features (Functions, object storage, and the AI Gateway) are only available in the AWS US East (Ohio) region " +
-			`(\`${PLATFORM_BETA_REGION_ID}\`). Create a project in that region — e.g. \`neon link --org-id <org> --project-name <name> --region-id ${PLATFORM_BETA_REGION_ID}\`.`
-		);
+		return PLATFORM_BETA_REGION_GUIDANCE;
 	}
 	if (status === 503) {
 		return "The endpoint is reachable but refused the request — Neon may be having a transient incident. Retry shortly; if it keeps failing, check https://neonstatus.com and contact Neon support.";
 	}
-	return (
-		"During the public beta, this feature is only available in the AWS US East (Ohio) region " +
-		`(\`${PLATFORM_BETA_REGION_ID}\`). Create a project in that region to use it.`
-	);
+	return PLATFORM_BETA_REGION_GUIDANCE_SHORT;
 }
 
 /**
