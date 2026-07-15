@@ -1361,12 +1361,12 @@ const HTTP_STATUS_TEXT: Record<number, string> = {
 const PLATFORM_BETA_REGION_ID = "aws-us-east-2";
 
 const PLATFORM_BETA_REGION_GUIDANCE =
-	"Neon platform features (Functions, Object Storage, and AI Gateway) are currently in beta and only available in the AWS US East (Ohio) region " +
-	`(\`${PLATFORM_BETA_REGION_ID}\`); more regions are coming shortly. Create a project in that region — e.g. \`neon link --org-id <org> --project-name <name> --region-id ${PLATFORM_BETA_REGION_ID}\`.`;
+	"Neon platform features (Functions and Object Storage) are currently in beta and only available in the AWS US East (Ohio) region " +
+	`(\`${PLATFORM_BETA_REGION_ID}\`); more regions are coming shortly. Run \`neon link\` to create a new project in that region.`;
 
 const PLATFORM_BETA_REGION_GUIDANCE_SHORT =
 	"Neon platform features are currently in beta and only available in the AWS US East (Ohio) region " +
-	`(\`${PLATFORM_BETA_REGION_ID}\`); more regions are coming shortly. Create a project in that region to use it.`;
+	`(\`${PLATFORM_BETA_REGION_ID}\`); more regions are coming shortly. Run \`neon link\` to create a new project in that region.`;
 
 /**
  * True when the Neon API body indicates the feature isn't deployed for this project's
