@@ -16,6 +16,7 @@ import {
 } from "@neon/config-runtime";
 import chalk from "chalk";
 import type yargs from "yargs";
+import { getApiClient } from "../api.js";
 import { toNeonConfigView } from "../config_format.js";
 
 import { contextBranch, readContextFile } from "../context.js";
@@ -23,6 +24,10 @@ import { isCi } from "../env.js";
 import { loadEnvFileIntoProcess } from "../env_file.js";
 import { log } from "../log.js";
 import type { BranchScopeProps } from "../types.js";
+import {
+	assertAiGatewayProvisionable,
+	warnAiGateway,
+} from "../utils/ai_gateway_notice.js";
 import { announceTargetBranch } from "../utils/branch_notice.js";
 import {
 	renderAppliedChanges,
@@ -464,7 +469,19 @@ export const planCmd = async (props: ConfigProps): Promise<void> => {
 		...(props.apiHost ? { apiHost: props.apiHost } : {}),
 		...(props.runtimeApi ? { api: props.runtimeApi } : {}),
 	});
-	reportPushResult(props, result, "plan", utilizedServices(config));
+	const services = utilizedServices(config);
+	reportPushResult(props, result, "plan", services);
+
+	// `plan` is a dry run and never pulls credentials, so it can only offer the plan-based
+	// (Free) AI Gateway notice — the reduced-model-set check needs a live gateway token,
+	// which `apply`/`checkout`/`env pull` get via the bundled env pull. Best-effort.
+	if (services.includes("AI Gateway")) {
+		await warnAiGateway({
+			apiClient: props.apiClient,
+			projectId: props.projectId,
+			branchId,
+		});
+	}
 };
 
 export const applyCmd = async (props: ConfigProps): Promise<void> => {
@@ -472,6 +489,17 @@ export const applyCmd = async (props: ConfigProps): Promise<void> => {
 	const branch = await resolveBranchRef(props);
 	announceTargetBranch(props, branch, "Applying to branch");
 	const branchId = branch.branchId;
+
+	// The AI Gateway can't serve on the Free plan, so refuse to provision it up front rather
+	// than write a credential that won't work. Only when the policy actually enables the
+	// gateway; best-effort on the plan lookup (a transient failure never blocks a paid user).
+	if (utilizedServices(config).includes("AI Gateway")) {
+		await assertAiGatewayProvisionable({
+			apiClient: props.apiClient,
+			projectId: props.projectId,
+		});
+	}
+
 	let result: PushResult;
 	try {
 		result = await apply(config, {
@@ -648,6 +676,31 @@ const reportConflicts = (
 };
 
 /**
+ * Block provisioning the AI Gateway on a Free plan from the `checkout` policy paths, which
+ * carry raw credentials (`apiKey`/`apiHost`) rather than the CLI's api client. Builds a client
+ * from them and defers to {@link assertAiGatewayProvisionable}. Skipped when a `runtimeApi` is
+ * injected (tests) or no `apiKey` is available; the interactive commands always have a key.
+ */
+const assertAiGatewayProvisionableFromCreds = async (props: {
+	projectId: string;
+	apiKey?: string;
+	apiHost?: string;
+	runtimeApi?: NeonApi;
+	config: Config;
+}): Promise<void> => {
+	if (props.runtimeApi || !props.apiKey) return;
+	if (!utilizedServices(props.config).includes("AI Gateway")) return;
+	const apiClient = getApiClient({
+		apiKey: props.apiKey,
+		...(props.apiHost ? { apiHost: props.apiHost } : {}),
+	});
+	await assertAiGatewayProvisionable({
+		apiClient,
+		projectId: props.projectId,
+	});
+};
+
+/**
  * Apply a `neon.ts` policy to a **freshly created** branch (used by `neonctl checkout`
  * when it creates a branch). No-op when there is no `neon.ts` on the path from cwd up to
  * the repo root — checkout still succeeds, it just has no policy to apply.
@@ -675,6 +728,14 @@ export const applyPolicyOnCreate = async (props: {
 		if (/Could not find a Neon config file/i.test(message)) return;
 		throw err;
 	}
+
+	await assertAiGatewayProvisionableFromCreds({
+		projectId: props.projectId,
+		...(props.apiKey ? { apiKey: props.apiKey } : {}),
+		...(props.apiHost ? { apiHost: props.apiHost } : {}),
+		...(props.runtimeApi ? { runtimeApi: props.runtimeApi } : {}),
+		config,
+	});
 
 	log.info("Applying neon.ts policy to the new branch…");
 	const result = await apply(config, {
@@ -736,6 +797,14 @@ export const createBranchFromPolicyOnCheckout = async (props: {
 		if (/Could not find a Neon config file/i.test(message)) return null;
 		throw err;
 	}
+
+	await assertAiGatewayProvisionableFromCreds({
+		projectId: props.projectId,
+		...(props.apiKey ? { apiKey: props.apiKey } : {}),
+		...(props.apiHost ? { apiHost: props.apiHost } : {}),
+		...(props.runtimeApi ? { runtimeApi: props.runtimeApi } : {}),
+		config,
+	});
 
 	const { branchId, branchName, result } = await createBranchFromPolicy(
 		config,

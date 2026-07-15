@@ -7,6 +7,7 @@ import { resolveNeonEnvVars } from "../dev/env.js";
 import { mergeEnvFile, readEnvFile, resolveEnvFilePath } from "../env_file.js";
 import { log } from "../log.js";
 import type { BranchScopeProps } from "../types.js";
+import { warnAiGateway } from "../utils/ai_gateway_notice.js";
 import { announceTargetBranch } from "../utils/branch_notice.js";
 import { fillSingleProject, resolveBranchRef } from "../utils/enrichers.js";
 
@@ -168,6 +169,22 @@ export const pull = async (
 			removed.join(", "),
 		);
 	}
+
+	// When the branch has the AI Gateway enabled, the pulled credentials always work, but
+	// serving is plan-gated and the model set can be reduced on the beta — surface that as a
+	// courtesy notice (best-effort; never fails the pull). The freshly pulled token lets us
+	// probe the branch's own /v1/models to detect a reduced catalog.
+	const gatewayBaseUrl = neonVars.NEON_AI_GATEWAY_BASE_URL;
+	const gatewayToken = neonVars.NEON_AI_GATEWAY_TOKEN;
+	if (gatewayBaseUrl && gatewayToken) {
+		await warnAiGateway({
+			apiClient: props.apiClient,
+			projectId: props.projectId,
+			branchId,
+			gateway: { baseUrl: gatewayBaseUrl, token: gatewayToken },
+		});
+	}
+
 	return { status: "written", written, file: targetPath };
 };
 
