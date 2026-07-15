@@ -1,5 +1,20 @@
 # neonctl
 
+## 2.33.0
+
+### Minor Changes
+
+- Surface AI Gateway plan and model-catalog limits in the `neon.ts` lifecycle and `env pull`. Enabling `preview.aiGateway` is credential-gated, but the gateway only serves on a paid plan, so `neon config apply` / `deploy` and `neon checkout` now refuse to provision it on the Free plan with a friendly upgrade message (org-scoped Console billing link), while `neon config plan` (dry run) and `neon env pull` only warn. On a paid plan, `neon env pull` checks the branch's `/v1/models` and, when the catalog is reduced, links the branch's Console AI Gateway page to request access to more models.
+
+### Patch Changes
+
+- Updated dependencies [22d5cdd]
+  - neon-init@0.20.1
+  - @neon/env@0.11.2
+  - @neon/config@0.9.3
+  - @neon/sdk@1.1.1
+  - @neon/config-runtime@0.9.3
+
 ## 2.32.0
 
 ### Minor Changes

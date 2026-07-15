@@ -1,5 +1,18 @@
 # @neondatabase/env
 
+## 0.11.2
+
+### Patch Changes
+
+- 22d5cdd: Reference the `neon` CLI over `neonctl` in user-facing output and docs. The CLI
+  ships both the `neon` and `neonctl` binaries; `neonctl` keeps working as an
+  alias, but `neon init` now emits `neon …` commands, status messages, and
+  agent-facing prompts using the cleaner `neon` name, and the package READMEs
+  document `neon`. Internal package install/version checks and the
+  `~/.config/neonctl/` config path are unchanged.
+- Updated dependencies [22d5cdd]
+  - @neon/config@0.9.3
+
 ## 0.11.1
 
 ### Patch Changes
