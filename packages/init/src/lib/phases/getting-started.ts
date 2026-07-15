@@ -33,7 +33,7 @@ export async function handleGettingStartedPhase(
 
 	if (!options.hasConnectionString) {
 		if (options.preview) {
-			// Preview mode: new project in AWS us-east-2, or existing eligible project
+			// Public beta: platform features are only in AWS us-east-2 for now
 			steps.push(
 				{
 					id: "select_org",
@@ -49,7 +49,7 @@ export async function handleGettingStartedPhase(
 					id: "select_or_create_project",
 					description: [
 						"List existing Neon projects in the selected organization using the CLI command below (replace <org-id> with the selected org ID).",
-						"IMPORTANT: Preview features require a project in the AWS us-east-2 region created on or after 2026-06-15.",
+						"IMPORTANT: During the public beta, Neon platform features (Functions, object storage, AI Gateway) require a project in the AWS us-east-2 region created on or after 2026-06-15.",
 						"Filter the project list to ONLY show projects where region_id is 'aws-us-east-2' AND created_at is on or after '2026-06-15'.",
 						"If eligible projects exist, present them alongside a 'Create new project' option.",
 						"If no eligible projects exist, tell the user and proceed directly to creating a new one.",

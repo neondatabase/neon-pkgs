@@ -205,7 +205,39 @@ describe("isPreviewFeatureUnavailable", () => {
 });
 
 describe("previewUnavailableError", () => {
-	test("503: FeatureUnavailable with status line, API message, request id, and incident guidance", () => {
+	test("503 with region-unavailable API body: points at aws-us-east-2 public beta", () => {
+		const original = new PlatformError(ErrorCode.ServerError, "boom", {
+			details: {
+				status: 503,
+				neonMessage:
+					'platform service not available for this region; cell_id:"aws-us-east-1-cell-9"',
+				requestId: "req-503-region",
+			},
+		});
+		const wrapped = previewUnavailableError(
+			original,
+			"Object storage (buckets)",
+		);
+		expect(wrapped).toBeInstanceOf(PlatformError);
+		if (!(wrapped instanceof PlatformError)) throw new Error("not wrapped");
+		expect(wrapped.code).toBe(ErrorCode.FeatureUnavailable);
+		expect(wrapped.message).toMatch(
+			/Object storage \(buckets\) isn't available for this Neon project/,
+		);
+		expect(wrapped.message).toMatch(/HTTP 503 Service Unavailable/);
+		expect(wrapped.message).toMatch(
+			/platform service not available for this region/,
+		);
+		expect(wrapped.message).toMatch(/request id req-503-region/);
+		expect(wrapped.message).toMatch(/public beta/);
+		expect(wrapped.message).toMatch(/aws-us-east-2/);
+		expect(wrapped.message).not.toMatch(/private preview/);
+		expect(wrapped.message).not.toMatch(/neonstatus\.com/);
+		expect(wrapped.details.status).toBe(503);
+		expect(wrapped.details.requestId).toBe("req-503-region");
+	});
+
+	test("503 with project-unavailable API body: points at aws-us-east-2 public beta", () => {
 		const original = new PlatformError(ErrorCode.ServerError, "boom", {
 			details: {
 				status: 503,
@@ -218,28 +250,37 @@ describe("previewUnavailableError", () => {
 		expect(wrapped).toBeInstanceOf(PlatformError);
 		if (!(wrapped instanceof PlatformError)) throw new Error("not wrapped");
 		expect(wrapped.code).toBe(ErrorCode.FeatureUnavailable);
-		expect(wrapped.message).toMatch(/Functions is a Preview feature/);
 		expect(wrapped.message).toMatch(
-			/isn't available for this Neon project/,
+			/Functions isn't available for this Neon project/,
 		);
-		// One short status line + the raw API message + request id (never a stack trace).
 		expect(wrapped.message).toMatch(/HTTP 503 Service Unavailable/);
 		expect(wrapped.message).toMatch(
 			/platform functions not available for this project/,
 		);
 		expect(wrapped.message).toMatch(/request id req-503/);
-		// 503 → still coming up, or a transient incident: retry / status page / support.
-		expect(wrapped.message).toMatch(/incident/);
-		expect(wrapped.message).toMatch(/neonstatus\.com/);
-		// Escape hatch + structured details for programmatic consumers.
-		expect(wrapped.message).toMatch(
-			/remove the corresponding feature from the `preview`/,
-		);
+		expect(wrapped.message).toMatch(/public beta/);
+		expect(wrapped.message).toMatch(/aws-us-east-2/);
+		expect(wrapped.message).not.toMatch(/neonstatus\.com/);
 		expect(wrapped.details.status).toBe(503);
 		expect(wrapped.details.requestId).toBe("req-503");
 	});
 
-	test("404: points at region availability / private-preview access", () => {
+	test("503 without region signal: incident guidance", () => {
+		const original = new PlatformError(ErrorCode.ServerError, "boom", {
+			details: {
+				status: 503,
+				neonMessage: "service not available",
+				requestId: "req-503-transient",
+			},
+		});
+		const wrapped = previewUnavailableError(original, "Functions");
+		if (!(wrapped instanceof PlatformError)) throw new Error("not wrapped");
+		expect(wrapped.message).toMatch(/incident/);
+		expect(wrapped.message).toMatch(/neonstatus\.com/);
+		expect(wrapped.message).not.toMatch(/aws-us-east-2/);
+	});
+
+	test("404: points at aws-us-east-2 public beta", () => {
 		const original = new PlatformError(ErrorCode.NotFound, "boom", {
 			details: { status: 404, neonMessage: "this route does not exist" },
 		});
@@ -250,8 +291,9 @@ describe("previewUnavailableError", () => {
 		if (!(wrapped instanceof PlatformError)) throw new Error("not wrapped");
 		expect(wrapped.code).toBe(ErrorCode.FeatureUnavailable);
 		expect(wrapped.message).toMatch(/HTTP 404 Not Found/);
-		expect(wrapped.message).toMatch(/region/);
-		expect(wrapped.message).toMatch(/access to the preview/);
+		expect(wrapped.message).toMatch(/public beta/);
+		expect(wrapped.message).toMatch(/aws-us-east-2/);
+		expect(wrapped.message).not.toMatch(/private preview/);
 		expect(wrapped.message).not.toMatch(/neonstatus\.com/);
 		expect(wrapped.details.status).toBe(404);
 	});

@@ -1357,43 +1357,62 @@ const HTTP_STATUS_TEXT: Record<number, string> = {
 	503: "Service Unavailable",
 };
 
+/** AWS region where Neon platform features are available during the public beta. */
+const PLATFORM_BETA_REGION_ID = "aws-us-east-2";
+
 /**
- * Per-status guidance for a Preview feature that came back "unavailable". A preview can be
- * gated several different ways and the HTTP status is the best signal for which, so we tailor
- * the next step instead of emitting one catch-all — valuable while these features are in
- * preview and rolling out region by region:
+ * True when the Neon API body indicates the feature isn't deployed for this project's
+ * region (as opposed to a transient 503 incident).
+ */
+function isRegionUnavailableNeonMessage(
+	neonMessage: string | undefined,
+): boolean {
+	if (!neonMessage) return false;
+	const lower = neonMessage.toLowerCase();
+	return (
+		lower.includes("not available for this region") ||
+		lower.includes("not available for this project") ||
+		lower.includes("platform functions not available") ||
+		lower.includes("platform service not available")
+	);
+}
+
+/**
+ * Per-status guidance for a platform feature that came back "unavailable". During the
+ * public beta these features roll out region by region — today only in
+ * {@link PLATFORM_BETA_REGION_ID} — so we tailor the next step instead of emitting one
+ * catch-all:
  *
- * - 404 / 501 — the route isn't deployed for this project's region (or the account isn't in
- *   the private preview): create a project in a region where the preview is enabled, and
- *   confirm your account has preview access.
- * - 503 — the route exists but is refusing right now: either the preview is still coming up,
- *   or Neon is having a transient incident. Retry; if it persists it's likely an incident.
- * - anything else — generic "not enabled for your account/region; request access".
+ * - 404 / 501, or an API message that names region/project unavailability — the route
+ *   isn't deployed for this project's region: create a project in `aws-us-east-2`.
+ * - 503 without a region-unavailable body — the route exists but is refusing right now;
+ *   Neon may be having a transient incident. Retry; if it persists check neonstatus.com.
+ * - anything else — point at the public-beta region requirement.
  *
  * Only statuses {@link isPreviewFeatureUnavailable} accepts (404/501/503) actually reach
  * this, so there is intentionally no 401/403 branch — those never classify as "unavailable".
  */
-function previewUnavailableHint(status: number | undefined): string {
-	switch (status) {
-		case 404:
-		case 501:
-			return (
-				"This usually means the preview isn't available in your project's region yet, or " +
-				"your Neon account isn't in the private preview: create a project in a region where " +
-				"the preview is enabled, and make sure your account has access to the preview."
-			);
-		case 503:
-			return (
-				"The endpoint is reachable but refused the request — the preview may still be " +
-				"coming up, or Neon may be having a transient incident. Retry shortly; if it keeps " +
-				"failing, check https://neonstatus.com and report it to Neon support."
-			);
-		default:
-			return (
-				"This usually means the preview isn't enabled for your Neon account or the project's " +
-				"region. Request access to the preview, or use a project in a region where it's available."
-			);
+function platformFeatureUnavailableHint(
+	status: number | undefined,
+	neonMessage: string | undefined,
+): string {
+	if (
+		isRegionUnavailableNeonMessage(neonMessage) ||
+		status === 404 ||
+		status === 501
+	) {
+		return (
+			"During the public beta, Neon platform features (Functions, object storage, and the AI Gateway) are only available in the AWS US East (Ohio) region " +
+			`(\`${PLATFORM_BETA_REGION_ID}\`). Create a project in that region — e.g. \`neon link --org-id <org> --project-name <name> --region-id ${PLATFORM_BETA_REGION_ID}\`.`
+		);
 	}
+	if (status === 503) {
+		return "The endpoint is reachable but refused the request — Neon may be having a transient incident. Retry shortly; if it keeps failing, check https://neonstatus.com and contact Neon support.";
+	}
+	return (
+		"During the public beta, this feature is only available in the AWS US East (Ohio) region " +
+		`(\`${PLATFORM_BETA_REGION_ID}\`). Create a project in that region to use it.`
+	);
 }
 
 /**
@@ -1403,8 +1422,8 @@ function previewUnavailableHint(status: number | undefined): string {
  *
  * The message names the failing feature, summarizes the response in one short
  * `HTTP <status> <reason>` line, includes the raw Neon API message + request id (valuable
- * signal while the feature is in preview), gives status-specific guidance (see
- * {@link previewUnavailableHint}), and offers removing the feature from the policy as an
+ * signal while the feature is in beta), gives status-specific guidance (see
+ * {@link platformFeatureUnavailableHint}), and offers removing the feature from the policy as an
  * escape hatch. `status`/`requestId` are also kept on `details` for programmatic consumers.
  */
 export function previewUnavailableError(
@@ -1436,8 +1455,8 @@ export function previewUnavailableError(
 	return new PlatformError(
 		ErrorCode.FeatureUnavailable,
 		[
-			`${featureLabel} is a Preview feature and isn't available for this Neon project${apiContext}.`,
-			previewUnavailableHint(status),
+			`${featureLabel} isn't available for this Neon project${apiContext}.`,
+			platformFeatureUnavailableHint(status, neonMessage),
 			"If you don't need it, remove the corresponding feature from the `preview` block of your neon.ts and re-run.",
 		].join(" "),
 		{
