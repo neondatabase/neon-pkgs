@@ -1,6 +1,5 @@
 packages:
     - "packages/*"
-    - "examples/*"
 
 # pnpm 10 blocks dependency lifecycle/build scripts by default. node-pty has
 # no linux-x64 prebuild, so it must run its `install` (node-gyp) step to

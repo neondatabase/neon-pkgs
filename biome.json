@@ -59,7 +59,7 @@
 			}
 		},
 		{
-			"includes": ["packages/cli/**", "examples/**"],
+			"includes": ["packages/cli/**"],
 			"linter": {
 				"rules": {
 					"suspicious": {
