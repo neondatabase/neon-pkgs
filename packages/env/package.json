@@ -1,6 +1,6 @@
 {
 	"name": "@neon/env",
-	"version": "0.11.2",
+	"version": "0.11.3",
 	"description": "Resolve and inject Neon connection strings for the branch selected by your neon.ts policy. fetchEnv / parseEnv plus a `neon-env` CLI with `run` and `export`.",
 	"keywords": [
 		"neon",
