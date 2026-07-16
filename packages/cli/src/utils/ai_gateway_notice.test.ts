@@ -4,6 +4,7 @@ import {
 	aiGatewayModelsUrl,
 	aiGatewayUpgradeUrl,
 	buildAiGatewayNotice,
+	extractEnabledModelIds,
 	freePlanBlockMessage,
 	hasFlagshipModels,
 	isFreePlan,
@@ -147,5 +148,48 @@ describe("buildAiGatewayNotice", () => {
 			});
 			expect(notice?.message ?? "").not.toMatch(/verif/i);
 		}
+	});
+
+	it("warns when only disabled flagship models appear in the raw catalog", () => {
+		const catalog = {
+			object: "list",
+			data: [
+				{ id: "claude-opus-4-8", enabled: false },
+				{ id: "gpt-5-3-codex", enabled: false },
+				{ id: "gemma-3-12b", enabled: true },
+				{ id: "gpt-oss-20b", enabled: true },
+			],
+		};
+		const enabledIds = extractEnabledModelIds(catalog);
+		expect(enabledIds).toEqual(["gemma-3-12b", "gpt-oss-20b"]);
+		expect(hasFlagshipModels(enabledIds ?? [])).toBe(false);
+
+		const notice = buildAiGatewayNotice({
+			subscriptionType: "launch_v3",
+			modelIds: enabledIds ?? undefined,
+			upgradeUrl: UPGRADE_URL,
+			moreModelsUrl: MODELS_URL,
+		});
+		expect(notice?.level).toBe("warning");
+		expect(notice?.message).toContain(MODELS_URL);
+	});
+});
+
+describe("extractEnabledModelIds", () => {
+	it("keeps only models with enabled: true", () => {
+		expect(
+			extractEnabledModelIds({
+				object: "list",
+				data: [
+					{ id: "claude-opus-4-8", enabled: false },
+					{ id: "gemma-3-12b", enabled: true },
+					{ id: "gpt-5-mini" },
+				],
+			}),
+		).toEqual(["gemma-3-12b"]);
+	});
+
+	it("returns null for a non-list body", () => {
+		expect(extractEnabledModelIds({ object: "model" })).toBeNull();
 	});
 });

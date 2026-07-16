@@ -12,8 +12,8 @@ import { log } from "../log.js";
  *  - **Free plan** — credentials provision, but the gateway does not *serve* model requests.
  *    The account needs to upgrade to a paid plan.
  *  - **Reduced model set** — on a paid plan, an account still ramping up on the beta gets a
- *    trimmed model catalog (flagship models are missing from `/v1/models`). They can request
- *    access to more models.
+ *    trimmed model catalog (flagship models are listed but `enabled: false` on `/v1/models`).
+ *    They can request access to more models.
  *
  * This is deliberately phrased for the user: it never mentions account "verification" or any
  * other internal gating mechanism.
@@ -52,11 +52,11 @@ export const isFreePlan = (subscriptionType: string | undefined): boolean =>
 	FREE_SUBSCRIPTION_TYPES.has(subscriptionType);
 
 /**
- * Whether a model catalog includes at least one flagship model. Flagship models (Anthropic
- * Opus, OpenAI Codex / `*-pro`) are the first to be held back for an account still ramping
- * up on the beta, so their total absence from a non-empty catalog is the signal that the
- * account has a reduced model set. Matched by id substring so it survives model version
- * bumps (e.g. `claude-opus-4-8`).
+ * Whether the model catalog includes at least one flagship model enabled. Flagship models
+ * (Anthropic Opus, OpenAI Codex / `*-pro`) are the first to be held back for an account still
+ * ramping up on the beta, so their total absence from a non-empty enabled set is the signal
+ * that the account has a reduced model set. Matched by id substring so it survives model
+ * version bumps (e.g. `claude-opus-4-8`).
  */
 export const hasFlagshipModels = (modelIds: readonly string[]): boolean =>
 	modelIds.some(
@@ -128,12 +128,21 @@ export const buildAiGatewayNotice = ({
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null;
 
-/** Pull the string `id`s out of an OpenAI-compatible `{ object: "list", data: [...] }` body. */
-const extractModelIds = (body: unknown): string[] | null => {
+/**
+ * Pull the `id`s of enabled models out of an OpenAI-compatible
+ * `{ object: "list", data: [{ id, enabled, ... }] }` body. The gateway lists every model in
+ * the catalog but marks ones the account can't serve yet with `enabled: false`; only the
+ * enabled set is used to detect a reduced catalog.
+ */
+export const extractEnabledModelIds = (body: unknown): string[] | null => {
 	if (!isRecord(body) || !Array.isArray(body.data)) return null;
 	const ids: string[] = [];
 	for (const entry of body.data) {
-		if (isRecord(entry) && typeof entry.id === "string") {
+		if (
+			isRecord(entry) &&
+			typeof entry.id === "string" &&
+			entry.enabled === true
+		) {
 			ids.push(entry.id);
 		}
 	}
@@ -141,7 +150,7 @@ const extractModelIds = (body: unknown): string[] | null => {
 };
 
 /**
- * `GET {baseUrl}/v1/models` → the served model ids, or `null` if the catalog can't be read
+ * `GET {baseUrl}/v1/models` → the enabled model ids, or `null` if the catalog can't be read
  * (network / HTTP / parse failure). Returning `null` keeps the notice silent rather than
  * risking a false "reduced models" warning. `/v1/models` is served only on the unified
  * dialect (the `/openai/v1` Responses dialect returns 404).
@@ -155,7 +164,7 @@ export const fetchGatewayModelIds = async (
 			headers: { Authorization: `Bearer ${token}` },
 		});
 		if (!res.ok) return null;
-		return extractModelIds(await res.json());
+		return extractEnabledModelIds(await res.json());
 	} catch {
 		return null;
 	}
