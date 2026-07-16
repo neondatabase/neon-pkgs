@@ -20,6 +20,11 @@ const WRITE_KEY = "3SQXn5ejjXWLEJ8xU2PRYhAotLtTaeeV";
 const hasCurrentBranchArgv = (): boolean =>
 	process.argv.includes("--current-branch");
 
+const DATABASE_URL_PATTERN = /\b(?:jdbc:)?postgres(?:ql)?:\/\/[^\s"'`\\]+/gi;
+const AUTHORIZATION_VALUE_PATTERN =
+	/\b(authorization|api[_-]?key|password|token)\s*([=:])\s*[^\s,;]+/gi;
+const BEARER_TOKEN_PATTERN = /\bBearer\s+[^\s,;]+/gi;
+
 let client: Analytics | undefined;
 let clientInitialized = false;
 let userId = "";
@@ -28,6 +33,7 @@ let errorEventContext: AnalyticsEventProperties | undefined;
 type AnalyticsEventArgs = {
 	_: (string | number)[];
 	output?: string;
+	currentBranch?: boolean;
 };
 
 type AnalyticsEventProperties = {
@@ -55,7 +61,7 @@ export const initAnalyticsClientMiddleware = (
 	// middleware runs before validation, so guard on the raw argv too (in case
 	// the parsed `currentBranch` flag isn't populated this early): never create
 	// the Segment client, which keeps trackEvent/closeAnalytics no-ops downstream.
-	if (isCurrentBranchProbe(args as any) || hasCurrentBranchArgv()) {
+	if (isCurrentBranchProbe(args) || hasCurrentBranchArgv()) {
 		return;
 	}
 	clientInitialized = true;
@@ -161,8 +167,7 @@ export const getErrorAnalyticsEventProperties = (
 
 	return {
 		...context,
-		message: err.message,
-		stack: err.stack,
+		message: redactAnalyticsText(err.message),
 		errCode,
 		statusCode: apiError?.status,
 		requestId,
@@ -205,11 +210,17 @@ export const trackEvent = (
 	log.debug("Sent CLI event: %s", event);
 };
 
+export const redactAnalyticsText = (value: string): string =>
+	value
+		.replace(DATABASE_URL_PATTERN, "[REDACTED_DATABASE_URL]")
+		.replace(AUTHORIZATION_VALUE_PATTERN, "$1$2[REDACTED]")
+		.replace(BEARER_TOKEN_PATTERN, "Bearer [REDACTED]");
+
 export const getAnalyticsEventProperties = (
 	args: AnalyticsEventArgs,
 ): AnalyticsEventProperties => ({
 	version: pkg.version,
-	command: args._.join(" "),
+	command: redactAnalyticsText(args._.join(" ")),
 	flags: {
 		output: args.output,
 	},
