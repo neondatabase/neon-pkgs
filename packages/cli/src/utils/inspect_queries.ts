@@ -185,6 +185,57 @@ export const INSPECT_QUERIES = {
 			LIMIT 25;
 		`,
 	},
+	"lfc-hit-rate": {
+		describe: "Local File Cache hit rate (needs neon extension)",
+		fields: ["name", "ratio"],
+		emptyMessage: "No LFC stats available.",
+		requiresExtension: "neon",
+		// Read the hit/miss counters from neon_get_lfc_stats() rather than the
+		// neon_lfc_stats / neon_stat_file_cache views: those views are owned by
+		// cloud_admin and are not always readable by end-user roles, whereas the
+		// function is EXECUTE-able by the default role.
+		sql: /* sql */ `
+			WITH lfc AS (
+				SELECT lfc_key AS k, lfc_value AS v
+				FROM neon_get_lfc_stats() t(lfc_key text, lfc_value bigint)
+			)
+			SELECT
+				'lfc hit rate' AS name,
+				max(v) FILTER (WHERE k = 'file_cache_hits')::float
+					/ nullif(
+						max(v) FILTER (WHERE k = 'file_cache_hits')
+						+ max(v) FILTER (WHERE k = 'file_cache_misses'),
+						0
+					) AS ratio
+			FROM lfc;
+		`,
+	},
+	"working-set": {
+		describe: "Estimated working set vs LFC size (needs neon extension)",
+		fields: ["window", "working_set", "lfc_size", "exceeds_lfc"],
+		emptyMessage: "No working-set estimate available.",
+		requiresExtension: "neon",
+		sql: /* sql */ `
+			SELECT
+				w.window,
+				pg_size_pretty(w.working_set_bytes) AS working_set,
+				pg_size_pretty(pg_size_bytes(current_setting('neon.file_cache_size_limit'))) AS lfc_size,
+				CASE
+					WHEN w.working_set_bytes
+						> pg_size_bytes(current_setting('neon.file_cache_size_limit'))
+					THEN 'yes' ELSE 'no'
+				END AS exceeds_lfc
+			FROM (
+				SELECT
+					x AS window,
+					approximate_working_set_size_seconds(
+						extract('epoch' from x::interval)::int
+					)::bigint * 8192 AS working_set_bytes
+				FROM (VALUES ('1m'), ('5m'), ('15m'), ('1h')) AS t(x)
+			) w
+			ORDER BY working_set_bytes;
+		`,
+	},
 	"vacuum-stats": {
 		describe:
 			"Autovacuum status per table: last (auto)vacuum, dead tuples, threshold",

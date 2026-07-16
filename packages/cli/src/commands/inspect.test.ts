@@ -46,6 +46,8 @@ describe("inspect db", () => {
 		"bloat",
 		"outliers",
 		"calls",
+		"lfc-hit-rate",
+		"working-set",
 		"replication-slots",
 		"subscriptions",
 	] as const) {
