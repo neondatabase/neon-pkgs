@@ -212,11 +212,7 @@ export const getErrorAnalyticsEventProperties = (
 	return {
 		...context,
 		errCode,
-		errorKind: getAnalyticsErrorKind(
-			err.message,
-			errCode,
-			apiError?.status,
-		),
+		reason: getAnalyticsErrorKind(err.message, errCode, apiError?.status),
 		statusCode: apiError?.status,
 		requestId,
 	};

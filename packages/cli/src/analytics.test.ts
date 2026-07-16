@@ -24,7 +24,7 @@ describe("getErrorAnalyticsEventProperties", () => {
 			command: "branches",
 			flags: { output: "json" },
 			errCode: "API_ERROR",
-			errorKind: "resource_conflict",
+			reason: "resource_conflict",
 			version: expect.any(String),
 		});
 	});
@@ -37,7 +37,7 @@ describe("getErrorAnalyticsEventProperties", () => {
 
 		expect(properties).toMatchObject({
 			errCode: "UNKNOWN_ERROR",
-			errorKind: "unknown_error",
+			reason: "unknown_error",
 		});
 		expect(properties).not.toHaveProperty("command");
 	});
@@ -50,7 +50,7 @@ describe("getErrorAnalyticsEventProperties", () => {
 			"UNKNOWN_ERROR",
 		);
 
-		expect(properties.errorKind).toBe("unknown_error");
+		expect(properties.reason).toBe("unknown_error");
 		expect(properties).not.toHaveProperty("message");
 		expect(properties).not.toHaveProperty("stack");
 		expect(JSON.stringify(properties)).not.toContain(databaseUrl);
