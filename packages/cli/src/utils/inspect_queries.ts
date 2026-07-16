@@ -278,10 +278,11 @@ export const INSPECT_QUERIES = {
 	},
 	"replication-slots": {
 		describe:
-			"Replication slots: status, client, restart/confirmed-flush LSNs, and lag (pg_replication_slots + pg_stat_replication)",
+			"Replication slots: kind, status, client, restart/confirmed-flush LSNs, and lag (pg_replication_slots + pg_stat_replication)",
 		fields: [
 			"slot_name",
 			"slot_type",
+			"slot_kind",
 			"status",
 			"client_addr",
 			"restart_lsn",
@@ -293,6 +294,12 @@ export const INSPECT_QUERIES = {
 			SELECT
 				s.slot_name,
 				s.slot_type,
+				CASE
+					WHEN s.slot_type = 'physical' THEN 'physical'
+					WHEN s.slot_name LIKE 'pg_%_sync_%' THEN 'initial-sync (tablesync)'
+					WHEN s.slot_type = 'logical' THEN 'CDC (apply)'
+					ELSE 'other'
+				END AS slot_kind,
 				CASE
 					WHEN r.state IS NOT NULL THEN r.state
 					WHEN s.active THEN 'active (no walsender)'
