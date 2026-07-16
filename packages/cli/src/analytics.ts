@@ -23,16 +23,31 @@ const hasCurrentBranchArgv = (): boolean =>
 let client: Analytics | undefined;
 let clientInitialized = false;
 let userId = "";
+let errorEventContext: AnalyticsEventProperties | undefined;
+
+type AnalyticsEventArgs = {
+	_: (string | number)[];
+	output?: string;
+};
+
+type AnalyticsEventProperties = {
+	version: string;
+	command: string;
+	flags: {
+		output: string | undefined;
+	};
+	ci: boolean;
+	githubEnvVars: ReturnType<typeof getGithubEnvVars>;
+};
 
 /**
  * Phase 1: Run before validation so the Segment client exists if any
  * middleware (e.g. auth) fails. Enables sendError() in the fail handler.
  * Does not resolve user id or send CLI Started.
  */
-export const initAnalyticsClientMiddleware = (args: {
-	analytics: boolean;
-	[key: string]: unknown;
-}) => {
+export const initAnalyticsClientMiddleware = (
+	args: AnalyticsEventArgs & { analytics: boolean },
+) => {
 	if (!args.analytics || clientInitialized) {
 		return;
 	}
@@ -44,6 +59,7 @@ export const initAnalyticsClientMiddleware = (args: {
 		return;
 	}
 	clientInitialized = true;
+	errorEventContext = getAnalyticsEventProperties(args);
 	client = new Analytics({
 		writeKey: WRITE_KEY,
 		host: "https://track.neon.tech",
@@ -135,6 +151,24 @@ export const closeAnalytics = async (opts?: { timeout?: number }) => {
 	}
 };
 
+export const getErrorAnalyticsEventProperties = (
+	err: Error,
+	errCode: ErrorCode,
+	context?: AnalyticsEventProperties,
+) => {
+	const apiError = isNeonApiError(err) ? err : undefined;
+	const requestId = apiError?.headers?.["x-neon-ret-request-id"];
+
+	return {
+		...context,
+		message: err.message,
+		stack: err.stack,
+		errCode,
+		statusCode: apiError?.status,
+		requestId,
+	};
+};
+
 export const sendError = (err: Error, errCode: ErrorCode) => {
 	if (!client) {
 		return;
@@ -147,13 +181,11 @@ export const sendError = (err: Error, errCode: ErrorCode) => {
 	client.track({
 		event: "CLI Error",
 		userId: userId || "anonymous",
-		properties: {
-			message: err.message,
-			stack: err.stack,
+		properties: getErrorAnalyticsEventProperties(
+			err,
 			errCode,
-			statusCode: apiError?.status,
-			requestId: requestId,
-		},
+			errorEventContext,
+		),
 	});
 	log.debug("Sent CLI error event: %s", errCode);
 };
@@ -173,7 +205,9 @@ export const trackEvent = (
 	log.debug("Sent CLI event: %s", event);
 };
 
-export const getAnalyticsEventProperties = (args: any) => ({
+export const getAnalyticsEventProperties = (
+	args: AnalyticsEventArgs,
+): AnalyticsEventProperties => ({
 	version: pkg.version,
 	command: args._.join(" "),
 	flags: {
