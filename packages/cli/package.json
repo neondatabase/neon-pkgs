@@ -1,6 +1,6 @@
 {
   "name": "neonctl",
-  "version": "2.33.1",
+  "version": "2.33.2",
   "description": "CLI tool for Neon Serverless Postgres",
   "keywords": [
     "neon",
