@@ -2,4 +2,4 @@
 "neonctl": patch
 ---
 
-Include the command and CLI version in error analytics events so failures can be investigated and prioritized accurately.
+Include the CLI version and CI context in error analytics events so failures can be investigated and prioritized accurately.

@@ -20,44 +20,10 @@ const WRITE_KEY = "3SQXn5ejjXWLEJ8xU2PRYhAotLtTaeeV";
 const hasCurrentBranchArgv = (): boolean =>
 	process.argv.includes("--current-branch");
 
-const KNOWN_COMMAND_ROOTS = new Set([
-	"api",
-	"auth",
-	"bootstrap",
-	"branches",
-	"bucket",
-	"checkout",
-	"config",
-	"connection-string",
-	"cs",
-	"data-api",
-	"databases",
-	"deploy",
-	"dev",
-	"diff",
-	"env",
-	"functions",
-	"init",
-	"ip-allow",
-	"link",
-	"login",
-	"me",
-	"neon-auth",
-	"operations",
-	"orgs",
-	"projects",
-	"psql",
-	"roles",
-	"set-context",
-	"status",
-	"users",
-	"vpc-endpoints",
-]);
-
 let client: Analytics | undefined;
 let clientInitialized = false;
 let userId = "";
-let errorEventContext: AnalyticsEventProperties | undefined;
+let errorEventContext: ErrorEventContext | undefined;
 
 type AnalyticsEventArgs = {
 	_: (string | number)[];
@@ -75,18 +41,10 @@ type AnalyticsEventProperties = {
 	githubEnvVars: ReturnType<typeof getGithubEnvVars>;
 };
 
-type AnalyticsErrorKind =
-	| "ambiguous_target"
-	| "authentication_failed"
-	| "authentication_timeout"
-	| "invalid_request"
-	| "missing_argument"
-	| "network_failure"
-	| "resource_conflict"
-	| "resource_not_found"
-	| "request_timeout"
-	| "unknown_command"
-	| "unknown_error";
+type ErrorEventContext = {
+	version: string;
+	ci: boolean;
+};
 
 /**
  * Phase 1: Run before validation so the Segment client exists if any
@@ -202,7 +160,7 @@ export const closeAnalytics = async (opts?: { timeout?: number }) => {
 export const getErrorAnalyticsEventProperties = (
 	err: Error,
 	errCode: ErrorCode,
-	context?: AnalyticsEventProperties,
+	context?: ErrorEventContext,
 ) => {
 	const apiError = isNeonApiError(err) ? err : undefined;
 	const requestId = apiError?.headers?.["x-neon-ret-request-id"];
@@ -212,7 +170,6 @@ export const getErrorAnalyticsEventProperties = (
 		message: err.message,
 		stack: err.stack,
 		errCode,
-		reason: getAnalyticsErrorKind(err.message, errCode, apiError?.status),
 		statusCode: apiError?.status,
 		requestId,
 	};
@@ -254,74 +211,12 @@ export const trackEvent = (
 	log.debug("Sent CLI event: %s", event);
 };
 
-export const getAnalyticsCommand = (
-	commandParts: (string | number)[],
-): string => {
-	const root = commandParts[0];
-	return typeof root === "string" && KNOWN_COMMAND_ROOTS.has(root)
-		? root
-		: "unknown";
-};
-
 const getErrorAnalyticsEventContext = (
-	args: AnalyticsEventArgs,
-): AnalyticsEventProperties => ({
+	_args: AnalyticsEventArgs,
+): ErrorEventContext => ({
 	version: pkg.version,
-	command: getAnalyticsCommand(args._),
-	flags: {
-		output: args.output,
-	},
 	ci: isCi(),
-	githubEnvVars: getGithubEnvVars(process.env),
 });
-
-export const getAnalyticsErrorKind = (
-	message: string,
-	errCode: ErrorCode,
-	statusCode: number | undefined,
-): AnalyticsErrorKind => {
-	if (/^Unknown commands?:/i.test(message) || errCode === "UNKNOWN_COMMAND") {
-		return "unknown_command";
-	}
-	if (
-		/^Missing required argument:/i.test(message) ||
-		errCode === "MISSING_ARGUMENT"
-	) {
-		return "missing_argument";
-	}
-	if (/Authentication timed out/i.test(message)) {
-		return "authentication_timeout";
-	}
-	if (
-		errCode === "AUTH_FAILED" ||
-		errCode === "AUTH_BROWSER_FAILED" ||
-		statusCode === 401
-	) {
-		return "authentication_failed";
-	}
-	if (errCode === "NETWORK_ERROR") {
-		return "network_failure";
-	}
-	if (errCode === "REQUEST_TIMEOUT" || statusCode === 408) {
-		return "request_timeout";
-	}
-	if (
-		statusCode === 404 ||
-		/(?:branch|project|resource) .+ not found/i.test(message)
-	) {
-		return "resource_not_found";
-	}
-	if (statusCode === 409 || /already exists|limit exceeded/i.test(message)) {
-		return "resource_conflict";
-	}
-	if (statusCode === 400 || statusCode === 422) {
-		return "invalid_request";
-	}
-	if (/^Multiple (?:projects|roles) found/i.test(message)) {
-		return "ambiguous_target";
-	}
-	return "unknown_error";
-};
 
 export const getAnalyticsEventProperties = (
 	args: AnalyticsEventArgs,
