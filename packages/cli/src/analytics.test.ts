@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+	getAnalyticsCommand,
+	getAnalyticsErrorKind,
 	getAnalyticsEventProperties,
 	getErrorAnalyticsEventProperties,
-	redactAnalyticsText,
 } from "./analytics.js";
 
 describe("getErrorAnalyticsEventProperties", () => {
@@ -20,10 +21,10 @@ describe("getErrorAnalyticsEventProperties", () => {
 		);
 
 		expect(properties).toMatchObject({
-			command: "branches create",
+			command: "branches",
 			flags: { output: "json" },
 			errCode: "API_ERROR",
-			message: "branch already exists",
+			errorKind: "resource_conflict",
 			version: expect.any(String),
 		});
 	});
@@ -36,12 +37,12 @@ describe("getErrorAnalyticsEventProperties", () => {
 
 		expect(properties).toMatchObject({
 			errCode: "UNKNOWN_ERROR",
-			message: "configuration directory is unavailable",
+			errorKind: "unknown_error",
 		});
 		expect(properties).not.toHaveProperty("command");
 	});
 
-	it("does not send a database URL or stack trace", () => {
+	it("does not send a database URL, error message, or stack trace", () => {
 		const databaseUrl =
 			"postgresql://user:password@ep-example.us-east-2.aws.neon.tech/neondb?sslmode=require";
 		const properties = getErrorAnalyticsEventProperties(
@@ -49,21 +50,66 @@ describe("getErrorAnalyticsEventProperties", () => {
 			"UNKNOWN_ERROR",
 		);
 
-		expect(properties.message).toBe(
-			"Could not connect to [REDACTED_DATABASE_URL]",
-		);
+		expect(properties.errorKind).toBe("unknown_error");
+		expect(properties).not.toHaveProperty("message");
 		expect(properties).not.toHaveProperty("stack");
 		expect(JSON.stringify(properties)).not.toContain(databaseUrl);
 	});
 });
 
-describe("redactAnalyticsText", () => {
-	it("redacts database URLs and credential values from command telemetry", () => {
-		const value =
-			"psql postgresql://user:password@host/neondb?sslmode=require token=secret-token";
+describe("analytics allowlist", () => {
+	it("keeps only known command roots", () => {
+		expect(
+			getAnalyticsCommand(["branches", "create", "feature-branch"]),
+		).toBe("branches");
+		expect(
+			getAnalyticsCommand([
+				"psql",
+				"postgresql://user:password@host/neondb?sslmode=require",
+			]),
+		).toBe("psql");
+		expect(getAnalyticsCommand(["unrecognized-command"])).toBe("unknown");
+	});
 
-		expect(redactAnalyticsText(value)).toBe(
-			"psql [REDACTED_DATABASE_URL] token=[REDACTED]",
-		);
+	it("classifies known errors without retaining their message", () => {
+		expect(
+			getAnalyticsErrorKind(
+				"Branch production not found",
+				"UNKNOWN_ERROR",
+				undefined,
+			),
+		).toBe("resource_not_found");
+		expect(
+			getAnalyticsErrorKind("branch already exists", "API_ERROR", 409),
+		).toBe("resource_conflict");
+		expect(
+			getAnalyticsErrorKind(
+				"Authentication timed out after 60 seconds",
+				"UNKNOWN_ERROR",
+				undefined,
+			),
+		).toBe("authentication_timeout");
+		expect(
+			getAnalyticsErrorKind(
+				"Unknown commands: endpoints, list",
+				"UNKNOWN_ERROR",
+				undefined,
+			),
+		).toBe("unknown_command");
+	});
+
+	it("does not preserve an invalid output value", () => {
+		expect(
+			getAnalyticsEventProperties({
+				_: ["branches", "list"],
+				output: "secret-value",
+			}).flags.output,
+		).toBeUndefined();
+		expect(
+			getAnalyticsEventProperties({
+				_: ["branches", "list"],
+				output: "yaml",
+			}).flags.output,
+		).toBe("yaml");
 	});
 });
