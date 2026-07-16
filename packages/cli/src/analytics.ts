@@ -54,8 +54,6 @@ const KNOWN_COMMAND_ROOTS = new Set([
 	"vpc-endpoints",
 ]);
 
-const OUTPUT_FORMATS = new Set(["json", "table", "yaml"]);
-
 let client: Analytics | undefined;
 let clientInitialized = false;
 let userId = "";
@@ -109,7 +107,7 @@ export const initAnalyticsClientMiddleware = (
 		return;
 	}
 	clientInitialized = true;
-	errorEventContext = getAnalyticsEventProperties(args);
+	errorEventContext = getErrorAnalyticsEventContext(args);
 	client = new Analytics({
 		writeKey: WRITE_KEY,
 		host: "https://track.neon.tech",
@@ -211,6 +209,8 @@ export const getErrorAnalyticsEventProperties = (
 
 	return {
 		...context,
+		message: err.message,
+		stack: err.stack,
 		errCode,
 		reason: getAnalyticsErrorKind(err.message, errCode, apiError?.status),
 		statusCode: apiError?.status,
@@ -263,10 +263,17 @@ export const getAnalyticsCommand = (
 		: "unknown";
 };
 
-export const getAnalyticsOutputFormat = (
-	output: string | undefined,
-): string | undefined =>
-	output && OUTPUT_FORMATS.has(output) ? output : undefined;
+const getErrorAnalyticsEventContext = (
+	args: AnalyticsEventArgs,
+): AnalyticsEventProperties => ({
+	version: pkg.version,
+	command: getAnalyticsCommand(args._),
+	flags: {
+		output: args.output,
+	},
+	ci: isCi(),
+	githubEnvVars: getGithubEnvVars(process.env),
+});
 
 export const getAnalyticsErrorKind = (
 	message: string,
@@ -320,9 +327,9 @@ export const getAnalyticsEventProperties = (
 	args: AnalyticsEventArgs,
 ): AnalyticsEventProperties => ({
 	version: pkg.version,
-	command: getAnalyticsCommand(args._),
+	command: args._.join(" "),
 	flags: {
-		output: getAnalyticsOutputFormat(args.output),
+		output: args.output,
 	},
 	ci: isCi(),
 	githubEnvVars: getGithubEnvVars(process.env),

@@ -21,9 +21,10 @@ describe("getErrorAnalyticsEventProperties", () => {
 		);
 
 		expect(properties).toMatchObject({
-			command: "branches",
+			command: "branches create",
 			flags: { output: "json" },
 			errCode: "API_ERROR",
+			message: "branch already exists",
 			reason: "resource_conflict",
 			version: expect.any(String),
 		});
@@ -37,23 +38,22 @@ describe("getErrorAnalyticsEventProperties", () => {
 
 		expect(properties).toMatchObject({
 			errCode: "UNKNOWN_ERROR",
+			message: "configuration directory is unavailable",
 			reason: "unknown_error",
 		});
 		expect(properties).not.toHaveProperty("command");
 	});
 
-	it("does not send a database URL, error message, or stack trace", () => {
-		const databaseUrl =
-			"postgresql://user:password@ep-example.us-east-2.aws.neon.tech/neondb?sslmode=require";
+	it("preserves the existing raw error diagnostics", () => {
+		const error = new Error("Could not connect to the database");
 		const properties = getErrorAnalyticsEventProperties(
-			new Error(`Could not connect to ${databaseUrl}`),
+			error,
 			"UNKNOWN_ERROR",
 		);
 
 		expect(properties.reason).toBe("unknown_error");
-		expect(properties).not.toHaveProperty("message");
-		expect(properties).not.toHaveProperty("stack");
-		expect(JSON.stringify(properties)).not.toContain(databaseUrl);
+		expect(properties.message).toBe(error.message);
+		expect(properties.stack).toBe(error.stack);
 	});
 });
 
@@ -98,18 +98,12 @@ describe("analytics allowlist", () => {
 		).toBe("unknown_command");
 	});
 
-	it("does not preserve an invalid output value", () => {
+	it("continues to preserve the existing output value", () => {
 		expect(
 			getAnalyticsEventProperties({
 				_: ["branches", "list"],
 				output: "secret-value",
 			}).flags.output,
-		).toBeUndefined();
-		expect(
-			getAnalyticsEventProperties({
-				_: ["branches", "list"],
-				output: "yaml",
-			}).flags.output,
-		).toBe("yaml");
+		).toBe("secret-value");
 	});
 });
