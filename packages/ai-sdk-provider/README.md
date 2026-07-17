@@ -88,7 +88,7 @@ for await (const part of result.fullStream) {
 ## Limitations
 
 - `generateImage()` and embeddings (`embed` / `embedMany`) are not offered by the gateway and throw `NoSuchModelError`.
-- `gpt-oss-*` models return a non-standard ("harmony") response shape on the unified endpoint and are not fully supported.
+- `gpt-oss-*` models return a non-standard ("harmony") response shape on the unified endpoint (`message.content` as an array of reasoning/text parts instead of a string). The provider normalizes this to the OpenAI Chat Completions contract (string `content` + `reasoning_content`) so `generateText`/`streamText` work and reasoning is surfaced. See neondatabase/neon-pkgs#308.
 - OpenAI Responses multi-turn tool flows (`generateText` + `stepCountIs`) can return 502 from the gateway; tool calling is covered on Anthropic/Google/Meta in e2e.
 
 ## End-to-end tests

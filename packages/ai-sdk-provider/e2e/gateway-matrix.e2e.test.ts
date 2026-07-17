@@ -163,11 +163,34 @@ describe.skipIf(!hasGatewayEnv())(
 			}, 120_000);
 		});
 
-		describe("known gateway limitations", () => {
-			it.skip("gpt-oss harmony response shape is not OpenAI-compatible on MLflow", () => {
-				// Documented limitation — see README.
+		describe("gpt-oss harmony normalization (#308)", () => {
+			// The gateway returns gpt-oss `message.content` as a harmony parts
+			// array; the provider normalizes it to the OpenAI Chat Completions
+			// contract. Verify text comes through for both generate and stream.
+			it("generateText works and does not throw on the harmony shape", async () => {
+				const result = await generateText({
+					model: neon("gpt-oss-120b"),
+					prompt: "Reply with exactly three words.",
+					maxOutputTokens: 512,
+				});
+				expect(result.text.trim().length).toBeGreaterThan(0);
 			});
 
+			it("streamText works without an invalid-JSON error flood", async () => {
+				const result = streamText({
+					model: neon("gpt-oss-120b"),
+					prompt: "Reply with exactly three words.",
+					maxOutputTokens: 512,
+				});
+				let text = "";
+				for await (const part of result.textStream) {
+					text += part;
+				}
+				expect(text.trim().length).toBeGreaterThan(0);
+			});
+		});
+
+		describe("known gateway limitations", () => {
 			it.skip("OpenAI Responses multi-turn tool follow-up can 502 on the gateway", () => {
 				// gpt-5-mini tool calling works for the first step but follow-up requests can 502.
 			});

@@ -29,6 +29,7 @@ import { z } from "zod/v4";
 import { NeonAnthropicLanguageModel } from "./neon-anthropic-language-model.js";
 import { NeonChatLanguageModel } from "./neon-chat-language-model.js";
 import type { NeonChatModelId } from "./neon-chat-options.js";
+import { wrapFetchWithHarmonyNormalization } from "./neon-harmony-normalize.js";
 import { getNeonModelRoute } from "./neon-model-capabilities.js";
 import { NeonResponsesLanguageModel } from "./neon-responses-language-model.js";
 import { VERSION } from "./version.js";
@@ -173,12 +174,15 @@ export function createNeon(options: NeonProviderSettings = {}): NeonProvider {
 
 	// Everything else (Gemini, Llama, Qwen, gpt-oss, ...) -> unified Chat
 	// Completions endpoint. Gemini is here because its native endpoint can't stream.
+	// The fetch wrapper normalizes gpt-oss's non-compliant "harmony" content-array
+	// shape into the OpenAI Chat Completions contract (a no-op for every compliant
+	// model); see neon-harmony-normalize.ts and neondatabase/neon-pkgs#308.
 	const createChatModel = (modelId: NeonChatModelId) =>
 		new NeonChatLanguageModel(modelId, {
 			provider: "neon.chat",
 			url: ({ path }) => `${getHost()}/v1${path}`,
 			headers: getHeaders,
-			fetch: options.fetch,
+			fetch: wrapFetchWithHarmonyNormalization(options.fetch),
 			errorStructure: neonErrorStructure,
 			transformRequestBody: transformNeonRequestBody,
 			supportsStructuredOutputs: true,
