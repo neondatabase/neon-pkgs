@@ -1,0 +1,225 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`snapshots > create at a timestamp 1`] = `
+"id: snap-new-snapshot-123456
+name: snap-new-snapshot-123456
+source_branch_id: br-main-branch-123456
+created_at: 2021-01-01T00:00:00.000Z
+timestamp: 2021-01-01T00:00:00Z
+manual: true
+"
+`;
+
+exports[`snapshots > create at an lsn with expiration 1`] = `
+"id: snap-new-snapshot-123456
+name: snap-new-snapshot-123456
+source_branch_id: br-main-branch-123456
+created_at: 2021-01-01T00:00:00.000Z
+lsn: 0/1F3C8A0
+expires_at: 2025-12-31T23:59:59.000Z
+manual: true
+"
+`;
+
+exports[`snapshots > create from default branch 1`] = `
+"id: snap-new-snapshot-123456
+name: snap-new-snapshot-123456
+source_branch_id: br-main-branch-123456
+created_at: 2021-01-01T00:00:00.000Z
+manual: true
+"
+`;
+
+exports[`snapshots > create rejects an invalid lsn 1`] = `""`;
+
+exports[`snapshots > create rejects both timestamp and lsn 1`] = `""`;
+
+exports[`snapshots > create with name 1`] = `
+"id: snap-new-snapshot-123456
+name: pre-migration
+source_branch_id: br-main-branch-123456
+created_at: 2021-01-01T00:00:00.000Z
+manual: true
+"
+`;
+
+exports[`snapshots > delete by id 1`] = `
+"id: snap-first-snapshot-123456
+name: nightly
+source_branch_id: br-main-branch-123456
+created_at: 2021-01-01T00:00:00.000Z
+expires_at: 2022-01-01T00:00:00.000Z
+manual: false
+"
+`;
+
+exports[`snapshots > delete by name 1`] = `
+"id: snap-first-snapshot-123456
+name: nightly
+source_branch_id: br-main-branch-123456
+created_at: 2021-01-01T00:00:00.000Z
+expires_at: 2022-01-01T00:00:00.000Z
+manual: false
+"
+`;
+
+exports[`snapshots > finalize a restored branch 1`] = `
+"- id: op-finalize-restore-1
+  action: finalize_restore
+  status: running
+  created_at: 2021-03-01T00:00:00.000Z
+"
+`;
+
+exports[`snapshots > get by id 1`] = `
+"id: snap-first-snapshot-123456
+name: nightly
+source_branch_id: br-main-branch-123456
+created_at: 2021-01-01T00:00:00.000Z
+expires_at: 2022-01-01T00:00:00.000Z
+manual: false
+"
+`;
+
+exports[`snapshots > get by name 1`] = `
+"id: snap-second-snapshot-123456
+name: pre-migration
+source_branch_id: br-main-branch-123456
+created_at: 2021-02-01T00:00:00.000Z
+manual: true
+"
+`;
+
+exports[`snapshots > get not found errors 1`] = `""`;
+
+exports[`snapshots > list/table output 1`] = `
+"snapshots
+┌─────────────────────────────┬───────────────┬───────────────────────┬──────────────────────────┬──────────────────────────┐
+│ Id                          │ Name          │ Source Branch Id      │ Created At               │ Expires At               │
+├─────────────────────────────┼───────────────┼───────────────────────┼──────────────────────────┼──────────────────────────┤
+│ snap-first-snapshot-123456  │ nightly       │ br-main-branch-123456 │ 2021-01-01T00:00:00.000Z │ 2022-01-01T00:00:00.000Z │
+├─────────────────────────────┼───────────────┼───────────────────────┼──────────────────────────┼──────────────────────────┤
+│ snap-second-snapshot-123456 │ pre-migration │ br-main-branch-123456 │ 2021-02-01T00:00:00.000Z │ never                    │
+└─────────────────────────────┴───────────────┴───────────────────────┴──────────────────────────┴──────────────────────────┘
+"
+`;
+
+exports[`snapshots > list/yaml 1`] = `
+"- id: snap-first-snapshot-123456
+  name: nightly
+  source_branch_id: br-main-branch-123456
+  created_at: 2021-01-01T00:00:00.000Z
+  expires_at: 2022-01-01T00:00:00.000Z
+  manual: false
+- id: snap-second-snapshot-123456
+  name: pre-migration
+  source_branch_id: br-main-branch-123456
+  created_at: 2021-02-01T00:00:00.000Z
+  manual: true
+"
+`;
+
+exports[`snapshots > restore onto a target branch and finalize 1`] = `
+"restored_branch:
+  id: br-restored-branch-123456
+  name: restored-from-snap-first-snapshot-123456
+  source_branch_id: br-main-branch-123456
+  parent_id: br-main-branch-123456
+  created_at: 2021-03-01T00:00:00.000Z
+  current_state: ready
+operations:
+  - id: op-restore-snapshot-1
+    action: restore_snapshot
+    status: running
+    created_at: 2021-03-01T00:00:00.000Z
+"
+`;
+
+exports[`snapshots > restore to a new branch 1`] = `
+"restored_branch:
+  id: br-restored-branch-123456
+  name: recovered
+  source_branch_id: br-main-branch-123456
+  parent_id: br-main-branch-123456
+  created_at: 2021-03-01T00:00:00.000Z
+  current_state: ready
+operations:
+  - id: op-restore-snapshot-1
+    action: restore_snapshot
+    status: running
+    created_at: 2021-03-01T00:00:00.000Z
+"
+`;
+
+exports[`snapshots > schedule get 1`] = `
+"- frequency: daily
+  hour: 3
+  retention_seconds: 604800
+"
+`;
+
+exports[`snapshots > schedule set from flags 1`] = `
+"- frequency: daily
+  hour: 3
+  retention_seconds: 604800
+"
+`;
+
+exports[`snapshots > schedule set from json 1`] = `
+"- frequency: hourly
+- frequency: daily
+  hour: 3
+"
+`;
+
+exports[`snapshots > schedule set rejects invalid json 1`] = `""`;
+
+exports[`snapshots > schedule set with nothing errors 1`] = `""`;
+
+exports[`snapshots > snapshot alias works 1`] = `
+"- id: snap-first-snapshot-123456
+  name: nightly
+  source_branch_id: br-main-branch-123456
+  created_at: 2021-01-01T00:00:00.000Z
+  expires_at: 2022-01-01T00:00:00.000Z
+  manual: false
+- id: snap-second-snapshot-123456
+  name: pre-migration
+  source_branch_id: br-main-branch-123456
+  created_at: 2021-02-01T00:00:00.000Z
+  manual: true
+"
+`;
+
+exports[`snapshots > update clear expiration 1`] = `
+"id: snap-first-snapshot-123456
+name: nightly
+source_branch_id: br-main-branch-123456
+created_at: 2021-01-01T00:00:00.000Z
+manual: false
+"
+`;
+
+exports[`snapshots > update expiration 1`] = `
+"id: snap-first-snapshot-123456
+name: nightly
+source_branch_id: br-main-branch-123456
+created_at: 2021-01-01T00:00:00.000Z
+expires_at: 2030-01-01T00:00:00.000Z
+manual: false
+"
+`;
+
+exports[`snapshots > update name 1`] = `
+"id: snap-first-snapshot-123456
+name: renamed
+source_branch_id: br-main-branch-123456
+created_at: 2021-01-01T00:00:00.000Z
+expires_at: 2022-01-01T00:00:00.000Z
+manual: false
+"
+`;
+
+exports[`snapshots > update rejects expires-at with clear-expiration 1`] = `""`;
+
+exports[`snapshots > update with nothing to change errors 1`] = `""`;

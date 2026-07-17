@@ -1,0 +1,19 @@
+{
+  "snapshots": [
+    {
+      "id": "snap-first-snapshot-123456",
+      "name": "nightly",
+      "source_branch_id": "br-main-branch-123456",
+      "created_at": "2021-01-01T00:00:00.000Z",
+      "expires_at": "2022-01-01T00:00:00.000Z",
+      "manual": false
+    },
+    {
+      "id": "snap-second-snapshot-123456",
+      "name": "pre-migration",
+      "source_branch_id": "br-main-branch-123456",
+      "created_at": "2021-02-01T00:00:00.000Z",
+      "manual": true
+    }
+  ]
+}

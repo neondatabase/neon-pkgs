@@ -23,6 +23,7 @@ import * as projects from "./projects.js";
 import * as psql from "./psql.js";
 import * as roles from "./roles.js";
 import * as setContext from "./set_context.js";
+import * as snapshots from "./snapshots.js";
 import * as status from "./status.js";
 import * as users from "./user.js";
 import * as vpcEndpoints from "./vpc_endpoints.js";
@@ -40,6 +41,7 @@ export default [
 	databases,
 	roles,
 	operations,
+	snapshots,
 	cs,
 	psql,
 	setContext,

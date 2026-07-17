@@ -505,6 +505,50 @@ $ neon bootstrap . --template hono
 
 The target directory must be empty unless you pass `--force` (a lone `.git` is ignored, so a freshly `git init`ed folder is fine). Symlinks and executable bits in the template are preserved.
 
+## Snapshots (`snapshots`)
+
+`neon snapshots` (alias `neon snapshot`) manages **snapshots** — point-in-time backups of a branch that you can list, rename, expire, restore into a branch, or schedule automatically. Snapshots are a Beta Neon feature and were previously only available in the Console and REST API; this command group brings them to the CLI.
+
+Every sub-command resolves the project through the standard chain (`--project-id`, then the `.neon` context file, then a single-project auto-detect). Branch-scoped sub-commands (`create`, `schedule`) default to the branch pinned in `.neon`, falling back to the project's default branch, and accept `--branch <id|name>`. The `get`, `update`, `delete`, and `restore` sub-commands take a snapshot **id or name** as their positional argument (an id wins; an ambiguous name errors and asks you to use the id).
+
+```bash
+# Snapshot the head of the current/default branch
+neon snapshots create --name pre-migration
+
+# Snapshot a specific branch at a point in time (RFC 3339 timestamp OR LSN — mutually exclusive)
+neon snapshots create --branch main --timestamp 2025-01-01T00:00:00Z
+neon snapshots create --branch main --lsn 0/1F3C8A0 --expires-at 2025-12-31T23:59:59Z
+
+# List / inspect
+neon snapshots list
+neon snapshots get pre-migration
+
+# Rename or change expiration (omit both to error; --expires-at and --clear-expiration conflict)
+neon snapshots update snap-1234 --name nightly
+neon snapshots update snap-1234 --expires-at 2030-01-01T00:00:00Z
+neon snapshots update snap-1234 --clear-expiration      # keep indefinitely
+
+# Restore a snapshot to a NEW branch
+neon snapshots restore snap-1234 --name recovered
+
+# Restore ONTO an existing branch. Without --finalize the restore is left un-finalized
+# so you can inspect it first, then swap it in:
+neon snapshots restore snap-1234 --target-branch main
+neon snapshots finalize br-restored-1234                # commit the swap
+# …or do it in one step:
+neon snapshots restore snap-1234 --target-branch main --finalize
+
+# Delete
+neon snapshots delete snap-1234
+
+# Automatic snapshot (backup) schedule of a branch
+neon snapshots schedule get --branch main
+neon snapshots schedule set --branch main --frequency daily --hour 3 --retention 604800
+neon snapshots schedule set --branch main --schedule '[{"frequency":"hourly"},{"frequency":"daily","hour":3}]'
+```
+
+All sub-commands honor the [global options](#global-options), including `--output json|yaml|table`.
+
 ## Commands
 
 | Command                                                                    | Subcommands                                                                                                  | Description                        |
@@ -518,6 +562,7 @@ The target directory must be empty unless you pass `--force` (a lone `.git` is i
 | function                                                                   | `deploy`, `list`, `get`, `delete`                                                                            | Manage Neon Functions              |
 | [roles](https://neon.com/docs/reference/cli-roles)                         | `list`, `create`, `delete`                                                                                   | Manage roles                       |
 | [operations](https://neon.com/docs/reference/cli-operations)               | `list`                                                                                                       | Manage operations                  |
+| snapshots                                                                  | `list`, `get`, `create`, `update`, `delete`, `restore`, `finalize`, `schedule get`, `schedule set`           | Manage snapshots                   |
 | [connection-string](https://neon.com/docs/reference/cli-connection-string) |                                                                                                              | Get connection string              |
 | [psql](https://neon.com/docs/reference/cli-psql)                           |                                                                                                              | Connect to a database via psql     |
 | set-context                                                                |                                                                                                              | Deprecated; use `link`             |

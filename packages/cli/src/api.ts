@@ -628,6 +628,89 @@ export const getApiClient = ({ apiKey, apiHost }: ApiCallProps) => {
 				}),
 			),
 
+		// ─── Snapshots ───────────────────────────────────────────────────────
+		listSnapshots: (projectId: string) =>
+			call(() =>
+				raw.listSnapshots({
+					client,
+					path: { project_id: projectId },
+				}),
+			),
+		createSnapshot: (
+			projectId: string,
+			branchId: string,
+			query?: NonNullable<raw.CreateSnapshotData["query"]>,
+		) =>
+			call(() =>
+				raw.createSnapshot({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+					...(query !== undefined ? { query } : {}),
+				}),
+			),
+		updateSnapshot: (
+			projectId: string,
+			snapshotId: string,
+			data: NonNullable<raw.UpdateSnapshotData["body"]>,
+		) =>
+			call(() =>
+				raw.updateSnapshot({
+					client,
+					path: { project_id: projectId, snapshot_id: snapshotId },
+					body: data,
+				}),
+			),
+		deleteSnapshot: (projectId: string, snapshotId: string) =>
+			call(() =>
+				raw.deleteSnapshot({
+					client,
+					path: { project_id: projectId, snapshot_id: snapshotId },
+				}),
+			),
+		restoreSnapshot: (
+			projectId: string,
+			snapshotId: string,
+			data?: raw.RestoreSnapshotData["body"],
+		) =>
+			call(() =>
+				raw.restoreSnapshot({
+					client,
+					path: { project_id: projectId, snapshot_id: snapshotId },
+					...(data !== undefined ? { body: data } : {}),
+				}),
+			),
+		finalizeRestoreBranch: (
+			projectId: string,
+			branchId: string,
+			data?: raw.FinalizeRestoreBranchData["body"],
+		) =>
+			call(() =>
+				raw.finalizeRestoreBranch({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+					...(data !== undefined ? { body: data } : {}),
+				}),
+			),
+		getSnapshotSchedule: (projectId: string, branchId: string) =>
+			call(() =>
+				raw.getSnapshotSchedule({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+				}),
+			),
+		setSnapshotSchedule: (
+			projectId: string,
+			branchId: string,
+			data: NonNullable<raw.SetSnapshotScheduleData["body"]>,
+		) =>
+			call(() =>
+				raw.setSnapshotSchedule({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+					body: data,
+				}),
+			),
+
 		// ─── Databases ───────────────────────────────────────────────────────
 		listProjectBranchDatabases: (projectId: string, branchId: string) =>
 			call(() =>
