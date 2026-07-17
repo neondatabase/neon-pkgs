@@ -1,5 +1,11 @@
 import type { FetchFunction } from "@ai-sdk/provider-utils";
 
+// TODO(#308): Temporary workaround. Remove this whole module (and its wiring in
+// provider.ts) once the Neon AI Gateway returns Chat Completions-compliant
+// gpt-oss responses (string `content` + `reasoning_content`). The wrapper is a
+// transparent pass-through for any already-compliant response, so it is safe to
+// leave in place until the gateway fix ships — but it should be deleted then.
+
 /**
  * Normalize the Neon AI Gateway's non-OpenAI-compliant `gpt-oss` ("harmony")
  * response shape into the OpenAI Chat Completions contract before it reaches
@@ -19,9 +25,11 @@ import type { FetchFunction } from "@ai-sdk/provider-utils";
  * `reasoning_content` (which `@ai-sdk/openai-compatible` already surfaces as an
  * AI SDK reasoning part).
  *
- * The transform only rewrites when `content` is an array, so it is a no-op for
- * every spec-compliant model (Llama, Gemini, Qwen, …) and self-retires if the
- * gateway is fixed to return a compliant shape.
+ * The transform only rewrites when `content` is an array, and the fetch wrapper
+ * returns the response untouched when nothing was rewritten. So it is a true
+ * no-op / pass-through for every spec-compliant model (Llama, Gemini, Qwen, …)
+ * and self-retires the moment the gateway starts returning a compliant shape —
+ * it will not double-transform or otherwise interfere with the downstream fix.
  *
  * See neondatabase/neon-pkgs#308.
  */
@@ -35,14 +43,18 @@ interface ExtractedHarmony {
 	reasoning: string;
 }
 
+/** The result of a normalization pass, flagging whether anything was rewritten. */
+interface NormalizeResult {
+	body: unknown;
+	changed: boolean;
+}
+
 /**
  * Pull the text and reasoning out of a harmony `content` array. Returns `null`
  * when `content` is not an array (i.e. an already-compliant string response),
  * signalling that no rewrite is needed.
  */
-export function extractHarmonyContent(
-	content: unknown,
-): ExtractedHarmony | null {
+export function extractHarmonyContent(content: unknown): ExtractedHarmony | null {
 	if (!Array.isArray(content)) {
 		return null;
 	}
@@ -86,11 +98,15 @@ export function extractHarmonyContent(
 	return { text: texts.join(""), reasoning: reasonings.join("\n") };
 }
 
-/** Rewrite a non-streaming `chat.completion` body in place. Returns the body. */
-export function normalizeCompletionBody(body: unknown): unknown {
+/**
+ * Rewrite a non-streaming `chat.completion` body in place. `changed` is false
+ * when the body was already compliant (no harmony array found).
+ */
+export function normalizeCompletionBody(body: unknown): NormalizeResult {
 	if (!isRecord(body) || !Array.isArray(body.choices)) {
-		return body;
+		return { body, changed: false };
 	}
+	let changed = false;
 	for (const choice of body.choices) {
 		if (!isRecord(choice)) {
 			continue;
@@ -104,6 +120,7 @@ export function normalizeCompletionBody(body: unknown): unknown {
 			continue;
 		}
 		message.content = extracted.text;
+		changed = true;
 		if (
 			extracted.reasoning.length > 0 &&
 			message.reasoning_content == null &&
@@ -112,14 +129,18 @@ export function normalizeCompletionBody(body: unknown): unknown {
 			message.reasoning_content = extracted.reasoning;
 		}
 	}
-	return body;
+	return { body, changed };
 }
 
-/** Rewrite a streaming `chat.completion.chunk` body in place. Returns the body. */
-export function normalizeChunkBody(body: unknown): unknown {
+/**
+ * Rewrite a streaming `chat.completion.chunk` body in place. `changed` is false
+ * when the chunk was already compliant (no harmony array found).
+ */
+export function normalizeChunkBody(body: unknown): NormalizeResult {
 	if (!isRecord(body) || !Array.isArray(body.choices)) {
-		return body;
+		return { body, changed: false };
 	}
+	let changed = false;
 	for (const choice of body.choices) {
 		if (!isRecord(choice)) {
 			continue;
@@ -132,6 +153,7 @@ export function normalizeChunkBody(body: unknown): unknown {
 		if (extracted === null) {
 			continue;
 		}
+		changed = true;
 		// Drop empty text so reasoning-only chunks don't emit spurious text deltas.
 		if (extracted.text.length > 0) {
 			delta.content = extracted.text;
@@ -146,10 +168,13 @@ export function normalizeChunkBody(body: unknown): unknown {
 			delta.reasoning_content = extracted.reasoning;
 		}
 	}
-	return body;
+	return { body, changed };
 }
 
-/** Rewrite each `data:` frame of an SSE stream. */
+/**
+ * Rewrite each `data:` frame of an SSE stream. Compliant frames pass through
+ * verbatim; only harmony frames are re-serialized.
+ */
 function normalizeEventStream(
 	body: ReadableStream<Uint8Array>,
 ): ReadableStream<Uint8Array> {
@@ -158,8 +183,7 @@ function normalizeEventStream(
 	let buffer = "";
 
 	const rewriteLine = (line: string): string => {
-		const trimmed = line.startsWith("data:") ? line : null;
-		if (trimmed === null) {
+		if (!line.startsWith("data:")) {
 			return line;
 		}
 		const payload = line.slice("data:".length).trim();
@@ -172,7 +196,9 @@ function normalizeEventStream(
 		} catch {
 			return line;
 		}
-		return `data: ${JSON.stringify(normalizeChunkBody(parsed))}`;
+		const { body: normalized, changed } = normalizeChunkBody(parsed);
+		// Pass compliant frames through unchanged so we don't reshape a fixed gateway.
+		return changed ? `data: ${JSON.stringify(normalized)}` : line;
 	};
 
 	return body.pipeThrough(
@@ -182,9 +208,7 @@ function normalizeEventStream(
 				const lines = buffer.split("\n");
 				buffer = lines.pop() ?? "";
 				for (const line of lines) {
-					controller.enqueue(
-						encoder.encode(`${rewriteLine(line)}\n`),
-					);
+					controller.enqueue(encoder.encode(`${rewriteLine(line)}\n`));
 				}
 			},
 			flush(controller) {
@@ -208,6 +232,10 @@ function headersWithout(source: Headers, ...names: string[]): Headers {
  * Wrap a fetch implementation so gpt-oss harmony responses are normalized to
  * the OpenAI Chat Completions shape before the caller parses them. Composes
  * with a user-supplied `fetch` (falls back to the global `fetch`).
+ *
+ * When the response is already compliant, the original response is returned
+ * untouched — a transparent pass-through that will not interfere once the
+ * gateway is fixed.
  */
 export function wrapFetchWithHarmonyNormalization(
 	baseFetch?: FetchFunction,
@@ -223,10 +251,12 @@ export function wrapFetchWithHarmonyNormalization(
 		const contentType = response.headers.get("content-type") ?? "";
 
 		if (contentType.includes("text/event-stream")) {
+			// Streaming is inspected frame-by-frame; compliant frames pass through
+			// verbatim (see normalizeEventStream).
 			return new Response(normalizeEventStream(response.body), {
 				status: response.status,
 				statusText: response.statusText,
-				// content-length/encoding no longer match the rewritten body.
+				// content-length/encoding no longer describe the (possibly) rewritten body.
 				headers: headersWithout(
 					response.headers,
 					"content-length",
@@ -236,29 +266,33 @@ export function wrapFetchWithHarmonyNormalization(
 		}
 
 		if (contentType.includes("application/json")) {
-			const text = await response.text();
+			// Inspect a clone so the original body stays intact for the pass-through case.
+			let text: string;
+			try {
+				text = await response.clone().text();
+			} catch {
+				return response;
+			}
 			let parsed: unknown;
 			try {
 				parsed = JSON.parse(text);
 			} catch {
-				return new Response(text, {
-					status: response.status,
-					statusText: response.statusText,
-					headers: response.headers,
-				});
+				return response;
 			}
-			return new Response(
-				JSON.stringify(normalizeCompletionBody(parsed)),
-				{
-					status: response.status,
-					statusText: response.statusText,
-					headers: headersWithout(
-						response.headers,
-						"content-length",
-						"content-encoding",
-					),
-				},
-			);
+			const { body: normalized, changed } = normalizeCompletionBody(parsed);
+			if (!changed) {
+				// Already compliant: return the original response untouched.
+				return response;
+			}
+			return new Response(JSON.stringify(normalized), {
+				status: response.status,
+				statusText: response.statusText,
+				headers: headersWithout(
+					response.headers,
+					"content-length",
+					"content-encoding",
+				),
+			});
 		}
 
 		return response;

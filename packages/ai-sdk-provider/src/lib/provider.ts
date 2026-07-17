@@ -174,14 +174,16 @@ export function createNeon(options: NeonProviderSettings = {}): NeonProvider {
 
 	// Everything else (Gemini, Llama, Qwen, gpt-oss, ...) -> unified Chat
 	// Completions endpoint. Gemini is here because its native endpoint can't stream.
-	// The fetch wrapper normalizes gpt-oss's non-compliant "harmony" content-array
-	// shape into the OpenAI Chat Completions contract (a no-op for every compliant
-	// model); see neon-harmony-normalize.ts and neondatabase/neon-pkgs#308.
 	const createChatModel = (modelId: NeonChatModelId) =>
 		new NeonChatLanguageModel(modelId, {
 			provider: "neon.chat",
 			url: ({ path }) => `${getHost()}/v1${path}`,
 			headers: getHeaders,
+			// TODO(#308): Temporary workaround for gpt-oss. The gateway returns a
+			// non-compliant "harmony" content-array shape; this wrapper normalizes it
+			// to the Chat Completions contract and is a transparent pass-through for
+			// every compliant response. Remove it (and neon-harmony-normalize.ts) once
+			// the gateway returns spec-compliant gpt-oss responses.
 			fetch: wrapFetchWithHarmonyNormalization(options.fetch),
 			errorStructure: neonErrorStructure,
 			transformRequestBody: transformNeonRequestBody,

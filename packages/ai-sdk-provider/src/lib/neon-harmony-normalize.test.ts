@@ -16,9 +16,7 @@ describe("extractHarmonyContent", () => {
 		const content = [
 			{
 				type: "reasoning",
-				summary: [
-					{ type: "summary_text", text: "Think about the greeting." },
-				],
+				summary: [{ type: "summary_text", text: "Think about the greeting." }],
 			},
 			{ type: "text", text: "Hi! 👋" },
 		];
@@ -30,15 +28,8 @@ describe("extractHarmonyContent", () => {
 
 	it("joins multiple text parts and reasoning sources", () => {
 		const content = [
-			{
-				type: "reasoning",
-				text: "raw cot",
-				summary: [{ text: "summary cot" }],
-			},
-			{
-				type: "reasoning",
-				content: [{ type: "reasoning_text", text: "more cot" }],
-			},
+			{ type: "reasoning", text: "raw cot", summary: [{ text: "summary cot" }] },
+			{ type: "reasoning", content: [{ type: "reasoning_text", text: "more cot" }] },
 			{ type: "text", text: "Hello " },
 			{ type: "text", text: "world" },
 		];
@@ -59,12 +50,7 @@ describe("normalizeCompletionBody", () => {
 					message: {
 						role: "assistant",
 						content: [
-							{
-								type: "reasoning",
-								summary: [
-									{ type: "summary_text", text: "why" },
-								],
-							},
+							{ type: "reasoning", summary: [{ type: "summary_text", text: "why" }] },
 							{ type: "text", text: "Hi" },
 						],
 					},
@@ -72,7 +58,8 @@ describe("normalizeCompletionBody", () => {
 				},
 			],
 		};
-		const out = normalizeCompletionBody(body);
+		const { body: out, changed } = normalizeCompletionBody(body);
+		expect(changed).toBe(true);
 		expect(out).toEqual({
 			object: "chat.completion",
 			choices: [
@@ -89,11 +76,13 @@ describe("normalizeCompletionBody", () => {
 		});
 	});
 
-	it("leaves a compliant string-content body untouched", () => {
+	it("leaves a compliant string-content body untouched (changed=false)", () => {
 		const body = {
 			choices: [{ message: { role: "assistant", content: "Hi there" } }],
 		};
-		expect(normalizeCompletionBody(structuredClone(body))).toEqual(body);
+		const { body: out, changed } = normalizeCompletionBody(structuredClone(body));
+		expect(changed).toBe(false);
+		expect(out).toEqual(body);
 	});
 
 	it("does not overwrite an existing reasoning field", () => {
@@ -108,10 +97,10 @@ describe("normalizeCompletionBody", () => {
 				},
 			],
 		};
-		const out = normalizeCompletionBody(body);
-		const choice = (
-			out as { choices: Array<{ message: Record<string, unknown> }> }
-		).choices[0];
+		const { body: out, changed } = normalizeCompletionBody(body);
+		expect(changed).toBe(true);
+		const choice = (out as { choices: Array<{ message: Record<string, unknown> }> })
+			.choices[0];
 		expect(choice.message.content).toBe("Hi");
 		expect(choice.message.reasoning).toBe("already here");
 		expect(choice.message.reasoning_content).toBeUndefined();
@@ -127,36 +116,36 @@ describe("normalizeChunkBody", () => {
 					index: 0,
 					delta: {
 						content: [
-							{
-								type: "reasoning",
-								summary: [
-									{ type: "summary_text", text: "thinking" },
-								],
-							},
+							{ type: "reasoning", summary: [{ type: "summary_text", text: "thinking" }] },
 						],
 					},
 					finish_reason: null,
 				},
 			],
 		};
-		const out = normalizeChunkBody(chunk);
-		const delta = (
-			out as { choices: Array<{ delta: Record<string, unknown> }> }
-		).choices[0].delta;
+		const { body: out, changed } = normalizeChunkBody(chunk);
+		expect(changed).toBe(true);
+		const delta = (out as { choices: Array<{ delta: Record<string, unknown> }> })
+			.choices[0].delta;
 		expect(delta.content).toBeUndefined();
 		expect(delta.reasoning_content).toBe("thinking");
 	});
 
 	it("rewrites a text delta to a string", () => {
 		const chunk = {
-			choices: [
-				{ delta: { content: [{ type: "text", text: "Hello" }] } },
-			],
+			choices: [{ delta: { content: [{ type: "text", text: "Hello" }] } }],
 		};
-		const out = normalizeChunkBody(chunk);
-		const delta = (
-			out as { choices: Array<{ delta: Record<string, unknown> }> }
-		).choices[0].delta;
+		const { body: out, changed } = normalizeChunkBody(chunk);
+		expect(changed).toBe(true);
+		const delta = (out as { choices: Array<{ delta: Record<string, unknown> }> })
+			.choices[0].delta;
 		expect(delta.content).toBe("Hello");
+	});
+
+	it("leaves a compliant string delta untouched (changed=false)", () => {
+		const chunk = { choices: [{ delta: { content: "Hello" } }] };
+		const { body: out, changed } = normalizeChunkBody(structuredClone(chunk));
+		expect(changed).toBe(false);
+		expect(out).toEqual(chunk);
 	});
 });
