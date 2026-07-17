@@ -54,7 +54,9 @@ interface NormalizeResult {
  * when `content` is not an array (i.e. an already-compliant string response),
  * signalling that no rewrite is needed.
  */
-export function extractHarmonyContent(content: unknown): ExtractedHarmony | null {
+export function extractHarmonyContent(
+	content: unknown,
+): ExtractedHarmony | null {
 	if (!Array.isArray(content)) {
 		return null;
 	}
@@ -208,7 +210,9 @@ function normalizeEventStream(
 				const lines = buffer.split("\n");
 				buffer = lines.pop() ?? "";
 				for (const line of lines) {
-					controller.enqueue(encoder.encode(`${rewriteLine(line)}\n`));
+					controller.enqueue(
+						encoder.encode(`${rewriteLine(line)}\n`),
+					);
 				}
 			},
 			flush(controller) {
@@ -279,7 +283,8 @@ export function wrapFetchWithHarmonyNormalization(
 			} catch {
 				return response;
 			}
-			const { body: normalized, changed } = normalizeCompletionBody(parsed);
+			const { body: normalized, changed } =
+				normalizeCompletionBody(parsed);
 			if (!changed) {
 				// Already compliant: return the original response untouched.
 				return response;
