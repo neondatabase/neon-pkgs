@@ -1,5 +1,15 @@
 # neonctl
 
+## 2.34.0
+
+### Minor Changes
+
+- 21db0be: Add a `snapshots` command group (alias `snapshot`) for managing Neon snapshots from the CLI: `list`, `get`, `create` (from a branch head, timestamp, or LSN, with optional expiration), `update` (rename / set / clear expiration), `delete`, `restore` (to a new branch or onto an existing branch, with optional immediate `--finalize`), `finalize` (commit a previewed restore), and `schedule get` / `schedule set` for a branch's automatic snapshot (backup) schedule.
+
+### Patch Changes
+
+- 2fa3793: Include the CLI version and CI context in error analytics events so failures can be investigated and prioritized accurately.
+
 ## 2.33.2
 
 ### Patch Changes
