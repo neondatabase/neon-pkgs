@@ -363,7 +363,7 @@ export type OperationsResponse = {
 /**
  * The action performed by the operation
  */
-export type OperationAction = 'create_compute' | 'create_timeline' | 'start_compute' | 'suspend_compute' | 'apply_config' | 'check_availability' | 'delete_timeline' | 'create_branch' | 'import_data' | 'tenant_ignore' | 'tenant_attach' | 'tenant_detach' | 'tenant_reattach' | 'replace_safekeeper' | 'disable_maintenance' | 'apply_storage_config' | 'prepare_secondary_pageserver' | 'switch_pageserver' | 'detach_parent_branch' | 'timeline_archive' | 'timeline_unarchive' | 'start_reserved_compute' | 'sync_dbs_and_roles_from_compute' | 'apply_schema_from_branch' | 'timeline_mark_invisible' | 'timeline_update_protected_config' | 'prewarm_replica' | 'promote_replica' | 'set_storage_non_dirty' | 'swap_binding_id' | 'finalize_migration' | 'mark_migration_prepared' | 'update_catalog';
+export type OperationAction = 'create_compute' | 'create_timeline' | 'start_compute' | 'suspend_compute' | 'apply_config' | 'check_availability' | 'delete_timeline' | 'create_branch' | 'import_data' | 'tenant_ignore' | 'tenant_attach' | 'tenant_detach' | 'tenant_detach_safekeepers' | 'tenant_attach_safekeepers' | 'tenant_reattach' | 'replace_safekeeper' | 'disable_maintenance' | 'apply_storage_config' | 'prepare_secondary_pageserver' | 'switch_pageserver' | 'detach_parent_branch' | 'timeline_archive' | 'timeline_unarchive' | 'start_reserved_compute' | 'sync_dbs_and_roles_from_compute' | 'apply_schema_from_branch' | 'timeline_mark_invisible' | 'timeline_update_protected_config' | 'prewarm_replica' | 'promote_replica' | 'set_storage_non_dirty' | 'swap_binding_id' | 'finalize_migration' | 'mark_migration_prepared' | 'update_catalog';
 
 /**
  * The status of the operation
@@ -2482,7 +2482,7 @@ export type PgbouncerSettingsData = {
 };
 
 /**
- * The major Postgres version number. Currently supported versions are `14`, `15`, `16`, `17`, and `18`.
+ * The major Postgres version number. Generally available versions are `14`, `15`, `16`, `17`, and `18`. `19` is being rolled out and is only accepted in regions where it has been enabled; requesting it in a region where it is not yet available returns an error.
  */
 export type PgVersion = number;
 
