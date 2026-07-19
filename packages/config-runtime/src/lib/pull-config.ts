@@ -65,9 +65,16 @@ export interface PulledBranchConfig {
 	};
 	/**
 	 * The branch's live state expressed as a {@link Config}: static `auth` / `dataApi`
-	 * toggles plus a `branch` closure carrying the branch's lifecycle/compute tuning.
-	 * Preview functions/buckets are reported separately in {@link PulledBranchConfig.preview}
-	 * because functions cannot round-trip (the remote has no `source` path).
+	 * toggles, any object-storage `preview.buckets`, plus a `branch` closure carrying the
+	 * branch's lifecycle/compute tuning. Buckets are included here (not just in
+	 * {@link PulledBranchConfig.preview}) because they round-trip cleanly — name + access
+	 * level is all a {@link Config} needs — so the no-policy env path (`neon dev` /
+	 * `neon env pull`) can resolve the branch's storage credentials without a local
+	 * `neon.ts`. Preview **functions** are reported only in
+	 * {@link PulledBranchConfig.preview}: they cannot round-trip (the remote has no local
+	 * `source` path). The AI Gateway is omitted from both — it has no branch-level "enabled"
+	 * state to read back (it is always available, credential-gated), so `pullConfig` cannot
+	 * tell whether a policy would enable it.
 	 */
 	config: Config;
 	/**
@@ -206,9 +213,22 @@ export function buildPulledBranchConfig(
 		const compute = endpointToComputeSettings(endpoint, project);
 		if (compute) tuning.postgres = { computeSettings: compute };
 	}
+	// Buckets round-trip cleanly (name + access level), so they belong in the config the
+	// env path resolves from — this is what lets `neon dev` / `neon env pull` inject the
+	// branch's object-storage credentials (AWS_*) with no local neon.ts. Functions are
+	// deliberately NOT emitted here (they can't round-trip: the remote has no `source`
+	// path) and neither is the AI Gateway (no branch-level enabled state to detect, only a
+	// credential) — both would otherwise turn a read-back into a bogus policy declaration.
+	const bucketDefs: Record<string, { access: BucketAccessLevel }> = {};
+	for (const b of previewState?.buckets ?? []) {
+		bucketDefs[b.name] = { access: b.accessLevel };
+	}
 	const config: Config = {
 		...(previewState?.authEnabled ? { auth: true } : {}),
 		...(previewState?.dataApiEnabled ? { dataApi: true } : {}),
+		...(Object.keys(bucketDefs).length > 0
+			? { preview: { buckets: bucketDefs } }
+			: {}),
 		...(Object.keys(tuning).length > 0 ? { branch: () => tuning } : {}),
 	};
 	const result: PulledBranchConfig = {

@@ -212,6 +212,83 @@ describe("pullConfig", () => {
 		expect(pulled.config.dataApi).toBe(true);
 	});
 
+	test("includes the branch's buckets in config so the no-policy env path resolves storage", async () => {
+		// Regression for the feature gap: a branch with a bucket but no local neon.ts must
+		// still get its object-storage vars pulled. `pullConfig` mirrors the bucket into
+		// `config.preview.buckets` (buckets round-trip: name + access), which is what makes
+		// `fetchEnv`'s `wantsStorage` fire in the no-policy tier (`neon dev` / `neon env pull`).
+		const api = new FakeNeonApi();
+		const projectId = "proj-buckets";
+		api.seedProject({
+			project: {
+				id: projectId,
+				name: "buckets",
+				regionId: "aws-us-east-2",
+				pgVersion: 17,
+			},
+			branches: [
+				{ branch: { id: "br-main", name: "main", isDefault: true } },
+			],
+		});
+		api.seedBucket(projectId, "br-main", {
+			name: "assets",
+			accessLevel: "private",
+		});
+
+		const pulled = await pullConfig({
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+
+		// The bucket rides on the resolvable `config` (not just the display-only `preview`),
+		// with its access level preserved …
+		expect(pulled.config.preview?.buckets).toEqual({
+			assets: { access: "private" },
+		});
+		// … and it is what a downstream `resolveConfig` reads as "storage wanted".
+		const resolved = resolveConfig(pulled.config, {
+			name: "main",
+			exists: true,
+		});
+		expect(resolved.preview?.buckets.map((b) => b.name)).toEqual([
+			"assets",
+		]);
+		// The AI Gateway has no branch-level enabled state to read back, so it is never
+		// smuggled into the pulled config (only buckets are).
+		expect(pulled.config.preview?.aiGateway).toBeUndefined();
+		// It also stays in the display-only preview view for `config status` / inspect.
+		expect(pulled.preview?.buckets).toEqual([
+			{ name: "assets", access: "private" },
+		]);
+	});
+
+	test("omits preview from config when the branch has no buckets", async () => {
+		const api = new FakeNeonApi();
+		const projectId = "proj-no-buckets";
+		api.seedProject({
+			project: {
+				id: projectId,
+				name: "no-buckets",
+				regionId: "aws-us-east-1",
+				pgVersion: 17,
+			},
+			branches: [
+				{ branch: { id: "br-main", name: "main", isDefault: true } },
+			],
+		});
+
+		const pulled = await pullConfig({
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+
+		// No buckets → no `preview` on the resolvable config, so `fetchEnv` never mints a
+		// storage credential or probes the storage endpoint.
+		expect(pulled.config.preview).toBeUndefined();
+	});
+
 	test("reports issued credential metadata (secret-free) under preview", async () => {
 		const api = new FakeNeonApi();
 		const projectId = "proj-creds";

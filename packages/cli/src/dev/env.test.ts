@@ -43,6 +43,11 @@ type FakeOverrides = {
 	 * is correct this is never called, since functions carry no branch env.
 	 */
 	listBranchFunctions?: NeonApi["listBranchFunctions"];
+	/**
+	 * Override `listBranchBuckets` (e.g. to simulate a branch that has an object-storage
+	 * bucket). Defaults to returning `[]`.
+	 */
+	listBranchBuckets?: NeonApi["listBranchBuckets"];
 };
 
 /**
@@ -183,7 +188,13 @@ class FakeNeonApi implements NeonApi {
 		throw new Error("not implemented");
 	}
 
-	async listBranchBuckets(): Promise<NeonBucketSnapshot[]> {
+	async listBranchBuckets(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonBucketSnapshot[]> {
+		if (this.overrides.listBranchBuckets) {
+			return this.overrides.listBranchBuckets(projectId, branchId);
+		}
 		return [];
 	}
 
@@ -329,6 +340,39 @@ describe("resolveDevEnv", () => {
 		expect(result.vars.NEON_AUTH_JWKS_URL).toBe(
 			"https://auth.fake.neon.tech/.well-known/jwks.json",
 		);
+	});
+
+	it("tier 2 with a bucket present: surfaces the AWS_* object-storage vars too", async () => {
+		// The feature-gap fix: a branch that has an object-storage bucket but no local
+		// neon.ts. pullConfig now mirrors the bucket into `config.preview.buckets`, so
+		// `fetchEnv`'s `wantsStorage` fires — it mints a branch credential and injects the
+		// S3-compatible AWS_* vars, exactly what a deployed function would receive. No
+		// policy required.
+		const api = new FakeNeonApi({
+			listBranchBuckets: async () => [
+				{ name: "assets", accessLevel: "private" },
+			],
+		});
+
+		const result = await resolveDevEnv({
+			cwd,
+			projectId: PROJECT_ID,
+			branchId: BRANCH_ID,
+			api,
+		});
+
+		// The storage gateway authenticates against the full token id, so accessKeyId is the
+		// minted credential's `tokenId` (not the short id).
+		expect(result.vars.AWS_ACCESS_KEY_ID).toBe("cred-fake-0000");
+		expect(result.vars.AWS_SECRET_ACCESS_KEY).toBeDefined();
+		expect(result.vars.AWS_ENDPOINT_URL_S3).toBe(
+			"https://fake.storage.neon.tech",
+		);
+		expect(result.vars.AWS_REGION).toBe("us-east-1");
+		// The AI Gateway has no branch-level enabled state to read back, so pullConfig never
+		// declares it — its vars must not leak into the no-policy pull.
+		expect(result.vars.NEON_AI_GATEWAY_TOKEN).toBeUndefined();
+		expect(result.vars.NEON_AI_GATEWAY_BASE_URL).toBeUndefined();
 	});
 
 	it("tier 1: a neon.ts policy enabling auth -> DATABASE_URL and NEON_AUTH_BASE_URL", async () => {

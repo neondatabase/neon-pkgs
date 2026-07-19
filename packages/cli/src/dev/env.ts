@@ -62,8 +62,9 @@ export class MissingBranchContextError extends Error {
  *      the branch is missing, we stop with a {@link DevEnvMismatchError} pointing at
  *      `neonctl deploy`. Otherwise `fetchEnv` evaluates the policy.
  *   2. no `neon.ts`, but a project + branch are known -> `pullConfig` reads the
- *      branch's live state (incl. Auth / Data API enablement) into a config, then
- *      `fetchEnv` resolves what is actually enabled.
+ *      branch's live state (Auth / Data API enablement plus any object-storage
+ *      buckets) into a config, then `fetchEnv` resolves what is actually enabled —
+ *      so a branch with a bucket gets its `AWS_*` storage vars pulled with no policy.
  *   3. otherwise -> throw {@link MissingBranchContextError}.
  *
  * Unlike {@link resolveDevEnv}, this never swallows errors — callers decide how to
@@ -101,8 +102,11 @@ export const resolveNeonEnvVars = async (
 			branchId: ctx.branchId,
 			...apiOptions(ctx),
 		});
-		// `pulled.config` is already a `Config` (static auth/dataApi toggles + a branch
-		// tuning closure), so it feeds straight into fetchEnv — no wrapping needed.
+		// `pulled.config` is already a `Config` (static auth/dataApi toggles, any
+		// object-storage `preview.buckets`, and a branch tuning closure), so it feeds
+		// straight into fetchEnv — no wrapping needed. pullConfig excludes functions and
+		// the AI Gateway (neither can be faithfully read back), so fetchEnv never probes
+		// the functions API here and only mints a storage credential when a bucket exists.
 		return await fetchAndProject(pulled.config, ctx);
 	}
 
