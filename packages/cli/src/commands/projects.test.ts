@@ -56,6 +56,17 @@ describe("projects", () => {
 		]);
 	});
 
+	test("create with PostgreSQL version", async ({ testCliCommand }) => {
+		await testCliCommand([
+			"projects",
+			"create",
+			"--name",
+			"test_project_with_pg_version",
+			"--pg-version",
+			"18",
+		]);
+	});
+
 	test("create and connect with psql", async ({ testCliCommand }) => {
 		await testCliCommand([
 			"projects",
@@ -149,6 +160,47 @@ describe("projects", () => {
 
 	test("update hipaa flag", async ({ testCliCommand }) => {
 		await testCliCommand(["projects", "update", "test", "--hipaa"]);
+	});
+
+	test("update enables logical replication with confirmation bypass", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand([
+			"projects",
+			"update",
+			"test",
+			"--enable-logical-replication",
+			"--yes",
+		]);
+	});
+
+	test("update requires confirmation to enable logical replication", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			["projects", "update", "test", "--enable-logical-replication"],
+			{
+				code: 1,
+				stderr: "ERROR: Enabling logical replication requires confirmation. Re-run interactively or pass --yes.",
+			},
+		);
+	});
+
+	test("update rejects disabling logical replication", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"projects",
+				"update",
+				"test",
+				"--enable-logical-replication=false",
+			],
+			{
+				code: 1,
+				stderr: "ERROR: Logical replication cannot be disabled once it has been enabled.",
+			},
+		);
 	});
 
 	test("update project with default fixed size CU", async ({

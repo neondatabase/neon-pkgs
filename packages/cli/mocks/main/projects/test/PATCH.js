@@ -1,3 +1,5 @@
+import { expect } from 'vitest';
+
 const defaultSettings = {
   allowed_ips: {
     ips: ['192.168.1.1'],
@@ -7,6 +9,9 @@ const defaultSettings = {
 
 export default function (req, res) {
   const project = req.body.project ?? {};
+  if (project.settings?.enable_logical_replication !== undefined) {
+    expect(project.settings.enable_logical_replication).toBe(true);
+  }
   res.send({
     project: {
       id: 'test',

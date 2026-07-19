@@ -77,6 +77,13 @@ connection_uris:
 "
 `;
 
+exports[`branches > create protected branch 1`] = `
+"id: br-new-branch-123456
+name: protected_branch
+created_at: 2021-01-01T00:00:00.000Z
+"
+`;
+
 exports[`branches > create schema-only branch 1`] = `
 "branch:
   id: br-new-branch-123456

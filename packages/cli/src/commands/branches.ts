@@ -130,6 +130,11 @@ export const builder = (argv: yargs.Argv) =>
 						type: "string",
 						requiresArg: true,
 					},
+					protected: {
+						describe:
+							branchCreateRequest["branch.protected"].description,
+						type: "boolean",
+					},
 				}),
 			(args) => create(args as any),
 		)
@@ -360,6 +365,7 @@ const create = async (
 		annotation?: string;
 		schemaOnly: boolean;
 		"expires-at"?: string;
+		protected?: boolean;
 		"--"?: string[];
 	},
 ) => {
@@ -419,6 +425,9 @@ const create = async (
 								props["expires-at"],
 							).toISOString(),
 						}
+					: {}),
+				...(props.protected !== undefined
+					? { protected: props.protected }
 					: {}),
 			},
 			endpoints: props.compute

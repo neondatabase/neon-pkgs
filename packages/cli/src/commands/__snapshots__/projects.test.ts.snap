@@ -60,6 +60,16 @@ connection_uris:
 "
 `;
 
+exports[`projects > create with PostgreSQL version 1`] = `
+"project:
+  id: new-project-123456
+  name: test_project
+  created_at: 2021-01-01T00:00:00.000Z
+connection_uris:
+  - connection_uri: postgres://localhost:5432/test_project
+"
+`;
+
 exports[`projects > create with database and role 1`] = `
 "project:
   id: new-project-123456
@@ -176,6 +186,19 @@ created_at: 2019-01-01T00:00:00.000Z
 "
 `;
 
+exports[`projects > update enables logical replication with confirmation bypass 1`] = `
+"id: test
+name: test_project
+created_at: 2019-01-01T00:00:00Z
+settings:
+  allowed_ips:
+    ips:
+      - 192.168.1.1
+    protected_branches_only: false
+  enable_logical_replication: true
+"
+`;
+
 exports[`projects > update hipaa flag 1`] = `
 "id: test
 name: test_project
@@ -224,3 +247,7 @@ settings:
     protected_branches_only: false
 "
 `;
+
+exports[`projects > update rejects disabling logical replication 1`] = `""`;
+
+exports[`projects > update requires confirmation to enable logical replication 1`] = `""`;

@@ -129,6 +129,12 @@ export const builder = (argv: yargs.Argv) => {
 								.description,
 						type: "string",
 					},
+					"pg-version": {
+						describe:
+							"Major PostgreSQL version (14–19). Version 19 is available only in regions where it has been enabled.",
+						type: "number",
+						choices: [14, 15, 16, 17, 18, 19],
+					},
 					"set-context": {
 						type: "boolean",
 						describe: "Set the current context to the new project",
@@ -180,6 +186,17 @@ export const builder = (argv: yargs.Argv) => {
 						describe:
 							projectUpdateRequest["project.name"].description,
 						type: "string",
+					},
+					"enable-logical-replication": {
+						describe:
+							"Enable logical replication for all project endpoints. This suspends active endpoints and cannot be disabled.",
+						type: "boolean",
+					},
+					yes: {
+						type: "boolean",
+						default: false,
+						describe:
+							"Skip the confirmation prompt when enabling logical replication.",
 					},
 				}),
 			async (args) => {
@@ -288,6 +305,7 @@ const create = async (
 		orgId?: string;
 		database?: string;
 		role?: string;
+		pgVersion?: number;
 		psql: boolean;
 		fallback: boolean;
 		setContext: boolean;
@@ -330,6 +348,9 @@ const create = async (
 	}
 	if (props.role) {
 		project.branch.role_name = props.role;
+	}
+	if (props.pgVersion !== undefined) {
+		project.pg_version = props.pgVersion;
 	}
 	if (props.cu) {
 		project.default_endpoint_settings = props.cu
@@ -378,9 +399,40 @@ const update = async (
 			blockVpcConnections?: boolean;
 			blockPublicConnections?: boolean;
 			hipaa?: boolean;
+			enableLogicalReplication?: boolean;
+			yes: boolean;
 		},
 ) => {
 	const project: ProjectUpdateRequest["project"] = {};
+	if (props.enableLogicalReplication !== undefined) {
+		if (!props.enableLogicalReplication) {
+			throw new Error(
+				"Logical replication cannot be disabled once it has been enabled.",
+			);
+		}
+		if (!props.yes) {
+			if (isCi() || !process.stdin.isTTY) {
+				throw new Error(
+					"Enabling logical replication requires confirmation. Re-run interactively or pass --yes.",
+				);
+			}
+			const { proceed } = await prompts({
+				onState: onPromptState,
+				type: "confirm",
+				name: "proceed",
+				message:
+					"Enable logical replication? This suspends active endpoints and cannot be undone.",
+				initial: false,
+			});
+			if (!proceed) {
+				log.info("Logical replication was not enabled.");
+				return;
+			}
+		}
+		project.settings = {
+			enable_logical_replication: true,
+		};
+	}
 	if (props.hipaa !== undefined) {
 		if (!project.settings) {
 			project.settings = {};

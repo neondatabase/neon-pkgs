@@ -115,6 +115,18 @@ describe("branches", () => {
 		]);
 	});
 
+	test("create protected branch", async ({ testCliCommand }) => {
+		await testCliCommand([
+			"branches",
+			"create",
+			"--project-id",
+			"test",
+			"--name",
+			"protected_branch",
+			"--protected",
+		]);
+	});
+
 	test("create with parent by name", async ({ testCliCommand }) => {
 		await testCliCommand([
 			"branches",

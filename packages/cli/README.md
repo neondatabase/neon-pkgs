@@ -58,6 +58,40 @@ neon projects list --api-key <neon_api_key>
 
 For information about obtaining an Neon API key, see [Authentication](https://api-docs.neon.tech/reference/authentication), in the _Neon API Reference_.
 
+## Project and branch creation
+
+Choose the PostgreSQL version when creating a project:
+
+```bash
+neon projects create --name my-project --pg-version 18
+```
+
+Supported versions are `14` through `19`; version `19` is available only in
+regions where it has been enabled.
+
+Create a protected branch when it should not be modified or deleted by routine
+automation:
+
+```bash
+neon branches create --project-id <project-id> --name production --protected
+```
+
+### Enable logical replication
+
+Enable logical replication for every endpoint in an existing project:
+
+```bash
+neon projects update <project-id> --enable-logical-replication
+```
+
+The CLI asks for confirmation because enabling logical replication suspends
+active endpoints and cannot be undone. For non-interactive automation, pass
+`--yes` explicitly:
+
+```bash
+neon projects update <project-id> --enable-logical-replication --yes
+```
+
 ## Connect with psql
 
 ### The `psql` command

@@ -23,6 +23,13 @@ export default function (req, res) {
         },
       },
     });
+  } else if (req.body.project?.name === 'test_project_with_pg_version') {
+    expect(req.body).toMatchObject({
+      project: {
+        name: 'test_project_with_pg_version',
+        pg_version: 18,
+      },
+    });
   } else {
     expect(req.body).toMatchObject({
       project: {

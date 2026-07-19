@@ -98,6 +98,20 @@ export default function (req, res) {
         suspend_timeout: req.body.endpoints[0].suspend_timeout_seconds,
       },
     });
+  } else if (req.body.branch?.name === 'protected_branch') {
+    expect(req.body).toMatchObject({
+      branch: {
+        name: 'protected_branch',
+        protected: true,
+      },
+    });
+    res.send({
+      branch: {
+        id: 'br-new-branch-123456',
+        name: 'protected_branch',
+        created_at: '2021-01-01T00:00:00.000Z',
+      },
+    });
   } else {
     expect(req.body).toMatchObject({
       branch: {
