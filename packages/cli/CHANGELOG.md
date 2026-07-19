@@ -1,5 +1,15 @@
 # neonctl
 
+## 2.35.0
+
+### Minor Changes
+
+- f62419c: Add project PostgreSQL-version selection, protected branch creation, and confirmed logical-replication enablement.
+
+### Patch Changes
+
+- c7c8156: Prevent the CLI from hanging while looking up `.neon` context files at Windows drive and UNC roots.
+
 ## 2.34.1
 
 ### Patch Changes
