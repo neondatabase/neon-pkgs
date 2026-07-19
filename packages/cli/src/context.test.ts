@@ -6,7 +6,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, win32 } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 import {
@@ -14,6 +14,7 @@ import {
 	currentContextFile,
 	ensureGitignored,
 	isCurrentBranchProbe,
+	walkContextFile,
 } from "./context.js";
 
 describe("isCurrentBranchProbe", () => {
@@ -69,6 +70,104 @@ describe("isCurrentBranchProbe", () => {
 		expect(
 			isCurrentBranchProbe({ _: ["config"], currentBranch: true }),
 		).toBe(false);
+	});
+});
+
+const createBoundedWindowsResolver = () => {
+	let terminalParentResolutions = 0;
+
+	return {
+		resolvePath: (...paths: string[]) => {
+			const resolved = win32.resolve(...paths);
+			const currentDir = paths[0];
+			if (
+				currentDir !== undefined &&
+				paths.at(-1) === ".." &&
+				resolved === currentDir
+			) {
+				terminalParentResolutions += 1;
+				if (terminalParentResolutions > 1) {
+					throw new Error(
+						"Context walk did not stop at the filesystem root.",
+					);
+				}
+			}
+			return resolved;
+		},
+		terminalParentResolutions: () => terminalParentResolutions,
+	};
+};
+
+describe("walkContextFile with Windows path semantics", () => {
+	const root = win32.normalize("/");
+	const home = "C:\\Users\\test-user";
+
+	test("terminates after reaching a drive root from a nested directory", () => {
+		const cwd = "C:\\workspace\\nested";
+		const { resolvePath, terminalParentResolutions } =
+			createBoundedWindowsResolver();
+
+		expect(walkContextFile(cwd, root, home, resolvePath, () => false)).toBe(
+			win32.resolve(cwd, ".neon"),
+		);
+		expect(terminalParentResolutions()).toBe(1);
+	});
+
+	test("terminates when invoked directly at a drive root", () => {
+		const cwd = "D:\\";
+		const { resolvePath, terminalParentResolutions } =
+			createBoundedWindowsResolver();
+
+		expect(walkContextFile(cwd, root, home, resolvePath, () => false)).toBe(
+			win32.resolve(cwd, ".neon"),
+		);
+		expect(terminalParentResolutions()).toBe(1);
+	});
+
+	test("terminates after reaching a UNC share root", () => {
+		const cwd = "\\\\server\\share\\workspace\\nested";
+		const { resolvePath, terminalParentResolutions } =
+			createBoundedWindowsResolver();
+
+		expect(walkContextFile(cwd, root, home, resolvePath, () => false)).toBe(
+			win32.resolve(cwd, ".neon"),
+		);
+		expect(terminalParentResolutions()).toBe(1);
+	});
+
+	test("uses a context file found before the root", () => {
+		const cwd = "C:\\workspace\\nested";
+		const contextFile = "C:\\workspace\\.neon";
+		const { resolvePath, terminalParentResolutions } =
+			createBoundedWindowsResolver();
+
+		expect(
+			walkContextFile(
+				cwd,
+				root,
+				home,
+				resolvePath,
+				(file) => file === contextFile,
+			),
+		).toBe(contextFile);
+		expect(terminalParentResolutions()).toBe(0);
+	});
+
+	test("does not inspect a context file in the home directory", () => {
+		const cwd = "C:\\Users\\test-user\\workspace";
+		const inspectedFiles: string[] = [];
+		const { resolvePath, terminalParentResolutions } =
+			createBoundedWindowsResolver();
+
+		walkContextFile(cwd, root, home, resolvePath, (file) => {
+			inspectedFiles.push(file);
+			return false;
+		});
+
+		expect(inspectedFiles).toEqual([
+			"C:\\Users\\test-user\\workspace\\.neon",
+		]);
+		expect(terminalParentResolutions()).toBe(0);
 	});
 });
 
