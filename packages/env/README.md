@@ -121,6 +121,15 @@ These are the OS-level vars `fetchEnv` / `parseEnv` read and `toEntries` (so `ne
 | `NEON_AI_GATEWAY_TOKEN` | branch credential's API token (bearer) |
 | `NEON_AI_GATEWAY_BASE_URL` | bare branch gateway host (`https://<branch>-api.ai.<region>.…`, no path) |
 
+## Connection role & database selection
+
+When `roleName` / `databaseName` aren't passed, `fetchEnv` (not `parseEnv`, which reads an already-resolved `DATABASE_URL`) auto-picks them:
+
+- **Role** — the sole role, else `neondb_owner`, else the single role left after dropping the managed `authenticator` / `anonymous` / `authenticated`. More than one app role throws.
+- **Database** — `neondb` if present, else the sole database, else (among several) one owned by the role, else the alphabetically-first. Never throws on ambiguity.
+
+When it picks among several databases, it reports the choice via the optional `onNotice(message)` callback — CLIs wire it to their logger (e.g. `neonctl link` prints `Branch main has 2 databases (my-database, neondb); using the default 'neondb'.`). Pass `databaseName` / `roleName` to override.
+
 ## Resolution
 
 The **CLI** (`neon-env run`) resolves project + branch itself: `--project-id` / `--branch` flag → `NEON_PROJECT_ID` / `NEON_BRANCH` (name) / `NEON_BRANCH_ID` (legacy id) env → `.neon[/project.json]` walked up from the working directory (its `branch` field, name or id; legacy `branchId` still read). The API key resolves via `--api-key` → `NEON_API_KEY` → `~/.config/neonctl/credentials.json`.

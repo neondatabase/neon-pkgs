@@ -32,6 +32,13 @@ import { z } from "zod";
 const NEON_DEFAULT_OWNER_ROLE = "neondb_owner";
 
 /**
+ * Neon's default database, created with every project. When a branch has several databases
+ * and none was requested, this is preferred for the `DATABASE_URL` so the common case (a
+ * user added a second database next to `neondb`) auto-picks without asking.
+ */
+const NEON_DEFAULT_DATABASE = "neondb";
+
+/**
  * Roles Neon provisions for the Auth / Data API (PostgREST) stack. They exist to back
  * RLS-scoped Data API requests authenticated by JWT — never to hold a `DATABASE_URL` —
  * so they're skipped when auto-picking the connection role. Enabling Neon Auth or the
@@ -420,9 +427,11 @@ export interface FetchEnvOptions {
 	 */
 	roleName?: string;
 	/**
-	 * Database name. When omitted, the only database on the branch is auto-picked; throws
-	 * {@link PlatformError} with `PLATFORM_AMBIGUOUS_BRANCH_AUTH` if the branch has more
-	 * than one database.
+	 * Database name. When omitted, it is auto-picked: Neon's default `neondb` if present,
+	 * else the only database, else — among several non-`neondb` databases — one owned by the
+	 * connecting role (alphabetically first), else the alphabetically-first database. This
+	 * never throws on ambiguity; when it picks among several it reports via {@link onNotice}.
+	 * Only an empty branch (no databases) or a `databaseName` that does not exist throws.
 	 */
 	databaseName?: string;
 	/**
@@ -430,6 +439,12 @@ export interface FetchEnvOptions {
 	 * creation. Defaults to `process.env`; callers may layer values from `.env.local`.
 	 */
 	env?: NodeJS.ProcessEnv;
+	/**
+	 * Optional sink for non-fatal, human-readable notices (e.g. "branch has several
+	 * databases; using the default `neondb`"). The library never writes to the console
+	 * itself; CLIs pass their logger (e.g. `log.info`) so the message reaches the user.
+	 */
+	onNotice?: (message: string) => void;
 }
 
 /**
@@ -507,6 +522,7 @@ export async function fetchEnv<const C extends Config>(
 		branch,
 		roleName,
 		options.databaseName,
+		options.onNotice,
 	);
 
 	// Fan out: always fetch both Postgres URIs. Conditionally fetch auth + dataApi based
@@ -878,6 +894,7 @@ function pickDatabaseName(
 	branch: NeonBranchSnapshot,
 	roleName: string,
 	requested: string | undefined,
+	onNotice?: (message: string) => void,
 ): string {
 	if (requested) {
 		if (!databases.some((d) => d.name === requested)) {
@@ -908,25 +925,36 @@ function pickDatabaseName(
 			{ details: { branchId: branch.id } },
 		);
 	}
+
+	const names = databases.map((d) => d.name);
+
+	// Prefer Neon's default `neondb`. On the common "added a second database" branch this
+	// auto-picks it silently for a lone database, or with an info notice when others exist.
+	const neondb = databases.find((d) => d.name === NEON_DEFAULT_DATABASE);
+	if (neondb) {
+		if (databases.length > 1) {
+			onNotice?.(
+				`Branch ${branch.name} has ${databases.length} databases (${names.join(", ")}); using the default '${NEON_DEFAULT_DATABASE}'.`,
+			);
+		}
+		return neondb.name;
+	}
+
 	if (databases.length === 1) return databases[0].name;
 
-	// Prefer a database owned by the role we're connecting as.
-	const owned = databases.filter((d) => d.ownerName === roleName);
-	if (owned.length === 1) return owned[0].name;
-
-	throw new PlatformError(
-		ErrorCode.AmbiguousBranchAuth,
-		[
-			`fetchEnv: branch ${branch.name} (${branch.id}) has ${databases.length} databases; cannot auto-pick.`,
-			`Pass \`databaseName\` explicitly. Available: ${databases.map((d) => d.name).join(", ")}.`,
-		].join(" "),
-		{
-			details: {
-				branchId: branch.id,
-				availableDatabases: databases.map((d) => d.name),
-			},
-		},
+	// No `neondb` and several databases: pick deterministically rather than fail. Prefer one
+	// owned by the connecting role (alphabetically first), else the alphabetically-first
+	// database overall, so the choice is stable across runs regardless of API ordering.
+	const byName = (a: NeonDatabaseSnapshot, b: NeonDatabaseSnapshot) =>
+		a.name.localeCompare(b.name);
+	const owned = databases
+		.filter((d) => d.ownerName === roleName)
+		.sort(byName);
+	const picked = (owned[0] ?? [...databases].sort(byName)[0]).name;
+	onNotice?.(
+		`Branch ${branch.name} has ${databases.length} databases (${names.join(", ")}) and no default '${NEON_DEFAULT_DATABASE}'; using '${picked}'.`,
 	);
+	return picked;
 }
 
 // ───────────────────────── parseEnv ─────────────────────────

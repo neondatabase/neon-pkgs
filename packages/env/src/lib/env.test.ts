@@ -76,6 +76,28 @@ function seededFakeWithRoles(roleNames: string[]) {
 	return { api, projectId };
 }
 
+function seededFakeWithDatabases(
+	databases: Array<{ name: string; ownerName?: string }>,
+) {
+	const api = new FakeNeonApi();
+	const projectId = "proj-env-dbs";
+	api.seedProject({
+		project: {
+			id: projectId,
+			name: "env-dbs-test",
+			regionId: "aws-us-east-1",
+			pgVersion: 17,
+		},
+		branches: [
+			{
+				branch: { id: "br-main", name: "main", isDefault: true },
+				databases,
+			},
+		],
+	});
+	return { api, projectId };
+}
+
 describe("fetchEnv", () => {
 	test("fetches postgres env for selected branch", async () => {
 		const { api, projectId } = seededFake();
@@ -245,6 +267,88 @@ describe("fetchEnv", () => {
 		expect(env.postgres.databaseUrl).toContain(
 			"postgresql://authenticator:",
 		);
+	});
+
+	test("prefers the default neondb among multiple databases and notices", async () => {
+		const { api, projectId } = seededFakeWithDatabases([
+			{ name: "my-database" },
+			{ name: "neondb" },
+		]);
+		const notices: string[] = [];
+		const env = await fetchEnv(defineConfig({}), {
+			api,
+			projectId,
+			branchId: "br-main",
+			onNotice: (m) => notices.push(m),
+		});
+		expect(env.postgres.databaseUrl).toContain("/neondb?");
+		expect(notices).toHaveLength(1);
+		expect(notices[0]).toContain("neondb");
+	});
+
+	test("uses the sole remaining database when neondb is absent (no notice)", async () => {
+		const { api, projectId } = seededFakeWithDatabases([
+			{ name: "my-database" },
+		]);
+		const notices: string[] = [];
+		const env = await fetchEnv(defineConfig({}), {
+			api,
+			projectId,
+			branchId: "br-main",
+			onNotice: (m) => notices.push(m),
+		});
+		expect(env.postgres.databaseUrl).toContain("/my-database?");
+		expect(notices).toHaveLength(0);
+	});
+
+	test("without neondb, prefers a database owned by the connecting role", async () => {
+		// Connecting role auto-picks neondb_owner. "beta" is alphabetically first, but
+		// "zulu" is owned by neondb_owner, so ownership wins over alphabetical order.
+		const { api, projectId } = seededFakeWithDatabases([
+			{ name: "beta", ownerName: "someone_else" },
+			{ name: "zulu", ownerName: "neondb_owner" },
+		]);
+		const notices: string[] = [];
+		const env = await fetchEnv(defineConfig({}), {
+			api,
+			projectId,
+			branchId: "br-main",
+			onNotice: (m) => notices.push(m),
+		});
+		expect(env.postgres.databaseUrl).toContain("/zulu?");
+		expect(notices).toHaveLength(1);
+		expect(notices[0]).toContain("zulu");
+	});
+
+	test("without neondb and no role-owned db, picks the alphabetically-first database", async () => {
+		// Seeded out of order; none owned by the connecting role (neondb_owner).
+		const { api, projectId } = seededFakeWithDatabases([
+			{ name: "gamma", ownerName: "other" },
+			{ name: "alpha", ownerName: "other" },
+		]);
+		const notices: string[] = [];
+		const env = await fetchEnv(defineConfig({}), {
+			api,
+			projectId,
+			branchId: "br-main",
+			onNotice: (m) => notices.push(m),
+		});
+		expect(env.postgres.databaseUrl).toContain("/alpha?");
+		expect(notices).toHaveLength(1);
+	});
+
+	test("an explicit databaseName still wins over the auto-pick", async () => {
+		const { api, projectId } = seededFakeWithDatabases([
+			{ name: "my-database" },
+			{ name: "neondb" },
+		]);
+		const env = await fetchEnv(defineConfig({}), {
+			api,
+			projectId,
+			branchId: "br-main",
+			databaseName: "my-database",
+		});
+		expect(env.postgres.databaseUrl).toContain("/my-database?");
 	});
 });
 
