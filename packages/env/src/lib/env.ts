@@ -428,10 +428,10 @@ export interface FetchEnvOptions {
 	roleName?: string;
 	/**
 	 * Database name. When omitted, it is auto-picked: Neon's default `neondb` if present,
-	 * else the only database, else — among several non-`neondb` databases — one owned by the
-	 * connecting role (alphabetically first), else the alphabetically-first database. This
-	 * never throws on ambiguity; when it picks among several it reports via {@link onNotice}.
-	 * Only an empty branch (no databases) or a `databaseName` that does not exist throws.
+	 * else the only database on the branch. Throws {@link PlatformError} with
+	 * `PLATFORM_AMBIGUOUS_BRANCH_AUTH` when the branch has several databases and none is
+	 * `neondb` (pass `databaseName` to disambiguate), and `PLATFORM_BRANCH_NOT_FOUND` when
+	 * the branch has no databases or the requested `databaseName` does not exist.
 	 */
 	databaseName?: string;
 	/**
@@ -439,12 +439,6 @@ export interface FetchEnvOptions {
 	 * creation. Defaults to `process.env`; callers may layer values from `.env.local`.
 	 */
 	env?: NodeJS.ProcessEnv;
-	/**
-	 * Optional sink for non-fatal, human-readable notices (e.g. "branch has several
-	 * databases; using the default `neondb`"). The library never writes to the console
-	 * itself; CLIs pass their logger (e.g. `log.info`) so the message reaches the user.
-	 */
-	onNotice?: (message: string) => void;
 }
 
 /**
@@ -520,9 +514,7 @@ export async function fetchEnv<const C extends Config>(
 	const databaseName = pickDatabaseName(
 		databases,
 		branch,
-		roleName,
 		options.databaseName,
-		options.onNotice,
 	);
 
 	// Fan out: always fetch both Postgres URIs. Conditionally fetch auth + dataApi based
@@ -892,9 +884,7 @@ function pickRoleName(
 function pickDatabaseName(
 	databases: NeonDatabaseSnapshot[],
 	branch: NeonBranchSnapshot,
-	roleName: string,
 	requested: string | undefined,
-	onNotice?: (message: string) => void,
 ): string {
 	if (requested) {
 		if (!databases.some((d) => d.name === requested)) {
@@ -926,35 +916,28 @@ function pickDatabaseName(
 		);
 	}
 
-	const names = databases.map((d) => d.name);
-
 	// Prefer Neon's default `neondb`. On the common "added a second database" branch this
-	// auto-picks it silently for a lone database, or with an info notice when others exist.
+	// auto-picks it, so a lone or `neondb`-including branch resolves without asking.
 	const neondb = databases.find((d) => d.name === NEON_DEFAULT_DATABASE);
-	if (neondb) {
-		if (databases.length > 1) {
-			onNotice?.(
-				`Branch ${branch.name} has ${databases.length} databases (${names.join(", ")}); using the default '${NEON_DEFAULT_DATABASE}'.`,
-			);
-		}
-		return neondb.name;
-	}
+	if (neondb) return neondb.name;
 
 	if (databases.length === 1) return databases[0].name;
 
-	// No `neondb` and several databases: pick deterministically rather than fail. Prefer one
-	// owned by the connecting role (alphabetically first), else the alphabetically-first
-	// database overall, so the choice is stable across runs regardless of API ordering.
-	const byName = (a: NeonDatabaseSnapshot, b: NeonDatabaseSnapshot) =>
-		a.name.localeCompare(b.name);
-	const owned = databases
-		.filter((d) => d.ownerName === roleName)
-		.sort(byName);
-	const picked = (owned[0] ?? [...databases].sort(byName)[0]).name;
-	onNotice?.(
-		`Branch ${branch.name} has ${databases.length} databases (${names.join(", ")}) and no default '${NEON_DEFAULT_DATABASE}'; using '${picked}'.`,
+	// Several databases and no `neondb` to fall back on. Auto-picking any of them would be
+	// perceived as random and is bad DX, so fail loudly and let the caller disambiguate.
+	throw new PlatformError(
+		ErrorCode.AmbiguousBranchAuth,
+		[
+			`fetchEnv: branch ${branch.name} (${branch.id}) has ${databases.length} databases and none is named "${NEON_DEFAULT_DATABASE}"; cannot auto-pick.`,
+			`Rename one to "${NEON_DEFAULT_DATABASE}" or keep a single database on the branch (or, when calling fetchEnv directly, pass \`databaseName\`). Available: ${databases.map((d) => d.name).join(", ")}.`,
+		].join(" "),
+		{
+			details: {
+				branchId: branch.id,
+				availableDatabases: databases.map((d) => d.name),
+			},
+		},
 	);
-	return picked;
 }
 
 // ───────────────────────── parseEnv ─────────────────────────

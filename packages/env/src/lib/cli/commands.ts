@@ -198,8 +198,6 @@ async function loadConfigAndFetchEnv(
 		env: { ...process.env, ...fileEnv },
 		...(ctx.api ? { api: ctx.api } : {}),
 		...(options.apiKey ? { apiKey: options.apiKey } : {}),
-		// Info notices (e.g. auto-picked database) go to stderr so `export`'s stdout stays clean.
-		onNotice: (message) => process.stderr.write(`${message}\n`),
 	});
 }
 

@@ -269,72 +269,39 @@ describe("fetchEnv", () => {
 		);
 	});
 
-	test("prefers the default neondb among multiple databases and notices", async () => {
+	test("prefers the default neondb among multiple databases", async () => {
 		const { api, projectId } = seededFakeWithDatabases([
 			{ name: "my-database" },
 			{ name: "neondb" },
 		]);
-		const notices: string[] = [];
 		const env = await fetchEnv(defineConfig({}), {
 			api,
 			projectId,
 			branchId: "br-main",
-			onNotice: (m) => notices.push(m),
 		});
 		expect(env.postgres.databaseUrl).toContain("/neondb?");
-		expect(notices).toHaveLength(1);
-		expect(notices[0]).toContain("neondb");
 	});
 
-	test("uses the sole remaining database when neondb is absent (no notice)", async () => {
+	test("uses the sole remaining database when neondb is absent", async () => {
 		const { api, projectId } = seededFakeWithDatabases([
 			{ name: "my-database" },
 		]);
-		const notices: string[] = [];
 		const env = await fetchEnv(defineConfig({}), {
 			api,
 			projectId,
 			branchId: "br-main",
-			onNotice: (m) => notices.push(m),
 		});
 		expect(env.postgres.databaseUrl).toContain("/my-database?");
-		expect(notices).toHaveLength(0);
 	});
 
-	test("without neondb, prefers a database owned by the connecting role", async () => {
-		// Connecting role auto-picks neondb_owner. "beta" is alphabetically first, but
-		// "zulu" is owned by neondb_owner, so ownership wins over alphabetical order.
+	test("throws when several databases and none is neondb", async () => {
 		const { api, projectId } = seededFakeWithDatabases([
-			{ name: "beta", ownerName: "someone_else" },
-			{ name: "zulu", ownerName: "neondb_owner" },
+			{ name: "alpha" },
+			{ name: "beta" },
 		]);
-		const notices: string[] = [];
-		const env = await fetchEnv(defineConfig({}), {
-			api,
-			projectId,
-			branchId: "br-main",
-			onNotice: (m) => notices.push(m),
-		});
-		expect(env.postgres.databaseUrl).toContain("/zulu?");
-		expect(notices).toHaveLength(1);
-		expect(notices[0]).toContain("zulu");
-	});
-
-	test("without neondb and no role-owned db, picks the alphabetically-first database", async () => {
-		// Seeded out of order; none owned by the connecting role (neondb_owner).
-		const { api, projectId } = seededFakeWithDatabases([
-			{ name: "gamma", ownerName: "other" },
-			{ name: "alpha", ownerName: "other" },
-		]);
-		const notices: string[] = [];
-		const env = await fetchEnv(defineConfig({}), {
-			api,
-			projectId,
-			branchId: "br-main",
-			onNotice: (m) => notices.push(m),
-		});
-		expect(env.postgres.databaseUrl).toContain("/alpha?");
-		expect(notices).toHaveLength(1);
+		await expect(
+			fetchEnv(defineConfig({}), { api, projectId, branchId: "br-main" }),
+		).rejects.toMatchObject({ code: ErrorCode.AmbiguousBranchAuth });
 	});
 
 	test("an explicit databaseName still wins over the auto-pick", async () => {

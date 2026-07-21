@@ -126,9 +126,9 @@ These are the OS-level vars `fetchEnv` / `parseEnv` read and `toEntries` (so `ne
 When `roleName` / `databaseName` aren't passed, `fetchEnv` (not `parseEnv`, which reads an already-resolved `DATABASE_URL`) auto-picks them:
 
 - **Role** — the sole role, else `neondb_owner`, else the single role left after dropping the managed `authenticator` / `anonymous` / `authenticated`. More than one app role throws.
-- **Database** — `neondb` if present, else the sole database, else (among several) one owned by the role, else the alphabetically-first. Never throws on ambiguity.
+- **Database** — `neondb` if present, else the sole database. Several databases with no `neondb` throws (pass `databaseName` to disambiguate) rather than guessing.
 
-When it picks among several databases, it reports the choice via the optional `onNotice(message)` callback — CLIs wire it to their logger (e.g. `neonctl link` prints `Branch main has 2 databases (my-database, neondb); using the default 'neondb'.`). Pass `databaseName` / `roleName` to override.
+Pass `databaseName` / `roleName` to override the auto-pick.
 
 ## Resolution
 

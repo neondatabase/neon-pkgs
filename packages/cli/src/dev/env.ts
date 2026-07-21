@@ -242,7 +242,6 @@ const fetchAndProject = async (
 		branch: ctx.branchId as string,
 		...apiOptions(ctx),
 		...(ctx.env ? { env: ctx.env } : {}),
-		onNotice: (message) => log.info(message),
 	});
 	return toEntries(env);
 };
