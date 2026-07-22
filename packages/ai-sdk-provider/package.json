@@ -48,7 +48,8 @@
 	"devDependencies": {
 		"@types/node": "catalog:",
 		"@vitest/coverage-v8": "catalog:",
-		"ai": "6.0.132",
+		"ai": "6.0.228",
+		"ai-v7": "npm:ai@7.0.0-beta.187",
 		"console-fail-test": "catalog:",
 		"tsdown": "catalog:",
 		"typescript": "catalog:",
@@ -70,7 +71,7 @@
 		"@ai-sdk/provider-utils": "^4.0.27"
 	},
 	"peerDependencies": {
-		"ai": "^6.0.0",
+		"ai": "^6.0.0 || ^7.0.0-0",
 		"zod": "^3.25.76 || ^4.1.8"
 	}
 }

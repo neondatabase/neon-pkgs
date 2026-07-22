@@ -1,6 +1,6 @@
 # @neon/ai-sdk-provider
 
-Community [Vercel AI SDK](https://ai-sdk.dev) provider for the [Neon](https://neon.com) AI Gateway. Requires **AI SDK v6** (`ai@^6`).
+Community [Vercel AI SDK](https://ai-sdk.dev) provider for the [Neon](https://neon.com) AI Gateway. Supports **AI SDK v6 and v7** (`ai@^6` or `ai@^7`).
 
 The Neon AI Gateway is **branch-scoped**: each Neon project branch gets its own gateway host, and a platform token authorizes requests for that branch. This provider routes each model to the best gateway endpoint (Anthropic → native Messages, OpenAI → native Responses incl. **Codex**, everything else → unified OpenAI-compatible MLflow endpoint), so a single `neon('claude-...')` call reaches the whole catalog.
 
@@ -9,10 +9,10 @@ Model ids use the canonical Neon (unprefixed) form — `claude-sonnet-4-6`, `gpt
 ## Install
 
 ```bash
-npm install @neon/ai-sdk-provider ai@^6
+npm install @neon/ai-sdk-provider ai
 ```
 
-> **Requirements:** Node.js >= 20.19.
+> **Requirements:** Node.js >= 20.19 with AI SDK 6. AI SDK 7 itself requires Node.js >= 22.
 
 ## Configuration
 
@@ -100,4 +100,4 @@ cp .env.example .env   # fill NEON_AI_GATEWAY_BASE_URL + NEON_AI_GATEWAY_TOKEN f
 pnpm test:e2e
 ```
 
-The matrix covers one models.dev `neon` model per family (Anthropic, OpenAI, Codex, Gemini, Meta) across `generateText`, `streamText`, `generateObject`, tool calling, and `neon.tools.imageGeneration`. Skipped when gateway env vars are absent.
+The matrix covers one models.dev `neon` model per family (Anthropic, OpenAI, Codex, Gemini, Meta) across `generateText`, `streamText`, `generateObject`, tool calling, and `neon.tools.imageGeneration`. It also fetches the live `/v1/models` catalog and calls every currently enabled model with both AI SDK 6 and AI SDK 7. Tests are skipped when gateway env vars are absent.
