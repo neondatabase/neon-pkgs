@@ -1,5 +1,11 @@
 # neonctl
 
+## 2.36.0
+
+### Minor Changes
+
+- Add `neon inspect db` diagnostic commands to help investigate database health, sizes, and query statistics.
+
 ## 2.35.2
 
 ### Patch Changes
