@@ -1,5 +1,8 @@
 import { generateText as generateTextV6 } from "ai";
-import { generateText as generateTextV7 } from "ai-v7";
+import {
+	generateText as generateTextV7,
+	streamText as streamTextV7,
+} from "ai-v7";
 import { beforeAll, describe, expect, it } from "vitest";
 import { neon } from "../src/index.js";
 import { assertGatewayEnv, hasGatewayEnv } from "./helpers.js";
@@ -127,5 +130,37 @@ describe.skipIf(!hasGatewayEnv())(
 				).toEqual([]);
 			}, 600_000);
 		}
+
+		it("uses the Neon image-generation tool with AI SDK 7", async () => {
+			const result = streamTextV7({
+				model: neon("gpt-5-mini"),
+				prompt: "Generate a simple red circle on a white background.",
+				tools: {
+					image_generation: neon.tools.imageGeneration({
+						outputFormat: "jpeg",
+						quality: "low",
+						outputCompression: 30,
+						size: "1024x1024",
+					}),
+				},
+				maxOutputTokens: 2048,
+			});
+
+			let gotImage = false;
+			for await (const part of result.fullStream) {
+				if (
+					part.type === "tool-result" &&
+					part.toolName === "image_generation" &&
+					typeof part.output === "object" &&
+					part.output !== null &&
+					"result" in part.output &&
+					typeof part.output.result === "string" &&
+					part.output.result.length > 1000
+				) {
+					gotImage = true;
+				}
+			}
+			expect(gotImage).toBe(true);
+		}, 120_000);
 	},
 );

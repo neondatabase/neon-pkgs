@@ -10,7 +10,6 @@
  * `NEON_AI_GATEWAY_TOKEN` emitted by `neonctl env pull` / `neon dev`, or pass
  * `baseURL` / `apiKey` explicitly.
  */
-import { openai as openaiProvider } from "@ai-sdk/openai";
 import type { ProviderErrorStructure } from "@ai-sdk/openai-compatible";
 import {
 	type LanguageModelV3,
@@ -31,6 +30,7 @@ import { NeonChatLanguageModel } from "./neon-chat-language-model.js";
 import type { NeonChatModelId } from "./neon-chat-options.js";
 import { wrapFetchWithHarmonyNormalization } from "./neon-harmony-normalize.js";
 import { getNeonModelRoute } from "./neon-model-capabilities.js";
+import { neonOpenAITools } from "./neon-openai-tools.js";
 import { NeonResponsesLanguageModel } from "./neon-responses-language-model.js";
 import { VERSION } from "./version.js";
 
@@ -119,7 +119,7 @@ export interface NeonProvider extends ProviderV3 {
 	chat(modelId: NeonChatModelId): LanguageModelV3;
 
 	/** OpenAI Responses tools (e.g. `imageGeneration`) for OpenAI-routed models. */
-	tools: typeof openaiProvider.tools;
+	tools: typeof neonOpenAITools;
 
 	/** @deprecated Use `embeddingModel` instead. */
 	textEmbeddingModel(modelId: string): never;
@@ -206,7 +206,7 @@ export function createNeon(options: NeonProviderSettings = {}): NeonProvider {
 	provider.specificationVersion = "v3" as const;
 	provider.languageModel = createLanguageModel;
 	provider.chat = createLanguageModel;
-	provider.tools = openaiProvider.tools;
+	provider.tools = neonOpenAITools;
 
 	provider.embeddingModel = (modelId: string) => {
 		throw new NoSuchModelError({ modelId, modelType: "embeddingModel" });
