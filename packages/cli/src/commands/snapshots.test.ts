@@ -311,7 +311,7 @@ describe("snapshots", () => {
 			"--branch",
 			"main",
 			"--schedule",
-			'[{"frequency":"hourly"},{"frequency":"daily","hour":3}]',
+			'[{"frequency":"weekly","day":1,"hour":2},{"frequency":"daily","hour":3}]',
 		]);
 	});
 

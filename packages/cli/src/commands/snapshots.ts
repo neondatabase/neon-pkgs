@@ -34,13 +34,7 @@ const OPERATION_FIELDS: readonly (keyof Operation)[] = [
 	"status",
 ];
 
-const SNAPSHOT_FREQUENCIES = [
-	"hourly",
-	"daily",
-	"weekly",
-	"monthly",
-	"yearly",
-] as const;
+const SNAPSHOT_FREQUENCIES = ["daily", "weekly", "monthly"] as const;
 
 export const command = "snapshots";
 export const describe = "Manage snapshots";
@@ -273,7 +267,7 @@ export const builder = (argv: yargs.Argv) =>
 										"A daily 03:00 snapshot kept for 7 days",
 									],
 									[
-										'$0 snapshots schedule set --branch main --schedule \'[{"frequency":"hourly"},{"frequency":"daily","hour":3}]\'',
+										'$0 snapshots schedule set --branch main --schedule \'[{"frequency":"weekly","day":1,"hour":2},{"frequency":"daily","hour":3}]\'',
 										"A multi-entry schedule via JSON",
 									],
 								]),

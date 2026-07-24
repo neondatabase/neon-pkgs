@@ -166,7 +166,9 @@ exports[`snapshots > schedule set from flags 1`] = `
 `;
 
 exports[`snapshots > schedule set from json 1`] = `
-"- frequency: hourly
+"- frequency: weekly
+  hour: 2
+  day: 1
 - frequency: daily
   hour: 3
 "

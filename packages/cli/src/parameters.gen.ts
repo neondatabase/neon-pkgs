@@ -124,7 +124,7 @@ export const projectCreateRequest = {
   },
   'project.pg_version': {
               type: "number",
-              description: "The major Postgres version number. Currently supported versions are `14`, `15`, `16`, `17`, and `18`.",
+              description: "The major Postgres version number. Generally available versions are `14`, `15`, `16`, `17`, and `18`. `19` is being rolled out and is only accepted in regions where it has been enabled; requesting it in a region where it is not yet available returns an error.",
               demandOption: false,
   },
   'project.store_passwords': {

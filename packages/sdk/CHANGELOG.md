@@ -1,5 +1,19 @@
 # @neon/sdk
 
+## 1.3.0
+
+### Minor Changes
+
+- Fix snapshot expiration updates and schedule frequency options
+
+  - SDK: regenerate from the latest API spec so `SnapshotUpdateRequest` supports
+    updating (`expires_at`) and clearing (`null`) a snapshot's expiration, and the
+    backup schedule `frequency` documents only the supported `daily`/`weekly`/`monthly`
+    values.
+  - CLI: `neon snapshots update --expires-at`/`--clear-expiration` now work, and
+    `snapshots schedule set --frequency` only offers `daily`, `weekly`, and `monthly`
+    (dropping `hourly`/`yearly`, which the API rejects).
+
 ## 1.2.0
 
 ### Minor Changes
