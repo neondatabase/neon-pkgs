@@ -99,10 +99,59 @@ The release mechanism does not change:
 7. Verify `npm view neonctl version` and
    `npm view neonctl dependencies.neon`.
 
+The standalone binaries are named after the package, so they now ship as
+`neon-linux-x64`, `neon-linux-arm64`, `neon-macos-x64`, and `neon-win-x64.exe`
+on a `neon@<version>` GitHub release.
+
 The first release must include the coordinated Databricks workflow change that
 stops repacking `neonctl` as `neon` and instead treats both as independent
 publish targets. After that migration, normal CLI releases use the existing
 one-package-per-dispatch flow unchanged.
+
+## Homebrew
+
+`brew install neonctl` installs homebrew-core's `neonctl` formula, which builds
+from the npm `neonctl` tarball and symlinks every executable that package
+provides. It currently yields both `neonctl` and `neon`, because the fat package
+declared both.
+
+The compatibility package declares only `neonctl`; its `neon` dependency's
+executable stays in `node_modules/.bin`, which Homebrew does not expose. So the
+formula needs one coordinated change, which must be published as a homebrew-core
+PR:
+
+```diff
+-  url "https://registry.npmjs.org/neonctl/-/neonctl-<version>.tgz"
++  url "https://registry.npmjs.org/neon/-/neon-<version>.tgz"
+     ...
+   def install
+     system "npm", "install", *std_npm_args
+     bin.install_symlink libexec.glob("bin/*")
++    bin.install_symlink bin/"neon" => "neonctl"
+
+-    %w[neonctl neon].each do |cmd|
++    %w[neon neonctl].each do |cmd|
+       generate_completions_from_executable(bin/cmd, "completion", shells: [:bash, :zsh])
+     end
+
+-    node_modules = libexec/"lib/node_modules/neonctl/node_modules"
++    node_modules = libexec/"lib/node_modules/neon/node_modules"
+```
+
+Two details matter. The formula keeps the name `neonctl` — homebrew-core's `neon`
+is already the [neon HTTP/WebDAV
+library](https://formulae.brew.sh/formula/neon) — so `brew install neonctl`
+stays the documented command and keeps providing both executables. And the
+`node_modules` path must be updated even though nothing appears to break: the
+prebuild and bundled-esbuild cleanup globs a directory that would no longer
+exist, so they would silently stop running and the formula would ship the
+bundled esbuild it declares a dependency on.
+
+Timing: the PR needs a published `neon@<version>` for its `url` and `sha256`, so
+open it after the `neon` dispatch and before the `neonctl` dispatch. Homebrew's
+bot bumps this formula within a day of each npm release, so land it promptly —
+otherwise the bot opens a bump PR against the compatibility tarball, which
+cannot build.
 
 ## Compatibility
 

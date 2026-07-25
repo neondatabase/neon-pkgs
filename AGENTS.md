@@ -264,6 +264,9 @@ The CLI publishes from this monorepo via the same external workflow as every oth
 - **Compatibility command**: `neonctl` is a thin package that depends on `neon` (`workspace:*`)
   and owns only the legacy `neonctl` executable. Publish `neon` first, verify it on npm, then
   publish `neonctl` with the same workflow (`-f package=neonctl`). It has no binaries.
+- **Homebrew**: `brew install neonctl` is a homebrew-core formula built from an npm tarball, not
+  something this repo publishes. It needs a one-time PR to build from `neon` instead of `neonctl`
+  (exact diff in `docs/neonctl-compatibility-shim.md`); after that Homebrew's bot bumps it.
 
 ### Best Practices
 
