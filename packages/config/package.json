@@ -42,7 +42,7 @@
 	"scripts": {
 		"build": "tsc --noEmit && tsdown",
 		"prepare": "npm run build",
-		"test": "vitest --passWithNoTests",
+		"test": "pnpm --filter @neon/config... build && vitest --passWithNoTests",
 		"test:ci": "vitest run --passWithNoTests",
 		"test:types": "vitest run --typecheck.enabled --typecheck.only",
 		"test:e2e": "vitest run --config vitest.e2e.config.ts",
@@ -61,7 +61,6 @@
 		"jiti": "^2.7.0",
 		"zod": "^4.4.3"
 	},
-	"packageManager": "pnpm@10.4.0",
 	"engines": {
 		"node": ">=20.19.0"
 	},

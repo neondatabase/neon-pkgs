@@ -19,7 +19,7 @@
 	],
 	"scripts": {
 		"build": "tsc --noEmit && tsdown",
-		"test": "vitest --passWithNoTests",
+		"test": "pnpm --filter vite-plugin-neon-new... build && vitest --passWithNoTests",
 		"test:ci": "vitest run --passWithNoTests",
 		"tsc": "tsc",
 		"dry:run": "pnpm build && node dist/cli.js --yes",

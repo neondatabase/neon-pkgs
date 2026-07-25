@@ -43,7 +43,7 @@
 	"scripts": {
 		"build": "tsc --noEmit && tsdown",
 		"prepare": "npm run build",
-		"test": "vitest --passWithNoTests",
+		"test": "pnpm --filter @neon/config-runtime... build && vitest --passWithNoTests",
 		"test:ci": "vitest run --passWithNoTests",
 		"test:e2e": "vitest run --config vitest.e2e.config.ts",
 		"tsc": "tsc"
@@ -62,7 +62,6 @@
 		"esbuild": "^0.28.1",
 		"fflate": "^0.8.3"
 	},
-	"packageManager": "pnpm@10.4.0",
 	"engines": {
 		"node": ">=20.19.0"
 	},

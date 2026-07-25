@@ -45,7 +45,7 @@
 	],
 	"scripts": {
 		"build": "tsc --noEmit && tsdown",
-		"test": "vitest --passWithNoTests",
+		"test": "pnpm --filter neondb... build && vitest --passWithNoTests",
 		"test:ci": "vitest run --passWithNoTests",
 		"tsc": "tsc"
 	},
@@ -56,7 +56,6 @@
 		"typescript": "catalog:",
 		"vitest": "catalog:"
 	},
-	"packageManager": "pnpm@10.4.0",
 	"engines": {
 		"node": ">=20.19.0"
 	},
