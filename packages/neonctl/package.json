@@ -1,0 +1,50 @@
+{
+  "name": "neonctl",
+  "version": "2.37.0",
+  "description": "Compatibility command for the Neon CLI",
+  "keywords": [
+    "neon",
+    "neonctl",
+    "cli",
+    "postgres",
+    "database",
+    "serverless"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/neondatabase/neon-pkgs.git"
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Neon",
+    "url": "https://neon.com"
+  },
+  "type": "module",
+  "bin": {
+    "neonctl": "bin/neonctl.js"
+  },
+  "files": [
+    "README.md",
+    "bin/",
+    "package.json"
+  ],
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "test": "vitest",
+    "test:ci": "vitest run"
+  },
+  "dependencies": {
+    "neon": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "vitest": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": false
+  }
+}

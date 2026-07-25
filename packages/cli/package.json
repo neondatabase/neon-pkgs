@@ -1,5 +1,5 @@
 {
-  "name": "neonctl",
+  "name": "neon",
   "version": "2.36.0",
   "description": "CLI tool for Neon Serverless Postgres",
   "keywords": [
@@ -21,8 +21,13 @@
   },
   "type": "module",
   "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./cli": "./dist/cli.js",
+    "./dist/*": "./dist/*",
+    "./package.json": "./package.json"
+  },
   "bin": {
-    "neonctl": "dist/cli.js",
     "neon": "dist/cli.js"
   },
   "files": [

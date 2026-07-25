@@ -33,6 +33,9 @@ delete pkgJson.type;
 const binName = typeof pkgJson.bin === 'string' ? 'neon' : Object.keys(pkgJson.bin)[0];
 pkgJson.bin = { [binName]: 'cli.js' };
 delete pkgJson.main;
+// The bundle has no dist/ directory, so the published subpath map would only
+// point at files that don't exist in the standalone build.
+delete pkgJson.exports;
 
 pkgJson.pkg.assets.forEach((asset) => {
   cpSync(join('dist', asset), join('bundle', asset));

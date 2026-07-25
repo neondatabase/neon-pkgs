@@ -41,20 +41,21 @@ artifacts — ignore them.
 
 ### The CLI package (`packages/cli`)
 
-`packages/cli` is the Neon CLI (published as `neonctl`, rebranding to `neon`). It is a normal
-Changesets package for versioning, but a few things differ from the rest of the repo:
+`packages/cli` is the primary `neon` package. `packages/neonctl` is a lightweight compatibility
+command that depends on `neon` and imports its public `neon/cli` entry point. They are a Changesets
+fixed group, so changing either package bumps and republishes both at the same version. A few things
+differ from the rest of the repo:
 
 - It uses its own **build** toolchain (`tsc` → `dist`, `@yao-pkg/pkg` binaries) rather than tsdown,
   but is linted/formatted by Biome like every other package (via a `packages/cli/**` override in
   `biome.json`) and is covered by root `biome ci`.
-- **`neonctl` and `neoncli` are thin forwarder packages** that depend on `neon` (`workspace:*`).
-  Bump them in lockstep with `neon` (a changeset listing all three). `neoncli` may sit at `0.0.0`
-  until its first real release — the git-vs-npm / dry-run checks skip `0.0.0`, so don't be alarmed
-  that it isn't flagged.
+- **`neonctl` is a thin compatibility package** that depends on `neon` (`workspace:*`). The
+  Changesets fixed group keeps the package versions synchronized; a changeset for either package
+  bumps both.
 - **Publishing the CLI also ships standalone binaries**: the external `neon-pkgs.yml` workflow
-  cross-compiles `@yao-pkg/pkg` binaries for the package with a `pkg` block and attaches them to a
-  GitHub release on `neondatabase/neon-pkgs` (tag `<name>@<version>`). Nothing to do at bump time;
-  just be aware the CLI publish does more than npm.
+  cross-compiles `@yao-pkg/pkg` binaries when publishing `neon` and attaches them to a GitHub
+  release on `neondatabase/neon-pkgs` (tag `neon@<version>`). Nothing to do at bump time; just be
+  aware the primary CLI publish does more than npm.
 
 ## Procedure
 
@@ -169,8 +170,10 @@ gh workflow run neon-pkgs.yml --repo databricks/secure-public-registry-releases-
 **Publish order: leaf deps first, the CLI last.** The build packs from source (internal `@neon/*`
 deps are `workspace:*`), so ordering doesn't affect whether a run *succeeds* — but for npm
 consumers to resolve cleanly, publish a dependency before its dependents:
-`@neon/config` → `@neon/config-runtime` / `@neon/env` → `neonctl` (which also ships `neon`, the
-standalone binaries, and the GitHub release). `neon-init` is special — see below.
+`@neon/config` → `@neon/config-runtime` / `@neon/env` → `neon` → `neonctl`.
+Publishing `neon` also ships the standalone binaries and GitHub release; publish the compatibility
+package only after `npm view neon version` confirms the matching primary package. `neon-init` is
+special — see below.
 
 #### ⚠️ When the release bumps `neon-init` (the lockfile catch-22)
 
