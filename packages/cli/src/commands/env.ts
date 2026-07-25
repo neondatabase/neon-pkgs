@@ -156,7 +156,6 @@ export const pull = async (
 	const { written, removed } = mergeEnvFile(targetPath, neonVars, {
 		managedKeys: NEON_OWNED_ENV_KEYS,
 	});
-
 	log.info(
 		"Pulled %d Neon variable%s into %s: %s",
 		written.length,
