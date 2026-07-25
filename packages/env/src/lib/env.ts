@@ -284,6 +284,32 @@ export type FunctionSlugOf<C extends Config> = Extract<
 	string
 >;
 
+/**
+ * Human-readable hint surfaced as the **expected type** of `parseEnv`'s `scope` argument when
+ * the policy declares no functions at all. Without it the argument's expected type is the bare
+ * `never` {@link FunctionSlugOf} yields, and TypeScript reports the opaque `Type '"x"' is not
+ * assignable to type 'never'`; the literal turns that into a sentence naming the fix (and the
+ * editor offers it as the single completion, so the empty completion list is explained rather
+ * than just empty). Mirrors `NeonAuthRequiredHint` in `@neon/config`.
+ */
+// Exported (type-only) for the type tests in `env.test-d.ts`; intentionally not re-exported
+// from `index.ts`, so it stays an internal implementation detail.
+export type NoFunctionScopeHint =
+	"this policy declares no `preview.functions`, so there is no function scope to read. Declare the function in `neon.ts` first, or omit the scope to read the branch env";
+
+/**
+ * The expected type of `parseEnv`'s function-slug `scope` argument: the caller's inferred slug
+ * `S` normally, and the {@link NoFunctionScopeHint} message when the policy declares no
+ * functions. Keeping `S` (rather than `FunctionSlugOf<C>`) in the enabled branch is what makes
+ * the returned `function` namespace exact — it stays the one function's env keys instead of
+ * widening to every declared function's.
+ */
+type FunctionScopeField<C extends Config, S extends string> = [
+	FunctionSlugOf<C>,
+] extends [never]
+	? NoFunctionScopeHint
+	: S;
+
 /** The declared env-var keys of one function `S`, as a string union. */
 type FunctionEnvKeysOf<
 	C extends Config,
@@ -1037,7 +1063,8 @@ function isServiceEnabledInput(
  *   full `{ postgres, auth?, dataApi?, … }` the policy enables.
  * - a **function slug** (a key of `config.preview.functions`) — *function* scope: you are
  *   running inside that function. Returns the same branch secrets **plus** a typed
- *   `function` namespace with the function's declared env-var keys.
+ *   `function` namespace with the function's declared env-var keys. The slug autocompletes
+ *   from the policy ({@link FunctionSlugOf}) and an undeclared one is a type error.
  * - an **array of OS-level env-var keys** (e.g. `["DATABASE_URL", "NEON_AUTH_BASE_URL"]`) —
  *   *filtered* mode: only those vars are required and returned, as a narrowed namespaced
  *   shape. The keys autocomplete from the policy ({@link SelectableEnvKey}), so you can only
@@ -1066,14 +1093,25 @@ function isServiceEnabledInput(
  * ```
  */
 export function parseEnv<const C extends Config>(config: C): NeonEnv<C>;
+// Overload order is load-bearing for **editor autocomplete**, not for type checking: when the
+// argument is a half-typed string literal the call resolves against no signature, and the
+// editor takes its string-literal completions from the first candidate overload. With the
+// `keys` overload listed first, the expected type of `parseEnv(config, "…")` is read as
+// `readonly K[]` — an array has no literal completions, so typing a function slug offered
+// nothing. Keep the slug overload ahead of the array one: `env.completions.test.ts` asserts the
+// completions through the language service, and `env.test-d.ts` locks the order itself (the
+// last overload is observable as `Parameters<typeof parseEnv>`), so `tsc` fails on a reorder.
+export function parseEnv<
+	const C extends Config,
+	const S extends FunctionSlugOf<C>,
+>(
+	config: C,
+	scope: FunctionScopeField<C, S>,
+): NeonEnv<C> & NeonFunctionEnv<C, S>;
 export function parseEnv<
 	const C extends Config,
 	const K extends SelectableEnvKey<C>,
 >(config: C, keys: readonly K[]): FilteredNeonEnv<K>;
-export function parseEnv<
-	const C extends Config,
-	const S extends FunctionSlugOf<C>,
->(config: C, scope: S): NeonEnv<C> & NeonFunctionEnv<C, S>;
 export function parseEnv(
 	config: Config,
 	scopeOrKeys?: string | readonly string[],
