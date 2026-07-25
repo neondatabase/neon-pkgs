@@ -40,9 +40,9 @@ const OPERATION_FIELDS: readonly (keyof Operation)[] = [
 ];
 
 // The values the Neon API accepts for a backup-schedule entry's `frequency`
-// (per the OpenAPI `BackupScheduleItem` description). `satisfies` keeps this
-// list in lockstep with the SDK's `SnapshotFrequency` union — if the spec adds
-// or drops a value, this stops compiling until both are updated together.
+// (per the OpenAPI `BackupScheduleItem` description). `satisfies` fails the
+// build if a value listed here leaves the SDK's `SnapshotFrequency` union, so
+// the CLI can never offer a frequency the API rejects.
 const SNAPSHOT_FREQUENCIES = [
 	"daily",
 	"weekly",

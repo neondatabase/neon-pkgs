@@ -8,7 +8,7 @@
 
   - **Regenerated from the latest spec:** `OperationAction` gains `epc_sync` (additive), and the backup-schedule update endpoint + `BackupScheduleItem.frequency` descriptions now document only `daily` / `weekly` / `monthly` (dropping `hourly` / `yearly`). The generated `frequency` stays `string` — the spec documents the allowed values in prose, not as an `enum` — so the type-level narrowing lives in the ergonomic layer.
   - **Ergonomic layer:** `snapshots.setSchedule` now takes a `SetScheduleInput` whose entries' `frequency` is narrowed to the new `SnapshotFrequency` union (`"daily" | "weekly" | "monthly"`), so unsupported values are rejected at compile time instead of by the API. `getSchedule` still returns the server-controlled `BackupSchedule` unchanged (received data stays wide).
-  - **New exported types:** `SnapshotFrequency`, `ScheduleItem`, `SetScheduleInput`, plus the previously-unexported `UpdateSnapshotInput`.
+  - **New exported types:** `SnapshotFrequency`, `BackupScheduleItemInput`, `SetScheduleInput`, plus the previously-unexported `UpdateSnapshotInput`.
 
   Snapshot expiration (`expiresAt` / clearing with `null`) already shipped in 1.1.0 and is unchanged here.
 

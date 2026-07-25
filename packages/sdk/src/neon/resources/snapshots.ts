@@ -81,18 +81,18 @@ export interface RestoreSnapshotInput {
 export type SnapshotFrequency = "daily" | "weekly" | "monthly";
 
 /**
- * A single entry in an automatic snapshot (backup) schedule. Identical to the
- * generated {@link BackupScheduleItem} except `frequency` is narrowed to
+ * A single entry to write to an automatic snapshot (backup) schedule. Identical
+ * to the generated {@link BackupScheduleItem} except `frequency` is narrowed to
  * {@link SnapshotFrequency} — the values the API actually accepts.
  */
-export type ScheduleItem = Omit<BackupScheduleItem, "frequency"> & {
+export type BackupScheduleItemInput = Omit<BackupScheduleItem, "frequency"> & {
 	frequency: SnapshotFrequency;
 };
 
 /** Input for {@link Snapshots.setSchedule}. */
 export interface SetScheduleInput {
 	/** The ordered list of schedule entries to apply to the branch. */
-	schedule: ScheduleItem[];
+	schedule: BackupScheduleItemInput[];
 }
 
 /** Snapshot resource. */
@@ -352,7 +352,17 @@ export class Snapshots<DThrow extends boolean> {
 		);
 	}
 
-	/** @apiCall PUT /projects/{project_id}/branches/{branch_id}/backup_schedule */
+	/**
+	 * Replace a branch's automatic snapshot schedule.
+	 *
+	 * `frequency` is narrowed to {@link SnapshotFrequency}, so a value the API
+	 * rejects fails to compile. {@link Snapshots.getSchedule} deliberately keeps
+	 * the wider generated type, because a branch can still hold a schedule
+	 * created when the API accepted other frequencies; feeding one straight back
+	 * here is a type error rather than a runtime rejection.
+	 *
+	 * @apiCall PUT /projects/{project_id}/branches/{branch_id}/backup_schedule
+	 */
 	setSchedule(
 		projectId: string,
 		branchId: string,
@@ -376,9 +386,7 @@ export class Snapshots<DThrow extends boolean> {
 				setSnapshotSchedule({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
-					// `SetScheduleInput` narrows `frequency` to the accepted values;
-					// it is otherwise structurally the generated `BackupSchedule`.
-					body: schedule satisfies BackupSchedule,
+					body: schedule,
 					throwOnError: false,
 				}),
 			() => undefined,

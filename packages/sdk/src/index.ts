@@ -46,10 +46,10 @@ export type {
 	TransferProjectsInput,
 } from "./neon/resources/projects.js";
 export type {
+	BackupScheduleItemInput,
 	CreateSnapshotInput,
 	RestorePreview,
 	RestoreSnapshotInput,
-	ScheduleItem,
 	SetScheduleInput,
 	SnapshotFrequency,
 	UpdateSnapshotInput,
