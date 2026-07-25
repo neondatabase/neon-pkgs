@@ -175,12 +175,11 @@ Publishing `neon` also ships the standalone binaries and GitHub release; publish
 package only after `npm view neon version` confirms the matching primary package. `neon-init` is
 special — see below.
 
-**Homebrew is a separate, non-automated step.** `brew install neonctl` is a homebrew-core formula
-that builds from an npm tarball. Its one-time migration onto the `neon` package — required, because
-the compatibility tarball no longer provides a `neon` executable for the formula to link — is
-documented with the exact diff in [`docs/neonctl-compatibility-shim.md`](../../../docs/neonctl-compatibility-shim.md).
-Open that homebrew-core PR between the `neon` and `neonctl` dispatches. Afterwards Homebrew's bot
-resumes bumping the formula on its own.
+**Homebrew needs nothing from you.** `brew install neonctl` is a homebrew-core formula that builds
+from the npm `neonctl` tarball, and Homebrew's bot bumps it within a day of each publish. The
+compatibility package deliberately keeps both the `neonctl` and `neon` commands so the formula keeps
+working untouched — see [`docs/neonctl-compatibility-shim.md`](../../../docs/neonctl-compatibility-shim.md)
+before changing its `bin` map.
 
 #### ⚠️ When the release bumps `neon-init` (the lockfile catch-22)
 

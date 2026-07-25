@@ -1,9 +1,11 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 
-const shim = fileURLToPath(new URL("../bin/neonctl.js", import.meta.url));
+const shim = fileURLToPath(new URL("../bin/cli.js", import.meta.url));
 
 const primaryVersion = (
 	JSON.parse(
@@ -14,20 +16,34 @@ const primaryVersion = (
 	) as { version: string }
 ).version;
 
-const runShim = (...args: string[]): string => {
-	const result = spawnSync(process.execPath, [shim, ...args], {
-		encoding: "utf8",
-	});
+// npm and Homebrew expose each `bin` entry as a link named after the command,
+// and the CLI brands its help from the name it was invoked as — so the commands
+// have to be exercised through links, not through the shim's own path.
+const commands = mkdtempSync(join(tmpdir(), "neon-shim-"));
+for (const name of ["neonctl", "neon"]) {
+	symlinkSync(shim, join(commands, name));
+}
+
+const run = (command: string, ...args: string[]): string => {
+	const result = spawnSync(
+		process.execPath,
+		[join(commands, command), ...args],
+		{
+			encoding: "utf8",
+		},
+	);
 	expect(result.status, result.stderr).toBe(0);
 	return `${result.stdout}${result.stderr}`;
 };
 
-describe("neonctl shim", () => {
+describe.each(["neonctl", "neon"])("%s", (command) => {
 	test("reports the version of the primary neon package", () => {
-		expect(runShim("--version").trim()).toBe(primaryVersion);
+		expect(run(command, "--version").trim()).toBe(primaryVersion);
 	});
 
-	test("keeps the neonctl command name in help output", () => {
-		expect(runShim("--help")).toMatch(/^neonctl <command> \[options\]/m);
+	test("brands its help with the invoked command name", () => {
+		expect(run(command, "--help")).toMatch(
+			new RegExp(`^${command} <command> \\[options\\]`, "m"),
+		);
 	});
 });

@@ -21,7 +21,8 @@
   },
   "type": "module",
   "bin": {
-    "neonctl": "bin/neonctl.js"
+    "neonctl": "bin/cli.js",
+    "neon": "bin/cli.js"
   },
   "files": [
     "README.md",

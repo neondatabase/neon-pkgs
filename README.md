@@ -11,7 +11,7 @@ If you're looking for a single package's docs, see its own `README.md` under `pa
 | Package | Description |
 | --- | --- |
 | `neon` | The Neon CLI. Install this package for the `neon` command. |
-| `neonctl` | Compatibility package for the legacy `neonctl` command; delegates to `neon`. |
+| `neonctl` | Compatibility package that delegates to `neon`. Provides the legacy `neonctl` command (plus `neon`) and is what Homebrew builds from. |
 
 ### Provisioning & project setup
 

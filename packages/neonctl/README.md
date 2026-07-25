@@ -8,9 +8,9 @@ npm install --global neon
 neon --help
 ```
 
-Existing scripts can continue to install `neonctl` and invoke `neonctl`. This
-package contains only a small executable shim and depends on `neon`, where the
-CLI implementation lives:
+Existing scripts can keep installing `neonctl`, which provides both the `neonctl`
+and `neon` commands, as it always has. This package contains only a small
+executable shim; it depends on `neon`, where the CLI implementation lives:
 
 ```shell
 npm install --global neonctl
@@ -19,4 +19,6 @@ neonctl --help
 
 The shim imports the `neon/cli` entry point in the same Node.js process, so
 arguments, standard input/output, signals, and exit behavior remain those of the
-primary CLI without duplicating its source or build output.
+primary CLI without duplicating its source or build output. It is also the
+package [Homebrew](https://formulae.brew.sh/formula/neonctl) builds the Neon CLI
+from.

@@ -7,8 +7,9 @@ output. `neonctl` is a small compatibility package with:
 
 - one dependency: `"neon": "workspace:*"` (rewritten to the released version by
   `pnpm pack`);
-- one executable: `neonctl`;
-- one executable file that imports the public `neon/cli` entry point.
+- one executable file that imports the public `neon/cli` entry point;
+- the two command names the old package provided, `neonctl` and `neon`, both
+  pointing at that file.
 
 The two packages are a Changesets fixed group, so every CLI release republishes
 both at the same version. The external Databricks release workflow publishes
@@ -29,9 +30,15 @@ await import("neon/cli");
 ```
 
 An in-process import preserves arguments, standard streams, signals, current
-working directory, and exit behavior. It also lets the primary CLI inspect
-`process.argv[1]` and render `neonctl` in help output when invoked through the
-compatibility command.
+working directory, and exit behavior.
+
+One file serves both command names. `process.argv[1]` is the link the user
+invoked, not the file it resolves to, so the CLI brands its own help from the
+command name without the shim passing anything along.
+
+The compatibility package keeps **both** names because the package it replaces
+provided both, and things downstream depend on that — see Homebrew below. A
+package that dropped `neon` would be a smaller shim that broke its consumers.
 
 ### npm download accounting
 
@@ -110,58 +117,46 @@ one-package-per-dispatch flow unchanged.
 
 ## Homebrew
 
-`brew install neonctl` installs homebrew-core's `neonctl` formula, which builds
-from the npm `neonctl` tarball and symlinks every executable that package
-provides. It currently yields both `neonctl` and `neon`, because the fat package
-declared both.
+`brew install neonctl` installs
+[homebrew-core's `neonctl` formula](https://github.com/Homebrew/homebrew-core/blob/main/Formula/n/neonctl.rb),
+which is outside this repository: it builds from the npm `neonctl` tarball,
+symlinks every executable that package provides, generates completions for
+`neonctl` **and** `neon`, and prunes the bundled esbuild out of
+`lib/node_modules/neonctl/node_modules` in favor of the `esbuild` formula.
+Homebrew's bot bumps it within a day of each npm publish.
 
-The compatibility package declares only `neonctl`; its `neon` dependency's
-executable stays in `node_modules/.bin`, which Homebrew does not expose. So the
-formula needs one coordinated change, which must be published as a homebrew-core
-PR:
+Nothing about it changes, and that is the reason the compatibility package keeps
+both command names and stays the package Homebrew builds from. Replaying the
+formula's install steps against the packed compatibility tarball:
 
-```diff
--  url "https://registry.npmjs.org/neonctl/-/neonctl-<version>.tgz"
-+  url "https://registry.npmjs.org/neon/-/neon-<version>.tgz"
-     ...
-   def install
-     system "npm", "install", *std_npm_args
-     bin.install_symlink libexec.glob("bin/*")
-+    bin.install_symlink bin/"neon" => "neonctl"
+- `npm install` resolves the `neon` dependency, and its transitive dependencies
+  hoist into `lib/node_modules/neonctl/node_modules` — the path the formula
+  prunes, still holding `esbuild` and `@esbuild`;
+- `libexec.glob("bin/*")` yields `neonctl` and `neon`, since both `bin` entries
+  belong to the installed package;
+- both completions generate, each branded with the name it was invoked as.
 
--    %w[neonctl neon].each do |cmd|
-+    %w[neon neonctl].each do |cmd|
-       generate_completions_from_executable(bin/cmd, "completion", shells: [:bash, :zsh])
-     end
-
--    node_modules = libexec/"lib/node_modules/neonctl/node_modules"
-+    node_modules = libexec/"lib/node_modules/neon/node_modules"
-```
-
-Two details matter. The formula keeps the name `neonctl` — homebrew-core's `neon`
-is already the [neon HTTP/WebDAV
-library](https://formulae.brew.sh/formula/neon) — so `brew install neonctl`
-stays the documented command and keeps providing both executables. And the
-`node_modules` path must be updated even though nothing appears to break: the
-prebuild and bundled-esbuild cleanup globs a directory that would no longer
-exist, so they would silently stop running and the formula would ship the
-bundled esbuild it declares a dependency on.
-
-Timing: the PR needs a published `neon@<version>` for its `url` and `sha256`, so
-open it after the `neon` dispatch and before the `neonctl` dispatch. Homebrew's
-bot bumps this formula within a day of each npm release, so land it promptly —
-otherwise the bot opens a bump PR against the compatibility tarball, which
-cannot build.
+The formula cannot simply be repointed at the `neon` package instead:
+homebrew-core's `neon` is already the
+[neon HTTP/WebDAV library](https://formulae.brew.sh/formula/neon), so `neonctl`
+is the name Homebrew has for the Neon CLI regardless of what npm calls it. That
+makes the npm `neonctl` package load-bearing rather than vestigial, which is a
+second reason to keep it a genuine package instead of deprecating it.
 
 ## Compatibility
 
-- `npm install --global neon` installs the primary `neon` command.
-- `npm install --global neonctl` installs the `neonctl` shim and its `neon`
-  dependency.
+- `npm install --global neon` — the recommended install; provides `neon`.
+- `npm install --global neonctl` — provides `neonctl` and `neon`, exactly as the
+  package it replaces did, and additionally downloads `neon`.
+- `brew install neonctl` — unchanged, provides both commands.
 - `npx neonctl ...` installs/resolves both packages and runs the shim.
-- Existing `neonctl` arguments, standard streams, configuration directory, and
-  exit behavior are preserved by the shared CLI entry point.
-- The `neon` package no longer installs a `neonctl` executable of its own; that
-  command is owned by the `neonctl` package. Anyone who installed `neon` and
-  called `neonctl` installs `neonctl` instead.
+- Arguments, standard streams, configuration directory, and exit behavior are
+  those of the shared CLI entry point, whichever command name is used.
+- The `neon` package itself provides only the `neon` command. Someone who
+  installed `neon` and calls `neonctl` needs the `neonctl` package (which is what
+  Homebrew installs) or the `neon` command.
 - The package versions stay synchronized through the Changesets fixed group.
+  `neon-init` relies on this: it compares a globally installed `neonctl --version`
+  (which reports the `neon` implementation's version) against
+  `npm view neonctl version`, and would prompt for pointless updates if the two
+  packages could drift.
