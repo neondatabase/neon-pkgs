@@ -24,7 +24,7 @@ brew install neonctl
 
 **Binary (macOS, Linux, Windows)**
 
-Download a binary file [here](https://github.com/neondatabase/neonctl/releases).
+Download a `neon-<platform>` binary from the [releases page](https://github.com/neondatabase/neon-pkgs/releases), which carries one asset per platform for each `neon@<version>` tag.
 
 ### Upgrade
 
