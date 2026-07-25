@@ -9,6 +9,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import type {
+	ComputeSettings,
+	CreateBranchInput,
 	CreateBucketInput,
 	CreateCredentialInput,
 	DeployFunctionInput,
@@ -32,7 +34,13 @@ import stripAnsi from "strip-ansi";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { ConfigProps } from "./config.js";
-import { applyCmd, applyPolicyOnCreate, planCmd, status } from "./config.js";
+import {
+	applyCmd,
+	applyPolicyOnCreate,
+	createBranchFromPolicyOnCheckout,
+	planCmd,
+	status,
+} from "./config.js";
 
 const PROJECT_ID = "patient-art-12345";
 const BRANCH_ID = "br-snowy-frost-12345";
@@ -78,7 +86,8 @@ class FakeNeonApi implements NeonApi {
 		throw new Error("not implemented");
 	}
 
-	async listBranches(): Promise<NeonBranchSnapshot[]> {
+	async listBranches(projectId: string): Promise<NeonBranchSnapshot[]> {
+		void projectId;
 		return [
 			{
 				id: BRANCH_ID,
@@ -89,10 +98,15 @@ class FakeNeonApi implements NeonApi {
 		];
 	}
 
-	async createBranch(): Promise<{
+	async createBranch(
+		projectId: string,
+		input: CreateBranchInput,
+	): Promise<{
 		branch: NeonBranchSnapshot;
 		endpoints: NeonEndpointSnapshot[];
 	}> {
+		void projectId;
+		void input;
 		throw new Error("not implemented");
 	}
 
@@ -100,7 +114,8 @@ class FakeNeonApi implements NeonApi {
 		throw new Error("not implemented");
 	}
 
-	async listEndpoints(): Promise<NeonEndpointSnapshot[]> {
+	async listEndpoints(projectId: string): Promise<NeonEndpointSnapshot[]> {
+		void projectId;
 		return [
 			{
 				id: "ep-fake-1",
@@ -113,7 +128,14 @@ class FakeNeonApi implements NeonApi {
 		];
 	}
 
-	async updateEndpoint(): Promise<NeonEndpointSnapshot> {
+	async updateEndpoint(
+		projectId: string,
+		endpointId: string,
+		settings: ComputeSettings,
+	): Promise<NeonEndpointSnapshot> {
+		void projectId;
+		void endpointId;
+		void settings;
 		throw new Error("not implemented");
 	}
 
@@ -793,5 +815,149 @@ describe("applyPolicyOnCreate", () => {
 		});
 
 		expect(api.enableNeonAuthCalls).toHaveLength(0);
+	});
+});
+
+const NEW_BRANCH_ID = "br-fresh-dawn-98765";
+const NEW_BRANCH_NAME = "feature-policy";
+
+/** Tunes compute only on a *new* branch — the "configure new branches" policy shape. */
+const NEW_BRANCH_POLICY =
+	"export default { branch: (branch) => (branch.exists ? {} : " +
+	"{ postgres: { computeSettings: { autoscalingLimitMaxCu: 2 } } }) };\n";
+
+/** What Neon rejects a plan-gated compute setting with (seen live on a Free-plan project). */
+const SUSPEND_REJECTED =
+	'HTTP 412. Neon API said: "modifying the suspend interval is not permitted on this account".';
+
+const newBranchEndpoint = (): NeonEndpointSnapshot => ({
+	id: "ep-fresh-1",
+	branchId: NEW_BRANCH_ID,
+	type: "read_write",
+	autoscalingLimitMinCu: 0.25,
+	autoscalingLimitMaxCu: 0.25,
+	suspendTimeout: "5m",
+});
+
+/**
+ * Branch creation succeeds and the new branch comes up on the project's default compute, so a
+ * policy that tunes compute has something to change. Records the compute updates so a test can
+ * tell "the policy was applied" apart from "nothing happened".
+ */
+class CreateBranchNeonApi extends FakeNeonApi {
+	readonly updateEndpointCalls: {
+		endpointId: string;
+		settings: ComputeSettings;
+	}[] = [];
+	/** The branch `createBranch` made, so subsequent listings see it like Neon would. */
+	private created: NeonBranchSnapshot | undefined;
+
+	override async listBranches(
+		projectId: string,
+	): Promise<NeonBranchSnapshot[]> {
+		const branches = await super.listBranches(projectId);
+		return this.created ? [...branches, this.created] : branches;
+	}
+
+	override async createBranch(
+		projectId: string,
+		input: CreateBranchInput,
+	): Promise<{
+		branch: NeonBranchSnapshot;
+		endpoints: NeonEndpointSnapshot[];
+	}> {
+		void projectId;
+		this.created = {
+			id: NEW_BRANCH_ID,
+			name: input.name,
+			isDefault: false,
+			protected: false,
+			parentId: input.parentId,
+		};
+		return { branch: this.created, endpoints: [newBranchEndpoint()] };
+	}
+
+	override async listEndpoints(
+		projectId: string,
+	): Promise<NeonEndpointSnapshot[]> {
+		return [...(await super.listEndpoints(projectId)), newBranchEndpoint()];
+	}
+
+	override async updateEndpoint(
+		projectId: string,
+		endpointId: string,
+		settings: ComputeSettings,
+	): Promise<NeonEndpointSnapshot> {
+		void projectId;
+		this.updateEndpointCalls.push({ endpointId, settings });
+		return newBranchEndpoint();
+	}
+}
+
+/** Creation succeeds, then Neon rejects the policy's compute setting. */
+class CreateBranchThenRejectNeonApi extends CreateBranchNeonApi {
+	override async updateEndpoint(): Promise<NeonEndpointSnapshot> {
+		throw new Error(SUSPEND_REJECTED);
+	}
+}
+
+describe("createBranchFromPolicyOnCheckout", () => {
+	let cwd: string;
+
+	beforeEach(() => {
+		cwd = mkdtempSync(join(tmpdir(), "neonctl-create-policy-"));
+	});
+
+	afterEach(() => {
+		rmSync(cwd, { recursive: true, force: true });
+	});
+
+	it("creates the branch from the policy and applies its settings", async () => {
+		const api = new CreateBranchNeonApi();
+		writeFileSync(join(cwd, "neon.ts"), NEW_BRANCH_POLICY);
+
+		const created = await createBranchFromPolicyOnCheckout({
+			projectId: PROJECT_ID,
+			branchName: NEW_BRANCH_NAME,
+			runtimeApi: api,
+			cwd,
+		});
+
+		expect(created).toEqual({ branchId: NEW_BRANCH_ID });
+		expect(api.updateEndpointCalls).toEqual([
+			{
+				endpointId: "ep-fresh-1",
+				settings: { autoscalingLimitMaxCu: 2 },
+			},
+		]);
+	});
+
+	it("returns the created branch id and the reason when applying the policy fails", async () => {
+		// The branch is created before its settings are pushed, so a rejected setting leaves a
+		// real branch behind. It must come back to the caller (checkout pins it) rather than
+		// being lost with the thrown error.
+		const api = new CreateBranchThenRejectNeonApi();
+		writeFileSync(join(cwd, "neon.ts"), NEW_BRANCH_POLICY);
+
+		const created = await createBranchFromPolicyOnCheckout({
+			projectId: PROJECT_ID,
+			branchName: NEW_BRANCH_NAME,
+			runtimeApi: api,
+			cwd,
+		});
+
+		expect(created?.branchId).toBe(NEW_BRANCH_ID);
+		expect(created?.policyFailure).toContain("suspend interval");
+	});
+
+	it("returns null when there is no neon.ts on the path", async () => {
+		const created = await createBranchFromPolicyOnCheckout({
+			projectId: PROJECT_ID,
+			branchName: NEW_BRANCH_NAME,
+			runtimeApi: new CreateBranchNeonApi(),
+			cwd, // empty temp dir, no neon.ts
+		});
+
+		expect(created).toBeNull();
 	});
 });

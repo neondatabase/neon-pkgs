@@ -216,9 +216,12 @@ export const setContext = (file: string, context: ResolvedContext) => {
 };
 
 /**
- * Make sure the `.gitignore` next to `file` lists the file's basename
- * (currently always `.neon`). Creates the `.gitignore` if it doesn't exist,
- * or appends `.neon` if it's missing — never duplicates an existing entry.
+ * Make sure the `.gitignore` next to `file` covers the file's basename — used for the `.neon`
+ * context file and for a `.env` we create (both carry credentials that must not be committed).
+ * Creates the `.gitignore` if it doesn't exist, otherwise appends the entry only when nothing
+ * there already covers it: an exact line, or a basename glob such as `.env*` / `*.local`
+ * (see {@link gitignoreCovers}), so a repo that already ignores env files doesn't collect a
+ * redundant line per pull.
  *
  * Best-effort: a failure here (e.g. read-only filesystem) is logged at debug
  * level and swallowed; persisting the context file is the primary goal and
@@ -256,5 +259,40 @@ const basenameOf = (file: string): string => {
 };
 
 const hasGitignoreEntry = (content: string, entry: string): boolean => {
-	return content.split(/\r?\n/).some((line) => line.trim() === entry);
+	return content
+		.split(/\r?\n/)
+		.some((line) => gitignoreCovers(line.trim(), entry));
+};
+
+/**
+ * Whether a single `.gitignore` line already ignores `entry` (a bare basename like `.neon` or
+ * `.env.local`).
+ *
+ * Deliberately narrow: an exact match, or a glob **without a path separator** — the
+ * `.env*` / `*.local` / `.env.?` shapes that repos actually use for env files — matched
+ * against the whole basename. Everything else returns false, which at worst appends an entry
+ * git already covers (harmless) rather than skipping one it doesn't (a committed credential).
+ * That's why path-scoped patterns (`config/.env`), negations (`!.env.local`), character
+ * classes, and comments are all treated as "does not cover".
+ */
+const gitignoreCovers = (line: string, entry: string): boolean => {
+	if (line === "" || line.startsWith("#") || line.startsWith("!")) {
+		return false;
+	}
+	// A trailing slash marks a directory-only pattern; the leading one anchors to the
+	// .gitignore's own directory, which is exactly where `entry` lives.
+	const pattern = line.replace(/\/$/, "").replace(/^\//, "");
+	if (pattern === entry) return true;
+	if (pattern.includes("/") || pattern.includes("[")) return false;
+	if (!pattern.includes("*") && !pattern.includes("?")) return false;
+	return globToRegExp(pattern).test(entry);
+};
+
+/** Compile a separator-free `.gitignore` glob (`*` / `?` only) into an anchored RegExp. */
+const globToRegExp = (pattern: string): RegExp => {
+	const source = pattern
+		.replace(/[.+^${}()|\\]/g, "\\$&")
+		.replace(/\*/g, "[^/]*")
+		.replace(/\?/g, "[^/]");
+	return new RegExp(`^${source}$`);
 };

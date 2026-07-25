@@ -14,6 +14,8 @@ import type { ConflictReport } from "./types.js";
  * - `PLATFORM_MISSING_API_KEY` — no `NEON_API_KEY` and no explicit `apiKey` was provided.
  * - `PLATFORM_MISSING_PARENT_BRANCH` — push tried to create a child of a non-existent
  *   branch.
+ * - `PLATFORM_PARTIAL_BRANCH_CREATE` — `createBranch` created the branch but failed to
+ *   apply its policy, so the branch exists without its declared settings.
  * - `PLATFORM_UNAUTHORIZED` / `PLATFORM_FORBIDDEN` / `PLATFORM_NOT_FOUND` /
  *   `PLATFORM_CONFLICT` / `PLATFORM_RATE_LIMITED` / `PLATFORM_LOCKED` /
  *   `PLATFORM_SERVER_ERROR` — wrappings of Neon HTTP failures.
@@ -33,6 +35,7 @@ export const ErrorCode = {
 	BranchNotFound: "PLATFORM_BRANCH_NOT_FOUND",
 	FeatureUnavailable: "PLATFORM_FEATURE_UNAVAILABLE",
 	MissingParentBranch: "PLATFORM_MISSING_PARENT_BRANCH",
+	PartialBranchCreate: "PLATFORM_PARTIAL_BRANCH_CREATE",
 	Unauthorized: "PLATFORM_UNAUTHORIZED",
 	Forbidden: "PLATFORM_FORBIDDEN",
 	NotFound: "PLATFORM_NOT_FOUND",
@@ -219,6 +222,65 @@ export class PushAbortedError extends PlatformError {
 }
 
 /**
+ * Thrown by `createBranch` when the branch was created but pushing its `neon.ts` policy onto
+ * it failed — e.g. the API rejected a declared compute setting, or a service could not be
+ * provisioned. The branch is **real**: it exists with its creation-time `parent` but without
+ * the rest of its declared settings.
+ *
+ * The created branch's id/name are carried on the error so callers can keep it usable (pin it,
+ * report it) instead of leaving a branch behind that no one knows diverges from the policy.
+ * Nothing re-applies a policy to an *existing* branch implicitly, so recovering takes an
+ * explicit apply with `updateExisting: true` (SDK) / `--update-existing` (CLI).
+ */
+export class PartialBranchCreateError extends PlatformError {
+	override readonly name = "PartialBranchCreateError";
+	readonly branchId: string;
+	readonly branchName: string;
+	/**
+	 * Why the policy failed, taken from the underlying error — what Neon actually rejected.
+	 * Exposed separately from {@link message} so a caller that has already reported the created
+	 * branch can show just the reason.
+	 */
+	readonly reason: string;
+
+	constructor(branchId: string, branchName: string, cause: unknown) {
+		const reason = messageOf(cause);
+		super(
+			"PLATFORM_PARTIAL_BRANCH_CREATE",
+			[
+				`Created branch ${JSON.stringify(branchName)} (${branchId}), but applying the neon.ts policy to it failed: ${reason}`,
+				"The branch exists and is usable, but its settings do not match the policy. Fix the cause above, then apply the policy to the existing branch with `updateExisting: true` (SDK) / `--update-existing` (CLI).",
+			].join("\n"),
+			{ cause, details: { branchId, branchName } },
+		);
+		this.branchId = branchId;
+		this.branchName = branchName;
+		this.reason = reason;
+	}
+}
+
+/**
+ * Structural check for a {@link PartialBranchCreateError}, matching on the stable `code` and
+ * the branch fields rather than class identity — same realm-crossing rationale as
+ * {@link isPlatformError}.
+ */
+export function isPartialBranchCreateError(
+	value: unknown,
+): value is PartialBranchCreateError {
+	if (value instanceof PartialBranchCreateError) return true;
+	if (!isPlatformError(value)) return false;
+	if (value.code !== ErrorCode.PartialBranchCreate) return false;
+	return (
+		"branchId" in value &&
+		typeof value.branchId === "string" &&
+		"branchName" in value &&
+		typeof value.branchName === "string" &&
+		"reason" in value &&
+		typeof value.reason === "string"
+	);
+}
+
+/**
  * Thrown when the SDK fails to find or load a `neon.ts` config file.
  */
 export class ConfigLoadError extends PlatformError {
@@ -227,6 +289,10 @@ export class ConfigLoadError extends PlatformError {
 	constructor(message: string, options?: { cause?: unknown }) {
 		super("PLATFORM_CONFIG_LOAD_FAILED", message, options);
 	}
+}
+
+function messageOf(cause: unknown): string {
+	return cause instanceof Error ? cause.message : String(cause);
 }
 
 function formatValue(value: unknown): string {

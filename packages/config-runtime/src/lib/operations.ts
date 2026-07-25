@@ -4,6 +4,7 @@ import {
 	ErrorCode,
 	type NeonApi,
 	type NeonBranchSnapshot,
+	PartialBranchCreateError,
 	PlatformError,
 	type PushResult,
 	resolveConfig,
@@ -171,7 +172,9 @@ export interface CreateBranchResult {
  * (`exists: true`), so a policy keyed on `!branch.exists` never returns the creation tuning.
  *
  * Throws {@link PlatformError} (`Conflict`) if a branch with `branchName` already exists, or
- * (`BranchNotFound`) if the policy names a `parent` that isn't on the project.
+ * (`BranchNotFound`) if the policy names a `parent` that isn't on the project. When step 3
+ * fails the branch has already been created, so it throws {@link PartialBranchCreateError}
+ * carrying the created branch's id/name.
  */
 export async function createBranch(
 	config: Config,
@@ -214,17 +217,28 @@ export async function createBranch(
 	// `protected`, and the services/functions the policy declares are applied onto the
 	// freshly created branch. `updateExisting`/`allowProtectedBranch` are safe here — there is
 	// no pre-existing state a user would be surprised to see overridden.
-	const result = await pushConfig(config, {
-		projectId,
-		branchId: branch.id,
-		api,
-		branchExists: false,
-		updateExisting: true,
-		allowProtectedBranch: true,
-		...(options.bundleFunction
-			? { bundleFunction: options.bundleFunction }
-			: {}),
-	});
+	//
+	// The branch is already created at this point, so a failure here (a plan-gated compute
+	// setting, a service that can't be provisioned, a transient API error) cannot be undone by
+	// throwing: the branch would linger with only its creation-time `parent` applied, invisible
+	// to the caller. Re-throw as PartialBranchCreateError so the id/name survive and the caller
+	// can keep the branch usable while reporting that it diverges from the policy.
+	let result: PushResult;
+	try {
+		result = await pushConfig(config, {
+			projectId,
+			branchId: branch.id,
+			api,
+			branchExists: false,
+			updateExisting: true,
+			allowProtectedBranch: true,
+			...(options.bundleFunction
+				? { bundleFunction: options.bundleFunction }
+				: {}),
+		});
+	} catch (cause) {
+		throw new PartialBranchCreateError(branch.id, branch.name, cause);
+	}
 
 	return { branchId: branch.id, branchName: branch.name, result };
 }
