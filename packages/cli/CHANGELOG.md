@@ -1,5 +1,12 @@
 # neonctl
 
+## 2.36.2
+
+### Patch Changes
+
+- Updated dependencies [44a95e8]
+  - @neon/env@0.11.7
+
 ## 2.36.1
 
 ### Patch Changes
