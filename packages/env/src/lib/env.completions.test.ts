@@ -1,7 +1,7 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
-import { describe, expect, test } from "vitest";
+import { beforeAll, describe, expect, test } from "vitest";
 
 /**
  * Editor-autocomplete tests for `parseEnv`'s second argument, driven through the same
@@ -115,6 +115,16 @@ const TWO_FUNCTIONS = `{
 }`;
 
 describe("parseEnv autocomplete", () => {
+	// The *first* query is what builds the program behind the language service (`env.ts` plus
+	// `@neon/config`'s source, zod's declarations and the TypeScript lib files); every query
+	// after it reuses that program and is quick. Locally the build takes a few hundred ms, but
+	// on a cold CI runner under coverage instrumentation it ran past Vitest's 5s default and
+	// failed the first test on time rather than on its result. Pay the cost once here, with a
+	// hook timeout sized for the slowest runner, so the assertions below time only themselves.
+	beforeAll(() => {
+		completionsAt(fixture("{}", `parseEnv(config, "${CARET}")`));
+	}, 120_000);
+
 	test("offers the policy's declared function slugs", () => {
 		const entries = completionsAt(
 			fixture(TWO_FUNCTIONS, `parseEnv(config, "${CARET}")`),
