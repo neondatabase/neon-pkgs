@@ -584,7 +584,7 @@ neon snapshots delete snap-1234
 # Automatic snapshot (backup) schedule of a branch
 neon snapshots schedule get --branch main
 neon snapshots schedule set --branch main --frequency daily --hour 3 --retention 604800
-neon snapshots schedule set --branch main --schedule '[{"frequency":"hourly"},{"frequency":"daily","hour":3}]'
+neon snapshots schedule set --branch main --schedule '[{"frequency":"weekly","day":1,"hour":2},{"frequency":"daily","hour":3}]'
 ```
 
 All sub-commands honor the [global options](#global-options), including `--output json|yaml|table`.

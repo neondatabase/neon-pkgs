@@ -311,8 +311,30 @@ describe("snapshots", () => {
 			"--branch",
 			"main",
 			"--schedule",
-			'[{"frequency":"hourly"},{"frequency":"daily","hour":3}]',
+			'[{"frequency":"weekly","day":1,"hour":2},{"frequency":"daily","hour":3}]',
 		]);
+	});
+
+	test("schedule set from json rejects an unsupported frequency", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"snapshots",
+				"schedule",
+				"set",
+				"--project-id",
+				"test",
+				"--branch",
+				"main",
+				"--schedule",
+				'[{"frequency":"hourly"}]',
+			],
+			{
+				code: 1,
+				stderr: expect.stringContaining('unsupported "frequency"'),
+			},
+		);
 	});
 
 	test("schedule set with nothing errors", async ({ testCliCommand }) => {

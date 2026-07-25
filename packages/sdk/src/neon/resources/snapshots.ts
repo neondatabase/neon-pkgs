@@ -11,6 +11,7 @@ import {
 } from "../../client/sdk.gen.js";
 import type {
 	BackupSchedule,
+	BackupScheduleItem,
 	Branch,
 	Snapshot,
 } from "../../client/types.gen.js";
@@ -68,6 +69,30 @@ export interface RestoreSnapshotInput {
 	preview?: RestorePreview;
 	/** Keep the preview branch when `preview` returns `false` (default: delete it). */
 	keepOnAbort?: boolean;
+}
+
+/**
+ * How often the automatic snapshot (backup) schedule takes a snapshot. These are
+ * the values the Neon API accepts, per the OpenAPI spec's `BackupScheduleItem`
+ * description. The generated `BackupScheduleItem.frequency` is a broad `string`
+ * (the spec documents the allowed values in prose rather than an `enum`), so this
+ * union narrows what {@link Snapshots.setSchedule} sends.
+ */
+export type SnapshotFrequency = "daily" | "weekly" | "monthly";
+
+/**
+ * A single entry to write to an automatic snapshot (backup) schedule. Identical
+ * to the generated {@link BackupScheduleItem} except `frequency` is narrowed to
+ * {@link SnapshotFrequency} — the values the API actually accepts.
+ */
+export type BackupScheduleItemInput = Omit<BackupScheduleItem, "frequency"> & {
+	frequency: SnapshotFrequency;
+};
+
+/** Input for {@link Snapshots.setSchedule}. */
+export interface SetScheduleInput {
+	/** The ordered list of schedule entries to apply to the branch. */
+	schedule: BackupScheduleItemInput[];
 }
 
 /** Snapshot resource. */
@@ -327,22 +352,32 @@ export class Snapshots<DThrow extends boolean> {
 		);
 	}
 
-	/** @apiCall PUT /projects/{project_id}/branches/{branch_id}/backup_schedule */
+	/**
+	 * Replace a branch's automatic snapshot schedule.
+	 *
+	 * `frequency` is narrowed to {@link SnapshotFrequency}, so a value the API
+	 * rejects fails to compile. {@link Snapshots.getSchedule} deliberately keeps
+	 * the wider generated type, because a branch can still hold a schedule
+	 * created when the API accepted other frequencies; feeding one straight back
+	 * here is a type error rather than a runtime rejection.
+	 *
+	 * @apiCall PUT /projects/{project_id}/branches/{branch_id}/backup_schedule
+	 */
 	setSchedule(
 		projectId: string,
 		branchId: string,
-		schedule: BackupSchedule,
+		schedule: SetScheduleInput,
 	): Promise<Outcome<void, DThrow>>;
 	setSchedule<Throw extends boolean = DThrow>(
 		projectId: string,
 		branchId: string,
-		schedule: BackupSchedule,
+		schedule: SetScheduleInput,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<void, Throw>>;
 	setSchedule(
 		projectId: string,
 		branchId: string,
-		schedule: BackupSchedule,
+		schedule: SetScheduleInput,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
 		return this.#ctx.run(

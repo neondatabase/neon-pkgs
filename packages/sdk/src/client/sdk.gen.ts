@@ -4045,7 +4045,7 @@ export const getSnapshotSchedule = <ThrowOnError extends boolean = false>(option
  * Update backup schedule
  *
  * Updates the backup schedule for the specified branch.
- * The schedule defines how often automatic snapshots are created (e.g., `hourly`, `daily`).
+ * The schedule defines how often automatic snapshots are created (e.g., `daily`, `weekly`).
  *
  * **Note**: This endpoint is currently in Beta.
  *

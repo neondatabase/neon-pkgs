@@ -321,8 +321,8 @@ Branch-scoped AI Gateway endpoint metadata (beta).
 | `update(projectId, snapshotId, input)` | `Snapshot` | `input`: `{ name?, expiresAt? }` — pass `expiresAt: null` to clear the expiration |
 | `delete(projectId, snapshotId)` | **→void** | |
 | `restore(projectId, snapshotId, input?)` | `Branch` | see below |
-| `getSchedule(projectId, branchId)` | `BackupSchedule` | |
-| `setSchedule(projectId, branchId, schedule)` | **→void** | |
+| `getSchedule(projectId, branchId)` | `BackupSchedule` | `frequency` stays a wide `string`: a branch can still hold a schedule created when the API accepted other values |
+| `setSchedule(projectId, branchId, schedule)` | **→void** | `schedule.schedule[].frequency` is narrowed to `SnapshotFrequency` (`"daily" \| "weekly" \| "monthly"`) |
 
 ```ts
 // Snapshot a branch at a point in time (or an `lsn`), with a name + TTL

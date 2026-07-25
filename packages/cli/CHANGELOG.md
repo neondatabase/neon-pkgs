@@ -1,5 +1,21 @@
 # neonctl
 
+## 2.36.1
+
+### Patch Changes
+
+- `neon snapshots schedule set` now only accepts the backup frequencies the API supports (`daily`, `weekly`, `monthly`).
+
+  - The `--frequency` flag drops `hourly` / `yearly` from its choices.
+  - The `--schedule <json>` path now validates each entry's `frequency` and errors on an unsupported value (e.g. `hourly`) instead of forwarding it to the API, closing the gap where invalid frequencies bypassed the flag-level check.
+  - Regenerated `--pg-version` help text from the spec (documents the Postgres 19 rollout).
+
+- Updated dependencies
+  - @neon/sdk@1.3.0
+  - @neon/config@0.9.6
+  - @neon/config-runtime@0.9.7
+  - @neon/env@0.11.6
+
 ## 2.36.0
 
 ### Minor Changes
