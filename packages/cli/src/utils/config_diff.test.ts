@@ -124,6 +124,65 @@ describe("renderAppliedChanges", () => {
 		expect(lines[5]).toMatch(/^ {6}ttl\s+→ 2026-07-20T00:00:00Z$/);
 	});
 
+	it("renders the settings a branch creation applied, parent included", () => {
+		// `createBranch` reports what the create call itself carried using the same shapes a
+		// push produces, so a setting applied at creation reads exactly like one applied
+		// after — including `parent`, which only ever comes from a creation.
+		const changes: AppliedChange[] = [
+			{
+				kind: "branch",
+				action: "create",
+				identifier: "feature-x",
+				details: { field: "parent", parent: "main" },
+			},
+			{
+				kind: "branch",
+				action: "create",
+				identifier: "feature-x",
+				details: {
+					field: "ttl",
+					expiresAt: "2026-07-26T06:36:56.608Z",
+				},
+			},
+			{
+				kind: "branch",
+				action: "create",
+				identifier: "feature-x",
+				details: { field: "protected", protected: false },
+			},
+			{
+				kind: "branch",
+				action: "create",
+				identifier: "feature-x",
+				details: {
+					field: "computeSettings",
+					settings: {
+						autoscalingLimitMaxCu: 2,
+						suspendTimeout: "5m",
+					},
+				},
+			},
+		];
+
+		const lines = renderAppliedChanges(changes, "neon.ts applied", {
+			color: false,
+		}).split("\n");
+
+		expect(lines[0]).toBe("neon.ts applied");
+		expect(lines[1]).toBe("  ~ feature-x");
+		// One group, fields sorted, object settings expanded per key.
+		expect(lines[2]).toMatch(
+			/^ {6}computeSettings\.autoscalingLimitMaxCu\s+→ 2$/,
+		);
+		expect(lines[3]).toMatch(
+			/^ {6}computeSettings\.suspendTimeout\s+→ 5m$/,
+		);
+		expect(lines[4]).toMatch(/^ {6}parent\s+→ main$/);
+		expect(lines[5]).toMatch(/^ {6}protected\s+→ false$/);
+		expect(lines[6]).toMatch(/^ {6}ttl\s+→ 2026-07-26T06:36:56\.608Z$/);
+		expect(lines).toHaveLength(7);
+	});
+
 	it("renders a re-deployed function (update) as a ~ line and never leaks the URL", () => {
 		const changes: AppliedChange[] = [
 			{

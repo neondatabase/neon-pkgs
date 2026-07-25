@@ -1,4 +1,6 @@
 import {
+	type AppliedChange,
+	type ComputeSettings,
 	type Config,
 	createNeonApiFromOptions,
 	ErrorCode,
@@ -163,18 +165,25 @@ export interface CreateBranchResult {
  *  1. Evaluate the policy for the new branch with `exists: false` (so creation-time tuning —
  *     `parent`, `ttl`, compute settings, `protected` — resolves instead of the
  *     "existing branch, leave as-is" path most policies guard with `if (branch.exists)`).
- *  2. Create the branch, branched from the policy's `parent` (falling back to the project's
- *     default branch).
- *  3. {@link pushConfig} the policy onto it with `branchExists: false`, so TTL / compute /
- *     `protected` and the services (Neon Auth, Data API, functions) are applied.
+ *  2. Create the branch **with** that tuning: `parent`, `expires_at`, `protected`, and the
+ *     compute settings all ride along on the single create call, which Neon validates as a
+ *     whole. A setting it rejects therefore fails the creation outright, leaving nothing
+ *     behind, rather than producing a branch that doesn't match the policy.
+ *  3. {@link pushConfig} the rest onto it with `branchExists: false` — the services (Neon
+ *     Auth, Data API, buckets, functions), which have no create-time equivalent because they
+ *     are provisioned against an existing branch id.
  *
  * This is why `apply` alone couldn't do it: `apply` operates on an *existing* branch
  * (`exists: true`), so a policy keyed on `!branch.exists` never returns the creation tuning.
  *
+ * `result.applied` covers both steps — the settings the create call carried are reported
+ * exactly like the ones a push applies (see {@link settingsAppliedAtCreate}), so folding them
+ * into the creation doesn't make them vanish from the summary.
+ *
  * Throws {@link PlatformError} (`Conflict`) if a branch with `branchName` already exists, or
- * (`BranchNotFound`) if the policy names a `parent` that isn't on the project. When step 3
- * fails the branch has already been created, so it throws {@link PartialBranchCreateError}
- * carrying the created branch's id/name.
+ * (`BranchNotFound`) if the policy names a `parent` that isn't on the project — both before
+ * anything is created, as is a setting Neon rejects in step 2. Only step 3 can fail with a
+ * branch already created; that throws {@link PartialBranchCreateError} carrying its id/name.
  */
 export async function createBranch(
 	config: Config,
@@ -208,21 +217,50 @@ export async function createBranch(
 		branchName,
 	);
 
+	// Everything the policy can express *in the create call itself* goes into it. Neon
+	// validates the whole request, so a value it rejects (a plan-gated suspend timeout, an
+	// out-of-range autoscaling limit) fails with **no branch created** instead of leaving one
+	// behind that silently diverges from the policy. Only the services below genuinely need an
+	// existing branch id, which is what keeps them a second step.
+	const expiresAt =
+		resolved.ttlSeconds !== undefined
+			? new Date(Date.now() + resolved.ttlSeconds * 1000).toISOString()
+			: undefined;
+	const computeSettings = resolved.postgres?.computeSettings;
+
 	const { branch } = await api.createBranch(projectId, {
 		name: branchName,
 		...(parentId ? { parentId } : {}),
+		...(expiresAt ? { expiresAt } : {}),
+		...(resolved.protected !== undefined
+			? { protected: resolved.protected }
+			: {}),
+		...(computeSettings ? { computeSettings } : {}),
 	});
 
-	// Reconcile the rest as a new branch (`branchExists: false`): TTL, compute settings,
-	// `protected`, and the services/functions the policy declares are applied onto the
-	// freshly created branch. `updateExisting`/`allowProtectedBranch` are safe here — there is
-	// no pre-existing state a user would be surprised to see overridden.
+	const appliedAtCreate = settingsAppliedAtCreate({
+		branchName: branch.name,
+		...(resolved.parent !== undefined
+			? { parentName: resolved.parent }
+			: {}),
+		...(expiresAt !== undefined ? { expiresAt } : {}),
+		...(resolved.protected !== undefined
+			? { isProtected: resolved.protected }
+			: {}),
+		...(computeSettings ? { computeSettings } : {}),
+	});
+
+	// Reconcile what the create call could not express as a new branch (`branchExists: false`):
+	// the services/functions the policy declares. The settings above are already in place, so
+	// push sees them satisfied and applies nothing for them.
+	// `updateExisting`/`allowProtectedBranch` are safe here — there is no pre-existing state a
+	// user would be surprised to see overridden.
 	//
-	// The branch is already created at this point, so a failure here (a plan-gated compute
-	// setting, a service that can't be provisioned, a transient API error) cannot be undone by
-	// throwing: the branch would linger with only its creation-time `parent` applied, invisible
-	// to the caller. Re-throw as PartialBranchCreateError so the id/name survive and the caller
-	// can keep the branch usable while reporting that it diverges from the policy.
+	// The branch is already created at this point, so a failure here (a service that can't be
+	// provisioned, a function that fails to deploy, a transient API error) cannot be undone by
+	// throwing: the branch would linger without its declared services, invisible to the caller.
+	// Re-throw as PartialBranchCreateError so the id/name survive and the caller can keep the
+	// branch usable while reporting that it diverges from the policy.
 	let result: PushResult;
 	try {
 		result = await pushConfig(config, {
@@ -240,8 +278,78 @@ export async function createBranch(
 		throw new PartialBranchCreateError(branch.id, branch.name, cause);
 	}
 
-	return { branchId: branch.id, branchName: branch.name, result };
+	return {
+		branchId: branch.id,
+		branchName: branch.name,
+		result: {
+			...result,
+			applied: mergeCreateSettings(appliedAtCreate, result.applied),
+		},
+	};
 }
+
+/**
+ * Describe the policy settings the create call itself carried as {@link AppliedChange}s, keyed
+ * by field.
+ *
+ * Applying a setting *at creation* rather than in a follow-up call must not make it disappear
+ * from the report, so these are shaped exactly like the changes `pushConfig` returns for the
+ * same fields — same `kind`/`identifier`/`details`, so every renderer already knows how to
+ * print them and no caller needs to special-case a creation.
+ */
+const settingsAppliedAtCreate = (args: {
+	branchName: string;
+	/** The parent the *policy* named, omitted when the branch fell back to the project default. */
+	parentName?: string;
+	expiresAt?: string;
+	isProtected?: boolean;
+	computeSettings?: ComputeSettings;
+}): Map<string, AppliedChange> => {
+	const changes = new Map<string, AppliedChange>();
+	const add = (field: string, details: Record<string, unknown>): void => {
+		changes.set(field, {
+			kind: "branch",
+			action: "create",
+			identifier: args.branchName,
+			details: { field, ...details },
+		});
+	};
+	if (args.parentName !== undefined) {
+		add("parent", { parent: args.parentName });
+	}
+	if (args.expiresAt !== undefined) add("ttl", { expiresAt: args.expiresAt });
+	if (args.isProtected !== undefined) {
+		add("protected", { protected: args.isProtected });
+	}
+	if (args.computeSettings) {
+		add("computeSettings", { settings: args.computeSettings });
+	}
+	return changes;
+};
+
+/**
+ * Fold the create-time settings into what the push applied, reporting each field once.
+ *
+ * A field the create call already satisfied is a noop for the push, so the two normally don't
+ * overlap. They do when the create didn't take (an API that ignores a create-time field, or
+ * drift in the moments between the two calls) and the push applied it for real — the push
+ * change is the one that describes what actually happened, so it wins.
+ */
+const mergeCreateSettings = (
+	atCreate: Map<string, AppliedChange>,
+	pushed: AppliedChange[],
+): AppliedChange[] => {
+	const pushedFields = new Set(
+		pushed
+			.filter((c) => c.kind === "branch" && c.action !== "noop")
+			.map((c) => c.details?.field)
+			.filter((field): field is string => typeof field === "string"),
+	);
+	const fromCreate = [...atCreate]
+		.filter(([field]) => !pushedFields.has(field))
+		.map(([, change]) => change);
+	return [...fromCreate, ...pushed];
+};
 
 /**
  * Resolve the parent branch id for a new branch. A policy-declared `parent` (a branch name) is
