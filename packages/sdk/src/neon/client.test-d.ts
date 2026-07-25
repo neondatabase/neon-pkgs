@@ -116,6 +116,17 @@ it("agent-platform helpers (default org, default branch, transfer, finalize) are
 			},
 		}),
 	).resolves.toEqualTypeOf<NeonResult<Branch>>();
+
+	// setSchedule narrows `frequency` to the API-accepted values.
+	expectTypeOf(
+		neon.snapshots.setSchedule("p", "br", {
+			schedule: [{ frequency: "daily", hour: 3 }],
+		}),
+	).resolves.toEqualTypeOf<NeonResult<void>>();
+	neon.snapshots.setSchedule("p", "br", {
+		// @ts-expect-error — "hourly" is not an accepted SnapshotFrequency
+		schedule: [{ frequency: "hourly" }],
+	});
 });
 
 it("phase-1 namespaces (auth, permissions, recover, branch endpoints) are typed", () => {

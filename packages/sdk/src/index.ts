@@ -49,6 +49,10 @@ export type {
 	CreateSnapshotInput,
 	RestorePreview,
 	RestoreSnapshotInput,
+	ScheduleItem,
+	SetScheduleInput,
+	SnapshotFrequency,
+	UpdateSnapshotInput,
 } from "./neon/resources/snapshots.js";
 export type { NeonResult, Outcome } from "./neon/result.js";
 export type { WaitForOptions } from "./neon/wait.js";

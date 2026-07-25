@@ -363,7 +363,7 @@ export type OperationsResponse = {
 /**
  * The action performed by the operation
  */
-export type OperationAction = 'create_compute' | 'create_timeline' | 'start_compute' | 'suspend_compute' | 'apply_config' | 'check_availability' | 'delete_timeline' | 'create_branch' | 'import_data' | 'tenant_ignore' | 'tenant_attach' | 'tenant_detach' | 'tenant_detach_safekeepers' | 'tenant_attach_safekeepers' | 'tenant_reattach' | 'replace_safekeeper' | 'disable_maintenance' | 'apply_storage_config' | 'prepare_secondary_pageserver' | 'switch_pageserver' | 'detach_parent_branch' | 'timeline_archive' | 'timeline_unarchive' | 'start_reserved_compute' | 'sync_dbs_and_roles_from_compute' | 'apply_schema_from_branch' | 'timeline_mark_invisible' | 'timeline_update_protected_config' | 'prewarm_replica' | 'promote_replica' | 'set_storage_non_dirty' | 'swap_binding_id' | 'finalize_migration' | 'mark_migration_prepared' | 'update_catalog';
+export type OperationAction = 'create_compute' | 'create_timeline' | 'start_compute' | 'suspend_compute' | 'apply_config' | 'check_availability' | 'delete_timeline' | 'create_branch' | 'import_data' | 'tenant_ignore' | 'tenant_attach' | 'tenant_detach' | 'tenant_detach_safekeepers' | 'tenant_attach_safekeepers' | 'tenant_reattach' | 'replace_safekeeper' | 'disable_maintenance' | 'apply_storage_config' | 'prepare_secondary_pageserver' | 'switch_pageserver' | 'detach_parent_branch' | 'timeline_archive' | 'timeline_unarchive' | 'start_reserved_compute' | 'sync_dbs_and_roles_from_compute' | 'apply_schema_from_branch' | 'timeline_mark_invisible' | 'timeline_update_protected_config' | 'prewarm_replica' | 'promote_replica' | 'set_storage_non_dirty' | 'swap_binding_id' | 'finalize_migration' | 'mark_migration_prepared' | 'update_catalog' | 'epc_sync';
 
 /**
  * The status of the operation
@@ -3177,11 +3177,9 @@ export type SnapshotUpdateRequest = {
 export type BackupScheduleItem = {
     /**
      * How often to take snapshots. Must be one of the following values:
-     * - `hourly`
      * - `daily`
      * - `weekly`
      * - `monthly`
-     * - `yearly`
      *
      */
     frequency: string;

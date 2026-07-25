@@ -1,4 +1,9 @@
-import type { BackupScheduleItem, Operation, Snapshot } from "@neon/sdk";
+import type {
+	BackupScheduleItem,
+	Operation,
+	Snapshot,
+	SnapshotFrequency,
+} from "@neon/sdk";
 import type yargs from "yargs";
 import { retryOnLock } from "../api.js";
 import { log } from "../log.js";
@@ -34,13 +39,19 @@ const OPERATION_FIELDS: readonly (keyof Operation)[] = [
 	"status",
 ];
 
+// The values the Neon API accepts for a backup-schedule entry's `frequency`
+// (per the OpenAPI `BackupScheduleItem` description). `satisfies` keeps this
+// list in lockstep with the SDK's `SnapshotFrequency` union — if the spec adds
+// or drops a value, this stops compiling until both are updated together.
 const SNAPSHOT_FREQUENCIES = [
-	"hourly",
 	"daily",
 	"weekly",
 	"monthly",
-	"yearly",
-] as const;
+] as const satisfies readonly SnapshotFrequency[];
+
+/** Narrow an arbitrary string to a supported {@link SnapshotFrequency}. */
+const isSnapshotFrequency = (value: string): value is SnapshotFrequency =>
+	SNAPSHOT_FREQUENCIES.some((frequency) => frequency === value);
 
 export const command = "snapshots";
 export const describe = "Manage snapshots";
@@ -273,7 +284,7 @@ export const builder = (argv: yargs.Argv) =>
 										"A daily 03:00 snapshot kept for 7 days",
 									],
 									[
-										'$0 snapshots schedule set --branch main --schedule \'[{"frequency":"hourly"},{"frequency":"daily","hour":3}]\'',
+										'$0 snapshots schedule set --branch main --schedule \'[{"frequency":"weekly","day":1,"hour":2},{"frequency":"daily","hour":3}]\'',
 										"A multi-entry schedule via JSON",
 									],
 								]),
@@ -582,6 +593,11 @@ const parseScheduleJson = (raw: string): BackupScheduleItem[] => {
 		if (typeof frequency !== "string") {
 			throw new Error(
 				`--schedule entry ${index} is missing a string "frequency".`,
+			);
+		}
+		if (!isSnapshotFrequency(frequency)) {
+			throw new Error(
+				`--schedule entry ${index} has an unsupported "frequency": "${frequency}". Use one of: ${SNAPSHOT_FREQUENCIES.join(", ")}.`,
 			);
 		}
 		const item: BackupScheduleItem = { frequency };

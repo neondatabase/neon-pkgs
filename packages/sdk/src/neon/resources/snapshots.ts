@@ -11,6 +11,7 @@ import {
 } from "../../client/sdk.gen.js";
 import type {
 	BackupSchedule,
+	BackupScheduleItem,
 	Branch,
 	Snapshot,
 } from "../../client/types.gen.js";
@@ -68,6 +69,30 @@ export interface RestoreSnapshotInput {
 	preview?: RestorePreview;
 	/** Keep the preview branch when `preview` returns `false` (default: delete it). */
 	keepOnAbort?: boolean;
+}
+
+/**
+ * How often the automatic snapshot (backup) schedule takes a snapshot. These are
+ * the values the Neon API accepts, per the OpenAPI spec's `BackupScheduleItem`
+ * description. The generated `BackupScheduleItem.frequency` is a broad `string`
+ * (the spec documents the allowed values in prose rather than an `enum`), so this
+ * union narrows what {@link Snapshots.setSchedule} sends.
+ */
+export type SnapshotFrequency = "daily" | "weekly" | "monthly";
+
+/**
+ * A single entry in an automatic snapshot (backup) schedule. Identical to the
+ * generated {@link BackupScheduleItem} except `frequency` is narrowed to
+ * {@link SnapshotFrequency} — the values the API actually accepts.
+ */
+export type ScheduleItem = Omit<BackupScheduleItem, "frequency"> & {
+	frequency: SnapshotFrequency;
+};
+
+/** Input for {@link Snapshots.setSchedule}. */
+export interface SetScheduleInput {
+	/** The ordered list of schedule entries to apply to the branch. */
+	schedule: ScheduleItem[];
 }
 
 /** Snapshot resource. */
@@ -331,18 +356,18 @@ export class Snapshots<DThrow extends boolean> {
 	setSchedule(
 		projectId: string,
 		branchId: string,
-		schedule: BackupSchedule,
+		schedule: SetScheduleInput,
 	): Promise<Outcome<void, DThrow>>;
 	setSchedule<Throw extends boolean = DThrow>(
 		projectId: string,
 		branchId: string,
-		schedule: BackupSchedule,
+		schedule: SetScheduleInput,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<void, Throw>>;
 	setSchedule(
 		projectId: string,
 		branchId: string,
-		schedule: BackupSchedule,
+		schedule: SetScheduleInput,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
 		return this.#ctx.run(
@@ -351,7 +376,9 @@ export class Snapshots<DThrow extends boolean> {
 				setSnapshotSchedule({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
-					body: schedule,
+					// `SetScheduleInput` narrows `frequency` to the accepted values;
+					// it is otherwise structurally the generated `BackupSchedule`.
+					body: schedule satisfies BackupSchedule,
 					throwOnError: false,
 				}),
 			() => undefined,

@@ -322,7 +322,7 @@ Branch-scoped AI Gateway endpoint metadata (beta).
 | `delete(projectId, snapshotId)` | **→void** | |
 | `restore(projectId, snapshotId, input?)` | `Branch` | see below |
 | `getSchedule(projectId, branchId)` | `BackupSchedule` | |
-| `setSchedule(projectId, branchId, schedule)` | **→void** | |
+| `setSchedule(projectId, branchId, schedule)` | **→void** | `schedule.schedule[].frequency` is narrowed to `SnapshotFrequency` (`"daily" \| "weekly" \| "monthly"`) |
 
 ```ts
 // Snapshot a branch at a point in time (or an `lsn`), with a name + TTL

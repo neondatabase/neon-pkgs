@@ -8163,7 +8163,7 @@
             },
             "put": {
                 "summary": "Update backup schedule",
-                "description": "Updates the backup schedule for the specified branch.\nThe schedule defines how often automatic snapshots are created (e.g., `hourly`, `daily`).\n\n**Note**: This endpoint is currently in Beta.\n",
+                "description": "Updates the backup schedule for the specified branch.\nThe schedule defines how often automatic snapshots are created (e.g., `daily`, `weekly`).\n\n**Note**: This endpoint is currently in Beta.\n",
                 "tags": [
                     "Snapshot"
                 ],
@@ -10085,7 +10085,8 @@
                     "swap_binding_id",
                     "finalize_migration",
                     "mark_migration_prepared",
-                    "update_catalog"
+                    "update_catalog",
+                    "epc_sync"
                 ]
             },
             "OperationStatus": {
@@ -15150,7 +15151,7 @@
                 "properties": {
                     "frequency": {
                         "type": "string",
-                        "description": "How often to take snapshots. Must be one of the following values:\n  - `hourly`\n  - `daily`\n  - `weekly`\n  - `monthly`\n  - `yearly`\n"
+                        "description": "How often to take snapshots. Must be one of the following values:\n  - `daily`\n  - `weekly`\n  - `monthly`\n"
                     },
                     "hour": {
                         "type": "integer",

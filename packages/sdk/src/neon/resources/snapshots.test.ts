@@ -57,3 +57,24 @@ describe("snapshots.update maps the ergonomic input to the API body", () => {
 		expect(calls[0]?.body).toEqual({ snapshot: { name: "renamed" } });
 	});
 });
+
+describe("snapshots.setSchedule forwards the schedule body verbatim", () => {
+	it("sends the narrowed schedule as the request body", async () => {
+		const { neon, calls } = neonCapturing();
+		await neon.snapshots.setSchedule("p-1", "br-1", {
+			schedule: [
+				{ frequency: "weekly", day: 1, hour: 2 },
+				{ frequency: "daily", hour: 3, retention_seconds: 604800 },
+			],
+		});
+		expect(calls[0]?.url).toContain(
+			"/projects/p-1/branches/br-1/backup_schedule",
+		);
+		expect(calls[0]?.body).toEqual({
+			schedule: [
+				{ frequency: "weekly", day: 1, hour: 2 },
+				{ frequency: "daily", hour: 3, retention_seconds: 604800 },
+			],
+		});
+	});
+});
