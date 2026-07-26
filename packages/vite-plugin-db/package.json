@@ -20,7 +20,7 @@
 	],
 	"scripts": {
 		"build": "tsc --noEmit && tsdown",
-		"test": "vitest --passWithNoTests",
+		"test": "pnpm --filter vite-plugin-db... build && vitest --passWithNoTests",
 		"test:ci": "vitest run --passWithNoTests",
 		"tsc": "tsc"
 	},

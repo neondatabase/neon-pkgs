@@ -65,7 +65,6 @@
 		"yargs": "^18.0.0",
 		"yoctocolors": "^2.1.2"
 	},
-	"packageManager": "pnpm@10.4.0",
 	"engines": {
 		"node": ">=20.19.0"
 	},
