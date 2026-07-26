@@ -1,5 +1,11 @@
 # neonctl
 
+## 2.37.1
+
+### Patch Changes
+
+- 30d42c9: Update the post-sign-in page to the current official Neon logomark, with brand light/dark fills that follow the system color scheme.
+
 ## 2.37.0
 
 ### Minor Changes
