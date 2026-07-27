@@ -1,0 +1,18 @@
+{
+	"name": "@neon/e2e-harness",
+	"version": "0.0.0",
+	"private": true,
+	"description": "Internal test-only harness shared by the live Neon e2e suites. Never published.",
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"devDependencies": {
+		"@types/node": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	},
+	"engines": {
+		"node": ">=22"
+	}
+}

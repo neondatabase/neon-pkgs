@@ -49,6 +49,7 @@
 		"tsc": "tsc"
 	},
 	"devDependencies": {
+		"@neon/e2e-harness": "workspace:*",
 		"@neon/sdk": "workspace:*",
 		"@types/node": "catalog:",
 		"@vitest/coverage-v8": "catalog:",

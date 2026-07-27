@@ -47,6 +47,7 @@
 		"tsc": "tsc"
 	},
 	"devDependencies": {
+		"@neon/e2e-harness": "workspace:*",
 		"@neon/sdk": "workspace:*",
 		"@types/node": "catalog:",
 		"@types/yargs": "^17.0.35",

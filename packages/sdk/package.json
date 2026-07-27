@@ -58,6 +58,7 @@
 	},
 	"devDependencies": {
 		"@hey-api/openapi-ts": "0.98.2",
+		"@neon/e2e-harness": "workspace:*",
 		"@types/node": "catalog:",
 		"@vitest/coverage-v8": "catalog:",
 		"console-fail-test": "catalog:",

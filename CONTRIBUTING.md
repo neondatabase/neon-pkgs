@@ -61,15 +61,20 @@ CLI package, which keeps its own toolchain).
 
 ## Live Neon e2e tests
 
-`pnpm test:e2e:live` runs the `@neon/config`, `@neon/config-runtime`, and `@neon/env` e2e suites
-against the real Neon API, creating and deleting real projects. They are excluded from
-`pnpm test:ci`, so you only pay for them when you ask for them.
+`pnpm test:e2e:live` runs the `@neon/sdk`, `@neon/config`, `@neon/config-runtime`, and
+`@neon/env` e2e suites against the real Neon API, creating and deleting real projects. They are
+excluded from `pnpm test:ci`, so you only pay for them when you ask for them.
 
-Copy each package's `.env.example` to `.env` and fill in `NEON_API_KEY` with an **org-scoped key
-for a throwaway organization**. The suite deletes stale `neon-ts-e2e-*` projects on start, so
+Copy any package's `.env.example` to a `.env` **at the repository root** and fill in
+`NEON_API_KEY` with an **org-scoped key for a throwaway organization**. All four suites read the
+root file, so you only configure this once; a package-local `.env` overrides it, and real
+environment variables beat both. The suite deletes stale `neon-ts-e2e-*` projects on start, so
 never point it at an org holding anything you care about. If your key is user-scoped rather than
 org-scoped, set `NEON_ORG_ID` as well to keep the sweep inside a single org. The org must be on
 the Launch plan or above — one test protects a branch, which the free plan disallows.
+
+The shared plumbing lives in `packages/e2e-harness`, a private workspace package that is never
+published; see its README for the cleanup rules it enforces.
 
 In CI these run as the `e2e (live Neon)` workflow on every pull request from this repository.
 Fork and Dependabot PRs skip the job, because GitHub does not expose repository secrets to

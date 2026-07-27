@@ -9,7 +9,7 @@
 		"format": "biome check --error-on-warnings --write",
 		"lint:ci": "biome ci --error-on-warnings",
 		"test:ci": "pnpm --recursive test:ci",
-		"test:e2e:live": "pnpm --workspace-concurrency=1 --no-bail --filter @neon/config --filter @neon/config-runtime --filter @neon/env test:e2e",
+		"test:e2e:live": "pnpm --workspace-concurrency=1 --no-bail --filter @neon/sdk --filter @neon/config --filter @neon/config-runtime --filter @neon/env test:e2e",
 		"prepare": "husky"
 	},
 	"lint-staged": {

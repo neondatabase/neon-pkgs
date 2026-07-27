@@ -1,6 +1,6 @@
 # Neon JavaScript/TypeScript packages
 
-The monorepo for [Neon](https://neon.com)'s open-source JavaScript/TypeScript SDKs, libraries, CLIs, and framework plugins. Each folder under [`packages/`](./packages) is an independently versioned, separately published package; they share tooling (pnpm workspaces, Biome, tsdown, Vitest, Changesets) but ship on their own cadence.
+The monorepo for [Neon](https://neon.com)'s open-source JavaScript/TypeScript SDKs, libraries, CLIs, and framework plugins. Almost every folder under [`packages/`](./packages) is an independently versioned, separately published package; they share tooling (pnpm workspaces, Biome, tsdown, Vitest, Changesets) but ship on their own cadence. The one exception is `packages/e2e-harness`, a private test-only package that is never published.
 
 If you're looking for a single package's docs, see its own `README.md` under `packages/<name>/`.
 
@@ -35,7 +35,8 @@ A few renamed packages are still published as deprecated aliases (`get-db` / `ne
 ## Repository layout
 
 ```
-packages/   # the published SDKs, libraries, CLIs, and plugins (one per folder)
+packages/   # the published SDKs, libraries, CLIs, and plugins (one per folder),
+            # plus the private e2e-harness shared by the live Neon test suites
 examples/   # runnable examples that consume the packages via the workspace
 ```
 

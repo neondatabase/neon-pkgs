@@ -40,10 +40,10 @@ pnpm --filter vite-plugin-neon-new test
 
 #### Live Neon e2e tests
 
-`pnpm test:e2e:live` runs the `@neon/config`, `@neon/config-runtime`, and `@neon/env`
-e2e suites against the **real Neon Management API**. They create Postgres projects,
-mutate branches, read connection strings, and delete everything again. They are
-excluded from `pnpm test:ci` (each package's Vitest config excludes `**/*.e2e.test.ts`)
+`pnpm test:e2e:live` runs the `@neon/sdk`, `@neon/config`, `@neon/config-runtime`, and
+`@neon/env` e2e suites against the **real Neon Management API**. They create Postgres
+projects, mutate branches, read connection strings, and delete everything again. They
+are excluded from `pnpm test:ci` (each package's Vitest config excludes the e2e files)
 and only run through their own `test:e2e` script.
 
 Run them against a **dedicated throwaway organization** — never a personal or
@@ -51,11 +51,15 @@ production one. The suite sweeps stale `neon-ts-e2e-*` projects on start, so any
 project matching that prefix in reach of the key is fair game for deletion.
 
 ```bash
-cp packages/config/.env.example packages/config/.env   # and the same for config-runtime + env
+cp packages/config/.env.example .env   # repo root: one file for all four suites
 # Fill in NEON_API_KEY with an org-scoped key for the throwaway org.
 # Set NEON_ORG_ID too when the key is user-scoped, so the sweep stays inside one org.
 pnpm test:e2e:live
 ```
+
+Credentials are read from the package's own `.env` first and the repo root's second,
+so one root file configures every suite. Real environment variables always win, which
+is how CI injects the secret with no file present.
 
 | | |
 | --- | --- |
@@ -77,6 +81,44 @@ in-flight project is never deleted underneath it.
 `@neon/ai-sdk-provider` also has a `test:e2e`, but it targets a live AI Gateway with a
 different pair of credentials (`NEON_AI_GATEWAY_BASE_URL`, `NEON_AI_GATEWAY_TOKEN`) and
 is not part of `test:e2e:live`.
+
+##### The shared harness (`packages/e2e-harness`)
+
+`@neon/e2e-harness` is a **private, never-published** workspace package holding the
+plumbing every live suite needs: the `.env` contract, key-scope detection, project
+create/delete, the orphan sweep, and the `e2eTest` fixture. It has no build step —
+consumers import its TypeScript source.
+
+It exists because cleanup is the dangerous part, and three copies of it meant fixing
+every bug three times. Three invariants live there and nowhere else:
+
+1. **Prefix guard** — never delete a project not named `neon-ts-e2e-*`.
+2. **Age guard** — never sweep a project created in the last hour; it probably belongs
+   to a concurrent run.
+3. **Unprotect before delete** — Neon rejects a delete with 422 while a branch is
+   protected, and an un-cleared flag makes the project unreachable by *any* later
+   cleanup.
+
+**It deliberately does not use `@neon/sdk`.** The SDK is one of the packages under
+test, so plumbing built on it would break teardown at exactly the moment a test
+catches an SDK bug. The harness uses plain `fetch` and has zero runtime dependencies,
+which also keeps the workspace graph acyclic.
+
+Suites keep a thin local `e2e/helpers.ts` for whatever *is* their subject under test —
+`@neon/config` and friends bootstrap projects through their own `NeonApi` adapter
+rather than the harness's `createProject`, because that adapter is what they're
+testing.
+
+##### What the `@neon/sdk` suite covers
+
+The SDK's unit tests answer every request with a canned `fetch` response, which proves
+the mapping logic but cannot prove the API still returns the shape that logic was
+written against. `packages/sdk/e2e/` targets exactly that gap: readiness polling
+against real operation state, cursor pagination against cursors the API actually
+issues (`branches.list` reads `pagination.next` while `projects.list` reads
+`pagination.cursor` — a stub can only confirm whichever the author picked),
+connection-string resolution from a real project's branches/roles/databases, and
+`toNeonError` classification of real 404 and 401 envelopes.
 
 ### Linting & Formatting
 

@@ -4,5 +4,12 @@
 		"module": "ESNext",
 		"moduleResolution": "Bundler"
 	},
-	"include": ["src", "vitest.config.ts", "tsdown.config.ts", "openapi-ts.config.ts"]
+	"include": [
+		"e2e",
+		"src",
+		"vitest.config.ts",
+		"vitest.e2e.config.ts",
+		"tsdown.config.ts",
+		"openapi-ts.config.ts"
+	]
 }
