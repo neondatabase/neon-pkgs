@@ -1,5 +1,12 @@
 # neonctl
 
+## 2.38.1
+
+### Patch Changes
+
+- Updated dependencies [2532f9e]
+  - neon@2.38.1
+
 ## 2.38.0
 
 ### Minor Changes

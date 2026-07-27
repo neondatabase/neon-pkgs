@@ -1,5 +1,13 @@
 # neon
 
+## 2.38.1
+
+### Patch Changes
+
+- 2532f9e: Stop deleting stored credentials when a 401 comes from an API key. A rejected `--api-key` or `NEON_API_KEY` no longer signs you out of the account saved in your config directory, and reports the rejection instead of retrying. When the stored OAuth token is what was rejected, it is still cleared — but now from the directory named by `--config-dir` rather than always the default one.
+- Updated dependencies [54ab231]
+  - neon-init@0.20.3
+
 ## 2.38.0
 
 ### Minor Changes

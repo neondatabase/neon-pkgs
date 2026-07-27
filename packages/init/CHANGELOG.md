@@ -1,5 +1,11 @@
 # neon-init
 
+## 0.20.3
+
+### Patch Changes
+
+- 54ab231: Stop installing the Neon editor extension during default setup while keeping it available as an option during customized setup.
+
 ## 0.20.2
 
 ### Patch Changes
