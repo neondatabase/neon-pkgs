@@ -13,6 +13,7 @@ import { handleNeonAuthPhase } from "./lib/phases/neon-auth.js";
 import { handleSetupPhase } from "./lib/phases/setup.js";
 import { handleSkillsPhase } from "./lib/phases/skills.js";
 import { handleStatusPhase } from "./lib/phases/status.js";
+import pkg from "./pkg.js";
 import { orchestrate } from "./v2.js";
 
 // ---------------------------------------------------------------------------
@@ -695,6 +696,9 @@ const cli = yargs(hideBin(process.argv))
 	)
 
 	.help()
+	// Without this yargs guesses the version, and in an ESM bin it guesses
+	// wrong — `neon-init --version` printed "unknown".
+	.version(pkg.version)
 	.strict();
 
 // Parse and execute

@@ -51,6 +51,7 @@
 		"@vitest/coverage-v8": "catalog:",
 		"console-fail-test": "catalog:",
 		"tsdown": "catalog:",
+		"tsx": "4.22.3",
 		"typescript": "catalog:",
 		"vitest": "catalog:"
 	},
