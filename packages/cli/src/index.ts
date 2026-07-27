@@ -11,6 +11,7 @@ import {
 } from "./analytics.js";
 import { isNeonApiError, messageFromBody, type NeonApiClient } from "./api.js";
 import { defaultClientID } from "./auth.js";
+import { credentialsToClearOn401, getAuthContext } from "./auth_context.js";
 import { deleteCredentials, ensureAuth } from "./commands/auth.js";
 import commands from "./commands/index.js";
 import { defaultDir, ensureConfigDir } from "./config.js";
@@ -210,9 +211,19 @@ async function handleError(msg: string, err: unknown): Promise<boolean> {
 			return false;
 		} else if (err.status === 401) {
 			sendError(err, "AUTH_FAILED");
+			const configDir = credentialsToClearOn401(getAuthContext());
+			// The request was authorized with a key the user supplied, so there
+			// is nothing of ours to clear and nothing to retry — the same key
+			// would just be rejected again.
+			if (configDir === null) {
+				log.error(
+					"Authentication failed: the Neon API rejected the API key. Check --api-key or NEON_API_KEY.",
+				);
+				return false;
+			}
 			log.info("Authentication failed, deleting credentials...");
 			try {
-				deleteCredentials(defaultDir);
+				deleteCredentials(configDir);
 				return true; // Allow retry for auth failures
 			} catch (deleteErr) {
 				log.debug(

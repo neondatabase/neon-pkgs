@@ -7,6 +7,7 @@ import type { NeonApiClient } from "../api.js";
 
 import { getApiClient } from "../api.js";
 import { auth, refreshToken } from "../auth.js";
+import { setAuthContext } from "../auth_context.js";
 import { CREDENTIALS_FILE } from "../config.js";
 import { isConfigInit, isCurrentBranchProbe } from "../context.js";
 import { isCi } from "../env.js";
@@ -198,6 +199,10 @@ export const ensureAuth = async (
 	if (props.apiKey || props._[0] === "auth") {
 		if (props.apiKey) {
 			log.debug("Using an API key to authorize requests");
+			setAuthContext({
+				source: "api-key",
+				configDir: props.configDir,
+			});
 		}
 		props.apiClient = getApiClient({
 			apiKey: props.apiKey,
@@ -225,6 +230,10 @@ export const ensureAuth = async (
 			if (result) {
 				props.apiKey = result.apiKey;
 				props.apiClient = result.apiClient;
+				setAuthContext({
+					source: "stored-credentials",
+					configDir: props.configDir,
+				});
 				return;
 			}
 		} catch (err) {
@@ -274,6 +283,10 @@ export const ensureAuth = async (
 	props.apiClient = getApiClient({
 		apiKey,
 		apiHost: props.apiHost,
+	});
+	setAuthContext({
+		source: "stored-credentials",
+		configDir: props.configDir,
 	});
 };
 
