@@ -1,5 +1,8 @@
 packages:
     - "packages/*"
+    # Test-only, never published. Kept out of `packages/` so that folder means
+    # exactly one thing: packages we ship.
+    - "tests/e2e-harness"
 
 # pnpm 10 blocks dependency lifecycle/build scripts by default. node-pty has
 # no linux-x64 prebuild, so it must run its `install` (node-gyp) step to

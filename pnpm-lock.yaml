@@ -174,7 +174,7 @@ importers:
         version: 12.1.0(openapi-types@12.1.3)
       '@neon/e2e-harness':
         specifier: workspace:*
-        version: link:../e2e-harness
+        version: link:../../tests/e2e-harness
       '@rollup/plugin-commonjs':
         specifier: 25.0.8
         version: 25.0.8(rollup@3.29.4)
@@ -263,7 +263,7 @@ importers:
     devDependencies:
       '@neon/e2e-harness':
         specifier: workspace:*
-        version: link:../e2e-harness
+        version: link:../../tests/e2e-harness
       '@types/node':
         specifier: 'catalog:'
         version: 20.19.17
@@ -297,7 +297,7 @@ importers:
     devDependencies:
       '@neon/e2e-harness':
         specifier: workspace:*
-        version: link:../e2e-harness
+        version: link:../../tests/e2e-harness
       '@neon/sdk':
         specifier: workspace:*
         version: link:../sdk
@@ -320,18 +320,6 @@ importers:
         specifier: 'catalog:'
         version: 3.0.9(@types/debug@4.1.13)(@types/node@20.19.17)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.39.0)(tsx@4.22.3)(yaml@2.9.0)
 
-  packages/e2e-harness:
-    devDependencies:
-      '@types/node':
-        specifier: 'catalog:'
-        version: 20.19.17
-      typescript:
-        specifier: 'catalog:'
-        version: 5.9.3
-      vitest:
-        specifier: 'catalog:'
-        version: 3.0.9(@types/debug@4.1.13)(@types/node@20.19.17)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.39.0)(tsx@4.22.3)(yaml@2.9.0)
-
   packages/env:
     dependencies:
       '@neon/config':
@@ -346,7 +334,7 @@ importers:
     devDependencies:
       '@neon/e2e-harness':
         specifier: workspace:*
-        version: link:../e2e-harness
+        version: link:../../tests/e2e-harness
       '@neon/sdk':
         specifier: workspace:*
         version: link:../sdk
@@ -554,7 +542,7 @@ importers:
         version: 0.98.2(magicast@0.3.5)(typescript@5.9.3)
       '@neon/e2e-harness':
         specifier: workspace:*
-        version: link:../e2e-harness
+        version: link:../../tests/e2e-harness
       '@types/node':
         specifier: 'catalog:'
         version: 20.19.17
@@ -648,6 +636,18 @@ importers:
       vite:
         specifier: 'catalog:'
         version: 6.4.1(@types/node@20.19.17)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.39.0)(tsx@4.22.3)(yaml@2.9.0)
+      vitest:
+        specifier: 'catalog:'
+        version: 3.0.9(@types/debug@4.1.13)(@types/node@20.19.17)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.39.0)(tsx@4.22.3)(yaml@2.9.0)
+
+  tests/e2e-harness:
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 20.19.17
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
       vitest:
         specifier: 'catalog:'
         version: 3.0.9(@types/debug@4.1.13)(@types/node@20.19.17)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.39.0)(tsx@4.22.3)(yaml@2.9.0)

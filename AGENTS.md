@@ -124,7 +124,7 @@ of habit.
 To wire up a **new** variable end to end:
 
 1. **Read it through the harness**, not `process.env` scattered across tests. Add an
-   accessor in `packages/e2e-harness/src/env.ts` next to `configuredOrgId()` so the
+   accessor in `tests/e2e-harness/src/env.ts` next to `configuredOrgId()` so the
    default and the "missing" error message live in one place.
 2. **Document it in every `.env.example`** — `packages/{sdk,config,config-runtime,env,cli}/.env.example`.
    They are near-identical on purpose: a contributor copies whichever one they find.
@@ -155,12 +155,19 @@ in-flight project is never deleted underneath it.
 different pair of credentials (`NEON_AI_GATEWAY_BASE_URL`, `NEON_AI_GATEWAY_TOKEN`) and
 is not part of `test:e2e:live`.
 
-##### The shared harness (`packages/e2e-harness`)
+##### The shared harness (`tests/e2e-harness`)
 
 `@neon/e2e-harness` is a **private, never-published** workspace package holding the
 plumbing every live suite needs: the `.env` contract, key-scope detection, project
 create/delete, the orphan sweep, and the `e2eTest` fixture. It has no build step —
 consumers import its TypeScript source.
+
+It lives in a top-level `tests/` folder rather than under `packages/` so that
+`packages/` keeps meaning exactly one thing: packages we publish. It's still a
+workspace package — listed explicitly in `pnpm-workspace.yaml` and depended on with
+`workspace:*` — because the alternative is every suite reaching across package roots
+with `../../../tests/e2e-harness` paths, which fights both `tsc -p` and the CLI's
+`moduleResolution: node` mappings for no benefit.
 
 It exists because cleanup is the dangerous part, and three copies of it meant fixing
 every bug three times. Three invariants live there and nowhere else:

@@ -111,7 +111,7 @@ file, and a package-local `.env` overrides the root one when you need a single s
 
 `.env` files are gitignored (`.env.example` is the tracked exception). Don't commit one.
 
-Adding a **new** variable? Read it through `packages/e2e-harness`, add it to every package's
+Adding a **new** variable? Read it through `tests/e2e-harness`, add it to every package's
 `.env.example` and to the table above, and — for CI — see the "How CI supplies them" steps in
 [`AGENTS.md`](./AGENTS.md), which cover the repository secret or variable and the workflow
 mapping.
@@ -127,7 +127,7 @@ Fork and Dependabot PRs skip the job, because GitHub does not expose repository 
 untrusted pull request code. **You do not need credentials to contribute** — open the PR and a
 maintainer will run the suite before merging.
 
-The shared plumbing lives in `packages/e2e-harness`, a private workspace package that is never
+The shared plumbing lives in `tests/e2e-harness`, a private workspace package that is never
 published; see its README for the cleanup rules it enforces.
 
 ## Changing the supported Node floor

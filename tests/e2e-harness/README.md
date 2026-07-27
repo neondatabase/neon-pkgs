@@ -60,3 +60,8 @@ Add `"@neon/e2e-harness": "workspace:*"` to the package's `devDependencies`, the
 
 It has no build step — consumers import the TypeScript source directly, which is why
 `exports` points at `src/index.ts`.
+
+It sits here rather than under `packages/` so that folder keeps meaning exactly one
+thing: packages we publish. It is still a workspace package, listed explicitly in
+`pnpm-workspace.yaml`, so suites can import it by name instead of reaching across
+package roots with `../../../tests/e2e-harness` paths.
