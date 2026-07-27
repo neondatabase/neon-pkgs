@@ -4,7 +4,9 @@ import { createNeonClient } from "@neon/sdk";
 import {
 	deleteProject as rawDeleteProject,
 	getProject as rawGetProject,
+	listProjectBranches as rawListProjectBranches,
 	listProjects as rawListProjects,
+	updateProjectBranch as rawUpdateProjectBranch,
 } from "@neon/sdk/raw";
 import { test } from "vitest";
 
@@ -176,8 +178,10 @@ async function deleteProject(projectId: string): Promise<void> {
 		);
 	}
 	// Retry on 423 (locked while a previous mutation is in flight) so cleanup is robust.
+	// A 422 means a branch is still protected; clear the flag once and try again.
 	const maxAttempts = 12;
 	let delay = 500;
+	let unprotected = false;
 	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 		try {
 			unwrap(
@@ -192,10 +196,43 @@ async function deleteProject(projectId: string): Promise<void> {
 				err as { response?: { status?: number } } | undefined
 			)?.response?.status;
 			if (status === 404 || status === 410) return;
+			if (status === 422 && !unprotected) {
+				unprotected = true;
+				await unprotectBranches(client, projectId);
+				continue;
+			}
 			if (status !== 423 || attempt === maxAttempts) throw err;
 			await sleep(delay);
 			delay = Math.min(delay * 2, 5_000);
 		}
+	}
+}
+
+/**
+ * Neon refuses to delete a project while any of its branches is protected, and
+ * `lifecycle.e2e.test.ts` leaves the default branch that way on purpose. Without clearing
+ * the flag the project is undeletable — not just by the test that made it, but by
+ * {@link sweepOrphans} too, so it would sit in the org forever.
+ */
+async function unprotectBranches(
+	client: ReturnType<typeof makeRawClient>,
+	projectId: string,
+): Promise<void> {
+	const body = unwrap(
+		await rawListProjectBranches({
+			client,
+			path: { project_id: projectId },
+		}),
+	);
+	for (const branch of body.branches) {
+		if (!branch.protected) continue;
+		unwrap(
+			await rawUpdateProjectBranch({
+				client,
+				path: { project_id: projectId, branch_id: branch.id },
+				body: { branch: { protected: false } },
+			}),
+		);
 	}
 }
 
@@ -257,12 +294,23 @@ export const e2eTest = test.extend<{
 				// Surface, but don't fail on cleanup errors — the orphan sweep on the next
 				// run will mop up anything we miss.
 				console.error(
-					`[e2e cleanup] failed to delete ${projectId}: ${(err as Error).message}`,
+					`[e2e cleanup] failed to delete ${projectId}: ${describeError(err)}`,
 				);
 			}
 		}
 	},
 });
+
+/**
+ * {@link unwrap} throws a bare `{ response: { status } }`, not an `Error`, so reading
+ * `.message` off it reports `undefined` and hides why cleanup failed.
+ */
+function describeError(err: unknown): string {
+	if (err instanceof Error) return err.message;
+	const status = (err as { response?: { status?: number } } | undefined)
+		?.response?.status;
+	return status ? `HTTP ${status}` : String(err);
+}
 
 /**
  * Some Neon operations are eventually consistent (notably branch creation finishing
