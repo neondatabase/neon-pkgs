@@ -68,9 +68,11 @@ pnpm test:e2e:live
 The org needs the **Launch plan or above**: `lifecycle.e2e.test.ts` protects a branch
 through `pushConfig`, and the free plan allows zero protected branches.
 
-Suites run one at a time (`--workspace-concurrency=1`) because they share one org.
-Across concurrent CI runs, safety comes from the sweep ignoring projects younger than
-an hour, so a sibling run's in-flight project is never deleted underneath it.
+Suites run one at a time (`--workspace-concurrency=1`) because they share one org, and
+with `--no-bail` so one failure neither hides the other suites' results nor aborts a
+suite that has already started creating projects. Across concurrent CI runs, safety
+comes from the sweep ignoring projects younger than an hour, so a sibling run's
+in-flight project is never deleted underneath it.
 
 `@neon/ai-sdk-provider` also has a `test:e2e`, but it targets a live AI Gateway with a
 different pair of credentials (`NEON_AI_GATEWAY_BASE_URL`, `NEON_AI_GATEWAY_TOKEN`) and
