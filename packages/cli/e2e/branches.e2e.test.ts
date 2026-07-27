@@ -13,10 +13,10 @@ type BranchPayload = {
 
 /**
  * Branch, role, database and connection-string commands against one shared project.
- * The project is provisioned through the harness rather than `neonctl projects create`
+ * The project is provisioned through the harness rather than `neon projects create`
  * so a regression there fails its own test instead of this whole file's setup.
  */
-describe.sequential("e2e — neonctl branch commands against the real API", () => {
+describe.sequential("e2e — neon CLI branch commands against the real API", () => {
 	let projectId: string;
 
 	beforeAll(async () => {

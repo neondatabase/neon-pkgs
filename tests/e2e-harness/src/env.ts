@@ -70,7 +70,7 @@ export const DEFAULT_API_BASE_URL = "https://console.neon.tech/api/v2";
 
 /**
  * Lets a whole run target a non-production API. Every suite honours it — the harness for
- * its own calls, `@neon/sdk` through `createNeonClient({ baseUrl })`, and `neonctl`
+ * its own calls, `@neon/sdk` through `createNeonClient({ baseUrl })`, and the Neon CLI
  * through `--api-host` — so pointing at staging doesn't silently leave half the run
  * talking to production.
  */

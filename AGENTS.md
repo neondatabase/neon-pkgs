@@ -41,7 +41,7 @@ pnpm --filter vite-plugin-neon-new test
 #### Live Neon e2e tests
 
 `pnpm test:e2e:live` runs the `@neon/sdk`, `@neon/config`, `@neon/config-runtime`,
-`@neon/env`, and `neonctl` e2e suites against the **real Neon Management API**. They
+`@neon/env`, and `neon` (the CLI) e2e suites against the **real Neon Management API**. They
 create Postgres projects, mutate branches, read connection strings, and delete
 everything again. They are excluded from `pnpm test:ci` (each package's Vitest config
 excludes the e2e files) and only run through their own `test:e2e` script.
@@ -74,7 +74,7 @@ Every variable the live suites read, and where it comes from:
 | Variable | Required | Read by | Meaning |
 | --- | --- | --- | --- |
 | `NEON_API_KEY` | yes | all five suites, via `requireApiKey()` | Org-scoped key for the throwaway org |
-| `NEON_ORG_ID` | recommended | harness `configuredOrgId()`; `neonctl` suite maps it to `--org-id` | Pins create, list and sweep to one org. **Required in practice for a user-scoped key**, or the sweep ranges over every org the key can see |
+| `NEON_ORG_ID` | recommended | harness `configuredOrgId()`; the CLI suite maps it to `--org-id` | Pins create, list and sweep to one org. **Required in practice for a user-scoped key**, or the sweep ranges over every org the key can see |
 | `NEON_PROJECT_ID` | only for project-scoped keys | harness `detectApiKeyScope()` | Targets a fixed project; create-paths skip themselves |
 | `NEON_API_BASE_URL` | no | harness `api.ts` | Point the harness at a non-production API. Defaults to `https://console.neon.tech/api/v2` |
 | `NEON_AI_GATEWAY_BASE_URL`, `NEON_AI_GATEWAY_TOKEN` | for that suite only | `@neon/ai-sdk-provider` | Live AI Gateway. **Not** part of `test:e2e:live` |
@@ -217,7 +217,7 @@ Note what an **org-scoped** key cannot reach: `user.me()`, `apiKeys.list()`, and
 `regions.list()` all answer `404 "not allowed for organization API keys"`. That's why
 those namespaces aren't covered — not because they don't matter.
 
-##### What the `neonctl` suite covers
+##### What the CLI (`neon`) suite covers
 
 `packages/cli/e2e/` spawns the built binary (`dist/cli.js`, the real `bin` entry) and
 parses `--output json`. The CLI's unit tests answer every request from a local
@@ -229,7 +229,7 @@ Each invocation is hermetic: `--api-key` from the environment, plus `--config-di
 stray `.neon` in the checkout can't leak into a run. `--no-analytics` keeps Segment
 out of it.
 
-`test:e2e` builds first, because unlike the other packages `neonctl` has no `prepare`
+`test:e2e` builds first, because unlike the other packages the CLI has no `prepare`
 script and `pnpm install` therefore leaves `dist/` stale.
 
 One thing to know: **the CLI does not read `NEON_ORG_ID`.** It takes the org from

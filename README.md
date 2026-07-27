@@ -6,6 +6,13 @@ If you're looking for a single package's docs, see its own `README.md` under `pa
 
 ## Packages
 
+### Neon CLI
+
+| Package | Description |
+| --- | --- |
+| `neon` | The Neon CLI. Install this package for the `neon` command. |
+| `neonctl` | Compatibility package that delegates to `neon`. Provides the legacy `neonctl` command (plus `neon`) and is what Homebrew builds from. |
+
 ### Provisioning & project setup
 
 | Package | Description |
@@ -30,7 +37,7 @@ If you're looking for a single package's docs, see its own `README.md` under `pa
 | `@neon/functions` | Runtime helpers for Neon Functions (e.g. a `waitUntil` primitive for deferring work past a response). |
 | `@neon/ai-sdk-provider` | Community [Vercel AI SDK](https://ai-sdk.dev) provider for the Neon AI Gateway. |
 
-A few renamed packages are still published as deprecated aliases (`get-db` / `neondb` → `neon-new`; `vite-plugin-db` / `@neondatabase/vite-plugin-postgres` → `vite-plugin-neon-new`); they re-export the new package and print a deprecation warning.
+A few renamed packages are still published as deprecated aliases (`get-db` / `neondb` → `neon-new`; `vite-plugin-db` / `@neondatabase/vite-plugin-postgres` → `vite-plugin-neon-new`); they re-export the new package and print a deprecation warning. `neonctl` is not deprecated: it is a supported compatibility package that installs and runs `neon`.
 
 ## Repository layout
 

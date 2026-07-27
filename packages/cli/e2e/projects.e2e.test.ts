@@ -22,7 +22,7 @@ type BareProject = {
  * they verify argument plumbing and output formatting but never that a command still
  * works against Neon.
  */
-describe.sequential("e2e — neonctl projects against the real API", () => {
+describe.sequential("e2e — neon CLI projects against the real API", () => {
 	e2eTest(
 		"creates, reads, lists and deletes a project",
 		async ({ track }) => {

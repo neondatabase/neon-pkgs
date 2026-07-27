@@ -1,7 +1,7 @@
 # @neon/e2e-harness
 
 Internal, **never published**. Shared plumbing for the live Neon e2e suites in
-`@neon/sdk`, `@neon/config`, `@neon/config-runtime`, `@neon/env`, and `neonctl` — the
+`@neon/sdk`, `@neon/config`, `@neon/config-runtime`, `@neon/env`, and `neon` (the CLI) — the
 ones `pnpm test:e2e:live` runs against a real Neon organization.
 
 It exists because that plumbing is dangerous to get wrong. Every suite creates real

@@ -140,10 +140,27 @@ describe("setup phase", () => {
 
 			const modePref = prefs.find((p) => p.id === "mode");
 			expect(modePref?.phase).toBe("after_checks");
+			const defaultsOption = modePref?.options.find(
+				(option) =>
+					typeof option !== "string" && option.value === "defaults",
+			);
+			expect(
+				typeof defaultsOption === "string"
+					? defaultsOption
+					: defaultsOption?.label,
+			).not.toContain("extension");
 
 			const mcpScopePref = prefs.find((p) => p.id === "mcpScope");
 			expect(mcpScopePref?.phase).toBe("after_checks");
 			expect(mcpScopePref?.condition).toEqual({
+				preferenceId: "mode",
+				equals: "customize",
+			});
+
+			const extensionPref = prefs.find(
+				(p) => p.id === "installExtension",
+			);
+			expect(extensionPref?.condition).toEqual({
 				preferenceId: "mode",
 				equals: "customize",
 			});
@@ -175,10 +192,6 @@ describe("setup phase", () => {
 	});
 
 	test("defaults mode executes installation and chains to getting-started", async () => {
-		// claude agent doesn't map to a VS Code editor, so extension install is skipped
-		// Use "vscode" agent to test full install with extension
-		mockFindEditorCommand.mockResolvedValue("/usr/bin/code");
-
 		const result = await handleSetupPhase({
 			agent: "vscode",
 			mcpConfigured: false,
@@ -199,7 +212,7 @@ describe("setup phase", () => {
 		expect(resultIds).toContain("neonctl");
 		expect(resultIds).toContain("install_mcp");
 		expect(resultIds).toContain("install_skills");
-		expect(resultIds).toContain("install_extension");
+		expect(resultIds).not.toContain("install_extension");
 		expect(results.every((r) => r.status === "success")).toBe(true);
 
 		// nextAction should chain to the getting-started CLI command
@@ -207,8 +220,8 @@ describe("setup phase", () => {
 		const args = (result.nextAction as { args: string[] }).args;
 		expect(args[0]).toBe("getting-started");
 
-		// Should have called execa for MCP and extension (neonctl mocked, skills via ensureSkillsUpToDate)
-		expect(mockExeca).toHaveBeenCalledTimes(2);
+		// Should have called execa for MCP only (neonctl mocked, skills via ensureSkillsUpToDate)
+		expect(mockExeca).toHaveBeenCalledTimes(1);
 		expect(mockEnsureSkills).toHaveBeenCalled();
 
 		// MCP call should use -g for global scope
@@ -216,11 +229,6 @@ describe("setup phase", () => {
 		expect(mcpCall[0]).toBe("npx");
 		expect(mcpCall[1]).toContain("-g");
 		expect(mcpCall[1]).toContain("add-mcp");
-
-		// Extension call should use resolved path
-		const extCall = mockExeca.mock.calls[1];
-		expect(extCall[0]).toBe("/usr/bin/code");
-		expect(extCall[1]).toContain("--install-extension");
 	});
 
 	test("defaults mode skips MCP when already configured", async () => {
@@ -289,7 +297,7 @@ describe("setup phase", () => {
 		}
 	});
 
-	test("cursor agent installs extension via direct --install-extension", async () => {
+	test("defaults mode does not install the Cursor extension", async () => {
 		mockFindEditorCommand.mockResolvedValue(
 			"/Applications/Cursor.app/Contents/Resources/app/bin/cursor",
 		);
@@ -311,12 +319,10 @@ describe("setup phase", () => {
 			manualAction?: boolean;
 		}[];
 		const extResult = results.find((r) => r.id === "install_extension");
-		expect(extResult?.status).toBe("success");
-		expect(extResult?.manualAction).toBeUndefined();
-		expect(extResult?.description).toContain("Installed Neon extension");
+		expect(extResult).toBeUndefined();
 	});
 
-	test("falls back to manual when both direct install and VSIX fail", async () => {
+	test("custom install falls back to manual when extension installation fails", async () => {
 		mockFindEditorCommand.mockResolvedValue("/usr/bin/cursor");
 		// Make direct install fail
 		mockExeca.mockImplementation((_cmd: string, args: string[]) => {
@@ -333,7 +339,8 @@ describe("setup phase", () => {
 			framework: "none",
 			orm: "none",
 			isVscodeIde: true,
-			mode: "defaults",
+			mode: "customize",
+			installExtension: true,
 		});
 
 		const results = result.results as {

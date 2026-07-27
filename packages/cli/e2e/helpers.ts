@@ -16,7 +16,7 @@ export {
 	waitForProjectReady,
 } from "@neon/e2e-harness";
 
-/** The published entry point (`bin.neonctl`), not `dist/index.js`. */
+/** The published entry point (`bin.neon`), not `dist/index.js`. */
 const CLI_ENTRY = resolve(import.meta.dirname, "..", "dist", "cli.js");
 
 /**
@@ -25,7 +25,7 @@ const CLI_ENTRY = resolve(import.meta.dirname, "..", "dist", "cli.js");
  * real `~/.config/neonctl/credentials.json` can never be picked up and silently make a
  * failing auth path look like it works.
  */
-const configDir = mkdtempSync(join(tmpdir(), "neonctl-e2e-config-"));
+const configDir = mkdtempSync(join(tmpdir(), "neon-e2e-config-"));
 
 /**
  * Likewise for `.neon`: the CLI walks parent directories looking for a context file and
@@ -33,7 +33,7 @@ const configDir = mkdtempSync(join(tmpdir(), "neonctl-e2e-config-"));
  * path inside an empty temp dir keeps every run hermetic.
  */
 const contextFile = join(
-	mkdtempSync(join(tmpdir(), "neonctl-e2e-context-")),
+	mkdtempSync(join(tmpdir(), "neon-e2e-context-")),
 	".neon",
 );
 
@@ -93,14 +93,14 @@ export async function runCliJson<T>(args: string[]): Promise<T> {
 	const result = await runCli(args);
 	if (result.code !== 0) {
 		throw new Error(
-			`neonctl ${args.join(" ")} exited ${result.code}\n${result.stderr || result.stdout}`,
+			`neon ${args.join(" ")} exited ${result.code}\n${result.stderr || result.stdout}`,
 		);
 	}
 	try {
 		return JSON.parse(result.stdout) as T;
 	} catch {
 		throw new Error(
-			`neonctl ${args.join(" ")} did not print JSON:\n${result.stdout}`,
+			`neon ${args.join(" ")} did not print JSON:\n${result.stdout}`,
 		);
 	}
 }

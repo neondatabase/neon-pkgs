@@ -1,4 +1,10 @@
-The Neon CLI is a command-line interface that lets you manage [Neon Serverless Postgres](https://neon.tech/) directly from the terminal. For the complete documentation, see [Neon CLI](https://neon.tech/docs/reference/neon-cli).
+# Neon CLI
+
+The `neon` package is a command-line interface that lets you manage [Neon Serverless Postgres](https://neon.tech/) directly from the terminal. For the complete documentation, see [Neon CLI](https://neon.tech/docs/reference/neon-cli).
+
+The legacy `neonctl` package is a lightweight compatibility package that depends
+on this package and invokes the same CLI entry point. The implementation and
+build artifacts live only here.
 
 ## Install the Neon CLI
 
@@ -18,7 +24,7 @@ brew install neonctl
 
 **Binary (macOS, Linux, Windows)**
 
-Download a binary file [here](https://github.com/neondatabase/neonctl/releases).
+Download a `neon-<platform>` binary from the [releases page](https://github.com/neondatabase/neon-pkgs/releases), which carries one asset per platform for each `neon@<version>` tag.
 
 ### Upgrade
 
@@ -706,4 +712,5 @@ bun run test:conformance:matrix  # run across PG 14/15/16/17/18 locally (require
 
 ## Releasing
 
-Maintainers: see [`RELEASING.md`](./RELEASING.md) for the two-stage publish flow.
+Maintainers: see the repository's [release skill](../../.claude/skills/release/SKILL.md)
+for the Changesets bump and external publish flow.

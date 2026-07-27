@@ -501,14 +501,14 @@ async function interactiveInitInner(
 				log.step(dim("Neon editor extension already installed ✓"));
 			}
 		}
-		let doInstallExtension =
+		const canInstallExtension =
 			vscodeEditors.length > 0 && !extensionAlreadyInstalled;
+		let doInstallExtension = false;
 
 		// Build hint showing only what needs installing
 		const hintParts: string[] = [];
 		if (needsMcp) hintParts.push("MCP server (global)");
 		if (needsSkills) hintParts.push("agent skills (project)");
-		if (doInstallExtension) hintParts.push("editor extension");
 
 		// Installation preferences
 		let mcpScope: "global" | "project" | "none" = "global";
@@ -528,7 +528,9 @@ async function interactiveInitInner(
 					{
 						value: "customize",
 						label: "Customize installation",
-						hint: "choose scopes and options",
+						hint: canInstallExtension
+							? "choose scopes and optional editor extension"
+							: "choose scopes and options",
 					},
 					{
 						value: "change_editor",
@@ -620,7 +622,7 @@ async function interactiveInitInner(
 				skillsScope = skillsScopeResult as "global" | "project";
 			}
 
-			if (doInstallExtension) {
+			if (canInstallExtension) {
 				const extResult = await confirm({
 					message: `Install the Neon extension for ${vscodeEditors.join(", ")}?`,
 				});

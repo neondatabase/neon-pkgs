@@ -102,13 +102,11 @@ export async function handleSetupPhase(
 		options.mode !== "custom"
 	) {
 		const merged = await mergeCliInspection(options);
-		const shouldInstallExt =
-			merged.installExtension ?? isVscodeBasedIde(merged);
 		return executeBatchedInstallation({
 			...merged,
 			mcpScope: merged.mcpScope ?? "global",
 			skillsScope: merged.skillsScope ?? "project",
-			installExtension: shouldInstallExt,
+			installExtension: false,
 		});
 	}
 
@@ -306,8 +304,8 @@ async function buildBulkInspection(
 								{
 									value: "defaults",
 									label: hasApp
-										? "Use defaults (Neon CLI, MCP: global, skills: project-level, extension if applicable — already-configured components will be skipped)"
-										: "Use defaults (Neon CLI, MCP: global, extension if applicable — skills included in template)",
+										? "Use defaults (Neon CLI, MCP: global, skills: project-level — already-configured components will be skipped)"
+										: "Use defaults (Neon CLI, MCP: global — skills included in template)",
 								},
 								{
 									value: "customize",
@@ -470,7 +468,6 @@ function _buildModeQuestion(options: SetupPhaseOptions): PhaseResponse {
 	const defaultsParts: string[] = ["Neon CLI"];
 	if (!options.mcpConfigured) defaultsParts.push("MCP global");
 	defaultsParts.push("skills in project");
-	if (options.isVscodeIde) defaultsParts.push("install extension");
 	const defaultsLabel =
 		defaultsParts.length > 0
 			? `Use defaults (${defaultsParts.join(", ")})`

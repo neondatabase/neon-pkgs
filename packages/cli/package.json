@@ -1,120 +1,125 @@
 {
-	"name": "neonctl",
-	"version": "2.37.1",
-	"description": "CLI tool for Neon Serverless Postgres",
-	"keywords": [
-		"neon",
-		"neonctl",
-		"cli",
-		"postgres",
-		"database",
-		"serverless"
-	],
-	"repository": {
-		"type": "git",
-		"url": "git+https://github.com/neondatabase/neon-pkgs.git"
-	},
-	"license": "Apache-2.0",
-	"author": {
-		"name": "Neon",
-		"url": "https://neon.com"
-	},
-	"type": "module",
-	"main": "dist/index.js",
-	"bin": {
-		"neonctl": "dist/cli.js",
-		"neon": "dist/cli.js"
-	},
-	"files": [
-		"README.md",
-		"dist/",
-		"package.json"
-	],
-	"engines": {
-		"node": ">=20.19.0"
-	},
-	"scripts": {
-		"generateParams": "tsx generateOptionsFromSpec.ts",
-		"clean": "rm -rf dist",
-		"build": "pnpm generateParams && pnpm clean && tsc -p tsconfig.build.json && cp src/*.html ./dist",
-		"bundle": "node pkg.js",
-		"typecheck": "tsc --noEmit",
-		"lint": "pnpm typecheck && biome check src",
-		"lint:fix": "pnpm typecheck && biome check src --write",
-		"test": "pnpm --filter neonctl... build && vitest run",
-		"test:ci": "pnpm build && vitest run",
-		"test:e2e": "pnpm build && vitest run --config vitest.e2e.config.ts",
-		"test:conformance": "vitest run --config tests/psql-conformance/vitest.config.ts"
-	},
-	"dependencies": {
-		"@hono/node-server": "2.0.4",
-		"@neon/sdk": "workspace:*",
-		"@neon/config": "workspace:*",
-		"@neon/config-runtime": "workspace:*",
-		"@neon/env": "workspace:*",
-		"@segment/analytics-node": "1.3.0",
-		"chalk": "5.3.0",
-		"chokidar": "5.0.0",
-		"cli-table": "0.3.11",
-		"cliui": "8.0.1",
-		"diff": "5.2.0",
-		"fflate": "^0.8.3",
-		"neon-init": "0.20.2",
-		"open": "^10.2.0",
-		"openid-client": "6.8.1",
-		"pg-protocol": "^1.14.0",
-		"prompts": "2.4.2",
-		"undici": "^7.28.0",
-		"which": "3.0.1",
-		"yaml": "^2.9.0",
-		"yargs": "17.7.2"
-	},
-	"optionalDependencies": {
-		"esbuild": "0.28.1"
-	},
-	"devDependencies": {
-		"@apidevtools/swagger-parser": "12.1.0",
-		"@neon/e2e-harness": "workspace:*",
-		"@rollup/plugin-commonjs": "25.0.8",
-		"@rollup/plugin-json": "6.1.0",
-		"@rollup/plugin-node-resolve": "15.2.3",
-		"@testcontainers/postgresql": "^11.14.0",
-		"@types/cli-table": "0.3.4",
-		"@types/diff": "5.2.1",
-		"@types/express": "4.17.21",
-		"@types/node": "catalog:",
-		"@types/prompts": "2.4.9",
-		"@types/which": "3.0.4",
-		"@types/yargs": "^17.0.35",
-		"@vitest/coverage-v8": "catalog:",
-		"@yao-pkg/pkg": "6.10.0",
-		"emocks": "3.0.4",
-		"express": "4.19.2",
-		"node-pty": "1.1.0",
-		"oauth2-mock-server": "8.1.0",
-		"openapi-types": "12.1.3",
-		"rollup": "3.29.4",
-		"strip-ansi": "7.1.0",
-		"tsx": "4.22.3",
-		"typescript": "catalog:",
-		"vitest": "catalog:"
-	},
-	"publishConfig": {
-		"access": "public",
-		"provenance": false
-	},
-	"pkg": {
-		"assets": [
-			"callback.html"
-		],
-		"scripts": [
-			"bundle/*.js"
-		],
-		"targets": [
-			"node22-linux-x64",
-			"node22-macos-x64",
-			"node22-win-x64",
-			"node22-linux-arm64"
-		]
-	}
+  "name": "neon",
+  "version": "2.38.0",
+  "description": "CLI tool for Neon Serverless Postgres",
+  "keywords": [
+    "neon",
+    "neonctl",
+    "cli",
+    "postgres",
+    "database",
+    "serverless"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/neondatabase/neon-pkgs.git"
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Neon",
+    "url": "https://neon.com"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./cli": "./dist/cli.js",
+    "./dist/*": "./dist/*",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "neon": "dist/cli.js"
+  },
+  "files": [
+    "README.md",
+    "dist/",
+    "package.json"
+  ],
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "generateParams": "tsx generateOptionsFromSpec.ts",
+    "clean": "rm -rf dist",
+    "build": "pnpm generateParams && pnpm clean && tsc -p tsconfig.build.json && cp src/*.html ./dist",
+    "bundle": "node pkg.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "pnpm typecheck && biome check src",
+    "lint:fix": "pnpm typecheck && biome check src --write",
+    "test": "pnpm --filter neonctl... build && vitest run",
+    "test:ci": "pnpm build && vitest run",
+    "test:e2e": "pnpm build && vitest run --config vitest.e2e.config.ts",
+    "test:conformance": "vitest run --config tests/psql-conformance/vitest.config.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "2.0.4",
+    "@neon/sdk": "workspace:*",
+    "@neon/config": "workspace:*",
+    "@neon/config-runtime": "workspace:*",
+    "@neon/env": "workspace:*",
+    "@segment/analytics-node": "1.3.0",
+    "chalk": "5.3.0",
+    "chokidar": "5.0.0",
+    "cli-table": "0.3.11",
+    "cliui": "8.0.1",
+    "diff": "5.2.0",
+    "fflate": "^0.8.3",
+    "neon-init": "0.20.2",
+    "open": "^10.2.0",
+    "openid-client": "6.8.1",
+    "pg-protocol": "^1.14.0",
+    "prompts": "2.4.2",
+    "undici": "^7.28.0",
+    "which": "3.0.1",
+    "yaml": "^2.9.0",
+    "yargs": "17.7.2"
+  },
+  "optionalDependencies": {
+    "esbuild": "0.28.1"
+  },
+  "devDependencies": {
+    "@apidevtools/swagger-parser": "12.1.0",
+    "@neon/e2e-harness": "workspace:*",
+    "@rollup/plugin-commonjs": "25.0.8",
+    "@rollup/plugin-json": "6.1.0",
+    "@rollup/plugin-node-resolve": "15.2.3",
+    "@testcontainers/postgresql": "^11.14.0",
+    "@types/cli-table": "0.3.4",
+    "@types/diff": "5.2.1",
+    "@types/express": "4.17.21",
+    "@types/node": "catalog:",
+    "@types/prompts": "2.4.9",
+    "@types/which": "3.0.4",
+    "@types/yargs": "^17.0.35",
+    "@vitest/coverage-v8": "catalog:",
+    "@yao-pkg/pkg": "6.10.0",
+    "emocks": "3.0.4",
+    "express": "4.19.2",
+    "node-pty": "1.1.0",
+    "oauth2-mock-server": "8.1.0",
+    "openapi-types": "12.1.3",
+    "rollup": "3.29.4",
+    "strip-ansi": "7.1.0",
+    "tsx": "4.22.3",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": false
+  },
+  "pkg": {
+    "assets": [
+      "callback.html"
+    ],
+    "scripts": [
+      "bundle/*.js"
+    ],
+    "targets": [
+      "node22-linux-x64",
+      "node22-macos-x64",
+      "node22-win-x64",
+      "node22-linux-arm64"
+    ]
+  }
 }

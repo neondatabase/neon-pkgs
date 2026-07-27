@@ -62,8 +62,8 @@ CLI package, which keeps its own toolchain).
 ## Live Neon e2e tests
 
 `pnpm test:e2e:live` runs the `@neon/sdk`, `@neon/config`, `@neon/config-runtime`, `@neon/env`,
-and `neonctl` e2e suites against the real Neon API, creating and deleting real projects. The
-`neonctl` suite spawns the built binary and parses its JSON output. All of them are excluded
+and `neon` (the CLI) e2e suites against the real Neon API, creating and deleting real projects. The
+CLI suite spawns the built binary and parses its JSON output. All of them are excluded
 from `pnpm test:ci`, so you only pay for them when you ask for them.
 
 ### Setup
