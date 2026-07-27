@@ -38,6 +38,44 @@ pnpm --filter neon-new test
 pnpm --filter vite-plugin-neon-new test
 ```
 
+#### Live Neon e2e tests
+
+`pnpm test:e2e:live` runs the `@neon/config`, `@neon/config-runtime`, and `@neon/env`
+e2e suites against the **real Neon Management API**. They create Postgres projects,
+mutate branches, read connection strings, and delete everything again. They are
+excluded from `pnpm test:ci` (each package's Vitest config excludes `**/*.e2e.test.ts`)
+and only run through their own `test:e2e` script.
+
+Run them against a **dedicated throwaway organization** — never a personal or
+production one. The suite sweeps stale `neon-ts-e2e-*` projects on start, so any
+project matching that prefix in reach of the key is fair game for deletion.
+
+```bash
+cp packages/config/.env.example packages/config/.env   # and the same for config-runtime + env
+# Fill in NEON_API_KEY with an org-scoped key for the throwaway org.
+# Set NEON_ORG_ID too when the key is user-scoped, so the sweep stays inside one org.
+pnpm test:e2e:live
+```
+
+| | |
+| --- | --- |
+| **Workflow** | `.github/workflows/e2e-live.yml` — every PR, every push to `main`, plus `workflow_dispatch` |
+| **Org** | `org-autumn-tree-56376911` ("neon-pkgs Integration Test Org"), Launch plan |
+| **Secrets** | Repository secret `NEON_TEST_API_KEY` → `NEON_API_KEY`; repository variable `NEON_TEST_ORG_ID` → `NEON_ORG_ID` |
+| **Skipped for** | Fork and Dependabot PRs — GitHub does not expose repository secrets to untrusted PR code |
+| **Runner** | Protected runner group. Unlike `neon.com` and `models.dev`, the Neon **API** is reachable from it |
+
+The org needs the **Launch plan or above**: `lifecycle.e2e.test.ts` protects a branch
+through `pushConfig`, and the free plan allows zero protected branches.
+
+Suites run one at a time (`--workspace-concurrency=1`) because they share one org.
+Across concurrent CI runs, safety comes from the sweep ignoring projects younger than
+an hour, so a sibling run's in-flight project is never deleted underneath it.
+
+`@neon/ai-sdk-provider` also has a `test:e2e`, but it targets a live AI Gateway with a
+different pair of credentials (`NEON_AI_GATEWAY_BASE_URL`, `NEON_AI_GATEWAY_TOKEN`) and
+is not part of `test:e2e:live`.
+
 ### Linting & Formatting
 
 ```bash

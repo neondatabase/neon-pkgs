@@ -39,6 +39,7 @@ pnpm install          # install all workspaces
 pnpm build            # build every package (tsc + tsdown)
 pnpm test:ci          # run the test suites (Vitest)
 pnpm lint:ci          # lint + format check (Biome)
+pnpm test:e2e:live    # e2e suites against a real Neon org — needs credentials, see below
 ```
 
 Scope a command to a single package with a filter:
@@ -57,6 +58,22 @@ checkout, so everything is current already. Run `test:ci` locally only right aft
 
 See [`AGENTS.md`](./AGENTS.md) for the deeper architecture and per-package notes (especially the
 CLI package, which keeps its own toolchain).
+
+## Live Neon e2e tests
+
+`pnpm test:e2e:live` runs the `@neon/config`, `@neon/config-runtime`, and `@neon/env` e2e suites
+against the real Neon API, creating and deleting real projects. They are excluded from
+`pnpm test:ci`, so you only pay for them when you ask for them.
+
+Copy each package's `.env.example` to `.env` and fill in `NEON_API_KEY` with an **org-scoped key
+for a throwaway organization**. The suite deletes stale `neon-ts-e2e-*` projects on start, so
+never point it at an org holding anything you care about. If your key is user-scoped rather than
+org-scoped, set `NEON_ORG_ID` as well to keep the sweep inside a single org. The org must be on
+the Launch plan or above — one test protects a branch, which the free plan disallows.
+
+In CI these run as the `e2e (live Neon)` workflow on every pull request from this repository.
+Fork and Dependabot PRs skip the job, because GitHub does not expose repository secrets to
+untrusted pull request code; a maintainer runs the suite before merging those.
 
 ## Changing the supported Node floor
 

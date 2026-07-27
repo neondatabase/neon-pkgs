@@ -1,0 +1,54 @@
+# Live Neon e2e suites for @neon/config, @neon/config-runtime and @neon/env.
+#
+# Unlike every other workflow here, these tests call the real Neon Management API:
+# they create Postgres projects, mutate branches, and delete everything again. They
+# run against the dedicated throwaway "neon-pkgs Integration Test Org", reached
+# through the NEON_TEST_API_KEY repository secret (an org-scoped key). Never point
+# that secret at an org holding anything worth keeping — the suite sweeps stale
+# `neon-ts-e2e-*` projects on start.
+#
+# Fork and Dependabot pull requests skip the job: GitHub does not expose repository
+# secrets to untrusted pull request code, so the suite could only fail there.
+name: e2e (live Neon)
+
+on:
+    pull_request: ~
+    push:
+        branches:
+            - main
+    workflow_dispatch: ~
+
+permissions:
+    contents: read
+    id-token: write # mint the JFrog OIDC token in ./.github/actions/prepare
+
+concurrency:
+    group: e2e-live-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    e2e:
+        name: Live Neon e2e
+        if: >-
+            github.event_name != 'pull_request' ||
+            (github.event.pull_request.head.repo.full_name == github.repository &&
+            github.actor != 'dependabot[bot]')
+        runs-on:
+            group: neondatabase-protected-runner-group
+            labels: linux-ubuntu-latest
+        timeout-minutes: 20
+        steps:
+            - name: Harden the runner (Audit all outbound calls)
+              uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
+              with:
+                  egress-policy: audit
+
+            - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+            - uses: ./.github/actions/prepare
+            # One suite at a time: they share a single org, and running them in
+            # parallel multiplies the project churn for no wall-clock gain.
+            - name: Run live e2e suites
+              env:
+                  NEON_API_KEY: ${{ secrets.NEON_TEST_API_KEY }}
+                  NEON_ORG_ID: ${{ vars.NEON_TEST_ORG_ID }}
+              run: pnpm test:e2e:live

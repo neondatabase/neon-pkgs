@@ -16,9 +16,31 @@ import { test } from "vitest";
 const PROJECT_PREFIX = "neon-ts-e2e-";
 
 /**
+ * Projects younger than this are assumed to belong to a run that is still in flight. CI
+ * runs several suites against one shared org, so {@link sweepOrphans} must never delete a
+ * sibling run's project out from under it. Comfortably longer than a full suite.
+ */
+const ORPHAN_MIN_AGE_MS = 60 * 60 * 1000;
+
+/**
  * Default Neon region used by every e2e test that creates a project.
  */
 export const DEFAULT_REGION = "aws-us-east-2";
+
+/**
+ * Pins every create and list to one organization. Redundant for an org-scoped API key,
+ * which can't see anything else anyway, but essential for a user-scoped key: without it
+ * {@link sweepOrphans} would range over every org the user belongs to.
+ */
+function configuredOrgId(): string | undefined {
+	const value = process.env.NEON_ORG_ID?.trim();
+	return value ? value : undefined;
+}
+
+function orgQuery(): { org_id?: string } {
+	const org = configuredOrgId();
+	return org ? { org_id: org } : {};
+}
 
 /** Generate a project name guaranteed not to collide with anything else in the org. */
 export function uniqueProjectName(suffix?: string): string {
@@ -50,9 +72,11 @@ export async function bootstrapProject(
 	api: NeonApi,
 	args: { name: string; region: string },
 ): Promise<string> {
+	const org = configuredOrgId();
 	const created = await api.createProject({
 		name: args.name,
 		regionId: args.region,
+		...(org ? { orgId: org } : {}),
 	});
 	return created.id;
 }
@@ -91,7 +115,12 @@ export async function detectApiKeyScope(): Promise<ApiKeyScope> {
 	if (cachedScope) return cachedScope;
 	const client = makeRawClient();
 	try {
-		unwrap(await rawListProjects({ client, query: { limit: 1 } }));
+		unwrap(
+			await rawListProjects({
+				client,
+				query: { limit: 1, ...orgQuery() },
+			}),
+		);
 		cachedScope = { kind: "org-or-user", canCreate: true };
 		return cachedScope;
 	} catch (err) {
@@ -163,26 +192,32 @@ async function deleteProject(projectId: string): Promise<void> {
 }
 
 /**
- * List every project whose name starts with {@link PROJECT_PREFIX} and delete them.
+ * List every project whose name starts with {@link PROJECT_PREFIX} and is older than
+ * {@link ORPHAN_MIN_AGE_MS}, then delete them. Leaves a concurrent run's projects alone.
  */
 export async function sweepOrphans(): Promise<{ swept: string[] }> {
 	const scope = await detectApiKeyScope();
 	if (scope.kind === "project") return { swept: [] };
 	const client = makeRawClient();
 	const swept: string[] = [];
+	const cutoff = Date.now() - ORPHAN_MIN_AGE_MS;
 	let cursor: string | undefined;
 	while (true) {
 		const body = unwrap(
 			await rawListProjects({
 				client,
-				query: { limit: 100, ...(cursor ? { cursor } : {}) },
+				query: {
+					limit: 100,
+					...orgQuery(),
+					...(cursor ? { cursor } : {}),
+				},
 			}),
 		);
 		for (const project of body.projects) {
-			if (project.name.startsWith(PROJECT_PREFIX)) {
-				await deleteProject(project.id);
-				swept.push(project.id);
-			}
+			if (!project.name.startsWith(PROJECT_PREFIX)) continue;
+			if (Date.parse(project.created_at) > cutoff) continue;
+			await deleteProject(project.id);
+			swept.push(project.id);
 		}
 		const next = (body as { pagination?: { next?: string } }).pagination
 			?.next;

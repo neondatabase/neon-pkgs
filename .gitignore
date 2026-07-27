@@ -3,4 +3,5 @@ dist
 coverage
 .env
 .env.*
+!.env.example
 CLAUDE.md
