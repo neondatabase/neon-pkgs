@@ -1,4 +1,4 @@
-import { requireApiKey } from "./env.js";
+import { configuredBaseUrl, requireApiKey } from "./env.js";
 
 /**
  * The harness talks to the Neon API with plain `fetch` rather than through `@neon/sdk`,
@@ -10,11 +10,6 @@ import { requireApiKey } from "./env.js";
  * It also keeps the workspace graph acyclic — `@neon/sdk` depends on this package for its
  * own e2e suite.
  */
-const DEFAULT_BASE_URL = "https://console.neon.tech/api/v2";
-
-function baseUrl(): string {
-	return process.env.NEON_API_BASE_URL?.trim() || DEFAULT_BASE_URL;
-}
 
 /** A non-2xx response. Thrown by {@link apiRequest} so callers can branch on `status`. */
 export class ApiError extends Error {
@@ -45,7 +40,7 @@ export async function apiRequest<T>(
 		query?: Record<string, unknown>;
 	} = {},
 ): Promise<T> {
-	const url = new URL(`${baseUrl()}${path}`);
+	const url = new URL(`${configuredBaseUrl()}${path}`);
 	for (const [key, value] of Object.entries(init.query ?? {})) {
 		if (value !== undefined) url.searchParams.set(key, String(value));
 	}

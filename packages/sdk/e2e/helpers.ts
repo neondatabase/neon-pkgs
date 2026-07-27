@@ -1,4 +1,8 @@
-import { configuredOrgId, requireApiKey } from "@neon/e2e-harness";
+import {
+	configuredBaseUrl,
+	configuredOrgId,
+	requireApiKey,
+} from "@neon/e2e-harness";
 import { createNeonClient, type NeonClient } from "../src/index.js";
 
 export {
@@ -16,6 +20,7 @@ export function makeClient(): NeonClient<false> {
 	return createNeonClient({
 		apiKey: requireApiKey(),
 		orgId: configuredOrgId(),
+		baseUrl: configuredBaseUrl(),
 	});
 }
 
@@ -24,6 +29,7 @@ export function makeThrowingClient(): NeonClient<true> {
 	return createNeonClient({
 		apiKey: requireApiKey(),
 		orgId: configuredOrgId(),
+		baseUrl: configuredBaseUrl(),
 		throwOnError: true,
 	});
 }

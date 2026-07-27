@@ -5,7 +5,13 @@ export {
 	sleep,
 	statusOf,
 } from "./api.js";
-export { configuredOrgId, loadEnv, requireApiKey } from "./env.js";
+export {
+	configuredBaseUrl,
+	configuredOrgId,
+	DEFAULT_API_BASE_URL,
+	loadEnv,
+	requireApiKey,
+} from "./env.js";
 export { e2eTest, installSuiteSetup } from "./fixture.js";
 export {
 	type ApiKeyScope,

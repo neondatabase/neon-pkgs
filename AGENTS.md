@@ -51,26 +51,99 @@ production one. The suite sweeps stale `neon-ts-e2e-*` projects on start, so any
 project matching that prefix in reach of the key is fair game for deletion.
 
 ```bash
-cp packages/config/.env.example .env   # repo root: one file for all four suites
+cp packages/sdk/.env.example .env   # repo root: one file for all five suites
 # Fill in NEON_API_KEY with an org-scoped key for the throwaway org.
 # Set NEON_ORG_ID too when the key is user-scoped, so the sweep stays inside one org.
 pnpm test:e2e:live
 ```
 
-Credentials are read from the package's own `.env` first and the repo root's second,
-so one root file configures every suite. Real environment variables always win, which
-is how CI injects the secret with no file present.
-
 | | |
 | --- | --- |
 | **Workflow** | `.github/workflows/e2e-live.yml` — every PR, every push to `main`, plus `workflow_dispatch` |
 | **Org** | `org-autumn-tree-56376911` ("neon-pkgs Integration Test Org"), Launch plan |
-| **Secrets** | Repository secret `NEON_TEST_API_KEY` → `NEON_API_KEY`; repository variable `NEON_TEST_ORG_ID` → `NEON_ORG_ID` |
 | **Skipped for** | Fork and Dependabot PRs — GitHub does not expose repository secrets to untrusted PR code |
 | **Runner** | Protected runner group. Unlike `neon.com` and `models.dev`, the Neon **API** is reachable from it |
 
 The org needs the **Launch plan or above**: `lifecycle.e2e.test.ts` protects a branch
 through `pushConfig`, and the free plan allows zero protected branches.
+
+##### Environment variables
+
+Every variable the live suites read, and where it comes from:
+
+| Variable | Required | Read by | Meaning |
+| --- | --- | --- | --- |
+| `NEON_API_KEY` | yes | all five suites, via `requireApiKey()` | Org-scoped key for the throwaway org |
+| `NEON_ORG_ID` | recommended | harness `configuredOrgId()`; `neonctl` suite maps it to `--org-id` | Pins create, list and sweep to one org. **Required in practice for a user-scoped key**, or the sweep ranges over every org the key can see |
+| `NEON_PROJECT_ID` | only for project-scoped keys | harness `detectApiKeyScope()` | Targets a fixed project; create-paths skip themselves |
+| `NEON_API_BASE_URL` | no | harness `api.ts` | Point the harness at a non-production API. Defaults to `https://console.neon.tech/api/v2` |
+| `NEON_AI_GATEWAY_BASE_URL`, `NEON_AI_GATEWAY_TOKEN` | for that suite only | `@neon/ai-sdk-provider` | Live AI Gateway. **Not** part of `test:e2e:live` |
+
+**Resolution order**, highest priority first — implemented in the harness's `loadEnv`:
+
+1. A real environment variable. Always wins; this is how CI injects secrets with no
+   file on disk.
+2. The package's own `.env` (`packages/sdk/.env`, …). Use this only to override one
+   suite.
+3. A `.env` at the repository root. The normal place to put credentials — all five
+   suites read it, so you configure them once.
+
+`.gitignore` covers `.env` and `.env.*` with a `!.env.example` negation, so the
+examples stay tracked and real credentials cannot be committed. Never add a `.env` to
+a commit, even a "redacted" one.
+
+**Getting an org-scoped key:** create the key in the Neon console under the throwaway
+org's settings, or via the API with a token for an account that administers it:
+
+```bash
+curl -X POST "https://console.neon.tech/api/v2/organizations/<org-id>/api_keys" \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"key_name":"neon-pkgs-ci-e2e"}'
+```
+
+Org-scoped is strongly preferred over user-scoped: the key can only see the throwaway
+org, so the orphan sweep physically cannot reach anything else.
+
+##### How CI supplies them, and adding a new one
+
+The workflow maps repository secrets and variables onto the same env var names the
+suites read locally, so there is one contract rather than two:
+
+```yaml
+env:
+    NEON_API_KEY: ${{ secrets.NEON_TEST_API_KEY }}
+    NEON_ORG_ID: ${{ vars.NEON_TEST_ORG_ID }}
+```
+
+**Secret or variable?** Secret if leaking it grants access to something — API keys,
+tokens, passwords. Variable if it's an identifier you would happily paste into a PR
+description, like an org id. Variables are readable in logs and in the Actions UI,
+which makes debugging a misconfigured run much easier, so don't reach for a secret out
+of habit.
+
+To wire up a **new** variable end to end:
+
+1. **Read it through the harness**, not `process.env` scattered across tests. Add an
+   accessor in `packages/e2e-harness/src/env.ts` next to `configuredOrgId()` so the
+   default and the "missing" error message live in one place.
+2. **Document it in every `.env.example`** — `packages/{sdk,config,config-runtime,env,cli}/.env.example`.
+   They are near-identical on purpose: a contributor copies whichever one they find.
+3. **Add it to the table above** and, if contributors need it, to `CONTRIBUTING.md`.
+4. **Store it on the repository** (needs admin on `neondatabase/neon-pkgs`):
+
+   ```bash
+   gh secret set NEON_TEST_SOMETHING   --repo neondatabase/neon-pkgs --body "<value>"
+   gh variable set NEON_TEST_SOMETHING --repo neondatabase/neon-pkgs --body "<value>"
+   ```
+
+5. **Map it in the workflow's `env:` block** in `.github/workflows/e2e-live.yml`,
+   using the local name as the key and `secrets.*` / `vars.*` as the value.
+6. **Verify on a PR from this repository.** Fork PRs get neither secrets nor variables,
+   so the job is skipped there and a green fork run proves nothing about the wiring.
+
+Prefer making a new variable **optional with a sane default**. A required variable
+breaks every existing checkout the moment it lands, and the failure surfaces as a
+confusing mid-suite error rather than a clear setup message.
 
 Suites run one at a time (`--workspace-concurrency=1`) because they share one org, and
 with `--no-bail` so one failure neither hides the other suites' results nor aborts a
@@ -98,6 +171,12 @@ every bug three times. Three invariants live there and nowhere else:
 3. **Unprotect before delete** — Neon rejects a delete with 422 while a branch is
    protected, and an un-cleared flag makes the project unreachable by *any* later
    cleanup.
+
+A fourth rule governs setup rather than teardown: `createProject` waits until the
+project is actually usable. "Created" and "usable" are different states — Neon rejects
+the next mutation with `project already has running conflicting operations` while
+provisioning is in flight — so returning early would just move that race into every
+caller.
 
 **It deliberately does not use `@neon/sdk`.** The SDK is one of the packages under
 test, so plumbing built on it would break teardown at exactly the moment a test

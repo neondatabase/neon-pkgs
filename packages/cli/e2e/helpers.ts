@@ -2,7 +2,11 @@ import { spawn } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { configuredOrgId, requireApiKey } from "@neon/e2e-harness";
+import {
+	configuredBaseUrl,
+	configuredOrgId,
+	requireApiKey,
+} from "@neon/e2e-harness";
 
 export {
 	createProject,
@@ -52,6 +56,10 @@ export function runCli(
 		...args,
 		"--api-key",
 		requireApiKey(),
+		// The CLI calls this `--api-host`; the harness contract calls it
+		// NEON_API_BASE_URL. Translate so one variable redirects the whole run.
+		"--api-host",
+		configuredBaseUrl(),
 		"--config-dir",
 		configDir,
 		"--context-file",

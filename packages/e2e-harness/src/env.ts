@@ -64,3 +64,16 @@ export function orgQuery(): { org_id?: string } {
 	const org = configuredOrgId();
 	return org ? { org_id: org } : {};
 }
+
+/** Neon's production Management API, used unless `NEON_API_BASE_URL` overrides it. */
+export const DEFAULT_API_BASE_URL = "https://console.neon.tech/api/v2";
+
+/**
+ * Lets a whole run target a non-production API. Every suite honours it — the harness for
+ * its own calls, `@neon/sdk` through `createNeonClient({ baseUrl })`, and `neonctl`
+ * through `--api-host` — so pointing at staging doesn't silently leave half the run
+ * talking to production.
+ */
+export function configuredBaseUrl(): string {
+	return process.env.NEON_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL;
+}
