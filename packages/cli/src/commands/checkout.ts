@@ -26,6 +26,8 @@ type CheckoutProps = CommonProps & {
 	orgId?: string;
 	id?: string;
 	envPull: boolean;
+	/** Global `--color` flag (default true); `--no-color` sets it false to force plain output. */
+	color?: boolean;
 };
 
 // The positional is optional: omitting it in an interactive terminal opens a
@@ -90,7 +92,7 @@ export const handler = async (props: CheckoutProps) => {
 	// nothing resolves, fall back to an interactive `neonctl link`.
 	const projectId = await resolveProjectId(props);
 
-	const { branchId, branchName, created, policyApplied } =
+	const { branchId, branchName, created, policyApplied, policyFailure } =
 		await resolveBranchId(props, projectId);
 
 	const orgId = await resolveOrgId(props, projectId);
@@ -119,14 +121,18 @@ export const handler = async (props: CheckoutProps) => {
 	// see `policyApplied`. The fallback below covers the case where the branch was created bare
 	// (e.g. a policy-driven create wasn't possible); `applyPolicyOnCreate` is a no-op when there
 	// is no neon.ts on disk. Checking out an existing branch never reconciles it.
-	if (created && !policyApplied) {
-		await applyPolicyOnCreate({
-			projectId,
-			branchId,
-			...(props.apiKey ? { apiKey: props.apiKey } : {}),
-			...(props.apiHost ? { apiHost: props.apiHost } : {}),
-		});
-	}
+	const failure =
+		created && !policyApplied
+			? await applyPolicyOrDescribeFailure({
+					projectId,
+					branchId,
+					...(props.apiKey ? { apiKey: props.apiKey } : {}),
+					...(props.apiHost ? { apiHost: props.apiHost } : {}),
+					...(props.color !== undefined
+						? { color: props.color }
+						: {}),
+				})
+			: policyFailure;
 
 	// Bundle `env pull` so the branch-first loop is just link + checkout: the branch you
 	// checked out is immediately usable for local dev. `--no-env-pull` opts out.
@@ -136,6 +142,36 @@ export const handler = async (props: CheckoutProps) => {
 		branch: branchId,
 		envPull: props.envPull,
 	});
+
+	// A policy that didn't fully apply is reported last, after the pin and the env pull, so the
+	// created branch is left in a consistent, usable, re-runnable state: the failure is what
+	// needs fixing, not the checkout. Still a non-zero exit — the branch does not match the
+	// policy, and `checkout` will not reconcile it on a second run.
+	if (failure) {
+		throw new Error(
+			[
+				`Branch ${branchName} (${branchId}) was created and checked out, but applying neon.ts to it failed: ${failure}`,
+				"The branch is usable but does not match the policy, and `neonctl checkout` never reconciles a branch that already exists.",
+				`Fix the cause above, then run \`neonctl deploy --update-existing\` to apply the policy to it — or, if your policy only configures new branches (keyed on \`!branch.exists\`), delete the branch and check it out again: \`neonctl branches delete ${branchName}\` then \`neonctl checkout ${branchName}\`.`,
+			].join("\n"),
+		);
+	}
+};
+
+/**
+ * Apply the policy to a branch `checkout` just created bare, returning the failure message
+ * instead of throwing it. The branch and the context pin already stand at this point, so a
+ * failed apply must not abort the rest of the checkout — the handler reports it at the end.
+ */
+const applyPolicyOrDescribeFailure = async (
+	props: Parameters<typeof applyPolicyOnCreate>[0],
+): Promise<string | undefined> => {
+	try {
+		await applyPolicyOnCreate(props);
+		return undefined;
+	} catch (err) {
+		return err instanceof Error ? err.message : String(err);
+	}
 };
 
 /**
@@ -157,11 +193,17 @@ type ResolvedBranch = {
 	/** True only when this checkout created a new branch (vs. selecting an existing one). */
 	created: boolean;
 	/**
-	 * True when the branch was created straight from the local `neon.ts` policy (so its
-	 * settings/infra are already applied and the handler must not re-apply). False for an
-	 * existing branch or a bare create with no policy on disk.
+	 * True when the branch was created through the local `neon.ts` policy, so the handler must
+	 * not apply the policy a second time — whether or not every declared setting landed (see
+	 * `policyFailure`). False for an existing branch or a bare create with no policy on disk.
 	 */
 	policyApplied: boolean;
+	/**
+	 * Why the policy did not fully apply to a branch this checkout created. The branch exists
+	 * (so it still gets pinned), but its settings diverge from `neon.ts` — the handler reports
+	 * this at the end with the remediation.
+	 */
+	policyFailure?: string;
 };
 
 const resolveBranchId = async (
@@ -257,6 +299,7 @@ const createCheckoutBranch = async (
 		branchName: name,
 		...(props.apiKey ? { apiKey: props.apiKey } : {}),
 		...(props.apiHost ? { apiHost: props.apiHost } : {}),
+		...(props.color !== undefined ? { color: props.color } : {}),
 	});
 	if (fromPolicy) {
 		return {
@@ -264,6 +307,9 @@ const createCheckoutBranch = async (
 			branchName: name,
 			created: true,
 			policyApplied: true,
+			...(fromPolicy.policyFailure
+				? { policyFailure: fromPolicy.policyFailure }
+				: {}),
 		};
 	}
 	return {

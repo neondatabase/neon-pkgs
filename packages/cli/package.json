@@ -1,6 +1,6 @@
 {
   "name": "neon",
-  "version": "2.36.1",
+  "version": "2.37.1",
   "description": "CLI tool for Neon Serverless Postgres",
   "keywords": [
     "neon",
@@ -46,7 +46,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "pnpm typecheck && biome check src",
     "lint:fix": "pnpm typecheck && biome check src --write",
-    "test": "pnpm build && vitest run",
+    "test": "pnpm --filter neonctl... build && vitest run",
     "test:ci": "pnpm build && vitest run",
     "test:conformance": "vitest run --config tests/psql-conformance/vitest.config.ts"
   },

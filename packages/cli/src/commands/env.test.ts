@@ -317,6 +317,45 @@ describe("env pull", () => {
 			expect(result.written).toContain("DATABASE_URL");
 		}
 	});
+
+	it("gitignores a dotenv file it creates (it holds live branch credentials)", async () => {
+		await pull(baseProps(new FakeNeonApi(), cwd));
+
+		expect(readFileSync(join(cwd, ".gitignore"), "utf8")).toBe(
+			".env.local\n",
+		);
+	});
+
+	it("gitignores an explicit --file target too", async () => {
+		await pull({
+			...baseProps(new FakeNeonApi(), cwd),
+			file: ".env.preview",
+		});
+
+		expect(readFileSync(join(cwd, ".gitignore"), "utf8")).toBe(
+			".env.preview\n",
+		);
+	});
+
+	it("does not add a redundant entry when a glob already covers the file", async () => {
+		writeFileSync(join(cwd, ".gitignore"), "node_modules\n.env*\n");
+
+		await pull(baseProps(new FakeNeonApi(), cwd));
+
+		expect(readFileSync(join(cwd, ".gitignore"), "utf8")).toBe(
+			"node_modules\n.env*\n",
+		);
+	});
+
+	it("leaves .gitignore alone when the dotenv file already existed", async () => {
+		// Only a file *we* create is scaffolded: re-adding the entry on every pull would fight a
+		// user who deliberately un-ignored a dotenv file they want to commit.
+		writeFileSync(join(cwd, ".env"), "APP_NAME=demo\n");
+
+		await pull(baseProps(new FakeNeonApi(), cwd));
+
+		expect(existsSync(join(cwd, ".gitignore"))).toBe(false);
+	});
 });
 
 /**

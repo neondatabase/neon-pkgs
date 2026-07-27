@@ -48,6 +48,13 @@ pnpm --filter @neon/env build
 pnpm --filter @neon/env test:ci
 ```
 
+Workspace packages import each other through their build output (`dist`), not their source, so
+a package's tests see a dependency's **last build** — not the source you just edited. `pnpm test`
+therefore builds the package and its workspace dependencies first (`pnpm --filter <pkg>... build`),
+which is what makes a single-package test run trustworthy after an edit anywhere in the graph.
+`test:ci` skips that: on CI, `pnpm install` runs each package's `prepare` (a build) on a fresh
+checkout, so everything is current already. Run `test:ci` locally only right after a build.
+
 See [`AGENTS.md`](./AGENTS.md) for the deeper architecture and per-package notes (especially the
 CLI package, which keeps its own toolchain).
 

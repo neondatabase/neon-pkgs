@@ -52,6 +52,7 @@ describe("@neon/config public value surface", () => {
 			  "DATA_API_AUTH_PROVIDERS",
 			  "ErrorCode",
 			  "MissingContextError",
+			  "PartialBranchCreateError",
 			  "PlatformError",
 			  "PushAbortedError",
 			  "PushConflictError",
@@ -62,6 +63,7 @@ describe("@neon/config public value surface", () => {
 			  "deriveCredentialScopes",
 			  "diffConfig",
 			  "errors",
+			  "isPartialBranchCreateError",
 			  "isPlatformError",
 			  "loadConfigFromFile",
 			  "resolveApiKey",
@@ -78,9 +80,11 @@ describe("@neon/config public value surface", () => {
 			  "ConfigValidationError",
 			  "ErrorCode",
 			  "MissingContextError",
+			  "PartialBranchCreateError",
 			  "PlatformError",
 			  "PushAbortedError",
 			  "PushConflictError",
+			  "isPartialBranchCreateError",
 			  "isPlatformError",
 			]
 		`);

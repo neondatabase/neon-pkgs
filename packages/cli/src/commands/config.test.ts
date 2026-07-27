@@ -9,6 +9,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import type {
+	ComputeSettings,
+	CreateBranchInput,
 	CreateBucketInput,
 	CreateCredentialInput,
 	DeployFunctionInput,
@@ -32,7 +34,13 @@ import stripAnsi from "strip-ansi";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { ConfigProps } from "./config.js";
-import { applyCmd, applyPolicyOnCreate, planCmd, status } from "./config.js";
+import {
+	applyCmd,
+	applyPolicyOnCreate,
+	createBranchFromPolicyOnCheckout,
+	planCmd,
+	status,
+} from "./config.js";
 
 const PROJECT_ID = "patient-art-12345";
 const BRANCH_ID = "br-snowy-frost-12345";
@@ -78,7 +86,8 @@ class FakeNeonApi implements NeonApi {
 		throw new Error("not implemented");
 	}
 
-	async listBranches(): Promise<NeonBranchSnapshot[]> {
+	async listBranches(projectId: string): Promise<NeonBranchSnapshot[]> {
+		void projectId;
 		return [
 			{
 				id: BRANCH_ID,
@@ -89,10 +98,15 @@ class FakeNeonApi implements NeonApi {
 		];
 	}
 
-	async createBranch(): Promise<{
+	async createBranch(
+		projectId: string,
+		input: CreateBranchInput,
+	): Promise<{
 		branch: NeonBranchSnapshot;
 		endpoints: NeonEndpointSnapshot[];
 	}> {
+		void projectId;
+		void input;
 		throw new Error("not implemented");
 	}
 
@@ -100,7 +114,8 @@ class FakeNeonApi implements NeonApi {
 		throw new Error("not implemented");
 	}
 
-	async listEndpoints(): Promise<NeonEndpointSnapshot[]> {
+	async listEndpoints(projectId: string): Promise<NeonEndpointSnapshot[]> {
+		void projectId;
 		return [
 			{
 				id: "ep-fake-1",
@@ -113,7 +128,14 @@ class FakeNeonApi implements NeonApi {
 		];
 	}
 
-	async updateEndpoint(): Promise<NeonEndpointSnapshot> {
+	async updateEndpoint(
+		projectId: string,
+		endpointId: string,
+		settings: ComputeSettings,
+	): Promise<NeonEndpointSnapshot> {
+		void projectId;
+		void endpointId;
+		void settings;
 		throw new Error("not implemented");
 	}
 
@@ -793,5 +815,233 @@ describe("applyPolicyOnCreate", () => {
 		});
 
 		expect(api.enableNeonAuthCalls).toHaveLength(0);
+	});
+});
+
+const NEW_BRANCH_ID = "br-fresh-dawn-98765";
+const NEW_BRANCH_NAME = "feature-policy";
+
+/** Tunes compute only on a *new* branch — the "configure new branches" policy shape. */
+const NEW_BRANCH_POLICY =
+	"export default { branch: (branch) => (branch.exists ? {} : " +
+	"{ postgres: { computeSettings: { autoscalingLimitMaxCu: 2 } } }) };\n";
+
+/** Enables a service, which can only be provisioned once the branch exists. */
+const AUTH_POLICY = "export default { auth: {} };\n";
+
+/** What Neon rejects a plan-gated compute setting with (seen live on a Free-plan project). */
+const SUSPEND_REJECTED =
+	'HTTP 412. Neon API said: "modifying the suspend interval is not permitted on this account".';
+const AUTH_REJECTED = "Neon Auth is not available on this account";
+
+const newBranchEndpoint = (
+	settings?: ComputeSettings,
+): NeonEndpointSnapshot => ({
+	id: "ep-fresh-1",
+	branchId: NEW_BRANCH_ID,
+	type: "read_write",
+	autoscalingLimitMinCu: settings?.autoscalingLimitMinCu ?? 0.25,
+	autoscalingLimitMaxCu: settings?.autoscalingLimitMaxCu ?? 0.25,
+	suspendTimeout: settings?.suspendTimeout ?? "5m",
+});
+
+/**
+ * Branch creation succeeds and, like Neon, the branch comes up with whatever the create call
+ * carried. Records the create input and any compute update so a test can tell "the policy was
+ * applied at creation" apart from "applied afterwards" apart from "nothing happened".
+ */
+class CreateBranchNeonApi extends FakeNeonApi {
+	readonly createBranchCalls: CreateBranchInput[] = [];
+	readonly updateEndpointCalls: {
+		endpointId: string;
+		settings: ComputeSettings;
+	}[] = [];
+	/** The branch `createBranch` made, so subsequent listings see it like Neon would. */
+	private created: NeonBranchSnapshot | undefined;
+	/** Compute the branch actually came up on — the create call's, unless it was ignored. */
+	private compute: ComputeSettings | undefined;
+
+	/** Whether the create call's settings take effect, as they do on Neon. */
+	protected get appliesCreateSettings(): boolean {
+		return true;
+	}
+
+	override async listBranches(
+		projectId: string,
+	): Promise<NeonBranchSnapshot[]> {
+		const branches = await super.listBranches(projectId);
+		return this.created ? [...branches, this.created] : branches;
+	}
+
+	override async createBranch(
+		projectId: string,
+		input: CreateBranchInput,
+	): Promise<{
+		branch: NeonBranchSnapshot;
+		endpoints: NeonEndpointSnapshot[];
+	}> {
+		void projectId;
+		this.createBranchCalls.push(input);
+		const applied = this.appliesCreateSettings;
+		this.created = {
+			id: NEW_BRANCH_ID,
+			name: input.name,
+			isDefault: false,
+			protected: applied && input.protected === true,
+			parentId: input.parentId,
+			...(applied && input.expiresAt
+				? { expiresAt: input.expiresAt }
+				: {}),
+		};
+		if (applied) this.compute = input.computeSettings;
+		return {
+			branch: this.created,
+			endpoints: [newBranchEndpoint(this.compute)],
+		};
+	}
+
+	override async listEndpoints(
+		projectId: string,
+	): Promise<NeonEndpointSnapshot[]> {
+		return [
+			...(await super.listEndpoints(projectId)),
+			newBranchEndpoint(this.compute),
+		];
+	}
+
+	override async updateEndpoint(
+		projectId: string,
+		endpointId: string,
+		settings: ComputeSettings,
+	): Promise<NeonEndpointSnapshot> {
+		void projectId;
+		this.updateEndpointCalls.push({ endpointId, settings });
+		this.compute = settings;
+		return newBranchEndpoint(settings);
+	}
+}
+
+/** Accepts the create-time settings but ignores them, leaving drift for the push to fix. */
+class IgnoresCreateSettingsNeonApi extends CreateBranchNeonApi {
+	protected override get appliesCreateSettings(): boolean {
+		return false;
+	}
+}
+
+/** Creation succeeds, then Neon refuses to provision the service the policy declares. */
+class CreateBranchThenRejectNeonApi extends CreateBranchNeonApi {
+	override async enableNeonAuth(): Promise<NeonAuthSnapshot> {
+		throw new Error(AUTH_REJECTED);
+	}
+}
+
+/** Neon rejects a setting the create call carried, so no branch is created at all. */
+class RejectCreateNeonApi extends CreateBranchNeonApi {
+	override async createBranch(): Promise<{
+		branch: NeonBranchSnapshot;
+		endpoints: NeonEndpointSnapshot[];
+	}> {
+		throw new Error(SUSPEND_REJECTED);
+	}
+}
+
+describe("createBranchFromPolicyOnCheckout", () => {
+	let cwd: string;
+
+	beforeEach(() => {
+		cwd = mkdtempSync(join(tmpdir(), "neonctl-create-policy-"));
+	});
+
+	afterEach(() => {
+		rmSync(cwd, { recursive: true, force: true });
+	});
+
+	it("creates the branch with the policy's settings on the create call", async () => {
+		const api = new CreateBranchNeonApi();
+		writeFileSync(join(cwd, "neon.ts"), NEW_BRANCH_POLICY);
+
+		const created = await createBranchFromPolicyOnCheckout({
+			projectId: PROJECT_ID,
+			branchName: NEW_BRANCH_NAME,
+			runtimeApi: api,
+			cwd,
+		});
+
+		expect(created).toEqual({ branchId: NEW_BRANCH_ID });
+		expect(api.createBranchCalls).toEqual([
+			{
+				name: NEW_BRANCH_NAME,
+				// The policy names no parent, so the branch comes off the project default.
+				parentId: BRANCH_ID,
+				computeSettings: { autoscalingLimitMaxCu: 2 },
+			},
+		]);
+		// Applied by the creation itself, so nothing follows it.
+		expect(api.updateEndpointCalls).toEqual([]);
+	});
+
+	it("falls back to updating the branch when the create call's settings don't take", async () => {
+		const api = new IgnoresCreateSettingsNeonApi();
+		writeFileSync(join(cwd, "neon.ts"), NEW_BRANCH_POLICY);
+
+		const created = await createBranchFromPolicyOnCheckout({
+			projectId: PROJECT_ID,
+			branchName: NEW_BRANCH_NAME,
+			runtimeApi: api,
+			cwd,
+		});
+
+		expect(created).toEqual({ branchId: NEW_BRANCH_ID });
+		expect(api.updateEndpointCalls).toEqual([
+			{
+				endpointId: "ep-fresh-1",
+				settings: { autoscalingLimitMaxCu: 2 },
+			},
+		]);
+	});
+
+	it("fails outright, creating nothing, when Neon rejects a setting", async () => {
+		// Settings ride along on the create call, so a rejected one fails before a branch
+		// exists — no id to hand back, nothing half-configured to explain.
+		const api = new RejectCreateNeonApi();
+		writeFileSync(join(cwd, "neon.ts"), NEW_BRANCH_POLICY);
+
+		await expect(
+			createBranchFromPolicyOnCheckout({
+				projectId: PROJECT_ID,
+				branchName: NEW_BRANCH_NAME,
+				runtimeApi: api,
+				cwd,
+			}),
+		).rejects.toThrow(SUSPEND_REJECTED);
+	});
+
+	it("returns the created branch id and the reason when a service fails", async () => {
+		// Services are provisioned against an existing branch, so this failure still lands
+		// after creation. The id must come back to the caller (checkout pins it) rather than
+		// being lost with the thrown error.
+		const api = new CreateBranchThenRejectNeonApi();
+		writeFileSync(join(cwd, "neon.ts"), AUTH_POLICY);
+
+		const created = await createBranchFromPolicyOnCheckout({
+			projectId: PROJECT_ID,
+			branchName: NEW_BRANCH_NAME,
+			runtimeApi: api,
+			cwd,
+		});
+
+		expect(created?.branchId).toBe(NEW_BRANCH_ID);
+		expect(created?.policyFailure).toContain(AUTH_REJECTED);
+	});
+
+	it("returns null when there is no neon.ts on the path", async () => {
+		const created = await createBranchFromPolicyOnCheckout({
+			projectId: PROJECT_ID,
+			branchName: NEW_BRANCH_NAME,
+			runtimeApi: new CreateBranchNeonApi(),
+			cwd, // empty temp dir, no neon.ts
+		});
+
+		expect(created).toBeNull();
 	});
 });

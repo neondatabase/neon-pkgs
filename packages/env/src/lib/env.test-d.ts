@@ -11,6 +11,7 @@ import type {
 	NeonFunctionEnv,
 	NeonPostgresEnv,
 	NeonStorageEnv,
+	NoFunctionScopeHint,
 } from "./env.js";
 import { type NeonEnv, parseEnv, type SelectableEnvKey } from "./env.js";
 
@@ -116,6 +117,125 @@ describe("parseEnv existing overloads still type", () => {
 		const env = parseEnv(config, "hello");
 		expectTypeOf(env.function).toEqualTypeOf<{ resendApiKey: string }>();
 		expectTypeOf(env.function.resendApiKey).toEqualTypeOf<string>();
+	});
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Function-slug scope. The slug is the one `parseEnv` argument whose accepted values come
+// from the *policy* rather than a fixed list, so these pin both halves of that contract:
+// only declared slugs type-check, and the chosen slug alone decides the `function` namespace.
+// The matching editor-autocomplete behaviour is covered by `env.completions.test.ts`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("parseEnv function slug scope (types)", () => {
+	const twoFunctions = defineConfig({
+		preview: {
+			functions: {
+				hello: {
+					name: "Hello",
+					source: "./hello.ts",
+					env: { resendApiKey: "" },
+				},
+				world: {
+					name: "World",
+					source: "./world.ts",
+					env: { otherKey: "" },
+				},
+			},
+		},
+	});
+
+	test("FunctionSlugOf is exactly the declared slugs", () => {
+		expectTypeOf<FunctionSlugOf<typeof twoFunctions>>().toEqualTypeOf<
+			"hello" | "world"
+		>();
+	});
+
+	test("the function namespace carries only the selected function's env keys", () => {
+		// A widened slug (the whole union instead of the one passed) would leak `otherKey`
+		// in here, which is why the two fixtures declare *different* env keys.
+		expectTypeOf(parseEnv(twoFunctions, "hello").function).toEqualTypeOf<{
+			resendApiKey: string;
+		}>();
+		expectTypeOf(parseEnv(twoFunctions, "world").function).toEqualTypeOf<{
+			otherKey: string;
+		}>();
+	});
+
+	test("accepts a slug held in a narrowed variable", () => {
+		// Callers don't always inline the literal; a `const` binding keeps its literal type
+		// and must resolve to that one function's env keys.
+		const slug = "world";
+		expectTypeOf(parseEnv(twoFunctions, slug).function).toEqualTypeOf<{
+			otherKey: string;
+		}>();
+	});
+
+	test("rejects a slug the policy does not declare", () => {
+		// @ts-expect-error "nope" is not a declared function slug
+		parseEnv(twoFunctions, "nope");
+	});
+
+	test("rejects a value only known to be a string", () => {
+		// Guards the constraint itself: if `FunctionSlugOf` ever widened to `string`, every
+		// assertion above would still pass while any slug became acceptable.
+		const widened: string = "hello";
+		// @ts-expect-error a plain string could name a function the policy never declared
+		parseEnv(twoFunctions, widened);
+	});
+
+	test("a key array still selects the filtered overload, not the slug one", () => {
+		// The slug overload is deliberately declared *first* (see the overload-order test
+		// below), so this pins that it doesn't shadow the array overload for a policy that
+		// declares functions — the case where both overloads are live at once.
+		expectTypeOf(parseEnv(twoFunctions, ["DATABASE_URL"])).toEqualTypeOf<{
+			postgres: { databaseUrl: string };
+		}>();
+	});
+
+	test("a policy with no functions has no slug to pass", () => {
+		const noFunctions = defineConfig({ auth: true });
+		expectTypeOf<
+			FunctionSlugOf<typeof noFunctions>
+		>().toEqualTypeOf<never>();
+		// The expected type collapses to the readable hint instead of a bare `never`.
+		// @ts-expect-error no functions are declared, so no scope is accepted
+		parseEnv(noFunctions, "hello");
+	});
+
+	test("an untyped policy exposes no slugs", () => {
+		// A bare `Config` carries no literal function info, so it must not optimistically
+		// accept arbitrary slugs.
+		expectTypeOf<FunctionSlugOf<Config>>().toEqualTypeOf<never>();
+	});
+
+	test("the no-functions hint stays a literal, not a bare string", () => {
+		// Load-bearing: the hint *is* the expected type of `scope` for a policy without
+		// functions, so widening it to `string` would silently accept any slug there.
+		expectTypeOf<NoFunctionScopeHint>().not.toEqualTypeOf<string>();
+		expectTypeOf<NoFunctionScopeHint>().toExtend<string>();
+	});
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Overload order.
+//
+// `parseEnv`'s overloads must keep the function-slug signature ahead of the key-array one:
+// the editor takes string-literal completions from the *first* candidate overload, so with
+// the array overload first, typing `parseEnv(config, "…")` offers no slugs at all. That is
+// invisible to every assertion above — the types stay sound either way — which is exactly why
+// it regressed once. `env.completions.test.ts` catches it through the real language service;
+// this locks the same invariant in the type system, so `tsc` fails on a reorder too.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("parseEnv overload order (types)", () => {
+	test("the key-array overload is declared last", () => {
+		// `Parameters<>` of an overloaded function resolves to its **last** signature, which
+		// makes the declaration order observable: if the slug overload were moved after the
+		// array one, this would resolve to the slug/hint parameter instead.
+		expectTypeOf<Parameters<typeof parseEnv>[1]>().toEqualTypeOf<
+			readonly SelectableEnvKey<Config>[]
+		>();
 	});
 });
 

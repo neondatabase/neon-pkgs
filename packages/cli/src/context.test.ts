@@ -258,11 +258,51 @@ describe("ensureGitignored", () => {
 		expect(readFileSync(gi, "utf-8")).toBe("  .neon  \n");
 	});
 
-	test("does NOT match partial entries like *.neon or foo/.neon", () => {
+	test("skips the entry when a glob already covers it, as git would", () => {
 		const gi = join(workspace, ".gitignore");
-		writeFileSync(gi, "*.neon\nfoo/.neon\n");
+		// `git check-ignore` reports `.neon` as ignored by `*.neon` (the `*` matches the
+		// empty string), so appending `.neon` would only add a redundant line.
+		writeFileSync(gi, "*.neon\n");
 		ensureGitignored(join(workspace, ".neon"));
-		expect(readFileSync(gi, "utf-8")).toBe("*.neon\nfoo/.neon\n.neon\n");
+		expect(readFileSync(gi, "utf-8")).toBe("*.neon\n");
+	});
+
+	test("does NOT treat a path-scoped entry like foo/.neon as covering", () => {
+		const gi = join(workspace, ".gitignore");
+		writeFileSync(gi, "foo/.neon\n");
+		ensureGitignored(join(workspace, ".neon"));
+		expect(readFileSync(gi, "utf-8")).toBe("foo/.neon\n.neon\n");
+	});
+
+	test("covers a created .env with an existing .env* / *.local glob", () => {
+		const gi = join(workspace, ".gitignore");
+		writeFileSync(gi, "node_modules\n.env*\n");
+		ensureGitignored(join(workspace, ".env.local"));
+		expect(readFileSync(gi, "utf-8")).toBe("node_modules\n.env*\n");
+
+		writeFileSync(gi, "*.local\n");
+		ensureGitignored(join(workspace, ".env.local"));
+		expect(readFileSync(gi, "utf-8")).toBe("*.local\n");
+	});
+
+	test("adds a created .env when nothing in .gitignore covers it", () => {
+		const gi = join(workspace, ".gitignore");
+		writeFileSync(gi, "node_modules\n.env.production\n");
+		ensureGitignored(join(workspace, ".env.local"));
+		expect(readFileSync(gi, "utf-8")).toBe(
+			"node_modules\n.env.production\n.env.local\n",
+		);
+	});
+
+	test("ignores comments and negations when deciding coverage", () => {
+		const gi = join(workspace, ".gitignore");
+		// `!` re-includes rather than ignores, and a comment is not a pattern at all —
+		// neither may suppress the entry we need.
+		writeFileSync(gi, "# .env.local\n!.env.local\n");
+		ensureGitignored(join(workspace, ".env.local"));
+		expect(readFileSync(gi, "utf-8")).toBe(
+			"# .env.local\n!.env.local\n.env.local\n",
+		);
 	});
 });
 

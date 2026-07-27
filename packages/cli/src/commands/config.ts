@@ -8,6 +8,7 @@ import {
 	createBranch as createBranchFromPolicy,
 	type FunctionBundler,
 	inspect,
+	isPartialBranchCreateError,
 	loadConfigFromFile,
 	type NeonApi,
 	PushConflictError,
@@ -717,6 +718,8 @@ export const applyPolicyOnCreate = async (props: {
 	runtimeApi?: NeonApi;
 	/** Directory to search for `neon.ts` from. Defaults to the process cwd. */
 	cwd?: string;
+	/** Global `--color` flag; `false` forces the plain-text diff. */
+	color?: boolean;
 }): Promise<void> => {
 	let config: Config;
 	try {
@@ -748,21 +751,31 @@ export const applyPolicyOnCreate = async (props: {
 		allowProtectedBranch: true,
 		bundleFunction: neonctlBundler,
 	});
-	logPolicyResult(result);
+	logPolicyResult(result, { color: props.color !== false });
 };
 
-/** Log a one-line summary of what applying a `neon.ts` policy changed (or that nothing did). */
-const logPolicyResult = (result: PushResult): void => {
+/**
+ * Report what applying a `neon.ts` policy changed, using the same `field → value` diff
+ * `deploy` prints (see {@link renderAppliedChanges}) rather than a bare list of change
+ * identifiers — the identifier alone repeats the branch name once per change and never says
+ * *what* was applied, which is the only interesting part on a freshly created branch.
+ */
+const logPolicyResult = (
+	result: PushResult,
+	opts: { color: boolean },
+): void => {
 	const changes = result.applied.filter((c) => c.action !== "noop");
 	if (changes.length === 0) {
 		log.info("neon.ts applied — no changes were needed.");
 		return;
 	}
 	log.info(
-		"neon.ts applied — %d change%s: %s",
-		changes.length,
-		changes.length === 1 ? "" : "s",
-		changes.map((c) => `${c.action} ${c.identifier}`).join(", "),
+		"%s",
+		renderAppliedChanges(
+			changes,
+			`neon.ts applied — ${changes.length} change${changes.length === 1 ? "" : "s"}:`,
+			opts,
+		),
 	);
 };
 
@@ -777,6 +790,10 @@ const logPolicyResult = (result: PushResult): void => {
  * a policy keyed on `!branch.exists` (the common "only configure new branches" shape) take
  * effect on the very first `checkout` — a bare create + `apply` always saw `exists: true` and
  * skipped that block.
+ *
+ * A branch that was created but whose policy failed to apply is reported through
+ * `policyFailure` rather than thrown: the branch is real, so `checkout` still needs to pin it
+ * (see the handler) instead of leaving it stranded behind an unchanged `.neon`.
  */
 export const createBranchFromPolicyOnCheckout = async (props: {
 	projectId: string;
@@ -786,7 +803,9 @@ export const createBranchFromPolicyOnCheckout = async (props: {
 	runtimeApi?: NeonApi;
 	/** Directory to search for `neon.ts` from. Defaults to the process cwd. */
 	cwd?: string;
-}): Promise<{ branchId: string } | null> => {
+	/** Global `--color` flag; `false` forces the plain-text diff. */
+	color?: boolean;
+}): Promise<{ branchId: string; policyFailure?: string } | null> => {
 	let config: Config;
 	try {
 		({ config } = await loadConfigFromFile({
@@ -806,22 +825,37 @@ export const createBranchFromPolicyOnCheckout = async (props: {
 		config,
 	});
 
-	const { branchId, branchName, result } = await createBranchFromPolicy(
-		config,
-		{
-			projectId: props.projectId,
-			branchName: props.branchName,
-			...(props.apiKey ? { apiKey: props.apiKey } : {}),
-			...(props.apiHost ? { apiHost: props.apiHost } : {}),
-			...(props.runtimeApi ? { api: props.runtimeApi } : {}),
-			bundleFunction: neonctlBundler,
-		},
-	);
-	log.info(
-		"Created branch %s (%s) from neon.ts policy.",
-		branchName,
-		branchId,
-	);
-	logPolicyResult(result);
-	return { branchId };
+	try {
+		const { branchId, branchName, result } = await createBranchFromPolicy(
+			config,
+			{
+				projectId: props.projectId,
+				branchName: props.branchName,
+				...(props.apiKey ? { apiKey: props.apiKey } : {}),
+				...(props.apiHost ? { apiHost: props.apiHost } : {}),
+				...(props.runtimeApi ? { api: props.runtimeApi } : {}),
+				bundleFunction: neonctlBundler,
+			},
+		);
+		log.info(
+			"Created branch %s (%s) from neon.ts policy.",
+			branchName,
+			branchId,
+		);
+		logPolicyResult(result, { color: props.color !== false });
+		return { branchId };
+	} catch (err) {
+		// The branch exists but its policy didn't fully apply. Hand the id back so checkout
+		// pins it and reports the failure with the remediation, rather than aborting with an
+		// unpinned context and a branch the next `checkout` would silently accept as-is.
+		if (isPartialBranchCreateError(err)) {
+			log.info(
+				"Created branch %s (%s) from neon.ts policy.",
+				err.branchName,
+				err.branchId,
+			);
+			return { branchId: err.branchId, policyFailure: err.reason };
+		}
+		throw err;
+	}
 };

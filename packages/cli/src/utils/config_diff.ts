@@ -142,14 +142,20 @@ const serviceLabel = (identifier: string): string => {
 /**
  * The desired-only field changes for an applied/planned **branch** update. The
  * synthesized `AppliedChange.details` carry the new value keyed by `field`
- * (`ttl`→`expiresAt`, `protected`→`protected`, `computeSettings`→`settings`);
- * the previous value isn't threaded through in Phase 1, so these render as
- * `field → desired` (no red "before"). Object settings expand into sub-fields.
+ * (`parent`→`parent`, `ttl`→`expiresAt`, `protected`→`protected`,
+ * `computeSettings`→`settings`); the previous value isn't threaded through in
+ * Phase 1, so these render as `field → desired` (no red "before"). Object
+ * settings expand into sub-fields.
+ *
+ * `parent` only ever arrives from a branch creation (it cannot be changed
+ * afterwards), where it reports the parent the policy named.
  */
 const appliedBranchFields = (change: AppliedChange): FieldChange[] => {
 	const details = change.details ?? {};
 	const field = typeof details.field === "string" ? details.field : "setting";
 	switch (field) {
+		case "parent":
+			return expandField("parent", undefined, details.parent);
 		case "ttl":
 			return expandField("ttl", undefined, details.expiresAt);
 		case "protected":

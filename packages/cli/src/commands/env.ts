@@ -3,6 +3,7 @@ import type { NeonApi } from "@neon/config";
 import { NEON_ENV_VAR_KEYS } from "@neon/env";
 import chalk from "chalk";
 import type yargs from "yargs";
+import { ensureGitignored } from "../context.js";
 import { resolveNeonEnvVars } from "../dev/env.js";
 import { mergeEnvFile, readEnvFile, resolveEnvFilePath } from "../env_file.js";
 import { log } from "../log.js";
@@ -124,7 +125,8 @@ export const pull = async (
 	// keys and the unified branch credential's `api_token` / `s3_secret_access_key`, which the
 	// API returns exactly once — instead of minting a fresh credential on every pull.
 	const targetPath = resolveEnvFilePath(cwd, props.file);
-	const existingEnv = existsSync(targetPath) ? readEnvFile(targetPath) : {};
+	const fileExisted = existsSync(targetPath);
+	const existingEnv = fileExisted ? readEnvFile(targetPath) : {};
 
 	// Reuse `neon dev`'s tiered resolver (neon.ts policy -> plan gate -> fetchEnv, else
 	// pullConfig -> fetchEnv). Unlike dev, an unresolved context or failure is surfaced —
@@ -168,6 +170,14 @@ export const pull = async (
 			removed.length === 1 ? "" : "s",
 			removed.join(", "),
 		);
+	}
+
+	// A dotenv file *we* create holds live branch credentials (DATABASE_URL, Auth keys, service
+	// tokens), so ignore it the same way the `.neon` context file is — otherwise a fresh repo is
+	// one `git add -A` away from committing them. Only on creation: re-adding the entry on every
+	// pull would fight a user who deliberately un-ignored a file they want to commit.
+	if (!fileExisted) {
+		ensureGitignored(targetPath);
 	}
 
 	// When the branch has the AI Gateway enabled, the pulled credentials always work, but
