@@ -280,14 +280,14 @@ and `@neon/functions`.
 
 ### The CLI package (`packages/cli`)
 
-`packages/cli` is the **Neon CLI**, migrated from [`neondatabase/neonctl`](https://github.com/neondatabase/neonctl). It is published as **`neonctl`** today and is being rebranded to **`neon`** (with thin `neonctl`/`neoncli` packages that depend on it and forward to it). It is linted/formatted with Biome like the rest of the repo, but its **build** toolchain differs:
+`packages/cli` is the **Neon CLI**, migrated from [`neondatabase/neonctl`](https://github.com/neondatabase/neonctl), and is published as **`neon`**. `packages/neonctl` is a lightweight compatibility package whose executable imports `neon/cli`; it contains no CLI implementation or build output. The two packages are a Changesets fixed group and release at the same version. The primary package is linted/formatted with Biome like the rest of the repo, but its **build** toolchain differs:
 
 -   **Build**: `pnpm --filter <name> build` runs swagger param generation (`generateOptionsFromSpec.ts` → `src/parameters.gen.ts`, a committed generated file), then `tsc -p tsconfig.build.json` to `dist/`, then copies `callback.html` into `dist/`. It compiles file-by-file with `tsc` (not bundled with tsdown) and **publishes from the package root** (`bin: dist/cli.js`, `files: ["dist", …]`). The param generator reads the OpenAPI spec from the `@neon/sdk` workspace package's vendored copy (`../sdk/spec/neon-openapi.json`, kept in sync via its `spec:pull` script), so it works offline within the monorepo.
 -   **Lint**: Biome, via a `packages/cli/**` override in the root `biome.json` (relaxes some rules for the migrated upstream code, and enforces `noConsole` since the CLI routes all output through its writer/logger). Root `pnpm lint:ci` (`biome ci`) covers it. `pnpm --filter <name> lint` additionally runs `tsc --noEmit` then `biome check src`.
 -   **Coverage**: needs `@vitest/coverage-v8` because the root CI runs `pnpm test:ci --coverage` (the flag is appended to every package's `test:ci`). Pin it to the package's `vitest` major.
--   **Standalone binaries**: `pnpm --filter <name> bundle` (`node pkg.js`) Rollup-bundles `dist/cli.js` and cross-compiles `linux-x64`, `linux-arm64`, `macos-x64`, and `win-x64` via `@yao-pkg/pkg`; targets/assets are declared in the package's `pkg` block. `pkg.js` rewrites `bin` to the bundled entry, so it is name-agnostic (works as `neon` or `neonctl`).
+-   **Standalone binaries**: `pnpm --filter neon bundle` (`node pkg.js`) Rollup-bundles `dist/cli.js` and cross-compiles `linux-x64`, `linux-arm64`, `macos-x64`, and `win-x64` via `@yao-pkg/pkg`; targets/assets are declared in the package's `pkg` block. The binaries are named after the package, so they ship as `neon-<target>`.
 -   **Conformance tests** (`tests/psql-conformance`) need Docker/testcontainers and are excluded from the default Vitest run; run them explicitly with `pnpm --filter <name> test:conformance`.
--   **Sibling deps**: `@neondatabase/*` + `neon-init` are currently pinned to published versions (not `workspace:*`); switching to `workspace:*` is a planned follow-up.
+-   **Sibling deps**: the `@neon/*` packages are `workspace:*`; only `neon-init` is still pinned to a published version (see the lockfile catch-22 below). Switching it to `workspace:*` is a planned follow-up.
 
 ### The SDK package (`packages/sdk`)
 
@@ -438,8 +438,10 @@ registry pin creates a chicken-and-egg whenever a release bumps `neon-init`:
    --lockfile-only` resolves it. Open a tiny `chore: sync lockfile for neon-init@<version>` PR
    (this is exactly what such historical PRs are). Its CI now passes because the lockfile matches.
 3. **Publish the rest from `main`**, leaf-first, CLI last:
-   `@neon/config` → `@neon/config-runtime` / `@neon/env` → `neonctl` (which also ships `neon`,
-   the standalone binaries, and the GitHub release). Verify each with `npm view <pkg> version`.
+   `@neon/config` → `@neon/config-runtime` / `@neon/env` → `neon` → `neonctl`.
+   Publishing `neon` also ships the standalone binaries and the GitHub release; publish the
+   compatibility package only after `npm view neon version` confirms the matching primary
+   package. Verify each with `npm view <pkg> version`.
 
 If a release does **not** touch `neon-init`, none of this applies — the lockfile stays consistent
 (`workspace:*` deps don't change it) and you can publish leaf-first / CLI-last straight from `main`.
@@ -448,19 +450,40 @@ If a release does **not** touch `neon-init`, none of this applies — the lockfi
 internal package (see the pinned-sibling note under the CLI package above); until that lands,
 follow the ordering above.
 
-### Publishing the CLI (`packages/cli` + forwarders)
+### Publishing the CLI (`neon` + the `neonctl` compatibility package)
 
 The CLI publishes from this monorepo via the same external workflow as every other package
 (`databricks/secure-public-registry-releases-eng` → `neon-pkgs.yml`, dispatched per package with
-`-f package=<name>`). Two CLI-specific notes:
+`-f package=<name>`). It takes **two dispatches**, `neon` then `neonctl`, and a few things are
+specific to it:
 
-- **Standalone binaries + GitHub release**: for the CLI package (the one with a `pkg` block), the
-  workflow also cross-compiles the `@yao-pkg/pkg` binaries and attaches them to a **GitHub release on
-  `neondatabase/neon-pkgs`** (tag `<name>@<version>`). The old standalone `neonctl` repo release
-  pipeline is retired.
-- **Forwarders**: `neonctl` and `neoncli` are thin packages that depend on `neon` (`workspace:*`);
-  publish them with the same workflow (`-f package=neonctl`, `-f package=neoncli`). They have no
-  binaries.
+- **Standalone binaries + GitHub release**: the `neon` dispatch (and only that one — the workflow
+  gates on `inputs.package == 'neon'`) cross-compiles the `@yao-pkg/pkg` binaries and attaches them
+  to a **GitHub release on `neondatabase/neon-pkgs`**, tagged `neon@<version>` and titled
+  `Neon CLI <version>`. The tag keeps the `<package>@<version>` shape every other package uses; the
+  title is what people read. The old standalone `neonctl` repo release pipeline is retired.
+- **Binaries ship under two names.** The workflow uploads each binary as both `neon-<target>` and
+  the legacy `neonctl-<target>`. This is deliberate: `neon.com/docs/cli/install` documents
+  `releases/latest/download/neonctl-<target>`, a rolling URL that users have copied into their own
+  CI, so dropping it would break them silently. Don't remove the duplicate upload without checking
+  those download counts first.
+- **Compatibility command**: `neonctl` is a thin package that depends on `neon` (`workspace:*`)
+  and owns only the legacy `neonctl` executable. `pnpm pack` rewrites that to an **exact** version
+  pin, so `npm i neonctl` cannot resolve until the matching `neon` is on npm. Publish `neon` first,
+  verify it, then dispatch `-f package=neonctl`. It has no binaries. This ordering applies to every
+  CLI release, not just the one that introduced the split.
+- **Homebrew**: `brew install neonctl` is a homebrew-core formula built from the npm `neonctl`
+  tarball (autobumped by Homebrew's bot), not something this repo publishes. It relies on that
+  package providing **both** the `neonctl` and `neon` commands — don't narrow the shim's `bin` map;
+  see `docs/neonctl-compatibility-shim.md`. The formula's `test` block also asserts that
+  `neonctl --api-key DOES-NOT-EXIST projects create` prints **"Authentication failed"** and exits 1,
+  so that phrase is load-bearing: rewording it breaks the formula.
+
+**Downstream of a CLI rename or retag**, two things in `neondatabase/website` are coupled to the
+names and neither fails loudly: `content/docs/cli/install.md` hardcodes the binary download URLs,
+and `scripts/docs-checks/neonctl/refresh.js` selects the release to regenerate the CLI reference
+from by tag prefix — if that prefix stops matching, it silently freezes the docs at the last
+matching release instead of erroring.
 
 ### Best Practices
 
