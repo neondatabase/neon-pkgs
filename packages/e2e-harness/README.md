@@ -1,8 +1,8 @@
 # @neon/e2e-harness
 
 Internal, **never published**. Shared plumbing for the live Neon e2e suites in
-`@neon/config`, `@neon/config-runtime`, `@neon/env`, and `@neon/sdk` — the ones
-`pnpm test:e2e:live` runs against a real Neon organization.
+`@neon/sdk`, `@neon/config`, `@neon/config-runtime`, `@neon/env`, and `neonctl` — the
+ones `pnpm test:e2e:live` runs against a real Neon organization.
 
 It exists because that plumbing is dangerous to get wrong. Every suite creates real
 projects and deletes them again, and cleanup is the part with teeth: a sweep that is
@@ -19,6 +19,7 @@ are written down once.
 | `detectApiKeyScope()` | Whether the key can create projects, or is pinned to one |
 | `uniqueProjectName()`, `PROJECT_PREFIX`, `DEFAULT_REGION` | Naming that makes cleanup safe |
 | `createProject()`, `deleteProject()` | Project lifecycle, org-scoped |
+| `waitForProjectReady()` | Poll until no operation is still in flight |
 | `sweepOrphans()` | Reclaim leftovers from previous failed runs |
 | `e2eTest` | Vitest fixture with a `track(id)` cleanup hook |
 | `installSuiteSetup()` | `beforeAll` that probes the key and sweeps |
@@ -44,6 +45,12 @@ Three invariants, all enforced here rather than in each suite:
 3. **Unprotect before delete.** Neon rejects a delete with 422 while a branch is
    protected. Without clearing the flag the project is unreachable by *any* later
    cleanup, so it would sit in the org indefinitely.
+
+A fourth rule governs setup rather than teardown: `createProject` **waits for the
+project to be usable** before returning. "Created" and "usable" are different states —
+Neon rejects the next mutation with "project already has running conflicting
+operations" while provisioning is in flight — and a helper that hands back an id you
+can't use yet just moves that race into every caller.
 
 ## Consuming it
 

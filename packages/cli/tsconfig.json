@@ -21,12 +21,14 @@
       // specifiers to their shipped types here for the type-checker; Node honors
       // the export map at runtime (the emitted JS keeps the bare specifiers).
       "@neon/sdk": ["node_modules/@neon/sdk/dist/index"],
-      "@neon/sdk/raw": ["node_modules/@neon/sdk/dist/raw"]
+      "@neon/sdk/raw": ["node_modules/@neon/sdk/dist/raw"],
+      // Same story for the test-only harness, which is source-only.
+      "@neon/e2e-harness": ["node_modules/@neon/e2e-harness/src/index"]
     },
     "resolveJsonModule": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
     "skipLibCheck": true
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "e2e/**/*.ts"]
 }

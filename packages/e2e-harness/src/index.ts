@@ -16,4 +16,5 @@ export {
 	PROJECT_PREFIX,
 	sweepOrphans,
 	uniqueProjectName,
+	waitForProjectReady,
 } from "./projects.js";

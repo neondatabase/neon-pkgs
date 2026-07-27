@@ -40,11 +40,11 @@ pnpm --filter vite-plugin-neon-new test
 
 #### Live Neon e2e tests
 
-`pnpm test:e2e:live` runs the `@neon/sdk`, `@neon/config`, `@neon/config-runtime`, and
-`@neon/env` e2e suites against the **real Neon Management API**. They create Postgres
-projects, mutate branches, read connection strings, and delete everything again. They
-are excluded from `pnpm test:ci` (each package's Vitest config excludes the e2e files)
-and only run through their own `test:e2e` script.
+`pnpm test:e2e:live` runs the `@neon/sdk`, `@neon/config`, `@neon/config-runtime`,
+`@neon/env`, and `neonctl` e2e suites against the **real Neon Management API**. They
+create Postgres projects, mutate branches, read connection strings, and delete
+everything again. They are excluded from `pnpm test:ci` (each package's Vitest config
+excludes the e2e files) and only run through their own `test:e2e` script.
 
 Run them against a **dedicated throwaway organization** — never a personal or
 production one. The suite sweeps stale `neon-ts-e2e-*` projects on start, so any
@@ -113,12 +113,42 @@ testing.
 
 The SDK's unit tests answer every request with a canned `fetch` response, which proves
 the mapping logic but cannot prove the API still returns the shape that logic was
-written against. `packages/sdk/e2e/` targets exactly that gap: readiness polling
-against real operation state, cursor pagination against cursors the API actually
-issues (`branches.list` reads `pagination.next` while `projects.list` reads
-`pagination.cursor` — a stub can only confirm whichever the author picked),
-connection-string resolution from a real project's branches/roles/databases, and
-`toNeonError` classification of real 404 and 401 envelopes.
+written against. `packages/sdk/e2e/` targets exactly that gap across three files:
+
+- **`workflows`** — `createAndConnect` with readiness polling, the client's `orgId`
+  default, cursor pagination against cursors the API actually issues (`branches.list`
+  reads `pagination.next` while `projects.list` reads `pagination.cursor`, so a stub
+  can only confirm whichever the author picked), and `postgres.connectionString`
+  auto-resolving branch, role, and database.
+- **`resources`** — the CRUD spine on one shared project: branch create/get/update/
+  delete, `createWithCompute`, roles (including that `password` returns a bare string
+  while `resetPassword` returns a `Role`), databases, endpoints, and
+  `operations.waitFor` recognising terminal states.
+- **`errors`** — `toNeonError` against real 404 and 401 envelopes, `throwOnError`
+  narrowing, the raw layer's `Response`, and the org-key scope boundary.
+
+Note what an **org-scoped** key cannot reach: `user.me()`, `apiKeys.list()`, and
+`regions.list()` all answer `404 "not allowed for organization API keys"`. That's why
+those namespaces aren't covered — not because they don't matter.
+
+##### What the `neonctl` suite covers
+
+`packages/cli/e2e/` spawns the built binary (`dist/cli.js`, the real `bin` entry) and
+parses `--output json`. The CLI's unit tests answer every request from a local
+`emocks` fixture server, so they verify argument plumbing and output formatting but
+never that a command still works against Neon.
+
+Each invocation is hermetic: `--api-key` from the environment, plus `--config-dir` and
+`--context-file` pointed at temp directories so a developer's real credentials or a
+stray `.neon` in the checkout can't leak into a run. `--no-analytics` keeps Segment
+out of it.
+
+`test:e2e` builds first, because unlike the other packages `neonctl` has no `prepare`
+script and `pnpm install` therefore leaves `dist/` stale.
+
+One thing to know: **the CLI does not read `NEON_ORG_ID`.** It takes the org from
+`--org-id` or a `.neon` context file, so the suite's `orgArgs()` helper translates the
+harness's env var into the flag.
 
 ### Linting & Formatting
 

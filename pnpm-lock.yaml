@@ -172,6 +172,9 @@ importers:
       '@apidevtools/swagger-parser':
         specifier: 12.1.0
         version: 12.1.0(openapi-types@12.1.3)
+      '@neon/e2e-harness':
+        specifier: workspace:*
+        version: link:../e2e-harness
       '@rollup/plugin-commonjs':
         specifier: 25.0.8
         version: 25.0.8(rollup@3.29.4)

@@ -7,6 +7,9 @@ export default defineConfig({
 			"**/node_modules/**",
 			"**/dist/**",
 			"tests/psql-conformance/**",
+			// Live Neon suite — needs credentials and a throwaway org.
+			// Run it with `pnpm --filter neonctl test:e2e`.
+			"e2e/**",
 		],
 	},
 });

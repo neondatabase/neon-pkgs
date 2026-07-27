@@ -1,4 +1,5 @@
-# Live Neon e2e suites for @neon/sdk, @neon/config, @neon/config-runtime and @neon/env.
+# Live Neon e2e suites for @neon/sdk, @neon/config, @neon/config-runtime, @neon/env
+# and the neonctl CLI.
 #
 # Unlike every other workflow here, these tests call the real Neon Management API:
 # they create Postgres projects, mutate branches, and delete everything again. They

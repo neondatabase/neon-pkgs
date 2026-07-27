@@ -37,6 +37,19 @@ interface BranchSummary {
 	protected: boolean;
 }
 
+interface OperationSummary {
+	status: string;
+}
+
+/** Neon operation states that will never change again. */
+const TERMINAL_OPERATION_STATUSES = new Set([
+	"finished",
+	"failed",
+	"error",
+	"cancelled",
+	"skipped",
+]);
+
 /**
  * Discriminates the key currently configured. Project-scoped keys can't list projects;
  * org/user-scoped keys can.
@@ -85,9 +98,15 @@ function listProjectsPage(query: { limit: number; cursor?: string }): Promise<{
 }
 
 /**
- * Create a project in the configured org. Packages that exercise their own creation path
- * (`@neon/config`'s `NeonApi` adapter, say) should use that instead — this exists for
- * suites whose subject under test isn't project creation.
+ * Create a project in the configured org and wait until it is actually usable. Packages
+ * that exercise their own creation path (`@neon/config`'s `NeonApi` adapter, say) should
+ * use that instead — this exists for suites whose subject under test isn't project
+ * creation.
+ *
+ * The wait is not optional on purpose. "Created" and "usable" are different states: Neon
+ * rejects the next mutation with "project already has running conflicting operations"
+ * while provisioning is still in flight, and a helper that hands back an id you can't use
+ * yet just moves that race into every caller.
  */
 export async function createProject(args: {
 	name: string;
@@ -103,7 +122,30 @@ export async function createProject(args: {
 			},
 		},
 	});
+	await waitForProjectReady(body.project.id);
 	return body.project.id;
+}
+
+/**
+ * Poll until the project has no operation left in a non-terminal state. Returns rather
+ * than throwing on timeout: the caller's own assertion is a better failure message than
+ * one from a setup helper.
+ */
+export async function waitForProjectReady(
+	projectId: string,
+	timeoutMs = 120_000,
+): Promise<void> {
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		const body = await apiRequest<{ operations: OperationSummary[] }>(
+			`/projects/${projectId}/operations`,
+		);
+		const pending = body.operations.filter(
+			(operation) => !TERMINAL_OPERATION_STATUSES.has(operation.status),
+		);
+		if (pending.length === 0) return;
+		await sleep(500);
+	}
 }
 
 /**

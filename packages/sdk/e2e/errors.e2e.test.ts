@@ -50,6 +50,31 @@ describe.sequential("e2e — @neon/sdk error mapping against the real API", () =
 		).rejects.toBeInstanceOf(NeonNotFoundError);
 	});
 
+	it("lists the organizations an org-scoped key belongs to", async () => {
+		const neon = makeClient();
+
+		const { data, error } = await neon.user.organizations();
+
+		expect(error).toBeUndefined();
+		const orgId = process.env.NEON_ORG_ID?.trim();
+		if (orgId) {
+			expect(data?.map((org) => org.id)).toContain(orgId);
+		}
+	});
+
+	it("reports a user-only endpoint reached with an org key as not found", async () => {
+		const neon = makeClient();
+
+		const { error } = await neon.user.me();
+
+		// Neon answers user-scoped endpoints with 404 "not allowed for organization API
+		// keys" rather than 403 when the caller holds an org key. Pinned here because the
+		// SDK classifies purely on status: if Neon ever corrects this to 403, the error
+		// consumers see silently changes from NeonNotFoundError to NeonAuthError.
+		expect(error).toBeInstanceOf(NeonNotFoundError);
+		expect(error?.message).toContain("organization API keys");
+	});
+
 	it("surfaces the underlying Response through the raw layer", async () => {
 		const neon = makeClient();
 

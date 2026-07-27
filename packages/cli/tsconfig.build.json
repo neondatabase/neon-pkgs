@@ -5,5 +5,5 @@
   // tsconfig.json) still covers test files. `exclude` is not inherited via
   // `extends`, so it is declared here.
   "extends": "./tsconfig.json",
-  "exclude": ["src/**/*.test.ts", "src/**/*.spec.ts"]
+  "exclude": ["src/**/*.test.ts", "src/**/*.spec.ts", "e2e/**"]
 }
