@@ -12,8 +12,6 @@
  */
 
 export type {
-	CredentialMode,
-	CredentialResolution,
 	FetchEnvOptions,
 	FilteredNeonEnv,
 	FunctionSlugOf,
@@ -25,6 +23,7 @@ export type {
 	NeonFunctionEnv,
 	NeonPostgresEnv,
 	NeonStorageEnv,
+	ResolvedNeonEnv,
 	SelectableEnvKey,
 } from "./lib/env.js";
 export {
@@ -33,6 +32,11 @@ export {
 	parseEnv,
 	toEntries,
 } from "./lib/env.js";
+export type {
+	CredentialOutcome,
+	ReusedBranchEnv,
+} from "./lib/reuse-secrets.js";
+export { fetchEnvReusingSecrets } from "./lib/reuse-secrets.js";
 
 // The branch policy type (`Config`) and `defineConfig` live in `@neon/config`.
 // Import them from there directly:

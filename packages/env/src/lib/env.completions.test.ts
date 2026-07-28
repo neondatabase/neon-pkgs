@@ -145,6 +145,7 @@ describe("parseEnv autocomplete", () => {
 			"DATABASE_URL_UNPOOLED",
 			"NEON_AUTH_BASE_URL",
 			"NEON_AUTH_JWKS_URL",
+			"NEON_BRANCH",
 		]);
 	});
 

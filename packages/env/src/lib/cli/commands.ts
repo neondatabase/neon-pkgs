@@ -9,7 +9,7 @@ import {
 	type NeonApi,
 	PlatformError,
 } from "@neon/config/v1";
-import { fetchEnv, toEntries } from "../env.js";
+import { fetchEnvReusingSecrets } from "../reuse-secrets.js";
 import { resolveContext } from "./resolve-context.js";
 
 /** File `env run` reads to layer one-time auth keys. Matches the Vercel/Next.js convention. */
@@ -96,8 +96,7 @@ export async function runEnvRun(
 
 	let injected: Record<string, string>;
 	try {
-		const env = await loadConfigAndFetchEnv(options, ctx, resolved.context);
-		injected = toEntries(env);
+		injected = await loadConfigAndFetchEnv(options, ctx, resolved.context);
 	} catch (err) {
 		return handleError(err);
 	}
@@ -142,8 +141,7 @@ export async function runEnvExport(
 
 	let entries: Record<string, string>;
 	try {
-		const env = await loadConfigAndFetchEnv(options, ctx, resolved.context);
-		entries = toEntries(env);
+		entries = await loadConfigAndFetchEnv(options, ctx, resolved.context);
 	} catch (err) {
 		return handleError(err);
 	}
@@ -174,16 +172,18 @@ function formatDotenvLine(key: string, value: string): string {
 }
 
 /**
- * Load `neon.ts`, then call `fetchEnv` with the explicitly-resolved project + branch.
- * Layers any one-time Auth keys from `.env.local` (next to the config file) into the env
- * source so re-runs keep round-tripping values the Neon API only returns once at
- * integration-creation time.
+ * Load `neon.ts`, then resolve the branch env for the explicitly-resolved project + branch.
+ * Layers `.env.local` (next to the config file) into the env source so re-runs keep the
+ * one-time secrets the Neon API only returns once — the branch credential's, and any Auth
+ * values a pre-`base_url` integration can no longer report. Uses
+ * {@link fetchEnvReusingSecrets} rather than a bare `fetchEnv` so a run that already has a
+ * working credential verifies and keeps it instead of minting another one per invocation.
  */
 async function loadConfigAndFetchEnv(
 	options: EnvResolveOptions,
 	ctx: CommandEnv,
 	resolved: { projectId: string; branch: string },
-): Promise<Awaited<ReturnType<typeof fetchEnv>>> {
+): Promise<Record<string, string>> {
 	const { config, resolvedPath } = await loadConfigFromFile({
 		...(options.configPath ? { path: options.configPath } : {}),
 		cwd: ctx.cwd,
@@ -192,13 +192,14 @@ async function loadConfigAndFetchEnv(
 	const fileEnv = existsSync(envFileSource)
 		? parseEnvFile(readFileSync(envFileSource, "utf-8"))
 		: {};
-	return fetchEnv(config, {
+	const { vars } = await fetchEnvReusingSecrets(config, {
 		projectId: resolved.projectId,
 		branch: resolved.branch,
 		env: { ...process.env, ...fileEnv },
 		...(ctx.api ? { api: ctx.api } : {}),
 		...(options.apiKey ? { apiKey: options.apiKey } : {}),
 	});
+	return vars;
 }
 
 /**

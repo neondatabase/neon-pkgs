@@ -7,7 +7,12 @@ vi.mock("../dev/env.js", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("../dev/env.js")>();
 	return {
 		...actual,
-		resolveNeonEnvVars: vi.fn(() => Promise.resolve({})),
+		resolveNeonEnvVars: vi.fn(() =>
+			Promise.resolve({
+				vars: {},
+				credential: { issued: false, keys: [], revoked: [] },
+			}),
+		),
 	};
 });
 

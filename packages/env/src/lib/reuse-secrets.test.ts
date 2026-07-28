@@ -1,0 +1,275 @@
+import { defineConfig } from "@neon/config/v1";
+import { beforeEach, describe, expect, test } from "vitest";
+import { FakeNeonApi } from "./fake-neon-api.js";
+import { fetchEnvReusingSecrets } from "./reuse-secrets.js";
+import { stubCleanNeonEnv } from "./test-utils.js";
+
+beforeEach(() => stubCleanNeonEnv());
+
+function seededFake() {
+	const api = new FakeNeonApi();
+	const projectId = "proj-env";
+	api.seedProject({
+		project: {
+			id: projectId,
+			name: "env-test",
+			regionId: "aws-us-east-1",
+			pgVersion: 17,
+		},
+		branches: [
+			{ branch: { id: "br-main", name: "main", isDefault: true } },
+		],
+	});
+	return { api, projectId };
+}
+
+const callsTo = (api: FakeNeonApi, method: string) =>
+	api.history.filter((h) => h.method === method).length;
+
+const storagePolicy = defineConfig({ preview: { buckets: { uploads: {} } } });
+const gatewayPolicy = defineConfig({ preview: { aiGateway: true } });
+const bothPolicy = defineConfig({
+	preview: { buckets: { uploads: {} }, aiGateway: true },
+});
+
+describe("fetchEnvReusingSecrets", () => {
+	test("replaces a .env.example placeholder with a real credential", async () => {
+		// The bug this exists for. `packages/ai-sdk-provider/.env.example` used to ship a
+		// token-shaped placeholder; copying it to `.env` and pulling left it untouched, because
+		// a presence check can't tell a placeholder from a secret. Anything that names no live
+		// credential on this branch must be replaced, not carried through.
+		const { api, projectId } = seededFake();
+
+		const { vars, credential } = await fetchEnvReusingSecrets(
+			gatewayPolicy,
+			{
+				api,
+				projectId,
+				branch: "main",
+				env: { NEON_AI_GATEWAY_TOKEN: "nt_live_..." },
+			},
+		);
+
+		expect(vars.NEON_AI_GATEWAY_TOKEN).not.toBe("nt_live_...");
+		expect(vars.NEON_AI_GATEWAY_TOKEN).toMatch(/^nt_live_\w+_/);
+		expect(callsTo(api, "createCredential")).toBe(1);
+		// The placeholder named no credential, so there was nothing of ours to revoke.
+		expect(credential).toEqual({
+			issued: true,
+			keys: ["NEON_AI_GATEWAY_TOKEN"],
+			revoked: [],
+		});
+	});
+
+	test("keeps a credential that is still live and sufficiently scoped", async () => {
+		// The everyday path: resolve, then resolve again. Verification must not turn into a
+		// rotation on every call — that is the credential spam a bare `fetchEnv` would cause.
+		const { api, projectId } = seededFake();
+		const first = await fetchEnvReusingSecrets(storagePolicy, {
+			api,
+			projectId,
+			branch: "main",
+		});
+
+		const second = await fetchEnvReusingSecrets(storagePolicy, {
+			api,
+			projectId,
+			branch: "main",
+			env: { ...process.env, ...first.vars },
+		});
+
+		expect(callsTo(api, "createCredential")).toBe(1); // not minted again
+		expect(callsTo(api, "revokeCredential")).toBe(0);
+		expect(second.vars.AWS_ACCESS_KEY_ID).toBe(
+			first.vars.AWS_ACCESS_KEY_ID,
+		);
+		expect(second.vars.AWS_SECRET_ACCESS_KEY).toBe(
+			first.vars.AWS_SECRET_ACCESS_KEY,
+		);
+		expect(second.credential).toEqual({
+			issued: false,
+			keys: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
+			revoked: [],
+		});
+		// The non-secret storage vars are still refreshed from the branch — only the secrets
+		// are carried through.
+		expect(second.vars.AWS_ENDPOINT_URL_S3).toBe(
+			first.vars.AWS_ENDPOINT_URL_S3,
+		);
+	});
+
+	test("replaces a credential revoked out from under the env source", async () => {
+		const { api, projectId } = seededFake();
+		const first = await fetchEnvReusingSecrets(storagePolicy, {
+			api,
+			projectId,
+			branch: "main",
+		});
+		// e.g. revoked in the console, or expired. The secrets are still there and still look
+		// perfectly real — only the branch knows they're dead.
+		const tokenId = first.vars.AWS_ACCESS_KEY_ID as string;
+		await api.revokeCredential(projectId, "br-main", tokenId);
+
+		const second = await fetchEnvReusingSecrets(storagePolicy, {
+			api,
+			projectId,
+			branch: "main",
+			env: { ...process.env, ...first.vars },
+		});
+
+		expect(second.vars.AWS_ACCESS_KEY_ID).not.toBe(tokenId);
+		expect(second.credential.issued).toBe(true);
+		// Already revoked, so it is not one of ours to revoke again.
+		expect(second.credential.revoked).toEqual([]);
+	});
+
+	test("revokes the credential it replaces when the branch gains a feature", async () => {
+		// Enabling the AI Gateway on a branch that already had storage widens the scopes the
+		// credential needs, so the storage-only one has to be replaced. Its secrets lived only
+		// in the env source being superseded, so leaving it live would strand a usable
+		// credential on the branch — one per call, forever.
+		const { api, projectId } = seededFake();
+		const storageOnly = await fetchEnvReusingSecrets(storagePolicy, {
+			api,
+			projectId,
+			branch: "main",
+		});
+
+		const widened = await fetchEnvReusingSecrets(bothPolicy, {
+			api,
+			projectId,
+			branch: "main",
+			env: { ...process.env, ...storageOnly.vars },
+		});
+
+		expect(callsTo(api, "createCredential")).toBe(2);
+		expect(widened.credential).toEqual({
+			issued: true,
+			keys: [
+				"AWS_ACCESS_KEY_ID",
+				"AWS_SECRET_ACCESS_KEY",
+				"NEON_AI_GATEWAY_TOKEN",
+			],
+			revoked: [storageOnly.vars.AWS_ACCESS_KEY_ID],
+		});
+		// One credential in, one out — the branch does not accumulate.
+		const live = await api.listCredentials(projectId, "br-main");
+		expect(live).toHaveLength(1);
+		expect(live[0]?.tokenId).toBe(widened.vars.AWS_ACCESS_KEY_ID);
+	});
+
+	test("never revokes a credential this tool did not issue", async () => {
+		// A credential minted by something else (a deployed function, a teammate, the console)
+		// can be kept if it fits, but must never be revoked: its secrets live somewhere we know
+		// nothing about.
+		const { api, projectId } = seededFake();
+		const foreign = await api.createCredential(projectId, "br-main", {
+			scopes: ["storage:read"],
+			principalType: "user",
+			name: "minted-by-hand",
+		});
+
+		const result = await fetchEnvReusingSecrets(storagePolicy, {
+			api,
+			projectId,
+			branch: "main",
+			// Scoped `storage:read` only, so the policy's `storage:write` forces a replacement.
+			env: {
+				AWS_ACCESS_KEY_ID: foreign.tokenId,
+				AWS_SECRET_ACCESS_KEY: foreign.s3SecretAccessKey,
+			},
+		});
+
+		expect(result.credential.issued).toBe(true);
+		expect(result.credential.revoked).toEqual([]);
+		expect(callsTo(api, "revokeCredential")).toBe(0);
+		const live = await api.listCredentials(projectId, "br-main");
+		expect(live.map((c) => c.tokenId)).toContain(foreign.tokenId);
+	});
+
+	test("re-mints when the storage and gateway halves name different credentials", async () => {
+		// One credential backs both features, so halves stitched together from two different
+		// calls are not a credential — neither half can be trusted.
+		const { api, projectId } = seededFake();
+		const a = await fetchEnvReusingSecrets(bothPolicy, {
+			api,
+			projectId,
+			branch: "main",
+		});
+		const b = await fetchEnvReusingSecrets(bothPolicy, {
+			api,
+			projectId,
+			branch: "main",
+		});
+
+		const mixed = await fetchEnvReusingSecrets(bothPolicy, {
+			api,
+			projectId,
+			branch: "main",
+			env: {
+				...a.vars,
+				NEON_AI_GATEWAY_TOKEN: b.vars.NEON_AI_GATEWAY_TOKEN,
+			},
+		});
+
+		expect(callsTo(api, "createCredential")).toBe(3);
+		expect(mixed.vars.AWS_ACCESS_KEY_ID).not.toBe(a.vars.AWS_ACCESS_KEY_ID);
+		expect(mixed.vars.NEON_AI_GATEWAY_TOKEN).not.toBe(
+			b.vars.NEON_AI_GATEWAY_TOKEN,
+		);
+	});
+
+	test("touches no credential endpoint when the policy enables neither feature", async () => {
+		const { api, projectId } = seededFake();
+
+		const { vars, credential } = await fetchEnvReusingSecrets(
+			defineConfig({}),
+			{ api, projectId, branch: "main" },
+		);
+
+		expect(callsTo(api, "listCredentials")).toBe(0);
+		expect(callsTo(api, "createCredential")).toBe(0);
+		expect(credential).toEqual({ issued: false, keys: [], revoked: [] });
+		expect(vars.DATABASE_URL).toContain("postgresql://");
+		expect(vars.NEON_BRANCH).toBe("main");
+	});
+
+	test("does not look up credentials when nothing is persisted to verify", async () => {
+		// A first run has nothing to check, so the list call would be wasted.
+		const { api, projectId } = seededFake();
+
+		await fetchEnvReusingSecrets(storagePolicy, {
+			api,
+			projectId,
+			branch: "main",
+		});
+
+		expect(callsTo(api, "listCredentials")).toBe(0);
+		expect(callsTo(api, "createCredential")).toBe(1);
+	});
+
+	test("keeps a persisted Auth base URL the integration can no longer report", async () => {
+		// Integrations created before the API returned `base_url` answer with an empty string,
+		// and the persisted copy is the only one left. An empty fetched value never carries more
+		// information than a non-empty persisted one, so a resolve must not blank it.
+		const { api, projectId } = seededFake();
+		api.seedNeonAuth(projectId, "br-main", {
+			projectId: "auth-br-main",
+			jwksUrl: "https://example.com/jwks.json",
+		});
+
+		const { vars } = await fetchEnvReusingSecrets(
+			defineConfig({ auth: true }),
+			{
+				api,
+				projectId,
+				branch: "main",
+				env: { NEON_AUTH_BASE_URL: "https://auth.example.com" },
+			},
+		);
+
+		expect(vars.NEON_AUTH_BASE_URL).toBe("https://auth.example.com");
+		// jwks_url is always returned by the snapshot, so it comes from there.
+		expect(vars.NEON_AUTH_JWKS_URL).toBe("https://example.com/jwks.json");
+	});
+});

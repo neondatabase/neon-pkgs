@@ -199,6 +199,7 @@ describe("@neon/env public surface", () => {
 			[
 			  "NEON_ENV_VAR_KEYS",
 			  "fetchEnv",
+			  "fetchEnvReusingSecrets",
 			  "parseEnv",
 			  "toEntries",
 			]

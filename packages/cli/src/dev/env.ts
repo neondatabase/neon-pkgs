@@ -1,10 +1,9 @@
 import { type Config, loadConfigFromFile, type NeonApi } from "@neon/config";
 import { type AppliedChange, plan, pullConfig } from "@neon/config-runtime";
 import {
-	type CredentialMode,
-	type CredentialResolution,
-	fetchEnv,
-	toEntries,
+	type CredentialOutcome,
+	fetchEnvReusingSecrets,
+	type ReusedBranchEnv,
 } from "@neon/env";
 
 import { log } from "../log.js";
@@ -22,17 +21,11 @@ export type DevEnvContext = {
 	 * Env source layered under `process.env` when resolving the branch env. Lets callers
 	 * supply already-persisted values (e.g. the existing `.env` for `env pull`) so one-time
 	 * secrets — Neon Auth keys and the unified branch credential's `api_token` /
-	 * `s3_secret_access_key` — are **reused** rather than re-minted on every run.
+	 * `s3_secret_access_key` — are **reused** rather than re-minted on every run. See
+	 * {@link fetchEnvReusingSecrets}, which verifies them against the branch before keeping
+	 * them.
 	 */
 	env?: NodeJS.ProcessEnv;
-	/**
-	 * Forwarded to {@link fetchEnv}'s `credentials`; see there. `neon dev` / `neon-env run`
-	 * leave it at the default `"reuse"` (no extra API call on a hot path); `env pull` asks for
-	 * `"verify"` so the `.env` it leaves behind holds a credential that actually works.
-	 */
-	credentials?: CredentialMode;
-	/** Forwarded to {@link fetchEnv}'s `onCredential`; see there. */
-	onCredential?: (resolution: CredentialResolution) => void;
 };
 
 /** The API-targeting options every runtime call forwards from the context. */
@@ -85,7 +78,7 @@ export class MissingBranchContextError extends Error {
  */
 export const resolveNeonEnvVars = async (
 	ctx: DevEnvContext,
-): Promise<Record<string, string>> => {
+): Promise<ReusedBranchEnv> => {
 	const config = await loadNeonConfig(ctx.cwd);
 
 	if (config) {
@@ -139,6 +132,8 @@ export const resolveNeonEnvVars = async (
 export type DevEnvResolution = {
 	/** Neon branch env vars to inject (DATABASE_URL[_UNPOOLED], NEON_AUTH_BASE_URL, …). */
 	vars: Record<string, string>;
+	/** What happened to the branch credential, when one was involved. */
+	credential?: CredentialOutcome;
 	/**
 	 * Present only when `vars` is empty *because* resolution was skipped/degraded (not when
 	 * the branch legitimately has no extra services). A short, actionable explanation.
@@ -161,7 +156,8 @@ export const resolveDevEnv = async (
 	ctx: DevEnvContext,
 ): Promise<DevEnvResolution> => {
 	try {
-		return { vars: await resolveNeonEnvVars(ctx) };
+		const { vars, credential } = await resolveNeonEnvVars(ctx);
+		return { vars, credential };
 	} catch (err) {
 		if (err instanceof DevEnvMismatchError) throw err;
 		if (err instanceof MissingBranchContextError) {
@@ -249,17 +245,13 @@ const isMissingResource = (change: AppliedChange): boolean =>
 const fetchAndProject = async (
 	config: Config,
 	ctx: DevEnvContext,
-): Promise<Record<string, string>> => {
-	const env = await fetchEnv(config, {
+): Promise<ReusedBranchEnv> =>
+	fetchEnvReusingSecrets(config, {
 		projectId: ctx.projectId as string,
 		branch: ctx.branchId as string,
 		...apiOptions(ctx),
 		...(ctx.env ? { env: ctx.env } : {}),
-		...(ctx.credentials ? { credentials: ctx.credentials } : {}),
-		...(ctx.onCredential ? { onCredential: ctx.onCredential } : {}),
 	});
-	return toEntries(env);
-};
 
 /**
  * Load a `neon.ts` policy if one exists on the path from `cwd` up to the repo

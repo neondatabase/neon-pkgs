@@ -63,8 +63,10 @@ describe("parseEnv key filter (types)", () => {
 
 	test("SelectableEnvKey reflects exactly the policy's namespaces", () => {
 		const config = defineConfig({});
+		// `NEON_BRANCH` is always selectable: every branch has an identity, so the namespace
+		// is present on every `NeonEnv`.
 		expectTypeOf<SelectableEnvKey<typeof config>>().toEqualTypeOf<
-			"DATABASE_URL" | "DATABASE_URL_UNPOOLED"
+			"DATABASE_URL" | "DATABASE_URL_UNPOOLED" | "NEON_BRANCH"
 		>();
 	});
 });
@@ -78,7 +80,7 @@ describe("parseEnv key filter (negative types)", () => {
 
 	test("rejects an unknown env var key", () => {
 		// @ts-expect-error not a real Neon env var
-		parseEnv(defineConfig({}), ["NEON_BRANCH"]);
+		parseEnv(defineConfig({}), ["NEON_NOPE"]);
 	});
 
 	test("rejects a storage key without a buckets policy", () => {
