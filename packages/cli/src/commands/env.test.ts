@@ -188,7 +188,11 @@ class FakeNeonApi implements NeonApi {
 	async listCredentials(): Promise<NeonCredentialMeta[]> {
 		return [];
 	}
-	async revokeCredential(): Promise<void> {
+	async revokeCredential(
+		_projectId: string,
+		_branchId: string,
+		_tokenId: string,
+	): Promise<void> {
 		return;
 	}
 	async getProjectBranchStorage(): Promise<NeonBranchStorageSnapshot | null> {
