@@ -465,6 +465,18 @@ export interface FetchEnvOptions {
 	 * creation. Defaults to `process.env`; callers may layer values from `.env.local`.
 	 */
 	env?: NodeJS.ProcessEnv;
+	/**
+	 * Called when the branch credential (object storage / AI Gateway) is resolved, reporting
+	 * whether its secrets were `"reused"` (already in `env`, echoed back — no API call, no
+	 * validation) or freshly `"minted"`, plus the env-var `keys` they surface under (storage
+	 * keys and/or the gateway token, per what the policy enables). Lets `neon env pull` report
+	 * reused secrets without re-deriving which keys are credential-backed. Only fires when the
+	 * policy enables storage or the AI Gateway.
+	 */
+	onCredential?: (info: {
+		source: "reused" | "minted";
+		keys: string[];
+	}) => void;
 }
 
 /**
@@ -641,6 +653,20 @@ export async function fetchEnv<const C extends Config>(
 			needStorage: wantsStorage,
 			needApiToken: wantsAiGateway,
 		});
+		// Report the exact env keys the credential secrets land under, so callers don't have to
+		// re-derive "which keys are credential-backed" (and drift when that set changes here).
+		options.onCredential?.({
+			source: secrets.source,
+			keys: [
+				...(wantsStorage
+					? [
+							NEON_ENV_VAR_KEYS.storage.accessKeyId,
+							NEON_ENV_VAR_KEYS.storage.secretAccessKey,
+						]
+					: []),
+				...(wantsAiGateway ? [NEON_ENV_VAR_KEYS.aiGateway.apiKey] : []),
+			],
+		});
 		if (wantsStorage) {
 			const storage = await api.getProjectBranchStorage(
 				projectId,
@@ -720,6 +746,13 @@ async function resolveCredentialSecrets(args: {
 	accessKeyId: string;
 	secretAccessKey: string;
 	apiToken: string;
+	/**
+	 * Where the returned secrets came from: `"reused"` when every needed secret was already
+	 * present in the env source and echoed back verbatim (no API call, no validation),
+	 * `"minted"` when a fresh `user` credential was created. Surfaced so callers can report
+	 * that reused secrets were passed through untouched rather than fetched.
+	 */
+	source: "reused" | "minted";
 }> {
 	const sKeys = NEON_ENV_VAR_KEYS.storage;
 	const aKeys = NEON_ENV_VAR_KEYS.aiGateway;
@@ -732,6 +765,7 @@ async function resolveCredentialSecrets(args: {
 			accessKeyId: args.env[sKeys.accessKeyId] ?? "",
 			secretAccessKey: args.env[sKeys.secretAccessKey] ?? "",
 			apiToken: args.env[aKeys.apiKey] ?? "",
+			source: "reused",
 		};
 	}
 	const minted = await args.api.createCredential(
@@ -750,6 +784,7 @@ async function resolveCredentialSecrets(args: {
 		accessKeyId: minted.tokenId,
 		secretAccessKey: minted.s3SecretAccessKey,
 		apiToken: minted.apiToken,
+		source: "minted",
 	};
 }
 

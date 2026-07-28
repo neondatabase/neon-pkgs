@@ -774,6 +774,39 @@ describe("branch storage + AI Gateway (Preview)", () => {
 		);
 	});
 
+	test("onCredential reports minted vs reused with the credential's env keys", async () => {
+		const { api, projectId } = seededFake();
+		const config = defineConfig({ preview: { buckets: { uploads: {} } } });
+		const calls: { source: "reused" | "minted"; keys: string[] }[] = [];
+
+		const first = await fetchEnv(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+			onCredential: (info) => calls.push(info),
+		});
+		// Fresh branch: the credential is minted, reported under the AWS storage keys.
+		expect(calls).toEqual([
+			{
+				source: "minted",
+				keys: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
+			},
+		]);
+
+		await fetchEnv(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+			env: { ...process.env, ...toEntries(first) },
+			onCredential: (info) => calls.push(info),
+		});
+		// Second pull with the secrets on disk: reused verbatim, not minted again.
+		expect(calls[1]).toEqual({
+			source: "reused",
+			keys: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
+		});
+	});
+
 	test("re-mints when a newly-enabled feature's secret is absent", async () => {
 		const { api, projectId } = seededFake();
 		// Persist a storage-only credential, then ask for a policy that also needs the AI Gateway

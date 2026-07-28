@@ -20,6 +20,11 @@ export type DevEnvContext = {
 	 * `s3_secret_access_key` — are **reused** rather than re-minted on every run.
 	 */
 	env?: NodeJS.ProcessEnv;
+	/** Forwarded to {@link fetchEnv}'s `onCredential`; see there. Lets `env pull` report reused secrets. */
+	onCredential?: (info: {
+		source: "reused" | "minted";
+		keys: string[];
+	}) => void;
 };
 
 /** The API-targeting options every runtime call forwards from the context. */
@@ -242,6 +247,7 @@ const fetchAndProject = async (
 		branch: ctx.branchId as string,
 		...apiOptions(ctx),
 		...(ctx.env ? { env: ctx.env } : {}),
+		...(ctx.onCredential ? { onCredential: ctx.onCredential } : {}),
 	});
 	return toEntries(env);
 };

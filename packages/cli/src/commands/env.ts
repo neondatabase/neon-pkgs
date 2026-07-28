@@ -131,6 +131,10 @@ export const pull = async (
 	// Reuse `neon dev`'s tiered resolver (neon.ts policy -> plan gate -> fetchEnv, else
 	// pullConfig -> fetchEnv). Unlike dev, an unresolved context or failure is surfaced —
 	// `env pull` is an explicit action, so it should error rather than write nothing.
+	// Credential secrets already on disk are reused as-is, not fetched (see `onCredential`).
+	// Track which so we can report them separately — a user who set them by hand (e.g. from a
+	// .env.example) shouldn't think `pull` refreshed them.
+	let reusedKeys: string[] = [];
 	const vars = await resolveNeonEnvVars({
 		cwd,
 		projectId: props.projectId,
@@ -139,6 +143,9 @@ export const pull = async (
 		...(props.apiKey ? { apiKey: props.apiKey } : {}),
 		...(props.apiHost ? { apiHost: props.apiHost } : {}),
 		...(props.runtimeApi ? { api: props.runtimeApi } : {}),
+		onCredential: ({ source, keys }) => {
+			if (source === "reused") reusedKeys = keys;
+		},
 	});
 
 	const neonVars = pickNeonVars(vars);
@@ -156,13 +163,30 @@ export const pull = async (
 	const { written, removed } = mergeEnvFile(targetPath, neonVars, {
 		managedKeys: NEON_OWNED_ENV_KEYS,
 	});
-	log.info(
-		"Pulled %d Neon variable%s into %s: %s",
-		written.length,
-		written.length === 1 ? "" : "s",
-		targetPath,
-		written.join(", "),
-	);
+
+	// Split the written keys into those fetched from Neon and those reused as-is from disk.
+	const reused = written.filter((key) => reusedKeys.includes(key));
+	const fetched = written.filter((key) => !reused.includes(key));
+
+	if (fetched.length > 0) {
+		log.info(
+			"Pulled %d Neon variable%s into %s: %s",
+			fetched.length,
+			fetched.length === 1 ? "" : "s",
+			targetPath,
+			fetched.join(", "),
+		);
+	}
+	if (reused.length > 0) {
+		// No source named: a reused secret may come from process.env, not the file — so
+		// "as-is" rather than "from <targetPath>".
+		log.info(
+			"Reused %d existing value%s as-is (not fetched/verified from Neon): %s",
+			reused.length,
+			reused.length === 1 ? "" : "s",
+			reused.join(", "),
+		);
+	}
 	if (removed.length > 0) {
 		log.info(
 			"Removed %d stale Neon variable%s not enabled on this branch: %s",

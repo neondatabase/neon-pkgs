@@ -25,7 +25,7 @@ import type {
 	NeonProjectSnapshot,
 	NeonRoleSnapshot,
 } from "@neon/config";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { autoPullEnvAfterPin, type EnvPullProps, pull } from "./env.js";
 
@@ -200,6 +200,16 @@ class FakeNeonApi implements NeonApi {
 	}
 }
 
+/**
+ * A branch with object storage enabled (one bucket), so env-pull's tier-2 path (`pullConfig`
+ * -> `fetchEnv`) resolves the branch credential and emits the `AWS_*` storage vars.
+ */
+class StorageNeonApi extends FakeNeonApi {
+	override async listBranchBuckets(): Promise<NeonBucketSnapshot[]> {
+		return [{ name: "assets", accessLevel: "private" }];
+	}
+}
+
 /** Stand-in for the neonctl Api client; only branch resolution is exercised. */
 const fakeApiClient = {
 	listProjectBranches: async () => ({
@@ -355,6 +365,72 @@ describe("env pull", () => {
 		await pull(baseProps(new FakeNeonApi(), cwd));
 
 		expect(existsSync(join(cwd, ".gitignore"))).toBe(false);
+	});
+
+	it("reports storage credentials reused from an existing .env rather than fetched", async () => {
+		// Mirrors the real confusion: the user copied a .env.example (or set AWS_* by hand) with
+		// storage credentials already in place, then ran `pull`. The credential secrets are
+		// echoed back verbatim (never fetched/verified), so they must be reported as reused —
+		// not lumped into the "Pulled N variables" list as if refreshed from Neon.
+		writeFileSync(
+			join(cwd, ".env"),
+			[
+				"AWS_ACCESS_KEY_ID=nak_live_frombyhand",
+				"AWS_SECRET_ACCESS_KEY=secretsetbyhand",
+				"",
+			].join("\n"),
+		);
+
+		const lines: string[] = [];
+		const stderr = vi
+			.spyOn(process.stderr, "write")
+			.mockImplementation((chunk: string | Uint8Array) => {
+				lines.push(String(chunk));
+				return true;
+			});
+		let result: Awaited<ReturnType<typeof pull>>;
+		try {
+			result = await pull(baseProps(new StorageNeonApi(), cwd));
+		} finally {
+			stderr.mockRestore();
+		}
+		const logged = lines.join("");
+
+		expect(result.status).toBe("written");
+		if (result.status === "written") {
+			// The reused secrets stay in `written` (they were written to the file)…
+			expect(result.written).toContain("AWS_ACCESS_KEY_ID");
+			expect(result.written).toContain("AWS_SECRET_ACCESS_KEY");
+			// …and their by-hand values are preserved untouched (never validated/refetched).
+			const content = readFileSync(join(cwd, ".env"), "utf8");
+			expect(content).toContain("AWS_ACCESS_KEY_ID=nak_live_frombyhand");
+			expect(content).toContain("AWS_SECRET_ACCESS_KEY=secretsetbyhand");
+			// The freshly-fetched non-secret storage vars are still written.
+			expect(content).toMatch(/^AWS_ENDPOINT_URL_S3=/m);
+			expect(content).toMatch(/^AWS_REGION=/m);
+		}
+
+		// The rendered message must split reused-from-disk secrets out of the "Pulled" line.
+		const reusedLine = logged.split("\n").find((l) => l.includes("Reused"));
+		expect(reusedLine).toBeDefined();
+		expect(reusedLine).toContain("AWS_ACCESS_KEY_ID");
+		expect(reusedLine).toContain("AWS_SECRET_ACCESS_KEY");
+		expect(reusedLine).toContain("not fetched/verified");
+		// The reused secrets must NOT appear on the "Pulled" line.
+		const pulledLine = logged.split("\n").find((l) => l.includes("Pulled"));
+		expect(pulledLine).toBeDefined();
+		expect(pulledLine).not.toContain("AWS_ACCESS_KEY_ID");
+		expect(pulledLine).toContain("AWS_ENDPOINT_URL_S3");
+	});
+
+	it("mints storage credentials when none are on disk (not reused)", async () => {
+		const result = await pull(baseProps(new StorageNeonApi(), cwd));
+
+		expect(result.status).toBe("written");
+		const content = readFileSync(join(cwd, ".env.local"), "utf8");
+		// A fresh credential was minted, so its access keys land in the file.
+		expect(content).toContain("AWS_ACCESS_KEY_ID=cred-fake-0000");
+		expect(content).toMatch(/^AWS_SECRET_ACCESS_KEY=/m);
 	});
 });
 
