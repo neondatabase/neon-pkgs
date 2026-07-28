@@ -7,6 +7,7 @@ export default defineConfig({
 	dts: true,
 	entry: [
 		"src/index.ts",
+		"src/runtime.ts",
 		"src/cli.ts",
 		"src/lib/**/*.ts",
 		"!src/**/*.test.*",

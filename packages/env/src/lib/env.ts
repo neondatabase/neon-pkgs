@@ -512,6 +512,9 @@ export async function fetchEnv<
 		 * everything else without issuing a new one. The non-secret vars of the same features
 		 * (`AWS_ENDPOINT_URL_S3`, `AWS_REGION`, `NEON_AI_GATEWAY_BASE_URL`) are not
 		 * credential-backed and stay available on their own.
+		 *
+		 * The selection **intersects** with the policy rather than overriding it: naming a var
+		 * the branch policy does not enable is not an error, it simply yields nothing.
 		 */
 		keys: readonly K[];
 	},

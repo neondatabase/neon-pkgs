@@ -4,7 +4,7 @@ import {
 	type CredentialOutcome,
 	fetchEnvReusingSecrets,
 	type ReusedBranchEnv,
-} from "@neon/env";
+} from "@neon/env/runtime";
 
 import { log } from "../log.js";
 

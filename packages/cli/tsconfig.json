@@ -22,6 +22,10 @@
       // the export map at runtime (the emitted JS keeps the bare specifiers).
       "@neon/sdk": ["node_modules/@neon/sdk/dist/index"],
       "@neon/sdk/raw": ["node_modules/@neon/sdk/dist/raw"],
+      // And for `@neon/env/runtime`, the stateful half of `@neon/env` (credential
+      // reuse / revocation), which is a subpath export so an app importing
+      // `@neon/env` is never offered it.
+      "@neon/env/runtime": ["node_modules/@neon/env/dist/runtime"],
       // Same story for the test-only harness, which is source-only.
       "@neon/e2e-harness": ["node_modules/@neon/e2e-harness/src/index"]
     },

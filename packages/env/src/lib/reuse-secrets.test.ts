@@ -1,7 +1,7 @@
 import { defineConfig } from "@neon/config/v1";
 import { beforeEach, describe, expect, test } from "vitest";
+import { fetchEnvReusingSecrets } from "../runtime.js";
 import { FakeNeonApi } from "./fake-neon-api.js";
-import { fetchEnvReusingSecrets } from "./reuse-secrets.js";
 import { stubCleanNeonEnv } from "./test-utils.js";
 
 beforeEach(() => stubCleanNeonEnv());

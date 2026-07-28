@@ -199,9 +199,25 @@ describe("@neon/env public surface", () => {
 			[
 			  "NEON_ENV_VAR_KEYS",
 			  "fetchEnv",
-			  "fetchEnvReusingSecrets",
 			  "parseEnv",
 			  "toEntries",
+			]
+		`);
+	});
+
+	test("the root entry point stays pure — no stateful helpers leak into it", async () => {
+		// `fetchEnvReusingSecrets` reads an env source and can mint and revoke credentials, so it
+		// belongs to `@neon/env/runtime` (mirroring `@neon/config` vs `@neon/config-runtime`).
+		// An app or build script importing `@neon/env` should not be offered it.
+		const surface = await import("../index.js");
+		expect(Object.keys(surface)).not.toContain("fetchEnvReusingSecrets");
+	});
+
+	test("runtime exports are stable (removing/renaming one is a breaking change)", async () => {
+		const surface = await import("../runtime.js");
+		expect(Object.keys(surface).sort()).toMatchInlineSnapshot(`
+			[
+			  "fetchEnvReusingSecrets",
 			]
 		`);
 	});

@@ -77,6 +77,8 @@ interface PersistedSecrets {
  * the record of what the last call issued.
  *
  * ```ts
+ * import { fetchEnvReusingSecrets } from "@neon/env/runtime";
+ *
  * const { vars, credential } = await fetchEnvReusingSecrets(config, {
  *     projectId,
  *     branch: "main",
