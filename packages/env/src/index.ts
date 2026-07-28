@@ -12,6 +12,8 @@
  */
 
 export type {
+	CredentialMode,
+	CredentialResolution,
 	FetchEnvOptions,
 	FilteredNeonEnv,
 	FunctionSlugOf,

@@ -726,7 +726,11 @@ export class FakeNeonApi implements NeonApi {
 		this.requireBranch(projectId, branchId);
 		const seq = this.nextId.toString(16).padStart(12, "0");
 		this.nextId += 1;
-		const tokenIdShort = `c${seq}`.slice(0, 12);
+		// Keep the id 12 characters like the real one, but take the tail of the sequence rather
+		// than the head: `c${seq}`.slice(0, 12) truncated the digit that actually varies, so
+		// every credential the fake minted shared one `tokenIdShort`. Real short ids are
+		// unique, and anything that looks a credential up by id needs the fake's to be too.
+		const tokenIdShort = `c${seq.slice(-11)}`;
 		const tokenId = `${tokenIdShort}-fake-fake-fake-${seq}`;
 		const apiToken = `nt_live_${tokenIdShort}_${seq}secret`;
 		const s3SecretAccessKey = `s3secret${seq}`.padEnd(64, "0");

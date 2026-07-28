@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import type { NeonApi } from "@neon/config";
-import { NEON_ENV_VAR_KEYS } from "@neon/env";
+import { type CredentialResolution, NEON_ENV_VAR_KEYS } from "@neon/env";
 import chalk from "chalk";
 import type yargs from "yargs";
 import { ensureGitignored } from "../context.js";
@@ -106,7 +106,16 @@ const NEON_OWNED_ENV_KEYS: readonly string[] = [
  * has no Neon vars to pull yet (no DATABASE_URL / Auth / Data API).
  */
 export type PullOutcome =
-	| { status: "written"; written: string[]; file: string }
+	| {
+			status: "written";
+			written: string[];
+			file: string;
+			/**
+			 * What happened to the branch credential, when the branch has object storage or the
+			 * AI Gateway. Absent otherwise — nothing else is credential-backed.
+			 */
+			credential?: CredentialResolution;
+	  }
 	| { status: "empty" };
 
 export const pull = async (
@@ -131,11 +140,22 @@ export const pull = async (
 	// Reuse `neon dev`'s tiered resolver (neon.ts policy -> plan gate -> fetchEnv, else
 	// pullConfig -> fetchEnv). Unlike dev, an unresolved context or failure is surfaced —
 	// `env pull` is an explicit action, so it should error rather than write nothing.
+	//
+	// `credentials: "verify"` is the difference from `dev`: a pull exists to leave a working
+	// `.env` behind, so a credential secret it cannot verify against this branch (a
+	// `.env.example` placeholder, one revoked in the console, one copied from another branch)
+	// is replaced rather than echoed back. `dev` keeps the cheap presence check — it injects
+	// what a pull already verified, and shouldn't pay an API call per start.
+	let credential: CredentialResolution | undefined;
 	const vars = await resolveNeonEnvVars({
 		cwd,
 		projectId: props.projectId,
 		branchId,
 		env: { ...process.env, ...existingEnv },
+		credentials: "verify",
+		onCredential: (resolution) => {
+			credential = resolution;
+		},
 		...(props.apiKey ? { apiKey: props.apiKey } : {}),
 		...(props.apiHost ? { apiHost: props.apiHost } : {}),
 		...(props.runtimeApi ? { api: props.runtimeApi } : {}),
@@ -171,6 +191,21 @@ export const pull = async (
 			removed.join(", "),
 		);
 	}
+	// A new credential means the values that back object storage / the AI Gateway just
+	// changed, so anything else holding the old ones (a deployed preview, a second checkout)
+	// needs the new values. Name the keys rather than leaving the user to diff the file.
+	if (credential?.action === "issued") {
+		log.info(
+			"Issued a new branch credential — these now hold fresh values: %s",
+			credential.keys.join(", "),
+		);
+		if (credential.revoked.length > 0) {
+			log.info(
+				"Revoked the credential it replaced (%s).",
+				credential.revoked.join(", "),
+			);
+		}
+	}
 
 	// A dotenv file *we* create holds live branch credentials (DATABASE_URL, Auth keys, service
 	// tokens), so ignore it the same way the `.neon` context file is — otherwise a fresh repo is
@@ -195,7 +230,12 @@ export const pull = async (
 		});
 	}
 
-	return { status: "written", written, file: targetPath };
+	return {
+		status: "written",
+		written,
+		file: targetPath,
+		...(credential ? { credential } : {}),
+	};
 };
 
 /**
@@ -245,10 +285,17 @@ export const autoPullEnvAfterPin = async (
  */
 export const renderAgentPullNote = (result: AutoPullResult): string => {
 	switch (result.status) {
-		case "written":
+		case "written": {
+			// Call out a re-issued credential: an agent that already wrote the old storage /
+			// gateway values somewhere else has to update them.
+			const credential =
+				result.credential?.action === "issued"
+					? ` Issued a new branch credential, so ${result.credential.keys.join(", ")} changed.`
+					: "";
 			return ` Pulled ${result.written.length} Neon env var${
 				result.written.length === 1 ? "" : "s"
-			} into ${result.file}.`;
+			} into ${result.file}.${credential}`;
+		}
 		case "empty":
 			return " No Neon env vars to pull for this branch yet.";
 		case "skipped":

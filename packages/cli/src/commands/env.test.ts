@@ -25,7 +25,7 @@ import type {
 	NeonProjectSnapshot,
 	NeonRoleSnapshot,
 } from "@neon/config";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { autoPullEnvAfterPin, type EnvPullProps, pull } from "./env.js";
 
@@ -200,6 +200,79 @@ class FakeNeonApi implements NeonApi {
 	}
 }
 
+/**
+ * A branch with object storage enabled (one bucket), so env-pull's tier-2 path (`pullConfig`
+ * -> `fetchEnv`) resolves the branch credential and emits the `AWS_*` storage vars. Keeps a
+ * real credential store, because `env pull` verifies persisted secrets against the branch's
+ * live credentials — a stubbed-out empty list would make every pull look like a first pull.
+ */
+class StorageNeonApi extends FakeNeonApi {
+	readonly credentials: NeonCredentialMeta[] = [];
+	createCalls = 0;
+
+	override async listBranchBuckets(): Promise<NeonBucketSnapshot[]> {
+		return [{ name: "assets", accessLevel: "private" }];
+	}
+	override async createCredential(
+		_projectId: string,
+		branchId: string,
+		input: CreateCredentialInput,
+	): Promise<NeonCredentialSecret> {
+		this.createCalls += 1;
+		const tokenIdShort = `credfake000${this.createCalls}`;
+		const named = input.name !== undefined ? { name: input.name } : {};
+		this.credentials.push({
+			tokenId: `cred-fake-000${this.createCalls}`,
+			tokenIdShort,
+			...named,
+			scopes: input.scopes,
+			principalType: input.principalType,
+			branchId,
+			createdAt: "2026-01-01T00:00:00Z",
+		});
+		return {
+			tokenId: `cred-fake-000${this.createCalls}`,
+			tokenIdShort,
+			...named,
+			apiToken: `nt_live_${tokenIdShort}_secret`,
+			s3SecretAccessKey: `s3secret${this.createCalls}`.padEnd(64, "0"),
+			scopes: input.scopes,
+			branchId,
+			createdAt: "2026-01-01T00:00:00Z",
+		};
+	}
+	override async listCredentials(): Promise<NeonCredentialMeta[]> {
+		return this.credentials.filter((c) => c.revokedAt === undefined);
+	}
+	override async revokeCredential(
+		_projectId: string,
+		_branchId: string,
+		tokenId: string,
+	): Promise<void> {
+		for (const cred of this.credentials) {
+			if (cred.tokenId === tokenId)
+				cred.revokedAt = "2026-01-02T00:00:00Z";
+		}
+	}
+}
+
+/** Capture what the command wrote to stderr for the duration of `run`. */
+const captureLog = async (run: () => Promise<void>): Promise<string> => {
+	const chunks: string[] = [];
+	const stderr = vi
+		.spyOn(process.stderr, "write")
+		.mockImplementation((chunk: string | Uint8Array) => {
+			chunks.push(String(chunk));
+			return true;
+		});
+	try {
+		await run();
+	} finally {
+		stderr.mockRestore();
+	}
+	return chunks.join("");
+};
+
 /** Stand-in for the neonctl Api client; only branch resolution is exercised. */
 const fakeApiClient = {
 	listProjectBranches: async () => ({
@@ -355,6 +428,50 @@ describe("env pull", () => {
 		await pull(baseProps(new FakeNeonApi(), cwd));
 
 		expect(existsSync(join(cwd, ".gitignore"))).toBe(false);
+	});
+
+	it("replaces credential secrets that name no live credential on the branch", async () => {
+		// The reported bug: copy a `.env.example` whose secrets are placeholders, run `pull`,
+		// and the placeholders survived — reported as "Pulled" while quietly keeping their
+		// example values. A pull exists to leave a working `.env` behind, so a secret it cannot
+		// verify against this branch is replaced rather than echoed back.
+		const api = new StorageNeonApi();
+		writeFileSync(
+			join(cwd, ".env"),
+			[
+				"AWS_ACCESS_KEY_ID=nak_live_...",
+				"AWS_SECRET_ACCESS_KEY=your-secret-here",
+				"",
+			].join("\n"),
+		);
+
+		const logged = await captureLog(async () => {
+			await pull(baseProps(api, cwd));
+		});
+
+		const content = readFileSync(join(cwd, ".env"), "utf8");
+		expect(content).toContain("AWS_ACCESS_KEY_ID=cred-fake-0001");
+		expect(content).not.toContain("nak_live_...");
+		expect(content).not.toContain("your-secret-here");
+		// The placeholder named no credential, so there was nothing of ours to revoke.
+		expect(api.credentials.filter((c) => c.revokedAt).length).toBe(0);
+		// And the user is told which values are new, so they can update anything holding the old ones.
+		expect(logged).toContain("Issued a new branch credential");
+		expect(logged).toContain("AWS_ACCESS_KEY_ID");
+	});
+
+	it("does not mint a second credential when the pulled one still verifies", async () => {
+		// The other half of the fix: verification must not become a rotation on every run. The
+		// values a pull writes have to survive the next pull, or `env pull` would issue a
+		// credential per invocation and change the user's keys under them each time.
+		const api = new StorageNeonApi();
+
+		await pull(baseProps(api, cwd));
+		const afterFirst = readFileSync(join(cwd, ".env.local"), "utf8");
+		await pull(baseProps(api, cwd));
+
+		expect(api.createCalls).toBe(1);
+		expect(readFileSync(join(cwd, ".env.local"), "utf8")).toBe(afterFirst);
 	});
 });
 

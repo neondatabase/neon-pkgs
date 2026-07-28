@@ -5,6 +5,7 @@ import {
 } from "@neon/config/v1";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import {
+	type CredentialResolution,
 	fetchEnv,
 	type NeonAuthEnv,
 	type NeonEnv,
@@ -799,6 +800,244 @@ describe("branch storage + AI Gateway (Preview)", () => {
 		expect(widened.aiGateway.apiKey).toMatch(/^nt_live_/);
 	});
 
+	test("credentials: verify replaces a .env.example placeholder with a real credential", async () => {
+		// The bug this mode exists for. `packages/ai-sdk-provider/.env.example` used to ship a
+		// token-shaped placeholder; copying it to `.env` and running a pull left it untouched,
+		// because presence-based reuse can't tell a placeholder from a secret. Anything that
+		// names no live credential on this branch must be replaced, not echoed back.
+		const { api, projectId } = seededFake();
+		const resolutions: CredentialResolution[] = [];
+
+		const env = await fetchEnv(
+			defineConfig({ preview: { aiGateway: true } }),
+			{
+				api,
+				projectId,
+				branchId: "br-main",
+				env: { NEON_AI_GATEWAY_TOKEN: "nt_live_..." },
+				credentials: "verify",
+				onCredential: (resolution) => resolutions.push(resolution),
+			},
+		);
+
+		expect(env.aiGateway.apiKey).not.toBe("nt_live_...");
+		expect(env.aiGateway.apiKey).toMatch(/^nt_live_\w+_/);
+		expect(callsTo(api, "createCredential")).toBe(1);
+		// The placeholder named no credential, so there was nothing of ours to revoke.
+		expect(callsTo(api, "revokeCredential")).toBe(0);
+		expect(resolutions).toEqual([
+			{
+				action: "issued",
+				keys: ["NEON_AI_GATEWAY_TOKEN"],
+				revoked: [],
+			},
+		]);
+	});
+
+	test("credentials: verify reuses a credential that is still live and sufficiently scoped", async () => {
+		// The everyday path: pull, then pull again. Verification must not turn into a rotation
+		// on every run — that is the credential spam the presence check was avoiding.
+		const { api, projectId } = seededFake();
+		const config = defineConfig({ preview: { buckets: { uploads: {} } } });
+		const first = await fetchEnv(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+			credentials: "verify",
+		});
+		const resolutions: CredentialResolution[] = [];
+
+		const second = await fetchEnv(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+			env: { ...process.env, ...toEntries(first) },
+			credentials: "verify",
+			onCredential: (resolution) => resolutions.push(resolution),
+		});
+
+		expect(callsTo(api, "createCredential")).toBe(1); // not minted again
+		expect(callsTo(api, "revokeCredential")).toBe(0);
+		expect(second.storage.accessKeyId).toBe(first.storage.accessKeyId);
+		expect(resolutions[0]?.action).toBe("reused");
+		// `AWS_ACCESS_KEY_ID` is the credential's own token id, which is how the persisted
+		// secrets name the credential that issued them without any local bookkeeping.
+		expect(callsTo(api, "listCredentials")).toBe(1);
+	});
+
+	test("credentials: verify replaces a credential revoked out from under the .env", async () => {
+		const { api, projectId } = seededFake();
+		const config = defineConfig({ preview: { buckets: { uploads: {} } } });
+		const first = await fetchEnv(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+			credentials: "verify",
+		});
+		// e.g. revoked in the console, or expired. The secrets are still in `.env` and still
+		// look perfectly real — only the branch knows they're dead.
+		await api.revokeCredential(
+			projectId,
+			"br-main",
+			first.storage.accessKeyId,
+		);
+
+		const second = await fetchEnv(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+			env: { ...process.env, ...toEntries(first) },
+			credentials: "verify",
+		});
+
+		expect(second.storage.accessKeyId).not.toBe(first.storage.accessKeyId);
+		expect(callsTo(api, "createCredential")).toBe(2);
+	});
+
+	test("credentials: verify revokes the credential it replaces when the branch gains a feature", async () => {
+		// Enabling the AI Gateway on a branch that already had storage widens the scopes the
+		// credential needs, so the storage-only one has to be replaced. Its secrets lived only
+		// in the env this call is superseding, so leaving it live would strand a usable
+		// credential on the branch — one per pull, forever. This is the case that makes
+		// "always mint" unaffordable and the reason reuse existed in the first place.
+		const { api, projectId } = seededFake();
+		const storageOnly = await fetchEnv(
+			defineConfig({ preview: { buckets: { uploads: {} } } }),
+			{ api, projectId, branchId: "br-main", credentials: "verify" },
+		);
+		const resolutions: CredentialResolution[] = [];
+
+		const widened = await fetchEnv(
+			defineConfig({
+				preview: { buckets: { uploads: {} }, aiGateway: true },
+			}),
+			{
+				api,
+				projectId,
+				branchId: "br-main",
+				// The gateway token is simply absent — the branch didn't have the feature when
+				// the last pull ran. The storage half still names the credential to supersede.
+				env: { ...process.env, ...toEntries(storageOnly) },
+				credentials: "verify",
+				onCredential: (resolution) => resolutions.push(resolution),
+			},
+		);
+
+		expect(callsTo(api, "createCredential")).toBe(2);
+		expect(widened.storage.accessKeyId).not.toBe(
+			storageOnly.storage.accessKeyId,
+		);
+		expect(resolutions[0]).toEqual({
+			action: "issued",
+			keys: [
+				"AWS_ACCESS_KEY_ID",
+				"AWS_SECRET_ACCESS_KEY",
+				"NEON_AI_GATEWAY_TOKEN",
+			],
+			revoked: [storageOnly.storage.accessKeyId],
+		});
+		// One credential in, one credential out — the branch does not accumulate.
+		const live = await api.listCredentials(projectId, "br-main");
+		expect(live).toHaveLength(1);
+		expect(live[0]?.tokenId).toBe(widened.storage.accessKeyId);
+	});
+
+	test("credentials: verify never revokes a credential this tool did not issue", async () => {
+		// A credential minted by something else (a deployed function, a teammate, the console)
+		// can be reused if it fits, but must never be revoked: its secrets live somewhere we
+		// know nothing about.
+		const { api, projectId } = seededFake();
+		const foreign = await api.createCredential(projectId, "br-main", {
+			scopes: ["storage:read"],
+			principalType: "user",
+			name: "minted-by-hand",
+		});
+
+		await fetchEnv(
+			defineConfig({ preview: { buckets: { uploads: {} } } }),
+			{
+				api,
+				projectId,
+				branchId: "br-main",
+				// Scoped `storage:read` only, so the policy's `storage:write` forces a replacement.
+				env: {
+					AWS_ACCESS_KEY_ID: foreign.tokenId,
+					AWS_SECRET_ACCESS_KEY: foreign.s3SecretAccessKey,
+				},
+				credentials: "verify",
+			},
+		);
+
+		expect(callsTo(api, "revokeCredential")).toBe(0);
+		const live = await api.listCredentials(projectId, "br-main");
+		expect(live.map((c) => c.tokenId)).toContain(foreign.tokenId);
+	});
+
+	test("credentials: verify re-mints when the storage and gateway halves name different credentials", async () => {
+		// One credential backs both features, so halves stitched together from two different
+		// pulls are not a credential — neither half can be trusted.
+		const { api, projectId } = seededFake();
+		const config = defineConfig({
+			preview: { buckets: { uploads: {} }, aiGateway: true },
+		});
+		const a = await fetchEnv(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+			credentials: "verify",
+		});
+		const b = await fetchEnv(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+			credentials: "verify",
+		});
+
+		const mixed = await fetchEnv(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+			env: {
+				...toEntries(a),
+				NEON_AI_GATEWAY_TOKEN: b.aiGateway.apiKey,
+			},
+			credentials: "verify",
+		});
+
+		expect(callsTo(api, "createCredential")).toBe(3);
+		expect(mixed.storage.accessKeyId).not.toBe(a.storage.accessKeyId);
+		expect(mixed.aiGateway.apiKey).not.toBe(b.aiGateway.apiKey);
+	});
+
+	test("credentials defaults to reuse: no credentials list, no rotation", async () => {
+		// `neon dev` / `neon-env run` stay on the cheap presence check — they inject what a pull
+		// already verified, and must not pay an API call (or risk a rotation) per start.
+		const { api, projectId } = seededFake();
+		const config = defineConfig({ preview: { buckets: { uploads: {} } } });
+		const first = await fetchEnv(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+		const resolutions: CredentialResolution[] = [];
+
+		await fetchEnv(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+			env: { ...process.env, ...toEntries(first) },
+			onCredential: (resolution) => resolutions.push(resolution),
+		});
+
+		expect(callsTo(api, "listCredentials")).toBe(0);
+		expect(callsTo(api, "createCredential")).toBe(1);
+		expect(resolutions[0]).toEqual({
+			action: "reused",
+			keys: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
+			revoked: [],
+		});
+	});
+
 	test("throws when buckets are declared but storage is not enabled on the branch", async () => {
 		const { api, projectId } = seededFake();
 		api.seedStorageDisabled(projectId, "br-main");
@@ -809,6 +1048,9 @@ describe("branch storage + AI Gateway (Preview)", () => {
 				branchId: "br-main",
 			}),
 		).rejects.toMatchObject({ code: ErrorCode.NotFound });
+		// The branch's storage settings are read before the credential is resolved, so a
+		// resolve that cannot succeed never spends a credential on the way to failing.
+		expect(callsTo(api, "createCredential")).toBe(0);
 	});
 
 	test("parseEnv reads injected storage env (sync, no network)", () => {

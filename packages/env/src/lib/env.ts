@@ -2,10 +2,13 @@ import {
 	type Config,
 	type CredentialScope,
 	createNeonApiFromOptions,
+	credentialScopesSatisfied,
 	deriveCredentialScopes,
 	ErrorCode,
 	type NeonApi,
 	type NeonBranchSnapshot,
+	type NeonBranchStorageSnapshot,
+	type NeonCredentialMeta,
 	type NeonDatabaseSnapshot,
 	type NeonRoleSnapshot,
 	PlatformError,
@@ -465,6 +468,62 @@ export interface FetchEnvOptions {
 	 * creation. Defaults to `process.env`; callers may layer values from `.env.local`.
 	 */
 	env?: NodeJS.ProcessEnv;
+	/**
+	 * How the branch credential's one-time secrets are resolved when `env` already carries
+	 * them. Defaults to `"reuse"`. See {@link CredentialMode}.
+	 */
+	credentials?: CredentialMode;
+	/**
+	 * Called once with what happened to the branch credential, after it is resolved and
+	 * before the resolved env is returned. Fires only when the policy enables object storage
+	 * or the AI Gateway — nothing else is credential-backed — and fires even if the rest of
+	 * the resolve later throws, because a `"verify"` resolve can revoke a credential and that
+	 * mutation must reach the caller either way.
+	 */
+	onCredential?: (resolution: CredentialResolution) => void;
+}
+
+/**
+ * How {@link fetchEnv} resolves the branch credential's one-time secrets — the object-storage
+ * access keys and the AI Gateway token — when the env source already carries them.
+ *
+ * - `"reuse"` (default) — keep whatever is present without checking it. Costs no extra API
+ *   call, which is what hot paths want: `neon dev` and `neon-env run` inject the values a
+ *   previous pull already verified and wrote.
+ * - `"verify"` — check the persisted secrets against the branch's live credentials and reuse
+ *   them only if they name a credential that still exists, is not revoked or expired, and
+ *   carries every scope the policy needs. Anything else is replaced by a freshly minted
+ *   credential. This is what `neon env pull` wants: its job is to leave a `.env` behind that
+ *   actually works, and a value it cannot verify is a value it should not keep.
+ *
+ * Reuse is presence-based in both modes — a secret is only ever kept, never re-fetched. The
+ * Neon API returns `api_token` / `s3_secret_access_key` once at mint time, so a persisted copy
+ * is the only copy; `"verify"` adds a check that the copy still corresponds to something real.
+ */
+export type CredentialMode = "reuse" | "verify";
+
+/**
+ * What {@link fetchEnv} did with the branch credential, reported through
+ * {@link FetchEnvOptions.onCredential}.
+ *
+ * Lets a caller say precisely which values changed without re-deriving "which env keys are
+ * credential-backed" — a set that lives here and would otherwise drift.
+ */
+export interface CredentialResolution {
+	/**
+	 * `"reused"` when the persisted secrets were kept, `"issued"` when a new credential was
+	 * minted (either because none was persisted, or because `"verify"` rejected the one that
+	 * was).
+	 */
+	action: "reused" | "issued";
+	/** The env-var keys the credential's secrets surface under, in emit order. */
+	keys: string[];
+	/**
+	 * `tokenId`s revoked because this call replaced them. Only ever the credential the
+	 * persisted secrets named, and only when this tool issued it; empty in every other case,
+	 * including every `"reuse"` resolve.
+	 */
+	revoked: string[];
 }
 
 /**
@@ -631,21 +690,13 @@ export async function fetchEnv<const C extends Config>(
 	const wantsStorage = (desired.preview?.buckets.length ?? 0) > 0;
 	const wantsAiGateway = desired.preview?.aiGatewayEnabled ?? false;
 	if (wantsStorage || wantsAiGateway) {
-		const secrets = await resolveCredentialSecrets({
-			api,
-			projectId,
-			branchId: branch.id,
-			branchName: branch.name,
-			scopes: previewCredentialScopes(desired.preview),
-			env: options.env ?? process.env,
-			needStorage: wantsStorage,
-			needApiToken: wantsAiGateway,
-		});
+		// Read the branch's storage settings *before* touching credentials: a policy that
+		// declares buckets on a branch without storage has to fail without having minted (and,
+		// in `"verify"` mode, revoked) anything. Minting first would spend a credential on a
+		// resolve that cannot succeed.
+		let storage: NeonBranchStorageSnapshot | null = null;
 		if (wantsStorage) {
-			const storage = await api.getProjectBranchStorage(
-				projectId,
-				branch.id,
-			);
+			storage = await api.getProjectBranchStorage(projectId, branch.id);
 			if (!storage) {
 				throw new PlatformError(
 					ErrorCode.NotFound,
@@ -656,6 +707,31 @@ export async function fetchEnv<const C extends Config>(
 					{ details: { projectId, branchId: branch.id } },
 				);
 			}
+		}
+
+		const secrets = await resolveCredentialSecrets({
+			api,
+			projectId,
+			branchId: branch.id,
+			branchName: branch.name,
+			scopes: previewCredentialScopes(desired.preview),
+			env: options.env ?? process.env,
+			needStorage: wantsStorage,
+			needApiToken: wantsAiGateway,
+			mode: options.credentials ?? "reuse",
+		});
+		options.onCredential?.({
+			action: secrets.action,
+			// Reported from here so callers don't re-derive which keys are credential-backed
+			// (and drift when that set changes).
+			keys: credentialEnvKeys({
+				storage: wantsStorage,
+				aiGateway: wantsAiGateway,
+			}),
+			revoked: secrets.revoked,
+		});
+
+		if (storage) {
 			result.storage = {
 				accessKeyId: secrets.accessKeyId,
 				secretAccessKey: secrets.secretAccessKey,
@@ -698,14 +774,125 @@ function previewCredentialScopes(
 	});
 }
 
+/** The `name` this tool stamps on every credential it mints, so it can recognize its own. */
+function credentialName(branchName: string): string {
+	return `neon-env ${branchName}`;
+}
+
+/** The env-var keys a branch credential's secrets surface under, in emit order. */
+function credentialEnvKeys(flags: {
+	storage: boolean;
+	aiGateway: boolean;
+}): string[] {
+	return [
+		...(flags.storage
+			? [
+					NEON_ENV_VAR_KEYS.storage.accessKeyId,
+					NEON_ENV_VAR_KEYS.storage.secretAccessKey,
+				]
+			: []),
+		...(flags.aiGateway ? [NEON_ENV_VAR_KEYS.aiGateway.apiKey] : []),
+	];
+}
+
+/** The branch credential's secrets as persisted in the env source. Empty string means absent. */
+interface PersistedSecrets {
+	accessKeyId: string;
+	secretAccessKey: string;
+	apiToken: string;
+}
+
 /**
- * Resolve the branch credential's secrets, reusing the ones already in the env source when
- * present and minting a fresh `user` credential otherwise. The Neon API returns `api_token` /
- * `s3_secret_access_key` exactly once at mint time, so the persisted copies (e.g. in
- * `.env.local`, surfaced as `NEON_AI_GATEWAY_TOKEN` / `AWS_SECRET_ACCESS_KEY`) are the only way to
- * recover them — exactly how one-time Auth keys are round-tripped. Reuse is presence-based
- * (no extra bookkeeping vars): if every secret the enabled features need is already present,
- * reuse it; otherwise mint one credential covering all currently-needed scopes.
+ * The credential id embedded in an AI Gateway token. The API mints them as
+ * `nt_live_<tokenIdShort>_<secret>`, and `tokenIdShort` is the public identifier the
+ * credentials list reports — so a persisted token names the credential that issued it, with no
+ * local bookkeeping needed. Returns `null` for anything not in that shape (a `.env.example`
+ * placeholder, a hand-typed value), which callers treat as unverifiable.
+ */
+function gatewayTokenIdShort(apiToken: string): string | null {
+	return /^nt_live_([^_]+)_.+$/.exec(apiToken)?.[1] ?? null;
+}
+
+/** Whether an issued credential can still be used: not revoked, not past its expiry. */
+function isLiveCredential(meta: NeonCredentialMeta, now: number): boolean {
+	if (meta.revokedAt !== undefined) return false;
+	if (meta.expiresAt === undefined) return true;
+	const expiresAt = Date.parse(meta.expiresAt);
+	return Number.isNaN(expiresAt) || expiresAt > now;
+}
+
+/**
+ * The live credentials the persisted secrets name — at most one per half.
+ *
+ * The secrets carry their own credential id, which is why none of this needs local
+ * bookkeeping: `AWS_ACCESS_KEY_ID` **is** the credential's `tokenId` (the storage gateway
+ * authenticates against the full id, not the short one), and the AI Gateway token embeds
+ * `tokenIdShort`. A half that names nothing contributes nothing — that is what a
+ * `.env.example` placeholder, a credential revoked in the console, or one copied in from
+ * another branch all look like from here.
+ */
+function namedCredentials(
+	live: NeonCredentialMeta[],
+	persisted: PersistedSecrets,
+): { storage: NeonCredentialMeta | null; gateway: NeonCredentialMeta | null } {
+	const usable = live.filter((meta) => isLiveCredential(meta, Date.now()));
+	const shortId = persisted.apiToken
+		? gatewayTokenIdShort(persisted.apiToken)
+		: null;
+	return {
+		storage: persisted.accessKeyId
+			? (usable.find((meta) => meta.tokenId === persisted.accessKeyId) ??
+				null)
+			: null,
+		gateway: shortId
+			? (usable.find((meta) => meta.tokenIdShort === shortId) ?? null)
+			: null,
+	};
+}
+
+/**
+ * The credential the persisted secrets can be *reused* as, or `null`.
+ *
+ * Strict on purpose: every half the policy needs has to name a live credential, and when both
+ * features are enabled they must name the *same* one — they share a single credential, so
+ * halves that disagree came from two different pulls and neither can be trusted.
+ */
+function reusableCredential(
+	named: ReturnType<typeof namedCredentials>,
+	need: { needStorage: boolean; needApiToken: boolean },
+): NeonCredentialMeta | null {
+	if (need.needStorage && need.needApiToken) {
+		return named.storage &&
+			named.gateway &&
+			named.storage.tokenId === named.gateway.tokenId
+			? named.storage
+			: null;
+	}
+	if (need.needStorage) return named.storage;
+	if (need.needApiToken) return named.gateway;
+	return null;
+}
+
+/**
+ * Resolve the branch credential's secrets: reuse the ones already in the env source when they
+ * can be, and mint a fresh `user` credential otherwise.
+ *
+ * The Neon API returns `api_token` / `s3_secret_access_key` exactly once at mint time, so the
+ * persisted copies (e.g. in `.env.local`, surfaced as `NEON_AI_GATEWAY_TOKEN` /
+ * `AWS_SECRET_ACCESS_KEY`) are the only copies — exactly how one-time Auth keys are
+ * round-tripped. What "can be" means depends on {@link CredentialMode}:
+ *
+ * - `"reuse"` — every needed secret is present. Cheap, and blind: a placeholder or a revoked
+ *   credential passes.
+ * - `"verify"` — present *and* naming a live credential on this branch that carries every
+ *   needed scope. Otherwise a replacement is minted, and the credential it replaces is revoked
+ *   so a branch doesn't accumulate a live credential per pull.
+ *
+ * Revocation is deliberately narrow: only credentials the persisted secrets named, and only
+ * those this tool issued under {@link credentialName}. Their secrets lived nowhere but the env
+ * source this call supersedes, so revoking them strands nothing. Every other credential on the
+ * branch is left alone — it may belong to a teammate, another checkout, or a deployed function,
+ * and nothing observable distinguishes those from an orphan of our own.
  */
 async function resolveCredentialSecrets(args: {
 	api: NeonApi;
@@ -716,33 +903,75 @@ async function resolveCredentialSecrets(args: {
 	env: NodeJS.ProcessEnv;
 	needStorage: boolean;
 	needApiToken: boolean;
-}): Promise<{
-	accessKeyId: string;
-	secretAccessKey: string;
-	apiToken: string;
-}> {
+	mode: CredentialMode;
+}): Promise<
+	PersistedSecrets & { action: "reused" | "issued"; revoked: string[] }
+> {
 	const sKeys = NEON_ENV_VAR_KEYS.storage;
 	const aKeys = NEON_ENV_VAR_KEYS.aiGateway;
+	const persisted: PersistedSecrets = {
+		accessKeyId: args.env[sKeys.accessKeyId] ?? "",
+		secretAccessKey: args.env[sKeys.secretAccessKey] ?? "",
+		apiToken: args.env[aKeys.apiKey] ?? "",
+	};
 	const haveStorage =
 		!args.needStorage ||
-		Boolean(args.env[sKeys.accessKeyId] && args.env[sKeys.secretAccessKey]);
-	const haveApiToken = !args.needApiToken || Boolean(args.env[aKeys.apiKey]);
-	if (haveStorage && haveApiToken) {
-		return {
-			accessKeyId: args.env[sKeys.accessKeyId] ?? "",
-			secretAccessKey: args.env[sKeys.secretAccessKey] ?? "",
-			apiToken: args.env[aKeys.apiKey] ?? "",
-		};
+		Boolean(persisted.accessKeyId && persisted.secretAccessKey);
+	const haveApiToken = !args.needApiToken || Boolean(persisted.apiToken);
+	const complete = haveStorage && haveApiToken;
+
+	if (complete && args.mode === "reuse") {
+		return { ...persisted, action: "reused", revoked: [] };
 	}
+
+	// Look the persisted secrets up whenever there are any — not just when they're complete.
+	// An incomplete set still names the credential a newly-enabled feature is about to
+	// supersede (the classic case: a storage-only credential on a branch that just gained the
+	// AI Gateway), and that one should be revoked rather than left live.
+	const identifiable =
+		persisted.accessKeyId !== "" || persisted.apiToken !== "";
+	const named =
+		args.mode === "verify" && identifiable
+			? namedCredentials(
+					await args.api.listCredentials(
+						args.projectId,
+						args.branchId,
+					),
+					persisted,
+				)
+			: { storage: null, gateway: null };
+
+	const reusable = complete ? reusableCredential(named, args) : null;
+	if (reusable && credentialScopesSatisfied(reusable.scopes, args.scopes)) {
+		return { ...persisted, action: "reused", revoked: [] };
+	}
+
 	const minted = await args.api.createCredential(
 		args.projectId,
 		args.branchId,
 		{
 			scopes: args.scopes,
 			principalType: "user",
-			name: `neon-env ${args.branchName}`,
+			name: credentialName(args.branchName),
 		},
 	);
+
+	// Revoke what this write supersedes: the credentials the old secrets named, minus any this
+	// tool did not issue. A Set because both halves usually name the same one.
+	const ours = new Set<string>();
+	for (const meta of [named.storage, named.gateway]) {
+		if (
+			meta !== null &&
+			meta.principalType === "user" &&
+			meta.name === credentialName(args.branchName)
+		) {
+			ours.add(meta.tokenId);
+		}
+	}
+	for (const tokenId of ours) {
+		await args.api.revokeCredential(args.projectId, args.branchId, tokenId);
+	}
+
 	return {
 		// The storage gateway authenticates against the full token id (e.g.
 		// `nak_live_…`), not the short token id — using the short id yields
@@ -750,6 +979,8 @@ async function resolveCredentialSecrets(args: {
 		accessKeyId: minted.tokenId,
 		secretAccessKey: minted.s3SecretAccessKey,
 		apiToken: minted.apiToken,
+		action: "issued",
+		revoked: [...ours],
 	};
 }
 

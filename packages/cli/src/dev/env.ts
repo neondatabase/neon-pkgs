@@ -1,6 +1,11 @@
 import { type Config, loadConfigFromFile, type NeonApi } from "@neon/config";
 import { type AppliedChange, plan, pullConfig } from "@neon/config-runtime";
-import { fetchEnv, toEntries } from "@neon/env";
+import {
+	type CredentialMode,
+	type CredentialResolution,
+	fetchEnv,
+	toEntries,
+} from "@neon/env";
 
 import { log } from "../log.js";
 
@@ -20,6 +25,14 @@ export type DevEnvContext = {
 	 * `s3_secret_access_key` — are **reused** rather than re-minted on every run.
 	 */
 	env?: NodeJS.ProcessEnv;
+	/**
+	 * Forwarded to {@link fetchEnv}'s `credentials`; see there. `neon dev` / `neon-env run`
+	 * leave it at the default `"reuse"` (no extra API call on a hot path); `env pull` asks for
+	 * `"verify"` so the `.env` it leaves behind holds a credential that actually works.
+	 */
+	credentials?: CredentialMode;
+	/** Forwarded to {@link fetchEnv}'s `onCredential`; see there. */
+	onCredential?: (resolution: CredentialResolution) => void;
 };
 
 /** The API-targeting options every runtime call forwards from the context. */
@@ -242,6 +255,8 @@ const fetchAndProject = async (
 		branch: ctx.branchId as string,
 		...apiOptions(ctx),
 		...(ctx.env ? { env: ctx.env } : {}),
+		...(ctx.credentials ? { credentials: ctx.credentials } : {}),
+		...(ctx.onCredential ? { onCredential: ctx.onCredential } : {}),
 	});
 	return toEntries(env);
 };

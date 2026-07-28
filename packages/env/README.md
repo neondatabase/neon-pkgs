@@ -121,6 +121,27 @@ These are the OS-level vars `fetchEnv` / `parseEnv` read and `toEntries` (so `ne
 | `NEON_AI_GATEWAY_TOKEN` | branch credential's API token (bearer) |
 | `NEON_AI_GATEWAY_BASE_URL` | bare branch gateway host (`https://<branch>-api.ai.<region>.…`, no path) |
 
+### The branch credential
+
+Object storage and the AI Gateway are backed by one branch credential, and the Neon API returns its secrets (`s3_secret_access_key`, `api_token`) **once**, at mint time. The persisted copy is therefore the only copy, so `fetchEnv` reuses what's already in its env source rather than minting a credential per call. The `credentials` option decides how much it trusts that copy:
+
+```ts
+const env = await fetchEnv(config, {
+    projectId,
+    branch: "main",
+    env: { ...process.env, ...readEnvFile(".env") },
+    credentials: "verify", // default: "reuse"
+    onCredential: ({ action, keys, revoked }) => {
+        if (action === "issued") console.log(`new values for ${keys.join(", ")}`);
+    },
+});
+```
+
+- `"reuse"` keeps whatever is present without checking it. No extra API call — the right trade for `neon dev` / `neon-env run`, which inject values a pull already wrote.
+- `"verify"` checks the persisted secrets against the branch's live credentials and keeps them only if they name one that still exists, isn't revoked or expired, and carries every scope the policy needs. Anything else — a `.env.example` placeholder, a credential revoked in the console, one copied from another branch — is replaced, and the credential it replaced is revoked. This is what `neon env pull` uses.
+
+No local bookkeeping backs this: `AWS_ACCESS_KEY_ID` **is** the credential's token id, and the AI Gateway token embeds its short id, so the persisted secrets already name the credential that issued them.
+
 ## Connection role & database selection
 
 When `roleName` / `databaseName` aren't passed, `fetchEnv` (not `parseEnv`, which reads an already-resolved `DATABASE_URL`) auto-picks them:
