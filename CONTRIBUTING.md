@@ -59,6 +59,13 @@ checkout, so everything is current already. Run `test:ci` locally only right aft
 See [`AGENTS.md`](./AGENTS.md) for the deeper architecture and per-package notes (especially the
 CLI package, which keeps its own toolchain).
 
+Some packages add their own contributing notes for rules that only apply there. Read the
+package's file before changing it:
+
+| Package | Notes |
+| --- | --- |
+| [`@neon/env`](./packages/env/CONTRIBUTING.md) | Which of its two entry points (`@neon/env` vs `@neon/env/runtime`) a change belongs in, and the branch-credential rules |
+
 ## Live Neon e2e tests
 
 `pnpm test:e2e:live` runs the `@neon/sdk`, `@neon/config`, `@neon/config-runtime`, `@neon/env`,

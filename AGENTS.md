@@ -278,6 +278,22 @@ with `@neon/config-runtime` (imperative `inspect`/`plan`/`apply` + function depl
 + inject a branch's env) both building on `config`; plus `neon-init`, `@neon/ai-sdk-provider`,
 and `@neon/functions`.
 
+**Pure and imperative halves are split by import path, and the boundary is load-bearing.** The
+`@neon/config` / `@neon/config-runtime` pair is the package-level version of it. `@neon/env` does
+the same thing with a subpath:
+
+| Entry point | For | Side effects |
+| --- | --- | --- |
+| `@neon/env` | Package consumers — apps, build scripts, a `neon.ts` policy | None. Never reads `process.env` or a file |
+| `@neon/env/runtime` | Our own tooling — the `neon-env` CLI, `packages/cli`, anything resolving one branch repeatedly | Reads an env source; mints and revokes branch credentials |
+
+Before adding an export to `@neon/env`, or reaching into one of its internals from
+`packages/cli`, read **[`packages/env/CONTRIBUTING.md`](packages/env/CONTRIBUTING.md)**. It has
+the test for which side a change belongs on, why the credential-reuse logic cannot live on the
+root export, why it stays in that package rather than moving into the CLI, and the `tsconfig`
+`paths` entry a new subpath needs because `packages/cli` runs classic `moduleResolution: node`
+and so ignores package `exports`.
+
 ### The CLI package (`packages/cli`)
 
 `packages/cli` is the **Neon CLI**, migrated from [`neondatabase/neonctl`](https://github.com/neondatabase/neonctl), and is published as **`neon`**. `packages/neonctl` is a lightweight compatibility package whose executable imports `neon/cli`; it contains no CLI implementation or build output. The two packages are a Changesets fixed group and release at the same version. The primary package is linted/formatted with Biome like the rest of the repo, but its **build** toolchain differs:

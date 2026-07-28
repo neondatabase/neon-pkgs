@@ -19,7 +19,7 @@ npm install @neon/env
 | `@neon/env` | The pure half: `fetchEnv` asks the Neon API for a branch's env, `parseEnv` reads what was already injected. Neither touches the filesystem or reads an env source. This is what an app, a build script, or a `neon.ts` policy needs. |
 | `@neon/env/runtime` | The stateful half: `fetchEnvReusingSecrets`, for tools that resolve the same branch repeatedly and must not re-mint a credential each time. It reads an env source and can mint and revoke credentials. Import it from a CLI or CI, never from an app bootstrap. |
 
-The split mirrors [`@neon/config`](../config) vs [`@neon/config-runtime`](../config-runtime), for the same reason: side effects should be something you opt into by import path.
+The split mirrors [`@neon/config`](../config) vs [`@neon/config-runtime`](../config-runtime), for the same reason: side effects should be something you opt into by import path. Contributing to either half? See [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
 ## Functions
 
