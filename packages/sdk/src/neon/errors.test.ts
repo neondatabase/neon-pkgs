@@ -126,11 +126,6 @@ describe("toNeonError", () => {
 		expect((error as NeonNetworkError).reason).toBe("ECONNREFUSED");
 		expect(error.cause).toBe(cause);
 	});
-
-	it("passes a NeonError through instead of relabelling it as a network failure", () => {
-		const original = new NeonError("you passed an empty id", "client");
-		expect(toNeonError(original, undefined)).toBe(original);
-	});
 });
 
 describe("transport failures end to end", () => {

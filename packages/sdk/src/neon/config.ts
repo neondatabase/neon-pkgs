@@ -1,6 +1,5 @@
 import { createClient, createConfig } from "../client/client/index.js";
 import type { ResolvedConfig } from "./context.js";
-import { assertUsablePathParams } from "./path-params.js";
 import type { WaitForOptions } from "./wait.js";
 
 const DEFAULT_BASE_URL = "https://console.neon.tech/api/v2";
@@ -46,12 +45,6 @@ export function resolveConfig(config: NeonConfig<boolean>): ResolvedConfig {
 		createConfig({
 			auth,
 			baseUrl: config.baseUrl ?? DEFAULT_BASE_URL,
-			// The ergonomic resources call the generated operations directly rather than
-			// through `wrapRaw`, so this is the only hook that covers every request.
-			requestValidator: async (data) => {
-				assertUsablePathParams(data);
-				return data;
-			},
 			...(config.fetch ? { fetch: config.fetch } : {}),
 		}),
 	);

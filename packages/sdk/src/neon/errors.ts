@@ -204,12 +204,6 @@ export function toNeonError(
 	error: unknown,
 	response: Response | undefined,
 ): NeonError {
-	// Our own layer raises `NeonError` before the request is sent (see `path-params.ts`),
-	// and the generated client routes anything thrown there onto its error channel with no
-	// response attached. Pass it through rather than relabelling a caller mistake as a
-	// transport fault.
-	if (error instanceof NeonError) return error;
-
 	if (!response) {
 		const reason = describeTransportFailure(error);
 		return new NeonNetworkError(

@@ -84,7 +84,7 @@ The `error` channel carries a typed hierarchy (all `Error` subclasses with a `ki
 | `NeonOperationError` | `"operation"` | `operationId`, `status` — an awaited operation failed |
 | `NeonTimeoutError` | `"timeout"` | readiness/wait deadline exceeded |
 | `NeonNetworkError` | `"network"` | `reason` — transport failure (no response) |
-| `NeonError` | `"client"` | SDK-side errors (e.g. an empty path parameter, ambiguous connection-string selection) |
+| `NeonError` | `"client"` | SDK-side errors (e.g. ambiguous connection-string selection) |
 
 ```ts
 const { error } = await neon.branches.get(pid, "nope");
@@ -107,21 +107,10 @@ if (error?.kind === "network") {
 }
 ```
 
-### Empty path parameters are refused before the request is sent
-
-Passing an empty or whitespace-only id fails immediately with a `"client"` error naming the
-parameter, rather than reaching the network:
-
-```ts
-const { error } = await neon.projects.get("");
-error.kind; // "client"
-error.message; // 'Path parameter "project_id" is missing or empty, so the request was not sent. …'
-```
-
-An empty id produces a path with an empty segment (`/projects//branches`). The Neon API
-redirects those instead of rejecting them, and a redirect on a request with a body can fail
-in a way that is indistinguishable from a dropped connection — so the caller would otherwise
-see a network error for what is really a bad argument.
+Validating ids and other path parameters before passing them in is the caller's
+responsibility. An empty path parameter builds a URL with an empty segment, which the Neon
+API answers with a redirect rather than a `400`; that can surface as a `"network"` error
+rather than anything that names the argument.
 
 ## Pagination
 
