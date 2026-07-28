@@ -1,6 +1,6 @@
 {
 	"name": "@neon/sdk",
-	"version": "1.3.0",
+	"version": "1.4.0",
 	"description": "The official TypeScript SDK for the Neon API, generated from Neon's OpenAPI specification. A modern, fetch-based replacement for @neondatabase/api-client.",
 	"keywords": [
 		"neon",
