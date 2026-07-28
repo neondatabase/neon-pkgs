@@ -5,6 +5,9 @@
  * it.
  */
 
+/** Used when a transport failure carries neither an `errno` code nor any message. */
+const UNKNOWN_TRANSPORT_REASON = "cause unavailable";
+
 export type NeonErrorKind =
 	| "api"
 	| "not_found"
@@ -15,7 +18,14 @@ export type NeonErrorKind =
 	| "network"
 	| "client";
 
-/** Base class for every error the ergonomic layer produces. */
+/**
+ * Base class for every error the ergonomic layer produces.
+ *
+ * Every subclass assigns `this.name` as a string literal rather than reading it from the
+ * constructor. Bundlers rename classes, so deriving the name at runtime leaves consumers
+ * of a minified build with errors called `s` and `r` — unreadable in logs and impossible
+ * to group on in an error tracker.
+ */
 export class NeonError extends Error {
 	readonly kind: NeonErrorKind;
 
@@ -25,7 +35,7 @@ export class NeonError extends Error {
 		options?: { cause?: unknown },
 	) {
 		super(message, options);
-		this.name = new.target.name;
+		this.name = "NeonError";
 		this.kind = kind;
 	}
 }
@@ -55,6 +65,7 @@ export class NeonApiError extends NeonError {
 		},
 	) {
 		super(message, init.kind ?? "api");
+		this.name = "NeonApiError";
 		this.status = init.status;
 		this.code = init.code;
 		this.requestId = init.requestId;
@@ -70,6 +81,7 @@ export class NeonNotFoundError extends NeonApiError {
 		init: ConstructorParameters<typeof NeonApiError>[1],
 	) {
 		super(message, { ...init, kind: "not_found" });
+		this.name = "NeonNotFoundError";
 	}
 }
 
@@ -80,6 +92,7 @@ export class NeonAuthError extends NeonApiError {
 		init: ConstructorParameters<typeof NeonApiError>[1],
 	) {
 		super(message, { ...init, kind: "auth" });
+		this.name = "NeonAuthError";
 	}
 }
 
@@ -90,6 +103,7 @@ export class NeonRateLimitError extends NeonApiError {
 		init: ConstructorParameters<typeof NeonApiError>[1],
 	) {
 		super(message, { ...init, kind: "rate_limit" });
+		this.name = "NeonRateLimitError";
 	}
 }
 
@@ -105,6 +119,7 @@ export class NeonOperationError extends NeonError {
 		init: { operationId: string; status: string },
 	) {
 		super(message, "operation");
+		this.name = "NeonOperationError";
 		this.operationId = init.operationId;
 		this.status = init.status;
 	}
@@ -114,13 +129,26 @@ export class NeonOperationError extends NeonError {
 export class NeonTimeoutError extends NeonError {
 	constructor(message: string) {
 		super(message, "timeout");
+		this.name = "NeonTimeoutError";
 	}
 }
 
 /** A transport-level failure (DNS, connection, abort) — no HTTP response received. */
 export class NeonNetworkError extends NeonError {
-	constructor(message: string, options?: { cause?: unknown }) {
-		super(message, "network", options);
+	/**
+	 * The most specific reason the platform gave for the failure — an `errno` code such as
+	 * `ECONNRESET` when one is available, otherwise the innermost non-empty message. Read
+	 * this instead of matching on {@link message}.
+	 */
+	readonly reason: string;
+
+	constructor(
+		message: string,
+		options?: { cause?: unknown; reason?: string },
+	) {
+		super(message, "network", { cause: options?.cause });
+		this.name = "NeonNetworkError";
+		this.reason = options?.reason ?? UNKNOWN_TRANSPORT_REASON;
 	}
 }
 
@@ -143,6 +171,31 @@ function readApiErrorBody(body: unknown): ApiErrorBody {
 }
 
 /**
+ * Walk a transport failure's `cause` chain for the most specific description available.
+ *
+ * `fetch` reports every transport fault as `TypeError: fetch failed` and puts the real
+ * reason underneath, sometimes several levels down and sometimes with an empty message and
+ * only an `errno` code. Without this, a DNS failure, a reset connection and a redirect the
+ * client refused to follow all produce the same sentence.
+ */
+export function describeTransportFailure(error: unknown): string {
+	const seen = new Set<unknown>();
+	let current: unknown = error;
+	let deepestMessage: string | undefined;
+
+	while (current instanceof Error && !seen.has(current)) {
+		seen.add(current);
+		if ("code" in current && typeof current.code === "string") {
+			return current.code;
+		}
+		if (current.message) deepestMessage = current.message;
+		current = current.cause;
+	}
+
+	return deepestMessage ?? UNKNOWN_TRANSPORT_REASON;
+}
+
+/**
  * Build the right {@link NeonError} subclass from a raw client result. `error` is the
  * decoded error body (Neon `GeneralError`); `response` is present unless the failure was
  * transport-level.
@@ -151,10 +204,17 @@ export function toNeonError(
 	error: unknown,
 	response: Response | undefined,
 ): NeonError {
+	// Our own layer raises `NeonError` before the request is sent (see `path-params.ts`),
+	// and the generated client routes anything thrown there onto its error channel with no
+	// response attached. Pass it through rather than relabelling a caller mistake as a
+	// transport fault.
+	if (error instanceof NeonError) return error;
+
 	if (!response) {
+		const reason = describeTransportFailure(error);
 		return new NeonNetworkError(
-			"Network error: no response received from the Neon API.",
-			{ cause: error },
+			`Network error: no response received from the Neon API (${reason}).`,
+			{ cause: error, reason },
 		);
 	}
 

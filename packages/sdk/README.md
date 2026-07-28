@@ -83,13 +83,45 @@ The `error` channel carries a typed hierarchy (all `Error` subclasses with a `ki
 | `NeonRateLimitError` | `"rate_limit"` | (429, after retries) |
 | `NeonOperationError` | `"operation"` | `operationId`, `status` — an awaited operation failed |
 | `NeonTimeoutError` | `"timeout"` | readiness/wait deadline exceeded |
-| `NeonNetworkError` | `"network"` | transport failure (no response) |
-| `NeonError` | `"client"` | SDK-side errors (e.g. ambiguous connection-string selection) |
+| `NeonNetworkError` | `"network"` | `reason` — transport failure (no response) |
+| `NeonError` | `"client"` | SDK-side errors (e.g. an empty path parameter, ambiguous connection-string selection) |
 
 ```ts
 const { error } = await neon.branches.get(pid, "nope");
 if (error?.kind === "not_found") { /* … */ }
 ```
+
+Branch on `kind` rather than `name` or `message`. `name` is a stable string literal on every
+class, so it survives bundling, but `message` is not a contract.
+
+`NeonNetworkError.reason` carries the most specific reason the platform gave — an `errno`
+code such as `ECONNRESET` when one is available, otherwise the innermost non-empty message.
+It is also interpolated into `message`, so transport faults are distinguishable in logs and
+error trackers instead of collapsing onto one string:
+
+```ts
+const { error } = await neon.projects.get(id);
+if (error?.kind === "network") {
+  error.reason; // "ECONNRESET"
+  error.message; // 'Network error: no response received from the Neon API (ECONNRESET).'
+}
+```
+
+### Empty path parameters are refused before the request is sent
+
+Passing an empty or whitespace-only id fails immediately with a `"client"` error naming the
+parameter, rather than reaching the network:
+
+```ts
+const { error } = await neon.projects.get("");
+error.kind; // "client"
+error.message; // 'Path parameter "project_id" is missing or empty, so the request was not sent. …'
+```
+
+An empty id produces a path with an empty segment (`/projects//branches`). The Neon API
+redirects those instead of rejecting them, and a redirect on a request with a body can fail
+in a way that is indistinguishable from a dropped connection — so the caller would otherwise
+see a network error for what is really a bad argument.
 
 ## Pagination
 

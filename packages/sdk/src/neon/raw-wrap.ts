@@ -16,6 +16,10 @@
 
 import type { NeonError } from "./errors.js";
 import { toNeonError } from "./errors.js";
+import {
+	findUnusablePathParam,
+	unusablePathParamError,
+} from "./path-params.js";
 
 /**
  * Structural shape of any generated raw function: generic over `throwOnError`, resolving to
@@ -87,6 +91,19 @@ export function wrapRaw<F extends AnyRawFn>(fn: F & AnyRawFn) {
 		options: RawOptions<F> & { throwOnError?: boolean },
 	): Promise<RawData<F> | RawResult<RawData<F>>> {
 		const shouldThrow = options.throwOnError === true;
+
+		// Checked here as well as in the client's `requestValidator`, because the raw surface
+		// can be called with the default client from `client.gen.ts`, which no configuration
+		// of ours passes through.
+		const unusable = findUnusablePathParam(
+			(options as { path?: unknown }).path,
+		);
+		if (unusable !== undefined) {
+			const error = unusablePathParamError(unusable);
+			if (shouldThrow) throw error;
+			return { data: undefined, error };
+		}
+
 		const raw: RawFieldsResult<RawData<F>> = await fn({
 			...options,
 			throwOnError: false,
