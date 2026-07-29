@@ -24,7 +24,7 @@ import {
 import { showHelp } from "./help.js";
 import { log } from "./log.js";
 import pkg from "./pkg.js";
-import { fillInArgs } from "./utils/middlewares.js";
+import { fillInArgs, resolveApiKeyFromEnv } from "./utils/middlewares.js";
 
 const NO_SUBCOMMANDS_VERBS = [
 	// `api <path>` has a handler but no subcommands (like `status`), so the
@@ -117,7 +117,12 @@ builder = builder
 			describe: "API key",
 			group: "Global options:",
 			type: "string",
-			default: process.env.NEON_API_KEY ?? "",
+			// The default must never be the value of NEON_API_KEY: yargs renders an
+			// option's default into every help screen, so that printed the user's key
+			// verbatim on `neon --help`. `resolveApiKeyFromEnv` reads the env var
+			// instead, and `defaultDescription` names it in help without its value.
+			default: "",
+			defaultDescription: "NEON_API_KEY",
 		},
 		apiClient: {
 			hidden: true,
@@ -146,6 +151,7 @@ builder = builder
 	.middleware((args) => {
 		fillInArgs(args);
 	}, true)
+	.middleware(resolveApiKeyFromEnv, true)
 	.middleware(initAnalyticsClientMiddleware, true)
 	.help(false)
 	.group("help", "Global options:")

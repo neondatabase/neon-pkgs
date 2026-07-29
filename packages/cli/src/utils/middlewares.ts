@@ -1,4 +1,20 @@
 /**
+ * Resolves `--api-key` from `NEON_API_KEY` when the flag is absent, leaving it an
+ * empty string when neither is set.
+ *
+ * This cannot be expressed as the option's yargs `default`, because yargs prints
+ * defaults in help output and would print the key itself.
+ */
+export const resolveApiKeyFromEnv = (args: Record<string, unknown>) => {
+	if (typeof args.apiKey === "string" && args.apiKey !== "") {
+		return;
+	}
+	const fromEnv = process.env.NEON_API_KEY ?? "";
+	args.apiKey = fromEnv;
+	args["api-key"] = fromEnv;
+};
+
+/**
  * This middleware is needed to fill in the args for nested objects,
  * so that required arguments would work
  * otherwise yargs just throws an error
