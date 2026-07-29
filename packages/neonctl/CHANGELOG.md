@@ -1,5 +1,11 @@
 # neonctl
 
+## 2.38.5
+
+### Patch Changes
+
+- neon@2.38.5
+
 ## 2.38.4
 
 ### Patch Changes

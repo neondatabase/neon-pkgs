@@ -1,5 +1,12 @@
 # neon
 
+## 2.38.5
+
+### Patch Changes
+
+- Updated dependencies [fac9ab2]
+  - neon-init@0.20.4
+
 ## 2.38.4
 
 ### Patch Changes

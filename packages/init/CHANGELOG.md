@@ -1,5 +1,11 @@
 # neon-init
 
+## 0.20.4
+
+### Patch Changes
+
+- fac9ab2: `neon-init --version` now prints the installed version instead of `unknown`.
+
 ## 0.20.3
 
 ### Patch Changes
