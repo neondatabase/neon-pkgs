@@ -32,7 +32,7 @@ describe("wrapNeonError — HTTP status mapping", () => {
 		expect(p.message).toContain(
 			"https://console.neon.tech/app/settings/api-keys",
 		);
-		expect(p.message).toContain("neonctl auth");
+		expect(p.message).toContain("neon auth");
 		expect(p.message).toContain("req-1");
 		expect(p.details.status).toBe(401);
 		expect(p.details.requestId).toBe("req-1");

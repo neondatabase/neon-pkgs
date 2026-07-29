@@ -220,7 +220,7 @@ describe("set_context", () => {
 				],
 				{
 					stderr: expect.stringContaining(
-						"`neonctl set-context` is deprecated",
+						"`neon set-context` is deprecated",
 					),
 				},
 			);

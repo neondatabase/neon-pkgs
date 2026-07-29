@@ -412,7 +412,7 @@ describe("applyStartupArgs", () => {
 		const parsed = ok(parseStartupArgs([]));
 		const settings = buildBaseSettings();
 		applyStartupArgs(parsed, settings, baseConn);
-		expect(settings.vars.get("VERSION")).toMatch(/^psql-ts \(neonctl\) /);
+		expect(settings.vars.get("VERSION")).toMatch(/^psql-ts \(neon\) /);
 		expect(settings.vars.get("VERSION_NAME")).toMatch(/^\d+\.\d+\.\d+$/);
 		expect(settings.vars.get("VERSION_NUM")).toMatch(/^\d+$/);
 	});

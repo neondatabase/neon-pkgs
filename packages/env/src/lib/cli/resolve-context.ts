@@ -50,12 +50,12 @@ export function resolveContext(
 	const missing: string[] = [];
 	if (!projectId) {
 		missing.push(
-			"project id — pass `--project-id`, set `NEON_PROJECT_ID`, or add `projectId` to `.neon` (run `npx neonctl link`).",
+			"project id — pass `--project-id`, set `NEON_PROJECT_ID`, or add `projectId` to `.neon` (run `npx neon link`).",
 		);
 	}
 	if (!branch) {
 		missing.push(
-			"branch — pass `--branch`, set `NEON_BRANCH`/`NEON_BRANCH_ID`, or add `branch` to `.neon` (run `npx neonctl link` / `neonctl checkout <branch>`).",
+			"branch — pass `--branch`, set `NEON_BRANCH`/`NEON_BRANCH_ID`, or add `branch` to `.neon` (run `npx neon link` / `neon checkout <branch>`).",
 		);
 	}
 	if (!projectId || !branch) return { ok: false, missing };

@@ -7,6 +7,7 @@ import type yargs from "yargs";
 import { isNeonApiError, retryOnLock } from "../api.js";
 import { log } from "../log.js";
 import type { BranchScopeProps } from "../types.js";
+import { getCliName } from "../utils/cli_name.js";
 import {
 	branchIdFromProps,
 	fillSingleProject,
@@ -307,7 +308,7 @@ const update = async (
 		} catch (err: unknown) {
 			if (isNeonApiError(err) && err.status === 404) {
 				throw new Error(
-					`Data API is not provisioned for ${database} on branch ${branchId}. Run \`neonctl data-api create\` first.`,
+					`Data API is not provisioned for ${database} on branch ${branchId}. Run \`${getCliName()} data-api create\` first.`,
 				);
 			}
 			throw err;
@@ -335,7 +336,7 @@ const update = async (
 	} catch (err: unknown) {
 		if (isNeonApiError(err) && err.status === 404) {
 			throw new Error(
-				`Data API is not provisioned for ${database} on branch ${branchId}. Run \`neonctl data-api create\` first.`,
+				`Data API is not provisioned for ${database} on branch ${branchId}. Run \`${getCliName()} data-api create\` first.`,
 			);
 		}
 		throw err;
@@ -363,7 +364,7 @@ const refreshSchema = async (props: DataApiProps): Promise<void> => {
 	} catch (err: unknown) {
 		if (isNeonApiError(err) && err.status === 404) {
 			throw new Error(
-				`Data API is not provisioned for ${database} on branch ${branchId}. Run \`neonctl data-api create\` first.`,
+				`Data API is not provisioned for ${database} on branch ${branchId}. Run \`${getCliName()} data-api create\` first.`,
 			);
 		}
 		throw err;

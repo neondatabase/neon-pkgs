@@ -12,6 +12,7 @@ import {
 	createBranch,
 	pickBranchInteractively,
 } from "../utils/branch_picker.js";
+import { getCliName } from "../utils/cli_name.js";
 import { fillSingleProject } from "../utils/enrichers.js";
 import { looksLikeBranchId } from "../utils/formats.js";
 import {
@@ -151,8 +152,8 @@ export const handler = async (props: CheckoutProps) => {
 		throw new Error(
 			[
 				`Branch ${branchName} (${branchId}) was created and checked out, but applying neon.ts to it failed: ${failure}`,
-				"The branch is usable but does not match the policy, and `neonctl checkout` never reconciles a branch that already exists.",
-				`Fix the cause above, then run \`neonctl deploy --update-existing\` to apply the policy to it — or, if your policy only configures new branches (keyed on \`!branch.exists\`), delete the branch and check it out again: \`neonctl branches delete ${branchName}\` then \`neonctl checkout ${branchName}\`.`,
+				`The branch is usable but does not match the policy, and \`${getCliName()} checkout\` never reconciles a branch that already exists.`,
+				`Fix the cause above, then run \`${getCliName()} deploy --update-existing\` to apply the policy to it — or, if your policy only configures new branches (keyed on \`!branch.exists\`), delete the branch and check it out again: \`${getCliName()} branches delete ${branchName}\` then \`${getCliName()} checkout ${branchName}\`.`,
 			].join("\n"),
 		);
 	}
@@ -217,7 +218,7 @@ const resolveBranchId = async (
 		const picked = await pickBranchInteractively(branches, {
 			message: "Which branch would you like to check out?",
 			nonInteractiveMessage:
-				"No branch specified. Pass a branch name or id (e.g. `neonctl checkout main`), " +
+				`No branch specified. Pass a branch name or id (e.g. \`${getCliName()} checkout main\`), ` +
 				"or run interactively to pick one from a list.",
 		});
 		if (picked.kind === "existing") {
@@ -387,7 +388,7 @@ const resolveProjectId = async (props: CheckoutProps): Promise<string> => {
 	const missingProjectMessage =
 		"Could not determine which Neon project to check out a branch from. " +
 		"Provide one via the --project-id flag " +
-		"or a .neon file (created by `neonctl link` / `neonctl set-context`).";
+		`or a .neon file (created by \`${getCliName()} link\` / \`${getCliName()} set-context\`).`;
 
 	if (isCi() || !process.stdout.isTTY) {
 		throw new Error(missingProjectMessage);
@@ -398,8 +399,7 @@ const resolveProjectId = async (props: CheckoutProps): Promise<string> => {
 	const { runLink } = await prompts({
 		type: "confirm",
 		name: "runLink",
-		message:
-			"Run `neonctl link` in the current folder to pick a project now?",
+		message: `Run \`${getCliName()} link\` in the current folder to pick a project now?`,
 		initial: true,
 	});
 
@@ -420,7 +420,7 @@ const resolveProjectId = async (props: CheckoutProps): Promise<string> => {
 	const linked = readContextFile(props.contextFile);
 	if (!linked.projectId) {
 		throw new Error(
-			"Linking did not produce a project id. Re-run `neonctl checkout` once the directory is linked.",
+			`Linking did not produce a project id. Re-run \`${getCliName()} checkout\` once the directory is linked.`,
 		);
 	}
 	// Carry the freshly-linked org id forward so the merge below keeps it.

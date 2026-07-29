@@ -42,6 +42,7 @@ import {
 	warnAiGateway,
 } from "../utils/ai_gateway_notice.js";
 import { announceTargetBranch } from "../utils/branch_notice.js";
+import { getCliName } from "../utils/cli_name.js";
 import {
 	renderAppliedChanges,
 	renderBranchSettingConflicts,
@@ -573,7 +574,7 @@ export const status = async (props: ConfigProps): Promise<void> => {
 			// No branch pinned: hint on stderr and exit non-zero (grep-style) so a prompt's
 			// `when` hides the segment cleanly instead of rendering a bare icon.
 			log.info(
-				"No branch pinned. Run `neonctl checkout <branch>` to pin a branch and pull its env vars.",
+				`No branch pinned. Run \`${getCliName()} checkout <branch>\` to pin a branch and pull its env vars.`,
 			);
 			process.exitCode = 1;
 		}

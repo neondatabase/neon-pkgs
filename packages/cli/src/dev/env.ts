@@ -7,6 +7,7 @@ import {
 } from "@neon/env/runtime";
 
 import { log } from "../log.js";
+import { getCliName } from "../utils/cli_name.js";
 
 export type DevEnvContext = {
 	cwd: string;
@@ -85,7 +86,7 @@ export const resolveNeonEnvVars = async (
 		if (!ctx.projectId || !ctx.branchId) {
 			throw new MissingBranchContextError(
 				"Found a neon.ts but could not resolve the project/branch. " +
-					"Run `neonctl link` and `neonctl checkout <branch>`, or pass " +
+					`Run \`${getCliName()} link\` and \`${getCliName()} checkout <branch>\`, or pass ` +
 					"--project-id / --branch.",
 			);
 		}
@@ -117,8 +118,8 @@ export const resolveNeonEnvVars = async (
 	}
 
 	throw new MissingBranchContextError(
-		"No project/branch context found. Link a branch (`neonctl link` / " +
-			"`neonctl checkout`) or pass --project-id and --branch.",
+		`No project/branch context found. Link a branch (\`${getCliName()} link\` / ` +
+			`\`${getCliName()} checkout\`) or pass --project-id and --branch.`,
 	);
 };
 
@@ -166,8 +167,8 @@ export const resolveDevEnv = async (
 				vars: {},
 				skipped: {
 					reason:
-						"no linked Neon branch — run `neonctl link`, then " +
-						"`neonctl checkout <branch>`, to inject DATABASE_URL and friends",
+						`no linked Neon branch — run \`${getCliName()} link\`, then ` +
+						`\`${getCliName()} checkout <branch>\`, to inject DATABASE_URL and friends`,
 				},
 			};
 		}
@@ -226,8 +227,8 @@ const assertPolicyMatchesBranch = async (
 	throw new DevEnvMismatchError(
 		`Your neon.ts declares ${names} for branch ${ctx.branchId}, but the branch ` +
 			"does not have it yet, so the matching env vars cannot be injected. " +
-			"Provision it first with `neonctl deploy` (or `neonctl config apply`), " +
-			"then re-run `neonctl dev`.",
+			`Provision it first with \`${getCliName()} deploy\` (or \`${getCliName()} config apply\`), ` +
+			`then re-run \`${getCliName()} dev\`.`,
 	);
 };
 

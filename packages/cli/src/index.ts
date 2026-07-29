@@ -1,4 +1,3 @@
-import { basename } from "node:path";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import {
@@ -28,6 +27,7 @@ import {
 import { showHelp } from "./help.js";
 import { log } from "./log.js";
 import pkg from "./pkg.js";
+import { getCliName } from "./utils/cli_name.js";
 import { fillInArgs, resolveApiKeyFromEnv } from "./utils/middlewares.js";
 
 const NO_SUBCOMMANDS_VERBS = [
@@ -193,7 +193,7 @@ builder = builder
 	.group("version", "Global options:")
 	.alias("version", "v")
 	.completion()
-	.scriptName(basename(process.argv[1]) === "neon" ? "neon" : "neonctl")
+	.scriptName(getCliName())
 	.epilog(
 		"For more information, visit https://neon.com/docs/reference/neon-cli",
 	)

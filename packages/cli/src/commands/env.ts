@@ -11,6 +11,7 @@ import { log } from "../log.js";
 import type { BranchScopeProps } from "../types.js";
 import { warnAiGateway } from "../utils/ai_gateway_notice.js";
 import { announceTargetBranch } from "../utils/branch_notice.js";
+import { getCliName } from "../utils/cli_name.js";
 import { fillSingleProject, resolveBranchRef } from "../utils/enrichers.js";
 
 export type EnvPullProps = BranchScopeProps & {
@@ -31,7 +32,7 @@ export const describe = "Manage a branch's Neon env variables locally";
  * eagerly: an explicit `neonctl env pull`, or runtime injection via `neon-env run`.
  */
 export const ENV_PULL_SKIPPED_HINT =
-	"Skipped env pull (--no-env-pull). Run `neonctl env pull` to write this branch’s env vars " +
+	`Skipped env pull (--no-env-pull). Run \`${getCliName()} env pull\` to write this branch’s env vars ` +
 	"(DATABASE_URL, …) into a local .env, or inject them at runtime with `neon-env run -- <your dev command>`.";
 export const builder = (argv: yargs.Argv) =>
 	argv
@@ -261,7 +262,7 @@ export const autoPullEnvAfterPin = async (
 		const message = err instanceof Error ? err.message : String(err);
 		log.warning(
 			"Branch pinned, but pulling its Neon env vars failed: %s\n" +
-				"Run `neonctl env pull` once resolved (e.g. `neonctl deploy` if a declared service " +
+				`Run \`${getCliName()} env pull\` once resolved (e.g. \`${getCliName()} deploy\` if a declared service ` +
 				"is missing), or inject them at runtime with `neon-env run -- <your dev command>`.",
 			message,
 		);
@@ -289,11 +290,11 @@ export const renderAgentPullNote = (result: AutoPullResult): string => {
 			return " No Neon env vars to pull for this branch yet.";
 		case "skipped":
 			return (
-				" Skipped env pull (--no-env-pull); run `neonctl env pull` later, " +
+				` Skipped env pull (--no-env-pull); run \`${getCliName()} env pull\` later, ` +
 				"or inject env at runtime with `neon-env run -- <your dev command>`."
 			);
 		case "failed":
-			return ` Could not pull env vars (${result.message}); run \`neonctl env pull\` once resolved.`;
+			return ` Could not pull env vars (${result.message}); run \`${getCliName()} env pull\` once resolved.`;
 	}
 };
 

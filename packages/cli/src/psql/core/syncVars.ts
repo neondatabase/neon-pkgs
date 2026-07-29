@@ -110,16 +110,16 @@ export const syncConnectionVars = (vars: VarStore, conn: Connection): void => {
  * identifier is real and traceable to the shipped binary, while keeping
  * upstream's variable *shapes*:
  *
- *   - `VERSION`      → `psql-ts (neonctl) <clientVersion>` — a banner that
+ *   - `VERSION`      → `psql-ts (neon) <clientVersion>` — a banner that
  *     names the implementation so users can tell they are on the embedded
- *     TS port, mirroring the startup banner's `psql-ts (neonctl, …)` shape.
+ *     TS port, mirroring the startup banner's `psql-ts (neon, …)` shape.
  *   - `VERSION_NAME` → `<clientVersion>` (e.g. `2.22.0`).
  *   - `VERSION_NUM`  → the same version mapped into PG's NNMMPP integer form
  *     (`2.22.0` → `22200`) via {@link clientVersionNum}, so a script doing a
  *     numeric `:VERSION_NUM` comparison gets a monotonic integer.
  */
 export const setStartupVars = (vars: VarStore, clientVersion: string): void => {
-	vars.set("VERSION", `psql-ts (neonctl) ${clientVersion}`);
+	vars.set("VERSION", `psql-ts (neon) ${clientVersion}`);
 	vars.set("VERSION_NAME", clientVersion);
 	vars.set("VERSION_NUM", String(clientVersionNum(clientVersion)));
 };

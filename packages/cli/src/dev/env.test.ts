@@ -287,7 +287,7 @@ describe("resolveDevEnv", () => {
 	it('tier 3: no neon.ts and no project/branch -> empty vars + a "link a branch" note', async () => {
 		const result = await resolveDevEnv({ cwd });
 		expect(result.vars).toEqual({});
-		expect(result.skipped?.reason).toMatch(/neonctl link/);
+		expect(result.skipped?.reason).toMatch(/neon link/);
 	});
 
 	it("tier 2: no neon.ts but project + branch -> pooled + unpooled DATABASE_URL", async () => {
@@ -429,7 +429,7 @@ describe("resolveDevEnv", () => {
 				branchId: BRANCH_ID,
 				api,
 			}),
-		).rejects.toThrow(/auth.*neonctl deploy/s);
+		).rejects.toThrow(/auth.*neon deploy/s);
 	});
 
 	it("tier 1 match: neon.ts enables auth the branch already has -> injects, no throw", async () => {

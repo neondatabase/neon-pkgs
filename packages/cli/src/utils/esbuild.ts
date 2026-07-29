@@ -5,7 +5,7 @@ import { basename, join } from "node:path";
 import which from "which";
 
 const NOT_FOUND =
-	"esbuild not found. neonctl ships esbuild for most platforms; if you see " +
+	"esbuild not found. neon ships esbuild for most platforms; if you see " +
 	"this, install esbuild and ensure it is on your PATH (e.g. `npm i -g " +
 	"esbuild`), or set NEON_ESBUILD_PATH to an esbuild binary.";
 

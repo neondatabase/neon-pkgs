@@ -24,6 +24,7 @@ import {
 	createBranch,
 	pickBranchInteractively,
 } from "../utils/branch_picker.js";
+import { getCliName } from "../utils/cli_name.js";
 import { hasNeonConfigFile, initCmd } from "./config.js";
 import { autoPullEnvAfterPin, renderAgentPullNote } from "./env.js";
 import { REGIONS } from "./projects.js";
@@ -122,7 +123,7 @@ export const builder = (argv: yargs.Argv) =>
 				describe:
 					"Branch name or ID to pin in the context (resolved to its ID before writing). " +
 					"Without it, link only resolves the org and project — pin a branch with " +
-					"`neonctl checkout <branch>` (link never guesses a default).",
+					`\`${getCliName()} checkout <branch>\` (link never guesses a default).`,
 				type: "string",
 			},
 			params: {
@@ -170,7 +171,7 @@ export const builder = (argv: yargs.Argv) =>
 		.example([
 			[
 				"$0 link --project-id polished-snowflake-12345678",
-				"Link an existing project (org is inferred); pin a branch later with 'neonctl checkout'",
+				`Link an existing project (org is inferred); pin a branch later with '${getCliName()} checkout'`,
 			],
 			[
 				"$0 link --org-id org-… --project-name my-app --region-id aws-us-east-2",
@@ -221,9 +222,9 @@ export const handler = async (props: LinkProps) => {
 				"Missing inputs and CI environment detected (no TTY for prompts).",
 				"",
 				"Use one of:",
-				"  neonctl link --agent                                                    (JSON state machine for agents)",
-				"  neonctl link --project-id <project>                                     (link to an existing project; org is inferred)",
-				"  neonctl link --org-id <org> --project-name <name> --region-id <region>  (create a new project and link)",
+				`  ${getCliName()} link --agent                                                    (JSON state machine for agents)`,
+				`  ${getCliName()} link --project-id <project>                                     (link to an existing project; org is inferred)`,
+				`  ${getCliName()} link --org-id <org> --project-name <name> --region-id <region>  (create a new project and link)`,
 			].join("\n"),
 		);
 		process.exit(1);
@@ -288,7 +289,7 @@ const validateInputs = (inputs: Inputs): void => {
 	}
 	if (inputs.projectName && inputs.branch) {
 		throw new Error(
-			"Conflicting inputs: --branch pins a branch of an existing project, but --project-name creates a new one. Create the project first, then `neonctl checkout <branch>`.",
+			`Conflicting inputs: --branch pins a branch of an existing project, but --project-name creates a new one. Create the project first, then \`${getCliName()} checkout <branch>\`.`,
 		);
 	}
 };
@@ -482,7 +483,7 @@ const resolveBranchRef = async (
 					.join(", ")
 			: "(none)";
 	throw new LinkInputError(
-		`Branch '${branchRef}' not found in project '${projectId}'. Available branches: ${available}. Pin one with \`neonctl checkout <branch>\`.`,
+		`Branch '${branchRef}' not found in project '${projectId}'. Available branches: ${available}. Pin one with \`${getCliName()} checkout <branch>\`.`,
 		"NOT_FOUND",
 	);
 };
@@ -960,7 +961,7 @@ const runAgent = async (props: LinkProps, inputs: Inputs) => {
 			context_file: props.contextFile,
 			context: { orgId, projectId },
 			project: { id: projectId },
-			message: `Linked ${props.contextFile} to project ${projectId}${orgSuffix}. No branch pinned — run \`neonctl checkout <branch>\` (omit the branch to list options) to pin one and pull its env vars.`,
+			message: `Linked ${props.contextFile} to project ${projectId}${orgSuffix}. No branch pinned — run \`${getCliName()} checkout <branch>\` (omit the branch to list options) to pin one and pull its env vars.`,
 		});
 		return;
 	}
@@ -982,7 +983,7 @@ const runAgent = async (props: LinkProps, inputs: Inputs) => {
 				name: region.name,
 				default: region.default,
 			})),
-			next_command_template: `neonctl link --agent --org-id ${shellArg(orgId)} --project-name ${shellArg(projectName)} --region-id <region_id>`,
+			next_command_template: `${getCliName()} link --agent --org-id ${shellArg(orgId)} --project-name ${shellArg(projectName)} --region-id <region_id>`,
 		});
 		return;
 	}
@@ -1030,7 +1031,7 @@ const runAgent = async (props: LinkProps, inputs: Inputs) => {
 	// the instruction rather than silently dropped.
 	const projects = await listAllProjects(props, orgId);
 	const branchNote = branch
-		? ` A branch was requested (--branch ${branch}) but a branch can only be pinned once a project is chosen — re-run with --project-id first, then \`neonctl checkout ${branch}\`.`
+		? ` A branch was requested (--branch ${branch}) but a branch can only be pinned once a project is chosen — re-run with --project-id first, then \`${getCliName()} checkout ${branch}\`.`
 		: "";
 	emitAgent({
 		status: "needs_project",
@@ -1047,9 +1048,9 @@ const runAgent = async (props: LinkProps, inputs: Inputs) => {
 		create_option: {
 			instruction:
 				"To create a new project, ask the user for a project name. The region can be omitted to receive a follow-up needs_project_details response that lists available regions.",
-			next_command_template: `neonctl link --agent --org-id ${shellArg(orgId)} --project-name <name> --region-id <region_id>`,
+			next_command_template: `${getCliName()} link --agent --org-id ${shellArg(orgId)} --project-name <name> --region-id <region_id>`,
 		},
-		next_command_template: `neonctl link --agent --org-id ${shellArg(orgId)} --project-id <project_id>`,
+		next_command_template: `${getCliName()} link --agent --org-id ${shellArg(orgId)} --project-id <project_id>`,
 	});
 };
 
@@ -1143,7 +1144,7 @@ const buildNeedsOrgResponse = (
 			instruction:
 				"This Neon API key is organization-scoped, so the CLI cannot list the user's organizations and no existing project was found to auto-detect the org ID. Ask the user for their Neon organization ID (visible in the Neon Console under the org's Settings page, formatted like `org-bitter-breeze-12345678`) and re-run the next_command_template with that --org-id.",
 			options: [],
-			next_command_template: "neonctl link --agent --org-id <org_id>",
+			next_command_template: `${getCliName()} link --agent --org-id <org_id>`,
 		};
 	}
 	const orgs = resolution.orgs;
@@ -1154,7 +1155,7 @@ const buildNeedsOrgResponse = (
 				? "The user does not belong to any organizations. Ask them to create one in the Neon Console (https://console.neon.tech/) before linking."
 				: `Ask the user which of these ${orgs.length} organization${orgs.length === 1 ? "" : "s"} they want to link the current directory to. After they pick one, re-run the next_command_template with the chosen --org-id value.`,
 		options: orgs.map((org) => ({ id: org.id, name: org.name })),
-		next_command_template: "neonctl link --agent --org-id <org_id>",
+		next_command_template: `${getCliName()} link --agent --org-id <org_id>`,
 	};
 };
 
@@ -1245,7 +1246,7 @@ const resolveInteractiveBranch = async (
 		message: "Which branch would you like to link?",
 		nonInteractiveMessage:
 			"No branch could be selected without an interactive terminal. " +
-			"Re-run `neonctl link` interactively, or `neonctl checkout <branch>` to pin one.",
+			`Re-run \`${getCliName()} link\` interactively, or \`${getCliName()} checkout <branch>\` to pin one.`,
 	});
 	if (picked.kind === "existing") {
 		const existing = branches.find((b: Branch) => b.id === picked.branchId);
@@ -1365,7 +1366,7 @@ const printSummary = (_props: LinkProps, summary: HumanSummary): void => {
 	} else if (summary.projectId && !summary.branch && !summary.orgOnly) {
 		lines.push("");
 		lines.push(
-			"No branch pinned. Run `neonctl checkout <branch>` to pin a branch and pull its env vars.",
+			`No branch pinned. Run \`${getCliName()} checkout <branch>\` to pin a branch and pull its env vars.`,
 		);
 	}
 	lines.push("");

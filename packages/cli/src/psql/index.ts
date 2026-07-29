@@ -378,7 +378,7 @@ const writeStartupBanner = (
 	// Client identifier. Matches upstream's `psql (18.4, server X.Y)` shape
 	// but signals that this is the embedded TS implementation so users can tell
 	// when they're on the fallback path.
-	out.write(`psql-ts (neonctl, server ${serverVersion})\n`);
+	out.write(`psql-ts (neon, server ${serverVersion})\n`);
 
 	const tls = connection.getTlsInfo();
 	if (tls) {

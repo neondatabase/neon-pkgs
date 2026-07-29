@@ -18,6 +18,7 @@ import { credentialInputs } from "../_shared/auth_selection.js";
 import { isCi } from "../env.js";
 import { log } from "../log.js";
 import type { CommonProps } from "../types.js";
+import { getCliName } from "../utils/cli_name.js";
 import {
 	detectPackageManager,
 	installedPackageManagers,
@@ -142,8 +143,7 @@ export const builder = (argv: yargs.Argv) =>
 				default: true,
 			},
 			link: {
-				describe:
-					"Run `neon link` in the scaffolded directory after installing. In interactive mode this is offered as a prompt; use --no-link to skip without being asked.",
+				describe: `Run \`${getCliName()} link\` in the scaffolded directory after installing. In interactive mode this is offered as a prompt; use --no-link to skip without being asked.`,
 				type: "boolean",
 				default: true,
 			},
@@ -292,7 +292,7 @@ const resolveTargetDir = async (
 		}
 		if (!interactive) {
 			throw new Error(
-				'No target directory given. Pass one, e.g. `neon bootstrap my-app` (or "." for the current directory).',
+				`No target directory given. Pass one, e.g. \`${getCliName()} bootstrap my-app\` (or "." for the current directory).`,
 			);
 		}
 		const { value } = await prompts({
@@ -392,13 +392,13 @@ const runPostScaffoldSteps = async (
 	if (props.link) {
 		if (!installed && hasNeonConfig(targetDir)) {
 			log.info(
-				"Skipping the Neon link step: `neon link` reads this project's neon.ts " +
+				`Skipping the Neon link step: \`${getCliName()} link\` reads this project's neon.ts ` +
 					`to pull env vars, which needs its dependencies. Run \`${pm} install\`, ` +
-					"then `neon link`.",
+					`then \`${getCliName()} link\`.`,
 			);
 		} else if (
 			await confirm(
-				"Link this project to a Neon project now? (runs neon link)",
+				`Link this project to a Neon project now? (runs ${getCliName()} link)`,
 			)
 		) {
 			await runNeonLink(props, targetDir);
@@ -564,7 +564,7 @@ const printNextSteps = (
 		log.info("  %s install", pm);
 	}
 	if (opts.suggestLink) {
-		log.info("  neon link");
+		log.info(`  ${getCliName()} link`);
 	}
 	log.info("  See the README to run it.");
 	log.info("");
@@ -601,7 +601,7 @@ const runAgent = async (props: BootstrapProps): Promise<void> => {
 				description: template.description,
 				...(template.services ? { services: template.services } : {}),
 			})),
-			next_command_template: `neon bootstrap --agent ${
+			next_command_template: `${getCliName()} bootstrap --agent ${
 				props.directory ? shellArg(props.directory) : "<directory>"
 			} --template <template_id>`,
 		});
@@ -622,7 +622,7 @@ const runAgent = async (props: BootstrapProps): Promise<void> => {
 			status: "needs_directory",
 			instruction:
 				'Ask the user which directory to scaffold into (use "." for the current directory), then re-run the next_command_template with it.',
-			next_command_template: `neon bootstrap --agent <directory> --template ${shellArg(
+			next_command_template: `${getCliName()} bootstrap --agent <directory> --template ${shellArg(
 				template.id,
 			)}`,
 		});
@@ -660,7 +660,7 @@ const runAgent = async (props: BootstrapProps): Promise<void> => {
 				action: "link_neon_project",
 				instruction:
 					"Ask the user whether to link the project to a Neon project now. This runs the link state machine — follow its JSON output for the next step.",
-				command: `${runIn}neon link --agent`,
+				command: `${runIn}${getCliName()} link --agent`,
 			},
 		],
 		message: `Scaffolded "${template.title}" (${filesWritten} files) into ${dir}. Offer the next_steps to the user: install dependencies, initialize git, then link a Neon project.`,

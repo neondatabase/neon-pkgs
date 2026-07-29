@@ -38,7 +38,7 @@ describe("functions", () => {
 				},
 				stderr:
 					"INFO: Function deployment triggered for function nowaitfunc. " +
-					"INFO: Check status with: neonctl function get nowaitfunc " +
+					"INFO: Check status with: neon function get nowaitfunc " +
 					"--project-id test-project-123456 --branch br-main-branch-123456",
 			},
 		);
@@ -393,7 +393,7 @@ describe("functions", () => {
 				},
 				stderr:
 					"INFO: Function deployment triggered for function stuckstart. " +
-					"INFO: Check status with: neonctl function get stuckstart " +
+					"INFO: Check status with: neon function get stuckstart " +
 					"--project-id test-project-123456 --branch br-main-branch-123456 " +
 					"ERROR: Timed out waiting for the deployment of stuckstart to start. " +
 					"It may still be in progress.",
@@ -426,7 +426,7 @@ describe("functions", () => {
 				},
 				stderr:
 					"INFO: Function deployment triggered for function stuckbuild. " +
-					"INFO: Check status with: neonctl function get stuckbuild " +
+					"INFO: Check status with: neon function get stuckbuild " +
 					"--project-id test-project-123456 --branch br-main-branch-123456 " +
 					"ERROR: Timed out waiting for function deployment stuckbuild/1 to finish. " +
 					"It may still be building.",
@@ -462,7 +462,7 @@ describe("functions", () => {
 				},
 				stderr:
 					"INFO: Function deployment triggered for function envfunc. " +
-					"INFO: Check status with: neonctl function get envfunc " +
+					"INFO: Check status with: neon function get envfunc " +
 					"--project-id test-project-123456 --branch br-main-branch-123456",
 			},
 		);
@@ -617,7 +617,7 @@ describe("functions", () => {
 				code: 1,
 				stderr:
 					"ERROR: Provide at least one option to deploy, e.g. --src or --env. " +
-					"See: neonctl function deploy --help.",
+					"See: neon function deploy --help.",
 			},
 		);
 	});
@@ -651,7 +651,7 @@ describe("functions", () => {
 				},
 				stderr:
 					"INFO: Function deployment triggered for function tsoverjs. " +
-					"INFO: Check status with: neonctl function get tsoverjs " +
+					"INFO: Check status with: neon function get tsoverjs " +
 					"--project-id test-project-123456 --branch br-main-branch-123456",
 			},
 		);
@@ -684,7 +684,7 @@ describe("functions", () => {
 				},
 				stderr:
 					"INFO: Function deployment triggered for function mjsoverjs. " +
-					"INFO: Check status with: neonctl function get mjsoverjs " +
+					"INFO: Check status with: neon function get mjsoverjs " +
 					"--project-id test-project-123456 --branch br-main-branch-123456",
 			},
 		);
@@ -717,7 +717,7 @@ describe("functions", () => {
 				},
 				stderr:
 					"INFO: Function deployment triggered for function jsonly. " +
-					"INFO: Check status with: neonctl function get jsonly " +
+					"INFO: Check status with: neon function get jsonly " +
 					"--project-id test-project-123456 --branch br-main-branch-123456",
 			},
 		);
@@ -753,7 +753,7 @@ describe("functions", () => {
 				},
 				stderr:
 					"INFO: Function deployment triggered for function srcfile. " +
-					"INFO: Check status with: neonctl function get srcfile " +
+					"INFO: Check status with: neon function get srcfile " +
 					"--project-id test-project-123456 --branch br-main-branch-123456",
 			},
 		);

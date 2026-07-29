@@ -120,7 +120,7 @@ describe("setStartupVars", () => {
 	test("seeds VERSION / VERSION_NAME / VERSION_NUM from the client version", () => {
 		const vars = createVarStore();
 		setStartupVars(vars, "2.22.0");
-		expect(vars.get("VERSION")).toBe("psql-ts (neonctl) 2.22.0");
+		expect(vars.get("VERSION")).toBe("psql-ts (neon) 2.22.0");
 		expect(vars.get("VERSION_NAME")).toBe("2.22.0");
 		expect(vars.get("VERSION_NUM")).toBe("22200");
 	});

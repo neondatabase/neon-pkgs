@@ -332,7 +332,7 @@ export const CLIENT_VERSION = "1.0.0";
 // `embedded-ts` label in place of a real PG build number since this is a
 // reimplementation, not a compiled psql. Distinct from the `:VERSION` psql
 // variable (the client-identity string seeded from CLIENT_VERSION).
-const VERSION_STRING = `psql (PostgreSQL) embedded-ts (neonctl ${CLIENT_VERSION})`;
+const VERSION_STRING = `psql (PostgreSQL) embedded-ts (neon ${CLIENT_VERSION})`;
 
 const pushAction = (acts: StartupAction[], a: StartupAction): void => {
 	acts.push(a);

@@ -85,7 +85,7 @@ describe("tryCurrentBranchFastPath", () => {
 			tryCurrentBranchFastPath(ARGV("status", "--current-branch"), cwd),
 		).toBe(true);
 		expect(out.join("")).toBe("");
-		expect(err.join("")).toContain("Run `neonctl checkout <branch>`");
+		expect(err.join("")).toContain("Run `neon checkout <branch>`");
 		expect(process.exitCode).toBe(1);
 	});
 

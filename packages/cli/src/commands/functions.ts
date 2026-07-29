@@ -13,6 +13,7 @@ import {
 } from "../functions_api.js";
 import { log } from "../log.js";
 import type { BranchScopeProps } from "../types.js";
+import { getCliName } from "../utils/cli_name.js";
 import { branchIdFromProps, fillSingleProject } from "../utils/enrichers.js";
 import { bundleEntry } from "../utils/esbuild.js";
 import { zipBundle } from "../utils/zip.js";
@@ -220,7 +221,7 @@ const parseEnv = (entries: string[] | undefined): string | undefined => {
 };
 
 const statusHint = (slug: string, projectId: string, branchId: string) =>
-	`Check status with: neonctl function get ${slug} --project-id ${projectId} --branch ${branchId}`;
+	`Check status with: ${getCliName()} function get ${slug} --project-id ${projectId} --branch ${branchId}`;
 
 // Emit the resolved deployment together with the function's invocation_url, so the
 // deploy output shows where the function is reachable (not just the deployment id).
@@ -262,7 +263,7 @@ const deploy = async (props: DeployProps) => {
 	if (!hasOption) {
 		throw new Error(
 			"Provide at least one option to deploy, e.g. --src or --env. " +
-				"See: neonctl function deploy --help.",
+				`See: ${getCliName()} function deploy --help.`,
 		);
 	}
 

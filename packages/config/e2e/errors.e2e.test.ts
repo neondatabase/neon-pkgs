@@ -22,7 +22,7 @@ describe("e2e — error wrapping against real Neon API", () => {
 				expect(p.message).toContain(
 					"https://console.neon.tech/app/settings/api-keys",
 				);
-				expect(p.message).toContain("neonctl auth");
+				expect(p.message).toContain("neon auth");
 			}
 		},
 	);

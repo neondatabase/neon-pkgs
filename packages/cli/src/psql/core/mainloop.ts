@@ -331,7 +331,7 @@ const isHelpKeyword = (line: string): boolean => {
 };
 
 const HELP_TEXT =
-	"You are using psql-ts, the embedded TypeScript psql in neonctl.\n" +
+	"You are using psql-ts, the embedded TypeScript psql in neon.\n" +
 	"Type:  \\copyright for distribution terms\n" +
 	"       \\h for help with SQL commands\n" +
 	"       \\? for help with psql commands\n" +

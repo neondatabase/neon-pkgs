@@ -484,7 +484,7 @@ describe("config commands", () => {
 			// stdout stays empty; the hint goes to stderr only.
 			expect(stdoutChunks.join("")).toBe("");
 			expect(stderrChunks.join("")).toContain(
-				"Run `neonctl checkout <branch>`",
+				"Run `neon checkout <branch>`",
 			);
 			// Non-zero exit (grep-style) so a shell prompt can guard on it directly.
 			expect(process.exitCode).toBe(1);

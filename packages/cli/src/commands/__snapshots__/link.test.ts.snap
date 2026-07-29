@@ -13,7 +13,7 @@ exports[`link > --agent mode > with full project details creates project and emi
     "id": "new-project-789012",
     "name": "test_project"
   },
-  "message": "Created project new-project-789012 (\\"test_project\\") in aws-us-east-2 and linked <TMP>/agent_linked_create/.neon on branch test_branch. Skipped env pull (--no-env-pull); run \`neonctl env pull\` later, or inject env at runtime with \`neon-env run -- <your dev command>\`."
+  "message": "Created project new-project-789012 (\\"test_project\\") in aws-us-east-2 and linked <TMP>/agent_linked_create/.neon on branch test_branch. Skipped env pull (--no-env-pull); run \`neon env pull\` later, or inject env at runtime with \`neon-env run -- <your dev command>\`."
 }
 "
 `;
@@ -44,7 +44,7 @@ exports[`link > --agent mode > with no flags emits needs_org JSON 1`] = `
       "name": "Organization 3"
     }
   ],
-  "next_command_template": "neonctl link --agent --org-id <org_id>"
+  "next_command_template": "neon link --agent --org-id <org_id>"
 }
 "
 `;
@@ -69,9 +69,9 @@ exports[`link > --agent mode > with only --org-id emits needs_project JSON 1`] =
   ],
   "create_option": {
     "instruction": "To create a new project, ask the user for a project name. The region can be omitted to receive a follow-up needs_project_details response that lists available regions.",
-    "next_command_template": "neonctl link --agent --org-id org-2 --project-name <name> --region-id <region_id>"
+    "next_command_template": "neon link --agent --org-id org-2 --project-name <name> --region-id <region_id>"
   },
-  "next_command_template": "neonctl link --agent --org-id org-2 --project-id <project_id>"
+  "next_command_template": "neon link --agent --org-id org-2 --project-id <project_id>"
 }
 "
 `;
@@ -87,7 +87,7 @@ exports[`link > --agent mode > with only --project-id infers the org and emits l
   "project": {
     "id": "proj-in-org"
   },
-  "message": "Linked <TMP>/agent_linked_infer/.neon to project proj-in-org (org org-7). No branch pinned — run \`neonctl checkout <branch>\` (omit the branch to list options) to pin one and pull its env vars."
+  "message": "Linked <TMP>/agent_linked_infer/.neon to project proj-in-org (org org-7). No branch pinned — run \`neon checkout <branch>\` (omit the branch to list options) to pin one and pull its env vars."
 }
 "
 `;
@@ -110,7 +110,7 @@ exports[`link > --agent mode > with org+project emits linked JSON (no branch) an
   "project": {
     "id": "test"
   },
-  "message": "Linked <TMP>/agent_linked_existing/.neon to project test (org org-2). No branch pinned — run \`neonctl checkout <branch>\` (omit the branch to list options) to pin one and pull its env vars."
+  "message": "Linked <TMP>/agent_linked_existing/.neon to project test (org org-2). No branch pinned — run \`neon checkout <branch>\` (omit the branch to list options) to pin one and pull its env vars."
 }
 "
 `;
@@ -148,7 +148,7 @@ exports[`link > --agent mode > with org+projectName but no region emits needs_pr
       "default": false
     }
   ],
-  "next_command_template": "neonctl link --agent --org-id org-2 --project-name demo --region-id <region_id>"
+  "next_command_template": "neon link --agent --org-id org-2 --project-name demo --region-id <region_id>"
 }
 "
 `;
@@ -196,7 +196,7 @@ exports[`link > gitignore scaffolding > appends .neon to an existing .gitignore 
   orgId:     org-2
   projectId: test
 
-No branch pinned. Run \`neonctl checkout <branch>\` to pin a branch and pull its env vars.
+No branch pinned. Run \`neon checkout <branch>\` to pin a branch and pull its env vars.
 
 "
 `;
@@ -206,7 +206,7 @@ exports[`link > gitignore scaffolding > appends .neon to an existing .gitignore 
   orgId:     org-2
   projectId: test
 
-No branch pinned. Run \`neonctl checkout <branch>\` to pin a branch and pull its env vars.
+No branch pinned. Run \`neon checkout <branch>\` to pin a branch and pull its env vars.
 
 "
 `;
@@ -216,7 +216,7 @@ exports[`link > gitignore scaffolding > creates a .gitignore listing .neon next 
   orgId:     org-2
   projectId: test
 
-No branch pinned. Run \`neonctl checkout <branch>\` to pin a branch and pull its env vars.
+No branch pinned. Run \`neon checkout <branch>\` to pin a branch and pull its env vars.
 
 "
 `;
@@ -273,7 +273,7 @@ exports[`link > non-interactive flag mode > link --params JSON behaves like flag
   orgId:     org-2
   projectId: test
 
-No branch pinned. Run \`neonctl checkout <branch>\` to pin a branch and pull its env vars.
+No branch pinned. Run \`neon checkout <branch>\` to pin a branch and pull its env vars.
 
 "
 `;
@@ -290,7 +290,7 @@ exports[`link > non-interactive flag mode > link --project-id alone infers the o
   orgId:     org-7
   projectId: proj-in-org
 
-No branch pinned. Run \`neonctl checkout <branch>\` to pin a branch and pull its env vars.
+No branch pinned. Run \`neon checkout <branch>\` to pin a branch and pull its env vars.
 
 "
 `;
@@ -325,7 +325,7 @@ exports[`link > non-interactive flag mode > link to existing project writes org+
   orgId:     org-2
   projectId: test
 
-No branch pinned. Run \`neonctl checkout <branch>\` to pin a branch and pull its env vars.
+No branch pinned. Run \`neon checkout <branch>\` to pin a branch and pull its env vars.
 
 "
 `;
@@ -367,9 +367,9 @@ exports[`link > org-scoped API key behavior > agent mode auto-detects org from e
   ],
   "create_option": {
     "instruction": "To create a new project, ask the user for a project name. The region can be omitted to receive a follow-up needs_project_details response that lists available regions.",
-    "next_command_template": "neonctl link --agent --org-id org-detected-99887766 --project-name <name> --region-id <region_id>"
+    "next_command_template": "neon link --agent --org-id org-detected-99887766 --project-name <name> --region-id <region_id>"
   },
-  "next_command_template": "neonctl link --agent --org-id org-detected-99887766 --project-id <project_id>"
+  "next_command_template": "neon link --agent --org-id org-detected-99887766 --project-id <project_id>"
 }
 "
 `;
@@ -415,7 +415,7 @@ exports[`link > org-scoped API key behavior > agent mode falls back to static re
       "default": false
     }
   ],
-  "next_command_template": "neonctl link --agent --org-id org-detected-99887766 --project-name whatever --region-id <region_id>"
+  "next_command_template": "neon link --agent --org-id org-detected-99887766 --project-name whatever --region-id <region_id>"
 }
 "
 `;
@@ -425,7 +425,7 @@ exports[`link > org-scoped API key behavior > agent mode with no orgs available 
   "status": "needs_org",
   "instruction": "This Neon API key is organization-scoped, so the CLI cannot list the user's organizations and no existing project was found to auto-detect the org ID. Ask the user for their Neon organization ID (visible in the Neon Console under the org's Settings page, formatted like \`org-bitter-breeze-12345678\`) and re-run the next_command_template with that --org-id.",
   "options": [],
-  "next_command_template": "neonctl link --agent --org-id <org_id>"
+  "next_command_template": "neon link --agent --org-id <org_id>"
 }
 "
 `;
@@ -435,7 +435,7 @@ exports[`link > overwrites an existing .neon when re-linking non-interactively 1
   orgId:     org-2
   projectId: test
 
-No branch pinned. Run \`neonctl checkout <branch>\` to pin a branch and pull its env vars.
+No branch pinned. Run \`neon checkout <branch>\` to pin a branch and pull its env vars.
 
 "
 `;

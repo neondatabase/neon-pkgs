@@ -29,9 +29,9 @@ describe("pickBranchInteractively", () => {
 			pickBranchInteractively([], {
 				message: "Which branch would you like to check out?",
 				nonInteractiveMessage:
-					"No branch specified. Pass a branch name or id (e.g. `neonctl checkout main`), " +
+					"No branch specified. Pass a branch name or id (e.g. `neon checkout main`), " +
 					"or run interactively to pick one from a list.",
 			}),
-		).rejects.toThrow(/neonctl checkout main/);
+		).rejects.toThrow(/neon checkout main/);
 	});
 });

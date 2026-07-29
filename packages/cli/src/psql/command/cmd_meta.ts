@@ -800,12 +800,12 @@ PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
  * here on purpose (see the project's LICENSE file for terms).
  */
 const NEON_NOTICE = `
-This is an embedded psql reimplementation that ships with neonctl, the
+This is an embedded psql reimplementation that ships with neon, the
 command-line interface for Neon (https://neon.tech). Neon is part of
 Databricks (https://www.databricks.com).
 
 It is an independent reimplementation of psql and is not affiliated with
-or endorsed by the PostgreSQL Global Development Group. See the neonctl
+or endorsed by the PostgreSQL Global Development Group. See the neon
 LICENSE file for distribution terms.
 `;
 

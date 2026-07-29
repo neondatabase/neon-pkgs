@@ -4,6 +4,7 @@ import {
 	readContextFile,
 } from "./context.js";
 import { log } from "./log.js";
+import { getCliName } from "./utils/cli_name.js";
 
 /**
  * Offline fast path for `(config) status --current-branch` (used by shell prompts).
@@ -43,7 +44,7 @@ export const tryCurrentBranchFastPath = (
 		process.stdout.write(`${branch}\n`);
 	} else {
 		log.info(
-			"No branch pinned. Run `neonctl checkout <branch>` to pin a branch and pull its env vars.",
+			`No branch pinned. Run \`${getCliName()} checkout <branch>\` to pin a branch and pull its env vars.`,
 		);
 		process.exitCode = 1;
 	}

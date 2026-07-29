@@ -15,6 +15,7 @@ import {
 	projectUpdateRequest,
 } from "../parameters.gen.js";
 import type { CommonProps, IdOrNameProps } from "../types.js";
+import { getCliName } from "../utils/cli_name.js";
 import { getComputeUnits } from "../utils/compute_units.js";
 import { psql } from "../utils/psql.js";
 import { writer } from "../writer.js";
@@ -541,11 +542,11 @@ The organization ID has been saved in ${props.contextFile}
 
 If you'd like to change the default organization later, use
 
-    neonctl link --org-id <org_id>
+    ${getCliName()} link --org-id <org_id>
 
 Or to clear the context file and forget the default organization
 
-    neonctl link --clear
+    ${getCliName()} link --clear
 
 `);
 	}

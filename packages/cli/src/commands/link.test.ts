@@ -321,7 +321,7 @@ describe("link", () => {
 				],
 				{
 					code: 1,
-					stderr: "ERROR: Conflicting inputs: --branch pins a branch of an existing project, but --project-name creates a new one. Create the project first, then `neonctl checkout <branch>`.",
+					stderr: "ERROR: Conflicting inputs: --branch pins a branch of an existing project, but --project-name creates a new one. Create the project first, then `neon checkout <branch>`.",
 				},
 			);
 		});
@@ -640,7 +640,7 @@ describe("link", () => {
 			]);
 			expect(result.code).toBe(1);
 			expect(result.stderr).toContain("CI environment detected");
-			expect(result.stderr).toContain("neonctl link --agent");
+			expect(result.stderr).toContain("neon link --agent");
 		});
 	});
 

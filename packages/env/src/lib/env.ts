@@ -618,7 +618,7 @@ export async function fetchEnvKeys(
 				ErrorCode.NotFound,
 				[
 					`fetchEnv: branch policy enables auth but no Neon Auth integration is enabled on branch ${branch.name} (${branch.id}).`,
-					"Enable it via `apply(config, { projectId, branchId })` (or `npx neonctl …`), in the Neon Console — then re-run fetchEnv. Or return auth.enabled=false.",
+					"Enable it via `apply(config, { projectId, branchId })` (or `npx neon …`), in the Neon Console — then re-run fetchEnv. Or return auth.enabled=false.",
 				].join(" "),
 				{
 					details: { projectId, branchId: branch.id },
