@@ -28,6 +28,14 @@ export interface NeonConfig<Throw extends boolean = false> {
 	retries?: number;
 	/** Override the API base URL. Defaults to `https://console.neon.tech/api/v2`. */
 	baseUrl?: string;
+	/**
+	 * Product token sent as `User-Agent` on every request, for example `my-cli/1.2.0`.
+	 *
+	 * Neon attributes API traffic to a caller by user agent, so anything built on this
+	 * SDK that wants its usage counted separately from direct API use has to set this.
+	 * Unset by default, which means requests carry whatever the runtime's `fetch` sends.
+	 */
+	userAgent?: string;
 	/** Custom `fetch` implementation (e.g. for proxies, tests, or non-global runtimes). */
 	fetch?: typeof fetch;
 	/**
@@ -45,6 +53,9 @@ export function resolveConfig(config: NeonConfig<boolean>): ResolvedConfig {
 		createConfig({
 			auth,
 			baseUrl: config.baseUrl ?? DEFAULT_BASE_URL,
+			...(config.userAgent
+				? { headers: { "User-Agent": config.userAgent } }
+				: {}),
 			...(config.fetch ? { fetch: config.fetch } : {}),
 		}),
 	);

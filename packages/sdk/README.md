@@ -45,9 +45,23 @@ const { project, connectionString } = data;
 | `retries` | `number` | `2` | Automatic retries on always-safe statuses (`423`, `429`, `503`) with backoff. |
 | `orgId` | `string` | — | Default organization, applied to project create/list and as the transfer source org. Overridable per call. |
 | `baseUrl` | `string` | `https://console.neon.tech/api/v2` | Override the API base URL. |
+| `userAgent` | `string` | — | Product token sent as `User-Agent` on every request, e.g. `my-cli/1.2.0`. See below. |
 | `fetch` | `typeof fetch` | global `fetch` | Custom fetch implementation (proxies, tests, non-global runtimes). |
 
 Every option except `apiKey` is also accepted **per call** via the last `options` argument (`{ throwOnError?, waitForReadiness?, signal? }`), overriding the client default.
+
+### Identifying your application
+
+Neon attributes API traffic to a caller by user agent. If you are building a tool, integration, or service on this SDK and want its usage counted separately from direct API calls, set `userAgent`:
+
+```ts
+const neon = createNeonClient({
+  apiKey: process.env.NEON_API_KEY!,
+  userAgent: "my-cli/1.2.0",
+});
+```
+
+It applies to every request the client makes, including raw calls that reuse `neon.client`. Left unset, requests carry whatever your runtime's `fetch` sends by default — `node` on Node.js — and are indistinguishable from any other client.
 
 ## The result model
 
