@@ -140,7 +140,7 @@ export interface EnableDataApiInput {
 }
 
 /**
- * A branchable object-storage bucket (Preview). Backed by the Neon Platform
+ * A branchable object-storage bucket (Preview). Backed by Neon's
  * branchable-storage service.
  */
 export interface NeonBucketSnapshot {

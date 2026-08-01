@@ -1,6 +1,6 @@
 # Neon CLI
 
-The `neon` package is a command-line interface that lets you manage [Neon Serverless Postgres](https://neon.tech/) directly from the terminal. For the complete documentation, see [Neon CLI](https://neon.tech/docs/reference/neon-cli).
+The `neon` package is a command-line interface that lets you manage [Neon](https://neon.tech/) — Lakebase Postgres, Object Storage, Functions, Managed Better Auth, and the AI Gateway — directly from the terminal. For the complete documentation, see [Neon CLI](https://neon.tech/docs/reference/neon-cli).
 
 The legacy `neonctl` package is a lightweight compatibility package that depends
 on this package and invokes the same CLI entry point. The implementation and

@@ -166,7 +166,7 @@ export async function handleAuthPhase(
 				},
 			],
 			context:
-				"Neon is a serverless Postgres provider. A free account is required to continue.",
+				"Neon is a complete set of cloud backend primitives built around Lakebase Postgres. A free account is required to continue.",
 			responseMapping: {
 				existing_account: {
 					action: {

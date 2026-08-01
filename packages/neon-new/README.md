@@ -43,7 +43,7 @@ Import the SDK:
 import { instantPostgres } from "neon-new/sdk";
 ```
 
-Create a claimable Neon Postgres database and save credentials to your .env:
+Create a claimable Lakebase Postgres database and save credentials to your .env:
 
 ```ts
 await instantPostgres({

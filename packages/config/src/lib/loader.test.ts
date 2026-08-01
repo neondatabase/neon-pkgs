@@ -56,7 +56,7 @@ describe("loadConfigFromFile", () => {
 			);
 			const message =
 				error instanceof Error ? error.message : String(error);
-			expect(message).toContain("Invalid Neon platform config");
+			expect(message).toContain("Invalid Neon config");
 			expect(message).toContain("preview.functions.hello-world");
 			expect(message).toContain(
 				"function slug must be 1-20 lowercase letters and digits (no hyphens or other characters)",

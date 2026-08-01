@@ -107,7 +107,7 @@ type PreviewAutocomplete<Preview> = (Preview extends { functions: infer F }
 		: unknown);
 
 /**
- * Validate and freeze a Neon Platform branch policy.
+ * Validate and freeze a Neon branch policy.
  *
  * Used at the top of `neon.ts`:
  * ```ts

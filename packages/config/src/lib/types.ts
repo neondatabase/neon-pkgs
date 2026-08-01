@@ -63,7 +63,7 @@ type DurationField<Suggestions extends DurationString> =
  *
  * Mirrors the subset of {@link https://api-docs.neon.tech/reference/getting-started-with-neon-api Neon endpoint}
  * fields that we expose as IaC primitives. Anything left undefined falls back to the project's
- * `default_endpoint_settings` (which themselves fall back to Neon platform defaults).
+ * `default_endpoint_settings` (which themselves fall back to Neon defaults).
  */
 export interface ComputeSettings {
 	/**
@@ -88,7 +88,7 @@ export interface ComputeSettings {
 	 *   `<integer><unit>` (units: `s`, `m`, `h`, `d`, `w`). A **unit is required** — for raw
 	 *   seconds pass a `number`, not a string.
 	 * - `number` — custom timeout in **seconds**, must be in `60`–`604800` (1 minute to 1 week)
-	 * - `undefined` — use the Neon platform default (currently 300s / 5 minutes)
+	 * - `undefined` — use the Neon default (currently 300s / 5 minutes)
 	 *
 	 * Whichever form you use, the resolved timeout must fall in `60`–`604800` seconds (the Neon
 	 * API limit); the suggestions are all within that band, anything else is checked at apply.

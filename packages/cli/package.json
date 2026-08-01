@@ -1,7 +1,7 @@
 {
   "name": "neon",
   "version": "2.38.5",
-  "description": "CLI tool for Neon Serverless Postgres",
+  "description": "CLI tool for Neon, the cloud backend primitives built around Lakebase Postgres",
   "keywords": [
     "neon",
     "neonctl",

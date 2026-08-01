@@ -1,6 +1,6 @@
 /**
- * `@neon/config-runtime/v1` — the imperative runtime for Config-as-Code on the
- * Neon Platform.
+ * `@neon/config-runtime/v1` — the imperative runtime for Config-as-Code on
+ * Neon.
  *
  * `@neon/config` is the **authoring** surface: `defineConfig`, types, and schemas
  * you import from `neon.ts`. It is intentionally free of heavy/native dependencies.

@@ -1,5 +1,5 @@
 /**
- * `@neon/config/v1` — the v1 public API for Config-as-Code on the Neon Platform.
+ * `@neon/config/v1` — the v1 public API for Config-as-Code on Neon.
  *
  * Usage in `neon.ts`:
  * ```ts

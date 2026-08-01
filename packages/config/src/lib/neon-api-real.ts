@@ -1357,15 +1357,15 @@ const HTTP_STATUS_TEXT: Record<number, string> = {
 	503: "Service Unavailable",
 };
 
-/** AWS region where Neon platform features are currently available in beta. */
+/** AWS region where Neon features are currently available in beta. */
 const PLATFORM_BETA_REGION_ID = "aws-us-east-2";
 
 const PLATFORM_BETA_REGION_GUIDANCE =
-	"Neon platform features (Functions and Object Storage) are currently in beta and only available in the AWS US East (Ohio) region " +
+	"Neon features (Functions and Object Storage) are currently in beta and only available in the AWS US East (Ohio) region " +
 	`(\`${PLATFORM_BETA_REGION_ID}\`); more regions are coming shortly. Run \`neon link\` to link or create a new project in that region.`;
 
 const PLATFORM_BETA_REGION_GUIDANCE_SHORT =
-	"Neon platform features are currently in beta and only available in the AWS US East (Ohio) region " +
+	"Neon features are currently in beta and only available in the AWS US East (Ohio) region " +
 	`(\`${PLATFORM_BETA_REGION_ID}\`); more regions are coming shortly. Run \`neon link\` to link or create a new project in that region.`;
 
 /**

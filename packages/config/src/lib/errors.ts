@@ -113,7 +113,7 @@ export class ConfigValidationError extends PlatformError {
 	constructor(issues: readonly string[]) {
 		super(
 			"PLATFORM_INVALID_CONFIG",
-			`Invalid Neon platform config:\n  - ${issues.join("\n  - ")}`,
+			`Invalid Neon config:\n  - ${issues.join("\n  - ")}`,
 		);
 		this.issues = issues;
 	}

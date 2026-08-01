@@ -40,7 +40,7 @@ type SeedBranch = Omit<NeonBranchSnapshot, "protected"> & {
  * - Each project has a single read-write endpoint per branch (Neon's default), an `orgId`
  *   on the project, default endpoint settings, and a fixed region.
  * - Branches inherit endpoint defaults from the project when no explicit settings are set
- *   at create-time. This mirrors the real Neon platform.
+ *   at create-time. This mirrors the real Neon API.
  *
  * The fake records a call log (`history`) so tests can assert on the exact sequence of API
  * operations that `pushConfig` performs.

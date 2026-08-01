@@ -225,7 +225,7 @@ describe("resolveConfig", () => {
 		if (!(caught instanceof ConfigValidationError)) throw caught;
 
 		// The user-visible message is exactly what the CLI prints.
-		expect(caught.message).toContain("Invalid Neon platform config:");
+		expect(caught.message).toContain("Invalid Neon config:");
 		const issue = caught.issues.join("\n");
 		// Points at the exact path…
 		expect(issue).toContain("preview.functions.hello.env.test");

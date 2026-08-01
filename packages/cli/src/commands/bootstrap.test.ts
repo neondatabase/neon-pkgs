@@ -53,8 +53,8 @@ const FIXTURE: Record<string, FixtureFile> = {
 
 const MANIFEST_YAML = `templates:
   - id: hono
-    title: "Hono API (Drizzle, Neon Postgres) on Neon Functions"
-    description: "A Hono API using Drizzle ORM and Neon Postgres, ready to deploy as a Neon Function."
+    title: "Hono API (Drizzle, Lakebase Postgres) on Neon Functions"
+    description: "A Hono API using Drizzle ORM and Lakebase Postgres, ready to deploy as a Neon Function."
     services:
       - Postgres
       - Functions
@@ -275,7 +275,7 @@ describe("bootstrap", () => {
 		expect(code, stderr).toBe(0);
 		expect(stdout).toContain("hono");
 		expect(stdout).toContain(
-			"A Hono API using Drizzle ORM and Neon Postgres",
+			"A Hono API using Drizzle ORM and Lakebase Postgres",
 		);
 		// The services from the manifest are surfaced alongside each template.
 		expect(stdout).toContain("[Postgres · Functions]");

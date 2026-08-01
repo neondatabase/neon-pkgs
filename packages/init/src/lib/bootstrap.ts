@@ -83,7 +83,7 @@ export const FALLBACK_TEMPLATES: BootstrapTemplate[] = [
 		id: "hono",
 		title: "REST API",
 		description:
-			"A Hono REST API on Neon Functions, backed by Neon Postgres via Drizzle.",
+			"A Hono REST API on Neon Functions, backed by Lakebase Postgres via Drizzle.",
 		tools: ["Hono", "Drizzle"],
 		services: ["Postgres", "Functions"],
 		requires: ["database", "functions"],
@@ -113,7 +113,7 @@ export const FALLBACK_TEMPLATES: BootstrapTemplate[] = [
 		id: "mastra",
 		title: "Personal-assistant agent",
 		description:
-			"A Mastra agent that streams chat through the Neon AI Gateway and uses Mastra Memory on Neon Postgres to remember you across threads.",
+			"A Mastra agent that streams chat through the Neon AI Gateway and uses Mastra Memory on Lakebase Postgres to remember you across threads.",
 		tools: ["Mastra", "Mastra Memory"],
 		services: ["Postgres", "Functions", "AI Gateway"],
 		requires: ["database", "functions", "ai-gateway"],

@@ -192,7 +192,7 @@ const cli = yargs(hideBin(process.argv))
 	// -----------------------------------------------------------------------
 	.command(
 		"auth",
-		"Manage Neon platform authentication",
+		"Manage Neon authentication",
 		(y) =>
 			y
 				.options(jsonOption)
