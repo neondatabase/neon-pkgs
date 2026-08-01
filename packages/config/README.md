@@ -63,7 +63,14 @@ export default defineConfig({
 });
 ```
 
-**An external package is not resolvable at runtime.** The deployed archive is a single `index.mjs` with no `node_modules` beside it, so anything listed here throws `Cannot find module` if the function actually reaches it. That makes the option right for an import that is never evaluated, and wrong for a dependency the handler needs — for which the answer is to make the package bundleable.
+**An external package is not resolvable at runtime.** The deployed archive is a single `index.mjs` with no `node_modules` beside it, so anything listed here throws `Cannot find module` if the function actually reaches it. The option unblocks an import that is never evaluated; it does not make a dependency usable.
+
+A dependency the handler actually calls has to be bundled, and whether that is possible depends on what it is:
+
+- **Pure JavaScript** — bundling is the normal case, and a failure is usually something specific and fixable in the entry.
+- **Backed by a native `.node` binary** — cannot be bundled by any bundler; the binary is a compiled object the platform loads from a real path. Such a package cannot work on Functions until the archive can carry files alongside the bundle. Listing it here does not help, it only moves the error from deploy to invoke.
+
+A native package may also bundle without needing this option at all. `sharp` loads its binary through `createRequire`, which esbuild does not follow, so it bundles cleanly and then fails at invoke with `Could not load the "sharp" module`.
 
 Entries are package names, optionally with a subpath (`pkg`, `@scope/pkg`, `pkg/sub`). A relative or absolute path is rejected at validation time. `neon dev` applies the same list, so a local run bundles like a deploy.
 

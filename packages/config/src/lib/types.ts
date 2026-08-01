@@ -348,9 +348,20 @@ export interface FunctionDef {
 	 *
 	 * **An external package is not resolvable at runtime.** The deployed archive is a
 	 * single `index.mjs` with no `node_modules` beside it, so anything listed here throws
-	 * `Cannot find module` if the function actually reaches it. That makes this safe for
-	 * an import that is never evaluated, and wrong for a dependency the handler needs —
-	 * for which the answer is to make the package bundleable, not to externalize it.
+	 * `Cannot find module` if the function actually reaches it. This option therefore only
+	 * unblocks an import that is never evaluated; it does not make a dependency usable.
+	 *
+	 * A dependency the handler actually calls has to be bundled, and whether that is
+	 * possible depends on what it is. A pure-JavaScript package can be bundled, and a
+	 * failure to do so is usually something specific and fixable. A package backed by a
+	 * native `.node` binary cannot be bundled by anything — the binary is a compiled
+	 * object the platform loads from a real path — so such a package cannot work on
+	 * Functions until the deployed archive can carry files alongside the bundle. Do not
+	 * reach for `externalPackages` to try: it moves the error from deploy to invoke.
+	 *
+	 * Note that a native package may bundle without ever needing this option. `sharp`, for
+	 * instance, loads its binary through `createRequire`, which esbuild does not follow, so
+	 * it bundles cleanly and then fails at invoke with "Could not load the sharp module".
 	 *
 	 * Entries are package names, optionally with a subpath (`pkg`, `@scope/pkg`,
 	 * `pkg/sub`), matching esbuild. A relative or absolute path is rejected at validation

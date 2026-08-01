@@ -529,7 +529,7 @@ neon deploy --branch my-feature --update-existing
 
 Function deploys declared under `preview.functions` are bundled by neon's own esbuild helper and uploaded as part of `apply`, so the policy stays declarative and the packaged CLI never has to embed esbuild's native binary.
 
-When a package cannot be bundled — a native addon with no esbuild loader, or an optional peer dependency a library references on an untaken code path — list it in that function's `externalPackages` and the bundler leaves the import alone. `neon dev` honours the same list. It does not make the package resolvable in the deployed archive (there is no `node_modules` next to the bundle), so it suits an import that is never evaluated; see [`@neon/config`](../config/README.md#unbundleable-dependencies-externalpackages).
+When a package cannot be bundled — a native addon with no esbuild loader, or an optional peer dependency a library references on an untaken code path — list it in that function's `externalPackages` and the bundler leaves the import alone. `neon dev` honours the same list. It does not make the package resolvable in the deployed archive (there is no `node_modules` next to the bundle), so it only unblocks an import that is never evaluated — a dependency the handler actually calls has to be bundled, and a natively-backed one cannot be. See [`@neon/config`](../config/README.md#unbundleable-dependencies-externalpackages).
 
 ## Scaffold a project (`bootstrap`)
 
