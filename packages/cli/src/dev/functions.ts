@@ -19,6 +19,12 @@ export type PlannedFunction = {
 	source: string;
 	port?: number;
 	env: Record<string, string>;
+	/**
+	 * The function's `neon.ts` `externalPackages`, mirrored so a local bundle is built with
+	 * the same `external` list as a deploy. Without it, `neon dev` would fail to bundle a
+	 * function that deploys fine — the failure `externalPackages` exists to fix.
+	 */
+	externalPackages?: string[];
 };
 
 /**
@@ -73,6 +79,9 @@ export const resolveFunctionsFromConfig = async (
 				? { port: devPort(fn.dev) as number }
 				: {}),
 			env: { ...fn.env },
+			...(fn.externalPackages
+				? { externalPackages: [...fn.externalPackages] }
+				: {}),
 		};
 	});
 

@@ -100,6 +100,90 @@ describe("configInputSchema", () => {
 		expect(result.success).toBe(true);
 	});
 
+	test("accepts externalPackages with bare, scoped, and subpath specifiers", () => {
+		const result = configInputSchema.safeParse({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: "./hello.ts",
+						externalPackages: [
+							"microsandbox",
+							"@scope/pkg",
+							"pkg/sub",
+						],
+					},
+				},
+			},
+		});
+		expect(result.success).toBe(true);
+	});
+
+	test("accepts an empty externalPackages list", () => {
+		const result = configInputSchema.safeParse({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: "./hello.ts",
+						externalPackages: [],
+					},
+				},
+			},
+		});
+		expect(result.success).toBe(true);
+	});
+
+	test("rejects a relative path in externalPackages", () => {
+		const result = configInputSchema.safeParse({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: "./hello.ts",
+						externalPackages: ["./local-module.js"],
+					},
+				},
+			},
+		});
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(formatZodIssues(result.error).join("\n")).toMatch(
+				/not a relative or absolute path/,
+			);
+		}
+	});
+
+	test("rejects an absolute path in externalPackages", () => {
+		const result = configInputSchema.safeParse({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: "./hello.ts",
+						externalPackages: ["/opt/thing.js"],
+					},
+				},
+			},
+		});
+		expect(result.success).toBe(false);
+	});
+
+	test("rejects a non-string entry in externalPackages", () => {
+		const result = configInputSchema.safeParse({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: "./hello.ts",
+						externalPackages: [42],
+					},
+				},
+			},
+		});
+		expect(result.success).toBe(false);
+	});
+
 	test("rejects an unknown key in the function dev block (e.g. removed `portless`)", () => {
 		const result = configInputSchema.safeParse({
 			preview: {

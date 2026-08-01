@@ -17,7 +17,7 @@ npm install @neon/config-runtime
 - `inspect` / `plan` / `apply` — read the current branch state, diff a policy against it, and apply the changes.
 - `pullConfig` / `pushConfig` — lower-level pull/push primitives.
 - `createBranch` — create a branch to target.
-- `buildFunctionBundle` — bundle Neon Functions for deploy.
+- `buildFunctionBundle` — bundle Neon Functions for deploy. Honours the function's `externalPackages`, passing each entry to esbuild's `external`.
 
 ```ts
 import { inspect, plan, apply } from "@neon/config-runtime/v1";

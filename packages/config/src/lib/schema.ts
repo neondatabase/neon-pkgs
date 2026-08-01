@@ -203,6 +203,27 @@ const functionDevConfigSchema = z.strictObject({
 	port: devPortSchema.optional(),
 });
 
+/**
+ * A package the bundler must leave alone. Accepts what esbuild's `external` accepts for a
+ * package — a bare name, a scope, or a subpath — and rejects a relative or absolute path,
+ * which names a local module rather than a dependency and is never the right thing to
+ * externalize (the bundle would ship an import of a file that isn't deployed).
+ */
+const externalPackageSchema = z
+	.string()
+	.min(1)
+	.refine((value) => !value.startsWith(".") && !value.startsWith("/"), {
+		error: 'must be a package name such as "microsandbox" or "@scope/pkg", not a relative or absolute path',
+	});
+
+/**
+ * Per-function list of packages esbuild leaves unresolved at deploy time. See
+ * {@link FunctionDef.externalPackages} for when this is the right tool — the deployed
+ * archive has no `node_modules`, so an externalized package must never be reached at
+ * runtime.
+ */
+const functionExternalPackagesSchema = z.array(externalPackageSchema);
+
 const runtimeSchema = z.literal("nodejs24");
 
 /**
@@ -214,6 +235,7 @@ export const functionDefSchema = z.strictObject({
 	name: z.string().min(1).max(255),
 	source: z.string().min(1),
 	env: functionEnvSchema.optional(),
+	externalPackages: functionExternalPackagesSchema.optional(),
 	dev: functionDevConfigSchema.optional(),
 });
 

@@ -14,13 +14,17 @@ afterAll(() => {
 	rmSync(dir, { recursive: true, force: true });
 });
 
-function fn(source: string): ResolvedFunctionConfig {
+function fn(
+	source: string,
+	externalPackages?: string[],
+): ResolvedFunctionConfig {
 	return {
 		slug: "fn1",
 		name: "Hello World",
 		source,
 		env: {},
 		runtime: "nodejs24",
+		...(externalPackages ? { externalPackages } : {}),
 	};
 }
 
@@ -61,5 +65,57 @@ describe("buildFunctionBundle", () => {
 		await expect(
 			buildFunctionBundle(fn(join(dir, "does-not-exist.ts"))),
 		).rejects.toThrow(/Failed to bundle function "fn1"/);
+	});
+
+	test("fails to bundle an unresolvable dependency when it is not declared external", async () => {
+		const source = join(dir, "needs-external.ts");
+		writeFileSync(
+			source,
+			[
+				"import { thing } from 'not-installed-anywhere';",
+				"export default { fetch(): Response { return new Response(String(thing)); } };",
+			].join("\n"),
+		);
+
+		// The baseline for the test below: without `externalPackages` this is exactly the
+		// deploy-time failure the option exists to fix.
+		await expect(buildFunctionBundle(fn(source))).rejects.toThrow(
+			/Could not resolve "not-installed-anywhere"/,
+		);
+	});
+
+	test("leaves a declared external package unbundled instead of failing to resolve it", async () => {
+		const source = join(dir, "needs-external.ts");
+
+		const bundle = await buildFunctionBundle(
+			fn(source, ["not-installed-anywhere"]),
+		);
+
+		const files = unzipSync(bundle);
+		const js = new TextDecoder().decode(files["index.mjs"]);
+		// The import survives into the output rather than being followed and inlined.
+		expect(js).toContain("not-installed-anywhere");
+	});
+
+	test("bundles everything not named in externalPackages", async () => {
+		const helper = join(dir, "still-bundled.ts");
+		writeFileSync(helper, "export const marker = 'inlined by esbuild';\n");
+		const source = join(dir, "mixed-externals.ts");
+		writeFileSync(
+			source,
+			[
+				"import { marker } from './still-bundled.js';",
+				"import { thing } from 'not-installed-anywhere';",
+				"export default { fetch(): Response { return new Response(marker + thing); } };",
+			].join("\n"),
+		);
+
+		const bundle = await buildFunctionBundle(
+			fn(source, ["not-installed-anywhere"]),
+		);
+
+		const js = new TextDecoder().decode(unzipSync(bundle)["index.mjs"]);
+		expect(js).toContain("inlined by esbuild");
+		expect(js).toContain("not-installed-anywhere");
 	});
 });

@@ -267,10 +267,14 @@ const plannedToUnit = (
 		// base) so reconcile can tell a real change from a no-op save. A search-mode function
 		// re-planned with a different base must hash identically, or it would be needlessly
 		// restarted — see reconcile().
+		...(fn.externalPackages
+			? { externalPackages: fn.externalPackages }
+			: {}),
 		configKey: JSON.stringify({
 			source: fn.source,
 			port: fn.port ?? null,
 			env: fn.env,
+			externalPackages: fn.externalPackages ?? null,
 		}),
 	};
 };
@@ -303,6 +307,11 @@ const buildChildEnv = (
 export type ServedUnit = {
 	slug: string | null;
 	source: string;
+	/**
+	 * Packages to leave unbundled, from the function's `neon.ts` `externalPackages`. Absent
+	 * in single-source mode (`--source` has no policy to read it from).
+	 */
+	externalPackages?: string[];
 	bundleDir: string;
 	childEnv: NodeJS.ProcessEnv;
 	label: string | null;
@@ -359,7 +368,11 @@ const runSupervisor = async (
 	const bundleAndStart = async (r: RunningUnit): Promise<void> => {
 		let bundlePath: string;
 		try {
-			bundlePath = await writeBundle(r.unit.source, r.unit.bundleDir);
+			bundlePath = await writeBundle(
+				r.unit.source,
+				r.unit.bundleDir,
+				r.unit.externalPackages,
+			);
 		} catch (err) {
 			r.status = "error";
 			logUnit(
@@ -670,8 +683,11 @@ const spawnChild = (
 const writeBundle = async (
 	source: string,
 	bundleDir: string,
+	externalPackages?: readonly string[],
 ): Promise<string> => {
-	const files = await bundleEntry(source);
+	const files = await bundleEntry(source, {
+		...(externalPackages ? { externalPackages } : {}),
+	});
 	mkdirSync(bundleDir, { recursive: true });
 	// bundleEntry emits a single `index.mjs` (no source map). The `.mjs` extension makes Node
 	// load it as ESM directly, so no `package.json` `"type": "module"` marker is needed.

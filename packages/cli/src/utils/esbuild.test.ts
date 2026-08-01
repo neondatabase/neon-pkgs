@@ -51,6 +51,17 @@ beforeAll(() => {
 		].join("\n"),
 	);
 	writeFileSync(join(dir, "broken.ts"), "export default {\n");
+	// Imports a package that is not installed anywhere, so it can only bundle when the
+	// specifier is declared external.
+	writeFileSync(
+		join(dir, "needs-external.ts"),
+		[
+			'import { greet } from "./helper";',
+			'import { thing } from "not-installed-anywhere";',
+			"export default { greet, thing };",
+			"",
+		].join("\n"),
+	);
 });
 afterAll(() => {
 	rmSync(dir, { recursive: true, force: true });
@@ -87,6 +98,37 @@ describe("bundleEntry", () => {
 			`Failed to bundle function from ${source}`,
 		);
 		expect(err.message).not.toContain("esbuild not found");
+	});
+
+	test("fails on an unresolvable dependency when externalPackages is not set", async () => {
+		// The baseline the option exists to fix: this is the deploy-time bundle failure.
+		await expect(
+			bundleEntry(join(dir, "needs-external.ts"), npmDeps),
+		).rejects.toThrow(/Could not resolve "not-installed-anywhere"/);
+	});
+
+	test("externalPackages leaves the named package unbundled and still inlines the rest", async () => {
+		const out = await bundleEntry(join(dir, "needs-external.ts"), {
+			...npmDeps,
+			externalPackages: ["not-installed-anywhere"],
+		});
+		const js = strFromU8(out["index.mjs"]);
+		expect(js).toContain("not-installed-anywhere");
+		expect(js).toContain("hi from helper");
+	});
+
+	test("externalPackages reaches the binary path as --external flags", async () => {
+		await withEnv(ESBUILD_BIN, async () => {
+			const out = await bundleEntry(join(dir, "needs-external.ts"), {
+				isPackaged: () => true,
+				loadEsbuild: () =>
+					Promise.reject(new Error("should not be called")),
+				externalPackages: ["not-installed-anywhere"],
+			});
+			const js = strFromU8(out["index.mjs"]);
+			expect(js).toContain("not-installed-anywhere");
+			expect(js).toContain("hi from helper");
+		});
 	});
 
 	test("packaged mode uses the binary and never imports the esbuild module", async () => {

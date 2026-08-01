@@ -43,6 +43,30 @@ A policy is split into a **static** existential set and a **dynamic** `branch` c
 
 Service toggles accept `true` / `{}` / `{ enabled: true }` (enabled) and `false` / `{ enabled: false }` (disabled). Function slugs (record keys) must match `^[a-z0-9]{1,20}$`.
 
+### Unbundleable dependencies (`externalPackages`)
+
+A function's `source` is bundled with esbuild at deploy time, and some packages cannot be bundled at all: a native `.node` addon has no esbuild loader, and a library may reference an optional peer dependency on a code path the function never takes. Either one fails the deploy with a resolve or loader error naming the package, and neither is fixable from the function's own source.
+
+`externalPackages` is the escape hatch, and the deploy-time counterpart of Next.js's `serverExternalPackages` — every entry is passed to esbuild's `external`, so the import survives into the bundle instead of being followed:
+
+```ts
+export default defineConfig({
+  preview: {
+    functions: {
+      agent: {
+        name: "Agent",
+        source: "./functions/agent.ts",
+        externalPackages: ["microsandbox", "@mongodb-js/zstd"],
+      },
+    },
+  },
+});
+```
+
+**An external package is not resolvable at runtime.** The deployed archive is a single `index.mjs` with no `node_modules` beside it, so anything listed here throws `Cannot find module` if the function actually reaches it. That makes the option right for an import that is never evaluated, and wrong for a dependency the handler needs — for which the answer is to make the package bundleable.
+
+Entries are package names, optionally with a subpath (`pkg`, `@scope/pkg`, `pkg/sub`). A relative or absolute path is rejected at validation time. `neon dev` applies the same list, so a local run bundles like a deploy.
+
 ### Data API
 
 `dataApi` accepts the same boolean/toggle forms **or** an object that selects the auth provider and reusable runtime `settings`:

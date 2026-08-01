@@ -30,6 +30,17 @@ export type BundleDeps = {
 	loadEsbuild: (name: string) => Promise<EsbuildModule>;
 };
 
+/**
+ * Bundling knobs a caller may set, alongside the injectable deps. `externalPackages` comes
+ * from a function's `neon.ts` `externalPackages` and is handed to esbuild's `external`, so
+ * a package esbuild cannot bundle (a native addon, an optional peer on an untaken code
+ * path) stops failing the build. It does NOT become resolvable in the deployed archive —
+ * see `FunctionDef.externalPackages` in @neon/config.
+ */
+export type BundleOptions = Partial<BundleDeps> & {
+	externalPackages?: readonly string[];
+};
+
 const defaultDeps: BundleDeps = {
 	// @yao-pkg/pkg defines process.pkg inside the packaged binary.
 	isPackaged: () => (process as { pkg?: unknown }).pkg !== undefined,
@@ -55,6 +66,7 @@ const toFilesByBasename = (
 const bundleViaModule = async (
 	source: string,
 	loadEsbuild: BundleDeps["loadEsbuild"],
+	externalPackages: readonly string[],
 ): Promise<Record<string, Uint8Array>> => {
 	// esbuild is resolved by a COMPUTED specifier, never the literal string
 	// 'esbuild'. Both rollup (bundle step) and @yao-pkg/pkg (binary step)
@@ -91,6 +103,8 @@ const bundleViaModule = async (
 			// Functions runtime has no node_modules). Node built-ins stay external on
 			// platform:'node'. The banner re-creates require/__filename/__dirname for bundled CJS.
 			banner: { js: ESM_CJS_INTEROP_BANNER },
+			// Only what the policy declared unbundleable; everything else is still inlined.
+			external: [...externalPackages],
 			logLevel: "silent",
 		})
 		.catch((err: unknown) => {
@@ -148,6 +162,7 @@ const runEsbuild = (
 
 const bundleViaBinary = async (
 	source: string,
+	externalPackages: readonly string[],
 ): Promise<Record<string, Uint8Array>> => {
 	const bin = resolveEsbuild();
 	const outDir = mkdtempSync(join(tmpdir(), "neon-fn-bundle-"));
@@ -161,6 +176,8 @@ const bundleViaBinary = async (
 			"--format=esm",
 			"--platform=node",
 			`--banner:js=${ESM_CJS_INTEROP_BANNER}`,
+			// One flag per package, mirroring the module path's `external` array.
+			...externalPackages.map((pkg) => `--external:${pkg}`),
 			"--log-level=error",
 		]);
 		if (code !== 0) {
@@ -183,13 +200,17 @@ const bundleViaBinary = async (
 // binary (and platforms esbuild can't run on) shell out to an esbuild binary.
 export const bundleEntry = async (
 	source: string,
-	deps: BundleDeps = defaultDeps,
+	options: BundleOptions = {},
 ): Promise<Record<string, Uint8Array>> => {
-	if (deps.isPackaged()) return bundleViaBinary(source);
+	const isPackaged = options.isPackaged ?? defaultDeps.isPackaged;
+	const loadEsbuild = options.loadEsbuild ?? defaultDeps.loadEsbuild;
+	const externalPackages = options.externalPackages ?? [];
+	if (isPackaged()) return bundleViaBinary(source, externalPackages);
 	try {
-		return await bundleViaModule(source, deps.loadEsbuild);
+		return await bundleViaModule(source, loadEsbuild, externalPackages);
 	} catch (err) {
-		if (err instanceof ModuleNotAvailable) return bundleViaBinary(source);
+		if (err instanceof ModuleNotAvailable)
+			return bundleViaBinary(source, externalPackages);
 		throw err;
 	}
 };

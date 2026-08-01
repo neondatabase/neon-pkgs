@@ -130,6 +130,64 @@ describe("resolveConfig", () => {
 		});
 	});
 
+	test("passes externalPackages through to the resolved function", () => {
+		const config = defineConfig({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: "./functions/hello-world.ts",
+						externalPackages: ["microsandbox", "@mongodb-js/zstd"],
+					},
+				},
+			},
+		});
+		const resolved = resolveConfig(config, { name: "main", exists: true });
+		expect(resolved.preview?.functions).toEqual([
+			{
+				slug: "fn1",
+				name: "Hello World",
+				source: "./functions/hello-world.ts",
+				env: {},
+				externalPackages: ["microsandbox", "@mongodb-js/zstd"],
+				runtime: "nodejs24",
+			},
+		]);
+	});
+
+	test("omits externalPackages entirely when the policy does not declare it", () => {
+		const config = defineConfig({
+			preview: {
+				functions: { fn1: { name: "Hello", source: "./hello.ts" } },
+			},
+		});
+		const resolved = resolveConfig(config, { name: "main", exists: true });
+		// Absent rather than `[]`, so an existing policy resolves to the shape it always did.
+		expect(resolved.preview?.functions[0]).not.toHaveProperty(
+			"externalPackages",
+		);
+	});
+
+	test("copies externalPackages so mutating the policy array cannot reach the resolved config", () => {
+		const externalPackages = ["microsandbox"];
+		const config = defineConfig({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello",
+						source: "./hello.ts",
+						externalPackages,
+					},
+				},
+			},
+		});
+		const resolved = resolveConfig(config, { name: "main", exists: true });
+		externalPackages.push("mutated-after-resolve");
+		expect(resolved.preview?.functions[0]?.externalPackages).toEqual([
+			"microsandbox",
+		]);
+	});
+
 	test("applies per-branch function runtime tuning", () => {
 		const config = defineConfig({
 			preview: {

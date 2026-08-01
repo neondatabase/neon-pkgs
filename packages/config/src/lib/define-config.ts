@@ -341,6 +341,11 @@ function resolveFunctionConfig(
 		source: def.source,
 		env: { ...(def.env ?? {}) },
 		runtime: tuning.runtime ?? DEFAULT_FUNCTION_RUNTIME,
+		// Copied only when declared, so a policy without it resolves unchanged. Both
+		// bundlers read it; `neon dev` mirrors it so a local run bundles like a deploy.
+		...(def.externalPackages
+			? { externalPackages: [...def.externalPackages] }
+			: {}),
 		// Passed through untouched (no defaults); only `neon dev` reads it.
 		...(def.dev ? { dev: def.dev } : {}),
 	};

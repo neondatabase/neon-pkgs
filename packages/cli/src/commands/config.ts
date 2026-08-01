@@ -52,7 +52,13 @@ import { autoPullEnvAfterPin } from "./env.js";
  * neonctl snapshot, which resolves esbuild dynamically at deploy time.
  */
 const neonctlBundler: FunctionBundler = async (fn) =>
-	zipBundle(await bundleEntry(fn.source));
+	zipBundle(
+		await bundleEntry(fn.source, {
+			...(fn.externalPackages
+				? { externalPackages: fn.externalPackages }
+				: {}),
+		}),
+	);
 
 const INSPECT_FIELDS = ["project", "branch", "config"] as const;
 

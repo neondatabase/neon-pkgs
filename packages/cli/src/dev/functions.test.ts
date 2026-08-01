@@ -46,6 +46,31 @@ describe("resolveFunctionsFromConfig", () => {
 		expect(resolved?.configPath).toBe(join(cwd, "neon.ts"));
 	});
 
+	it("mirrors externalPackages so a local bundle matches a deploy", async () => {
+		writeWorkspace(
+			cwd,
+			`export default {
+        preview: {
+          functions: {
+            hello: {
+              name: 'Hello',
+              source: './hello.ts',
+              externalPackages: ['microsandbox'],
+            },
+            bare: { name: 'Bare', source: './bare.ts' },
+          },
+        },
+      };\n`,
+			["hello.ts", "bare.ts"],
+		);
+
+		const resolved = await resolveFunctionsFromConfig(cwd);
+		const bySlug = new Map(resolved?.functions.map((f) => [f.slug, f]));
+		expect(bySlug.get("hello")?.externalPackages).toEqual(["microsandbox"]);
+		// Absent, not empty, when the policy does not declare it.
+		expect(bySlug.get("bare")).not.toHaveProperty("externalPackages");
+	});
+
 	it("resolves each function with an absolute source and its dev settings", async () => {
 		writeWorkspace(
 			cwd,
