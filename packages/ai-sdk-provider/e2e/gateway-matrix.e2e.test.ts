@@ -11,11 +11,12 @@ import { neon } from "../src/index.js";
 import {
 	assertGatewayEnv,
 	expectNoHardFailureWarnings,
+	fetchServedModelIds,
 	hasGatewayEnv,
 	MATRIX_MODELS,
 	type MatrixFamily,
 	maxTokensFor,
-	REASONING_FAMILIES,
+	REASONING_EFFORT_FAMILIES,
 } from "./helpers.js";
 
 const PROMPT = "Reply with exactly three words.";
@@ -32,20 +33,43 @@ const weatherTool = tool({
 	execute: async ({ city }) => ({ city, tempF: 72 }),
 });
 
-/** Families where structured output is expected to work end-to-end. */
+/**
+ * Families where structured output is expected to work end-to-end.
+ *
+ * Gemini is excluded: on the unified endpoint it answers `generateObject` with
+ * prose the SDK cannot parse into the schema ("No object generated"), measured
+ * on both `gemini-3-flash` and `gemini-3-5-flash`.
+ */
 const STRUCTURED_FAMILIES = new Set<MatrixFamily>([
 	"anthropic",
 	"openai",
-	"google",
+	"codex",
 	"meta",
+	"alibaba",
 ]);
 
-/** Families where multi-step tool calling is exercised (OpenAI Responses multi-turn tools can 502 on the gateway). */
-const TOOL_FAMILIES = new Set<MatrixFamily>(["anthropic", "google", "meta"]);
+/**
+ * Families where multi-step tool calling is exercised.
+ *
+ * OpenAI and Codex are here deliberately: their Responses tool loop is the path
+ * that used to fail with a gateway 502, because the SDK replayed earlier
+ * reasoning as an `item_reference` the stateless gateway could not resolve. It
+ * is the regression this matrix most needs to hold.
+ *
+ * Gemini is excluded: the tool round trip 400s on the replay leg, since the AI
+ * SDK does not echo back the `thoughtSignature` Gemini expects.
+ */
+const TOOL_FAMILIES = new Set<MatrixFamily>([
+	"anthropic",
+	"openai",
+	"codex",
+	"meta",
+	"alibaba",
+]);
 
 function modelOptions(family: MatrixFamily) {
 	const maxOutputTokens = maxTokensFor(family);
-	if (!REASONING_FAMILIES.has(family)) {
+	if (!REASONING_EFFORT_FAMILIES.has(family)) {
 		return { maxOutputTokens };
 	}
 	return {
@@ -56,6 +80,11 @@ function modelOptions(family: MatrixFamily) {
 	};
 }
 
+// Resolved once: which of the matrix models this branch can actually serve.
+const served = hasGatewayEnv()
+	? await fetchServedModelIds()
+	: new Set<string>();
+
 describe.skipIf(!hasGatewayEnv())(
 	"e2e — Neon AI Gateway capability matrix",
 	() => {
@@ -64,7 +93,10 @@ describe.skipIf(!hasGatewayEnv())(
 		describe.each(
 			Object.entries(MATRIX_MODELS) as Array<[MatrixFamily, string]>,
 		)("%s (%s)", (family, modelId) => {
-			it("generateText", async () => {
+			// Skipped wholesale when this branch's catalog has no such model.
+			const modelIt = it.skipIf(!served.has(modelId));
+
+			modelIt("generateText", async () => {
 				const result = await generateText({
 					model: neon(modelId),
 					prompt: PROMPT,
@@ -74,7 +106,7 @@ describe.skipIf(!hasGatewayEnv())(
 				expectNoHardFailureWarnings(result.warnings);
 			});
 
-			it("generateText with system prompt", async () => {
+			modelIt("generateText with system prompt", async () => {
 				const result = await generateText({
 					model: neon(modelId),
 					system: SYSTEM,
@@ -85,7 +117,7 @@ describe.skipIf(!hasGatewayEnv())(
 				expectNoHardFailureWarnings(result.warnings);
 			});
 
-			it("streamText", async () => {
+			modelIt("streamText", async () => {
 				const result = streamText({
 					model: neon(modelId),
 					prompt: PROMPT,
@@ -98,7 +130,7 @@ describe.skipIf(!hasGatewayEnv())(
 				expect(text.trim().length).toBeGreaterThan(0);
 			});
 
-			it.skipIf(!STRUCTURED_FAMILIES.has(family))(
+			modelIt.skipIf(!STRUCTURED_FAMILIES.has(family))(
 				"generateObject",
 				async () => {
 					const result = await generateObject({
@@ -113,7 +145,7 @@ describe.skipIf(!hasGatewayEnv())(
 				},
 			);
 
-			it.skipIf(!TOOL_FAMILIES.has(family))(
+			modelIt.skipIf(!TOOL_FAMILIES.has(family))(
 				"tool calling (generateText + stepCountIs)",
 				async () => {
 					const result = await generateText({
@@ -124,7 +156,14 @@ describe.skipIf(!hasGatewayEnv())(
 						...modelOptions(family),
 					});
 					expect(result.text.trim().length).toBeGreaterThan(0);
-					expect(result.steps.length).toBeGreaterThanOrEqual(1);
+					// A tool call plus a follow-up step, not one step that happened
+					// to answer. The follow-up is the leg that carries prior
+					// reasoning back to the gateway, so anything less would pass
+					// while the multi-turn path is broken.
+					expect(
+						result.steps.flatMap((step) => step.toolCalls).length,
+					).toBeGreaterThanOrEqual(1);
+					expect(result.steps.length).toBeGreaterThanOrEqual(2);
 				},
 			);
 		});
@@ -187,12 +226,6 @@ describe.skipIf(!hasGatewayEnv())(
 					text += part;
 				}
 				expect(text.trim().length).toBeGreaterThan(0);
-			});
-		});
-
-		describe("known gateway limitations", () => {
-			it.skip("OpenAI Responses multi-turn tool follow-up can 502 on the gateway", () => {
-				// gpt-5-mini tool calling works for the first step but follow-up requests can 502.
 			});
 		});
 	},
