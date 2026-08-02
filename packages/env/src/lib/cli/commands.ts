@@ -297,6 +297,21 @@ function handleError(err: unknown): CommandResult {
 		return errorResult(err, `Missing context: ${err.message}`, 3);
 	if (err instanceof ConfigLoadError)
 		return errorResult(err, `Failed to load config: ${err.message}`, 4);
+	// The library's own wording is right for a library ("this package never reads
+	// NEON_API_KEY on your behalf") and wrong here: `neon-env` does read it. Render the
+	// chain this CLI actually implements, the same way an unresolved context is rendered.
+	if (err instanceof PlatformError && err.code === ErrorCode.MissingApiKey) {
+		return errorResult(
+			err,
+			[
+				"No Neon API key. `neon-env` looks for one in this order:",
+				"  - the `--api-key` flag",
+				"  - the `NEON_API_KEY` environment variable",
+				"  - `credentials.json` in `NEONCTL_CONFIG_DIR` (else `~/.config/neonctl`) — run `neon auth` to create it",
+			].join("\n"),
+			EXIT_CODE_BY_PLATFORM_ERROR_CODE[ErrorCode.MissingApiKey] ?? 1,
+		);
+	}
 	if (err instanceof PlatformError) {
 		const exitCode = EXIT_CODE_BY_PLATFORM_ERROR_CODE[err.code];
 		if (exitCode !== undefined)

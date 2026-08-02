@@ -158,4 +158,27 @@ describe("runEnvExport", () => {
 		expect(result.exitCode).not.toBe(0);
 		expect(result.stderr).toContain("could not resolve");
 	});
+
+	// `@neon/config` raises a library-shaped error ("this package never reads
+	// NEON_API_KEY on your behalf") that is the opposite of what a `neon-env` user needs
+	// to hear, since this CLI does read it. No `api` is injected here, so the real
+	// adapter is constructed — and refuses — before any request is made.
+	test("explains this CLI's own key chain when no key resolves", async () => {
+		const { projectId } = seededFake();
+		const root = setup({
+			"package.json": "{}",
+			".neon": JSON.stringify({ projectId, branch: "main" }),
+			"neon.ts": policy(),
+		});
+
+		const result = await runEnvExport({ format: "json" }, { cwd: root });
+
+		expect(result.exitCode).not.toBe(0);
+		expect(result.stderr).toContain("No Neon API key");
+		expect(result.stderr).toContain("--api-key");
+		expect(result.stderr).toContain("NEON_API_KEY");
+		expect(result.stderr).toContain("credentials.json");
+		// The library's phrasing must not leak through to a CLI user.
+		expect(result.stderr).not.toContain("This package never reads");
+	});
 });
