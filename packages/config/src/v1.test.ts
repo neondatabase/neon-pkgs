@@ -66,7 +66,6 @@ describe("@neon/config public value surface", () => {
 			  "isPartialBranchCreateError",
 			  "isPlatformError",
 			  "loadConfigFromFile",
-			  "resolveApiKey",
 			  "resolveConfig",
 			  "schemas",
 			]

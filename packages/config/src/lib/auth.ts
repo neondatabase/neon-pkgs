@@ -1,96 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { ErrorCode, PlatformError } from "./errors.js";
 import type { NeonApi } from "./neon-api.js";
 import { createRealNeonApi } from "./neon-api-real.js";
-
-/**
- * Minimal shape of `~/.config/neonctl/credentials.json` we read. `neonctl` writes more
- * fields (refresh_token, expires_at, …) but only `access_token` is what we need — it's a
- * Bearer token the Neon API accepts on the same endpoints `napi_*` API keys do.
- */
-export interface NeonctlCredentials {
-	access_token: string;
-	[key: string]: unknown;
-}
-
-/**
- * Locate and read the OAuth credentials neonctl writes after `neon auth`.
- *
- * Resolution:
- * 1. `options.configDir` (explicit override — mirrors neonctl's `--config-dir` flag).
- * 2. `NEONCTL_CONFIG_DIR` environment variable.
- * 3. `<home>/.config/neonctl/credentials.json` (the neonctl default; `home` reads
- *    `HOME`, falling back to `USERPROFILE` for Windows parity).
- *
- * Returns `null` (never throws) when the file is missing, unreadable, malformed, or has
- * no `access_token` — so callers can use this as a quiet fallback in a resolution chain
- * without try/catch noise.
- */
-export function readNeonctlCredentials(
-	options: { configDir?: string } = {},
-): NeonctlCredentials | null {
-	const home = process.env.HOME ?? process.env.USERPROFILE;
-	const configDir =
-		options.configDir ??
-		process.env.NEONCTL_CONFIG_DIR ??
-		(home ? resolve(home, ".config", "neonctl") : undefined);
-	if (!configDir) return null;
-
-	const credentialsPath = resolve(configDir, "credentials.json");
-	if (!existsSync(credentialsPath)) return null;
-
-	let raw: string;
-	try {
-		raw = readFileSync(credentialsPath, "utf-8");
-	} catch {
-		return null;
-	}
-
-	let parsed: unknown;
-	try {
-		parsed = JSON.parse(raw);
-	} catch {
-		return null;
-	}
-
-	if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
-		return null;
-	const obj = parsed as Record<string, unknown>;
-	if (typeof obj.access_token !== "string" || obj.access_token === "")
-		return null;
-	return obj as NeonctlCredentials;
-}
-
-/**
- * Resolution chain for the Bearer token sent to the Neon API. Each entry wins over the
- * next:
- *
- * 1. `options.apiKey` (explicit).
- * 2. `NEON_API_KEY` environment variable.
- * 3. `access_token` from `~/.config/neonctl/credentials.json` (or `NEONCTL_CONFIG_DIR`).
- *
- * Returns `null` when no source provides one. Callers wrap the null case in a
- * `PLATFORM_MISSING_API_KEY` error with a message tailored to the operation.
- */
-export function resolveApiKey(
-	options: { apiKey?: string; configDir?: string } = {},
-): { token: string; source: "option" | "env" | "neonctl" } | null {
-	if (options.apiKey && options.apiKey.trim() !== "") {
-		return { token: options.apiKey.trim(), source: "option" };
-	}
-	const envKey = process.env.NEON_API_KEY;
-	if (typeof envKey === "string" && envKey.trim() !== "") {
-		return { token: envKey.trim(), source: "env" };
-	}
-	const creds = readNeonctlCredentials(
-		options.configDir ? { configDir: options.configDir } : {},
-	);
-	if (creds) {
-		return { token: creds.access_token, source: "neonctl" };
-	}
-	return null;
-}
 
 /** Trim trailing slashes and surrounding whitespace; treat empty as unset. */
 function normalizeApiHost(url: string | undefined): string | undefined {
@@ -99,17 +9,20 @@ function normalizeApiHost(url: string | undefined): string | undefined {
 }
 
 /**
- * Resolve the Neon API key via the standard chain (option → `NEON_API_KEY` env →
- * `~/.config/neonctl/credentials.json`) and construct a real {@link NeonApi} adapter from
- * it, or throw a uniform `PLATFORM_MISSING_API_KEY` error if no key can be found.
+ * Build a real {@link NeonApi} adapter from an explicit API key, or throw a uniform
+ * `PLATFORM_MISSING_API_KEY` error when the caller didn't supply one.
  *
- * The API host is resolved via: `options.apiHost` → `NEON_API_HOST` env → production
- * default (`https://console.neon.tech/api/v2`).
+ * **This function is pure with respect to its environment**: it reads no environment
+ * variables and no files. Everything it needs arrives in `options`. Resolving *where* a
+ * credential comes from — a flag, `NEON_API_KEY`, a credentials file on disk — is the
+ * caller's job, because only the caller knows which of those its users expect. See
+ * `packages/cli` (`ensureAuth` + `resolveApiKeyFromEnv`) and `packages/init`
+ * (`src/lib/auth.ts`) for the two implementations in this repo.
  *
  * Used by `pullConfig`, `pushConfig`, `fetchEnv`, and `branch` to build their default
- * `NeonApi` when the caller doesn't inject one. `operation` is the calling function's
- * name (e.g. `"pushConfig"`, `"branch"`) — it's prepended to the error message so users
- * can tell which call surfaced the missing key.
+ * adapter when the caller doesn't inject one. `operation` is the calling function's name
+ * (e.g. `"pushConfig"`, `"branch"`) — it's prepended to the error message so users can tell
+ * which call surfaced the missing key.
  */
 export function createNeonApiFromOptions(
 	operation: string,
@@ -118,25 +31,22 @@ export function createNeonApiFromOptions(
 		apiHost?: string;
 	} = {},
 ): NeonApi {
-	const resolved = resolveApiKey(
-		options.apiKey ? { apiKey: options.apiKey } : {},
-	);
-	if (resolved) {
-		const baseUrl =
-			normalizeApiHost(options.apiHost) ??
-			normalizeApiHost(process.env.NEON_API_HOST);
-		return createRealNeonApi({
-			apiKey: resolved.token,
-			...(baseUrl ? { baseUrl } : {}),
-		});
+	const apiKey = options.apiKey?.trim();
+	if (!apiKey) {
+		throw new PlatformError(
+			ErrorCode.MissingApiKey,
+			[
+				`${operation} was not given a Neon API key.`,
+				"Pass `apiKey` explicitly, or inject your own `api` adapter (e.g. an in-memory fake for tests).",
+				"This package never reads NEON_API_KEY or a credentials file on your behalf — resolve the key in your own application or CLI and pass it in.",
+				"Generate a key at https://console.neon.tech/app/settings/api-keys.",
+			].join(" "),
+		);
 	}
-	throw new PlatformError(
-		ErrorCode.MissingApiKey,
-		[
-			`${operation} has no Neon API key to work with.`,
-			"Tried (in order): `apiKey` option, NEON_API_KEY env, and `~/.config/neonctl/credentials.json`.",
-			"Either pass `apiKey` directly, set NEON_API_KEY, run `npx neonctl auth` to populate the credentials file, or pass a custom `api` adapter (e.g. an in-memory fake for tests).",
-			"Generate a key at https://console.neon.tech/app/settings/api-keys.",
-		].join(" "),
-	);
+
+	const baseUrl = normalizeApiHost(options.apiHost);
+	return createRealNeonApi({
+		apiKey,
+		...(baseUrl ? { baseUrl } : {}),
+	});
 }

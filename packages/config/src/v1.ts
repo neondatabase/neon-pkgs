@@ -100,7 +100,7 @@ export const schemas = {
 } as const;
 
 // ─── Lower-level adapters ──────────────────────────────────────────────────────
-export { createNeonApiFromOptions, resolveApiKey } from "./lib/auth.js";
+export { createNeonApiFromOptions } from "./lib/auth.js";
 // ─── Credentials (pure scope derivation; Preview) ─────────────────────────────
 export type { CredentialFeatureFlags } from "./lib/credentials.js";
 export {

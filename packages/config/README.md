@@ -143,7 +143,9 @@ const live = await inspect(target);
 | `plan(config, options)` | Returns the dry-run diff — what `apply` would do for the branch, with no mutations. Returns a `PushResult` whose `applied` holds the plan and `conflicts` holds blocking drift. |
 | `apply(config, options)` | Reconciles your local `neon.ts` policy onto the branch. Pass `updateExisting` to auto-confirm overriding existing remote settings and `allowProtectedBranch` to auto-confirm applying to a protected branch. |
 
-`options` requires both `projectId` and `branchId` (a Neon branch id, `br-…`). Resolve branch names to ids before calling. The Neon API key resolves via the `apiKey` option → `NEON_API_KEY` → `~/.config/neonctl/credentials.json`.
+`options` requires both `projectId` and `branchId` (a Neon branch id, `br-…`). Resolve branch names to ids before calling.
+
+**Pass `apiKey` explicitly** (or inject your own `api` adapter). This package reads no environment variables and no files on your behalf — it will not pick up `NEON_API_KEY` or `~/.config/neonctl/credentials.json`, and omitting the key raises `PLATFORM_MISSING_API_KEY`. Resolving where a credential comes from belongs to the application or CLI embedding this package, because only it knows which ambient sources its users expect. `packages/cli` and `packages/env`'s `neon-env` both implement that chain; the latter's `src/lib/cli/resolve-api-key.ts` is a ~60-line reference implementation of flag → `NEON_API_KEY` → stored credentials.
 
 ## Lower-level engine
 
@@ -159,7 +161,6 @@ import {
   pullConfig,
   loadConfigFromFile,
   createRealNeonApi,
-  resolveApiKey,
   PlatformError,
   ErrorCode,
   errors,

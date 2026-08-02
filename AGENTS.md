@@ -287,6 +287,17 @@ the same thing with a subpath:
 | `@neon/env` | Package consumers — apps, build scripts, a `neon.ts` policy | None. Never reads `process.env` or a file |
 | `@neon/env/runtime` | Our own tooling — the `neon-env` CLI, `packages/cli`, anything resolving one branch repeatedly | Reads an env source; mints and revokes branch credentials |
 
+**Credentials are always passed in, never discovered.** `@neon/config`, `@neon/config-runtime`
+and the `@neon/env` root export read **no environment variables and no files** to find a Neon
+API key. `createNeonApiFromOptions` takes an explicit `apiKey` and raises
+`PLATFORM_MISSING_API_KEY` without one; it does not consult `NEON_API_KEY` or
+`~/.config/neonctl/credentials.json`. Resolving *where* a key comes from belongs to whatever
+embeds these packages, because only it knows which ambient sources its users expect — and a
+library that silently authenticates as whoever last ran `neon auth` is a library you cannot
+safely embed. The three implementations in this repo are `packages/cli` (`ensureAuth` +
+`resolveApiKeyFromEnv`), `packages/env`'s CLI (`src/lib/cli/resolve-api-key.ts`), and
+`packages/init` (`src/lib/auth.ts`). Copy one rather than pushing the lookup back down.
+
 Before adding an export to `@neon/env`, or reaching into one of its internals from
 `packages/cli`, read **[`packages/env/CONTRIBUTING.md`](packages/env/CONTRIBUTING.md)**. It has
 the test for which side a change belongs on, why the credential-reuse logic cannot live on the
