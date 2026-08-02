@@ -1,5 +1,11 @@
 # vite-plugin-db
 
+## 0.8.2
+
+### Patch Changes
+
+- vite-plugin-neon-new@0.9.1
+
 ## 0.8.1
 
 ### Patch Changes

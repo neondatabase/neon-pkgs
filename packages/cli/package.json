@@ -1,6 +1,6 @@
 {
   "name": "neon",
-  "version": "2.38.5",
+  "version": "2.39.0",
   "description": "CLI tool for Neon, the cloud backend primitives built around Lakebase Postgres",
   "keywords": [
     "neon",
@@ -64,7 +64,7 @@
     "cliui": "8.0.1",
     "diff": "5.2.0",
     "fflate": "^0.8.3",
-    "neon-init": "0.20.4",
+    "neon-init": "0.20.5",
     "open": "^10.2.0",
     "openid-client": "6.8.1",
     "pg-protocol": "^1.14.0",

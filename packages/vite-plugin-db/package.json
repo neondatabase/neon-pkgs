@@ -1,6 +1,6 @@
 {
 	"name": "vite-plugin-db",
-	"version": "0.8.1",
+	"version": "0.8.2",
 	"description": "[DEPRECATED] This package has been renamed to 'vite-plugin-neon-new'. Please use 'vite-plugin-neon-new' instead.",
 	"keywords": [
 		"neon",

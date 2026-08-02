@@ -1,5 +1,12 @@
 # vite-plugin-neon-new
 
+## 0.9.1
+
+### Patch Changes
+
+- Updated dependencies [b8217bc]
+  - neon-new@0.15.1
+
 ## 0.9.0
 
 ### Minor Changes
