@@ -14,8 +14,11 @@ embedder to opt out.
 
 `createNeonApiFromOptions(operation, { apiKey, apiHost })` now requires `apiKey` and throws
 `PLATFORM_MISSING_API_KEY` without one. It reads no environment variables and no files.
-`apiHost` no longer falls back to `NEON_API_HOST`. `resolveApiKey` is removed from
-`@neon/config/v1`.
+`resolveApiKey` is removed from `@neon/config/v1`.
+
+`apiHost` is unchanged in spirit: still optional, still defaulting to production
+(`https://console.neon.tech/api/v2`). Only the ambient `NEON_API_HOST` lookup is gone — pass
+`apiHost` explicitly to target a non-production API.
 
 **If you were relying on the fallback**, resolve the key where you already know your users'
 conventions and pass it in:

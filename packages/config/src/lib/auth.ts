@@ -19,6 +19,11 @@ function normalizeApiHost(url: string | undefined): string | undefined {
  * `packages/cli` (`ensureAuth` + `resolveApiKeyFromEnv`) and `packages/init`
  * (`src/lib/auth.ts`) for the two implementations in this repo.
  *
+ * `apiHost` stays **optional** and defaults to production
+ * (`https://console.neon.tech/api/v2`, applied by {@link createRealNeonApi}) — only pass it
+ * to target a non-production API. It is the *ambient* `NEON_API_HOST` lookup that's gone,
+ * not the default.
+ *
  * Used by `pullConfig`, `pushConfig`, `fetchEnv`, and `branch` to build their default
  * adapter when the caller doesn't inject one. `operation` is the calling function's name
  * (e.g. `"pushConfig"`, `"branch"`) — it's prepended to the error message so users can tell
