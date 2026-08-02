@@ -303,7 +303,7 @@ and so ignores package `exports`.
 -   **Coverage**: needs `@vitest/coverage-v8` because the root CI runs `pnpm test:ci --coverage` (the flag is appended to every package's `test:ci`). Pin it to the package's `vitest` major.
 -   **Standalone binaries**: `pnpm --filter neon bundle` (`node pkg.js`) Rollup-bundles `dist/cli.js` and cross-compiles `linux-x64`, `linux-arm64`, `macos-x64`, and `win-x64` via `@yao-pkg/pkg`; targets/assets are declared in the package's `pkg` block. The binaries are named after the package, so they ship as `neon-<target>`.
 -   **Conformance tests** (`tests/psql-conformance`) need Docker/testcontainers and are excluded from the default Vitest run; run them explicitly with `pnpm --filter <name> test:conformance`.
--   **Sibling deps**: the `@neon/*` packages are `workspace:*`; only `neon-init` is still pinned to a published version (see the lockfile catch-22 below). Switching it to `workspace:*` is a planned follow-up.
+-   **Sibling deps**: every internal dependency — the `@neon/*` packages and `neon-init` — is `workspace:*`. `neon-init` was pinned to a published version until it caused a release-blocking lockfile trap; keep it on the workspace protocol. `pnpm pack` rewrites the protocol to the exact version at publish time, so the tarball is unaffected either way.
 
 ### The SDK package (`packages/sdk`)
 
@@ -425,46 +425,27 @@ To cut one:
 The `release` Claude Code skill (`.claude/skills/release/`) automates this end to end,
 including a git-vs-npm check that flags packages which changed but lack a changeset.
 
-### Publish order — the `neon-init` lockfile trap
+### Publish order
 
-**Publish leaf dependencies first, the CLI last, and mind `neon-init`.** All internal
-`@neon/*` deps are `workspace:*` (linked locally, never a registry round-trip), so they don't
-constrain ordering for the build. **The one exception is `packages/cli`, which pins `neon-init`
-to a _published_ version** (e.g. `"neon-init": "0.20.2"`), not `workspace:*`. That single
-registry pin creates a chicken-and-egg whenever a release bumps `neon-init`:
+**Publish leaf dependencies first, the CLI last:**
+`@neon/config` → `@neon/config-runtime` / `@neon/env` → `neon` → `neonctl`.
+Publishing `neon` also ships the standalone binaries and the GitHub release; publish the
+compatibility package only after `npm view neon version` confirms the matching primary package.
+Verify each with `npm view <pkg> version`.
 
-- `changeset version` bumps `neon-init` **and** rewrites the CLI's pin to the new version
-  (`updateInternalDependencies: "patch"`), but **does not** update `pnpm-lock.yaml`.
-- So the moment the release PR merges, `main`'s lockfile still points at the **old** `neon-init`
-  while `packages/cli/package.json` wants the new one. The publish workflow's
-  `pnpm install --frozen-lockfile` (whole workspace) then fails with `ERR_PNPM_OUTDATED_LOCKFILE`
-  — for **every** package, since it installs the whole workspace before packing any one of them.
-- You can't fix the lockfile by running `pnpm install`, because the new `neon-init` isn't on npm
-  yet (pnpm 10 defaults `link-workspace-packages=false`, so it tries to *fetch* it). And you
-  can't publish the new `neon-init` because the frozen install is broken. Catch-22.
+Ordering is a courtesy to npm consumers, not a build constraint. Every internal dependency is
+`workspace:*`, so a package is always built and packed against workspace source and never makes a
+registry round-trip for a sibling.
 
-**Correct order when a release bumps `neon-init`:**
-
-1. **Publish `neon-init` first, from a throwaway ref where the lockfile is consistent.** Branch
-   off `main`, temporarily revert only the CLI's `neon-init` pin back to the currently-published
-   version (so `package.json` matches the still-old lockfile), push, and dispatch
-   `-f package=neon-init -f ref=<that-branch>`. This publishes **only** `neon-init` — the CLI is
-   never published from this throwaway ref. Delete the branch afterwards; never merge it.
-2. **Sync the lockfile on `main`.** Now that the new `neon-init` is on npm, `pnpm install
-   --lockfile-only` resolves it. Open a tiny `chore: sync lockfile for neon-init@<version>` PR
-   (this is exactly what such historical PRs are). Its CI now passes because the lockfile matches.
-3. **Publish the rest from `main`**, leaf-first, CLI last:
-   `@neon/config` → `@neon/config-runtime` / `@neon/env` → `neon` → `neonctl`.
-   Publishing `neon` also ships the standalone binaries and the GitHub release; publish the
-   compatibility package only after `npm view neon version` confirms the matching primary
-   package. Verify each with `npm view <pkg> version`.
-
-If a release does **not** touch `neon-init`, none of this applies — the lockfile stays consistent
-(`workspace:*` deps don't change it) and you can publish leaf-first / CLI-last straight from `main`.
-
-**The permanent fix** is to make the CLI depend on `neon-init` via `workspace:*` like every other
-internal package (see the pinned-sibling note under the CLI package above); until that lands,
-follow the ordering above.
+**Never pin an internal package to a published version.** `packages/cli` pinned `neon-init` that
+way until 2.39.0, and it deadlocked every release that bumped `neon-init`: `changeset version`
+rewrote the pin without touching `pnpm-lock.yaml`, so `pnpm install --frozen-lockfile` failed with
+`ERR_PNPM_OUTDATED_LOCKFILE` across the whole workspace — every CI job and every publish, not just
+the CLI's — and `pnpm install` could not repair it, because pnpm 10 defaults
+`link-workspace-packages=false` and tried to fetch a version that was unpublished precisely because
+the install was broken. Breaking that required publishing from a throwaway ref with the pin
+reverted. `workspace:*` cannot reach that state: the lockfile records `link:../init` and no version
+appears in it at all.
 
 ### Publishing the CLI (`neon` + the `neonctl` compatibility package)
 

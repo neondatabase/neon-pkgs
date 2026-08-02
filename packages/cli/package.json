@@ -64,7 +64,7 @@
     "cliui": "8.0.1",
     "diff": "5.2.0",
     "fflate": "^0.8.3",
-    "neon-init": "0.20.5",
+    "neon-init": "workspace:*",
     "open": "^10.2.0",
     "openid-client": "6.8.1",
     "pg-protocol": "^1.14.0",

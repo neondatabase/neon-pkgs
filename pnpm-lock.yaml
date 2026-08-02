@@ -142,8 +142,8 @@ importers:
         specifier: ^0.8.3
         version: 0.8.3
       neon-init:
-        specifier: 0.20.5
-        version: 0.20.5
+        specifier: workspace:*
+        version: link:../init
       open:
         specifier: ^10.2.0
         version: 10.2.0
@@ -3321,11 +3321,6 @@ packages:
   negotiator@1.0.0:
     resolution: {integrity: sha512-8Ofs/AUQh8MaEcrlq5xOX0CQ9ypTF5dl78mjlMNfOK08fzpgTHQRQPBxcPlEtIw0yRpws+Zo/3r+5WRby7u3Gg==}
     engines: {node: '>= 0.6'}
-
-  neon-init@0.20.5:
-    resolution: {integrity: sha512-QlZ0UsHjOzCOs/6a48ddfJs0mscK2mPnAd+EJpL/b3iWIeS9Foirs3/tlf/PyLawh0w4iaBVhsFnV92QoHuw6g==}
-    engines: {node: '>=20.19.0'}
-    hasBin: true
 
   node-abi@3.92.0:
     resolution: {integrity: sha512-KdHvFWZjEKDf0cakgFjebl371GPsISX2oZHcuyKqM7DtogIsHrqKeLTo8wBHxaXRAQlY2PsPlZmfo+9ZCxEREQ==}
@@ -7079,18 +7074,6 @@ snapshots:
   negotiator@0.6.3: {}
 
   negotiator@1.0.0: {}
-
-  neon-init@0.20.5:
-    dependencies:
-      '@clack/core': 0.4.2
-      '@clack/prompts': 0.10.1
-      add-mcp: 1.5.1
-      execa: 9.6.0
-      fflate: 0.8.3
-      picocolors: 1.1.1
-      yaml: 2.9.0
-      yargs: 18.0.0
-      yoctocolors: 2.1.2
 
   node-abi@3.92.0:
     dependencies:
