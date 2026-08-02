@@ -142,8 +142,8 @@ importers:
         specifier: ^0.8.3
         version: 0.8.3
       neon-init:
-        specifier: 0.20.4
-        version: 0.20.4
+        specifier: 0.20.5
+        version: 0.20.5
       open:
         specifier: ^10.2.0
         version: 10.2.0
@@ -3322,8 +3322,8 @@ packages:
     resolution: {integrity: sha512-8Ofs/AUQh8MaEcrlq5xOX0CQ9ypTF5dl78mjlMNfOK08fzpgTHQRQPBxcPlEtIw0yRpws+Zo/3r+5WRby7u3Gg==}
     engines: {node: '>= 0.6'}
 
-  neon-init@0.20.4:
-    resolution: {integrity: sha512-oqmAT8pqmjohKCrtBxWyDuQROj8lYIde/jEhz/Ya5MuRdZrdVWzJk8lLNIS2Si3bRSsVJykX1EaKIkR2PeUu6w==}
+  neon-init@0.20.5:
+    resolution: {integrity: sha512-QlZ0UsHjOzCOs/6a48ddfJs0mscK2mPnAd+EJpL/b3iWIeS9Foirs3/tlf/PyLawh0w4iaBVhsFnV92QoHuw6g==}
     engines: {node: '>=20.19.0'}
     hasBin: true
 
@@ -7080,7 +7080,7 @@ snapshots:
 
   negotiator@1.0.0: {}
 
-  neon-init@0.20.4:
+  neon-init@0.20.5:
     dependencies:
       '@clack/core': 0.4.2
       '@clack/prompts': 0.10.1
