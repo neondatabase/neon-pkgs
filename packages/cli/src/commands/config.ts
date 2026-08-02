@@ -19,6 +19,17 @@ import chalk from "chalk";
 import type yargs from "yargs";
 import { getApiClient } from "../api.js";
 import { toNeonConfigView } from "../config_format.js";
+import {
+	FUNCTION_FILENAME,
+	FUNCTION_SLUG,
+	FUNCTION_TEMPLATE,
+	NEON_SERVICES,
+	type NeonService,
+	NO_SERVICES,
+	parseServices,
+	REQUIRED_PACKAGES,
+	renderNeonConfig,
+} from "../config_template.js";
 
 import { contextBranch, readContextFile } from "../context.js";
 import { isCi } from "../env.js";
@@ -41,6 +52,7 @@ import {
 	resolvePackageManager,
 	runCommand,
 } from "../utils/package_manager.js";
+import { pickServicesInteractively } from "../utils/service_picker.js";
 import { zipBundle } from "../utils/zip.js";
 import { writer } from "../writer.js";
 import { autoPullEnvAfterPin } from "./env.js";
@@ -149,19 +161,6 @@ export const envPullFlag = {
 
 // ── `config init` ─────────────────────────────────────────────────────────────
 
-/**
- * The published npm packages a `neon.ts` project needs — the `@neon/*` org names.
- *
- * ⚠️ These ship to users the next time `neonctl` is released, so do NOT release
- * neonctl until `@neon/config` and `@neon/env` are published to npm — otherwise
- * `config init` would install packages that don't exist yet. (The libraries are
- * mid-migration from `@neondatabase/*`; track their publish before cutting a CLI
- * release.)
- */
-const CONFIG_PACKAGE = "@neon/config";
-const ENV_PACKAGE = "@neon/env";
-const REQUIRED_PACKAGES = [CONFIG_PACKAGE, ENV_PACKAGE] as const;
-
 /** package.json fields a dependency can be declared in. */
 const DEPENDENCY_FIELDS = [
 	"dependencies",
@@ -176,29 +175,6 @@ const NEON_CONFIG_FILENAMES = ["neon.ts", "neon.mts", "neon.js", "neon.mjs"];
 /** Whether `dir` already has a Neon config file the runtime would load. */
 export const hasNeonConfigFile = (dir: string): boolean =>
 	NEON_CONFIG_FILENAMES.some((name) => existsSync(join(dir, name)));
-
-/** Starter `neon.ts` written by `config init` when a project has none. */
-const NEON_CONFIG_TEMPLATE = `import { defineConfig } from "${CONFIG_PACKAGE}/v1";
-
-export default defineConfig({
-  // Declare your Neon services here
-  auth: false,
-  // Branch policy: per-branch tuning
-  branch: (branch) => {
-    if (branch.isDefault) {
-      // Default branch: no overrides, uses project defaults
-      return {};
-    }
-    if (!branch.exists) {
-      // New non-default branches: auto-expire
-      // Run \`neon checkout <name>\` to create a new branch with these settings
-      return { ttl: "7d" };
-    }
-    // Existing branch: no changes
-    return {};
-  },
-});
-`;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null;
@@ -240,6 +216,58 @@ export type ConfigInitProps = {
 	install?: boolean;
 	/** Injected command runner (tests). Defaults to the real spawn-based runner. */
 	run?: typeof runCommand;
+	/**
+	 * Raw `--services` value: comma-separated {@link NEON_SERVICES} names, or `none` for the
+	 * bare starter policy. When omitted, {@link resolveServices} picks interactively on a TTY
+	 * and falls back to the starter policy otherwise.
+	 */
+	services?: string;
+	/** Injected service picker (tests). Wins over the TTY check; production omits it. */
+	pickServices?: () => Promise<NeonService[]>;
+};
+
+/**
+ * Which services the scaffolded policy declares. `--services` always wins so a script or an
+ * agent gets the same result without a TTY; an injected picker is next (tests); the real
+ * picker only runs on an interactive terminal outside CI. Everything else scaffolds the
+ * starter policy, which is what `config init` has always written.
+ */
+const resolveServices = async (
+	props: ConfigInitProps,
+): Promise<NeonService[]> => {
+	if (props.services !== undefined) {
+		return parseServices(props.services);
+	}
+	if (props.pickServices) {
+		return props.pickServices();
+	}
+	if (isCi() || !process.stdout.isTTY) {
+		return [];
+	}
+	return pickServicesInteractively();
+};
+
+/**
+ * Write the hello-world handler the scaffolded `preview.functions` entry points at. An
+ * existing `hello.ts` is left alone: the declared function keeps pointing at it, which is the
+ * better outcome than overwriting a file the user wrote.
+ */
+const scaffoldFunction = (cwd: string): void => {
+	const path = join(cwd, FUNCTION_FILENAME);
+	if (existsSync(path)) {
+		log.info(
+			"Found an existing %s — leaving it untouched; the %s function points at it.",
+			FUNCTION_FILENAME,
+			FUNCTION_SLUG,
+		);
+		return;
+	}
+	writeFileSync(path, FUNCTION_TEMPLATE);
+	log.info(
+		"Created %s — the source of the %s function.",
+		FUNCTION_FILENAME,
+		FUNCTION_SLUG,
+	);
 };
 
 /**
@@ -251,15 +279,25 @@ export const initCmd = async (props: ConfigInitProps): Promise<void> => {
 	const cwd = props.cwd ?? process.cwd();
 	const run = props.run ?? runCommand;
 
-	// 1. Scaffold neon.ts unless the project already has a Neon config file.
+	// 1. Scaffold neon.ts unless the project already has a Neon config file. Resolving the
+	// services (which may prompt) happens only when there is something to write — asking
+	// which services to declare and then declaring nothing would be a lie.
 	const existing = NEON_CONFIG_FILENAMES.find((name) =>
 		existsSync(join(cwd, name)),
 	);
 	if (existing) {
 		log.info("Found an existing %s — leaving it untouched.", existing);
 	} else {
-		writeFileSync(join(cwd, "neon.ts"), NEON_CONFIG_TEMPLATE);
-		log.info("Created neon.ts with a starter policy.");
+		const services = await resolveServices(props);
+		writeFileSync(join(cwd, "neon.ts"), renderNeonConfig(services));
+		if (services.length === 0) {
+			log.info("Created neon.ts with a starter policy.");
+		} else {
+			log.info("Created neon.ts declaring %s.", services.join(", "));
+		}
+		if (services.includes("functions")) {
+			scaffoldFunction(cwd);
+		}
 	}
 
 	// 2. Make sure the config packages are installed.
@@ -373,6 +411,13 @@ export const builder = (argv: yargs.Argv) =>
 							"On by default; use --no-install to just print the command.",
 						type: "boolean",
 						default: true,
+					},
+					services: {
+						describe:
+							`Services the scaffolded neon.ts declares, comma-separated: ${NEON_SERVICES.join(", ")}. ` +
+							`Pass "${NO_SERVICES}" for the bare starter policy. Omitted: pick interactively on a ` +
+							"terminal, starter policy in CI or without a TTY.",
+						type: "string",
 					},
 				}),
 			(args) => initCmd(args as any),

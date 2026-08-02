@@ -1,3 +1,5 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`config init > --services runs offline end to end 1`] = `""`;
+
 exports[`config init > runs offline end to end and scaffolds into the working directory 1`] = `""`;
