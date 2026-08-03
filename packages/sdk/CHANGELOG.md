@@ -1,5 +1,73 @@
 # @neon/sdk
 
+## 1.5.0
+
+### Minor Changes
+
+- 4fb2ea4: Make cancellation work, and let a call be bounded.
+
+  `CallOptions.signal` was documented on every method but never reached the request: the
+  execution core passed only the client into each generated call, so aborting a call let it
+  run to completion. The one place a signal did have an effect — interrupting the sleep
+  between retries — rejected with a raw `DOMException`, so a client promising
+  `{ data, error }` threw, and a `throwOnError` client threw something that was not a
+  `NeonError`.
+
+  - **`signal` now reaches the request** on all 91 ergonomic call sites, plus paginated
+    `list()`, and the multi-request `postgres.connectionString` resolver.
+  - **`requestTimeoutMs`** bounds a request and its retries, on the client or per call.
+    Unset by default, so existing calls stay unbounded; pass `Infinity` on a call to opt out
+    of a client-wide value. It is separate from `wait.timeoutMs`, which budgets readiness
+    polling. Invalid values are rejected at construction rather than silently firing
+    immediately.
+  - **New `NeonAbortError`** (`kind: "aborted"`) for caller cancellation, distinct from
+    `NeonTimeoutError` (`kind: "timeout"`) because a timeout is worth retrying and a
+    cancellation is not. Both arrive through the result envelope; neither escapes as a
+    `DOMException`.
+  - **Paginated `list()` methods accept per-call options** after their query, so a walk can
+    be cancelled or bounded like any other call. A deadline covers one consumption of the
+    list rather than each page.
+  - **`Retry-After` is honoured, not capped.** It previously multiplied straight into a
+    sleep, so `Retry-After: 3600` parked a call for an hour; the HTTP-date form parsed as
+    `NaN` and fell through to generated backoff, retrying far sooner than instructed. The
+    delay is never shortened now — when honouring it would exceed 10s or the remaining
+    deadline, the SDK stops retrying and surfaces the real `423`/`429`/`503`.
+
+  Cancellation is classified from the SDK's own deadline state rather than by matching error
+  names, because the generated client reports auth, serialization, interceptor, transport and
+  parsing faults through one channel. A transport failure that merely looks like an abort
+  stays a `NeonNetworkError`.
+
+  **Compile-time note.** `NeonErrorKind` gains `"aborted"`. Widening that union can break a
+  consumer whose `switch` over `error.kind` is exhaustive with a `never` check — such code
+  stops compiling until the new case is handled. This ships as a minor deliberately: an error
+  taxonomy has to be able to grow, and treating every new kind as breaking would either
+  freeze it or force a major for each addition. Nothing changes at runtime for existing
+  kinds, and no existing kind changes meaning.
+
+### Patch Changes
+
+- c8e1e74: Close three gaps in the cancellation and deadline work.
+
+  - **A malformed `Retry-After` no longer causes an immediate retry.** Requiring
+    `/^\d+$/` for delta-seconds sent invalid values on to `Date.parse`, which reads `-1`,
+    `1.5` and `+5` as dates in 2001. Those are in the past, so the delay clamped to `0` and
+    the SDK retried at once — the opposite of what the header asks. A numeric-looking value
+    that is not valid delta-seconds is now rejected outright.
+  - **A `wait.timeoutMs` larger than `2147483647` no longer expires almost immediately.**
+    `setTimeout` collapses any delay past that to 1ms (`TimeoutOverflowWarning`), and
+    readiness budgets have always accepted arbitrarily large values. Deadline timers are
+    re-armed in chunks, so a large budget behaves as written.
+  - **A `snapshots.restore` `preview` callback that throws no longer escapes the result
+    contract.** A callback cooperating with its signal throws an `AbortError`, which
+    propagated out of a client that promised `{ data, error }`. A throw is now reported as
+    `NeonAbortError` when the signal fired and as a `client`-kind `NeonError` otherwise,
+    both saying the restored branch is left un-finalized.
+
+  Also: a readiness timeout message counts the operations still outstanding rather than the
+  round's starting total, and the readiness tests now cancel and expire during an in-flight
+  poll instead of only between polls.
+
 ## 1.4.1
 
 ### Patch Changes

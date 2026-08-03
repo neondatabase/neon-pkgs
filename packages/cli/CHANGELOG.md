@@ -1,5 +1,77 @@
 # neon
 
+## 2.43.0
+
+### Minor Changes
+
+- 48b274f: Add `neon api-keys`, including project-scoped keys
+
+  The CLI exposed no API-key management at all, so the only way to mint one was the console or a hand-rolled `neon api /organizations/{id}/api_keys -X POST`. All six endpoints are now covered:
+
+  ```bash
+  neon api-keys list                                        # your account's keys
+  neon api-keys list --org-id org-…                         # an organization's, with scope shown
+
+  neon api-keys create --name ci                            # account key
+  neon api-keys create --name ci    --org-id org-…          # organization key
+  neon api-keys create --name agent --project-id frosty-…   # can access only that project
+
+  neon api-keys revoke <id> [--org-id org-…]
+  ```
+
+  **Project-scoped keys are the reason this matters.** A key created with `--project-id` cannot create projects, cannot mint API keys, and cannot see any other project — other projects return "not found" rather than a permission error, so it isn't even an existence oracle. It is not read-only — inside that project it can do anything the API allows, including deleting it. What it bounds is reach, which is what lets you hand it to an agent or a CI job without handing over your account (link the directory as yourself first; a scoped key cannot list projects to pick one):
+
+  ```bash
+  neon link --project-id frosty-…       # once, as yourself
+  NEON_API_KEY=napi_… neon deploy       # then the agent, reaching only that project
+  ```
+
+  `--org-id` and `--project-id` are mutually exclusive: a project-scoped key is already an organization key, and its organization is looked up from the project rather than chosen separately. With neither flag you get an account key.
+
+  `api-keys` is deliberately exempt from `.neon` context enrichment. Every other project command fills `--project-id` from the linked directory, which here would mean `api-keys create --name ci` silently producing a key scoped to whatever project is checked out instead of the account key requested. How far a credential reaches comes only from a flag you typed.
+
+  `neon api-keys list --org-id` shows which keys are scoped and to what, reading `(all projects)` for keys that are not narrowed, alongside `last_used_at` and `last_used_from_addr` — the fields you need to spot a key worth revoking.
+
+### Patch Changes
+
+- 48b274f: Make `profiles` the primary spelling of the profile command group
+
+  `profile` was primary with `profiles` as the alias, which is backwards from every other group — `projects`/`project`, `branches`/`branch`, `databases`/`database`. Both spellings continue to work.
+
+  The group first appears in an unreleased version, so nothing depends on the old ordering.
+
+- 7cbeead: Report a request timeout as a timeout, not as a broken internet connection.
+
+  When the Neon API accepted a connection and then didn't answer within the 60s request
+  timeout, the CLI printed:
+
+  > Could not reach the Neon API. Please check your internet connection and try again.
+
+  The connection was fine and the request had reached the server, so the one thing the
+  message told the user to check was the one thing that was not wrong.
+
+  The timeout is raised inside the CLI's own `fetch` wrapper, so by the time it is
+  classified `@neon/sdk` has wrapped it as a `NeonNetworkError` — and the check looked only
+  at the top-level error's `name`, which is `NeonNetworkError` on every SDK path. The
+  timeout therefore fell through to the connectivity branch, whose message pattern matched
+  the SDK's own `Network error: …` text. A timeout is now raised as a CLI-owned error type
+  and recognised through the `cause` chain, so it reports `ECONNABORTED` and "Request timed
+  out" as intended.
+
+  `getApiClient` also accepts `requestTimeoutMs`, defaulting to the same 60s, which is what
+  makes the behaviour testable against a server that never responds. It is validated when
+  the client is built: without that, `-1`, `NaN`, `Infinity`, fractions and values above
+  `4294967295` throw from inside the fetch wrapper and come back as the same misleading
+  connectivity error, while `0` and the band from `2147483648` to `4294967295` are accepted
+  and make every request time out at once.
+
+- Updated dependencies [4fb2ea4]
+- Updated dependencies [c8e1e74]
+  - @neon/sdk@1.5.0
+  - @neon/config@0.13.2
+  - @neon/config-runtime@0.12.3
+  - @neon/env@0.13.3
+
 ## 2.42.0
 
 ### Minor Changes
