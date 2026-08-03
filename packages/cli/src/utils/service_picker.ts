@@ -10,24 +10,26 @@ const CHOICES: { value: NeonService; title: string; description: string }[] = [
 	{
 		value: "auth",
 		title: "Managed Better Auth",
-		description: "Users, sessions, and OAuth providers managed by Neon",
-	},
-	{
-		value: "ai-gateway",
-		title: "AI Gateway",
 		description:
-			"One OpenAI-compatible endpoint; provisioning needs a paid plan",
+			"Authentication with users and sessions stored in Postgres.",
 	},
 	{
 		value: "functions",
 		title: "Functions",
 		description:
-			"Scaffolds hello.ts and declares it as a deployable function",
+			"Long-running, without timeouts, and closer to your database.",
 	},
 	{
 		value: "storage",
 		title: "Object Storage",
-		description: "A branchable private bucket named assets",
+		description:
+			"S3-compatible blob storage that branches with your projects.",
+	},
+	{
+		value: "ai-gateway",
+		title: "AI Gateway",
+		description:
+			"All models, one API, one bill. Powered by Databricks. Not available on the Neon free plan.",
 	},
 ];
 

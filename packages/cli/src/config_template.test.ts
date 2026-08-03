@@ -14,8 +14,8 @@ describe("parseServices", () => {
 	it("canonicalizes order and drops duplicates", () => {
 		expect(parseServices("storage,auth,storage,ai-gateway")).toEqual([
 			"auth",
-			"ai-gateway",
 			"storage",
+			"ai-gateway",
 		]);
 	});
 
@@ -25,7 +25,7 @@ describe("parseServices", () => {
 
 	it("rejects an unknown service by name, listing the supported values", () => {
 		expect(() => parseServices("auth,data-api")).toThrow(
-			/Unknown service data-api\. Supported values: auth, ai-gateway, functions, storage, none\./,
+			/Unknown service data-api\. Supported values: auth, functions, storage, ai-gateway, none\./,
 		);
 	});
 

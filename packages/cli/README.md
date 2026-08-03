@@ -456,9 +456,55 @@ export default defineConfig({
 });
 ```
 
-Three sub-commands plus two top-level aliases drive it:
+### Getting a `neon.ts` (`config init`)
+
+`neon config init` scaffolds the policy and installs `@neon/config` / `@neon/env`, so a project can go straight to `plan` / `apply`. It is purely local — no auth, no API calls. In an interactive terminal it asks which services the policy should declare:
+
+```
+? Which Neon services should neon.ts declare? (space to toggle, enter to confirm) ›
+◯   Managed Better Auth
+     Authentication with users and sessions stored in Postgres.
+◯   Functions
+     Long-running, without timeouts, and closer to your database.
+◯   Object Storage
+     S3-compatible blob storage that branches with your projects.
+◯   AI Gateway
+     All models, one API, one bill. Powered by Databricks. Not available on the Neon free plan.
+```
+
+Selecting nothing is a valid answer: you get the starter policy, which is also what a non-interactive run (CI, no TTY) writes. Pass `--services` to skip the prompt anywhere:
 
 ```bash
+# Pick interactively (TTY) or take the starter policy (CI)
+neon config init
+
+# Declare services with no prompt
+neon config init --services auth,functions,storage,ai-gateway
+
+# Explicitly ask for the bare starter policy
+neon config init --services none
+
+# Scaffold but print the install command instead of running it
+neon config init --no-install
+```
+
+Choosing **Functions** also writes the handler the policy points at, since `source` is only resolved when `apply` bundles it — a declared function with no file on disk fails at deploy:
+
+```ts
+// hello.ts
+export default async function hello(): Promise<Response> {
+  return new Response('Hello from Neon Functions');
+}
+```
+
+An existing `neon.ts` (or `hello.ts`) is never overwritten.
+
+Four sub-commands plus two top-level aliases drive it:
+
+```bash
+# Scaffold a neon.ts and install the config packages (local only)
+neon config init
+
 # Inspect the branch's live Neon state (read-only — never mutates)
 neon config status
 
@@ -612,7 +658,7 @@ All sub-commands honor the [global options](#global-options), including `--outpu
 | checkout                                                                   |                                                                                                              | Pin a branch in `.neon`            |
 | diff                                                                       |                                                                                                              | Git-style schema diff vs a branch  |
 | [link](https://neon.com/docs/reference/cli-link)                           |                                                                                                              | Link a directory to a project      |
-| config                                                                     | `status`, `plan`, `apply`                                                                                    | Drive a branch from `neon.ts`      |
+| config                                                                     | `init`, `status`, `plan`, `apply`                                                                            | Drive a branch from `neon.ts`      |
 | deploy                                                                     |                                                                                                              | Alias for `config apply`           |
 | bootstrap                                                                  |                                                                                                              | Scaffold a project from a template |
 | bucket                                                                     | `create`, `list`, `delete`, `object list`, `object get`, `object put`, `object delete` (incl. `--recursive`) | Manage buckets and their objects   |

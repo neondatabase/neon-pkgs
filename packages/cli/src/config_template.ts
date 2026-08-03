@@ -22,9 +22,9 @@ export const REQUIRED_PACKAGES = [CONFIG_PACKAGE, ENV_PACKAGE] as const;
  */
 export const NEON_SERVICES = [
 	"auth",
-	"ai-gateway",
 	"functions",
 	"storage",
+	"ai-gateway",
 ] as const;
 export type NeonService = (typeof NEON_SERVICES)[number];
 
