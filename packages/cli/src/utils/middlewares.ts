@@ -1,12 +1,23 @@
+import { recordApiKeyFlag } from "../auth_selection.js";
+
 /**
  * Resolves `--api-key` from `NEON_API_KEY` when the flag is absent, leaving it an
  * empty string when neither is set.
  *
  * This cannot be expressed as the option's yargs `default`, because yargs prints
  * defaults in help output and would print the key itself.
+ *
+ * The flag's own value is recorded before the fold, because folding destroys the one
+ * distinction the precedence rules need: `--api-key` outranks `--profile` and an exported
+ * `NEON_API_KEY` does not, but once both live in `args.apiKey` they are indistinguishable.
+ * It is recorded outside `args` deliberately — a hidden yargs option would be a second,
+ * undocumented way to pass a credential, and commands that call `.strict()` reject arguments
+ * the middleware invents.
  */
 export const resolveApiKeyFromEnv = (args: Record<string, unknown>) => {
-	if (typeof args.apiKey === "string" && args.apiKey !== "") {
+	const fromFlag = typeof args.apiKey === "string" ? args.apiKey : "";
+	recordApiKeyFlag(fromFlag);
+	if (fromFlag !== "") {
 		return;
 	}
 	const fromEnv = process.env.NEON_API_KEY ?? "";

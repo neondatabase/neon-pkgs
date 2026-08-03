@@ -27,7 +27,12 @@ export function resolveApiKey(options: {
 }
 
 /**
- * Read `access_token` from the Neon CLI's credentials file.
+ * Read the stored credential from the Neon CLI's credentials file.
+ *
+ * The file holds one of two kinds, and `type` says which: an `api_key` file authenticates with
+ * its `api_key`, and anything else is an OAuth token set whose `access_token` is itself a
+ * bearer token for the Neon API. Reading only `access_token` would silently find nothing on a
+ * key-backed profile and report "no key" for an account that is perfectly signed in.
  *
  * Location resolution is delegated to `@neon/config/paths` so this agrees with the `neon`
  * CLI itself — `NEON_CONFIG_DIR` / `NEONCTL_CONFIG_DIR`, else `$XDG_CONFIG_HOME/neon`, else
@@ -36,10 +41,10 @@ export function resolveApiKey(options: {
  * var but not XDG, while the CLI honoured XDG but not the env var, so with
  * `XDG_CONFIG_HOME` set they disagreed about where credentials lived.
  *
- * Reads only `DEFAULT` — a profile is a CLI-invocation concept, and `neon-env` has no
- * `--profile` of its own to read one from.
+ * Reads only `DEFAULT` — profiles are a `neon` CLI concept, and `neon-env` has no `--profile`
+ * of its own to select one with.
  *
- * Never throws: a missing, unreadable, malformed, or token-less file is simply "no key",
+ * Never throws: a missing, unreadable, malformed, or credential-less file is simply "no key",
  * so this can sit in a resolution chain without try/catch noise.
  */
 function readStoredAccessToken(env: NodeJS.ProcessEnv): string | undefined {
@@ -57,7 +62,11 @@ function readStoredAccessToken(env: NodeJS.ProcessEnv): string | undefined {
 
 	if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
 		return undefined;
-	return nonEmpty((parsed as Record<string, unknown>).access_token as string);
+	const credentials = parsed as Record<string, unknown>;
+	if (credentials.type === "api_key") {
+		return nonEmpty(credentials.api_key as string);
+	}
+	return nonEmpty(credentials.access_token as string);
 }
 
 function nonEmpty(value: string | undefined): string | undefined {

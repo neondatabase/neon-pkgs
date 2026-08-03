@@ -13,7 +13,7 @@ import type { NeonApiClient } from "../api.js";
 import * as authModule from "../auth";
 import { test } from "../test_utils/fixtures";
 import { startOauthServer } from "../test_utils/oauth_server";
-import { authFlow, deleteCredentials, ensureAuth } from "./auth";
+import { authFlow, deleteCredentialsAt, ensureAuth } from "./auth";
 
 vi.mock("open", () => ({ default: vi.fn((url: string) => fetch(url)) }));
 vi.mock("../pkg.ts", () => ({ default: { version: "0.0.0" } }));
@@ -269,7 +269,7 @@ describe("ensureAuth", () => {
 	});
 });
 
-describe("deleteCredentials", () => {
+describe("deleteCredentialsAt", () => {
 	let configDir = "";
 
 	beforeAll(() => {
@@ -286,7 +286,7 @@ describe("deleteCredentials", () => {
 
 		expect(existsSync(credentialsPath)).toBe(true);
 
-		deleteCredentials(configDir);
+		deleteCredentialsAt(credentialsPath);
 
 		expect(existsSync(credentialsPath)).toBe(false);
 	});
@@ -304,7 +304,7 @@ describe("deleteCredentials", () => {
 
 		// Should not throw an error
 		expect(() => {
-			deleteCredentials(nonExistentDir);
+			deleteCredentialsAt(credentialsPath);
 		}).not.toThrow();
 
 		rmSync(nonExistentDir, { recursive: true });

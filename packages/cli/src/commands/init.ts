@@ -46,7 +46,19 @@ export const handler = async (argv: {
 	data?: string;
 	skipMigrations?: boolean;
 	preview?: boolean;
+	profile?: string;
 }) => {
+	// `init` delegates its whole auth flow to `neon-init`, which reads the default
+	// credentials directly and re-invokes the CLI as a subprocess. It has no way to be told
+	// which profile to use, so honouring `--profile` here is not possible yet — and silently
+	// running as the default account would be worse than refusing, because the flag's entire
+	// job is to say which account to act on.
+	if (argv.profile) {
+		throw new Error(
+			`\`neon init\` does not support --profile yet: it would run as the default account instead of "${argv.profile}". Run it without --profile, or set up the project with \`neon --profile ${argv.profile} link\`.`,
+		);
+	}
+
 	try {
 		// Auto-detect agent from environment. When --agent is explicitly passed,
 		// always detect (the user asked for agent mode). Otherwise, require

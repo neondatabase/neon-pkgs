@@ -657,13 +657,13 @@ neon profiles remove work
 ```console
 $ neon profiles list
 Profiles
-┌────────┬─────────┬──────────────────────┬──────────┬──────────────────────────────────────┐
-│ Active │ Name    │ Account              │ SignedIn │ Credentials                          │
-├────────┼─────────┼──────────────────────┼──────────┼──────────────────────────────────────┤
-│ *      │ DEFAULT │ me@example.com       │ yes      │ ~/.config/neon/credentials.json      │
-├────────┼─────────┼──────────────────────┼──────────┼──────────────────────────────────────┤
-│        │ work    │ me@work.example.com  │ yes      │ ~/.config/neon/credentials.work.json │
-└────────┴─────────┴──────────────────────┴──────────┴──────────────────────────────────────┘
+┌────────┬─────────┬─────────────────────┬─────────┬───────────┬──────────────────────────────────────┐
+│ Active │ Name    │ Account             │ Auth    │ Available │ Credentials                          │
+├────────┼─────────┼─────────────────────┼─────────┼───────────┼──────────────────────────────────────┤
+│ *      │ DEFAULT │ me@example.com      │ oauth   │ yes       │ ~/.config/neon/credentials.json      │
+├────────┼─────────┼─────────────────────┼─────────┼───────────┼──────────────────────────────────────┤
+│        │ work    │ me@work.example.com │ api key │ yes       │ ~/.config/neon/credentials.work.json │
+└────────┴─────────┴─────────────────────┴─────────┴───────────┴──────────────────────────────────────┘
 ```
 
 Select one per invocation with `--profile`, or per shell with `NEON_PROFILE`. There is no `profile use` command and nothing is stored about which profile is "current", so what you type is always what runs.
@@ -754,12 +754,66 @@ API keys in org-7
 
 `last_used_at` and `last_used_from_addr` are how you spot a key worth revoking.
 
+### A profile can hold an API key instead of an OAuth session
+
+`neon auth` signs a profile in through the browser. `neon profile set-key` gives it an API key instead, which is what you want for an agent, a shared machine, or anything that must never be interrupted by a login:
+
+```bash
+neon profile set-key work                                # prompts, so the key stays out of shell history
+neon profile set-key work --api-key napi_...             # non-interactive
+neon profile set-key work --api-key-file ~/keys/work     # take it from a file you already have
+neon profile rotate-key work                             # mint a fresh key, revoke the one it replaces
+```
+
+`set-key` verifies the key against the API before storing it, and records who it belongs to so `profile list` can show you. It creates the profile if it does not exist yet and replaces the key if it does. Only a real API key is accepted — an OAuth access token authenticates today and then expires with nothing to refresh it, so it is refused rather than stored.
+
+`rotate-key` mints with whatever the profile can currently authenticate with, so a profile that has both a key and the OAuth session it was minted from can be rotated without a browser. It stores the new key before revoking the old one: if the write fails, the old key still works.
+
+The credentials file says which kind it holds, and `type` is what decides — not which fields happen to be present:
+
+```json
+// oauth: what `neon auth` writes. An absent `type` means this.
+{ "access_token": "…", "refresh_token": "…", "expires_at": 1786…, "user_id": "…" }
+
+// api_key: what `set-key` writes
+{ "type": "api_key", "api_key": "napi_…", "user_id": "…" }
+
+// api_key minted by `rotate-key`, keeping the session it came from for the next rotation
+{ "type": "api_key", "api_key": "napi_…", "key_id": 123, "user_id": "…",
+  "access_token": "…", "refresh_token": "…", "expires_at": 1786… }
+```
+
+The secret stays in that file and never goes into `profiles.json`, so listing profiles cannot leak one. Both files are written owner-only through a temporary file and a rename, which also repairs the permissions of a file that was created too permissively.
+
+Two things `rotate-key` cannot do for a key you supplied yourself. It cannot revoke it — `GET /api_keys` exposes no prefix, so a stored secret cannot be matched to a listing entry, and the command tells you to check `neon api GET /api_keys` instead. For the same reason `profile remove` leaves an API key live upstream, and says so.
+
+### Which credential an invocation uses
+
+An explicit flag always beats an environment variable:
+
+| Given | What runs |
+| --- | --- |
+| `--api-key` and `--profile` | neither — contradictory, so the command fails |
+| `--api-key` and `NEON_PROFILE` | the flag's key |
+| `--profile` and `NEON_API_KEY` | the profile |
+| `NEON_API_KEY` and `NEON_PROFILE` | the key, and the ignored profile is named in a warning |
+| `--profile` or `NEON_PROFILE` alone | that profile |
+| nothing | `DEFAULT` |
+
+Passing both flags fails rather than picking a winner: `--api-key` supplies a credential and `--profile` selects a stored one, so there is no reading of the command that makes both true.
+
+When both are only environment variables the key wins, which keeps a CI pipeline that injects `NEON_API_KEY` working even if a `NEON_PROFILE` leaks into the environment — but the disregarded profile is named on stderr rather than passed over silently.
+
+`neon auth` and the `profile` subcommands are outside all of this, because they read the same flags to mean something else: `neon auth --profile work` names where to write a credential, and `neon profile set-key work --api-key …` names one to store.
+
+`neon init` does not support `--profile` yet. It hands its whole auth flow to `neon-init`, which reads the default credentials directly, so passing the flag fails instead of quietly running as the default account.
+
 ## Commands
 
 | Command                                                                    | Subcommands                                                                                                  | Description                        |
 | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------- |
 | [auth](https://neon.com/docs/reference/cli-auth)                           |                                                                                                              | Authenticate                       |
-| profiles                                                                   | `list`, `remove`                                                                                             | Manage named sets of credentials   |
+| profiles                                                                   | `list`, `create`, `rotate-key`, `remove`                                                                     | Manage named sets of credentials   |
 | api-keys                                                                   | `list`, `create`, `revoke`                                                                                   | Manage API keys                    |
 | [projects](https://neon.com/docs/reference/cli-projects)                   | `list`, `create`, `update`, `delete`, `get`                                                                  | Manage projects                    |
 | [ip-allow](https://neon.com/docs/reference/cli-ip-allow)                   | `list`, `add`, `remove`, `reset`                                                                             | Manage IP Allow                    |

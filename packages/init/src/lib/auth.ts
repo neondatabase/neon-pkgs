@@ -67,6 +67,11 @@ async function getNeonctlAccessToken(): Promise<string | null> {
 		for (const path of credentialsCandidates()) {
 			if (!existsSync(path)) continue;
 			const credentials = JSON.parse(readFileSync(path, "utf-8"));
+			// The file holds one of two kinds and `type` says which. An `api_key` file has no
+			// `access_token`, so looking only for that would treat a signed-in, key-backed
+			// account as not authenticated and send the user through a browser login.
+			if (credentials.type === "api_key" && credentials.api_key)
+				return credentials.api_key;
 			if (credentials.access_token) return credentials.access_token;
 		}
 		return null;

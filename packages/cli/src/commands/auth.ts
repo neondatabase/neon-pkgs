@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import type yargs from "yargs";
 
 import type { NeonApiClient } from "../api.js";
@@ -7,12 +7,26 @@ import type { NeonApiClient } from "../api.js";
 import { getApiClient } from "../api.js";
 import { auth, refreshToken } from "../auth.js";
 import { setAuthContext } from "../auth_context.js";
+import {
+	apiKeyFlagValue,
+	displacedProfileWarning,
+	selectCredential,
+} from "../auth_selection.js";
 import { credentialsPath as defaultCredentialsPath } from "../config.js";
 import {
 	isConfigInit,
 	isCurrentBranchProbe,
 	isProfileCommand,
 } from "../context.js";
+import {
+	API_KEY,
+	type CredentialKind,
+	interpretCredentials,
+	mergeCredentials,
+	OAUTH,
+	readCredentials,
+	writeCredentials,
+} from "../credentials.js";
 import { isCi } from "../env.js";
 import { log } from "../log.js";
 import {
@@ -40,23 +54,27 @@ type AuthProps = {
 };
 
 /**
- * The credentials file this invocation reads and writes: the selected profile's, falling
- * back to plain `credentials.json` when no profile was named and none is declared. An
- * unknown profile name is a hard error rather than a silent write to the default file —
- * a typo must not authenticate the wrong account.
+ * The credentials file a named profile resolves to, falling back to plain `credentials.json`
+ * when the name is `DEFAULT` and nothing is declared. An unknown profile name is a hard error
+ * rather than a silent write to the default file — a typo must not authenticate the wrong
+ * account.
  */
+export const credentialsPathForName = (
+	configDir: string,
+	name: string,
+): string => {
+	if (name === DEFAULT_PROFILE && !readProfiles(configDir))
+		return defaultCredentialsPath(configDir);
+	return resolveProfile(configDir, name).credentialsPath;
+};
+
 const credentialsPathFor = ({
 	configDir,
 	profile,
 }: {
 	configDir: string;
 	profile?: string;
-}): string => {
-	const name = selectProfileName(profile);
-	if (name === DEFAULT_PROFILE && !readProfiles(configDir))
-		return defaultCredentialsPath(configDir);
-	return resolveProfile(configDir, name).credentialsPath;
-};
+}): string => credentialsPathForName(configDir, selectProfileName(profile));
 
 export const command = "auth";
 export const aliases = ["login"];
@@ -140,23 +158,32 @@ const preserveCredentials = async (
 	const {
 		data: { id, email },
 	} = await apiClient.getCurrentUserInfo();
-	const contents = JSON.stringify({
-		// Cast to a plain record: we intentionally spread the credentials object.
+	// Merge rather than replace, and declare the kind explicitly. Signing in turns the file
+	// into an OAuth credential, but a `key_id` recorded by an earlier `rotate-key` has to
+	// survive — it is the only handle on a key that is still live upstream, and dropping it
+	// would orphan that key with no way to revoke it.
+	const merged = mergeCredentials(readCredentials(path), {
 		...(credentials as Record<string, unknown>),
+		type: OAUTH,
 		user_id: id,
 	});
-	// Owner-only. A credentials file needs read/write, never execute.
-	writeFileSync(path, contents, {
-		mode: 0o600,
-	});
+	writeCredentials(path, merged);
 	log.debug("Saved credentials to %s", path);
-	log.debug("Credentials MD5 hash: %s", md5hash(contents));
+	log.debug("Credentials MD5 hash: %s", md5hash(JSON.stringify(merged)));
 	return { ...(id ? { id } : {}), ...(email ? { email } : {}) };
+};
+
+/** Everything needed to use or refresh a stored credential. A subset of {@link AuthProps}. */
+export type CredentialProps = {
+	apiHost: string;
+	oauthHost: string;
+	clientId: string;
+	allowUnsafeTls?: boolean;
 };
 
 const handleExistingToken = async (
 	tokenSet: ExtendedTokenSet,
-	props: AuthProps,
+	props: CredentialProps,
 	credentialsPath: string,
 ): Promise<{ apiKey: string; apiClient: NeonApiClient } | null> => {
 	// Use existing access_token, if present and valid
@@ -213,6 +240,45 @@ const handleExistingToken = async (
 	}
 };
 
+/**
+ * The credential a stored file can authenticate with right now — its API key, or an OAuth
+ * access token, refreshed first when it has expired. Never launches a browser.
+ *
+ * The `profile` subcommands need exactly this. They deliberately skip `ensureAuth`, but
+ * `rotate-key` still has to call the API as the account it is rotating, and falling through to
+ * an interactive login would be authenticating something other than what the command is about.
+ */
+export const usableCredential = async (
+	props: CredentialProps,
+	credentialsPath: string,
+): Promise<{ apiKey: string; kind: CredentialKind } | null> => {
+	const stored = readCredentials(credentialsPath);
+	if (stored === null) return null;
+
+	// A file that declares an unusable kind throws, rather than being reported as "no
+	// credential" — the user needs to know it is broken, not that it is absent.
+	const credential = interpretCredentials(stored, credentialsPath);
+	if (credential.kind === API_KEY) {
+		return { apiKey: credential.apiKey, kind: API_KEY };
+	}
+
+	try {
+		const result = await handleExistingToken(
+			stored as ExtendedTokenSet,
+			props,
+			credentialsPath,
+		);
+		return result ? { apiKey: result.apiKey, kind: OAUTH } : null;
+	} catch (err) {
+		log.debug(
+			"Could not use the stored OAuth session at %s: %s",
+			credentialsPath,
+			err instanceof Error ? err.message : "unknown error",
+		);
+		return null;
+	}
+};
+
 export const ensureAuth = async (
 	props: AuthProps & {
 		apiKey: string;
@@ -260,15 +326,10 @@ export const ensureAuth = async (
 	// then triggers OAuth at the right time). Skip the global auth middleware.
 	const isInit = props._[0] === "init";
 
-	// Use existing API key or handle auth command
-	if (props.apiKey || props._[0] === "auth") {
-		if (props.apiKey) {
-			log.debug("Using an API key to authorize requests");
-			setAuthContext({
-				source: "api-key",
-				configDir: props.configDir,
-			});
-		}
+	// `auth` writes a credential rather than using one, and reads `--profile` as the
+	// destination to write it to. Running selection here would reject the flag pair it
+	// accepts, and could resolve a stored key that this command must not authenticate with.
+	if (props._[0] === "auth") {
 		props.apiClient = getApiClient({
 			apiKey: props.apiKey,
 			apiHost: props.apiHost,
@@ -276,19 +337,70 @@ export const ensureAuth = async (
 		return;
 	}
 
-	const credentialsPath = credentialsPathFor(props);
+	// Throws when `--api-key` and `--profile` are both passed.
+	const selection = selectCredential({
+		apiKeyFlag: apiKeyFlagValue(),
+		profileFlag: props.profile,
+	});
 
-	// Handle case when credentials file exists
-	if (existsSync(credentialsPath)) {
+	const displaced = displacedProfileWarning(selection);
+	if (displaced !== null) {
+		log.warning(displaced);
+	}
+
+	if (selection.source !== "profile") {
+		props.apiKey = selection.apiKey;
+		log.debug("Using an API key to authorize requests");
+		setAuthContext({
+			source: "api-key",
+			configDir: props.configDir,
+		});
+		props.apiClient = getApiClient({
+			apiKey: props.apiKey,
+			apiHost: props.apiHost,
+		});
+		return;
+	}
+
+	// An explicit `--profile` outranks an exported `NEON_API_KEY`, which the middleware has
+	// already folded into `apiKey`. Clear it so nothing downstream — analytics, `dev`'s env
+	// runtime, a re-exec — authenticates with a key this invocation decided against.
+	props.apiKey = "";
+
+	const credentialsPath = credentialsPathForName(
+		props.configDir,
+		selection.profile,
+	);
+	const stored = readCredentials(credentialsPath);
+
+	if (stored !== null) {
 		log.debug("Trying to read credentials from %s", credentialsPath);
-		try {
-			const contents = readFileSync(credentialsPath, "utf8");
-			log.debug("Credentials MD5 hash: %s", md5hash(contents));
-			const tokenSet: ExtendedTokenSet = JSON.parse(contents);
+		// Throws on a file whose declared kind is unusable. That is deliberate: falling
+		// through to a browser login would replace the credential the user is fixing.
+		const credential = interpretCredentials(stored, credentialsPath);
 
-			// Try to use existing token or refresh it
+		if (credential.kind === API_KEY) {
+			log.debug(
+				'Using profile "%s"\'s API key to authorize requests',
+				selection.profile,
+			);
+			props.apiKey = credential.apiKey;
+			setAuthContext({
+				source: "profile-api-key",
+				configDir: props.configDir,
+				profile: selection.profile,
+				credentialsPath,
+			});
+			props.apiClient = getApiClient({
+				apiKey: credential.apiKey,
+				apiHost: props.apiHost,
+			});
+			return;
+		}
+
+		try {
 			const result = await handleExistingToken(
-				tokenSet,
+				stored as ExtendedTokenSet,
 				props,
 				credentialsPath,
 			);
@@ -298,28 +410,23 @@ export const ensureAuth = async (
 				setAuthContext({
 					source: "stored-credentials",
 					configDir: props.configDir,
+					profile: selection.profile,
+					credentialsPath,
 				});
 				return;
 			}
 		} catch (err) {
 			if (
-				!(
-					err instanceof Error &&
-					err.message === "AUTH_REFRESH_FAILED"
-				) &&
-				(err as { code: string }).code !== "ENOENT" &&
-				!(err instanceof SyntaxError)
+				!(err instanceof Error && err.message === "AUTH_REFRESH_FAILED")
 			) {
-				// Throw for any errors except auth refresh failure, missing file, or invalid credentials file
 				throw err;
 			}
-
-			// Fall through to new auth flow for auth failures
+			// A refresh that failed is recoverable by logging in again.
 			log.debug("Ensure auth failed, starting authentication", err);
 		}
 	} else {
 		log.debug(
-			"Credentials file %s does not exist, starting authentication",
+			"No usable credentials at %s, starting authentication",
 			credentialsPath,
 		);
 	}
@@ -342,8 +449,10 @@ export const ensureAuth = async (
 		return;
 	}
 
-	// Start new auth flow if no valid token exists or refresh failed
-	const apiKey = await authFlow(props);
+	// Start new auth flow if no valid token exists or refresh failed. Pass the resolved
+	// profile rather than the raw flag, so a name that came from `NEON_PROFILE` is written to
+	// its own file instead of overwriting `DEFAULT`'s.
+	const apiKey = await authFlow({ ...props, profile: selection.profile });
 	props.apiKey = apiKey;
 	props.apiClient = getApiClient({
 		apiKey,
@@ -352,24 +461,22 @@ export const ensureAuth = async (
 	setAuthContext({
 		source: "stored-credentials",
 		configDir: props.configDir,
+		profile: selection.profile,
+		credentialsPath,
 	});
 };
 
 /**
- * Delete the credentials backing a profile — used by the 401 handler to clear a token the
- * API has rejected, so the next command re-authenticates instead of failing again.
+ * Delete one credentials file — used by the 401 handler to clear an OAuth token set the API
+ * has rejected, so the next command logs in again instead of failing the same way.
  *
- * @param configDir Directory the credentials live in
- * @param profile Profile whose credentials to clear. Defaults to the selected one.
+ * It takes the exact path rather than a directory and an optional profile. Deriving the path
+ * here meant re-running selection from partial state, and the 401 handler has no parsed
+ * arguments: it passed only the config directory, so a rejected token on a
+ * `--profile`-selected account deleted whatever `DEFAULT` pointed at — signing the user out
+ * of an account whose credentials the failed request had never touched.
  */
-export const deleteCredentials = (
-	configDir: string,
-	profile?: string,
-): void => {
-	const credentialsPath = credentialsPathFor({
-		configDir,
-		...(profile ? { profile } : {}),
-	});
+export const deleteCredentialsAt = (credentialsPath: string): void => {
 	try {
 		if (existsSync(credentialsPath)) {
 			rmSync(credentialsPath);

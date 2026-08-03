@@ -49,29 +49,56 @@ export type CliResult = {
  */
 export function runCli(
 	args: string[],
-	options: { json?: boolean } = {},
+	options: {
+		json?: boolean;
+		/** Override the shared scratch config directory. Never pass `--config-dir` in `args`. */
+		configDir?: string;
+		/**
+		 * Authenticate from this profile. Suppresses `--api-key`, which is the only way to
+		 * exercise a stored credential — the two together are rejected on purpose.
+		 */
+		profile?: string;
+		/**
+		 * Pass this key as `--api-key`. Defaults to the harness key, and to nothing at all when
+		 * `profile` is set. Give both to exercise the rejection.
+		 */
+		apiKey?: string;
+		/** Extra environment for the child. `undefined` removes an inherited variable. */
+		env?: Record<string, string | undefined>;
+	} = {},
 ): Promise<CliResult> {
+	const key =
+		options.apiKey ?? (options.profile ? undefined : requireApiKey());
 	const argv = [
 		CLI_ENTRY,
 		...args,
-		"--api-key",
-		requireApiKey(),
+		...(key !== undefined ? ["--api-key", key] : []),
+		...(options.profile ? ["--profile", options.profile] : []),
+		"--config-dir",
+		options.configDir ?? configDir,
 		// The CLI calls this `--api-host`; the harness contract calls it
 		// NEON_API_BASE_URL. Translate so one variable redirects the whole run.
 		"--api-host",
 		configuredBaseUrl(),
-		"--config-dir",
-		configDir,
 		"--context-file",
 		contextFile,
 		"--no-analytics",
 		"--output",
 		options.json === false ? "table" : "json",
 	];
+	const env: Record<string, string | undefined> = {
+		...process.env,
+		NO_COLOR: "1",
+		FORCE_COLOR: "0",
+		...(options.env ?? {}),
+	};
+	for (const [key, value] of Object.entries(env)) {
+		if (value === undefined) delete env[key];
+	}
 	return new Promise((resolvePromise, reject) => {
 		const child = spawn(process.execPath, argv, {
 			stdio: ["ignore", "pipe", "pipe"],
-			env: { ...process.env, NO_COLOR: "1", FORCE_COLOR: "0" },
+			env,
 		});
 		let stdout = "";
 		let stderr = "";

@@ -41,11 +41,12 @@
  * profile is, and nothing is ever moved.
  */
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 import { resolveConfigFile } from "@neon/config/paths";
 import { credentialsPath, defaultDir } from "./config.js";
 import { log } from "./log.js";
+import { writeSecretFile } from "./utils/secure_file.js";
 
 export const PROFILES_FILE = "profiles.json";
 
@@ -234,7 +235,7 @@ export const listProfiles = (dir: string): ResolvedProfile[] => {
 };
 
 const writeProfiles = (path: string, file: ProfilesFile): void => {
-	writeFileSync(path, `${JSON.stringify(file, null, 2)}\n`, { mode: 0o600 });
+	writeSecretFile(path, `${JSON.stringify(file, null, 2)}\n`);
 };
 
 const resolveEntryPath = (dir: string, entry: string): string =>

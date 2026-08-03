@@ -164,3 +164,48 @@ describe("resolveApiKey — returns undefined rather than throwing", () => {
 		expect(resolveApiKey({ env: { HOME: home } })).toBeUndefined();
 	});
 });
+
+/**
+ * The credentials file holds one of two kinds and `type` says which. Reading only
+ * `access_token` reported "no key" for an account that is perfectly signed in with a key.
+ */
+describe("resolveApiKey — an api_key credentials file", () => {
+	const apiKeyFile = (api_key: string, extra: object = {}) =>
+		JSON.stringify({ type: "api_key", api_key, ...extra });
+
+	test("its api_key is used", () => {
+		const home = makeHome(apiKeyFile("napi_stored"));
+		expect(resolveApiKey({ env: { HOME: home } })).toBe("napi_stored");
+	});
+
+	test("in the current `neon` directory too", () => {
+		const home = makeHome(apiKeyFile("napi_stored"), "neon");
+		expect(resolveApiKey({ env: { HOME: home } })).toBe("napi_stored");
+	});
+
+	// `type` decides, not which fields are present — a minted key keeps the OAuth token set it
+	// was minted from, and that token must not win over the key the file declares.
+	test("the api_key wins over a retained access_token", () => {
+		const home = makeHome(
+			apiKeyFile("napi_stored", { access_token: "retained-oauth" }),
+		);
+		expect(resolveApiKey({ env: { HOME: home } })).toBe("napi_stored");
+	});
+
+	test("an explicit flag and NEON_API_KEY still outrank it", () => {
+		const home = makeHome(apiKeyFile("napi_stored"));
+		expect(
+			resolveApiKey({ apiKey: "from-flag", env: { HOME: home } }),
+		).toBe("from-flag");
+		expect(
+			resolveApiKey({ env: { HOME: home, NEON_API_KEY: "from-env" } }),
+		).toBe("from-env");
+	});
+
+	test("an api_key file with no key is no key, not a fall back to access_token", () => {
+		const home = makeHome(
+			JSON.stringify({ type: "api_key", access_token: "oauth-token" }),
+		);
+		expect(resolveApiKey({ env: { HOME: home } })).toBeUndefined();
+	});
+});

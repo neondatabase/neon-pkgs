@@ -1,9 +1,9 @@
-import { readFileSync } from "node:fs";
-
 import { Analytics, type TrackParams } from "@segment/analytics-node";
 import { getApiClient, isNeonApiError } from "./api.js";
+import { getAuthContext } from "./auth_context.js";
 import { credentialsPath } from "./config.js";
 import { isCurrentBranchProbe } from "./context.js";
+import { readCredentials } from "./credentials.js";
 import { getGithubEnvVars, isCi } from "./env.js";
 import type { ErrorCode } from "./errors.js";
 import { log } from "./log.js";
@@ -94,13 +94,16 @@ export const analyticsMiddleware = async (args: {
 		return;
 	}
 
-	try {
-		const credentials = readFileSync(credentialsPath(args.configDir), {
-			encoding: "utf-8",
-		});
-		userId = JSON.parse(credentials).user_id;
-	} catch (err) {
-		log.debug("Failed to read credentials file", err);
+	// Read the credentials this invocation actually authenticated with, which `ensureAuth`
+	// recorded. Reading `DEFAULT`'s unconditionally attributed every `--profile`-selected
+	// command to whichever account happened to be the default one.
+	const authenticatedAs =
+		getAuthContext()?.credentialsPath ?? credentialsPath(args.configDir);
+	const stored = readCredentials(authenticatedAs);
+	if (stored === null) {
+		log.debug("No readable credentials at %s", authenticatedAs);
+	} else if (typeof stored.user_id === "string") {
+		userId = stored.user_id;
 	}
 
 	try {

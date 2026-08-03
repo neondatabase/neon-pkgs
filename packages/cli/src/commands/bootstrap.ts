@@ -14,7 +14,7 @@ import {
 } from "neon-init/bootstrap";
 import prompts, { type InitialReturnValue } from "prompts";
 import type yargs from "yargs";
-
+import { apiKeyFlagValue } from "../auth_selection.js";
 import { isCi } from "../env.js";
 import { log } from "../log.js";
 import type { CommonProps } from "../types.js";
@@ -35,6 +35,9 @@ type BootstrapProps = CommonProps & {
 	install: boolean;
 	git: boolean;
 	link: boolean;
+	/** Forwarded to the re-exec'd `link`, so the child resolves the same account. */
+	configDir?: string;
+	profile?: string;
 };
 
 // ----------------------------------------------------------------------------
@@ -501,9 +504,20 @@ const runNeonLink = async (
 	targetDir: string,
 ): Promise<void> => {
 	const args = [process.argv[1], "link"];
-	if (props.apiKey) {
-		args.push("--api-key", props.apiKey);
+
+	// Forward how to authenticate, never the resolved credential. A key on the child's argv is
+	// visible to anything that can list processes, and it would also strip the child of the
+	// profile it came from — so a 401 there could not name the profile, and `--config-dir`
+	// (which was never forwarded at all) would silently resolve somewhere else.
+	if (props.configDir) {
+		args.push("--config-dir", props.configDir);
 	}
+	if (props.profile) {
+		args.push("--profile", props.profile);
+	} else if (apiKeyFlagValue()) {
+		args.push("--api-key", apiKeyFlagValue());
+	}
+
 	args.push("--api-host", props.apiHost, "--output", props.output);
 	await runCommand(process.execPath, args, targetDir);
 };

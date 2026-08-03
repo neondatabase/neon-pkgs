@@ -11,8 +11,12 @@ import {
 } from "./analytics.js";
 import { isNeonApiError, messageFromBody, type NeonApiClient } from "./api.js";
 import { defaultClientID } from "./auth.js";
-import { credentialsToClearOn401, getAuthContext } from "./auth_context.js";
-import { deleteCredentials, ensureAuth } from "./commands/auth.js";
+import {
+	authFailureMessage,
+	credentialsToClearOn401,
+	getAuthContext,
+} from "./auth_context.js";
+import { deleteCredentialsAt, ensureAuth } from "./commands/auth.js";
 import commands from "./commands/index.js";
 import { defaultDir, ensureConfigDir } from "./config.js";
 import { currentContextFile, enrichFromContext } from "./context.js";
@@ -223,19 +227,20 @@ async function handleError(msg: string, err: unknown): Promise<boolean> {
 			return false;
 		} else if (err.status === 401) {
 			sendError(err, "AUTH_FAILED");
-			const configDir = credentialsToClearOn401(getAuthContext());
-			// The request was authorized with a key the user supplied, so there
-			// is nothing of ours to clear and nothing to retry — the same key
-			// would just be rejected again.
-			if (configDir === null) {
-				log.error(
-					"Authentication failed: the Neon API rejected the API key. Check --api-key or NEON_API_KEY.",
-				);
+			const context = getAuthContext();
+			const staleCredentials = credentialsToClearOn401(context);
+			// The request was authorized with a key rather than a refreshable token — one the
+			// user supplied, or one stored in a profile. Either way there is nothing to clear
+			// and nothing to retry, since the same key would just be rejected again. Deleting
+			// a profile's key would destroy the only copy of a credential that cannot be
+			// refreshed, so the message says what to re-run instead.
+			if (staleCredentials === null) {
+				log.error(authFailureMessage(context));
 				return false;
 			}
 			log.info("Authentication failed, deleting credentials...");
 			try {
-				deleteCredentials(configDir);
+				deleteCredentialsAt(staleCredentials);
 				return true; // Allow retry for auth failures
 			} catch (deleteErr) {
 				log.debug(
