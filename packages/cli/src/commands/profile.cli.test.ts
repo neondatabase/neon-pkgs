@@ -744,6 +744,31 @@ describe("a damaged credentials file", () => {
 		expect(existsSync(resolve(dir, "credentials.work.json"))).toBe(false);
 	});
 
+	// A parseable file with a kind we do not understand was classified as invalid by `list` yet
+	// could not be removed, because `remove` asked for its kind without catching the refusal.
+	test("a profile with an unrecognised type can be removed", async () => {
+		const dir = makeConfigDir({
+			"credentials.odd.json": JSON.stringify({ type: "unknown" }),
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { odd: { credentials: "credentials.odd.json" } },
+			}),
+		});
+		const { code, stderr } = await runCli([
+			"profile",
+			"remove",
+			"odd",
+			"--yes",
+			"--config-dir",
+			dir,
+		]);
+
+		expect(code).toBe(0);
+		expect(stderr).toContain('unrecognised "type": "unknown"');
+		expect(stderr).not.toContain("..");
+		expect(existsSync(resolve(dir, "credentials.odd.json"))).toBe(false);
+	});
+
 	// But one broken profile must not take the whole listing with it.
 	test("is reported as invalid by list, which still shows the others", async () => {
 		const dir = makeConfigDir({

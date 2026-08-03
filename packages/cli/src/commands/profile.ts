@@ -11,10 +11,10 @@ import { isInsideConfigDir } from "../config.js";
 import {
 	API_KEY,
 	apiKeyCredentials,
-	type CredentialKind,
 	credentialKind,
 	describeScope,
 	inspectCredentials,
+	isSameCredential,
 	type KeyScope,
 	readCredentials,
 	type StoredCredentials,
@@ -334,14 +334,27 @@ const list = async (props: ProfileProps) => {
  */
 const readOutgoingCredential = (path: string): StoredCredentials | null => {
 	const read = inspectCredentials(path);
-	if (read.kind === "unusable") {
+	const unusable = (reason: string): null => {
+		// `reason` comes from two sources, one of which ends in a period. Trim it so the
+		// sentence does not run "…api_key".. Nothing in it…".
 		log.warning(
 			"%s. Nothing in it could be revoked, so it is only being replaced locally.",
-			read.reason,
+			reason.replace(/\.$/, ""),
 		);
 		return null;
+	};
+
+	if (read.kind === "unusable") return unusable(read.reason);
+	if (read.kind === "absent") return null;
+
+	// A declared kind we do not recognise is the same situation as unparseable: there is
+	// nothing here we know how to revoke, and refusing would make the file undeletable.
+	try {
+		credentialKind(read.credentials, path);
+	} catch (err) {
+		return unusable(err instanceof Error ? err.message : String(err));
 	}
-	return read.kind === "ok" ? read.credentials : null;
+	return read.credentials;
 };
 
 const credentialsPathFor = (configDir: string, name: string): string => {
@@ -823,31 +836,16 @@ const retirePreviousCredential = async (
 
 	// Re-storing the key a profile already holds is a no-op, not a replacement. Revoking here
 	// would leave the profile pointing at a credential this command had just killed.
-	if (
-		replacementKey !== undefined &&
-		typeof existing.api_key === "string" &&
-		existing.api_key.trim() === replacementKey.trim()
-	) {
+	if (isSameCredential(existing, replacementKey)) {
 		log.debug(
 			"The replacement is the credential already stored; nothing to retire.",
 		);
 		return;
 	}
 
-	// The replacement is already on disk, so a credential we cannot classify is a thing to
-	// report, not a reason to fail a command that has otherwise succeeded.
-	let previousKind: CredentialKind;
-	try {
-		previousKind = credentialKind(existing, credentialsPath);
-	} catch (err) {
-		log.warning(
-			"Could not tell what the previous credential was, so it was left alone: %s",
-			err instanceof Error ? err.message : String(err),
-		);
-		return;
-	}
-
-	if (previousKind === API_KEY) {
+	// Already classified by `readOutgoingCredential`, which is the only way a credential
+	// reaches here.
+	if (credentialKind(existing, credentialsPath) === API_KEY) {
 		const keyId =
 			typeof existing.key_id === "number" ? existing.key_id : undefined;
 		if (keyId === undefined) {
