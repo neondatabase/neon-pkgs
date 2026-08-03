@@ -696,9 +696,6 @@ Entries in `profiles.json` are paths, and a path may point anywhere — which is
 ```bash
 neon profile create work                                 # sign in with the browser, like `neon auth`
 neon profile create work --api-key napi_...              # store a key you already have
-neon profile create work --api-key-file ~/keys/work      # take it from a file
-echo "$KEY" | neon profile create work --api-key-stdin   # from a pipe
-neon profile create work --api-key-prompt                # or asked for, on a terminal
 neon profile create ci --mint                            # sign in once, keep only a minted key
 neon profile create ci --mint --org-id org-abc-123        # minted for an organization
 neon profile create ci --mint --project-id proj-1         # minted for one project only
@@ -706,9 +703,10 @@ neon profile create work --force                          # replace an existing 
 neon profile rotate-key work                              # mint a replacement, revoke the old one
 ```
 
-`--api-key-stdin` reads a pipe and refuses a terminal; `--api-key-prompt` is the one that asks.
-Keeping them apart matters for anything automated: a flag named for a stream that opened a prompt
-would sit waiting for input that never arrives.
+There is one way to supply a key you already have, because the shell already has the rest:
+`--api-key "$(cat ~/keys/work)"` reads a file and `--api-key "$KEY"` takes a variable. Note that
+this puts the key in the process arguments, where `ps` and shell history can see it — `--mint`
+avoids that entirely by never having the key leave the CLI.
 
 **A profile is one kind or the other, never both.** `type` in the credentials file states which:
 

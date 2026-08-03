@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { basename } from "node:path";
 import prompts from "prompts";
 import type yargs from "yargs";
@@ -26,10 +26,8 @@ import { log } from "../log.js";
 import {
 	identityFromAuthDetails,
 	isApiKeyMethod,
-	isGroupOrWorldReadable,
 	mintedKeyName,
 	notAnApiKeyMessage,
-	readApiKeyFile,
 } from "../profile_keys.js";
 import {
 	assertValidProfileName,
@@ -60,9 +58,6 @@ type ProfileProps = CommonProps & {
 
 type CreateProps = ProfileProps & {
 	name: string;
-	apiKeyFile?: string;
-	apiKeyStdin?: boolean;
-	apiKeyPrompt?: boolean;
 	mint?: boolean;
 	orgId?: string;
 	projectId?: string;
@@ -102,24 +97,6 @@ export const builder = (argv: yargs.Argv) =>
 								"none; this command ignores NEON_API_KEY",
 							type: "string",
 						},
-						"api-key-file": {
-							describe:
-								"Read the API key from this file, whose entire contents are the key. Warns if the file is readable by other users",
-							type: "string",
-							coerce: single("api-key-file"),
-						},
-						"api-key-stdin": {
-							describe:
-								"Read the API key from stdin. Fails if stdin is a terminal — use --api-key-prompt for that",
-							type: "boolean",
-							default: false,
-						},
-						"api-key-prompt": {
-							describe:
-								"Ask for the API key on the terminal, so it stays out of shell history",
-							type: "boolean",
-							default: false,
-						},
 						mint: {
 							describe:
 								"Sign in once in the browser, then store a freshly minted API key and nothing else",
@@ -155,7 +132,7 @@ export const builder = (argv: yargs.Argv) =>
 						"Sign in with the browser, like `neon auth --profile work`",
 					)
 					.example(
-						"$0 profile create work --api-key napi_...",
+						'$0 profile create work --api-key "$(cat ~/keys/work)"',
 						"Store a key you already have",
 					)
 					.example(
@@ -386,87 +363,25 @@ const assertReplaceable = (props: CreateProps): void => {
 };
 
 /**
- * The key to store, from `--api-key`, `--api-key-file`, or stdin.
+ * The key to store.
  *
- * Note this reads the key from the *flag* and never from `NEON_API_KEY`. Everywhere else those
- * are interchangeable, but "store this credential permanently" is not something an exported
+ * Read from the *flag* and never from `NEON_API_KEY`. Everywhere else those are
+ * interchangeable, but "store this credential permanently" is not something an exported
  * environment variable should be able to answer — a `create` that silently wrote whatever
  * happened to be in the shell would be storing a key the user never named.
+ *
+ * One way in, deliberately. Earlier revisions added `--api-key-file`, `--api-key-stdin` and
+ * `--api-key-prompt` to keep the secret out of argv, and every one of them is a shell
+ * expression away: `--api-key "$(cat ~/keys/work)"` reads a file, `--api-key "$KEY"` takes a
+ * variable, and a shell that records history has `HISTCONTROL` for the rest. Four flags for
+ * that is four surfaces to document, validate against each other, and get wrong.
  */
-const resolveKeyToStore = async (props: CreateProps): Promise<string> => {
+const resolveKeyToStore = (props: CreateProps): string => {
 	const fromFlag = credentialInputs().apiKeyFlag.trim();
-	const fromFile = props.apiKeyFile?.trim();
-	const fromStdin = props.apiKeyStdin === true;
-
-	const fromPrompt = props.apiKeyPrompt === true;
-
-	const given = [
-		fromFlag ? "--api-key" : null,
-		fromFile ? "--api-key-file" : null,
-		fromStdin ? "--api-key-stdin" : null,
-		fromPrompt ? "--api-key-prompt" : null,
-	].filter((flag): flag is string => flag !== null);
-
-	if (given.length > 1) {
-		throw new Error(
-			`Pass only one of ${given.join(", ")} — they are three ways to supply the same key.`,
-		);
-	}
-
-	if (fromFile) {
-		if (isGroupOrWorldReadable(fromFile)) {
-			log.warning(
-				"%s is readable by other users. This stores an owner-only copy, but the original stays exposed.",
-				fromFile,
-			);
-		}
-		return readApiKeyFile(fromFile);
-	}
-
-	if (fromFlag) return fromFlag;
-
-	// Neither of these puts the key in argv, where `ps` and shell history would both keep it.
-	if (fromStdin) return readKeyFromStdin();
-	if (fromPrompt) return await promptForKey(props.name);
-
+	if (fromFlag !== "") return fromFlag;
 	throw new Error(
-		`Nothing to store for profile "${props.name}". Pass --api-key, --api-key-file, --api-key-stdin or --api-key-prompt — or --mint to have one minted, or no flags at all to sign in with the browser.`,
+		`Nothing to store for profile "${props.name}". Pass --api-key, or --mint to have one minted, or no flags at all to sign in with the browser.`,
 	);
-};
-
-const readKeyFromStdin = (): string => {
-	// Reading a terminal here would sit silently waiting for EOF, which for anything automated
-	// is indistinguishable from a hang. `--api-key-prompt` is the interactive one.
-	if (process.stdin.isTTY) {
-		throw new Error(
-			'stdin is a terminal, so there is nothing to read. Pipe the key in — echo "$KEY" | neon profile create <name> --api-key-stdin — or use --api-key-prompt to be asked for it.',
-		);
-	}
-	const piped = readFileSync(0, "utf8").trim();
-	if (piped === "") {
-		throw new Error(
-			"Nothing arrived on stdin, so there is no API key to store.",
-		);
-	}
-	return piped;
-};
-
-const promptForKey = async (name: string): Promise<string> => {
-	if (isCi() || !process.stdin.isTTY) {
-		throw new Error(
-			'--api-key-prompt needs a terminal to ask on. Pipe the key instead: echo "$KEY" | neon profile create <name> --api-key-stdin',
-		);
-	}
-	const { key } = await prompts({
-		type: "password",
-		name: "key",
-		message: `API key for profile "${name}"`,
-	});
-	const entered = typeof key === "string" ? key.trim() : "";
-	if (entered === "") {
-		throw new Error("No API key entered, so nothing was changed.");
-	}
-	return entered;
 };
 
 /**
@@ -490,6 +405,8 @@ const verifyKey = async (
 	if (!isApiKeyMethod(details.auth_method)) {
 		throw new Error(notAnApiKeyMessage(details.auth_method));
 	}
+	// Only a user key has a user to look up: `GET /users/me` answers 404 for an organization
+	// key, so asking anyway would fail a `create` that is working perfectly.
 	const email =
 		details.auth_method === "api_key_user"
 			? (await apiClient.getCurrentUserInfo()).data.email
@@ -509,21 +426,14 @@ const create = async (props: CreateProps) => {
 	assertValidProfileName(name);
 	assertReplaceable(props);
 
-	// Every flag that says "this profile holds a key". Missing one here is not cosmetic: the
-	// command would fall through to the browser sign-in and ignore what the user asked for.
-	const keyInputs = [
-		credentialInputs().apiKeyFlag.trim() !== "" ? "--api-key" : null,
-		props.apiKeyFile !== undefined ? "--api-key-file" : null,
-		props.apiKeyStdin === true ? "--api-key-stdin" : null,
-		props.apiKeyPrompt === true ? "--api-key-prompt" : null,
-	].filter((flag): flag is string => flag !== null);
+	const suppliedKey = credentialInputs().apiKeyFlag.trim() !== "";
 
 	if (props.mint) {
 		// Silently preferring one over the other would store a credential the user did not
 		// choose — and the two disagree about which account the profile ends up as.
-		if (keyInputs.length > 0) {
+		if (suppliedKey) {
 			throw new Error(
-				`--mint creates a new key, so it cannot be combined with ${keyInputs.join(", ")}. Drop one.`,
+				"--mint creates a new key, so it cannot be combined with --api-key. Drop one.",
 			);
 		}
 		await createByMinting(props);
@@ -538,7 +448,7 @@ const create = async (props: CreateProps) => {
 
 	// No key and no --mint means a browser sign-in, which is exactly `neon auth --profile`.
 	// Delegating rather than reimplementing keeps one OAuth path in the CLI.
-	if (keyInputs.length === 0) {
+	if (!suppliedKey) {
 		const credentialsPath = credentialsPathFor(props.configDir, name);
 		const previous = readOutgoingCredential(credentialsPath);
 		// `authFlow` reports its own failure and returns an empty token rather than throwing,
@@ -560,7 +470,7 @@ const create = async (props: CreateProps) => {
 		return;
 	}
 
-	const apiKey = await resolveKeyToStore(props);
+	const apiKey = resolveKeyToStore(props);
 	const identity = await verifyKey(props, apiKey);
 	const credentialsPath = credentialsPathFor(props.configDir, name);
 	const previous = readOutgoingCredential(credentialsPath);

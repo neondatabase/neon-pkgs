@@ -1,28 +1,10 @@
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { afterEach, describe, expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
 import {
 	identityFromAuthDetails,
 	isApiKeyMethod,
-	isGroupOrWorldReadable,
 	mintedKeyName,
 	notAnApiKeyMessage,
-	readApiKeyFile,
 } from "./profile_keys.js";
-
-const cleanups: Array<() => void> = [];
-afterEach(() => {
-	while (cleanups.length > 0) cleanups.shift()?.();
-});
-
-function makeFile(name: string, contents: string): string {
-	const root = mkdtempSync(join(tmpdir(), "neon-profile-keys-"));
-	cleanups.push(() => rmSync(root, { recursive: true, force: true }));
-	const path = resolve(root, name);
-	writeFileSync(path, contents);
-	return path;
-}
 
 describe("mintedKeyName", () => {
 	test("carries the profile, a UTC timestamp, and a suffix", () => {
@@ -60,49 +42,6 @@ describe("mintedKeyName", () => {
 		expect(mintedKeyName("dbx", new Date("2026-08-03T09:41:02Z"))).toMatch(
 			/^neon-cli-dbx-20260803T094102Z-[0-9a-f]{4}$/,
 		);
-	});
-});
-
-describe("readApiKeyFile", () => {
-	test("the whole trimmed contents are the key", () => {
-		expect(readApiKeyFile(makeFile("k", "  napi_abc\n"))).toBe("napi_abc");
-	});
-
-	test("a missing file names the path", () => {
-		expect(() => readApiKeyFile("/definitely/not/here")).toThrow(
-			/No such file: \/definitely\/not\/here/,
-		);
-	});
-
-	// Storing an empty string would produce a profile that cannot work and says nothing.
-	test("an empty file is refused", () => {
-		expect(() => readApiKeyFile(makeFile("k", "   \n"))).toThrow(
-			/is empty/,
-		);
-	});
-});
-
-describe("isGroupOrWorldReadable", () => {
-	test("false for an owner-only file", () => {
-		const path = makeFile("k", "napi_abc");
-		chmodSync(path, 0o600);
-		expect(isGroupOrWorldReadable(path)).toBe(false);
-	});
-
-	test("true for a world-readable file", () => {
-		const path = makeFile("k", "napi_abc");
-		chmodSync(path, 0o644);
-		expect(isGroupOrWorldReadable(path)).toBe(true);
-	});
-
-	test("true for a group-readable file", () => {
-		const path = makeFile("k", "napi_abc");
-		chmodSync(path, 0o640);
-		expect(isGroupOrWorldReadable(path)).toBe(true);
-	});
-
-	test("a missing file is not reported as exposed", () => {
-		expect(isGroupOrWorldReadable("/definitely/not/here")).toBe(false);
 	});
 });
 

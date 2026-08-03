@@ -323,56 +323,6 @@ describe("profile create", () => {
 		expect(stderr).toContain("--force");
 	});
 
-	test("says what to pass when given no way to get a credential", async () => {
-		const dir = makeConfigDir({});
-		const { code, stderr } = await runCli([
-			"profile",
-			"create",
-			"work",
-			"--config-dir",
-			dir,
-			"--api-key-file",
-			resolve(dir, "missing-key"),
-		]);
-
-		expect(code).toBe(1);
-		expect(stderr).toContain("No such file");
-	});
-
-	test("refuses two ways of supplying the same key", async () => {
-		const dir = makeConfigDir({ "some-key": "napi_fromfile" });
-		const { code, stderr } = await runCli([
-			"profile",
-			"create",
-			"work",
-			"--config-dir",
-			dir,
-			"--api-key",
-			"napi_flagkey",
-			"--api-key-file",
-			resolve(dir, "some-key"),
-		]);
-
-		expect(code).toBe(1);
-		expect(stderr).toContain("only one of");
-	});
-
-	test("refuses an empty key file", async () => {
-		const dir = makeConfigDir({ "blank-key": "   \n" });
-		const { code, stderr } = await runCli([
-			"profile",
-			"create",
-			"work",
-			"--config-dir",
-			dir,
-			"--api-key-file",
-			resolve(dir, "blank-key"),
-		]);
-
-		expect(code).toBe(1);
-		expect(stderr).toContain("is empty");
-	});
-
 	test("names every way to supply a key when given none", async () => {
 		const dir = makeConfigDir({});
 		const { code, stderr } = await runCli([
@@ -389,30 +339,7 @@ describe("profile create", () => {
 		expect(stderr).toContain("only apply with --mint");
 	});
 
-	test("reads a key from stdin and never puts it in argv", async () => {
-		const dir = makeConfigDir({});
-		// The API host refuses connections, so this gets as far as verifying and no further —
-		// which is enough to prove the key was read from the pipe rather than rejected as absent.
-		const { code, stderr } = await runCli(
-			[
-				"profile",
-				"create",
-				"work",
-				"--config-dir",
-				dir,
-				"--api-key-stdin",
-			],
-			{},
-			"napi_from_stdin\n",
-		);
-
-		expect(code).toBe(1);
-		expect(stderr).not.toContain("Nothing arrived on stdin");
-		expect(stderr).not.toContain("napi_from_stdin");
-	});
-
-	// A flag named for a stream must not open a dialog: an agent on a pty would block forever.
-	test("--api-key-stdin refuses a terminal instead of prompting", async () => {
+	test("says what to pass when given no way to get a credential", async () => {
 		const dir = makeConfigDir({});
 		const { code, stderr } = await runCli([
 			"profile",
@@ -420,27 +347,29 @@ describe("profile create", () => {
 			"work",
 			"--config-dir",
 			dir,
-			"--api-key-prompt",
+			"--org-id",
+			"org-abc-123",
 		]);
 
-		// stdin is a pipe here, so the interactive flag is the one with nothing to ask on.
 		expect(code).toBe(1);
-		expect(stderr).toContain("needs a terminal to ask on");
+		expect(stderr).toContain("only apply with --mint");
 	});
 
-	test("says so when nothing arrives on stdin", async () => {
+	test("--mint with a supplied key is refused rather than one being ignored", async () => {
 		const dir = makeConfigDir({});
 		const { code, stderr } = await runCli([
 			"profile",
 			"create",
-			"work",
+			"ci",
 			"--config-dir",
 			dir,
-			"--api-key-stdin",
+			"--mint",
+			"--api-key",
+			"napi_flagkey",
 		]);
 
 		expect(code).toBe(1);
-		expect(stderr).toContain("Nothing arrived on stdin");
+		expect(stderr).toContain("cannot be combined with --api-key");
 	});
 
 	// A scope only means something for a key we mint; a key you supply already has one.
@@ -590,23 +519,6 @@ describe("profile create — parsing and scope safety", () => {
 		expect(code).toBe(1);
 		expect(stderr).toContain("cannot happen in CI");
 		expect(stderr).not.toContain("proj-from-context");
-	});
-
-	test("--mint with a supplied key is refused rather than one being ignored", async () => {
-		const dir = makeConfigDir({});
-		const { code, stderr } = await runCli([
-			"profile",
-			"create",
-			"ci",
-			"--config-dir",
-			dir,
-			"--mint",
-			"--api-key",
-			"napi_flagkey",
-		]);
-
-		expect(code).toBe(1);
-		expect(stderr).toContain("cannot be combined with --api-key");
 	});
 });
 

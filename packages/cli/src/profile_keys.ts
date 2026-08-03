@@ -7,7 +7,6 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { existsSync, readFileSync, statSync } from "node:fs";
 import type { AuthDetailsResponse } from "@neon/sdk/raw";
 
 /** Auth methods that are an API key. Anything else is not a key and must not be stored as one. */
@@ -43,35 +42,6 @@ export const mintedKeyName = (
 		.replace(/[-:]/g, "")
 		.replace(/\.\d+Z$/, "Z");
 	return `neon-cli-${profile}-${stamp}-${suffix}`;
-};
-
-/**
- * Read an API key from a file the user pointed at, where the whole trimmed contents are the
- * key. Refuses an empty file rather than storing a credential that cannot work.
- */
-export const readApiKeyFile = (path: string): string => {
-	if (!existsSync(path)) {
-		throw new Error(`No such file: ${path}`);
-	}
-	const key = readFileSync(path, "utf8").trim();
-	if (key === "") {
-		throw new Error(`${path} is empty, so there is no API key to store.`);
-	}
-	return key;
-};
-
-/**
- * Whether a file the user is about to hand us is readable by anyone else. Worth saying out
- * loud: a key adopted from a world-readable file stays exposed at its original location even
- * after we store our own owner-only copy.
- */
-export const isGroupOrWorldReadable = (path: string): boolean => {
-	if (process.platform === "win32") return false;
-	try {
-		return (statSync(path).mode & 0o077) !== 0;
-	} catch {
-		return false;
-	}
 };
 
 export type KeyIdentity = {
