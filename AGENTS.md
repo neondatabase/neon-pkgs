@@ -367,10 +367,18 @@ does **not** match `client.test-d.ts` — the `test-d` exclusion is separate, wh
 `@neon/config` and `@neon/env` list both.
 
 `pnpm --filter @neon/sdk build` ends in `node scripts/check-dist.mjs`, which fails when
-`dist/` carries bundled dependencies, emitted test files, a non-empty `dependencies`
-map, or a bare runtime import a consumer could not resolve. CI's Build job runs
-`pnpm build`, so a regression fails the PR rather than reaching npm. Don't route around
-it by relaxing the check — fix the entry globs or move the offending file out of them.
+`dist/` carries bundled dependencies, emitted test files, or a non-empty `dependencies`
+map. Those bound both directions: a dependency left *external* rather than bundled can
+only be one tsdown was told to externalize, which means it is declared in
+`dependencies`. The checks live in `scripts/dist-guard.mjs` and are covered by
+`scripts/dist-guard.test.mjs` against real temporary package trees.
+
+CI's Build job runs `pnpm build`, so a regression fails the PR rather than reaching npm.
+Don't route around it by relaxing the check — fix the entry globs or move the offending
+file out of them. Scanning `dist` for bare imports was tried and removed: a regex over
+emitted JavaScript flags imports inside strings and comments and misses multiline ones,
+and a release gate that blocks a good release costs more than the redundant coverage it
+buys.
 
 **Automated spec refresh (`.github/workflows/sdk-spec-refresh.yml`):**
 
