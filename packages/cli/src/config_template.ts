@@ -1,3 +1,5 @@
+import type { NeonConfigView } from "./config_format.js";
+
 /**
  * The published npm packages a `neon.ts` project needs — the `@neon/*` org names.
  *
@@ -133,6 +135,146 @@ ${renderPreview(services)}  // Branch policy: per-branch tuning
   },
 });
 `;
+
+/** Render a scalar the way it has to appear in TypeScript source. */
+const renderScalar = (value: string | number | boolean): string =>
+	typeof value === "string" ? `"${value}"` : String(value);
+
+/**
+ * Render an object key. Live names are not identifiers: a Neon bucket may be called
+ * `smoke-uploads`, which as a bare key is a subtraction and a syntax error. Anything that
+ * isn't a plain identifier gets quoted.
+ */
+const renderKey = (name: string): string =>
+	/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) ? name : JSON.stringify(name);
+
+/**
+ * The `branch` closure for a policy seeded from live state, or "" when the branch carries no
+ * tuning worth declaring.
+ *
+ * `protected` is read but never declared: it is a fact about one branch, while a policy
+ * `protected` applies to every branch the policy runs against. It becomes a comment instead.
+ */
+const renderSeededBranch = (view: NeonConfigView): string => {
+	const settings: string[] = [];
+	if (view.branch?.parent !== undefined) {
+		settings.push(`    parent: ${renderScalar(view.branch.parent)},`);
+	}
+	if (view.branch?.ttl !== undefined) {
+		settings.push(`    ttl: ${renderScalar(view.branch.ttl)},`);
+	}
+
+	const compute = view.branch?.postgres?.computeSettings;
+	const computeFields = Object.entries(compute ?? {}).filter(
+		([, value]) => value !== undefined,
+	);
+	if (computeFields.length > 0) {
+		settings.push("    postgres: {", "      computeSettings: {");
+		for (const [field, value] of computeFields) {
+			settings.push(`        ${field}: ${renderScalar(value)},`);
+		}
+		settings.push("      },", "    },");
+	}
+
+	if (settings.length === 0) {
+		return "";
+	}
+	return ["  branch: () => ({", ...settings, "  }),"].join("\n").concat("\n");
+};
+
+/** The `preview` block for a policy seeded from live state. */
+const renderSeededPreview = (
+	view: NeonConfigView,
+	branchName: string,
+): string => {
+	const lines: string[] = [];
+
+	const buckets = Object.entries(view.preview?.buckets ?? {});
+	if (buckets.length > 0) {
+		lines.push("    buckets: {");
+		for (const [name, bucket] of buckets) {
+			lines.push(
+				`      ${renderKey(name)}: { access: "${bucket.access}" },`,
+			);
+		}
+		lines.push("    },");
+	}
+
+	// A deployed function cannot be declared from live state: `source` is a path in the
+	// user's project and the branch only knows the uploaded bundle. Listing the slugs as a
+	// commented-out block is the most a read-back can honestly produce.
+	const functions = Object.entries(view.preview?.functions ?? {});
+	if (functions.length > 0) {
+		lines.push(
+			`    // ${branchName} has ${functions.length} deployed function${functions.length === 1 ? "" : "s"}.`,
+			"    // Declaring one needs the local source path, which the branch does not know:",
+			"    // functions: {",
+			...functions.map(
+				([slug, fn]) =>
+					`    //   ${renderKey(slug)}: { name: "${fn.name}", source: "./${slug}.ts" },`,
+			),
+			"    // },",
+		);
+	}
+
+	if (lines.length === 0) {
+		return "";
+	}
+	return ["  preview: {", ...lines, "  },"].join("\n").concat("\n");
+};
+
+/**
+ * Render a `neon.ts` from a branch's live state (`config init --from-branch`).
+ *
+ * Only what the branch can actually report is declared. Three things are deliberately
+ * absent, each for its own reason:
+ *
+ * - **The AI Gateway** has no branch-level enabled state to read — it is always available and
+ *   credential-gated — so `pullConfig` cannot tell whether a policy would enable it.
+ * - **Functions** cannot round-trip (no `source` path on the remote); they are listed as a
+ *   commented-out block.
+ * - **`protected`** is branch state rather than policy intent, so it is reported as a comment.
+ *
+ * A branch with nothing to report (no services, no tuning) renders the starter policy rather
+ * than an empty `defineConfig({})`: seeding found nothing, and the caller says so.
+ */
+export const renderNeonConfigFromView = (
+	view: NeonConfigView,
+	branchName: string,
+): { source: string; seeded: boolean } => {
+	const services = [
+		view.auth ? "  auth: true," : "",
+		view.dataApi ? "  dataApi: true," : "",
+	].filter((line) => line !== "");
+	const preview = renderSeededPreview(view, branchName);
+	const branch = renderSeededBranch(view);
+
+	if (services.length === 0 && preview === "" && branch === "") {
+		return { source: renderNeonConfig([]), seeded: false };
+	}
+
+	const protectedNote = view.branch?.protected
+		? `// ${branchName} is protected on Neon. Not declared here: a policy \`protected\` would\n// apply to every branch this policy is applied to.\n`
+		: "";
+	const body = [
+		...services,
+		...(preview === "" ? [] : [preview.trimEnd()]),
+		...(branch === "" ? [] : [branch.trimEnd()]),
+	].join("\n");
+
+	return {
+		source: `import { defineConfig } from "${CONFIG_PACKAGE}/v1";
+
+// Seeded by \`neon config init --from-branch\` from ${branchName}.
+// The AI Gateway is not readable from a branch (always available, credential-gated), so add
+// \`preview: { aiGateway: true }\` if the policy should declare it.
+${protectedNote}export default defineConfig({
+${body}
+});
+`,
+		seeded: true,
+	};
+};
 
 /**
  * The handler written alongside `neon.ts` when `functions` is selected. It has to exist:

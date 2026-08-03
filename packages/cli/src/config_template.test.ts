@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 
+import type { NeonConfigView } from "./config_format.js";
 import {
 	NEON_SERVICES,
 	parseServices,
 	renderNeonConfig,
+	renderNeonConfigFromView,
 } from "./config_template.js";
 
 describe("parseServices", () => {
@@ -112,5 +114,99 @@ export default defineConfig({
 		expect(rendered).toContain('assets: { access: "private" },');
 		expect(rendered).not.toContain("aiGateway");
 		expect(rendered).not.toContain("functions");
+	});
+});
+
+describe("renderNeonConfigFromView", () => {
+	it("renders a branch's live state as a policy", () => {
+		const view: NeonConfigView = {
+			auth: true,
+			dataApi: true,
+			preview: {
+				buckets: { uploads: { access: "public_read" } },
+				functions: { resize: { name: "Resize Image" } },
+				credentials: [{ id: "credfake0000", scopes: ["storage:read"] }],
+			},
+			branch: {
+				parent: "main",
+				protected: true,
+				postgres: {
+					computeSettings: {
+						autoscalingLimitMaxCu: 4,
+						suspendTimeout: "5m",
+					},
+				},
+			},
+		};
+
+		const { source, seeded } = renderNeonConfigFromView(view, "preview");
+
+		expect(seeded).toBe(true);
+		expect(source).toBe(`import { defineConfig } from "@neon/config/v1";
+
+// Seeded by \`neon config init --from-branch\` from preview.
+// The AI Gateway is not readable from a branch (always available, credential-gated), so add
+// \`preview: { aiGateway: true }\` if the policy should declare it.
+// preview is protected on Neon. Not declared here: a policy \`protected\` would
+// apply to every branch this policy is applied to.
+export default defineConfig({
+  auth: true,
+  dataApi: true,
+  preview: {
+    buckets: {
+      uploads: { access: "public_read" },
+    },
+    // preview has 1 deployed function.
+    // Declaring one needs the local source path, which the branch does not know:
+    // functions: {
+    //   resize: { name: "Resize Image", source: "./resize.ts" },
+    // },
+  },
+  branch: () => ({
+    parent: "main",
+    postgres: {
+      computeSettings: {
+        autoscalingLimitMaxCu: 4,
+        suspendTimeout: "5m",
+      },
+    },
+  }),
+});
+`);
+		// Issued credentials are live state, not policy — they must never be emitted.
+		expect(source).not.toContain("credfake0000");
+	});
+
+	it("falls back to the starter policy for a branch with nothing to seed", () => {
+		const { source, seeded } = renderNeonConfigFromView({}, "main");
+
+		expect(seeded).toBe(false);
+		expect(source).toBe(renderNeonConfig([]));
+	});
+
+	it("quotes a bucket name that isn't a valid identifier", () => {
+		const { source } = renderNeonConfigFromView(
+			{
+				preview: {
+					buckets: {
+						"smoke-uploads": { access: "private" },
+						assets: { access: "private" },
+					},
+				},
+			},
+			"main",
+		);
+
+		// A bare `smoke-uploads:` key is a subtraction, i.e. a syntax error.
+		expect(source).toContain('"smoke-uploads": { access: "private" },');
+		expect(source).toContain('assets: { access: "private" },');
+	});
+
+	it("omits the branch closure when the branch carries no tuning", () => {
+		const { source } = renderNeonConfigFromView({ auth: true }, "main");
+
+		expect(source).toContain("  auth: true,\n});");
+		expect(source).not.toContain("branch:");
+		expect(source).not.toContain("protected");
 	});
 });

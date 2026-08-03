@@ -8,6 +8,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
+import { fileURLToPath } from "node:url";
 import type {
 	ComputeSettings,
 	CreateBranchInput,
@@ -29,7 +30,8 @@ import type {
 	NeonProjectSnapshot,
 	NeonRoleSnapshot,
 } from "@neon/config";
-import type { NeonApi } from "@neon/config-runtime";
+import { resolveConfig } from "@neon/config";
+import { loadConfigFromFile, type NeonApi } from "@neon/config-runtime";
 import stripAnsi from "strip-ansi";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -38,6 +40,7 @@ import {
 	applyCmd,
 	applyPolicyOnCreate,
 	createBranchFromPolicyOnCheckout,
+	initCmd,
 	planCmd,
 	status,
 } from "./config.js";
@@ -776,6 +779,195 @@ describe("config commands", () => {
 		// Nothing written: --no-env-pull leaves the working tree untouched.
 		expect(existsSync(join(cwd, ".env.local"))).toBe(false);
 		expect(existsSync(join(cwd, ".env"))).toBe(false);
+	});
+});
+
+/**
+ * A branch that has something worth seeding: Neon Auth and the Data API on, one bucket, one
+ * deployed function, and the branch marked protected.
+ */
+class LoadedBranchNeonApi extends FakeNeonApi {
+	override async listBranches(): Promise<NeonBranchSnapshot[]> {
+		return [
+			{
+				id: BRANCH_ID,
+				name: BRANCH_NAME,
+				isDefault: true,
+				protected: true,
+			},
+		];
+	}
+
+	override async getNeonAuth(): Promise<NeonAuthSnapshot> {
+		return {
+			projectId: "auth-project",
+			jwksUrl: "https://auth.fake.neon.tech/.well-known/jwks.json",
+			baseUrl: "https://auth.fake.neon.tech",
+		};
+	}
+
+	override async getNeonDataApi(): Promise<NeonDataApiSnapshot> {
+		return { url: "https://dataapi.fake.neon.tech", status: "ready" };
+	}
+
+	override async listBranchBuckets(): Promise<NeonBucketSnapshot[]> {
+		return [
+			// Hyphenated on purpose: a real Neon bucket name is not a JS identifier, and a
+			// bare `user-uploads:` key would be a syntax error in the emitted policy.
+			{ name: "user-uploads", accessLevel: "public_read" },
+			{ name: "backups", accessLevel: "private" },
+		];
+	}
+
+	override async listBranchFunctions(): Promise<NeonFunctionSnapshot[]> {
+		return [
+			{
+				id: "fn-resize",
+				slug: "resize",
+				name: "Resize Image",
+				invocationUrl: "https://fake.neon.tech/functions/resize",
+			},
+		];
+	}
+}
+
+describe("config init --from-branch", () => {
+	let cwd: string;
+
+	beforeEach(() => {
+		cwd = mkdtempSync(join(tmpdir(), "neonctl-from-branch-"));
+	});
+
+	afterEach(() => {
+		rmSync(cwd, { recursive: true, force: true });
+	});
+
+	const seedProps = (api: NeonApi) => ({
+		cwd,
+		install: false,
+		fromBranch: true,
+		apiClient: fakeApiClient as never,
+		projectId: PROJECT_ID,
+		runtimeApi: api,
+	});
+
+	it("declares the services the branch actually has", async () => {
+		await initCmd(seedProps(new LoadedBranchNeonApi()));
+
+		const source = readFileSync(join(cwd, "neon.ts"), "utf8");
+		expect(source).toContain("auth: true,");
+		expect(source).toContain("dataApi: true,");
+		expect(source).toContain('"user-uploads": { access: "public_read" },');
+		expect(source).toContain('backups: { access: "private" },');
+		expect(source).toContain(
+			`Seeded by \`neon config init --from-branch\` from ${BRANCH_NAME}`,
+		);
+	});
+
+	it("lists deployed functions as a comment, since source cannot round-trip", async () => {
+		await initCmd(seedProps(new LoadedBranchNeonApi()));
+
+		const source = readFileSync(join(cwd, "neon.ts"), "utf8");
+		expect(source).toContain("// main has 1 deployed function.");
+		expect(source).toContain(
+			'//   resize: { name: "Resize Image", source: "./resize.ts" },',
+		);
+		// Commented out, so the policy does not declare a function with no source on disk.
+		expect(source).not.toMatch(/^\s+functions: \{/m);
+		// And no handler is invented for it.
+		expect(existsSync(join(cwd, "resize.ts"))).toBe(false);
+	});
+
+	it("reports `protected` as a comment instead of declaring it", async () => {
+		await initCmd(seedProps(new LoadedBranchNeonApi()));
+
+		const source = readFileSync(join(cwd, "neon.ts"), "utf8");
+		expect(source).toContain("// main is protected on Neon.");
+		expect(source).not.toMatch(/protected: true/);
+	});
+
+	it("carries the branch's compute settings into the policy closure", async () => {
+		await initCmd(seedProps(new FakeNeonApi()));
+
+		const source = readFileSync(join(cwd, "neon.ts"), "utf8");
+		expect(source).toContain("branch: () => ({");
+		expect(source).toContain("autoscalingLimitMinCu: 0.25,");
+		expect(source).toContain('suspendTimeout: "5m",');
+		// The AI Gateway has no readable per-branch state, so it is never declared — only
+		// mentioned in the header comment as something to add by hand.
+		expect(source).not.toMatch(/^\s+aiGateway: true,/m);
+		expect(source).toContain(
+			"// `preview: { aiGateway: true }` if the policy should declare it.",
+		);
+	});
+
+	// A seeded policy that doesn't load is worse than no seed: the emitted values come from
+	// live state, so a mis-serialized compute setting or bucket name only fails when
+	// `config plan` imports the file. Load it through the CLI's own loader.
+	//
+	// The temp project lives under the package's `node_modules` so jiti resolves
+	// `@neon/config/v1` by walking up as it would in a user's project, and so a directory
+	// left by a crashed run can never be committed.
+	it("writes a policy that loads and resolves", async () => {
+		const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
+		const project = mkdtempSync(
+			join(packageRoot, "node_modules", ".neon-from-branch-"),
+		);
+		try {
+			await initCmd({
+				...seedProps(new LoadedBranchNeonApi()),
+				cwd: project,
+			});
+
+			const { config } = await loadConfigFromFile({
+				path: join(project, "neon.ts"),
+			});
+			const resolved = resolveConfig(config, {
+				name: "preview",
+				exists: false,
+				isDefault: false,
+			});
+
+			expect(resolved.authEnabled).toBe(true);
+			expect(resolved.dataApiEnabled).toBe(true);
+			expect(resolved.preview?.buckets).toEqual([
+				{ name: "user-uploads", access: "public_read" },
+				{ name: "backups", access: "private" },
+			]);
+			expect(resolved.preview?.functions).toEqual([]);
+			expect(resolved.postgres?.computeSettings).toMatchObject({
+				autoscalingLimitMinCu: 0.25,
+				suspendTimeout: "5m",
+			});
+			// Read but deliberately not declared.
+			expect(resolved.protected).toBeUndefined();
+		} finally {
+			rmSync(project, { recursive: true, force: true });
+		}
+	});
+
+	it("leaves an existing neon.ts untouched without calling the API", async () => {
+		const original = "export default { auth: true };\n";
+		writeFileSync(join(cwd, "neon.ts"), original);
+
+		// `runtimeApi` is omitted: a read would have to build a real adapter and fail.
+		await initCmd({
+			cwd,
+			install: false,
+			fromBranch: true,
+			apiClient: fakeApiClient as never,
+			projectId: PROJECT_ID,
+		});
+
+		expect(readFileSync(join(cwd, "neon.ts"), "utf8")).toBe(original);
+	});
+
+	it("fails with guidance when no project is resolved", async () => {
+		await expect(
+			initCmd({ cwd, install: false, fromBranch: true }),
+		).rejects.toThrow(/--from-branch needs a project/);
+
+		expect(existsSync(join(cwd, "neon.ts"))).toBe(false);
 	});
 });
 

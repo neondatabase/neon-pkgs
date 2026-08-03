@@ -17,8 +17,8 @@ import {
 } from "@neon/config-runtime";
 import chalk from "chalk";
 import type yargs from "yargs";
-import { getApiClient } from "../api.js";
-import { toNeonConfigView } from "../config_format.js";
+import { getApiClient, type NeonApiClient } from "../api.js";
+import { type NeonConfigView, toNeonConfigView } from "../config_format.js";
 import {
 	FUNCTION_FILENAME,
 	FUNCTION_SLUG,
@@ -29,6 +29,7 @@ import {
 	parseServices,
 	REQUIRED_PACKAGES,
 	renderNeonConfig,
+	renderNeonConfigFromView,
 } from "../config_template.js";
 
 import { contextBranch, readContextFile } from "../context.js";
@@ -224,6 +225,24 @@ export type ConfigInitProps = {
 	services?: string;
 	/** Injected service picker (tests). Wins over the TTY check; production omits it. */
 	pickServices?: () => Promise<NeonService[]>;
+	/**
+	 * `--from-branch`: seed the policy from a branch's live Neon state instead of asking.
+	 * The one path in `config init` that reaches the API — {@link isConfigInit} stops
+	 * skipping auth and project resolution when it is set.
+	 */
+	fromBranch?: boolean;
+	/**
+	 * Branch scoping for `--from-branch`, supplied by the `config` command's `--project-id` /
+	 * `--branch` options, the `.neon` context middleware, and the global auth middleware. All
+	 * optional because every other path in this command runs with none of it.
+	 */
+	apiClient?: NeonApiClient;
+	apiKey?: string;
+	apiHost?: string;
+	projectId?: string;
+	branch?: string;
+	/** Injected NeonApi adapter (tests). Production omits it so it's built from credentials. */
+	runtimeApi?: NeonApi;
 };
 
 /**
@@ -271,9 +290,48 @@ const scaffoldFunction = (cwd: string): void => {
 };
 
 /**
+ * Read a branch's live state and render it as a `neon.ts`. The read goes through the same
+ * {@link liveConfigView} as `config status`, so a seeded policy declares exactly what
+ * `config status --config-json` reports — including what it cannot report (see
+ * {@link renderNeonConfigFromView}).
+ */
+const seedFromBranch = async (
+	props: ConfigInitProps,
+): Promise<{ source: string; seeded: boolean; branchName: string }> => {
+	const { apiClient, projectId } = props;
+	if (!apiClient || !projectId) {
+		throw new Error(
+			"--from-branch needs a project. Pass --project-id, or run `neon link` to pin one in .neon.",
+		);
+	}
+
+	const ref = await resolveBranchRef({
+		apiClient,
+		projectId,
+		...(props.branch !== undefined ? { branch: props.branch } : {}),
+	});
+	if (ref.usedDefault) {
+		log.info(
+			"No branch pinned or passed — seeding from the project's default branch %s.",
+			ref.branchName,
+		);
+	}
+
+	const { live, view } = await liveConfigView({
+		projectId,
+		branchId: ref.branchId,
+		...(props.apiKey ? { apiKey: props.apiKey } : {}),
+		...(props.apiHost ? { apiHost: props.apiHost } : {}),
+		...(props.runtimeApi ? { runtimeApi: props.runtimeApi } : {}),
+	});
+	const rendered = renderNeonConfigFromView(view, live.branch.name);
+	return { ...rendered, branchName: live.branch.name };
+};
+
+/**
  * Scaffold a `neon.ts` policy and make sure the Neon config packages are
  * installed, so a project can go straight to `neon config plan` / `apply`.
- * Purely local — it never touches the Neon API (see {@link isConfigInit}).
+ * Local-only unless `--from-branch` is set (see {@link isConfigInit}).
  */
 export const initCmd = async (props: ConfigInitProps): Promise<void> => {
 	const cwd = props.cwd ?? process.cwd();
@@ -287,6 +345,17 @@ export const initCmd = async (props: ConfigInitProps): Promise<void> => {
 	);
 	if (existing) {
 		log.info("Found an existing %s — leaving it untouched.", existing);
+	} else if (props.fromBranch) {
+		const { source, seeded, branchName } = await seedFromBranch(props);
+		writeFileSync(join(cwd, "neon.ts"), source);
+		if (seeded) {
+			log.info("Created neon.ts from the live state of %s.", branchName);
+		} else {
+			log.info(
+				"%s declares no services and no branch settings — created neon.ts with the starter policy instead.",
+				branchName,
+			);
+		}
 	} else {
 		const services = await resolveServices(props);
 		writeFileSync(join(cwd, "neon.ts"), renderNeonConfig(services));
@@ -419,12 +488,60 @@ export const builder = (argv: yargs.Argv) =>
 							"terminal, starter policy in CI or without a TTY.",
 						type: "string",
 					},
+					"from-branch": {
+						describe:
+							"Seed neon.ts from a branch's live Neon state instead of asking. Uses the " +
+							"branch pinned in .neon, or --branch <name|id>, or the project's default " +
+							"branch. The only mode of `config init` that calls the Neon API.",
+						type: "boolean",
+						// No `default`: yargs counts a defaulted key as provided, so
+						// `default: false` makes `conflicts` reject every `--services` run.
+						conflicts: "services",
+					},
 				}),
 			(args) => initCmd(args as any),
 		);
 
 export const handler = (args: yargs.Argv) => {
 	return args;
+};
+
+/**
+ * A branch's live state, plus that state projected into the `neon.ts`-shaped
+ * {@link NeonConfigView}. Shared by `config status` and `config init --from-branch` so both
+ * read the branch through one path: what `status --config-json` prints is exactly what
+ * `init --from-branch` writes.
+ *
+ * The pulled `config` carries the branch's tuning inside a closure that JSON can't render, so
+ * it is resolved against the live branch target first.
+ */
+const liveConfigView = async (opts: {
+	projectId: string;
+	branchId: string;
+	apiKey?: string;
+	apiHost?: string;
+	runtimeApi?: NeonApi;
+}): Promise<{
+	live: Awaited<ReturnType<typeof inspect>>;
+	view: NeonConfigView;
+}> => {
+	const live = await inspect({
+		projectId: opts.projectId,
+		branchId: opts.branchId,
+		...(opts.apiKey ? { apiKey: opts.apiKey } : {}),
+		...(opts.apiHost ? { apiHost: opts.apiHost } : {}),
+		...(opts.runtimeApi ? { api: opts.runtimeApi } : {}),
+	});
+	const resolved = resolveConfig(live.config, {
+		name: live.branch.name,
+		id: live.branch.id,
+		exists: true,
+		isDefault: live.branch.isDefault,
+		isProtected: live.branch.protected,
+		...(live.branch.parent ? { parentId: live.branch.parent } : {}),
+		...(live.branch.expiresAt ? { expiresAt: live.branch.expiresAt } : {}),
+	});
+	return { live, view: toNeonConfigView(resolved, live.preview) };
 };
 
 const loadConfig = async (props: ConfigProps): Promise<Config> => {
@@ -469,28 +586,13 @@ export const status = async (props: ConfigProps): Promise<void> => {
 	if (!props.configJson) {
 		announceTargetBranch(props, branch, "Inspecting branch");
 	}
-	const branchId = branch.branchId;
-	const live = await inspect({
+	const { live, view: configView } = await liveConfigView({
 		projectId: props.projectId,
-		branchId,
+		branchId: branch.branchId,
 		...(props.apiKey ? { apiKey: props.apiKey } : {}),
 		...(props.apiHost ? { apiHost: props.apiHost } : {}),
-		...(props.runtimeApi ? { api: props.runtimeApi } : {}),
+		...(props.runtimeApi ? { runtimeApi: props.runtimeApi } : {}),
 	});
-
-	// The pulled `config` carries the branch's tuning inside a closure that JSON can't
-	// render. Resolve it against the live branch target to get the concrete settings, then
-	// project both that and the separately-pulled preview state into a neon.ts-shaped view.
-	const resolved = resolveConfig(live.config, {
-		name: live.branch.name,
-		id: live.branch.id,
-		exists: true,
-		isDefault: live.branch.isDefault,
-		isProtected: live.branch.protected,
-		...(live.branch.parent ? { parentId: live.branch.parent } : {}),
-		...(live.branch.expiresAt ? { expiresAt: live.branch.expiresAt } : {}),
-	});
-	const configView = toNeonConfigView(resolved, live.preview);
 
 	// `--config-json`: emit just the neon.ts-shaped config to stdout (script-friendly,
 	// copy-paste-able), regardless of the global --output.

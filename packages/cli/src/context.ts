@@ -56,9 +56,21 @@ export const isCurrentBranchProbe = (args: {
  * never calls the Neon API. Gated on the exact command path so the global auth
  * middleware and the single-project resolver can skip it (it runs with no API
  * client), mirroring {@link isCurrentBranchProbe}.
+ *
+ * `--from-branch` is the exception: it seeds the policy from a branch's live state, so it
+ * needs both credentials and a resolved project. The raw argv is checked alongside the parsed
+ * flag because this runs from middleware that executes before validation, where the parsed
+ * value may not be populated yet (the same reason `analytics.ts` scans argv for
+ * `--current-branch`).
  */
-export const isConfigInit = (args: { _: (string | number)[] }): boolean =>
-	args._[0] === "config" && args._[1] === "init";
+export const isConfigInit = (args: {
+	_: (string | number)[];
+	fromBranch?: boolean;
+}): boolean =>
+	args._[0] === "config" &&
+	args._[1] === "init" &&
+	args.fromBranch !== true &&
+	!process.argv.includes("--from-branch");
 
 /**
  * `neon profile …` manages credentials on disk and never calls the Neon API, so the global

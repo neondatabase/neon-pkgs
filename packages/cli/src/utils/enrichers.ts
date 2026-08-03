@@ -84,13 +84,23 @@ export type ResolvedBranchRef = {
 	usedDefault: boolean;
 };
 
+/**
+ * What resolving a branch reference actually needs. Narrower than
+ * {@link BranchScopeProps} on purpose: every command's props satisfy it, and a caller that
+ * holds only a client and a project (e.g. `config init --from-branch`) can call it without
+ * inventing an `output` / `contextFile` / `apiKey` it has no use for.
+ */
+export type BranchRefProps = {
+	apiClient: CommonProps["apiClient"];
+	projectId: string;
+	branch?: string | number;
+	id?: string | number;
+};
+
 export const resolveBranchRef = async (
-	props: BranchScopeProps,
+	props: BranchRefProps,
 ): Promise<ResolvedBranchRef> => {
-	const branch =
-		"branch" in props && typeof props.branch === "string"
-			? props.branch
-			: (props as any).id;
+	const branch = typeof props.branch === "string" ? props.branch : props.id;
 
 	const { data } = await props.apiClient.listProjectBranches({
 		projectId: props.projectId,
