@@ -3,6 +3,7 @@ import type yargs from "yargs";
 import { isNeonApiError } from "../api.js";
 import { log } from "../log.js";
 import type { CommonProps } from "../types.js";
+import { noPassthrough, single } from "../utils/flags.js";
 import { writer } from "../writer.js";
 
 const ACCOUNT_FIELDS = [
@@ -54,66 +55,6 @@ const ALL_PROJECTS = "(all projects)";
 const NO_PROJECT = Symbol("no-project");
 type ExpectedScope = string | typeof NO_PROJECT;
 
-/**
- * A flag is either absent, or exactly one non-empty string. Anything else is an error.
- *
- * Every rejected shape otherwise ends the same way: the flag reads as falsy, the scope check
- * falls through, and an **account** key is minted instead of the narrow one asked for — the
- * worst thing this command can do, so none of them get a lenient reading.
- *
- * - `--project-id ""` — an unset shell variable; empty string, which is falsy.
- * - `--no-project-id` — yargs boolean negation; `false`, which is falsy.
- * - `--project-id a --project-id b` — an array, which would reach the API as `a,b`.
- *
- * A misspelled flag never binds and cannot be seen here; `.strict()` rejects it. Anything
- * after a `--` terminator is handled by {@link noPassthrough}.
- */
-const single =
-	(name: string, { required = false }: { required?: boolean } = {}) =>
-	(value: unknown) => {
-		if (value === undefined) return undefined;
-		if (Array.isArray(value)) {
-			throw new Error(
-				`--${name} was given more than once. Pass it at most once.`,
-			);
-		}
-		// `--no-x` is the negation form and yields `false`, so name it rather than telling
-		// the user their value was empty when they never gave one.
-		if (value === false) {
-			throw new Error(
-				required
-					? `--no-${name} is not valid: --${name} is required.`
-					: `--no-${name} is not a valid way to skip --${name}. Omit the flag entirely.`,
-			);
-		}
-		if (typeof value !== "string" || value.trim() === "") {
-			throw new Error(
-				required
-					? `--${name} needs a value.`
-					: `--${name} needs a value. Pass one, or omit the flag entirely.`,
-			);
-		}
-		return value;
-	};
-
-/**
- * Refuse arguments after a `--` terminator.
- *
- * The CLI sets `populate--`, so everything past `--` lands in `argv["--"]` where `.strict()`
- * never looks — `create --name x -- --project-id p` would parse cleanly and mint an account
- * key from a line that names the scope flag. No `api-keys` subcommand takes passthrough
- * arguments, so their presence is always a mistake.
- */
-const noPassthrough = (argv: Record<string, unknown>): true => {
-	const rest = argv["--"];
-	if (Array.isArray(rest) && rest.length > 0) {
-		throw new Error(
-			`api-keys takes no arguments after \`--\`, and options placed there are ignored rather than applied. Remove the \`--\`.`,
-		);
-	}
-	return true;
-};
-
 export const command = "api-keys";
 export const aliases = ["api-key"];
 export const describe = "Manage API keys";
@@ -135,7 +76,7 @@ export const builder = (argv: yargs.Argv) =>
 						},
 					})
 					.strict()
-					.check(noPassthrough),
+					.check(noPassthrough("api-keys")),
 			async (args) => await list(args as unknown as ListProps),
 		)
 		.command(
@@ -168,7 +109,7 @@ export const builder = (argv: yargs.Argv) =>
 					// the project and cannot be chosen independently.
 					.conflicts("org-id", "project-id")
 					.strict()
-					.check(noPassthrough),
+					.check(noPassthrough("api-keys")),
 			async (args) => await create(args as unknown as CreateProps),
 		)
 		.command(
@@ -213,7 +154,7 @@ export const builder = (argv: yargs.Argv) =>
 						},
 					})
 					.strict()
-					.check(noPassthrough),
+					.check(noPassthrough("api-keys")),
 			async (args) => await revoke(args as unknown as RevokeProps),
 		)
 		.demandCommand(1, "Run `neon api-keys --help` to see the subcommands.");

@@ -11,11 +11,13 @@ import { join, resolve } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import {
 	API_KEY,
+	apiKeyCredentials,
 	credentialKind,
+	describeScope,
 	interpretCredentials,
-	mergeCredentials,
 	OAUTH,
 	readCredentials,
+	scopeOf,
 	writeCredentials,
 } from "./credentials.js";
 
@@ -177,57 +179,98 @@ describe("writeCredentials", () => {
 	});
 });
 
-describe("mergeCredentials", () => {
-	// Signing in turns the file into an OAuth credential, but a key_id from an earlier
-	// rotation is the only handle on a key that is still live upstream.
-	test("keeps existing fields the update does not mention", () => {
-		expect(
-			mergeCredentials(
-				{ type: "api_key", api_key: "napi_x", key_id: 7 },
-				{ type: "oauth", access_token: "t" },
-			),
-		).toEqual({
-			type: "oauth",
+describe("apiKeyCredentials", () => {
+	test("the minimum is a declared kind and the key", () => {
+		expect(apiKeyCredentials({ apiKey: "napi_x" })).toEqual({
+			type: "api_key",
 			api_key: "napi_x",
-			key_id: 7,
-			access_token: "t",
 		});
 	});
 
-	test("an undefined value in the update does not erase an existing field", () => {
+	// The scope is not recoverable from the secret, and `rotate-key` has to mint the
+	// replacement on the same endpoint or it would silently widen what the profile reaches.
+	test("records the scope a key was minted at", () => {
 		expect(
-			mergeCredentials(
-				{ type: "api_key", api_key: "napi_x", refresh_token: "r" },
-				{ refresh_token: undefined },
-			).refresh_token,
-		).toBe("r");
+			apiKeyCredentials({
+				apiKey: "napi_x",
+				keyId: 7,
+				userId: "u-1",
+				scope: { orgId: "org-1", projectId: "proj-1" },
+			}),
+		).toEqual({
+			type: "api_key",
+			api_key: "napi_x",
+			key_id: 7,
+			user_id: "u-1",
+			org_id: "org-1",
+			project_id: "proj-1",
+		});
 	});
 
-	// An imported key has no discoverable id, so a stale one must go rather than be left
-	// pointing at a key a later rotation would revoke by mistake.
-	test("dropped fields are removed from the written object", () => {
-		const merged = mergeCredentials(
-			{ type: "api_key", api_key: "old", key_id: 7 },
-			{ api_key: "new" },
-			["key_id"],
-		);
-		expect(merged).toEqual({ type: "api_key", api_key: "new" });
-		expect("key_id" in merged).toBe(false);
-	});
-
-	test("a dropped field leaves no trace on disk", () => {
-		const dir = makeDir();
+	// Single-kind: nothing from a previous credential is carried over, so a profile can never
+	// hold one account's session beside another account's key.
+	test("carries nothing over from an OAuth credential", () => {
+		const dir = makeDir({
+			"credentials.json": JSON.stringify({
+				type: "oauth",
+				access_token: "at",
+				refresh_token: "rt",
+				user_id: "u-old",
+			}),
+		});
 		const path = resolve(dir, "credentials.json");
-		writeCredentials(
-			path,
-			mergeCredentials({ key_id: 7 }, { api_key: "new" }, ["key_id"]),
-		);
-		expect(readFileSync(path, "utf8")).not.toContain("key_id");
+		writeCredentials(path, apiKeyCredentials({ apiKey: "napi_x" }));
+
+		expect(readCredentials(path)).toEqual({
+			type: "api_key",
+			api_key: "napi_x",
+		});
+		const raw = readFileSync(path, "utf8");
+		expect(raw).not.toContain("access_token");
+		expect(raw).not.toContain("refresh_token");
+		expect(raw).not.toContain("u-old");
+	});
+});
+
+describe("scopeOf / describeScope", () => {
+	test("an account key has no scope", () => {
+		expect(scopeOf({ type: "api_key", api_key: "k" })).toEqual({});
+		expect(describeScope({})).toBe("account");
 	});
 
-	test("merging onto nothing is just the update", () => {
-		expect(
-			mergeCredentials(null, { type: "api_key", api_key: "k" }),
-		).toEqual({ type: "api_key", api_key: "k" });
+	test("an org key reports its organization", () => {
+		const scope = scopeOf({
+			type: "api_key",
+			api_key: "k",
+			org_id: "org-1",
+		});
+		expect(scope).toEqual({ orgId: "org-1" });
+		expect(describeScope(scope)).toBe("org org-1");
+	});
+
+	// The narrowest scope is the one worth naming, and the one a reader cares about.
+	test("a project key reports the project rather than the org", () => {
+		const scope = scopeOf({
+			type: "api_key",
+			api_key: "k",
+			org_id: "org-1",
+			project_id: "proj-1",
+		});
+		expect(scope).toEqual({ orgId: "org-1", projectId: "proj-1" });
+		expect(describeScope(scope)).toBe("project proj-1");
+	});
+
+	// The value comes off disk, so it can be any JSON type whatever the declared shape says.
+	test("a non-string scope field is ignored rather than trusted", () => {
+		const dir = makeDir({
+			"credentials.json": JSON.stringify({
+				type: "api_key",
+				api_key: "k",
+				org_id: 7,
+			}),
+		});
+		const stored = readCredentials(resolve(dir, "credentials.json"));
+		expect(stored).not.toBeNull();
+		expect(scopeOf(stored as NonNullable<typeof stored>)).toEqual({});
 	});
 });

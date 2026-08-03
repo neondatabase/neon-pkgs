@@ -657,14 +657,18 @@ neon profiles remove work
 ```console
 $ neon profiles list
 Profiles
-┌────────┬─────────┬─────────────────────┬─────────┬───────────┬──────────────────────────────────────┐
-│ Active │ Name    │ Account             │ Auth    │ Available │ Credentials                          │
-├────────┼─────────┼─────────────────────┼─────────┼───────────┼──────────────────────────────────────┤
-│ *      │ DEFAULT │ me@example.com      │ oauth   │ yes       │ ~/.config/neon/credentials.json      │
-├────────┼─────────┼─────────────────────┼─────────┼───────────┼──────────────────────────────────────┤
-│        │ work    │ me@work.example.com │ api key │ yes       │ ~/.config/neon/credentials.work.json │
-└────────┴─────────┴─────────────────────┴─────────┴───────────┴──────────────────────────────────────┘
+┌────────┬─────────┬─────────────────────┬─────────┬────────────────┬───────────┬──────────────────────────────────────┐
+│ Active │ Name    │ Account             │ Auth    │ Scope          │ Available │ Credentials                          │
+├────────┼─────────┼─────────────────────┼─────────┼────────────────┼───────────┼──────────────────────────────────────┤
+│ *      │ DEFAULT │ me@example.com      │ oauth   │ -              │ yes       │ ~/.config/neon/credentials.json      │
+├────────┼─────────┼─────────────────────┼─────────┼────────────────┼───────────┼──────────────────────────────────────┤
+│        │ work    │ me@work.example.com │ api key │ account        │ yes       │ ~/.config/neon/credentials.work.json │
+├────────┼─────────┼─────────────────────┼─────────┼────────────────┼───────────┼──────────────────────────────────────┤
+│        │ ci      │ organization org-…  │ api key │ project proj-1 │ yes       │ ~/.config/neon/credentials.ci.json   │
+└────────┴─────────┴─────────────────────┴─────────┴────────────────┴───────────┴──────────────────────────────────────┘
 ```
+
+`Scope` is what a key can reach; an OAuth session has none of its own, so it shows `-`.
 
 Select one per invocation with `--profile`, or per shell with `NEON_PROFILE`. There is no `profile use` command and nothing is stored about which profile is "current", so what you type is always what runs.
 
@@ -754,38 +758,48 @@ API keys in org-7
 
 `last_used_at` and `last_used_from_addr` are how you spot a key worth revoking.
 
-### A profile can hold an API key instead of an OAuth session
+### A profile holds either a sign-in or an API key
 
-`neon auth` signs a profile in through the browser. `neon profile set-key` gives it an API key instead, which is what you want for an agent, a shared machine, or anything that must never be interrupted by a login:
+`neon profile create` makes a profile, and how you call it decides which kind of credential it holds. A key-backed profile is what you want for an agent, a shared machine, or anything that must never be interrupted by a browser:
 
 ```bash
-neon profile set-key work                                # prompts, so the key stays out of shell history
-neon profile set-key work --api-key napi_...             # non-interactive
-neon profile set-key work --api-key-file ~/keys/work     # take it from a file you already have
-neon profile rotate-key work                             # mint a fresh key, revoke the one it replaces
+neon profile create work                                 # browser sign-in, same as `neon auth --profile work`
+neon profile create work --api-key napi_...              # store a key you already have
+neon profile create work --api-key-file ~/keys/work      # take it from a file
+echo "$KEY" | neon profile create work --api-key-stdin   # or a pipe; prompts in a terminal
+neon profile create ci --mint                            # sign in once, keep only a minted key
+neon profile create ci --mint --org-id org-abc-123        # minted for an organization
+neon profile create ci --mint --project-id proj-1         # minted for one project only
+neon profile create work --force                          # replace an existing profile
+neon profile rotate-key work                              # mint a replacement, revoke the old one
 ```
 
-`set-key` verifies the key against the API before storing it, and records who it belongs to so `profile list` can show you. It creates the profile if it does not exist yet and replaces the key if it does. Only a real API key is accepted — an OAuth access token authenticates today and then expires with nothing to refresh it, so it is refused rather than stored.
-
-`rotate-key` mints with whatever the profile can currently authenticate with, so a profile that has both a key and the OAuth session it was minted from can be rotated without a browser. It stores the new key before revoking the old one: if the write fails, the old key still works.
-
-The credentials file says which kind it holds, and `type` is what decides — not which fields happen to be present:
+**A profile is one kind or the other, never both.** `type` in the credentials file states which:
 
 ```json
-// oauth: what `neon auth` writes. An absent `type` means this.
+// oauth: what a plain `create` (or `neon auth --profile`) writes. An absent `type` means this.
 { "access_token": "…", "refresh_token": "…", "expires_at": 1786…, "user_id": "…" }
 
-// api_key: what `set-key` writes
+// api_key: what `--api-key` writes
 { "type": "api_key", "api_key": "napi_…", "user_id": "…" }
 
-// api_key minted by `rotate-key`, keeping the session it came from for the next rotation
-{ "type": "api_key", "api_key": "napi_…", "key_id": 123, "user_id": "…",
-  "access_token": "…", "refresh_token": "…", "expires_at": 1786… }
+// api_key from `--mint --org-id`, which records the scope it was issued at
+{ "type": "api_key", "api_key": "napi_…", "key_id": 123, "org_id": "org-…" }
 ```
 
-The secret stays in that file and never goes into `profiles.json`, so listing profiles cannot leak one. Both files are written owner-only through a temporary file and a rename, which also repairs the permissions of a file that was created too permissively.
+Nothing is carried over when a profile is replaced, so one profile can never hold two credentials — or two different accounts. The secret stays in that file and never goes into `profiles.json`, so listing profiles cannot leak one. Both files are written owner-only through a temporary file and a rename, which also repairs the permissions of a file created too permissively.
 
-Two things `rotate-key` cannot do for a key you supplied yourself. It cannot revoke it — `GET /api_keys` exposes no prefix, so a stored secret cannot be matched to a listing entry, and the command tells you to check `neon api GET /api_keys` instead. For the same reason `profile remove` leaves an API key live upstream, and says so.
+`--mint` is the one to reach for. It signs you in through the browser once, mints a key with that session, stores only the key, and signs the session back out — so afterwards nothing about the profile can open a browser, and no half-forgotten login is left behind. `--org-id` and `--project-id` narrow what the minted key can reach, exactly as they do on [`neon api-keys create`](#api-keys); a project-scoped key cannot create projects, mint keys, or read any other project.
+
+Every key is verified against the API before it is stored, and the account it belongs to is recorded so `profile list` can show it. Only a real API key is accepted: an OAuth access token authenticates today and then expires with nothing to refresh it.
+
+`rotate-key` mints at the scope the profile already has — replacing an org key with an account key would quietly widen everything it reaches — and stores the new key before revoking the old one, so a failed write leaves the old key working.
+
+One thing it cannot do: **an organization key cannot mint its own replacement.** Neon only accepts a personal credential when creating organization keys, so rotating an org- or project-scoped profile means signing in again — `neon profile create ci --mint --org-id org-abc-123 --force`. `rotate-key` checks this before minting and says so, rather than letting the API answer with a rule you had no reason to expect.
+
+Two things the CLI cannot do for a key you supplied rather than minted. It cannot revoke it, because `GET /api_keys` exposes no prefix and a stored secret cannot be matched to a listing entry, so both `rotate-key` and `profile remove` say the old key is still live and point you at `neon api-keys list`. And it cannot know the key's scope, so `profile list` shows `account` for it.
+
+If a stored key stops working there is nothing to refresh, so recovery is one browser sign-in: `neon profile create work --mint --force`.
 
 ### Which credential an invocation uses
 

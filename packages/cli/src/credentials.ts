@@ -10,31 +10,37 @@
  * // oauth: every file written before this existed. An absent `type` means this.
  * { "access_token": "…", "refresh_token": "…", "expires_at": 1786…, "user_id": "…" }
  *
- * // api_key: imported with `neon profile set-key`
+ * // api_key, stored by `neon profile create --api-key`
  * { "type": "api_key", "api_key": "napi_…", "user_id": "…" }
  *
- * // api_key minted from an OAuth session, which it keeps so rotation needs no browser
- * { "type": "api_key", "api_key": "napi_…", "key_id": 123, "user_id": "…",
- *   "access_token": "…", "refresh_token": "…", "expires_at": 1786… }
+ * // api_key minted by `--mint --org-id`, which records the scope it was issued at
+ * { "type": "api_key", "api_key": "napi_…", "key_id": 123, "org_id": "org-…" }
  * ```
  *
- * ## `type` is the whole contract
+ * ## One profile, one kind
  *
- * The two shapes are supersets of each other rather than alternatives, and `type` — not
- * "which fields happen to be present" — decides which credential authenticates. That is the
- * point: an API-key file may retain the OAuth token set it was minted from, so
- * `neon profile rotate-key` can replace a revoked key without a browser, and an OAuth file
- * may retain `key_id` so a later rotation can still revoke the key it superseded.
+ * A credentials file holds an API key or an OAuth session, never both, and `type` states
+ * which. An earlier draft let the two coexist — the idea being that a key could keep the
+ * session it was minted from and so rotate without a browser. It did not survive review, for
+ * two reasons that are worth recording so nobody rebuilds it:
  *
- * Inferring the kind from the fields instead would make both of those impossible, and would
- * silently mis-read a half-written file as the other kind.
+ * 1. **It never worked.** The resolver returned the key without testing it, so a revoked key
+ *    failed to mint and never fell back to the session sitting beside it.
+ * 2. **It could mix accounts.** Nothing compared the identity of the credential being written
+ *    with the one already there, so a profile could hold one account's session and another's
+ *    key, told apart only by a single string. Flip or lose `type` and the profile silently
+ *    becomes a different person.
+ *
+ * Recovery from a dead key is therefore one browser login — `neon profile create <name>
+ * --mint --force` — which is what the retained session was supposed to save and never did.
  *
  * ## Older releases
  *
  * A CLI predating this reads the pointer, finds no `type` it understands, ignores it, and
- * looks for `access_token`. A minted profile therefore keeps working on an old release; an
- * imported-key profile has no `access_token`, so the old release falls through to its browser
- * login. Neither crashes, which is why `credentials` stays a required pointer.
+ * looks for `access_token`. An `api_key` profile has none, so an older release falls through
+ * to its browser login rather than crashing. That it does not crash is why `credentials`
+ * stays a required pointer: an entry without one makes 2.41 and 2.42 throw
+ * `ERR_INVALID_ARG_TYPE` from `resolveEntryPath`.
  */
 
 import { readFileSync } from "node:fs";
@@ -54,6 +60,10 @@ export type StoredCredentials = {
 	type?: string;
 	api_key?: string;
 	key_id?: number;
+	/** Set when the key was minted for an organization rather than the account. */
+	org_id?: string;
+	/** Set when the key was narrowed to a single project. Implies `org_id`. */
+	project_id?: string;
 	user_id?: string;
 	access_token?: string;
 	refresh_token?: string;
@@ -153,20 +163,53 @@ export const writeCredentials = (
  * discards the other. Undefined values in `update` leave the existing field alone; that is
  * how `auth` keeps a `key_id` it did not mint and `set-key` keeps a recovery token set.
  */
-export const mergeCredentials = (
-	existing: StoredCredentials | null,
-	update: StoredCredentials,
-	drop: readonly string[] = [],
-): StoredCredentials => {
-	const merged: StoredCredentials = { ...(existing ?? {}) };
-	for (const [key, value] of Object.entries(update)) {
-		if (value !== undefined) merged[key] = value;
-	}
-	for (const key of drop) {
-		if (key in merged) merged[key] = undefined;
-	}
-	// `JSON.stringify` omits undefined values, so dropped fields leave no trace on disk.
-	return JSON.parse(JSON.stringify(merged)) as StoredCredentials;
+/** The scope a minted key was issued at. Absent org means an account key. */
+export type KeyScope = {
+	orgId?: string;
+	projectId?: string;
+};
+
+/**
+ * Build an `api_key` credentials object. Nothing from a previous credential is carried over.
+ *
+ * The scope is stored because it is not recoverable from the secret: `rotate-key` has to mint
+ * the replacement on the same endpoint, and an org or project key minted as an account key
+ * would silently widen what the profile reaches.
+ */
+export const apiKeyCredentials = ({
+	apiKey,
+	keyId,
+	userId,
+	scope,
+}: {
+	apiKey: string;
+	keyId?: number;
+	userId?: string;
+	scope?: KeyScope;
+}): StoredCredentials => ({
+	type: API_KEY,
+	api_key: apiKey,
+	...(keyId !== undefined ? { key_id: keyId } : {}),
+	...(userId !== undefined ? { user_id: userId } : {}),
+	...(scope?.orgId !== undefined ? { org_id: scope.orgId } : {}),
+	...(scope?.projectId !== undefined ? { project_id: scope.projectId } : {}),
+});
+
+/** The scope recorded on a stored credential. */
+export const scopeOf = (credentials: StoredCredentials): KeyScope => ({
+	...(typeof credentials.org_id === "string"
+		? { orgId: credentials.org_id }
+		: {}),
+	...(typeof credentials.project_id === "string"
+		? { projectId: credentials.project_id }
+		: {}),
+});
+
+/** How to describe a scope in output. */
+export const describeScope = (scope: KeyScope): string => {
+	if (scope.projectId !== undefined) return `project ${scope.projectId}`;
+	if (scope.orgId !== undefined) return `org ${scope.orgId}`;
+	return "account";
 };
 
 function nonEmpty(value: unknown): string | undefined {

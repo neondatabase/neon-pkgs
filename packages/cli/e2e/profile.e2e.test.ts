@@ -29,52 +29,57 @@ afterAll(() => {
 });
 
 describe("API-key profiles against the live API", () => {
-	e2eTest("set-key stores a verified key the API accepts", async () => {
-		const stored = await runCli(["profile", "set-key", PROFILE], {
-			configDir,
-			json: false,
-		});
-		expect(stored.stderr).toContain(
-			`Stored an API key for profile "${PROFILE}"`,
-		);
-		expect(stored.code).toBe(0);
+	e2eTest(
+		"create --api-key stores a verified key the API accepts",
+		async () => {
+			const stored = await runCli(["profile", "create", PROFILE], {
+				configDir,
+				json: false,
+			});
+			expect(stored.stderr).toContain(
+				`Stored an API key for profile "${PROFILE}"`,
+			);
+			expect(stored.code).toBe(0);
 
-		// The key belongs in the credentials file, declared as one, and never in profiles.json.
-		const credentials = JSON.parse(
-			readFileSync(
-				resolve(configDir, `credentials.${PROFILE}.json`),
+			// The key belongs in the credentials file, declared as one, and never in profiles.json.
+			const credentials = JSON.parse(
+				readFileSync(
+					resolve(configDir, `credentials.${PROFILE}.json`),
+					"utf8",
+				),
+			);
+			expect(credentials.type).toBe("api_key");
+			expect(credentials.api_key).toBe(requireApiKey());
+
+			const profiles = readFileSync(
+				resolve(configDir, "profiles.json"),
 				"utf8",
-			),
-		);
-		expect(credentials.type).toBe("api_key");
-		expect(credentials.api_key).toBe(requireApiKey());
+			);
+			expect(profiles).not.toContain(requireApiKey());
 
-		const profiles = readFileSync(
-			resolve(configDir, "profiles.json"),
-			"utf8",
-		);
-		expect(profiles).not.toContain(requireApiKey());
-
-		const listed = await runCli(["profile", "list"], { configDir });
-		expect(listed.code).toBe(0);
-		const rows = JSON.parse(listed.stdout) as Array<{
-			name: string;
-			account: string;
-		}>;
-		expect(rows).toEqual(
-			expect.arrayContaining([
-				expect.objectContaining({
-					name: PROFILE,
-					auth: "api key",
-					available: "yes",
-				}),
-			]),
-		);
-		// Whoever the key belongs to, `set-key` resolved an identity from the API rather than
-		// leaving a placeholder: a user key gets an email or id, an org key "organization <id>".
-		expect(rows.find((r) => r.name === PROFILE)?.account).not.toBe("-");
-		expect(listed.stdout).not.toContain(requireApiKey());
-	});
+			const listed = await runCli(["profile", "list"], { configDir });
+			expect(listed.code).toBe(0);
+			const rows = JSON.parse(listed.stdout) as Array<{
+				name: string;
+				account: string;
+			}>;
+			expect(rows).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({
+						name: PROFILE,
+						auth: "api key",
+						available: "yes",
+						// A supplied key records no scope: we cannot know what it was issued at.
+						scope: "account",
+					}),
+				]),
+			);
+			// Whoever the key belongs to, `create` resolved an identity from the API rather than
+			// leaving a placeholder: a user key gets an email or id, an org key "organization <id>".
+			expect(rows.find((r) => r.name === PROFILE)?.account).not.toBe("-");
+			expect(listed.stdout).not.toContain(requireApiKey());
+		},
+	);
 
 	e2eTest(
 		"a stored key authenticates with no key in the environment",
@@ -121,13 +126,13 @@ describe("API-key profiles against the live API", () => {
 	// Verifying before storing is what makes a profile trustworthy: a key that cannot
 	// authenticate never reaches disk, so `profile list` can't show an account that isn't real.
 	e2eTest(
-		"set-key refuses a key the API rejects, and writes nothing",
+		"create refuses a key the API rejects, and writes nothing",
 		async () => {
 			const deadDir = mkdtempSync(
 				join(tmpdir(), "neon-e2e-profile-dead-"),
 			);
 			try {
-				const stored = await runCli(["profile", "set-key", "dead"], {
+				const stored = await runCli(["profile", "create", "dead"], {
 					configDir: deadDir,
 					apiKey: "napi_definitely_not_a_real_key",
 					json: false,

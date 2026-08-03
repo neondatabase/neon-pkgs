@@ -67,6 +67,7 @@ type Run = { code: number | null; stdout: string; stderr: string };
 function runCli(
 	args: string[],
 	env: Record<string, string> = {},
+	stdin = "",
 ): Promise<Run> {
 	return new Promise((res, rej) => {
 		const cp = fork(
@@ -77,6 +78,8 @@ function runCli(
 				env: { PATH: process.env.PATH ?? "", HOME: tmpdir(), ...env },
 			},
 		);
+		// Always closed, so a command that reads stdin sees EOF rather than hanging.
+		cp.stdin?.end(stdin);
 		let stdout = "";
 		let stderr = "";
 		cp.stdout?.on("data", (d: Buffer) => {
@@ -270,45 +273,39 @@ describe("profile list", () => {
 	});
 });
 
-describe("profile set-key", () => {
-	// stdin is a pipe here, so there is no terminal to prompt on.
-	test("with no key and no terminal it says what to pass instead of hanging", async () => {
-		const dir = makeConfigDir({});
+describe("profile create", () => {
+	// Guarding before anything else matters here: without it, `create` on an existing profile
+	// would fall through to the browser sign-in and clobber a credential.
+	test("refuses to replace an existing profile without --force", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": OAUTH_FILE,
+			"credentials.work.json": API_KEY_FILE,
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: {
+					DEFAULT: { credentials: "credentials.json" },
+					work: { credentials: "credentials.work.json" },
+				},
+			}),
+		});
 		const { code, stderr } = await runCli([
 			"profile",
-			"set-key",
+			"create",
 			"work",
 			"--config-dir",
 			dir,
 		]);
 
 		expect(code).toBe(1);
-		expect(stderr).toContain("--api-key or --api-key-file");
+		expect(stderr).toContain("already exists");
+		expect(stderr).toContain("--force");
 	});
 
-	test("refuses --api-key together with --api-key-file", async () => {
+	test("says what to pass when given no way to get a credential", async () => {
 		const dir = makeConfigDir({});
 		const { code, stderr } = await runCli([
 			"profile",
-			"set-key",
-			"work",
-			"--config-dir",
-			dir,
-			"--api-key",
-			"napi_flagkey",
-			"--api-key-file",
-			resolve(dir, "somewhere"),
-		]);
-
-		expect(code).toBe(1);
-		expect(stderr).toContain("--api-key or --api-key-file, not both");
-	});
-
-	test("names a key file that is not there", async () => {
-		const dir = makeConfigDir({});
-		const { code, stderr } = await runCli([
-			"profile",
-			"set-key",
+			"create",
 			"work",
 			"--config-dir",
 			dir,
@@ -320,11 +317,29 @@ describe("profile set-key", () => {
 		expect(stderr).toContain("No such file");
 	});
 
+	test("refuses two ways of supplying the same key", async () => {
+		const dir = makeConfigDir({ "some-key": "napi_fromfile" });
+		const { code, stderr } = await runCli([
+			"profile",
+			"create",
+			"work",
+			"--config-dir",
+			dir,
+			"--api-key",
+			"napi_flagkey",
+			"--api-key-file",
+			resolve(dir, "some-key"),
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("only one of");
+	});
+
 	test("refuses an empty key file", async () => {
 		const dir = makeConfigDir({ "blank-key": "   \n" });
 		const { code, stderr } = await runCli([
 			"profile",
-			"set-key",
+			"create",
 			"work",
 			"--config-dir",
 			dir,
@@ -334,6 +349,134 @@ describe("profile set-key", () => {
 
 		expect(code).toBe(1);
 		expect(stderr).toContain("is empty");
+	});
+
+	test("reads a key from stdin and never puts it in argv", async () => {
+		const dir = makeConfigDir({});
+		// The API host refuses connections, so this gets as far as verifying and no further —
+		// which is enough to prove the key was read from the pipe rather than rejected as absent.
+		const { code, stderr } = await runCli(
+			[
+				"profile",
+				"create",
+				"work",
+				"--config-dir",
+				dir,
+				"--api-key-stdin",
+			],
+			{},
+			"napi_from_stdin\n",
+		);
+
+		expect(code).toBe(1);
+		expect(stderr).not.toContain("Nothing arrived on stdin");
+		expect(stderr).not.toContain("napi_from_stdin");
+	});
+
+	test("says so when nothing arrives on stdin", async () => {
+		const dir = makeConfigDir({});
+		const { code, stderr } = await runCli([
+			"profile",
+			"create",
+			"work",
+			"--config-dir",
+			dir,
+			"--api-key-stdin",
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("Nothing arrived on stdin");
+	});
+
+	// A scope only means something for a key we mint; a key you supply already has one.
+	test("--org-id without --mint is refused rather than ignored", async () => {
+		const dir = makeConfigDir({});
+		const { code, stderr } = await runCli([
+			"profile",
+			"create",
+			"work",
+			"--config-dir",
+			dir,
+			"--api-key",
+			"napi_flagkey",
+			"--org-id",
+			"org-abc-123",
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("only apply with --mint");
+	});
+
+	test("--org-id and --project-id together is refused", async () => {
+		const dir = makeConfigDir({});
+		const { code, stderr } = await runCli([
+			"profile",
+			"create",
+			"ci",
+			"--config-dir",
+			dir,
+			"--mint",
+			"--org-id",
+			"org-abc-123",
+			"--project-id",
+			"proj-1",
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).toMatch(
+			/mutually exclusive|Arguments org-id and project-id/i,
+		);
+	});
+
+	// Every rejected shape of a scope flag otherwise ends the same way: it reads as falsy and
+	// an account key gets minted instead of the narrow one that was asked for.
+	test("an empty --org-id is refused rather than read as absent", async () => {
+		const dir = makeConfigDir({});
+		const { code, stderr } = await runCli([
+			"profile",
+			"create",
+			"ci",
+			"--config-dir",
+			dir,
+			"--mint",
+			"--org-id",
+			"",
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("--org-id needs a value");
+	});
+
+	// `--mint` calls the OAuth flow directly, so it has to make the CI check that `authFlow`
+	// makes — otherwise it sits waiting for a login nobody can complete.
+	test("--mint refuses to wait for a browser in CI", async () => {
+		const dir = makeConfigDir({});
+		const { code, stderr } = await runCli(
+			["profile", "create", "ci", "--config-dir", dir, "--mint"],
+			{ CI: "true" },
+		);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("cannot happen in CI");
+		expect(stderr).toContain("--api-key-stdin");
+	});
+
+	test("options after a -- terminator are refused, not silently dropped", async () => {
+		const dir = makeConfigDir({});
+		const { code, stderr } = await runCli([
+			"profile",
+			"create",
+			"ci",
+			"--config-dir",
+			dir,
+			"--mint",
+			"--",
+			"--org-id",
+			"org-abc-123",
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("takes no arguments after");
 	});
 });
 
@@ -425,6 +568,6 @@ describe("profile rotate-key", () => {
 
 		expect(code).toBe(1);
 		expect(stderr).toContain("no usable credential");
-		expect(stderr).toContain("neon auth --profile work");
+		expect(stderr).toContain("neon profile create work --mint --force");
 	});
 });

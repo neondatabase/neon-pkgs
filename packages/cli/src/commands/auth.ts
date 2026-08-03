@@ -22,9 +22,9 @@ import {
 	API_KEY,
 	type CredentialKind,
 	interpretCredentials,
-	mergeCredentials,
 	OAUTH,
 	readCredentials,
+	type StoredCredentials,
 	writeCredentials,
 } from "../credentials.js";
 import { isCi } from "../env.js";
@@ -158,18 +158,18 @@ const preserveCredentials = async (
 	const {
 		data: { id, email },
 	} = await apiClient.getCurrentUserInfo();
-	// Merge rather than replace, and declare the kind explicitly. Signing in turns the file
-	// into an OAuth credential, but a `key_id` recorded by an earlier `rotate-key` has to
-	// survive — it is the only handle on a key that is still live upstream, and dropping it
-	// would orphan that key with no way to revoke it.
-	const merged = mergeCredentials(readCredentials(path), {
+	// Replace rather than merge, and declare the kind. Signing in makes this an OAuth
+	// credential and nothing of a previous one is carried over: a retained API key would leave
+	// the file holding two credentials, possibly for two different accounts, with a single
+	// field deciding which one is live.
+	const stored: StoredCredentials = {
 		...(credentials as Record<string, unknown>),
 		type: OAUTH,
-		user_id: id,
-	});
-	writeCredentials(path, merged);
+		...(id !== undefined ? { user_id: id } : {}),
+	};
+	writeCredentials(path, stored);
 	log.debug("Saved credentials to %s", path);
-	log.debug("Credentials MD5 hash: %s", md5hash(JSON.stringify(merged)));
+	log.debug("Credentials MD5 hash: %s", md5hash(JSON.stringify(stored)));
 	return { ...(id ? { id } : {}), ...(email ? { email } : {}) };
 };
 
