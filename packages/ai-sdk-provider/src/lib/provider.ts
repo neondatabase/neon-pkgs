@@ -159,7 +159,10 @@ export function createNeon(options: NeonProviderSettings = {}): NeonProvider {
 			provider: "neon.anthropic",
 			baseURL: `${getHost()}/anthropic/v1`,
 			headers: () => getHeaders({ "anthropic-version": "2023-06-01" }),
-			fetch: options.fetch,
+			fetch: wrapFetchWithGatewayErrorNormalization(
+				options.fetch,
+				"anthropic",
+			),
 			generateId,
 		});
 
@@ -172,7 +175,10 @@ export function createNeon(options: NeonProviderSettings = {}): NeonProvider {
 			// This route returns Databricks error envelopes the OpenAI schema
 			// cannot read, which reach the caller as a bare "Bad Request".
 			// `OpenAIConfig` has no error hook, so the rewrite rides on fetch.
-			fetch: wrapFetchWithGatewayErrorNormalization(options.fetch),
+			fetch: wrapFetchWithGatewayErrorNormalization(
+				options.fetch,
+				"openai",
+			),
 			fileIdPrefixes: ["file-"],
 		});
 
@@ -183,12 +189,21 @@ export function createNeon(options: NeonProviderSettings = {}): NeonProvider {
 			provider: "neon.chat",
 			url: ({ path }) => `${getHost()}/v1${path}`,
 			headers: getHeaders,
+			// Two wrappers, on disjoint halves of the response: the harmony one
+			// rewrites successful gpt-oss bodies and returns early on any error,
+			// the error one only touches non-2xx bodies. This route emits the
+			// same flat `{ error_code, message }` Databricks envelope as the
+			// Responses route (an out-of-range `temperature`, say), which
+			// `errorStructure` below cannot read on its own.
+			//
 			// TODO(#308): Temporary workaround for gpt-oss. The gateway returns a
 			// non-compliant "harmony" content-array shape; this wrapper normalizes it
 			// to the Chat Completions contract and is a transparent pass-through for
 			// every compliant response. Remove it (and neon-harmony-normalize.ts) once
 			// the gateway returns spec-compliant gpt-oss responses.
-			fetch: wrapFetchWithHarmonyNormalization(options.fetch),
+			fetch: wrapFetchWithHarmonyNormalization(
+				wrapFetchWithGatewayErrorNormalization(options.fetch, "openai"),
+			),
 			errorStructure: neonErrorStructure,
 			transformRequestBody: transformNeonRequestBody,
 			supportsStructuredOutputs: true,

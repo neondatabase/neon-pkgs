@@ -69,3 +69,29 @@ describe.skipIf(!hasGatewayEnv())(
 		});
 	},
 );
+
+/**
+ * The unified endpoint returns the same flat Databricks envelope, so it needs
+ * the same rewrite — `errorStructure` alone only reads the nested OpenAI shape.
+ */
+describe.skipIf(!hasGatewayEnv())(
+	`e2e — chat-completions error surfacing (${MATRIX_MODELS.meta})`,
+	() => {
+		it("surfaces a flat Databricks rejection", async () => {
+			let message = "";
+			try {
+				await generateText({
+					model: neon(MATRIX_MODELS.meta),
+					prompt: "Reply with exactly three words.",
+					maxOutputTokens: 512,
+					temperature: 9.5,
+				});
+			} catch (error) {
+				message = (error as { message: string }).message;
+			}
+
+			expect(message).not.toBe("Bad Request");
+			expect(message).toContain("temperature");
+		});
+	},
+);

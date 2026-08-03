@@ -1,69 +1,114 @@
 import type { FetchFunction } from "@ai-sdk/provider-utils";
 
 /**
- * Rewrite the Neon AI Gateway's non-OpenAI error envelopes into the shape
- * `@ai-sdk/openai` parses, so the reason reaches `error.message` instead of
- * being flattened to the bare HTTP status text.
+ * Give every route of this provider the error envelope its model knows how to
+ * read, so a failed call surfaces the gateway's reason on `error.message`
+ * instead of a bare HTTP status line.
  *
- * The Responses route returns three different error shapes:
+ * The gateway emits several error shapes, and which one you get depends on
+ * which layer rejected the request rather than on which route you called:
  *
- * 1. The gateway's own rejection, already OpenAI-shaped and passed through
- *    untouched:
+ * 1. The gateway's own rejection, in OpenAI shape:
  *      { "error": { "message": "unknown model \"nope\"" } }
  *
- * 2. A Databricks rejection, top-level and unparseable by the OpenAI schema:
- *      { "error_code": "INVALID_PARAMETER_VALUE", "message": "…" }
+ * 2. A Databricks rejection, flat and with its own code:
+ *      { "error_code": "BAD_REQUEST", "message": "service_tier='flex' is …" }
  *
- * 3. A Databricks rejection wrapping an OpenAI error as a JSON *string*:
+ * 3. A Databricks rejection wrapping an upstream error as a JSON *string*:
  *      { "error_code": "BAD_REQUEST", "message": "{\"error\":{\"message\":…}}" }
  *
- * Shapes 2 and 3 both fail `openaiErrorDataSchema` (which requires a nested
- * `error.message`), so the AI SDK falls back to the status line and the caller
- * sees `AI_APICallError: Bad Request` with the real explanation buried in
- * `responseBody`. Shape 3 is the worst of the three: the useful text — the
- * offending parameter and its allowed range — is two levels down.
+ * Meanwhile each underlying model parses a different schema: the OpenAI and
+ * OpenAI-compatible models want `{ error: { message } }`, the Anthropic model
+ * wants `{ type: "error", error: { type, message } }`. Anything that does not
+ * match is dropped and the AI SDK falls back to the status text, which is how
+ * `AI_APICallError: Bad Request` reaches a caller with the real explanation
+ * stranded on `responseBody`.
  *
- * `OpenAIConfig` exposes no error-handler hook, so the rewrite happens in
- * `fetch`, the same lever `wrapFetchWithHarmonyNormalization` uses. Successful
- * responses and already-compliant errors are returned untouched.
+ * So the shape a body needs is a property of the route, not of the gateway:
+ * this reads any of the above into one reason and re-emits it in the dialect
+ * that route's model expects — including across dialects, since shape 1 is
+ * emitted on the Anthropic route too and does not parse there either. A body
+ * already valid for the target dialect is left alone, as is any successful
+ * response and anything unrecognised.
+ *
+ * None of the models expose an error hook (`OpenAIConfig` has none, and the
+ * Anthropic one takes a fixed handler), so this rides on `fetch` — the same
+ * lever `wrapFetchWithHarmonyNormalization` uses. The two are disjoint: that
+ * one returns early on a failed response, this one only acts on failures.
  */
+
+/** The error envelope a route's model can parse. */
+export type GatewayErrorDialect = "openai" | "anthropic";
+
+interface Reason {
+	message: string;
+	/** Preserved verbatim when the source was already an OpenAI envelope. */
+	openaiFields?: Record<string, unknown>;
+	/** An Anthropic `error.type`, or a Databricks `error_code`. */
+	type?: string;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** An OpenAI-shaped envelope the AI SDK can already parse. */
-function isOpenAIShaped(value: unknown): boolean {
-	return (
+function asOpenAIEnvelope(value: unknown): Record<string, unknown> | null {
+	if (
 		isRecord(value) &&
 		isRecord(value.error) &&
 		typeof value.error.message === "string"
-	);
+	) {
+		return value.error;
+	}
+	return null;
 }
 
-/**
- * Map one gateway error body to the OpenAI envelope, or return null when it
- * needs no rewriting (or isn't a shape we recognise).
- */
-export function normalizeGatewayErrorBody(body: unknown): unknown | null {
-	if (!isRecord(body) || isOpenAIShaped(body)) {
-		return null;
+function asAnthropicEnvelope(value: unknown): Record<string, unknown> | null {
+	if (
+		isRecord(value) &&
+		value.type === "error" &&
+		isRecord(value.error) &&
+		typeof value.error.message === "string" &&
+		typeof value.error.type === "string"
+	) {
+		return value.error;
 	}
-	const { error_code: errorCode, message } = body;
-	if (typeof message !== "string") {
-		return null;
+	return null;
+}
+
+/** Read any envelope the gateway emits into a single reason. */
+function extractReason(body: unknown): Reason | null {
+	const anthropic = asAnthropicEnvelope(body);
+	if (anthropic) {
+		return {
+			message: anthropic.message as string,
+			type: anthropic.type as string,
+		};
 	}
 
-	// Shape 3: the message is itself an OpenAI error envelope. Prefer it — it
+	const openai = asOpenAIEnvelope(body);
+	if (openai) {
+		return {
+			message: openai.message as string,
+			openaiFields: openai,
+			type: typeof openai.type === "string" ? openai.type : undefined,
+		};
+	}
+
+	if (!isRecord(body) || typeof body.message !== "string") {
+		return null;
+	}
+	const code =
+		typeof body.error_code === "string" ? body.error_code : undefined;
+
+	// Shape 3: an upstream envelope encoded into `message`. Prefer it — it
 	// names the offending parameter, which the outer wrapper does not.
-	if (message.trimStart().startsWith("{")) {
+	if (body.message.trimStart().startsWith("{")) {
 		try {
-			const inner: unknown = JSON.parse(message);
-			if (isOpenAIShaped(inner)) {
-				const { error } = inner as { error: Record<string, unknown> };
-				return {
-					error: { ...error, code: error.code ?? errorCode ?? null },
-				};
+			const inner: unknown = JSON.parse(body.message);
+			const nested = extractReason(inner);
+			if (nested) {
+				return { ...nested, type: nested.type ?? code };
 			}
 		} catch {
 			// Not JSON after all; fall through to shape 2.
@@ -71,12 +116,52 @@ export function normalizeGatewayErrorBody(body: unknown): unknown | null {
 	}
 
 	// Shape 2: a flat Databricks rejection.
-	return { error: { message, code: errorCode ?? null } };
+	return { message: body.message, type: code };
 }
 
-/** Wrap a fetch so gateway error bodies reach the AI SDK in OpenAI shape. */
+function emit(reason: Reason, dialect: GatewayErrorDialect): unknown {
+	if (dialect === "anthropic") {
+		return {
+			type: "error",
+			error: {
+				type: reason.type ?? "api_error",
+				message: reason.message,
+			},
+		};
+	}
+	return {
+		error: {
+			...reason.openaiFields,
+			message: reason.message,
+			code: reason.openaiFields?.code ?? reason.type ?? null,
+		},
+	};
+}
+
+/**
+ * Map a gateway error body into `dialect`, or return null when it already
+ * parses there (or is not a shape we recognise).
+ */
+export function normalizeGatewayErrorBody(
+	body: unknown,
+	dialect: GatewayErrorDialect,
+): unknown | null {
+	const alreadyValid =
+		dialect === "anthropic"
+			? asAnthropicEnvelope(body) !== null
+			: asOpenAIEnvelope(body) !== null;
+	if (alreadyValid) {
+		return null;
+	}
+
+	const reason = extractReason(body);
+	return reason === null ? null : emit(reason, dialect);
+}
+
+/** Wrap a fetch so failed responses reach the model in its own dialect. */
 export function wrapFetchWithGatewayErrorNormalization(
-	baseFetch?: FetchFunction,
+	baseFetch: FetchFunction | undefined,
+	dialect: GatewayErrorDialect,
 ): FetchFunction {
 	const inner: FetchFunction =
 		baseFetch ?? ((...args) => globalThis.fetch(...args));
@@ -86,23 +171,19 @@ export function wrapFetchWithGatewayErrorNormalization(
 		if (response.ok) {
 			return response;
 		}
-		if (
-			!(response.headers.get("content-type") ?? "").includes(
-				"application/json",
-			)
-		) {
+		const contentType = response.headers.get("content-type") ?? "";
+		if (!contentType.includes("application/json")) {
 			return response;
 		}
 
-		const raw = await response.clone().text();
 		let parsed: unknown;
 		try {
-			parsed = JSON.parse(raw);
+			parsed = JSON.parse(await response.clone().text());
 		} catch {
 			return response;
 		}
 
-		const normalized = normalizeGatewayErrorBody(parsed);
+		const normalized = normalizeGatewayErrorBody(parsed, dialect);
 		if (normalized === null) {
 			return response;
 		}
