@@ -1,6 +1,6 @@
 {
   "name": "neonctl",
-  "version": "2.41.0",
+  "version": "2.42.0",
   "description": "Compatibility command for the Neon CLI",
   "keywords": [
     "neon",

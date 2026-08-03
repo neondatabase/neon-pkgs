@@ -1,5 +1,12 @@
 # neonctl
 
+## 2.42.0
+
+### Patch Changes
+
+- Updated dependencies [6648f8c]
+  - neon@2.42.0
+
 ## 2.41.0
 
 ### Minor Changes
