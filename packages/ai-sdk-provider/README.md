@@ -2,9 +2,9 @@
 
 Community [Vercel AI SDK](https://ai-sdk.dev) provider for the [Neon](https://neon.com) AI Gateway. Supports **AI SDK v6 and v7** (`ai@^6` or `ai@^7`).
 
-The Neon AI Gateway is **branch-scoped**: each Neon project branch gets its own gateway host, and a platform token authorizes requests for that branch. This provider routes each model to the best gateway endpoint (Anthropic → native Messages, OpenAI → native Responses incl. **Codex**, everything else → unified OpenAI-compatible MLflow endpoint), so a single `neon('gpt-5-mini')` call reaches the whole catalog.
+The Neon AI Gateway is **branch-scoped**: each Neon project branch gets its own gateway host, and a platform token authorizes requests for that branch. Use the same `neon(modelId)` API across the branch's model catalog; the provider selects Anthropic Messages, OpenAI Responses, or Chat Completions for each model.
 
-Model ids use the canonical Neon (unprefixed) form — `gpt-5-mini`, `llama-4-maverick`, `gemini-3-flash` — matching the [`neon` provider on models.dev](https://models.dev). The typed catalog mirrors that provider exactly (kept in sync by a scheduled drift check), plus a few extra gateway-served ids that models.dev doesn't list yet (e.g. Codex, Llama, Qwen). Any other id is still accepted as a plain string, so existing code keeps working.
+Use canonical model ids such as `gpt-5-mini`, `llama-4-maverick`, and `gemini-3-flash`, matching the [`neon` provider on models.dev](https://models.dev). The typed catalog includes the known model ids, and arbitrary strings are accepted so newly available models work before the types update.
 
 ## Install
 
@@ -51,24 +51,17 @@ const neon = createNeon({
 
 | Model family | Endpoint | Why |
 | --- | --- | --- |
-| Anthropic (`claude-*`) | native Messages API | streaming structured output + native reasoning |
-| OpenAI (`gpt-*`, `*-codex`) | native Responses API | Codex (native-only), native reasoning, image-gen tool |
-| Everything else (Gemini, Llama, Qwen, gpt-oss, ...) | unified MLflow endpoint | broad coverage; Gemini is here because its native endpoint does not support streaming |
+| Anthropic (`claude-*`) | Messages API | Anthropic tools, structured output, and reasoning |
+| OpenAI (`gpt-*`, `*-codex`) | Responses API | Codex, reasoning, and built-in tools such as image generation |
+| Everything else (Gemini, Llama, Qwen, gpt-oss, ...) | Chat Completions API | one streaming interface across the remaining model families |
 
 Routing matches on the model id.
 
 ## Capabilities
 
-`generateText` / `streamText` (text, system prompts, multi-turn) run against every model the branch serves. Tool calling (single and multi-step, generate and stream) and `generateObject` / `streamObject` are verified on OpenAI (incl. Codex), Meta and Alibaba models. Image (vision) input works on models that accept it and is not covered by the e2e matrix.
+`generateText` and `streamText` work with any model available to your branch. `generateObject`, `streamObject`, and single- or multi-step tool calls work with OpenAI (including Codex), Meta, and Alibaba models. Gemini currently supports `generateText` and `streamText`; structured output and multi-step tools are not supported. Vision input works on models that accept images.
 
-Two exceptions, measured against a live branch:
-
-| Family | Works | Does not |
-| --- | --- | --- |
-| Google (`gemini-3-*`) | `generateText`, `streamText` | `generateObject` returns prose the SDK cannot parse; a tool round trip 400s on the replay leg, because the AI SDK does not echo back the `thoughtSignature` Gemini expects |
-| Anthropic (`claude-*`) | — | No `claude-*` id is served during the beta, so nothing on this route can be exercised |
-
-For MLflow-routed models, the provider detects the model family and drops parameters a backend rejects (e.g. penalties/`seed` for Llama, `reasoningEffort` for Gemini) with an AI SDK warning (`result.warnings`) instead of failing the request. The one exception is `providerOptions.openai.store` on the Responses route, which throws — see [Errors](#errors).
+Claude models use the Messages API when `claude-*` ids are available. For models using Chat Completions, the provider removes unsupported options such as penalties or `seed` for Llama and `reasoningEffort` for Gemini, then reports them in `result.warnings` instead of failing the request. Unsupported Responses API storage options throw before a request is sent — see [Errors](#errors).
 
 Which ids your branch serves is account-specific during the beta; `GET $NEON_AI_GATEWAY_BASE_URL/v1/models` is the authoritative list.
 
@@ -94,11 +87,9 @@ for await (const part of result.fullStream) {
 }
 ```
 
-### Iterative editing needs the image passed back
+### Edit a generated image
 
-Keep the bytes. On a later turn the gateway cannot replay a generated image for you: doing so needs a reference to a stored response item, and this gateway stores none, so the AI SDK drops the tool result and records `Results for OpenAI tool image_generation are not sent to the API when store is false` in `result.warnings`.
-
-Nothing throws. The model simply does not see the earlier image and generates a fresh one instead of editing it — which is easy to mistake for the model ignoring the instruction. Re-attach the image yourself as an input image:
+The gateway does not support stored Responses API items (`store: true`, `previousResponseId`, or `conversation`), which the Responses API uses to reuse tool results across turns. For image edits, pass the returned bytes back as image input; otherwise the model does not receive the original image and generates a new one.
 
 ```ts
 const first = await generateText({
@@ -110,7 +101,15 @@ const first = await generateText({
 const generated = first.steps
   .flatMap((step) => step.toolResults)
   .find((result) => result.toolName === "image_generation");
-const base64 = (generated?.output as { result: string }).result;
+const output = generated?.output;
+if (
+  !output ||
+  typeof output !== "object" ||
+  !("result" in output) ||
+  typeof output.result !== "string"
+) {
+  throw new Error("Image generation did not return image bytes.");
+}
 
 // Pass it back as image content, not as conversation history.
 await generateText({
@@ -120,7 +119,7 @@ await generateText({
     {
       role: "user",
       content: [
-        { type: "image", image: base64, mediaType: "image/jpeg" },
+        { type: "image", image: output.result, mediaType: "image/jpeg" },
         { type: "text", text: "Make that same square blue instead." },
       ],
     },
@@ -128,7 +127,7 @@ await generateText({
 });
 ```
 
-The same applies to the other provider-executed Responses tools (web search, code interpreter): their results are available to your code, but not to the model on a later step.
+The same stateless limitation applies to other built-in Responses tools such as web search and code interpreter.
 
 ## Errors
 
@@ -148,7 +147,7 @@ try {
 }
 ```
 
-The gateway answers with more than one error envelope depending on which layer rejected the request, and each route's model parses only its own dialect; the provider re-emits them so the reason always lands on `message`. Two cases are deliberately left alone: an error delivered inside an open stream, and a non-JSON body — both still surface as the status line, with the payload on `error.responseBody`.
+The provider normalizes JSON error responses so the gateway's reason lands on `error.message`. Errors delivered inside an open stream and non-JSON responses keep the HTTP status line; inspect `error.responseBody` for their payload.
 
 Requests that cannot work are refused before they leave, with `UnsupportedFunctionalityError`:
 
@@ -170,9 +169,8 @@ So `store` is only refused on the Responses route; the same option is ignored el
 ## Limitations
 
 - `generateImage()` and embeddings (`embed` / `embedMany`) are not offered by the gateway and throw `NoSuchModelError`.
-- `gpt-oss-*` models return a non-standard ("harmony") response shape on the unified endpoint (`message.content` as an array of reasoning/text parts instead of a string). The provider normalizes this to the OpenAI Chat Completions contract (string `content` + `reasoning_content`) so `generateText`/`streamText` work and reasoning is surfaced. See neondatabase/neon-pkgs#308.
-- Results from provider-executed tools (`neon.tools.imageGeneration`, and the other Responses built-ins) are not replayed to the gateway on a later step — see [Iterative editing needs the image passed back](#iterative-editing-needs-the-image-passed-back).
-- The Responses route is stateless, so the provider sends `store: false` and refuses an explicit `store`, `previousResponseId`, or `conversation` — see [Errors](#errors).
+- Results from provider-executed tools (`neon.tools.imageGeneration`, and the other Responses built-ins) are not replayed to the gateway on a later step — see [Edit a generated image](#edit-a-generated-image).
+- The Responses route is stateless, so the provider sends `store: false` and refuses `store: true`, `store: null`, `previousResponseId`, or `conversation` — see [Errors](#errors).
 
 ## End-to-end tests
 
