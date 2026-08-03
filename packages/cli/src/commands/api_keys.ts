@@ -55,21 +55,6 @@ const NO_PROJECT = Symbol("no-project");
 type ExpectedScope = string | typeof NO_PROJECT;
 
 /**
- * Reject a scope flag that is present but unusable.
- *
- * Every failure mode here ends the same way — the flag reads as absent, the scope check
- * falls through, and an **account** key is minted instead of the narrow one asked for.
- * Widening a credential because of a shell accident is the worst thing this command could
- * do, so each case is an error rather than a fallback:
- *
- * - `--project-id "$PROJECT"` with `PROJECT` unset arrives as an empty string, which is falsy.
- * - The same flag passed twice arrives as an array, which is not a string and would reach
- *   the API as `a,b`.
- *
- * A *misspelled* flag is the third case and cannot be caught here, because yargs never binds
- * it — `.strictOptions()` on each subcommand rejects it instead.
- */
-/**
  * A flag is either absent, or exactly one non-empty string. Anything else is an error.
  *
  * Every rejected shape otherwise ends the same way: the flag reads as falsy, the scope check
@@ -96,7 +81,9 @@ const single =
 		// the user their value was empty when they never gave one.
 		if (value === false) {
 			throw new Error(
-				`--no-${name} is not a valid way to skip --${name}. Omit the flag entirely.`,
+				required
+					? `--no-${name} is not valid: --${name} is required.`
+					: `--no-${name} is not a valid way to skip --${name}. Omit the flag entirely.`,
 			);
 		}
 		if (typeof value !== "string" || value.trim() === "") {
@@ -191,21 +178,27 @@ export const builder = (argv: yargs.Argv) =>
 				yargs
 					.positional("id", {
 						describe: "The API key id, from `api-keys list`",
-						type: "number",
+						// Deliberately not `type: "number"`. That coerces before `coerce`
+						// runs, so an unparseable id arrives as NaN and the error can only
+						// echo `NaN` — a JavaScript artifact the user never typed. Taking
+						// the raw string lets the message name what they actually passed,
+						// and stops NaN reaching the API, which answers "not found" and
+						// blames the key rather than the input.
+						type: "string",
 						demandOption: true,
-						// Without this an unparseable id becomes NaN and is sent to the API,
-						// which answers "not found" — blaming the key rather than the input.
 						coerce: (value: unknown) => {
+							const id = Number(value);
 							if (
-								typeof value !== "number" ||
-								!Number.isSafeInteger(value) ||
-								value <= 0
+								typeof value !== "string" ||
+								value.trim() === "" ||
+								!Number.isSafeInteger(id) ||
+								id <= 0
 							) {
 								throw new Error(
 									`api-keys revoke needs a numeric key id, from \`neon api-keys list\`. Got \`${String(value)}\`.`,
 								);
 							}
-							return value;
+							return id;
 						},
 					})
 					.options({
@@ -277,7 +270,7 @@ const list = async (props: ListProps) => {
 	// would claim to be everything while showing only half.
 	if (props.output === "table") {
 		log.info(
-			"Organization keys are listed separately: neon api-keys list --org-id <org>",
+			"Organization keys are listed separately: neon api-keys list --org-id <org> (see `neon orgs list`).",
 		);
 	}
 };
@@ -306,8 +299,8 @@ const create = async (props: CreateProps) => {
 		});
 		await assertUsable(props, data, { orgId, expect: NO_PROJECT });
 		report(props, data, CREATE_FIELDS, CREATE_TABLE_FIELDS);
-		log.info(
-			"Reaches every project in %s. Pass --project-id instead to restrict it to one.",
+		log.warning(
+			"This key reaches every project in %s, including ones created later. Pass --project-id instead to restrict it to one.",
 			orgId,
 		);
 		return;
@@ -368,12 +361,14 @@ const report = (
 			title: "API key",
 		});
 		out.end();
-		out.text(`${data.key}\n`);
+		// Blank line so the key is visually detached from the table border, and so
+		// `| tail -1` on stdout yields exactly the key (both notices go to stderr).
+		out.text(`\n${data.key}\n`);
 	} else {
 		out.write(data as never, { fields: fields as never, title: "API key" });
 		out.end();
 	}
-	log.warning("Store this key now — it is not shown again.");
+	log.warning("Store this key now: it is not shown again.");
 };
 
 /**
@@ -413,7 +408,7 @@ const assertUsable = async (
 				: `The key could NOT be revoked and may still be live${
 						data.id === undefined
 							? ""
-							: ` — remove it with \`neon api-keys revoke ${data.id}${
+							: `. Remove it with \`neon api-keys revoke ${data.id}${
 									scope.orgId
 										? ` --org-id ${scope.orgId}`
 										: ""
@@ -437,9 +432,11 @@ const revokeOrExplain = async (props: RevokeProps) => {
 			? await props.apiClient.revokeOrgApiKey(props.orgId, props.id)
 			: await props.apiClient.revokeApiKey(props.id);
 	} catch (err) {
-		if (isNeonApiError(err) && err.status === 404 && !props.orgId) {
+		if (isNeonApiError(err) && err.status === 404) {
 			throw new Error(
-				`No account API key with id ${props.id}. If it belongs to an organization, pass --org-id — organization keys are not visible to your account.`,
+				props.orgId
+					? `No API key with id ${props.id} in ${props.orgId}. If it is one of your account's own keys, drop --org-id.`
+					: `No account API key with id ${props.id}. If it belongs to an organization, pass --org-id. Organization keys are not visible to your account.`,
 			);
 		}
 		throw err;
@@ -499,7 +496,7 @@ const orgIdForProject = async (
 		if (isNeonApiError(err) && err.status === 404) {
 			throw new Error(
 				projectId.startsWith("org-")
-					? `Project ${projectId} not found — that looks like an organization id. Pass it as --org-id instead.`
+					? `Project ${projectId} not found. That looks like an organization id: Pass it as --org-id instead.`
 					: `Project ${projectId} not found. Check the id with \`neon projects list\`.`,
 			);
 		}

@@ -695,7 +695,21 @@ neon api-keys create --name agent --project-id frosty-…   # can access only th
 neon api-keys revoke <id> [--org-id org-…]
 ```
 
-The key is returned once, on create, and cannot be retrieved again.
+The key is returned once, on create, and cannot be retrieved again. It prints on its own line below the table, so it can be selected in one gesture regardless of terminal width — and `… | tail -1` on stdout yields exactly the key, since both notices go to stderr.
+
+```console
+$ neon api-keys create --name agent --project-id proj-in-org
+API key
+┌─────┬───────┬─────────────┐
+│ Id  │ Name  │ Project     │
+├─────┼───────┼─────────────┤
+│ 303 │ agent │ proj-in-org │
+└─────┴───────┴─────────────┘
+
+napi_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+WARNING: Store this key now: it is not shown again.
+INFO: Limited to proj-in-org: it cannot create projects, mint API keys, or read any other project. It can still change and delete everything inside that project.
+```
 
 `--org-id` and `--project-id` are mutually exclusive. A project-scoped key *is* an organization key, and its organization is looked up from the project rather than chosen separately. With neither flag you get an account key.
 
@@ -710,6 +724,8 @@ A key created with `--project-id` bounds what it can reach to one project. Verif
 | `neon projects create` | `project-scoped keys are not allowed to create projects` |
 | `neon projects list` | refused |
 | `neon api-keys create` / `list` | refused (true of any organization key, not only scoped ones) |
+| `neon orgs list` | **works** — it can see the id, name and handle of the organization it belongs to |
+| Anything else about that organization (`GET /organizations/{id}`, members) | refused |
 
 It is **not** read-only. Inside its one project it can do everything the API allows, including deleting branches and the project itself — `neon deploy` working at all is proof of that. What it bounds is *reach*, which is what lets you hand it to an agent or a CI job without handing over your account:
 
@@ -725,13 +741,15 @@ NEON_API_KEY=napi_… neon deploy       # then the agent, reaching only that pro
 ### Seeing what is scoped
 
 ```console
-$ neon api-keys list --org-id org-old-flower-82714815
-┌─────────┬───────────────┬────────────────────────┬──────────────────────┬──────────────┐
-│ Id      │ Name          │ Project                │ Created At           │ Last Used At │
-├─────────┼───────────────┼────────────────────────┼──────────────────────┼──────────────┤
-│ 3238954 │ agent         │ divine-credit-28872766 │ 2026-08-03T07:16:04Z │              │
-│ 3196722 │ ci            │ (all projects)         │ 2026-07-16T15:59:25Z │ 2026-07-23…  │
-└─────────┴───────────────┴────────────────────────┴──────────────────────┴──────────────┘
+$ neon api-keys list --org-id org-7
+API keys in org-7
+┌─────┬──────────┬────────────────┬──────────────────────┬──────────────────────┬─────────────────────┐
+│ Id  │ Name     │ Project        │ Created At           │ Last Used At         │ Last Used From Addr │
+├─────┼──────────┼────────────────┼──────────────────────┼──────────────────────┼─────────────────────┤
+│ 301 │ scoped   │ proj-in-org    │ 2026-01-02T00:00:00Z │                      │                     │
+├─────┼──────────┼────────────────┼──────────────────────┼──────────────────────┼─────────────────────┤
+│ 302 │ org-wide │ (all projects) │ 2026-01-03T00:00:00Z │ 2026-02-03T00:00:00Z │ 203.0.113.9         │
+└─────┴──────────┴────────────────┴──────────────────────┴──────────────────────┴─────────────────────┘
 ```
 
 `last_used_at` and `last_used_from_addr` are how you spot a key worth revoking.

@@ -51,6 +51,7 @@ exports[`api-keys create > table output puts the secret on its own line 1`] = `
 ├─────┼───────┼─────────────┤
 │ 303 │ agent │ proj-in-org │
 └─────┴───────┴─────────────┘
+
 napi_org_secret
 "
 `;
@@ -141,6 +142,8 @@ exports[`api-keys list > table output names the unscoped rows 1`] = `
 "
 `;
 
+exports[`api-keys revoke > a 404 on the account path suggests --org-id 1`] = `""`;
+
 exports[`api-keys revoke > account key 1`] = `
 "id: 999
 name: laptop
@@ -149,6 +152,10 @@ last_used_at: 2026-02-01T00:00:00Z
 last_used_from_addr: 203.0.113.1
 "
 `;
+
+exports[`api-keys revoke > and a 404 on the org path suggests dropping it 1`] = `""`;
+
+exports[`api-keys revoke > names the id the user typed, not NaN 1`] = `""`;
 
 exports[`api-keys revoke > org key 1`] = `
 "id: 888

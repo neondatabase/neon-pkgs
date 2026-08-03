@@ -34,19 +34,25 @@ describe("api-keys list", () => {
 });
 
 describe("api-keys create", () => {
+	// The mitigation the PR leans on: an account key is the only one that reaches
+	// everything, so deleting this warning must fail a test.
 	test("account key when no scope is given", async ({ testCliCommand }) => {
-		await testCliCommand(["api-keys", "create", "--name", "ci"]);
+		await testCliCommand(["api-keys", "create", "--name", "ci"], {
+			stderr: expect.stringContaining(
+				"This key reaches everything your account can, in every organization.",
+			),
+		});
 	});
 
 	test("org key with --org-id", async ({ testCliCommand }) => {
-		await testCliCommand([
-			"api-keys",
-			"create",
-			"--name",
-			"ci",
-			"--org-id",
-			"org-7",
-		]);
+		await testCliCommand(
+			["api-keys", "create", "--name", "ci", "--org-id", "org-7"],
+			{
+				stderr: expect.stringContaining(
+					"This key reaches every project in org-7",
+				),
+			},
+		);
 	});
 
 	// The org is looked up from the project rather than supplied, so this also covers
@@ -54,14 +60,21 @@ describe("api-keys create", () => {
 	test("project-scoped key infers the org from the project", async ({
 		testCliCommand,
 	}) => {
-		await testCliCommand([
-			"api-keys",
-			"create",
-			"--name",
-			"agent",
-			"--project-id",
-			"proj-in-org",
-		]);
+		await testCliCommand(
+			[
+				"api-keys",
+				"create",
+				"--name",
+				"agent",
+				"--project-id",
+				"proj-in-org",
+			],
+			{
+				stderr: expect.stringContaining(
+					"Limited to proj-in-org: it cannot create projects",
+				),
+			},
+		);
 	});
 
 	// Locks the layout: metadata in the table, the secret alone on the line below, where it
@@ -251,7 +264,7 @@ describe("api-keys create refuses an unusable response", () => {
 			{
 				code: 1,
 				stderr: expect.stringContaining(
-					"The key could NOT be revoked and may still be live — remove it with `neon api-keys revoke 500 --org-id org-7`",
+					"The key could NOT be revoked and may still be live. Remove it with `neon api-keys revoke 500 --org-id org-7`",
 				),
 			},
 		);
@@ -330,6 +343,39 @@ describe("api-keys revoke", () => {
 			"--org-id",
 			"org-7",
 		]);
+	});
+
+	// The easy mistake: `list --org-id X` prints ids the account endpoint cannot see.
+	test("a 404 on the account path suggests --org-id", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["api-keys", "revoke", "12345"], {
+			code: 1,
+			stderr: expect.stringContaining(
+				"If it belongs to an organization, pass --org-id",
+			),
+		});
+	});
+
+	test("and a 404 on the org path suggests dropping it", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			["api-keys", "revoke", "12345", "--org-id", "org-7"],
+			{
+				code: 1,
+				stderr: expect.stringContaining(
+					"If it is one of your account's own keys, drop --org-id",
+				),
+			},
+		);
+	});
+
+	test("names the id the user typed, not NaN", async ({ testCliCommand }) => {
+		await testCliCommand(["api-keys", "revoke", "abc"], {
+			code: 1,
+			stderr: expect.stringContaining("Got `abc`"),
+		});
 	});
 
 	test("refuses a non-numeric id instead of sending NaN", async ({
