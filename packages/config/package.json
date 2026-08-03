@@ -32,6 +32,11 @@
 			"types": "./dist/v1.d.ts",
 			"import": "./dist/v1.js",
 			"default": "./dist/v1.js"
+		},
+		"./paths": {
+			"types": "./dist/paths.d.ts",
+			"import": "./dist/paths.js",
+			"default": "./dist/paths.js"
 		}
 	},
 	"files": [

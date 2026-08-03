@@ -591,11 +591,57 @@ neon snapshots schedule set --branch main --schedule '[{"frequency":"weekly","da
 
 All sub-commands honor the [global options](#global-options), including `--output json|yaml|table`.
 
+## Profiles
+
+The CLI holds one Neon account by default. A profile adds another, and is nothing more than a pointer to a credentials file:
+
+```
+~/.config/neon/
+├── credentials.json          # this IS the DEFAULT profile
+├── credentials.work.json     # created by `neon auth --profile work`
+└── profiles.json             # created only once a second profile exists
+```
+
+```bash
+neon auth --profile work     # create it, or sign in again
+neon profile list
+neon profile remove work
+```
+
+```console
+$ neon profile list
+Profiles
+┌────────┬─────────┬──────────────────────┬──────────┬──────────────────────────────────────┐
+│ Active │ Name    │ Account              │ SignedIn │ Credentials                          │
+├────────┼─────────┼──────────────────────┼──────────┼──────────────────────────────────────┤
+│ *      │ DEFAULT │ me@example.com       │ yes      │ ~/.config/neon/credentials.json      │
+├────────┼─────────┼──────────────────────┼──────────┼──────────────────────────────────────┤
+│        │ work    │ me@work.example.com  │ yes      │ ~/.config/neon/credentials.work.json │
+└────────┴─────────┴──────────────────────┴──────────┴──────────────────────────────────────┘
+```
+
+Select one per invocation with `--profile`, or per shell with `NEON_PROFILE`. There is no `profile use` command and nothing is stored about which profile is "current", so what you type is always what runs.
+
+Entries in `profiles.json` are paths, and a path may point anywhere — which is how you adopt a directory you already have, without moving or re-authenticating anything:
+
+```json
+{
+  "version": 1,
+  "profiles": {
+    "DEFAULT": { "credentials": "credentials.json" },
+    "work": { "credentials": "../neonctl-work/credentials.json" }
+  }
+}
+```
+
+`neon profile remove` revokes the refresh token at the authorization server, not just locally. It deletes the credentials file only when the CLI created it: an adopted path like the one above is unlinked and left on disk, and the command says so. Removing the last named profile deletes `profiles.json`, returning you to the single-account layout. `neon profile remove DEFAULT` signs you out.
+
 ## Commands
 
 | Command                                                                    | Subcommands                                                                                                  | Description                        |
 | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------- |
 | [auth](https://neon.com/docs/reference/cli-auth)                           |                                                                                                              | Authenticate                       |
+| profile                                                                    | `list`, `remove`                                                                                             | Manage named sets of credentials   |
 | [projects](https://neon.com/docs/reference/cli-projects)                   | `list`, `create`, `update`, `delete`, `get`                                                                  | Manage projects                    |
 | [ip-allow](https://neon.com/docs/reference/cli-ip-allow)                   | `list`, `add`, `remove`, `reset`                                                                             | Manage IP Allow                    |
 | [me](https://neon.com/docs/reference/cli-me)                               |                                                                                                              | Show current user                  |
@@ -625,7 +671,8 @@ Global options are supported with any Neon CLI command.
 | Option                      | Description                                                 | Type    | Default                        |
 | :-------------------------- | :---------------------------------------------------------- | :------ | :----------------------------- |
 | [-o, --output](#output)     | Set the Neon CLI output format (`json`, `yaml`, or `table`) | string  | table                          |
-| [--config-dir](#config-dir) | Path to the Neon CLI configuration directory                | string  | `/home/<user>/.config/neonctl` |
+| [--config-dir](#config-dir) | Path to the Neon CLI configuration directory                | string  | `/home/<user>/.config/neon`    |
+| [--profile](#profile)       | Named credentials to use, from `profiles.json`              | string  | `DEFAULT`                      |
 | [--api-key](#api-key)       | Neon API key                                                | string  | ""                             |
 | [--analytics](#analytics)   | Manage analytics                                            | boolean | true                           |
 | [-v, --version](#version)   | Show the Neon CLI version number                            | boolean | -                              |
@@ -641,11 +688,26 @@ Global options are supported with any Neon CLI command.
 
 - <a id="config-dir"></a>`--config-dir`
 
-  Specifies the path to the `neon` configuration directory. To view the default configuration directory containing you `credentials.json` file, run `neon --help`. The credentials file is created when you authenticate using the `neon auth` command. This option is only necessary if you move your `neon` configuration file to a location other than the default.
+  Specifies the path to the `neon` configuration directory, which holds the `credentials.json` written by `neon auth`. The default is `$XDG_CONFIG_HOME/neon`, or `~/.config/neon`; run `neon --help` to see the resolved path. This option is only necessary if you keep your configuration somewhere else.
+
+  The directory was called `neonctl` before the CLI was renamed. An existing one is still read, and is used **in place** — nothing is moved or copied, so there is never a second credentials file to go stale. A directory you pass explicitly is used exactly as given and never falls back to the legacy name, so pointing a CI run at a scratch directory cannot pick up local credentials.
 
   ```bash
-  neon projects list --config-dir /home/dtprice/.config/neonctl
+  neon projects list --config-dir /home/dtprice/.config/neon
   ```
+
+- <a id="profile"></a>`--profile`
+
+  Selects a named set of credentials, for holding more than one Neon account at a time. A profile is a pointer to a credentials file, recorded in `profiles.json` next to it.
+
+  ```bash
+  neon auth --profile work        # create it, or sign in again
+  neon profile list               # names, accounts, and where each one's credentials live
+  neon projects list --profile work
+  NEON_PROFILE=work neon projects list
+  ```
+
+  Precedence is `--profile`, then `NEON_PROFILE`, then `DEFAULT`. `DEFAULT` is plain `credentials.json`, so an install with a single account needs no `profiles.json` and behaves exactly as before. See [Profiles](#profiles) to list or remove them.
 
 - <a id="api-key"></a>`--api-key`
 

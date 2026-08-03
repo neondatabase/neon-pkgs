@@ -94,6 +94,12 @@ builder = builder
 		type: "string",
 		default: defaultDir,
 	})
+	.option("profile", {
+		describe:
+			"Named credentials to use, from profiles.json (default: NEON_PROFILE, else DEFAULT)",
+		group: "Global options:",
+		type: "string",
+	})
 	.option("force-auth", {
 		describe: "Force authentication",
 		type: "boolean",

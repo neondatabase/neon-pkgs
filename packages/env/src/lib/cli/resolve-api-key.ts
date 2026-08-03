@@ -1,10 +1,10 @@
 import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { resolveConfigFile } from "@neon/config/paths";
 
 /**
  * Resolve the Neon API key for a `neon-env` CLI invocation. Precedence (each wins over the
  * next): `--api-key` flag → `NEON_API_KEY` → `access_token` from the Neon CLI's
- * `credentials.json`.
+ * `credentials.json`, located by `@neon/config/paths`.
  *
  * The CLI owns this resolution — `@neon/config` and `@neon/env` are deliberately
  * environment- and filesystem-agnostic and only ever accept an explicit `apiKey`, so the
@@ -27,21 +27,25 @@ export function resolveApiKey(options: {
 }
 
 /**
- * Read `access_token` from the Neon CLI's credentials file, the same location and
- * precedence `neon auth` writes to: `NEONCTL_CONFIG_DIR` → `<home>/.config/neonctl`
- * (`HOME`, falling back to `USERPROFILE` for Windows parity).
+ * Read `access_token` from the Neon CLI's credentials file.
  *
- * Never throws — a missing, unreadable, malformed, or token-less file is simply "no key",
+ * Location resolution is delegated to `@neon/config/paths` so this agrees with the `neon`
+ * CLI itself — `NEON_CONFIG_DIR` / `NEONCTL_CONFIG_DIR`, else `$XDG_CONFIG_HOME/neon`, else
+ * `~/.config/neon`, with an existing legacy `neonctl` directory still read. Rolling that
+ * lookup by hand here is how the two drifted in the first place: this file honoured the env
+ * var but not XDG, while the CLI honoured XDG but not the env var, so with
+ * `XDG_CONFIG_HOME` set they disagreed about where credentials lived.
+ *
+ * Reads only `DEFAULT` — a profile is a CLI-invocation concept, and `neon-env` has no
+ * `--profile` of its own to read one from.
+ *
+ * Never throws: a missing, unreadable, malformed, or token-less file is simply "no key",
  * so this can sit in a resolution chain without try/catch noise.
  */
 function readStoredAccessToken(env: NodeJS.ProcessEnv): string | undefined {
-	const home = env.HOME ?? env.USERPROFILE;
-	const configDir =
-		nonEmpty(env.NEONCTL_CONFIG_DIR) ??
-		(home ? resolve(home, ".config", "neonctl") : undefined);
-	if (!configDir) return undefined;
-
-	const credentialsPath = resolve(configDir, "credentials.json");
+	const { path: credentialsPath } = resolveConfigFile("credentials.json", {
+		env,
+	});
 	if (!existsSync(credentialsPath)) return undefined;
 
 	let parsed: unknown;

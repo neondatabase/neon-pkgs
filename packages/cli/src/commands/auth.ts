@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import type yargs from "yargs";
 
 import type { NeonApiClient } from "../api.js";
@@ -8,10 +7,23 @@ import type { NeonApiClient } from "../api.js";
 import { getApiClient } from "../api.js";
 import { auth, refreshToken } from "../auth.js";
 import { setAuthContext } from "../auth_context.js";
-import { CREDENTIALS_FILE } from "../config.js";
-import { isConfigInit, isCurrentBranchProbe } from "../context.js";
+import { credentialsPath as defaultCredentialsPath } from "../config.js";
+import {
+	isConfigInit,
+	isCurrentBranchProbe,
+	isProfileCommand,
+} from "../context.js";
 import { isCi } from "../env.js";
 import { log } from "../log.js";
+import {
+	assertValidProfileName,
+	DEFAULT_PROFILE,
+	newProfileCredentialsPath,
+	readProfiles,
+	resolveProfile,
+	selectProfileName,
+	upsertProfile,
+} from "../profiles.js";
 import type { ExtendedTokenSet } from "../types.js";
 import { extendTokenSet } from "../utils/auth.js";
 
@@ -24,6 +36,26 @@ type AuthProps = {
 	forceAuth?: boolean;
 	"force-auth"?: boolean;
 	allowUnsafeTls?: boolean;
+	profile?: string;
+};
+
+/**
+ * The credentials file this invocation reads and writes: the selected profile's, falling
+ * back to plain `credentials.json` when no profile was named and none is declared. An
+ * unknown profile name is a hard error rather than a silent write to the default file —
+ * a typo must not authenticate the wrong account.
+ */
+const credentialsPathFor = ({
+	configDir,
+	profile,
+}: {
+	configDir: string;
+	profile?: string;
+}): string => {
+	const name = selectProfileName(profile);
+	if (name === DEFAULT_PROFILE && !readProfiles(configDir))
+		return defaultCredentialsPath(configDir);
+	return resolveProfile(configDir, name).credentialsPath;
 };
 
 export const command = "auth";
@@ -45,6 +77,7 @@ export const authFlow = async ({
 	forceAuth,
 	"force-auth": forceAuthKebab,
 	allowUnsafeTls,
+	profile,
 }: AuthProps) => {
 	const allowInteractiveAuth = forceAuth ?? forceAuthKebab;
 	if (!allowInteractiveAuth && isCi()) {
@@ -56,9 +89,20 @@ export const authFlow = async ({
 		allowUnsafeTls,
 	});
 
-	const credentialsPath = join(configDir, CREDENTIALS_FILE);
+	// A named profile that doesn't exist yet is created here rather than erroring: `neon
+	// auth --profile work` is how you make one, so it must work before there is anything
+	// to look up.
+	const profileName = selectProfileName(profile);
+	const isNamed = profileName !== DEFAULT_PROFILE;
+	if (isNamed) assertValidProfileName(profileName);
+	const credentialsPath =
+		isNamed && !readProfiles(configDir)?.profiles[profileName]
+			? newProfileCredentialsPath(configDir, profileName)
+			: credentialsPathFor({ configDir, profile });
+
+	let identity: { id?: string; email?: string } = {};
 	try {
-		await preserveCredentials(
+		identity = await preserveCredentials(
 			credentialsPath,
 			tokenSet,
 			getApiClient({
@@ -70,29 +114,44 @@ export const authFlow = async ({
 		log.error("Failed to save credentials");
 		return "";
 	}
+
+	if (isNamed) {
+		upsertProfile(configDir, profileName, {
+			credentials: credentialsPath,
+			...(identity.email ? { label: identity.email } : {}),
+			...(identity.id ? { userId: identity.id } : {}),
+		});
+		log.info('Saved profile "%s" (%s)', profileName, credentialsPath);
+	}
 	log.info("Auth complete");
 	return tokenSet.access_token || "";
 };
 
+/**
+ * Persist the token set and return the account it belongs to, so a named profile can be
+ * labelled with an email. The credentials file records only `user_id` — a UUID with no
+ * email — which is why identifying a stored profile offline is otherwise impossible.
+ */
 const preserveCredentials = async (
 	path: string,
 	credentials: ExtendedTokenSet,
 	apiClient: NeonApiClient,
-) => {
+): Promise<{ id?: string; email?: string }> => {
 	const {
-		data: { id },
+		data: { id, email },
 	} = await apiClient.getCurrentUserInfo();
 	const contents = JSON.stringify({
 		// Cast to a plain record: we intentionally spread the credentials object.
 		...(credentials as Record<string, unknown>),
 		user_id: id,
 	});
-	// correctly sets needed permissions for the credentials file
+	// Owner-only. A credentials file needs read/write, never execute.
 	writeFileSync(path, contents, {
-		mode: 0o700,
+		mode: 0o600,
 	});
 	log.debug("Saved credentials to %s", path);
 	log.debug("Credentials MD5 hash: %s", md5hash(contents));
+	return { ...(id ? { id } : {}), ...(email ? { email } : {}) };
 };
 
 const handleExistingToken = async (
@@ -179,6 +238,12 @@ export const ensureAuth = async (
 		return;
 	}
 
+	// `profile` reads and edits credential files on disk. Authenticating first would mean
+	// a browser login just to list profiles, and would make a lapsed profile unremovable.
+	if (isProfileCommand(props)) {
+		return;
+	}
+
 	// `dev` runs a function locally. It injects the selected branch's env vars
 	// when credentials happen to be available, but must never trigger an
 	// interactive login: use an API key or existing stored credentials if
@@ -211,7 +276,7 @@ export const ensureAuth = async (
 		return;
 	}
 
-	const credentialsPath = join(props.configDir, CREDENTIALS_FILE);
+	const credentialsPath = credentialsPathFor(props);
 
 	// Handle case when credentials file exists
 	if (existsSync(credentialsPath)) {
@@ -291,11 +356,20 @@ export const ensureAuth = async (
 };
 
 /**
- * Deletes the credentials file at the specified path
- * @param configDir Directory where credentials file is stored
+ * Delete the credentials backing a profile — used by the 401 handler to clear a token the
+ * API has rejected, so the next command re-authenticates instead of failing again.
+ *
+ * @param configDir Directory the credentials live in
+ * @param profile Profile whose credentials to clear. Defaults to the selected one.
  */
-export const deleteCredentials = (configDir: string): void => {
-	const credentialsPath = join(configDir, CREDENTIALS_FILE);
+export const deleteCredentials = (
+	configDir: string,
+	profile?: string,
+): void => {
+	const credentialsPath = credentialsPathFor({
+		configDir,
+		...(profile ? { profile } : {}),
+	});
 	try {
 		if (existsSync(credentialsPath)) {
 			rmSync(credentialsPath);

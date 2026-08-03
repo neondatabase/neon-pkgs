@@ -287,6 +287,28 @@ the same thing with a subpath:
 | `@neon/env` | Package consumers — apps, build scripts, a `neon.ts` policy | None. Never reads `process.env` or a file |
 | `@neon/env/runtime` | Our own tooling — the `neon-env` CLI, `packages/cli`, anything resolving one branch repeatedly | Reads an env source; mints and revokes branch credentials |
 
+`@neon/config` has the same shape, and for the same reason:
+
+| Entry point | For | Side effects |
+| --- | --- | --- |
+| `@neon/config` / `@neon/config/v1` | `neon.ts` policies, apps, anything embedding the toolchain | None. Never reads `process.env` or a file |
+| `@neon/config/paths` | Our own CLIs — `packages/cli`, `packages/env` | Reads env vars and stats the filesystem to locate the config directory |
+
+`paths` exists because three readers each grew their own answer to "where is the config
+directory" and all three disagreed: the CLI honoured `XDG_CONFIG_HOME` but not
+`NEONCTL_CONFIG_DIR`, `@neon/env` honoured the env var but not XDG, and `neon-init`
+hardcoded `~/.config/neonctl`. With `XDG_CONFIG_HOME` set, the CLI wrote credentials
+somewhere the other two never looked. Add a reader to that module rather than to a fourth
+private copy. (`neon-init` still has an inline copy, deliberately — it has no workspace
+dependencies and taking one on `@neon/config` would pull `@neon/sdk`, `zod` and `jiti` into
+its install footprint for a file path. That copy disappears when the package folds into
+`packages/cli`.)
+
+The directory is `neon`; `neonctl` is the pre-rename name and is **read forever, in place**.
+Nothing is moved, copied, or deleted, so a second copy of a credential can never go stale
+behind the first. An explicitly chosen directory is exact and never falls back — a CI run
+pointed at a scratch directory must not pick up a developer's credentials.
+
 **Credentials are always passed in, never discovered.** `@neon/config`, `@neon/config-runtime`
 and the `@neon/env` root export read **no environment variables and no files** to find a Neon
 API key. `createNeonApiFromOptions` takes an explicit `apiKey` and raises

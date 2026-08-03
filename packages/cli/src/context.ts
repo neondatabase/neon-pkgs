@@ -60,6 +60,17 @@ export const isCurrentBranchProbe = (args: {
 export const isConfigInit = (args: { _: (string | number)[] }): boolean =>
 	args._[0] === "config" && args._[1] === "init";
 
+/**
+ * `neon profile …` manages credentials on disk and never calls the Neon API, so the global
+ * auth middleware must skip it — mirroring {@link isConfigInit}.
+ *
+ * More than a nicety: without this, listing your profiles would launch a browser login, and
+ * removing a broken profile would demand you sign into it first. Removing a profile whose
+ * access has already lapsed is the main reason to remove one.
+ */
+export const isProfileCommand = (args: { _: (string | number)[] }): boolean =>
+	args._[0] === "profile" || args._[0] === "profiles";
+
 const CONTEXT_FILE = ".neon";
 const GITIGNORE_FILE = ".gitignore";
 

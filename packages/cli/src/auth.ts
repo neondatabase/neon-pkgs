@@ -69,6 +69,46 @@ export const refreshToken = async (
 	);
 };
 
+/**
+ * Invalidate a refresh token at the authorization server (RFC 7009).
+ *
+ * Best-effort by design, and it returns a boolean rather than throwing: the usual reason to
+ * revoke is that a profile is being removed, and a revoke that fails — offline, token
+ * already dead, server unreachable — must not leave the local entry stranded. Deleting the
+ * file alone would only stop *us* using the token; this stops anyone.
+ */
+export const revokeToken = async (
+	{ oauthHost, clientId, allowUnsafeTls }: AuthProps,
+	tokenSet: ExtendedTokenSet,
+): Promise<boolean> => {
+	const token = tokenSet.refresh_token;
+	if (typeof token !== "string" || token === "") return false;
+	try {
+		const configuration = await client.discovery(
+			new URL(oauthHost),
+			clientId,
+			{ token_endpoint_auth_method: "none" },
+			client.None(),
+			{
+				timeout: SERVER_TIMEOUT,
+				execute: allowUnsafeTls
+					? [client.allowInsecureRequests]
+					: undefined,
+			},
+		);
+		await client.tokenRevocation(configuration, token, {
+			token_type_hint: "refresh_token",
+		});
+		return true;
+	} catch (err) {
+		log.debug(
+			"Token revocation failed: %s",
+			err instanceof Error ? err.message : String(err),
+		);
+		return false;
+	}
+};
+
 export const auth = async ({
 	oauthHost,
 	clientId,

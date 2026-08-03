@@ -1,9 +1,8 @@
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
 
 import { Analytics, type TrackParams } from "@segment/analytics-node";
 import { getApiClient, isNeonApiError } from "./api.js";
-import { CREDENTIALS_FILE } from "./config.js";
+import { credentialsPath } from "./config.js";
 import { isCurrentBranchProbe } from "./context.js";
 import { getGithubEnvVars, isCi } from "./env.js";
 import type { ErrorCode } from "./errors.js";
@@ -96,8 +95,7 @@ export const analyticsMiddleware = async (args: {
 	}
 
 	try {
-		const credentialsPath = join(args.configDir, CREDENTIALS_FILE);
-		const credentials = readFileSync(credentialsPath, {
+		const credentials = readFileSync(credentialsPath(args.configDir), {
 			encoding: "utf-8",
 		});
 		userId = JSON.parse(credentials).user_id;

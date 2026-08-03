@@ -26,6 +26,9 @@
       // reuse / revocation), which is a subpath export so an app importing
       // `@neon/env` is never offered it.
       "@neon/env/runtime": ["node_modules/@neon/env/dist/runtime"],
+      // And `@neon/config/paths`, the implementor-only half of `@neon/config` that
+      // knows where the config directory lives (the pure root export must not).
+      "@neon/config/paths": ["node_modules/@neon/config/dist/paths"],
       // Same story for the test-only harness, which is source-only.
       "@neon/e2e-harness": ["node_modules/@neon/e2e-harness/src/index"]
     },

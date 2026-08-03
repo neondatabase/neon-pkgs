@@ -8,6 +8,7 @@ export default defineConfig({
 	entry: [
 		"src/index.ts",
 		"src/v1.ts",
+		"src/paths.ts",
 		"src/lib/**/*.ts",
 		"!src/**/*.test.*",
 		"!src/**/*.test-d.*",

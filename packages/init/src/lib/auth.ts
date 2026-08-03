@@ -53,26 +53,54 @@ export async function isAuthenticated(): Promise<boolean> {
 }
 
 /**
- * Gets the OAuth access token from neonctl's stored credentials
+ * Gets the OAuth access token from the Neon CLI's stored credentials.
+ *
+ * Kept inline rather than importing `@neon/config/paths`: this package has no workspace
+ * dependencies, and taking one on `@neon/config` would pull `@neon/sdk`, `zod` and `jiti`
+ * into the install footprint of a package whose only need here is a file path. The
+ * resolution below must stay identical to `packages/config/src/paths.ts`, which is the
+ * canonical implementation — and it collapses entirely once this package folds into
+ * `packages/cli`.
  */
 async function getNeonctlAccessToken(): Promise<string | null> {
 	try {
-		const homeDir = process.env.HOME || process.env.USERPROFILE;
-		if (!homeDir) return null;
-
-		const credentialsPath = resolve(
-			homeDir,
-			".config",
-			"neonctl",
-			"credentials.json",
-		);
-		if (!existsSync(credentialsPath)) return null;
-
-		const credentials = JSON.parse(readFileSync(credentialsPath, "utf-8"));
-		return credentials.access_token || null;
+		for (const path of credentialsCandidates()) {
+			if (!existsSync(path)) continue;
+			const credentials = JSON.parse(readFileSync(path, "utf-8"));
+			if (credentials.access_token) return credentials.access_token;
+		}
+		return null;
 	} catch {
 		return null;
 	}
+}
+
+/**
+ * Where the Neon CLI may keep `credentials.json`, most specific first: an explicitly
+ * configured directory, else `$XDG_CONFIG_HOME`/`~/.config` under the current `neon`
+ * directory and then the legacy `neonctl` one. An explicit directory is exact — it never
+ * falls back to the legacy name.
+ */
+function credentialsCandidates(): string[] {
+	const env = process.env;
+	const explicit =
+		trimmed(env.NEON_CONFIG_DIR) ?? trimmed(env.NEONCTL_CONFIG_DIR);
+	if (explicit) return [resolve(explicit, "credentials.json")];
+
+	const home = trimmed(env.HOME) ?? trimmed(env.USERPROFILE);
+	const base =
+		trimmed(env.XDG_CONFIG_HOME) ??
+		(home ? resolve(home, ".config") : null);
+	if (!base) return [];
+	return [
+		resolve(base, "neon", "credentials.json"),
+		resolve(base, "neonctl", "credentials.json"),
+	];
+}
+
+function trimmed(value: string | undefined): string | null {
+	const v = value?.trim();
+	return v ? v : null;
 }
 
 /**

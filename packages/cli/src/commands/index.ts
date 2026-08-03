@@ -20,6 +20,7 @@ import * as link from "./link.js";
 import * as neonAuth from "./neon_auth.js";
 import * as operations from "./operations.js";
 import * as orgs from "./orgs.js";
+import * as profile from "./profile.js";
 import * as projects from "./projects.js";
 import * as psql from "./psql.js";
 import * as roles from "./roles.js";
@@ -31,6 +32,7 @@ import * as vpcEndpoints from "./vpc_endpoints.js";
 
 export default [
 	auth,
+	profile,
 	api,
 	users,
 	orgs,
