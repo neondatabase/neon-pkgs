@@ -22,6 +22,7 @@ out" as intended.
 
 `getApiClient` also accepts `requestTimeoutMs`, defaulting to the same 60s, which is what
 makes the behaviour testable against a server that never responds. It is validated when
-the client is built: without that, `-1`, `NaN`, `Infinity` and fractions throw from inside
-the fetch wrapper and come back as the same misleading connectivity error, while `0` and
-values above `2147483647` are accepted and make every request time out at once.
+the client is built: without that, `-1`, `NaN`, `Infinity`, fractions and values above
+`4294967295` throw from inside the fetch wrapper and come back as the same misleading
+connectivity error, while `0` and the band from `2147483648` to `4294967295` are accepted
+and make every request time out at once.

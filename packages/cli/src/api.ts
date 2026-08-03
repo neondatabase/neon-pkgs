@@ -298,10 +298,13 @@ const MAX_TIMER_MS = 2 ** 31 - 1;
  * Reject a timeout `AbortSignal.timeout` would refuse or silently mistreat.
  *
  * Without this the bad value surfaces as the very failure this classification exists to
- * prevent: `-1`, `NaN`, `Infinity` and fractions throw `ERR_OUT_OF_RANGE` from inside the
- * fetch wrapper, which is then wrapped as a `NeonNetworkError` and reported as a broken
- * internet connection. `0` and anything above {@link MAX_TIMER_MS} are worse still — both
- * are accepted, and both make every request time out immediately.
+ * prevent: `-1`, `NaN`, `Infinity`, fractions and anything above `4294967295` throw
+ * `ERR_OUT_OF_RANGE` from inside the fetch wrapper, which is then wrapped as a
+ * `NeonNetworkError` and reported as a broken internet connection.
+ *
+ * `0`, and the band from {@link MAX_TIMER_MS} + 1 up to `4294967295`, are worse still:
+ * both are accepted, and both make every request time out immediately — `0` by asking for
+ * it, the band because a timer above the signed 32-bit ceiling collapses to 1ms.
  */
 function validateRequestTimeout(ms: number): number {
 	if (!Number.isInteger(ms) || ms < 1 || ms > MAX_TIMER_MS) {
