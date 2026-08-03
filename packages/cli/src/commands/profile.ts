@@ -5,7 +5,7 @@ import type yargs from "yargs";
 
 import { getApiClient } from "../api.js";
 import { revokeToken } from "../auth.js";
-import { apiKeyFlagValue } from "../auth_selection.js";
+import { credentialInputs } from "../auth_selection.js";
 import {
 	API_KEY,
 	credentialKind,
@@ -209,7 +209,7 @@ const credentialsPathFor = (configDir: string, name: string): string => {
 const resolveKeyToStore = async (
 	props: ProfileProps & { name: string; apiKeyFile?: string },
 ): Promise<string> => {
-	const fromFlag = apiKeyFlagValue().trim();
+	const fromFlag = credentialInputs().apiKeyFlag.trim();
 	const fromFile = props.apiKeyFile?.trim();
 
 	if (fromFlag && fromFile) {

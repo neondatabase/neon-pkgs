@@ -36,7 +36,7 @@
  * selection entirely rather than passing exemptions down here.
  */
 
-import { DEFAULT_PROFILE, selectProfileName } from "./profiles.js";
+import { DEFAULT_PROFILE } from "./profiles.js";
 
 export type CredentialSelection =
 	/** `--api-key`. Used as given; no profile is consulted and no stored file is touched. */
@@ -51,35 +51,56 @@ export type SelectionInput = {
 	apiKeyFlag?: string;
 	/** The `--profile` flag. */
 	profileFlag?: string;
-	env?: NodeJS.ProcessEnv;
+	/** `NEON_API_KEY`. */
+	apiKeyEnv?: string;
+	/** `NEON_PROFILE`. */
+	profileEnv?: string;
 };
 
 /**
- * The `--api-key` flag as it was actually passed, stashed by `resolveApiKeyFromEnv` before it
- * folds `NEON_API_KEY` in.
+ * What the four credential inputs were for this invocation, captured by
+ * `resolveApiKeyFromEnv` — which is the one place that reads the environment.
  *
- * Module state rather than a field on the parsed arguments, for the same reason `auth_context`
- * is: an extra key on `args` is rejected by every command that calls `.strict()`, and
- * declaring a hidden option to hold it would create a second undocumented way to pass a
- * credential. One process is one invocation, so there is nothing here to get out of step.
+ * Two reasons this is module state rather than fields on the parsed arguments, the same two
+ * that put `auth_context` here: an extra key on `args` is rejected by every command calling
+ * `.strict()`, and a hidden option to carry it would be a second undocumented way to pass a
+ * credential. One process is one invocation, so there is nothing to get out of step.
+ *
+ * Capturing the environment here rather than reading it inside {@link selectCredential} keeps
+ * the selection a function of its arguments. That is not tidiness: `ensureAuth` is called
+ * directly by tests, and reading `process.env` down in the decision made those tests depend on
+ * whether the developer running them happened to have `NEON_API_KEY` exported.
  */
-let apiKeyFlag = "";
-
-export const recordApiKeyFlag = (value: string): void => {
-	apiKeyFlag = value;
+export type CredentialInputs = {
+	apiKeyFlag: string;
+	apiKeyEnv: string;
+	profileEnv: string;
 };
 
-export const apiKeyFlagValue = (): string => apiKeyFlag;
+const NO_INPUTS: CredentialInputs = {
+	apiKeyFlag: "",
+	apiKeyEnv: "",
+	profileEnv: "",
+};
 
-/** Reset between tests, so one case cannot observe another's flags. */
-export const clearApiKeyFlag = (): void => {
-	apiKeyFlag = "";
+let inputs: CredentialInputs = NO_INPUTS;
+
+export const recordCredentialInputs = (recorded: CredentialInputs): void => {
+	inputs = recorded;
+};
+
+export const credentialInputs = (): CredentialInputs => inputs;
+
+/** Reset between tests, so one case cannot observe another's inputs. */
+export const clearCredentialInputs = (): void => {
+	inputs = NO_INPUTS;
 };
 
 export const selectCredential = ({
 	apiKeyFlag,
 	profileFlag,
-	env = process.env,
+	apiKeyEnv,
+	profileEnv,
 }: SelectionInput): CredentialSelection => {
 	const flagKey = nonEmpty(apiKeyFlag);
 	const flagProfile = nonEmpty(profileFlag);
@@ -98,21 +119,21 @@ export const selectCredential = ({
 		return { source: "profile", profile: flagProfile, explicit: true };
 	}
 
-	const envKey = nonEmpty(env.NEON_API_KEY);
+	const envKey = nonEmpty(apiKeyEnv);
+	const envProfile = nonEmpty(profileEnv);
+
 	if (envKey !== undefined) {
-		const displaced = nonEmpty(env.NEON_PROFILE);
 		return {
 			source: "ambient-api-key",
 			apiKey: envKey,
-			...(displaced !== undefined ? { ignoredProfile: displaced } : {}),
+			...(envProfile !== undefined ? { ignoredProfile: envProfile } : {}),
 		};
 	}
 
-	const name = selectProfileName(undefined, env);
 	return {
 		source: "profile",
-		profile: name,
-		explicit: name !== DEFAULT_PROFILE,
+		profile: envProfile ?? DEFAULT_PROFILE,
+		explicit: envProfile !== undefined,
 	};
 };
 

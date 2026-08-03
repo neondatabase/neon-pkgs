@@ -14,7 +14,7 @@ import {
 } from "neon-init/bootstrap";
 import prompts, { type InitialReturnValue } from "prompts";
 import type yargs from "yargs";
-import { apiKeyFlagValue } from "../auth_selection.js";
+import { credentialInputs } from "../auth_selection.js";
 import { isCi } from "../env.js";
 import { log } from "../log.js";
 import type { CommonProps } from "../types.js";
@@ -514,8 +514,8 @@ const runNeonLink = async (
 	}
 	if (props.profile) {
 		args.push("--profile", props.profile);
-	} else if (apiKeyFlagValue()) {
-		args.push("--api-key", apiKeyFlagValue());
+	} else if (credentialInputs().apiKeyFlag) {
+		args.push("--api-key", credentialInputs().apiKeyFlag);
 	}
 
 	args.push("--api-host", props.apiHost, "--output", props.output);

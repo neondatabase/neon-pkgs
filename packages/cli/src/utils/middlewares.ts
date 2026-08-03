@@ -1,4 +1,4 @@
-import { recordApiKeyFlag } from "../auth_selection.js";
+import { recordCredentialInputs } from "../auth_selection.js";
 
 /**
  * Resolves `--api-key` from `NEON_API_KEY` when the flag is absent, leaving it an
@@ -7,20 +7,24 @@ import { recordApiKeyFlag } from "../auth_selection.js";
  * This cannot be expressed as the option's yargs `default`, because yargs prints
  * defaults in help output and would print the key itself.
  *
- * The flag's own value is recorded before the fold, because folding destroys the one
- * distinction the precedence rules need: `--api-key` outranks `--profile` and an exported
- * `NEON_API_KEY` does not, but once both live in `args.apiKey` they are indistinguishable.
- * It is recorded outside `args` deliberately — a hidden yargs option would be a second,
- * undocumented way to pass a credential, and commands that call `.strict()` reject arguments
- * the middleware invents.
+ * This is also the one place that reads the credential environment, and it records what it saw
+ * before folding anything together. Folding destroys the distinction the precedence rules turn
+ * on — `--api-key` outranks `--profile` and an exported `NEON_API_KEY` does not, but once both
+ * live in `args.apiKey` they are indistinguishable. The snapshot lives outside `args`
+ * deliberately: a hidden yargs option would be a second, undocumented way to pass a
+ * credential, and commands that call `.strict()` reject arguments the middleware invents.
  */
 export const resolveApiKeyFromEnv = (args: Record<string, unknown>) => {
 	const fromFlag = typeof args.apiKey === "string" ? args.apiKey : "";
-	recordApiKeyFlag(fromFlag);
+	const fromEnv = process.env.NEON_API_KEY ?? "";
+	recordCredentialInputs({
+		apiKeyFlag: fromFlag,
+		apiKeyEnv: fromEnv,
+		profileEnv: process.env.NEON_PROFILE ?? "",
+	});
 	if (fromFlag !== "") {
 		return;
 	}
-	const fromEnv = process.env.NEON_API_KEY ?? "";
 	args.apiKey = fromEnv;
 	args["api-key"] = fromEnv;
 };

@@ -8,7 +8,15 @@ import {
 import type { AddressInfo } from "node:net";
 import type { OAuth2Server } from "oauth2-mock-server";
 import { join } from "path";
-import { afterAll, beforeAll, beforeEach, describe, expect, vi } from "vitest";
+import {
+	afterAll,
+	afterEach,
+	beforeAll,
+	beforeEach,
+	describe,
+	expect,
+	vi,
+} from "vitest";
 import type { NeonApiClient } from "../api.js";
 import * as authModule from "../auth";
 import { test } from "../test_utils/fixtures";
@@ -17,6 +25,17 @@ import { authFlow, deleteCredentialsAt, ensureAuth } from "./auth";
 
 vi.mock("open", () => ({ default: vi.fn((url: string) => fetch(url)) }));
 vi.mock("../pkg.ts", () => ({ default: { version: "0.0.0" } }));
+
+// Neither suite names a credential explicitly, so an exported NEON_API_KEY or NEON_PROFILE in
+// the shell running the tests would redirect them: the key would satisfy auth outright, and the
+// profile would send `authFlow` to write `credentials.<name>.json` instead of `credentials.json`.
+beforeEach(() => {
+	vi.stubEnv("NEON_API_KEY", "");
+	vi.stubEnv("NEON_PROFILE", "");
+});
+afterEach(() => {
+	vi.unstubAllEnvs();
+});
 
 describe("auth", () => {
 	let configDir = "";

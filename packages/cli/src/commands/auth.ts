@@ -8,7 +8,7 @@ import { getApiClient } from "../api.js";
 import { auth, refreshToken } from "../auth.js";
 import { setAuthContext } from "../auth_context.js";
 import {
-	apiKeyFlagValue,
+	credentialInputs,
 	displacedProfileWarning,
 	selectCredential,
 } from "../auth_selection.js";
@@ -339,7 +339,7 @@ export const ensureAuth = async (
 
 	// Throws when `--api-key` and `--profile` are both passed.
 	const selection = selectCredential({
-		apiKeyFlag: apiKeyFlagValue(),
+		...credentialInputs(),
 		profileFlag: props.profile,
 	});
 
