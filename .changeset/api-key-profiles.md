@@ -15,7 +15,8 @@ nothing.
 ```bash
 neon profile create work                                 # browser sign-in, as `neon auth --profile work`
 neon profile create work --api-key napi_...              # store a key you already have
-echo "$KEY" | neon profile create work --api-key-stdin    # or a pipe; prompts in a terminal
+echo "$KEY" | neon profile create work --api-key-stdin    # from a pipe
+neon profile create work --api-key-prompt                 # or asked for, on a terminal
 neon profile create ci --mint --org-id org-abc-123        # sign in once, keep only a minted org key
 neon profile create ci --mint --project-id proj-1         # or one scoped to a single project
 neon profile rotate-key ci                                # mint a replacement at the same scope

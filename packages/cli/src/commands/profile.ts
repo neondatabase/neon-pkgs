@@ -93,6 +93,15 @@ export const builder = (argv: yargs.Argv) =>
 						demandOption: true,
 					})
 					.options({
+						// `create` deliberately ignores NEON_API_KEY (see `resolveKeyToStore`),
+						// but the global option renders "default: NEON_API_KEY" into this help
+						// screen — so a user with it exported would expect it to be stored.
+						"api-key": {
+							describe: "API key to store",
+							defaultDescription:
+								"none; this command ignores NEON_API_KEY",
+							type: "string",
+						},
 						"api-key-file": {
 							describe:
 								"Read the API key from this file, whose entire contents are the key. Warns if the file is readable by other users",
@@ -248,16 +257,18 @@ const describeAuth = (
  */
 const inspectForListing = (
 	path: string,
-): { stored: StoredCredentials | null; auth: string } => {
+): { stored: StoredCredentials | null; auth: string; file: string } => {
 	const read = inspectCredentials(path);
 	if (read.kind === "unusable") {
 		log.warning(read.reason);
-		return { stored: null, auth: "invalid" };
+		return { stored: null, auth: "-", file: "invalid" };
 	}
-	if (read.kind === "absent") return { stored: null, auth: "-" };
+	if (read.kind === "absent")
+		return { stored: null, auth: "-", file: "missing" };
 	return {
 		stored: read.credentials,
 		auth: describeAuth(read.credentials, path),
+		file: "ok",
 	};
 };
 
@@ -269,7 +280,7 @@ const list = async (props: ProfileProps) => {
 		resolveProfile(props.configDir, active);
 	}
 	const rows = listProfiles(props.configDir).map((p) => {
-		const { stored, auth } = inspectForListing(p.credentialsPath);
+		const { stored, auth, file } = inspectForListing(p.credentialsPath);
 		const storedUserId =
 			typeof stored?.user_id === "string" ? stored.user_id : undefined;
 		return {
@@ -285,12 +296,7 @@ const list = async (props: ProfileProps) => {
 			// Names what was actually checked. The column this replaced was called "available",
 			// which claims the credential is ready to use — a thing reading a file cannot show,
 			// and the wrong answer for the dead key someone runs this to diagnose.
-			file:
-				auth === "invalid"
-					? "invalid"
-					: stored === null
-						? "missing"
-						: "ok",
+			file,
 			// The basename in the table, because `cli-table` neither wraps nor truncates and a
 			// real path pushes the row past most terminals. Structured output keeps the path,
 			// which is what a script actually wants.
@@ -510,7 +516,14 @@ const create = async (props: CreateProps) => {
 			);
 		}
 		await retirePreviousCredential(props, name, previous, credentialsPath);
-		log.info("Use it with: neon --profile %s <command>", name);
+		const signedIn = readProfiles(props.configDir)?.profiles[name];
+		report(props, {
+			name,
+			account: signedIn?.label ?? signedIn?.userId ?? "unknown account",
+			auth: "oauth",
+			scope: "-",
+			credentials: credentialsPath,
+		});
 		return;
 	}
 
@@ -613,7 +626,6 @@ const report = (
 			record.scope,
 			record.credentials,
 		);
-		out.end([], { fields: [] });
 		return;
 	}
 	out.end(record as never, {
@@ -1013,7 +1025,14 @@ const rotateKey = async (props: ProfileProps & { name: string }) => {
 		);
 		throw err;
 	}
-	log.info("Stored it in %s", profile.credentialsPath);
+	report(props, {
+		name,
+		account: profile.label ?? profile.userId ?? "unknown account",
+		auth: "api key",
+		scope: describeScope(scope),
+		keyId: created.id,
+		credentials: profile.credentialsPath,
+	});
 
 	if (previousKeyId === undefined) {
 		log.warning(

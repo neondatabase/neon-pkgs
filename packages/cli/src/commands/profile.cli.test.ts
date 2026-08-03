@@ -738,12 +738,18 @@ describe("a damaged credentials file", () => {
 		expect(code).toBe(0);
 		expect(JSON.parse(stdout)).toEqual(
 			expect.arrayContaining([
+				// One fault, one column: the kind of an unreadable file is genuinely unknown,
+				// so `auth` is "-" and `file` carries the problem.
 				expect.objectContaining({
 					name: "broken",
-					auth: "invalid",
+					auth: "-",
 					file: "invalid",
 				}),
-				expect.objectContaining({ name: "DEFAULT", auth: "oauth" }),
+				expect.objectContaining({
+					name: "DEFAULT",
+					auth: "oauth",
+					file: "ok",
+				}),
 			]),
 		);
 		expect(stderr).toContain("not valid JSON");

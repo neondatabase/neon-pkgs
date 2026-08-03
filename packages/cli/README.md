@@ -687,7 +687,7 @@ Entries in `profiles.json` are paths, and a path may point anywhere — which is
 }
 ```
 
-`neon profiles remove` revokes the refresh token at the authorization server, not just locally. It deletes the credentials file only when the CLI created it: an adopted path like the one above is unlinked and left on disk, and the command says so. Removing the last named profile deletes `profiles.json`, returning you to the single-account layout. `neon profiles remove DEFAULT` signs you out.
+`neon profile remove` revokes the refresh token at the authorization server, not just locally. It deletes the credentials file only when the CLI created it: an adopted path like the one above is unlinked and left on disk, and the command says so. Removing the last named profile deletes `profiles.json`, returning you to the single-account layout. `neon profile remove DEFAULT` signs you out.
 
 ### A profile holds either a sign-in or an API key
 
@@ -697,13 +697,18 @@ Entries in `profiles.json` are paths, and a path may point anywhere — which is
 neon profile create work                                 # sign in with the browser, like `neon auth`
 neon profile create work --api-key napi_...              # store a key you already have
 neon profile create work --api-key-file ~/keys/work      # take it from a file
-echo "$KEY" | neon profile create work --api-key-stdin   # or a pipe; prompts in a terminal
+echo "$KEY" | neon profile create work --api-key-stdin   # from a pipe
+neon profile create work --api-key-prompt                # or asked for, on a terminal
 neon profile create ci --mint                            # sign in once, keep only a minted key
 neon profile create ci --mint --org-id org-abc-123        # minted for an organization
 neon profile create ci --mint --project-id proj-1         # minted for one project only
 neon profile create work --force                          # replace an existing profile
 neon profile rotate-key work                              # mint a replacement, revoke the old one
 ```
+
+`--api-key-stdin` reads a pipe and refuses a terminal; `--api-key-prompt` is the one that asks.
+Keeping them apart matters for anything automated: a flag named for a stream that opened a prompt
+would sit waiting for input that never arrives.
 
 **A profile is one kind or the other, never both.** `type` in the credentials file states which:
 
