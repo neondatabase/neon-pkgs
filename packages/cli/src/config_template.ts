@@ -78,33 +78,60 @@ export const parseServices = (raw: string): NeonService[] => {
 	return NEON_SERVICES.filter((service) => names.includes(service));
 };
 
+/**
+ * One indentation level in the emitted `neon.ts`. Two spaces, which is what every renderer
+ * here produces and what `config_template.format.test.ts` holds them to.
+ */
+const INDENT = "  ";
+
+/**
+ * Prefix each line with `level` indentation levels. Nesting is expressed as a number at the
+ * one place that knows the structure, rather than as literal spaces at every push site — a
+ * miscounted space is otherwise invisible in review and only shows up in a user's file.
+ */
+const at = (level: number, ...lines: string[]): string[] =>
+	lines.map((line) => INDENT.repeat(level) + line);
+
+/** Wrap `body` in an object-literal block named `key`, indented from `level`. */
+const block = (level: number, key: string, body: string[]): string[] => [
+	...at(level, `${key}: {`),
+	...body,
+	...at(level, "},"),
+];
+
 /** The `preview` block for the selected services, or "" when none of them is a preview feature. */
 const renderPreview = (services: readonly NeonService[]): string => {
 	const lines: string[] = [];
 
 	if (services.includes("ai-gateway")) {
-		lines.push("    aiGateway: true,");
+		lines.push(...at(2, "aiGateway: true,"));
 	}
 	if (services.includes("functions")) {
 		lines.push(
-			"    functions: {",
-			`      ${FUNCTION_SLUG}: { name: "${FUNCTION_NAME}", source: "./${FUNCTION_FILENAME}" },`,
-			"    },",
+			...block(2, "functions", [
+				...at(
+					3,
+					`${FUNCTION_SLUG}: { name: "${FUNCTION_NAME}", source: "./${FUNCTION_FILENAME}" },`,
+				),
+			]),
 		);
 	}
 	if (services.includes("storage")) {
 		lines.push(
-			"    buckets: {",
-			`      // "private" is the default; use "public_read" for anonymous reads`,
-			`      ${BUCKET_NAME}: { access: "private" },`,
-			"    },",
+			...block(2, "buckets", [
+				...at(
+					3,
+					`// "private" is the default; use "public_read" for anonymous reads`,
+					`${BUCKET_NAME}: { access: "private" },`,
+				),
+			]),
 		);
 	}
 
 	if (lines.length === 0) {
 		return "";
 	}
-	return `${["  preview: {", ...lines, "  },"].join("\n")}\n`;
+	return `${block(1, "preview", lines).join("\n")}\n`;
 };
 
 /**
@@ -158,10 +185,10 @@ const renderKey = (name: string): string =>
 const renderSeededBranch = (view: NeonConfigView): string => {
 	const settings: string[] = [];
 	if (view.branch?.parent !== undefined) {
-		settings.push(`    parent: ${renderScalar(view.branch.parent)},`);
+		settings.push(...at(2, `parent: ${renderScalar(view.branch.parent)},`));
 	}
 	if (view.branch?.ttl !== undefined) {
-		settings.push(`    ttl: ${renderScalar(view.branch.ttl)},`);
+		settings.push(...at(2, `ttl: ${renderScalar(view.branch.ttl)},`));
 	}
 
 	const compute = view.branch?.postgres?.computeSettings;
@@ -169,17 +196,24 @@ const renderSeededBranch = (view: NeonConfigView): string => {
 		([, value]) => value !== undefined,
 	);
 	if (computeFields.length > 0) {
-		settings.push("    postgres: {", "      computeSettings: {");
-		for (const [field, value] of computeFields) {
-			settings.push(`        ${field}: ${renderScalar(value)},`);
-		}
-		settings.push("      },", "    },");
+		settings.push(
+			...block(2, "postgres", [
+				...block(
+					3,
+					"computeSettings",
+					computeFields.flatMap(([field, value]) =>
+						at(4, `${field}: ${renderScalar(value)},`),
+					),
+				),
+			]),
+		);
 	}
 
 	if (settings.length === 0) {
 		return "";
 	}
-	return ["  branch: () => ({", ...settings, "  }),"].join("\n").concat("\n");
+	// An arrow returning an object literal, so the closing line is `}),` rather than `},`.
+	return `${[...at(1, "branch: () => ({"), ...settings, ...at(1, "}),")].join("\n")}\n`;
 };
 
 /** The `preview` block for a policy seeded from live state. */
@@ -191,13 +225,18 @@ const renderSeededPreview = (
 
 	const buckets = Object.entries(view.preview?.buckets ?? {});
 	if (buckets.length > 0) {
-		lines.push("    buckets: {");
-		for (const [name, bucket] of buckets) {
-			lines.push(
-				`      ${renderKey(name)}: { access: "${bucket.access}" },`,
-			);
-		}
-		lines.push("    },");
+		lines.push(
+			...block(
+				2,
+				"buckets",
+				buckets.flatMap(([name, bucket]) =>
+					at(
+						3,
+						`${renderKey(name)}: { access: "${bucket.access}" },`,
+					),
+				),
+			),
+		);
 	}
 
 	// A deployed function cannot be declared from live state: `source` is a path in the
@@ -206,21 +245,24 @@ const renderSeededPreview = (
 	const functions = Object.entries(view.preview?.functions ?? {});
 	if (functions.length > 0) {
 		lines.push(
-			`    // ${branchName} has ${functions.length} deployed function${functions.length === 1 ? "" : "s"}.`,
-			"    // Declaring one needs the local source path, which the branch does not know:",
-			"    // functions: {",
-			...functions.map(
-				([slug, fn]) =>
-					`    //   ${renderKey(slug)}: { name: "${fn.name}", source: "./${slug}.ts" },`,
+			...at(
+				2,
+				`// ${branchName} has ${functions.length} deployed function${functions.length === 1 ? "" : "s"}.`,
+				"// Declaring one needs the local source path, which the branch does not know:",
+				"// functions: {",
+				...functions.map(
+					([slug, fn]) =>
+						`//   ${renderKey(slug)}: { name: "${fn.name}", source: "./${slug}.ts" },`,
+				),
+				"// },",
 			),
-			"    // },",
 		);
 	}
 
 	if (lines.length === 0) {
 		return "";
 	}
-	return ["  preview: {", ...lines, "  },"].join("\n").concat("\n");
+	return `${block(1, "preview", lines).join("\n")}\n`;
 };
 
 /**
