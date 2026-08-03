@@ -1,0 +1,10 @@
+[
+  {
+    "id": 101,
+    "name": "laptop",
+    "created_at": "2026-01-01T00:00:00Z",
+    "created_by": { "id": "u-1", "name": "Test", "image": "" },
+    "last_used_at": "2026-02-01T00:00:00Z",
+    "last_used_from_addr": "203.0.113.1"
+  }
+]

@@ -701,7 +701,9 @@ The key is returned once, on create, and cannot be retrieved again.
 
 ### Project-scoped keys
 
-A key created with `--project-id` is a least-privilege credential: it cannot create projects, cannot mint API keys, and cannot see any other project — others report "not found" rather than a permission error. That makes it safe to hand to an agent or a CI job:
+A key created with `--project-id` bounds the blast radius to one project: it cannot create projects, cannot mint API keys, and cannot see any other project — others report "not found" rather than a permission error, so it is not even an existence oracle.
+
+It is **not** read-only. Inside that one project it can do everything the API allows, including deleting branches and the project itself — `neon deploy` working at all is proof of that. What it buys is a bound on *reach*, which is what lets you hand it to an agent or a CI job without handing over your account:
 
 ```bash
 NEON_API_KEY=napi_… neon deploy    # applies neon.ts, and can reach nothing else
