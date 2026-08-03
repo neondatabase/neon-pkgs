@@ -1,7 +1,13 @@
 import type { Client } from "../client/client/index.js";
 import { getProjectOperation } from "../client/sdk.gen.js";
 import type { Operation, OperationStatus } from "../client/types.gen.js";
-import { NeonOperationError, NeonTimeoutError, toNeonError } from "./errors.js";
+import { delay } from "./deadline.js";
+import {
+	NeonAbortError,
+	NeonOperationError,
+	NeonTimeoutError,
+	toNeonError,
+} from "./errors.js";
 import { err, type NeonResult, ok } from "./result.js";
 
 const SUCCESS: ReadonlySet<OperationStatus> = new Set(["finished", "skipped"]);
@@ -19,24 +25,11 @@ export interface WaitForOptions {
 	signal?: AbortSignal;
 }
 
-const sleep = (ms: number, signal?: AbortSignal): Promise<void> =>
-	new Promise((resolve, reject) => {
-		if (signal?.aborted) return reject(signal.reason);
-		const id = setTimeout(resolve, ms);
-		signal?.addEventListener(
-			"abort",
-			() => {
-				clearTimeout(id);
-				reject(signal.reason);
-			},
-			{ once: true },
-		);
-	});
-
 /**
  * Poll the given operations until each reaches a terminal `finished`/`skipped` state.
  * Returns an error result carrying {@link NeonOperationError} if any operation ends in
- * `failed`/`error`/`cancelled`, or {@link NeonTimeoutError} if the deadline is exceeded.
+ * `failed`/`error`/`cancelled`, {@link NeonTimeoutError} if the deadline is exceeded, or
+ * {@link NeonAbortError} if the caller's signal fired.
  *
  * Composable: usable directly with operations obtained from the raw layer.
  */
@@ -65,7 +58,13 @@ export async function waitForOperations(
 				),
 			);
 		}
-		await sleep(pollIntervalMs, options.signal);
+		if ((await delay(pollIntervalMs, options.signal)) === "cancelled") {
+			return err(
+				new NeonAbortError(
+					"Waiting for operations was aborted by its signal.",
+				),
+			);
+		}
 
 		const stillPending: Operation[] = [];
 		for (const op of pending) {

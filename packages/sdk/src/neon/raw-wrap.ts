@@ -15,7 +15,26 @@
  */
 
 import type { NeonError } from "./errors.js";
-import { toNeonError } from "./errors.js";
+import { NeonAbortError, toNeonError } from "./errors.js";
+
+/**
+ * Did the caller's own signal end this call?
+ *
+ * Read from the signal rather than the error, because the generated client reports
+ * authentication, serialization, interceptor, transport and parsing faults through one
+ * channel — an error named `AbortError` is not evidence about which occurred. A response
+ * having arrived rules cancellation out.
+ *
+ * This deliberately says nothing about a signal the SDK never saw: the Neon CLI installs
+ * its own request timeout inside a custom `fetch` rather than passing `signal`, so its
+ * timeouts keep classifying as {@link NeonNetworkError} exactly as before.
+ */
+function abortedBy(
+	signal: AbortSignal | undefined,
+	response: Response | undefined,
+): boolean {
+	return response === undefined && signal?.aborted === true;
+}
 
 /**
  * Structural shape of any generated raw function: generic over `throwOnError`, resolving to
@@ -93,7 +112,11 @@ export function wrapRaw<F extends AnyRawFn>(fn: F & AnyRawFn) {
 			responseStyle: "fields",
 		});
 		if (raw.error !== undefined && raw.error !== null) {
-			const error = toNeonError(raw.error, raw.response);
+			const error = abortedBy(options.signal, raw.response)
+				? new NeonAbortError("The request was aborted by its signal.", {
+						cause: raw.error,
+					})
+				: toNeonError(raw.error, raw.response);
 			if (shouldThrow) throw error;
 			return {
 				data: undefined,

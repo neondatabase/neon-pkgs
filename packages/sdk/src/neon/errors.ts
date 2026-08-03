@@ -15,6 +15,7 @@ export type NeonErrorKind =
 	| "rate_limit"
 	| "operation"
 	| "timeout"
+	| "aborted"
 	| "network"
 	| "client";
 
@@ -125,11 +126,32 @@ export class NeonOperationError extends NeonError {
 	}
 }
 
-/** Waiting for operations to finish exceeded the configured timeout. */
+/**
+ * A deadline was exceeded — either `requestTimeoutMs` for a request and its retries, or
+ * the `wait` budget while polling operations for readiness.
+ */
 export class NeonTimeoutError extends NeonError {
 	constructor(message: string) {
 		super(message, "timeout");
 		this.name = "NeonTimeoutError";
+	}
+}
+
+/**
+ * The caller's `AbortSignal` fired. Distinct from {@link NeonTimeoutError} because nothing
+ * went wrong: the caller asked for the work to stop, and the two call for different
+ * handling (retry a timeout, don't retry a cancellation).
+ *
+ * Raised only where the SDK knows the caller cancelled — the call's own deadline, or an
+ * already-aborted `signal` on a raw call. A transport failure that merely looks like an
+ * abort stays a {@link NeonNetworkError}, since the generated client reports auth,
+ * serialization, interceptor and parsing faults through the same channel and an error's
+ * name is not evidence about which one occurred.
+ */
+export class NeonAbortError extends NeonError {
+	constructor(message: string, options?: { cause?: unknown }) {
+		super(message, "aborted", options);
+		this.name = "NeonAbortError";
 	}
 }
 

@@ -53,7 +53,7 @@ export class BucketObjects<DThrow extends boolean> {
 	> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				listProjectBranchBucketObjects({
 					client,
 					path: {
@@ -63,6 +63,7 @@ export class BucketObjects<DThrow extends boolean> {
 					},
 					query,
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data,
 		);
@@ -91,7 +92,7 @@ export class BucketObjects<DThrow extends boolean> {
 	): Promise<Blob | NeonResult<Blob>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				getProjectBranchBucketObject({
 					client,
 					path: {
@@ -101,6 +102,7 @@ export class BucketObjects<DThrow extends boolean> {
 						object_key: objectKey,
 					},
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data,
 		);
@@ -127,7 +129,7 @@ export class BucketObjects<DThrow extends boolean> {
 		objectKey: string,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
-		return this.#ctx.runVoid(opts, (client) =>
+		return this.#ctx.runVoid(opts, (client, signal) =>
 			deleteProjectBranchBucketObject({
 				client,
 				path: {
@@ -137,6 +139,7 @@ export class BucketObjects<DThrow extends boolean> {
 					object_key: objectKey,
 				},
 				throwOnError: false,
+				signal,
 			}),
 		);
 	}
@@ -167,7 +170,7 @@ export class BucketObjects<DThrow extends boolean> {
 	> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				deleteProjectBranchBucketObjectsByPrefix({
 					client,
 					path: {
@@ -177,6 +180,7 @@ export class BucketObjects<DThrow extends boolean> {
 					},
 					query: { prefix },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data,
 		);
@@ -208,7 +212,7 @@ export class BucketObjects<DThrow extends boolean> {
 	): Promise<PresignResponse | NeonResult<PresignResponse>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				presignProjectBranchBucketObject({
 					client,
 					path: {
@@ -219,6 +223,7 @@ export class BucketObjects<DThrow extends boolean> {
 					},
 					body: input,
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data,
 		);

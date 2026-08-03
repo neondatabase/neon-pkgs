@@ -28,11 +28,12 @@ export class AiGateway<DThrow extends boolean> {
 	): Promise<BranchAiGateway | NeonResult<BranchAiGateway>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				getProjectBranchAiGateway({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data,
 		);

@@ -35,7 +35,8 @@ export class User<DThrow extends boolean> {
 	): Promise<CurrentUserInfoResponse | NeonResult<CurrentUserInfoResponse>> {
 		return this.#ctx.run(
 			opts,
-			(client) => getCurrentUserInfo({ client, throwOnError: false }),
+			(client, signal) =>
+				getCurrentUserInfo({ client, throwOnError: false, signal }),
 			(data) => data,
 		);
 	}
@@ -50,8 +51,12 @@ export class User<DThrow extends boolean> {
 	): Promise<Organization[] | NeonResult<Organization[]>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
-				getCurrentUserOrganizations({ client, throwOnError: false }),
+			(client, signal) =>
+				getCurrentUserOrganizations({
+					client,
+					throwOnError: false,
+					signal,
+				}),
 			(data) => data.organizations,
 		);
 	}
@@ -75,7 +80,8 @@ export class Regions<DThrow extends boolean> {
 	): Promise<RegionResponse[] | NeonResult<RegionResponse[]>> {
 		return this.#ctx.run(
 			opts,
-			(client) => getActiveRegions({ client, throwOnError: false }),
+			(client, signal) =>
+				getActiveRegions({ client, throwOnError: false, signal }),
 			(data) => data.regions,
 		);
 	}
@@ -101,7 +107,8 @@ export class ApiKeys<DThrow extends boolean> {
 	> {
 		return this.#ctx.run(
 			opts,
-			(client) => listApiKeys({ client, throwOnError: false }),
+			(client, signal) =>
+				listApiKeys({ client, throwOnError: false, signal }),
 			(data) => data,
 		);
 	}
@@ -122,11 +129,12 @@ export class ApiKeys<DThrow extends boolean> {
 	): Promise<ApiKeyCreateResponse | NeonResult<ApiKeyCreateResponse>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				createApiKey({
 					client,
 					body: { key_name: keyName },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data,
 		);
@@ -144,11 +152,12 @@ export class ApiKeys<DThrow extends boolean> {
 	): Promise<ApiKeyRevokeResponse | NeonResult<ApiKeyRevokeResponse>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				revokeApiKey({
 					client,
 					path: { key_id: keyId },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data,
 		);

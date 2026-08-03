@@ -41,7 +41,7 @@ export class DataApi<DThrow extends boolean> {
 	): Promise<DataApiReponse | NeonResult<DataApiReponse>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				getProjectBranchDataApi({
 					client,
 					path: {
@@ -50,6 +50,7 @@ export class DataApi<DThrow extends boolean> {
 						database_name: databaseName,
 					},
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data,
 		);
@@ -78,7 +79,7 @@ export class DataApi<DThrow extends boolean> {
 	): Promise<DataApiCreateResponse | NeonResult<DataApiCreateResponse>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				createProjectBranchDataApi({
 					client,
 					path: {
@@ -88,6 +89,7 @@ export class DataApi<DThrow extends boolean> {
 					},
 					body: input,
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data,
 		);
@@ -116,7 +118,7 @@ export class DataApi<DThrow extends boolean> {
 	): Promise<void | NeonResult<void>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				updateProjectBranchDataApi({
 					client,
 					path: {
@@ -126,6 +128,7 @@ export class DataApi<DThrow extends boolean> {
 					},
 					body: input,
 					throwOnError: false,
+					signal,
 				}),
 			() => undefined,
 		);
@@ -151,7 +154,7 @@ export class DataApi<DThrow extends boolean> {
 	): Promise<void | NeonResult<void>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				deleteProjectBranchDataApi({
 					client,
 					path: {
@@ -160,6 +163,7 @@ export class DataApi<DThrow extends boolean> {
 						database_name: databaseName,
 					},
 					throwOnError: false,
+					signal,
 				}),
 			() => undefined,
 		);

@@ -5,6 +5,7 @@ import {
 	listProjectBranchRoles,
 } from "../../client/sdk.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
+import { cancelled, runBounded } from "../deadline.js";
 import { NeonError, toNeonError } from "../errors.js";
 import { err, finalize, type NeonResult, type Outcome, ok } from "../result.js";
 import { DataApi } from "./dataapi.js";
@@ -65,7 +66,30 @@ export class Postgres<DThrow extends boolean> {
 	): Promise<string | NeonResult<string>> {
 		const shouldThrow =
 			opts?.throwOnError ?? this.#ctx.defaults.throwOnError;
-		return finalize(await this.#resolve(params, opts?.signal), shouldThrow);
+		// This resolver makes up to four sequential requests without going through
+		// RequestContext, so it owns the deadline covering all of them.
+		const deadline = this.#ctx.deadlineFor(opts);
+		try {
+			const resolved = await runBounded(deadline, () =>
+				this.#resolve(params, deadline.signal),
+			);
+			const cancellation = cancelled(deadline);
+			// `runBounded` resolves undefined only when the deadline won the race, which
+			// `cancelled` then reports, so the fallback is unreachable by construction.
+			const result: NeonResult<string> =
+				cancellation !== undefined
+					? err(cancellation)
+					: (resolved ??
+						err(
+							new NeonError(
+								"The connection-string resolver ended without a result.",
+								"client",
+							),
+						));
+			return finalize(result, shouldThrow);
+		} finally {
+			deadline.dispose();
+		}
 	}
 
 	async #resolve(

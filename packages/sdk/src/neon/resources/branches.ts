@@ -60,7 +60,11 @@ export class Branches<DThrow extends boolean> {
 	}
 
 	/** @apiCall GET /projects/{project_id}/branches (cursor-paginated) */
-	list(projectId: string, query?: ListQuery): Paginated<Branch> {
+	list(
+		projectId: string,
+		query?: ListQuery,
+		opts?: CallOptions,
+	): Paginated<Branch> {
 		return paginate(
 			(cursor, signal) =>
 				listProjectBranches({
@@ -74,6 +78,7 @@ export class Branches<DThrow extends boolean> {
 				items: data?.branches ?? [],
 				cursor: data?.pagination?.next,
 			}),
+			() => this.#ctx.deadlineFor(opts),
 		);
 	}
 
@@ -91,11 +96,12 @@ export class Branches<DThrow extends boolean> {
 	): Promise<Branch | NeonResult<Branch>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				getProjectBranch({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.branch,
 		);
@@ -118,12 +124,13 @@ export class Branches<DThrow extends boolean> {
 	): Promise<Branch | NeonResult<Branch>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				createProjectBranch({
 					client,
 					path: { project_id: projectId },
 					body: { branch: input },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.branch,
 		);
@@ -149,12 +156,13 @@ export class Branches<DThrow extends boolean> {
 	): Promise<Branch | NeonResult<Branch>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				updateProjectBranch({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
 					body: { branch: input },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.branch,
 		);
@@ -172,11 +180,12 @@ export class Branches<DThrow extends boolean> {
 		branchId: string,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
-		return this.#ctx.runVoid(opts, (client) =>
+		return this.#ctx.runVoid(opts, (client, signal) =>
 			deleteProjectBranch({
 				client,
 				path: { project_id: projectId, branch_id: branchId },
 				throwOnError: false,
+				signal,
 			}),
 		);
 	}
@@ -205,7 +214,7 @@ export class Branches<DThrow extends boolean> {
 			opts?.throwOnError ?? this.#ctx.defaults.throwOnError;
 		const result = await this.#ctx.execute(
 			{ ...opts, waitForReadiness: opts?.waitForReadiness ?? true },
-			(client) =>
+			(client, signal) =>
 				createProjectBranch({
 					client,
 					path: { project_id: projectId },
@@ -222,6 +231,7 @@ export class Branches<DThrow extends boolean> {
 						],
 					},
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data,
 		);
@@ -255,11 +265,12 @@ export class Branches<DThrow extends boolean> {
 			opts?.throwOnError ?? this.#ctx.defaults.throwOnError;
 		const result = await this.#ctx.execute(
 			opts,
-			(client) =>
+			(client, signal) =>
 				listProjectBranches({
 					client,
 					path: { project_id: projectId },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.branches,
 		);
@@ -297,11 +308,12 @@ export class Branches<DThrow extends boolean> {
 	): Promise<Branch | NeonResult<Branch>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				setDefaultProjectBranch({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.branch,
 		);
@@ -333,12 +345,13 @@ export class Branches<DThrow extends boolean> {
 	): Promise<void | NeonResult<void>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				finalizeRestoreBranch({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
 					body: { name: input?.name },
 					throwOnError: false,
+					signal,
 				}),
 			() => undefined,
 		);
@@ -365,11 +378,12 @@ export class Branches<DThrow extends boolean> {
 	): Promise<Branch | NeonResult<Branch>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				recoverProjectBranch({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.branch,
 		);

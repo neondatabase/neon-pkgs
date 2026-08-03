@@ -38,11 +38,12 @@ export class Credentials<DThrow extends boolean> {
 	): Promise<CredentialMeta[] | NeonResult<CredentialMeta[]>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				listCredentials({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.credentials,
 		);
@@ -70,12 +71,13 @@ export class Credentials<DThrow extends boolean> {
 	> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				createCredential({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
 					body: input,
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data,
 		);
@@ -99,7 +101,7 @@ export class Credentials<DThrow extends boolean> {
 		tokenId: string,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
-		return this.#ctx.runVoid(opts, (client) =>
+		return this.#ctx.runVoid(opts, (client, signal) =>
 			revokeCredential({
 				client,
 				path: {
@@ -108,6 +110,7 @@ export class Credentials<DThrow extends boolean> {
 					token_id: tokenId,
 				},
 				throwOnError: false,
+				signal,
 			}),
 		);
 	}

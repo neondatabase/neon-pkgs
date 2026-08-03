@@ -11,7 +11,7 @@ import type {
 	GetConsumptionHistoryPerProjectData,
 	GetConsumptionHistoryPerProjectV2Data,
 } from "../../client/types.gen.js";
-import type { RequestContext } from "../context.js";
+import type { CallOptions, RequestContext } from "../context.js";
 import { type Paginated, paginate } from "../paginate.js";
 
 type PerProjectQuery = Omit<
@@ -38,6 +38,7 @@ export class Consumption {
 	/** @apiCall GET /consumption_history/projects */
 	perProject(
 		query: PerProjectQuery,
+		opts?: CallOptions,
 	): Paginated<ConsumptionHistoryPerProject> {
 		return paginate(
 			(cursor, signal) =>
@@ -51,12 +52,14 @@ export class Consumption {
 				items: data?.projects ?? [],
 				cursor: data?.pagination?.cursor,
 			}),
+			() => this.#ctx.deadlineFor(opts),
 		);
 	}
 
 	/** @apiCall GET /consumption_history/v2/projects */
 	perProjectV2(
 		query: PerProjectV2Query,
+		opts?: CallOptions,
 	): Paginated<ConsumptionHistoryPerProjectV2> {
 		return paginate(
 			(cursor, signal) =>
@@ -70,12 +73,14 @@ export class Consumption {
 				items: data?.projects ?? [],
 				cursor: data?.pagination?.cursor,
 			}),
+			() => this.#ctx.deadlineFor(opts),
 		);
 	}
 
 	/** @apiCall GET /consumption_history/v2/branches */
 	perBranchV2(
 		query: PerBranchV2Query,
+		opts?: CallOptions,
 	): Paginated<ConsumptionHistoryPerBranchV2> {
 		return paginate(
 			(cursor, signal) =>
@@ -89,6 +94,7 @@ export class Consumption {
 				items: data?.branches ?? [],
 				cursor: data?.pagination?.cursor,
 			}),
+			() => this.#ctx.deadlineFor(opts),
 		);
 	}
 }

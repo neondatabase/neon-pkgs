@@ -34,11 +34,12 @@ export class Roles<DThrow extends boolean> {
 	): Promise<Role[] | NeonResult<Role[]>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				listProjectBranchRoles({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.roles,
 		);
@@ -64,7 +65,7 @@ export class Roles<DThrow extends boolean> {
 	): Promise<Role | NeonResult<Role>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				getProjectBranchRole({
 					client,
 					path: {
@@ -73,6 +74,7 @@ export class Roles<DThrow extends boolean> {
 						role_name: name,
 					},
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.role,
 		);
@@ -98,12 +100,13 @@ export class Roles<DThrow extends boolean> {
 	): Promise<Role | NeonResult<Role>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				createProjectBranchRole({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
 					body: { role: input },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.role,
 		);
@@ -127,7 +130,7 @@ export class Roles<DThrow extends boolean> {
 		name: string,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
-		return this.#ctx.runVoid(opts, (client) =>
+		return this.#ctx.runVoid(opts, (client, signal) =>
 			deleteProjectBranchRole({
 				client,
 				path: {
@@ -136,6 +139,7 @@ export class Roles<DThrow extends boolean> {
 					role_name: name,
 				},
 				throwOnError: false,
+				signal,
 			}),
 		);
 	}
@@ -164,7 +168,7 @@ export class Roles<DThrow extends boolean> {
 	): Promise<string | NeonResult<string>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				getProjectBranchRolePassword({
 					client,
 					path: {
@@ -173,6 +177,7 @@ export class Roles<DThrow extends boolean> {
 						role_name: name,
 					},
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.password,
 		);
@@ -202,7 +207,7 @@ export class Roles<DThrow extends boolean> {
 	): Promise<Role | NeonResult<Role>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				resetProjectBranchRolePassword({
 					client,
 					path: {
@@ -211,6 +216,7 @@ export class Roles<DThrow extends boolean> {
 						role_name: name,
 					},
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.role,
 		);

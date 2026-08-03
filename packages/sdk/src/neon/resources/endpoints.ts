@@ -40,11 +40,12 @@ export class Endpoints<DThrow extends boolean> {
 	): Promise<Endpoint[] | NeonResult<Endpoint[]>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				listProjectEndpoints({
 					client,
 					path: { project_id: projectId },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.endpoints,
 		);
@@ -67,11 +68,12 @@ export class Endpoints<DThrow extends boolean> {
 	): Promise<Endpoint[] | NeonResult<Endpoint[]>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				listProjectBranchEndpoints({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.endpoints,
 		);
@@ -94,11 +96,12 @@ export class Endpoints<DThrow extends boolean> {
 	): Promise<Endpoint | NeonResult<Endpoint>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				getProjectEndpoint({
 					client,
 					path: { project_id: projectId, endpoint_id: endpointId },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.endpoint,
 		);
@@ -121,12 +124,13 @@ export class Endpoints<DThrow extends boolean> {
 	): Promise<Endpoint | NeonResult<Endpoint>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				createProjectEndpoint({
 					client,
 					path: { project_id: projectId },
 					body: { endpoint: input },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.endpoint,
 		);
@@ -152,12 +156,13 @@ export class Endpoints<DThrow extends boolean> {
 	): Promise<Endpoint | NeonResult<Endpoint>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				updateProjectEndpoint({
 					client,
 					path: { project_id: projectId, endpoint_id: endpointId },
 					body: { endpoint: input },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.endpoint,
 		);
@@ -178,11 +183,12 @@ export class Endpoints<DThrow extends boolean> {
 		endpointId: string,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
-		return this.#ctx.runVoid(opts, (client) =>
+		return this.#ctx.runVoid(opts, (client, signal) =>
 			deleteProjectEndpoint({
 				client,
 				path: { project_id: projectId, endpoint_id: endpointId },
 				throwOnError: false,
+				signal,
 			}),
 		);
 	}
@@ -204,11 +210,12 @@ export class Endpoints<DThrow extends boolean> {
 	): Promise<Endpoint | NeonResult<Endpoint>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				startProjectEndpoint({
 					client,
 					path: { project_id: projectId, endpoint_id: endpointId },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.endpoint,
 		);
@@ -231,11 +238,12 @@ export class Endpoints<DThrow extends boolean> {
 	): Promise<Endpoint | NeonResult<Endpoint>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				suspendProjectEndpoint({
 					client,
 					path: { project_id: projectId, endpoint_id: endpointId },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.endpoint,
 		);
@@ -258,11 +266,12 @@ export class Endpoints<DThrow extends boolean> {
 	): Promise<Endpoint | NeonResult<Endpoint>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				restartProjectEndpoint({
 					client,
 					path: { project_id: projectId, endpoint_id: endpointId },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.endpoint,
 		);

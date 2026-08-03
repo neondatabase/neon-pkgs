@@ -35,6 +35,7 @@ export class Functions<DThrow extends boolean> {
 		projectId: string,
 		branchId: string,
 		query?: ListQuery,
+		opts?: CallOptions,
 	): Paginated<NeonFunction> {
 		return paginate(
 			(cursor, signal) =>
@@ -49,6 +50,7 @@ export class Functions<DThrow extends boolean> {
 				items: data?.functions ?? [],
 				cursor: data?.pagination?.next,
 			}),
+			() => this.#ctx.deadlineFor(opts),
 		);
 	}
 
@@ -72,7 +74,7 @@ export class Functions<DThrow extends boolean> {
 	): Promise<NeonFunction | NeonResult<NeonFunction>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				getProjectBranchFunction({
 					client,
 					path: {
@@ -81,6 +83,7 @@ export class Functions<DThrow extends boolean> {
 						slug,
 					},
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.function,
 		);
@@ -109,7 +112,7 @@ export class Functions<DThrow extends boolean> {
 	): Promise<NeonFunction | NeonResult<NeonFunction>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				updateProjectBranchFunction({
 					client,
 					path: {
@@ -119,6 +122,7 @@ export class Functions<DThrow extends boolean> {
 					},
 					body: input,
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.function,
 		);
@@ -142,7 +146,7 @@ export class Functions<DThrow extends boolean> {
 		slug: string,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
-		return this.#ctx.runVoid(opts, (client) =>
+		return this.#ctx.runVoid(opts, (client, signal) =>
 			deleteProjectBranchFunction({
 				client,
 				path: {
@@ -151,6 +155,7 @@ export class Functions<DThrow extends boolean> {
 					slug,
 				},
 				throwOnError: false,
+				signal,
 			}),
 		);
 	}
@@ -178,7 +183,7 @@ export class Functions<DThrow extends boolean> {
 	): Promise<NeonFunctionDeployment | NeonResult<NeonFunctionDeployment>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				createProjectBranchFunctionDeployment({
 					client,
 					path: {
@@ -188,6 +193,7 @@ export class Functions<DThrow extends boolean> {
 					},
 					body: input ?? {},
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.deployment,
 		);

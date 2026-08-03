@@ -38,11 +38,12 @@ export class Buckets<DThrow extends boolean> {
 	): Promise<Bucket[] | NeonResult<Bucket[]>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				listProjectBranchBuckets({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.buckets,
 		);
@@ -68,12 +69,13 @@ export class Buckets<DThrow extends boolean> {
 	): Promise<Bucket | NeonResult<Bucket>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				createProjectBranchBucket({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
 					body: input,
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.bucket,
 		);
@@ -97,7 +99,7 @@ export class Buckets<DThrow extends boolean> {
 		bucketName: string,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
-		return this.#ctx.runVoid(opts, (client) =>
+		return this.#ctx.runVoid(opts, (client, signal) =>
 			deleteProjectBranchBucket({
 				client,
 				path: {
@@ -106,6 +108,7 @@ export class Buckets<DThrow extends boolean> {
 					bucket_name: bucketName,
 				},
 				throwOnError: false,
+				signal,
 			}),
 		);
 	}

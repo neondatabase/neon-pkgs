@@ -70,11 +70,12 @@ export class Permissions<DThrow extends boolean> {
 	): Promise<ProjectPermission[] | NeonResult<ProjectPermission[]>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				listProjectPermissions({
 					client,
 					path: { project_id: projectId },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.project_permissions,
 		);
@@ -97,12 +98,13 @@ export class Permissions<DThrow extends boolean> {
 	): Promise<ProjectPermission | NeonResult<ProjectPermission>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				grantPermissionToProject({
 					client,
 					path: { project_id: projectId },
 					body: { email },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data,
 		);
@@ -125,7 +127,7 @@ export class Permissions<DThrow extends boolean> {
 	): Promise<ProjectPermission | NeonResult<ProjectPermission>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				revokePermissionFromProject({
 					client,
 					path: {
@@ -133,6 +135,7 @@ export class Permissions<DThrow extends boolean> {
 						permission_id: permissionId,
 					},
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data,
 		);
@@ -156,7 +159,7 @@ export class Projects<DThrow extends boolean> {
 	 *
 	 * @apiCall GET /projects
 	 */
-	list(query?: ListQuery): Paginated<ProjectListItem> {
+	list(query?: ListQuery, opts?: CallOptions): Paginated<ProjectListItem> {
 		return paginate(
 			(cursor, signal) =>
 				listProjects({
@@ -173,6 +176,7 @@ export class Projects<DThrow extends boolean> {
 				items: data?.projects ?? [],
 				cursor: data?.pagination?.cursor,
 			}),
+			() => this.#ctx.deadlineFor(opts),
 		);
 	}
 
@@ -188,11 +192,12 @@ export class Projects<DThrow extends boolean> {
 	): Promise<Project | NeonResult<Project>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				getProject({
 					client,
 					path: { project_id: id },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.project,
 		);
@@ -210,7 +215,7 @@ export class Projects<DThrow extends boolean> {
 	): Promise<Project | NeonResult<Project>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				createProject({
 					client,
 					body: {
@@ -222,6 +227,7 @@ export class Projects<DThrow extends boolean> {
 						},
 					},
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.project,
 		);
@@ -249,7 +255,7 @@ export class Projects<DThrow extends boolean> {
 			opts?.throwOnError ?? this.#ctx.defaults.throwOnError;
 		const result = await this.#ctx.execute(
 			{ ...opts, waitForReadiness: opts?.waitForReadiness ?? true },
-			(client) =>
+			(client, signal) =>
 				createProject({
 					client,
 					body: {
@@ -261,6 +267,7 @@ export class Projects<DThrow extends boolean> {
 						},
 					},
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data,
 		);
@@ -290,12 +297,13 @@ export class Projects<DThrow extends boolean> {
 	): Promise<Project | NeonResult<Project>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				updateProject({
 					client,
 					path: { project_id: id },
 					body: { project: input },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.project,
 		);
@@ -313,11 +321,12 @@ export class Projects<DThrow extends boolean> {
 	): Promise<Project | NeonResult<Project>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				deleteProject({
 					client,
 					path: { project_id: id },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.project,
 		);
@@ -340,11 +349,12 @@ export class Projects<DThrow extends boolean> {
 	): Promise<Project | NeonResult<Project>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				recoverProject({
 					client,
 					path: { project_id: id },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.project,
 		);
@@ -381,7 +391,7 @@ export class Projects<DThrow extends boolean> {
 		}
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				transferProjectsFromOrgToOrg({
 					client,
 					path: { source_org_id: fromOrgId },
@@ -390,6 +400,7 @@ export class Projects<DThrow extends boolean> {
 						project_ids: input.projectIds,
 					},
 					throwOnError: false,
+					signal,
 				}),
 			() => undefined,
 		);
@@ -414,7 +425,7 @@ export class Projects<DThrow extends boolean> {
 	): Promise<void | NeonResult<void>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				transferProjectsFromUserToOrg({
 					client,
 					body: {
@@ -422,6 +433,7 @@ export class Projects<DThrow extends boolean> {
 						project_ids: input.projectIds,
 					},
 					throwOnError: false,
+					signal,
 				}),
 			() => undefined,
 		);

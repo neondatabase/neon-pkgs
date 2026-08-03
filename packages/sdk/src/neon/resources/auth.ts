@@ -59,11 +59,12 @@ export class AuthOauthProviders<DThrow extends boolean> {
 	): Promise<NeonAuthOauthProvider[] | NeonResult<NeonAuthOauthProvider[]>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				listBranchNeonAuthOauthProviders({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.providers,
 		);
@@ -89,12 +90,13 @@ export class AuthOauthProviders<DThrow extends boolean> {
 	): Promise<NeonAuthOauthProvider | NeonResult<NeonAuthOauthProvider>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				addBranchNeonAuthOauthProvider({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
 					body: input,
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data,
 		);
@@ -123,7 +125,7 @@ export class AuthOauthProviders<DThrow extends boolean> {
 	): Promise<NeonAuthOauthProvider | NeonResult<NeonAuthOauthProvider>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				updateBranchNeonAuthOauthProvider({
 					client,
 					path: {
@@ -133,6 +135,7 @@ export class AuthOauthProviders<DThrow extends boolean> {
 					},
 					body: input,
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data,
 		);
@@ -156,7 +159,7 @@ export class AuthOauthProviders<DThrow extends boolean> {
 		providerId: NeonAuthOauthProviderId,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
-		return this.#ctx.runVoid(opts, (client) =>
+		return this.#ctx.runVoid(opts, (client, signal) =>
 			deleteBranchNeonAuthOauthProvider({
 				client,
 				path: {
@@ -165,6 +168,7 @@ export class AuthOauthProviders<DThrow extends boolean> {
 					oauth_provider_id: providerId,
 				},
 				throwOnError: false,
+				signal,
 			}),
 		);
 	}
@@ -198,11 +202,12 @@ export class AuthTrustedDomains<DThrow extends boolean> {
 	> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				listBranchNeonAuthTrustedDomains({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.domains,
 		);
@@ -226,12 +231,13 @@ export class AuthTrustedDomains<DThrow extends boolean> {
 		input: NeonAuthAddDomainToRedirectUriWhitelistRequest,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
-		return this.#ctx.runVoid(opts, (client) =>
+		return this.#ctx.runVoid(opts, (client, signal) =>
 			addBranchNeonAuthTrustedDomain({
 				client,
 				path: { project_id: projectId, branch_id: branchId },
 				body: input,
 				throwOnError: false,
+				signal,
 			}),
 		);
 	}
@@ -254,12 +260,13 @@ export class AuthTrustedDomains<DThrow extends boolean> {
 		input: NeonAuthDeleteDomainFromRedirectUriWhitelistRequest,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
-		return this.#ctx.runVoid(opts, (client) =>
+		return this.#ctx.runVoid(opts, (client, signal) =>
 			deleteBranchNeonAuthTrustedDomain({
 				client,
 				path: { project_id: projectId, branch_id: branchId },
 				body: input,
 				throwOnError: false,
+				signal,
 			}),
 		);
 	}
@@ -296,12 +303,13 @@ export class AuthUsers<DThrow extends boolean> {
 	> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				createBranchNeonAuthNewUser({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
 					body: input,
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data,
 		);
@@ -325,7 +333,7 @@ export class AuthUsers<DThrow extends boolean> {
 		authUserId: string,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
-		return this.#ctx.runVoid(opts, (client) =>
+		return this.#ctx.runVoid(opts, (client, signal) =>
 			deleteBranchNeonAuthUser({
 				client,
 				path: {
@@ -334,6 +342,7 @@ export class AuthUsers<DThrow extends boolean> {
 					auth_user_id: authUserId,
 				},
 				throwOnError: false,
+				signal,
 			}),
 		);
 	}
@@ -364,7 +373,7 @@ export class AuthUsers<DThrow extends boolean> {
 	> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				updateNeonAuthUserRole({
 					client,
 					path: {
@@ -374,6 +383,7 @@ export class AuthUsers<DThrow extends boolean> {
 					},
 					body: { roles },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data,
 		);
@@ -415,11 +425,12 @@ export class Auth<DThrow extends boolean> {
 	): Promise<NeonAuthIntegration | NeonResult<NeonAuthIntegration>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				getNeonAuth({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data,
 		);
@@ -448,12 +459,13 @@ export class Auth<DThrow extends boolean> {
 	> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				createNeonAuth({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
 					body: input,
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data,
 		);
@@ -477,12 +489,13 @@ export class Auth<DThrow extends boolean> {
 		input?: { deleteData?: boolean },
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
-		return this.#ctx.runVoid(opts, (client) =>
+		return this.#ctx.runVoid(opts, (client, signal) =>
 			disableNeonAuth({
 				client,
 				path: { project_id: projectId, branch_id: branchId },
 				body: { delete_data: input?.deleteData },
 				throwOnError: false,
+				signal,
 			}),
 		);
 	}
@@ -507,12 +520,13 @@ export class Auth<DThrow extends boolean> {
 	): Promise<NeonAuthConfigResponse | NeonResult<NeonAuthConfigResponse>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				updateNeonAuthConfig({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
 					body: input,
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data,
 		);

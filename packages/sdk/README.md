@@ -43,11 +43,12 @@ const { project, connectionString } = data;
 | `waitForReadiness` | `boolean` | `false` | When `true`, mutations block until their provisioning `operations` finish, so the returned resource is ready to use. |
 | `wait` | `{ pollIntervalMs?: number; timeoutMs?: number }` | `1000` / `300000` | Tuning for the readiness poller. |
 | `retries` | `number` | `2` | Automatic retries on always-safe statuses (`423`, `429`, `503`) with backoff. |
+| `requestTimeoutMs` | `number` | — (unbounded) | Deadline for a request **and** its retries. Aborts the request and resolves with a `NeonTimeoutError`. Pass `Infinity` per call to opt out of a client-wide value. Separate from `wait.timeoutMs`. |
 | `orgId` | `string` | — | Default organization, applied to project create/list and as the transfer source org. Overridable per call. |
 | `baseUrl` | `string` | `https://console.neon.tech/api/v2` | Override the API base URL. |
 | `fetch` | `typeof fetch` | global `fetch` | Custom fetch implementation (proxies, tests, non-global runtimes). |
 
-Every option except `apiKey` is also accepted **per call** via the last `options` argument (`{ throwOnError?, waitForReadiness?, signal? }`), overriding the client default.
+Every option except `apiKey` is also accepted **per call** via the last `options` argument (`{ throwOnError?, waitForReadiness?, requestTimeoutMs?, signal? }`), overriding the client default. Paginated `list()` methods take it too, after their query.
 
 ## The result model
 
@@ -82,7 +83,8 @@ The `error` channel carries a typed hierarchy (all `Error` subclasses with a `ki
 | `NeonAuthError` | `"auth"` | (401/403) |
 | `NeonRateLimitError` | `"rate_limit"` | (429, after retries) |
 | `NeonOperationError` | `"operation"` | `operationId`, `status` — an awaited operation failed |
-| `NeonTimeoutError` | `"timeout"` | readiness/wait deadline exceeded |
+| `NeonTimeoutError` | `"timeout"` | a deadline was exceeded — `requestTimeoutMs`, or the readiness/wait budget |
+| `NeonAbortError` | `"aborted"` | the caller's `signal` fired |
 | `NeonNetworkError` | `"network"` | `reason` — transport failure (no response) |
 | `NeonError` | `"client"` | SDK-side errors (e.g. ambiguous connection-string selection) |
 
@@ -112,6 +114,43 @@ responsibility. An empty path parameter builds a URL with an empty segment, whic
 API answers with a redirect rather than a `400`; that can surface as a `"network"` error
 rather than anything that names the argument.
 
+## Cancellation & deadlines
+
+Pass a `signal` to cancel a call, or `requestTimeoutMs` to bound it. Both arrive on the
+`error` channel as typed errors — a cancelled call never rejects with a raw `DOMException`,
+and a `throwOnError` client throws the same `NeonError` subclass it would have returned:
+
+```ts
+const controller = new AbortController();
+const { error } = await neon.projects.list().all();
+
+// cancel in-flight work (a user navigating away, a request handler aborting)
+const result = await neon.projects.get(id, { signal: controller.signal });
+if (result.error?.kind === "aborted") { /* the caller stopped it */ }
+
+// bound a call, on the client or per call
+const neon = createNeonClient({ apiKey, requestTimeoutMs: 30_000 });
+const slow = await neon.projects.get(id, { requestTimeoutMs: 5_000 });
+if (slow.error?.kind === "timeout") { /* the deadline was exceeded */ }
+
+// opt a single call back out of a client-wide deadline
+await neon.storage.objects.get(projectId, branchId, "bucket", "big.tar", {
+  requestTimeoutMs: Number.POSITIVE_INFINITY,
+});
+```
+
+`"aborted"` and `"timeout"` are deliberately distinct: a timeout is worth retrying, a
+cancellation is not.
+
+**Calls are unbounded unless you set `requestTimeoutMs`**, which is what they have always
+been. `requestTimeoutMs` covers one request and all of its retries; readiness polling keeps
+its own budget in `wait.timeoutMs`, so setting one does not silently cap the other.
+
+`retries` interacts with it: a `Retry-After` is never shortened, because retrying earlier
+than the server asked is worse than not retrying. If honouring it would take longer than
+10s or than the remaining deadline, the SDK stops retrying and hands you the real
+`423`/`429`/`503` instead of waiting or reporting a timeout that hides the status.
+
 ## Pagination
 
 Cursor-paginated `list()` methods return a lazy `Paginated<T>`:
@@ -120,7 +159,16 @@ Cursor-paginated `list()` methods return a lazy `Paginated<T>`:
 const { data: all } = await neon.projects.list().all();      // every page → { data, error }
 const { data: page } = await neon.projects.list().page();    // one page
 for await (const project of neon.projects.list()) { … }      // stream; throws on a page error
+
+// per-call options come after the query
+const { data } = await neon.projects
+  .list({ search: "prod" }, { signal, requestTimeoutMs: 10_000 })
+  .all();
 ```
+
+A deadline covers **one consumption** — a whole `all()`, or a whole iteration — rather than
+each page, since that is the unit a caller waits on. A `Paginated` is lazy and reusable, so
+consuming it twice gets a fresh deadline each time.
 
 ## Readiness & workflows
 

@@ -4,7 +4,9 @@ import type {
 	Endpoint,
 	NeonAuthIntegration,
 	NeonAuthOauthProvider,
+	Operation,
 	Project,
+	ProjectListItem,
 	ProjectPermission,
 	Snapshot,
 } from "../client/types.gen.js";
@@ -61,6 +63,44 @@ it("branches + workflows carry the envelope and narrow under throwOnError", () =
 	expectTypeOf(
 		throwing.branches.delete("p", "br"),
 	).resolves.toEqualTypeOf<void>();
+});
+
+it("cancellation and deadline options are accepted on the client and per call", () => {
+	const neon = createNeonClient({ apiKey: "x", requestTimeoutMs: 30_000 });
+	const controller = new AbortController();
+
+	expectTypeOf(
+		neon.projects.get("p", {
+			signal: controller.signal,
+			requestTimeoutMs: 5_000,
+		}),
+	).resolves.toEqualTypeOf<NeonResult<Project>>();
+
+	// Paginated lists take the same per-call options as every other method, after their
+	// query, and still erase the response-body type.
+	expectTypeOf(
+		neon.projects.list({ search: "x" }, { signal: controller.signal }),
+	).toEqualTypeOf<Paginated<ProjectListItem>>();
+	expectTypeOf(neon.branches.list("p", undefined, {})).toEqualTypeOf<
+		Paginated<Branch>
+	>();
+	expectTypeOf(
+		neon.operations.list("p", { requestTimeoutMs: 1_000 }),
+	).toEqualTypeOf<Paginated<Operation>>();
+
+	// A per-call throwOnError still narrows when other options ride along.
+	expectTypeOf(
+		neon.projects.get("p", {
+			throwOnError: true,
+			signal: controller.signal,
+		}),
+	).resolves.toEqualTypeOf<Project>();
+
+	createNeonClient({
+		apiKey: "x",
+		// @ts-expect-error — a deadline is a number of milliseconds
+		requestTimeoutMs: "30s",
+	});
 });
 
 it("postgres namespace + tier-2/3 resources are reachable and typed", () => {

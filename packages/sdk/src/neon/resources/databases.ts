@@ -41,11 +41,12 @@ export class Databases<DThrow extends boolean> {
 	): Promise<Database[] | NeonResult<Database[]>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				listProjectBranchDatabases({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.databases,
 		);
@@ -71,7 +72,7 @@ export class Databases<DThrow extends boolean> {
 	): Promise<Database | NeonResult<Database>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				getProjectBranchDatabase({
 					client,
 					path: {
@@ -80,6 +81,7 @@ export class Databases<DThrow extends boolean> {
 						database_name: name,
 					},
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.database,
 		);
@@ -105,12 +107,13 @@ export class Databases<DThrow extends boolean> {
 	): Promise<Database | NeonResult<Database>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				createProjectBranchDatabase({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
 					body: { database: input },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.database,
 		);
@@ -139,7 +142,7 @@ export class Databases<DThrow extends boolean> {
 	): Promise<Database | NeonResult<Database>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				updateProjectBranchDatabase({
 					client,
 					path: {
@@ -149,6 +152,7 @@ export class Databases<DThrow extends boolean> {
 					},
 					body: { database: input },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.database,
 		);
@@ -172,7 +176,7 @@ export class Databases<DThrow extends boolean> {
 		name: string,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
-		return this.#ctx.runVoid(opts, (client) =>
+		return this.#ctx.runVoid(opts, (client, signal) =>
 			deleteProjectBranchDatabase({
 				client,
 				path: {
@@ -181,6 +185,7 @@ export class Databases<DThrow extends boolean> {
 					database_name: name,
 				},
 				throwOnError: false,
+				signal,
 			}),
 		);
 	}

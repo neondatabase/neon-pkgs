@@ -115,11 +115,12 @@ export class Snapshots<DThrow extends boolean> {
 	): Promise<Snapshot[] | NeonResult<Snapshot[]>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				listSnapshots({
 					client,
 					path: { project_id: projectId },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.snapshots,
 		);
@@ -145,7 +146,7 @@ export class Snapshots<DThrow extends boolean> {
 	): Promise<Snapshot | NeonResult<Snapshot>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				createSnapshot({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
@@ -156,6 +157,7 @@ export class Snapshots<DThrow extends boolean> {
 						expires_at: input?.expiresAt,
 					},
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.snapshot,
 		);
@@ -181,7 +183,7 @@ export class Snapshots<DThrow extends boolean> {
 	): Promise<Snapshot | NeonResult<Snapshot>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				updateSnapshot({
 					client,
 					path: { project_id: projectId, snapshot_id: snapshotId },
@@ -195,6 +197,7 @@ export class Snapshots<DThrow extends boolean> {
 						},
 					},
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.snapshot,
 		);
@@ -217,11 +220,12 @@ export class Snapshots<DThrow extends boolean> {
 	): Promise<void | NeonResult<void>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				deleteSnapshot({
 					client,
 					path: { project_id: projectId, snapshot_id: snapshotId },
 					throwOnError: false,
+					signal,
 				}),
 			() => undefined,
 		);
@@ -272,7 +276,7 @@ export class Snapshots<DThrow extends boolean> {
 				...opts,
 				waitForReadiness: preview ? true : opts?.waitForReadiness,
 			},
-			(client) =>
+			(client, signal) =>
 				restoreSnapshot({
 					client,
 					path: { project_id: projectId, snapshot_id: snapshotId },
@@ -282,6 +286,7 @@ export class Snapshots<DThrow extends boolean> {
 						finalize_restore: finalizeNow,
 					},
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data.branch,
 		);
@@ -294,7 +299,7 @@ export class Snapshots<DThrow extends boolean> {
 		const step = commit
 			? await this.#ctx.execute(
 					{ ...opts, waitForReadiness: true },
-					(client) =>
+					(client, signal) =>
 						finalizeRestoreBranch({
 							client,
 							path: {
@@ -302,6 +307,7 @@ export class Snapshots<DThrow extends boolean> {
 								branch_id: branch.id,
 							},
 							throwOnError: false,
+							signal,
 						}),
 					() => undefined,
 				)
@@ -309,7 +315,7 @@ export class Snapshots<DThrow extends boolean> {
 				? ok(undefined)
 				: await this.#ctx.execute(
 						{ ...opts, waitForReadiness: true },
-						(client) =>
+						(client, signal) =>
 							deleteProjectBranch({
 								client,
 								path: {
@@ -317,6 +323,7 @@ export class Snapshots<DThrow extends boolean> {
 									branch_id: branch.id,
 								},
 								throwOnError: false,
+								signal,
 							}),
 						() => undefined,
 					);
@@ -342,11 +349,12 @@ export class Snapshots<DThrow extends boolean> {
 	): Promise<BackupSchedule | NeonResult<BackupSchedule>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				getSnapshotSchedule({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data,
 		);
@@ -382,12 +390,13 @@ export class Snapshots<DThrow extends boolean> {
 	): Promise<void | NeonResult<void>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				setSnapshotSchedule({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
 					body: schedule,
 					throwOnError: false,
+					signal,
 				}),
 			() => undefined,
 		);

@@ -37,11 +37,12 @@ export class Storage<DThrow extends boolean> {
 	): Promise<BranchStorage | NeonResult<BranchStorage>> {
 		return this.#ctx.run(
 			opts,
-			(client) =>
+			(client, signal) =>
 				getProjectBranchStorage({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
 					throwOnError: false,
+					signal,
 				}),
 			(data) => data,
 		);

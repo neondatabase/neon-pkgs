@@ -1,3 +1,4 @@
+import { cancelled, type Deadline } from "./deadline.js";
 import { toNeonError } from "./errors.js";
 import { err, type NeonResult, ok } from "./result.js";
 
@@ -33,7 +34,7 @@ class PaginatedList<T, D> implements Paginated<T> {
 		signal?: AbortSignal,
 	) => Promise<RawResult<D>>;
 	readonly #mapPage: (data: D) => Page<T>;
-	readonly #signal?: AbortSignal;
+	readonly #newDeadline: () => Deadline;
 
 	constructor(
 		fetchPage: (
@@ -41,42 +42,78 @@ class PaginatedList<T, D> implements Paginated<T> {
 			signal?: AbortSignal,
 		) => Promise<RawResult<D>>,
 		mapPage: (data: D) => Page<T>,
-		signal?: AbortSignal,
+		newDeadline: () => Deadline,
 	) {
 		this.#fetchPage = fetchPage;
 		this.#mapPage = mapPage;
-		this.#signal = signal;
+		this.#newDeadline = newDeadline;
 	}
 
-	async page(cursor?: string): Promise<NeonResult<Page<T>>> {
-		const raw = await this.#fetchPage(cursor, this.#signal);
+	async #page(
+		cursor: string | undefined,
+		deadline: Deadline,
+	): Promise<NeonResult<Page<T>>> {
+		let raw: RawResult<D>;
+		try {
+			raw = await this.#fetchPage(cursor, deadline.signal);
+		} catch (error) {
+			return err(cancelled(deadline) ?? toNeonError(error, undefined));
+		}
+		const cancellation = cancelled(deadline);
+		if (cancellation) return err(cancellation);
 		if (raw.error || raw.data === undefined) {
 			return err(toNeonError(raw.error, raw.response));
 		}
 		return ok(this.#mapPage(raw.data));
 	}
 
-	async all(): Promise<NeonResult<T[]>> {
-		const items: T[] = [];
-		let cursor: string | undefined;
-		while (true) {
-			const result = await this.page(cursor);
-			if (result.error) return err(result.error);
-			items.push(...result.data.items);
-			if (!result.data.cursor || result.data.items.length === 0) break;
-			cursor = result.data.cursor;
+	async page(cursor?: string): Promise<NeonResult<Page<T>>> {
+		const deadline = this.#newDeadline();
+		try {
+			return await this.#page(cursor, deadline);
+		} finally {
+			deadline.dispose();
 		}
-		return ok(items);
+	}
+
+	/**
+	 * One deadline covers the whole walk, not each page: `all()` is a single operation
+	 * from the caller's side, and a per-page budget would leave an unbounded number of
+	 * pages unbounded in total.
+	 */
+	async all(): Promise<NeonResult<T[]>> {
+		const deadline = this.#newDeadline();
+		try {
+			const items: T[] = [];
+			let cursor: string | undefined;
+			while (true) {
+				const result = await this.#page(cursor, deadline);
+				if (result.error) return err(result.error);
+				items.push(...result.data.items);
+				if (!result.data.cursor || result.data.items.length === 0)
+					break;
+				cursor = result.data.cursor;
+			}
+			return ok(items);
+		} finally {
+			deadline.dispose();
+		}
 	}
 
 	async *[Symbol.asyncIterator](): AsyncIterator<T> {
-		let cursor: string | undefined;
-		while (true) {
-			const result = await this.page(cursor);
-			if (result.error) throw result.error;
-			yield* result.data.items;
-			if (!result.data.cursor || result.data.items.length === 0) break;
-			cursor = result.data.cursor;
+		const deadline = this.#newDeadline();
+		try {
+			let cursor: string | undefined;
+			while (true) {
+				const result = await this.#page(cursor, deadline);
+				if (result.error) throw result.error;
+				yield* result.data.items;
+				if (!result.data.cursor || result.data.items.length === 0)
+					break;
+				cursor = result.data.cursor;
+			}
+		} finally {
+			deadline.dispose();
 		}
 	}
 }
@@ -84,6 +121,10 @@ class PaginatedList<T, D> implements Paginated<T> {
 /**
  * Build a {@link Paginated} list from a page fetcher and a page mapper. The response-body
  * type `D` is inferred and erased from the public `Paginated<T>` return.
+ *
+ * `newDeadline` is called once per consumption — each `page()`, each `all()`, each
+ * iteration — because a `Paginated` is lazy and may be consumed more than once, so a
+ * deadline created when the list was built would already be spent.
  */
 export function paginate<T, D>(
 	fetchPage: (
@@ -91,7 +132,7 @@ export function paginate<T, D>(
 		signal?: AbortSignal,
 	) => Promise<RawResult<D>>,
 	mapPage: (data: D) => Page<T>,
-	signal?: AbortSignal,
+	newDeadline: () => Deadline,
 ): Paginated<T> {
-	return new PaginatedList(fetchPage, mapPage, signal);
+	return new PaginatedList(fetchPage, mapPage, newDeadline);
 }
