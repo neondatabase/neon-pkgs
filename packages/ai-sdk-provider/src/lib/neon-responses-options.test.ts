@@ -43,14 +43,35 @@ describe("store", () => {
 		["null", null],
 	])("refuses %s, which the gateway rejects", (_label, store) => {
 		expect(() => openaiOptions("gpt-5-2", { store })).toThrow(
-			/must be `false` or omitted/,
+			/not available on the Neon AI Gateway/,
 		);
 	});
 
-	it("names the gateway's own rejection so the caller can act on it", () => {
+	it("tells the caller what to do instead of describing the gateway", () => {
 		expect(() => openaiOptions("gpt-5-2", { store: true })).toThrow(
-			/Databricks does not support store response/,
+			/Remove `providerOptions\.openai\.store`, or set it to `false`/,
 		);
+	});
+
+	it("warns that null is not the same as omitting it", () => {
+		expect(() => openaiOptions("gpt-5-2", { store: null })).toThrow(
+			/reads a null `store` as `true`/,
+		);
+	});
+
+	it.each([
+		"previousResponseId",
+		"conversation",
+	])("refuses %s, which needs stored items too", (option) => {
+		expect(() => openaiOptions("gpt-5-2", { [option]: "resp_x" })).toThrow(
+			/Send the full message history instead/,
+		);
+	});
+
+	it("ignores a null previousResponseId, which asks for nothing", () => {
+		expect(() =>
+			openaiOptions("gpt-5-2", { previousResponseId: null }),
+		).not.toThrow();
 	});
 
 	it.each([

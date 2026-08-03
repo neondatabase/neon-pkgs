@@ -29,6 +29,9 @@ import {
  * being a reasoning model.
  */
 
+const STATELESS_HELP =
+	"See https://github.com/neondatabase/neon-pkgs/tree/main/packages/ai-sdk-provider#errors";
+
 /** Models the gateway serves as reasoning models on this route. */
 export function isReasoningModelId(modelId: string): boolean {
 	return /gpt-5/.test(modelId.toLowerCase());
@@ -51,15 +54,20 @@ export function withResponsesGatewayDefaults(
 	if (openai?.store === undefined) {
 		defaults.store = false;
 	} else if (openai.store === true || openai.store === null) {
+		// `null` reads as "omitted" but is not: the shared model resolves it
+		// with `store ?? true`, so it asks for storage just as `true` does.
 		throw new UnsupportedFunctionalityError({
 			functionality: "storing responses (providerOptions.openai.store)",
 			message:
-				"The Neon AI Gateway serves the Responses API statelessly and does " +
-				"not store response items, so `store` must be `false` or omitted " +
-				`(received ${String(openai.store)}). Sending it reaches the ` +
-				"gateway as `400 INVALID_PARAMETER_VALUE: Databricks does not " +
-				"support store response for OpenAI Responses API`. Remove " +
-				"`providerOptions.openai.store`, or set it to `false`.",
+				`\`store: ${String(openai.store)}\` is not available on the Neon AI ` +
+				"Gateway, which serves the Responses API statelessly and never " +
+				"persists response items. Remove `providerOptions.openai.store`, or " +
+				"set it to `false`." +
+				(openai.store === null
+					? " `null` is not the same as omitting it — the AI SDK reads a null" +
+						" `store` as `true`."
+					: "") +
+				` ${STATELESS_HELP}`,
 		});
 	}
 
@@ -67,6 +75,21 @@ export function withResponsesGatewayDefaults(
 	// (`store: z.boolean().nullish()`), which rejects it locally with a type
 	// error. Only `true` and `null` pass that schema and are refused by the
 	// gateway, so only they need saying something about here.
+
+	// The same statelessness rules these out, and they belong to the same set:
+	// refusing one and forwarding the others would read as an oversight.
+	for (const option of ["previousResponseId", "conversation"] as const) {
+		if (openai?.[option] != null) {
+			throw new UnsupportedFunctionalityError({
+				functionality: `server-side conversation state (providerOptions.openai.${option})`,
+				message:
+					`\`${option}\` is not available on the Neon AI Gateway, which ` +
+					"serves the Responses API statelessly and never persists response " +
+					`items, so there is nothing for \`${option}\` to refer to. Send ` +
+					`the full message history instead. ${STATELESS_HELP}`,
+			});
+		}
+	}
 
 	if (isReasoningModelId(modelId) && openai?.forceReasoning === undefined) {
 		defaults.forceReasoning = true;

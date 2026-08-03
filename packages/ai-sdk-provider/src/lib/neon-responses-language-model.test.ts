@@ -92,7 +92,7 @@ describe("NeonResponsesLanguageModel", () => {
 					prompt: "hi",
 					providerOptions: { openai: { store: true } },
 				}),
-			).rejects.toThrow(/must be `false` or omitted/);
+			).rejects.toThrow(/not available on the Neon AI Gateway/);
 
 			expect(gateway.requests).toHaveLength(0);
 		} finally {

@@ -59,9 +59,18 @@ Routing matches on the model id, so both the canonical (`gpt-5`) and the legacy 
 
 ## Capabilities
 
-Verified across Anthropic, OpenAI (incl. Codex), Google, and Meta models: `generateText` / `streamText` (text, system prompts, multi-turn), tool calling (single and multi-step, generate and stream), `generateObject` / `streamObject`, and image (vision) input.
+`generateText` / `streamText` (text, system prompts, multi-turn) and image (vision) input work across every family the gateway serves. Tool calling (single and multi-step, generate and stream) and `generateObject` / `streamObject` are verified on OpenAI (incl. Codex), Meta and Alibaba models.
 
-For MLflow-routed models, the provider detects the model family and drops parameters a backend rejects (e.g. penalties/`seed` for Llama, `reasoningEffort` for Gemini) with an AI SDK warning (`result.warnings`) instead of failing the request.
+Two exceptions, measured against a live branch:
+
+| Family | Works | Does not |
+| --- | --- | --- |
+| Google (`gemini-3-*`) | `generateText`, `streamText` | `generateObject` returns prose the SDK cannot parse; a tool round trip 400s on the replay leg, because the AI SDK does not echo back the `thoughtSignature` Gemini expects |
+| Anthropic (`claude-*`) | — | No `claude-*` id is served during the beta, so nothing on this route can be exercised |
+
+For MLflow-routed models, the provider detects the model family and drops parameters a backend rejects (e.g. penalties/`seed` for Llama, `reasoningEffort` for Gemini) with an AI SDK warning (`result.warnings`) instead of failing the request. The one exception is `providerOptions.openai.store` on the Responses route, which throws — see [Errors](#errors).
+
+Which ids your branch serves is account-specific during the beta; `GET $NEON_AI_GATEWAY_BASE_URL/v1/models` is the authoritative list.
 
 ## Image generation
 
@@ -85,12 +94,45 @@ for await (const part of result.fullStream) {
 }
 ```
 
+## Errors
+
+A failed call rejects with the AI SDK's `APICallError`, and `error.message` carries the gateway's own reason rather than the bare HTTP status line:
+
+```ts
+try {
+  await generateText({ model: neon("gpt-5-mini"), maxOutputTokens: 1, prompt });
+} catch (error) {
+  error.message;      // "Invalid 'max_output_tokens': integer below minimum
+                      //  value. Expected a value >= 16, but got 1 instead."
+  error.responseBody; // the gateway's original body, including its error_code
+}
+```
+
+The gateway answers with more than one error envelope depending on which layer rejected the request, and each route's model parses only its own dialect; the provider re-emits them so the reason always lands on `message`. Two cases are deliberately left alone: an error delivered inside an open stream, and a non-JSON body — both still surface as the status line, with the payload on `error.responseBody`.
+
+Requests that cannot work are refused before they leave, with `UnsupportedFunctionalityError`:
+
+| `providerOptions.openai` | Why |
+| --- | --- |
+| `store: true` or `store: null` | The Responses route is stateless and never persists items. `null` is not "omitted" — the AI SDK reads it as `true`. |
+| `previousResponseId`, `conversation` | Nothing is stored for them to refer to. Send the full message history instead. |
+
+Provider options are namespaced per route, which decides where the SDK reads them from:
+
+| Route | Models | Namespace |
+| --- | --- | --- |
+| Responses | `gpt-*` (incl. Codex) | `openai` |
+| Chat Completions | Gemini, Llama, Qwen, gpt-oss, … | `neon` |
+| Anthropic Messages | `claude-*` | `anthropic` |
+
+So `store` is only refused on the Responses route; the same option is ignored elsewhere.
+
 ## Limitations
 
 - `generateImage()` and embeddings (`embed` / `embedMany`) are not offered by the gateway and throw `NoSuchModelError`.
 - `gpt-oss-*` models return a non-standard ("harmony") response shape on the unified endpoint (`message.content` as an array of reasoning/text parts instead of a string). The provider normalizes this to the OpenAI Chat Completions contract (string `content` + `reasoning_content`) so `generateText`/`streamText` work and reasoning is surfaced. See neondatabase/neon-pkgs#308.
-- JSON gateway errors are re-emitted in the dialect each route's model parses, so `error.message` carries the reason rather than a bare `Bad Request`. A non-JSON body is left alone and still surfaces as the status line, with the body on `error.responseBody`. The gateway returns its own OpenAI-shaped envelope, a flat `{ error_code, message }` from Databricks, and a `{ error_code, message }` wrapping an upstream error as a JSON string; only some of those parse on any given route. Successful responses and already-readable errors are untouched.
-- The gateway serves the Responses API statelessly, so the provider sends `store: false` on that route. Without it the AI SDK assumes OpenAI's stored-item semantics and replays earlier reasoning as `{ type: "item_reference" }`, which the gateway cannot resolve and answers with a 502 — the failure that used to break OpenAI multi-turn tool flows (`generateText` + `stepCountIs`). Because `false` is the only value the gateway accepts, `providerOptions.openai.store` set to `true` or `null` throws `UnsupportedFunctionalityError` rather than making the round trip to earn a 400. Any other type is left to the shared provider-option schema, which rejects it locally as a type error. See LKB-15857.
+- Results from provider-executed tools (`neon.tools.imageGeneration`, and the other Responses built-ins) are not replayed to the gateway on a later step. Replaying them requires the stored-item reference the gateway cannot resolve, so the AI SDK omits them and reports it in `result.warnings`. Keep anything a later turn depends on in your own application state.
+- The gateway serves the Responses API statelessly, so the provider sends `store: false` on that route. Without it the AI SDK assumes OpenAI's stored-item semantics and replays earlier reasoning as `{ type: "item_reference" }`, which the gateway cannot resolve and answers with a 502 — the failure that used to break OpenAI multi-turn tool flows (`generateText` + `stepCountIs`). Because `false` is the only value the gateway accepts, an explicit `store` is refused — see [Errors](#errors).
 
 ## End-to-end tests
 
