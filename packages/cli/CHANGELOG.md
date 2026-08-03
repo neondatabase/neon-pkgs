@@ -1,5 +1,13 @@
 # neon
 
+## 2.40.0
+
+### Minor Changes
+
+- a47cf06: `neon config init` now asks which Neon services the scaffolded `neon.ts` should declare — Managed Better Auth, Functions, Object Storage, AI Gateway — and writes them into the policy. Selecting Functions also scaffolds the `hello.ts` handler the declared function points at.
+
+  `--services auth,functions,storage,ai-gateway` picks them without a prompt, `--services none` scaffolds the bare starter policy, and a run with no TTY (CI, an agent) keeps writing exactly the file it wrote before.
+
 ## 2.39.1
 
 ### Patch Changes
