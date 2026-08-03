@@ -12,7 +12,14 @@
  * to a caller who was promised `{ data, error }`.
  */
 
-import { NeonAbortError, type NeonError, NeonTimeoutError } from "./errors.js";
+import { NeonAbortError, NeonError, NeonTimeoutError } from "./errors.js";
+
+/**
+ * The largest delay `setTimeout` can represent. Beyond it Node warns
+ * (`TimeoutOverflowWarning`) and fires after 1ms instead, which would turn a deliberately
+ * generous deadline into an instant timeout.
+ */
+const MAX_TIMER_MS = 2 ** 31 - 1;
 
 /** Why a bounded wait ended. */
 export type DelayOutcome = "elapsed" | "cancelled";
@@ -54,6 +61,36 @@ const UNBOUNDED: Deadline = {
 	fired: () => new Promise<void>(() => {}),
 	dispose: () => {},
 };
+
+/**
+ * Normalize a `requestTimeoutMs`, rejecting values `setTimeout` would mistreat.
+ *
+ * Shared by the client config and by per-call overrides — validating only at construction
+ * left `requestTimeoutMs: NaN` on a call silently meaning *unbounded*, and a value past
+ * {@link MAX_TIMER_MS} silently meaning *1ms*. Both are worse than an error, because the
+ * call still returns a plausible-looking result.
+ *
+ * `undefined` and `Infinity` both mean unbounded; `Infinity` is the documented way to opt
+ * a single call out of a client-wide deadline.
+ */
+export function resolveTimeoutMs(value: number | undefined): number {
+	if (value === undefined || value === Number.POSITIVE_INFINITY) {
+		return Number.POSITIVE_INFINITY;
+	}
+	if (typeof value !== "number" || Number.isNaN(value) || value <= 0) {
+		throw new NeonError(
+			`requestTimeoutMs must be a positive number of milliseconds, or Infinity to disable; received ${String(value)}.`,
+			"client",
+		);
+	}
+	if (value > MAX_TIMER_MS) {
+		throw new NeonError(
+			`requestTimeoutMs must be at most ${MAX_TIMER_MS}ms (about 24.8 days); received ${value}. Pass Infinity for no deadline.`,
+			"client",
+		);
+	}
+	return value;
+}
 
 /**
  * The typed error for a deadline that has fired, or `undefined` if it has not.
@@ -130,7 +167,9 @@ export function createDeadline(
 	const bounded = Number.isFinite(timeoutMs);
 	if (!bounded && !callerSignal) return UNBOUNDED;
 
-	const startedAt = Date.now();
+	// Monotonic: a wall-clock jump (NTP correction, manual change) would otherwise expire
+	// a deadline early or extend one whose timer is being starved.
+	const startedAt = performance.now();
 	const controller = new AbortController();
 	let source: DeadlineSource | undefined;
 	let notify: (() => void) | undefined;
@@ -159,7 +198,7 @@ export function createDeadline(
 
 	const remainingMs = () =>
 		bounded
-			? Math.max(0, timeoutMs - (Date.now() - startedAt))
+			? Math.max(0, timeoutMs - (performance.now() - startedAt))
 			: Number.POSITIVE_INFINITY;
 
 	return {

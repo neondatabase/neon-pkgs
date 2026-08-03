@@ -1,9 +1,15 @@
 import type { Client } from "../client/client/index.js";
 import { getProjectOperation } from "../client/sdk.gen.js";
 import type { Operation, OperationStatus } from "../client/types.gen.js";
-import { delay } from "./deadline.js";
+import {
+	createDeadline,
+	type Deadline,
+	delay,
+	runBounded,
+} from "./deadline.js";
 import {
 	NeonAbortError,
+	type NeonError,
 	NeonOperationError,
 	NeonTimeoutError,
 	toNeonError,
@@ -26,10 +32,38 @@ export interface WaitForOptions {
 }
 
 /**
+ * Why waiting stopped, with a message about readiness rather than about a request.
+ * Returns `undefined` while the wait may continue.
+ */
+function readinessEnded(
+	deadline: Deadline,
+	timeoutMs: number,
+	pending: number,
+): NeonError | undefined {
+	const source = deadline.source();
+	if (source === "caller") {
+		return new NeonAbortError(
+			"Waiting for operations was aborted by its signal.",
+		);
+	}
+	if (source === "timeout") {
+		return new NeonTimeoutError(
+			`Timed out after ${timeoutMs}ms waiting for ${pending} operation(s) to finish.`,
+		);
+	}
+	return undefined;
+}
+
+/**
  * Poll the given operations until each reaches a terminal `finished`/`skipped` state.
  * Returns an error result carrying {@link NeonOperationError} if any operation ends in
  * `failed`/`error`/`cancelled`, {@link NeonTimeoutError} if the deadline is exceeded, or
  * {@link NeonAbortError} if the caller's signal fired.
+ *
+ * `timeoutMs` is a real deadline rather than a check between polls. Each poll runs under
+ * it, so a request that hangs cannot outlast the budget, and the budget is re-examined
+ * after every operation rather than once per round — a round polls each pending operation
+ * in turn, so checking only at the top let a long round overrun the timeout arbitrarily.
  *
  * Composable: usable directly with operations obtained from the raw layer.
  */
@@ -40,51 +74,75 @@ export async function waitForOperations(
 ): Promise<NeonResult<void>> {
 	const pollIntervalMs = options.pollIntervalMs ?? 1000;
 	const timeoutMs = options.timeoutMs ?? 300_000;
-	const deadline = Date.now() + timeoutMs;
+	const deadline = createDeadline(timeoutMs, options.signal);
 
-	// Track only operations that aren't already in a terminal state.
-	let pending = operations.filter((op) => !SUCCESS.has(op.status));
+	try {
+		// Track only operations that aren't already in a terminal state.
+		let pending = operations.filter((op) => !SUCCESS.has(op.status));
 
-	for (const op of pending) {
-		if (FAILURE.has(op.status)) return err(operationFailed(op));
-	}
-	pending = pending.filter((op) => !FAILURE.has(op.status));
-
-	while (pending.length > 0) {
-		if (Date.now() > deadline) {
-			return err(
-				new NeonTimeoutError(
-					`Timed out after ${timeoutMs}ms waiting for ${pending.length} operation(s) to finish.`,
-				),
-			);
-		}
-		if ((await delay(pollIntervalMs, options.signal)) === "cancelled") {
-			return err(
-				new NeonAbortError(
-					"Waiting for operations was aborted by its signal.",
-				),
-			);
-		}
-
-		const stillPending: Operation[] = [];
 		for (const op of pending) {
-			const { data, error, response } = await getProjectOperation({
-				client,
-				path: { project_id: op.project_id, operation_id: op.id },
-				throwOnError: false,
-				signal: options.signal,
-			});
-			if (error || !data) return err(toNeonError(error, response));
-
-			const current = data.operation;
-			if (FAILURE.has(current.status))
-				return err(operationFailed(current));
-			if (!SUCCESS.has(current.status)) stillPending.push(current);
+			if (FAILURE.has(op.status)) return err(operationFailed(op));
 		}
-		pending = stillPending;
-	}
+		pending = pending.filter((op) => !FAILURE.has(op.status));
 
-	return ok(undefined);
+		while (pending.length > 0) {
+			const ended = readinessEnded(deadline, timeoutMs, pending.length);
+			if (ended) return err(ended);
+
+			if (
+				(await delay(pollIntervalMs, deadline.signal)) === "cancelled"
+			) {
+				return err(
+					readinessEnded(deadline, timeoutMs, pending.length) ??
+						new NeonAbortError(
+							"Waiting for operations was aborted by its signal.",
+						),
+				);
+			}
+
+			const stillPending: Operation[] = [];
+			for (const op of pending) {
+				const polled = await runBounded(deadline, () =>
+					getProjectOperation({
+						client,
+						path: {
+							project_id: op.project_id,
+							operation_id: op.id,
+						},
+						throwOnError: false,
+						signal: deadline.signal,
+					}),
+				);
+
+				// Cancellation is read from the deadline before the response is
+				// classified: an aborted poll comes back as a transport failure with no
+				// response, which `toNeonError` would otherwise report as a network error.
+				const stopped = readinessEnded(
+					deadline,
+					timeoutMs,
+					pending.length,
+				);
+				if (stopped) return err(stopped);
+				if (polled === undefined) {
+					return err(toNeonError(undefined, undefined));
+				}
+
+				const { data, error, response } = polled;
+				if (error || !data) return err(toNeonError(error, response));
+
+				const current = data.operation;
+				if (FAILURE.has(current.status)) {
+					return err(operationFailed(current));
+				}
+				if (!SUCCESS.has(current.status)) stillPending.push(current);
+			}
+			pending = stillPending;
+		}
+
+		return ok(undefined);
+	} finally {
+		deadline.dispose();
+	}
 }
 
 function operationFailed(op: Operation): NeonOperationError {

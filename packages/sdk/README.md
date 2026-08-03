@@ -142,6 +142,17 @@ await neon.storage.objects.get(projectId, branchId, "bucket", "big.tar", {
 `"aborted"` and `"timeout"` are deliberately distinct: a timeout is worth retrying, a
 cancellation is not.
 
+`requestTimeoutMs` must be a positive number of milliseconds up to `2147483647`, or
+`Infinity`. Anything else — `0`, a negative, `NaN`, or a value past that range — is
+rejected with a `client`-kind error when the client is created or the call is made, rather
+than silently becoming an instant timeout or no timeout at all.
+
+Cancellation reaches everything the SDK controls: the request and its retries, readiness
+polling, each page of a paginated walk, and the multi-request `postgres.connectionString`
+resolver. The one thing it cannot interrupt is your own code — a `snapshots.restore`
+`preview` callback receives the signal as its second argument so it can cooperate, and the
+restore is left un-finalized if the call is cancelled around it.
+
 **Calls are unbounded unless you set `requestTimeoutMs`**, which is what they have always
 been. `requestTimeoutMs` covers one request and all of its retries; readiness polling keeps
 its own budget in `wait.timeoutMs`, so setting one does not silently cap the other.
@@ -410,7 +421,9 @@ const { data: snapshot } = await neon.snapshots.create(projectId, branchId, {
 ```ts
 await neon.snapshots.restore(projectId, snapshotId, {
   targetBranchId,
-  preview: async (branch) => (await checks(branch)) === "ok", // true → commit · false → abort
+  // second argument carries the call's signal; the SDK cannot interrupt your callback
+  preview: async (branch, { signal }) =>
+    (await checks(branch, { signal })) === "ok", // true → commit · false → abort
 });
 ```
 

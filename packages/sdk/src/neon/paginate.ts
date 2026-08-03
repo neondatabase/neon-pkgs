@@ -1,4 +1,4 @@
-import { cancelled, type Deadline } from "./deadline.js";
+import { cancelled, type Deadline, runBounded } from "./deadline.js";
 import { toNeonError } from "./errors.js";
 import { err, type NeonResult, ok } from "./result.js";
 
@@ -53,16 +53,21 @@ class PaginatedList<T, D> implements Paginated<T> {
 		cursor: string | undefined,
 		deadline: Deadline,
 	): Promise<NeonResult<Page<T>>> {
-		let raw: RawResult<D>;
+		let raw: RawResult<D> | undefined;
 		try {
-			raw = await this.#fetchPage(cursor, deadline.signal);
+			// Bounded the same way the execution core bounds a request: the signal alone
+			// does not cover the phases before `fetch` is reached, so a slow auth provider
+			// would otherwise outlast the deadline.
+			raw = await runBounded(deadline, () =>
+				this.#fetchPage(cursor, deadline.signal),
+			);
 		} catch (error) {
 			return err(cancelled(deadline) ?? toNeonError(error, undefined));
 		}
 		const cancellation = cancelled(deadline);
 		if (cancellation) return err(cancellation);
-		if (raw.error || raw.data === undefined) {
-			return err(toNeonError(raw.error, raw.response));
+		if (raw === undefined || raw.error || raw.data === undefined) {
+			return err(toNeonError(raw?.error, raw?.response));
 		}
 		return ok(this.#mapPage(raw.data));
 	}

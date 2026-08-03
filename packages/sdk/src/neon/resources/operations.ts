@@ -8,6 +8,16 @@ import { type Paginated, paginate } from "../paginate.js";
 import type { NeonResult, Outcome } from "../result.js";
 import { type WaitForOptions, waitForOperations } from "../wait.js";
 
+/**
+ * Options for {@link Operations.waitFor}.
+ *
+ * `requestTimeoutMs` and `waitForReadiness` are deliberately excluded. Readiness is
+ * budgeted by `timeoutMs`, and waiting *is* the readiness step — accepting either would
+ * offer a knob that silently did nothing.
+ */
+export type WaitForForOptions<Throw extends boolean> = WaitForOptions &
+	Omit<CallOptions<Throw>, "requestTimeoutMs" | "waitForReadiness">;
+
 /** Operation resource — read operations and wait for them to finish. */
 export class Operations<DThrow extends boolean> {
 	readonly #ctx: RequestContext;
@@ -71,11 +81,11 @@ export class Operations<DThrow extends boolean> {
 	waitFor(operations: readonly Operation[]): Promise<Outcome<void, DThrow>>;
 	waitFor<Throw extends boolean = DThrow>(
 		operations: readonly Operation[],
-		opts: WaitForOptions & CallOptions<Throw>,
+		opts: WaitForForOptions<Throw>,
 	): Promise<Outcome<void, Throw>>;
 	async waitFor(
 		operations: readonly Operation[],
-		opts?: WaitForOptions & CallOptions,
+		opts?: WaitForForOptions<boolean>,
 	): Promise<void | NeonResult<void>> {
 		const defaults = this.#ctx.defaults;
 		const shouldThrow = opts?.throwOnError ?? defaults.throwOnError;

@@ -3,6 +3,7 @@ import {
 	cancelled,
 	createDeadline,
 	type Deadline,
+	resolveTimeoutMs,
 	runBounded,
 } from "./deadline.js";
 import { type NeonError, toNeonError } from "./errors.js";
@@ -79,10 +80,18 @@ export class RequestContext {
 		return this.#config;
 	}
 
-	/** The deadline for one call: the per-call timeout if given, else the client's. */
+	/**
+	 * The deadline for one call: the per-call timeout if given, else the client's.
+	 *
+	 * A per-call value is validated the same way the client's was. Skipping that left
+	 * `requestTimeoutMs: NaN` meaning *unbounded* and a value past `setTimeout`'s range
+	 * meaning *1ms*, both silently.
+	 */
 	deadlineFor(opts: CallOptions | undefined): Deadline {
 		const timeoutMs =
-			opts?.requestTimeoutMs ?? this.#config.requestTimeoutMs;
+			opts?.requestTimeoutMs === undefined
+				? this.#config.requestTimeoutMs
+				: resolveTimeoutMs(opts.requestTimeoutMs);
 		return createDeadline(timeoutMs, opts?.signal);
 	}
 

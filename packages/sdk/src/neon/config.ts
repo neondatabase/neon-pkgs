@@ -1,6 +1,6 @@
 import { createClient, createConfig } from "../client/client/index.js";
 import type { ResolvedConfig } from "./context.js";
-import { NeonError } from "./errors.js";
+import { resolveTimeoutMs } from "./deadline.js";
 import type { WaitForOptions } from "./wait.js";
 
 const DEFAULT_BASE_URL = "https://console.neon.tech/api/v2";
@@ -49,22 +49,6 @@ export interface NeonConfig<Throw extends boolean = false> {
 	 * for transfers when not given explicitly; overridable on every call.
 	 */
 	orgId?: string;
-}
-
-/**
- * Reject a timeout that `setTimeout` would silently mistreat — `NaN` and negatives fire
- * immediately, so a typo would turn every call into an instant timeout instead of an
- * obvious configuration error. `Infinity` is the documented way to say "unbounded".
- */
-export function resolveTimeoutMs(value: number | undefined): number {
-	if (value === undefined) return Number.POSITIVE_INFINITY;
-	if (typeof value !== "number" || Number.isNaN(value) || value <= 0) {
-		throw new NeonError(
-			`requestTimeoutMs must be a positive number of milliseconds (or Infinity to disable); received ${String(value)}.`,
-			"client",
-		);
-	}
-	return value;
 }
 
 export function resolveConfig(config: NeonConfig<boolean>): ResolvedConfig {

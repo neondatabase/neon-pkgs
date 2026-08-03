@@ -16,13 +16,24 @@ import type {
 	Snapshot,
 } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
+import { NeonAbortError } from "../errors.js";
 import { err, finalize, type NeonResult, type Outcome, ok } from "../result.js";
 
 /**
  * Inspect a freshly restored (not-yet-finalized) branch and decide whether to commit.
  * Return `true` to finalize the restore, `false` to abort it.
  */
-export type RestorePreview = (branch: Branch) => boolean | Promise<boolean>;
+/**
+ * Inspect a restored-but-un-finalized branch and decide whether to commit it.
+ *
+ * The second argument carries the call's `signal`. The SDK cannot interrupt this callback
+ * — it is the caller's own code — so long-running checks should honour the signal
+ * themselves; the restore is left un-finalized if the call is cancelled around it.
+ */
+export type RestorePreview = (
+	branch: Branch,
+	context: { signal?: AbortSignal },
+) => boolean | Promise<boolean>;
 
 /** Options for {@link Snapshots.create} (point-in-time + naming). */
 export interface CreateSnapshotInput {
@@ -295,7 +306,31 @@ export class Snapshots<DThrow extends boolean> {
 		}
 
 		const branch = restored.data;
-		const commit = await preview(branch);
+		// The callback is the caller's own code, so the SDK cannot bound it — a callback
+		// that never settles leaves the restore un-finalized however the signal is set.
+		// It gets the signal so it can cooperate, and the abort is honoured either side
+		// of it rather than pretending to interrupt it.
+		if (opts?.signal?.aborted) {
+			return finalize(
+				err<Branch>(
+					new NeonAbortError(
+						"The restore was aborted before its preview callback ran; the restored branch is left un-finalized.",
+					),
+				),
+				shouldThrow,
+			);
+		}
+		const commit = await preview(branch, { signal: opts?.signal });
+		if (opts?.signal?.aborted) {
+			return finalize(
+				err<Branch>(
+					new NeonAbortError(
+						"The restore was aborted after its preview callback ran; the restored branch is left un-finalized.",
+					),
+				),
+				shouldThrow,
+			);
+		}
 		const step = commit
 			? await this.#ctx.execute(
 					{ ...opts, waitForReadiness: true },

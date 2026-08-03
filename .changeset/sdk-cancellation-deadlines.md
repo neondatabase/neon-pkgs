@@ -35,3 +35,10 @@ Cancellation is classified from the SDK's own deadline state rather than by matc
 names, because the generated client reports auth, serialization, interceptor, transport and
 parsing faults through one channel. A transport failure that merely looks like an abort
 stays a `NeonNetworkError`.
+
+**Compile-time note.** `NeonErrorKind` gains `"aborted"`. Widening that union can break a
+consumer whose `switch` over `error.kind` is exhaustive with a `never` check — such code
+stops compiling until the new case is handled. This ships as a minor deliberately: an error
+taxonomy has to be able to grow, and treating every new kind as breaking would either
+freeze it or force a major for each addition. Nothing changes at runtime for existing
+kinds, and no existing kind changes meaning.
