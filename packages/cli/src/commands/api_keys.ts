@@ -56,21 +56,51 @@ const ALL_PROJECTS = "— all projects —";
  * A *misspelled* flag is the third case and cannot be caught here, because yargs never binds
  * it — `.strictOptions()` on each subcommand rejects it instead.
  */
+/**
+ * A scope flag is either absent, or exactly one non-empty string. Anything else is an error.
+ *
+ * Every rejected shape otherwise ends the same way: the flag reads as falsy, the scope check
+ * falls through, and an **account** key is minted instead of the narrow one asked for. That
+ * is the worst thing this command can do, so none of them get a lenient reading.
+ *
+ * - `--project-id ""` — an unset shell variable; empty string, which is falsy.
+ * - `--no-project-id` — yargs boolean negation; `false`, which is falsy.
+ * - `--project-id a --project-id b` — an array, which would reach the API as `a,b`.
+ *
+ * A misspelled flag never binds at all and cannot be seen here; `.strict()` rejects it.
+ * Anything after a `--` terminator is handled by {@link noPassthrough}.
+ */
 const single = (name: string) => (value: unknown) => {
-	// Repeated flags arrive as an array. Coerce runs during parsing, before `strictOptions`
-	// reports the array's numeric keys as unknown arguments, so this is what produces the
-	// message the user actually sees.
+	if (value === undefined) return undefined;
 	if (Array.isArray(value)) {
 		throw new Error(
 			`--${name} was given more than once. Pass it at most once.`,
 		);
 	}
-	if (typeof value === "string" && value.trim() === "") {
+	if (typeof value !== "string" || value.trim() === "") {
 		throw new Error(
-			`--${name} was given an empty value. Pass a real value, or omit the flag entirely.`,
+			`--${name} needs a value. Pass one, or omit the flag entirely.`,
 		);
 	}
 	return value;
+};
+
+/**
+ * Refuse arguments after a `--` terminator.
+ *
+ * The CLI sets `populate--`, so everything past `--` lands in `argv["--"]` where `.strict()`
+ * never looks — `create --name x -- --project-id p` would parse cleanly and mint an account
+ * key from a line that names the scope flag. No `api-keys` subcommand takes passthrough
+ * arguments, so their presence is always a mistake.
+ */
+const noPassthrough = (argv: Record<string, unknown>): true => {
+	const rest = argv["--"];
+	if (Array.isArray(rest) && rest.length > 0) {
+		throw new Error(
+			`api-keys takes no arguments after \`--\`, and options placed there are ignored rather than applied. Remove the \`--\`.`,
+		);
+	}
+	return true;
 };
 
 export const command = "api-keys";
@@ -93,7 +123,8 @@ export const builder = (argv: yargs.Argv) =>
 							coerce: single("org-id"),
 						},
 					})
-					.strictOptions(),
+					.strict()
+					.check(noPassthrough),
 			async (args) => await list(args as unknown as ListProps),
 		)
 		.command(
@@ -125,7 +156,8 @@ export const builder = (argv: yargs.Argv) =>
 					// both is contradictory rather than redundant — the org is derived from
 					// the project and cannot be chosen independently.
 					.conflicts("org-id", "project-id")
-					.strictOptions(),
+					.strict()
+					.check(noPassthrough),
 			async (args) => await create(args as unknown as CreateProps),
 		)
 		.command(
@@ -146,7 +178,8 @@ export const builder = (argv: yargs.Argv) =>
 							coerce: single("org-id"),
 						},
 					})
-					.strictOptions(),
+					.strict()
+					.check(noPassthrough),
 			async (args) => await revoke(args as unknown as RevokeProps),
 		)
 		.demandCommand(1, "Run `neon api-keys --help` to see the subcommands.");
@@ -212,7 +245,7 @@ const create = async (props: CreateProps) => {
 	// really did ask for account scope rather than inheriting a checked-out project.
 	if (!projectId && !orgId) {
 		const { data } = await props.apiClient.createApiKey({ key_name: name });
-		await assertUsable(props, data, { orgId: null });
+		await assertUsable(props, data, { orgId: null, expect: "no-project" });
 		report(props, data, CREATE_FIELDS);
 		return;
 	}
@@ -221,7 +254,7 @@ const create = async (props: CreateProps) => {
 		const { data } = await props.apiClient.createOrgApiKey(orgId, {
 			key_name: name,
 		});
-		await assertUsable(props, data, { orgId });
+		await assertUsable(props, data, { orgId, expect: "no-project" });
 		report(props, data, CREATE_FIELDS);
 		log.info(
 			"Reaches every project in %s. Pass --project-id instead to restrict it to one.",
@@ -246,7 +279,7 @@ const create = async (props: CreateProps) => {
 	// one thing this command must not get wrong.
 	await assertUsable(props, data, {
 		orgId: resolvedOrgId,
-		expectProject: scopeTo,
+		expect: scopeTo,
 	});
 
 	report(props, data, CREATE_FIELDS_SCOPED);
@@ -283,14 +316,17 @@ const report = (
 const assertUsable = async (
 	props: CommonProps,
 	data: { id?: number; key?: string; project_id?: string },
-	scope: { orgId: string | null; expectProject?: string },
+	scope: { orgId: string | null; expect: string | "no-project" },
 ): Promise<void> => {
+	// `expect` is always stated, never inferred from a missing field: "no project" has to be
+	// checked as deliberately as an exact project, or a key that came back narrower than
+	// requested would be reported as reaching the whole organization.
+	const wanted = scope.expect === "no-project" ? undefined : scope.expect;
 	const problem =
 		typeof data.key !== "string" || data.key.trim() === ""
 			? "Neon returned no key."
-			: scope.expectProject !== undefined &&
-					data.project_id !== scope.expectProject
-				? `Neon returned a key scoped to ${data.project_id ?? "nothing"} rather than ${scope.expectProject}.`
+			: data.project_id !== wanted
+				? `Neon returned a key scoped to ${data.project_id ?? "nothing"} rather than ${wanted ?? "the whole organization"}.`
 				: null;
 	if (!problem) return;
 
@@ -318,12 +354,14 @@ const withdraw = async (
 	orgId: string | null,
 	keyId: number | undefined,
 ): Promise<boolean> => {
-	if (keyId === undefined) return false;
+	if (!Number.isSafeInteger(keyId) || (keyId as number) <= 0) return false;
 	try {
 		const { data } = orgId
-			? await props.apiClient.revokeOrgApiKey(orgId, keyId)
-			: await props.apiClient.revokeApiKey(keyId);
-		return data.revoked === true;
+			? await props.apiClient.revokeOrgApiKey(orgId, keyId as number)
+			: await props.apiClient.revokeApiKey(keyId as number);
+		// Check which key the response names: a `revoked: true` for some other id is not
+		// evidence that the one we issued is gone.
+		return data.revoked === true && data.id === keyId;
 	} catch (err) {
 		log.error(
 			"Failed to revoke API key %d: %s",

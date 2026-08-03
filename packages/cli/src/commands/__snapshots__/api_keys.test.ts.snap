@@ -28,6 +28,8 @@ project_id: proj-in-org
 "
 `;
 
+exports[`api-keys create > refuses --no-project-id rather than widening the key 1`] = `""`;
+
 exports[`api-keys create > refuses a misspelled scope flag rather than widening the key 1`] = `""`;
 
 exports[`api-keys create > refuses a repeated scope flag 1`] = `""`;
@@ -40,11 +42,17 @@ exports[`api-keys create > refuses an empty --project-id instead of widening the
 
 exports[`api-keys create > refuses both scope flags together 1`] = `""`;
 
+exports[`api-keys create > refuses scope flags after a -- terminator 1`] = `""`;
+
+exports[`api-keys create refuses an unusable response > an org-wide create that comes back scoped is refused 1`] = `""`;
+
 exports[`api-keys create refuses an unusable response > explains a project that belongs to no organization 1`] = `""`;
 
 exports[`api-keys create refuses an unusable response > no key in the body 1`] = `""`;
 
 exports[`api-keys create refuses an unusable response > not scoped at all, and the withdrawal fails 1`] = `""`;
+
+exports[`api-keys create refuses an unusable response > prints no secret when it refuses 1`] = `""`;
 
 exports[`api-keys create refuses an unusable response > scoped to the wrong project — withdrawn, and says so 1`] = `""`;
 

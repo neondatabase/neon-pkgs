@@ -19,6 +19,14 @@ export default function (req, res) {
 		case "noscope":
 			return res.json({ ...base, id: 500, key: "napi_no_scope" });
 		// 2xx with no key at all — a live credential the user could never see.
+		// An org-wide request that comes back narrowed — the inverse mistake.
+		case "sneaky":
+			return res.json({
+				...base,
+				id: 401,
+				key: "napi_unexpected_scope",
+				project_id: "some-other-project",
+			});
 		case "nokey":
 			return res.json({ ...base, id: 401 });
 		default:

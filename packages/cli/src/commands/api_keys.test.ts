@@ -92,7 +92,7 @@ describe("api-keys create", () => {
 			["api-keys", "create", "--name", "x", "--project-id", ""],
 			{
 				code: 1,
-				stderr: "ERROR: --project-id was given an empty value. Pass a real value, or omit the flag entirely.",
+				stderr: "ERROR: --project-id needs a value. Pass one, or omit the flag entirely.",
 			},
 		);
 	});
@@ -102,7 +102,7 @@ describe("api-keys create", () => {
 			["api-keys", "create", "--name", "x", "--org-id", ""],
 			{
 				code: 1,
-				stderr: "ERROR: --org-id was given an empty value. Pass a real value, or omit the flag entirely.",
+				stderr: "ERROR: --org-id needs a value. Pass one, or omit the flag entirely.",
 			},
 		);
 	});
@@ -110,7 +110,7 @@ describe("api-keys create", () => {
 	test("refuses an empty --name", async ({ testCliCommand }) => {
 		await testCliCommand(["api-keys", "create", "--name", ""], {
 			code: 1,
-			stderr: "ERROR: --name was given an empty value. Pass a real value, or omit the flag entirely.",
+			stderr: "ERROR: --name needs a value. Pass one, or omit the flag entirely.",
 		});
 	});
 
@@ -129,6 +129,44 @@ describe("api-keys create", () => {
 				"proj-in-org",
 			],
 			{ code: 1, stderr: "ERROR: Unknown argument: project_id" },
+		);
+	});
+
+	// yargs turns `--no-x` into `false`, which is falsy — so without the guard this reads as
+	// "no project given" and mints an account key from a command line that names the flag.
+	test("refuses --no-project-id rather than widening the key", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			["api-keys", "create", "--name", "x", "--no-project-id"],
+			{
+				code: 1,
+				stderr: "ERROR: --project-id needs a value. Pass one, or omit the flag entirely.",
+			},
+		);
+	});
+
+	// After `--` the rest is positional, not options — so the scope flag would be ignored.
+	// These subcommands take no passthrough, so the extra arguments are an error.
+	test("refuses scope flags after a -- terminator", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"api-keys",
+				"create",
+				"--name",
+				"x",
+				"--",
+				"--project-id",
+				"proj-in-org",
+			],
+			{
+				code: 1,
+				stderr: expect.stringContaining(
+					"api-keys takes no arguments after `--`",
+				),
+			},
 		);
 	});
 
@@ -201,6 +239,41 @@ describe("api-keys create refuses an unusable response", () => {
 		);
 	});
 
+	// The whole point of refusing is that the secret never reaches the user, so assert its
+	// absence directly rather than inferring it from the error text.
+	test("prints no secret when it refuses", async ({ testCliCommand }) => {
+		await testCliCommand(
+			[
+				"api-keys",
+				"create",
+				"--name",
+				"noscope",
+				"--project-id",
+				"proj-in-org",
+			],
+			{
+				code: 1,
+				stderr: expect.not.stringContaining("napi_no_scope"),
+			},
+		);
+	});
+
+	// A narrower key than asked for is still the wrong key: reporting it as reaching the
+	// whole organization would overstate what the caller can do with it.
+	test("an org-wide create that comes back scoped is refused", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			["api-keys", "create", "--name", "sneaky", "--org-id", "org-7"],
+			{
+				code: 1,
+				stderr: expect.stringContaining(
+					"Neon returned a key scoped to some-other-project rather than the whole organization",
+				),
+			},
+		);
+	});
+
 	test("no key in the body", async ({ testCliCommand }) => {
 		await testCliCommand(
 			["api-keys", "create", "--name", "nokey", "--org-id", "org-7"],
@@ -246,7 +319,7 @@ describe("api-keys revoke", () => {
 	}) => {
 		await testCliCommand(["api-keys", "revoke", "999", "--org-id", ""], {
 			code: 1,
-			stderr: "ERROR: --org-id was given an empty value. Pass a real value, or omit the flag entirely.",
+			stderr: "ERROR: --org-id needs a value. Pass one, or omit the flag entirely.",
 		});
 	});
 });
