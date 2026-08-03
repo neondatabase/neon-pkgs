@@ -62,7 +62,7 @@
     "chokidar": "5.0.0",
     "cli-table": "0.3.11",
     "cliui": "8.0.1",
-    "diff": "5.2.0",
+    "diff": "5.2.2",
     "fflate": "^0.8.3",
     "neon-init": "workspace:*",
     "open": "^10.2.0",
