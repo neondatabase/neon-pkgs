@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createNeonClient } from "../client.js";
+import { NeonAbortError } from "../errors.js";
 
 /**
  * Build a client whose only stub is the network boundary, capturing the
@@ -55,6 +56,65 @@ describe("snapshots.update maps the ergonomic input to the API body", () => {
 		const { neon, calls } = neonCapturing();
 		await neon.snapshots.update("p-1", "snap-1", { name: "renamed" });
 		expect(calls[0]?.body).toEqual({ snapshot: { name: "renamed" } });
+	});
+});
+
+describe("snapshots.restore keeps the result contract around its preview callback", () => {
+	/** Answers the restore, then the branch fetch, with a ready branch. */
+	function neonRestoring() {
+		return createNeonClient({
+			apiKey: "test",
+			retries: 0,
+			fetch: async () =>
+				new Response(
+					JSON.stringify({
+						branch: { id: "br-restored", name: "restored" },
+						operations: [],
+					}),
+					{
+						status: 200,
+						headers: { "content-type": "application/json" },
+					},
+				),
+		});
+	}
+
+	it("reports a callback that honours its signal by throwing as aborted", async () => {
+		// Cooperating with the signal is the documented thing to do, so the DOMException
+		// it throws must not escape a client that promised { data, error }.
+		const neon = neonRestoring();
+		const controller = new AbortController();
+
+		const { error } = await neon.snapshots.restore(
+			"p-1",
+			"snap-1",
+			{
+				targetBranchId: "br-1",
+				preview: async (_branch, { signal }) => {
+					controller.abort();
+					signal?.throwIfAborted();
+					return true;
+				},
+			},
+			{ signal: controller.signal },
+		);
+
+		expect(error).toBeInstanceOf(NeonAbortError);
+		expect(error?.message).toContain("un-finalized");
+	});
+
+	it("reports a callback that throws for its own reasons as a client error", async () => {
+		const neon = neonRestoring();
+
+		const { error } = await neon.snapshots.restore("p-1", "snap-1", {
+			targetBranchId: "br-1",
+			preview: async () => {
+				throw new Error("my checks blew up");
+			},
+		});
+
+		expect(error?.kind).toBe("client");
+		expect(error?.message).toContain("my checks blew up");
 	});
 });
 

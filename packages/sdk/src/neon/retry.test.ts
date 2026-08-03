@@ -29,6 +29,18 @@ describe("parseRetryAfterMs", () => {
 		expect(parseRetryAfterMs("   ", NOW)).toBeUndefined();
 		expect(parseRetryAfterMs("soon", NOW)).toBeUndefined();
 	});
+
+	it("rejects malformed numbers instead of letting the date parser rescue them", () => {
+		// `Date.parse` reads "-1", "1.5" and "+5" as dates in 2001 — all in the past, so
+		// the delay clamped to 0 and a malformed header became an immediate retry.
+		for (const header of ["-1", "1.5", "+5", "1e3", "0x10", "007.0"]) {
+			expect(parseRetryAfterMs(header, NOW)).toBeUndefined();
+		}
+	});
+
+	it("still reads a leading-zero integer, which is valid delta-seconds", () => {
+		expect(parseRetryAfterMs("007", NOW)).toBe(7_000);
+	});
 });
 
 describe("backoffMs", () => {

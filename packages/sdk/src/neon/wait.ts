@@ -101,6 +101,9 @@ export async function waitForOperations(
 			}
 
 			const stillPending: Operation[] = [];
+			// Counted from what is left rather than from the round's starting size, so a
+			// timeout part-way through a round reports the operations actually outstanding.
+			let remaining = pending.length;
 			for (const op of pending) {
 				const polled = await runBounded(deadline, () =>
 					getProjectOperation({
@@ -117,11 +120,7 @@ export async function waitForOperations(
 				// Cancellation is read from the deadline before the response is
 				// classified: an aborted poll comes back as a transport failure with no
 				// response, which `toNeonError` would otherwise report as a network error.
-				const stopped = readinessEnded(
-					deadline,
-					timeoutMs,
-					pending.length,
-				);
+				const stopped = readinessEnded(deadline, timeoutMs, remaining);
 				if (stopped) return err(stopped);
 				if (polled === undefined) {
 					return err(toNeonError(undefined, undefined));
@@ -134,7 +133,8 @@ export async function waitForOperations(
 				if (FAILURE.has(current.status)) {
 					return err(operationFailed(current));
 				}
-				if (!SUCCESS.has(current.status)) stillPending.push(current);
+				if (SUCCESS.has(current.status)) remaining -= 1;
+				else stillPending.push(current);
 			}
 			pending = stillPending;
 		}

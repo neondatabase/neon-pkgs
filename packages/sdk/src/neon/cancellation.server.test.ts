@@ -17,7 +17,11 @@ interface Behaviour {
 	hang: boolean;
 	/** Operations still reported as running when polled. */
 	operationRunning: boolean;
+	/** Leave the operation poll itself in flight, so cancellation lands mid-request. */
+	hangOperations: boolean;
 	operationPolls: number;
+	/** Resolves the first time an operation poll is received. */
+	onOperationPoll?: () => void;
 }
 
 let server: Server;
@@ -25,8 +29,19 @@ let baseUrl: string;
 const behaviour: Behaviour = {
 	hang: false,
 	operationRunning: true,
+	hangOperations: false,
 	operationPolls: 0,
 };
+
+/** Reset between tests so one test's server behaviour cannot leak into the next. */
+function resetBehaviour(overrides: Partial<Behaviour> = {}) {
+	behaviour.hang = false;
+	behaviour.operationRunning = true;
+	behaviour.hangOperations = false;
+	behaviour.operationPolls = 0;
+	behaviour.onOperationPoll = undefined;
+	Object.assign(behaviour, overrides);
+}
 
 function json(body: unknown) {
 	return JSON.stringify(body);
@@ -40,6 +55,10 @@ beforeAll(async () => {
 
 		if (url.pathname.includes("/operations/")) {
 			behaviour.operationPolls += 1;
+			behaviour.onOperationPoll?.();
+			// Leaves the poll in flight, so an abort or a deadline lands during the
+			// request rather than in the gap between polls.
+			if (behaviour.hangOperations) return;
 			res.writeHead(200, { "content-type": "application/json" });
 			res.end(
 				json({
@@ -199,27 +218,53 @@ describe("work that happens before fetch is reached", () => {
 });
 
 describe("readiness polling", () => {
-	it("reports a caller abort during a poll as aborted, not as a network failure", async () => {
-		behaviour.operationRunning = true;
+	it("reports an abort during an in-flight poll as aborted, not as a network failure", async () => {
+		// The abort is triggered only once the server confirms it is holding a poll, so
+		// this cannot pass on a between-polls check: the request is definitely in flight.
+		const controller = new AbortController();
+		resetBehaviour({
+			hangOperations: true,
+			onOperationPoll: () => setTimeout(() => controller.abort(), 20),
+		});
 		const neon = createNeonClient({
 			apiKey: "k",
 			baseUrl,
 			retries: 0,
 			waitForReadiness: true,
-			wait: { pollIntervalMs: 10, timeoutMs: 60_000 },
+			wait: { pollIntervalMs: 5, timeoutMs: 60_000 },
 		});
-		const controller = new AbortController();
-		setTimeout(() => controller.abort(), 60);
 
 		const { error } = await neon.projects.create(
 			{ name: "test" },
 			{ signal: controller.signal },
 		);
+		expect(behaviour.operationPolls).toBeGreaterThan(0);
 		expect(error?.kind).toBe("aborted");
+		resetBehaviour();
 	});
 
-	it("enforces its own timeout while operations stay pending", async () => {
-		behaviour.operationRunning = true;
+	it("enforces its timeout while a poll is in flight", async () => {
+		// Previously the budget was only consulted between polls, so a poll that never
+		// returned could outlast it indefinitely.
+		resetBehaviour({ hangOperations: true });
+		const neon = createNeonClient({
+			apiKey: "k",
+			baseUrl,
+			retries: 0,
+			waitForReadiness: true,
+			wait: { pollIntervalMs: 5, timeoutMs: 80 },
+		});
+
+		const startedAt = Date.now();
+		const { error } = await neon.projects.create({ name: "test" });
+		expect(behaviour.operationPolls).toBeGreaterThan(0);
+		expect(error?.kind).toBe("timeout");
+		expect(Date.now() - startedAt).toBeLessThan(2_000);
+		resetBehaviour();
+	});
+
+	it("enforces its timeout while operations stay pending between polls", async () => {
+		resetBehaviour({ operationRunning: true });
 		const neon = createNeonClient({
 			apiKey: "k",
 			baseUrl,
@@ -228,20 +273,35 @@ describe("readiness polling", () => {
 			wait: { pollIntervalMs: 10, timeoutMs: 80 },
 		});
 
-		const startedAt = Date.now();
 		const { error } = await neon.projects.create({ name: "test" });
 		expect(error?.kind).toBe("timeout");
-		expect(Date.now() - startedAt).toBeLessThan(2_000);
 	});
 
 	it("resolves once the operations finish", async () => {
-		behaviour.operationRunning = false;
+		resetBehaviour({ operationRunning: false });
 		const neon = createNeonClient({
 			apiKey: "k",
 			baseUrl,
 			retries: 0,
 			waitForReadiness: true,
 			wait: { pollIntervalMs: 10, timeoutMs: 5_000 },
+		});
+
+		const { data, error } = await neon.projects.create({ name: "test" });
+		expect(error).toBeUndefined();
+		expect(data?.id).toBe("p-1");
+	});
+
+	it("survives a readiness budget larger than setTimeout can represent", async () => {
+		// A single timer above 2^31-1 collapses to 1ms in Node, which would have turned
+		// a very generous budget into an instant timeout.
+		resetBehaviour({ operationRunning: false });
+		const neon = createNeonClient({
+			apiKey: "k",
+			baseUrl,
+			retries: 0,
+			waitForReadiness: true,
+			wait: { pollIntervalMs: 5, timeoutMs: 2 ** 31 + 1_000 },
 		});
 
 		const { data, error } = await neon.projects.create({ name: "test" });

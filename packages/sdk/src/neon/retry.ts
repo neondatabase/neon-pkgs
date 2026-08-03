@@ -38,15 +38,19 @@ export function parseRetryAfterMs(
 	const trimmed = header.trim();
 	if (trimmed === "") return undefined;
 
-	// RFC 9110 delta-seconds is a non-negative integer. `Number()` would also accept
-	// "-1", "1.5", "0x10" and "1e3"; treating "-1" as 0 in particular turned a malformed
-	// header into an immediate retry.
+	// RFC 9110 delta-seconds is a non-negative integer.
 	if (/^\d+$/.test(trimmed)) {
 		const seconds = Number(trimmed);
 		return Number.isFinite(seconds * 1000)
 			? seconds * 1000
 			: Number.POSITIVE_INFINITY;
 	}
+
+	// A malformed number must be rejected here rather than fall through to the date
+	// parser. `Date.parse` is permissive enough to read "-1", "1.5" and "+5" as dates in
+	// 2001 — all in the past, so the delay clamped to 0 and a malformed header became an
+	// immediate retry, which is the opposite of what it asks for.
+	if (Number.isFinite(Number(trimmed))) return undefined;
 
 	const at = Date.parse(trimmed);
 	if (Number.isNaN(at)) return undefined;

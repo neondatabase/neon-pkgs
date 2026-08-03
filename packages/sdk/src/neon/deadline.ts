@@ -187,19 +187,31 @@ export function createDeadline(
 	if (callerSignal?.aborted) trip("caller");
 
 	const onCallerAbort = () => trip("caller");
-	// Deliberately not `unref`ed: every deadline is disposed in a `finally`, so it cannot
-	// outlive its call, and an unref'd timer is invisible to the event loop's liveness
-	// accounting — a call whose only pending work is the deadline would starve instead of
-	// timing out.
-	const timer = bounded
-		? setTimeout(() => trip("timeout"), timeoutMs)
-		: undefined;
-	callerSignal?.addEventListener("abort", onCallerAbort, { once: true });
-
 	const remainingMs = () =>
 		bounded
 			? Math.max(0, timeoutMs - (performance.now() - startedAt))
 			: Number.POSITIVE_INFINITY;
+
+	// Deliberately not `unref`ed: every deadline is disposed in a `finally`, so it cannot
+	// outlive its call, and an unref'd timer is invisible to the event loop's liveness
+	// accounting — a call whose only pending work is the deadline would starve instead of
+	// timing out.
+	//
+	// Re-armed in chunks rather than scheduled once, because `setTimeout` silently
+	// collapses any delay above MAX_TIMER_MS to 1ms. `wait.timeoutMs` has always accepted
+	// arbitrarily large budgets, and a single timer would have turned one into an instant
+	// timeout.
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const arm = () => {
+		const left = remainingMs();
+		if (left === 0) return trip("timeout");
+		timer = setTimeout(
+			left > MAX_TIMER_MS ? arm : () => trip("timeout"),
+			Math.min(left, MAX_TIMER_MS),
+		);
+	};
+	if (bounded) arm();
+	callerSignal?.addEventListener("abort", onCallerAbort, { once: true });
 
 	return {
 		signal: controller.signal,

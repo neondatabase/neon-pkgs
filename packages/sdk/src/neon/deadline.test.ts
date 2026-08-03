@@ -92,6 +92,16 @@ describe("createDeadline", () => {
 		deadline.dispose();
 	});
 
+	it("does not fire early for a budget larger than setTimeout can represent", async () => {
+		// setTimeout collapses any delay above 2^31-1 to 1ms, so a single timer would
+		// have expired this deadline almost immediately.
+		const deadline = createDeadline(2 ** 31 + 1_000);
+		await delay(30);
+		expect(deadline.source()).toBeUndefined();
+		expect(deadline.remainingMs()).toBeGreaterThan(2 ** 31 - 1);
+		deadline.dispose();
+	});
+
 	it("releases the caller-signal listener on dispose", () => {
 		const controller = new AbortController();
 		const deadline = createDeadline(60_000, controller.signal);
