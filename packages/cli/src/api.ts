@@ -41,6 +41,8 @@ if (PROXY_ENV_VARS.some((name) => process.env[name])) {
 export type ApiCallProps = {
 	apiKey: string;
 	apiHost?: string;
+	/** Per-request timeout. Defaults to {@link REQUEST_TIMEOUT_MS}. */
+	requestTimeoutMs?: number;
 };
 
 const DEFAULT_API_HOST = "https://console.neon.tech/api/v2";
@@ -167,11 +169,51 @@ function headersToObject(headers: Headers): Record<string, string> {
 	return out;
 }
 
+/**
+ * Raised by {@link makeTimedFetch} when the CLI's own request timeout fires. Owning the
+ * type is what makes the timeout recognisable further up: `@neon/sdk` reports every
+ * transport failure as a `NeonNetworkError`, so matching on names or codes cannot tell a
+ * timeout from a reset connection.
+ */
+class RequestTimeoutError extends Error {
+	/**
+	 * What `fetch` actually threw. Not passed as an `Error` `cause`, because this package
+	 * compiles against a lib without `ErrorOptions`.
+	 */
+	readonly reason?: unknown;
+
+	constructor(timeoutMs: number, reason?: unknown) {
+		super(`Request timed out after ${timeoutMs}ms`);
+		this.name = "RequestTimeoutError";
+		this.reason = reason;
+	}
+}
+
+/**
+ * Whether a failure was a request timeout rather than a connectivity problem.
+ *
+ * Walks the `cause` chain, because the SDK wraps whatever `fetch` threw. Before this, the
+ * check only looked at the top-level error's `name` — which is `NeonNetworkError` on every
+ * SDK path — so a timeout fell through to the connectivity branch and the user was told to
+ * check an internet connection that was working.
+ */
 function isAbortError(err: unknown): boolean {
-	return (
-		err instanceof Error &&
-		(err.name === "AbortError" || err.name === "TimeoutError")
-	);
+	let current: unknown = err;
+	for (let depth = 0; depth < 6 && current != null; depth++) {
+		if (current instanceof RequestTimeoutError) return true;
+		if (
+			current instanceof Error &&
+			(current.name === "AbortError" || current.name === "TimeoutError")
+		) {
+			return true;
+		}
+		// `@neon/sdk` classifies its own deadlines and cancellations by kind; the CLI
+		// does not set them today, but reading them keeps this correct if it ever does.
+		const kind = (current as { kind?: unknown }).kind;
+		if (kind === "timeout" || kind === "aborted") return true;
+		current = (current as { cause?: unknown }).cause;
+	}
+	return false;
 }
 
 /**
@@ -246,19 +288,33 @@ function networkError(err: unknown): NeonApiError {
  * and lightweight debug logging of the request line + response status — the
  * fetch-native replacement for the old `axios-debug-log` wiring.
  */
-const timedFetch: typeof fetch = async (input, init) => {
-	const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
-	const signal = init?.signal
-		? AbortSignal.any([init.signal, timeout])
-		: timeout;
-	const method =
-		init?.method ?? (input instanceof Request ? input.method : "GET");
-	const url = input instanceof Request ? input.url : String(input);
-	log.debug("%s %s", method.toUpperCase(), url);
-	const response = await fetch(input, { ...init, signal });
-	log.debug("%d %s", response.status, response.statusText);
-	return response;
-};
+const makeTimedFetch =
+	(requestTimeoutMs: number): typeof fetch =>
+	async (input, init) => {
+		const timeout = AbortSignal.timeout(requestTimeoutMs);
+		const signal = init?.signal
+			? AbortSignal.any([init.signal, timeout])
+			: timeout;
+		const method =
+			init?.method ?? (input instanceof Request ? input.method : "GET");
+		const url = input instanceof Request ? input.url : String(input);
+		log.debug("%s %s", method.toUpperCase(), url);
+		try {
+			const response = await fetch(input, { ...init, signal });
+			log.debug("%d %s", response.status, response.statusText);
+			return response;
+		} catch (err) {
+			// Our own timeout fired, and we are the only code that knows that: by the
+			// time this reaches `networkError` the SDK has wrapped it as a
+			// `NeonNetworkError`, and neither its name nor its `cause` chain carries a
+			// string code to recognise. Raise something we own instead of leaving the
+			// classification to guess.
+			if (timeout.aborted && !init?.signal?.aborted) {
+				throw new RequestTimeoutError(requestTimeoutMs, err);
+			}
+			throw err;
+		}
+	};
 
 const RETRY_COUNT = 5;
 const RETRY_DELAY = 3000;
@@ -341,13 +397,20 @@ export type RequestParams = {
 	headers?: Record<string, string>;
 };
 
-export const getApiClient = ({ apiKey, apiHost }: ApiCallProps) => {
+export const getApiClient = ({
+	apiKey,
+	apiHost,
+	requestTimeoutMs = REQUEST_TIMEOUT_MS,
+}: ApiCallProps) => {
 	const baseUrl = apiHost ?? DEFAULT_API_HOST;
+	// Shared by the generated client and the low-level `request()` escape hatch, so both
+	// paths get the same timeout and the same timeout classification.
+	const fetchWithTimeout = makeTimedFetch(requestTimeoutMs);
 	const client: Client = createClient(
 		createConfig({
 			auth: () => apiKey,
 			baseUrl,
-			fetch: timedFetch,
+			fetch: fetchWithTimeout,
 			headers: { "User-Agent": USER_AGENT },
 		}),
 	);
@@ -417,7 +480,7 @@ export const getApiClient = ({ apiKey, apiHost }: ApiCallProps) => {
 
 		let response: Response;
 		try {
-			response = await timedFetch(url, {
+			response = await fetchWithTimeout(url, {
 				method: params.method,
 				headers,
 				...(payload !== undefined ? { body: payload } : {}),
