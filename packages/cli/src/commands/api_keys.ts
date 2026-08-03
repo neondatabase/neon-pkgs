@@ -42,6 +42,16 @@ const CREATE_FIELDS_SCOPED = ["id", "name", "project_id", "key"] as const;
 const ALL_PROJECTS = "— all projects —";
 
 /**
+ * "This key should carry no project scope."
+ *
+ * A symbol rather than a string, because project ids are `^[a-z0-9-]{1,60}$` — any sentinel
+ * spelled as a string is a legal project id, and a project genuinely called that would have
+ * its correctly-scoped key rejected and revoked.
+ */
+const NO_PROJECT = Symbol("no-project");
+type ExpectedScope = string | typeof NO_PROJECT;
+
+/**
  * Reject a scope flag that is present but unusable.
  *
  * Every failure mode here ends the same way — the flag reads as absent, the scope check
@@ -245,7 +255,7 @@ const create = async (props: CreateProps) => {
 	// really did ask for account scope rather than inheriting a checked-out project.
 	if (!projectId && !orgId) {
 		const { data } = await props.apiClient.createApiKey({ key_name: name });
-		await assertUsable(props, data, { orgId: null, expect: "no-project" });
+		await assertUsable(props, data, { orgId: null, expect: NO_PROJECT });
 		report(props, data, CREATE_FIELDS);
 		return;
 	}
@@ -254,7 +264,7 @@ const create = async (props: CreateProps) => {
 		const { data } = await props.apiClient.createOrgApiKey(orgId, {
 			key_name: name,
 		});
-		await assertUsable(props, data, { orgId, expect: "no-project" });
+		await assertUsable(props, data, { orgId, expect: NO_PROJECT });
 		report(props, data, CREATE_FIELDS);
 		log.info(
 			"Reaches every project in %s. Pass --project-id instead to restrict it to one.",
@@ -316,12 +326,12 @@ const report = (
 const assertUsable = async (
 	props: CommonProps,
 	data: { id?: number; key?: string; project_id?: string },
-	scope: { orgId: string | null; expect: string | "no-project" },
+	scope: { orgId: string | null; expect: ExpectedScope },
 ): Promise<void> => {
 	// `expect` is always stated, never inferred from a missing field: "no project" has to be
 	// checked as deliberately as an exact project, or a key that came back narrower than
 	// requested would be reported as reaching the whole organization.
-	const wanted = scope.expect === "no-project" ? undefined : scope.expect;
+	const wanted = scope.expect === NO_PROJECT ? undefined : scope.expect;
 	const problem =
 		typeof data.key !== "string" || data.key.trim() === ""
 			? "Neon returned no key."
