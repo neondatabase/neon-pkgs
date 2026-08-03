@@ -80,8 +80,9 @@ describe("normalizeGatewayErrorBody — anthropic dialect", () => {
 	});
 
 	it("converts the gateway's OpenAI-shaped rejection", () => {
-		// The gateway emits this shape on every route, including /anthropic/v1,
-		// where it would otherwise be dropped for lacking `type: "error"`.
+		// Nothing guarantees a layer answers in the dialect of the route it was
+		// reached through, and this shape lacks the `type: "error"` the
+		// Anthropic schema requires.
 		expect(normalizeGatewayErrorBody(OPENAI_SHAPED, "anthropic")).toEqual({
 			type: "error",
 			error: {
@@ -103,7 +104,7 @@ describe("normalizeGatewayErrorBody — anthropic dialect", () => {
 		});
 	});
 
-	it("unwraps an upstream error carried as a JSON string", () => {
+	it("unwraps an upstream error and keeps its diagnostics", () => {
 		expect(
 			normalizeGatewayErrorBody(DATABRICKS_WRAPPED, "anthropic"),
 		).toMatchObject({
@@ -112,6 +113,9 @@ describe("normalizeGatewayErrorBody — anthropic dialect", () => {
 				type: "invalid_request_error",
 				message:
 					"Invalid 'max_output_tokens': integer below minimum value. Expected a value >= 16, but got 1 instead.",
+				// Carried over from the OpenAI envelope rather than dropped.
+				param: "max_output_tokens",
+				code: "integer_below_min_value",
 			},
 		});
 	});
@@ -182,6 +186,7 @@ describe("error surfacing over a real socket", () => {
 		const gateway = await startTestGateway({
 			body: DATABRICKS_FLAT,
 			status: 400,
+			headers: { "content-encoding": "identity" },
 		});
 		try {
 			const neon = createNeon({
@@ -195,6 +200,7 @@ describe("error surfacing over a real socket", () => {
 				error as { responseHeaders?: Record<string, string> }
 			).responseHeaders;
 			expect(headers).not.toHaveProperty("content-length");
+			expect(headers).not.toHaveProperty("content-encoding");
 		} finally {
 			await gateway.close();
 		}
@@ -241,17 +247,20 @@ describe("error surfacing over a real socket", () => {
 			contentType: "text/plain",
 		});
 		let message = "";
+		let responseBody: string | undefined;
 		try {
 			const neon = createNeon({ baseURL: gateway.baseURL, apiKey: "t" });
 			await generateText({ model: neon("gpt-5-2"), prompt: "hi" });
 		} catch (error) {
 			message = (error as { message: string }).message;
+			responseBody = (error as { responseBody?: string }).responseBody;
 		} finally {
 			await gateway.close();
 		}
 
-		// Untouched: the body never became an envelope either model could read,
-		// so the SDK still falls back to the status line and keeps the raw body.
+		// Untouched: never an envelope either model could read, so the SDK falls
+		// back to the status line and the raw body survives for inspection.
 		expect(message).toBe("Bad Request");
+		expect(responseBody).toBe("upstream exploded");
 	});
 });

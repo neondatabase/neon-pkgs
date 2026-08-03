@@ -3,7 +3,7 @@
 	"include": [
 		"src",
 		"test",
-		"e2e/sdk-version-matrix.e2e.test.ts",
+		"e2e",
 		"vitest.config.ts",
 		"vitest.e2e.config.ts",
 		"tsdown.config.ts"

@@ -91,9 +91,9 @@ describe.skipIf(!hasGatewayEnv())(
 		describe.each(
 			Object.entries(MATRIX_MODELS) as Array<[MatrixFamily, string]>,
 		)("%s (%s)", (family, modelId) => {
-			const modelIt = it.skipIf(!served.has(modelId));
+			const servesModel = served.has(modelId);
 
-			modelIt("generateText", async () => {
+			it.skipIf(!servesModel)("generateText", async () => {
 				const result = await generateText({
 					model: neon(modelId),
 					prompt: PROMPT,
@@ -103,18 +103,21 @@ describe.skipIf(!hasGatewayEnv())(
 				expectNoHardFailureWarnings(result.warnings);
 			});
 
-			modelIt("generateText with system prompt", async () => {
-				const result = await generateText({
-					model: neon(modelId),
-					system: SYSTEM,
-					prompt: "Say hello.",
-					...modelOptions(family),
-				});
-				expect(result.text.trim().length).toBeGreaterThan(0);
-				expectNoHardFailureWarnings(result.warnings);
-			});
+			it.skipIf(!servesModel)(
+				"generateText with system prompt",
+				async () => {
+					const result = await generateText({
+						model: neon(modelId),
+						system: SYSTEM,
+						prompt: "Say hello.",
+						...modelOptions(family),
+					});
+					expect(result.text.trim().length).toBeGreaterThan(0);
+					expectNoHardFailureWarnings(result.warnings);
+				},
+			);
 
-			modelIt("streamText", async () => {
+			it.skipIf(!servesModel)("streamText", async () => {
 				const result = streamText({
 					model: neon(modelId),
 					prompt: PROMPT,
@@ -127,7 +130,7 @@ describe.skipIf(!hasGatewayEnv())(
 				expect(text.trim().length).toBeGreaterThan(0);
 			});
 
-			modelIt.skipIf(!STRUCTURED_FAMILIES.has(family))(
+			it.skipIf(!servesModel || !STRUCTURED_FAMILIES.has(family))(
 				"generateObject",
 				async () => {
 					const result = await generateObject({
@@ -142,7 +145,7 @@ describe.skipIf(!hasGatewayEnv())(
 				},
 			);
 
-			modelIt.skipIf(!TOOL_FAMILIES.has(family))(
+			it.skipIf(!servesModel || !TOOL_FAMILIES.has(family))(
 				"tool calling (generateText + stepCountIs)",
 				async () => {
 					const result = await generateText({
