@@ -81,10 +81,7 @@ const renderPreview = (services: readonly NeonService[]): string => {
 	const lines: string[] = [];
 
 	if (services.includes("ai-gateway")) {
-		lines.push(
-			"    // Always available on the branch; provisioning needs a paid plan",
-			"    aiGateway: true,",
-		);
+		lines.push("    aiGateway: true,");
 	}
 	if (services.includes("functions")) {
 		lines.push(

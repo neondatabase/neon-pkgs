@@ -72,7 +72,6 @@ export default defineConfig({
   // Declare your Neon services here
   auth: true,
   preview: {
-    // Always available on the branch; provisioning needs a paid plan
     aiGateway: true,
     functions: {
       hello: { name: "Hello World", source: "./hello.ts" },
