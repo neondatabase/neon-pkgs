@@ -701,13 +701,24 @@ The key is returned once, on create, and cannot be retrieved again.
 
 ### Project-scoped keys
 
-A key created with `--project-id` bounds the blast radius to one project: it cannot create projects, cannot mint API keys, and cannot see any other project — others report "not found" rather than a permission error, so it is not even an existence oracle.
+A key created with `--project-id` bounds what it can reach to one project. Verified against a real scoped key:
 
-It is **not** read-only. Inside that one project it can do everything the API allows, including deleting branches and the project itself — `neon deploy` working at all is proof of that. What it buys is a bound on *reach*, which is what lets you hand it to an agent or a CI job without handing over your account:
+| Attempt | Result |
+| --- | --- |
+| Read and write its own project | works |
+| Read any other project | `project not found` — not even an existence oracle |
+| `neon projects create` | `project-scoped keys are not allowed to create projects` |
+| `neon projects list` | refused |
+| `neon api-keys create` / `list` | refused (true of any organization key, not only scoped ones) |
+
+It is **not** read-only. Inside its one project it can do everything the API allows, including deleting branches and the project itself — `neon deploy` working at all is proof of that. What it bounds is *reach*, which is what lets you hand it to an agent or a CI job without handing over your account:
 
 ```bash
-NEON_API_KEY=napi_… neon deploy    # applies neon.ts, and can reach nothing else
+neon link --project-id frosty-…       # once, as yourself — writes .neon
+NEON_API_KEY=napi_… neon deploy       # then the agent, reaching only that project
 ```
+
+`neon link` needs `--project-id` explicitly when using a scoped key: the interactive picker lists your projects, which a scoped key cannot do.
 
 `api-keys` deliberately ignores the `.neon` context file, unlike every other project command. Otherwise `neon api-keys create --name ci` inside a linked directory would silently mint a key scoped to that project instead of the account key you asked for. How far a credential reaches comes only from a flag you typed.
 
@@ -719,7 +730,7 @@ $ neon api-keys list --org-id org-old-flower-82714815
 │ Id      │ Name          │ Project                │ Created At           │ Last Used At │
 ├─────────┼───────────────┼────────────────────────┼──────────────────────┼──────────────┤
 │ 3238954 │ agent         │ divine-credit-28872766 │ 2026-08-03T07:16:04Z │              │
-│ 3196722 │ ci            │ — all projects —       │ 2026-07-16T15:59:25Z │ 2026-07-23…  │
+│ 3196722 │ ci            │ (all projects)         │ 2026-07-16T15:59:25Z │ 2026-07-23…  │
 └─────────┴───────────────┴────────────────────────┴──────────────────────┴──────────────┘
 ```
 

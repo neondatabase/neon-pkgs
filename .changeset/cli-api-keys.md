@@ -18,14 +18,15 @@ neon api-keys create --name agent --project-id frosty-…   # can access only th
 neon api-keys revoke <id> [--org-id org-…]
 ```
 
-**Project-scoped keys are the reason this matters.** A key created with `--project-id` cannot create projects, cannot mint API keys, and cannot see any other project — other projects return "not found" rather than a permission error, so it isn't even an existence oracle. It is not read-only — inside that project it can do anything the API allows, including deleting it. What it bounds is reach, which is what lets you hand it to an agent or a CI job without handing over your account:
+**Project-scoped keys are the reason this matters.** A key created with `--project-id` cannot create projects, cannot mint API keys, and cannot see any other project — other projects return "not found" rather than a permission error, so it isn't even an existence oracle. It is not read-only — inside that project it can do anything the API allows, including deleting it. What it bounds is reach, which is what lets you hand it to an agent or a CI job without handing over your account (link the directory as yourself first; a scoped key cannot list projects to pick one):
 
 ```bash
-NEON_API_KEY=napi_… neon deploy    # applies neon.ts, and can reach nothing else
+neon link --project-id frosty-…       # once, as yourself
+NEON_API_KEY=napi_… neon deploy       # then the agent, reaching only that project
 ```
 
 `--org-id` and `--project-id` are mutually exclusive: a project-scoped key is already an organization key, and its organization is looked up from the project rather than chosen separately. With neither flag you get an account key.
 
 `api-keys` is deliberately exempt from `.neon` context enrichment. Every other project command fills `--project-id` from the linked directory, which here would mean `api-keys create --name ci` silently producing a key scoped to whatever project is checked out instead of the account key requested. How far a credential reaches comes only from a flag you typed.
 
-`neon api-keys list --org-id` shows which keys are scoped and to what, reading `— all projects —` for keys that aren't narrowed, alongside `last_used_at` and `last_used_from_addr` — the fields you need to spot a key worth revoking.
+`neon api-keys list --org-id` shows which keys are scoped and to what, reading `(all projects)` for keys that are not narrowed, alongside `last_used_at` and `last_used_from_addr` — the fields you need to spot a key worth revoking.

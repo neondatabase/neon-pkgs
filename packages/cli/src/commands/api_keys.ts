@@ -36,10 +36,13 @@ const ORG_FIELDS = [
 ] as const;
 
 const CREATE_FIELDS = ["id", "name", "key"] as const;
+/** Metadata only: the secret is printed separately so it can be copied cleanly. */
+const CREATE_TABLE_FIELDS = ["id", "name"] as const;
+const CREATE_TABLE_FIELDS_SCOPED = ["id", "name", "project"] as const;
 const CREATE_FIELDS_SCOPED = ["id", "name", "project_id", "key"] as const;
 
 /** Rendered for an org key that was not narrowed to a project. Table output only. */
-const ALL_PROJECTS = "— all projects —";
+const ALL_PROJECTS = "(all projects)";
 
 /**
  * "This key should carry no project scope."
@@ -67,33 +70,44 @@ type ExpectedScope = string | typeof NO_PROJECT;
  * it — `.strictOptions()` on each subcommand rejects it instead.
  */
 /**
- * A scope flag is either absent, or exactly one non-empty string. Anything else is an error.
+ * A flag is either absent, or exactly one non-empty string. Anything else is an error.
  *
  * Every rejected shape otherwise ends the same way: the flag reads as falsy, the scope check
- * falls through, and an **account** key is minted instead of the narrow one asked for. That
- * is the worst thing this command can do, so none of them get a lenient reading.
+ * falls through, and an **account** key is minted instead of the narrow one asked for — the
+ * worst thing this command can do, so none of them get a lenient reading.
  *
  * - `--project-id ""` — an unset shell variable; empty string, which is falsy.
  * - `--no-project-id` — yargs boolean negation; `false`, which is falsy.
  * - `--project-id a --project-id b` — an array, which would reach the API as `a,b`.
  *
- * A misspelled flag never binds at all and cannot be seen here; `.strict()` rejects it.
- * Anything after a `--` terminator is handled by {@link noPassthrough}.
+ * A misspelled flag never binds and cannot be seen here; `.strict()` rejects it. Anything
+ * after a `--` terminator is handled by {@link noPassthrough}.
  */
-const single = (name: string) => (value: unknown) => {
-	if (value === undefined) return undefined;
-	if (Array.isArray(value)) {
-		throw new Error(
-			`--${name} was given more than once. Pass it at most once.`,
-		);
-	}
-	if (typeof value !== "string" || value.trim() === "") {
-		throw new Error(
-			`--${name} needs a value. Pass one, or omit the flag entirely.`,
-		);
-	}
-	return value;
-};
+const single =
+	(name: string, { required = false }: { required?: boolean } = {}) =>
+	(value: unknown) => {
+		if (value === undefined) return undefined;
+		if (Array.isArray(value)) {
+			throw new Error(
+				`--${name} was given more than once. Pass it at most once.`,
+			);
+		}
+		// `--no-x` is the negation form and yields `false`, so name it rather than telling
+		// the user their value was empty when they never gave one.
+		if (value === false) {
+			throw new Error(
+				`--no-${name} is not a valid way to skip --${name}. Omit the flag entirely.`,
+			);
+		}
+		if (typeof value !== "string" || value.trim() === "") {
+			throw new Error(
+				required
+					? `--${name} needs a value.`
+					: `--${name} needs a value. Pass one, or omit the flag entirely.`,
+			);
+		}
+		return value;
+	};
 
 /**
  * Refuse arguments after a `--` terminator.
@@ -147,7 +161,7 @@ export const builder = (argv: yargs.Argv) =>
 							describe: "A name to identify the key later",
 							type: "string",
 							demandOption: true,
-							coerce: single("name"),
+							coerce: single("name", { required: true }),
 						},
 						"org-id": {
 							describe:
@@ -179,6 +193,20 @@ export const builder = (argv: yargs.Argv) =>
 						describe: "The API key id, from `api-keys list`",
 						type: "number",
 						demandOption: true,
+						// Without this an unparseable id becomes NaN and is sent to the API,
+						// which answers "not found" — blaming the key rather than the input.
+						coerce: (value: unknown) => {
+							if (
+								typeof value !== "number" ||
+								!Number.isSafeInteger(value) ||
+								value <= 0
+							) {
+								throw new Error(
+									`api-keys revoke needs a numeric key id, from \`neon api-keys list\`. Got \`${String(value)}\`.`,
+								);
+							}
+							return value;
+						},
 					})
 					.options({
 						"org-id": {
@@ -223,14 +251,14 @@ const list = async (props: ListProps) => {
 				})),
 				{
 					fields: ORG_TABLE_FIELDS,
-					title: "API keys",
+					title: `API keys in ${props.orgId}`,
 					emptyMessage: "This organization has no API keys.",
 				},
 			);
 		} else {
 			out.write(data, {
 				fields: ORG_FIELDS,
-				title: "API keys",
+				title: `API keys in ${props.orgId}`,
 				emptyMessage: "This organization has no API keys.",
 			});
 		}
@@ -241,10 +269,17 @@ const list = async (props: ListProps) => {
 	const { data } = await props.apiClient.listApiKeys();
 	out.write(data, {
 		fields: ACCOUNT_FIELDS,
-		title: "API keys",
-		emptyMessage: "You have no API keys.",
+		title: "Account API keys",
+		emptyMessage: "You have no account API keys.",
 	});
 	out.end();
+	// Organization keys live on a different endpoint, so a heading of plain "API keys"
+	// would claim to be everything while showing only half.
+	if (props.output === "table") {
+		log.info(
+			"Organization keys are listed separately: neon api-keys list --org-id <org>",
+		);
+	}
 };
 
 const create = async (props: CreateProps) => {
@@ -256,7 +291,12 @@ const create = async (props: CreateProps) => {
 	if (!projectId && !orgId) {
 		const { data } = await props.apiClient.createApiKey({ key_name: name });
 		await assertUsable(props, data, { orgId: null, expect: NO_PROJECT });
-		report(props, data, CREATE_FIELDS);
+		report(props, data, CREATE_FIELDS, CREATE_TABLE_FIELDS);
+		// The only key here that reaches everything, and the only one that used to say
+		// nothing about its reach.
+		log.warning(
+			"This key reaches everything your account can, in every organization. Pass --org-id or --project-id to narrow it.",
+		);
 		return;
 	}
 
@@ -265,7 +305,7 @@ const create = async (props: CreateProps) => {
 			key_name: name,
 		});
 		await assertUsable(props, data, { orgId, expect: NO_PROJECT });
-		report(props, data, CREATE_FIELDS);
+		report(props, data, CREATE_FIELDS, CREATE_TABLE_FIELDS);
 		log.info(
 			"Reaches every project in %s. Pass --project-id instead to restrict it to one.",
 			orgId,
@@ -292,23 +332,48 @@ const create = async (props: CreateProps) => {
 		expect: scopeTo,
 	});
 
-	report(props, data, CREATE_FIELDS_SCOPED);
+	report(props, data, CREATE_FIELDS_SCOPED, CREATE_TABLE_FIELDS_SCOPED);
 	log.info(
 		"Limited to %s: it cannot create projects, mint API keys, or read any other project. It can still change and delete everything inside that project.",
 		scopeTo,
 	);
 };
 
-/** Print the issued key and the reminder that it will not be shown again. */
+/**
+ * Print the issued key.
+ *
+ * In a terminal the secret goes on its own line rather than into a table cell: `cli-table`
+ * neither wraps nor truncates, so a 50-odd character key makes the row wider than most
+ * terminals and the wrapped remainder ends up beside box-drawing characters. Since this is
+ * the only time the key is ever shown, it has to be selectable in one gesture. Structured
+ * output keeps the key in the object, where a script expects it.
+ */
 const report = (
 	props: CommonProps,
-	data: unknown,
+	data: { key?: string; [field: string]: unknown },
 	fields: readonly string[],
+	tableFields: readonly string[],
 ) => {
 	const out = writer(props);
-	out.write(data as never, { fields: fields as never, title: "API key" });
-	out.end();
-	log.info("Store this key now — it is not shown again.");
+	if (props.output === "table") {
+		// `project` mirrors the column name `list` uses. Added here rather than by the
+		// caller so structured output keeps the API's own `project_id` and gains no
+		// duplicate under a second name.
+		const row =
+			typeof data.project_id === "string"
+				? { ...data, project: data.project_id }
+				: data;
+		out.write(row as never, {
+			fields: tableFields as never,
+			title: "API key",
+		});
+		out.end();
+		out.text(`${data.key}\n`);
+	} else {
+		out.write(data as never, { fields: fields as never, title: "API key" });
+		out.end();
+	}
+	log.warning("Store this key now — it is not shown again.");
 };
 
 /**
@@ -358,6 +423,29 @@ const assertUsable = async (
 	);
 };
 
+/**
+ * Revoke, turning the most likely mistake into a usable message.
+ *
+ * Account and organization keys live on different endpoints, and `api-keys list --org-id X`
+ * shows ids that the account endpoint cannot see. Copying one and forgetting the flag is the
+ * easy error, and a bare "API key not found" sends the user looking for a deleted key rather
+ * than a missing flag.
+ */
+const revokeOrExplain = async (props: RevokeProps) => {
+	try {
+		return props.orgId
+			? await props.apiClient.revokeOrgApiKey(props.orgId, props.id)
+			: await props.apiClient.revokeApiKey(props.id);
+	} catch (err) {
+		if (isNeonApiError(err) && err.status === 404 && !props.orgId) {
+			throw new Error(
+				`No account API key with id ${props.id}. If it belongs to an organization, pass --org-id — organization keys are not visible to your account.`,
+			);
+		}
+		throw err;
+	}
+};
+
 /** Best-effort withdrawal of a key we are refusing to report. Never throws. */
 const withdraw = async (
 	props: CommonProps,
@@ -384,9 +472,7 @@ const withdraw = async (
 
 const revoke = async (props: RevokeProps) => {
 	const out = writer(props);
-	const { data } = props.orgId
-		? await props.apiClient.revokeOrgApiKey(props.orgId, props.id)
-		: await props.apiClient.revokeApiKey(props.id);
+	const { data } = await revokeOrExplain(props);
 	out.write(data, {
 		fields: ["id", "name", "revoked", "last_used_at"],
 		title: "API key",
@@ -412,7 +498,9 @@ const orgIdForProject = async (
 	} catch (err) {
 		if (isNeonApiError(err) && err.status === 404) {
 			throw new Error(
-				`Project ${projectId} not found. Check the id with \`neon projects list\`.`,
+				projectId.startsWith("org-")
+					? `Project ${projectId} not found — that looks like an organization id. Pass it as --org-id instead.`
+					: `Project ${projectId} not found. Check the id with \`neon projects list\`.`,
 			);
 		}
 		throw err;

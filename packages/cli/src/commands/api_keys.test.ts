@@ -64,6 +64,24 @@ describe("api-keys create", () => {
 		]);
 	});
 
+	// Locks the layout: metadata in the table, the secret alone on the line below, where it
+	// can be selected in one gesture no matter how narrow the terminal is.
+	test("table output puts the secret on its own line", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"api-keys",
+				"create",
+				"--name",
+				"agent",
+				"--project-id",
+				"proj-in-org",
+			],
+			{ outputTable: true },
+		);
+	});
+
 	test("refuses both scope flags together", async ({ testCliCommand }) => {
 		await testCliCommand(
 			[
@@ -110,7 +128,7 @@ describe("api-keys create", () => {
 	test("refuses an empty --name", async ({ testCliCommand }) => {
 		await testCliCommand(["api-keys", "create", "--name", ""], {
 			code: 1,
-			stderr: "ERROR: --name needs a value. Pass one, or omit the flag entirely.",
+			stderr: "ERROR: --name needs a value.",
 		});
 	});
 
@@ -141,7 +159,7 @@ describe("api-keys create", () => {
 			["api-keys", "create", "--name", "x", "--no-project-id"],
 			{
 				code: 1,
-				stderr: "ERROR: --project-id needs a value. Pass one, or omit the flag entirely.",
+				stderr: "ERROR: --no-project-id is not a valid way to skip --project-id. Omit the flag entirely.",
 			},
 		);
 	});
@@ -312,6 +330,17 @@ describe("api-keys revoke", () => {
 			"--org-id",
 			"org-7",
 		]);
+	});
+
+	test("refuses a non-numeric id instead of sending NaN", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["api-keys", "revoke", "abc"], {
+			code: 1,
+			stderr: expect.stringContaining(
+				"api-keys revoke needs a numeric key id",
+			),
+		});
 	});
 
 	test("refuses an empty --org-id rather than hitting the account endpoint", async ({

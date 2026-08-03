@@ -44,6 +44,17 @@ exports[`api-keys create > refuses both scope flags together 1`] = `""`;
 
 exports[`api-keys create > refuses scope flags after a -- terminator 1`] = `""`;
 
+exports[`api-keys create > table output puts the secret on its own line 1`] = `
+"API key
+┌─────┬───────┬─────────────┐
+│ Id  │ Name  │ Project     │
+├─────┼───────┼─────────────┤
+│ 303 │ agent │ proj-in-org │
+└─────┴───────┴─────────────┘
+napi_org_secret
+"
+`;
+
 exports[`api-keys create refuses an unusable response > an org-wide create that comes back scoped is refused 1`] = `""`;
 
 exports[`api-keys create refuses an unusable response > explains a project that belongs to no organization 1`] = `""`;
@@ -119,14 +130,14 @@ exports[`api-keys list > org keys carry the project each is scoped to 1`] = `
 `;
 
 exports[`api-keys list > table output names the unscoped rows 1`] = `
-"API keys
-┌─────┬──────────┬──────────────────┬──────────────────────┬──────────────────────┬─────────────────────┐
-│ Id  │ Name     │ Project          │ Created At           │ Last Used At         │ Last Used From Addr │
-├─────┼──────────┼──────────────────┼──────────────────────┼──────────────────────┼─────────────────────┤
-│ 301 │ scoped   │ proj-in-org      │ 2026-01-02T00:00:00Z │                      │                     │
-├─────┼──────────┼──────────────────┼──────────────────────┼──────────────────────┼─────────────────────┤
-│ 302 │ org-wide │ — all projects — │ 2026-01-03T00:00:00Z │ 2026-02-03T00:00:00Z │ 203.0.113.9         │
-└─────┴──────────┴──────────────────┴──────────────────────┴──────────────────────┴─────────────────────┘
+"API keys in org-7
+┌─────┬──────────┬────────────────┬──────────────────────┬──────────────────────┬─────────────────────┐
+│ Id  │ Name     │ Project        │ Created At           │ Last Used At         │ Last Used From Addr │
+├─────┼──────────┼────────────────┼──────────────────────┼──────────────────────┼─────────────────────┤
+│ 301 │ scoped   │ proj-in-org    │ 2026-01-02T00:00:00Z │                      │                     │
+├─────┼──────────┼────────────────┼──────────────────────┼──────────────────────┼─────────────────────┤
+│ 302 │ org-wide │ (all projects) │ 2026-01-03T00:00:00Z │ 2026-02-03T00:00:00Z │ 203.0.113.9         │
+└─────┴──────────┴────────────────┴──────────────────────┴──────────────────────┴─────────────────────┘
 "
 `;
 
@@ -147,5 +158,7 @@ last_used_at: 2026-02-03T00:00:00Z
 last_used_from_addr: 203.0.113.9
 "
 `;
+
+exports[`api-keys revoke > refuses a non-numeric id instead of sending NaN 1`] = `""`;
 
 exports[`api-keys revoke > refuses an empty --org-id rather than hitting the account endpoint 1`] = `""`;
