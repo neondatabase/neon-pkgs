@@ -288,6 +288,30 @@ function networkError(err: unknown): NeonApiError {
  * and lightweight debug logging of the request line + response status — the
  * fetch-native replacement for the old `axios-debug-log` wiring.
  */
+/**
+ * The largest delay a timer can represent. Above it Node warns
+ * (`TimeoutOverflowWarning`) and fires after 1ms instead.
+ */
+const MAX_TIMER_MS = 2 ** 31 - 1;
+
+/**
+ * Reject a timeout `AbortSignal.timeout` would refuse or silently mistreat.
+ *
+ * Without this the bad value surfaces as the very failure this classification exists to
+ * prevent: `-1`, `NaN`, `Infinity` and fractions throw `ERR_OUT_OF_RANGE` from inside the
+ * fetch wrapper, which is then wrapped as a `NeonNetworkError` and reported as a broken
+ * internet connection. `0` and anything above {@link MAX_TIMER_MS} are worse still — both
+ * are accepted, and both make every request time out immediately.
+ */
+function validateRequestTimeout(ms: number): number {
+	if (!Number.isInteger(ms) || ms < 1 || ms > MAX_TIMER_MS) {
+		throw new Error(
+			`requestTimeoutMs must be a whole number of milliseconds between 1 and ${MAX_TIMER_MS}; received ${ms}.`,
+		);
+	}
+	return ms;
+}
+
 const makeTimedFetch =
 	(requestTimeoutMs: number): typeof fetch =>
 	async (input, init) => {
@@ -405,7 +429,9 @@ export const getApiClient = ({
 	const baseUrl = apiHost ?? DEFAULT_API_HOST;
 	// Shared by the generated client and the low-level `request()` escape hatch, so both
 	// paths get the same timeout and the same timeout classification.
-	const fetchWithTimeout = makeTimedFetch(requestTimeoutMs);
+	const fetchWithTimeout = makeTimedFetch(
+		validateRequestTimeout(requestTimeoutMs),
+	);
 	const client: Client = createClient(
 		createConfig({
 			auth: () => apiKey,

@@ -74,4 +74,55 @@ describe("a request that times out", () => {
 		if (!isNeonApiError(err)) throw new Error("expected a NeonApiError");
 		expect(err.status).toBeUndefined();
 	});
+
+	it("classifies the low-level request() escape hatch the same way", async () => {
+		// A different code path from the generated client, sharing one fetch wrapper.
+		const api = getApiClient({
+			apiKey: "test",
+			apiHost,
+			requestTimeoutMs: 150,
+		});
+		try {
+			await api.request({ path: "projects", method: "GET" });
+			throw new Error("expected the request to time out");
+		} catch (err) {
+			if (!isNeonApiError(err)) throw err;
+			expect(err.code).toBe("ECONNABORTED");
+			expect(err.message).toBe("Request timed out");
+		}
+	});
+});
+
+describe("an invalid requestTimeoutMs", () => {
+	it("is refused when the client is built, not surfaced as a connection failure", () => {
+		// Left unvalidated, each of these reaches AbortSignal.timeout inside the fetch
+		// wrapper and comes back as "check your internet connection" — the failure this
+		// whole file exists to prevent. `0` and 2**31 are worse: both are accepted, and
+		// both make every request time out at once.
+		for (const requestTimeoutMs of [
+			-1,
+			0,
+			1.5,
+			Number.NaN,
+			Number.POSITIVE_INFINITY,
+			2 ** 31,
+		]) {
+			expect(() =>
+				getApiClient({ apiKey: "test", apiHost, requestTimeoutMs }),
+			).toThrow(/requestTimeoutMs must be a whole number/);
+		}
+	});
+
+	it("accepts the boundary values", () => {
+		expect(() =>
+			getApiClient({ apiKey: "test", apiHost, requestTimeoutMs: 1 }),
+		).not.toThrow();
+		expect(() =>
+			getApiClient({
+				apiKey: "test",
+				apiHost,
+				requestTimeoutMs: 2 ** 31 - 1,
+			}),
+		).not.toThrow();
+	});
 });
