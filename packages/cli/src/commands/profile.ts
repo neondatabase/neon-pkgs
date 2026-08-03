@@ -11,6 +11,7 @@ import { isInsideConfigDir } from "../config.js";
 import {
 	API_KEY,
 	apiKeyCredentials,
+	type CredentialKind,
 	credentialKind,
 	describeScope,
 	inspectCredentials,
@@ -533,8 +534,14 @@ const create = async (props: CreateProps) => {
 				: {}),
 		}),
 	);
+	await retirePreviousCredential(
+		props,
+		name,
+		previous,
+		credentialsPath,
+		apiKey,
+	);
 	recordProfile(props, name, credentialsPath, identity);
-	await retirePreviousCredential(props, name, previous, credentialsPath);
 
 	report(props, {
 		name,
@@ -702,8 +709,14 @@ const createByMinting = async (props: CreateProps) => {
 		// failure writing `profiles.json` costs a profile entry, not the credential.
 		keyIsReachable = true;
 
+		await retirePreviousCredential(
+			props,
+			name,
+			previous,
+			credentialsPath,
+			minted.key,
+		);
 		recordProfile(props, name, credentialsPath, identity);
-		await retirePreviousCredential(props, name, previous, credentialsPath);
 
 		report(props, {
 			name,
@@ -771,10 +784,38 @@ const retirePreviousCredential = async (
 	name: string,
 	existing: StoredCredentials | null,
 	credentialsPath: string,
+	/** The key now stored. Retiring this would kill the credential we just committed to. */
+	replacementKey?: string,
 ): Promise<void> => {
 	if (existing === null) return;
 
-	if (credentialKind(existing, credentialsPath) === API_KEY) {
+	// Re-storing the key a profile already holds is a no-op, not a replacement. Revoking here
+	// would leave the profile pointing at a credential this command had just killed.
+	if (
+		replacementKey !== undefined &&
+		typeof existing.api_key === "string" &&
+		existing.api_key.trim() === replacementKey.trim()
+	) {
+		log.debug(
+			"The replacement is the credential already stored; nothing to retire.",
+		);
+		return;
+	}
+
+	// The replacement is already on disk, so a credential we cannot classify is a thing to
+	// report, not a reason to fail a command that has otherwise succeeded.
+	let previousKind: CredentialKind;
+	try {
+		previousKind = credentialKind(existing, credentialsPath);
+	} catch (err) {
+		log.warning(
+			"Could not tell what the previous credential was, so it was left alone: %s",
+			err instanceof Error ? err.message : String(err),
+		);
+		return;
+	}
+
+	if (previousKind === API_KEY) {
 		const keyId =
 			typeof existing.key_id === "number" ? existing.key_id : undefined;
 		if (keyId === undefined) {
@@ -923,12 +964,17 @@ const rotateKey = async (props: ProfileProps & { name: string }) => {
 	// a command where the user named nothing but a profile.
 	const { data: details } = await minting.getAuthDetails();
 	if (details.auth_method === "api_key_org") {
-		const target =
+		// Only advise a scope we know. `api_key_org` covers organization *and* project keys, so
+		// for a key we did not mint — which records no scope — suggesting `--org-id` could hand
+		// the profile more reach than it had.
+		const advice =
 			scope.projectId !== undefined
-				? `--project-id ${scope.projectId}`
-				: `--org-id ${scope.orgId ?? details.account_id}`;
+				? `\`neon profile create ${name} --mint --project-id ${scope.projectId} --force\``
+				: scope.orgId !== undefined && previousKeyId !== undefined
+					? `\`neon profile create ${name} --mint --org-id ${scope.orgId} --force\``
+					: `\`neon profile create ${name} --mint --org-id ${details.account_id} --force\` — but check \`neon api-keys list --org-id ${details.account_id}\` first, because a key you supplied may have been narrowed to a single project and an organization key would reach more`;
 		throw new Error(
-			`Profile "${name}" holds an organization key, and only a personal credential can mint organization keys — so it cannot mint its own replacement. Sign in and mint one with \`neon profile create ${name} --mint ${target} --force\`.`,
+			`Profile "${name}" holds an organization key, and only a personal credential can mint organization keys — so it cannot mint its own replacement. Sign in and mint one with ${advice}.`,
 		);
 	}
 

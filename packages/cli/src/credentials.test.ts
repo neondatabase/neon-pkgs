@@ -120,14 +120,19 @@ describe("readCredentials", () => {
 			"not valid JSON",
 		);
 		expect(read.kind === "unusable" && read.reason).toContain(path);
-		expect(readCredentials(path)).toBeNull();
+		// Using it is an error: a read-only command must not "repair" it by signing in again,
+		// which would overwrite it and possibly as a different account.
+		expect(() => readCredentials(path)).toThrow(/not valid JSON/);
+		expect(() => readCredentials(path)).toThrow(/Replace it deliberately/);
 	});
 
 	test("a JSON array is unusable, not a credentials object", () => {
 		const dir = makeDir({ "credentials.json": "[1,2]" });
 		const path = resolve(dir, "credentials.json");
 		expect(inspectCredentials(path).kind).toBe("unusable");
-		expect(readCredentials(path)).toBeNull();
+		expect(() => readCredentials(path)).toThrow(
+			/does not contain a credentials object/,
+		);
 	});
 
 	test("a missing file is absent rather than damaged", () => {
@@ -303,5 +308,23 @@ describe("scopeOf / describeScope", () => {
 		const stored = readCredentials(resolve(dir, "credentials.json"));
 		expect(stored).not.toBeNull();
 		expect(scopeOf(stored as NonNullable<typeof stored>)).toEqual({});
+	});
+});
+
+describe("replacing a credential with itself", () => {
+	// Re-storing the key a profile already holds is a no-op, not a replacement. The command that
+	// wraps this must not revoke the key it has just committed to.
+	test("the stored key and the replacement are recognisably the same", () => {
+		const dir = makeDir();
+		const path = resolve(dir, "credentials.json");
+		writeCredentials(
+			path,
+			apiKeyCredentials({ apiKey: "napi_same", keyId: 7 }),
+		);
+
+		const stored = readCredentials(path);
+		expect(stored?.api_key).toBe("napi_same");
+		// Whitespace on either side must not make them look different.
+		expect((stored?.api_key as string).trim()).toBe(" napi_same\n".trim());
 	});
 });

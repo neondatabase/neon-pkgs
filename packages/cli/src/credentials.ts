@@ -44,7 +44,6 @@
  */
 
 import { readFileSync } from "node:fs";
-import { log } from "./log.js";
 import { writeSecretFile } from "./utils/secure_file.js";
 
 export const OAUTH = "oauth";
@@ -178,19 +177,23 @@ export const inspectCredentials = (path: string): CredentialsRead => {
 };
 
 /**
- * The credential at `path`, or `null` when there is nothing usable there.
+ * The credential at `path`, or `null` when the file is not there.
  *
- * A damaged file is **reported and then treated as absent**, so the caller recovers by
- * authenticating again. Both halves matter. Failing hard would leave the CLI unusable until the
- * user found and deleted a file by hand, for a fault whose only recovery is to replace the
- * credential anyway — but staying quiet about it, as this used to, meant a corrupted file was
- * silently overwritten and nobody ever learned it had been damaged.
+ * A damaged file is an error, not an absence. Treating it as absent — which is what this used to
+ * do — meant any read-only command could repair it by starting a browser sign-in and overwriting
+ * it, **possibly as a different account**, with the user never having asked for a repair and no
+ * way back to whatever was in the file. Failing here costs one deliberate command; the message
+ * names it.
+ *
+ * `profile list` and telemetry use {@link inspectCredentials} instead, because describing a
+ * broken credential is not the same as using one.
  */
 export const readCredentials = (path: string): StoredCredentials | null => {
 	const read = inspectCredentials(path);
 	if (read.kind === "unusable") {
-		log.warning("%s. Signing in again will replace it.", read.reason);
-		return null;
+		throw new Error(
+			`${read.reason}. Replace it deliberately with \`neon auth\` (or \`neon profile create <name> --force\`), or delete the file.`,
+		);
 	}
 	return read.kind === "ok" ? read.credentials : null;
 };

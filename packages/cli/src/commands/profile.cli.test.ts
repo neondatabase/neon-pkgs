@@ -692,25 +692,25 @@ describe("profile rotate-key — what it refuses", () => {
 });
 
 describe("a damaged credentials file", () => {
-	// Loud, then recovers. Silence would mean the file was overwritten by the next sign-in and
-	// nobody ever learned it had been damaged; failing hard would leave the CLI unusable until
-	// the user found and deleted a file by hand.
-	test("is reported by name, and then recovered from by signing in", async () => {
+	// It must not be "repaired" by a read-only command: treating it as absent let any command
+	// start a sign-in and overwrite it, possibly as a different account, with no way back.
+	test("stops the command and names the file and the repair", async () => {
 		const dir = makeConfigDir({
 			"credentials.json": "{ not json",
 		});
-		// CI, so the sign-in refuses instead of reaching for a browser.
-		const { code, stderr } = await runCli(
-			["projects", "list", "--config-dir", dir],
-			{ CI: "true" },
-		);
+		const { code, stderr } = await runCli([
+			"projects",
+			"list",
+			"--config-dir",
+			dir,
+		]);
 
 		expect(code).toBe(1);
 		expect(stderr).toContain("not valid JSON");
 		expect(stderr).toContain("credentials.json");
-		expect(stderr).toContain("Signing in again will replace it");
-		// It went on to authenticate rather than stopping at the damaged file.
-		expect(stderr).toContain("Cannot run interactive auth in CI");
+		expect(stderr).toContain("Replace it deliberately");
+		// It did not go on to authenticate over the top of it.
+		expect(stderr).not.toContain("Awaiting authentication");
 	});
 
 	// But one broken profile must not take the whole listing with it.

@@ -728,7 +728,7 @@ Every key is verified against the API before it is stored, and the account it be
 
 One thing it cannot do: **an organization key cannot mint its own replacement.** Neon only accepts a personal credential when creating organization keys, so rotating an org- or project-scoped profile means signing in again — `neon profile create ci --mint --org-id org-abc-123 --force`. `rotate-key` checks this before minting and says so, rather than letting the API answer with a rule you had no reason to expect.
 
-Two things the CLI cannot do for a key you supplied rather than minted. It cannot revoke it, because `GET /api_keys` exposes no prefix and a stored secret cannot be matched to a listing entry, so both `rotate-key` and `profile remove` say the old key is still live and point you at `neon api-keys list`. And it cannot know the key's scope, so `profile list` shows `account` for it.
+Two things the CLI cannot do for a key you supplied rather than minted. It cannot revoke it, because `GET /api_keys` exposes no prefix and a stored secret cannot be matched to a listing entry, so both `rotate-key` and `profile remove` say the old key is still live and point you at `neon api-keys list`. For a key you supplied it records the organization the API reports, but cannot know whether that key was narrowed to a single project — so `rotate-key` will not suggest an organization-wide replacement without telling you to check `neon api-keys list` first.
 
 If a stored key stops working there is nothing to refresh, so recovery is one browser sign-in: `neon profile create work --mint --force`.
 

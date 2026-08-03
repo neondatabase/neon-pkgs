@@ -166,20 +166,20 @@ describe("ensureAuth", () => {
 		expect(props.apiKey).toEqual(expect.any(String));
 	});
 
-	test("should trigger auth flow when credentials.json is invalid", async ({
+	// Changed deliberately: an invalid credentials file used to be treated as absent, so this
+	// command would sign in over the top of it — overwriting a file the user might have wanted
+	// back, possibly as a different account. It now stops and says how to replace it.
+	test("should refuse and name the file when credentials.json is invalid", async ({
 		runMockServer,
 	}) => {
 		const server = await runMockServer("main");
-
-		// Write an empty credentials file
-		writeFileSync(join(configDir, "credentials.json"), "", { mode: 0o700 });
+		writeFileSync(join(configDir, "credentials.json"), "invalid json", {
+			mode: 0o700,
+		});
 
 		const props = setupTestProps(server);
-		await ensureAuth(props);
-
-		expect(authSpy).toHaveBeenCalledTimes(1);
-		expect(refreshTokenSpy).not.toHaveBeenCalled();
-		expect(props.apiKey).toEqual(expect.any(String));
+		await expect(ensureAuth(props)).rejects.toThrow(/not valid JSON/);
+		expect(authSpy).not.toHaveBeenCalled();
 	});
 
 	test("should try refresh when token is missing access_token but has refresh_token", async ({
