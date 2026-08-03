@@ -1,3 +1,5 @@
+import { isInsideConfigDir } from "./config.js";
+
 /**
  * How the current invocation authenticated, recorded by `ensureAuth` so the top-level 401
  * handler can react to the credential that actually failed.
@@ -54,23 +56,37 @@ export const clearAuthContext = (): void => {
  */
 export const credentialsToClearOn401 = (
 	context: AuthContext | null,
-): string | null =>
-	context?.source === "stored-credentials"
-		? (context.credentialsPath ?? null)
-		: null;
+): string | null => {
+	if (context?.source !== "stored-credentials") return null;
+	const path = context.credentialsPath;
+	if (path === undefined) return null;
+
+	// Only a file the CLI created. A profile entry may point anywhere, and a credentials file
+	// we merely adopted is not ours to delete — `neon profile remove` already refuses to touch
+	// one, so a 401 must not quietly do what an explicit removal declines to.
+	return isInsideConfigDir(context.configDir, path) ? path : null;
+};
 
 /**
  * What to tell the user when the API rejects their credential, naming the profile and file
  * when one is involved so they know which of several accounts failed and what to re-run.
  */
 export const authFailureMessage = (context: AuthContext | null): string => {
+	const profile = context?.profile ?? "the selected profile";
+	const where =
+		context?.credentialsPath !== undefined
+			? ` (${context.credentialsPath})`
+			: "";
+
 	if (context?.source === "profile-api-key") {
-		const where =
-			context.credentialsPath !== undefined
-				? ` (${context.credentialsPath})`
-				: "";
-		const profile = context.profile ?? "the selected profile";
 		return `Authentication failed: the Neon API rejected profile "${profile}"'s API key${where}. Mint a replacement with \`neon profile rotate-key ${profile}\`, or store a new one with \`neon profile set-key ${profile}\`.`;
 	}
+
+	// Reached only when the session was not ours to clear, i.e. an adopted credentials file.
+	// Saying "check --api-key" there would be nonsense; the fix is to sign in again.
+	if (context?.source === "stored-credentials") {
+		return `Authentication failed: the Neon API rejected profile "${profile}"'s stored session${where}. That file was not created by neon, so it was left alone — sign in again with \`neon auth --profile ${profile}\`.`;
+	}
+
 	return "Authentication failed: the Neon API rejected the API key. Check --api-key or NEON_API_KEY.";
 };

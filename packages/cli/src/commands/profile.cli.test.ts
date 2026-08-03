@@ -337,6 +337,76 @@ describe("profile set-key", () => {
 	});
 });
 
+describe("neon init and profile selection", () => {
+	// Checking only the flag left the case that is easier to hit by accident: a profile
+	// exported once into a shell, then disregarded by every `neon init` run in it.
+	test("NEON_PROFILE is refused, not silently ignored", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": OAUTH_FILE,
+			"credentials.work.json": API_KEY_FILE,
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: {
+					DEFAULT: { credentials: "credentials.json" },
+					work: { credentials: "credentials.work.json" },
+				},
+			}),
+		});
+		const { code, stderr } = await runCli(["init", "--config-dir", dir], {
+			NEON_PROFILE: "work",
+		});
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("NEON_PROFILE");
+		expect(stderr).toContain("work");
+	});
+
+	test("--profile is refused too", async () => {
+		const dir = makeConfigDir({ "credentials.json": OAUTH_FILE });
+		const { code, stderr } = await runCli([
+			"init",
+			"--config-dir",
+			dir,
+			"--profile",
+			"work",
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("--profile");
+	});
+});
+
+describe("profile remove", () => {
+	// Deleting the file only makes the key unreachable from here. Saying nothing would imply
+	// the credential was destroyed.
+	test("says an API key stays live on the account", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": OAUTH_FILE,
+			"credentials.work.json": API_KEY_FILE,
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: {
+					DEFAULT: { credentials: "credentials.json" },
+					work: { credentials: "credentials.work.json" },
+				},
+			}),
+		});
+		const { code, stderr } = await runCli([
+			"profile",
+			"remove",
+			"work",
+			"--yes",
+			"--config-dir",
+			dir,
+		]);
+
+		expect(code).toBe(0);
+		expect(stderr).toContain("stays live on the account");
+		expect(stderr).not.toContain("Revoked the OAuth token");
+		expect(stderr).not.toContain("napi_supersecretkeyvalue");
+	});
+});
+
 describe("profile rotate-key", () => {
 	test("a profile with no usable credential says how to get one", async () => {
 		const dir = makeConfigDir({

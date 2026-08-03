@@ -91,11 +91,6 @@ export const recordCredentialInputs = (recorded: CredentialInputs): void => {
 
 export const credentialInputs = (): CredentialInputs => inputs;
 
-/** Reset between tests, so one case cannot observe another's inputs. */
-export const clearCredentialInputs = (): void => {
-	inputs = NO_INPUTS;
-};
-
 export const selectCredential = ({
 	apiKeyFlag,
 	profileFlag,

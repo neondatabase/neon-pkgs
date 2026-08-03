@@ -37,7 +37,7 @@
  * login. Neither crashes, which is why `credentials` stays a required pointer.
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { writeSecretFile } from "./utils/secure_file.js";
 
 export const OAUTH = "oauth";
@@ -120,10 +120,19 @@ export const interpretCredentials = (
  * `auth` would paper over a mistake rather than fix it.
  */
 export const readCredentials = (path: string): StoredCredentials | null => {
-	if (!existsSync(path)) return null;
+	let contents: string;
+	try {
+		contents = readFileSync(path, "utf8");
+	} catch (err) {
+		// Absent is "no credentials". Unreadable is not: a permission or I/O error means there
+		// may be a perfectly good credential here that we cannot see, and treating it as absent
+		// would send the user to a browser login that overwrites it.
+		if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+		throw err;
+	}
 	let parsed: unknown;
 	try {
-		parsed = JSON.parse(readFileSync(path, "utf8"));
+		parsed = JSON.parse(contents);
 	} catch {
 		return null;
 	}

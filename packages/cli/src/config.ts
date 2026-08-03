@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync } from "node:fs";
+import { resolve } from "node:path";
 import { configDir, resolveConfigFile } from "@neon/config/paths";
 import type yargs from "yargs";
 
@@ -28,6 +29,16 @@ export const defaultDir = configDir();
  */
 export const credentialsPath = (dir: string): string =>
 	resolveConfigFile(CREDENTIALS_FILE, dir === defaultDir ? {} : { dir }).path;
+
+/**
+ * Whether a credentials file is one the CLI created, rather than a path a profile adopted.
+ *
+ * Anything that deletes a credential has to ask this first. A profile entry may point anywhere
+ * — that is what makes adopting an existing directory a one-line edit — and a file we did not
+ * create is not ours to remove.
+ */
+export const isInsideConfigDir = (configDir: string, file: string): boolean =>
+	`${resolve(file)}/`.startsWith(`${resolve(configDir)}/`);
 
 export const ensureConfigDir = ({
 	"config-dir": configDirArg,

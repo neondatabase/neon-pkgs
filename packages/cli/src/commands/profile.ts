@@ -1,11 +1,11 @@
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import prompts from "prompts";
 import type yargs from "yargs";
 
 import { getApiClient } from "../api.js";
 import { revokeToken } from "../auth.js";
 import { credentialInputs } from "../auth_selection.js";
+import { isInsideConfigDir } from "../config.js";
 import {
 	API_KEY,
 	credentialKind,
@@ -37,6 +37,7 @@ import {
 	upsertProfile,
 } from "../profiles.js";
 import type { CommonProps, ExtendedTokenSet } from "../types.js";
+import { writeSecretFile } from "../utils/secure_file.js";
 import { writer } from "../writer.js";
 import { credentialsPathForName, usableCredential } from "./auth.js";
 
@@ -396,14 +397,30 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 		}
 	}
 
-	// 1. Revoke upstream, so the token dies rather than merely becoming unreachable by us.
+	// 1. Revoke upstream, so the credential dies rather than merely becoming unreachable by us.
 	//    Best-effort: a profile is often removed precisely because its access already broke.
-	const revoked = await revokeStoredToken(profile.credentialsPath, props);
-	log.info(
-		revoked
-			? "Revoked the OAuth token"
-			: "Could not revoke the OAuth token — removing locally anyway",
-	);
+	const stored = readCredentials(profile.credentialsPath);
+	const holdsApiKey =
+		stored !== null &&
+		credentialKind(stored, profile.credentialsPath) === API_KEY;
+
+	if (holdsApiKey) {
+		// An API key cannot be revoked from here. `GET /api_keys` exposes no prefix, so a
+		// stored secret cannot be matched back to a listing entry — even one we minted and
+		// recorded a `key_id` for would need that id to survive a removal that deletes it.
+		// Deleting the file locally would otherwise look like the key was destroyed.
+		log.warning(
+			'Profile "%s" holds an API key, which stays live on the account — removing it here only makes it unreachable from this machine. Revoke it with: neon api GET /api_keys',
+			name,
+		);
+	} else {
+		const revoked = await revokeStoredToken(profile.credentialsPath, props);
+		log.info(
+			revoked
+				? "Revoked the OAuth token"
+				: "Could not revoke the OAuth token — removing locally anyway",
+		);
+	}
 
 	// 2. Delete the credentials file only if we created it. A profile pointing outside the
 	//    config directory was adopted from elsewhere; unlink it and say so, because the
@@ -430,9 +447,7 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 			rmSync(path);
 			log.info('Removed "%s" — no profiles left, deleted %s', name, path);
 		} else {
-			writeFileSync(path, `${JSON.stringify(file, null, 2)}\n`, {
-				mode: 0o600,
-			});
+			writeSecretFile(path, `${JSON.stringify(file, null, 2)}\n`);
 			log.info('Removed "%s" from %s', name, path);
 		}
 	} else if (name === DEFAULT_PROFILE) {
@@ -462,7 +477,3 @@ const revokeStoredToken = async (
 		tokenSet,
 	);
 };
-
-/** Whether a credentials file is one the CLI created, rather than an adopted path. */
-const isInsideConfigDir = (configDir: string, file: string): boolean =>
-	`${resolve(file)}/`.startsWith(`${resolve(configDir)}/`);

@@ -7,6 +7,7 @@ import {
 } from "neon-init";
 import type yargs from "yargs";
 import { sendError } from "../analytics.js";
+import { credentialInputs } from "../auth_selection.js";
 import { log } from "../log.js";
 
 export const command = "init";
@@ -48,14 +49,23 @@ export const handler = async (argv: {
 	preview?: boolean;
 	profile?: string;
 }) => {
-	// `init` delegates its whole auth flow to `neon-init`, which reads the default
-	// credentials directly and re-invokes the CLI as a subprocess. It has no way to be told
-	// which profile to use, so honouring `--profile` here is not possible yet — and silently
-	// running as the default account would be worse than refusing, because the flag's entire
-	// job is to say which account to act on.
-	if (argv.profile) {
+	// `init` delegates its whole auth flow to `neon-init`, which reads the default credentials
+	// directly and re-invokes the CLI as a subprocess. It has no way to be told which profile
+	// to use, so honouring a selection here is not possible yet — and silently running as the
+	// default account would be worse than refusing, because naming an account is the entire
+	// job of the thing being ignored.
+	//
+	// `NEON_PROFILE` counts just as much as the flag. Checking only the flag left the case that
+	// is easier to hit by accident: a profile exported once into a shell then silently
+	// disregarded by every `neon init` run in it.
+	const selectedProfile =
+		argv.profile?.trim() || credentialInputs().profileEnv.trim();
+	if (selectedProfile) {
+		const how = argv.profile?.trim()
+			? "--profile"
+			: "NEON_PROFILE is set, so";
 		throw new Error(
-			`\`neon init\` does not support --profile yet: it would run as the default account instead of "${argv.profile}". Run it without --profile, or set up the project with \`neon --profile ${argv.profile} link\`.`,
+			`${how} \`neon init\` would run as the default account instead of "${selectedProfile}", and it does not support profile selection yet. Run it without one, or set the project up with \`neon --profile ${selectedProfile} link\`.`,
 		);
 	}
 

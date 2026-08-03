@@ -505,21 +505,30 @@ const runNeonLink = async (
 ): Promise<void> => {
 	const args = [process.argv[1], "link"];
 
-	// Forward how to authenticate, never the resolved credential. A key on the child's argv is
-	// visible to anything that can list processes, and it would also strip the child of the
-	// profile it came from — so a 401 there could not name the profile, and `--config-dir`
-	// (which was never forwarded at all) would silently resolve somewhere else.
+	// Forward how to authenticate, never the credential itself. A key on the child's argv is
+	// visible to anything that can list processes, and `runCommand` prints the whole argument
+	// list when the command fails — so a failed link would put the key in the log too.
+	// Forwarding the selection also keeps the child on the same account: without `--profile` it
+	// would resolve its own, and `--config-dir` was never forwarded at all.
 	if (props.configDir) {
 		args.push("--config-dir", props.configDir);
 	}
 	if (props.profile) {
 		args.push("--profile", props.profile);
-	} else if (credentialInputs().apiKeyFlag) {
-		args.push("--api-key", credentialInputs().apiKeyFlag);
 	}
 
 	args.push("--api-host", props.apiHost, "--output", props.output);
-	await runCommand(process.execPath, args, targetDir);
+
+	// An explicit `--api-key` has nowhere else to go — the child cannot re-resolve a flag we
+	// were given — so it travels in the environment, which neither `ps` nor our own logging
+	// exposes. A profile needs none of this; the child reads the credential itself.
+	const explicitKey = props.profile ? "" : credentialInputs().apiKeyFlag;
+	await runCommand(
+		process.execPath,
+		args,
+		targetDir,
+		explicitKey ? { NEON_API_KEY: explicitKey } : undefined,
+	);
 };
 
 const printScaffolded = (

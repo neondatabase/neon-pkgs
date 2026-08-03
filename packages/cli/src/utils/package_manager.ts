@@ -61,6 +61,12 @@ export const runCommand = (
 	cmd: string,
 	args: string[],
 	cwd: string,
+	/**
+	 * Extra environment for the child. Anything secret belongs here rather than in `args`:
+	 * arguments are visible to any process that can list processes, and both handlers below
+	 * print the full argument list when the command fails.
+	 */
+	env?: NodeJS.ProcessEnv,
 ): Promise<boolean> =>
 	new Promise((resolvePromise) => {
 		// npm/pnpm/yarn ship as .cmd shims on Windows, which need a shell to run.
@@ -68,6 +74,7 @@ export const runCommand = (
 			cwd,
 			stdio: "inherit",
 			shell: process.platform === "win32",
+			...(env ? { env: { ...process.env, ...env } } : {}),
 		});
 		child.on("error", (err) => {
 			log.warning(
