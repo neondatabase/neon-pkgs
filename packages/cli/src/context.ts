@@ -181,6 +181,13 @@ export const enrichFromContext = (
 	if (isApiKeysCommand(args)) {
 		return;
 	}
+	// `profile create --mint` mints one too, and for the same reason must take its scope only
+	// from what was typed: enriched here, running it inside a linked directory would quietly
+	// produce a key scoped to that project rather than the account or organization asked for.
+	// No `profile` subcommand has any use for a project or branch.
+	if (isProfileCommand(args)) {
+		return;
+	}
 	const context = readContextFile(args.contextFile);
 	if (!args.orgId) {
 		args.orgId = context.orgId;

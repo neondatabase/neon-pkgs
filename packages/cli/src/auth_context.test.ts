@@ -112,7 +112,9 @@ describe("authFailureMessage", () => {
 		});
 		expect(message).toContain('profile "dbx"');
 		expect(message).toContain("/c/credentials.dbx.json");
-		expect(message).toContain("neon profile rotate-key dbx");
+		// Not `rotate-key`: a rejected key cannot authenticate to mint its own replacement.
+		expect(message).toContain("neon profile create dbx --mint --force");
+		expect(message).not.toContain("rotate-key");
 	});
 
 	// "Check --api-key" would be nonsense for a session we declined to delete.

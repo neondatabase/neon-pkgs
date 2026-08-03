@@ -3,7 +3,7 @@ import { getApiClient, isNeonApiError } from "./api.js";
 import { getAuthContext } from "./auth_context.js";
 import { credentialsPath } from "./config.js";
 import { isCurrentBranchProbe } from "./context.js";
-import { readCredentials } from "./credentials.js";
+import { inspectCredentials } from "./credentials.js";
 import { getGithubEnvVars, isCi } from "./env.js";
 import type { ErrorCode } from "./errors.js";
 import { log } from "./log.js";
@@ -99,11 +99,19 @@ export const analyticsMiddleware = async (args: {
 	// command to whichever account happened to be the default one.
 	const authenticatedAs =
 		getAuthContext()?.credentialsPath ?? credentialsPath(args.configDir);
-	const stored = readCredentials(authenticatedAs);
-	if (stored === null) {
-		log.debug("No readable credentials at %s", authenticatedAs);
-	} else if (typeof stored.user_id === "string") {
-		userId = stored.user_id;
+	// Telemetry must never turn a damaged or unreadable credentials file into a failed command.
+	try {
+		const read = inspectCredentials(authenticatedAs);
+		if (
+			read.kind === "ok" &&
+			typeof read.credentials.user_id === "string"
+		) {
+			userId = read.credentials.user_id;
+		} else if (read.kind !== "ok") {
+			log.debug("No usable credentials at %s", authenticatedAs);
+		}
+	} catch (err) {
+		log.debug("Could not read %s: %s", authenticatedAs, err);
 	}
 
 	try {

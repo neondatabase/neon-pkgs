@@ -44,6 +44,7 @@
  */
 
 import { readFileSync } from "node:fs";
+import { log } from "./log.js";
 import { writeSecretFile } from "./utils/secure_file.js";
 
 export const OAUTH = "oauth";
@@ -129,26 +130,69 @@ export const interpretCredentials = (
  * contradicts itself is different — {@link credentialKind} throws for that, since re-running
  * `auth` would paper over a mistake rather than fix it.
  */
-export const readCredentials = (path: string): StoredCredentials | null => {
+export type CredentialsRead =
+	| { kind: "ok"; credentials: StoredCredentials }
+	| { kind: "absent" }
+	/** The file is there but cannot be understood. `reason` is safe to print. */
+	| { kind: "unusable"; reason: string };
+
+/**
+ * Read and classify a credentials file, without deciding what to do about it.
+ *
+ * A permission or I/O error still throws: there may be a perfectly good credential here that
+ * we cannot see, and treating that as absent would send the user to a browser login that
+ * overwrites it.
+ */
+export const inspectCredentials = (path: string): CredentialsRead => {
 	let contents: string;
 	try {
 		contents = readFileSync(path, "utf8");
 	} catch (err) {
-		// Absent is "no credentials". Unreadable is not: a permission or I/O error means there
-		// may be a perfectly good credential here that we cannot see, and treating it as absent
-		// would send the user to a browser login that overwrites it.
-		if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+		if ((err as NodeJS.ErrnoException).code === "ENOENT")
+			return { kind: "absent" };
 		throw err;
 	}
+
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(contents);
-	} catch {
+	} catch (err) {
+		return {
+			kind: "unusable",
+			reason: `${path} is not valid JSON, so the credential in it cannot be read: ${
+				err instanceof Error ? err.message : String(err)
+			}`,
+		};
+	}
+	if (
+		parsed === null ||
+		typeof parsed !== "object" ||
+		Array.isArray(parsed)
+	) {
+		return {
+			kind: "unusable",
+			reason: `${path} does not contain a credentials object`,
+		};
+	}
+	return { kind: "ok", credentials: parsed as StoredCredentials };
+};
+
+/**
+ * The credential at `path`, or `null` when there is nothing usable there.
+ *
+ * A damaged file is **reported and then treated as absent**, so the caller recovers by
+ * authenticating again. Both halves matter. Failing hard would leave the CLI unusable until the
+ * user found and deleted a file by hand, for a fault whose only recovery is to replace the
+ * credential anyway — but staying quiet about it, as this used to, meant a corrupted file was
+ * silently overwritten and nobody ever learned it had been damaged.
+ */
+export const readCredentials = (path: string): StoredCredentials | null => {
+	const read = inspectCredentials(path);
+	if (read.kind === "unusable") {
+		log.warning("%s. Signing in again will replace it.", read.reason);
 		return null;
 	}
-	if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
-		return null;
-	return parsed as StoredCredentials;
+	return read.kind === "ok" ? read.credentials : null;
 };
 
 export const writeCredentials = (
@@ -158,11 +202,6 @@ export const writeCredentials = (
 	writeSecretFile(path, JSON.stringify(credentials));
 };
 
-/**
- * Merge new credential material into whatever is already stored, so writing one kind never
- * discards the other. Undefined values in `update` leave the existing field alone; that is
- * how `auth` keeps a `key_id` it did not mint and `set-key` keeps a recovery token set.
- */
 /** The scope a minted key was issued at. Absent org means an account key. */
 export type KeyScope = {
 	orgId?: string;

@@ -1,4 +1,4 @@
-import { isInsideConfigDir } from "./config.js";
+import { isOwnedCredentialPath } from "./config.js";
 
 /**
  * How the current invocation authenticated, recorded by `ensureAuth` so the top-level 401
@@ -64,7 +64,11 @@ export const credentialsToClearOn401 = (
 	// Only a file the CLI created. A profile entry may point anywhere, and a credentials file
 	// we merely adopted is not ours to delete — `neon profile remove` already refuses to touch
 	// one, so a 401 must not quietly do what an explicit removal declines to.
-	return isInsideConfigDir(context.configDir, path) ? path : null;
+	//
+	// The legacy `neonctl` directory counts as ours: default resolution deliberately still
+	// reads it in place, so an install predating the rename would otherwise have its own
+	// credentials called "adopted" and never cleared.
+	return isOwnedCredentialPath(context.configDir, path) ? path : null;
 };
 
 /**
@@ -79,7 +83,8 @@ export const authFailureMessage = (context: AuthContext | null): string => {
 			: "";
 
 	if (context?.source === "profile-api-key") {
-		return `Authentication failed: the Neon API rejected profile "${profile}"'s API key${where}. Mint a replacement with \`neon profile rotate-key ${profile}\`, or store a new one with \`neon profile set-key ${profile}\`.`;
+		// Not `rotate-key`: a rejected key cannot authenticate to mint its own replacement.
+		return `Authentication failed: the Neon API rejected profile "${profile}"'s API key${where}. Replace it with \`neon profile create ${profile} --mint --force\`, or store another with \`neon profile create ${profile} --api-key-stdin --force\`.`;
 	}
 
 	// Reached only when the session was not ours to clear, i.e. an adopted credentials file.

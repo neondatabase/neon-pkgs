@@ -11,6 +11,7 @@ import {
 	apiKeyCredentials,
 	credentialKind,
 	describeScope,
+	inspectCredentials,
 	type KeyScope,
 	readCredentials,
 	type StoredCredentials,
@@ -74,7 +75,7 @@ export const builder = (argv: yargs.Argv) =>
 		.command(
 			"list",
 			"List profiles, the account each holds, and where its credentials live",
-			(y) => y,
+			(y) => y.strict().check(noPassthrough("profile list")),
 			async (args) => await list(args as unknown as ProfileProps),
 		)
 		.command(
@@ -128,6 +129,7 @@ export const builder = (argv: yargs.Argv) =>
 					// A project-scoped key is already an organization key, and its org is
 					// derived from the project rather than chosen — same rule as `api-keys`.
 					.conflicts("org-id", "project-id")
+					.strict()
 					.check(noPassthrough("profile create"))
 					.example(
 						"$0 profile create work",
@@ -153,6 +155,7 @@ export const builder = (argv: yargs.Argv) =>
 						type: "string",
 						demandOption: true,
 					})
+					.strict()
 					.check(noPassthrough("profile rotate-key")),
 			async (args) =>
 				await rotateKey(
@@ -174,7 +177,9 @@ export const builder = (argv: yargs.Argv) =>
 						describe: "Skip the confirmation prompt",
 						type: "boolean",
 						default: false,
-					}),
+					})
+					.strict()
+					.check(noPassthrough("profile remove")),
 			async (args) =>
 				await remove(
 					args as unknown as ProfileProps & {
@@ -209,13 +214,34 @@ const describeAuth = (
 	}
 };
 
+/**
+ * One row's view of a credentials file.
+ *
+ * Reports a damaged file as `invalid` and carries on, because one broken profile must not take
+ * the whole listing with it — and unlike the authenticating path, listing has nothing to
+ * recover, so the row itself is the report.
+ */
+const inspectForListing = (
+	path: string,
+): { stored: StoredCredentials | null; auth: string } => {
+	const read = inspectCredentials(path);
+	if (read.kind === "unusable") {
+		log.warning(read.reason);
+		return { stored: null, auth: "invalid" };
+	}
+	if (read.kind === "absent") return { stored: null, auth: "-" };
+	return {
+		stored: read.credentials,
+		auth: describeAuth(read.credentials, path),
+	};
+};
+
 const list = async (props: ProfileProps) => {
 	const active = selectProfileName(props.profile);
 	const rows = listProfiles(props.configDir).map((p) => {
-		const stored = readCredentials(p.credentialsPath);
+		const { stored, auth } = inspectForListing(p.credentialsPath);
 		const storedUserId =
 			typeof stored?.user_id === "string" ? stored.user_id : undefined;
-		const auth = describeAuth(stored, p.credentialsPath);
 		return {
 			active: p.name === active ? "*" : "",
 			name: p.name,
@@ -228,7 +254,7 @@ const list = async (props: ProfileProps) => {
 					: "-",
 			// "available" rather than "signed in": a file existing has never proved that the
 			// credential inside it still works, and for a key there is no session to be in.
-			available: stored === null ? "no" : "yes",
+			available: auth === "invalid" || stored === null ? "no" : "yes",
 			credentials: p.credentialsPath,
 		};
 	});
@@ -373,7 +399,20 @@ const create = async (props: CreateProps) => {
 	assertValidProfileName(name);
 	assertReplaceable(props);
 
+	const keyInputs = [
+		credentialInputs().apiKeyFlag.trim() !== "" ? "--api-key" : null,
+		props.apiKeyFile !== undefined ? "--api-key-file" : null,
+		props.apiKeyStdin === true ? "--api-key-stdin" : null,
+	].filter((flag): flag is string => flag !== null);
+
 	if (props.mint) {
+		// Silently preferring one over the other would store a credential the user did not
+		// choose — and the two disagree about which account the profile ends up as.
+		if (keyInputs.length > 0) {
+			throw new Error(
+				`--mint creates a new key, so it cannot be combined with ${keyInputs.join(", ")}. Drop one.`,
+			);
+		}
 		await createByMinting(props);
 		return;
 	}
@@ -384,15 +423,18 @@ const create = async (props: CreateProps) => {
 		);
 	}
 
-	const wantsKey =
-		credentialInputs().apiKeyFlag.trim() !== "" ||
-		props.apiKeyFile !== undefined ||
-		props.apiKeyStdin === true;
-
 	// No key and no --mint means a browser sign-in, which is exactly `neon auth --profile`.
 	// Delegating rather than reimplementing keeps one OAuth path in the CLI.
-	if (!wantsKey) {
-		await authFlow({ ...props, _: ["auth"], profile: name });
+	if (keyInputs.length === 0) {
+		const credentialsPath = credentialsPathFor(props.configDir, name);
+		await retireExistingCredential(props, name, credentialsPath);
+		// `authFlow` reports its own failure and returns an empty token rather than throwing,
+		// so claiming success here would leave the user with no profile and no error.
+		if ((await authFlow({ ...props, _: ["auth"], profile: name })) === "") {
+			throw new Error(
+				`Could not save credentials for profile "${name}".`,
+			);
+		}
 		log.info("Use it with: neon --profile %s <command>", name);
 		return;
 	}
@@ -400,6 +442,7 @@ const create = async (props: CreateProps) => {
 	const apiKey = await resolveKeyToStore(props);
 	const identity = await verifyKey(props, apiKey);
 	const credentialsPath = credentialsPathFor(props.configDir, name);
+	await retireExistingCredential(props, name, credentialsPath);
 
 	writeCredentials(
 		credentialsPath,
@@ -459,75 +502,80 @@ const createByMinting = async (props: CreateProps) => {
 		);
 	}
 
-	const scope = await resolveMintScope(props);
-
-	const tokenSet = await auth({
+	const oauthProps = {
 		oauthHost: props.oauthHost,
 		clientId: props.clientId,
 		...(props.allowUnsafeTls
 			? { allowUnsafeTls: props.allowUnsafeTls }
 			: {}),
-	});
+	};
+
+	// Sign in before anything else that needs an API call. `profile` commands skip
+	// `ensureAuth`, so this invocation has no API client of its own — the session minted here
+	// is the only credential available, and `--project-id` needs one to find the owning org.
+	const tokenSet = await auth(oauthProps);
 	const session = getApiClient({
 		apiKey: tokenSet.access_token ?? "",
 		apiHost: props.apiHost,
 	});
 
-	const created = await mintKey(session, name, scope);
-	const identity = await verifyKey(props, created.key);
-	const credentialsPath = credentialsPathFor(props.configDir, name);
-
+	// Whatever happens after this point, the session was a means to an end. Revoking it in a
+	// `finally` is what makes "stores only the key" true even when the command fails partway.
+	let minted: { id: number; key: string; name: string } | undefined;
+	let stored = false;
 	try {
+		const scope = await resolveMintScope(props, session);
+		minted = await mintKey(session, name, scope);
+		const identity = await verifyKey(props, minted.key);
+		const credentialsPath = credentialsPathFor(props.configDir, name);
+
+		await retireExistingCredential(props, name, credentialsPath);
+
 		writeCredentials(
 			credentialsPath,
 			apiKeyCredentials({
-				apiKey: created.key,
-				keyId: created.id,
+				apiKey: minted.key,
+				keyId: minted.id,
 				...(identity.userId !== undefined
 					? { userId: identity.userId }
 					: {}),
 				scope,
 			}),
 		);
-	} catch (err) {
-		log.error(
-			"Minted key %d but could not write %s. Revoke it with: neon api-keys revoke %d%s",
-			created.id,
+		recordProfile(props, name, credentialsPath, identity);
+		stored = true;
+
+		log.info(
+			'Minted %s for profile "%s" (%s, %s) and stored it in %s',
+			minted.name,
+			name,
+			identity.label ?? "unknown account",
+			describeScope(scope),
 			credentialsPath,
-			created.id,
-			scope.orgId ? ` --org-id ${scope.orgId}` : "",
 		);
-		throw err;
+		log.info("Use it with: neon --profile %s <command>", name);
+	} finally {
+		// A key minted but never stored is unreachable, so it must not be left live.
+		if (minted !== undefined && !stored) {
+			const scope: KeyScope = {
+				...(props.orgId !== undefined ? { orgId: props.orgId } : {}),
+				...(props.projectId !== undefined
+					? { projectId: props.projectId }
+					: {}),
+			};
+			log.error(
+				(await withdrawKey(session, scope, minted.id))
+					? `Revoked the key that was minted but not stored (id ${minted.id}).`
+					: `Minted key ${minted.id} could be neither stored nor revoked, and may still be live. Remove it with: neon api-keys revoke ${minted.id}`,
+			);
+		}
+		const revoked = await revokeToken(oauthProps, tokenSet);
+		log.info(
+			revoked
+				? "Signed the browser session back out, so nothing but the key remains."
+				: "Could not sign the browser session back out; it will expire on its own.",
+		);
 	}
-	recordProfile(props, name, credentialsPath, identity);
-
-	log.info(
-		'Minted %s for profile "%s" (%s, %s) and stored it in %s',
-		created.name,
-		name,
-		identity.label ?? "unknown account",
-		describeScope(scope),
-		credentialsPath,
-	);
-
-	// Best-effort: a session we cannot revoke is worth saying out loud rather than leaving the
-	// user to believe `--mint` left nothing behind.
-	const revoked = await revokeToken(
-		{
-			oauthHost: props.oauthHost,
-			clientId: props.clientId,
-			...(props.allowUnsafeTls
-				? { allowUnsafeTls: props.allowUnsafeTls }
-				: {}),
-		},
-		tokenSet,
-	);
-	log.info(
-		revoked
-			? "Signed the browser session back out, so the profile holds only the key."
-			: "Could not sign the browser session back out; the key is stored and in use regardless.",
-	);
-	log.info("Use it with: neon --profile %s <command>", name);
 };
 
 /**
@@ -537,27 +585,67 @@ const createByMinting = async (props: CreateProps) => {
  * rather than asked for — `--project-id` alone would otherwise fail for a reason invisible from
  * the command line.
  */
-const resolveMintScope = async (props: CreateProps): Promise<KeyScope> => {
+const resolveMintScope = async (
+	props: CreateProps,
+	client: NeonApiClient,
+): Promise<KeyScope> => {
 	if (props.projectId === undefined) {
 		return props.orgId !== undefined ? { orgId: props.orgId } : {};
 	}
-	// Resolving the project needs a credential, and at this point the profile has none. Use
-	// whatever this invocation itself authenticated with; `--api-key` or an existing profile
-	// both work, and without either the message says what to pass.
-	if (!props.apiKey) {
-		throw new Error(
-			`--project-id has to look up which organization owns ${props.projectId}, which needs a credential. Pass --org-id instead, or run this with --api-key or --profile.`,
-		);
-	}
 	const {
 		data: { project },
-	} = await props.apiClient.getProject(props.projectId);
+	} = await client.getProject(props.projectId);
 	if (!project.org_id) {
 		throw new Error(
 			`Project ${props.projectId} does not belong to an organization, so it cannot have a project-scoped API key. Omit --project-id, or pass --org-id.`,
 		);
 	}
 	return { orgId: project.org_id, projectId: props.projectId };
+};
+
+/**
+ * Revoke the credential a profile is about to lose, before it is overwritten.
+ *
+ * Without this, replacing a profile leaves the outgoing credential live on the account while
+ * deleting the only local record of it: a minted key's `key_id` and an OAuth refresh token are
+ * both gone the moment the file is rewritten, so nothing could revoke them afterwards.
+ */
+const retireExistingCredential = async (
+	props: ProfileProps,
+	name: string,
+	credentialsPath: string,
+): Promise<void> => {
+	const existing = readCredentials(credentialsPath);
+	if (existing === null) return;
+
+	if (credentialKind(existing, credentialsPath) === API_KEY) {
+		const keyId =
+			typeof existing.key_id === "number" ? existing.key_id : undefined;
+		if (keyId === undefined) {
+			log.warning(
+				'Profile "%s" held an API key that was supplied rather than minted here, so it stays live on the account — find it with `neon api-keys list`.',
+				name,
+			);
+			return;
+		}
+		const client = getApiClient({
+			apiKey: existing.api_key as string,
+			apiHost: props.apiHost,
+		});
+		log.info(
+			(await withdrawKey(client, scopeOf(existing), keyId))
+				? `Revoked the key it replaces (id ${keyId})`
+				: `Could not revoke the key it replaces (id ${keyId}); it may still be live. Remove it with: neon api-keys revoke ${keyId}`,
+		);
+		return;
+	}
+
+	const revoked = await revokeStoredToken(credentialsPath, props);
+	log.info(
+		revoked
+			? "Signed out the session it replaces"
+			: "Could not sign out the session it replaces; it will expire on its own",
+	);
 };
 
 /**
@@ -644,6 +732,13 @@ const rotateKey = async (props: ProfileProps & { name: string }) => {
 			`Profile "${name}" has no usable credential to mint with. Replace it with \`neon profile create ${name} --mint --force\`.`,
 		);
 	}
+	// Rotating a *key* is what this command is for. An OAuth profile would otherwise be
+	// converted into a key profile as a side effect, discarding a session it never revoked.
+	if (credential.kind !== API_KEY) {
+		throw new Error(
+			`Profile "${name}" holds a browser sign-in, not an API key, so there is no key to rotate. Turn it into a key profile with \`neon profile create ${name} --mint --force\`.`,
+		);
+	}
 
 	const stored = readCredentials(profile.credentialsPath);
 	const scope = stored !== null ? scopeOf(stored) : {};
@@ -655,17 +750,20 @@ const rotateKey = async (props: ProfileProps & { name: string }) => {
 		apiHost: props.apiHost,
 	});
 
-	// Neon only lets a *personal* credential mint organization keys, so an org-scoped profile
-	// cannot mint its own replacement. Checked up front: letting it through produces
-	// "This endpoint requires a personal API key" from a command the user has no reason to
-	// connect to that rule, having named nothing but a profile.
-	if (scope.orgId !== undefined) {
-		const { data: details } = await minting.getAuthDetails();
-		if (details.auth_method === "api_key_org") {
-			throw new Error(
-				`Profile "${name}" holds an organization key, and only a personal credential can mint organization keys — so it cannot mint its own replacement. Sign in and mint one with \`neon profile create ${name} --mint ${scope.projectId ? `--project-id ${scope.projectId}` : `--org-id ${scope.orgId}`} --force\`.`,
-			);
-		}
+	// Neon only lets a *personal* credential mint organization keys, so an organization key
+	// cannot mint its own replacement. Asked of the credential itself rather than of the
+	// recorded scope: a key that was supplied rather than minted has no scope on record, and
+	// would otherwise sail past this and get "This endpoint requires a personal API key" from
+	// a command where the user named nothing but a profile.
+	const { data: details } = await minting.getAuthDetails();
+	if (details.auth_method === "api_key_org") {
+		const target =
+			scope.projectId !== undefined
+				? `--project-id ${scope.projectId}`
+				: `--org-id ${scope.orgId ?? details.account_id}`;
+		throw new Error(
+			`Profile "${name}" holds an organization key, and only a personal credential can mint organization keys — so it cannot mint its own replacement. Sign in and mint one with \`neon profile create ${name} --mint ${target} --force\`.`,
+		);
 	}
 
 	// Mint at the recorded scope. Minting an account key to replace an org or project one

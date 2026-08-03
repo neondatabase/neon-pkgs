@@ -1,6 +1,10 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { configDir, resolveConfigFile } from "@neon/config/paths";
+import {
+	configDir,
+	legacyConfigDir,
+	resolveConfigFile,
+} from "@neon/config/paths";
 import type yargs from "yargs";
 
 import { isCi } from "./env.js";
@@ -39,6 +43,24 @@ export const credentialsPath = (dir: string): string =>
  */
 export const isInsideConfigDir = (configDir: string, file: string): boolean =>
 	`${resolve(file)}/`.startsWith(`${resolve(configDir)}/`);
+
+/**
+ * Whether a credentials file is one the CLI owns, counting the legacy `neonctl` directory.
+ *
+ * {@link credentialsPath} deliberately reads an existing legacy file in place rather than
+ * migrating it, so for a default config directory that file is ours even though it sits
+ * outside `neon/`. Judging ownership on the current directory alone would call an install
+ * that predates the rename "adopted".
+ */
+export const isOwnedCredentialPath = (
+	configDir: string,
+	file: string,
+): boolean => {
+	if (isInsideConfigDir(configDir, file)) return true;
+	if (configDir !== defaultDir) return false;
+	const legacy = legacyConfigDir();
+	return legacy !== undefined && isInsideConfigDir(legacy, file);
+};
 
 export const ensureConfigDir = ({
 	"config-dir": configDirArg,

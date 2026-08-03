@@ -14,6 +14,7 @@ import {
 	apiKeyCredentials,
 	credentialKind,
 	describeScope,
+	inspectCredentials,
 	interpretCredentials,
 	OAUTH,
 	readCredentials,
@@ -108,15 +109,45 @@ describe("readCredentials", () => {
 		expect(readCredentials(resolve(dir, "nope.json"))).toBeNull();
 	});
 
-	// Recoverable by logging in again, so the callers treat it as "no credentials".
-	test("an unparseable file is null rather than an error", () => {
+	// A damaged file is recoverable by signing in again, so it reads as "no credentials" — but
+	// it is classified as damaged rather than absent, so the caller can say so out loud.
+	test("an unparseable file is unusable, and says why", () => {
 		const dir = makeDir({ "credentials.json": "not json" });
-		expect(readCredentials(resolve(dir, "credentials.json"))).toBeNull();
+		const path = resolve(dir, "credentials.json");
+		const read = inspectCredentials(path);
+		expect(read.kind).toBe("unusable");
+		expect(read.kind === "unusable" && read.reason).toContain(
+			"not valid JSON",
+		);
+		expect(read.kind === "unusable" && read.reason).toContain(path);
+		expect(readCredentials(path)).toBeNull();
 	});
 
-	test("a JSON array is null, not a credentials object", () => {
+	test("a JSON array is unusable, not a credentials object", () => {
 		const dir = makeDir({ "credentials.json": "[1,2]" });
-		expect(readCredentials(resolve(dir, "credentials.json"))).toBeNull();
+		const path = resolve(dir, "credentials.json");
+		expect(inspectCredentials(path).kind).toBe("unusable");
+		expect(readCredentials(path)).toBeNull();
+	});
+
+	test("a missing file is absent rather than damaged", () => {
+		const dir = makeDir();
+		expect(inspectCredentials(resolve(dir, "nope.json")).kind).toBe(
+			"absent",
+		);
+	});
+
+	// A permission error may be hiding a perfectly good credential, so it must not read as
+	// absent and send the caller to a login that overwrites it.
+	test("an unreadable file throws rather than reading as absent", () => {
+		const dir = makeDir({ "credentials.json": "{}" });
+		const path = resolve(dir, "credentials.json");
+		chmodSync(path, 0o000);
+		try {
+			expect(() => readCredentials(path)).toThrow();
+		} finally {
+			chmodSync(path, 0o600);
+		}
 	});
 
 	test("unknown fields survive a read", () => {

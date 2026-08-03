@@ -25,6 +25,12 @@ afterEach(() => {
 	while (cleanups.length > 0) cleanups.shift()?.();
 });
 
+/** An empty temp path, so no `.neon` in the checkout can reach a run. */
+const contextFile = join(
+	mkdtempSync(join(tmpdir(), "neon-profile-cli-ctx-")),
+	".neon",
+);
+
 let unreachableHost = "";
 beforeAll(async () => {
 	unreachableHost = await new Promise<string>((res, rej) => {
@@ -71,8 +77,18 @@ function runCli(
 ): Promise<Run> {
 	return new Promise((res, rej) => {
 		const cp = fork(
-			join(process.cwd(), "./dist/index.js"),
-			["--api-host", unreachableHost, "--no-analytics", ...args],
+			// `dist/cli.js` is the real `bin` entry; `dist/index.js` is not what ships.
+			join(process.cwd(), "./dist/cli.js"),
+			[
+				"--api-host",
+				unreachableHost,
+				"--no-analytics",
+				// Defer to a case that names its own; passing it twice is now a strict error.
+				...(args.includes("--context-file")
+					? []
+					: ["--context-file", contextFile]),
+				...args,
+			],
 			{
 				stdio: "pipe",
 				env: { PATH: process.env.PATH ?? "", HOME: tmpdir(), ...env },
@@ -477,6 +493,165 @@ describe("profile create", () => {
 
 		expect(code).toBe(1);
 		expect(stderr).toContain("takes no arguments after");
+	});
+});
+
+describe("profile create — parsing and scope safety", () => {
+	// Without `.strict()` a typo binds to nothing, reads as absent, and mints an account-wide
+	// key instead of the narrow one that was asked for.
+	test("a misspelled scope flag is rejected, not ignored", async () => {
+		const dir = makeConfigDir({});
+		const { code, stderr } = await runCli([
+			"profile",
+			"create",
+			"ci",
+			"--config-dir",
+			dir,
+			"--mint",
+			"--projectid",
+			"proj-1",
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).toMatch(/Unknown argument/i);
+	});
+
+	// A linked `.neon` must not decide how far a credential reaches.
+	test("a checked-out project does not scope a minted key", async () => {
+		const dir = makeConfigDir({});
+		const contextDir = mkdtempSync(join(tmpdir(), "neon-profile-ctx-"));
+		cleanups.push(() =>
+			rmSync(contextDir, { recursive: true, force: true }),
+		);
+		const linked = resolve(contextDir, ".neon");
+		writeFileSync(
+			linked,
+			JSON.stringify({
+				projectId: "proj-from-context",
+				orgId: "org-ctx",
+			}),
+		);
+
+		// CI is set so the sign-in refuses immediately: reaching that message proves the
+		// context never turned this into a project-scoped mint.
+		const { code, stderr } = await runCli(
+			[
+				"profile",
+				"create",
+				"ci",
+				"--config-dir",
+				dir,
+				"--context-file",
+				linked,
+				"--mint",
+			],
+			{ CI: "true" },
+		);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("cannot happen in CI");
+		expect(stderr).not.toContain("proj-from-context");
+	});
+
+	test("--mint with a supplied key is refused rather than one being ignored", async () => {
+		const dir = makeConfigDir({});
+		const { code, stderr } = await runCli([
+			"profile",
+			"create",
+			"ci",
+			"--config-dir",
+			dir,
+			"--mint",
+			"--api-key",
+			"napi_flagkey",
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("cannot be combined with --api-key");
+	});
+});
+
+describe("profile rotate-key — what it refuses", () => {
+	// Rotating would otherwise convert an OAuth profile into a key profile as a side effect,
+	// discarding a session it never revoked.
+	test("refuses a profile that holds a browser sign-in", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": OAUTH_FILE,
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { DEFAULT: { credentials: "credentials.json" } },
+			}),
+		});
+		const { code, stderr } = await runCli([
+			"profile",
+			"rotate-key",
+			"DEFAULT",
+			"--config-dir",
+			dir,
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("holds a browser sign-in");
+		expect(stderr).toContain("--mint --force");
+	});
+});
+
+describe("a damaged credentials file", () => {
+	// Loud, then recovers. Silence would mean the file was overwritten by the next sign-in and
+	// nobody ever learned it had been damaged; failing hard would leave the CLI unusable until
+	// the user found and deleted a file by hand.
+	test("is reported by name, and then recovered from by signing in", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": "{ not json",
+		});
+		// CI, so the sign-in refuses instead of reaching for a browser.
+		const { code, stderr } = await runCli(
+			["projects", "list", "--config-dir", dir],
+			{ CI: "true" },
+		);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("not valid JSON");
+		expect(stderr).toContain("credentials.json");
+		expect(stderr).toContain("Signing in again will replace it");
+		// It went on to authenticate rather than stopping at the damaged file.
+		expect(stderr).toContain("Cannot run interactive auth in CI");
+	});
+
+	// But one broken profile must not take the whole listing with it.
+	test("is reported as invalid by list, which still shows the others", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": OAUTH_FILE,
+			"credentials.broken.json": "{ not json",
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: {
+					DEFAULT: { credentials: "credentials.json" },
+					broken: { credentials: "credentials.broken.json" },
+				},
+			}),
+		});
+		const { code, stdout, stderr } = await runCli([
+			"profile",
+			"list",
+			"--config-dir",
+			dir,
+			"--output",
+			"json",
+		]);
+
+		expect(code).toBe(0);
+		expect(JSON.parse(stdout)).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					name: "broken",
+					auth: "invalid",
+					available: "no",
+				}),
+				expect.objectContaining({ name: "DEFAULT", auth: "oauth" }),
+			]),
+		);
+		expect(stderr).toContain("not valid JSON");
 	});
 });
 
