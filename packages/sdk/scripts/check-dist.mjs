@@ -18,5 +18,5 @@ if (problems.length > 0) {
 }
 
 console.log(
-	`${name}: dist/ is clean — ${fileCount} files, no bundled dependencies and no test artifacts.`,
+	`${name}: dist/ is clean — ${fileCount} files, no bundled or external dependencies and no test artifacts.`,
 );

@@ -15,8 +15,8 @@
 
   The globs now match the exclusions `@neon/config` and `@neon/env` already used, and
   `pnpm build` fails if the artifact regresses: `scripts/check-dist.mjs` rejects a
-  `dist/` that carries bundled dependencies, emitted test files, or a non-empty
-  `dependencies` map.
+  `dist/` that carries bundled dependencies, emitted test files, a non-empty
+  `dependencies` map, or a bare runtime import a consumer could not resolve.
 
   No API change.
 

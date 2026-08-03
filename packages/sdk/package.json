@@ -62,6 +62,7 @@
 		"@types/node": "catalog:",
 		"@vitest/coverage-v8": "catalog:",
 		"console-fail-test": "catalog:",
+		"es-module-lexer": "2.3.1",
 		"tsdown": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"

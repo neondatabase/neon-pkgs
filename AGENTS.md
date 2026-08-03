@@ -367,18 +367,22 @@ does **not** match `client.test-d.ts` — the `test-d` exclusion is separate, wh
 `@neon/config` and `@neon/env` list both.
 
 `pnpm --filter @neon/sdk build` ends in `node scripts/check-dist.mjs`, which fails when
-`dist/` carries bundled dependencies, emitted test files, or a non-empty `dependencies`
-map. Those bound both directions: a dependency left *external* rather than bundled can
-only be one tsdown was told to externalize, which means it is declared in
-`dependencies`. The checks live in `scripts/dist-guard.mjs` and are covered by
+`dist/` carries bundled dependencies, emitted test files, a runtime dependency in any of
+`dependencies` / `peerDependencies` / `optionalDependencies`, or a bare import a consumer
+would have to install. The checks live in `scripts/dist-guard.mjs` and are covered by
 `scripts/dist-guard.test.mjs` against real temporary package trees.
+
+**Manifest checks alone are not enough**, which is worth knowing before simplifying this.
+tsdown externalizes `dependencies` **∪ `peerDependencies`** (`getPackageDeps` in
+`tsdown/dist/src-XtWW9dvn.mjs`) and honours an explicit `external` option that no manifest
+field records, so a dependency can leave the build as a bare import with nothing in
+`package.json` to reveal it. The emitted code is therefore parsed too — with
+`es-module-lexer`, not a regex: a regex flags imports inside strings and comments, which
+misfired on this package's own `@example` JSDoc, and misses imports spanning lines.
 
 CI's Build job runs `pnpm build`, so a regression fails the PR rather than reaching npm.
 Don't route around it by relaxing the check — fix the entry globs or move the offending
-file out of them. Scanning `dist` for bare imports was tried and removed: a regex over
-emitted JavaScript flags imports inside strings and comments and misses multiline ones,
-and a release gate that blocks a good release costs more than the redundant coverage it
-buys.
+file out of them.
 
 **Automated spec refresh (`.github/workflows/sdk-spec-refresh.yml`):**
 
