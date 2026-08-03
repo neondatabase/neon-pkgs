@@ -51,10 +51,9 @@ const STRUCTURED_FAMILIES = new Set<MatrixFamily>([
 /**
  * Families where multi-step tool calling is exercised.
  *
- * OpenAI and Codex are here deliberately: their Responses tool loop is the path
- * that used to fail with a gateway 502, because the SDK replayed earlier
- * reasoning as an `item_reference` the stateless gateway could not resolve. It
- * is the regression this matrix most needs to hold.
+ * OpenAI and Codex matter most here: their Responses tool loop is the one that
+ * breaks if the SDK ever replays reasoning as an `item_reference` the stateless
+ * gateway cannot resolve, which the gateway answers with a 502.
  *
  * Gemini is excluded: the tool round trip 400s on the replay leg, since the AI
  * SDK does not echo back the `thoughtSignature` Gemini expects.
@@ -80,7 +79,6 @@ function modelOptions(family: MatrixFamily) {
 	};
 }
 
-// Resolved once: which of the matrix models this branch can actually serve.
 const served = hasGatewayEnv()
 	? await fetchServedModelIds()
 	: new Set<string>();
@@ -93,7 +91,6 @@ describe.skipIf(!hasGatewayEnv())(
 		describe.each(
 			Object.entries(MATRIX_MODELS) as Array<[MatrixFamily, string]>,
 		)("%s (%s)", (family, modelId) => {
-			// Skipped wholesale when this branch's catalog has no such model.
 			const modelIt = it.skipIf(!served.has(modelId));
 
 			modelIt("generateText", async () => {
@@ -166,6 +163,29 @@ describe.skipIf(!hasGatewayEnv())(
 					expect(result.steps.length).toBeGreaterThanOrEqual(2);
 				},
 			);
+		});
+
+		describe("OpenAI Responses — multi-step tool loop over streamText", () => {
+			// The stored-item 502 struck the second step of a loop, and
+			// `doStream` applies the request defaults on its own path, so the
+			// generateText cases above would not catch a regression there.
+			it("gets past the step that carries reasoning back", async () => {
+				const result = streamText({
+					model: neon(MATRIX_MODELS.openai),
+					prompt: "What is the temperature in Paris? Use the weather tool.",
+					tools: { weather: weatherTool },
+					stopWhen: stepCountIs(5),
+					...modelOptions("openai"),
+				});
+				await result.consumeStream();
+
+				const steps = await result.steps;
+				expect(
+					steps.flatMap((step) => step.toolCalls).length,
+				).toBeGreaterThanOrEqual(1);
+				expect(steps.length).toBeGreaterThanOrEqual(2);
+				await expect(result.text).resolves.not.toBe("");
+			}, 120_000);
 		});
 
 		describe("OpenAI Responses — imageGeneration tool", () => {

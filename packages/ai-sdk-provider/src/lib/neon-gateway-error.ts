@@ -119,9 +119,20 @@ function extractReason(body: unknown): Reason | null {
 	return { message: body.message, type: code };
 }
 
-function emit(reason: Reason, dialect: GatewayErrorDialect): unknown {
+/**
+ * Overlay the target envelope on the original body rather than replacing it,
+ * so whatever else the gateway sent — `error_code`, request ids, the encoded
+ * original message — still reaches the caller on `APICallError.responseBody`.
+ */
+function emit(
+	body: unknown,
+	reason: Reason,
+	dialect: GatewayErrorDialect,
+): unknown {
+	const original = isRecord(body) ? body : {};
 	if (dialect === "anthropic") {
 		return {
+			...original,
 			type: "error",
 			error: {
 				type: reason.type ?? "api_error",
@@ -130,6 +141,7 @@ function emit(reason: Reason, dialect: GatewayErrorDialect): unknown {
 		};
 	}
 	return {
+		...original,
 		error: {
 			...reason.openaiFields,
 			message: reason.message,
@@ -155,7 +167,7 @@ export function normalizeGatewayErrorBody(
 	}
 
 	const reason = extractReason(body);
-	return reason === null ? null : emit(reason, dialect);
+	return reason === null ? null : emit(body, reason, dialect);
 }
 
 /** Wrap a fetch so failed responses reach the model in its own dialect. */
@@ -188,10 +200,15 @@ export function wrapFetchWithGatewayErrorNormalization(
 			return response;
 		}
 
+		// Rewriting the body invalidates both of these.
+		const headers = new Headers(response.headers);
+		headers.delete("content-length");
+		headers.delete("content-encoding");
+
 		return new Response(JSON.stringify(normalized), {
 			status: response.status,
 			statusText: response.statusText,
-			headers: response.headers,
+			headers,
 		});
 	};
 }

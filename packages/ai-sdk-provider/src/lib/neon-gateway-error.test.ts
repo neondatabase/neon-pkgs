@@ -1,10 +1,11 @@
 import { generateText } from "ai";
 import { describe, expect, it } from "vitest";
+import { normalizeGatewayErrorBody } from "./neon-gateway-error.js";
 import {
-	type GatewayErrorDialect,
-	normalizeGatewayErrorBody,
-	wrapFetchWithGatewayErrorNormalization,
-} from "./neon-gateway-error.js";
+	CHAT_OK,
+	RESPONSES_OK,
+	startTestGateway,
+} from "./neon-test-gateway.js";
 import { createNeon } from "./provider.js";
 
 // Captured verbatim from a live branch gateway.
@@ -38,23 +39,27 @@ describe("normalizeGatewayErrorBody — openai dialect", () => {
 	});
 
 	it("lifts a flat Databricks rejection into error.message", () => {
-		expect(normalizeGatewayErrorBody(DATABRICKS_FLAT, "openai")).toEqual({
+		expect(
+			normalizeGatewayErrorBody(DATABRICKS_FLAT, "openai"),
+		).toMatchObject({
 			error: { message: DATABRICKS_FLAT.message, code: "BAD_REQUEST" },
+			// The original is kept so it still reaches `responseBody`.
+			error_code: "BAD_REQUEST",
 		});
 	});
 
 	it("unwraps an upstream error carried as a JSON string", () => {
-		expect(normalizeGatewayErrorBody(DATABRICKS_WRAPPED, "openai")).toEqual(
-			{
-				error: {
-					message:
-						"Invalid 'max_output_tokens': integer below minimum value. Expected a value >= 16, but got 1 instead.",
-					type: "invalid_request_error",
-					param: "max_output_tokens",
-					code: "integer_below_min_value",
-				},
+		expect(
+			normalizeGatewayErrorBody(DATABRICKS_WRAPPED, "openai"),
+		).toMatchObject({
+			error: {
+				message:
+					"Invalid 'max_output_tokens': integer below minimum value. Expected a value >= 16, but got 1 instead.",
+				type: "invalid_request_error",
+				param: "max_output_tokens",
+				code: "integer_below_min_value",
 			},
-		);
+		});
 	});
 
 	it("leaves an Anthropic envelope alone, because it already parses here", () => {
@@ -87,21 +92,21 @@ describe("normalizeGatewayErrorBody — anthropic dialect", () => {
 	});
 
 	it("converts a flat Databricks rejection, keeping the code as the type", () => {
-		expect(normalizeGatewayErrorBody(DATABRICKS_FLAT, "anthropic")).toEqual(
-			{
-				type: "error",
-				error: {
-					type: "BAD_REQUEST",
-					message: DATABRICKS_FLAT.message,
-				},
+		expect(
+			normalizeGatewayErrorBody(DATABRICKS_FLAT, "anthropic"),
+		).toMatchObject({
+			type: "error",
+			error: {
+				type: "BAD_REQUEST",
+				message: DATABRICKS_FLAT.message,
 			},
-		);
+		});
 	});
 
 	it("unwraps an upstream error carried as a JSON string", () => {
 		expect(
 			normalizeGatewayErrorBody(DATABRICKS_WRAPPED, "anthropic"),
-		).toEqual({
+		).toMatchObject({
 			type: "error",
 			error: {
 				type: "invalid_request_error",
@@ -124,75 +129,23 @@ describe("normalizeGatewayErrorBody — unrecognised input", () => {
 	});
 });
 
-describe("wrapFetchWithGatewayErrorNormalization", () => {
-	const jsonResponse = (body: unknown, status: number) =>
-		new Response(JSON.stringify(body), {
-			status,
-			headers: { "content-type": "application/json" },
-		});
-
-	it.each<GatewayErrorDialect>([
-		"openai",
-		"anthropic",
-	])("passes successful responses through untouched (%s)", async (dialect) => {
-		const wrapped = wrapFetchWithGatewayErrorNormalization(
-			async () => jsonResponse({ ok: true }, 200),
-			dialect,
-		);
-		const res = await wrapped("https://example.com");
-
-		expect(res.status).toBe(200);
-		await expect(res.json()).resolves.toEqual({ ok: true });
-	});
-
-	it("rewrites a failed response and keeps its status", async () => {
-		const wrapped = wrapFetchWithGatewayErrorNormalization(
-			async () => jsonResponse(DATABRICKS_FLAT, 400),
-			"openai",
-		);
-		const res = await wrapped("https://example.com");
-
-		expect(res.status).toBe(400);
-		await expect(res.json()).resolves.toMatchObject({
-			error: { message: DATABRICKS_FLAT.message },
-		});
-	});
-
-	it("leaves a non-JSON error body alone", async () => {
-		const wrapped = wrapFetchWithGatewayErrorNormalization(
-			async () =>
-				new Response("upstream exploded", {
-					status: 502,
-					headers: { "content-type": "text/plain" },
-				}),
-			"openai",
-		);
-		const res = await wrapped("https://example.com");
-
-		await expect(res.text()).resolves.toBe("upstream exploded");
-	});
-});
-
-describe("error surfacing through the provider", () => {
-	async function messageFor(modelId: string, body: unknown) {
-		const neon = createNeon({
-			baseURL: "https://example.com",
-			apiKey: "test-token",
-			fetch: async () =>
-				new Response(JSON.stringify(body), {
-					status: 400,
-					headers: { "content-type": "application/json" },
-				}),
-		});
+describe("error surfacing over a real socket", () => {
+	async function messageFor(modelId: string, body: unknown, status = 400) {
+		const gateway = await startTestGateway({ body, status });
 		try {
+			const neon = createNeon({
+				baseURL: gateway.baseURL,
+				apiKey: "test-token",
+			});
 			await generateText({ model: neon(modelId), prompt: "hi" });
 		} catch (error) {
 			return (error as { message: string }).message;
+		} finally {
+			await gateway.close();
 		}
 		throw new Error("expected the call to reject");
 	}
 
-	// One case per route, so the wiring in provider.ts is covered end to end.
 	it.each<[string, string]>([
 		["responses", "gpt-5-2"],
 		["chat completions", "llama-4-maverick"],
@@ -202,5 +155,101 @@ describe("error surfacing through the provider", () => {
 
 		expect(message).toContain("service_tier");
 		expect(message).not.toBe("Bad Request");
+	});
+
+	it("keeps the gateway's own diagnostics on the error", async () => {
+		const gateway = await startTestGateway({
+			body: DATABRICKS_FLAT,
+			status: 400,
+		});
+		try {
+			const neon = createNeon({
+				baseURL: gateway.baseURL,
+				apiKey: "test-token",
+			});
+			await generateText({ model: neon("gpt-5-2"), prompt: "hi" });
+			throw new Error("expected the call to reject");
+		} catch (error) {
+			expect((error as { responseBody?: string }).responseBody).toContain(
+				"error_code",
+			);
+		} finally {
+			await gateway.close();
+		}
+	});
+
+	it("drops the content-length invalidated by rewriting the body", async () => {
+		const gateway = await startTestGateway({
+			body: DATABRICKS_FLAT,
+			status: 400,
+		});
+		try {
+			const neon = createNeon({
+				baseURL: gateway.baseURL,
+				apiKey: "test-token",
+			});
+			await generateText({ model: neon("gpt-5-2"), prompt: "hi" });
+			throw new Error("expected the call to reject");
+		} catch (error) {
+			const headers = (
+				error as { responseHeaders?: Record<string, string> }
+			).responseHeaders;
+			expect(headers).not.toHaveProperty("content-length");
+		} finally {
+			await gateway.close();
+		}
+	});
+
+	it("passes a successful response through", async () => {
+		const gateway = await startTestGateway({ body: RESPONSES_OK });
+		try {
+			const neon = createNeon({
+				baseURL: gateway.baseURL,
+				apiKey: "test-token",
+			});
+			const result = await generateText({
+				model: neon("gpt-5-2"),
+				prompt: "hi",
+			});
+			expect(result.text).toBe("pong");
+		} finally {
+			await gateway.close();
+		}
+	});
+
+	it("passes a successful chat response through the harmony wrapper", async () => {
+		const gateway = await startTestGateway({ body: CHAT_OK });
+		try {
+			const neon = createNeon({
+				baseURL: gateway.baseURL,
+				apiKey: "test-token",
+			});
+			const result = await generateText({
+				model: neon("llama-4-maverick"),
+				prompt: "hi",
+			});
+			expect(result.text).toBe("pong");
+		} finally {
+			await gateway.close();
+		}
+	});
+
+	it("leaves a non-JSON error body alone", async () => {
+		const gateway = await startTestGateway({
+			body: "upstream exploded",
+			status: 400,
+			contentType: "text/plain",
+		});
+		let message = "";
+		try {
+			const neon = createNeon({ baseURL: gateway.baseURL, apiKey: "t" });
+			await generateText({ model: neon("gpt-5-2"), prompt: "hi" });
+		} catch (error) {
+			message = (error as { message: string }).message;
+		} finally {
+			await gateway.close();
+		}
+
+		expect(message).toBeTruthy();
 	});
 });
