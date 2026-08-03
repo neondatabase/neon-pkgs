@@ -145,13 +145,15 @@ describe("identityFromAuthDetails", () => {
 	});
 
 	// `GET /users/me` answers 404 for an organization key, so there is no email to ask for and
-	// no user id to record.
-	test("an organization key is labelled by organization, with no user id", () => {
+	// no user id to record. The id is returned bare: it already announces what it is through
+	// its `org-` prefix, and repeating the word beside a Scope column that says the same thing
+	// printed it twice.
+	test("an organization key is labelled by its id, with no user id", () => {
 		expect(
 			identityFromAuthDetails({
 				account_id: "org-1",
 				auth_method: "api_key_org",
 			}),
-		).toEqual({ label: "organization org-1" });
+		).toEqual({ label: "org-1" });
 	});
 });

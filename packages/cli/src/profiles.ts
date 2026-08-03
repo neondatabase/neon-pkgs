@@ -162,7 +162,7 @@ export const resolveProfile = (dir: string, name: string): ResolvedProfile => {
 		? Object.keys(file.profiles).join(", ")
 		: DEFAULT_PROFILE;
 	throw new Error(
-		`Unknown profile "${name}". Known profiles: ${known}. Create it with \`neon auth --profile ${name}\`.`,
+		`Unknown profile "${name}". Known profiles: ${known}. Create it with \`neon profile create ${name}\`.`,
 	);
 };
 

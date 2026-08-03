@@ -644,31 +644,34 @@ The CLI holds one Neon account by default. A profile adds another, and is nothin
 ```
 ~/.config/neon/
 ├── credentials.json          # this IS the DEFAULT profile
-├── credentials.work.json     # created by `neon auth --profile work`
+├── credentials.work.json     # created by `neon profile create work`
 └── profiles.json             # created only once a second profile exists
 ```
 
 ```bash
-neon auth --profile work     # create it, or sign in again
-neon profiles list
-neon profiles remove work
+neon profile create work     # a browser sign-in, or an API key — see below
+neon profile list
+neon profile remove work
 ```
 
 ```console
-$ neon profiles list
+$ neon profile list
 Profiles
-┌────────┬─────────┬─────────────────────┬─────────┬────────────────┬───────────┬──────────────────────────────────────┐
-│ Active │ Name    │ Account             │ Auth    │ Scope          │ Available │ Credentials                          │
-├────────┼─────────┼─────────────────────┼─────────┼────────────────┼───────────┼──────────────────────────────────────┤
-│ *      │ DEFAULT │ me@example.com      │ oauth   │ -              │ yes       │ ~/.config/neon/credentials.json      │
-├────────┼─────────┼─────────────────────┼─────────┼────────────────┼───────────┼──────────────────────────────────────┤
-│        │ work    │ me@work.example.com │ api key │ account        │ yes       │ ~/.config/neon/credentials.work.json │
-├────────┼─────────┼─────────────────────┼─────────┼────────────────┼───────────┼──────────────────────────────────────┤
-│        │ ci      │ organization org-…  │ api key │ project proj-1 │ yes       │ ~/.config/neon/credentials.ci.json   │
-└────────┴─────────┴─────────────────────┴─────────┴────────────────┴───────────┴──────────────────────────────────────┘
+┌────────┬─────────┬───────────────────────┬─────────┬────────────────┬──────┬────────────────────────┐
+│ Active │ Name    │ Account               │ Auth    │ Scope          │ File │ Credentials            │
+├────────┼─────────┼───────────────────────┼─────────┼────────────────┼──────┼────────────────────────┤
+│ *      │ DEFAULT │ me@example.com        │ oauth   │ -              │ ok   │ credentials.json       │
+├────────┼─────────┼───────────────────────┼─────────┼────────────────┼──────┼────────────────────────┤
+│        │ work    │ me@example.com        │ api key │ account        │ ok   │ credentials.work.json  │
+├────────┼─────────┼───────────────────────┼─────────┼────────────────┼──────┼────────────────────────┤
+│        │ ci      │ org-old-flower-827148 │ api key │ project proj-1 │ ok   │ credentials.ci.json    │
+└────────┴─────────┴───────────────────────┴─────────┴────────────────┴──────┴────────────────────────┘
 ```
 
-`Scope` is what a key can reach; an OAuth session has none of its own, so it shows `-`.
+`Scope` is what a key can reach; an OAuth session has none of its own, so it shows `-`. `File`
+says whether the credentials file is readable — `ok`, `invalid` or `missing` — which is not the
+same as the credential still working; only using it shows that. The table shows the file name,
+`--output json` the full path.
 
 Select one per invocation with `--profile`, or per shell with `NEON_PROFILE`. There is no `profile use` command and nothing is stored about which profile is "current", so what you type is always what runs.
 
@@ -685,6 +688,70 @@ Entries in `profiles.json` are paths, and a path may point anywhere — which is
 ```
 
 `neon profiles remove` revokes the refresh token at the authorization server, not just locally. It deletes the credentials file only when the CLI created it: an adopted path like the one above is unlinked and left on disk, and the command says so. Removing the last named profile deletes `profiles.json`, returning you to the single-account layout. `neon profiles remove DEFAULT` signs you out.
+
+### A profile holds either a sign-in or an API key
+
+`neon profile create` makes a profile, and how you call it decides which kind of credential it holds. A key-backed profile is what you want for an agent, a shared machine, or anything that must never be interrupted by a browser:
+
+```bash
+neon profile create work                                 # sign in with the browser, like `neon auth`
+neon profile create work --api-key napi_...              # store a key you already have
+neon profile create work --api-key-file ~/keys/work      # take it from a file
+echo "$KEY" | neon profile create work --api-key-stdin   # or a pipe; prompts in a terminal
+neon profile create ci --mint                            # sign in once, keep only a minted key
+neon profile create ci --mint --org-id org-abc-123        # minted for an organization
+neon profile create ci --mint --project-id proj-1         # minted for one project only
+neon profile create work --force                          # replace an existing profile
+neon profile rotate-key work                              # mint a replacement, revoke the old one
+```
+
+**A profile is one kind or the other, never both.** `type` in the credentials file states which:
+
+```json
+// oauth: what a plain `create` (or `neon auth --profile`) writes. An absent `type` means this.
+{ "access_token": "…", "refresh_token": "…", "expires_at": 1786…, "user_id": "…" }
+
+// api_key: what `--api-key` writes
+{ "type": "api_key", "api_key": "napi_…", "user_id": "…" }
+
+// api_key from `--mint --org-id`, which records the scope it was issued at
+{ "type": "api_key", "api_key": "napi_…", "key_id": 123, "org_id": "org-…" }
+```
+
+Nothing is carried over when a profile is replaced, so one profile can never hold two credentials — or two different accounts. The secret stays in that file and never goes into `profiles.json`, so listing profiles cannot leak one. Both files are written owner-only through a temporary file and a rename, which also repairs the permissions of a file created too permissively.
+
+`--mint` is the one to reach for. It signs you in through the browser once, mints a key with that session, stores only the key, and signs the session back out — so afterwards nothing about the profile can open a browser, and no half-forgotten login is left behind. `--org-id` and `--project-id` narrow what the minted key can reach, exactly as they do on [`neon api-keys create`](#api-keys); a project-scoped key cannot create projects, mint keys, or read any other project.
+
+Every key is verified against the API before it is stored, and the account it belongs to is recorded so `profile list` can show it. Only a real API key is accepted: an OAuth access token authenticates today and then expires with nothing to refresh it.
+
+`rotate-key` mints at the scope the profile already has — replacing an org key with an account key would quietly widen everything it reaches — and stores the new key before revoking the old one, so a failed write leaves the old key working.
+
+One thing it cannot do: **an organization key cannot mint its own replacement.** Neon only accepts a personal credential when creating organization keys, so rotating an org- or project-scoped profile means signing in again — `neon profile create ci --mint --org-id org-abc-123 --force`. `rotate-key` checks this before minting and says so, rather than letting the API answer with a rule you had no reason to expect.
+
+Two things the CLI cannot do for a key you supplied rather than minted. It cannot revoke it, because `GET /api_keys` exposes no prefix and a stored secret cannot be matched to a listing entry, so both `rotate-key` and `profile remove` say the old key is still live and point you at `neon api-keys list`. And it cannot know the key's scope, so `profile list` shows `account` for it.
+
+If a stored key stops working there is nothing to refresh, so recovery is one browser sign-in: `neon profile create work --mint --force`.
+
+### Which credential an invocation uses
+
+An explicit flag always beats an environment variable:
+
+| Given | What runs |
+| --- | --- |
+| `--api-key` and `--profile` | neither — contradictory, so the command fails |
+| `--api-key` and `NEON_PROFILE` | the flag's key |
+| `--profile` and `NEON_API_KEY` | the profile |
+| `NEON_API_KEY` and `NEON_PROFILE` | the key, and the ignored profile is named in a warning |
+| `--profile` or `NEON_PROFILE` alone | that profile |
+| nothing | `DEFAULT` |
+
+Passing both flags fails rather than picking a winner: `--api-key` supplies a credential and `--profile` selects a stored one, so there is no reading of the command that makes both true.
+
+When both are only environment variables the key wins, which keeps a CI pipeline that injects `NEON_API_KEY` working even if a `NEON_PROFILE` leaks into the environment — but the disregarded profile is named on stderr rather than passed over silently.
+
+`neon auth` and the `profile` subcommands are outside all of this, because they read the same flags to mean something else: `neon auth --profile work` names where to write a credential, and `neon profile create work --api-key …` names one to store.
+
+`neon init` does not support `--profile` yet. It hands its whole auth flow to `neon-init`, which reads the default credentials directly, so passing the flag fails instead of quietly running as the default account.
 
 ## API keys (`api-keys`)
 
@@ -757,70 +824,6 @@ API keys in org-7
 ```
 
 `last_used_at` and `last_used_from_addr` are how you spot a key worth revoking.
-
-### A profile holds either a sign-in or an API key
-
-`neon profile create` makes a profile, and how you call it decides which kind of credential it holds. A key-backed profile is what you want for an agent, a shared machine, or anything that must never be interrupted by a browser:
-
-```bash
-neon profile create work                                 # browser sign-in, same as `neon auth --profile work`
-neon profile create work --api-key napi_...              # store a key you already have
-neon profile create work --api-key-file ~/keys/work      # take it from a file
-echo "$KEY" | neon profile create work --api-key-stdin   # or a pipe; prompts in a terminal
-neon profile create ci --mint                            # sign in once, keep only a minted key
-neon profile create ci --mint --org-id org-abc-123        # minted for an organization
-neon profile create ci --mint --project-id proj-1         # minted for one project only
-neon profile create work --force                          # replace an existing profile
-neon profile rotate-key work                              # mint a replacement, revoke the old one
-```
-
-**A profile is one kind or the other, never both.** `type` in the credentials file states which:
-
-```json
-// oauth: what a plain `create` (or `neon auth --profile`) writes. An absent `type` means this.
-{ "access_token": "…", "refresh_token": "…", "expires_at": 1786…, "user_id": "…" }
-
-// api_key: what `--api-key` writes
-{ "type": "api_key", "api_key": "napi_…", "user_id": "…" }
-
-// api_key from `--mint --org-id`, which records the scope it was issued at
-{ "type": "api_key", "api_key": "napi_…", "key_id": 123, "org_id": "org-…" }
-```
-
-Nothing is carried over when a profile is replaced, so one profile can never hold two credentials — or two different accounts. The secret stays in that file and never goes into `profiles.json`, so listing profiles cannot leak one. Both files are written owner-only through a temporary file and a rename, which also repairs the permissions of a file created too permissively.
-
-`--mint` is the one to reach for. It signs you in through the browser once, mints a key with that session, stores only the key, and signs the session back out — so afterwards nothing about the profile can open a browser, and no half-forgotten login is left behind. `--org-id` and `--project-id` narrow what the minted key can reach, exactly as they do on [`neon api-keys create`](#api-keys); a project-scoped key cannot create projects, mint keys, or read any other project.
-
-Every key is verified against the API before it is stored, and the account it belongs to is recorded so `profile list` can show it. Only a real API key is accepted: an OAuth access token authenticates today and then expires with nothing to refresh it.
-
-`rotate-key` mints at the scope the profile already has — replacing an org key with an account key would quietly widen everything it reaches — and stores the new key before revoking the old one, so a failed write leaves the old key working.
-
-One thing it cannot do: **an organization key cannot mint its own replacement.** Neon only accepts a personal credential when creating organization keys, so rotating an org- or project-scoped profile means signing in again — `neon profile create ci --mint --org-id org-abc-123 --force`. `rotate-key` checks this before minting and says so, rather than letting the API answer with a rule you had no reason to expect.
-
-Two things the CLI cannot do for a key you supplied rather than minted. It cannot revoke it, because `GET /api_keys` exposes no prefix and a stored secret cannot be matched to a listing entry, so both `rotate-key` and `profile remove` say the old key is still live and point you at `neon api-keys list`. And it cannot know the key's scope, so `profile list` shows `account` for it.
-
-If a stored key stops working there is nothing to refresh, so recovery is one browser sign-in: `neon profile create work --mint --force`.
-
-### Which credential an invocation uses
-
-An explicit flag always beats an environment variable:
-
-| Given | What runs |
-| --- | --- |
-| `--api-key` and `--profile` | neither — contradictory, so the command fails |
-| `--api-key` and `NEON_PROFILE` | the flag's key |
-| `--profile` and `NEON_API_KEY` | the profile |
-| `NEON_API_KEY` and `NEON_PROFILE` | the key, and the ignored profile is named in a warning |
-| `--profile` or `NEON_PROFILE` alone | that profile |
-| nothing | `DEFAULT` |
-
-Passing both flags fails rather than picking a winner: `--api-key` supplies a credential and `--profile` selects a stored one, so there is no reading of the command that makes both true.
-
-When both are only environment variables the key wins, which keeps a CI pipeline that injects `NEON_API_KEY` working even if a `NEON_PROFILE` leaks into the environment — but the disregarded profile is named on stderr rather than passed over silently.
-
-`neon auth` and the `profile` subcommands are outside all of this, because they read the same flags to mean something else: `neon auth --profile work` names where to write a credential, and `neon profile set-key work --api-key …` names one to store.
-
-`neon init` does not support `--profile` yet. It hands its whole auth flow to `neon-init`, which reads the default credentials directly, so passing the flag fails instead of quietly running as the default account.
 
 ## Commands
 

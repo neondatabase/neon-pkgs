@@ -86,14 +86,16 @@ export type KeyIdentity = {
  *
  * An organization-scoped key has no user, and `GET /users/me` answers `404 not allowed for
  * organization API keys` — so the account id is the only identity available, and asking for an
- * email would turn a perfectly good key into a failed `set-key`.
+ * email would turn a perfectly good key into a failed `profile create`. The id is returned bare
+ * rather than as "organization <id>": it already announces what it is through its `org-` prefix,
+ * and `list` shows the scope in the next column.
  */
 export const identityFromAuthDetails = (
 	details: AuthDetailsResponse,
 	email?: string,
 ): KeyIdentity => {
 	if (details.auth_method === "api_key_org") {
-		return { label: `organization ${details.account_id}` };
+		return { label: details.account_id };
 	}
 	return {
 		...(email ? { label: email } : { label: details.account_id }),
@@ -109,4 +111,4 @@ export const identityFromAuthDetails = (
 export const notAnApiKeyMessage = (
 	method: AuthDetailsResponse["auth_method"],
 ): string =>
-	`That credential authenticates as "${method}", not an API key. Create a key with \`neon api-keys create\`, or have one minted with \`neon profile create <name> --mint\`.`;
+	`That credential authenticates as "${method}", not an API key. Create a key with \`neon api-keys create --name <name>\`, or have one minted with \`neon profile create <name> --mint\`.`;

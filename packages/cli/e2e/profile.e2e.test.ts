@@ -37,8 +37,11 @@ describe("API-key profiles against the live API", () => {
 				json: false,
 			});
 			expect(stored.stderr).toContain(
-				`Stored an API key for profile "${PROFILE}"`,
+				`Profile "${PROFILE}" now holds api key`,
 			);
+			// The caveat about a supplied key is a warning, not a note: it is the same one
+			// `api-keys create` raises at that level.
+			expect(stored.stderr).toContain("cannot be revoked by");
 			expect(stored.code).toBe(0);
 
 			// The key belongs in the credentials file, declared as one, and never in profiles.json.
@@ -68,7 +71,7 @@ describe("API-key profiles against the live API", () => {
 					expect.objectContaining({
 						name: PROFILE,
 						auth: "api key",
-						available: "yes",
+						file: "ok",
 						// A supplied key records no scope: we cannot know what it was issued at.
 						scope: "account",
 					}),
@@ -80,6 +83,33 @@ describe("API-key profiles against the live API", () => {
 			expect(listed.stdout).not.toContain(requireApiKey());
 		},
 	);
+
+	// An agent that creates a profile should not have to run `profile list` to find out what it
+	// just made — and the record must not carry the secret.
+	e2eTest("create reports the profile as JSON, without the key", async () => {
+		const jsonDir = mkdtempSync(join(tmpdir(), "neon-e2e-profile-json-"));
+		try {
+			const created = await runCli(["profile", "create", "agent"], {
+				configDir: jsonDir,
+				apiKey: requireApiKey(),
+			});
+
+			expect(created.code).toBe(0);
+			expect(JSON.parse(created.stdout)).toEqual(
+				expect.objectContaining({
+					name: "agent",
+					auth: "api key",
+					scope: expect.any(String),
+					credentials: expect.stringContaining(
+						"credentials.agent.json",
+					),
+				}),
+			);
+			expect(created.stdout).not.toContain(requireApiKey());
+		} finally {
+			rmSync(jsonDir, { recursive: true, force: true });
+		}
+	});
 
 	e2eTest(
 		"a stored key authenticates with no key in the environment",

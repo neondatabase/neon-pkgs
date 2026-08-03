@@ -208,13 +208,13 @@ describe("profile list", () => {
 			expect.objectContaining({
 				name: "DEFAULT",
 				auth: "oauth",
-				available: "yes",
+				file: "ok",
 			}),
 			expect.objectContaining({
 				name: "work",
 				auth: "api key",
 				account: "work@example.com",
-				available: "yes",
+				file: "ok",
 			}),
 		]);
 
@@ -250,7 +250,7 @@ describe("profile list", () => {
 				expect.objectContaining({
 					name: "gone",
 					auth: "-",
-					available: "no",
+					file: "missing",
 				}),
 			]),
 		);
@@ -367,6 +367,22 @@ describe("profile create", () => {
 		expect(stderr).toContain("is empty");
 	});
 
+	test("names every way to supply a key when given none", async () => {
+		const dir = makeConfigDir({});
+		const { code, stderr } = await runCli([
+			"profile",
+			"create",
+			"work",
+			"--config-dir",
+			dir,
+			"--org-id",
+			"org-abc-123",
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("only apply with --mint");
+	});
+
 	test("reads a key from stdin and never puts it in argv", async () => {
 		const dir = makeConfigDir({});
 		// The API host refuses connections, so this gets as far as verifying and no further —
@@ -387,6 +403,23 @@ describe("profile create", () => {
 		expect(code).toBe(1);
 		expect(stderr).not.toContain("Nothing arrived on stdin");
 		expect(stderr).not.toContain("napi_from_stdin");
+	});
+
+	// A flag named for a stream must not open a dialog: an agent on a pty would block forever.
+	test("--api-key-stdin refuses a terminal instead of prompting", async () => {
+		const dir = makeConfigDir({});
+		const { code, stderr } = await runCli([
+			"profile",
+			"create",
+			"work",
+			"--config-dir",
+			dir,
+			"--api-key-prompt",
+		]);
+
+		// stdin is a pipe here, so the interactive flag is the one with nothing to ask on.
+		expect(code).toBe(1);
+		expect(stderr).toContain("needs a terminal to ask on");
 	});
 
 	test("says so when nothing arrives on stdin", async () => {
@@ -708,7 +741,7 @@ describe("a damaged credentials file", () => {
 				expect.objectContaining({
 					name: "broken",
 					auth: "invalid",
-					available: "no",
+					file: "invalid",
 				}),
 				expect.objectContaining({ name: "DEFAULT", auth: "oauth" }),
 			]),
@@ -741,8 +774,20 @@ describe("neon init and profile selection", () => {
 		expect(stderr).toContain("work");
 	});
 
+	// The profile has to exist, or credential selection rejects the name first and `init`'s own
+	// refusal is never reached — which is what this case was accidentally asserting before.
 	test("--profile is refused too", async () => {
-		const dir = makeConfigDir({ "credentials.json": OAUTH_FILE });
+		const dir = makeConfigDir({
+			"credentials.json": OAUTH_FILE,
+			"credentials.work.json": API_KEY_FILE,
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: {
+					DEFAULT: { credentials: "credentials.json" },
+					work: { credentials: "credentials.work.json" },
+				},
+			}),
+		});
 		const { code, stderr } = await runCli([
 			"init",
 			"--config-dir",
@@ -753,6 +798,7 @@ describe("neon init and profile selection", () => {
 
 		expect(code).toBe(1);
 		expect(stderr).toContain("--profile");
+		expect(stderr).toContain("does not support profile selection yet");
 	});
 });
 

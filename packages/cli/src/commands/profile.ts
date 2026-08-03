@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
+import { basename } from "node:path";
 import prompts from "prompts";
 import type yargs from "yargs";
 
@@ -60,6 +61,7 @@ type CreateProps = ProfileProps & {
 	name: string;
 	apiKeyFile?: string;
 	apiKeyStdin?: boolean;
+	apiKeyPrompt?: boolean;
 	mint?: boolean;
 	orgId?: string;
 	projectId?: string;
@@ -81,7 +83,7 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.command(
 			"create <name>",
-			"Create a profile, holding either a browser sign-in or an API key",
+			"Create a profile. It holds either a browser sign-in or an API key, never both",
 			(y) =>
 				y
 					.positional("name", {
@@ -92,13 +94,19 @@ export const builder = (argv: yargs.Argv) =>
 					.options({
 						"api-key-file": {
 							describe:
-								"Store the API key in this file, whose entire contents are the key",
+								"Read the API key from this file, whose entire contents are the key. Warns if the file is readable by other users",
 							type: "string",
 							coerce: single("api-key-file"),
 						},
 						"api-key-stdin": {
 							describe:
-								"Read the API key from stdin, or prompt for it in a terminal",
+								"Read the API key from stdin. Fails if stdin is a terminal — use --api-key-prompt for that",
+							type: "boolean",
+							default: false,
+						},
+						"api-key-prompt": {
+							describe:
+								"Ask for the API key on the terminal, so it stays out of shell history",
 							type: "boolean",
 							default: false,
 						},
@@ -196,6 +204,21 @@ export const handler = (_args: yargs.Arguments) => {
 };
 
 /**
+ * Refuse `--profile` on a `profile` subcommand.
+ *
+ * These commands name their target as a positional, so `--profile` has nothing to select and
+ * was silently dropped — which is precisely the class of bug this command family exists to
+ * stop. `.strict()` cannot catch it because `--profile` is a global option.
+ */
+const rejectProfileFlag = (props: { profile?: string }, sub: string): void => {
+	const named = props.profile?.trim();
+	if (!named) return;
+	throw new Error(
+		`--profile does not apply to \`profile ${sub}\`, which takes the profile name as an argument. Did you mean \`neon profile ${sub} ${named}\`?`,
+	);
+};
+
+/**
  * What kind of credential a file holds, for display.
  *
  * A file that declares a kind we cannot read is reported as `invalid` with the reason logged,
@@ -238,7 +261,12 @@ const inspectForListing = (
 };
 
 const list = async (props: ProfileProps) => {
+	// `list` is the one subcommand where `--profile` means something: it marks the active row.
+	// It still has to be a profile that exists, or the marker silently lands on nothing.
 	const active = selectProfileName(props.profile);
+	if (props.profile !== undefined && props.profile.trim() !== "") {
+		resolveProfile(props.configDir, active);
+	}
 	const rows = listProfiles(props.configDir).map((p) => {
 		const { stored, auth } = inspectForListing(p.credentialsPath);
 		const storedUserId =
@@ -253,10 +281,21 @@ const list = async (props: ProfileProps) => {
 				stored !== null && auth === "api key"
 					? describeScope(scopeOf(stored))
 					: "-",
-			// "available" rather than "signed in": a file existing has never proved that the
-			// credential inside it still works, and for a key there is no session to be in.
-			available: auth === "invalid" || stored === null ? "no" : "yes",
-			credentials: p.credentialsPath,
+			// Names what was actually checked. The column this replaced was called "available",
+			// which claims the credential is ready to use — a thing reading a file cannot show,
+			// and the wrong answer for the dead key someone runs this to diagnose.
+			file:
+				auth === "invalid"
+					? "invalid"
+					: stored === null
+						? "missing"
+						: "ok",
+			// The basename in the table, because `cli-table` neither wraps nor truncates and a
+			// real path pushes the row past most terminals. Structured output keeps the path,
+			// which is what a script actually wants.
+			...(props.output === "table"
+				? { credentials: basename(p.credentialsPath) }
+				: { credentials: p.credentialsPath }),
 		};
 	});
 
@@ -268,7 +307,7 @@ const list = async (props: ProfileProps) => {
 			"account",
 			"auth",
 			"scope",
-			"available",
+			"file",
 			"credentials",
 		],
 	});
@@ -291,11 +330,19 @@ const assertReplaceable = (props: CreateProps): void => {
 	if (force) return;
 	const declared = readProfiles(configDir)?.profiles[name];
 	const path = credentialsPathFor(configDir, name);
-	if (declared || (name === DEFAULT_PROFILE && existsSync(path))) {
-		throw new Error(
-			`Profile "${name}" already exists. Pass --force to replace its credential, or \`neon profile rotate-key ${name}\` to mint a fresh key for it.`,
-		);
-	}
+	if (!declared && !(name === DEFAULT_PROFILE && existsSync(path))) return;
+
+	// Only offer `rotate-key` when it would actually work: it refuses anything that is not
+	// already an API-key profile, and `DEFAULT` is an OAuth profile on nearly every install.
+	const existing = inspectCredentials(path);
+	const rotatable =
+		existing.kind === "ok" &&
+		credentialKind(existing.credentials, path) === API_KEY;
+	throw new Error(
+		rotatable
+			? `Profile "${name}" already exists. Pass --force to replace its credential, or \`neon profile rotate-key ${name}\` to mint a fresh key for it.`
+			: `Profile "${name}" already exists. Pass --force to replace its credential.`,
+	);
 };
 
 /**
@@ -311,10 +358,13 @@ const resolveKeyToStore = async (props: CreateProps): Promise<string> => {
 	const fromFile = props.apiKeyFile?.trim();
 	const fromStdin = props.apiKeyStdin === true;
 
+	const fromPrompt = props.apiKeyPrompt === true;
+
 	const given = [
 		fromFlag ? "--api-key" : null,
 		fromFile ? "--api-key-file" : null,
 		fromStdin ? "--api-key-stdin" : null,
+		fromPrompt ? "--api-key-prompt" : null,
 	].filter((flag): flag is string => flag !== null);
 
 	if (given.length > 1) {
@@ -335,35 +385,23 @@ const resolveKeyToStore = async (props: CreateProps): Promise<string> => {
 
 	if (fromFlag) return fromFlag;
 
-	// `--api-key-stdin` covers both a pipe and a person: piped input is read, and a terminal
-	// gets a hidden prompt. Either way the key never appears in argv, where `ps` and shell
-	// history would both keep it.
-	if (fromStdin) return await readKeyFromStdin(props.name);
+	// Neither of these puts the key in argv, where `ps` and shell history would both keep it.
+	if (fromStdin) return readKeyFromStdin();
+	if (fromPrompt) return await promptForKey(props.name);
 
 	throw new Error(
-		`Nothing to store for profile "${props.name}". Pass --api-key, --api-key-file, or --api-key-stdin — or --mint to have one minted, or no flags at all to sign in with the browser.`,
+		`Nothing to store for profile "${props.name}". Pass --api-key, --api-key-file, --api-key-stdin or --api-key-prompt — or --mint to have one minted, or no flags at all to sign in with the browser.`,
 	);
 };
 
-const readKeyFromStdin = async (name: string): Promise<string> => {
+const readKeyFromStdin = (): string => {
+	// Reading a terminal here would sit silently waiting for EOF, which for anything automated
+	// is indistinguishable from a hang. `--api-key-prompt` is the interactive one.
 	if (process.stdin.isTTY) {
-		if (isCi()) {
-			throw new Error(
-				"Refusing to prompt for an API key in CI. Pipe it to --api-key-stdin instead.",
-			);
-		}
-		const { key } = await prompts({
-			type: "password",
-			name: "key",
-			message: `API key for profile "${name}"`,
-		});
-		const entered = typeof key === "string" ? key.trim() : "";
-		if (entered === "") {
-			throw new Error("No API key entered, so nothing was changed.");
-		}
-		return entered;
+		throw new Error(
+			'stdin is a terminal, so there is nothing to read. Pipe the key in — echo "$KEY" | neon profile create <name> --api-key-stdin — or use --api-key-prompt to be asked for it.',
+		);
 	}
-
 	const piped = readFileSync(0, "utf8").trim();
 	if (piped === "") {
 		throw new Error(
@@ -371,6 +409,24 @@ const readKeyFromStdin = async (name: string): Promise<string> => {
 		);
 	}
 	return piped;
+};
+
+const promptForKey = async (name: string): Promise<string> => {
+	if (isCi() || !process.stdin.isTTY) {
+		throw new Error(
+			'--api-key-prompt needs a terminal to ask on. Pipe the key instead: echo "$KEY" | neon profile create <name> --api-key-stdin',
+		);
+	}
+	const { key } = await prompts({
+		type: "password",
+		name: "key",
+		message: `API key for profile "${name}"`,
+	});
+	const entered = typeof key === "string" ? key.trim() : "";
+	if (entered === "") {
+		throw new Error("No API key entered, so nothing was changed.");
+	}
+	return entered;
 };
 
 /**
@@ -409,13 +465,17 @@ const verifyKey = async (
 
 const create = async (props: CreateProps) => {
 	const { name } = props;
+	rejectProfileFlag(props, "create");
 	assertValidProfileName(name);
 	assertReplaceable(props);
 
+	// Every flag that says "this profile holds a key". Missing one here is not cosmetic: the
+	// command would fall through to the browser sign-in and ignore what the user asked for.
 	const keyInputs = [
 		credentialInputs().apiKeyFlag.trim() !== "" ? "--api-key" : null,
 		props.apiKeyFile !== undefined ? "--api-key-file" : null,
 		props.apiKeyStdin === true ? "--api-key-stdin" : null,
+		props.apiKeyPrompt === true ? "--api-key-prompt" : null,
 	].filter((flag): flag is string => flag !== null);
 
 	if (props.mint) {
@@ -476,19 +536,90 @@ const create = async (props: CreateProps) => {
 	recordProfile(props, name, credentialsPath, identity);
 	await retirePreviousCredential(props, name, previous, credentialsPath);
 
-	log.info(
-		'Stored an API key for profile "%s" (%s) in %s',
+	report(props, {
 		name,
-		identity.label ?? "unknown account",
-		credentialsPath,
-	);
+		account: identity.label ?? "unknown account",
+		auth: "api key",
+		scope: describeScope(
+			identity.orgId !== undefined ? { orgId: identity.orgId } : {},
+		),
+		credentials: credentialsPath,
+	});
 	// A key we did not mint has no discoverable id: `GET /api_keys` exposes no prefix, so a
-	// stored secret cannot be matched back to a listing entry. Say so now rather than when a
-	// rotation cannot clean up after itself.
-	log.info(
-		"Its scope is whatever it was created with, and `rotate-key` cannot revoke it later — only keys minted here record an id. `neon api-keys list` shows what exists.",
+	// stored secret cannot be matched back to a listing entry. A warning rather than a note,
+	// because it is the same caveat `api-keys create` raises at that level.
+	log.warning(
+		"A key you supplied cannot be revoked by `rotate-key` or `remove` — only keys minted here record an id.",
 	);
-	log.info("Use it with: neon --profile %s <command>", name);
+};
+
+/**
+ * What a minted key can reach, in the same words `neon api-keys create` uses for the same key.
+ *
+ * Saying nothing here would be worse than there: this is the command aimed at agents and shared
+ * machines, which is exactly where an over-broad credential does the most damage.
+ */
+const warnAboutReach = (scope: KeyScope): void => {
+	if (scope.projectId !== undefined) {
+		log.info(
+			"Limited to %s: it cannot create projects, mint API keys, or read any other project. It can still change and delete everything inside that project.",
+			scope.projectId,
+		);
+		return;
+	}
+	if (scope.orgId !== undefined) {
+		log.warning(
+			"This key reaches every project in %s, including ones created later. Pass --project-id instead to restrict it to one.",
+			scope.orgId,
+		);
+		return;
+	}
+	log.warning(
+		"This key reaches everything your account can, in every organization. Pass --org-id or --project-id to narrow it.",
+	);
+};
+
+/**
+ * Report a profile that was just written.
+ *
+ * Through the writer rather than `log`, so `--output json` yields the record an agent needs
+ * instead of nothing — it had to follow up with `profile list` to learn what it just created.
+ */
+const report = (
+	props: ProfileProps,
+	record: {
+		name: string;
+		account: string;
+		auth: string;
+		scope: string;
+		keyId?: number;
+		credentials: string;
+	},
+): void => {
+	const out = writer(props);
+	if (props.output === "table") {
+		log.info(
+			'Profile "%s" now holds %s for %s (%s), in %s',
+			record.name,
+			record.auth,
+			record.account,
+			record.scope,
+			record.credentials,
+		);
+		out.end([], { fields: [] });
+		return;
+	}
+	out.end(record as never, {
+		fields: [
+			"name",
+			"account",
+			"auth",
+			"scope",
+			...(record.keyId !== undefined ? ["keyId"] : []),
+			"credentials",
+		] as never,
+		title: "Profile",
+	});
 };
 
 const recordProfile = (
@@ -519,7 +650,7 @@ const createByMinting = async (props: CreateProps) => {
 	// make the same check itself, or this would sit waiting for a login nobody can complete.
 	if (isCi() && props.forceAuth !== true) {
 		throw new Error(
-			`--mint needs a browser sign-in, which cannot happen in CI. Mint the key with \`neon api-keys create\` and store it with \`neon profile create ${name} --api-key-stdin\`.`,
+			`--mint needs a browser sign-in, which cannot happen in CI. Mint the key with \`neon api-keys create --name ${name}\` and pipe it in: echo "$KEY" | neon profile create ${name} --api-key-stdin`,
 		);
 	}
 
@@ -574,15 +705,15 @@ const createByMinting = async (props: CreateProps) => {
 		recordProfile(props, name, credentialsPath, identity);
 		await retirePreviousCredential(props, name, previous, credentialsPath);
 
-		log.info(
-			'Minted %s for profile "%s" (%s, %s) and stored it in %s',
-			minted.name,
+		report(props, {
 			name,
-			identity.label ?? "unknown account",
-			describeScope(scope),
-			credentialsPath,
-		);
-		log.info("Use it with: neon --profile %s <command>", name);
+			account: identity.label ?? "unknown account",
+			auth: "api key",
+			scope: describeScope(scope),
+			keyId: minted.id,
+			credentials: credentialsPath,
+		});
+		warnAboutReach(scope);
 	} finally {
 		// A key minted but never written is unreachable, so it must not be left live.
 		if (minted !== undefined && !keyIsReachable) {
@@ -748,6 +879,7 @@ const withdrawKey = async (
 
 const rotateKey = async (props: ProfileProps & { name: string }) => {
 	const { name } = props;
+	rejectProfileFlag(props, "rotate-key");
 	// Resolve first: an unknown profile must fail having minted nothing.
 	const profile = resolveProfile(props.configDir, name);
 
@@ -864,6 +996,7 @@ const rotateKey = async (props: ProfileProps & { name: string }) => {
 
 const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 	const { name } = props;
+	rejectProfileFlag(props, "remove");
 	// Resolve before touching anything: an unknown name must fail having deleted nothing.
 	const profile = resolveProfile(props.configDir, name);
 

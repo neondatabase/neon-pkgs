@@ -32,7 +32,7 @@
  *
  * `auth` and the `profile` subcommands do not use any of this. They read the same flags with
  * different meanings — `neon auth --profile work` names where to *write* a credential, and
- * `neon profile set-key work --api-key …` names one to *store* — so their callers skip
+ * `neon profile create work --api-key …` names one to *store* — so their callers skip
  * selection entirely rather than passing exemptions down here.
  */
 
