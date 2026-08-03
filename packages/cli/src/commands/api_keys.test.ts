@@ -371,21 +371,22 @@ describe("api-keys revoke", () => {
 		);
 	});
 
-	test("names the id the user typed, not NaN", async ({ testCliCommand }) => {
-		await testCliCommand(["api-keys", "revoke", "abc"], {
-			code: 1,
-			stderr: expect.stringContaining("Got `abc`"),
-		});
-	});
-
-	test("refuses a non-numeric id instead of sending NaN", async ({
+	// Rejected locally rather than sent as NaN, and the message names the token the user
+	// typed rather than the coercion artifact.
+	test("refuses a non-numeric id, naming what was typed", async ({
 		testCliCommand,
 	}) => {
 		await testCliCommand(["api-keys", "revoke", "abc"], {
 			code: 1,
-			stderr: expect.stringContaining(
-				"api-keys revoke needs a numeric key id",
-			),
+			stderr: "ERROR: api-keys revoke needs a numeric key id, from `neon api-keys list`. Got `abc`.",
+		});
+	});
+
+	// `Number("0x65")` is 101: accepting it would revoke a key the user never named.
+	test("refuses a hex or exponent id", async ({ testCliCommand }) => {
+		await testCliCommand(["api-keys", "revoke", "0x65"], {
+			code: 1,
+			stderr: expect.stringContaining("Got `0x65`"),
 		});
 	});
 

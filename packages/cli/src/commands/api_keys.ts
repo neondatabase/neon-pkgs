@@ -187,10 +187,13 @@ export const builder = (argv: yargs.Argv) =>
 						type: "string",
 						demandOption: true,
 						coerce: (value: unknown) => {
+							// Digits only, checked before Number(): `Number("0x65")` is 101
+							// and `Number("1e3")` is 1000, so either would revoke a key the
+							// user never named while the message promises "a numeric id".
 							const id = Number(value);
 							if (
 								typeof value !== "string" ||
-								value.trim() === "" ||
+								!/^\d+$/.test(value.trim()) ||
 								!Number.isSafeInteger(id) ||
 								id <= 0
 							) {
@@ -245,14 +248,14 @@ const list = async (props: ListProps) => {
 				{
 					fields: ORG_TABLE_FIELDS,
 					title: `API keys in ${props.orgId}`,
-					emptyMessage: "This organization has no API keys.",
+					emptyMessage: `No API keys in ${props.orgId}.`,
 				},
 			);
 		} else {
 			out.write(data, {
 				fields: ORG_FIELDS,
 				title: `API keys in ${props.orgId}`,
-				emptyMessage: "This organization has no API keys.",
+				emptyMessage: `No API keys in ${props.orgId}.`,
 			});
 		}
 		out.end();
@@ -422,9 +425,13 @@ const assertUsable = async (
  * Revoke, turning the most likely mistake into a usable message.
  *
  * Account and organization keys live on different endpoints, and `api-keys list --org-id X`
- * shows ids that the account endpoint cannot see. Copying one and forgetting the flag is the
- * easy error, and a bare "API key not found" sends the user looking for a deleted key rather
- * than a missing flag.
+ * shows ids that the account endpoint cannot see. Copying one and forgetting the flag — or
+ * leaving it on for an account key — is the easy error, and a bare "API key not found" sends
+ * the user looking for a deleted key rather than a misplaced flag.
+ *
+ * Only the key id is worth second-guessing here: an org id that is wrong or not yours does
+ * not reach this path at all, because the API answers "not an organization member" (verified
+ * against production) rather than a 404.
  */
 const revokeOrExplain = async (props: RevokeProps) => {
 	try {
@@ -496,7 +503,7 @@ const orgIdForProject = async (
 		if (isNeonApiError(err) && err.status === 404) {
 			throw new Error(
 				projectId.startsWith("org-")
-					? `Project ${projectId} not found. That looks like an organization id: Pass it as --org-id instead.`
+					? `Project ${projectId} not found. That looks like an organization id. Pass it as --org-id instead.`
 					: `Project ${projectId} not found. Check the id with \`neon projects list\`.`,
 			);
 		}
