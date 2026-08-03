@@ -168,7 +168,7 @@ So `store` is only refused on the Responses route; the same option is ignored el
 
 ## Limitations
 
-- `generateImage()` and embeddings (`embed` / `embedMany`) are not offered by the gateway and throw `NoSuchModelError`.
+- The gateway does not offer image or embedding model endpoints, so `generateImage()`, `embed()`, and `embedMany()` throw `NoSuchModelError`. Image generation is available through the Responses API's built-in `image_generation` tool with `neon.tools.imageGeneration()`.
 - Results from provider-executed tools (`neon.tools.imageGeneration`, and the other Responses built-ins) are not replayed to the gateway on a later step — see [Edit a generated image](#edit-a-generated-image).
 - The Responses route is stateless, so the provider sends `store: false` and refuses `store: true`, `store: null`, `previousResponseId`, or `conversation` — see [Errors](#errors).
 
