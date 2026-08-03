@@ -4,7 +4,7 @@ Community [Vercel AI SDK](https://ai-sdk.dev) provider for the [Neon](https://ne
 
 The Neon AI Gateway is **branch-scoped**: each Neon project branch gets its own gateway host, and a platform token authorizes requests for that branch. This provider routes each model to the best gateway endpoint (Anthropic → native Messages, OpenAI → native Responses incl. **Codex**, everything else → unified OpenAI-compatible MLflow endpoint), so a single `neon('gpt-5-mini')` call reaches the whole catalog.
 
-Model ids use the canonical Neon (unprefixed) form — `gpt-5-mini`, `llama-4-maverick`, `gemini-3-flash` — matching the [`neon` provider on models.dev](https://models.dev). The typed catalog mirrors that provider exactly (kept in sync by a scheduled drift check), plus a few extra gateway-served ids that models.dev doesn't list yet (e.g. Codex, Llama, Qwen). Any other id — including the legacy `databricks-` prefixed form (`databricks-gpt-5-mini`) — is still accepted as a plain string, so existing code keeps working.
+Model ids use the canonical Neon (unprefixed) form — `gpt-5-mini`, `llama-4-maverick`, `gemini-3-flash` — matching the [`neon` provider on models.dev](https://models.dev). The typed catalog mirrors that provider exactly (kept in sync by a scheduled drift check), plus a few extra gateway-served ids that models.dev doesn't list yet (e.g. Codex, Llama, Qwen). Any other id is still accepted as a plain string, so existing code keeps working.
 
 ## Install
 
@@ -55,7 +55,7 @@ const neon = createNeon({
 | OpenAI (`gpt-*`, `*-codex`) | native Responses API | Codex (native-only), native reasoning, image-gen tool |
 | Everything else (Gemini, Llama, Qwen, gpt-oss, ...) | unified MLflow endpoint | broad coverage; Gemini is here because its native endpoint does not support streaming |
 
-Routing matches on the model id, so both the canonical (`gpt-5`) and the legacy `databricks-`-prefixed (`databricks-gpt-5`) forms route identically.
+Routing matches on the model id.
 
 ## Capabilities
 
