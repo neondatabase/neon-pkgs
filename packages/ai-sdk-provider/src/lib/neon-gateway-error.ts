@@ -26,10 +26,14 @@ import type { FetchFunction } from "@ai-sdk/provider-utils";
  *
  * So the shape a body needs is a property of the route, not of the gateway:
  * this reads any of the above into one reason and re-emits it in the dialect
- * that route's model expects — including across dialects, since shape 1 is
- * emitted on the Anthropic route too and does not parse there either. A body
- * already valid for the target dialect is left alone, as is any successful
- * response and anything unrecognised.
+ * that route's model expects. Cross-dialect conversion is covered too, since
+ * nothing guarantees a given layer answers in the dialect of the route it was
+ * reached through. A body already valid for the target dialect is left alone,
+ * as is any successful response and anything unrecognised.
+ *
+ * The Anthropic direction is unverified against a live gateway: that endpoint
+ * currently answers every request with a plain-text 404, so no JSON envelope
+ * can be observed on it at all.
  *
  * None of the models expose an error hook (`OpenAIConfig` has none, and the
  * Anthropic one takes a fixed handler), so this rides on `fetch` — the same
@@ -135,6 +139,7 @@ function emit(
 			...original,
 			type: "error",
 			error: {
+				...reason.openaiFields,
 				type: reason.type ?? "api_error",
 				message: reason.message,
 			},

@@ -50,20 +50,23 @@ export function withResponsesGatewayDefaults(
 	// so `{ store: undefined }` and `{}` are the same request on the wire.
 	if (openai?.store === undefined) {
 		defaults.store = false;
-	} else if (openai.store !== false) {
+	} else if (openai.store === true || openai.store === null) {
 		throw new UnsupportedFunctionalityError({
 			functionality: "storing responses (providerOptions.openai.store)",
-			// The received value is described by type, never echoed: it is
-			// caller-supplied and ends up in logs.
 			message:
 				"The Neon AI Gateway serves the Responses API statelessly and does " +
 				"not store response items, so `store` must be `false` or omitted " +
-				`(received ${describeType(openai.store)}). Sending it reaches the ` +
+				`(received ${String(openai.store)}). Sending it reaches the ` +
 				"gateway as `400 INVALID_PARAMETER_VALUE: Databricks does not " +
 				"support store response for OpenAI Responses API`. Remove " +
 				"`providerOptions.openai.store`, or set it to `false`.",
 		});
 	}
+
+	// Any other type is left for the shared model's own provider-option schema
+	// (`store: z.boolean().nullish()`), which rejects it locally with a type
+	// error. Only `true` and `null` pass that schema and are refused by the
+	// gateway, so only they need saying something about here.
 
 	if (isReasoningModelId(modelId) && openai?.forceReasoning === undefined) {
 		defaults.forceReasoning = true;
@@ -79,15 +82,4 @@ export function withResponsesGatewayDefaults(
 			openai: { ...openai, ...defaults },
 		},
 	};
-}
-
-function describeType(value: unknown): string {
-	if (value === null) {
-		return "null";
-	}
-	if (Array.isArray(value)) {
-		return "an array";
-	}
-	const type = typeof value;
-	return /^[aeiou]/.test(type) ? `an ${type}` : `a ${type}`;
 }

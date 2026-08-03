@@ -169,23 +169,27 @@ describe.skipIf(!hasGatewayEnv())(
 			// The stored-item 502 struck the second step of a loop, and
 			// `doStream` applies the request defaults on its own path, so the
 			// generateText cases above would not catch a regression there.
-			it("gets past the step that carries reasoning back", async () => {
-				const result = streamText({
-					model: neon(MATRIX_MODELS.openai),
-					prompt: "What is the temperature in Paris? Use the weather tool.",
-					tools: { weather: weatherTool },
-					stopWhen: stepCountIs(5),
-					...modelOptions("openai"),
-				});
-				await result.consumeStream();
+			it.skipIf(!served.has(MATRIX_MODELS.openai))(
+				"gets past the step that carries reasoning back",
+				async () => {
+					const result = streamText({
+						model: neon(MATRIX_MODELS.openai),
+						prompt: "What is the temperature in Paris? Use the weather tool.",
+						tools: { weather: weatherTool },
+						stopWhen: stepCountIs(5),
+						...modelOptions("openai"),
+					});
+					await result.consumeStream();
 
-				const steps = await result.steps;
-				expect(
-					steps.flatMap((step) => step.toolCalls).length,
-				).toBeGreaterThanOrEqual(1);
-				expect(steps.length).toBeGreaterThanOrEqual(2);
-				await expect(result.text).resolves.not.toBe("");
-			}, 120_000);
+					const steps = await result.steps;
+					expect(
+						steps.flatMap((step) => step.toolCalls).length,
+					).toBeGreaterThanOrEqual(1);
+					expect(steps.length).toBeGreaterThanOrEqual(2);
+					await expect(result.text).resolves.not.toBe("");
+				},
+				120_000,
+			);
 		});
 
 		describe("OpenAI Responses — imageGeneration tool", () => {

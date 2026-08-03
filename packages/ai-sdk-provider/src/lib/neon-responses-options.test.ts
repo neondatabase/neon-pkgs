@@ -41,9 +41,7 @@ describe("store", () => {
 	it.each([
 		["true", true],
 		["null", null],
-		["a string", "yes"],
-		["an object", { secret: "nt_live_do_not_log_me" }],
-	])("refuses %s", (_label, store) => {
+	])("refuses %s, which the gateway rejects", (_label, store) => {
 		expect(() => openaiOptions("gpt-5-2", { store })).toThrow(
 			/must be `false` or omitted/,
 		);
@@ -55,17 +53,13 @@ describe("store", () => {
 		);
 	});
 
-	it("never echoes the received value, which may hold a secret", () => {
-		expect(() =>
-			openaiOptions("gpt-5-2", {
-				store: { secret: "nt_live_do_not_log_me" },
-			}),
-		).toThrow(/received an object/);
-		expect(() =>
-			openaiOptions("gpt-5-2", {
-				store: { secret: "nt_live_do_not_log_me" },
-			}),
-		).not.toThrow(/nt_live_do_not_log_me/);
+	it.each([
+		["a string", "yes"],
+		["an object", { nested: true }],
+	])("leaves %s to the shared provider-option schema", (_label, store) => {
+		// `store: z.boolean().nullish()` rejects these locally with a type
+		// error. Only `true` and `null` pass it and are refused by the gateway.
+		expect(openaiOptions("gpt-5-2", { store })).toMatchObject({ store });
 	});
 });
 

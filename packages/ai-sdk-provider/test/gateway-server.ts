@@ -9,9 +9,15 @@ import type { AddressInfo } from "node:net";
 export interface TestGateway {
 	/** Base URL to hand to `createNeon`. */
 	baseURL: string;
-	/** Parsed JSON bodies of every request received, in order. */
-	requests: Record<string, unknown>[];
+	/** Every request received, in order. */
+	requests: ReceivedRequest[];
 	close(): Promise<void>;
+}
+
+export interface ReceivedRequest {
+	method: string;
+	path: string;
+	body: Record<string, unknown> | undefined;
 }
 
 export interface TestGatewayResponse {
@@ -26,16 +32,20 @@ export interface TestGatewayResponse {
 export async function startTestGateway(
 	reply: TestGatewayResponse,
 ): Promise<TestGateway> {
-	const requests: Record<string, unknown>[] = [];
+	const requests: ReceivedRequest[] = [];
 
 	const server: Server = createServer((req, res) => {
 		const chunks: Buffer[] = [];
 		req.on("data", (chunk: Buffer) => chunks.push(chunk));
 		req.on("end", () => {
 			const raw = Buffer.concat(chunks).toString();
-			if (raw) {
-				requests.push(JSON.parse(raw) as Record<string, unknown>);
-			}
+			requests.push({
+				method: req.method ?? "",
+				path: req.url ?? "",
+				body: raw
+					? (JSON.parse(raw) as Record<string, unknown>)
+					: undefined,
+			});
 			const payload =
 				typeof reply.body === "string"
 					? reply.body

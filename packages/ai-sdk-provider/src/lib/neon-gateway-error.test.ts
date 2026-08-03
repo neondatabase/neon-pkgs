@@ -1,11 +1,11 @@
 import { generateText } from "ai";
 import { describe, expect, it } from "vitest";
-import { normalizeGatewayErrorBody } from "./neon-gateway-error.js";
 import {
 	CHAT_OK,
 	RESPONSES_OK,
 	startTestGateway,
-} from "./neon-test-gateway.js";
+} from "../../test/gateway-server.js";
+import { normalizeGatewayErrorBody } from "./neon-gateway-error.js";
 import { createNeon } from "./provider.js";
 
 // Captured verbatim from a live branch gateway.
@@ -178,7 +178,7 @@ describe("error surfacing over a real socket", () => {
 		}
 	});
 
-	it("drops the content-length invalidated by rewriting the body", async () => {
+	it("drops the headers invalidated by rewriting the body", async () => {
 		const gateway = await startTestGateway({
 			body: DATABRICKS_FLAT,
 			status: 400,
@@ -250,6 +250,8 @@ describe("error surfacing over a real socket", () => {
 			await gateway.close();
 		}
 
-		expect(message).toBeTruthy();
+		// Untouched: the body never became an envelope either model could read,
+		// so the SDK still falls back to the status line and keeps the raw body.
+		expect(message).toBe("Bad Request");
 	});
 });
