@@ -11,7 +11,13 @@
  * these use `projects list` rather than `me`, and never assume an email is available.
  */
 
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+	chmodSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { requireApiKey } from "@neon/e2e-harness";
@@ -110,6 +116,60 @@ describe("API-key profiles against the live API", () => {
 			rmSync(jsonDir, { recursive: true, force: true });
 		}
 	});
+
+	// The ordering that stops a credential being orphaned: the credential is written first, so a
+	// failure recording the profile costs a label rather than stranding a live key whose id has
+	// already been overwritten. Reached without a fault hook, by making the config directory
+	// read-only while the credentials file it points at stays writable.
+	e2eTest(
+		"a failure recording the profile still leaves the credential written",
+		async () => {
+			const readOnlyDir = mkdtempSync(join(tmpdir(), "neon-e2e-ro-"));
+			const adoptedDir = mkdtempSync(join(tmpdir(), "neon-e2e-adopted-"));
+			const adopted = resolve(adoptedDir, "credentials.locked.json");
+			try {
+				// A supplied key with no `key_id`, so nothing is revoked when it is replaced.
+				writeFileSync(
+					adopted,
+					JSON.stringify({
+						type: "api_key",
+						api_key: "napi_placeholder_not_a_real_key",
+					}),
+					{ mode: 0o600 },
+				);
+				writeFileSync(
+					resolve(readOnlyDir, "profiles.json"),
+					JSON.stringify({
+						version: 1,
+						profiles: { locked: { credentials: adopted } },
+					}),
+					{ mode: 0o600 },
+				);
+				chmodSync(readOnlyDir, 0o500);
+
+				const result = await runCli(
+					["profile", "create", "locked", "--force"],
+					{
+						configDir: readOnlyDir,
+						apiKey: requireApiKey(),
+						json: false,
+					},
+				);
+
+				// `profiles.json` could not be rewritten, so the command fails …
+				expect(result.code).toBe(1);
+				// … but the credential itself was already committed, which is the whole point of
+				// writing it before the metadata.
+				expect(JSON.parse(readFileSync(adopted, "utf8")).api_key).toBe(
+					requireApiKey(),
+				);
+			} finally {
+				chmodSync(readOnlyDir, 0o700);
+				rmSync(readOnlyDir, { recursive: true, force: true });
+				rmSync(adoptedDir, { recursive: true, force: true });
+			}
+		},
+	);
 
 	e2eTest(
 		"a stored key authenticates with no key in the environment",

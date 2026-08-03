@@ -324,6 +324,26 @@ const list = async (props: ProfileProps) => {
  * Where a profile's credentials belong: its existing file when it has one, `credentials.json`
  * for `DEFAULT`, and the conventional `credentials.<name>.json` for a profile being created.
  */
+/**
+ * The credential a command is about to replace or delete.
+ *
+ * Deliberately tolerant where {@link readCredentials} is fatal. Using a damaged credential must
+ * fail loudly, but *replacing* one must not: `readCredentials` throwing here made the repair its
+ * own error message recommends impossible, and left a malformed file unremovable through the
+ * CLI. There is nothing to revoke in a file we cannot parse, so this says so and moves on.
+ */
+const readOutgoingCredential = (path: string): StoredCredentials | null => {
+	const read = inspectCredentials(path);
+	if (read.kind === "unusable") {
+		log.warning(
+			"%s. Nothing in it could be revoked, so it is only being replaced locally.",
+			read.reason,
+		);
+		return null;
+	}
+	return read.kind === "ok" ? read.credentials : null;
+};
+
 const credentialsPathFor = (configDir: string, name: string): string => {
 	if (readProfiles(configDir)?.profiles[name] || name === DEFAULT_PROFILE) {
 		return credentialsPathForName(configDir, name);
@@ -507,7 +527,7 @@ const create = async (props: CreateProps) => {
 	// Delegating rather than reimplementing keeps one OAuth path in the CLI.
 	if (keyInputs.length === 0) {
 		const credentialsPath = credentialsPathFor(props.configDir, name);
-		const previous = readCredentials(credentialsPath);
+		const previous = readOutgoingCredential(credentialsPath);
 		// `authFlow` reports its own failure and returns an empty token rather than throwing,
 		// so claiming success here would leave the user with no profile and no error.
 		if ((await authFlow({ ...props, _: ["auth"], profile: name })) === "") {
@@ -530,7 +550,7 @@ const create = async (props: CreateProps) => {
 	const apiKey = await resolveKeyToStore(props);
 	const identity = await verifyKey(props, apiKey);
 	const credentialsPath = credentialsPathFor(props.configDir, name);
-	const previous = readCredentials(credentialsPath);
+	const previous = readOutgoingCredential(credentialsPath);
 
 	writeCredentials(
 		credentialsPath,
@@ -704,7 +724,7 @@ const createByMinting = async (props: CreateProps) => {
 		minted = await mintKey(session, name, scope);
 		const identity = await verifyKey(props, minted.key);
 		const credentialsPath = credentialsPathFor(props.configDir, name);
-		const previous = readCredentials(credentialsPath);
+		const previous = readOutgoingCredential(credentialsPath);
 
 		writeCredentials(
 			credentialsPath,
@@ -1087,7 +1107,7 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 	// 1. Revoke upstream where we can, so the credential dies rather than merely becoming
 	//    unreachable by us. Best-effort: a profile is often removed precisely because its
 	//    access already broke.
-	const stored = readCredentials(profile.credentialsPath);
+	const stored = readOutgoingCredential(profile.credentialsPath);
 	const holdsApiKey =
 		stored !== null &&
 		credentialKind(stored, profile.credentialsPath) === API_KEY;

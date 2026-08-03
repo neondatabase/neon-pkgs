@@ -192,7 +192,7 @@ export const readCredentials = (path: string): StoredCredentials | null => {
 	const read = inspectCredentials(path);
 	if (read.kind === "unusable") {
 		throw new Error(
-			`${read.reason}. Replace it deliberately with \`neon auth\` (or \`neon profile create <name> --force\`), or delete the file.`,
+			`${read.reason}. Replace it deliberately with \`neon profile create <name> --force\`, or delete the file.`,
 		);
 	}
 	return read.kind === "ok" ? read.credentials : null;
@@ -259,3 +259,21 @@ function nonEmpty(value: unknown): string | undefined {
 	const trimmed = value.trim();
 	return trimmed === "" ? undefined : trimmed;
 }
+
+/**
+ * Whether a stored credential is the same secret as the one about to replace it.
+ *
+ * Re-storing the key a profile already holds is a no-op, not a replacement — and retiring it
+ * would revoke the credential the command has just committed to. Trimmed on both sides, because
+ * a key read from a file or a pipe arrives with a trailing newline.
+ */
+export const isSameCredential = (
+	existing: StoredCredentials,
+	replacementKey: string | undefined,
+): boolean => {
+	if (replacementKey === undefined) return false;
+	const stored = existing.api_key;
+	if (typeof stored !== "string") return false;
+	const trimmed = stored.trim();
+	return trimmed !== "" && trimmed === replacementKey.trim();
+};

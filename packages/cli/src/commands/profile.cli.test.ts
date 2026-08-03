@@ -12,7 +12,13 @@
  */
 
 import { fork } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -711,6 +717,31 @@ describe("a damaged credentials file", () => {
 		expect(stderr).toContain("Replace it deliberately");
 		// It did not go on to authenticate over the top of it.
 		expect(stderr).not.toContain("Awaiting authentication");
+	});
+
+	// The repair the error recommends has to actually run. Reading the outgoing credential
+	// fatally made `create --force` throw on the same file it was replacing, and left a
+	// malformed file unremovable through the CLI.
+	test("can still be removed, which the fatal read used to prevent", async () => {
+		const dir = makeConfigDir({
+			"credentials.work.json": "{ not json",
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { work: { credentials: "credentials.work.json" } },
+			}),
+		});
+		const { code, stderr } = await runCli([
+			"profile",
+			"remove",
+			"work",
+			"--yes",
+			"--config-dir",
+			dir,
+		]);
+
+		expect(code).toBe(0);
+		expect(stderr).toContain("Nothing in it could be revoked");
+		expect(existsSync(resolve(dir, "credentials.work.json"))).toBe(false);
 	});
 
 	// But one broken profile must not take the whole listing with it.

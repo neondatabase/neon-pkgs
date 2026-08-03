@@ -16,6 +16,7 @@ import {
 	describeScope,
 	inspectCredentials,
 	interpretCredentials,
+	isSameCredential,
 	OAUTH,
 	readCredentials,
 	scopeOf,
@@ -311,20 +312,54 @@ describe("scopeOf / describeScope", () => {
 	});
 });
 
-describe("replacing a credential with itself", () => {
-	// Re-storing the key a profile already holds is a no-op, not a replacement. The command that
-	// wraps this must not revoke the key it has just committed to.
-	test("the stored key and the replacement are recognisably the same", () => {
-		const dir = makeDir();
-		const path = resolve(dir, "credentials.json");
-		writeCredentials(
-			path,
-			apiKeyCredentials({ apiKey: "napi_same", keyId: 7 }),
-		);
+describe("isSameCredential", () => {
+	// Re-storing the key a profile already holds is a no-op. Without this the caller retires the
+	// old credential and revokes the key it has just committed to.
+	test("recognises the same key", () => {
+		expect(
+			isSameCredential(
+				{ type: "api_key", api_key: "napi_same" },
+				"napi_same",
+			),
+		).toBe(true);
+	});
 
-		const stored = readCredentials(path);
-		expect(stored?.api_key).toBe("napi_same");
-		// Whitespace on either side must not make them look different.
-		expect((stored?.api_key as string).trim()).toBe(" napi_same\n".trim());
+	// A key read from a file or a pipe arrives with a trailing newline.
+	test("ignores surrounding whitespace on either side", () => {
+		expect(
+			isSameCredential(
+				{ type: "api_key", api_key: " napi_same\n" },
+				"napi_same",
+			),
+		).toBe(true);
+		expect(
+			isSameCredential(
+				{ type: "api_key", api_key: "napi_same" },
+				"  napi_same\n",
+			),
+		).toBe(true);
+	});
+
+	test("a different key is a real replacement", () => {
+		expect(
+			isSameCredential(
+				{ type: "api_key", api_key: "napi_old" },
+				"napi_new",
+			),
+		).toBe(false);
+	});
+
+	test("an OAuth credential is never the same as a key", () => {
+		expect(isSameCredential({ access_token: "t" }, "napi_new")).toBe(false);
+	});
+
+	// An empty stored key must not match an empty replacement and suppress a retirement.
+	test("blank values never match", () => {
+		expect(isSameCredential({ type: "api_key", api_key: "  " }, "  ")).toBe(
+			false,
+		);
+		expect(
+			isSameCredential({ type: "api_key", api_key: "napi_x" }, undefined),
+		).toBe(false);
 	});
 });
