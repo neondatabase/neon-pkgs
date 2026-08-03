@@ -78,8 +78,14 @@ describe("API-key profiles against the live API", () => {
 						name: PROFILE,
 						auth: "api key",
 						file: "ok",
-						// A supplied key records no scope: we cannot know what it was issued at.
-						scope: "account",
+						// Scope-independent on purpose. The harness key may be user- or
+						// organization-scoped, and pinning one of them made this pass locally
+						// on a personal key and fail in CI on an organization key. What matters
+						// is that a key always reports some reach, never the "-" an OAuth
+						// session gets.
+						scope: expect.stringMatching(
+							/^(account|org .+|project .+)$/,
+						),
 					}),
 				]),
 			);
