@@ -1,5 +1,14 @@
 # neon
 
+## 2.39.1
+
+### Patch Changes
+
+- Updated dependencies [3ade88e]
+  - @neon/config@0.12.0
+  - @neon/config-runtime@0.12.0
+  - @neon/env@0.13.0
+
 ## 2.39.0
 
 ### Minor Changes
