@@ -28,6 +28,7 @@ import { z } from "zod/v4";
 import { NeonAnthropicLanguageModel } from "./neon-anthropic-language-model.js";
 import { NeonChatLanguageModel } from "./neon-chat-language-model.js";
 import type { NeonChatModelId } from "./neon-chat-options.js";
+import { wrapFetchWithGatewayErrorNormalization } from "./neon-gateway-error.js";
 import { wrapFetchWithHarmonyNormalization } from "./neon-harmony-normalize.js";
 import { getNeonModelRoute } from "./neon-model-capabilities.js";
 import { neonOpenAITools } from "./neon-openai-tools.js";
@@ -168,7 +169,10 @@ export function createNeon(options: NeonProviderSettings = {}): NeonProvider {
 			provider: "neon.openai.responses",
 			url: ({ path }) => `${getHost()}/openai/v1${path}`,
 			headers: getHeaders,
-			fetch: options.fetch,
+			// This route returns Databricks error envelopes the OpenAI schema
+			// cannot read, which reach the caller as a bare "Bad Request".
+			// `OpenAIConfig` has no error hook, so the rewrite rides on fetch.
+			fetch: wrapFetchWithGatewayErrorNormalization(options.fetch),
 			fileIdPrefixes: ["file-"],
 		});
 

@@ -84,16 +84,26 @@ describe("NeonResponsesLanguageModel gateway defaults", () => {
 		expect(sent.store).toBe(false);
 	});
 
-	// Passed through rather than corrected: the gateway answers `store: true`
-	// with `400 INVALID_PARAMETER_VALUE: Databricks does not support store
-	// response for OpenAI Responses API. Please contact your Databricks account
-	// team to enable this feature`. That names the cause and the remedy, and it
-	// says the feature is account-enableable — so refusing it here would encode
-	// a policy that is not ours and could outlive the limitation.
-	it("passes an explicit store: true through instead of overriding it", async () => {
-		const { sent } = await capture("gpt-5-2", { openai: { store: true } });
+	// `false` is the only value this gateway accepts, so anything else is
+	// refused before the round trip rather than sent to earn a 400. Quietly
+	// forcing it to `false` would be the wrong kind of quiet for a
+	// data-retention flag.
+	it.each([true, null, "yes"])("rejects store: %o", async (store) => {
+		await expect(
+			capture("gpt-5-2", { openai: { store: store as never } }),
+		).rejects.toThrow(/must be `false` or omitted/);
+	});
 
-		expect(sent.store).toBe(true);
+	it("names the gateway's own error in the rejection", async () => {
+		await expect(
+			capture("gpt-5-2", { openai: { store: true } }),
+		).rejects.toThrow(/Databricks does not support store response/);
+	});
+
+	it("accepts an explicit store: false", async () => {
+		const { sent } = await capture("gpt-5-2", { openai: { store: false } });
+
+		expect(sent.store).toBe(false);
 	});
 
 	it("treats store: undefined as unset and still applies the default", async () => {

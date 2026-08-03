@@ -89,7 +89,7 @@ for await (const part of result.fullStream) {
 
 - `generateImage()` and embeddings (`embed` / `embedMany`) are not offered by the gateway and throw `NoSuchModelError`.
 - `gpt-oss-*` models return a non-standard ("harmony") response shape on the unified endpoint (`message.content` as an array of reasoning/text parts instead of a string). The provider normalizes this to the OpenAI Chat Completions contract (string `content` + `reasoning_content`) so `generateText`/`streamText` work and reasoning is surfaced. See neondatabase/neon-pkgs#308.
-- The gateway serves the Responses API statelessly, so the provider sends `store: false` on that route. Without it the AI SDK assumes OpenAI's stored-item semantics and replays earlier reasoning as `{ type: "item_reference" }`, which the gateway cannot resolve and answers with a 502 — the failure that used to break OpenAI multi-turn tool flows (`generateText` + `stepCountIs`). Pass `providerOptions.openai.store` explicitly to override. See LKB-15857.
+- The gateway serves the Responses API statelessly, so the provider sends `store: false` on that route. Without it the AI SDK assumes OpenAI's stored-item semantics and replays earlier reasoning as `{ type: "item_reference" }`, which the gateway cannot resolve and answers with a 502 — the failure that used to break OpenAI multi-turn tool flows (`generateText` + `stepCountIs`). Because `false` is the only value the gateway accepts, an explicit `providerOptions.openai.store` that is anything else throws `UnsupportedFunctionalityError` rather than making the round trip to earn a 400. See LKB-15857.
 
 ## End-to-end tests
 
