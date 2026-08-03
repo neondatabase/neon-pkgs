@@ -94,6 +94,42 @@ for await (const part of result.fullStream) {
 }
 ```
 
+### Iterative editing needs the image passed back
+
+Keep the bytes. On a later turn the gateway cannot replay a generated image for you: doing so needs a reference to a stored response item, and this gateway stores none, so the AI SDK drops the tool result and records `Results for OpenAI tool image_generation are not sent to the API when store is false` in `result.warnings`.
+
+Nothing throws. The model simply does not see the earlier image and generates a fresh one instead of editing it — which is easy to mistake for the model ignoring the instruction. Re-attach the image yourself as an input image:
+
+```ts
+const first = await generateText({
+  model: neon("gpt-5-mini"),
+  prompt: "Generate an image of a plain red square.",
+  tools: { image_generation: neon.tools.imageGeneration({ outputFormat: "jpeg" }) },
+});
+
+const generated = first.steps
+  .flatMap((step) => step.toolResults)
+  .find((result) => result.toolName === "image_generation");
+const base64 = (generated?.output as { result: string }).result;
+
+// Pass it back as image content, not as conversation history.
+await generateText({
+  model: neon("gpt-5-mini"),
+  tools: { image_generation: neon.tools.imageGeneration({ outputFormat: "jpeg" }) },
+  messages: [
+    {
+      role: "user",
+      content: [
+        { type: "image", image: base64, mediaType: "image/jpeg" },
+        { type: "text", text: "Make that same square blue instead." },
+      ],
+    },
+  ],
+});
+```
+
+The same applies to the other provider-executed Responses tools (web search, code interpreter): their results are available to your code, but not to the model on a later step.
+
 ## Errors
 
 A failed call rejects with the AI SDK's `APICallError`, and `error.message` carries the gateway's own reason rather than the bare HTTP status line:
@@ -135,7 +171,7 @@ So `store` is only refused on the Responses route; the same option is ignored el
 
 - `generateImage()` and embeddings (`embed` / `embedMany`) are not offered by the gateway and throw `NoSuchModelError`.
 - `gpt-oss-*` models return a non-standard ("harmony") response shape on the unified endpoint (`message.content` as an array of reasoning/text parts instead of a string). The provider normalizes this to the OpenAI Chat Completions contract (string `content` + `reasoning_content`) so `generateText`/`streamText` work and reasoning is surfaced. See neondatabase/neon-pkgs#308.
-- Results from provider-executed tools (`neon.tools.imageGeneration`, and the other Responses built-ins) are not replayed to the gateway on a later step. Replaying them requires the stored-item reference the gateway cannot resolve, so the AI SDK omits them and reports it in `result.warnings`. Keep anything a later turn depends on in your own application state.
+- Results from provider-executed tools (`neon.tools.imageGeneration`, and the other Responses built-ins) are not replayed to the gateway on a later step — see [Iterative editing needs the image passed back](#iterative-editing-needs-the-image-passed-back).
 - The Responses route is stateless, so the provider sends `store: false` and refuses an explicit `store`, `previousResponseId`, or `conversation` — see [Errors](#errors).
 
 ## End-to-end tests
