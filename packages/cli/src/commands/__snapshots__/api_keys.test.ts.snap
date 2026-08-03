@@ -9,32 +9,44 @@ created_by: u-1
 "
 `;
 
-exports[`api-keys create > explains a project that belongs to no organization 1`] = `""`;
-
 exports[`api-keys create > org key with --org-id 1`] = `
-"id: 303
-key: napi_org_secret
-name: ci
+"name: ci
 created_at: 2026-03-02T00:00:00Z
 created_by: u-1
+id: 303
+key: napi_org_secret
 "
 `;
 
 exports[`api-keys create > project-scoped key infers the org from the project 1`] = `
-"id: 303
-key: napi_org_secret
-name: agent
+"name: agent
 created_at: 2026-03-02T00:00:00Z
 created_by: u-1
+id: 303
+key: napi_org_secret
 project_id: proj-in-org
 "
 `;
+
+exports[`api-keys create > refuses a misspelled scope flag rather than widening the key 1`] = `""`;
+
+exports[`api-keys create > refuses a repeated scope flag 1`] = `""`;
+
+exports[`api-keys create > refuses an empty --name 1`] = `""`;
 
 exports[`api-keys create > refuses an empty --org-id 1`] = `""`;
 
 exports[`api-keys create > refuses an empty --project-id instead of widening the key 1`] = `""`;
 
 exports[`api-keys create > refuses both scope flags together 1`] = `""`;
+
+exports[`api-keys create refuses an unusable response > explains a project that belongs to no organization 1`] = `""`;
+
+exports[`api-keys create refuses an unusable response > no key in the body 1`] = `""`;
+
+exports[`api-keys create refuses an unusable response > not scoped at all, and the withdrawal fails 1`] = `""`;
+
+exports[`api-keys create refuses an unusable response > scoped to the wrong project — withdrawn, and says so 1`] = `""`;
 
 exports[`api-keys list > account keys 1`] = `
 "- id: 101

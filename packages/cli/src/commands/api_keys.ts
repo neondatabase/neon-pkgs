@@ -42,27 +42,36 @@ const CREATE_FIELDS_SCOPED = ["id", "name", "project_id", "key"] as const;
 const ALL_PROJECTS = "— all projects —";
 
 /**
- * Reject a flag that was passed with an empty value.
+ * Reject a scope flag that is present but unusable.
  *
- * `--project-id "$PROJECT"` with `PROJECT` unset arrives as an empty string, which is falsy
- * — so without this, asking for a project-scoped key would quietly mint an **account** key
- * instead, and `revoke --org-id ""` would delete from the wrong key class. Silently
- * widening a credential because a shell variable was empty is the worst failure this
- * command could have, so it is an error rather than a fallback.
+ * Every failure mode here ends the same way — the flag reads as absent, the scope check
+ * falls through, and an **account** key is minted instead of the narrow one asked for.
+ * Widening a credential because of a shell accident is the worst thing this command could
+ * do, so each case is an error rather than a fallback:
+ *
+ * - `--project-id "$PROJECT"` with `PROJECT` unset arrives as an empty string, which is falsy.
+ * - The same flag passed twice arrives as an array, which is not a string and would reach
+ *   the API as `a,b`.
+ *
+ * A *misspelled* flag is the third case and cannot be caught here, because yargs never binds
+ * it — `.strictOptions()` on each subcommand rejects it instead.
  */
-const rejectEmptyValues =
-	(...names: string[]) =>
-	(argv: Record<string, unknown>): true => {
-		for (const name of names) {
-			const value = argv[name];
-			if (typeof value === "string" && value.trim() === "") {
-				throw new Error(
-					`--${name} was given an empty value. Pass a real value, or omit the flag entirely.`,
-				);
-			}
-		}
-		return true;
-	};
+const single = (name: string) => (value: unknown) => {
+	// Repeated flags arrive as an array. Coerce runs during parsing, before `strictOptions`
+	// reports the array's numeric keys as unknown arguments, so this is what produces the
+	// message the user actually sees.
+	if (Array.isArray(value)) {
+		throw new Error(
+			`--${name} was given more than once. Pass it at most once.`,
+		);
+	}
+	if (typeof value === "string" && value.trim() === "") {
+		throw new Error(
+			`--${name} was given an empty value. Pass a real value, or omit the flag entirely.`,
+		);
+	}
+	return value;
+};
 
 export const command = "api-keys";
 export const aliases = ["api-key"];
@@ -81,9 +90,10 @@ export const builder = (argv: yargs.Argv) =>
 							describe:
 								"List the organization's keys instead of your account's",
 							type: "string",
+							coerce: single("org-id"),
 						},
 					})
-					.check(rejectEmptyValues("org-id")),
+					.strictOptions(),
 			async (args) => await list(args as unknown as ListProps),
 		)
 		.command(
@@ -96,23 +106,26 @@ export const builder = (argv: yargs.Argv) =>
 							describe: "A name to identify the key later",
 							type: "string",
 							demandOption: true,
+							coerce: single("name"),
 						},
 						"org-id": {
 							describe:
 								"Create a key for this organization instead of your account",
 							type: "string",
+							coerce: single("org-id"),
 						},
 						"project-id": {
 							describe:
 								"Create a key that can access only this project. Its organization is looked up from the project",
 							type: "string",
+							coerce: single("project-id"),
 						},
 					})
 					// A key scoped to a project is already an organization key, so naming
 					// both is contradictory rather than redundant — the org is derived from
 					// the project and cannot be chosen independently.
 					.conflicts("org-id", "project-id")
-					.check(rejectEmptyValues("name", "org-id", "project-id")),
+					.strictOptions(),
 			async (args) => await create(args as unknown as CreateProps),
 		)
 		.command(
@@ -130,9 +143,10 @@ export const builder = (argv: yargs.Argv) =>
 							describe:
 								"Revoke an organization key instead of an account key",
 							type: "string",
+							coerce: single("org-id"),
 						},
 					})
-					.check(rejectEmptyValues("org-id")),
+					.strictOptions(),
 			async (args) => await revoke(args as unknown as RevokeProps),
 		)
 		.demandCommand(1, "Run `neon api-keys --help` to see the subcommands.");
@@ -192,16 +206,14 @@ const list = async (props: ListProps) => {
 
 const create = async (props: CreateProps) => {
 	const { name, projectId, orgId } = props;
-	const out = writer(props);
 
 	// Neither flag: an account key, matching `POST /api_keys`. `api-keys` is exempt from
 	// `.neon` enrichment (see `isApiKeysCommand`), so reaching this branch means the user
 	// really did ask for account scope rather than inheriting a checked-out project.
 	if (!projectId && !orgId) {
 		const { data } = await props.apiClient.createApiKey({ key_name: name });
-		out.write(data, { fields: CREATE_FIELDS, title: "API key" });
-		out.end();
-		warnStoreItNow();
+		await assertUsable(props, data, { orgId: null });
+		report(props, data, CREATE_FIELDS);
 		return;
 	}
 
@@ -209,9 +221,8 @@ const create = async (props: CreateProps) => {
 		const { data } = await props.apiClient.createOrgApiKey(orgId, {
 			key_name: name,
 		});
-		out.write(data, { fields: CREATE_FIELDS, title: "API key" });
-		out.end();
-		warnStoreItNow();
+		await assertUsable(props, data, { orgId });
+		report(props, data, CREATE_FIELDS);
 		log.info(
 			"Reaches every project in %s. Pass --project-id instead to restrict it to one.",
 			orgId,
@@ -231,22 +242,96 @@ const create = async (props: CreateProps) => {
 	});
 
 	// `project_id` is optional on the response. Printing a key and calling it scoped
-	// without checking would hand the user a credential whose reach we have not confirmed
-	// — the one thing this command must never get wrong. Revoke and fail instead.
-	if (data.project_id !== scopeTo) {
-		await revokeUnverified(props, resolvedOrgId, data.id);
-		throw new Error(
-			`Neon returned a key scoped to ${data.project_id ?? "nothing"} rather than ${scopeTo}. The key has been revoked; nothing was issued.`,
-		);
-	}
+	// without checking would hand over a credential whose reach we never confirmed — the
+	// one thing this command must not get wrong.
+	await assertUsable(props, data, {
+		orgId: resolvedOrgId,
+		expectProject: scopeTo,
+	});
 
-	out.write(data, { fields: CREATE_FIELDS_SCOPED, title: "API key" });
-	out.end();
-	warnStoreItNow();
+	report(props, data, CREATE_FIELDS_SCOPED);
 	log.info(
 		"Limited to %s: it cannot create projects, mint API keys, or read any other project. It can still change and delete everything inside that project.",
 		scopeTo,
 	);
+};
+
+/** Print the issued key and the reminder that it will not be shown again. */
+const report = (
+	props: CommonProps,
+	data: unknown,
+	fields: readonly string[],
+) => {
+	const out = writer(props);
+	out.write(data as never, { fields: fields as never, title: "API key" });
+	out.end();
+	log.info("Store this key now — it is not shown again.");
+};
+
+/**
+ * Refuse to report a key that isn't what we asked for, and take it back.
+ *
+ * Two ways a 2xx can still be wrong: no `key` in the body, which leaves a live credential
+ * the user can never see or use; and a `project_id` that doesn't match the requested
+ * project, which would mean announcing a scope the key does not have. Both withdraw the key
+ * before throwing.
+ *
+ * The thrown message states whether the withdrawal actually succeeded. Saying "the key has
+ * been revoked" when the revoke itself failed would be worse than saying nothing — it would
+ * leave an unverified credential live while telling the user it is gone.
+ */
+const assertUsable = async (
+	props: CommonProps,
+	data: { id?: number; key?: string; project_id?: string },
+	scope: { orgId: string | null; expectProject?: string },
+): Promise<void> => {
+	const problem =
+		typeof data.key !== "string" || data.key.trim() === ""
+			? "Neon returned no key."
+			: scope.expectProject !== undefined &&
+					data.project_id !== scope.expectProject
+				? `Neon returned a key scoped to ${data.project_id ?? "nothing"} rather than ${scope.expectProject}.`
+				: null;
+	if (!problem) return;
+
+	const withdrawn = await withdraw(props, scope.orgId, data.id);
+	throw new Error(
+		`${problem} ${
+			withdrawn
+				? "The key has been revoked; nothing was issued."
+				: `The key could NOT be revoked and may still be live${
+						data.id === undefined
+							? ""
+							: ` — remove it with \`neon api-keys revoke ${data.id}${
+									scope.orgId
+										? ` --org-id ${scope.orgId}`
+										: ""
+								}\``
+					}.`
+		}`,
+	);
+};
+
+/** Best-effort withdrawal of a key we are refusing to report. Never throws. */
+const withdraw = async (
+	props: CommonProps,
+	orgId: string | null,
+	keyId: number | undefined,
+): Promise<boolean> => {
+	if (keyId === undefined) return false;
+	try {
+		const { data } = orgId
+			? await props.apiClient.revokeOrgApiKey(orgId, keyId)
+			: await props.apiClient.revokeApiKey(keyId);
+		return data.revoked === true;
+	} catch (err) {
+		log.error(
+			"Failed to revoke API key %d: %s",
+			keyId,
+			err instanceof Error ? err.message : String(err),
+		);
+		return false;
+	}
 };
 
 const revoke = async (props: RevokeProps) => {
@@ -259,29 +344,6 @@ const revoke = async (props: RevokeProps) => {
 		title: "API key",
 	});
 	out.end();
-};
-
-/**
- * Withdraw a key we are about to refuse to report. Best-effort: if the revoke also fails the
- * caller still throws, but the user is told the key exists so they can remove it by hand
- * rather than being left with a live credential they never saw.
- */
-const revokeUnverified = async (
-	props: CommonProps,
-	orgId: string,
-	keyId: number,
-): Promise<void> => {
-	try {
-		await props.apiClient.revokeOrgApiKey(orgId, keyId);
-	} catch (err) {
-		log.error(
-			"Could not revoke API key %d after it failed verification. Revoke it manually with `neon api-keys revoke %d --org-id %s`. Cause: %s",
-			keyId,
-			keyId,
-			orgId,
-			err instanceof Error ? err.message : String(err),
-		);
-	}
 };
 
 /**
@@ -314,6 +376,3 @@ const orgIdForProject = async (
 	}
 	return orgId;
 };
-
-const warnStoreItNow = () =>
-	log.info("Store this key now — it is not shown again.");

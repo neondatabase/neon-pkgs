@@ -107,6 +107,110 @@ describe("api-keys create", () => {
 		);
 	});
 
+	test("refuses an empty --name", async ({ testCliCommand }) => {
+		await testCliCommand(["api-keys", "create", "--name", ""], {
+			code: 1,
+			stderr: "ERROR: --name was given an empty value. Pass a real value, or omit the flag entirely.",
+		});
+	});
+
+	// A misspelled flag never binds, so the scope check would see it as absent and mint an
+	// account key from a command line that looks like it asked for a scoped one.
+	test("refuses a misspelled scope flag rather than widening the key", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"api-keys",
+				"create",
+				"--name",
+				"x",
+				"--project_id",
+				"proj-in-org",
+			],
+			{ code: 1, stderr: "ERROR: Unknown argument: project_id" },
+		);
+	});
+
+	// Passed twice, yargs yields an array — not a string, so the emptiness check would skip
+	// it and the value would reach the API as `a,b`.
+	test("refuses a repeated scope flag", async ({ testCliCommand }) => {
+		await testCliCommand(
+			[
+				"api-keys",
+				"create",
+				"--name",
+				"x",
+				"--project-id",
+				"proj-in-org",
+				"--project-id",
+				"test",
+			],
+			{
+				code: 1,
+				stderr: "ERROR: --project-id was given more than once. Pass it at most once.",
+			},
+		);
+	});
+});
+
+/**
+ * A 2xx is not proof the key is what was asked for. These drive the mock to return
+ * responses that are individually plausible and collectively unusable, and assert the CLI
+ * withdraws the key and prints no secret.
+ */
+describe("api-keys create refuses an unusable response", () => {
+	test("scoped to the wrong project — withdrawn, and says so", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"api-keys",
+				"create",
+				"--name",
+				"mismatch",
+				"--project-id",
+				"proj-in-org",
+			],
+			{
+				code: 1,
+				stderr: "ERROR: Neon returned a key scoped to some-other-project rather than proj-in-org. The key has been revoked; nothing was issued.",
+			},
+		);
+	});
+
+	// The withdrawal itself fails here, so the message must not claim the key is gone.
+	test("not scoped at all, and the withdrawal fails", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"api-keys",
+				"create",
+				"--name",
+				"noscope",
+				"--project-id",
+				"proj-in-org",
+			],
+			{
+				code: 1,
+				stderr: expect.stringContaining(
+					"The key could NOT be revoked and may still be live — remove it with `neon api-keys revoke 500 --org-id org-7`",
+				),
+			},
+		);
+	});
+
+	test("no key in the body", async ({ testCliCommand }) => {
+		await testCliCommand(
+			["api-keys", "create", "--name", "nokey", "--org-id", "org-7"],
+			{
+				code: 1,
+				stderr: "ERROR: Neon returned no key. The key has been revoked; nothing was issued.",
+			},
+		);
+	});
+
 	// A project outside an organization cannot have a scoped key at all: the endpoint that
 	// accepts `project_id` is org-only. Fail with that reason, not a bare 404.
 	test("explains a project that belongs to no organization", async ({
