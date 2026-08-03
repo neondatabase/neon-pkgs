@@ -139,13 +139,12 @@ ${renderPreview(services)}  // Branch policy: per-branch tuning
  * `FunctionDef.source` is only resolved when `config apply` / `deploy` bundles it, so a
  * declared function with no file on disk fails at deploy time rather than at authoring time.
  *
- * `fetch` takes no parameter on purpose — a scaffold that ships an unused `req` fails the
- * typecheck of any project running with `noUnusedParameters`. Add it back when the handler
- * needs the request.
+ * A default-exported function rather than `export default { fetch }`: both are resolved (see
+ * `resolveFetchHandler`), and the bare function is less to read and less to get wrong. It is
+ * named rather than anonymous so a project's linter has nothing to say about it, and takes no
+ * parameter because a scaffold shipping an unused `req` fails a `noUnusedParameters` project.
  */
-export const FUNCTION_TEMPLATE = `export default {
-  async fetch(): Promise<Response> {
-    return new Response("Hello from Neon Functions");
-  },
-};
+export const FUNCTION_TEMPLATE = `export default async function hello(): Promise<Response> {
+  return new Response("Hello from Neon Functions");
+}
 `;

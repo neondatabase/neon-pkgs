@@ -142,8 +142,11 @@ describe("config init", () => {
 			'hello: { name: "Hello World", source: "./hello.ts" }',
 		);
 		expect(content).not.toContain("aiGateway");
-		expect(readFileSync(join(workspace, "hello.ts"), "utf8")).toContain(
-			"async fetch(): Promise<Response>",
+		expect(readFileSync(join(workspace, "hello.ts"), "utf8")).toBe(
+			`export default async function hello(): Promise<Response> {
+  return new Response("Hello from Neon Functions");
+}
+`,
 		);
 	});
 
