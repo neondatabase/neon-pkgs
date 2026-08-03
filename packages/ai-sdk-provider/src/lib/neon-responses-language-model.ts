@@ -42,13 +42,16 @@ export class NeonResponsesLanguageModel
 	): LanguageModelV3CallOptions {
 		const openai = options.providerOptions?.openai;
 		const defaults: Record<string, boolean> = {};
-		if (openai == null || !("store" in openai)) {
+		// `undefined` counts as unset rather than as a choice: it serializes
+		// away, so `{ store: undefined }` and `{}` are the same request on the
+		// wire, and threading an optional config value through must not
+		// silently drop the default. An explicit value of any other kind is
+		// left alone — the gateway rejects everything but `false` with a 400
+		// that names the reason, which beats a client-side guess at policy.
+		if (openai?.store === undefined) {
 			defaults.store = false;
 		}
-		if (
-			this.isReasoningFamily &&
-			(openai == null || !("forceReasoning" in openai))
-		) {
+		if (this.isReasoningFamily && openai?.forceReasoning === undefined) {
 			defaults.forceReasoning = true;
 		}
 		if (Object.keys(defaults).length === 0) {

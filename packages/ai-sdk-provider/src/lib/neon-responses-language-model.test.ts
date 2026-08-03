@@ -84,10 +84,41 @@ describe("NeonResponsesLanguageModel gateway defaults", () => {
 		expect(sent.store).toBe(false);
 	});
 
-	it("respects an explicit store: true from the caller", async () => {
+	// Passed through rather than corrected: the gateway answers `store: true`
+	// with `400 INVALID_PARAMETER_VALUE: Databricks does not support store
+	// response for OpenAI Responses API. Please contact your Databricks account
+	// team to enable this feature`. That names the cause and the remedy, and it
+	// says the feature is account-enableable — so refusing it here would encode
+	// a policy that is not ours and could outlive the limitation.
+	it("passes an explicit store: true through instead of overriding it", async () => {
 		const { sent } = await capture("gpt-5-2", { openai: { store: true } });
 
 		expect(sent.store).toBe(true);
+	});
+
+	it("treats store: undefined as unset and still applies the default", async () => {
+		// `{ store: undefined }` serializes identically to `{}`, so it has to
+		// behave identically too — otherwise spreading an optional config value
+		// silently reinstates the item_reference 502.
+		const { sent } = await capture("gpt-5-2", {
+			openai: { store: undefined as unknown as boolean },
+		});
+
+		expect(sent.store).toBe(false);
+	});
+
+	// No `forceReasoning: undefined` case here on purpose. It gets the same
+	// treatment as store in the source, but the shared model's own bare-id
+	// detection currently recognises both `gpt-5-2` and `databricks-gpt-5-2`,
+	// so the default is unobservable and such a test could not fail for the
+	// right reason.
+	it("respects forceReasoning: false", async () => {
+		const { sent } = await capture("gpt-5-2", {
+			openai: { forceReasoning: false },
+		});
+
+		expect(sent.include).toBeUndefined();
+		expect(sent.store).toBe(false);
 	});
 
 	it("keeps other openai provider options alongside the default", async () => {
