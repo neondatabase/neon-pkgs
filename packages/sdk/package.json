@@ -46,7 +46,7 @@
 		"package.json"
 	],
 	"scripts": {
-		"build": "tsc --noEmit && tsdown",
+		"build": "tsc --noEmit && tsdown && node scripts/check-dist.mjs",
 		"prepare": "npm run build",
 		"generate": "openapi-ts && node scripts/generate-raw.mjs",
 		"spec:pull": "curl -fsSL https://neon.com/api_spec/release/v2.json -o spec/neon-openapi.json",

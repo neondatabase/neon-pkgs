@@ -334,6 +334,22 @@ pnpm --filter @neon/sdk test:ci     # coverage guard — see below
 The vendored spec lives at `packages/sdk/spec/neon-openapi.json`. Codegen is
 `@hey-api/openapi-ts` (`packages/sdk/openapi-ts.config.ts`).
 
+**`@neon/sdk` is published zero-dependency, and `build` enforces it.**
+
+tsdown externalizes whatever `dependencies` lists and **inlines everything else**, so an
+import of a devDependency from any file matched by the `entry` globs is copied into
+`dist/node_modules/` and published. That shipped 743KB of `vitest`, `chai`,
+`expect-type`, `loupe` and `tinyrainbow` in 1.4.0: `src/neon/client.test-d.ts` imports
+`expectTypeOf`, and the globs excluded only `*.test.ts`. Note that `!src/**/*.test.*`
+does **not** match `client.test-d.ts` — the `test-d` exclusion is separate, which is why
+`@neon/config` and `@neon/env` list both.
+
+`pnpm --filter @neon/sdk build` ends in `node scripts/check-dist.mjs`, which fails when
+`dist/` carries bundled dependencies, emitted test files, a non-empty `dependencies`
+map, or a bare runtime import a consumer could not resolve. CI's Build job runs
+`pnpm build`, so a regression fails the PR rather than reaching npm. Don't route around
+it by relaxing the check — fix the entry globs or move the offending file out of them.
+
 **Automated spec refresh (`.github/workflows/sdk-spec-refresh.yml`):**
 
 The live spec at https://neon.com/api_spec/release/v2.json can drift ahead of the
