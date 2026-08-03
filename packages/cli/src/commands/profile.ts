@@ -26,13 +26,13 @@ type ProfileProps = CommonProps & {
 	allowUnsafeTls?: boolean;
 };
 
-export const command = "profile";
-export const aliases = ["profiles"];
+export const command = "profiles";
+export const aliases = ["profile"];
 export const describe = "Manage named sets of Neon credentials";
 
 export const builder = (argv: yargs.Argv) =>
 	argv
-		.usage("$0 profile <sub-command> [options]")
+		.usage("$0 profiles <sub-command> [options]")
 		.command(
 			"list",
 			"List profiles, the account each holds, and where its credentials live",
@@ -63,7 +63,7 @@ export const builder = (argv: yargs.Argv) =>
 					},
 				),
 		)
-		.demandCommand(1, "Run `neon profile --help` to see the subcommands.");
+		.demandCommand(1, "Run `neon profiles --help` to see the subcommands.");
 
 export const handler = (_args: yargs.Arguments) => {
 	/* subcommands only */

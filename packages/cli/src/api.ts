@@ -463,6 +463,33 @@ export const getApiClient = ({ apiKey, apiHost }: ApiCallProps) => {
 		getAuthDetails: () => call(() => raw.getAuthDetails({ client })),
 		getActiveRegions: () => call(() => raw.getActiveRegions({ client })),
 
+		// ─── API keys ────────────────────────────────────────────────────────
+		// Account keys reach everything the account can. Org keys can additionally be
+		// narrowed to a single project via `project_id`, which is the only way to mint a
+		// least-privilege credential — so the org endpoints are not merely the org
+		// equivalent of the account ones.
+		listApiKeys: () => call(() => raw.listApiKeys({ client })),
+		createApiKey: (body: raw.CreateApiKeyData["body"]) =>
+			call(() => raw.createApiKey({ client, body })),
+		revokeApiKey: (keyId: number) =>
+			call(() => raw.revokeApiKey({ client, path: { key_id: keyId } })),
+		listOrgApiKeys: (orgId: string) =>
+			call(() => raw.listOrgApiKeys({ client, path: { org_id: orgId } })),
+		createOrgApiKey: (
+			orgId: string,
+			body: raw.CreateOrgApiKeyData["body"],
+		) =>
+			call(() =>
+				raw.createOrgApiKey({ client, path: { org_id: orgId }, body }),
+			),
+		revokeOrgApiKey: (orgId: string, keyId: number) =>
+			call(() =>
+				raw.revokeOrgApiKey({
+					client,
+					path: { org_id: orgId, key_id: keyId },
+				}),
+			),
+
 		// ─── Projects ────────────────────────────────────────────────────────
 		listProjects: (
 			query: NonNullable<raw.ListProjectsData["query"]> = {},

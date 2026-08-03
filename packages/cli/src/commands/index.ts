@@ -1,4 +1,5 @@
 import * as api from "./api.js";
+import * as apiKeys from "./api_keys.js";
 import * as auth from "./auth.js";
 import * as bootstrap from "./bootstrap.js";
 import * as branches from "./branches.js";
@@ -33,6 +34,7 @@ import * as vpcEndpoints from "./vpc_endpoints.js";
 export default [
 	auth,
 	profile,
+	apiKeys,
 	api,
 	users,
 	orgs,

@@ -71,6 +71,13 @@ export const isConfigInit = (args: { _: (string | number)[] }): boolean =>
 export const isProfileCommand = (args: { _: (string | number)[] }): boolean =>
 	args._[0] === "profile" || args._[0] === "profiles";
 
+/**
+ * `neon api-keys …`, under either spelling. Exempts the group from context enrichment: how
+ * far a credential reaches must come from an explicit flag, never from `.neon`.
+ */
+export const isApiKeysCommand = (args: { _: (string | number)[] }): boolean =>
+	args._[0] === "api-keys" || args._[0] === "api-key";
+
 const CONTEXT_FILE = ".neon";
 const GITIGNORE_FILE = ".gitignore";
 
@@ -153,6 +160,13 @@ export const enrichFromContext = (
 	// and must see the raw flags rather than values pre-filled from an existing
 	// `.neon`, so skip enrichment for both.
 	if (args._[0] === "link" || args._[0] === "set-context") {
+		return;
+	}
+	// `api-keys` mints credentials, and how far a credential reaches must be something the
+	// user typed — never something inherited from whichever project happens to be checked
+	// out. Enriched here, `api-keys create --name ci` in a linked directory would quietly
+	// produce a key scoped to that project instead of the account key it asked for.
+	if (isApiKeysCommand(args)) {
 		return;
 	}
 	const context = readContextFile(args.contextFile);
