@@ -116,7 +116,7 @@ export const interpretCredentials = (
 	const apiKey = nonEmpty(credentials.api_key);
 	if (apiKey === undefined) {
 		throw new Error(
-			`${path} declares "type": "${API_KEY}" but has no "api_key" value. Store one with \`neon profile set-key\`.`,
+			`${path} declares "type": "${API_KEY}" but has no "api_key" value. Replace the profile with \`neon profile create <name> --force\`.`,
 		);
 	}
 	return { kind: API_KEY, apiKey };

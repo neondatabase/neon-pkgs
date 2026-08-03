@@ -109,4 +109,4 @@ export const identityFromAuthDetails = (
 export const notAnApiKeyMessage = (
 	method: AuthDetailsResponse["auth_method"],
 ): string =>
-	`That credential authenticates as "${method}", not an API key. Create one with \`neon api POST /api_keys\`, or mint it here with \`neon profile rotate-key\`.`;
+	`That credential authenticates as "${method}", not an API key. Create a key with \`neon api-keys create\`, or have one minted with \`neon profile create <name> --mint\`.`;

@@ -1,7 +1,7 @@
 /**
  * Behaviour of the real built CLI around profiles and credential selection.
  *
- * These spawn `dist/index.js` rather than calling handlers, because what is under test is the
+ * These spawn the published `dist/cli.js` rather than calling handlers, because what is under test is the
  * shell: argument precedence, what reaches stdout, and the exit code. They deliberately do not
  * use the shared `testCliCommand` fixture — it always passes `--api-key`, which is one half of
  * the very conflict these cases are about.
@@ -12,7 +12,7 @@
  */
 
 import { fork } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -568,6 +568,68 @@ describe("profile create — parsing and scope safety", () => {
 
 		expect(code).toBe(1);
 		expect(stderr).toContain("cannot be combined with --api-key");
+	});
+});
+
+describe("replacing a profile is atomic", () => {
+	// Retiring the old credential first meant a cancelled or failed replacement left the
+	// profile holding something already revoked. The old one must survive a failure.
+	test("a failed replacement leaves the existing credential untouched", async () => {
+		const dir = makeConfigDir({
+			"credentials.work.json": API_KEY_FILE,
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { work: { credentials: "credentials.work.json" } },
+			}),
+		});
+		const before = readFileSync(
+			resolve(dir, "credentials.work.json"),
+			"utf8",
+		);
+
+		// The API host refuses connections, so verification fails and nothing is written.
+		const { code } = await runCli([
+			"profile",
+			"create",
+			"work",
+			"--config-dir",
+			dir,
+			"--force",
+			"--api-key",
+			"napi_replacement",
+		]);
+
+		expect(code).toBe(1);
+		expect(
+			readFileSync(resolve(dir, "credentials.work.json"), "utf8"),
+		).toBe(before);
+	});
+
+	// Same for the browser path: the session it would replace must not be revoked before the
+	// new sign-in has actually happened.
+	test("a refused sign-in leaves the existing credential untouched", async () => {
+		const dir = makeConfigDir({
+			"credentials.work.json": OAUTH_FILE,
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { work: { credentials: "credentials.work.json" } },
+			}),
+		});
+		const before = readFileSync(
+			resolve(dir, "credentials.work.json"),
+			"utf8",
+		);
+
+		const { code, stderr } = await runCli(
+			["profile", "create", "work", "--config-dir", dir, "--force"],
+			{ CI: "true" },
+		);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("Cannot run interactive auth in CI");
+		expect(
+			readFileSync(resolve(dir, "credentials.work.json"), "utf8"),
+		).toBe(before);
 	});
 });
 
