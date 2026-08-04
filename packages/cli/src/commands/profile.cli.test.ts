@@ -372,6 +372,61 @@ describe("profile create", () => {
 		expect(stderr).toContain("cannot be combined with --api-key");
 	});
 
+	// `-` is the usual convention for a piped value, and it means the key never reaches argv
+	// where `ps` and shell history can see it. It needs `nargs` on the option, or yargs reads
+	// the dash as an option of its own and reports "Unknown command: -".
+	test("--api-key - reads the key from stdin", async () => {
+		const dir = makeConfigDir({});
+		const { code, stderr } = await runCli(
+			[
+				"profile",
+				"create",
+				"work",
+				"--config-dir",
+				dir,
+				"--api-key",
+				"-",
+			],
+			{},
+			"napi_from_stdin\n",
+		);
+
+		// The API host refuses connections, so this gets as far as verifying and no further —
+		// enough to show the dash was replaced by what was piped rather than sent as a key.
+		expect(code).toBe(1);
+		expect(stderr).not.toContain("Unknown command");
+		expect(stderr).not.toContain("Nothing arrived on stdin");
+		expect(stderr).not.toContain("napi_from_stdin");
+	});
+
+	test("--api-key=- works the same way", async () => {
+		const dir = makeConfigDir({});
+		const { code, stderr } = await runCli(
+			["profile", "create", "work", "--config-dir", dir, "--api-key=-"],
+			{},
+			"napi_from_stdin\n",
+		);
+
+		expect(code).toBe(1);
+		expect(stderr).not.toContain("Nothing arrived on stdin");
+	});
+
+	test("says so when the pipe is empty", async () => {
+		const dir = makeConfigDir({});
+		const { code, stderr } = await runCli([
+			"profile",
+			"create",
+			"work",
+			"--config-dir",
+			dir,
+			"--api-key",
+			"-",
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("Nothing arrived on stdin");
+	});
+
 	// A scope only means something for a key we mint; a key you supply already has one.
 	test("--org-id without --mint is refused rather than ignored", async () => {
 		const dir = makeConfigDir({});

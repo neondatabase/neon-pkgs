@@ -1,4 +1,4 @@
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { basename } from "node:path";
 import prompts from "prompts";
 import type yargs from "yargs";
@@ -92,10 +92,15 @@ export const builder = (argv: yargs.Argv) =>
 						// but the global option renders "default: NEON_API_KEY" into this help
 						// screen — so a user with it exported would expect it to be stored.
 						"api-key": {
-							describe: "API key to store",
+							describe:
+								'API key to store, or "-" to read it from stdin',
 							defaultDescription:
 								"none; this command ignores NEON_API_KEY",
 							type: "string",
+							// Force the next token to be taken as the value. Without it yargs
+							// reads the `-` in `--api-key -` as an option of its own and reports
+							// "Unknown command: -", so only the `=` form would bind.
+							nargs: 1,
 						},
 						mint: {
 							describe:
@@ -132,8 +137,12 @@ export const builder = (argv: yargs.Argv) =>
 						"Sign in with the browser, like `neon auth --profile work`",
 					)
 					.example(
-						'$0 profile create work --api-key "$(cat ~/keys/work)"',
+						'$0 profile create work --api-key "$KEY"',
 						"Store a key you already have",
+					)
+					.example(
+						'echo "$KEY" | $0 profile create work --api-key -',
+						"Or pipe it, so it never reaches the process arguments",
 					)
 					.example(
 						"$0 profile create ci --mint --org-id org-abc-123",
@@ -362,6 +371,9 @@ const assertReplaceable = (props: CreateProps): void => {
 	);
 };
 
+/** `--api-key -` means "read it from stdin", the usual convention for a piped value. */
+const STDIN = "-";
+
 /**
  * The key to store.
  *
@@ -370,18 +382,41 @@ const assertReplaceable = (props: CreateProps): void => {
  * environment variable should be able to answer — a `create` that silently wrote whatever
  * happened to be in the shell would be storing a key the user never named.
  *
- * One way in, deliberately. Earlier revisions added `--api-key-file`, `--api-key-stdin` and
- * `--api-key-prompt` to keep the secret out of argv, and every one of them is a shell
- * expression away: `--api-key "$(cat ~/keys/work)"` reads a file, `--api-key "$KEY"` takes a
- * variable, and a shell that records history has `HISTCONTROL` for the rest. Four flags for
- * that is four surfaces to document, validate against each other, and get wrong.
+ * One flag, deliberately. Earlier revisions added `--api-key-file`, `--api-key-stdin` and
+ * `--api-key-prompt` to keep the secret out of argv, which is four surfaces to document and
+ * validate against each other for things the shell already does — `--api-key "$(cat file)"`
+ * reads a file, `--api-key "$KEY"` takes a variable. Piping is the one case the shell cannot
+ * express through an argument, so it gets the usual convention instead of a flag: `-`.
  */
 const resolveKeyToStore = (props: CreateProps): string => {
 	const fromFlag = credentialInputs().apiKeyFlag.trim();
+	if (fromFlag === STDIN) return readKeyFromStdin();
 	if (fromFlag !== "") return fromFlag;
 	throw new Error(
-		`Nothing to store for profile "${props.name}". Pass --api-key, or --mint to have one minted, or no flags at all to sign in with the browser.`,
+		`Nothing to store for profile "${props.name}". Pass --api-key (or --api-key - to pipe it), --mint to have one minted, or no flags at all to sign in with the browser.`,
 	);
+};
+
+/**
+ * Read the key from stdin, for `--api-key -`.
+ *
+ * A terminal is refused rather than read: `readFileSync(0)` on a tty waits for EOF with no
+ * prompt and nothing echoed, which is indistinguishable from a hang — and this spelling exists
+ * for pipes, so a terminal means the pipe is missing.
+ */
+const readKeyFromStdin = (): string => {
+	if (process.stdin.isTTY) {
+		throw new Error(
+			'`--api-key -` reads the key from stdin, but stdin is a terminal. Pipe it in: echo "$KEY" | neon profile create <name> --api-key -',
+		);
+	}
+	const piped = readFileSync(0, "utf8").trim();
+	if (piped === "") {
+		throw new Error(
+			"Nothing arrived on stdin, so there is no API key to store.",
+		);
+	}
+	return piped;
 };
 
 /**
