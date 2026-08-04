@@ -397,6 +397,51 @@ describe("profile create", () => {
 		expect(stderr).not.toContain("napi_from_stdin");
 	});
 
+	// The dash needs `nargs` on *both* the global option and this command's override. With it
+	// only on the override, yargs read the dash as a command of its own here and answered
+	// "Unknown commands: -, create, work".
+	test("--api-key - works before the command too", async () => {
+		const dir = makeConfigDir({});
+		const { code, stderr } = await runCli(
+			[
+				"--api-key",
+				"-",
+				"profile",
+				"create",
+				"work",
+				"--config-dir",
+				dir,
+			],
+			{},
+			"napi_from_stdin\n",
+		);
+
+		// The API host refuses connections, so this gets as far as verifying and no further —
+		// enough to show the dash bound and was replaced by what was piped.
+		expect(code).toBe(1);
+		expect(stderr).not.toContain("Unknown command");
+		expect(stderr).not.toContain("Nothing arrived on stdin");
+		expect(stderr).not.toContain("napi_from_stdin");
+	});
+
+	// `nargs` must not break an ordinary value in the same position.
+	test("a real key before the command still binds", async () => {
+		const dir = makeConfigDir({});
+		const { code, stderr } = await runCli([
+			"--api-key",
+			"napi_ordinary",
+			"profile",
+			"create",
+			"work",
+			"--config-dir",
+			dir,
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).not.toContain("Unknown command");
+		expect(stderr).not.toContain("Nothing to store");
+	});
+
 	test("--api-key=- works the same way", async () => {
 		const dir = makeConfigDir({});
 		const { code, stderr } = await runCli(
