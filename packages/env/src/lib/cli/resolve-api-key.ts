@@ -1,25 +1,25 @@
+import { selectCredential } from "../../_shared/auth_selection.js";
 import {
 	inspectCredentials,
 	interpretCredentials,
 } from "../../_shared/credentials.js";
-import { resolveConfigFile } from "../../_shared/paths.js";
-import {
-	DEFAULT_PROFILE,
-	resolveProfile,
-	selectProfileName,
-} from "../../_shared/profiles.js";
+import { configDir, resolveConfigFile } from "../../_shared/paths.js";
+import { DEFAULT_PROFILE, resolveProfile } from "../../_shared/profiles.js";
 
 /**
- * Resolve the Neon API key for a `neon-env` CLI invocation. Precedence (each wins over the
- * next): `--api-key` flag → `NEON_API_KEY` → the credential stored for the selected profile.
+ * Resolve the Neon API key for a `neon-env` CLI invocation.
  *
- * The CLI owns this resolution — `@neon/config` and `@neon/env` are deliberately environment-
- * and filesystem-agnostic and only ever accept an explicit `apiKey`, so the ambient sources a
- * *user* expects have to be read here. This mirrors `resolveContext`, which does the same for
- * project and branch.
+ * Precedence is the `neon` CLI's, from the same module: **an explicit flag beats an ambient
+ * environment variable.** `--api-key` and `--profile` together is an error; `--profile` beats
+ * `NEON_API_KEY`; `--api-key` beats `NEON_PROFILE`; two ambient sources resolve to the key.
  *
- * Returns `undefined` rather than throwing when nothing provides a key: the caller passes it
- * straight through, and the library raises the uniform `PLATFORM_MISSING_API_KEY` error.
+ * Sharing that decision rather than restating it is the point. An earlier version of this file
+ * checked `NEON_API_KEY` before the selected profile, so `NEON_API_KEY=… neon-env run --profile
+ * work` silently used the wrong account — the very bug this feature fixes in `neon`.
+ *
+ * The CLI owns the resolution because `@neon/config` and `@neon/env`'s root export are
+ * deliberately environment- and filesystem-agnostic: they accept an explicit `apiKey` and
+ * nothing else, so the ambient sources a *user* expects have to be read out here.
  */
 export function resolveApiKey(options: {
 	apiKey?: string;
@@ -27,70 +27,77 @@ export function resolveApiKey(options: {
 	env?: NodeJS.ProcessEnv;
 }): string | undefined {
 	const env = options.env ?? process.env;
-	return (
-		nonEmpty(options.apiKey) ??
-		nonEmpty(env.NEON_API_KEY) ??
-		readStoredCredential(options.profile, env)
-	);
+	const selection = selectCredential({
+		...(options.apiKey !== undefined ? { apiKeyFlag: options.apiKey } : {}),
+		...(options.profile !== undefined
+			? { profileFlag: options.profile }
+			: {}),
+		...(env.NEON_API_KEY !== undefined
+			? { apiKeyEnv: env.NEON_API_KEY }
+			: {}),
+		...(env.NEON_PROFILE !== undefined
+			? { profileEnv: env.NEON_PROFILE }
+			: {}),
+	});
+
+	if (selection.source !== "profile") return selection.apiKey;
+	return readStoredCredential(selection, env);
 }
 
 /**
- * The credential stored for the selected profile — `--profile`, else `NEON_PROFILE`, else
- * `DEFAULT`.
+ * The credential stored for the selected profile.
  *
- * Reading only `DEFAULT`, as this used to, meant `neon --profile dbx env` and `neon-env` could
- * resolve different accounts on the same machine. Sharing the profile reader with the `neon` CLI
- * is what makes them agree; see `shared/cli-core/README.md`.
- *
- * The stored credential is one of two kinds, and `type` says which: an `api_key` file
- * authenticates with its `api_key`, and an OAuth file's `access_token` is itself a bearer token
- * for the Neon API.
- *
- * Never throws: a missing, unreadable, malformed or credential-less file is simply "no key", and
- * an unknown profile is "no key" too — `neon-env` has no way to report it usefully, and the
- * library's `PLATFORM_MISSING_API_KEY` says the same thing more clearly than a stack trace.
+ * An **explicitly** named profile that cannot be used is an error: the user said which account to
+ * act as, and falling through to "no API key" would report a missing credential when the real
+ * problem is the name they typed. `DEFAULT` is different — nothing was named, so having no
+ * credential there is the ordinary not-signed-in case and the library's
+ * `PLATFORM_MISSING_API_KEY` says it better than a stack trace.
  */
 function readStoredCredential(
-	profile: string | undefined,
+	selection: { profile: string; explicit: boolean },
 	env: NodeJS.ProcessEnv,
 ): string | undefined {
-	const path = credentialsPathFor(profile, env);
-	if (path === undefined) return undefined;
+	const { profile, explicit } = selection;
+	const fail = (reason: string): undefined => {
+		if (explicit) throw new Error(reason);
+		return undefined;
+	};
+
+	let path: string;
+	try {
+		path =
+			profile === DEFAULT_PROFILE
+				? // Per *file*, so an install predating the rename still finds its
+					// `credentials.json` in the legacy `neonctl` directory, in place.
+					resolveConfigFile("credentials.json", { env }).path
+				: // From the config root, not from wherever `credentials.json` happens to live:
+					// that file can still be in `neonctl/` while `profiles.json` is in `neon/`,
+					// and deriving one from the other loses every named profile.
+					resolveProfile(configDir({ env }), profile).credentialsPath;
+	} catch (err) {
+		return fail(err instanceof Error ? err.message : String(err));
+	}
 
 	const read = inspectCredentials(path);
-	if (read.kind !== "ok") return undefined;
+	if (read.kind === "absent") {
+		return fail(
+			`Profile "${profile}" has no stored credential at ${path}. Sign in with \`neon profile create ${profile}\`.`,
+		);
+	}
+	if (read.kind === "unusable") return fail(read.reason);
 
 	try {
 		const credential = interpretCredentials(read.credentials, path);
-		return credential.kind === "api_key"
-			? credential.apiKey
-			: nonEmpty(read.credentials.access_token);
-	} catch {
-		return undefined;
+		if (credential.kind === "api_key") return credential.apiKey;
+		const token = read.credentials.access_token;
+		return typeof token === "string" && token.trim() !== ""
+			? token.trim()
+			: fail(
+					`Profile "${profile}" holds a browser sign-in with no usable token. Sign in again with \`neon auth --profile ${profile}\`.`,
+				);
+	} catch (err) {
+		return fail(err instanceof Error ? err.message : String(err));
 	}
 }
 
-function credentialsPathFor(
-	profile: string | undefined,
-	env: NodeJS.ProcessEnv,
-): string | undefined {
-	// `configDir` is not passed here: `neon-env` has no `--config-dir`, so the default
-	// resolution — including an existing legacy `neonctl` directory — is the only one that
-	// applies, and it is the same one `@neon/config/paths` gives every other reader.
-	const { dir } = resolveConfigFile("credentials.json", { env });
-	const name = selectProfileName(profile, env);
-	if (name === DEFAULT_PROFILE) {
-		return resolveConfigFile("credentials.json", { env }).path;
-	}
-	try {
-		return resolveProfile(dir, name).credentialsPath;
-	} catch {
-		return undefined;
-	}
-}
-
-function nonEmpty(value: unknown): string | undefined {
-	if (typeof value !== "string") return undefined;
-	const trimmed = value.trim();
-	return trimmed === "" ? undefined : trimmed;
-}
+export { DEFAULT_PROFILE };

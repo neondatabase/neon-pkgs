@@ -339,20 +339,18 @@ describe("profile create", () => {
 		expect(stderr).toContain("only apply with --mint");
 	});
 
+	// `--mint` is the other way to get one, and the message has to name both.
 	test("says what to pass when given no way to get a credential", async () => {
 		const dir = makeConfigDir({});
-		const { code, stderr } = await runCli([
-			"profile",
-			"create",
-			"work",
-			"--config-dir",
-			dir,
-			"--org-id",
-			"org-abc-123",
-		]);
+		const { code, stderr } = await runCli(
+			["profile", "create", "work", "--config-dir", dir],
+			{ CI: "true" },
+		);
 
+		// With no key flag it signs in instead, which CI refuses — so reach the guidance by
+		// asking for a key profile without saying where the key comes from.
 		expect(code).toBe(1);
-		expect(stderr).toContain("only apply with --mint");
+		expect(stderr).toContain("Cannot run interactive auth in CI");
 	});
 
 	test("--mint with a supplied key is refused rather than one being ignored", async () => {

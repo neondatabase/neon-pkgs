@@ -41,15 +41,15 @@
 	"scripts": {
 		"generateParams": "tsx generateOptionsFromSpec.ts",
 		"clean": "rm -rf dist",
-		"build": "node ../../scripts/sync-shared.mjs && pnpm generateParams && pnpm clean && tsc -p tsconfig.build.json && cp src/*.html ./dist",
+		"build": "node ../../scripts/sync-shared.mjs . && pnpm generateParams && pnpm clean && tsc -p tsconfig.build.json && cp src/*.html ./dist",
 		"bundle": "node pkg.js",
-		"typecheck": "tsc --noEmit",
-		"lint": "pnpm typecheck && biome check src",
+		"typecheck": "node ../../scripts/sync-shared.mjs . && tsc --noEmit",
+		"lint": "node ../../scripts/sync-shared.mjs . && pnpm typecheck && biome check src",
 		"lint:fix": "pnpm typecheck && biome check src --write",
-		"test": "node ../../scripts/sync-shared.mjs && pnpm --filter neonctl... build && vitest run",
-		"test:ci": "node ../../scripts/sync-shared.mjs && pnpm build && vitest run",
-		"test:e2e": "pnpm build && vitest run --config vitest.e2e.config.ts",
-		"test:conformance": "vitest run --config tests/psql-conformance/vitest.config.ts"
+		"test": "node ../../scripts/sync-shared.mjs . && pnpm --filter neonctl... build && vitest run",
+		"test:ci": "node ../../scripts/sync-shared.mjs . && pnpm build && vitest run",
+		"test:e2e": "node ../../scripts/sync-shared.mjs . && pnpm build && vitest run --config vitest.e2e.config.ts",
+		"test:conformance": "node ../../scripts/sync-shared.mjs . && vitest run --config tests/psql-conformance/vitest.config.ts"
 	},
 	"dependencies": {
 		"@hono/node-server": "2.0.4",

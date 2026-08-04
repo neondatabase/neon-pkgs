@@ -493,7 +493,9 @@ const create = async (props: CreateProps) => {
 			);
 		}
 		await retirePreviousCredential(props, name, previous, credentialsPath);
-		const signedIn = readProfiles(props.configDir)?.profiles[name];
+		const signedIn = readProfiles(props.configDir, log.warning)?.profiles[
+			name
+		];
 		report(props, {
 			name,
 			account: signedIn?.label ?? signedIn?.userId ?? "unknown account",
@@ -1103,7 +1105,7 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 	// 3. Drop the entry, and the file once nothing but DEFAULT is left — the mirror image
 	//    of creating it lazily, so a single-account install ends up with no profiles.json.
 	const path = profilesFilePath(props.configDir);
-	const file = readProfiles(props.configDir);
+	const file = readProfiles(props.configDir, log.warning);
 	if (file?.profiles[name]) {
 		delete file.profiles[name];
 		if (onlyDefaultRemains(file)) {

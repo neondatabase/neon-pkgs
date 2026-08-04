@@ -127,6 +127,10 @@ builder = builder
 			describe: "API key",
 			group: "Global options:",
 			type: "string",
+			// Take the next token as the value even when it looks like an option, so
+			// `--api-key -` binds the dash rather than being read as a command of its own.
+			// `profile create` gives `-` its meaning; everywhere else it is just a value.
+			nargs: 1,
 			// The default must never be the value of NEON_API_KEY: yargs renders an
 			// option's default into every help screen, so that printed the user's key
 			// verbatim on `neon --help`. `resolveApiKeyFromEnv` reads the env var

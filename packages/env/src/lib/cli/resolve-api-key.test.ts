@@ -272,16 +272,57 @@ describe("resolveApiKey — profiles", () => {
 		).toBe("napi_default");
 	});
 
-	// `neon-env` has no way to report an unknown profile usefully, and the library's
-	// PLATFORM_MISSING_API_KEY says the same thing more clearly than a stack trace.
-	test("an unknown profile is no key, not a crash", () => {
+	// A profile the user named and that cannot be used is an error, not "no API key" —
+	// reporting a missing credential would hide that the real problem is the name they typed.
+	test("an unknown profile says so instead of reporting no key", () => {
 		const home = makeProfiles(
 			{ "credentials.json": apiKeyFile("napi_default") },
 			{ DEFAULT: { credentials: "credentials.json" } },
 		);
-		expect(
+		expect(() =>
 			resolveApiKey({ env: { HOME: home, NEON_PROFILE: "ghost" } }),
-		).toBeUndefined();
+		).toThrow(/Unknown profile "ghost"/);
+	});
+
+	// DEFAULT is the exception: nothing was named, so an absent credential is the ordinary
+	// not-signed-in case and the library's PLATFORM_MISSING_API_KEY reports it better.
+	test("no credential under DEFAULT is simply no key", () => {
+		const home = makeProfiles({}, {});
+		expect(resolveApiKey({ env: { HOME: home } })).toBeUndefined();
+	});
+
+	// The bug this precedence exists to stop, in the package where it was reintroduced.
+	test("an explicit --profile beats an ambient NEON_API_KEY", () => {
+		const home = makeProfiles(
+			{
+				"credentials.json": apiKeyFile("napi_default"),
+				"credentials.work.json": apiKeyFile("napi_work"),
+			},
+			{
+				DEFAULT: { credentials: "credentials.json" },
+				work: { credentials: "credentials.work.json" },
+			},
+		);
+		expect(
+			resolveApiKey({
+				profile: "work",
+				env: { HOME: home, NEON_API_KEY: "napi_ambient" },
+			}),
+		).toBe("napi_work");
+	});
+
+	test("both explicit flags is an error rather than a silent winner", () => {
+		const home = makeProfiles(
+			{ "credentials.json": apiKeyFile("napi_default") },
+			{ DEFAULT: { credentials: "credentials.json" } },
+		);
+		expect(() =>
+			resolveApiKey({
+				apiKey: "from-flag",
+				profile: "DEFAULT",
+				env: { HOME: home },
+			}),
+		).toThrow(/--api-key or --profile, not both/);
 	});
 
 	test("an explicit key still outranks any profile", () => {

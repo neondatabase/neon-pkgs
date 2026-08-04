@@ -61,7 +61,7 @@ export const credentialsPathForName = (
 	configDir: string,
 	name: string,
 ): string => {
-	if (name === DEFAULT_PROFILE && !readProfiles(configDir))
+	if (name === DEFAULT_PROFILE && !readProfiles(configDir, log.warning))
 		return defaultCredentialsPath(configDir);
 	return resolveProfile(configDir, name).credentialsPath;
 };
@@ -112,7 +112,7 @@ export const authFlow = async ({
 	const isNamed = profileName !== DEFAULT_PROFILE;
 	if (isNamed) assertValidProfileName(profileName);
 	const credentialsPath =
-		isNamed && !readProfiles(configDir)?.profiles[profileName]
+		isNamed && !readProfiles(configDir, log.warning)?.profiles[profileName]
 			? newProfileCredentialsPath(configDir, profileName)
 			: credentialsPathFor({ configDir, profile });
 

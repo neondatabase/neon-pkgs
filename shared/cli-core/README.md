@@ -29,5 +29,8 @@ A workspace package would not work here, and the reasons are worth recording:
   this code has to work there.
 - **No logger, no yargs, no API client.** Take a callback or a value instead; the imperative
   shell belongs in the consumer.
-- Tests live in `packages/cli`, which is the only consumer that runs them, so the code is
-  covered once rather than four times.
+- Unit tests live in `packages/cli`, so the code is covered once rather than four times.
+  `@neon/env`'s `resolve-api-key.test.ts` additionally checks that the two CLIs agree on
+  precedence — that is the regression this directory exists to prevent.
+- **Any script that compiles a consumer's `src/` must run the sync first.** A `vitest` or `tsc`
+  invoked directly will happily use whatever copy is already there.

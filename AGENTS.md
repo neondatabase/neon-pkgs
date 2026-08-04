@@ -305,9 +305,11 @@ and `@neon/config/paths` re-exports it** — see below.
 
 Credential reading, profile resolution and config paths are shared by `neon`, `@neon/env`,
 `neon-init` and `@neon/config` from `shared/cli-core/src`. It is **not a package**:
-`scripts/sync-shared.mjs` copies it into each consumer's `src/_shared` before they build,
-that copy is gitignored, and the imports are relative, so the code is compiled into every
-`dist` and nothing resolves at runtime.
+`scripts/sync-shared.mjs <dir>` copies it into that one consumer's `src/_shared`, atomically
+and one package per invocation so concurrent builds cannot race. Every script that compiles or
+typechecks a consumer's source runs it first; that copy is gitignored, and the imports are
+relative, so the code is compiled into every `dist` and nothing resolves at runtime. **If you
+add a script that reads `src/`, add the sync to it** — otherwise it can compile a stale copy.
 
 It is not a workspace package because it cannot be one. Every package here builds with
 `bundle: false` or plain `tsc`, so a bare specifier survives into `dist` and must resolve
@@ -319,8 +321,9 @@ package all of this could hang off — is consumer-facing.
 
 **Edit `shared/cli-core/src`, never `packages/*/src/_shared`.** Keep it dependency-free (Node
 builtins only, because `neon-init` has no workspace dependencies), and keep loggers, yargs and
-API clients out of it — take a callback or a value instead. Its tests live in `packages/cli`,
-the one consumer that runs them. `@neon/config/paths` re-exports it **explicitly rather than
+API clients out of it — take a callback or a value instead. Its own unit tests live in `packages/cli`; `@neon/env`
+also exercises it through `resolve-api-key.test.ts`, which is where the two CLIs' precedence is
+checked against each other. `@neon/config/paths` re-exports it **explicitly rather than
 with `export *`**, so the credential paths and ownership checks the CLIs need do not become
 public API the next time something is added.
 
