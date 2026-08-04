@@ -18,7 +18,7 @@ import {
 	resolveProfile,
 	selectProfileName,
 	upsertProfile,
-} from "./profiles.js";
+} from "./_shared/profiles.js";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {

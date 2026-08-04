@@ -44,7 +44,7 @@
  */
 
 import { readFileSync } from "node:fs";
-import { writeSecretFile } from "./utils/secure_file.js";
+import { writeSecretFile } from "./secure_file.js";
 
 export const OAUTH = "oauth";
 export const API_KEY = "api_key";

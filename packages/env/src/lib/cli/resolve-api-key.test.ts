@@ -209,3 +209,91 @@ describe("resolveApiKey — an api_key credentials file", () => {
 		expect(resolveApiKey({ env: { HOME: home } })).toBeUndefined();
 	});
 });
+
+/**
+ * The reader is shared with the `neon` CLI now, so `neon --profile dbx env` and `neon-env`
+ * resolve the same account. Before this, `neon-env` read `DEFAULT` only and the two could
+ * silently disagree.
+ */
+describe("resolveApiKey — profiles", () => {
+	const apiKeyFile = (api_key: string) =>
+		JSON.stringify({ type: "api_key", api_key });
+
+	function makeProfiles(
+		files: Record<string, string>,
+		profiles: Record<string, { credentials: string }>,
+	): string {
+		const root = mkdtempSync(join(tmpdir(), "neon-env-profiles-"));
+		cleanups.push(() => rmSync(root, { recursive: true, force: true }));
+		const dir = resolve(root, ".config", "neon");
+		mkdirSync(dir, { recursive: true });
+		for (const [name, contents] of Object.entries(files)) {
+			writeFileSync(resolve(dir, name), contents);
+		}
+		writeFileSync(
+			resolve(dir, "profiles.json"),
+			JSON.stringify({ version: 1, profiles }),
+		);
+		return root;
+	}
+
+	test("NEON_PROFILE selects a profile's key", () => {
+		const home = makeProfiles(
+			{
+				"credentials.json": apiKeyFile("napi_default"),
+				"credentials.work.json": apiKeyFile("napi_work"),
+			},
+			{
+				DEFAULT: { credentials: "credentials.json" },
+				work: { credentials: "credentials.work.json" },
+			},
+		);
+		expect(
+			resolveApiKey({ env: { HOME: home, NEON_PROFILE: "work" } }),
+		).toBe("napi_work");
+	});
+
+	test("an explicit profile wins over NEON_PROFILE", () => {
+		const home = makeProfiles(
+			{
+				"credentials.json": apiKeyFile("napi_default"),
+				"credentials.work.json": apiKeyFile("napi_work"),
+			},
+			{
+				DEFAULT: { credentials: "credentials.json" },
+				work: { credentials: "credentials.work.json" },
+			},
+		);
+		expect(
+			resolveApiKey({
+				profile: "DEFAULT",
+				env: { HOME: home, NEON_PROFILE: "work" },
+			}),
+		).toBe("napi_default");
+	});
+
+	// `neon-env` has no way to report an unknown profile usefully, and the library's
+	// PLATFORM_MISSING_API_KEY says the same thing more clearly than a stack trace.
+	test("an unknown profile is no key, not a crash", () => {
+		const home = makeProfiles(
+			{ "credentials.json": apiKeyFile("napi_default") },
+			{ DEFAULT: { credentials: "credentials.json" } },
+		);
+		expect(
+			resolveApiKey({ env: { HOME: home, NEON_PROFILE: "ghost" } }),
+		).toBeUndefined();
+	});
+
+	test("an explicit key still outranks any profile", () => {
+		const home = makeProfiles(
+			{ "credentials.json": apiKeyFile("napi_default") },
+			{ DEFAULT: { credentials: "credentials.json" } },
+		);
+		expect(
+			resolveApiKey({
+				apiKey: "from-flag",
+				env: { HOME: home, NEON_PROFILE: "work" },
+			}),
+		).toBe("from-flag");
+	});
+});

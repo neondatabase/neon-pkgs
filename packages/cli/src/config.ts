@@ -1,66 +1,15 @@
 import { existsSync, mkdirSync } from "node:fs";
-import { resolve } from "node:path";
-import {
-	configDir,
-	legacyConfigDir,
-	resolveConfigFile,
-} from "@neon/config/paths";
 import type yargs from "yargs";
 
 import { isCi } from "./env.js";
 
-export const CREDENTIALS_FILE = "credentials.json";
-
-/**
- * Default for `--config-dir`: `$XDG_CONFIG_HOME/neon`, else `~/.config/neon`.
- *
- * The directory was called `neonctl` until the CLI was renamed. An existing one is still
- * read — see {@link credentialsPath} — but it is never written to, moved, or deleted.
- */
-export const defaultDir = configDir();
-
-/**
- * Where this invocation's `credentials.json` lives.
- *
- * When `--config-dir` was left at its default, an existing file in the legacy `neonctl`
- * directory is used **in place**: an install that predates the rename keeps working, and
- * its credentials are never duplicated into a second location where one copy could go
- * stale while another tool still reads it.
- *
- * A `--config-dir` the user actually passed is used exactly as given. Falling back out of
- * an explicitly chosen directory would defeat the reason for choosing it — a CI run
- * pointed at a scratch directory must never pick up a developer's real credentials.
- */
-export const credentialsPath = (dir: string): string =>
-	resolveConfigFile(CREDENTIALS_FILE, dir === defaultDir ? {} : { dir }).path;
-
-/**
- * Whether a credentials file is one the CLI created, rather than a path a profile adopted.
- *
- * Anything that deletes a credential has to ask this first. A profile entry may point anywhere
- * — that is what makes adopting an existing directory a one-line edit — and a file we did not
- * create is not ours to remove.
- */
-export const isInsideConfigDir = (configDir: string, file: string): boolean =>
-	`${resolve(file)}/`.startsWith(`${resolve(configDir)}/`);
-
-/**
- * Whether a credentials file is one the CLI owns, counting the legacy `neonctl` directory.
- *
- * {@link credentialsPath} deliberately reads an existing legacy file in place rather than
- * migrating it, so for a default config directory that file is ours even though it sits
- * outside `neon/`. Judging ownership on the current directory alone would call an install
- * that predates the rename "adopted".
- */
-export const isOwnedCredentialPath = (
-	configDir: string,
-	file: string,
-): boolean => {
-	if (isInsideConfigDir(configDir, file)) return true;
-	if (configDir !== defaultDir) return false;
-	const legacy = legacyConfigDir();
-	return legacy !== undefined && isInsideConfigDir(legacy, file);
-};
+export {
+	CREDENTIALS_FILE,
+	credentialsPath,
+	defaultDir,
+	isInsideConfigDir,
+	isOwnedCredentialPath,
+} from "./_shared/paths.js";
 
 export const ensureConfigDir = ({
 	"config-dir": configDirArg,

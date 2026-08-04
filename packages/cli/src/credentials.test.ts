@@ -21,7 +21,7 @@ import {
 	readCredentials,
 	scopeOf,
 	writeCredentials,
-} from "./credentials.js";
+} from "./_shared/credentials.js";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {

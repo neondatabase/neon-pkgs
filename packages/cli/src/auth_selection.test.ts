@@ -3,7 +3,7 @@ import {
 	type CredentialSelection,
 	displacedProfileWarning,
 	selectCredential,
-} from "./auth_selection.js";
+} from "./_shared/auth_selection.js";
 
 describe("selectCredential", () => {
 	test("an explicit --api-key is used as given", () => {

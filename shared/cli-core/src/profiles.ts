@@ -43,10 +43,8 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
-import { resolveConfigFile } from "@neon/config/paths";
-import { credentialsPath, defaultDir } from "./config.js";
-import { log } from "./log.js";
-import { writeSecretFile } from "./utils/secure_file.js";
+import { credentialsPath, defaultDir, resolveConfigFile } from "./paths.js";
+import { writeSecretFile } from "./secure_file.js";
 
 export const PROFILES_FILE = "profiles.json";
 
@@ -104,7 +102,11 @@ export const profilesFilePath = (dir: string): string =>
  * the worst case is that a named profile is "not found", which is recoverable, whereas
  * throwing here would lock the user out of `neon auth` itself.
  */
-export const readProfiles = (dir: string): ProfilesFile | null => {
+export const readProfiles = (
+	dir: string,
+	/** Called with the reason a profiles file was ignored. The consumer owns how it reports. */
+	onWarn: (message: string) => void = () => {},
+): ProfilesFile | null => {
 	const path = profilesFilePath(dir);
 	if (!existsSync(path)) return null;
 	try {
@@ -124,10 +126,10 @@ export const readProfiles = (dir: string): ProfilesFile | null => {
 			throw new Error("missing `profiles`");
 		return { version: 1, profiles };
 	} catch (err) {
-		log.warning(
-			"Ignoring malformed %s: %s",
-			path,
-			err instanceof Error ? err.message : String(err),
+		onWarn(
+			`Ignoring malformed ${path}: ${
+				err instanceof Error ? err.message : String(err)
+			}`,
 		);
 		return null;
 	}

@@ -43,10 +43,10 @@
 		"package.json"
 	],
 	"scripts": {
-		"build": "tsc --noEmit && tsdown",
+		"build": "node ../../scripts/sync-shared.mjs && tsc --noEmit && tsdown",
 		"prepare": "npm run build",
-		"test": "pnpm --filter @neon/env... build && vitest --passWithNoTests",
-		"test:ci": "vitest run --passWithNoTests",
+		"test": "node ../../scripts/sync-shared.mjs && pnpm --filter @neon/env... build && vitest --passWithNoTests",
+		"test:ci": "node ../../scripts/sync-shared.mjs && vitest run --passWithNoTests",
 		"test:types": "vitest run --typecheck.enabled --typecheck.only",
 		"test:e2e": "vitest run --config vitest.e2e.config.ts",
 		"tsc": "tsc"

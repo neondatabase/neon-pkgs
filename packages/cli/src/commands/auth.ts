@@ -1,23 +1,11 @@
 import { createHash } from "node:crypto";
 import { existsSync, rmSync } from "node:fs";
 import type yargs from "yargs";
-
-import type { NeonApiClient } from "../api.js";
-
-import { getApiClient } from "../api.js";
-import { auth, refreshToken } from "../auth.js";
-import { setAuthContext } from "../auth_context.js";
 import {
 	credentialInputs,
 	displacedProfileWarning,
 	selectCredential,
-} from "../auth_selection.js";
-import { credentialsPath as defaultCredentialsPath } from "../config.js";
-import {
-	isConfigInit,
-	isCurrentBranchProbe,
-	isProfileCommand,
-} from "../context.js";
+} from "../_shared/auth_selection.js";
 import {
 	API_KEY,
 	type CredentialKind,
@@ -26,9 +14,7 @@ import {
 	readCredentials,
 	type StoredCredentials,
 	writeCredentials,
-} from "../credentials.js";
-import { isCi } from "../env.js";
-import { log } from "../log.js";
+} from "../_shared/credentials.js";
 import {
 	assertValidProfileName,
 	DEFAULT_PROFILE,
@@ -37,7 +23,19 @@ import {
 	resolveProfile,
 	selectProfileName,
 	upsertProfile,
-} from "../profiles.js";
+} from "../_shared/profiles.js";
+import type { NeonApiClient } from "../api.js";
+import { getApiClient } from "../api.js";
+import { auth, refreshToken } from "../auth.js";
+import { setAuthContext } from "../auth_context.js";
+import { credentialsPath as defaultCredentialsPath } from "../config.js";
+import {
+	isConfigInit,
+	isCurrentBranchProbe,
+	isProfileCommand,
+} from "../context.js";
+import { isCi } from "../env.js";
+import { log } from "../log.js";
 import type { ExtendedTokenSet } from "../types.js";
 import { extendTokenSet } from "../utils/auth.js";
 

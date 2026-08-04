@@ -6,8 +6,8 @@ import {
 	routeDataStep,
 } from "neon-init";
 import type yargs from "yargs";
+import { credentialInputs } from "../_shared/auth_selection.js";
 import { sendError } from "../analytics.js";
-import { credentialInputs } from "../auth_selection.js";
 import { log } from "../log.js";
 
 export const command = "init";

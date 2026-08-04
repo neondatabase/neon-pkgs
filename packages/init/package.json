@@ -38,12 +38,12 @@
 		"package.json"
 	],
 	"scripts": {
-		"build": "node scripts/set-vsx-gallery.mjs && tsc --noEmit && tsdown",
+		"build": "node ../../scripts/sync-shared.mjs && node scripts/set-vsx-gallery.mjs && tsc --noEmit && tsdown",
 		"build:internal": "node scripts/set-vsx-gallery.mjs https://cursor-vsx-proxy.cloud.databricks.com/gallery && tsc --noEmit && tsdown",
 		"prepare": "npm run build",
 		"pretest": "node scripts/set-vsx-gallery.mjs",
-		"test": "vitest --passWithNoTests",
-		"test:ci": "vitest run --passWithNoTests",
+		"test": "node ../../scripts/sync-shared.mjs && vitest --passWithNoTests",
+		"test:ci": "node ../../scripts/sync-shared.mjs && vitest run --passWithNoTests",
 		"tsc": "node scripts/set-vsx-gallery.mjs && tsc"
 	},
 	"devDependencies": {

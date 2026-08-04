@@ -1,7 +1,8 @@
 ---
 "neon": minor
-"@neon/env": patch
+"@neon/env": minor
 "neon-init": patch
+"@neon/config": patch
 ---
 
 `neon profile create`, including API-key profiles, and an explicit `--profile` is no longer ignored
@@ -74,3 +75,14 @@ Fixed alongside it, all in the same area:
 - `readCredentials` treats only a missing file as "no credentials". A permission or I/O error used
   to look identical to absence, so it would start a browser login that overwrote a credential the
   CLI simply could not read.
+
+**All three CLIs read credentials the same way now.** The credential, profile and config-path
+code moved to `shared/cli-core`, which `neon`, `@neon/env`, `neon-init` and `@neon/config`
+each compile into their own build — it is copied into `src/_shared` before they compile, so
+the code ships inside every `dist` and nothing new appears on the registry. `@neon/config/paths`
+re-exports the path half explicitly, so its public API is unchanged.
+
+The point of it is that the three stop disagreeing. `neon-env` gains `--profile` and honours
+`NEON_PROFILE`, so `neon --profile dbx env` and `neon-env` can no longer resolve different
+accounts; and `neon-init` reads the stored credential through the same reader, so an account
+signed in with an API key is no longer treated as not signed in and sent to a browser.

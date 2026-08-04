@@ -2,12 +2,7 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { basename } from "node:path";
 import prompts from "prompts";
 import type yargs from "yargs";
-
-import { getApiClient, type NeonApiClient } from "../api.js";
-import { auth, revokeToken } from "../auth.js";
-import { setAuthContext } from "../auth_context.js";
-import { credentialInputs } from "../auth_selection.js";
-import { isInsideConfigDir } from "../config.js";
+import { credentialInputs } from "../_shared/auth_selection.js";
 import {
 	API_KEY,
 	apiKeyCredentials,
@@ -20,15 +15,7 @@ import {
 	type StoredCredentials,
 	scopeOf,
 	writeCredentials,
-} from "../credentials.js";
-import { isCi } from "../env.js";
-import { log } from "../log.js";
-import {
-	identityFromAuthDetails,
-	isApiKeyMethod,
-	mintedKeyName,
-	notAnApiKeyMessage,
-} from "../profile_keys.js";
+} from "../_shared/credentials.js";
 import {
 	assertValidProfileName,
 	DEFAULT_PROFILE,
@@ -40,10 +27,22 @@ import {
 	resolveProfile,
 	selectProfileName,
 	upsertProfile,
-} from "../profiles.js";
+} from "../_shared/profiles.js";
+import { writeSecretFile } from "../_shared/secure_file.js";
+import { getApiClient, type NeonApiClient } from "../api.js";
+import { auth, revokeToken } from "../auth.js";
+import { setAuthContext } from "../auth_context.js";
+import { isInsideConfigDir } from "../config.js";
+import { isCi } from "../env.js";
+import { log } from "../log.js";
+import {
+	identityFromAuthDetails,
+	isApiKeyMethod,
+	mintedKeyName,
+	notAnApiKeyMessage,
+} from "../profile_keys.js";
 import type { CommonProps, ExtendedTokenSet } from "../types.js";
 import { noPassthrough, single } from "../utils/flags.js";
-import { writeSecretFile } from "../utils/secure_file.js";
 import { writer } from "../writer.js";
 import { authFlow, credentialsPathForName, usableCredential } from "./auth.js";
 

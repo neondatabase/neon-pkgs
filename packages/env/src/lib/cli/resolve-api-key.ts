@@ -1,75 +1,95 @@
-import { existsSync, readFileSync } from "node:fs";
-import { resolveConfigFile } from "@neon/config/paths";
+import {
+	inspectCredentials,
+	interpretCredentials,
+} from "../../_shared/credentials.js";
+import { resolveConfigFile } from "../../_shared/paths.js";
+import {
+	DEFAULT_PROFILE,
+	resolveProfile,
+	selectProfileName,
+} from "../../_shared/profiles.js";
 
 /**
  * Resolve the Neon API key for a `neon-env` CLI invocation. Precedence (each wins over the
- * next): `--api-key` flag → `NEON_API_KEY` → `access_token` from the Neon CLI's
- * `credentials.json`, located by `@neon/config/paths`.
+ * next): `--api-key` flag → `NEON_API_KEY` → the credential stored for the selected profile.
  *
- * The CLI owns this resolution — `@neon/config` and `@neon/env` are deliberately
- * environment- and filesystem-agnostic and only ever accept an explicit `apiKey`, so the
- * ambient sources a *user* expects have to be read here. This mirrors `resolveContext`,
- * which does the same for project and branch.
+ * The CLI owns this resolution — `@neon/config` and `@neon/env` are deliberately environment-
+ * and filesystem-agnostic and only ever accept an explicit `apiKey`, so the ambient sources a
+ * *user* expects have to be read here. This mirrors `resolveContext`, which does the same for
+ * project and branch.
  *
- * Returns `undefined` rather than throwing when nothing provides a key: the caller passes
- * it straight through, and the library raises the uniform `PLATFORM_MISSING_API_KEY` error.
+ * Returns `undefined` rather than throwing when nothing provides a key: the caller passes it
+ * straight through, and the library raises the uniform `PLATFORM_MISSING_API_KEY` error.
  */
 export function resolveApiKey(options: {
 	apiKey?: string;
+	profile?: string;
 	env?: NodeJS.ProcessEnv;
 }): string | undefined {
 	const env = options.env ?? process.env;
 	return (
 		nonEmpty(options.apiKey) ??
 		nonEmpty(env.NEON_API_KEY) ??
-		readStoredAccessToken(env)
+		readStoredCredential(options.profile, env)
 	);
 }
 
 /**
- * Read the stored credential from the Neon CLI's credentials file.
+ * The credential stored for the selected profile — `--profile`, else `NEON_PROFILE`, else
+ * `DEFAULT`.
  *
- * The file holds one of two kinds, and `type` says which: an `api_key` file authenticates with
- * its `api_key`, and anything else is an OAuth token set whose `access_token` is itself a
- * bearer token for the Neon API. Reading only `access_token` would silently find nothing on a
- * key-backed profile and report "no key" for an account that is perfectly signed in.
+ * Reading only `DEFAULT`, as this used to, meant `neon --profile dbx env` and `neon-env` could
+ * resolve different accounts on the same machine. Sharing the profile reader with the `neon` CLI
+ * is what makes them agree; see `shared/cli-core/README.md`.
  *
- * Location resolution is delegated to `@neon/config/paths` so this agrees with the `neon`
- * CLI itself — `NEON_CONFIG_DIR` / `NEONCTL_CONFIG_DIR`, else `$XDG_CONFIG_HOME/neon`, else
- * `~/.config/neon`, with an existing legacy `neonctl` directory still read. Rolling that
- * lookup by hand here is how the two drifted in the first place: this file honoured the env
- * var but not XDG, while the CLI honoured XDG but not the env var, so with
- * `XDG_CONFIG_HOME` set they disagreed about where credentials lived.
+ * The stored credential is one of two kinds, and `type` says which: an `api_key` file
+ * authenticates with its `api_key`, and an OAuth file's `access_token` is itself a bearer token
+ * for the Neon API.
  *
- * Reads only `DEFAULT` — profiles are a `neon` CLI concept, and `neon-env` has no `--profile`
- * of its own to select one with.
- *
- * Never throws: a missing, unreadable, malformed, or credential-less file is simply "no key",
- * so this can sit in a resolution chain without try/catch noise.
+ * Never throws: a missing, unreadable, malformed or credential-less file is simply "no key", and
+ * an unknown profile is "no key" too — `neon-env` has no way to report it usefully, and the
+ * library's `PLATFORM_MISSING_API_KEY` says the same thing more clearly than a stack trace.
  */
-function readStoredAccessToken(env: NodeJS.ProcessEnv): string | undefined {
-	const { path: credentialsPath } = resolveConfigFile("credentials.json", {
-		env,
-	});
-	if (!existsSync(credentialsPath)) return undefined;
+function readStoredCredential(
+	profile: string | undefined,
+	env: NodeJS.ProcessEnv,
+): string | undefined {
+	const path = credentialsPathFor(profile, env);
+	if (path === undefined) return undefined;
 
-	let parsed: unknown;
+	const read = inspectCredentials(path);
+	if (read.kind !== "ok") return undefined;
+
 	try {
-		parsed = JSON.parse(readFileSync(credentialsPath, "utf-8"));
+		const credential = interpretCredentials(read.credentials, path);
+		return credential.kind === "api_key"
+			? credential.apiKey
+			: nonEmpty(read.credentials.access_token);
 	} catch {
 		return undefined;
 	}
-
-	if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
-		return undefined;
-	const credentials = parsed as Record<string, unknown>;
-	if (credentials.type === "api_key") {
-		return nonEmpty(credentials.api_key as string);
-	}
-	return nonEmpty(credentials.access_token as string);
 }
 
-function nonEmpty(value: string | undefined): string | undefined {
+function credentialsPathFor(
+	profile: string | undefined,
+	env: NodeJS.ProcessEnv,
+): string | undefined {
+	// `configDir` is not passed here: `neon-env` has no `--config-dir`, so the default
+	// resolution — including an existing legacy `neonctl` directory — is the only one that
+	// applies, and it is the same one `@neon/config/paths` gives every other reader.
+	const { dir } = resolveConfigFile("credentials.json", { env });
+	const name = selectProfileName(profile, env);
+	if (name === DEFAULT_PROFILE) {
+		return resolveConfigFile("credentials.json", { env }).path;
+	}
+	try {
+		return resolveProfile(dir, name).credentialsPath;
+	} catch {
+		return undefined;
+	}
+}
+
+function nonEmpty(value: unknown): string | undefined {
 	if (typeof value !== "string") return undefined;
 	const trimmed = value.trim();
 	return trimmed === "" ? undefined : trimmed;

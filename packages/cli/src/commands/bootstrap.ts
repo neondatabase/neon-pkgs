@@ -14,7 +14,7 @@ import {
 } from "neon-init/bootstrap";
 import prompts, { type InitialReturnValue } from "prompts";
 import type yargs from "yargs";
-import { credentialInputs } from "../auth_selection.js";
+import { credentialInputs } from "../_shared/auth_selection.js";
 import { isCi } from "../env.js";
 import { log } from "../log.js";
 import type { CommonProps } from "../types.js";

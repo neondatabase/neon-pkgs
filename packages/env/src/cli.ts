@@ -44,6 +44,11 @@ const argv = yargs(hideBin(process.argv))
 				.option("api-key", {
 					type: "string",
 					describe: "Neon API key (defaults to NEON_API_KEY)",
+				})
+				.option("profile", {
+					type: "string",
+					describe:
+						"Neon CLI profile whose stored credential to use (defaults to NEON_PROFILE, else DEFAULT)",
 				}),
 	)
 	.command(
@@ -73,6 +78,11 @@ const argv = yargs(hideBin(process.argv))
 				.option("api-key", {
 					type: "string",
 					describe: "Neon API key (defaults to NEON_API_KEY)",
+				})
+				.option("profile", {
+					type: "string",
+					describe:
+						"Neon CLI profile whose stored credential to use (defaults to NEON_PROFILE, else DEFAULT)",
 				}),
 	)
 	.demandCommand(1, "Run `neon-env --help` to see the available commands.")
@@ -105,6 +115,9 @@ switch (command) {
 				...(typeof argv["api-key"] === "string"
 					? { apiKey: argv["api-key"] }
 					: {}),
+				...(typeof argv.profile === "string"
+					? { profile: argv.profile }
+					: {}),
 			},
 			{ cwd },
 		);
@@ -125,6 +138,9 @@ switch (command) {
 					: {}),
 				...(typeof argv["api-key"] === "string"
 					? { apiKey: argv["api-key"] }
+					: {}),
+				...(typeof argv.profile === "string"
+					? { profile: argv.profile }
 					: {}),
 			},
 			{ cwd },

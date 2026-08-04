@@ -1,9 +1,9 @@
 import { Analytics, type TrackParams } from "@segment/analytics-node";
+import { inspectCredentials } from "./_shared/credentials.js";
 import { getApiClient, isNeonApiError } from "./api.js";
 import { getAuthContext } from "./auth_context.js";
 import { credentialsPath } from "./config.js";
 import { isCurrentBranchProbe } from "./context.js";
-import { inspectCredentials } from "./credentials.js";
 import { getGithubEnvVars, isCi } from "./env.js";
 import type { ErrorCode } from "./errors.js";
 import { log } from "./log.js";

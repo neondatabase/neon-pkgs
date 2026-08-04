@@ -1,7 +1,10 @@
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { log } from "@clack/prompts";
 import { execa } from "execa";
+import {
+	inspectCredentials,
+	interpretCredentials,
+} from "../_shared/credentials.js";
+import { resolveConfigFile } from "../_shared/paths.js";
 
 export interface AuthOptions {
 	json?: boolean;
@@ -53,59 +56,25 @@ export async function isAuthenticated(): Promise<boolean> {
 }
 
 /**
- * Gets the OAuth access token from the Neon CLI's stored credentials.
+ * The credential the Neon CLI has stored, or `null`.
  *
- * Kept inline rather than importing `@neon/config/paths`: this package has no workspace
- * dependencies, and taking one on `@neon/config` would pull `@neon/sdk`, `zod` and `jiti`
- * into the install footprint of a package whose only need here is a file path. The
- * resolution below must stay identical to `packages/config/src/paths.ts`, which is the
- * canonical implementation — and it collapses entirely once this package folds into
- * `packages/cli`.
+ * Shares the reader with `neon` and `@neon/env` rather than keeping a copy — the inline path
+ * resolution this replaced was the third implementation of "where is the config directory", and
+ * it also looked only for `access_token`, so an account signed in with an API key read as not
+ * authenticated and got sent to a browser. See `shared/cli-core/README.md`.
  */
 async function getNeonctlAccessToken(): Promise<string | null> {
 	try {
-		for (const path of credentialsCandidates()) {
-			if (!existsSync(path)) continue;
-			const credentials = JSON.parse(readFileSync(path, "utf-8"));
-			// The file holds one of two kinds and `type` says which. An `api_key` file has no
-			// `access_token`, so looking only for that would treat a signed-in, key-backed
-			// account as not authenticated and send the user through a browser login.
-			if (credentials.type === "api_key" && credentials.api_key)
-				return credentials.api_key;
-			if (credentials.access_token) return credentials.access_token;
-		}
-		return null;
+		const { path } = resolveConfigFile("credentials.json");
+		const read = inspectCredentials(path);
+		if (read.kind !== "ok") return null;
+		const credential = interpretCredentials(read.credentials, path);
+		if (credential.kind === "api_key") return credential.apiKey;
+		const token = read.credentials.access_token;
+		return typeof token === "string" && token.trim() !== "" ? token : null;
 	} catch {
 		return null;
 	}
-}
-
-/**
- * Where the Neon CLI may keep `credentials.json`, most specific first: an explicitly
- * configured directory, else `$XDG_CONFIG_HOME`/`~/.config` under the current `neon`
- * directory and then the legacy `neonctl` one. An explicit directory is exact — it never
- * falls back to the legacy name.
- */
-function credentialsCandidates(): string[] {
-	const env = process.env;
-	const explicit =
-		trimmed(env.NEON_CONFIG_DIR) ?? trimmed(env.NEONCTL_CONFIG_DIR);
-	if (explicit) return [resolve(explicit, "credentials.json")];
-
-	const home = trimmed(env.HOME) ?? trimmed(env.USERPROFILE);
-	const base =
-		trimmed(env.XDG_CONFIG_HOME) ??
-		(home ? resolve(home, ".config") : null);
-	if (!base) return [];
-	return [
-		resolve(base, "neon", "credentials.json"),
-		resolve(base, "neonctl", "credentials.json"),
-	];
-}
-
-function trimmed(value: string | undefined): string | null {
-	const v = value?.trim();
-	return v ? v : null;
 }
 
 /**

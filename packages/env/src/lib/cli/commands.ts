@@ -53,6 +53,8 @@ export interface EnvResolveOptions {
 	projectId?: string;
 	branch?: string;
 	apiKey?: string;
+	/** Neon CLI profile whose stored credential to use. `--profile`, else `NEON_PROFILE`. */
+	profile?: string;
 }
 
 export interface EnvRunCommandOptions extends EnvResolveOptions {
@@ -197,6 +199,7 @@ async function loadConfigAndFetchEnv(
 		: {};
 	const apiKey = resolveApiKey({
 		...(options.apiKey ? { apiKey: options.apiKey } : {}),
+		...(options.profile ? { profile: options.profile } : {}),
 	});
 	const { vars } = await fetchEnvReusingSecrets(config, {
 		projectId: resolved.projectId,
