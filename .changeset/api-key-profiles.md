@@ -2,7 +2,7 @@
 "neon": minor
 "@neon/env": minor
 "neon-init": patch
-"@neon/config": patch
+"@neon/config": minor
 ---
 
 `neon profile create`, including API-key profiles, and an explicit `--profile` is no longer ignored
@@ -79,8 +79,11 @@ Fixed alongside it, all in the same area:
 **All three CLIs read credentials the same way now.** The credential, profile and config-path
 code moved to `shared/cli-core`, which `neon`, `@neon/env`, `neon-init` and `@neon/config`
 each compile into their own build — it is copied into `src/_shared` before they compile, so
-the code ships inside every `dist` and nothing new appears on the registry. `@neon/config/paths`
-re-exports the path half explicitly, so its public API is unchanged.
+the code ships inside every `dist` and nothing new appears on the registry. **`@neon/config/paths` is removed.** It only ever
+existed because implementor-only code had nowhere else to live: it was never documented in the
+package's README, and nothing outside this repo imported it. The resolution it exposed now
+reaches each CLI by being compiled into it, so a policy-facing package no longer carries
+filesystem and environment reads. `@neon/config` and `@neon/config/v1` are unchanged.
 
 The point of it is that the three stop disagreeing. `neon-env` gains `--profile` and honours
 `NEON_PROFILE`, so `neon --profile dbx env` and `neon-env` can no longer resolve different

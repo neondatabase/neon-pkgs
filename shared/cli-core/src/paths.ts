@@ -1,11 +1,11 @@
 /**
- * # `@neon/config/paths` — where the Neon CLIs keep their files on disk
+ * # Where the Neon CLIs keep their files on disk
  *
- * **Implementor-only, and deliberately impure.** This subpath reads environment variables
- * and touches the filesystem, which the root `@neon/config` export must never do — the same
- * split as `@neon/env` (pure) versus `@neon/env/runtime` (stateful). Import it from a CLI,
- * never from a `neon.ts` policy. It imports nothing from the rest of the package, so pulling
- * it in costs one module.
+ **Deliberately impure.** It reads environment variables and touches the filesystem, which
+ * `@neon/config` — the package this used to be a subpath of — must never do from its root
+ * export. It lives here instead of there precisely so that a policy-facing package does not
+ * carry implementor-only code, and so `neon-init`, which has no workspace dependencies, can use
+ * the same resolution as everything else.
  *
  * It exists because three separate readers each grew their own answer to "where is the
  * config directory", and all three disagreed: `packages/cli` honoured `XDG_CONFIG_HOME` but

@@ -292,14 +292,15 @@ the same thing with a subpath:
 | Entry point | For | Side effects |
 | --- | --- | --- |
 | `@neon/config` / `@neon/config/v1` | `neon.ts` policies, apps, anything embedding the toolchain | None. Never reads `process.env` or a file |
-| `@neon/config/paths` | Our own CLIs — `packages/cli`, `packages/env` | Reads env vars and stats the filesystem to locate the config directory |
 
 `paths` exists because three readers each grew their own answer to "where is the config
 directory" and all three disagreed: the CLI honoured `XDG_CONFIG_HOME` but not
 `NEONCTL_CONFIG_DIR`, `@neon/env` honoured the env var but not XDG, and `neon-init`
 hardcoded `~/.config/neonctl`. With `XDG_CONFIG_HOME` set, the CLI wrote credentials
-somewhere the other two never looked. **That implementation now lives in `shared/cli-core`
-and `@neon/config/paths` re-exports it** — see below.
+somewhere the other two never looked. **That implementation now lives in `shared/cli-core`**, and
+the `@neon/config/paths` subpath is gone — it was a workaround for having nowhere else to put
+implementor-only code, was never documented in the package's README, and nothing outside this
+repo imported it. See below.
 
 ### `shared/cli-core` — code every CLI compiles as its own
 
@@ -323,9 +324,9 @@ package all of this could hang off — is consumer-facing.
 builtins only, because `neon-init` has no workspace dependencies), and keep loggers, yargs and
 API clients out of it — take a callback or a value instead. Its own unit tests live in `packages/cli`; `@neon/env`
 also exercises it through `resolve-api-key.test.ts`, which is where the two CLIs' precedence is
-checked against each other. `@neon/config/paths` re-exports it **explicitly rather than
-with `export *`**, so the credential paths and ownership checks the CLIs need do not become
-public API the next time something is added.
+checked against each other. Nothing re-exports it from a published
+package: the code reaches each CLI by being compiled into it, so credential paths and ownership
+checks cannot become someone else's public API by accident.
 
 The directory is `neon`; `neonctl` is the pre-rename name and is **read forever, in place**.
 Nothing is moved, copied, or deleted, so a second copy of a credential can never go stale

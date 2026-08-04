@@ -2,7 +2,11 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
-import { configDir, legacyConfigDir, resolveConfigFile } from "./paths.js";
+import {
+	configDir,
+	legacyConfigDir,
+	resolveConfigFile,
+} from "./_shared/paths.js";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {

@@ -37,7 +37,7 @@
  *
  * An install with no `profiles.json` is already a valid `DEFAULT`-only state: `DEFAULT`
  * resolves to `credentials.json` in the config directory (including an existing one in the
- * legacy `neonctl` directory — see `@neon/config/paths`). Nothing is created until a second
+ * legacy `neonctl` directory — see `./paths.ts`). Nothing is created until a second
  * profile is, and nothing is ever moved.
  */
 

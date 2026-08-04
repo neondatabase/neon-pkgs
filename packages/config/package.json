@@ -32,11 +32,6 @@
 			"types": "./dist/v1.d.ts",
 			"import": "./dist/v1.js",
 			"default": "./dist/v1.js"
-		},
-		"./paths": {
-			"types": "./dist/paths.d.ts",
-			"import": "./dist/paths.js",
-			"default": "./dist/paths.js"
 		}
 	},
 	"files": [
@@ -45,12 +40,12 @@
 		"package.json"
 	],
 	"scripts": {
-		"build": "node ../../scripts/sync-shared.mjs . && tsc --noEmit && tsdown",
+		"build": "tsc --noEmit && tsdown",
 		"prepare": "npm run build",
-		"test": "node ../../scripts/sync-shared.mjs . && pnpm --filter @neon/config... build && vitest --passWithNoTests",
-		"test:ci": "node ../../scripts/sync-shared.mjs . && vitest run --passWithNoTests",
-		"test:types": "node ../../scripts/sync-shared.mjs . && vitest run --typecheck.enabled --typecheck.only",
-		"test:e2e": "node ../../scripts/sync-shared.mjs . && vitest run --config vitest.e2e.config.ts",
+		"test": "pnpm --filter @neon/config... build && vitest --passWithNoTests",
+		"test:ci": "vitest run --passWithNoTests",
+		"test:types": "vitest run --typecheck.enabled --typecheck.only",
+		"test:e2e": "vitest run --config vitest.e2e.config.ts",
 		"tsc": "tsc"
 	},
 	"devDependencies": {

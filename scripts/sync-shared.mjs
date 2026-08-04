@@ -5,14 +5,15 @@
  * copy rather than a workspace package: every build here emits bare specifiers, so shared code
  * has to be part of the consumer's own source to survive into a published `dist`.
  *
- * **One consumer per invocation, named by the caller.** An earlier version rewrote all four trees
+ * **One consumer per invocation, named by the caller.** An earlier version rewrote every tree
  * on every call, so a recursive `pnpm build` — which runs packages concurrently — could delete
  * `_shared` in one package while another was mid-copy or mid-compile.
  *
  * The copy goes to a temporary directory and is renamed into place, so a reader either sees the
  * previous tree or the new one, never a half-written mix.
  *
- * Tests are excluded: they run once, from `packages/cli`, rather than in every consumer.
+ * Consumers are `packages/{cli,env,init}`. Tests are excluded: they run once, from
+ * `packages/cli`, rather than in every consumer.
  */
 import { cpSync, mkdtempSync, renameSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
