@@ -497,7 +497,7 @@ describe("profile create", () => {
 
 		expect(code).toBe(1);
 		expect(stderr).toContain("cannot happen in CI");
-		expect(stderr).toContain("--api-key-stdin");
+		expect(stderr).toContain("--api-key -");
 	});
 
 	test("options after a -- terminator are refused, not silently dropped", async () => {

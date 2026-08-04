@@ -646,7 +646,7 @@ const createByMinting = async (props: CreateProps) => {
 	// make the same check itself, or this would sit waiting for a login nobody can complete.
 	if (isCi() && props.forceAuth !== true) {
 		throw new Error(
-			`--mint needs a browser sign-in, which cannot happen in CI. Mint the key with \`neon api-keys create --name ${name}\` and pipe it in: echo "$KEY" | neon profile create ${name} --api-key-stdin`,
+			`--mint needs a browser sign-in, which cannot happen in CI. Mint the key with \`neon api-keys create --name ${name}\` and pipe it in: echo "$KEY" | neon profile create ${name} --api-key -`,
 		);
 	}
 
