@@ -1,6 +1,6 @@
 import type yargs from "yargs";
 
-import { isNeonApiError } from "../api.js";
+import { isNeonApiError, type NeonApiClient } from "../api.js";
 import { log } from "../log.js";
 import type { CommonProps } from "../types.js";
 import { noPassthrough, single } from "../utils/flags.js";
@@ -255,7 +255,7 @@ const create = async (props: CreateProps) => {
 	// Project-scoped keys exist only on the organization endpoint, so an org is required.
 	// Resolve it from the project rather than asking for both: `--project-id` alone would
 	// otherwise fail for a reason that isn't visible from the command line.
-	const resolvedOrgId = await orgIdForProject(props, scopeTo);
+	const resolvedOrgId = await orgIdForProject(props.apiClient, scopeTo);
 	const { data } = await props.apiClient.createOrgApiKey(resolvedOrgId, {
 		key_name: name,
 		project_id: scopeTo,
@@ -430,15 +430,15 @@ const revoke = async (props: RevokeProps) => {
  * scoped key — the endpoint that accepts `project_id` is org-only — so that case fails here
  * with the reason, rather than as a 404 from a URL the user never typed.
  */
-const orgIdForProject = async (
-	props: CommonProps,
+export const orgIdForProject = async (
+	client: NeonApiClient,
 	projectId: string,
 ): Promise<string> => {
 	let orgId: string | undefined;
 	try {
 		const {
 			data: { project },
-		} = await props.apiClient.getProject(projectId);
+		} = await client.getProject(projectId);
 		orgId = project.org_id;
 	} catch (err) {
 		if (isNeonApiError(err) && err.status === 404) {
@@ -452,7 +452,7 @@ const orgIdForProject = async (
 	}
 	if (!orgId) {
 		throw new Error(
-			`Project ${projectId} does not belong to an organization, so it cannot have a project-scoped API key. Create an account key by omitting --project-id.`,
+			`Project ${projectId} does not belong to an organization, so it cannot have a project-scoped API key. Omit --project-id to create an account key.`,
 		);
 	}
 	return orgId;

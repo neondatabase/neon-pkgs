@@ -6,6 +6,7 @@ import { credentialInputs } from "../_shared/auth_selection.js";
 import {
 	API_KEY,
 	apiKeyCredentials,
+	type CredentialLocation,
 	credentialKind,
 	describeScope,
 	inspectCredentials,
@@ -29,7 +30,7 @@ import {
 	upsertProfile,
 } from "../_shared/profiles.js";
 import { writeSecretFile } from "../_shared/secure_file.js";
-import { getApiClient, type NeonApiClient } from "../api.js";
+import { getApiClient, isNeonApiError, type NeonApiClient } from "../api.js";
 import { auth, revokeToken } from "../auth.js";
 import { setAuthContext } from "../auth_context.js";
 import { isInsideConfigDir } from "../config.js";
@@ -44,6 +45,7 @@ import {
 import type { CommonProps, ExtendedTokenSet } from "../types.js";
 import { noPassthrough, single } from "../utils/flags.js";
 import { writer } from "../writer.js";
+import { orgIdForProject } from "./api_keys.js";
 import { authFlow, credentialsPathForName, usableCredential } from "./auth.js";
 
 type ProfileProps = CommonProps & {
@@ -121,7 +123,7 @@ export const builder = (argv: yargs.Argv) =>
 						},
 						force: {
 							describe:
-								"Replace the profile if it already exists",
+								"Replace an existing profile, revoking the credential it holds now",
 							type: "boolean",
 							default: false,
 						},
@@ -199,17 +201,43 @@ export const handler = (_args: yargs.Arguments) => {
 };
 
 /**
- * Refuse `--profile` on a `profile` subcommand.
+ * Refuse a global credential flag that a `profile` subcommand cannot honour.
  *
- * These commands name their target as a positional, so `--profile` has nothing to select and
- * was silently dropped — which is precisely the class of bug this command family exists to
- * stop. `.strict()` cannot catch it because `--profile` is a global option.
+ * These commands name their target as a positional and authenticate as that profile, so both
+ * `--profile` and `--api-key` have nothing to select here and were silently dropped — which is
+ * precisely the class of bug this command family exists to stop. `.strict()` cannot catch
+ * either, because both are global options and yargs has already accepted them.
+ *
+ * No "did you mean". The suggestion this used to make was built from the flag rather than the
+ * positional, so it renamed the target: `profile remove work --profile other` answered "did you
+ * mean `neon profile remove other`". Since the name is a required positional, that was wrong in
+ * every case it fired, and on `remove` it was copy-pasteable destructive advice for an account
+ * the user had not mentioned.
  */
-const rejectProfileFlag = (props: { profile?: string }, sub: string): void => {
+const rejectProfileFlag = (
+	props: { profile?: string; name: string },
+	sub: string,
+): void => {
 	const named = props.profile?.trim();
 	if (!named) return;
 	throw new Error(
-		`--profile does not apply to \`profile ${sub}\`, which takes the profile name as an argument. Did you mean \`neon profile ${sub} ${named}\`?`,
+		`--profile does not apply to \`profile ${sub}\`, which takes the profile name as an argument. You passed both "${props.name}" and --profile ${named}; drop --profile.`,
+	);
+};
+
+/**
+ * Refuse `--api-key` on a subcommand that authenticates as the profile it was given.
+ *
+ * The mirror image of the flag above, and it was the one left silent: `profile remove work
+ * --api-key napi_…` ignored the key, used the stored one, and reported a revoke failure against
+ * a credential the user had not passed. This PR exists because a dropped credential flag chose
+ * the wrong account; leaving that unsaid on the commands that manage credentials would be the
+ * same bug with the arguments swapped.
+ */
+const rejectApiKeyFlag = (sub: string, instead?: string): void => {
+	if (credentialInputs().apiKeyFlag.trim() === "") return;
+	throw new Error(
+		`--api-key does not apply to \`profile ${sub}\`, which uses the credential the profile already holds.${instead ? ` ${instead}` : ""}`,
 	);
 };
 
@@ -222,11 +250,11 @@ const rejectProfileFlag = (props: { profile?: string }, sub: string): void => {
  */
 const describeAuth = (
 	stored: StoredCredentials | null,
-	path: string,
+	at: CredentialLocation,
 ): string => {
 	if (stored === null) return "-";
 	try {
-		return credentialKind(stored, path) === API_KEY ? "api key" : "oauth";
+		return credentialKind(stored, at) === API_KEY ? "api key" : "oauth";
 	} catch (err) {
 		log.warning(err instanceof Error ? err.message : String(err));
 		return "invalid";
@@ -239,25 +267,32 @@ const describeAuth = (
  * Reports a damaged file as `invalid` and carries on, because one broken profile must not take
  * the whole listing with it — and unlike the authenticating path, listing has nothing to
  * recover, so the row itself is the report.
+ *
+ * One column answers "can this be used". A file whose JSON parses but whose `type` is
+ * unreadable used to show `File: ok` beside `Auth: invalid`, so the column a user scans to find
+ * the broken profile pointed at a different row than the one that was broken.
  */
 const inspectForListing = (
-	path: string,
+	at: CredentialLocation,
 ): { stored: StoredCredentials | null; auth: string; file: string } => {
-	const read = inspectCredentials(path);
+	const read = inspectCredentials(at.path);
 	if (read.kind === "unusable") {
 		log.warning(read.reason);
 		return { stored: null, auth: "-", file: "invalid" };
 	}
 	if (read.kind === "absent")
 		return { stored: null, auth: "-", file: "missing" };
+	const auth = describeAuth(read.credentials, at);
 	return {
 		stored: read.credentials,
-		auth: describeAuth(read.credentials, path),
-		file: "ok",
+		auth,
+		file: auth === "invalid" ? "invalid" : "ok",
 	};
 };
 
 const list = async (props: ProfileProps) => {
+	// Reading files on disk; a key would authenticate nothing here.
+	rejectApiKeyFlag("list");
 	// `list` is the one subcommand where `--profile` means something: it marks the active row.
 	// It still has to be a profile that exists, or the marker silently lands on nothing.
 	const active = selectProfileName(props.profile);
@@ -265,7 +300,10 @@ const list = async (props: ProfileProps) => {
 		resolveProfile(props.configDir, active);
 	}
 	const rows = listProfiles(props.configDir).map((p) => {
-		const { stored, auth, file } = inspectForListing(p.credentialsPath);
+		const { stored, auth, file } = inspectForListing({
+			path: p.credentialsPath,
+			profile: p.name,
+		});
 		const storedUserId =
 			typeof stored?.user_id === "string" ? stored.user_id : undefined;
 		return {
@@ -317,8 +355,10 @@ const list = async (props: ProfileProps) => {
  * own error message recommends impossible, and left a malformed file unremovable through the
  * CLI. There is nothing to revoke in a file we cannot parse, so this says so and moves on.
  */
-const readOutgoingCredential = (path: string): StoredCredentials | null => {
-	const read = inspectCredentials(path);
+const readOutgoingCredential = (
+	at: CredentialLocation,
+): StoredCredentials | null => {
+	const read = inspectCredentials(at.path);
 	const unusable = (reason: string): null => {
 		// `reason` comes from two sources, one of which ends in a period. Trim it so the
 		// sentence does not run "…api_key".. Nothing in it…".
@@ -335,7 +375,7 @@ const readOutgoingCredential = (path: string): StoredCredentials | null => {
 	// A declared kind we do not recognise is the same situation as unparseable: there is
 	// nothing here we know how to revoke, and refusing would make the file undeletable.
 	try {
-		credentialKind(read.credentials, path);
+		credentialKind(read.credentials, at);
 	} catch (err) {
 		return unusable(err instanceof Error ? err.message : String(err));
 	}
@@ -349,7 +389,15 @@ const credentialsPathFor = (configDir: string, name: string): string => {
 	return newProfileCredentialsPath(configDir, name);
 };
 
-/** Refuse to overwrite an existing profile unless asked to. */
+/**
+ * Refuse to overwrite an existing profile unless asked to, and say what `--force` destroys.
+ *
+ * Naming the consequence is the point. `--force` does not merely point the profile somewhere
+ * else: {@link retirePreviousCredential} revokes the credential being replaced, so a key this
+ * CLI minted dies upstream — including the copy the user pasted into CI or another machine,
+ * which is not recoverable, only re-mintable. A message promising "replace its credential"
+ * described a local edit and made the irreversible half a surprise.
+ */
 const assertReplaceable = (props: CreateProps): void => {
 	const { name, configDir, force } = props;
 	if (force) return;
@@ -357,16 +405,25 @@ const assertReplaceable = (props: CreateProps): void => {
 	const path = credentialsPathFor(configDir, name);
 	if (!declared && !(name === DEFAULT_PROFILE && existsSync(path))) return;
 
+	const existing = inspectCredentials(path);
+	const stored = existing.kind === "ok" ? existing.credentials : null;
 	// Only offer `rotate-key` when it would actually work: it refuses anything that is not
 	// already an API-key profile, and `DEFAULT` is an OAuth profile on nearly every install.
-	const existing = inspectCredentials(path);
-	const rotatable =
-		existing.kind === "ok" &&
-		credentialKind(existing.credentials, path) === API_KEY;
+	const holdsKey =
+		stored !== null &&
+		credentialKind(stored, { path, profile: name }) === API_KEY;
+	const keyId =
+		typeof stored?.key_id === "number" ? stored.key_id : undefined;
+
+	if (holdsKey) {
+		throw new Error(
+			keyId !== undefined
+				? `Profile "${name}" already exists and holds an API key minted here (id ${keyId}). Pass --force to replace it — the key is revoked, wherever else it is in use. To keep the profile and swap the key instead: \`neon profile rotate-key ${name}\`.`
+				: `Profile "${name}" already exists and holds an API key you supplied, which stays live on the account either way — only keys minted here record an id to revoke. Pass --force to replace it locally, or \`neon profile rotate-key ${name}\` to mint one at the same scope.`,
+		);
+	}
 	throw new Error(
-		rotatable
-			? `Profile "${name}" already exists. Pass --force to replace its credential, or \`neon profile rotate-key ${name}\` to mint a fresh key for it.`
-			: `Profile "${name}" already exists. Pass --force to replace its credential.`,
+		`Profile "${name}" already exists and holds a browser sign-in. Pass --force to replace it — the session is signed out as part of the replacement.`,
 	);
 };
 
@@ -427,6 +484,8 @@ const readKeyFromStdin = (): string => {
 const verifyKey = async (
 	props: CommonProps,
 	apiKey: string,
+	/** Where the key came from, so a rejection can say what to do about it. */
+	origin: "supplied" | "minted" = "supplied",
 ): Promise<{
 	label?: string;
 	userId?: string;
@@ -435,7 +494,22 @@ const verifyKey = async (
 	apiClient: NeonApiClient;
 }> => {
 	const apiClient = getApiClient({ apiKey, apiHost: props.apiHost });
-	const { data: details } = await apiClient.getAuthDetails();
+	const { data: details } = await apiClient
+		.getAuthDetails()
+		.catch((err: unknown) => {
+			// `profile` skips `ensureAuth`, so nothing recorded how this call authenticated and
+			// the top-level handler falls back to "Check --api-key or NEON_API_KEY" — while
+			// this command's own help says it ignores `NEON_API_KEY`. An agent reads that and
+			// exports the variable to no effect.
+			if (isNeonApiError(err) && err.status === 401) {
+				throw new Error(
+					origin === "minted"
+						? "Neon rejected the key it had just minted. Nothing was stored; the key is being revoked."
+						: "The Neon API rejected the key passed to --api-key. Check the value, or use --mint to have one minted for this profile.",
+				);
+			}
+			throw err;
+		});
 	if (!isApiKeyMethod(details.auth_method)) {
 		throw new Error(notAnApiKeyMessage(details.auth_method));
 	}
@@ -483,8 +557,19 @@ const create = async (props: CreateProps) => {
 	// No key and no --mint means a browser sign-in, which is exactly `neon auth --profile`.
 	// Delegating rather than reimplementing keeps one OAuth path in the CLI.
 	if (!suppliedKey) {
+		// The no-flag form is the one an agent reaches for first, and `authFlow` answers it
+		// with a bare "Cannot run interactive auth in CI" — true, and no way forward. Say the
+		// same thing `--mint` says, since the two ways out are the same.
+		if (isCi() && props.forceAuth !== true) {
+			throw new Error(
+				`\`neon profile create ${name}\` with no key signs in through the browser, which cannot happen in CI. Pass a key instead: \`neon profile create ${name} --api-key "$KEY"\`, or pipe it with \`echo "$KEY" | neon profile create ${name} --api-key -\`.`,
+			);
+		}
 		const credentialsPath = credentialsPathFor(props.configDir, name);
-		const previous = readOutgoingCredential(credentialsPath);
+		const previous = readOutgoingCredential({
+			path: credentialsPath,
+			profile: name,
+		});
 		// `authFlow` reports its own failure and returns an empty token rather than throwing,
 		// so claiming success here would leave the user with no profile and no error.
 		if ((await authFlow({ ...props, _: ["auth"], profile: name })) === "") {
@@ -509,7 +594,10 @@ const create = async (props: CreateProps) => {
 	const apiKey = resolveKeyToStore(props);
 	const identity = await verifyKey(props, apiKey);
 	const credentialsPath = credentialsPathFor(props.configDir, name);
-	const previous = readOutgoingCredential(credentialsPath);
+	const previous = readOutgoingCredential({
+		path: credentialsPath,
+		profile: name,
+	});
 
 	writeCredentials(
 		credentialsPath,
@@ -681,9 +769,12 @@ const createByMinting = async (props: CreateProps) => {
 		const scope = await resolveMintScope(props, session);
 		mintedScope = scope;
 		minted = await mintKey(session, name, scope);
-		const identity = await verifyKey(props, minted.key);
+		const identity = await verifyKey(props, minted.key, "minted");
 		const credentialsPath = credentialsPathFor(props.configDir, name);
-		const previous = readOutgoingCredential(credentialsPath);
+		const previous = readOutgoingCredential({
+			path: credentialsPath,
+			profile: name,
+		});
 
 		writeCredentials(
 			credentialsPath,
@@ -750,15 +841,13 @@ const resolveMintScope = async (
 	if (props.projectId === undefined) {
 		return props.orgId !== undefined ? { orgId: props.orgId } : {};
 	}
-	const {
-		data: { project },
-	} = await client.getProject(props.projectId);
-	if (!project.org_id) {
-		throw new Error(
-			`Project ${props.projectId} does not belong to an organization, so it cannot have a project-scoped API key. Omit --project-id, or pass --org-id.`,
-		);
-	}
-	return { orgId: project.org_id, projectId: props.projectId };
+	// `api-keys create`'s lookup, not a second one. It already answers the mistake this flag
+	// invites — an organization id typed into the project slot — and a local copy meant the
+	// same typo got a written explanation there and a raw 404 here.
+	return {
+		orgId: await orgIdForProject(client, props.projectId),
+		projectId: props.projectId,
+	};
 };
 
 /**
@@ -791,7 +880,10 @@ const retirePreviousCredential = async (
 
 	// Already classified by `readOutgoingCredential`, which is the only way a credential
 	// reaches here.
-	if (credentialKind(existing, credentialsPath) === API_KEY) {
+	if (
+		credentialKind(existing, { path: credentialsPath, profile: name }) ===
+		API_KEY
+	) {
 		const keyId =
 			typeof existing.key_id === "number" ? existing.key_id : undefined;
 		if (keyId === undefined) {
@@ -897,10 +989,15 @@ const withdrawKey = async (
 const rotateKey = async (props: ProfileProps & { name: string }) => {
 	const { name } = props;
 	rejectProfileFlag(props, "rotate-key");
+	rejectApiKeyFlag(
+		"rotate-key",
+		`To store a key you already have, use \`neon profile create ${name} --api-key - --force\`.`,
+	);
 	// Resolve first: an unknown profile must fail having minted nothing.
 	const profile = resolveProfile(props.configDir, name);
 
-	const credential = await usableCredential(props, profile.credentialsPath);
+	const at = { path: profile.credentialsPath, profile: name };
+	const credential = await usableCredential(props, at);
 	if (credential === null) {
 		throw new Error(
 			`Profile "${name}" has no usable credential to mint with. Replace it with \`neon profile create ${name} --mint --force\`.`,
@@ -914,7 +1011,7 @@ const rotateKey = async (props: ProfileProps & { name: string }) => {
 		);
 	}
 
-	const stored = readCredentials(profile.credentialsPath);
+	const stored = readCredentials(at);
 	const scope = stored !== null ? scopeOf(stored) : {};
 	const previousKeyId =
 		typeof stored?.key_id === "number" ? stored.key_id : undefined;
@@ -1026,13 +1123,22 @@ const rotateKey = async (props: ProfileProps & { name: string }) => {
 const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 	const { name } = props;
 	rejectProfileFlag(props, "remove");
+	rejectApiKeyFlag(
+		"remove",
+		"It revokes the credential stored for that profile, which is the only one it can revoke.",
+	);
 	// Resolve before touching anything: an unknown name must fail having deleted nothing.
 	const profile = resolveProfile(props.configDir, name);
 
 	if (!props.yes) {
-		if (isCi()) {
+		// Both halves, as every other prompt in the CLI checks. `isCi()` alone left the shape
+		// a pipeline actually produces — stdin held by a pipe, `CI` unset — where `prompts`
+		// draws a question nobody can answer: with stdin open it waits for input that never
+		// comes, and at EOF it resolves to nothing, the event loop drains, and the process
+		// exits 0 having removed nothing. Exiting 0 is the worse half: an agent reads success.
+		if (isCi() || !process.stdin.isTTY) {
 			throw new Error(
-				"Refusing to remove a profile without confirmation in CI. Pass --yes.",
+				"Refusing to remove a profile without confirmation when stdin is not a terminal. Pass --yes.",
 			);
 		}
 		const who = profile.label ?? profile.userId ?? "unknown account";
@@ -1042,19 +1148,20 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 			message: `Remove profile "${name}" (${who})?`,
 			initial: false,
 		});
+		// Non-zero, because nothing was removed. A caller that scripts this reads the exit
+		// code, and answering "no" is not the same outcome as removing the profile.
 		if (!ok) {
-			log.info("Cancelled.");
-			return;
+			throw new Error(`Cancelled — profile "${name}" was not removed.`);
 		}
 	}
 
 	// 1. Revoke upstream where we can, so the credential dies rather than merely becoming
 	//    unreachable by us. Best-effort: a profile is often removed precisely because its
 	//    access already broke.
-	const stored = readOutgoingCredential(profile.credentialsPath);
+	const at = { path: profile.credentialsPath, profile: name };
+	const stored = readOutgoingCredential(at);
 	const holdsApiKey =
-		stored !== null &&
-		credentialKind(stored, profile.credentialsPath) === API_KEY;
+		stored !== null && credentialKind(stored, at) === API_KEY;
 
 	if (holdsApiKey) {
 		const keyId =

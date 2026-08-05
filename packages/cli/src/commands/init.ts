@@ -62,7 +62,7 @@ export const handler = async (argv: {
 		argv.profile?.trim() || credentialInputs().profileEnv.trim();
 	if (selectedProfile) {
 		const how = argv.profile?.trim()
-			? "--profile"
+			? "--profile was passed, so"
 			: "NEON_PROFILE is set, so";
 		throw new Error(
 			`${how} \`neon init\` would run as the default account instead of "${selectedProfile}", and it does not support profile selection yet. Run it without one, or set the project up with \`neon --profile ${selectedProfile} link\`.`,

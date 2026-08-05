@@ -235,9 +235,15 @@ describe("API-key profiles against the live API", () => {
 				});
 
 				expect(stored.code).toBe(1);
-				expect(stored.stderr).toMatch(
-					/authentication failed|rejected/i,
+				// `profile` skips `ensureAuth`, so nothing records how the call authenticated
+				// and the top-level handler used to answer with "Check --api-key or
+				// NEON_API_KEY" — while this command's own help says it ignores
+				// `NEON_API_KEY`. An agent reads that and exports the variable to no effect.
+				expect(stored.stderr).toContain(
+					"The Neon API rejected the key passed to --api-key",
 				);
+				expect(stored.stderr).not.toContain("NEON_API_KEY");
+				expect(stored.stderr).toContain("--mint");
 				expect(() =>
 					readFileSync(
 						resolve(deadDir, "credentials.dead.json"),
@@ -250,6 +256,36 @@ describe("API-key profiles against the live API", () => {
 			} finally {
 				rmSync(deadDir, { recursive: true, force: true });
 			}
+		},
+	);
+
+	// `profile create --mint --project-id` resolves the owning organization through the same
+	// `orgIdForProject` this exercises, rather than a second copy of the lookup — a copy is
+	// how the identical typo came to get a written explanation from `api-keys create` and a
+	// raw 404 from `profile create`. Reached through `api-keys` because the mint path needs a
+	// browser sign-in first; the lookup and its message are the shared part.
+	e2eTest(
+		"an organization id in the project slot is explained, not 404'd",
+		async () => {
+			const result = await runCli(
+				[
+					"api-keys",
+					"create",
+					"--name",
+					"never-created",
+					"--project-id",
+					"org-not-a-project-id",
+				],
+				{ json: false },
+			);
+
+			expect(result.code).toBe(1);
+			expect(result.stderr).toContain(
+				"That looks like an organization id",
+			);
+			expect(result.stderr).toContain("--org-id");
+			// The lookup happens before anything is created, so the refusal costs nothing.
+			expect(result.stderr).not.toContain("napi_");
 		},
 	);
 });

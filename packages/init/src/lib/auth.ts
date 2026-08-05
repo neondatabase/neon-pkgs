@@ -5,6 +5,7 @@ import {
 	interpretCredentials,
 } from "../_shared/credentials.js";
 import { resolveConfigFile } from "../_shared/paths.js";
+import { DEFAULT_PROFILE } from "../_shared/profiles.js";
 
 export interface AuthOptions {
 	json?: boolean;
@@ -68,7 +69,12 @@ async function getNeonctlAccessToken(): Promise<string | null> {
 		const { path } = resolveConfigFile("credentials.json");
 		const read = inspectCredentials(path);
 		if (read.kind !== "ok") return null;
-		const credential = interpretCredentials(read.credentials, path);
+		// `neon init` has no profile selection — it reads the default credential and refuses
+		// when one is named, so `DEFAULT` is the only profile this can ever be about.
+		const credential = interpretCredentials(read.credentials, {
+			path,
+			profile: DEFAULT_PROFILE,
+		});
 		if (credential.kind === "api_key") return credential.apiKey;
 		const token = read.credentials.access_token;
 		return typeof token === "string" && token.trim() !== "" ? token : null;

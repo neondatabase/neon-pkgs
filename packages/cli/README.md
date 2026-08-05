@@ -669,9 +669,9 @@ Profiles
 ```
 
 `Scope` is what a key can reach; an OAuth session has none of its own, so it shows `-`. `File`
-says whether the credentials file is readable — `ok`, `invalid` or `missing` — which is not the
-same as the credential still working; only using it shows that. The table shows the file name,
-`--output json` the full path.
+says whether the credentials file can be read and understood — `ok`, `invalid` or `missing` —
+which is not the same as the credential still working; only using it shows that. The table shows
+the file name, `--output json` the full path.
 
 Select one per invocation with `--profile`, or per shell with `NEON_PROFILE`. There is no `profile use` command and nothing is stored about which profile is "current", so what you type is always what runs.
 
@@ -687,21 +687,41 @@ Entries in `profiles.json` are paths, and a path may point anywhere — which is
 }
 ```
 
-`neon profile remove` revokes the refresh token at the authorization server, not just locally. It deletes the credentials file only when the CLI created it: an adopted path like the one above is unlinked and left on disk, and the command says so. Removing the last named profile deletes `profiles.json`, returning you to the single-account layout. `neon profile remove DEFAULT` signs you out.
+`neon profile remove` revokes what the profile holds — an OAuth refresh token at the
+authorization server, or an API key this CLI minted — rather than only forgetting it locally. A
+key you supplied is the exception and stays live, because nothing records its id; the command
+says so. It asks for confirmation first, which `--yes` skips; without a terminal on stdin, in
+CI or behind a pipe, it refuses rather than prompting into the void. It deletes the credentials
+file only when the CLI created it: an adopted path like the one above is unlinked and left on
+disk, and the command says so. Removing the last named profile deletes `profiles.json`,
+returning you to the single-account layout. `neon profile remove DEFAULT` signs you out.
 
 ### A profile holds either a sign-in or an API key
 
 `neon profile create` makes a profile, and how you call it decides which kind of credential it holds. A key-backed profile is what you want for an agent, a shared machine, or anything that must never be interrupted by a browser:
 
 ```bash
-neon profile create work                                 # sign in with the browser, like `neon auth`
-neon profile create work --api-key "$KEY"                # store a key you already have
-echo "$KEY" | neon profile create work --api-key -        # or pipe it, keeping it out of argv
-neon profile create ci --mint                            # sign in once, keep only a minted key
-neon profile create ci --mint --org-id org-abc-123        # minted for an organization
-neon profile create ci --mint --project-id proj-1         # minted for one project only
-neon profile create work --force                          # replace an existing profile
-neon profile rotate-key work                              # mint a replacement, revoke the old one
+neon profile create work                            # sign in with the browser, like `neon auth`
+neon profile create work --api-key "$KEY"           # store a key you already have
+echo "$KEY" | neon profile create work --api-key -  # or pipe it, keeping it out of argv
+neon profile create ci --mint                       # sign in once, keep only a minted key
+neon profile create ci --mint --org-id org-abc-123  # minted for an organization
+neon profile create ci --mint --project-id proj-1   # minted for one project only
+neon profile create work --force                    # replace it, revoking what it holds now
+neon profile rotate-key work                        # mint a replacement, revoke the old one
+```
+
+`--force` is not only a local edit: replacing a profile revokes the credential it held, so a key
+this CLI minted stops working everywhere it was pasted, and an OAuth session is signed out.
+Without `--force`, `create` refuses and names what would be revoked. To keep a working profile
+and swap only its key, use `rotate-key`.
+
+`create` and `rotate-key` print the profile they wrote, so an agent needn't follow up with
+`list`. Under `--output json` that is a record, and it never carries the secret:
+
+```console
+$ neon profile create ci --mint --org-id org-abc-123 --output json
+{"name":"ci","account":"organization org-abc-123","auth":"api key","scope":"org org-abc-123","keyId":3239771,"credentials":"/home/me/.config/neon/credentials.ci.json"}
 ```
 
 One flag takes the key, because the shell already covers the variations: `--api-key "$(cat
@@ -835,7 +855,7 @@ API keys in org-7
 | Command                                                                    | Subcommands                                                                                                  | Description                        |
 | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------- |
 | [auth](https://neon.com/docs/reference/cli-auth)                           |                                                                                                              | Authenticate                       |
-| profiles                                                                   | `list`, `create`, `rotate-key`, `remove`                                                                     | Manage named sets of credentials   |
+| profile                                                                    | `list`, `create`, `rotate-key`, `remove`                                                                     | Manage named sets of credentials   |
 | api-keys                                                                   | `list`, `create`, `revoke`                                                                                   | Manage API keys                    |
 | [projects](https://neon.com/docs/reference/cli-projects)                   | `list`, `create`, `update`, `delete`, `get`                                                                  | Manage projects                    |
 | [ip-allow](https://neon.com/docs/reference/cli-ip-allow)                   | `list`, `add`, `remove`, `reset`                                                                             | Manage IP Allow                    |

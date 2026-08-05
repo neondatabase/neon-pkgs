@@ -167,19 +167,60 @@ describe("credential selection", () => {
 		);
 	});
 
-	test("a profile command accepts --api-key without complaining", async () => {
-		const dir = makeConfigDir({ "credentials.json": OAUTH_FILE });
+	// The mirror image of the flag pair above, and the half that was left silent: `--api-key`
+	// is global, so `.strict()` cannot see it, and these three commands took it, ignored it,
+	// and acted on the stored credential instead. On `remove` that produced a revoke failure
+	// against a credential the user had not passed.
+	test.each([
+		["list", []],
+		["rotate-key", ["work"]],
+		["remove", ["work", "--yes"]],
+	])("profile %s refuses --api-key rather than ignoring it", async (sub, rest) => {
+		const dir = makeConfigDir({
+			"credentials.json": OAUTH_FILE,
+			"credentials.work.json": API_KEY_FILE,
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: {
+					DEFAULT: { credentials: "credentials.json" },
+					work: { credentials: "credentials.work.json" },
+				},
+			}),
+		});
 		const { code, stderr } = await runCli([
 			"profile",
-			"list",
+			sub,
+			...rest,
 			"--config-dir",
 			dir,
 			"--api-key",
 			"napi_flagkey",
 		]);
 
-		expect(code).toBe(0);
+		expect(code).toBe(1);
+		expect(stderr).toContain(
+			`--api-key does not apply to \`profile ${sub}\``,
+		);
+		// Refused for its own reason, not routed through the flag-pair conflict.
 		expect(stderr).not.toContain("not both");
+		// Nothing was removed on the way to refusing.
+		expect(existsSync(resolve(dir, "credentials.work.json"))).toBe(true);
+	});
+
+	// `create` is the one that stores a key, so the flag has to keep working there.
+	test("profile create still takes --api-key", async () => {
+		const dir = makeConfigDir({});
+		const { stderr } = await runCli([
+			"profile",
+			"create",
+			"work",
+			"--config-dir",
+			dir,
+			"--api-key",
+			"napi_flagkey",
+		]);
+
+		expect(stderr).not.toContain("does not apply");
 	});
 });
 
@@ -287,11 +328,24 @@ describe("profile list", () => {
 		expect(code).toBe(0);
 		expect(JSON.parse(stdout)).toEqual(
 			expect.arrayContaining([
-				expect.objectContaining({ name: "odd", auth: "invalid" }),
-				expect.objectContaining({ name: "DEFAULT", auth: "oauth" }),
+				// One column answers "can this be used". Reporting `file: "ok"` beside `auth:
+				// "invalid"` sent anyone scanning for the broken profile to a different row.
+				expect.objectContaining({
+					name: "odd",
+					auth: "invalid",
+					file: "invalid",
+				}),
+				expect.objectContaining({
+					name: "DEFAULT",
+					auth: "oauth",
+					file: "ok",
+				}),
 			]),
 		);
 		expect(stderr).toContain('unrecognised "type": "keychain"');
+		// The one credential error that used to be a dead end: it throws before the reader
+		// that appends a repair, so it had to grow its own.
+		expect(stderr).toContain("`neon profile create odd --force`");
 	});
 });
 
@@ -323,6 +377,101 @@ describe("profile create", () => {
 		expect(stderr).toContain("--force");
 	});
 
+	// What `--force` costs, before it is paid. Replacing a profile revokes the credential it
+	// holds, so a key this CLI minted dies wherever else it was pasted — and the message that
+	// said "replace its credential" described a local edit, which is the half a user would
+	// have agreed to.
+	test("says the key --force revokes, and names it", async () => {
+		const dir = makeConfigDir({
+			"credentials.work.json": JSON.stringify({
+				type: "api_key",
+				api_key: "napi_minted_here",
+				key_id: 4242,
+			}),
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { work: { credentials: "credentials.work.json" } },
+			}),
+		});
+		const { code, stderr } = await runCli([
+			"profile",
+			"create",
+			"work",
+			"--config-dir",
+			dir,
+			"--api-key",
+			"napi_replacement",
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("id 4242");
+		expect(stderr).toContain("the key is revoked");
+		// The non-destructive alternative, since the user's goal is usually a working key.
+		expect(stderr).toContain("neon profile rotate-key work");
+	});
+
+	// A key we did not mint records no id, so it survives the replacement. Claiming otherwise
+	// in either direction is the problem: this one is warned about at `remove` too.
+	test("says a supplied key stays live either way", async () => {
+		const dir = makeConfigDir({
+			"credentials.work.json": API_KEY_FILE,
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { work: { credentials: "credentials.work.json" } },
+			}),
+		});
+		const { code, stderr } = await runCli([
+			"profile",
+			"create",
+			"work",
+			"--config-dir",
+			dir,
+			"--api-key",
+			"napi_replacement",
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("stays live on the account either way");
+	});
+
+	test("says the session --force replaces is signed out", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": OAUTH_FILE,
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { DEFAULT: { credentials: "credentials.json" } },
+			}),
+		});
+		const { code, stderr } = await runCli([
+			"profile",
+			"create",
+			"DEFAULT",
+			"--config-dir",
+			dir,
+			"--api-key",
+			"napi_replacement",
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("holds a browser sign-in");
+		expect(stderr).toContain("signed out as part of the replacement");
+	});
+
+	// The no-flag form is what an agent tries first, and `authFlow` answered it with a bare
+	// "Cannot run interactive auth in CI" — true, and with no way forward from it.
+	test("with no key in CI, says how to pass one instead", async () => {
+		const dir = makeConfigDir({});
+		const { code, stderr } = await runCli(
+			["profile", "create", "ci", "--config-dir", dir],
+			{ CI: "true" },
+		);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("cannot happen in CI");
+		expect(stderr).toContain('neon profile create ci --api-key "$KEY"');
+		expect(stderr).toContain("--api-key -");
+	});
+
 	test("names every way to supply a key when given none", async () => {
 		const dir = makeConfigDir({});
 		const { code, stderr } = await runCli([
@@ -337,20 +486,6 @@ describe("profile create", () => {
 
 		expect(code).toBe(1);
 		expect(stderr).toContain("only apply with --mint");
-	});
-
-	// `--mint` is the other way to get one, and the message has to name both.
-	test("says what to pass when given no way to get a credential", async () => {
-		const dir = makeConfigDir({});
-		const { code, stderr } = await runCli(
-			["profile", "create", "work", "--config-dir", dir],
-			{ CI: "true" },
-		);
-
-		// With no key flag it signs in instead, which CI refuses — so reach the guidance by
-		// asking for a key profile without saying where the key comes from.
-		expect(code).toBe(1);
-		expect(stderr).toContain("Cannot run interactive auth in CI");
 	});
 
 	test("--mint with a supplied key is refused rather than one being ignored", async () => {
@@ -675,7 +810,7 @@ describe("replacing a profile is atomic", () => {
 		);
 
 		expect(code).toBe(1);
-		expect(stderr).toContain("Cannot run interactive auth in CI");
+		expect(stderr).toContain("cannot happen in CI");
 		expect(
 			readFileSync(resolve(dir, "credentials.work.json"), "utf8"),
 		).toBe(before);
@@ -727,6 +862,30 @@ describe("a damaged credentials file", () => {
 		expect(stderr).toContain("Replace it deliberately");
 		// It did not go on to authenticate over the top of it.
 		expect(stderr).not.toContain("Awaiting authentication");
+	});
+
+	// The repair has to be runnable as printed. It named a literal `<name>`, which an agent
+	// runs verbatim and is told `Invalid profile name "<name>"` for.
+	test("the repair names the profile that points at the file", async () => {
+		const dir = makeConfigDir({
+			"credentials.work.json": "{ not json",
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { work: { credentials: "credentials.work.json" } },
+			}),
+		});
+		const { code, stderr } = await runCli([
+			"projects",
+			"list",
+			"--config-dir",
+			dir,
+			"--profile",
+			"work",
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("`neon profile create work --force`");
+		expect(stderr).not.toContain("<name>");
 	});
 
 	// The repair the error recommends has to actually run. Reading the outgoing credential
@@ -869,8 +1028,13 @@ describe("neon init and profile selection", () => {
 		]);
 
 		expect(code).toBe(1);
-		expect(stderr).toContain("--profile");
 		expect(stderr).toContain("does not support profile selection yet");
+		// Both spellings of "how this profile got selected" have to read as English. The
+		// flag branch was a bare "--profile", so the sentence started with no verb:
+		// "--profile `neon init` would run as the default account instead of …".
+		expect(stderr).toContain(
+			"--profile was passed, so `neon init` would run",
+		);
 	});
 });
 
@@ -903,6 +1067,58 @@ describe("profile remove", () => {
 		expect(stderr).not.toContain("Revoked the OAuth token");
 		expect(stderr).not.toContain("napi_supersecretkeyvalue");
 	});
+
+	// Guarded on `isCi()` alone, this was the shape a pipeline actually produces — stdin held
+	// by a pipe, `CI` unset — and `prompts` drew a question nobody could answer. At EOF it
+	// resolved to nothing and the process exited **0** having removed the profile it named,
+	// which an agent reads as success. Every other prompt in the CLI checks both.
+	//
+	// `runCli` always closes stdin, so this is that case without arranging anything.
+	test("refuses to prompt when stdin is not a terminal", async () => {
+		const dir = makeConfigDir({
+			"credentials.work.json": API_KEY_FILE,
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { work: { credentials: "credentials.work.json" } },
+			}),
+		});
+		const { code, stderr } = await runCli([
+			"profile",
+			"remove",
+			"work",
+			"--config-dir",
+			dir,
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("stdin is not a terminal");
+		expect(stderr).toContain("--yes");
+		// The half that made exiting 0 dangerous: it really was still there.
+		expect(existsSync(resolve(dir, "credentials.work.json"))).toBe(true);
+		expect(readFileSync(resolve(dir, "profiles.json"), "utf8")).toContain(
+			"work",
+		);
+	});
+
+	// Same guard, reached the other way. Kept as its own case because CI is where an
+	// unattended run is most likely to be reading the exit code and nothing else.
+	test("refuses to prompt in CI", async () => {
+		const dir = makeConfigDir({
+			"credentials.work.json": API_KEY_FILE,
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { work: { credentials: "credentials.work.json" } },
+			}),
+		});
+		const { code, stderr } = await runCli(
+			["profile", "remove", "work", "--config-dir", dir],
+			{ CI: "true" },
+		);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("Pass --yes");
+		expect(existsSync(resolve(dir, "credentials.work.json"))).toBe(true);
+	});
 });
 
 describe("profile rotate-key", () => {
@@ -924,5 +1140,46 @@ describe("profile rotate-key", () => {
 		expect(code).toBe(1);
 		expect(stderr).toContain("no usable credential");
 		expect(stderr).toContain("neon profile create work --mint --force");
+	});
+});
+
+describe("--profile on a subcommand that takes a name", () => {
+	// The suggestion this used to make was built from the flag rather than the positional, so
+	// it renamed the target: `remove work --profile other` answered "did you mean `neon
+	// profile remove other`". The name is a required positional, so that was wrong every time
+	// it fired — and on `remove` it was copy-pasteable destructive advice for an account the
+	// user had never mentioned.
+	test.each([
+		"create",
+		"rotate-key",
+		"remove",
+	])("profile %s names both values and suggests nothing", async (sub) => {
+		const dir = makeConfigDir({
+			"credentials.work.json": API_KEY_FILE,
+			"credentials.other.json": API_KEY_FILE,
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: {
+					work: { credentials: "credentials.work.json" },
+					other: { credentials: "credentials.other.json" },
+				},
+			}),
+		});
+		const { code, stderr } = await runCli([
+			"profile",
+			sub,
+			"work",
+			"--config-dir",
+			dir,
+			"--profile",
+			"other",
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain('You passed both "work" and --profile other');
+		expect(stderr).toContain("drop --profile");
+		expect(stderr).not.toContain("Did you mean");
+		// Nothing was acted on, least of all the profile named only by the flag.
+		expect(existsSync(resolve(dir, "credentials.other.json"))).toBe(true);
 	});
 });

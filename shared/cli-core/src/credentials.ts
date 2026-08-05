@@ -72,6 +72,20 @@ export type StoredCredentials = {
 };
 
 /**
+ * Where a credential lives, and which profile points at it.
+ *
+ * Both halves are needed to report a broken file: the path says which file to open, and the
+ * profile is what every recovery command takes as its argument. Carrying only the path is what
+ * produced errors telling the user to run `neon profile create <name> --force` with the
+ * placeholder intact — a command an agent will run verbatim and be told `Invalid profile name
+ * "<name>"`.
+ */
+export type CredentialLocation = {
+	path: string;
+	profile: string;
+};
+
+/**
  * Which credential in this file authenticates, by declaration alone.
  *
  * An unrecognised `type` throws rather than falling back to `oauth`. A file we cannot
@@ -85,15 +99,24 @@ export type StoredCredentials = {
  */
 export const credentialKind = (
 	credentials: StoredCredentials,
-	path: string,
+	at: CredentialLocation,
 ): CredentialKind => {
 	const declared = credentials.type;
 	if (declared === undefined || declared === OAUTH) return OAUTH;
 	if (declared === API_KEY) return API_KEY;
 	throw new Error(
-		`${path} has an unrecognised "type": ${JSON.stringify(declared)}. Expected "${OAUTH}" or "${API_KEY}".`,
+		`${at.path} has an unrecognised "type": ${JSON.stringify(declared)}. Expected "${OAUTH}" or "${API_KEY}". ${repair(at)}`,
 	);
 };
+
+/**
+ * The way out of a credentials file that cannot be read.
+ *
+ * One sentence, shared by every such error, because they all have the same two answers: write
+ * a new credential over it, or delete it and start again.
+ */
+const repair = (at: CredentialLocation): string =>
+	`Replace it deliberately with \`neon profile create ${at.profile} --force\`, or delete the file.`;
 
 /** A credentials file resolved far enough to authenticate with. */
 export type InterpretedCredentials =
@@ -109,13 +132,13 @@ export type InterpretedCredentials =
  */
 export const interpretCredentials = (
 	credentials: StoredCredentials,
-	path: string,
+	at: CredentialLocation,
 ): InterpretedCredentials => {
-	if (credentialKind(credentials, path) === OAUTH) return { kind: OAUTH };
+	if (credentialKind(credentials, at) === OAUTH) return { kind: OAUTH };
 	const apiKey = nonEmpty(credentials.api_key);
 	if (apiKey === undefined) {
 		throw new Error(
-			`${path} declares "type": "${API_KEY}" but has no "api_key" value. Replace the profile with \`neon profile create <name> --force\`.`,
+			`${at.path} declares "type": "${API_KEY}" but has no "api_key" value. ${repair(at)}`,
 		);
 	}
 	return { kind: API_KEY, apiKey };
@@ -188,12 +211,12 @@ export const inspectCredentials = (path: string): CredentialsRead => {
  * `profile list` and telemetry use {@link inspectCredentials} instead, because describing a
  * broken credential is not the same as using one.
  */
-export const readCredentials = (path: string): StoredCredentials | null => {
-	const read = inspectCredentials(path);
+export const readCredentials = (
+	at: CredentialLocation,
+): StoredCredentials | null => {
+	const read = inspectCredentials(at.path);
 	if (read.kind === "unusable") {
-		throw new Error(
-			`${read.reason}. Replace it deliberately with \`neon profile create <name> --force\`, or delete the file.`,
-		);
+		throw new Error(`${read.reason}. ${repair(at)}`);
 	}
 	return read.kind === "ok" ? read.credentials : null;
 };

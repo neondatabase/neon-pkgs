@@ -304,8 +304,9 @@ repo imported it. See below.
 
 ### `shared/cli-core` — code every CLI compiles as its own
 
-Credential reading, profile resolution and config paths are shared by `neon`, `@neon/env`,
-`neon-init` and `@neon/config` from `shared/cli-core/src`. It is **not a package**:
+Credential reading, profile resolution and config paths are shared by `neon`, `@neon/env` and
+`neon-init` from `shared/cli-core/src` — the three that read a credential off disk;
+`@neon/config` takes an explicit key and reads nothing. It is **not a package**:
 `scripts/sync-shared.mjs <dir>` copies it into that one consumer's `src/_shared`, atomically
 and one package per invocation so concurrent builds cannot race. Every script that compiles or
 typechecks a consumer's source runs it first; that copy is gitignored, and the imports are

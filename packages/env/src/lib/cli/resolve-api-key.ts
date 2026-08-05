@@ -1,4 +1,7 @@
-import { selectCredential } from "../../_shared/auth_selection.js";
+import {
+	displacedProfileWarning,
+	selectCredential,
+} from "../../_shared/auth_selection.js";
 import {
 	inspectCredentials,
 	interpretCredentials,
@@ -25,6 +28,8 @@ export function resolveApiKey(options: {
 	apiKey?: string;
 	profile?: string;
 	env?: NodeJS.ProcessEnv;
+	/** Where to say that an exported key displaced an exported profile. Defaults to stderr. */
+	warn?: (message: string) => void;
 }): string | undefined {
 	const env = options.env ?? process.env;
 	const selection = selectCredential({
@@ -39,6 +44,18 @@ export function resolveApiKey(options: {
 			? { profileEnv: env.NEON_PROFILE }
 			: {}),
 	});
+
+	// Sharing the decision is only half of it. The disclosure is the half that keeps a
+	// displaced profile from being the original bug in a quieter form: `NEON_API_KEY=…
+	// NEON_PROFILE=work neon-env run` legitimately uses the key, and saying nothing leaves the
+	// user believing they ran as `work`. `neon` has warned here from the start; this did not.
+	const displaced = displacedProfileWarning(selection);
+	if (displaced !== null) {
+		const warn =
+			options.warn ??
+			((message: string) => process.stderr.write(`${message}\n`));
+		warn(displaced);
+	}
 
 	if (selection.source !== "profile") return selection.apiKey;
 	return readStoredCredential(selection, env);
@@ -87,7 +104,10 @@ function readStoredCredential(
 	if (read.kind === "unusable") return fail(read.reason);
 
 	try {
-		const credential = interpretCredentials(read.credentials, path);
+		const credential = interpretCredentials(read.credentials, {
+			path,
+			profile,
+		});
 		if (credential.kind === "api_key") return credential.apiKey;
 		const token = read.credentials.access_token;
 		return typeof token === "string" && token.trim() !== ""

@@ -324,7 +324,7 @@ describe("api-keys create refuses an unusable response", () => {
 			["api-keys", "create", "--name", "x", "--project-id", "test"],
 			{
 				code: 1,
-				stderr: "ERROR: Project test does not belong to an organization, so it cannot have a project-scoped API key. Create an account key by omitting --project-id.",
+				stderr: "ERROR: Project test does not belong to an organization, so it cannot have a project-scoped API key. Omit --project-id to create an account key.",
 			},
 		);
 	});

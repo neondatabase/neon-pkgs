@@ -337,4 +337,70 @@ describe("resolveApiKey — profiles", () => {
 			}),
 		).toBe("from-flag");
 	});
+
+	// Sharing the decision with `neon` was only half of it. Two ambient sources resolve to the
+	// key — correct, and indistinguishable from having run as the profile unless it is said
+	// out loud. `neon` has warned here from the start; this package returned the key in
+	// silence, which is the original bug wearing a quieter coat.
+	test("warns when an exported key displaces an exported profile", () => {
+		const home = makeProfiles(
+			{
+				"credentials.json": apiKeyFile("napi_default"),
+				"credentials.work.json": apiKeyFile("napi_work"),
+			},
+			{
+				DEFAULT: { credentials: "credentials.json" },
+				work: { credentials: "credentials.work.json" },
+			},
+		);
+		const warnings: string[] = [];
+
+		const key = resolveApiKey({
+			env: {
+				HOME: home,
+				NEON_API_KEY: "napi_ambient",
+				NEON_PROFILE: "work",
+			},
+			warn: (message) => warnings.push(message),
+		});
+
+		expect(key).toBe("napi_ambient");
+		expect(warnings).toEqual([
+			expect.stringContaining(
+				'profile "work" from NEON_PROFILE was ignored',
+			),
+		]);
+	});
+
+	// Nothing was displaced in either of these, and a warning that fires when nothing happened
+	// is noise a script has to learn to ignore.
+	test.each([
+		["only a profile is exported", { NEON_PROFILE: "work" }],
+		["only a key is exported", { NEON_API_KEY: "napi_ambient" }],
+		[
+			"the profile was named explicitly",
+			{ NEON_API_KEY: "napi_ambient" },
+			"work",
+		],
+	])("stays quiet when %s", (_name, vars, profile?: string) => {
+		const home = makeProfiles(
+			{
+				"credentials.json": apiKeyFile("napi_default"),
+				"credentials.work.json": apiKeyFile("napi_work"),
+			},
+			{
+				DEFAULT: { credentials: "credentials.json" },
+				work: { credentials: "credentials.work.json" },
+			},
+		);
+		const warnings: string[] = [];
+
+		resolveApiKey({
+			...(profile !== undefined ? { profile } : {}),
+			env: { HOME: home, ...vars },
+			warn: (message) => warnings.push(message),
+		});
+
+		expect(warnings).toEqual([]);
+	});
 });

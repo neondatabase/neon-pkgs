@@ -23,6 +23,14 @@ import {
 	writeCredentials,
 } from "./_shared/credentials.js";
 
+/**
+ * Where a credential lives and which profile points at it.
+ *
+ * Both halves travel together because every error these functions raise ends in a recovery
+ * command, and that command takes the profile name.
+ */
+const at = (path: string, profile = "work") => ({ path, profile });
+
 const cleanups: Array<() => void> = [];
 afterEach(() => {
 	while (cleanups.length > 0) cleanups.shift()?.();
@@ -40,38 +48,50 @@ function makeDir(files: Record<string, string> = {}): string {
 describe("credentialKind", () => {
 	// Every file written before profiles held API keys has no `type`, and must stay OAuth.
 	test("an absent type means oauth", () => {
-		expect(credentialKind({ access_token: "t" }, "p")).toBe(OAUTH);
+		expect(credentialKind({ access_token: "t" }, at("p"))).toBe(OAUTH);
 	});
 
 	test("an explicit oauth type means oauth", () => {
-		expect(credentialKind({ type: "oauth" }, "p")).toBe(OAUTH);
+		expect(credentialKind({ type: "oauth" }, at("p"))).toBe(OAUTH);
 	});
 
 	test("an api_key type means api_key, even with nothing else present", () => {
-		expect(credentialKind({ type: "api_key" }, "p")).toBe(API_KEY);
+		expect(credentialKind({ type: "api_key" }, at("p"))).toBe(API_KEY);
 	});
 
 	// Falling back to oauth would send the user to a browser login that overwrites the
 	// credential they were trying to fix.
 	test("an unrecognised type throws and quotes what it found", () => {
-		expect(() => credentialKind({ type: "keychain" }, "/c.json")).toThrow(
-			/unrecognised "type": "keychain"/,
-		);
-		expect(() => credentialKind({ type: "keychain" }, "/c.json")).toThrow(
-			/\/c\.json/,
-		);
+		expect(() =>
+			credentialKind({ type: "keychain" }, at("/c.json")),
+		).toThrow(/unrecognised "type": "keychain"/);
+		expect(() =>
+			credentialKind({ type: "keychain" }, at("/c.json")),
+		).toThrow(/\/c\.json/);
+	});
+
+	// This message used to be the one dead end among the credential errors: the unparseable
+	// sibling appended a repair and this did not, because it throws before the reader that
+	// adds one. A file the CLI refuses to authenticate with has to say how to get out of it.
+	test("an unrecognised type says how to recover, naming the profile", () => {
+		expect(() =>
+			credentialKind({ type: "keychain" }, at("/c.json", "work")),
+		).toThrow(/`neon profile create work --force`/);
 	});
 });
 
 describe("interpretCredentials", () => {
 	test("an api_key file resolves to its key", () => {
 		expect(
-			interpretCredentials({ type: "api_key", api_key: "napi_x" }, "p"),
+			interpretCredentials(
+				{ type: "api_key", api_key: "napi_x" },
+				at("p"),
+			),
 		).toEqual({ kind: API_KEY, apiKey: "napi_x" });
 	});
 
 	test("an oauth file resolves to oauth without exposing a key", () => {
-		expect(interpretCredentials({ access_token: "t" }, "p")).toEqual({
+		expect(interpretCredentials({ access_token: "t" }, at("p"))).toEqual({
 			kind: OAUTH,
 		});
 	});
@@ -80,7 +100,7 @@ describe("interpretCredentials", () => {
 		expect(() =>
 			interpretCredentials(
 				{ type: "api_key", access_token: "t" },
-				"/c.json",
+				at("/c.json"),
 			),
 		).toThrow(/no "api_key" value/);
 	});
@@ -89,16 +109,27 @@ describe("interpretCredentials", () => {
 		expect(() =>
 			interpretCredentials(
 				{ type: "api_key", api_key: "   " },
-				"/c.json",
+				at("/c.json"),
 			),
 		).toThrow(/no "api_key" value/);
+	});
+
+	// The recovery command is only useful if it is runnable. Both of these printed a literal
+	// `<name>`, which an agent runs verbatim and gets `Invalid profile name "<name>"` for.
+	test("the recovery command names the profile rather than a placeholder", () => {
+		expect(() =>
+			interpretCredentials({ type: "api_key" }, at("/c.json", "dbx")),
+		).toThrow(/`neon profile create dbx --force`/);
+		expect(() =>
+			interpretCredentials({ type: "api_key" }, at("/c.json", "dbx")),
+		).not.toThrow(/<name>/);
 	});
 
 	test("a key is trimmed", () => {
 		expect(
 			interpretCredentials(
 				{ type: "api_key", api_key: " napi_x\n" },
-				"p",
+				at("p"),
 			),
 		).toEqual({ kind: API_KEY, apiKey: "napi_x" });
 	});
@@ -107,7 +138,7 @@ describe("interpretCredentials", () => {
 describe("readCredentials", () => {
 	test("a missing file is null", () => {
 		const dir = makeDir();
-		expect(readCredentials(resolve(dir, "nope.json"))).toBeNull();
+		expect(readCredentials(at(resolve(dir, "nope.json")))).toBeNull();
 	});
 
 	// A damaged file is recoverable by signing in again, so it reads as "no credentials" — but
@@ -123,15 +154,17 @@ describe("readCredentials", () => {
 		expect(read.kind === "unusable" && read.reason).toContain(path);
 		// Using it is an error: a read-only command must not "repair" it by signing in again,
 		// which would overwrite it and possibly as a different account.
-		expect(() => readCredentials(path)).toThrow(/not valid JSON/);
-		expect(() => readCredentials(path)).toThrow(/Replace it deliberately/);
+		expect(() => readCredentials(at(path))).toThrow(/not valid JSON/);
+		expect(() => readCredentials(at(path, "dbx"))).toThrow(
+			/Replace it deliberately with `neon profile create dbx --force`/,
+		);
 	});
 
 	test("a JSON array is unusable, not a credentials object", () => {
 		const dir = makeDir({ "credentials.json": "[1,2]" });
 		const path = resolve(dir, "credentials.json");
 		expect(inspectCredentials(path).kind).toBe("unusable");
-		expect(() => readCredentials(path)).toThrow(
+		expect(() => readCredentials(at(path))).toThrow(
 			/does not contain a credentials object/,
 		);
 	});
@@ -150,7 +183,7 @@ describe("readCredentials", () => {
 		const path = resolve(dir, "credentials.json");
 		chmodSync(path, 0o000);
 		try {
-			expect(() => readCredentials(path)).toThrow();
+			expect(() => readCredentials(at(path))).toThrow();
 		} finally {
 			chmodSync(path, 0o600);
 		}
@@ -163,7 +196,7 @@ describe("readCredentials", () => {
 				id_token: "i",
 			}),
 		});
-		expect(readCredentials(resolve(dir, "credentials.json"))).toEqual({
+		expect(readCredentials(at(resolve(dir, "credentials.json")))).toEqual({
 			access_token: "t",
 			id_token: "i",
 		});
@@ -200,7 +233,7 @@ describe("writeCredentials", () => {
 			api_key: "napi_x",
 			key_id: 7,
 		});
-		expect(readCredentials(path)).toEqual({
+		expect(readCredentials(at(path))).toEqual({
 			type: "api_key",
 			api_key: "napi_x",
 			key_id: 7,
@@ -258,7 +291,7 @@ describe("apiKeyCredentials", () => {
 		const path = resolve(dir, "credentials.json");
 		writeCredentials(path, apiKeyCredentials({ apiKey: "napi_x" }));
 
-		expect(readCredentials(path)).toEqual({
+		expect(readCredentials(at(path))).toEqual({
 			type: "api_key",
 			api_key: "napi_x",
 		});
@@ -306,7 +339,7 @@ describe("scopeOf / describeScope", () => {
 				org_id: 7,
 			}),
 		});
-		const stored = readCredentials(resolve(dir, "credentials.json"));
+		const stored = readCredentials(at(resolve(dir, "credentials.json")));
 		expect(stored).not.toBeNull();
 		expect(scopeOf(stored as NonNullable<typeof stored>)).toEqual({});
 	});

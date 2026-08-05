@@ -36,8 +36,9 @@ same one rather than quietly widening it. Every key is verified before being sto
 real API key is accepted; an OAuth access token would authenticate and then expire with nothing
 to refresh it.
 
-`profile list` gains `Auth` and `Scope` columns, and `SignedIn` becomes `Available` — a file
-existing never proved a credential valid, and for a key there is no session to be in.
+`profile list` gains `Auth` and `Scope` columns, and `SignedIn` becomes `File`, reporting `ok`,
+`invalid` or `missing`. A file existing never proved a credential valid, and for a key there is
+no session to be in — the column now names what was actually checked.
 
 **Precedence now follows one rule: an explicit flag beats an environment variable.** `--profile`
 wins over `NEON_API_KEY`, `--api-key` wins over `NEON_PROFILE`, passing both flags fails instead
@@ -68,6 +69,15 @@ Fixed alongside it, all in the same area:
 - `@neon/env` and `neon-init` read the stored credential's `type`, so a key-backed account is no
   longer reported as having no credentials at all.
 - `profile remove` revokes an API key it minted, and says the key is still live when it cannot.
+  It confirms first, and refuses rather than prompting when stdin is not a terminal — guarded on
+  CI alone, a piped stdin either waited for input that never arrived or exited **0** having
+  removed nothing. Declining the prompt now exits non-zero, because nothing was removed.
+- `create --force` says what it is about to revoke. Replacing a profile has always retired the
+  credential it held, so a key minted here stops working wherever else it was pasted; the message
+  described a local replacement and left the irreversible half to be discovered.
+- `--api-key` is refused on `profile list`, `rotate-key` and `remove` instead of being accepted
+  and ignored. It is a global option, so `.strict()` cannot see it, and `remove --api-key …`
+  reported a revoke failure against a credential the user had not passed.
 - Credentials and `profiles.json` are written through a temporary file and a rename.
   `writeFileSync`'s `mode` applies only when it creates a file, so an existing credentials file
   kept whatever permissions it already had — one created `0700` by a release before `0600` became
@@ -77,9 +87,9 @@ Fixed alongside it, all in the same area:
   CLI simply could not read.
 
 **All three CLIs read credentials the same way now.** The credential, profile and config-path
-code moved to `shared/cli-core`, which `neon`, `@neon/env`, `neon-init` and `@neon/config`
-each compile into their own build — it is copied into `src/_shared` before they compile, so
-the code ships inside every `dist` and nothing new appears on the registry. **`@neon/config/paths` is removed.** It only ever
+code moved to `shared/cli-core`, which `neon`, `@neon/env` and `neon-init` each compile into
+their own build — it is copied into `src/_shared` before they compile, so the code ships inside
+every `dist` and nothing new appears on the registry. **`@neon/config/paths` is removed.** It only ever
 existed because implementor-only code had nowhere else to live: it was never documented in the
 package's README, and nothing outside this repo imported it. The resolution it exposed now
 reaches each CLI by being compiled into it, so a policy-facing package no longer carries

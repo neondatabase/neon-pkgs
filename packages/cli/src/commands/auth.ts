@@ -9,6 +9,7 @@ import {
 import {
 	API_KEY,
 	type CredentialKind,
+	type CredentialLocation,
 	interpretCredentials,
 	OAUTH,
 	readCredentials,
@@ -248,14 +249,15 @@ const handleExistingToken = async (
  */
 export const usableCredential = async (
 	props: CredentialProps,
-	credentialsPath: string,
+	at: CredentialLocation,
 ): Promise<{ apiKey: string; kind: CredentialKind } | null> => {
-	const stored = readCredentials(credentialsPath);
+	const credentialsPath = at.path;
+	const stored = readCredentials(at);
 	if (stored === null) return null;
 
 	// A file that declares an unusable kind throws, rather than being reported as "no
 	// credential" — the user needs to know it is broken, not that it is absent.
-	const credential = interpretCredentials(stored, credentialsPath);
+	const credential = interpretCredentials(stored, at);
 	if (credential.kind === API_KEY) {
 		return { apiKey: credential.apiKey, kind: API_KEY };
 	}
@@ -369,13 +371,14 @@ export const ensureAuth = async (
 		props.configDir,
 		selection.profile,
 	);
-	const stored = readCredentials(credentialsPath);
+	const at = { path: credentialsPath, profile: selection.profile };
+	const stored = readCredentials(at);
 
 	if (stored !== null) {
 		log.debug("Trying to read credentials from %s", credentialsPath);
 		// Throws on a file whose declared kind is unusable. That is deliberate: falling
 		// through to a browser login would replace the credential the user is fixing.
-		const credential = interpretCredentials(stored, credentialsPath);
+		const credential = interpretCredentials(stored, at);
 
 		if (credential.kind === API_KEY) {
 			log.debug(
