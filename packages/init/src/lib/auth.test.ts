@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -79,5 +80,63 @@ describe("isAuthenticated", () => {
 	test("a file declaring a key it does not have is an error", async () => {
 		makeConfigDir(JSON.stringify({ type: "api_key" }));
 		await expect(isAuthenticated()).rejects.toThrow(/no "api_key" value/);
+	});
+});
+
+/**
+ * Failing loudly is only half of it — the failure has to be shaped like the output the caller
+ * asked for. Under `--json` an agent parses stdout, and yargs' default path answered a thrown
+ * error with the whole help screen followed by a Node stack trace: not JSON, and nothing an
+ * agent can act on.
+ */
+describe("the CLI's failure output", () => {
+	const CLI = resolve(import.meta.dirname, "..", "..", "dist", "cli.js");
+
+	/** Run the built binary in a directory of its own, with a damaged credentials file. */
+	function runStatus(args: string[], env: Record<string, string> = {}) {
+		const configDir = mkdtempSync(join(tmpdir(), "neon-init-cli-cfg-"));
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-cli-cwd-"));
+		cleanups.push(() =>
+			rmSync(configDir, { recursive: true, force: true }),
+		);
+		cleanups.push(() => rmSync(cwd, { recursive: true, force: true }));
+		writeFileSync(resolve(configDir, "credentials.json"), "{ not json", {
+			mode: 0o600,
+		});
+		const result = spawnSync(process.execPath, [CLI, "status", ...args], {
+			cwd,
+			encoding: "utf8",
+			stdio: ["ignore", "pipe", "pipe"],
+			env: {
+				PATH: process.env.PATH ?? "",
+				HOME: process.env.HOME ?? "",
+				NEON_CONFIG_DIR: configDir,
+				...env,
+			},
+		});
+		return { ...result, configDir };
+	}
+
+	test("--json reports a damaged credential as JSON, not a stack trace", () => {
+		const { status, stdout, stderr } = runStatus(["--json"]);
+
+		expect(status).toBe(1);
+		const parsed = JSON.parse(stdout);
+		expect(parsed.success).toBe(false);
+		expect(parsed.error).toMatch(/not valid JSON/);
+		expect(parsed.error).toMatch(/neon profile create DEFAULT --force/);
+		// The two shapes an agent cannot use.
+		expect(stdout).not.toMatch(/^\s*at /m);
+		expect(stderr).not.toContain("Show help");
+	});
+
+	test("without --json it is one line, not a help dump", () => {
+		const { status, stderr } = runStatus([]);
+
+		expect(status).toBe(1);
+		expect(stderr).toContain("Error: ");
+		expect(stderr).toMatch(/not valid JSON/);
+		expect(stderr).not.toContain("Show help");
+		expect(stderr).not.toMatch(/^\s*at /m);
 	});
 });

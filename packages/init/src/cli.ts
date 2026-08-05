@@ -49,6 +49,21 @@ function outputJson(data: unknown): void {
 }
 
 /**
+ * Whether this invocation asked for JSON, read from argv rather than from a parsed `argv`.
+ *
+ * The failure handler runs for parse errors too, where there is no parsed `argv` to consult —
+ * and it is the mode, not the command, that decides how a failure has to be shaped.
+ */
+function jsonRequested(): boolean {
+	return (
+		process.argv.includes("--json") ||
+		process.argv.includes("--agent") ||
+		process.argv.includes("-a") ||
+		detectAgentInvocation() !== null
+	);
+}
+
+/**
  * Resolve the agent ID from the environment.
  */
 function resolveAgent(): string | undefined {
@@ -699,7 +714,21 @@ const cli = yargs(hideBin(process.argv))
 	// Without this yargs guesses the version, and in an ESM bin it guesses
 	// wrong — `neon-init --version` printed "unknown".
 	.version(pkg.version)
-	.strict();
+	.strict()
+	// Report a failure in the idiom the caller asked for. Without this, anything thrown from a
+	// handler reached yargs' default path and printed the whole help screen followed by a Node
+	// stack trace — and under `--json`, output that is not JSON at all, which is the one thing
+	// an agent parsing this cannot recover from. Reached by a damaged credentials file, whose
+	// whole point is to fail rather than be silently replaced.
+	.fail((msg, err) => {
+		const message = err?.message ?? msg ?? "neon-init failed";
+		if (jsonRequested()) {
+			outputJson({ success: false, error: message });
+		} else {
+			console.error(`Error: ${message}`);
+		}
+		process.exit(1);
+	});
 
 // Parse and execute
 cli.parse();

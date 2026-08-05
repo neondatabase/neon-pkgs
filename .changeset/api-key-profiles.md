@@ -86,7 +86,9 @@ Fixed alongside it, all in the same area:
   to look identical to absence, so it would start a browser login that overwrote a credential the
   CLI simply could not read. `@neon/env` and `neon-init` now agree: a damaged credentials file is
   an error naming the file and the repair, where they previously reported "not signed in" and, in
-  `neon-init`'s case, offered a browser sign-in that would overwrite it.
+  `neon-init`'s case, offered a browser sign-in that would overwrite it. `neon-init` also reports
+  a failure in the shape the caller asked for: under `--json` an error is now a JSON object with
+  a non-zero exit, where anything thrown used to print the help screen and a stack trace.
 - **A malformed credentials file no longer echoes its own contents.** `JSON.parse` quotes a window
   of the input around a syntax error, so a truncated credentials file produced
   `Unexpected token 'a', ..."api_key":napi_SUPERS"... is not valid JSON` — printed by
