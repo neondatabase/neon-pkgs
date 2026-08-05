@@ -37,7 +37,7 @@ describe("hasFlagshipModels", () => {
 	it("detects opus / codex / *-pro by id substring", () => {
 		expect(hasFlagshipModels(["claude-opus-4-8"])).toBe(true);
 		expect(hasFlagshipModels(["gpt-5-3-codex"])).toBe(true);
-		expect(hasFlagshipModels(["gemini-3-pro"])).toBe(true);
+		expect(hasFlagshipModels(["gpt-5-5-pro"])).toBe(true);
 	});
 
 	it("is false for a catalog without any flagship model", () => {
@@ -45,7 +45,7 @@ describe("hasFlagshipModels", () => {
 			hasFlagshipModels([
 				"gpt-5-mini",
 				"claude-haiku-4-5",
-				"gemini-2-5-flash",
+				"gemini-3-5-flash",
 			]),
 		).toBe(false);
 		expect(hasFlagshipModels([])).toBe(false);

@@ -17,6 +17,10 @@ export const MATRIX_MODELS = {
 	meta: "llama-4-maverick",
 	/** Unified MLflow endpoint (Alibaba) */
 	alibaba: "qwen3-next-80b-a3b-instruct",
+	/** Unified MLflow endpoint (Zhipu) — no prefix rule matches, so it must route by default */
+	zhipu: "glm-5-2",
+	/** Unified MLflow endpoint (Databricks) — same, and the id carries no vendor hint at all */
+	databricks: "inkling",
 } as const;
 
 export type MatrixFamily = keyof typeof MATRIX_MODELS;
@@ -61,12 +65,12 @@ export function maxTokensFor(family: MatrixFamily): number {
  * Model ids the branch under test actually serves.
  *
  * The catalog is per-account during the beta — an account can be paid and still
- * see a trimmed list, and models come and go (all Anthropic ids are absent at
- * the time of writing). A matrix pinned to ids alone therefore goes red for
- * reasons that have nothing to do with this provider, which is exactly the
- * signal we want to keep clean. Families whose representative id is missing are
- * skipped instead, so the suite reports "not served here" rather than a
- * failure.
+ * see a trimmed list, and models come and go. The Anthropic ids were absent for a
+ * stretch and are now back; seven other ids were retired in the same window. A
+ * matrix pinned to ids alone therefore goes red for reasons that have nothing to
+ * do with this provider, which is exactly the signal we want to keep clean.
+ * Families whose representative id is missing are skipped instead, so the suite
+ * reports "not served here" rather than a failure.
  */
 export async function fetchServedModelIds(): Promise<Set<string>> {
 	const baseUrl = process.env.NEON_AI_GATEWAY_BASE_URL?.trim().replace(

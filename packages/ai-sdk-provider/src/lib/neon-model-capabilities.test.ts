@@ -15,7 +15,7 @@ describe("getNeonModelRoute", () => {
 
 	it("falls back to the unified MLflow endpoint for everything else", () => {
 		// Gemini is routed to MLflow because its native endpoint cannot stream.
-		expect(getNeonModelRoute("gemini-2-5-flash")).toBe("mlflow");
+		expect(getNeonModelRoute("gemini-3-flash")).toBe("mlflow");
 		expect(getNeonModelRoute("llama-4-maverick")).toBe("mlflow");
 		expect(getNeonModelRoute("qwen35-122b-a10b")).toBe("mlflow");
 		// gpt-oss is open-weight and served on the unified endpoint, not Responses.
@@ -29,7 +29,7 @@ describe("getNeonModelRoute", () => {
 			["claude-haiku-4-5", "databricks-claude-haiku-4-5"],
 			["gpt-5", "databricks-gpt-5"],
 			["gpt-5-3-codex", "databricks-gpt-5-3-codex"],
-			["gemini-2-5-flash", "databricks-gemini-2-5-flash"],
+			["gemini-3-flash", "databricks-gemini-3-flash"],
 			["gpt-oss-120b", "databricks-gpt-oss-120b"],
 		];
 		for (const [canonical, prefixed] of pairs) {
@@ -82,7 +82,7 @@ describe("getNeonModelCapabilities", () => {
 			"claude-haiku-4-5",
 			"gpt-5-mini",
 			"gpt-5-1",
-			"gemini-2-5-flash",
+			"gemini-3-flash",
 			"llama-4-maverick",
 			"qwen35-122b-a10b",
 		];

@@ -13,38 +13,59 @@
 // does not (yet) list; they are kept for autocomplete and verified to resolve
 // against the gateway. The authoritative, always-current catalog is shown in
 // the Neon Console under the branch's "AI Gateway" tab.
+//
+// The two lists answer different questions and are allowed to disagree with the
+// gateway in opposite directions. `NEON_MODELS_DEV_IDS` tracks what models.dev
+// publishes, so it currently still names `claude-sonnet-4`, `gemini-2-5-flash`,
+// `gemini-2-5-pro`, `gemini-3-pro`, `gpt-5-1-codex-max`, `gpt-5-1-codex-mini` and
+// `gpt-5-2-codex`, which the gateway has retired — they come out when models.dev
+// drops them, not before, or the drift check goes red. Autocompleting a retired id
+// is a smaller cost than a permanently red catalog check.
 
 /** The models.dev `neon` catalog (canonical, unprefixed ids). */
 export const NEON_MODELS_DEV_IDS = [
 	// Anthropic (native Messages API)
-	"claude-opus-4-7",
-	"claude-opus-4-6",
-	"claude-opus-4-5",
-	"claude-opus-4-1",
-	"claude-sonnet-4-6",
-	"claude-sonnet-4-5",
-	"claude-sonnet-4",
 	"claude-haiku-4-5",
+	"claude-opus-4-1",
+	"claude-opus-4-5",
+	"claude-opus-4-6",
+	"claude-opus-4-7",
+	"claude-opus-4-8",
+	"claude-sonnet-4",
+	"claude-sonnet-4-5",
+	"claude-sonnet-4-6",
 	// OpenAI (native Responses API)
 	"gpt-5",
-	"gpt-5-mini",
-	"gpt-5-nano",
 	"gpt-5-1",
+	"gpt-5-1-codex-max",
+	"gpt-5-1-codex-mini",
 	"gpt-5-2",
+	"gpt-5-2-codex",
+	"gpt-5-3-codex",
 	"gpt-5-4",
 	"gpt-5-4-mini",
 	"gpt-5-4-nano",
-	"gpt-5-5",
+	"gpt-5-mini",
+	"gpt-5-nano",
 	// OpenAI open-weight (unified MLflow endpoint)
 	"gpt-oss-120b",
 	"gpt-oss-20b",
 	// Google (unified MLflow endpoint)
-	"gemini-3-pro",
-	"gemini-3-flash",
-	"gemini-3-1-pro",
-	"gemini-3-1-flash-lite",
-	"gemini-2-5-pro",
 	"gemini-2-5-flash",
+	"gemini-2-5-pro",
+	"gemini-3-1-flash-lite",
+	"gemini-3-1-pro",
+	"gemini-3-5-flash",
+	"gemini-3-flash",
+	"gemini-3-pro",
+	"gemma-3-12b",
+	// Meta (unified MLflow endpoint)
+	"llama-4-maverick",
+	"meta-llama-3-1-8b-instruct",
+	"meta-llama-3-3-70b-instruct",
+	// Alibaba (unified MLflow endpoint)
+	"qwen3-next-80b-a3b-instruct",
+	"qwen35-122b-a10b",
 ] as const;
 
 /**
@@ -55,21 +76,19 @@ export const NEON_MODELS_DEV_IDS = [
  */
 export const NEON_EXTRA_MODEL_IDS = [
 	// Anthropic (native Messages API)
-	"claude-opus-4-8",
-	// OpenAI (native Responses API) — Codex is served only natively
-	"gpt-5-2-codex",
-	"gpt-5-3-codex",
+	"claude-fable-5",
+	"claude-opus-5",
+	"claude-sonnet-5",
+	// OpenAI (native Responses API)
+	"gpt-5-5",
 	"gpt-5-5-pro",
-	// Google (unified MLflow endpoint)
-	"gemini-3-5-flash",
-	"gemma-3-12b",
-	// Meta (unified MLflow endpoint)
-	"llama-4-maverick",
-	"meta-llama-3-3-70b-instruct",
-	"meta-llama-3-1-8b-instruct",
-	// Alibaba (unified MLflow endpoint)
-	"qwen3-next-80b-a3b-instruct",
-	"qwen35-122b-a10b",
+	"gpt-5-6-luna",
+	"gpt-5-6-sol",
+	"gpt-5-6-terra",
+	// Zhipu (unified MLflow endpoint)
+	"glm-5-2",
+	// Databricks (unified MLflow endpoint)
+	"inkling",
 ] as const;
 
 /** A known Neon AI Gateway model id (models.dev catalog + gateway extras). */
