@@ -7,6 +7,7 @@ import {
 	type FetchHandler,
 	portSelectionFromEnv,
 	resolveFetchHandler,
+	resolveUpgradeHandler,
 	withErrorBoundary,
 } from "./runtime.js";
 
@@ -39,6 +40,88 @@ describe("resolveFetchHandler", () => {
 		expect(() =>
 			resolveFetchHandler({ handler: () => new Response("named") }),
 		).toThrow(/No request handler found/);
+	});
+});
+
+describe("resolveUpgradeHandler", () => {
+	// Resolution order must match the deployed runtime's: a named export first, then
+	// an `upgrade` method on the default export.
+	const req = {} as Parameters<
+		NonNullable<ReturnType<typeof resolveUpgradeHandler>>
+	>[0];
+	const socket = {} as Parameters<
+		NonNullable<ReturnType<typeof resolveUpgradeHandler>>
+	>[1];
+	const head = Buffer.alloc(0);
+
+	it("picks a named `export function upgrade`", () => {
+		let called = false;
+		const handler = resolveUpgradeHandler({
+			upgrade: () => {
+				called = true;
+			},
+		});
+		handler?.(req, socket, head);
+		expect(called).toBe(true);
+	});
+
+	it("picks an `upgrade` method on the default export", () => {
+		let called = false;
+		const handler = resolveUpgradeHandler({
+			default: {
+				fetch: () => new Response("x"),
+				upgrade: () => {
+					called = true;
+				},
+			},
+		});
+		handler?.(req, socket, head);
+		expect(called).toBe(true);
+	});
+
+	it("prefers the named export over the default-export method", () => {
+		const calls: string[] = [];
+		const handler = resolveUpgradeHandler({
+			upgrade: () => calls.push("named"),
+			default: { upgrade: () => calls.push("default") },
+		});
+		handler?.(req, socket, head);
+		expect(calls).toEqual(["named"]);
+	});
+
+	it("calls the default-export method with `this` bound to the object", () => {
+		// A bundle written as `export default { upgrade() { this.handle(...) } }` must
+		// not lose its receiver.
+		let receiver: unknown = null;
+		const target = {
+			marker: "the-object",
+			upgrade(): void {
+				receiver = this;
+			},
+		};
+		resolveUpgradeHandler({ default: target })?.(req, socket, head);
+		expect(receiver).toBe(target);
+	});
+
+	it("returns undefined when the module has no upgrade export", () => {
+		expect(
+			resolveUpgradeHandler({
+				default: { fetch: () => new Response("x") },
+			}),
+		).toBeUndefined();
+		expect(
+			resolveUpgradeHandler({ default: () => new Response("x") }),
+		).toBeUndefined();
+		expect(resolveUpgradeHandler({})).toBeUndefined();
+	});
+
+	it("ignores a non-function `upgrade`", () => {
+		expect(
+			resolveUpgradeHandler({ upgrade: "not a function" }),
+		).toBeUndefined();
+		expect(
+			resolveUpgradeHandler({ default: { upgrade: 42 } }),
+		).toBeUndefined();
 	});
 });
 

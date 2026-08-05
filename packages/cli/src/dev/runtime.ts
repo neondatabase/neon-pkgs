@@ -4,6 +4,12 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { getRequestListener } from "@hono/node-server";
 
+import {
+	createUpgradeListener,
+	installWebSocketBridge,
+	type UpgradeHandler,
+} from "./websocket.js";
+
 /**
  * A WHATWG fetch-style handler: takes a Request, returns a Response. The single
  * shape the local dev server and the deployed Neon Functions runtime both speak.
@@ -47,6 +53,36 @@ export const resolveFetchHandler = (mod: UserModule): FetchHandler => {
 			"  export default { fetch(req) { /* ... */ } }\n" +
 			"  export default function (req) { /* ... */ }",
 	);
+};
+
+const hasUpgradeMethod = (
+	value: unknown,
+): value is { upgrade: UpgradeHandler } =>
+	typeof value === "object" &&
+	value !== null &&
+	"upgrade" in value &&
+	typeof (value as { upgrade: unknown }).upgrade === "function";
+
+/**
+ * Resolve the user's optional WebSocket entrypoint: a named `export function upgrade`,
+ * or an `upgrade` method on the default export. `undefined` when the module has
+ * neither, which is the common case — a function without one either uses
+ * `upgradeWebSocket()` inside `fetch` or serves no WebSockets at all.
+ *
+ * Resolution order matches the deployed runtime exactly (named export first, then the
+ * default-export method), so a module that resolves one way locally cannot resolve the
+ * other way once deployed.
+ */
+export const resolveUpgradeHandler = (
+	mod: UserModule,
+): UpgradeHandler | undefined => {
+	if (typeof mod.upgrade === "function") return mod.upgrade as UpgradeHandler;
+	const defaultExport = mod.default;
+	if (hasUpgradeMethod(defaultExport)) {
+		const target = defaultExport;
+		return (req, socket, head) => target.upgrade(req, socket, head);
+	}
+	return undefined;
 };
 
 /**
@@ -150,12 +186,36 @@ export const startRuntime = async ({
 	const mod = (await import(
 		pathToFileURL(absoluteSource).href
 	)) as UserModule;
-	const handler = withErrorBoundary(resolveFetchHandler(mod));
+	const fetchHandler = resolveFetchHandler(mod);
+	const handler = withErrorBoundary(fetchHandler);
+
+	// Publish the bridge `upgradeWebSocket()` reads before the user module can serve a
+	// request, so the helper resolves locally exactly as it does when deployed.
+	installWebSocketBridge();
 
 	const listener = getRequestListener(handler, { hostname });
 	const server = createServer((incoming, outgoing) => {
 		void listener(incoming, outgoing);
 	});
+
+	// Node emits 'upgrade' rather than 'request' for a WebSocket handshake. Without
+	// this listener Node hands the handshake to the ordinary request handler, which
+	// answers 200 on a connection the client expects to be a 101 — so a function's
+	// WebSocket code silently never ran under `neon dev`.
+	//
+	// The upgrade path takes the RAW handler, not the error-boundary-wrapped one. The
+	// boundary turns a throw into a 500 Response, which on this path is
+	// indistinguishable from a handler that deliberately declined the upgrade — so a
+	// crashing handler would answer 501 ("no WebSocket support") instead of surfacing
+	// the error. The upgrade listener has its own equivalent boundary, and reports a
+	// throw as the 502 the deployed runtime returns.
+	server.on(
+		"upgrade",
+		createUpgradeListener({
+			fetch: fetchHandler,
+			upgrade: resolveUpgradeHandler(mod),
+		}),
+	);
 
 	const boundPort = await bindPort(server, port, hostname);
 	process.stdout.write(`neon-dev:ready ${boundPort}\n`);
