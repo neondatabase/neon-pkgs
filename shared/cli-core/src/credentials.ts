@@ -104,8 +104,11 @@ export const credentialKind = (
 	const declared = credentials.type;
 	if (declared === undefined || declared === OAUTH) return OAUTH;
 	if (declared === API_KEY) return API_KEY;
+	// The value is not quoted back. Everything in this file is secret material, and a
+	// corrupted or hand-edited file can put a key anywhere in it — including here. Naming the
+	// file is enough to act on, and it cannot leak what the file holds.
 	throw new Error(
-		`${at.path} has an unrecognised "type": ${JSON.stringify(declared)}. Expected "${OAUTH}" or "${API_KEY}". ${repair(at)}`,
+		`${at.path} declares a "type" this version does not understand. Expected "${OAUTH}" or "${API_KEY}". ${repair(at)}`,
 	);
 };
 
@@ -178,12 +181,15 @@ export const inspectCredentials = (path: string): CredentialsRead => {
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(contents);
-	} catch (err) {
+	} catch {
+		// The parser's message is deliberately discarded. V8 quotes a window of the input
+		// around the syntax error — on Node 24 a truncated credentials file produced
+		// `Unexpected token 'a', ..."api_key":napi_SUPERS"... is not valid JSON` — and this
+		// reason is printed by `profile list` and by every failed authentication. A malformed
+		// secret file is exactly when a diagnostic must say less, not more.
 		return {
 			kind: "unusable",
-			reason: `${path} is not valid JSON, so the credential in it cannot be read: ${
-				err instanceof Error ? err.message : String(err)
-			}`,
+			reason: `${path} is not valid JSON, so the credential in it cannot be read`,
 		};
 	}
 	if (
@@ -291,12 +297,10 @@ function nonEmpty(value: unknown): string | undefined {
  * a key read from a file or a pipe arrives with a trailing newline.
  */
 export const isSameCredential = (
-	existing: StoredCredentials,
+	existingKey: string | undefined,
 	replacementKey: string | undefined,
 ): boolean => {
-	if (replacementKey === undefined) return false;
-	const stored = existing.api_key;
-	if (typeof stored !== "string") return false;
-	const trimmed = stored.trim();
+	if (existingKey === undefined || replacementKey === undefined) return false;
+	const trimmed = existingKey.trim();
 	return trimmed !== "" && trimmed === replacementKey.trim();
 };

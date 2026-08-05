@@ -127,8 +127,9 @@ describe("resolveProfile", () => {
 		);
 	});
 
-	// A broken profiles.json must not lock the user out of `neon auth`.
-	test("a malformed profiles.json is ignored rather than fatal", () => {
+	// A broken profiles.json must not lock the user out of `neon auth`, which is a `DEFAULT`
+	// operation and needs no named profile to work.
+	test("a malformed profiles.json does not block DEFAULT", () => {
 		const dir = makeDir({
 			"credentials.json": creds("me"),
 			"profiles.json": "not json",
@@ -137,6 +138,42 @@ describe("resolveProfile", () => {
 		expect(resolveProfile(dir, DEFAULT_PROFILE).credentialsPath).toBe(
 			resolve(dir, "credentials.json"),
 		);
+	});
+
+	// But a *named* profile is defined only in that file, so "not found" is the wrong answer:
+	// the user is looking at an entry the CLI is claiming does not exist.
+	test("a named profile reports the broken file, not an unknown profile", () => {
+		const dir = makeDir({
+			"credentials.json": creds("me"),
+			"profiles.json": "not json",
+		});
+		expect(() => resolveProfile(dir, "work")).toThrow(
+			/could not be read as a profiles file/,
+		);
+		expect(() => resolveProfile(dir, "work")).not.toThrow(
+			/Unknown profile/,
+		);
+	});
+
+	test.each([
+		["not an object", '"just a string"', /does not contain an object/],
+		["no profiles key", '{"version":1}', /has no `profiles` object/],
+		[
+			"an invalid profile name",
+			'{"version":1,"profiles":{"bad name":{"credentials":"c.json"}}}',
+			/"bad name" is not a valid profile name/,
+		],
+		[
+			"an entry with no path",
+			'{"version":1,"profiles":{"work":{"label":"me"}}}',
+			/profile "work" has no `credentials` path/,
+		],
+	])("%s is refused with the reason", (_label, contents, expected) => {
+		const dir = makeDir({
+			"credentials.json": creds("me"),
+			"profiles.json": contents,
+		});
+		expect(() => resolveProfile(dir, "work")).toThrow(expected);
 	});
 });
 
@@ -186,6 +223,39 @@ describe("upsertProfile", () => {
 			resolve(dir, "profiles.json"),
 		);
 		expect(mode & 0o777).toBe(0o600);
+	});
+
+	// Reading tolerates a broken file; writing must not. Treating it as absent here rebuilt it
+	// from a single DEFAULT entry, discarding every named profile in it — silent data loss in
+	// the only record of where each account's credentials live. The credentials themselves
+	// survive, so refusing keeps the file recoverable by hand.
+	test("refuses to overwrite a malformed profiles.json, losing nothing", () => {
+		const broken = '{"version":1,"profiles":{"work":{"credentials":';
+		const dir = makeDir({
+			"credentials.json": creds("me"),
+			"profiles.json": broken,
+		});
+
+		expect(() =>
+			upsertProfile(dir, "other", {
+				credentials: "credentials.other.json",
+			}),
+		).toThrow(/Refusing to rewrite it/);
+		expect(readFileSync(resolve(dir, "profiles.json"), "utf8")).toBe(
+			broken,
+		);
+	});
+
+	test("and refuses when an entry in it is unusable", () => {
+		const dir = makeDir({
+			"credentials.json": creds("me"),
+			"profiles.json": '{"version":1,"profiles":{"work":{}}}',
+		});
+		expect(() =>
+			upsertProfile(dir, "other", {
+				credentials: "credentials.other.json",
+			}),
+		).toThrow(/has no `credentials` path/);
 	});
 });
 

@@ -10,8 +10,10 @@ import {
 	credentialKind,
 	describeScope,
 	inspectCredentials,
+	interpretCredentials,
 	isSameCredential,
 	type KeyScope,
+	OAUTH,
 	readCredentials,
 	type StoredCredentials,
 	scopeOf,
@@ -254,7 +256,12 @@ const describeAuth = (
 ): string => {
 	if (stored === null) return "-";
 	try {
-		return credentialKind(stored, at) === API_KEY ? "api key" : "oauth";
+		// `interpretCredentials`, not `credentialKind`: the kind is a declaration, and a file
+		// declaring `api_key` with no key satisfies it. Reporting that as a working API-key
+		// profile is the wrong answer for the one command run to find out what is broken.
+		return interpretCredentials(stored, at).kind === API_KEY
+			? "api key"
+			: "oauth";
 	} catch (err) {
 		log.warning(err instanceof Error ? err.message : String(err));
 		return "invalid";
@@ -344,9 +351,16 @@ const list = async (props: ProfileProps) => {
 };
 
 /**
- * Where a profile's credentials belong: its existing file when it has one, `credentials.json`
- * for `DEFAULT`, and the conventional `credentials.<name>.json` for a profile being created.
+ * The credential a profile currently holds, resolved far enough to act on.
+ *
+ * A key carries what revoking it needs — the secret to authenticate the revocation, the id
+ * naming what to revoke, and the scope choosing the endpoint. Reading those off an untyped
+ * record at each use site is what produced `stored.api_key as string`.
  */
+type OutgoingCredential =
+	| { kind: typeof API_KEY; apiKey: string; keyId?: number; scope: KeyScope }
+	| { kind: typeof OAUTH; tokens: StoredCredentials };
+
 /**
  * The credential a command is about to replace or delete.
  *
@@ -357,11 +371,11 @@ const list = async (props: ProfileProps) => {
  */
 const readOutgoingCredential = (
 	at: CredentialLocation,
-): StoredCredentials | null => {
+): OutgoingCredential | null => {
 	const read = inspectCredentials(at.path);
 	const unusable = (reason: string): null => {
-		// `reason` comes from two sources, one of which ends in a period. Trim it so the
-		// sentence does not run "…api_key".. Nothing in it…".
+		// `reason` comes from several sources, some of which end in a period. Trim it so the
+		// sentence does not run "…cannot be read.. Nothing in it…".
 		log.warning(
 			"%s. Nothing in it could be revoked, so it is only being replaced locally.",
 			reason.replace(/\.$/, ""),
@@ -372,14 +386,27 @@ const readOutgoingCredential = (
 	if (read.kind === "unusable") return unusable(read.reason);
 	if (read.kind === "absent") return null;
 
-	// A declared kind we do not recognise is the same situation as unparseable: there is
-	// nothing here we know how to revoke, and refusing would make the file undeletable.
+	// Interpreted, not merely classified. A file declaring `api_key` with no key satisfies
+	// `credentialKind` and would then reach `getApiClient` with `undefined` behind a cast — a
+	// revoke request authenticated by nothing, reported as a failed revocation. There is
+	// genuinely nothing to revoke here, which is what `unusable` says; and saying it rather
+	// than throwing is what keeps the file removable.
 	try {
-		credentialKind(read.credentials, at);
+		const credential = interpretCredentials(read.credentials, at);
+		if (credential.kind === OAUTH) {
+			return { kind: OAUTH, tokens: read.credentials };
+		}
+		return {
+			kind: API_KEY,
+			apiKey: credential.apiKey,
+			...(typeof read.credentials.key_id === "number"
+				? { keyId: read.credentials.key_id }
+				: {}),
+			scope: scopeOf(read.credentials),
+		};
 	} catch (err) {
 		return unusable(err instanceof Error ? err.message : String(err));
 	}
-	return read.credentials;
 };
 
 const credentialsPathFor = (configDir: string, name: string): string => {
@@ -577,7 +604,7 @@ const create = async (props: CreateProps) => {
 				`Could not save credentials for profile "${name}".`,
 			);
 		}
-		await retirePreviousCredential(props, name, previous, credentialsPath);
+		await retirePreviousCredential(props, name, previous);
 		const signedIn = readProfiles(props.configDir, log.warning)?.profiles[
 			name
 		];
@@ -614,13 +641,7 @@ const create = async (props: CreateProps) => {
 				: {}),
 		}),
 	);
-	await retirePreviousCredential(
-		props,
-		name,
-		previous,
-		credentialsPath,
-		apiKey,
-	);
+	await retirePreviousCredential(props, name, previous, apiKey);
 	recordProfile(props, name, credentialsPath, identity);
 
 	report(props, {
@@ -791,13 +812,7 @@ const createByMinting = async (props: CreateProps) => {
 		// failure writing `profiles.json` costs a profile entry, not the credential.
 		keyIsReachable = true;
 
-		await retirePreviousCredential(
-			props,
-			name,
-			previous,
-			credentialsPath,
-			minted.key,
-		);
+		await retirePreviousCredential(props, name, previous, minted.key);
 		recordProfile(props, name, credentialsPath, identity);
 
 		report(props, {
@@ -862,31 +877,22 @@ const resolveMintScope = async (
 const retirePreviousCredential = async (
 	props: ProfileProps,
 	name: string,
-	existing: StoredCredentials | null,
-	credentialsPath: string,
+	existing: OutgoingCredential | null,
 	/** The key now stored. Retiring this would kill the credential we just committed to. */
 	replacementKey?: string,
 ): Promise<void> => {
 	if (existing === null) return;
 
-	// Re-storing the key a profile already holds is a no-op, not a replacement. Revoking here
-	// would leave the profile pointing at a credential this command had just killed.
-	if (isSameCredential(existing, replacementKey)) {
-		log.debug(
-			"The replacement is the credential already stored; nothing to retire.",
-		);
-		return;
-	}
-
-	// Already classified by `readOutgoingCredential`, which is the only way a credential
-	// reaches here.
-	if (
-		credentialKind(existing, { path: credentialsPath, profile: name }) ===
-		API_KEY
-	) {
-		const keyId =
-			typeof existing.key_id === "number" ? existing.key_id : undefined;
-		if (keyId === undefined) {
+	if (existing.kind === API_KEY) {
+		// Re-storing the key a profile already holds is a no-op, not a replacement. Revoking
+		// here would leave the profile pointing at a credential this command just committed to.
+		if (isSameCredential(existing.apiKey, replacementKey)) {
+			log.debug(
+				"The replacement is the credential already stored; nothing to retire.",
+			);
+			return;
+		}
+		if (existing.keyId === undefined) {
 			log.warning(
 				'Profile "%s" held an API key that was supplied rather than minted here, so it stays live on the account — find it with `neon api-keys list`.',
 				name,
@@ -894,18 +900,18 @@ const retirePreviousCredential = async (
 			return;
 		}
 		const client = getApiClient({
-			apiKey: existing.api_key as string,
+			apiKey: existing.apiKey,
 			apiHost: props.apiHost,
 		});
 		log.info(
-			(await withdrawKey(client, scopeOf(existing), keyId))
-				? `Revoked the key it replaces (id ${keyId})`
-				: `Could not revoke the key it replaces (id ${keyId}); it may still be live. Remove it with: neon api-keys revoke ${keyId}`,
+			(await withdrawKey(client, existing.scope, existing.keyId))
+				? `Revoked the key it replaces (id ${existing.keyId})`
+				: `Could not revoke the key it replaces (id ${existing.keyId}); it may still be live. Remove it with: neon api-keys revoke ${existing.keyId}`,
 		);
 		return;
 	}
 
-	const revoked = await revokeTokenSet(existing, props);
+	const revoked = await revokeTokenSet(existing.tokens, props);
 	log.info(
 		revoked
 			? "Signed out the session it replaced"
@@ -1160,13 +1166,9 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 	//    access already broke.
 	const at = { path: profile.credentialsPath, profile: name };
 	const stored = readOutgoingCredential(at);
-	const holdsApiKey =
-		stored !== null && credentialKind(stored, at) === API_KEY;
 
-	if (holdsApiKey) {
-		const keyId =
-			typeof stored.key_id === "number" ? stored.key_id : undefined;
-		const scope = scopeOf(stored);
+	if (stored?.kind === API_KEY) {
+		const { keyId, scope } = stored;
 		if (keyId === undefined) {
 			// A key we did not mint has no id we can match it by, so it outlives its profile.
 			// Deleting the file quietly would imply the credential had been destroyed.
@@ -1176,7 +1178,7 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 			);
 		} else {
 			const client = getApiClient({
-				apiKey: stored.api_key as string,
+				apiKey: stored.apiKey,
 				apiHost: props.apiHost,
 			});
 			log.info(
@@ -1186,7 +1188,7 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 			);
 		}
 	} else if (stored !== null) {
-		const revoked = await revokeTokenSet(stored, props);
+		const revoked = await revokeTokenSet(stored.tokens, props);
 		log.info(
 			revoked
 				? "Revoked the OAuth token"

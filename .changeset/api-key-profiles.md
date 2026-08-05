@@ -84,7 +84,23 @@ Fixed alongside it, all in the same area:
   the default stayed `0700` indefinitely. Every write now lands owner-only on a fresh inode.
 - `readCredentials` treats only a missing file as "no credentials". A permission or I/O error used
   to look identical to absence, so it would start a browser login that overwrote a credential the
-  CLI simply could not read.
+  CLI simply could not read. `@neon/env` and `neon-init` now agree: a damaged credentials file is
+  an error naming the file and the repair, where they previously reported "not signed in" and, in
+  `neon-init`'s case, offered a browser sign-in that would overwrite it.
+- **A malformed credentials file no longer echoes its own contents.** `JSON.parse` quotes a window
+  of the input around a syntax error, so a truncated credentials file produced
+  `Unexpected token 'a', ..."api_key":napi_SUPERS"... is not valid JSON` — printed by
+  `profile list` and by every failed authentication. Diagnostics now name the file and nothing
+  from inside it.
+- A file declaring `"type": "api_key"` without a key is reported as invalid rather than as a
+  working key profile, and no revocation is attempted for it. `list` showed it as usable, and
+  `remove` sent an empty credential to the revoke endpoint and reported the failure as if the key
+  might still be live.
+- A malformed `profiles.json` is never rewritten. It was treated as absent, so `profile create`
+  rebuilt it from a single `DEFAULT` entry and discarded every named profile in it — the file is
+  the only record of where each account's credentials live. Reading still tolerates it, so
+  `neon auth` keeps working, but a named profile now reports the broken file rather than
+  `Unknown profile`, and entry names and paths are validated as they are read.
 
 **All three CLIs read credentials the same way now.** The credential, profile and config-path
 code moved to `shared/cli-core`, which `neon`, `@neon/env` and `neon-init` each compile into

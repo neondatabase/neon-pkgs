@@ -136,7 +136,14 @@ describe("resolveApiKey — precedence", () => {
 	});
 });
 
-describe("resolveApiKey — returns undefined rather than throwing", () => {
+/**
+ * An **absent** credential is the ordinary not-signed-in state, so it resolves to no key and
+ * the library reports `PLATFORM_MISSING_API_KEY`. A **damaged** one is not an absence, and used
+ * to resolve the same way — reporting "no API key" for a file that is present and broken, which
+ * sends the reader hunting for a missing login. `neon` treats that file as a hard error, so the
+ * two CLIs also disagreed about the same file on the same machine.
+ */
+describe("resolveApiKey — nothing stored", () => {
 	test("no source provides a key", () => {
 		const home = makeHome(null);
 		expect(resolveApiKey({ env: { HOME: home } })).toBeUndefined();
@@ -146,22 +153,66 @@ describe("resolveApiKey — returns undefined rather than throwing", () => {
 		expect(resolveApiKey({ env: {} })).toBeUndefined();
 	});
 
-	test("malformed JSON", () => {
-		const home = makeHome("not json");
-		expect(resolveApiKey({ env: { HOME: home } })).toBeUndefined();
-	});
-
-	test("credentials file has no access_token, or an empty one", () => {
+	test("an OAuth file with no usable token is an error, not silence", () => {
 		const noToken = makeHome(JSON.stringify({ refresh_token: "rt-only" }));
-		expect(resolveApiKey({ env: { HOME: noToken } })).toBeUndefined();
+		expect(() => resolveApiKey({ env: { HOME: noToken } })).toThrow(
+			/no usable token/,
+		);
 
 		const emptyToken = makeHome(token(""));
-		expect(resolveApiKey({ env: { HOME: emptyToken } })).toBeUndefined();
+		expect(() => resolveApiKey({ env: { HOME: emptyToken } })).toThrow(
+			/no usable token/,
+		);
+	});
+});
+
+describe("resolveApiKey — a damaged credentials file fails loudly", () => {
+	test("malformed JSON names the file and the repair", () => {
+		const home = makeHome("not json");
+		expect(() => resolveApiKey({ env: { HOME: home } })).toThrow(
+			/not valid JSON/,
+		);
+		expect(() => resolveApiKey({ env: { HOME: home } })).toThrow(
+			/neon profile create DEFAULT --force/,
+		);
 	});
 
-	test("credentials file is a JSON array, not an object", () => {
+	// The parse error must not quote the file: it is the one file guaranteed to hold a secret.
+	test("and never quotes what the file contains", () => {
+		const home = makeHome('{"api_key":napi_SENTINELSECRET}');
+		let thrown = "";
+		try {
+			resolveApiKey({ env: { HOME: home } });
+		} catch (err) {
+			thrown = err instanceof Error ? err.message : String(err);
+		}
+		expect(thrown).toContain("not valid JSON");
+		expect(thrown).not.toContain("napi_");
+	});
+
+	test("a JSON array is an error too", () => {
 		const home = makeHome("[]");
-		expect(resolveApiKey({ env: { HOME: home } })).toBeUndefined();
+		expect(() => resolveApiKey({ env: { HOME: home } })).toThrow(
+			/does not contain a credentials object/,
+		);
+	});
+
+	test("an api_key file with no key is an error", () => {
+		const home = makeHome(JSON.stringify({ type: "api_key" }));
+		expect(() => resolveApiKey({ env: { HOME: home } })).toThrow(
+			/no "api_key" value/,
+		);
+	});
+
+	// An exported key is a credential of its own, so it answers before any file is read.
+	test("but an explicit key still wins over a damaged file", () => {
+		const home = makeHome("not json");
+		expect(
+			resolveApiKey({ apiKey: "napi_flag", env: { HOME: home } }),
+		).toBe("napi_flag");
+		expect(
+			resolveApiKey({ env: { HOME: home, NEON_API_KEY: "napi_env" } }),
+		).toBe("napi_env");
 	});
 });
 
@@ -202,11 +253,16 @@ describe("resolveApiKey — an api_key credentials file", () => {
 		).toBe("from-env");
 	});
 
-	test("an api_key file with no key is no key, not a fall back to access_token", () => {
+	// The declared kind decides, and a file that declares a key it does not have is broken
+	// rather than an OAuth file. Falling back to `access_token` would authenticate with a
+	// credential the file says is not the one to use.
+	test("an api_key file with no key is an error, not a fall back to access_token", () => {
 		const home = makeHome(
 			JSON.stringify({ type: "api_key", access_token: "oauth-token" }),
 		);
-		expect(resolveApiKey({ env: { HOME: home } })).toBeUndefined();
+		expect(() => resolveApiKey({ env: { HOME: home } })).toThrow(
+			/no "api_key" value/,
+		);
 	});
 });
 

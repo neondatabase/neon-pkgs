@@ -96,48 +96,88 @@ export const assertValidProfileName = (name: string): void => {
 export const profilesFilePath = (dir: string): string =>
 	resolveConfigFile(PROFILES_FILE, dir === defaultDir ? {} : { dir }).path;
 
+/** What is at `profiles.json`: nothing, something readable, or something broken. */
+export type ProfilesRead =
+	| { kind: "ok"; file: ProfilesFile }
+	| { kind: "absent" }
+	/** The file is there and cannot be trusted. `reason` names the file and is safe to print. */
+	| { kind: "unusable"; reason: string };
+
 /**
- * Read `profiles.json`, or `null` when there isn't one — the normal single-account state.
- * A malformed file is reported and treated as absent rather than breaking every command;
- * the worst case is that a named profile is "not found", which is recoverable, whereas
- * throwing here would lock the user out of `neon auth` itself.
+ * Read and classify `profiles.json` without deciding what to do about it.
+ *
+ * Entry keys and shapes are validated here rather than at each use. A key is a profile name,
+ * and a name that `assertValidProfileName` would reject cannot have been written by this CLI —
+ * it would travel into error messages as a recovery command nobody can run, and into a
+ * `credentials.<name>.json` filename.
+ */
+export const inspectProfiles = (dir: string): ProfilesRead => {
+	const path = profilesFilePath(dir);
+	if (!existsSync(path)) return { kind: "absent" };
+	const broken = (why: string): ProfilesRead => ({
+		kind: "unusable",
+		reason: `${path} could not be read as a profiles file: ${why}`,
+	});
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(readFileSync(path, "utf8"));
+	} catch {
+		return broken("it is not valid JSON");
+	}
+	if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
+		return broken("it does not contain an object");
+	const profiles = (parsed as ProfilesFile).profiles;
+	if (
+		profiles === null ||
+		typeof profiles !== "object" ||
+		Array.isArray(profiles)
+	)
+		return broken("it has no `profiles` object");
+	for (const [name, entry] of Object.entries(profiles)) {
+		if (!NAME_PATTERN.test(name))
+			return broken(`"${name}" is not a valid profile name`);
+		if (
+			entry === null ||
+			typeof entry !== "object" ||
+			typeof entry.credentials !== "string" ||
+			entry.credentials.trim() === ""
+		) {
+			return broken(`profile "${name}" has no \`credentials\` path`);
+		}
+	}
+	return { kind: "ok", file: { version: 1, profiles } };
+};
+
+/**
+ * Read `profiles.json`, or `null` when there is nothing usable there.
+ *
+ * A malformed file is reported through `onWarn` and treated as absent, because for a *read* the
+ * worst case is a named profile turning up missing, which is recoverable — whereas throwing
+ * would lock the user out of `neon auth` itself. Writing is the opposite: see
+ * {@link upsertProfile}, which refuses rather than rebuilding a file it cannot read.
  */
 export const readProfiles = (
 	dir: string,
 	/** Called with the reason a profiles file was ignored. The consumer owns how it reports. */
 	onWarn: (message: string) => void = () => {},
 ): ProfilesFile | null => {
-	const path = profilesFilePath(dir);
-	if (!existsSync(path)) return null;
-	try {
-		const parsed = JSON.parse(readFileSync(path, "utf8")) as unknown;
-		if (
-			parsed === null ||
-			typeof parsed !== "object" ||
-			Array.isArray(parsed)
-		)
-			throw new Error("not an object");
-		const profiles = (parsed as ProfilesFile).profiles;
-		if (
-			profiles === null ||
-			typeof profiles !== "object" ||
-			Array.isArray(profiles)
-		)
-			throw new Error("missing `profiles`");
-		return { version: 1, profiles };
-	} catch (err) {
-		onWarn(
-			`Ignoring malformed ${path}: ${
-				err instanceof Error ? err.message : String(err)
-			}`,
-		);
-		return null;
-	}
+	const read = inspectProfiles(dir);
+	if (read.kind === "ok") return read.file;
+	if (read.kind === "unusable") onWarn(read.reason);
+	return null;
 };
 
 /** Resolve a profile to an absolute credentials path. Throws when a named profile is unknown. */
 export const resolveProfile = (dir: string, name: string): ResolvedProfile => {
-	const file = readProfiles(dir);
+	const read = inspectProfiles(dir);
+	// A broken file must not be reported as `Unknown profile "work"`. That names the wrong
+	// problem, and the user goes looking for a profile they can see in the file in front of them.
+	if (read.kind === "unusable" && name !== DEFAULT_PROFILE) {
+		throw new Error(
+			`${read.reason}. Fix or delete the file — every named profile is defined in it.`,
+		);
+	}
+	const file = read.kind === "ok" ? read.file : null;
 	const entry = file?.profiles[name];
 
 	if (entry) {
@@ -188,14 +228,30 @@ export const upsertProfile = (
 ): void => {
 	assertValidProfileName(name);
 	const path = profilesFilePath(dir);
-	const file = readProfiles(dir) ?? {
-		version: 1 as const,
-		profiles: {
-			[DEFAULT_PROFILE]: {
-				credentials: relativeToProfiles(path, credentialsPath(dir)),
-			},
-		},
-	};
+	const read = inspectProfiles(dir);
+	// Refusing is the point. Treating a broken file as absent here rebuilt it from a single
+	// `DEFAULT` entry and dropped every named profile in it — silent data loss, in the file
+	// that is the only record of where each account's credentials live. The credentials
+	// themselves survive, so fixing the file by hand recovers everything.
+	if (read.kind === "unusable") {
+		throw new Error(
+			`${read.reason}. Refusing to rewrite it, because doing so would discard the profiles it defines. Fix or delete the file, then re-run.`,
+		);
+	}
+	const file =
+		read.kind === "ok"
+			? read.file
+			: {
+					version: 1 as const,
+					profiles: {
+						[DEFAULT_PROFILE]: {
+							credentials: relativeToProfiles(
+								path,
+								credentialsPath(dir),
+							),
+						},
+					},
+				};
 
 	file.profiles[name] = {
 		credentials: relativeToProfiles(path, entry.credentials),
@@ -229,7 +285,16 @@ export const onlyDefaultRemains = (file: ProfilesFile): boolean => {
 };
 
 export const listProfiles = (dir: string): ResolvedProfile[] => {
-	const file = readProfiles(dir);
+	const read = inspectProfiles(dir);
+	// Listing is the command run to find out what is there, so a broken file is the answer
+	// rather than an obstacle. Showing only `DEFAULT` would state, as fact, that the profiles
+	// in that file do not exist.
+	if (read.kind === "unusable") {
+		throw new Error(
+			`${read.reason}. Fix or delete the file — every named profile is defined in it.`,
+		);
+	}
+	const file = read.kind === "ok" ? read.file : null;
 	if (!file) return [resolveProfile(dir, DEFAULT_PROFILE)];
 	const names = Object.keys(file.profiles);
 	if (!names.includes(DEFAULT_PROFILE)) names.unshift(DEFAULT_PROFILE);

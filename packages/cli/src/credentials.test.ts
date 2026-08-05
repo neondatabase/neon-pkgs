@@ -64,7 +64,7 @@ describe("credentialKind", () => {
 	test("an unrecognised type throws and quotes what it found", () => {
 		expect(() =>
 			credentialKind({ type: "keychain" }, at("/c.json")),
-		).toThrow(/unrecognised "type": "keychain"/);
+		).toThrow(/declares a "type" this version does not understand/);
 		expect(() =>
 			credentialKind({ type: "keychain" }, at("/c.json")),
 		).toThrow(/\/c\.json/);
@@ -158,6 +158,55 @@ describe("readCredentials", () => {
 		expect(() => readCredentials(at(path, "dbx"))).toThrow(
 			/Replace it deliberately with `neon profile create dbx --force`/,
 		);
+	});
+
+	// V8 quotes a window of the input around a syntax error, so on Node 24 a truncated
+	// credentials file produced `Unexpected token 'a', ..."api_key":napi_SUPERS"... is not
+	// valid JSON` — and this reason is printed by `profile list` and by every failed
+	// authentication. The one file guaranteed to hold a secret is the one whose parse errors
+	// must say the least.
+	test("a malformed file's reason never quotes its contents", () => {
+		const secret = "napi_SENTINELSECRETVALUE";
+		const dir = makeDir({
+			"credentials.json": `{"type":"api_key","api_key":${secret}}`,
+		});
+		const path = resolve(dir, "credentials.json");
+
+		const read = inspectCredentials(path);
+		expect(read.kind).toBe("unusable");
+		const reason = read.kind === "unusable" ? read.reason : "";
+		expect(reason).toContain("not valid JSON");
+		expect(reason).toContain(path);
+		expect(reason).not.toContain("napi_");
+		expect(reason).not.toContain(secret.slice(0, 10));
+
+		// And through the fatal reader, which is what an authenticating command prints.
+		let thrown = "";
+		try {
+			readCredentials(at(path));
+		} catch (err) {
+			thrown = err instanceof Error ? err.message : String(err);
+		}
+		expect(thrown).toContain("not valid JSON");
+		expect(thrown).not.toContain("napi_");
+	});
+
+	// Same reasoning for a declared kind: it is a value read out of a secret file, and a
+	// corrupted or hand-edited file can put key material in any field.
+	test("an unrecognised type is not quoted back either", () => {
+		let thrown = "";
+		try {
+			credentialKind(
+				{ type: "napi_SENTINELSECRETVALUE" },
+				at("/c.json", "work"),
+			);
+		} catch (err) {
+			thrown = err instanceof Error ? err.message : String(err);
+		}
+		expect(thrown).toContain("does not understand");
+		expect(thrown).toContain("/c.json");
+		expect(thrown).toContain("`neon profile create work --force`");
+		expect(thrown).not.toContain("napi_");
 	});
 
 	test("a JSON array is unusable, not a credentials object", () => {
@@ -349,50 +398,23 @@ describe("isSameCredential", () => {
 	// Re-storing the key a profile already holds is a no-op. Without this the caller retires the
 	// old credential and revokes the key it has just committed to.
 	test("recognises the same key", () => {
-		expect(
-			isSameCredential(
-				{ type: "api_key", api_key: "napi_same" },
-				"napi_same",
-			),
-		).toBe(true);
+		expect(isSameCredential("napi_same", "napi_same")).toBe(true);
 	});
 
 	// A key read from a file or a pipe arrives with a trailing newline.
 	test("ignores surrounding whitespace on either side", () => {
-		expect(
-			isSameCredential(
-				{ type: "api_key", api_key: " napi_same\n" },
-				"napi_same",
-			),
-		).toBe(true);
-		expect(
-			isSameCredential(
-				{ type: "api_key", api_key: "napi_same" },
-				"  napi_same\n",
-			),
-		).toBe(true);
+		expect(isSameCredential(" napi_same\n", "napi_same")).toBe(true);
+		expect(isSameCredential("napi_same", "  napi_same\n")).toBe(true);
 	});
 
 	test("a different key is a real replacement", () => {
-		expect(
-			isSameCredential(
-				{ type: "api_key", api_key: "napi_old" },
-				"napi_new",
-			),
-		).toBe(false);
-	});
-
-	test("an OAuth credential is never the same as a key", () => {
-		expect(isSameCredential({ access_token: "t" }, "napi_new")).toBe(false);
+		expect(isSameCredential("napi_old", "napi_new")).toBe(false);
 	});
 
 	// An empty stored key must not match an empty replacement and suppress a retirement.
 	test("blank values never match", () => {
-		expect(isSameCredential({ type: "api_key", api_key: "  " }, "  ")).toBe(
-			false,
-		);
-		expect(
-			isSameCredential({ type: "api_key", api_key: "napi_x" }, undefined),
-		).toBe(false);
+		expect(isSameCredential("  ", "  ")).toBe(false);
+		expect(isSameCredential("napi_x", undefined)).toBe(false);
+		expect(isSameCredential(undefined, "napi_x")).toBe(false);
 	});
 });

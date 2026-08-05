@@ -64,18 +64,23 @@ export function resolveApiKey(options: {
 /**
  * The credential stored for the selected profile.
  *
- * An **explicitly** named profile that cannot be used is an error: the user said which account to
- * act as, and falling through to "no API key" would report a missing credential when the real
- * problem is the name they typed. `DEFAULT` is different — nothing was named, so having no
- * credential there is the ordinary not-signed-in case and the library's
- * `PLATFORM_MISSING_API_KEY` says it better than a stack trace.
+ * Two different situations, deliberately not merged. A **missing** credential under `DEFAULT` is
+ * the ordinary not-signed-in state and resolves to no key; under a profile the user named it is
+ * an error, because reporting a missing credential would hide that the real problem is the name
+ * they typed. A **damaged** credential is always an error: the file is there, it is not an
+ * absence, and no amount of signing in elsewhere explains it.
  */
 function readStoredCredential(
 	selection: { profile: string; explicit: boolean },
 	env: NodeJS.ProcessEnv,
 ): string | undefined {
 	const { profile, explicit } = selection;
-	const fail = (reason: string): undefined => {
+	/**
+	 * An *absence* is only an error when the user named the profile. Not being signed in under
+	 * `DEFAULT` is the ordinary state, and the library's `PLATFORM_MISSING_API_KEY` says it
+	 * better than a stack trace.
+	 */
+	const absent = (reason: string): undefined => {
 		if (explicit) throw new Error(reason);
 		return undefined;
 	};
@@ -92,32 +97,38 @@ function readStoredCredential(
 					// and deriving one from the other loses every named profile.
 					resolveProfile(configDir({ env }), profile).credentialsPath;
 	} catch (err) {
-		return fail(err instanceof Error ? err.message : String(err));
+		// An unknown profile name is a naming error whoever typed it can fix, so it is fatal
+		// either way — it cannot be reported as "not signed in".
+		throw err instanceof Error ? err : new Error(String(err));
 	}
 
 	const read = inspectCredentials(path);
 	if (read.kind === "absent") {
-		return fail(
+		return absent(
 			`Profile "${profile}" has no stored credential at ${path}. Sign in with \`neon profile create ${profile}\`.`,
 		);
 	}
-	if (read.kind === "unusable") return fail(read.reason);
 
-	try {
-		const credential = interpretCredentials(read.credentials, {
-			path,
-			profile,
-		});
-		if (credential.kind === "api_key") return credential.apiKey;
-		const token = read.credentials.access_token;
-		return typeof token === "string" && token.trim() !== ""
-			? token.trim()
-			: fail(
-					`Profile "${profile}" holds a browser sign-in with no usable token. Sign in again with \`neon auth --profile ${profile}\`.`,
-				);
-	} catch (err) {
-		return fail(err instanceof Error ? err.message : String(err));
+	// A file that exists but cannot be read is never an absence, named or not. Returning
+	// `undefined` here reported "no API key" for a credential that is present and broken,
+	// which sends the reader looking for a missing login instead of at the damaged file — and
+	// under `neon` the same file is a hard error, so the two CLIs disagreed about it.
+	if (read.kind === "unusable") {
+		throw new Error(
+			`${read.reason}. Replace it deliberately with \`neon profile create ${profile} --force\`, or delete the file.`,
+		);
 	}
+
+	const credential = interpretCredentials(read.credentials, {
+		path,
+		profile,
+	});
+	if (credential.kind === "api_key") return credential.apiKey;
+	const token = read.credentials.access_token;
+	if (typeof token === "string" && token.trim() !== "") return token.trim();
+	throw new Error(
+		`Profile "${profile}" holds a browser sign-in with no usable token at ${path}. Sign in again with \`neon auth --profile ${profile}\`.`,
+	);
 }
 
 export { DEFAULT_PROFILE };

@@ -1,7 +1,9 @@
 # `shared/cli-core`
 
-Credential, profile and config-path code shared by every CLI in this repo — `neon`,
-`@neon/env`, `neon-init` — and by `@neon/config`, which re-exports the path half of it.
+Credential, profile and config-path code shared by the three CLIs that read a credential off
+disk: `neon`, `@neon/env` and `neon-init`. `@neon/config` is not a consumer — it takes an
+explicit `apiKey` and touches neither the filesystem nor the environment, which is why its
+`./paths` subpath was removed rather than re-exported from here.
 
 ## It is not a package, on purpose
 
@@ -29,7 +31,7 @@ A workspace package would not work here, and the reasons are worth recording:
   this code has to work there.
 - **No logger, no yargs, no API client.** Take a callback or a value instead; the imperative
   shell belongs in the consumer.
-- Unit tests live in `packages/cli`, so the code is covered once rather than four times.
+- Unit tests live in `packages/cli`, so the code is covered once rather than three times.
   `@neon/env`'s `resolve-api-key.test.ts` additionally checks that the two CLIs agree on
   precedence — that is the regression this directory exists to prevent.
 - **Any script that compiles a consumer's `src/` must run the sync first.** A `vitest` or `tsc`

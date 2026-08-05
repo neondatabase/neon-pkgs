@@ -94,7 +94,7 @@ describe("API-key profiles against the live API", () => {
 				]),
 			);
 			// Whoever the key belongs to, `create` resolved an identity from the API rather than
-			// leaving a placeholder: a user key gets an email or id, an org key "organization <id>".
+			// leaving a placeholder: a user key gets an email or its user id, an org key the org id.
 			expect(rows.find((r) => r.name === PROFILE)?.account).not.toBe("-");
 			expect(listed.stdout).not.toContain(requireApiKey());
 		},

@@ -342,7 +342,9 @@ describe("profile list", () => {
 				}),
 			]),
 		);
-		expect(stderr).toContain('unrecognised "type": "keychain"');
+		expect(stderr).toContain(
+			'declares a "type" this version does not understand',
+		);
 		// The one credential error that used to be a dead end: it throws before the reader
 		// that appends a repair, so it had to grow its own.
 		expect(stderr).toContain("`neon profile create odd --force`");
@@ -933,7 +935,9 @@ describe("a damaged credentials file", () => {
 		]);
 
 		expect(code).toBe(0);
-		expect(stderr).toContain('unrecognised "type": "unknown"');
+		expect(stderr).toContain(
+			'declares a "type" this version does not understand',
+		);
 		expect(stderr).not.toContain("..");
 		expect(existsSync(resolve(dir, "credentials.odd.json"))).toBe(false);
 	});
@@ -978,6 +982,189 @@ describe("a damaged credentials file", () => {
 			]),
 		);
 		expect(stderr).toContain("not valid JSON");
+	});
+});
+
+describe("a credentials file that declares a key it does not have", () => {
+	// `credentialKind` answers what the file *declares*, and `{ "type": "api_key" }` declares a
+	// key. Using that as validation made `list` report a working API-key profile, and sent
+	// `remove` into `getApiClient` with `undefined` behind an `as string` — a revoke request
+	// authenticated by nothing, reported to the user as a failed revocation.
+	test("is listed as invalid, not as a working api key", async () => {
+		const dir = makeConfigDir({
+			"credentials.hollow.json": JSON.stringify({ type: "api_key" }),
+			"credentials.blank.json": JSON.stringify({
+				type: "api_key",
+				api_key: "   ",
+			}),
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: {
+					hollow: { credentials: "credentials.hollow.json" },
+					blank: { credentials: "credentials.blank.json" },
+				},
+			}),
+		});
+		const { code, stdout, stderr } = await runCli([
+			"profile",
+			"list",
+			"--config-dir",
+			dir,
+			"--output",
+			"json",
+		]);
+
+		expect(code).toBe(0);
+		expect(JSON.parse(stdout)).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					name: "hollow",
+					auth: "invalid",
+					file: "invalid",
+				}),
+				expect.objectContaining({
+					name: "blank",
+					auth: "invalid",
+					file: "invalid",
+				}),
+			]),
+		);
+		expect(stderr).toContain('no "api_key" value');
+	});
+
+	test("is removable, and no revocation is attempted", async () => {
+		const dir = makeConfigDir({
+			"credentials.hollow.json": JSON.stringify({
+				type: "api_key",
+				key_id: 99,
+			}),
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: {
+					hollow: { credentials: "credentials.hollow.json" },
+				},
+			}),
+		});
+		const { code, stderr } = await runCli([
+			"profile",
+			"remove",
+			"hollow",
+			"--yes",
+			"--config-dir",
+			dir,
+		]);
+
+		expect(code).toBe(0);
+		expect(stderr).toContain("Nothing in it could be revoked");
+		// The API host refuses connections, so an attempted revoke would say so out loud.
+		expect(stderr).not.toContain("Could not revoke");
+		expect(stderr).not.toContain("id 99");
+		expect(existsSync(resolve(dir, "credentials.hollow.json"))).toBe(false);
+	});
+});
+
+describe("a malformed profiles.json", () => {
+	const BROKEN = "{ not json";
+
+	// It is the only record of where each account's credentials live, and `create` used to
+	// rebuild it from a single DEFAULT entry when it could not be read — silent data loss.
+	// `upsertProfile`'s refusal is unit-tested in `profiles.test.ts`; what this adds is that
+	// the binary leaves the file alone, including on the path that fails before the write.
+	test("survives a create attempt byte for byte", async () => {
+		const dir = makeConfigDir({ "profiles.json": BROKEN });
+		const { code } = await runCli([
+			"profile",
+			"create",
+			"work",
+			"--config-dir",
+			dir,
+			"--api-key",
+			"napi_whatever",
+		]);
+
+		expect(code).toBe(1);
+		expect(readFileSync(resolve(dir, "profiles.json"), "utf8")).toBe(
+			BROKEN,
+		);
+	});
+
+	// "Unknown profile" names the wrong problem: the user can see the profile in the file.
+	test("is reported as broken rather than as an unknown profile", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": OAUTH_FILE,
+			"profiles.json": BROKEN,
+		});
+		const { code, stderr } = await runCli([
+			"projects",
+			"list",
+			"--config-dir",
+			dir,
+			"--profile",
+			"work",
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("could not be read as a profiles file");
+		expect(stderr).not.toContain('Unknown profile "work"');
+	});
+
+	// `list` is the command run to find out what is there, so it must not answer "one profile".
+	test("stops list rather than silently showing only DEFAULT", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": OAUTH_FILE,
+			"profiles.json": BROKEN,
+		});
+		const { code, stdout, stderr } = await runCli([
+			"profile",
+			"list",
+			"--config-dir",
+			dir,
+			"--output",
+			"json",
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("could not be read as a profiles file");
+		expect(stdout).not.toContain("DEFAULT");
+	});
+
+	// A name this CLI would refuse to create cannot be trusted on the way back in: it becomes
+	// part of a filename and of the recovery command printed in every error about that profile.
+	test("an invalid profile name in the file is refused", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": OAUTH_FILE,
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { "bad name": { credentials: "credentials.json" } },
+			}),
+		});
+		const { code, stderr } = await runCli([
+			"profile",
+			"list",
+			"--config-dir",
+			dir,
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain('"bad name" is not a valid profile name');
+	});
+
+	test("an entry with no credentials path is refused", async () => {
+		const dir = makeConfigDir({
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { work: { label: "me@example.com" } },
+			}),
+		});
+		const { code, stderr } = await runCli([
+			"profile",
+			"list",
+			"--config-dir",
+			dir,
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain('profile "work" has no `credentials` path');
 	});
 });
 

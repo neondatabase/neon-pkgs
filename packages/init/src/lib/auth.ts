@@ -57,30 +57,36 @@ export async function isAuthenticated(): Promise<boolean> {
 }
 
 /**
- * The credential the Neon CLI has stored, or `null`.
+ * The credential the Neon CLI has stored, or `null` when there is none.
  *
  * Shares the reader with `neon` and `@neon/env` rather than keeping a copy — the inline path
  * resolution this replaced was the third implementation of "where is the config directory", and
  * it also looked only for `access_token`, so an account signed in with an API key read as not
  * authenticated and got sent to a browser. See `shared/cli-core/README.md`.
+ *
+ * `null` means *absent*, and only absent. A file that exists and cannot be read throws: this
+ * value decides whether to start a browser sign-in, and a sign-in overwrites the file it could
+ * not read — as a different account, if a different one is chosen. Catching every error here
+ * made a damaged credential indistinguishable from a fresh machine.
  */
 async function getNeonctlAccessToken(): Promise<string | null> {
-	try {
-		const { path } = resolveConfigFile("credentials.json");
-		const read = inspectCredentials(path);
-		if (read.kind !== "ok") return null;
-		// `neon init` has no profile selection — it reads the default credential and refuses
-		// when one is named, so `DEFAULT` is the only profile this can ever be about.
-		const credential = interpretCredentials(read.credentials, {
-			path,
-			profile: DEFAULT_PROFILE,
-		});
-		if (credential.kind === "api_key") return credential.apiKey;
-		const token = read.credentials.access_token;
-		return typeof token === "string" && token.trim() !== "" ? token : null;
-	} catch {
-		return null;
+	const { path } = resolveConfigFile("credentials.json");
+	const read = inspectCredentials(path);
+	if (read.kind === "absent") return null;
+	if (read.kind === "unusable") {
+		throw new Error(
+			`${read.reason}. Replace it deliberately with \`neon profile create ${DEFAULT_PROFILE} --force\`, or delete the file.`,
+		);
 	}
+	// `neon init` has no profile selection — it reads the default credential and refuses
+	// when one is named, so `DEFAULT` is the only profile this can ever be about.
+	const credential = interpretCredentials(read.credentials, {
+		path,
+		profile: DEFAULT_PROFILE,
+	});
+	if (credential.kind === "api_key") return credential.apiKey;
+	const token = read.credentials.access_token;
+	return typeof token === "string" && token.trim() !== "" ? token : null;
 }
 
 /**

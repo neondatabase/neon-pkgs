@@ -721,7 +721,7 @@ and swap only its key, use `rotate-key`.
 
 ```console
 $ neon profile create ci --mint --org-id org-abc-123 --output json
-{"name":"ci","account":"organization org-abc-123","auth":"api key","scope":"org org-abc-123","keyId":3239771,"credentials":"/home/me/.config/neon/credentials.ci.json"}
+{"name":"ci","account":"org-abc-123","auth":"api key","scope":"org org-abc-123","keyId":3239771,"credentials":"/home/me/.config/neon/credentials.ci.json"}
 ```
 
 One flag takes the key, because the shell already covers the variations: `--api-key "$(cat
