@@ -224,20 +224,57 @@ const externalPackageSchema = z
  */
 const functionExternalPackagesSchema = z.array(externalPackageSchema);
 
+/**
+ * A package whose real files ship alongside the bundle. Same specifier grammar as
+ * {@link externalPackageSchema}, minus the subpath: a native package is installed and
+ * traced as a whole, so the unit is the package, not a file inside it.
+ */
+const nativePackageSchema = externalPackageSchema.refine(
+	(value) => value.split("/").length === (value.startsWith("@") ? 2 : 1),
+	{
+		error: 'must be a package name such as "sharp" or "@scope/pkg", without a subpath',
+	},
+);
+
+/**
+ * Per-function list of packages shipped as real files next to the bundle. See
+ * {@link FunctionDef.nativePackages}.
+ */
+const functionNativePackagesSchema = z.array(nativePackageSchema);
+
 const runtimeSchema = z.literal("nodejs24");
 
 /**
  * Static definition of a function (existence). The slug is the record key (validated by
  * {@link functionSlugSchema}), so it is not a field here. Deploy tuning (`runtime`) lives
  * in the `branch` closure, not here.
+ *
+ * `externalPackages` and `nativePackages` are mutually exclusive per package: the first
+ * means "leave the import unresolved", the second "leave it unresolved AND ship the files".
+ * Listing one package in both states two different intents for it, so it is rejected here
+ * rather than silently resolved in favour of one.
  */
-export const functionDefSchema = z.strictObject({
-	name: z.string().min(1).max(255),
-	source: z.string().min(1),
-	env: functionEnvSchema.optional(),
-	externalPackages: functionExternalPackagesSchema.optional(),
-	dev: functionDevConfigSchema.optional(),
-});
+export const functionDefSchema = z
+	.strictObject({
+		name: z.string().min(1).max(255),
+		source: z.string().min(1),
+		env: functionEnvSchema.optional(),
+		externalPackages: functionExternalPackagesSchema.optional(),
+		nativePackages: functionNativePackagesSchema.optional(),
+		dev: functionDevConfigSchema.optional(),
+	})
+	.check((ctx) => {
+		const external = new Set(ctx.value.externalPackages ?? []);
+		(ctx.value.nativePackages ?? []).forEach((pkg, index) => {
+			if (!external.has(pkg)) return;
+			ctx.issues.push({
+				code: "custom",
+				input: pkg,
+				path: ["nativePackages", index],
+				message: `"${pkg}" is also in externalPackages; a package belongs to one list or the other`,
+			});
+		});
+	});
 
 /** Static definition of a bucket (existence). Name is the record key. */
 export const bucketDefSchema = z.strictObject({

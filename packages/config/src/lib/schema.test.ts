@@ -184,6 +184,161 @@ describe("configInputSchema", () => {
 		expect(result.success).toBe(false);
 	});
 
+	test("accepts nativePackages with bare and scoped names", () => {
+		const result = configInputSchema.safeParse({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: "./hello.ts",
+						nativePackages: ["sharp", "@napi-rs/canvas"],
+					},
+				},
+			},
+		});
+		expect(result.success).toBe(true);
+	});
+
+	test("accepts an empty nativePackages list", () => {
+		const result = configInputSchema.safeParse({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: "./hello.ts",
+						nativePackages: [],
+					},
+				},
+			},
+		});
+		expect(result.success).toBe(true);
+	});
+
+	test("rejects a relative path in nativePackages", () => {
+		const result = configInputSchema.safeParse({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: "./hello.ts",
+						nativePackages: ["./local-addon.node"],
+					},
+				},
+			},
+		});
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(formatZodIssues(result.error).join("\n")).toMatch(
+				/not a relative or absolute path/,
+			);
+		}
+	});
+
+	test("rejects an absolute path in nativePackages", () => {
+		const result = configInputSchema.safeParse({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: "./hello.ts",
+						nativePackages: ["/opt/addon.node"],
+					},
+				},
+			},
+		});
+		expect(result.success).toBe(false);
+	});
+
+	test("rejects a non-string entry in nativePackages", () => {
+		const result = configInputSchema.safeParse({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: "./hello.ts",
+						nativePackages: [42],
+					},
+				},
+			},
+		});
+		expect(result.success).toBe(false);
+	});
+
+	// A native package is installed and traced whole, so a subpath names nothing the
+	// option can act on — unlike externalPackages, where esbuild accepts one.
+	test("rejects a subpath in nativePackages", () => {
+		const result = configInputSchema.safeParse({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: "./hello.ts",
+						nativePackages: ["sharp/lib/sharp.node"],
+					},
+				},
+			},
+		});
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(formatZodIssues(result.error).join("\n")).toMatch(
+				/without a subpath/,
+			);
+		}
+	});
+
+	test("accepts a scoped nativePackages name, which has one legitimate slash", () => {
+		const result = configInputSchema.safeParse({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: "./hello.ts",
+						nativePackages: ["@img/sharp-linux-arm64"],
+					},
+				},
+			},
+		});
+		expect(result.success).toBe(true);
+	});
+
+	test("rejects a package listed in both externalPackages and nativePackages", () => {
+		const result = configInputSchema.safeParse({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: "./hello.ts",
+						externalPackages: ["microsandbox", "sharp"],
+						nativePackages: ["sharp"],
+					},
+				},
+			},
+		});
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			const issues = formatZodIssues(result.error).join("\n");
+			expect(issues).toMatch(/also in externalPackages/);
+			// Reported against the offending entry, not the whole function.
+			expect(issues).toMatch(/nativePackages\[0\]/);
+		}
+	});
+
+	test("accepts the two lists side by side when they name different packages", () => {
+		const result = configInputSchema.safeParse({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: "./hello.ts",
+						externalPackages: ["microsandbox"],
+						nativePackages: ["sharp"],
+					},
+				},
+			},
+		});
+		expect(result.success).toBe(true);
+	});
+
 	test("rejects an unknown key in the function dev block (e.g. removed `portless`)", () => {
 		const result = configInputSchema.safeParse({
 			preview: {
