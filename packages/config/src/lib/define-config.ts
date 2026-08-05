@@ -346,6 +346,11 @@ function resolveFunctionConfig(
 		...(def.externalPackages
 			? { externalPackages: [...def.externalPackages] }
 			: {}),
+		// Same discipline: absent when undeclared, so the bundler can key the
+		// ship-native-files path off its presence and leave every other deploy untouched.
+		...(def.nativePackages
+			? { nativePackages: [...def.nativePackages] }
+			: {}),
 		// Passed through untouched (no defaults); only `neon dev` reads it.
 		...(def.dev ? { dev: def.dev } : {}),
 	};

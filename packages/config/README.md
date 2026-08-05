@@ -68,11 +68,43 @@ export default defineConfig({
 A dependency the handler actually calls has to be bundled, and whether that is possible depends on what it is:
 
 - **Pure JavaScript** — bundling is the normal case, and a failure is usually something specific and fixable in the entry.
-- **Backed by a native `.node` binary** — cannot be bundled by any bundler; the binary is a compiled object the platform loads from a real path. Such a package cannot work on Functions until the archive can carry files alongside the bundle. Listing it here does not help, it only moves the error from deploy to invoke.
+- **Backed by a native `.node` binary** — cannot be bundled by any bundler; the binary is a compiled object the platform loads from a real path. Such a package needs its files shipped next to the bundle, which is `nativePackages` below. Listing it here does not help, it only moves the error from deploy to invoke.
 
 A native package may also bundle without needing this option at all. `sharp` loads its binary through `createRequire`, which esbuild does not follow, so it bundles cleanly and then fails at invoke with `Could not load the "sharp" module`.
 
 Entries are package names, optionally with a subpath (`pkg`, `@scope/pkg`, `pkg/sub`). A relative or absolute path is rejected at validation time. `neon dev` applies the same list, so a local run bundles like a deploy.
+
+### Native dependencies (`nativePackages`)
+
+`nativePackages` names packages backed by a native binary whose real files should ship into the deployed archive. Where `externalPackages` only stops such a package failing the build, this is the option that makes it work:
+
+```ts
+export default defineConfig({
+  preview: {
+    functions: {
+      resize: {
+        name: "Resize",
+        source: "./functions/resize.ts",
+        nativePackages: ["sharp"],
+      },
+    },
+  },
+});
+```
+
+Each entry is kept out of the bundle and then installed for the Functions runtime target — **linux-arm64, glibc** — into a throwaway directory, traced for the files it actually reaches, and copied into the archive under `node_modules/` with its directory layout intact. The layout matters: a `.node` addon finds its sibling shared libraries relative to its own directory, so a flattened tree fails to load.
+
+Your own `node_modules` is never read for those files or modified. Its binaries are built for your machine rather than the deploy target, and a cross-platform install does not survive your next plain `npm install`, so the target's packages are resolved fresh on each deploy. The version installed is the one your project already resolved, read from your dependency tree — the deploy honours your lockfile without trusting the binaries beside it.
+
+Requirements, all checked at deploy time rather than left to fail at invoke:
+
+- the package publishes a linux-arm64 glibc build (`sharp` and most `@napi-rs/*` packages do; anything compiled from source at install time does not)
+- `npm` is on `PATH`
+- the archive stays within the deploy size limits — native binaries are large, so a couple of them is the practical ceiling
+
+Entries are package names without a subpath (`sharp`, `@scope/pkg`), since the whole package is installed and traced. A package must not appear in both lists.
+
+Under `neon dev` the list only keeps the package out of the bundle. Nothing is installed or copied, and it resolves from your own `node_modules` against your host architecture — which is what you want locally.
 
 ### Data API
 

@@ -355,9 +355,9 @@ export interface FunctionDef {
 	 * possible depends on what it is. A pure-JavaScript package can be bundled, and a
 	 * failure to do so is usually something specific and fixable. A package backed by a
 	 * native `.node` binary cannot be bundled by anything — the binary is a compiled
-	 * object the platform loads from a real path — so such a package cannot work on
-	 * Functions until the deployed archive can carry files alongside the bundle. Do not
-	 * reach for `externalPackages` to try: it moves the error from deploy to invoke.
+	 * object the platform loads from a real path — so it needs its files shipped next to
+	 * the bundle instead. That is what {@link FunctionDef.nativePackages} does; reaching
+	 * for `externalPackages` only moves the error from deploy to invoke.
 	 *
 	 * Note that a native package may bundle without ever needing this option. `sharp`, for
 	 * instance, loads its binary through `createRequire`, which esbuild does not follow, so
@@ -370,6 +370,40 @@ export interface FunctionDef {
 	 * @example ["microsandbox", "@mongodb-js/zstd"]
 	 */
 	externalPackages?: string[];
+	/**
+	 * Packages backed by a native binary, whose real files ship into the deployed archive
+	 * alongside the bundle. This is the option that makes a native dependency *work*, where
+	 * {@link FunctionDef.externalPackages} only stops it failing the build.
+	 *
+	 * Each entry is left out of the bundle and then installed for the Functions runtime
+	 * target — **linux-arm64, glibc** — into a throwaway directory, traced for the files it
+	 * actually reaches, and copied into the archive under `node_modules/` with its directory
+	 * layout preserved. That layout is load-bearing, not cosmetic: a `.node` addon locates
+	 * its sibling shared libraries relative to its own directory, so a flattened tree fails
+	 * to load.
+	 *
+	 * Your own `node_modules` is never read for these files or modified. Its binaries are
+	 * built for your machine rather than the deploy target, and a cross-platform install
+	 * does not survive your next plain `npm install`, so the target's packages are resolved
+	 * fresh on each deploy. The version installed is the one your project already resolved,
+	 * read from your dependency tree — the deploy honours your lockfile without trusting the
+	 * binaries sitting next to it.
+	 *
+	 * Requirements and failure modes, all reported at deploy time rather than at invoke: the
+	 * package must publish a linux-arm64 glibc build (`sharp` and most `@napi-rs/*` packages
+	 * do; anything compiled from source at install time does not), `npm` must be on `PATH`,
+	 * and the archive must stay inside the deploy size limits — native binaries are large.
+	 *
+	 * Entries are package names without a subpath (`sharp`, `@scope/pkg`): the whole package
+	 * is installed and traced, so naming a file inside one means nothing here. A package
+	 * listed here must not also appear in `externalPackages`.
+	 *
+	 * Under `neon dev` the list only keeps the package out of the bundle — nothing is
+	 * installed or copied, and it resolves from your own `node_modules` against your host
+	 * architecture, which is what you want locally.
+	 * @example ["sharp"]
+	 */
+	nativePackages?: string[];
 	/**
 	 * Local-development settings used by `neon dev` when serving every function from
 	 * `neon.ts`. Ignored at deploy time. See {@link FunctionDevConfig}.
@@ -557,6 +591,13 @@ export interface ResolvedFunctionConfig {
 	 * policy that never mentions it resolves to the same shape it always did.
 	 */
 	externalPackages?: string[];
+	/**
+	 * Packages whose real files ship alongside the bundle, passed through from
+	 * {@link FunctionDef.nativePackages}. Absent rather than empty when undeclared: a policy
+	 * that never mentions it takes the pre-existing bundling path and produces the archive
+	 * it always did.
+	 */
+	nativePackages?: string[];
 	runtime: FunctionRuntime;
 	/**
 	 * Local-development settings, passed through untouched from {@link FunctionDef.dev}
