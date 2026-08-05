@@ -66,7 +66,11 @@ describe("API-key profiles against the live API", () => {
 			);
 			expect(profiles).not.toContain(requireApiKey());
 
-			const listed = await runCli(["profile", "list"], { configDir });
+			// No `--api-key`: `list` reads files, and refuses a key rather than ignoring one.
+			const listed = await runCli(["profile", "list"], {
+				configDir,
+				apiKey: null,
+			});
 			expect(listed.code).toBe(0);
 			const rows = JSON.parse(listed.stdout) as Array<{
 				name: string;
@@ -256,6 +260,25 @@ describe("API-key profiles against the live API", () => {
 			} finally {
 				rmSync(deadDir, { recursive: true, force: true });
 			}
+		},
+	);
+
+	// Live, because a real key is the case that matters: the helper passes one on every call by
+	// default, so a subcommand quietly accepting it here is exactly how the flag came to be
+	// dropped in the first place.
+	e2eTest(
+		"profile list refuses a real key rather than using it",
+		async () => {
+			const result = await runCli(["profile", "list"], {
+				configDir,
+				apiKey: requireApiKey(),
+				json: false,
+			});
+
+			expect(result.code).toBe(1);
+			expect(result.stderr).toContain(
+				"--api-key does not apply to `profile list`",
+			);
 		},
 	);
 

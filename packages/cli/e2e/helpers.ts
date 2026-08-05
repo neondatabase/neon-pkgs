@@ -61,14 +61,21 @@ export function runCli(
 		/**
 		 * Pass this key as `--api-key`. Defaults to the harness key, and to nothing at all when
 		 * `profile` is set. Give both to exercise the rejection.
+		 *
+		 * `null` passes none. The `profile` subcommands that act on a stored credential refuse
+		 * `--api-key` rather than ignoring it, so the default would make them fail — and a case
+		 * about reading profiles off disk should not be authenticating in the first place.
 		 */
-		apiKey?: string;
+		apiKey?: string | null;
 		/** Extra environment for the child. `undefined` removes an inherited variable. */
 		env?: Record<string, string | undefined>;
 	} = {},
 ): Promise<CliResult> {
 	const key =
-		options.apiKey ?? (options.profile ? undefined : requireApiKey());
+		options.apiKey === null
+			? undefined
+			: (options.apiKey ??
+				(options.profile ? undefined : requireApiKey()));
 	const argv = [
 		CLI_ENTRY,
 		...args,
