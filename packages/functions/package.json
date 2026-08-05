@@ -1,14 +1,15 @@
 {
 	"name": "@neon/functions",
 	"version": "0.6.0",
-	"description": "Runtime helpers for Neon Functions. Currently provides a `waitUntil` primitive for deferring async work past a response.",
+	"description": "Runtime helpers for Neon Functions: `waitUntil` for deferring async work past a response, and `upgradeWebSocket` for serving WebSockets from a fetch handler.",
 	"keywords": [
 		"neon",
 		"database",
 		"postgres",
 		"functions",
 		"serverless",
-		"platform"
+		"platform",
+		"websocket"
 	],
 	"repository": {
 		"type": "git",
