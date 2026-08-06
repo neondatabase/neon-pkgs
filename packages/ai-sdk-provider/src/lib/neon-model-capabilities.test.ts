@@ -176,6 +176,18 @@ describe("getNeonModelCapabilities", () => {
 		);
 	});
 
+	it("flags an unrecognised Claude id so the warning can hedge", () => {
+		// The id shape from Anthropic's own docs, which `(string & {})` accepts.
+		expect(
+			getNeonModelCapabilities("claude-3-5-sonnet-20241022")
+				.claudeSamplingUnrecognized,
+		).toBe(true);
+		expect(
+			getNeonModelCapabilities("claude-opus-5")
+				.claudeSamplingUnrecognized,
+		).toBeUndefined();
+	});
+
 	it("is permissive for a genuinely unknown model", () => {
 		const caps = getNeonModelCapabilities("some-future-model-v1");
 		expect(caps.family).toBe("other");

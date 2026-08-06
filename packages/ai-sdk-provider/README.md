@@ -69,17 +69,27 @@ Which ids your branch serves is account-specific during the beta; `GET $NEON_AI_
 
 Upstream backends behind the gateway accept different subsets of the OpenAI-style parameters the AI SDK emits, and sending one an upstream rejects is a hard `400`. The provider drops those before the request and records a warning in `result.warnings`, so a call succeeds instead of failing on a parameter you passed in good faith.
 
+These rules apply on the Anthropic Messages and Chat Completions routes. The Responses route (every `gpt-*` id) relies on the upstream OpenAI model's own stripping instead, so its behaviour is the AI SDK's rather than described here — but `getNeonModelCapabilities` still answers for those ids.
+
 | Models | Dropped |
 | --- | --- |
-| Claude 4.7 and newer (`claude-opus-4-7`, `claude-opus-4-8`, `claude-opus-5`, `claude-sonnet-5`, `claude-fable-5`) | `temperature`, `topP` — these models are steered with reasoning effort instead |
-| All Claude | `frequencyPenalty`, `presencePenalty`, `seed`, and whichever of `temperature`/`topP` you did not set (Anthropic accepts only one) |
+| Claude 4.7 and newer (`claude-opus-4-7`, `claude-opus-4-8`, `claude-opus-5`, `claude-sonnet-5`, `claude-fable-5`) | `temperature`, `topP` |
+| All Claude | `frequencyPenalty`, `presencePenalty`, `seed`, `reasoningEffort`, and `topP` when you set both `temperature` and `topP` (Anthropic accepts only one) |
 | `gpt-oss` | `frequencyPenalty`, `presencePenalty`, `seed`, `stopSequences` |
 | Qwen, Gemma | `frequencyPenalty`, `presencePenalty`, `seed` |
 | `glm-5-2`, `inkling` | `frequencyPenalty`, `presencePenalty` |
 | Meta Llama | `frequencyPenalty`, `presencePenalty`, `seed` |
 | Gemini | `reasoningEffort` |
 
-**`temperature` on a Claude 5 model therefore has no effect.** That is the gateway's behaviour, not a provider choice; sending it returns `does not support the temperature parameter`.
+**`temperature` on a Claude 5 model therefore has no effect.** That is the gateway's behaviour, not a provider choice; sending it returns `does not support the temperature parameter`. Steer those models with Anthropic's own effort control instead — note that this is `effort`, not the OpenAI-style `reasoningEffort`, which every Claude id drops:
+
+```typescript
+await generateText({
+  model: neon('claude-opus-5'),
+  prompt: 'Plan a schema migration.',
+  providerOptions: { anthropic: { effort: 'high' } }, // low | medium | high | xhigh | max
+});
+```
 
 Query the rules directly rather than hardcoding them:
 
