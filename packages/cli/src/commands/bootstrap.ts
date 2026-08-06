@@ -316,7 +316,7 @@ const defaultDirName = (template: BootstrapTemplate): string =>
 
 /**
  * Download and materialize the template into `targetDir`. The actual
- * download/extract/write lives in the shared `neon-init/bootstrap` core
+ * download/extract/write lives in `src/init/bootstrap.ts`, shared with `neon init`
  * (exec-bit and symlink fidelity, graceful symlink fallback); here we just
  * frame it with progress logging. Returns the number of files written.
  */

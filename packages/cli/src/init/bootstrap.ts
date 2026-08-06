@@ -157,7 +157,9 @@ const githubToken = (): string =>
 // present so the same code path works behind proxies that authenticate, and
 // (in future) for private template repos.
 const downloadHeaders = (): Record<string, string> => ({
-	"User-Agent": "neon-init",
+	// GitHub rejects a request with no User-Agent; the value is free-form and this
+	// one only has to name the client honestly.
+	"User-Agent": "neon-cli",
 	...(githubToken() ? { Authorization: `Bearer ${githubToken()}` } : {}),
 });
 

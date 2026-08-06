@@ -1,6 +1,6 @@
 /**
- * Converts neon-init args (e.g. ["neon-auth", "--json", "--setup"]) to a
- * neon init --data command using the step routing pattern.
+ * Converts a phase's `args` (e.g. ["neon-auth", "--json", "--setup"]) into the
+ * `neon init --agent --data` invocation that reaches the same handler.
  */
 function argsToCommand(args: string[]): string {
 	const data: Record<string, unknown> = {};

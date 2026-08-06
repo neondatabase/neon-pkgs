@@ -642,7 +642,7 @@ async function interactiveInitInner(
 			const authSuccess = await ensureNeonctlAuth();
 			if (!authSuccess) {
 				authS.stop("Authentication failed.");
-				outro("Run neon-init again after signing in.");
+				outro("Run `neon init` again after signing in.");
 				return;
 			}
 			authS.stop("Authenticated.");
