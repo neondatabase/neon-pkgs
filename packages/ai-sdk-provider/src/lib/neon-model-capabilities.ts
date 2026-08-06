@@ -47,6 +47,13 @@ export interface NeonModelCapabilities {
 	supportsSeed: boolean;
 	supportsStopSequences: boolean;
 	supportsReasoningEffort: boolean;
+	/**
+	 * True when a `claude-*` id could not be parsed into a version and was
+	 * assumed to be new. The sampling restriction is then a precaution rather
+	 * than something measured, and the warning says so instead of asserting a
+	 * capability nobody checked.
+	 */
+	claudeSamplingUnrecognized?: boolean;
 }
 
 const PERMISSIVE: Omit<NeonModelCapabilities, "family"> = {
@@ -65,17 +72,19 @@ const PERMISSIVE: Omit<NeonModelCapabilities, "family"> = {
  * `claude-<tier>-<major>-<minor>`, optionally behind the legacy `databricks-`
  * prefix. An id we cannot parse is treated as new, which is the safe direction.
  */
-function claudeAcceptsSampling(id: string): boolean {
-	// Anchored: `claude-opus-4-beta` and `claude-opus-4.7` must fall through to
-	// the strict branch rather than matching their leading digits and being
-	// treated as an old model.
+function claudeVersion(id: string): { major: number; minor: number } | null {
+	// Anchored: `claude-opus-4-beta` and `claude-opus-4.7` must not match their
+	// leading digits and be read as old models. A dated id such as
+	// `claude-3-5-sonnet-20241022` does not parse either, and is reported as
+	// unrecognised rather than silently classified.
 	const match = /^(?:databricks-)?claude-[a-z]+-(\d+)(?:-(\d+))?$/.exec(id);
 	if (!match) {
-		return false;
+		return null;
 	}
-	const major = Number(match[1]);
-	const minor = match[2] === undefined ? 0 : Number(match[2]);
-	return major < 4 || (major === 4 && minor <= 6);
+	return {
+		major: Number(match[1]),
+		minor: match[2] === undefined ? 0 : Number(match[2]),
+	};
 }
 
 /**
@@ -104,7 +113,10 @@ export function getNeonModelCapabilities(
 	// future Claude inherits the restriction: dropping a parameter the model
 	// would have accepted costs a warning, claiming one it rejects costs a 400.
 	if (id.includes("claude")) {
-		const sampling = claudeAcceptsSampling(id);
+		const version = claudeVersion(id);
+		const sampling =
+			version !== null &&
+			(version.major < 4 || (version.major === 4 && version.minor <= 6));
 		return {
 			family: "anthropic",
 			supportsTemperature: sampling,
@@ -114,6 +126,7 @@ export function getNeonModelCapabilities(
 			supportsSeed: false,
 			supportsStopSequences: true,
 			supportsReasoningEffort: false,
+			...(version === null ? { claudeSamplingUnrecognized: true } : {}),
 		};
 	}
 

@@ -1,15 +1,19 @@
 ---
-"@neondatabase/ai-sdk-provider": minor
+"@neon/ai-sdk-provider": minor
 ---
 
-Fix hard 400s on sampling parameters, resync the model catalog, and remove the gateway-extras list.
+Fix hard 400s on sampling parameters, resync the model catalog, and remove `NEON_EXTRA_MODEL_IDS`.
 
 **Fixes.** The capability rules claimed support the gateway does not have, so the provider forwarded parameters that come back as a `400` instead of stripping them with a warning:
 
 - Claude 4.7 and newer (`claude-opus-4-7`, `claude-opus-4-8`, `claude-opus-5`, `claude-sonnet-5`, `claude-fable-5`) reject `temperature` and `top_p` — those models are steered with `output_config.effort`. Claude 4.6 and earlier are unaffected and keep both.
 - Every unified-endpoint family except Gemini rejects penalties (`parameter "frequency_penalty" must be equal to 0`). `gpt-oss`, Qwen, Gemma, `glm-5-2` and `inkling` now drop them. `gpt-oss` also rejects `seed` and `stop`; Qwen and Gemma reject `seed`.
 
-**Catalog.** `NEON_MODELS_DEV_IDS` now covers all 39 models the gateway serves. The exported `NeonKnownModelId` union gains eight ids — `claude-fable-5`, `claude-opus-5`, `claude-sonnet-5`, `glm-5-2`, `gpt-5-6-luna`, `gpt-5-6-sol`, `gpt-5-6-terra` and `inkling` — and loses five: `claude-sonnet-4`, `gemini-2-5-flash`, `gemini-2-5-pro`, `gemini-3-pro` and `gpt-5-2-codex`, which the gateway no longer serves. (`gpt-5-5-pro` was already in the union via the extras list; `gpt-5-1-codex-max` and `gpt-5-1-codex-mini` were retired upstream but were never in it.)
+**Catalog.** `NEON_MODELS_DEV_IDS` now covers all 39 models the gateway serves. The exported `NeonKnownModelId` union gains eight ids — `claude-fable-5`, `claude-opus-5`, `claude-sonnet-5`, `glm-5-2`, `gpt-5-6-luna`, `gpt-5-6-sol`, `gpt-5-6-terra` and `inkling` — and loses five: `claude-sonnet-4`, `gemini-2-5-flash`, `gemini-2-5-pro`, `gemini-3-pro` and `gpt-5-2-codex`, which the gateway no longer serves.
+
+**`getNeonModelCapabilities` returns different answers.** It is exported, and `supportsTemperature`, `supportsPenalties`, `supportsSeed` and `supportsStopSequences` all change for part of the catalog as a result of the fixes above. If you branch on it, re-check your assumptions. The README now documents every rule under "Dropped call options".
+
+**Note on the retired ids.** Removing them from `NeonKnownModelId` cannot warn most callers: `neon("gemini-3-pro")` still type-checks through the `(string & {})` fallback and now fails at the gateway instead. Only an explicit `const id: NeonKnownModelId = "gemini-3-pro"` gets a compile error.
 
 **Breaking: `NEON_EXTRA_MODEL_IDS` is removed.** It existed to autocomplete ids the gateway served ahead of models.dev, and the two catalogs now agree. The concept is gone rather than shipped empty: such an id already works, since `NeonChatModelId` accepts any string via its `(string & {})` fallback. `NeonKnownModelId` is now `NEON_MODELS_DEV_IDS[number]`. If you imported `NEON_EXTRA_MODEL_IDS`, delete the import.
 
