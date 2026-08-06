@@ -139,4 +139,40 @@ describe("the CLI's failure output", () => {
 		expect(stderr).not.toContain("Show help");
 		expect(stderr).not.toMatch(/^\s*at /m);
 	});
+
+	// Every spelling yargs accepts has to reach the same answer. Matching that by hand is a
+	// losing game — a first attempt looked for the bare token, so `--json=true` from an agent
+	// got a plaintext error — so the mode comes from what yargs parsed.
+	test.each([
+		"--json",
+		"--json=true",
+		"--agent=true",
+		"-a",
+	])("%s is answered with JSON", (flag) => {
+		const { status, stdout } = runStatus([flag]);
+
+		expect(status).toBe(1);
+		expect(JSON.parse(stdout).error).toMatch(/not valid JSON/);
+	});
+
+	test.each([
+		"--no-json",
+		"--json=false",
+	])("%s is answered in plain text", (flag) => {
+		const { status, stdout, stderr } = runStatus([flag]);
+
+		expect(status).toBe(1);
+		expect(stderr).toContain("Error: ");
+		expect(stdout).toBe("");
+	});
+
+	// A parse error happens before any middleware, so there is no parsed argv to consult and
+	// the raw fallback decides. An agent gets JSON for its own mistakes too.
+	test("a parse error in JSON mode is still JSON", () => {
+		const { status, stdout } = runStatus(["--json", "--nonsense"]);
+
+		expect(status).toBe(1);
+		expect(JSON.parse(stdout).success).toBe(false);
+		expect(JSON.parse(stdout).error).toMatch(/nonsense/i);
+	});
 });

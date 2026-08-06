@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { writeSync } from "node:fs";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import { interactiveInit } from "./interactive.js";
@@ -49,18 +50,56 @@ function outputJson(data: unknown): void {
 }
 
 /**
- * Whether this invocation asked for JSON, read from argv rather than from a parsed `argv`.
+ * What yargs parsed, once it has parsed anything. Recorded by a middleware so the failure
+ * handler can use the real value rather than re-deriving it.
+ */
+let parsedJsonMode: boolean | undefined;
+
+/**
+ * Whether this invocation asked for JSON.
  *
- * The failure handler runs for parse errors too, where there is no parsed `argv` to consult —
- * and it is the mode, not the command, that decides how a failure has to be shaped.
+ * Prefers what yargs parsed, because matching its semantics by hand is a losing game:
+ * `--json=true`, `-a=true` and `--no-json` are all valid and none of them is the bare token
+ * this used to look for, so an agent passing `--json=true` got a plaintext error.
+ *
+ * The raw scan is the fallback for a *parse* error, where there is no parsed argv to consult
+ * and the mode still decides how the failure has to be shaped. It is last-wins, as yargs is.
  */
 function jsonRequested(): boolean {
-	return (
-		process.argv.includes("--json") ||
-		process.argv.includes("--agent") ||
-		process.argv.includes("-a") ||
-		detectAgentInvocation() !== null
-	);
+	if (parsedJsonMode !== undefined) return parsedJsonMode;
+	return rawJsonFlag() ?? detectAgentInvocation() !== null;
+}
+
+/**
+ * Write every byte to a file descriptor before returning.
+ *
+ * `process.stdout.write` buffers on a pipe, which is exactly where an agent reads from, so the
+ * `process.exit` that has to follow a failure would cut the message in half. A partial write is
+ * normal on a pipe and `EAGAIN` is normal on a non-blocking one; both mean "call again".
+ */
+function writeAllSync(fd: number, text: string): void {
+	let buffer = Buffer.from(text, "utf8");
+	while (buffer.length > 0) {
+		try {
+			buffer = buffer.subarray(writeSync(fd, buffer));
+		} catch (err) {
+			if ((err as NodeJS.ErrnoException).code !== "EAGAIN") return;
+		}
+	}
+}
+
+/** `--json`, `--json=false`, `--no-agent`, `-a` … or `undefined` when none was passed. */
+function rawJsonFlag(): boolean | undefined {
+	let value: boolean | undefined;
+	for (const arg of process.argv.slice(2)) {
+		const match = /^(?:--(no-)?(json|agent)|(-a))(?:=(.*))?$/.exec(arg);
+		if (!match) continue;
+		const [, negated, , short, assigned] = match;
+		const asked =
+			assigned === undefined ? true : assigned.toLowerCase() !== "false";
+		value = negated && !short ? !asked : asked;
+	}
+	return value;
 }
 
 /**
@@ -710,6 +749,14 @@ const cli = yargs(hideBin(process.argv))
 		},
 	)
 
+	// Runs for every command once parsing succeeds, so the failure handler below reports in
+	// whichever mode yargs actually resolved rather than in one re-derived from raw argv.
+	.middleware((argv) => {
+		parsedJsonMode =
+			Boolean(argv.json) ||
+			Boolean(argv.agent) ||
+			detectAgentInvocation() !== null;
+	})
 	.help()
 	// Without this yargs guesses the version, and in an ESM bin it guesses
 	// wrong — `neon-init --version` printed "unknown".
@@ -722,10 +769,16 @@ const cli = yargs(hideBin(process.argv))
 	// whole point is to fail rather than be silently replaced.
 	.fail((msg, err) => {
 		const message = err?.message ?? msg ?? "neon-init failed";
+		// Written synchronously so that exiting on the next line cannot truncate it. Deferring
+		// the exit to a write callback instead lets yargs carry on: on a parse error it
+		// reported the bad argument and then ran the command anyway, printing two answers.
 		if (jsonRequested()) {
-			outputJson({ success: false, error: message });
+			writeAllSync(
+				1,
+				`${JSON.stringify(enrichResponse({ success: false, error: message }), null, 2)}\n`,
+			);
 		} else {
-			console.error(`Error: ${message}`);
+			writeAllSync(2, `Error: ${message}\n`);
 		}
 		process.exit(1);
 	});
