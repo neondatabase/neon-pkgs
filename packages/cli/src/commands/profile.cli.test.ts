@@ -1066,10 +1066,88 @@ describe("a credentials file that declares a key it does not have", () => {
 describe("a malformed profiles.json", () => {
 	const BROKEN = "{ not json";
 
+	// Refusing at the write was too late. With the metadata unreadable, `credentials.work.json`
+	// is a *guess* about which account that file holds — and `create` acted on the guess:
+	// overwrote it, revoked the key it replaced, and only then reached `upsertProfile`'s
+	// refusal. The earlier version of this case missed it, because a fake key fails
+	// verification against the unreachable API before any write happens.
+	//
+	// So the assertion is ordering: the refusal must arrive *before* the network call that a
+	// wrong answer would otherwise reach first.
+	test("stops a named create before it touches a credentials file", async () => {
+		const sentinel = JSON.stringify({
+			type: "api_key",
+			api_key: "napi_sentinel_do_not_touch",
+			key_id: 777,
+		});
+		const dir = makeConfigDir({
+			"profiles.json": BROKEN,
+			"credentials.work.json": sentinel,
+		});
+		const { code, stderr } = await runCli([
+			"profile",
+			"create",
+			"work",
+			"--force",
+			"--config-dir",
+			dir,
+			"--api-key",
+			"napi_replacement",
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("could not be read as a profiles file");
+		// The proof it happened first: the unreachable API was never called.
+		expect(stderr).not.toContain("Could not reach the Neon API");
+		expect(
+			readFileSync(resolve(dir, "credentials.work.json"), "utf8"),
+		).toBe(sentinel);
+		expect(readFileSync(resolve(dir, "profiles.json"), "utf8")).toBe(
+			BROKEN,
+		);
+	});
+
+	// `neon auth --profile work` is the other way in, and it opened the browser first.
+	test("stops a named sign-in before the browser opens", async () => {
+		const sentinel = JSON.stringify({ access_token: "sentinel-token" });
+		const dir = makeConfigDir({
+			"profiles.json": BROKEN,
+			"credentials.work.json": sentinel,
+		});
+		const { code, stderr } = await runCli([
+			"auth",
+			"--profile",
+			"work",
+			"--config-dir",
+			dir,
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("could not be read as a profiles file");
+		expect(stderr).not.toContain("Awaiting authentication");
+		expect(
+			readFileSync(resolve(dir, "credentials.work.json"), "utf8"),
+		).toBe(sentinel);
+	});
+
+	// DEFAULT is defined by the absence of metadata, so a broken file must not lock out the
+	// ordinary sign-in that repairs the situation.
+	test("does not block a DEFAULT sign-in", async () => {
+		const dir = makeConfigDir({ "profiles.json": BROKEN });
+		const { stderr } = await runCli(["auth", "--config-dir", dir], {
+			CI: "true",
+		});
+
+		// Reaches the CI guard, which is as far as a browser sign-in can get here — the point
+		// is that it is not the profiles-file refusal.
+		expect(stderr).toContain("Cannot run interactive auth in CI");
+		expect(stderr).not.toContain("could not be read as a profiles file");
+	});
+
 	// It is the only record of where each account's credentials live, and `create` used to
 	// rebuild it from a single DEFAULT entry when it could not be read — silent data loss.
 	// `upsertProfile`'s refusal is unit-tested in `profiles.test.ts`; what this adds is that
-	// the binary leaves the file alone, including on the path that fails before the write.
+	// the binary leaves the file alone.
 	test("survives a create attempt byte for byte", async () => {
 		const dir = makeConfigDir({ "profiles.json": BROKEN });
 		const { code } = await runCli([

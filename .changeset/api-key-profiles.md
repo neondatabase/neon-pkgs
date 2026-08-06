@@ -98,11 +98,14 @@ Fixed alongside it, all in the same area:
   working key profile, and no revocation is attempted for it. `list` showed it as usable, and
   `remove` sent an empty credential to the revoke endpoint and reported the failure as if the key
   might still be live.
-- A malformed `profiles.json` is never rewritten. It was treated as absent, so `profile create`
-  rebuilt it from a single `DEFAULT` entry and discarded every named profile in it — the file is
-  the only record of where each account's credentials live. Reading still tolerates it, so
-  `neon auth` keeps working, but a named profile now reports the broken file rather than
-  `Unknown profile`, and entry names and paths are validated as they are read.
+- A malformed `profiles.json` is never rewritten, and nothing that acts on a named profile runs
+  before it is checked. It was treated as absent, so `profile create` rebuilt it from a single
+  `DEFAULT` entry and discarded every named profile in it, and — because
+  `credentials.<name>.json` is only a convention, with the entry that confirms whose file it is
+  being the unreadable part — `create` could overwrite that file and revoke the key it held, and
+  `neon auth --profile` could sign in over it, before refusing. `DEFAULT` is unaffected, so the
+  ordinary sign-in that repairs the situation still works, and entry names and paths are
+  validated as they are read.
 
 **All three CLIs read credentials the same way now.** The credential, profile and config-path
 code moved to `shared/cli-core`, which `neon`, `@neon/env` and `neon-init` each compile into

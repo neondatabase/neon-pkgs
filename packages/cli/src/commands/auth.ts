@@ -17,6 +17,7 @@ import {
 	writeCredentials,
 } from "../_shared/credentials.js";
 import {
+	assertProfilesUsable,
 	assertValidProfileName,
 	DEFAULT_PROFILE,
 	newProfileCredentialsPath,
@@ -100,11 +101,6 @@ export const authFlow = async ({
 	if (!allowInteractiveAuth && isCi()) {
 		throw new Error("Cannot run interactive auth in CI");
 	}
-	const tokenSet = await auth({
-		oauthHost: oauthHost,
-		clientId: clientId,
-		allowUnsafeTls,
-	});
 
 	// A named profile that doesn't exist yet is created here rather than erroring: `neon
 	// auth --profile work` is how you make one, so it must work before there is anything
@@ -112,6 +108,16 @@ export const authFlow = async ({
 	const profileName = selectProfileName(profile);
 	const isNamed = profileName !== DEFAULT_PROFILE;
 	if (isNamed) assertValidProfileName(profileName);
+	// Both checks belong before the browser opens. Signing in and then refusing costs a real
+	// sign-in, and worse, the write in between lands on a path chosen from metadata this
+	// refuses to trust.
+	assertProfilesUsable(configDir, profileName);
+
+	const tokenSet = await auth({
+		oauthHost: oauthHost,
+		clientId: clientId,
+		allowUnsafeTls,
+	});
 	const credentialsPath =
 		isNamed && !readProfiles(configDir, log.warning)?.profiles[profileName]
 			? newProfileCredentialsPath(configDir, profileName)

@@ -20,6 +20,7 @@ import {
 	writeCredentials,
 } from "../_shared/credentials.js";
 import {
+	assertProfilesUsable,
 	assertValidProfileName,
 	DEFAULT_PROFILE,
 	listProfiles,
@@ -410,6 +411,11 @@ const readOutgoingCredential = (
 };
 
 const credentialsPathFor = (configDir: string, name: string): string => {
+	// Metadata we cannot read makes this a guess: `credentials.<name>.json` is a convention,
+	// and the entry that would say whether it is this account's file is exactly what is
+	// unreadable. Guessing here is what let a replacement overwrite a file and revoke its key
+	// before `upsertProfile` refused the same metadata.
+	assertProfilesUsable(configDir, name);
 	if (readProfiles(configDir)?.profiles[name] || name === DEFAULT_PROFILE) {
 		return credentialsPathForName(configDir, name);
 	}
@@ -559,6 +565,8 @@ const create = async (props: CreateProps) => {
 	const { name } = props;
 	rejectProfileFlag(props, "create");
 	assertValidProfileName(name);
+	// Before the key is read from stdin, verified against the API, or minted in a browser.
+	assertProfilesUsable(props.configDir, name);
 	assertReplaceable(props);
 
 	const suppliedKey = credentialInputs().apiKeyFlag.trim() !== "";

@@ -118,9 +118,21 @@ export const inspectProfiles = (dir: string): ProfilesRead => {
 		kind: "unusable",
 		reason: `${path} could not be read as a profiles file: ${why}`,
 	});
+	// Reading and parsing are separate failures with separate answers. Sharing one catch
+	// reported `EACCES` as "not valid JSON", which sends the user to edit a file that is
+	// perfectly valid and that they cannot open.
+	let contents: string;
+	try {
+		contents = readFileSync(path, "utf8");
+	} catch (err) {
+		const code = (err as NodeJS.ErrnoException).code;
+		return broken(
+			code ? `reading it failed with ${code}` : "reading it failed",
+		);
+	}
 	let parsed: unknown;
 	try {
-		parsed = JSON.parse(readFileSync(path, "utf8"));
+		parsed = JSON.parse(contents);
 	} catch {
 		return broken("it is not valid JSON");
 	}
@@ -165,6 +177,29 @@ export const readProfiles = (
 	if (read.kind === "ok") return read.file;
 	if (read.kind === "unusable") onWarn(read.reason);
 	return null;
+};
+
+/**
+ * Refuse to act on a named profile when the file that defines it cannot be read.
+ *
+ * Call this **before** anything that writes a credential, opens a browser, or spends an API
+ * call. {@link upsertProfile} refuses too, but it runs last: by then `create` has already
+ * overwritten `credentials.<name>.json` and revoked the key it replaced, and `neon auth
+ * --profile` has already signed in over it — a refusal that arrives after the destruction it
+ * exists to prevent. The path resolution itself is the unsound part, since with the metadata
+ * unreadable the conventional filename is a guess about which account that file belongs to.
+ *
+ * `DEFAULT` is exempt: it is defined by the absence of metadata rather than by an entry, so
+ * signing in normally must keep working while a broken `profiles.json` is repaired.
+ */
+export const assertProfilesUsable = (dir: string, name: string): void => {
+	if (name === DEFAULT_PROFILE) return;
+	const read = inspectProfiles(dir);
+	if (read.kind === "unusable") {
+		throw new Error(
+			`${read.reason}. Fix or delete the file before working with profile "${name}" — it is the only record of where each account's credentials live.`,
+		);
+	}
 };
 
 /** Resolve a profile to an absolute credentials path. Throws when a named profile is unknown. */
