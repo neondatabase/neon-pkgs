@@ -1,5 +1,12 @@
 # @neondatabase/config-runtime
 
+## 0.12.4
+
+### Patch Changes
+
+- Updated dependencies [aa31410]
+  - @neon/config@0.14.0
+
 ## 0.12.3
 
 ### Patch Changes
