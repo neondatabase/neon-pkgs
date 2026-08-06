@@ -93,6 +93,18 @@ export const RESPONSES_OK = {
 	usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
 };
 
+/** A minimal successful Anthropic Messages body. */
+export const MESSAGES_OK = {
+	id: "msg_test",
+	type: "message",
+	role: "assistant",
+	model: "claude-opus-5",
+	content: [{ type: "text", text: "pong" }],
+	stop_reason: "end_turn",
+	stop_sequence: null,
+	usage: { input_tokens: 1, output_tokens: 1 },
+};
+
 /** A minimal successful Chat Completions body. */
 export const CHAT_OK = {
 	id: "chatcmpl_test",

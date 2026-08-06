@@ -108,9 +108,23 @@ describe("getNeonModelCapabilities", () => {
 
 	it("treats an unparseable Claude id as new rather than permissive", () => {
 		// Dropping a supported parameter costs a warning; claiming an unsupported
-		// one costs a 400, so the unknown case must fall on the strict side.
-		const caps = getNeonModelCapabilities("claude-something-unreleased");
-		expect(caps.supportsTemperature).toBe(false);
+		// one costs a 400, so the unknown case must fall on the strict side. The
+		// match is anchored so a partially parseable id cannot borrow its leading
+		// digits and be read as an old model.
+		for (const id of [
+			"claude-something-unreleased",
+			"claude-opus-4-beta",
+			"claude-opus-4.7",
+			"claude-opus-4x",
+		]) {
+			expect({
+				id,
+				temperature: getNeonModelCapabilities(id).supportsTemperature,
+			}).toEqual({
+				id,
+				temperature: false,
+			});
+		}
 	});
 
 	// Every MLflow-routed family except Gemini rejects penalties with

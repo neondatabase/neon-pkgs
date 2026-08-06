@@ -66,7 +66,10 @@ const PERMISSIVE: Omit<NeonModelCapabilities, "family"> = {
  * prefix. An id we cannot parse is treated as new, which is the safe direction.
  */
 function claudeAcceptsSampling(id: string): boolean {
-	const match = /claude-[a-z]+-(\d+)(?:-(\d+))?/.exec(id);
+	// Anchored: `claude-opus-4-beta` and `claude-opus-4.7` must fall through to
+	// the strict branch rather than matching their leading digits and being
+	// treated as an old model.
+	const match = /^(?:databricks-)?claude-[a-z]+-(\d+)(?:-(\d+))?$/.exec(id);
 	if (!match) {
 		return false;
 	}
