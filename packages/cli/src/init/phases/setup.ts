@@ -699,38 +699,6 @@ async function executeBatchedInstallation(
 	};
 }
 
-function buildInspectionArgs(options: SetupPhaseOptions): string[] {
-	const args: string[] = [];
-	if (options.mcpConfigured !== null && options.mcpConfigured !== undefined) {
-		args.push("--mcp-configured", options.mcpConfigured ? "true" : "false");
-	}
-	if (
-		options.connectionString !== null &&
-		options.connectionString !== undefined
-	) {
-		args.push(
-			"--connection-string",
-			options.connectionString ? "true" : "false",
-		);
-	}
-	if (options.framework) {
-		args.push("--framework", options.framework);
-	}
-	if (options.orm) {
-		args.push("--orm", options.orm);
-	}
-	if (options.migrationTool) {
-		args.push("--migration-tool", options.migrationTool);
-	}
-	if (options.migrationDir) {
-		args.push("--migration-dir", options.migrationDir);
-	}
-	if (options.isVscodeIde !== null && options.isVscodeIde !== undefined) {
-		args.push("--is-vscode-ide", options.isVscodeIde ? "true" : "false");
-	}
-	return args;
-}
-
 /**
  * Fills in missing filesystem inspection fields by running inspectProject().
  * Agent-reported data (mcpConfigured, agent, mode, scopes) is preserved.
@@ -777,18 +745,6 @@ async function mergeCliInspection(
 			options.isVscodeIde ??
 			(inspection.isVscodeIde as boolean | undefined),
 	};
-}
-
-/**
- * Checks whether the user is in a VS Code-based IDE that supports extensions.
- * Uses agent-reported `ide` field first, then falls back to `isVscodeIde` from inspection.
- */
-function isCursorAgent(options: SetupPhaseOptions): boolean {
-	const ide = options.ide?.toLowerCase();
-	if (ide === "cursor") return true;
-	const agent = options.agent?.toLowerCase();
-	if (agent === "cursor") return true;
-	return false;
 }
 
 function isVscodeBasedIde(options: SetupPhaseOptions): boolean {
