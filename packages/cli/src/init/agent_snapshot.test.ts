@@ -42,6 +42,8 @@ import {
 	rmSync,
 	writeFileSync,
 } from "node:fs";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
@@ -200,10 +202,50 @@ const AGENTS: Record<string, Record<string, string>> = {
 	none: {},
 };
 
+/**
+ * The bootstrap template manifest, served locally. A fixture with no app makes
+ * the setup phase fetch this, and the real endpoint is both a network call and
+ * a list that changes every time we publish a template.
+ */
+const TEMPLATE_MANIFEST = `templates:
+  - id: hono
+    title: REST API
+    description: A Hono REST API on Neon Functions.
+    tools:
+      - Hono
+      - Drizzle
+    services:
+      - Postgres
+      - Functions
+    requires:
+      - database
+    source:
+      owner: neondatabase
+      repo: examples
+      ref: main
+      subdir: with-hono
+  - id: realtime-chat
+    title: Realtime chat
+    description: A Next.js chat app with Neon Auth.
+    services:
+      - Postgres
+      - Neon Auth
+    requires:
+      - database
+      - auth
+    source:
+      owner: neondatabase
+      repo: examples
+      ref: main
+      subdir: with-realtime-chat
+`;
+
 let root: string;
 let stubBin: string;
+let manifestServer: Server;
+let manifestUrl: string;
 
-beforeAll(() => {
+beforeAll(async () => {
 	root = mkdtempSync(join(tmpdir(), "neon-init-snap-"));
 	stubBin = join(root, "bin");
 	mkdirSync(stubBin, { recursive: true });
@@ -215,9 +257,22 @@ beforeAll(() => {
 		);
 		chmodSync(path, 0o755);
 	}
+
+	manifestServer = createServer((_req, res) => {
+		res.writeHead(200, { "Content-Type": "text/yaml" });
+		res.end(TEMPLATE_MANIFEST);
+	});
+	await new Promise<void>((done) => {
+		manifestServer.listen(0, "127.0.0.1", () => done());
+	});
+	const { port } = manifestServer.address() as AddressInfo;
+	manifestUrl = `http://127.0.0.1:${port}/templates.yaml`;
 });
 
-afterAll(() => {
+afterAll(async () => {
+	await new Promise<void>((done) => {
+		manifestServer.close(() => done());
+	});
 	rmSync(root, { recursive: true, force: true });
 });
 
@@ -273,6 +328,7 @@ function runInit(
 			HOME: home,
 			NEON_CONFIG_DIR: configDir,
 			NEON_STUB_LOG: stubLog,
+			NEON_BOOTSTRAP_MANIFEST_URL: manifestUrl,
 			NEON_NO_ANALYTICS: "1",
 			CI: "true",
 			NO_COLOR: "1",
@@ -302,10 +358,25 @@ function normalise(
 ): string {
 	return (
 		text
-			// `--help` prints the config directory as a yargs default and wraps it across
-			// lines, so plain path substitution cannot see it. The temp root carries this
-			// suite's own prefix, which makes the wrapped span safe to match directly.
-			.replace(/"[^"]*neon-init-snap[\s\S]*?"/g, '"<config>"')
+			// `--help` prints the config directory as a yargs default and wraps it
+			// mid-path, so plain substitution cannot see it. Match the option's own
+			// label instead, which survives whatever width the wrap lands on.
+			.replace(
+				/(Path to config directory \[string\] \[default: ")[\s\S]*?("\])/,
+				"$1<config>$2",
+			)
+			// `isCursorInstalled` / `isVSCodeInstalled` stat absolute install paths
+			// (`/Applications/Cursor.app`, `/usr/share/cursor`) with no env lever, so
+			// this is the one answer that legitimately differs between a laptop with
+			// an editor installed and a bare CI runner. Pin the shape, not the machine.
+			.replace(
+				/"installedEditors": (\[[\s\S]*?\]|null)/g,
+				'"installedEditors": <machine-dependent>',
+			)
+			.replace(
+				/No IDE detected, but the following editors are installed:[\s\S]*?set \\"ide\\" to \\"none\\"\.|No IDE or supported editors detected\. Set \\"ide\\" to \\"none\\" in your reportBack data\./g,
+				"<installed-editors-instruction>",
+			)
 			.split(paths.configDir)
 			.join("<config>")
 			.split(paths.cwd)
