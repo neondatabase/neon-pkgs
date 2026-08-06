@@ -1,6 +1,6 @@
 import { createServer, type Server } from "node:http";
 import { type AddressInfo, connect, type Socket } from "node:net";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
 	acceptKey,
@@ -317,6 +317,38 @@ describe("acceptKey", () => {
 	});
 });
 
+describe("event constructors below the supported Node floor", () => {
+	// `CloseEvent` is only global from Node 23, and this package supports >= 20.19,
+	// so every close path would throw a ReferenceError there without the shim.
+	it("uses a CloseEvent shim when the global is absent", async () => {
+		const host = globalThis as { CloseEvent?: unknown };
+		const original = host.CloseEvent;
+		host.CloseEvent = undefined;
+		vi.resetModules();
+		try {
+			const fresh = await import("./websocket.js");
+			const event = new fresh.CloseEventCtor("close", {
+				code: 4001,
+				reason: "bye",
+				wasClean: true,
+			});
+			expect(event).toBeInstanceOf(Event);
+			expect(event.type).toBe("close");
+			const shaped = event as Event & {
+				code: number;
+				reason: string;
+				wasClean: boolean;
+			};
+			expect(shaped.code).toBe(4001);
+			expect(shaped.reason).toBe("bye");
+			expect(shaped.wasClean).toBe(true);
+		} finally {
+			host.CloseEvent = original;
+			vi.resetModules();
+		}
+	});
+});
+
 describe("the legacy upgrade export under neon dev", () => {
 	it("is called with the raw Node triple (previously it never ran at all)", async () => {
 		const seen: { url: string | undefined; hasHead: boolean }[] = [];
@@ -624,15 +656,42 @@ describe("upgradeWebSocket under neon dev", () => {
 		expect((thrown as Error).message).toMatch(/already called/);
 	});
 
-	it("returns 501 when the handler ignores the upgrade", async () => {
+	it("relays the response verbatim when the handler declines the upgrade", async () => {
 		const port = await start({
 			fetch: () => new Response("ordinary body"),
 		});
 
 		const raw = await wsHandshakeFull(port);
 
-		expect(raw.startsWith("HTTP/1.1 501")).toBe(true);
-		expect(raw).not.toContain("ordinary body");
+		expect(raw.startsWith("HTTP/1.1 200 OK")).toBe(true);
+		expect(raw).toContain("ordinary body");
+	});
+
+	it("relays a 401 so a function can refuse an unauthenticated handshake", async () => {
+		const port = await start({
+			fetch: () =>
+				new Response("unauthorized", {
+					status: 401,
+					headers: { "x-reason": "no-token" },
+				}),
+		});
+
+		const raw = await wsHandshakeFull(port);
+
+		expect(raw.startsWith("HTTP/1.1 401 Unauthorized")).toBe(true);
+		expect(raw.toLowerCase()).toContain("x-reason: no-token");
+		expect(raw).toContain("unauthorized");
+	});
+
+	it("relays a 404 for an unknown websocket route", async () => {
+		const port = await start({
+			fetch: () => new Response("no such room", { status: 404 }),
+		});
+
+		const raw = await wsHandshakeFull(port);
+
+		expect(raw.startsWith("HTTP/1.1 404 Not Found")).toBe(true);
+		expect(raw).toContain("no such room");
 	});
 
 	it("finds the socket when the handler is handed a rebuilt Request", async () => {
@@ -748,6 +807,121 @@ describe("upgradeWebSocket under neon dev", () => {
 		});
 
 		expect(raw.startsWith("HTTP/1.1 426")).toBe(true);
+	});
+
+	it("answers an unsupported version with 426 and advertises version 13", async () => {
+		const port = await start({
+			fetch: (request) => upgradeWebSocket(request).response,
+		});
+
+		const raw = await new Promise<string>((resolveRaw, reject) => {
+			const sock = connect(port, "127.0.0.1", () => {
+				sock.write(
+					"GET /ws HTTP/1.1\r\nhost: localhost\r\n" +
+						"connection: Upgrade\r\nupgrade: websocket\r\n" +
+						"sec-websocket-version: 8\r\n" +
+						`sec-websocket-key: ${CLIENT_KEY}\r\n\r\n`,
+				);
+			});
+			const chunks: Buffer[] = [];
+			sock.on("data", (c: Buffer) => chunks.push(c));
+			sock.on("close", () =>
+				resolveRaw(Buffer.concat(chunks).toString("utf8")),
+			);
+			sock.on("error", reject);
+			sock.setTimeout(2000, () => {
+				sock.destroy();
+				reject(new Error("timeout"));
+			});
+		});
+
+		expect(raw.startsWith("HTTP/1.1 426 Upgrade Required")).toBe(true);
+		expect(raw.toLowerCase()).toContain("sec-websocket-version: 13");
+		// Never a 502: a bad version is the client's error, not the handler's.
+		expect(raw).not.toContain("502");
+	});
+
+	it("answers a malformed Sec-WebSocket-Key with 400", async () => {
+		const port = await start({
+			fetch: (request) => upgradeWebSocket(request).response,
+		});
+
+		const raw = await new Promise<string>((resolveRaw, reject) => {
+			const sock = connect(port, "127.0.0.1", () => {
+				sock.write(
+					"GET /ws HTTP/1.1\r\nhost: localhost\r\n" +
+						"connection: Upgrade\r\nupgrade: websocket\r\n" +
+						"sec-websocket-version: 13\r\n" +
+						"sec-websocket-key: not-a-valid-key\r\n\r\n",
+				);
+			});
+			const chunks: Buffer[] = [];
+			sock.on("data", (c: Buffer) => chunks.push(c));
+			sock.on("close", () =>
+				resolveRaw(Buffer.concat(chunks).toString("utf8")),
+			);
+			sock.on("error", reject);
+			sock.setTimeout(2000, () => {
+				sock.destroy();
+				reject(new Error("timeout"));
+			});
+		});
+
+		expect(raw.startsWith("HTTP/1.1 400 Bad Request")).toBe(true);
+	});
+
+	it("answers a non-GET handshake with 405", async () => {
+		const port = await start({
+			fetch: (request) => upgradeWebSocket(request).response,
+		});
+
+		const raw = await new Promise<string>((resolveRaw, reject) => {
+			const sock = connect(port, "127.0.0.1", () => {
+				sock.write(
+					"POST /ws HTTP/1.1\r\nhost: localhost\r\n" +
+						"connection: Upgrade\r\nupgrade: websocket\r\n" +
+						"sec-websocket-version: 13\r\n" +
+						`sec-websocket-key: ${CLIENT_KEY}\r\n\r\n`,
+				);
+			});
+			const chunks: Buffer[] = [];
+			sock.on("data", (c: Buffer) => chunks.push(c));
+			sock.on("close", () =>
+				resolveRaw(Buffer.concat(chunks).toString("utf8")),
+			);
+			sock.on("error", reject);
+			sock.setTimeout(2000, () => {
+				sock.destroy();
+				reject(new Error("timeout"));
+			});
+		});
+
+		expect(raw.startsWith("HTTP/1.1 405 Method Not Allowed")).toBe(true);
+	});
+
+	it("does not accumulate fragments for a flood of empty continuations", async () => {
+		const port = await start({
+			fetch: (request) => {
+				const { socket, response } = upgradeWebSocket(request);
+				socket.addEventListener("message", (event) => {
+					socket.send(
+						`len:${String((event as MessageEvent).data).length}`,
+					);
+				});
+				return response;
+			},
+		});
+
+		const { client } = await wsHandshake(port);
+		// Open a fragmented text message, then send many empty continuations. Each
+		// adds zero bytes, so a byte-only bound would never stop them.
+		client.send("", 0x1, false);
+		for (let i = 0; i < 20000; i++) client.send("", 0x0, false);
+		client.send("done", 0x0, true);
+
+		const frame = await client.next();
+		expect(frame.payload.toString("utf8")).toBe("len:4");
+		client.destroy();
 	});
 
 	it("throws off-platform, where no bridge is published", () => {

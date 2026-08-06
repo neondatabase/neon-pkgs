@@ -61,8 +61,10 @@ const CLOSE_HANDSHAKE_TIMEOUT_MS = 5_000;
 const EMPTY = Buffer.alloc(0);
 
 /**
- * Node has global Event/MessageEvent/CloseEvent but not ErrorEvent, so fall back to a
- * shim with the same shape (`message` + `error`) when it is missing.
+ * `MessageEvent` has been global since Node 15, but `CloseEvent` only since Node 23
+ * (and even there it disappears under `--no-experimental-websocket`) and `ErrorEvent`
+ * only since Node 25. This package supports Node >= 20.19, so both are shimmed with
+ * the same shape rather than constructed directly.
  */
 type ErrorEventInit = { message?: string; error?: unknown };
 type ErrorEventCtorType = new (type: string, init?: ErrorEventInit) => Event;
@@ -82,6 +84,27 @@ const ErrorEventCtor: ErrorEventCtorType =
 		? ((globalThis as { ErrorEvent?: unknown })
 				.ErrorEvent as ErrorEventCtorType)
 		: ShimErrorEvent;
+
+type CloseEventInit = { code?: number; reason?: string; wasClean?: boolean };
+type CloseEventCtorType = new (type: string, init?: CloseEventInit) => Event;
+
+class ShimCloseEvent extends Event {
+	readonly code: number;
+	readonly reason: string;
+	readonly wasClean: boolean;
+	constructor(type: string, init: CloseEventInit = {}) {
+		super(type);
+		this.code = init.code ?? 0;
+		this.reason = init.reason ?? "";
+		this.wasClean = init.wasClean ?? false;
+	}
+}
+
+export const CloseEventCtor: CloseEventCtorType =
+	typeof (globalThis as { CloseEvent?: unknown }).CloseEvent === "function"
+		? ((globalThis as { CloseEvent?: unknown })
+				.CloseEvent as CloseEventCtorType)
+		: ShimCloseEvent;
 
 export type UpgradeWebSocketOptions = {
 	protocol?: string;
@@ -358,11 +381,19 @@ const completeUpgrade = (record: UpgradeRecord, response: Response): void => {
 // -- Reject / relay helpers --------------------------------------------------
 
 const STATUS_TEXT: Record<number, string> = {
+	200: "OK",
+	400: "Bad Request",
+	401: "Unauthorized",
+	403: "Forbidden",
 	404: "Not Found",
+	405: "Method Not Allowed",
+	409: "Conflict",
 	426: "Upgrade Required",
+	429: "Too Many Requests",
 	500: "Internal Server Error",
 	501: "Not Implemented",
 	502: "Bad Gateway",
+	503: "Service Unavailable",
 };
 
 /**
@@ -374,17 +405,19 @@ export const writeUpgradeRejection = (
 	socket: Duplex,
 	status: number,
 	reason: string,
+	extraHeaders: Record<string, string> = {},
 ): void => {
 	const body = `${reason}\n`;
+	let head =
+		`HTTP/1.1 ${status} ${STATUS_TEXT[status] ?? "Error"}\r\n` +
+		"connection: close\r\n" +
+		"content-type: text/plain\r\n" +
+		`content-length: ${Buffer.byteLength(body)}\r\n`;
+	for (const [name, value] of Object.entries(extraHeaders)) {
+		head += `${name.toLowerCase()}: ${value}\r\n`;
+	}
 	try {
-		socket.end(
-			`HTTP/1.1 ${status} ${STATUS_TEXT[status] ?? "Error"}\r\n` +
-				"connection: close\r\n" +
-				"content-type: text/plain\r\n" +
-				`content-length: ${Buffer.byteLength(body)}\r\n` +
-				"\r\n" +
-				body,
-		);
+		socket.end(`${head}\r\n${body}`);
 	} catch {
 		try {
 			socket.destroy();
@@ -392,6 +425,82 @@ export const writeUpgradeRejection = (
 			/* already destroyed */
 		}
 	}
+};
+
+/** Headers the raw writer owns; a handler value must not contradict them. */
+const RESERVED_RESPONSE_HEADERS = new Set([
+	"connection",
+	"content-length",
+	"transfer-encoding",
+	"keep-alive",
+	"upgrade",
+]);
+
+/**
+ * Write a `Response` the handler returned to decline the upgrade, verbatim: status,
+ * headers and body. Declining a handshake with a 401/403/404 is how a function refuses
+ * a connection, so the response has to reach the client instead of being replaced.
+ */
+const writeResponseToSocket = async (
+	socket: Duplex,
+	response: Response,
+): Promise<void> => {
+	const body = Buffer.from(await response.arrayBuffer());
+	const statusText =
+		response.statusText || (STATUS_TEXT[response.status] ?? "");
+	let head = `HTTP/1.1 ${response.status} ${statusText}\r\n`;
+	response.headers.forEach((value, name) => {
+		if (RESERVED_RESPONSE_HEADERS.has(name.toLowerCase())) return;
+		head += `${name.toLowerCase()}: ${value}\r\n`;
+	});
+	head += "connection: close\r\n";
+	head += `content-length: ${body.length}\r\n\r\n`;
+	socket.end(Buffer.concat([Buffer.from(head, "latin1"), body]));
+};
+
+/** RFC 6455 §4.1: a 16-byte nonce, base64-encoded. */
+const isValidWebSocketKey = (key: string): boolean =>
+	/^[A-Za-z0-9+/]{22}==$/.test(key) &&
+	Buffer.from(key, "base64").length === 16;
+
+type HandshakeRejection = {
+	status: number;
+	reason: string;
+	headers?: Record<string, string>;
+};
+
+/**
+ * Check the parts of the handshake the server owns before any user code runs, so a
+ * malformed client request is answered as the client error it is rather than
+ * surfacing later as a throw from `upgradeWebSocket()` (which the listener cannot
+ * tell apart from a genuine handler bug, and would report as a 502).
+ */
+export const validateHandshake = (
+	req: IncomingMessage,
+): HandshakeRejection | null => {
+	const method = (req.method ?? "GET").toUpperCase();
+	if (method !== "GET") {
+		return {
+			status: 405,
+			reason: `a WebSocket handshake must use GET, got ${method}`,
+		};
+	}
+	const version = headerValue(req, "sec-websocket-version");
+	if (version !== "13") {
+		return {
+			status: 426,
+			reason: `unsupported Sec-WebSocket-Version ${version === "" ? "(absent)" : version}; only version 13 is supported`,
+			// §4.4 requires advertising what the server does support.
+			headers: { "sec-websocket-version": "13" },
+		};
+	}
+	if (!isValidWebSocketKey(headerValue(req, "sec-websocket-key"))) {
+		return {
+			status: 400,
+			reason: "Sec-WebSocket-Key must be a base64-encoded 16-byte value",
+		};
+	}
+	return null;
 };
 
 // -- The 'upgrade' listener --------------------------------------------------
@@ -455,8 +564,20 @@ const handleUpgrade = async (
 	}
 
 	// The launched contract wins, so local precedence matches deployed precedence.
+	// It owns its own handshake, so it is handed the request unvalidated.
 	if (upgrade) {
 		await upgrade(req, socket, head);
+		return;
+	}
+
+	const rejection = validateHandshake(req);
+	if (rejection) {
+		writeUpgradeRejection(
+			socket,
+			rejection.status,
+			rejection.reason,
+			rejection.headers ?? {},
+		);
 		return;
 	}
 
@@ -495,12 +616,11 @@ const handleUpgrade = async (
 		return;
 	}
 
-	// The handler ignored the upgrade. Same 501 the deployed runtime returns.
-	writeUpgradeRejection(
-		socket,
-		501,
-		"websocket not supported by this function",
-	);
+	// The handler declined the upgrade and answered with an ordinary response.
+	// Relay it verbatim: returning a 401/403/404 is how a function refuses a
+	// handshake, and replacing it with a status of our own would throw away the
+	// only answer the client was given.
+	await writeResponseToSocket(socket, response);
 };
 
 /**
@@ -741,7 +861,9 @@ class DevServerWebSocket extends EventTarget {
 		this.#readyState = CLOSING;
 		this.#sendClose(code ?? 1000, reasonBuf);
 		this.#closeTimer = setTimeout(() => {
-			this.#finishClose(code ?? 1000, reasonBuf.toString("utf8"), false);
+			// The peer never answered, so no close frame was received: §7.1.5 makes
+			// that 1006, not the code we sent.
+			this.#finishClose(1006, "", false);
 		}, CLOSE_HANDSHAKE_TIMEOUT_MS);
 		this.#closeTimer.unref?.();
 	}
@@ -777,7 +899,7 @@ class DevServerWebSocket extends EventTarget {
 			this.#closeTimer = null;
 		}
 		this.dispatchEvent(
-			new CloseEvent("close", { code, reason, wasClean: false }),
+			new CloseEventCtor("close", { code, reason, wasClean: false }),
 		);
 	}
 
@@ -922,6 +1044,10 @@ class DevServerWebSocket extends EventTarget {
 				`message exceeds the ${MAX_MESSAGE_BYTES} byte limit`,
 			);
 		}
+		// An empty continuation frame is legal and contributes nothing to the
+		// message. Dropping it here keeps a flood of them from growing the fragment
+		// list without ever moving `#fragmentBytes` toward the limit above.
+		if (payload.length === 0) return;
 		this.#fragments.push(payload);
 	}
 
@@ -1029,7 +1155,9 @@ class DevServerWebSocket extends EventTarget {
 				/* already gone */
 			}
 		}
-		this.dispatchEvent(new CloseEvent("close", { code, reason, wasClean }));
+		this.dispatchEvent(
+			new CloseEventCtor("close", { code, reason, wasClean }),
+		);
 	}
 
 	#emitError(err: unknown): void {
