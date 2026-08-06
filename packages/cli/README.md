@@ -836,7 +836,7 @@ When both are only environment variables the key wins, which keeps a CI pipeline
 
 `neon auth` and the `profile` subcommands are outside all of this, because they read the same flags to mean something else: `neon auth --profile work` names where to write a credential, and `neon profile create work --api-key …` names one to store.
 
-`neon init` does not support `--profile` yet. It runs its own auth flow, which reads the default credentials directly and re-invokes the CLI as a subprocess without passing a profile down, so passing the flag fails instead of quietly running as the default account. `--api-key` and `NEON_API_KEY` reach `neon init` no better and are **not** refused: the flow reads the stored credential, so an explicitly supplied key is ignored and you are sent to a browser sign-in. Sign in first, or use another command.
+`neon init` does not support `--profile` yet. It runs its own auth flow, which reads the default credentials directly and re-invokes the CLI as a subprocess without passing a profile down, so passing the flag fails instead of quietly running as the default account. `--api-key` and `NEON_API_KEY` reach `neon init` no better and are **not** refused. The flow reads the stored credential and nothing else, so a supplied key is ignored: with a credential on disk `neon init` runs silently as *that* account, and with none it sends you to a browser sign-in. The silent case is the one to watch — it is the same failure `--profile` is refused for, without the refusal. Until that is fixed, sign in as the account you want first, or use another command.
 
 ## API keys (`api-keys`)
 

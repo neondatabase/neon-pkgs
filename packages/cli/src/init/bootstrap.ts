@@ -159,7 +159,7 @@ const githubToken = (): string =>
 const downloadHeaders = (): Record<string, string> => ({
 	// GitHub rejects a request with no User-Agent; the value is free-form and this
 	// one only has to name the client honestly.
-	"User-Agent": "neon-cli",
+	"User-Agent": "neon",
 	...(githubToken() ? { Authorization: `Bearer ${githubToken()}` } : {}),
 });
 
