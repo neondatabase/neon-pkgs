@@ -84,22 +84,49 @@ function writeAllSync(fd: number, text: string): void {
 			buffer = buffer.subarray(writeSync(fd, buffer));
 		} catch (err) {
 			if ((err as NodeJS.ErrnoException).code !== "EAGAIN") return;
+			// Wait for the reader rather than spinning on it. A pipe nobody is draining would
+			// otherwise burn a core until it is; failure output is small enough that this
+			// should never be reached, which is the reason to bound it rather than assume so.
+			Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
 		}
 	}
 }
 
-/** `--json`, `--json=false`, `--no-agent`, `-a` … or `undefined` when none was passed. */
+/** The spellings yargs reads as false for a boolean option. */
+const FALSEY = new Set(["false", "0"]);
+
+/**
+ * `--json`, `--json=false`, `--json 0`, `--no-agent`, `-a` … or `undefined` when none was passed.
+ *
+ * The two flags are tracked separately and then OR'd, because that is what the parsed value is:
+ * folding them into one last-wins slot made `--json --no-agent` answer plaintext despite `json`
+ * being true. Each is last-wins on its own, as yargs is.
+ */
 function rawJsonFlag(): boolean | undefined {
-	let value: boolean | undefined;
-	for (const arg of process.argv.slice(2)) {
+	const argv = process.argv.slice(2);
+	let json: boolean | undefined;
+	let agent: boolean | undefined;
+
+	for (const [index, arg] of argv.entries()) {
 		const match = /^(?:--(no-)?(json|agent)|(-a))(?:=(.*))?$/.exec(arg);
 		if (!match) continue;
-		const [, negated, , short, assigned] = match;
-		const asked =
-			assigned === undefined ? true : assigned.toLowerCase() !== "false";
-		value = negated && !short ? !asked : asked;
+		const [, negated, long, short, assigned] = match;
+		// A boolean also takes its value as the next token: `--json false`.
+		const separate = assigned === undefined ? argv[index + 1] : undefined;
+		const value =
+			assigned ??
+			(separate !== undefined &&
+			(FALSEY.has(separate) || separate === "true" || separate === "1")
+				? separate
+				: undefined);
+		const asked = value === undefined || !FALSEY.has(value.toLowerCase());
+		const resolved = negated ? !asked : asked;
+		if (short !== undefined || long === "agent") agent = resolved;
+		else json = resolved;
 	}
-	return value;
+
+	if (json === undefined && agent === undefined) return undefined;
+	return Boolean(json) || Boolean(agent);
 }
 
 /**

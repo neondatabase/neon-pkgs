@@ -175,4 +175,32 @@ describe("the CLI's failure output", () => {
 		expect(JSON.parse(stdout).success).toBe(false);
 		expect(JSON.parse(stdout).error).toMatch(/nonsense/i);
 	});
+
+	// One answer per invocation. Deferring the exit so the stream could drain let yargs carry
+	// on and run the command after reporting the bad argument, printing two objects.
+	test("a parse error produces exactly one answer", () => {
+		const { stdout } = runStatus(["--json", "--nonsense"]);
+
+		expect(() => JSON.parse(stdout)).not.toThrow();
+		expect(stdout.match(/"success"/g)).toHaveLength(1);
+	});
+
+	// On that fallback path the two flags have to be read the way yargs reads them: they are
+	// OR'd, not last-wins across both, and a boolean takes `=false`, `=0` or a separate token.
+	test.each([
+		[["--json", "--no-agent", "--nonsense"], true],
+		[["--agent", "--no-json", "--nonsense"], true],
+		[["--json=0", "--nonsense"], false],
+		[["--json", "false", "--nonsense"], false],
+		[["--no-json", "--nonsense"], false],
+	])("%s decides JSON mode as %s on a parse error", (args, asJson) => {
+		const { stdout, stderr } = runStatus(args as string[]);
+
+		if (asJson) {
+			expect(JSON.parse(stdout).success).toBe(false);
+		} else {
+			expect(stdout).toBe("");
+			expect(stderr).toContain("Error: ");
+		}
+	});
 });
