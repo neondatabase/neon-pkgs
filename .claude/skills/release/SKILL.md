@@ -191,7 +191,8 @@ who does.
   `-f package=<name>` (and `-f ref=main`), once per bumped package. A `dry-run` (or input-less)
   dispatch goes green and prints a "Publish …" step but lands nothing on npm — verify with
   `npm view <pkg> version`, not the green check.
-- **Never pin an internal package to a published version.** `packages/cli` pinned `neon-init` that
+- **Never pin an internal package to a published version.** `packages/cli` pinned `neon-init`
+  (since folded into `packages/cli/src/init`) that
   way through 2.39.0, and `changeset version` rewriting the pin without touching `pnpm-lock.yaml`
   broke `--frozen-lockfile` for the whole workspace — every CI job and every publish dispatch —
   with no way to repair it until the new `neon-init` was published from a throwaway ref. Every

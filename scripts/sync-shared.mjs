@@ -12,7 +12,7 @@
  * The copy goes to a temporary directory and is renamed into place, so a reader either sees the
  * previous tree or the new one, never a half-written mix.
  *
- * Consumers are `packages/{cli,env,init}`. Tests are excluded: they run once, from
+ * Consumers are `packages/{cli,env}`. Tests are excluded: they run once, from
  * `packages/cli`, rather than in every consumer.
  */
 import { cpSync, mkdtempSync, renameSync, rmSync } from "node:fs";

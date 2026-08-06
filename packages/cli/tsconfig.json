@@ -8,14 +8,8 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "moduleResolution": "node",
-    // `neon-init` exposes the bootstrap core via the `neon-init/bootstrap`
-    // subpath export. Classic ("node") module resolution ignores package
-    // `exports`, so map the specifier to its shipped types here for the
-    // type-checker; Node honors the export map at runtime (the emitted JS keeps
-    // the bare `neon-init/bootstrap` specifier untouched).
     "baseUrl": ".",
     "paths": {
-      "neon-init/bootstrap": ["node_modules/neon-init/dist/lib/bootstrap"],
       // `@neon/sdk` ships its raw layer via the `@neon/sdk/raw` subpath export.
       // Classic ("node") module resolution ignores package `exports`, so map the
       // specifiers to their shipped types here for the type-checker; Node honors

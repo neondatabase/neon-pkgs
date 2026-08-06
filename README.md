@@ -17,7 +17,6 @@ If you're looking for a single package's docs, see its own `README.md` under `pa
 
 | Package | Description |
 | --- | --- |
-| `neon-init` | Set up your project with Neon's MCP server for AI-powered database operations. |
 | `neon-new` | A CLI tool and SDK for creating claimable Neon databases instantly. |
 | `vite-plugin-neon-new` | A Vite plugin that automatically provisions databases during development. |
 
@@ -38,6 +37,11 @@ If you're looking for a single package's docs, see its own `README.md` under `pa
 | `@neon/ai-sdk-provider` | Community [Vercel AI SDK](https://ai-sdk.dev) provider for the Neon AI Gateway. |
 
 A few renamed packages are still published as deprecated aliases (`get-db` / `neondb` → `neon-new`; `vite-plugin-db` / `@neondatabase/vite-plugin-postgres` → `vite-plugin-neon-new`); they re-export the new package and print a deprecation warning. `neonctl` is not deprecated: it is a supported compatibility package that installs and runs `neon`.
+
+`neon-init` is **deprecated and no longer built from this repo**. Everything it did is the
+`neon init` command, so `npx neon-init` becomes `npx neon init`. There is no alias package:
+it was a CLI rather than a library, and the replacement is a command on a CLI most users
+already have. The versions published before the fold stay installable but receive nothing.
 
 ## Repository layout
 

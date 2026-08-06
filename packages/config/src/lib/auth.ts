@@ -16,8 +16,8 @@ function normalizeApiHost(url: string | undefined): string | undefined {
  * variables and no files. Everything it needs arrives in `options`. Resolving *where* a
  * credential comes from — a flag, `NEON_API_KEY`, a credentials file on disk — is the
  * caller's job, because only the caller knows which of those its users expect. See
- * `packages/cli` (`ensureAuth` + `resolveApiKeyFromEnv`) and `packages/init`
- * (`src/lib/auth.ts`) for the two implementations in this repo.
+ * `packages/cli` (`ensureAuth` + `resolveApiKeyFromEnv`) and its init flow
+ * (`packages/cli/src/init/auth.ts`) for the two implementations in this repo.
  *
  * `apiHost` stays **optional** and defaults to production
  * (`https://console.neon.tech/api/v2`, applied by {@link createRealNeonApi}) — only pass it

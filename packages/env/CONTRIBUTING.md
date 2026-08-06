@@ -75,8 +75,7 @@ Adding to `runtime` is not free — these all have to keep working:
 
 `packages/cli` is on classic `moduleResolution: node`, which **ignores package `exports`**. A new
 subpath therefore needs a `paths` entry in `packages/cli/tsconfig.json` for the type-checker;
-Node honours the real export map at runtime. `neon-init/bootstrap` and `@neon/sdk/raw` have the
-same treatment. Because that mapping only satisfies `tsc`, verify a new subpath actually resolves
+Node honours the real export map at runtime. `@neon/sdk/raw` has the same treatment. Because that mapping only satisfies `tsc`, verify a new subpath actually resolves
 from the built artifact rather than trusting a green test run:
 
 ```bash

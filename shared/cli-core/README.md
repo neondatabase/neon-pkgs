@@ -1,9 +1,12 @@
 # `shared/cli-core`
 
-Credential, profile and config-path code shared by the three CLIs that read a credential off
-disk: `neon`, `@neon/env` and `neon-init`. `@neon/config` is not a consumer — it takes an
+Credential, profile and config-path code shared by the two CLIs that read a credential off
+disk: `neon` and `@neon/env`. `@neon/config` is not a consumer — it takes an
 explicit `apiKey` and touches neither the filesystem nor the environment, which is why its
 `./paths` subpath was removed rather than re-exported from here.
+
+`neon init` is a third reader, but not a third consumer: it lives inside `packages/cli` as
+`src/init/auth.ts` and imports the copy already synced into that package.
 
 ## It is not a package, on purpose
 
@@ -27,8 +30,8 @@ A workspace package would not work here, and the reasons are worth recording:
 
 - **Edit `shared/cli-core/src`, never `packages/*/src/_shared`.** The latter is generated and
   overwritten on every build.
-- **Keep it dependency-free.** Node builtins only. `neon-init` has no workspace dependencies and
-  this code has to work there.
+- **Keep it dependency-free.** Node builtins only. It is compiled into each consumer as that
+  consumer's own source, so anything it imports becomes a runtime dependency of all of them.
 - **No logger, no yargs, no API client.** Take a callback or a value instead; the imperative
   shell belongs in the consumer.
 - Unit tests live in `packages/cli`, so the code is covered once rather than three times.

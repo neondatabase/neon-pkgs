@@ -156,7 +156,7 @@ second reason to keep it a genuine package instead of deprecating it.
   installed `neon` and calls `neonctl` needs the `neonctl` package (which is what
   Homebrew installs) or the `neon` command.
 - The package versions stay synchronized through the Changesets fixed group.
-  `neon-init` relies on this: it compares a globally installed `neonctl --version`
-  (which reports the `neon` implementation's version) against
-  `npm view neonctl version`, and would prompt for pointless updates if the two
-  packages could drift.
+  `neon init` relies on this: `packages/cli/src/init/neonctl.ts` compares a globally
+  installed `neonctl --version` (which reports the `neon` implementation's version)
+  against `npm view neonctl version`, and would prompt for pointless updates if the
+  two packages could drift.

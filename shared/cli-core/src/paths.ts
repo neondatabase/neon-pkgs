@@ -4,13 +4,12 @@
  **Deliberately impure.** It reads environment variables and touches the filesystem, which
  * `@neon/config` — the package this used to be a subpath of — must never do from its root
  * export. It lives here instead of there precisely so that a policy-facing package does not
- * carry implementor-only code, and so `neon-init`, which has no workspace dependencies, can use
- * the same resolution as everything else.
+ * carry implementor-only code.
  *
  * It exists because three separate readers each grew their own answer to "where is the
  * config directory", and all three disagreed: `packages/cli` honoured `XDG_CONFIG_HOME` but
- * not `NEONCTL_CONFIG_DIR`, `packages/env` honoured the env var but not XDG, and
- * `packages/init` hardcoded `~/.config/neonctl`. With `XDG_CONFIG_HOME` set, the CLI wrote
+ * not `NEONCTL_CONFIG_DIR`, `packages/env` honoured the env var but not XDG, and the init
+ * flow hardcoded `~/.config/neonctl`. With `XDG_CONFIG_HOME` set, the CLI wrote
  * credentials somewhere the other two never looked.
  *
  * ## The directory

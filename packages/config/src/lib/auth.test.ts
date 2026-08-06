@@ -47,7 +47,7 @@ describe("createNeonApiFromOptions — the API key must be explicit", () => {
 	});
 
 	// The point of the package boundary: an ambient credential must not be picked up.
-	// Resolving NEON_API_KEY is the caller's job (see packages/cli, packages/init).
+	// Resolving NEON_API_KEY is the caller's job (see packages/cli).
 	test("ignores NEON_API_KEY in the environment", () => {
 		vi.stubEnv("NEON_API_KEY", "napi_from_env");
 		expect(() => createNeonApiFromOptions("fetchEnv")).toThrow(

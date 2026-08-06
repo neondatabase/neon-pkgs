@@ -275,8 +275,8 @@ At a high level: `neon-new` is the CLI + SDK, and `vite-plugin-neon-new` builds 
 toolchain centers on `@neon/config` (pure, side-effect-free policy types + diff engine),
 with `@neon/config-runtime` (imperative `inspect`/`plan`/`apply` + function deploy; pulls in
 `esbuild`, so import it from CLIs/CI, never from a `neon.ts` policy) and `@neon/env` (resolve
-+ inject a branch's env) both building on `config`; plus `neon-init`, `@neon/ai-sdk-provider`,
-and `@neon/functions`.
++ inject a branch's env) both building on `config`; plus `@neon/ai-sdk-provider` and
+`@neon/functions`.
 
 **Pure and imperative halves are split by import path, and the boundary is load-bearing.** The
 `@neon/config` / `@neon/config-runtime` pair is the package-level version of it. `@neon/env` does
@@ -295,7 +295,7 @@ the same thing with a subpath:
 
 `paths` exists because three readers each grew their own answer to "where is the config
 directory" and all three disagreed: the CLI honoured `XDG_CONFIG_HOME` but not
-`NEONCTL_CONFIG_DIR`, `@neon/env` honoured the env var but not XDG, and `neon-init`
+`NEONCTL_CONFIG_DIR`, `@neon/env` honoured the env var but not XDG, and the init flow
 hardcoded `~/.config/neonctl`. With `XDG_CONFIG_HOME` set, the CLI wrote credentials
 somewhere the other two never looked. **That implementation now lives in `shared/cli-core`**, and
 the `@neon/config/paths` subpath is gone — it was a workaround for having nowhere else to put
@@ -304,9 +304,9 @@ repo imported it. See below.
 
 ### `shared/cli-core` — code every CLI compiles as its own
 
-Credential reading, profile resolution and config paths are shared by `neon`, `@neon/env` and
-`neon-init` from `shared/cli-core/src` — the three that read a credential off disk;
-`@neon/config` takes an explicit key and reads nothing. It is **not a package**:
+Credential reading, profile resolution and config paths are shared by `neon` and `@neon/env`
+from `shared/cli-core/src` — the two that read a credential off disk; `@neon/config` takes an
+explicit key and reads nothing. It is **not a package**:
 `scripts/sync-shared.mjs <dir>` copies it into that one consumer's `src/_shared`, atomically
 and one package per invocation so concurrent builds cannot race. Every script that compiles or
 typechecks a consumer's source runs it first; that copy is gitignored, and the imports are
@@ -322,7 +322,8 @@ it would put an internal surface on the registry, and `@neon/config` — the one
 package all of this could hang off — is consumer-facing.
 
 **Edit `shared/cli-core/src`, never `packages/*/src/_shared`.** Keep it dependency-free (Node
-builtins only, because `neon-init` has no workspace dependencies), and keep loggers, yargs and
+builtins only — it is compiled into consumers as their own source, so anything it imports
+becomes a runtime dependency of each of them), and keep loggers, yargs and
 API clients out of it — take a callback or a value instead. Its own unit tests live in `packages/cli`; `@neon/env`
 also exercises it through `resolve-api-key.test.ts`, which is where the two CLIs' precedence is
 checked against each other. Nothing re-exports it from a published
@@ -342,8 +343,10 @@ API key. `createNeonApiFromOptions` takes an explicit `apiKey` and raises
 embeds these packages, because only it knows which ambient sources its users expect — and a
 library that silently authenticates as whoever last ran `neon auth` is a library you cannot
 safely embed. The three implementations in this repo are `packages/cli` (`ensureAuth` +
-`resolveApiKeyFromEnv`), `packages/env`'s CLI (`src/lib/cli/resolve-api-key.ts`), and
-`packages/init` (`src/lib/auth.ts`). Copy one rather than pushing the lookup back down.
+`resolveApiKeyFromEnv`), `packages/env`'s CLI (`src/lib/cli/resolve-api-key.ts`), and the init
+flow (`packages/cli/src/init/auth.ts`, which triggers OAuth by spawning `neon` as a subprocess
+rather than running the browser flow in-process). Copy one rather than pushing the lookup back
+down.
 
 Before adding an export to `@neon/env`, or reaching into one of its internals from
 `packages/cli`, read **[`packages/env/CONTRIBUTING.md`](packages/env/CONTRIBUTING.md)**. It has
@@ -356,12 +359,14 @@ and so ignores package `exports`.
 
 `packages/cli` is the **Neon CLI**, migrated from [`neondatabase/neonctl`](https://github.com/neondatabase/neonctl), and is published as **`neon`**. `packages/neonctl` is a lightweight compatibility package whose executable imports `neon/cli`; it contains no CLI implementation or build output. The two packages are a Changesets fixed group and release at the same version. The primary package is linted/formatted with Biome like the rest of the repo, but its **build** toolchain differs:
 
--   **Build**: `pnpm --filter <name> build` runs swagger param generation (`generateOptionsFromSpec.ts` → `src/parameters.gen.ts`, a committed generated file), then `tsc -p tsconfig.build.json` to `dist/`, then copies `callback.html` into `dist/`. It compiles file-by-file with `tsc` (not bundled with tsdown) and **publishes from the package root** (`bin: dist/cli.js`, `files: ["dist", …]`). The param generator reads the OpenAPI spec from the `@neon/sdk` workspace package's vendored copy (`../sdk/spec/neon-openapi.json`, kept in sync via its `spec:pull` script), so it works offline within the monorepo.
+-   **Build**: `pnpm --filter <name> build` runs `codegen` (the `shared/cli-core` sync plus `scripts/set-vsx-gallery.mjs`) and swagger param generation (`generateOptionsFromSpec.ts` → `src/parameters.gen.ts`, a committed generated file), then `tsc -p tsconfig.build.json` to `dist/`, then copies `callback.html` into `dist/`. It compiles file-by-file with `tsc` (not bundled with tsdown) and **publishes from the package root** (`bin: dist/cli.js`, `files: ["dist", …]`). The param generator reads the OpenAPI spec from the `@neon/sdk` workspace package's vendored copy (`../sdk/spec/neon-openapi.json`, kept in sync via its `spec:pull` script), so it works offline within the monorepo.
+-   **`codegen` runs before anything that reads `src/`.** `scripts/set-vsx-gallery.mjs` writes the gitignored `src/init/build_config.ts`, so a fresh clone fails to typecheck without it. `build:internal` is the same build with the Databricks VSX proxy gallery baked into that file; the public `build` bakes an empty string and `NEON_VSX_GALLERY_URL` overrides either at runtime.
 -   **Lint**: Biome, via a `packages/cli/**` override in the root `biome.json` (relaxes some rules for the migrated upstream code, and enforces `noConsole` since the CLI routes all output through its writer/logger). Root `pnpm lint:ci` (`biome ci`) covers it. `pnpm --filter <name> lint` additionally runs `tsc --noEmit` then `biome check src`.
 -   **Coverage**: needs `@vitest/coverage-v8` because the root CI runs `pnpm test:ci --coverage` (the flag is appended to every package's `test:ci`). Pin it to the package's `vitest` major.
 -   **Standalone binaries**: `pnpm --filter neon bundle` (`node pkg.js`) Rollup-bundles `dist/cli.js` and cross-compiles `linux-x64`, `linux-arm64`, `macos-x64`, and `win-x64` via `@yao-pkg/pkg`; targets/assets are declared in the package's `pkg` block. The binaries are named after the package, so they ship as `neon-<target>`.
 -   **Conformance tests** (`tests/psql-conformance`) need Docker/testcontainers and are excluded from the default Vitest run; run them explicitly with `pnpm --filter <name> test:conformance`.
--   **Sibling deps**: every internal dependency — the `@neon/*` packages and `neon-init` — is `workspace:*`. `neon-init` was pinned to a published version until it caused a release-blocking lockfile trap; keep it on the workspace protocol. `pnpm pack` rewrites the protocol to the exact version at publish time, so the tarball is unaffected either way.
+-   **Sibling deps**: every internal dependency — the `@neon/*` packages — is `workspace:*`. Never pin one to a published version; see "Publish order" below for the lockfile deadlock that caused.
+-   **`neon init` lives in `src/init/`**, folded in from the retired `neon-init` package. It is the agent-driven setup flow: `orchestrate.ts` is the state machine, `phases/` are its steps, `interactive.ts` is the human path, and `bootstrap.ts` is the template scaffolding core that `commands/bootstrap.ts` also uses. It talks to Neon by shelling out to `npx -y neon` (`init/neonctl.ts`) rather than through the in-process API client, and reads credentials through its own `init/auth.ts` — so it is unaffected by `--profile`, which `neon init` refuses rather than ignores.
 
 ### The SDK package (`packages/sdk`)
 
@@ -523,14 +528,15 @@ Ordering is a courtesy to npm consumers, not a build constraint. Every internal 
 `workspace:*`, so a package is always built and packed against workspace source and never makes a
 registry round-trip for a sibling.
 
-**Never pin an internal package to a published version.** `packages/cli` pinned `neon-init` that
-way until 2.39.0, and it deadlocked every release that bumped `neon-init`: `changeset version`
+**Never pin an internal package to a published version.** `packages/cli` pinned `neon-init` (a
+package since folded into `packages/cli/src/init`) that way until 2.39.0, and it deadlocked every
+release that bumped it: `changeset version`
 rewrote the pin without touching `pnpm-lock.yaml`, so `pnpm install --frozen-lockfile` failed with
 `ERR_PNPM_OUTDATED_LOCKFILE` across the whole workspace — every CI job and every publish, not just
 the CLI's — and `pnpm install` could not repair it, because pnpm 10 defaults
 `link-workspace-packages=false` and tried to fetch a version that was unpublished precisely because
 the install was broken. Breaking that required publishing from a throwaway ref with the pin
-reverted. `workspace:*` cannot reach that state: the lockfile records `link:../init` and no version
+reverted. `workspace:*` cannot reach that state: the lockfile records a `link:` and no version
 appears in it at all.
 
 ### Publishing the CLI (`neon` + the `neonctl` compatibility package)

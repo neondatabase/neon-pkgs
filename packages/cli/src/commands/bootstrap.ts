@@ -2,6 +2,10 @@ import { existsSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
 import chalk from "chalk";
+import prompts, { type InitialReturnValue } from "prompts";
+import type yargs from "yargs";
+import { credentialInputs } from "../_shared/auth_selection.js";
+import { isCi } from "../env.js";
 import {
 	BootstrapInputError,
 	type BootstrapTemplate,
@@ -11,11 +15,7 @@ import {
 	findTemplate,
 	scaffoldTemplate,
 	templateIds,
-} from "neon-init/bootstrap";
-import prompts, { type InitialReturnValue } from "prompts";
-import type yargs from "yargs";
-import { credentialInputs } from "../_shared/auth_selection.js";
-import { isCi } from "../env.js";
+} from "../init/bootstrap.js";
 import { log } from "../log.js";
 import type { CommonProps } from "../types.js";
 import { getCliName } from "../utils/cli_name.js";

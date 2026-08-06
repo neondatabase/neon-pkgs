@@ -1,6 +1,0 @@
-src/lib/build-config.ts
-*.tgz
-.agents/
-.claude/skills/
-skills-lock.json
-bin/

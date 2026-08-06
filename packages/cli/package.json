@@ -40,18 +40,22 @@
 	},
 	"scripts": {
 		"generateParams": "tsx generateOptionsFromSpec.ts",
+		"codegen": "node ../../scripts/sync-shared.mjs . && node scripts/set-vsx-gallery.mjs",
 		"clean": "rm -rf dist",
-		"build": "node ../../scripts/sync-shared.mjs . && pnpm generateParams && pnpm clean && tsc -p tsconfig.build.json && cp src/*.html ./dist",
+		"build": "pnpm codegen && pnpm generateParams && pnpm clean && tsc -p tsconfig.build.json && cp src/*.html ./dist",
+		"build:internal": "node ../../scripts/sync-shared.mjs . && node scripts/set-vsx-gallery.mjs https://cursor-vsx-proxy.cloud.databricks.com/gallery && pnpm generateParams && pnpm clean && tsc -p tsconfig.build.json && cp src/*.html ./dist",
 		"bundle": "node pkg.js",
-		"typecheck": "node ../../scripts/sync-shared.mjs . && tsc --noEmit",
-		"lint": "node ../../scripts/sync-shared.mjs . && pnpm typecheck && biome check src",
+		"typecheck": "pnpm codegen && tsc --noEmit",
+		"lint": "pnpm codegen && pnpm typecheck && biome check src",
 		"lint:fix": "pnpm typecheck && biome check src --write",
-		"test": "node ../../scripts/sync-shared.mjs . && pnpm --filter neonctl... build && vitest run",
-		"test:ci": "node ../../scripts/sync-shared.mjs . && pnpm build && vitest run",
-		"test:e2e": "node ../../scripts/sync-shared.mjs . && pnpm build && vitest run --config vitest.e2e.config.ts",
-		"test:conformance": "node ../../scripts/sync-shared.mjs . && vitest run --config tests/psql-conformance/vitest.config.ts"
+		"test": "pnpm codegen && pnpm --filter neonctl... build && vitest run",
+		"test:ci": "pnpm codegen && pnpm build && vitest run",
+		"test:e2e": "pnpm codegen && pnpm build && vitest run --config vitest.e2e.config.ts",
+		"test:conformance": "pnpm codegen && vitest run --config tests/psql-conformance/vitest.config.ts"
 	},
 	"dependencies": {
+		"@clack/core": "0.4.2",
+		"@clack/prompts": "0.10.1",
 		"@hono/node-server": "2.0.4",
 		"@neon/sdk": "workspace:*",
 		"@neon/config": "workspace:*",
@@ -63,16 +67,18 @@
 		"cli-table": "0.3.11",
 		"cliui": "8.0.1",
 		"diff": "5.2.0",
+		"execa": "^9.5.2",
 		"fflate": "^0.8.3",
-		"neon-init": "workspace:*",
 		"open": "^10.2.0",
 		"openid-client": "6.8.1",
 		"pg-protocol": "^1.14.0",
+		"picocolors": "^1.1.1",
 		"prompts": "2.4.2",
 		"undici": "^7.28.0",
 		"which": "3.0.1",
 		"yaml": "^2.9.0",
-		"yargs": "17.7.2"
+		"yargs": "17.7.2",
+		"yoctocolors": "^2.1.2"
 	},
 	"optionalDependencies": {
 		"esbuild": "0.28.1"
