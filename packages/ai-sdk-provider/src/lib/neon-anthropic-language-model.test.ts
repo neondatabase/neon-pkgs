@@ -1,6 +1,11 @@
-import { generateText } from "ai";
+import { generateText, streamText, tool } from "ai";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { MESSAGES_OK, startTestGateway } from "../../test/gateway-server.js";
+import { z } from "zod";
+import {
+	MESSAGES_OK,
+	MESSAGES_STREAM_OK,
+	startTestGateway,
+} from "../../test/gateway-server.js";
 import { createNeon } from "./provider.js";
 
 // These cases exist to prove a warning is raised, and the AI SDK also prints it.
@@ -52,6 +57,47 @@ async function sentBodyFor(
 	}
 }
 
+/**
+ * `eager_input_streaming` is only emitted for a streaming call that declares
+ * tools, so the gateway-compat behaviour has to be exercised with both.
+ */
+async function streamedToolBody(
+	modelId: string,
+	toolStreaming?: boolean,
+): Promise<Record<string, unknown>> {
+	const gateway = await startTestGateway({
+		body: MESSAGES_STREAM_OK,
+		contentType: "text/event-stream",
+	});
+	try {
+		const model = createNeon({
+			baseURL: gateway.baseURL,
+			apiKey: "test-token",
+		})(modelId);
+		const result = streamText({
+			model,
+			prompt: "what is the weather in Mountain View?",
+			tools: {
+				get_weather: tool({
+					description: "Get the weather for a city.",
+					inputSchema: z.object({ city: z.string() }),
+				}),
+			},
+			...(toolStreaming === undefined
+				? {}
+				: { providerOptions: { anthropic: { toolStreaming } } }),
+		});
+		await result.consumeStream();
+		const [request] = gateway.requests;
+		if (request?.body === undefined) {
+			throw new Error("the gateway received no request body");
+		}
+		return request.body;
+	} finally {
+		await gateway.close();
+	}
+}
+
 describe("NeonAnthropicLanguageModel", () => {
 	it("strips temperature for Claude 4.7 and newer", async () => {
 		const { body, warnings } = await sentBodyFor("claude-opus-5", {
@@ -80,9 +126,18 @@ describe("NeonAnthropicLanguageModel", () => {
 		expect(warnings).not.toContain("temperature");
 	});
 
-	it("still disables eager tool-input streaming, which the gateway rejects", async () => {
-		const { body } = await sentBodyFor("claude-opus-4-6", {});
+	it("disables eager tool-input streaming, which the gateway rejects", async () => {
+		const body = await streamedToolBody("claude-opus-4-6");
 
-		expect(body.eager_input_streaming).toBeUndefined();
+		// The shared Anthropic model would otherwise send this and the gateway
+		// answers `Extra inputs are not permitted`.
+		expect(body.tools).toBeDefined();
+		expect(JSON.stringify(body)).not.toContain("eager_input_streaming");
+	});
+
+	it("respects an explicit toolStreaming override", async () => {
+		const body = await streamedToolBody("claude-opus-4-6", true);
+
+		expect(JSON.stringify(body)).toContain("eager_input_streaming");
 	});
 });

@@ -105,6 +105,45 @@ export const MESSAGES_OK = {
 	usage: { input_tokens: 1, output_tokens: 1 },
 };
 
+/**
+ * A minimal successful Anthropic Messages SSE stream. Streaming is the only path
+ * that emits `eager_input_streaming`, so the gateway-compat behaviour cannot be
+ * asserted against the non-streaming fixture.
+ */
+export const MESSAGES_STREAM_OK = [
+	`event: message_start\ndata: ${JSON.stringify({
+		type: "message_start",
+		message: {
+			id: "msg_test",
+			type: "message",
+			role: "assistant",
+			model: "claude-opus-4-6",
+			content: [],
+			stop_reason: null,
+			stop_sequence: null,
+			usage: { input_tokens: 1, output_tokens: 0 },
+		},
+	})}`,
+	`event: content_block_start\ndata: ${JSON.stringify({
+		type: "content_block_start",
+		index: 0,
+		content_block: { type: "text", text: "" },
+	})}`,
+	`event: content_block_delta\ndata: ${JSON.stringify({
+		type: "content_block_delta",
+		index: 0,
+		delta: { type: "text_delta", text: "pong" },
+	})}`,
+	`event: content_block_stop\ndata: ${JSON.stringify({ type: "content_block_stop", index: 0 })}`,
+	`event: message_delta\ndata: ${JSON.stringify({
+		type: "message_delta",
+		delta: { stop_reason: "end_turn", stop_sequence: null },
+		usage: { output_tokens: 1 },
+	})}`,
+	`event: message_stop\ndata: ${JSON.stringify({ type: "message_stop" })}`,
+	"",
+].join("\n\n");
+
 /** A minimal successful Chat Completions body. */
 export const CHAT_OK = {
 	id: "chatcmpl_test",
