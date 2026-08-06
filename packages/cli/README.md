@@ -601,7 +601,7 @@ The target directory must be empty unless you pass `--force` (a lone `.git` is i
 $ neon init
 ```
 
-Run in a terminal it prompts you through those steps. This is what the retired `neon-init` package used to do, so `npx neon-init` becomes `npx neon init`.
+Run in a terminal it prompts you through those steps. This is what the retired `neon-init` package used to do; `npx neon init` replaces it.
 
 Two side effects worth knowing before you run it. It **installs or upgrades `neonctl` globally**, with whichever package manager invoked it — the flow drives Neon by shelling out to the CLI rather than calling the API in-process. And it **writes `.neon`** in the project directory, the same context file `neon link` and `neon checkout` use.
 

@@ -12,11 +12,10 @@ The code moves into `packages/cli/src/init/` and the package is gone. `neon init
 before: same phases, same `--data` step routing, same prompts, and it still reaches Neon by
 shelling out to `npx -y neon`.
 
-**Run `npx neon init` instead of `npx neon-init`.** No further version of `neon-init` will be
-published, so the last one keeps resolving and keeps working — frozen, with its own copy of
-every phase handler. There is no alias package: it was a CLI rather than a library, and the
-command that replaces it is on a CLI its users already have. The `neon-init/bootstrap` subpath
-is gone too; that core is now internal to `neon`, and `neon bootstrap` is its supported surface.
+**The command is `npx neon init`.** `neon-init` is deprecated and gets no further releases;
+there is no alias package, because it was a CLI rather than a library and the command that
+replaces it is on a CLI its users already have. The `neon-init/bootstrap` subpath is gone too;
+that core is now internal to `neon`, and `neon bootstrap` is its supported surface.
 
 Two things about `neon init --agent` change, because deleting the standalone binary made it the
 only agent entry point and it was the weaker of the two:
