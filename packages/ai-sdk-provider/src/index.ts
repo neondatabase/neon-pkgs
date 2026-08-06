@@ -9,7 +9,6 @@
 export { NeonAnthropicLanguageModel } from "./lib/neon-anthropic-language-model.js";
 export { NeonChatLanguageModel } from "./lib/neon-chat-language-model.js";
 export {
-	NEON_EXTRA_MODEL_IDS,
 	NEON_MODELS_DEV_IDS,
 	type NeonChatModelId,
 	type NeonKnownModelId,

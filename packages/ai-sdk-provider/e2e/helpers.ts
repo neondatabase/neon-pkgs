@@ -1,6 +1,6 @@
 /**
  * Representative models from the models.dev `neon` provider — one per gateway route
- * family. See `NEON_MODELS_DEV_IDS` / `NEON_EXTRA_MODEL_IDS` in neon-chat-options.ts.
+ * family. See `NEON_MODELS_DEV_IDS` in neon-chat-options.ts.
  */
 import { expect } from "vitest";
 

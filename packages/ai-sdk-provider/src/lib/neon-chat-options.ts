@@ -8,17 +8,16 @@
 // `(string & {})` fallback on `NeonChatModelId`.
 //
 // `NEON_MODELS_DEV_IDS` mirrors the models.dev `neon` catalog exactly — the
-// `neon-catalog-drift.test.ts` maintainer check fails if the two diverge.
-// `NEON_EXTRA_MODEL_IDS` are additional ids the gateway serves that models.dev
-// does not (yet) list; they are kept for autocomplete and verified to resolve
-// against the gateway. The authoritative, always-current catalog is shown in
-// the Neon Console under the branch's "AI Gateway" tab.
+// `neon-catalog-drift.test.ts` maintainer check fails if the two diverge. The
+// authoritative, always-current catalog is shown in the Neon Console under the
+// branch's "AI Gateway" tab.
 //
-// The two lists answer different questions and are allowed to disagree with the
-// gateway in opposite directions: `NEON_MODELS_DEV_IDS` tracks models.dev, so a
-// retired id stays until models.dev drops it, and `NEON_EXTRA_MODEL_IDS` holds
-// gateway ids models.dev has not published yet. Right now the two catalogs agree
-// exactly, so the extras list is empty — that is the healthy state, not a gap.
+// There is deliberately no second list for ids the gateway serves ahead of
+// models.dev. Such an id already works — `NeonChatModelId` accepts any string —
+// so a hand-maintained list would buy autocomplete for a few days at the cost of
+// a surface that silently rots, which is what happened last time. The fix for a
+// gateway model missing here is to add it to models.dev; Orbit's catalog-parity
+// job reports that gap daily.
 
 /** The models.dev `neon` catalog (canonical, unprefixed ids). */
 export const NEON_MODELS_DEV_IDS = [
@@ -71,18 +70,8 @@ export const NEON_MODELS_DEV_IDS = [
 	"inkling",
 ] as const;
 
-/**
- * Ids the gateway serves that the models.dev `neon` provider does not list.
- * Verified to resolve against the gateway; retained for autocomplete. If
- * models.dev later lists one of these, the drift check flags it for promotion
- * into `NEON_MODELS_DEV_IDS`.
- */
-export const NEON_EXTRA_MODEL_IDS = [] as const;
-
-/** A known Neon AI Gateway model id (models.dev catalog + gateway extras). */
-export type NeonKnownModelId =
-	| (typeof NEON_MODELS_DEV_IDS)[number]
-	| (typeof NEON_EXTRA_MODEL_IDS)[number];
+/** A known Neon AI Gateway model id. */
+export type NeonKnownModelId = (typeof NEON_MODELS_DEV_IDS)[number];
 
 /**
  * A Neon AI Gateway model id. Known ids are listed for autocomplete; any other
