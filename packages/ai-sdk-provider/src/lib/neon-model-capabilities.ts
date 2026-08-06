@@ -60,6 +60,22 @@ const PERMISSIVE: Omit<NeonModelCapabilities, "family"> = {
 };
 
 /**
+ * Whether a Claude id predates the 4.7 cutoff where the gateway stopped
+ * accepting `temperature` and `top_p`. Ids look like `claude-<tier>-<major>` or
+ * `claude-<tier>-<major>-<minor>`, optionally behind the legacy `databricks-`
+ * prefix. An id we cannot parse is treated as new, which is the safe direction.
+ */
+function claudeAcceptsSampling(id: string): boolean {
+	const match = /claude-[a-z]+-(\d+)(?:-(\d+))?/.exec(id);
+	if (!match) {
+		return false;
+	}
+	const major = Number(match[1]);
+	const minor = match[2] === undefined ? 0 : Number(match[2]);
+	return major < 4 || (major === 4 && minor <= 6);
+}
+
+/**
  * Heuristic, prefix-based capability detection for MLflow-routed Neon models.
  *
  * The unified endpoint proxies to heterogeneous upstream providers, each of
@@ -75,11 +91,21 @@ export function getNeonModelCapabilities(
 
 	// Anthropic (Claude): rejects penalties and seed, accepts only one of
 	// temperature/topP, and rejects the OpenAI `reasoning_effort` field.
+	//
+	// From Claude 4.7 onward the gateway also rejects non-default sampling
+	// entirely — `does not support the temperature parameter` /
+	// `does not support sampling parameters: top_p` — because those models are
+	// steered with `output_config.effort` instead. Measured: 4.1/4.5/4.6 accept
+	// both, 4.7/4.8/5 reject both, and every id accepts the default
+	// `temperature: 1.0`. A version comparison rather than a list of ids, so a
+	// future Claude inherits the restriction: dropping a parameter the model
+	// would have accepted costs a warning, claiming one it rejects costs a 400.
 	if (id.includes("claude")) {
+		const sampling = claudeAcceptsSampling(id);
 		return {
 			family: "anthropic",
-			supportsTemperature: true,
-			supportsTopP: true,
+			supportsTemperature: sampling,
+			supportsTopP: sampling,
 			temperatureTopPMutuallyExclusive: true,
 			supportsPenalties: false,
 			supportsSeed: false,
@@ -132,6 +158,33 @@ export function getNeonModelCapabilities(
 			supportsStopSequences: true,
 			supportsReasoningEffort: true,
 		};
+	}
+
+	// Everything else on the unified endpoint rejects penalties with
+	// `parameter "frequency_penalty" must be equal to 0`. Gemini, handled above,
+	// is the only MLflow-routed family that accepts them. Seed and stop vary, so
+	// each family carries what was measured rather than inheriting a guess.
+	if (id.includes("gpt-oss")) {
+		return {
+			family: "other",
+			...PERMISSIVE,
+			supportsPenalties: false,
+			supportsSeed: false,
+			supportsStopSequences: false,
+		};
+	}
+
+	if (id.includes("qwen") || id.includes("gemma")) {
+		return {
+			family: "other",
+			...PERMISSIVE,
+			supportsPenalties: false,
+			supportsSeed: false,
+		};
+	}
+
+	if (id.includes("glm") || id.includes("inkling")) {
+		return { family: "other", ...PERMISSIVE, supportsPenalties: false };
 	}
 
 	return { family: "other", ...PERMISSIVE };

@@ -70,8 +70,100 @@ describe("getNeonModelCapabilities", () => {
 		expect(caps.supportsSeed).toBe(false);
 	});
 
-	it("is permissive for unknown models", () => {
-		const caps = getNeonModelCapabilities("qwen35-122b-a10b");
+	// Measured against a live gateway branch: 4.1/4.5/4.6 accept temperature and
+	// top_p, 4.7 onward reject both with "does not support the temperature
+	// parameter".
+	it("keeps sampling params for Claude 4.6 and earlier", () => {
+		for (const id of [
+			"claude-haiku-4-5",
+			"claude-opus-4-1",
+			"claude-opus-4-6",
+			"claude-sonnet-4-6",
+		]) {
+			const caps = getNeonModelCapabilities(id);
+			expect({
+				id,
+				temperature: caps.supportsTemperature,
+				topP: caps.supportsTopP,
+			}).toEqual({ id, temperature: true, topP: true });
+		}
+	});
+
+	it("drops sampling params from Claude 4.7 onward", () => {
+		for (const id of [
+			"claude-opus-4-7",
+			"claude-opus-4-8",
+			"claude-opus-5",
+			"claude-sonnet-5",
+			"claude-fable-5",
+		]) {
+			const caps = getNeonModelCapabilities(id);
+			expect({
+				id,
+				temperature: caps.supportsTemperature,
+				topP: caps.supportsTopP,
+			}).toEqual({ id, temperature: false, topP: false });
+		}
+	});
+
+	it("treats an unparseable Claude id as new rather than permissive", () => {
+		// Dropping a supported parameter costs a warning; claiming an unsupported
+		// one costs a 400, so the unknown case must fall on the strict side.
+		const caps = getNeonModelCapabilities("claude-something-unreleased");
+		expect(caps.supportsTemperature).toBe(false);
+	});
+
+	// Every MLflow-routed family except Gemini rejects penalties with
+	// `parameter "frequency_penalty" must be equal to 0`.
+	it("drops penalties for every unified-endpoint family that rejects them", () => {
+		for (const id of [
+			"gpt-oss-20b",
+			"gpt-oss-120b",
+			"qwen35-122b-a10b",
+			"qwen3-next-80b-a3b-instruct",
+			"gemma-3-12b",
+			"glm-5-2",
+			"inkling",
+		]) {
+			expect({
+				id,
+				penalties: getNeonModelCapabilities(id).supportsPenalties,
+			}).toEqual({
+				id,
+				penalties: false,
+			});
+		}
+	});
+
+	it("keeps penalties for Gemini, the one unified family that accepts them", () => {
+		expect(
+			getNeonModelCapabilities("gemini-3-flash").supportsPenalties,
+		).toBe(true);
+	});
+
+	it("separates seed and stop support across the unified families", () => {
+		// gpt-oss rejects both; qwen and gemma reject seed only; glm and inkling
+		// accept both.
+		expect(getNeonModelCapabilities("gpt-oss-20b").supportsSeed).toBe(
+			false,
+		);
+		expect(
+			getNeonModelCapabilities("gpt-oss-20b").supportsStopSequences,
+		).toBe(false);
+		expect(getNeonModelCapabilities("qwen35-122b-a10b").supportsSeed).toBe(
+			false,
+		);
+		expect(
+			getNeonModelCapabilities("qwen35-122b-a10b").supportsStopSequences,
+		).toBe(true);
+		expect(getNeonModelCapabilities("glm-5-2").supportsSeed).toBe(true);
+		expect(getNeonModelCapabilities("inkling").supportsStopSequences).toBe(
+			true,
+		);
+	});
+
+	it("is permissive for a genuinely unknown model", () => {
+		const caps = getNeonModelCapabilities("some-future-model-v1");
 		expect(caps.family).toBe("other");
 		expect(caps.supportsPenalties).toBe(true);
 		expect(caps.supportsReasoningEffort).toBe(true);
