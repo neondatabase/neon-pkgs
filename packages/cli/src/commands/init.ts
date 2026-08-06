@@ -65,6 +65,13 @@ const writeAgentFailure = (error: Error) => {
 	);
 };
 
+/** ` at position 12`, or nothing when the parser did not report one. */
+const parsePosition = (parseError: unknown): string => {
+	const message = parseError instanceof Error ? parseError.message : "";
+	const at = message.match(/at position (\d+)/);
+	return at === null ? "" : ` at position ${at[1]}`;
+};
+
 export const handler = async (argv: {
 	agent?: boolean;
 	data?: string;
@@ -110,12 +117,14 @@ export const handler = async (argv: {
 			try {
 				data = JSON.parse(argv.data);
 			} catch (parseError) {
-				const detail =
-					parseError instanceof Error
-						? parseError.message
-						: String(parseError);
+				// Neither the payload nor the parser's message may appear here. `--data`
+				// carries whatever the caller put in it — a connection string, an API key —
+				// and V8 quotes a window of the input around the syntax error, so both would
+				// travel into the error message, onto stdout, and into `sendError`'s
+				// analytics payload. `shared/cli-core/src/credentials.ts` discards the same
+				// message for the same reason. The offset is a number and says enough.
 				throw new Error(
-					`Invalid JSON in --data flag (${detail}). Expected a JSON object, got: ${argv.data}`,
+					`Invalid JSON in --data flag${parsePosition(parseError)}. Expected a JSON object.`,
 				);
 			}
 			if (typeof data.step === "string") {
@@ -136,16 +145,17 @@ export const handler = async (argv: {
 			await interactiveInit({ preview: argv.preview });
 		}
 	} catch (error) {
-		// Attribute the failure to init before surfacing it: the top-level handler classifies
-		// by message and would file everything here under UNKNOWN_ERROR.
 		const cause = error instanceof Error ? error : new Error(String(error));
-		sendError(cause, "NEON_INIT_FAILED");
 		if (isAgentMode) {
+			// Agent mode answers and exits here, so nothing else will report this. Attribute
+			// it to init and flush before exiting — `process.exit` drops in-flight events.
+			sendError(cause, "NEON_INIT_FAILED");
 			writeAgentFailure(cause);
 			await closeAnalytics();
 			process.exit(1);
 		}
-		// A human gets the top-level handler's single `ERROR: <message>` line on stderr.
+		// A human gets the top-level handler's single `ERROR: <message>` line on stderr, and
+		// its `sendError`. Reporting here as well would file one failure as two events.
 		throw cause;
 	}
 };

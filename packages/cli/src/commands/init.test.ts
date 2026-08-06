@@ -153,7 +153,9 @@ describe("init", () => {
 		});
 	});
 
-	test("reports a failure under NEON_INIT_FAILED and rethrows the cause", async () => {
+	// Outside agent mode the top-level handler reports and prints, so reporting here too
+	// would file one failure as two analytics events.
+	test("rethrows the cause without reporting it a second time", async () => {
 		const { handler } = await import("./init.js");
 		const { sendError } = await import("../analytics.js");
 		const { interactiveInit } = await import("../init/interactive.js");
@@ -161,7 +163,7 @@ describe("init", () => {
 		vi.mocked(interactiveInit).mockRejectedValue(failure);
 
 		await expect(handler({})).rejects.toThrow("editor CLI not on PATH");
-		expect(sendError).toHaveBeenCalledWith(failure, "NEON_INIT_FAILED");
+		expect(sendError).not.toHaveBeenCalled();
 	});
 
 	test("refuses a named profile instead of silently running as the default account", async () => {

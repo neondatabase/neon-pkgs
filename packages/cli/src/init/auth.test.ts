@@ -130,8 +130,24 @@ describe("`neon init` failure output", () => {
 		expect(status).toBe(1);
 		const parsed = JSON.parse(stdout);
 		expect(parsed.success).toBe(false);
-		expect(parsed.error).toMatch(/Invalid JSON in --data flag/);
-		expect(parsed.error).toContain("{not json");
+		expect(parsed.error).toMatch(
+			/Invalid JSON in --data flag at position \d+/,
+		);
+	});
+
+	// `--data` carries whatever the caller put in it, and this message reaches stdout, the
+	// terminal, and Segment. V8's own parse error quotes a window of the input, so neither
+	// it nor the payload may be interpolated in.
+	test("and neither the payload nor the parser's message is echoed back", () => {
+		const { stdout, stderr } = runInit([
+			"--agent",
+			"--data",
+			'{"api_key":napi_SENTINELSECRET}',
+		]);
+
+		expect(stdout + stderr).not.toContain("napi_");
+		expect(stdout + stderr).not.toContain("SENTINEL");
+		expect(JSON.parse(stdout).error).toMatch(/Invalid JSON in --data flag/);
 	});
 
 	test("one JSON object per invocation, and no log prefix on it", () => {
@@ -141,6 +157,18 @@ describe("`neon init` failure output", () => {
 		expect(stdout.match(/"success"/g)).toHaveLength(1);
 		// Routing this through `log` would have prefixed it and put it on stderr.
 		expect(stdout).not.toMatch(/^(INFO|ERROR|WARNING):/m);
+	});
+
+	// Every spelling yargs accepts for the flag has to reach the same answer.
+	test.each([
+		"--agent",
+		"--agent=true",
+		"-a",
+	])("%s selects the JSON answer", (flag) => {
+		const { status, stdout } = runInit([flag, "--data", "{not json"]);
+
+		expect(status).toBe(1);
+		expect(JSON.parse(stdout).error).toMatch(/Invalid JSON in --data flag/);
 	});
 
 	test("--agent answers the profile refusal with JSON on stdout", () => {

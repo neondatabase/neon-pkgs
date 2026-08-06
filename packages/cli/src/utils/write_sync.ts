@@ -15,11 +15,21 @@ export function writeAllSync(fd: number, text: string): void {
 		try {
 			buffer = buffer.subarray(writeSync(fd, buffer));
 		} catch (err) {
-			if ((err as NodeJS.ErrnoException).code !== "EAGAIN") return;
-			// Wait for the reader rather than spinning on it. A pipe nobody is draining would
-			// otherwise burn a core until it is; failure output is small enough that this
-			// should never be reached, which is the reason to bound it rather than assume so.
-			Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
+			const code = (err as NodeJS.ErrnoException).code;
+			if (code === "EAGAIN") {
+				// Wait for the reader rather than spinning on it. A pipe nobody is draining
+				// would otherwise burn a core until it is; failure output is small enough
+				// that this should never be reached, which is the reason to bound it rather
+				// than assume so.
+				Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
+				continue;
+			}
+			// The reader closed the pipe (`neon … | head`). There is nobody left to tell,
+			// and this is the last thing the process does, so stop rather than throw.
+			if (code === "EPIPE") return;
+			// Anything else means the write did not happen and the caller is about to exit
+			// as though it had. Swallowing it turns a lost payload into an apparent success.
+			throw err;
 		}
 	}
 }
