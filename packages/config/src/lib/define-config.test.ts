@@ -130,14 +130,14 @@ describe("resolveConfig", () => {
 		});
 	});
 
-	test("passes externalPackages through to the resolved function", () => {
+	test("resolves a bare externalPackages string to includeFiles: true", () => {
 		const config = defineConfig({
 			preview: {
 				functions: {
 					fn1: {
 						name: "Hello World",
 						source: "./functions/hello-world.ts",
-						externalPackages: ["microsandbox", "@mongodb-js/zstd"],
+						externalPackages: ["sharp", "@mongodb-js/zstd"],
 					},
 				},
 			},
@@ -149,9 +149,54 @@ describe("resolveConfig", () => {
 				name: "Hello World",
 				source: "./functions/hello-world.ts",
 				env: {},
-				externalPackages: ["microsandbox", "@mongodb-js/zstd"],
+				externalPackages: [
+					{ name: "sharp", includeFiles: true },
+					{ name: "@mongodb-js/zstd", includeFiles: true },
+				],
 				runtime: "nodejs24",
 			},
+		]);
+	});
+
+	test("carries includeFiles: false through from the object form", () => {
+		const config = defineConfig({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello",
+						source: "./hello.ts",
+						externalPackages: [
+							"sharp",
+							{ name: "canvas", includeFiles: false },
+						],
+					},
+				},
+			},
+		});
+		const resolved = resolveConfig(config, { name: "main", exists: true });
+		expect(resolved.preview?.functions[0]?.externalPackages).toEqual([
+			{ name: "sharp", includeFiles: true },
+			{ name: "canvas", includeFiles: false },
+		]);
+	});
+
+	test("treats an explicit includeFiles: true the same as the bare string", () => {
+		const config = defineConfig({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello",
+						source: "./hello.ts",
+						externalPackages: [
+							{ name: "sharp", includeFiles: true },
+						],
+					},
+				},
+			},
+		});
+		const resolved = resolveConfig(config, { name: "main", exists: true });
+		expect(resolved.preview?.functions[0]?.externalPackages).toEqual([
+			{ name: "sharp", includeFiles: true },
 		]);
 	});
 
@@ -162,7 +207,8 @@ describe("resolveConfig", () => {
 			},
 		});
 		const resolved = resolveConfig(config, { name: "main", exists: true });
-		// Absent rather than `[]`, so an existing policy resolves to the shape it always did.
+		// Absent rather than `[]`. The bundler keys the stage-files path off there being a
+		// shipping entry, and an undeclared policy must produce the archive it always did.
 		expect(resolved.preview?.functions[0]).not.toHaveProperty(
 			"externalPackages",
 		);
@@ -184,87 +230,8 @@ describe("resolveConfig", () => {
 		const resolved = resolveConfig(config, { name: "main", exists: true });
 		externalPackages.push("mutated-after-resolve");
 		expect(resolved.preview?.functions[0]?.externalPackages).toEqual([
-			"microsandbox",
+			{ name: "microsandbox", includeFiles: true },
 		]);
-	});
-
-	test("passes nativePackages through to the resolved function", () => {
-		const config = defineConfig({
-			preview: {
-				functions: {
-					fn1: {
-						name: "Hello World",
-						source: "./functions/hello-world.ts",
-						nativePackages: ["sharp"],
-					},
-				},
-			},
-		});
-		const resolved = resolveConfig(config, { name: "main", exists: true });
-		expect(resolved.preview?.functions).toEqual([
-			{
-				slug: "fn1",
-				name: "Hello World",
-				source: "./functions/hello-world.ts",
-				env: {},
-				nativePackages: ["sharp"],
-				runtime: "nodejs24",
-			},
-		]);
-	});
-
-	test("omits nativePackages entirely when the policy does not declare it", () => {
-		const config = defineConfig({
-			preview: {
-				functions: { fn1: { name: "Hello", source: "./hello.ts" } },
-			},
-		});
-		const resolved = resolveConfig(config, { name: "main", exists: true });
-		// Absent rather than `[]`. The bundler keys the ship-native-files path off this
-		// property being present, so an empty array here would change every deploy.
-		expect(resolved.preview?.functions[0]).not.toHaveProperty(
-			"nativePackages",
-		);
-	});
-
-	test("copies nativePackages so mutating the policy array cannot reach the resolved config", () => {
-		const nativePackages = ["sharp"];
-		const config = defineConfig({
-			preview: {
-				functions: {
-					fn1: {
-						name: "Hello",
-						source: "./hello.ts",
-						nativePackages,
-					},
-				},
-			},
-		});
-		const resolved = resolveConfig(config, { name: "main", exists: true });
-		nativePackages.push("mutated-after-resolve");
-		expect(resolved.preview?.functions[0]?.nativePackages).toEqual([
-			"sharp",
-		]);
-	});
-
-	test("resolves both package lists independently", () => {
-		const config = defineConfig({
-			preview: {
-				functions: {
-					fn1: {
-						name: "Hello",
-						source: "./hello.ts",
-						externalPackages: ["microsandbox"],
-						nativePackages: ["sharp"],
-					},
-				},
-			},
-		});
-		const resolved = resolveConfig(config, { name: "main", exists: true });
-		expect(resolved.preview?.functions[0]).toMatchObject({
-			externalPackages: ["microsandbox"],
-			nativePackages: ["sharp"],
-		});
 	});
 
 	test("applies per-branch function runtime tuning", () => {

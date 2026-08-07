@@ -74,11 +74,10 @@ export async function buildFunctionBundle(
 			// `platform: "node"`. The banner re-creates require/__filename/__dirname so
 			// bundled CommonJS deps work inside the ESM output.
 			banner: { js: ESM_CJS_INTEROP_BANNER },
-			// Packages the policy declared unbundleable (native addons, optional peers on
-			// dead code paths). Their imports survive into the bundle and resolve against a
-			// directory with no node_modules, so reaching one at runtime throws — which is
-			// the documented contract of `FunctionDef.externalPackages`, not a bug here.
-			external: [...(fn.externalPackages ?? [])],
+			// Packages the policy declared unbundleable. Their imports survive into the
+			// bundle; whether they then resolve depends on `includeFiles`, which the deploy
+			// bundler acts on after this build. Both modes are external to esbuild.
+			external: (fn.externalPackages ?? []).map((pkg) => pkg.name),
 			logLevel: "silent",
 		});
 	} catch (cause) {

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { parseBranchTtl, parseSuspendTimeout } from "./duration.js";
+import { externalPackageRoot } from "./external-packages.js";
 import { isWildcardPattern, validatePattern } from "./patterns.js";
 
 /**
@@ -204,12 +205,12 @@ const functionDevConfigSchema = z.strictObject({
 });
 
 /**
- * A package the bundler must leave alone. Accepts what esbuild's `external` accepts for a
- * package — a bare name, a scope, or a subpath — and rejects a relative or absolute path,
- * which names a local module rather than a dependency and is never the right thing to
- * externalize (the bundle would ship an import of a file that isn't deployed).
+ * The name of a package the bundler must leave alone. Accepts what esbuild's `external`
+ * accepts for a package — a bare name, a scope, or a subpath — and rejects a relative or
+ * absolute path, which names a local module rather than a dependency and is never the right
+ * thing to externalize (the bundle would ship an import of a file that isn't deployed).
  */
-const externalPackageSchema = z
+const externalPackageNameSchema = z
 	.string()
 	.min(1)
 	.refine((value) => !value.startsWith(".") && !value.startsWith("/"), {
@@ -217,42 +218,44 @@ const externalPackageSchema = z
 	});
 
 /**
+ * One entry of `externalPackages`. A bare string is the common case and ships the package's
+ * files; the object form exists only to turn that off. See {@link FunctionDef.externalPackages}.
+ */
+const externalPackageEntrySchema = z.union([
+	externalPackageNameSchema,
+	z.strictObject({
+		name: externalPackageNameSchema,
+		includeFiles: z.boolean().optional(),
+	}),
+]);
+
+/**
  * Per-function list of packages esbuild leaves unresolved at deploy time. See
- * {@link FunctionDef.externalPackages} for when this is the right tool — the deployed
- * archive has no `node_modules`, so an externalized package must never be reached at
- * runtime.
+ * {@link FunctionDef.externalPackages}.
  */
-const functionExternalPackagesSchema = z.array(externalPackageSchema);
-
-/**
- * A package whose real files ship alongside the bundle. Same specifier grammar as
- * {@link externalPackageSchema}, minus the subpath: a native package is installed and
- * traced as a whole, so the unit is the package, not a file inside it.
- */
-const nativePackageSchema = externalPackageSchema.refine(
-	(value) => value.split("/").length === (value.startsWith("@") ? 2 : 1),
-	{
-		error: 'must be a package name such as "sharp" or "@scope/pkg", without a subpath',
-	},
-);
-
-/**
- * Per-function list of packages shipped as real files next to the bundle. See
- * {@link FunctionDef.nativePackages}.
- */
-const functionNativePackagesSchema = z.array(nativePackageSchema);
+const functionExternalPackagesSchema = z.array(externalPackageEntrySchema);
 
 const runtimeSchema = z.literal("nodejs24");
+
+/** The declared name of an entry, whichever form it was written in. */
+const entryName = (
+	entry: z.infer<typeof externalPackageEntrySchema>,
+): string => (typeof entry === "string" ? entry : entry.name);
+
+/** Whether an entry ships its files. Absent means yes — see `FunctionDef.externalPackages`. */
+const entryIncludesFiles = (
+	entry: z.infer<typeof externalPackageEntrySchema>,
+): boolean => (typeof entry === "string" ? true : entry.includeFiles !== false);
 
 /**
  * Static definition of a function (existence). The slug is the record key (validated by
  * {@link functionSlugSchema}), so it is not a field here. Deploy tuning (`runtime`) lives
  * in the `branch` closure, not here.
  *
- * `externalPackages` and `nativePackages` are mutually exclusive per package: the first
- * means "leave the import unresolved", the second "leave it unresolved AND ship the files".
- * Listing one package in both states two different intents for it, so it is rejected here
- * rather than silently resolved in favour of one.
+ * `externalPackages` entries are checked for contradictions: the same package named twice,
+ * or named once bare and once through a subpath with a different `includeFiles`. Both state
+ * two intents for one package, and files are staged per package rather than per subpath, so
+ * neither can be honoured as written.
  */
 export const functionDefSchema = z
 	.strictObject({
@@ -260,19 +263,48 @@ export const functionDefSchema = z
 		source: z.string().min(1),
 		env: functionEnvSchema.optional(),
 		externalPackages: functionExternalPackagesSchema.optional(),
-		nativePackages: functionNativePackagesSchema.optional(),
 		dev: functionDevConfigSchema.optional(),
 	})
 	.check((ctx) => {
-		const external = new Set(ctx.value.externalPackages ?? []);
-		(ctx.value.nativePackages ?? []).forEach((pkg, index) => {
-			if (!external.has(pkg)) return;
-			ctx.issues.push({
-				code: "custom",
-				input: pkg,
-				path: ["nativePackages", index],
-				message: `"${pkg}" is also in externalPackages; a package belongs to one list or the other`,
-			});
+		const entries = ctx.value.externalPackages ?? [];
+		const seenNames = new Map<string, number>();
+		const rootIntent = new Map<
+			string,
+			{ includeFiles: boolean; at: string }
+		>();
+
+		entries.forEach((entry, index) => {
+			const name = entryName(entry);
+			const includeFiles = entryIncludesFiles(entry);
+
+			const firstIndex = seenNames.get(name);
+			if (firstIndex !== undefined) {
+				ctx.issues.push({
+					code: "custom",
+					input: entry,
+					path: ["externalPackages", index],
+					message: `"${name}" is listed more than once (first at index ${firstIndex})`,
+				});
+				return;
+			}
+			seenNames.set(name, index);
+
+			// Files are installed and traced per package, so two specifiers that resolve to the
+			// same package cannot disagree about whether that package's files ship.
+			const root = externalPackageRoot(name);
+			const prior = rootIntent.get(root);
+			if (prior !== undefined && prior.includeFiles !== includeFiles) {
+				ctx.issues.push({
+					code: "custom",
+					input: entry,
+					path: ["externalPackages", index],
+					message:
+						`"${name}" and "${prior.at}" are both part of the "${root}" package but disagree ` +
+						`about includeFiles; files ship per package, so the whole package either ships or does not`,
+				});
+				return;
+			}
+			rootIntent.set(root, { includeFiles, at: name });
 		});
 	});
 

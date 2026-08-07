@@ -184,48 +184,60 @@ describe("configInputSchema", () => {
 		expect(result.success).toBe(false);
 	});
 
-	test("accepts nativePackages with bare and scoped names", () => {
-		const result = configInputSchema.safeParse({
+	const withExternalPackages = (externalPackages: unknown) =>
+		configInputSchema.safeParse({
 			preview: {
 				functions: {
 					fn1: {
 						name: "Hello World",
 						source: "./hello.ts",
-						nativePackages: ["sharp", "@napi-rs/canvas"],
+						externalPackages,
 					},
 				},
 			},
 		});
+
+	test("accepts the object form with includeFiles false", () => {
+		const result = withExternalPackages([
+			"sharp",
+			{ name: "canvas", includeFiles: false },
+		]);
 		expect(result.success).toBe(true);
 	});
 
-	test("accepts an empty nativePackages list", () => {
-		const result = configInputSchema.safeParse({
-			preview: {
-				functions: {
-					fn1: {
-						name: "Hello World",
-						source: "./hello.ts",
-						nativePackages: [],
-					},
-				},
-			},
-		});
-		expect(result.success).toBe(true);
+	test("accepts an explicit includeFiles: true", () => {
+		expect(
+			withExternalPackages([{ name: "sharp", includeFiles: true }])
+				.success,
+		).toBe(true);
 	});
 
-	test("rejects a relative path in nativePackages", () => {
-		const result = configInputSchema.safeParse({
-			preview: {
-				functions: {
-					fn1: {
-						name: "Hello World",
-						source: "./hello.ts",
-						nativePackages: ["./local-addon.node"],
-					},
-				},
-			},
-		});
+	test("accepts the object form without includeFiles", () => {
+		expect(withExternalPackages([{ name: "sharp" }]).success).toBe(true);
+	});
+
+	test("rejects an unknown key in the object form", () => {
+		expect(
+			withExternalPackages([{ name: "sharp", includeFile: false }])
+				.success,
+		).toBe(false);
+	});
+
+	test("rejects a non-boolean includeFiles", () => {
+		expect(
+			withExternalPackages([{ name: "sharp", includeFiles: "yes" }])
+				.success,
+		).toBe(false);
+	});
+
+	test("rejects an object entry with no name", () => {
+		expect(withExternalPackages([{ includeFiles: false }]).success).toBe(
+			false,
+		);
+	});
+
+	test("rejects a relative path in the object form too", () => {
+		const result = withExternalPackages([{ name: "./local-addon.node" }]);
 		expect(result.success).toBe(false);
 		if (!result.success) {
 			expect(formatZodIssues(result.error).join("\n")).toMatch(
@@ -234,109 +246,50 @@ describe("configInputSchema", () => {
 		}
 	});
 
-	test("rejects an absolute path in nativePackages", () => {
-		const result = configInputSchema.safeParse({
-			preview: {
-				functions: {
-					fn1: {
-						name: "Hello World",
-						source: "./hello.ts",
-						nativePackages: ["/opt/addon.node"],
-					},
-				},
-			},
-		});
-		expect(result.success).toBe(false);
+	// A subpath is legal: it narrows what esbuild leaves unresolved. Files are staged per
+	// package, so the subpath's package is what ships.
+	test("accepts a subpath entry", () => {
+		expect(withExternalPackages(["pkg/sub"]).success).toBe(true);
 	});
 
-	test("rejects a non-string entry in nativePackages", () => {
-		const result = configInputSchema.safeParse({
-			preview: {
-				functions: {
-					fn1: {
-						name: "Hello World",
-						source: "./hello.ts",
-						nativePackages: [42],
-					},
-				},
-			},
-		});
+	test("rejects the same package listed twice", () => {
+		const result = withExternalPackages(["sharp", "sharp"]);
 		expect(result.success).toBe(false);
+		if (!result.success) {
+			const issues = formatZodIssues(result.error).join("\n");
+			expect(issues).toMatch(/listed more than once/);
+			// Reported against the offending entry, not the whole function.
+			expect(issues).toMatch(/externalPackages\[1\]/);
+		}
 	});
 
-	// A native package is installed and traced whole, so a subpath names nothing the
-	// option can act on — unlike externalPackages, where esbuild accepts one.
-	test("rejects a subpath in nativePackages", () => {
-		const result = configInputSchema.safeParse({
-			preview: {
-				functions: {
-					fn1: {
-						name: "Hello World",
-						source: "./hello.ts",
-						nativePackages: ["sharp/lib/sharp.node"],
-					},
-				},
-			},
-		});
+	test("rejects a bare name and a subpath of it that disagree about includeFiles", () => {
+		const result = withExternalPackages([
+			"sharp",
+			{ name: "sharp/lib/index.js", includeFiles: false },
+		]);
 		expect(result.success).toBe(false);
 		if (!result.success) {
 			expect(formatZodIssues(result.error).join("\n")).toMatch(
-				/without a subpath/,
+				/disagree about includeFiles/,
 			);
 		}
 	});
 
-	test("accepts a scoped nativePackages name, which has one legitimate slash", () => {
-		const result = configInputSchema.safeParse({
-			preview: {
-				functions: {
-					fn1: {
-						name: "Hello World",
-						source: "./hello.ts",
-						nativePackages: ["@img/sharp-linux-arm64"],
-					},
-				},
-			},
-		});
-		expect(result.success).toBe(true);
+	test("accepts a bare name and a subpath of it that agree", () => {
+		expect(
+			withExternalPackages(["sharp", "sharp/lib/index.js"]).success,
+		).toBe(true);
 	});
 
-	test("rejects a package listed in both externalPackages and nativePackages", () => {
-		const result = configInputSchema.safeParse({
-			preview: {
-				functions: {
-					fn1: {
-						name: "Hello World",
-						source: "./hello.ts",
-						externalPackages: ["microsandbox", "sharp"],
-						nativePackages: ["sharp"],
-					},
-				},
-			},
-		});
-		expect(result.success).toBe(false);
-		if (!result.success) {
-			const issues = formatZodIssues(result.error).join("\n");
-			expect(issues).toMatch(/also in externalPackages/);
-			// Reported against the offending entry, not the whole function.
-			expect(issues).toMatch(/nativePackages\[0\]/);
-		}
-	});
-
-	test("accepts the two lists side by side when they name different packages", () => {
-		const result = configInputSchema.safeParse({
-			preview: {
-				functions: {
-					fn1: {
-						name: "Hello World",
-						source: "./hello.ts",
-						externalPackages: ["microsandbox"],
-						nativePackages: ["sharp"],
-					},
-				},
-			},
-		});
-		expect(result.success).toBe(true);
+	test("accepts two scoped packages sharing a scope", () => {
+		// Same scope, different packages — not the same root, so not a conflict.
+		expect(
+			withExternalPackages([
+				{ name: "@img/sharp-linux-arm64", includeFiles: false },
+				"@img/colour",
+			]).success,
+		).toBe(true);
 	});
 
 	test("rejects an unknown key in the function dev block (e.g. removed `portless`)", () => {
