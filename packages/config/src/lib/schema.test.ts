@@ -282,6 +282,33 @@ describe("configInputSchema", () => {
 		).toBe(true);
 	});
 
+	// A staged entry's root is handed to `npm install`, so it has to name one package.
+	// esbuild's `external` also accepts a wildcard and a bare scope, which name a set.
+	test("rejects a wildcard entry that would be staged", () => {
+		const result = withExternalPackages(["@scope/*"]);
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(formatZodIssues(result.error).join("\n")).toMatch(
+				/does not name a single installable package/,
+			);
+		}
+	});
+
+	test("accepts a wildcard entry that stages nothing", () => {
+		expect(
+			withExternalPackages([{ name: "@scope/*", includeFiles: false }])
+				.success,
+		).toBe(true);
+	});
+
+	test("rejects a bare scope that would be staged", () => {
+		expect(withExternalPackages(["@scope"]).success).toBe(false);
+	});
+
+	test("rejects a protocol specifier that would be staged", () => {
+		expect(withExternalPackages(["node:fs"]).success).toBe(false);
+	});
+
 	test("accepts two scoped packages sharing a scope", () => {
 		// Same scope, different packages — not the same root, so not a conflict.
 		expect(

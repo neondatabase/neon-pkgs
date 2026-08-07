@@ -27,20 +27,21 @@ export const normalizeExternalPackage = (
 		: { name: entry.name, includeFiles: entry.includeFiles !== false };
 
 /**
- * The distinct packages whose files a function ships, in declaration order.
+ * The specifiers whose files a function ships, in declaration order and deduplicated.
  *
- * Subpath entries collapse onto their package root, so declaring both `pkg` and `pkg/sub`
- * stages `pkg` once. The schema has already rejected any pair that disagrees about
- * `includeFiles`, so collapsing here cannot silently pick a side.
+ * These are the specifiers **as authored**, subpath included, because that is what the trace
+ * has to import. A package may export only a subpath — `exports: { "./native": … }` with no
+ * `.` — in which case importing the root throws `ERR_PACKAGE_PATH_NOT_EXPORTED` and the
+ * trace finds nothing. Use {@link externalPackageRoot} on these to get what to *install*,
+ * which is always the whole package.
  */
 export const packagesToStage = (
 	entries: readonly ResolvedExternalPackage[],
 ): string[] => {
-	const roots: string[] = [];
+	const specifiers: string[] = [];
 	for (const entry of entries) {
 		if (!entry.includeFiles) continue;
-		const root = externalPackageRoot(entry.name);
-		if (!roots.includes(root)) roots.push(root);
+		if (!specifiers.includes(entry.name)) specifiers.push(entry.name);
 	}
-	return roots;
+	return specifiers;
 };
