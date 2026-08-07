@@ -137,10 +137,22 @@ export type NativeTraceDeps = {
 	/** Install `specs` for the runtime target into `cwd`. Resolves on success. */
 	install: (cwd: string, specs: string[]) => Promise<void>;
 	/** Trace `entry` within `base`, returning archive-relative file paths. */
-	trace: (
-		base: string,
-		entry: string,
-	) => Promise<{ files: string[]; warnings?: string[] }>;
+	/**
+	 * Trace `entry` within `base`, returning archive-relative file paths.
+	 *
+	 * The tracer's own warnings are deliberately not surfaced. On a platform-gated package
+	 * they are noise and nothing else: `sharp`'s loader names every platform's binary and
+	 * probes for the one that exists, so tracing a correctly staged `sharp` emits about a
+	 * dozen "could not resolve" warnings — one per platform that was correctly not
+	 * installed, plus several for specifiers built by string concatenation that no tracer
+	 * can follow. None of them indicates a missing file, and a report that is wrong every
+	 * time on the canonical package teaches people to ignore it.
+	 *
+	 * An archive that really is incomplete is caught by what does prove it: a traced file
+	 * that is absent from staging fails the deploy, and a shipped binary that is not an
+	 * AArch64 ELF fails it too.
+	 */
+	trace: (base: string, entry: string) => Promise<{ files: string[] }>;
 	/** Version of `pkg` as resolved in the user's project, or undefined if not installed. */
 	installedVersion: (projectDir: string, pkg: string) => string | undefined;
 };
@@ -239,13 +251,6 @@ export async function traceNativePackages(options: {
 		);
 
 		const traced = await deps.trace(staging, "trace-entry.mjs");
-		for (const warning of traced.warnings ?? []) {
-			warnings.push(
-				`While tracing the files to ship for function "${slug}", a dependency could ` +
-					`not be followed: ${warning}. If that file is reached at runtime it will be ` +
-					`missing from the deployed function.`,
-			);
-		}
 		const files = selectArchiveFiles(slug, traced.files, staging);
 		const entries = readArchiveFiles(slug, staging, files);
 		enforceLimits(slug, entries, limits);
