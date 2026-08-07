@@ -218,6 +218,22 @@ const externalPackageNameSchema = z
 	});
 
 /**
+ * An entry whose files are staged has to name one installable package, because the deploy
+ * hands its root to `npm install`. esbuild's `external` additionally accepts a `*` wildcard
+ * and a bare scope, which name a set rather than a package — legal only when nothing is
+ * being installed for them.
+ */
+const stageablePackageName = (value: string): boolean => {
+	if (value.includes("*")) return false;
+	// A protocol (`node:fs`, `npm:pkg`) is a specifier, not something to install.
+	if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return false;
+	const root = externalPackageRoot(value);
+	// A bare scope names every package in it, not one package.
+	if (root.startsWith("@")) return /^@[^/]+\/[^/]+$/.test(root);
+	return root.length > 0;
+};
+
+/**
  * One entry of `externalPackages`. A bare string is the common case and ships the package's
  * files; the object form exists only to turn that off. See {@link FunctionDef.externalPackages}.
  */
@@ -276,6 +292,19 @@ export const functionDefSchema = z
 		entries.forEach((entry, index) => {
 			const name = entryName(entry);
 			const includeFiles = entryIncludesFiles(entry);
+
+			if (includeFiles && !stageablePackageName(name)) {
+				ctx.issues.push({
+					code: "custom",
+					input: entry,
+					path: ["externalPackages", index],
+					message:
+						`"${name}" does not name a single installable package, so its files cannot ` +
+						`be staged. Name one package, or set includeFiles: false to leave the ` +
+						`import unresolved without shipping anything for it`,
+				});
+				return;
+			}
 
 			const firstIndex = seenNames.get(name);
 			if (firstIndex !== undefined) {

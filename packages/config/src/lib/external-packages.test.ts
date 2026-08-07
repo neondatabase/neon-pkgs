@@ -74,19 +74,32 @@ describe("packagesToStage", () => {
 		).toEqual([]);
 	});
 
-	test("collapses a subpath onto its package", () => {
+	// Specifiers are kept whole rather than reduced to their package. A package may export
+	// only a subpath, in which case importing the root throws and a trace of it finds
+	// nothing — so the trace has to import exactly what was authored. Reducing to the package
+	// is the caller's job, via `externalPackageRoot`, and only to decide what to install.
+	test("keeps a subpath specifier as authored", () => {
 		expect(
 			packagesToStage([
 				{ name: "sharp/lib/index.js", includeFiles: true },
 			]),
-		).toEqual(["sharp"]);
+		).toEqual(["sharp/lib/index.js"]);
 	});
 
-	test("stages a package once when named both bare and through a subpath", () => {
+	test("keeps a bare name and a subpath of it as two specifiers", () => {
 		expect(
 			packagesToStage([
 				{ name: "sharp", includeFiles: true },
 				{ name: "sharp/lib/index.js", includeFiles: true },
+			]),
+		).toEqual(["sharp", "sharp/lib/index.js"]);
+	});
+
+	test("deduplicates an exactly repeated specifier", () => {
+		expect(
+			packagesToStage([
+				{ name: "sharp", includeFiles: true },
+				{ name: "sharp", includeFiles: true },
 			]),
 		).toEqual(["sharp"]);
 	});
