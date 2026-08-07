@@ -293,7 +293,7 @@ const deploy = async (props: DeployProps) => {
 	}
 
 	// Bundle before any network round-trip so a bundling failure fails fast.
-	const zip = zipBundle(await bundleEntry(source));
+	const zip = zipBundle((await bundleEntry(source)).files);
 	const branchId = await branchIdFromProps(props);
 
 	// Snapshot the current version before deploy so we can detect the new one

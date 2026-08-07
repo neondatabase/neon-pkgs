@@ -71,6 +71,36 @@ describe("resolveFunctionsFromConfig", () => {
 		expect(bySlug.get("bare")).not.toHaveProperty("externalPackages");
 	});
 
+	// Locally both forms mean the same thing — leave it unbundled — so the plan carries
+	// names only. `includeFiles` governs the deployed archive, which `neon dev` never builds.
+	it("flattens both entry forms to names", async () => {
+		writeWorkspace(
+			cwd,
+			`export default {
+        preview: {
+          functions: {
+            resize: {
+              name: 'Resize',
+              source: './resize.ts',
+              externalPackages: ['sharp', { name: 'canvas', includeFiles: false }],
+            },
+            bare: { name: 'Bare', source: './bare.ts' },
+          },
+        },
+      };\n`,
+			["resize.ts", "bare.ts"],
+		);
+
+		const resolved = await resolveFunctionsFromConfig(cwd);
+		const bySlug = new Map(resolved?.functions.map((f) => [f.slug, f]));
+		expect(bySlug.get("resize")?.externalPackages).toEqual([
+			"sharp",
+			"canvas",
+		]);
+		// Absent, not empty, when the policy does not declare it.
+		expect(bySlug.get("bare")).not.toHaveProperty("externalPackages");
+	});
+
 	it("resolves each function with an absolute source and its dev settings", async () => {
 		writeWorkspace(
 			cwd,

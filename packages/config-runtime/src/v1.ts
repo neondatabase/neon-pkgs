@@ -58,6 +58,24 @@ export {
 export type { FunctionBundler } from "./lib/function-bundle.js";
 // ─── Function bundling (esbuild + zip) ────────────────────────────────────────
 export { buildFunctionBundle } from "./lib/function-bundle.js";
+// ─── Native dependency staging and detection ──────────────────────────────────
+export type { NativeEvidence, NativeFinding } from "./lib/native-detect.js";
+export {
+	describeNativeFinding,
+	findUndeclaredNativePackages,
+} from "./lib/native-detect.js";
+export type {
+	ArchiveLimits,
+	NativeTraceDeps,
+	NativeTraceResult,
+} from "./lib/native-packages.js";
+export {
+	assertZipWithinLimits,
+	DEFAULT_ARCHIVE_LIMITS,
+	RUNTIME_TARGET,
+	RUNTIME_TARGET_LABEL,
+	traceNativePackages,
+} from "./lib/native-packages.js";
 // ─── Operations (intent-revealing entry points) ───────────────────────────────
 export type {
 	ApplyOptions,

@@ -1,12 +1,15 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { resolveConfig } from "@neon/config";
+import { dirname, join } from "node:path";
+import { packagesToStage, resolveConfig } from "@neon/config";
 import {
 	apply,
+	assertZipWithinLimits,
 	type Config,
 	type ConflictReport,
 	createBranch as createBranchFromPolicy,
+	describeNativeFinding,
 	type FunctionBundler,
+	findUndeclaredNativePackages,
 	inspect,
 	isPartialBranchCreateError,
 	loadConfigFromFile,
@@ -14,6 +17,7 @@ import {
 	PushConflictError,
 	type PushResult,
 	plan,
+	traceNativePackages,
 } from "@neon/config-runtime";
 import chalk from "chalk";
 import type yargs from "yargs";
@@ -65,18 +69,41 @@ import { autoPullEnvAfterPin } from "./env.js";
  * out of config-runtime's static module graph — and therefore out of the packaged
  * neonctl snapshot, which resolves esbuild dynamically at deploy time.
  */
-const neonctlBundler: FunctionBundler = async (fn) =>
-	zipBundle(
-		await bundleEntry(fn.source, {
-			...(fn.externalPackages
-				? {
-						externalPackages: fn.externalPackages.map(
-							(pkg) => pkg.name,
-						),
-					}
-				: {}),
-		}),
-	);
+const neonctlBundler: FunctionBundler = async (fn) => {
+	const externalPackages = fn.externalPackages ?? [];
+	const { files, metafile } = await bundleEntry(fn.source, {
+		externalPackages: externalPackages.map((pkg) => pkg.name),
+	});
+
+	// Advisory only — the evidence cannot prove the code path is reached, so a package with a
+	// working JavaScript fallback must not have its deploy blocked. See native-detect.
+	for (const finding of findUndeclaredNativePackages({
+		metafile,
+		declared: externalPackages.map((pkg) => pkg.name),
+		projectDir: dirname(fn.source),
+	})) {
+		log.warning(describeNativeFinding(fn.slug, finding));
+	}
+
+	const staged = packagesToStage(externalPackages);
+	// Nothing to stage is the pre-existing path: zip the esbuild output and nothing else,
+	// producing the archive it always did.
+	if (staged.length === 0) return zipBundle(files);
+
+	// Staged packages are installed for the runtime target, traced, and merged in under their
+	// `node_modules/...` paths. The tree layout is load-bearing — a `.node` addon finds its
+	// sibling shared libraries relative to its own directory.
+	const traced = await traceNativePackages({
+		slug: fn.slug,
+		packages: staged,
+		projectDir: dirname(fn.source),
+	});
+	for (const warning of traced.warnings) log.warning(warning);
+	const entries = { ...files, ...traced.entries };
+	const zip = zipBundle(entries);
+	assertZipWithinLimits(fn.slug, zip, entries);
+	return zip;
+};
 
 const INSPECT_FIELDS = ["project", "branch", "config"] as const;
 

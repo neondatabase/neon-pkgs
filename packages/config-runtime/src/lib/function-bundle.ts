@@ -1,9 +1,19 @@
-import { basename } from "node:path";
+import { basename, dirname } from "node:path";
 import {
 	ErrorCode,
 	PlatformError,
+	packagesToStage,
 	type ResolvedFunctionConfig,
 } from "@neon/config";
+import {
+	describeNativeFinding,
+	findUndeclaredNativePackages,
+} from "./native-detect.js";
+import {
+	assertZipWithinLimits,
+	type NativeTraceDeps,
+	traceNativePackages,
+} from "./native-packages.js";
 
 /**
  * Builds the deployable ZIP bundle for a single function. The default
@@ -52,8 +62,20 @@ const ESM_CJS_INTEROP_BANNER =
  */
 export async function buildFunctionBundle(
 	fn: ResolvedFunctionConfig,
+	options: {
+		nativeDeps?: Partial<NativeTraceDeps>;
+		/**
+		 * Where advisory findings go — currently the undeclared-native-dependency report.
+		 * Defaults to `console.warn` so a consumer that wires up nothing still sees them; a
+		 * dropped warning about a function that will fail at invoke is worse than noise.
+		 */
+		onWarning?: (message: string) => void;
+	} = {},
 ): Promise<Uint8Array> {
 	const esbuild = await loadEsbuild();
+	const externalPackages = fn.externalPackages ?? [];
+	const staged = packagesToStage(externalPackages);
+	const onWarning = options.onWarning ?? ((message) => console.warn(message));
 
 	let result: Awaited<ReturnType<typeof esbuild.build>>;
 	try {
@@ -75,9 +97,12 @@ export async function buildFunctionBundle(
 			// bundled CommonJS deps work inside the ESM output.
 			banner: { js: ESM_CJS_INTEROP_BANNER },
 			// Packages the policy declared unbundleable. Their imports survive into the
-			// bundle; whether they then resolve depends on `includeFiles`, which the deploy
-			// bundler acts on after this build. Both modes are external to esbuild.
-			external: (fn.externalPackages ?? []).map((pkg) => pkg.name),
+			// bundle instead of being followed; whether they then resolve at runtime depends
+			// on `includeFiles`, which is acted on below. Both modes are external here.
+			external: externalPackages.map((pkg) => pkg.name),
+			// Reveals which packages were bundled in, so an undeclared native dependency can
+			// be reported. Costs nothing here — esbuild is already running.
+			metafile: true,
 			logLevel: "silent",
 		});
 	} catch (cause) {
@@ -99,7 +124,38 @@ export async function buildFunctionBundle(
 		entries[basename(file.path)] = file.contents;
 	}
 
-	return zipBundle(entries);
+	// Only reachable on a successful build, which is the point: `sharp` and its kind bundle
+	// cleanly and fail at invoke, so this is exactly the case nothing else catches. A build
+	// that throws has already failed loudly with esbuild's own diagnostic.
+	for (const finding of findUndeclaredNativePackages({
+		metafile: result.metafile,
+		declared: externalPackages.map((pkg) => pkg.name),
+		projectDir: dirname(fn.source),
+	})) {
+		onWarning(describeNativeFinding(fn.slug, finding));
+	}
+
+	// The pre-existing path, byte for byte: no install, no trace, no size check, and an
+	// archive of exactly the esbuild output. A policy that declares nothing to stage — or
+	// sets `includeFiles: false` on everything — deploys the archive it always did.
+	if (staged.length === 0) return zipBundle(entries);
+
+	const traced = await traceNativePackages({
+		slug: fn.slug,
+		packages: staged,
+		// The user's project, located from their entry — where their resolved versions are
+		// read from. Only versions: the files themselves come from the staging install.
+		projectDir: dirname(fn.source),
+		...(options.nativeDeps ? { deps: options.nativeDeps } : {}),
+	});
+	for (const warning of traced.warnings) onWarning(warning);
+	// Keys carry their `node_modules/...` path, so the archive reproduces the tree layout a
+	// `.node` addon needs to find its sibling libraries. Do not flatten these.
+	Object.assign(entries, traced.entries);
+
+	const zip = await zipBundle(entries);
+	assertZipWithinLimits(fn.slug, zip, entries);
+	return zip;
 }
 
 async function zipBundle(

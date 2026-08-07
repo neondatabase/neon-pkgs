@@ -69,21 +69,23 @@ afterAll(() => {
 
 describe("bundleEntry", () => {
 	test("inlines local imports and emits no sourcemap", async () => {
-		const out = await bundleEntry(join(dir, "index.ts"), npmDeps);
-		const js = strFromU8(out["index.mjs"]);
+		const { files } = await bundleEntry(join(dir, "index.ts"), npmDeps);
+		const js = strFromU8(files["index.mjs"]);
 		expect(js).toContain("hi from helper");
 		expect(js).not.toContain("./helper");
 		// No source map is generated — the Functions runtime never consumes it, so we neither
 		// emit `index.mjs.map` nor leave a dangling `sourceMappingURL` link in the bundle.
 		expect(js).not.toContain("sourceMappingURL");
-		expect(out["index.mjs.map"]).toBeUndefined();
+		expect(files["index.mjs.map"]).toBeUndefined();
 	});
 
 	// Node built-ins stay external on platform:'node'; the createRequire banner is injected
 	// so bundled CommonJS deps can `require(...)` inside the ESM output.
 	test("keeps node built-ins external and injects a createRequire banner", async () => {
 		const js = strFromU8(
-			(await bundleEntry(join(dir, "index.ts"), npmDeps))["index.mjs"],
+			(await bundleEntry(join(dir, "index.ts"), npmDeps)).files[
+				"index.mjs"
+			],
 		);
 		expect(js).toContain("node:fs");
 		expect(js).toContain("createRequire");
@@ -108,26 +110,81 @@ describe("bundleEntry", () => {
 	});
 
 	test("externalPackages leaves the named package unbundled and still inlines the rest", async () => {
-		const out = await bundleEntry(join(dir, "needs-external.ts"), {
+		const { files } = await bundleEntry(join(dir, "needs-external.ts"), {
 			...npmDeps,
 			externalPackages: ["not-installed-anywhere"],
 		});
-		const js = strFromU8(out["index.mjs"]);
+		const js = strFromU8(files["index.mjs"]);
 		expect(js).toContain("not-installed-anywhere");
 		expect(js).toContain("hi from helper");
 	});
 
 	test("externalPackages reaches the binary path as --external flags", async () => {
 		await withEnv(ESBUILD_BIN, async () => {
-			const out = await bundleEntry(join(dir, "needs-external.ts"), {
-				isPackaged: () => true,
-				loadEsbuild: () =>
-					Promise.reject(new Error("should not be called")),
-				externalPackages: ["not-installed-anywhere"],
-			});
-			const js = strFromU8(out["index.mjs"]);
+			const { files } = await bundleEntry(
+				join(dir, "needs-external.ts"),
+				{
+					isPackaged: () => true,
+					loadEsbuild: () =>
+						Promise.reject(new Error("should not be called")),
+					externalPackages: ["not-installed-anywhere"],
+				},
+			);
+			const js = strFromU8(files["index.mjs"]);
 			expect(js).toContain("not-installed-anywhere");
 			expect(js).toContain("hi from helper");
+		});
+	});
+
+	test("externalizes every declared package", async () => {
+		writeFileSync(
+			join(dir, "needs-both.ts"),
+			[
+				'import { greet } from "./helper";',
+				'import { thing } from "not-installed-anywhere";',
+				'import addon from "also-not-installed";',
+				"export default { greet, thing, addon };",
+				"",
+			].join("\n"),
+		);
+		const { files } = await bundleEntry(join(dir, "needs-both.ts"), {
+			...npmDeps,
+			externalPackages: ["not-installed-anywhere", "also-not-installed"],
+		});
+		const js = strFromU8(files["index.mjs"]);
+		expect(js).toContain("not-installed-anywhere");
+		expect(js).toContain("also-not-installed");
+		expect(js).toContain("hi from helper");
+	});
+
+	// The metafile is what lets a deploy notice an undeclared native dependency. An
+	// externalized package is deliberately absent from it — esbuild never resolved a file
+	// for it — while a bundled one appears under its node_modules path.
+	test("reports the resolved graph in a metafile on the module path", async () => {
+		const { metafile } = await bundleEntry(join(dir, "needs-external.ts"), {
+			...npmDeps,
+			externalPackages: ["not-installed-anywhere"],
+		});
+		const inputs = Object.keys(metafile?.inputs ?? {});
+		expect(inputs.some((i) => i.endsWith("helper.ts"))).toBe(true);
+		expect(inputs.some((i) => i.includes("not-installed-anywhere"))).toBe(
+			false,
+		);
+	});
+
+	test("reports the resolved graph in a metafile on the binary path too", async () => {
+		await withEnv(ESBUILD_BIN, async () => {
+			const { metafile } = await bundleEntry(
+				join(dir, "needs-external.ts"),
+				{
+					isPackaged: () => true,
+					loadEsbuild: () =>
+						Promise.reject(new Error("should not be called")),
+					externalPackages: ["not-installed-anywhere"],
+				},
+			);
+			const inputs = Object.keys(metafile?.inputs ?? {});
+			expect(inputs.some((i) => i.endsWith("helper.ts"))).toBe(true);
 		});
 	});
 
@@ -141,7 +198,9 @@ describe("bundleEntry", () => {
 				loadEsbuild,
 			});
 			expect(loadEsbuild).not.toHaveBeenCalled();
-			expect(strFromU8(out["index.mjs"])).toContain("hi from helper");
+			expect(strFromU8(out.files["index.mjs"])).toContain(
+				"hi from helper",
+			);
 		});
 	});
 
@@ -155,7 +214,9 @@ describe("bundleEntry", () => {
 				loadEsbuild,
 			});
 			expect(loadEsbuild).toHaveBeenCalledOnce();
-			expect(strFromU8(out["index.mjs"])).toContain("hi from helper");
+			expect(strFromU8(out.files["index.mjs"])).toContain(
+				"hi from helper",
+			);
 		});
 	});
 
