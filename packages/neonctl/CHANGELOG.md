@@ -1,5 +1,13 @@
 # neonctl
 
+## 2.46.0
+
+### Patch Changes
+
+- Updated dependencies [ecd588f]
+- Updated dependencies [4b9fd02]
+  - neon@2.46.0
+
 ## 2.45.0
 
 ### Patch Changes

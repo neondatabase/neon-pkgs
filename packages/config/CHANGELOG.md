@@ -1,5 +1,11 @@
 # @neondatabase/config
 
+## 0.14.1
+
+### Patch Changes
+
+- 4b9fd02: Emit `neon` instead of the removed `neonctl` binary name in help text, error hints, and `--agent` command templates, so suggested commands are runnable. When invoked via the `neonctl` compat package the commands still read `neonctl`.
+
 ## 0.14.0
 
 ### Minor Changes
