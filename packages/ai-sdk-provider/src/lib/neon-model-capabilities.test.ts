@@ -196,6 +196,39 @@ describe("getNeonModelCapabilities", () => {
 		}
 	});
 
+	// The gateway maps reasoning_effort onto Gemini's thinking config, so dropping
+	// it cost callers control they were being billed for either way.
+	it("forwards reasoningEffort to Gemini", () => {
+		for (const id of ["gemini-3-flash", "gemini-3-6-flash"]) {
+			expect({
+				id,
+				effort: getNeonModelCapabilities(id).supportsReasoningEffort,
+			}).toEqual({ id, effort: true });
+		}
+	});
+
+	// gpt-5-5-pro reads as version 5.5 to the minor-version rule, so it was told
+	// it takes sampling parameters. The Responses API answers
+	// `Unsupported parameter: temperature`.
+	it("keeps gpt-5-5-pro out of the minor-version sampling rule", () => {
+		const pro = getNeonModelCapabilities("gpt-5-5-pro");
+		expect({
+			temperature: pro.supportsTemperature,
+			topP: pro.supportsTopP,
+		}).toEqual({
+			temperature: false,
+			topP: false,
+		});
+
+		// Its siblings on the same rule are unaffected.
+		expect(getNeonModelCapabilities("gpt-5-5").supportsTemperature).toBe(
+			true,
+		);
+		expect(getNeonModelCapabilities("gpt-5-1").supportsTemperature).toBe(
+			true,
+		);
+	});
+
 	it("applies the strict Gemini rules through the databricks- prefix", () => {
 		const prefixed = getNeonModelCapabilities(
 			"databricks-gemini-3-6-flash",

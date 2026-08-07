@@ -7,11 +7,11 @@ import type {
 import { getNeonModelCapabilities } from "./neon-model-capabilities.js";
 
 const PENALTY_DETAILS =
-	"This model rejects penalties, so it was dropped rather than sent.";
+	"The request was sent without it. Check getNeonModelCapabilities(id).supportsPenalties before setting penalties.";
 const GENERIC_DETAILS =
-	"The Neon AI Gateway rejects this parameter for this model, so it was dropped rather than sent.";
+	"The request was sent without it. Call getNeonModelCapabilities(id) to see which sampling parameters this model takes, or steer it through the prompt.";
 const REASONING_EFFORT_DETAILS =
-	"This model does not take the OpenAI reasoning_effort field, so it was dropped rather than sent.";
+	"The request was sent without it. Claude takes providerOptions.anthropic.effort instead.";
 
 /**
  * Drop call options the resolved model's upstream backend does not accept and

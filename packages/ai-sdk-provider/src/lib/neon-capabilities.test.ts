@@ -62,7 +62,9 @@ describe("applyNeonCapabilities warnings", () => {
 				id,
 				details: expect.not.stringContaining("Only Gemini"),
 			});
-			expect(warning.details).toContain("This model rejects penalties");
+			// The sentence has to add something the SDK's own prefix did not; it
+			// already prints provider, model, feature and "is not supported".
+			expect(warning.details).toContain("getNeonModelCapabilities");
 		}
 	});
 

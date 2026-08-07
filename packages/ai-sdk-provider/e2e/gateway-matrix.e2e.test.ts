@@ -289,6 +289,39 @@ describe.skipIf(!hasGatewayEnv())(
 			}, 120_000);
 		});
 
+		// The provider used to drop reasoningEffort on Gemini and tell the caller
+		// the model did not take it. The gateway maps it onto Gemini's thinking
+		// config, so that cost people control over spend they were billed for
+		// either way. Asserted live because the claim was about the gateway.
+		describe("reasoningEffort on Gemini", () => {
+			it("changes how much the model reasons", async () => {
+				const reason = async (effort: "minimal" | "high") => {
+					const result = await generateText({
+						model: neon("gemini-3-6-flash"),
+						prompt: "A farmer has 17 sheep. All but 9 run away. How many remain? Think it through.",
+						maxOutputTokens: 900,
+						providerOptions: { neon: { reasoningEffort: effort } },
+					});
+					expect(result.warnings ?? []).toEqual([]);
+					const usage = (
+						result as {
+							response?: {
+								body?: { usage?: Record<string, number> };
+							};
+						}
+					).response?.body?.usage;
+					return usage?.reasoning_tokens ?? 0;
+				};
+
+				const [minimal, high] = [
+					await reason("minimal"),
+					await reason("high"),
+				];
+				expect(minimal).toBe(0);
+				expect(high).toBeGreaterThan(0);
+			}, 180_000);
+		});
+
 		describe("gpt-oss harmony normalization (#308)", () => {
 			// The gateway returns gpt-oss `message.content` as a harmony parts
 			// array; the provider normalizes it to the OpenAI Chat Completions

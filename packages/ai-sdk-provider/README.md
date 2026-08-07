@@ -69,7 +69,7 @@ Which ids your branch serves is account-specific during the beta; `GET $NEON_AI_
 
 Upstream backends behind the gateway accept different subsets of the OpenAI-style parameters the AI SDK emits, and sending one an upstream rejects is a hard `400`. The provider drops those before the request and records a warning in `result.warnings`, so a call succeeds instead of failing on a parameter you passed in good faith.
 
-These rules apply on the Anthropic Messages and Chat Completions routes. The Responses route (every `gpt-*` id) relies on the upstream OpenAI model's own stripping instead, so its behaviour is the AI SDK's rather than described here — but `getNeonModelCapabilities` still answers for those ids.
+These rules apply on the Anthropic Messages and Chat Completions routes. On the Responses route (every `gpt-*` id) penalties, `seed` and `stopSequences` are left to the upstream OpenAI model's own stripping, but `temperature` and `topP` are handled here, because the gateway rejects them on the four ids listed below.
 
 | Models | Dropped |
 | --- | --- |
@@ -77,9 +77,12 @@ These rules apply on the Anthropic Messages and Chat Completions routes. The Res
 | All Claude | `frequencyPenalty`, `presencePenalty`, `seed`, `reasoningEffort`, and `topP` when you set both `temperature` and `topP` (Anthropic accepts only one) |
 | `gpt-oss` | `frequencyPenalty`, `presencePenalty`, `seed`, `stopSequences` |
 | Qwen, Gemma | `frequencyPenalty`, `presencePenalty`, `seed` |
-| `glm-5-2`, `inkling` | `frequencyPenalty`, `presencePenalty` |
+| `glm-5-2`, `inkling`, `kimi-k3` | `frequencyPenalty`, `presencePenalty` |
 | Meta Llama | `frequencyPenalty`, `presencePenalty`, `seed` |
-| Gemini | `reasoningEffort` |
+| `gemini-3-5-flash-lite` | `frequencyPenalty`, `presencePenalty` |
+| `gemini-3-6-flash` | `temperature`, `topP`, `frequencyPenalty`, `presencePenalty` |
+| Every other Gemini | nothing |
+| `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5-5-pro` | `temperature`, `topP` |
 
 **`temperature` on a Claude 5 model therefore has no effect.** That is the gateway's behaviour, not a provider choice; sending it returns `does not support the temperature parameter`. Steer those models with Anthropic's own effort control instead — note that this is `effort`, not the OpenAI-style `reasoningEffort`, which every Claude id drops:
 
@@ -100,7 +103,9 @@ getNeonModelCapabilities('claude-opus-5').supportsTemperature; // false
 getNeonModelCapabilities('glm-5-2').supportsPenalties; // false
 ```
 
-Gemini is the only family on the unified endpoint that accepts penalties. A model none of these rules match is left untouched, so a brand-new id gets the gateway's own error rather than a guess.
+**The rules are per model, not per family.** Two Gemini ids reject penalties while their siblings accept them, and `gemini-3-6-flash` rejects `temperature` and `topP` outright, so reading a row for "Gemini" is not enough — check the id. Every entry above is measured against the gateway rather than inherited from the upstream provider's own documentation, which disagrees in both directions.
+
+A model none of these rules match is left untouched, so a brand-new id gets the gateway's own error rather than a guess. That is also why the table can lag: an id added since the last release inherits the permissive default until someone measures it.
 
 ## Image generation
 

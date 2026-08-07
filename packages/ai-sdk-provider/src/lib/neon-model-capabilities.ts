@@ -74,6 +74,15 @@ const GEMINI_NO_PENALTIES = new Set([
 const GEMINI_NO_SAMPLING = new Set(["gemini-3-6-flash"]);
 
 /**
+ * GPT-5 ids that reject `temperature` despite carrying a minor version.
+ *
+ * The version rule below reads `gpt-5-5-pro` as 5.5 and concludes it takes
+ * sampling parameters. It does not — the Responses API answers
+ * `Unsupported parameter: temperature`.
+ */
+const GPT5_NO_SAMPLING = new Set(["gpt-5-5-pro"]);
+
+/**
  * The gateway accepts an optional `databricks-` prefix on any id, so strip it
  * before an exact-match lookup. Prefix rules elsewhere in this file tolerate it
  * incidentally; exact matches do not.
@@ -156,8 +165,10 @@ export function getNeonModelCapabilities(
 		};
 	}
 
-	// Google (Gemini): accepts standard sampling params but rejects the OpenAI
-	// `reasoning_effort` field (not part of Gemini's generation config).
+	// Google (Gemini): accepts standard sampling params, and does take
+	// `reasoning_effort` — the gateway maps it onto Gemini's thinking config.
+	// Measured on gemini-3-6-flash: `minimal` produces 0 reasoning tokens and
+	// `high` produces 310, against 130 with the field absent.
 	//
 	// Newer Gemini models are stricter, and not in a way the id predicts: the
 	// gateway rejects penalties on `gemini-3-5-flash-lite` while accepting them
@@ -175,7 +186,6 @@ export function getNeonModelCapabilities(
 			supportsTemperature: acceptsSampling,
 			supportsTopP: acceptsSampling,
 			supportsPenalties: !GEMINI_NO_PENALTIES.has(canonical),
-			supportsReasoningEffort: false,
 		};
 	}
 
@@ -188,7 +198,8 @@ export function getNeonModelCapabilities(
 	// reject topP, while gpt-5.1+ (a minor version digit follows) accept them
 	// again. The regex matches both prefixed and unprefixed ids.
 	if (/gpt-5/.test(id)) {
-		const hasMinorVersion = /gpt-5[.-]\d/.test(id);
+		const hasMinorVersion =
+			/gpt-5[.-]\d/.test(id) && !GPT5_NO_SAMPLING.has(canonicalId(id));
 		return {
 			family: "openai",
 			supportsTemperature: hasMinorVersion,
