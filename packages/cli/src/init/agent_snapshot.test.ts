@@ -417,6 +417,13 @@ function normalise(
 				/"installedEditors": (\[[\s\S]*?\]|null)/g,
 				'"installedEditors": <machine-dependent>',
 			)
+			// The auth phase picks the browser launcher from `process.platform`
+			// (`open` on macOS, `xdg-open` on Linux, `start` on Windows). Normalise
+			// the launcher and keep the URL, which is the part worth pinning.
+			.replace(
+				/\b(?:open|xdg-open|start) (https:\/\/\S*?signup)/g,
+				"<browser-open> $1",
+			)
 			// The sentence derived from that probe. Both variants collapse to one
 			// token, because *which* one appears is itself machine-dependent — but
 			// they are matched in full, with only the editor list wildcarded, so

@@ -14106,7 +14106,7 @@ exports[`neon init --agent: the signed-out auth branches > auth 1`] = `
             {
               "id": "open_signup",
               "description": "Open the Neon sign-up page in the user's browser",
-              "command": "open https://console.neon.tech/signup"
+              "command": "<browser-open> https://console.neon.tech/signup"
             },
             {
               "id": "wait_for_signup",
@@ -14185,7 +14185,7 @@ exports[`neon init --agent: the signed-out auth branches > auth-new-account 1`] 
       {
         "id": "open_signup",
         "description": "Open the Neon sign-up page in the user's browser",
-        "command": "open https://console.neon.tech/signup"
+        "command": "<browser-open> https://console.neon.tech/signup"
       },
       {
         "id": "wait_for_signup",
@@ -14337,7 +14337,7 @@ exports[`neon init --agent: the signed-out auth branches > the orchestrator send
             {
               "id": "open_signup",
               "description": "Open the Neon sign-up page in the user's browser",
-              "command": "open https://console.neon.tech/signup"
+              "command": "<browser-open> https://console.neon.tech/signup"
             },
             {
               "id": "wait_for_signup",
