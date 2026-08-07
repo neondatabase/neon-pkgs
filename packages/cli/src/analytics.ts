@@ -1,7 +1,7 @@
 import { Analytics, type TrackParams } from "@segment/analytics-node";
 import { inspectCredentials, OAUTH } from "./_shared/credentials.js";
 import { getApiClient, isNeonApiError } from "./api.js";
-import { getAuthContext } from "./auth_context.js";
+import { type AuthContext, getAuthContext } from "./auth_context.js";
 import { credentialsPath } from "./config.js";
 import { isCurrentBranchProbe } from "./context.js";
 import { getGithubEnvVars, isCi } from "./env.js";
@@ -43,6 +43,37 @@ export const storedCredentialAttribution = (
 	userId: string | undefined,
 ): { accountId?: string; authMethod?: string } =>
 	userId ? { accountId: userId, authMethod: OAUTH } : {};
+
+/**
+ * Which credential telemetry may describe this invocation with: one to ask the API about, a
+ * file to read an id out of, either, or neither.
+ *
+ * `ensureAuth` records a context only when it selected a credential for this invocation, so a
+ * missing context means the command authenticated with nothing. An ambient `NEON_API_KEY` is
+ * then not this run's identity — `neon profile list` never used it — and must not be queried
+ * on its behalf, which would both attribute the run to an account it never authenticated as
+ * and make a network call for a purely local command. The local default is the honest guess.
+ *
+ * A selected key records no file, because it authenticates as its own account rather than out
+ * of one. Reading `DEFAULT` for it would identify the run as whoever is signed in locally, and
+ * that borrowed id would suppress the API lookup that names the key's real owner.
+ */
+export const telemetryCredential = (
+	authContext: AuthContext | null,
+	apiKey: string | undefined,
+	defaultCredentialsPath: string,
+): { apiKey?: string; credentialsPath?: string } => {
+	if (authContext === null) {
+		return { credentialsPath: defaultCredentialsPath };
+	}
+	if (authContext.source === "api-key") {
+		return { apiKey };
+	}
+	return {
+		apiKey,
+		credentialsPath: authContext.credentialsPath ?? defaultCredentialsPath,
+	};
+};
 
 let client: Analytics | undefined;
 let clientInitialized = false;
@@ -119,20 +150,16 @@ export const analyticsMiddleware = async (args: {
 		return;
 	}
 
-	// Read the credentials this invocation actually authenticated with, which `ensureAuth`
-	// recorded. Reading `DEFAULT`'s unconditionally attributed every `--profile`-selected
-	// command to whichever account happened to be the default one.
-	//
-	// A key from `--api-key` or `NEON_API_KEY` authenticates as its own account and records no
-	// file, so there is nothing on disk to read for it. Falling back to `DEFAULT` there is the
-	// same misattribution one step removed: the run would be identified as whoever is signed
-	// in locally, and that stale id would then suppress the `getCurrentUserInfo` call below
-	// that resolves the key's real owner. Leave it unresolved and let the API answer.
-	const authContext = getAuthContext();
-	const authenticatedAs =
-		authContext?.source === "api-key"
-			? undefined
-			: (authContext?.credentialsPath ?? credentialsPath(args.configDir));
+	// Describe only the credential this invocation actually authenticated with. Reading
+	// `DEFAULT`'s unconditionally attributed every `--profile`-selected command to whichever
+	// account happened to be the default one.
+	const { apiKey: authenticatedWith, credentialsPath: authenticatedAs } =
+		telemetryCredential(
+			getAuthContext(),
+			args.apiKey,
+			credentialsPath(args.configDir),
+		);
+
 	if (authenticatedAs !== undefined) {
 		// Telemetry must never turn a damaged or unreadable credentials file into a failed command.
 		try {
@@ -151,9 +178,9 @@ export const analyticsMiddleware = async (args: {
 	}
 
 	try {
-		if (args.apiKey) {
+		if (authenticatedWith) {
 			const apiClient = getApiClient({
-				apiKey: args.apiKey,
+				apiKey: authenticatedWith,
 				apiHost: args.apiHost,
 			});
 

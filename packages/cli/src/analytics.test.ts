@@ -5,6 +5,7 @@ import {
 	getAnalyticsEventProperties,
 	getErrorAnalyticsEventProperties,
 	storedCredentialAttribution,
+	telemetryCredential,
 } from "./analytics.js";
 
 describe("analyticsUserId", () => {
@@ -37,6 +38,65 @@ describe("storedCredentialAttribution", () => {
 		expect(storedCredentialAttribution("1234")).toEqual({
 			accountId: "1234",
 			authMethod: "oauth",
+		});
+	});
+});
+
+describe("telemetryCredential", () => {
+	const DEFAULT_PATH = "/config/credentials.json";
+
+	it("ignores an ambient key the command never authenticated with", () => {
+		expect(telemetryCredential(null, "napi_ambient", DEFAULT_PATH)).toEqual(
+			{
+				credentialsPath: DEFAULT_PATH,
+			},
+		);
+	});
+
+	it("falls back to the local default for a command that skipped auth", () => {
+		expect(telemetryCredential(null, undefined, DEFAULT_PATH)).toEqual({
+			credentialsPath: DEFAULT_PATH,
+		});
+	});
+
+	it("asks the API about a supplied key rather than reading a file it did not use", () => {
+		expect(
+			telemetryCredential(
+				{ source: "api-key", configDir: "/config" },
+				"napi_supplied",
+				DEFAULT_PATH,
+			),
+		).toEqual({ apiKey: "napi_supplied" });
+	});
+
+	it("reads the file a profile selected, not the default one", () => {
+		expect(
+			telemetryCredential(
+				{
+					source: "profile-api-key",
+					configDir: "/config",
+					profile: "work",
+					credentialsPath: "/config/work.json",
+				},
+				"napi_from_profile",
+				DEFAULT_PATH,
+			),
+		).toEqual({
+			apiKey: "napi_from_profile",
+			credentialsPath: "/config/work.json",
+		});
+	});
+
+	it("uses the default file when a stored session recorded no path", () => {
+		expect(
+			telemetryCredential(
+				{ source: "stored-credentials", configDir: "/config" },
+				"access_token",
+				DEFAULT_PATH,
+			),
+		).toEqual({
+			apiKey: "access_token",
+			credentialsPath: DEFAULT_PATH,
 		});
 	});
 });
