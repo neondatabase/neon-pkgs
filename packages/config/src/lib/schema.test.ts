@@ -309,6 +309,28 @@ describe("configInputSchema", () => {
 		expect(withExternalPackages(["node:fs"]).success).toBe(false);
 	});
 
+	// Whatever passes here becomes an `npm install` argument, so the root is held to npm's
+	// own naming rules rather than merely "not a path".
+	test.each([
+		["a space", "foo bar"],
+		["a leading hash", "#alias"],
+		["an empty path segment", "foo//bar"],
+		["a parent-directory segment", "@scope/pkg/../../escape"],
+		["an uppercase name", "Foo"],
+		["a name starting with a dot", ".hidden"],
+	])("rejects %s in a staged entry", (_label, value) => {
+		expect(withExternalPackages([value]).success).toBe(false);
+	});
+
+	test.each([
+		["a plain name", "sharp"],
+		["a scoped name", "@img/sharp-linux-arm64"],
+		["a name with dots and underscores", "some.pkg_name"],
+		["a subpath", "pkg/sub/deep.js"],
+	])("accepts %s in a staged entry", (_label, value) => {
+		expect(withExternalPackages([value]).success).toBe(true);
+	});
+
 	test("accepts two scoped packages sharing a scope", () => {
 		// Same scope, different packages — not the same root, so not a conflict.
 		expect(

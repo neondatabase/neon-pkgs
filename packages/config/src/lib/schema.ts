@@ -224,13 +224,29 @@ const externalPackageNameSchema = z
  * being installed for them.
  */
 const stageablePackageName = (value: string): boolean => {
-	if (value.includes("*")) return false;
 	// A protocol (`node:fs`, `npm:pkg`) is a specifier, not something to install.
 	if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return false;
-	const root = externalPackageRoot(value);
+	// An empty segment (`foo//bar`) or a traversal is not a subpath the deploy can act on.
+	const segments = value.split("/");
+	if (segments.some((segment) => segment === "" || segment === "..")) {
+		return false;
+	}
+	return isNpmPackageName(externalPackageRoot(value));
+};
+
+/**
+ * npm's own rules for a package name, which is what the deploy hands to `npm install`.
+ * Deliberately strict: whatever slips through here becomes a subprocess argument.
+ */
+const NPM_NAME_SEGMENT = /^[a-z0-9~][a-z0-9._~-]*$/;
+
+const isNpmPackageName = (root: string): boolean => {
+	if (root.length === 0 || root.length > 214) return false;
+	if (!root.startsWith("@")) return NPM_NAME_SEGMENT.test(root);
+	const [scope, name, ...rest] = root.slice(1).split("/");
 	// A bare scope names every package in it, not one package.
-	if (root.startsWith("@")) return /^@[^/]+\/[^/]+$/.test(root);
-	return root.length > 0;
+	if (rest.length > 0 || name === undefined) return false;
+	return NPM_NAME_SEGMENT.test(scope) && NPM_NAME_SEGMENT.test(name);
 };
 
 /**
