@@ -1,8 +1,12 @@
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+	describeNativeFinding,
+	findUndeclaredNativePackages,
+} from "@neon/config-runtime";
 import chalk from "chalk";
 import type yargs from "yargs";
 import type { CredentialOutcome } from "../_shared/env-core/reuse-secrets.js";
@@ -175,7 +179,7 @@ const runSingleSource = async (props: DevProps): Promise<void> => {
 	const unit: ServedUnit = {
 		slug: null,
 		source,
-		bundleDir: join(process.cwd(), "node_modules", ".neon-dev"),
+		bundleDir: devBundleDir(process.cwd()),
 		childEnv: buildChildEnv(neonEnv, portFromProps(props.port)),
 		label: null,
 		envSummary: { neon: Object.keys(neonEnv), fn: [] },
@@ -319,6 +323,21 @@ const portFromProps = (port: number | undefined): PortSpec => {
 };
 
 /**
+ * Where a locally-served function's bundle is written.
+ *
+ * The location inside the project's own `node_modules` is load-bearing, not a tidiness
+ * choice. A function's `externalPackages` are left unbundled, and Node resolves an unbundled
+ * import by walking up from the importing file — so from here it reaches the project's real
+ * `node_modules` and finds them, at the host architecture that can actually run locally.
+ * Moving this directory anywhere outside `node_modules` breaks `neon dev` for those
+ * functions with a `Cannot find module`, so the path is pinned by a test.
+ */
+export const devBundleDir = (cwd: string, slug?: string): string =>
+	slug === undefined
+		? join(cwd, "node_modules", ".neon-dev")
+		: join(cwd, "node_modules", ".neon-dev", slug);
+
+/**
  * Translate a {@link PlannedFunction} into a {@link ServedUnit}. Port rules:
  *   - explicit `dev.port`: bind exactly, fail if taken.
  *   - no `dev.port`: search for a free port (base coordinated by the caller).
@@ -337,7 +356,7 @@ const plannedToUnit = (
 	return {
 		slug: fn.slug,
 		source: fn.source,
-		bundleDir: join(process.cwd(), "node_modules", ".neon-dev", fn.slug),
+		bundleDir: devBundleDir(process.cwd(), fn.slug),
 		childEnv,
 		label: fn.slug,
 		envSummary: { neon: Object.keys(branchEnv), fn: Object.keys(fn.env) },
@@ -763,9 +782,23 @@ const writeBundle = async (
 	bundleDir: string,
 	externalPackages?: readonly string[],
 ): Promise<string> => {
-	const files = await bundleEntry(source, {
+	// Left unbundled only. `bundleDir` sits inside the project's node_modules, so an
+	// externalized package resolves from the real tree at the host architecture — no install
+	// or copy is needed or wanted locally, whatever `includeFiles` says for a deploy.
+	const { files, metafile } = await bundleEntry(source, {
 		...(externalPackages ? { externalPackages } : {}),
 	});
+
+	// Local runs resolve native packages from the real tree, so a missing declaration is
+	// invisible until deploy. Reporting it here is the only signal before then.
+	for (const finding of findUndeclaredNativePackages({
+		metafile,
+		declared: externalPackages ?? [],
+		projectDir: dirname(source),
+	})) {
+		log.warning(describeNativeFinding(basename(source), finding));
+	}
+
 	mkdirSync(bundleDir, { recursive: true });
 	// bundleEntry emits a single `index.mjs` (no source map). The `.mjs` extension makes Node
 	// load it as ESM directly, so no `package.json` `"type": "module"` marker is needed.

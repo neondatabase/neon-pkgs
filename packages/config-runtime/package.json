@@ -60,6 +60,7 @@
 	},
 	"dependencies": {
 		"@neon/config": "workspace:*",
+		"@vercel/nft": "^1.10.2",
 		"esbuild": "^0.28.1",
 		"fflate": "^0.8.3"
 	},
