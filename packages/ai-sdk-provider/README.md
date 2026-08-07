@@ -69,7 +69,7 @@ Which ids your branch serves is account-specific during the beta; `GET $NEON_AI_
 
 Upstream backends behind the gateway accept different subsets of the OpenAI-style parameters the AI SDK emits, and sending one an upstream rejects is a hard `400`. The provider drops those before the request and records a warning in `result.warnings`, so a call succeeds instead of failing on a parameter you passed in good faith.
 
-These rules apply on the Anthropic Messages and Chat Completions routes. On the Responses route (every `gpt-*` id) penalties, `seed` and `stopSequences` are left to the upstream OpenAI model's own stripping, but `temperature` and `topP` are handled here, because the gateway rejects them on the four ids listed below.
+These rules apply on the Anthropic Messages and Chat Completions routes. The Responses route (every `gpt-*` id) relies on the upstream OpenAI model's own stripping instead, so its behaviour and its warning wording are the AI SDK's rather than described here — but `getNeonModelCapabilities` still answers for those ids, and the last row below is what it reports rather than something this provider drops.
 
 | Models | Dropped |
 | --- | --- |
@@ -82,7 +82,7 @@ These rules apply on the Anthropic Messages and Chat Completions routes. On the 
 | `gemini-3-5-flash-lite` | `frequencyPenalty`, `presencePenalty` |
 | `gemini-3-6-flash` | `temperature`, `topP`, `frequencyPenalty`, `presencePenalty` |
 | Every other Gemini | nothing |
-| `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5-5-pro` | `temperature`, `topP` |
+| `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5-5-pro` (reported only — Responses strips these upstream) | `temperature`, `topP` |
 
 **`temperature` on a Claude 5 model therefore has no effect.** That is the gateway's behaviour, not a provider choice; sending it returns `does not support the temperature parameter`. Steer those models with Anthropic's own effort control instead — note that this is `effort`, not the OpenAI-style `reasoningEffort`, which every Claude id drops:
 

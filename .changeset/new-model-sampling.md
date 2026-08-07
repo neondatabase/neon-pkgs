@@ -25,9 +25,11 @@ it. It now names the model instead of the family.
 Two further corrections found by review, both the same class of bug — a rule asserting the
 gateway lacks something it has:
 
-`gpt-5-5-pro` reads as version 5.5 to the minor-version rule and was told it accepts
-`temperature` and `topP`. It does not; the Responses API answers `Unsupported parameter`.
-It is now excluded, so the call succeeds with the parameter dropped instead of returning 400.
+`gpt-5-5-pro` reads as version 5.5 to the minor-version rule, so
+`getNeonModelCapabilities('gpt-5-5-pro').supportsTemperature` answered `true`. The gateway
+rejects it — `/openai/v1/responses` returns `Unsupported parameter: 'temperature'`. The exported
+answer is now correct. This changes what the function reports, not what goes over the wire: the
+Responses route strips the parameter upstream, so those calls already succeeded.
 
 Gemini does take `reasoning_effort` — the gateway maps it onto Gemini's thinking config, and
 `minimal` versus `high` measurably changes how much the model reasons. The provider dropped it

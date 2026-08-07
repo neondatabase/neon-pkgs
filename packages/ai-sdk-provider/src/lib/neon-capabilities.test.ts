@@ -83,6 +83,24 @@ describe("applyNeonCapabilities warnings", () => {
 		}
 	});
 
+	// temperature and topP read `samplingDetails`, not GENERIC_DETAILS, so the
+	// penalty assertions above did not cover them and the old wording survived
+	// one round of review on exactly the parameter the finding was about.
+	it("gives temperature and topP the same actionable wording as everything else", () => {
+		const warnings = detailsFor("gemini-3-6-flash", {
+			temperature: 0.2,
+			topP: 0.9,
+		});
+
+		expect(warnings.map((w) => w.feature)).toEqual(["temperature", "topP"]);
+		for (const warning of warnings) {
+			expect(warning.details).toContain(
+				"The request was sent without it",
+			);
+			expect(warning.details).toContain("getNeonModelCapabilities");
+		}
+	});
+
 	it("hedges rather than asserting a 400 for an unrecognised Claude id", () => {
 		const [warning] = detailsFor("claude-3-5-sonnet-20241022", {
 			temperature: 0.2,
@@ -99,6 +117,7 @@ describe("applyNeonCapabilities warnings", () => {
 
 		expect(warning.type).toBe("unsupported");
 		expect(warning.details).toContain("Claude 4.7 and newer");
+		expect(warning.details).toContain("The request was sent without it");
 	});
 
 	it("keeps temperature and drops topP when a Claude call sets both", () => {

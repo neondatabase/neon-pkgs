@@ -7,9 +7,9 @@ import type {
 import { getNeonModelCapabilities } from "./neon-model-capabilities.js";
 
 const PENALTY_DETAILS =
-	"The request was sent without it. Check getNeonModelCapabilities(id).supportsPenalties before setting penalties.";
+	"The request was sent without it. Check getNeonModelCapabilities('<model-id>').supportsPenalties before setting penalties.";
 const GENERIC_DETAILS =
-	"The request was sent without it. Call getNeonModelCapabilities(id) to see which sampling parameters this model takes, or steer it through the prompt.";
+	"The request was sent without it. Call getNeonModelCapabilities('<model-id>') to see which sampling parameters this model takes, or steer it through the prompt.";
 const REASONING_EFFORT_DETAILS =
 	"The request was sent without it. Claude takes providerOptions.anthropic.effort instead.";
 
@@ -45,10 +45,10 @@ export function applyNeonCapabilities(
 	// would contradict the hedge in the sentence that follows it.
 	const unrecognizedClaude = caps.claudeSamplingUnrecognized === true;
 	const samplingDetails = unrecognizedClaude
-		? "This Claude version was not recognised. Claude 4.7 and newer reject sampling parameters, so it was dropped as a precaution; set `providerOptions.anthropic.effort` instead."
+		? "This Claude version was not recognised. Claude 4.7 and newer reject sampling parameters, so the request was sent without it as a precaution; set `providerOptions.anthropic.effort` instead."
 		: caps.family === "anthropic"
-			? "Claude 4.7 and newer reject sampling parameters, so it was dropped rather than sent. Use `providerOptions.anthropic.effort` (low | medium | high | xhigh | max) to steer these models."
-			: "The Neon AI Gateway rejects this parameter for this model, so it was dropped rather than sent.";
+			? "The request was sent without it. Claude 4.7 and newer reject sampling parameters; use `providerOptions.anthropic.effort` (low | medium | high | xhigh | max) to steer these models."
+			: GENERIC_DETAILS;
 	const samplingType = unrecognizedClaude ? "compatibility" : "unsupported";
 
 	if (options.temperature != null && !caps.supportsTemperature) {
