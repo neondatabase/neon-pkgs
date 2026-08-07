@@ -715,4 +715,17 @@ export interface PushResult {
 	dryRun: boolean;
 	applied: AppliedChange[];
 	conflicts: ConflictReport[];
+	/**
+	 * Advisory findings from the push — a function that bundles a native dependency it never
+	 * declared, or a staged package whose version could not be pinned.
+	 *
+	 * Returned rather than logged, because a library has no business choosing an output
+	 * channel, and returned rather than left to an opt-in callback, because these are the
+	 * only warning that a deployed function will fail at invoke and an unregistered callback
+	 * is easy to never notice. Empty when there is nothing to report.
+	 *
+	 * Only populated by the built-in bundler: a caller that injects its own `bundleFunction`
+	 * owns its own reporting.
+	 */
+	warnings: string[];
 }

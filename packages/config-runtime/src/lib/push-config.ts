@@ -27,12 +27,12 @@ import type { FunctionBundler } from "./function-bundle.js";
  * injects its own bundler never triggers this import, so esbuild can be dropped
  * from their build entirely.
  */
-const defaultBundleFunction: FunctionBundler = async (
-	fn: ResolvedFunctionConfig,
-): Promise<Uint8Array> => {
-	const { buildFunctionBundle } = await import("./function-bundle.js");
-	return buildFunctionBundle(fn);
-};
+const makeDefaultBundleFunction =
+	(onWarning: (message: string) => void): FunctionBundler =>
+	async (fn: ResolvedFunctionConfig): Promise<Uint8Array> => {
+		const { buildFunctionBundle } = await import("./function-bundle.js");
+		return buildFunctionBundle(fn, { onWarning });
+	};
 
 export interface PushConfigOptions {
 	/**
@@ -159,6 +159,10 @@ export async function pushConfig(
 	const api = options.api ?? createApiFromOptions(options);
 	const projectId = options.projectId;
 
+	// Collected from the built-in bundler and returned on the result. A caller that injects
+	// its own `bundleFunction` reports for itself, so this stays empty for them.
+	const warnings: string[] = [];
+
 	const dryRun = options.dryRun === true;
 	const updateExisting = options.updateExisting === true;
 	const allowProtectedBranch = options.allowProtectedBranch === true;
@@ -261,7 +265,10 @@ export async function pushConfig(
 					branchById,
 					branchByName,
 					bundleFunction:
-						options.bundleFunction ?? defaultBundleFunction,
+						options.bundleFunction ??
+						makeDefaultBundleFunction((message) => {
+							warnings.push(message);
+						}),
 				});
 		applied.push(change);
 	}
@@ -285,6 +292,7 @@ export async function pushConfig(
 		dryRun,
 		applied,
 		conflicts: diff.conflicts,
+		warnings,
 	};
 	if (remoteProject.orgId) result.orgId = remoteProject.orgId;
 	return result;

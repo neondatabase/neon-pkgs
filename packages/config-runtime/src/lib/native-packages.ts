@@ -9,7 +9,10 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { ErrorCode, externalPackageRoot, PlatformError } from "@neon/config";
-import { installedPackageVersion } from "./resolve-package.js";
+import {
+	installedPackageVersion,
+	readPackageManifest,
+} from "./resolve-package.js";
 
 /**
  * The architecture, OS and libc a Neon Function runs on. Native packages are installed for
@@ -41,32 +44,66 @@ const ELF = {
 const BINARY_PATTERN = /\.(node|so)(\.\d+)*$/;
 
 /**
- * Sibling platform builds a package may install alongside the one we want. `sharp` ships a
- * WebAssembly fallback its loader silently drops to when the native binary is missing, and
- * a musl variant for Alpine. Neither can be reached on the runtime (it is Debian, and the
- * native build is present), and together they are most of the archive, so they are dropped.
- * Shipping the wasm build is actively harmful: it would let a broken native path succeed
- * quietly on a slower code path instead of failing loudly.
+ * The WebAssembly fallback is the one sibling variant that cannot be identified from its
+ * manifest: `@img/sharp-wasm32` declares no `os`, `cpu`, or `libc` at all, so npm installs it
+ * whatever target is asked for and only the name distinguishes it.
+ *
+ * Matched as a whole dash-delimited token rather than a substring, so an ordinary package
+ * that merely contains the word keeps its files.
  */
+const WASM_VARIANT_TOKEN = "wasm32";
 
 /**
- * Whether a traced path belongs to an excluded sibling variant.
+ * Whether a package in the staging tree can be left out of the archive.
  *
- * Matched against **package directory names only**, never the whole path: a substring test
- * over the full path also deletes an ordinary file that happens to be called something like
- * `musl-helper.js`, which would drop a needed file from the archive and fail at invoke.
+ * Incompatible builds are identified from their own manifest, the same way npm decides what
+ * to install — `@img/sharp-linuxmusl-arm64` declares `libc: ["musl"]`, which a glibc runtime
+ * cannot load. That is a fact about the package rather than a guess from its name, so a
+ * package called `musl-helper` is untouched.
+ *
+ * Dropping the wasm build is not merely a size saving: sharp's loader falls through to it
+ * silently, so a broken native path would succeed on much slower code instead of failing
+ * loudly.
  */
-function isExcludedVariant(path: string): boolean {
-	const segments = path.split(/[/\\]/);
-	return segments.some(
-		(segment, index) =>
-			// Only a segment that names a package: the one directly after a `node_modules`,
-			// or the one after that when the first is a scope.
-			(segments[index - 1] === "node_modules" ||
-				(segments[index - 2] === "node_modules" &&
-					segments[index - 1]?.startsWith("@"))) &&
-			(segment.includes("wasm32") || segment.includes("musl")),
+function isExcludedVariant(packageName: string, staging: string): boolean {
+	if (packageName.split(/[-/]/).includes(WASM_VARIANT_TOKEN)) return true;
+	const manifest = readPackageManifest(
+		join(staging, "node_modules", ...packageName.split("/")),
 	);
+	return manifest !== undefined && !manifestRunsOnRuntime(manifest);
+}
+
+/** Whether a manifest's `os`/`cpu`/`libc` permit {@link RUNTIME_TARGET}. */
+function manifestRunsOnRuntime(manifest: Record<string, unknown>): boolean {
+	const permits = (raw: unknown, value: string): boolean => {
+		const field =
+			typeof raw === "string"
+				? [raw]
+				: Array.isArray(raw)
+					? raw.filter(
+							(entry): entry is string =>
+								typeof entry === "string",
+						)
+					: undefined;
+		if (field === undefined || field.length === 0) return true;
+		if (field.includes(`!${value}`)) return false;
+		const positives = field.filter((entry) => !entry.startsWith("!"));
+		return positives.length === 0 || positives.includes(value);
+	};
+	return (
+		permits(manifest.os, RUNTIME_TARGET.os) &&
+		permits(manifest.cpu, RUNTIME_TARGET.cpu) &&
+		permits(manifest.libc, RUNTIME_TARGET.libc)
+	);
+}
+
+/** The package a `node_modules/...` archive path belongs to. */
+function packageOfArchivePath(path: string): string | undefined {
+	const segments = path.split("/");
+	if (segments[0] !== "node_modules" || segments.length < 2) return undefined;
+	return segments[1].startsWith("@") && segments.length >= 3
+		? `${segments[1]}/${segments[2]}`
+		: segments[1];
 }
 
 /** How long the staging install may take before the deploy gives up on it. */
@@ -100,7 +137,10 @@ export type NativeTraceDeps = {
 	/** Install `specs` for the runtime target into `cwd`. Resolves on success. */
 	install: (cwd: string, specs: string[]) => Promise<void>;
 	/** Trace `entry` within `base`, returning archive-relative file paths. */
-	trace: (base: string, entry: string) => Promise<string[]>;
+	trace: (
+		base: string,
+		entry: string,
+	) => Promise<{ files: string[]; warnings?: string[] }>;
 	/** Version of `pkg` as resolved in the user's project, or undefined if not installed. */
 	installedVersion: (projectDir: string, pkg: string) => string | undefined;
 };
@@ -135,8 +175,9 @@ const invalid = (message: string, cause?: unknown): PlatformError =>
  *    `node_modules` is never read for these files. Its binaries are built for their machine,
  *    and a cross-platform install is not sticky — a later plain `npm install` re-resolves
  *    optional dependencies for the host and replaces the target's packages with the host's.
- *    Only the resolved *version* is taken from the user's tree, so the deploy honours their
- *    lockfile without trusting the binaries next to it.
+ *    Only the resolved *version* of the declared package is taken from the user's tree. That
+ *    is not the same as honouring their lockfile: transitive pins, overrides, patches, and
+ *    aliases are not carried across, so the staged graph can differ below the root.
  * 2. **Trace the installed tree.** The file set cannot be discovered by asking Node:
  *    `@img/sharp-linux-arm64` exports only `./sharp.node` and `./package`, with no `.` and no
  *    wildcard, so its directory is unreachable through the resolver. A tracer that follows
@@ -198,7 +239,14 @@ export async function traceNativePackages(options: {
 		);
 
 		const traced = await deps.trace(staging, "trace-entry.mjs");
-		const files = selectArchiveFiles(slug, traced);
+		for (const warning of traced.warnings ?? []) {
+			warnings.push(
+				`While tracing the files to ship for function "${slug}", a dependency could ` +
+					`not be followed: ${warning}. If that file is reached at runtime it will be ` +
+					`missing from the deployed function.`,
+			);
+		}
+		const files = selectArchiveFiles(slug, traced.files, staging);
 		const entries = readArchiveFiles(slug, staging, files);
 		enforceLimits(slug, entries, limits);
 		return { entries, warnings };
@@ -240,15 +288,32 @@ function verifyInstalled(
  * {@link isExcludedVariant}). The trace entry itself is dropped — the real entry is
  * the esbuild bundle.
  */
-function selectArchiveFiles(slug: string, traced: readonly string[]): string[] {
+function selectArchiveFiles(
+	slug: string,
+	traced: readonly string[],
+	staging: string,
+): string[] {
+	// Decided once per package rather than per file: the exclusion is a property of the
+	// package, and its manifest would otherwise be re-read for every file it contributes.
+	const excluded = new Map<string, boolean>();
+	const dropped = (path: string): boolean => {
+		const pkg = packageOfArchivePath(path);
+		if (pkg === undefined) return false;
+		const known = excluded.get(pkg);
+		if (known !== undefined) return known;
+		const decision = isExcludedVariant(pkg, staging);
+		excluded.set(pkg, decision);
+		return decision;
+	};
+
 	const files = traced
 		.filter(
 			(path) =>
 				path.startsWith(`node_modules${sep}`) ||
 				path.startsWith("node_modules/"),
 		)
-		.filter((path) => !isExcludedVariant(path))
 		.map((path) => path.split(sep).join("/"))
+		.filter((path) => !dropped(path))
 		.sort();
 
 	if (files.length === 0) {
@@ -321,7 +386,16 @@ function verifyArchitecture(
 	relative: string,
 	contents: Buffer,
 ): void {
-	if (contents.length < ELF.headerBytes) return;
+	// Too short to carry an ELF header at all. Returning here would let a truncated or
+	// placeholder binary through the one check that exists to stop a wrong-architecture file
+	// reaching the runtime.
+	if (contents.length < ELF.headerBytes) {
+		throw invalid(
+			`Function "${slug}" would ship "${relative}", which is ${contents.length} bytes — ` +
+				`too short to be a valid binary. The Functions runtime is ` +
+				`${RUNTIME_TARGET_LABEL}.`,
+		);
+	}
 	const isElf = contents.subarray(0, 4).toString("binary") === ELF.magic;
 	if (!isElf) {
 		throw invalid(
@@ -346,15 +420,17 @@ function verifyArchitecture(
  * Check the archive against the build service's limits, naming the largest contributors. The
  * compressed size is not known until the archive is zipped, so only the counts and
  * uncompressed total are checked here; {@link assertZipWithinLimits} covers the rest.
+ *
+ * Exported so the caller can re-check the **final** archive: these entries are the staged
+ * files alone, and the bundle is merged in afterwards.
  */
-function enforceLimits(
+export function enforceLimits(
 	slug: string,
 	entries: Record<string, Uint8Array>,
-	limits: ArchiveLimits,
+	limits: ArchiveLimits = DEFAULT_ARCHIVE_LIMITS,
 ): void {
 	const names = Object.keys(entries);
-	// +1 for index.mjs, which the caller adds after this runs.
-	const count = names.length + 1;
+	const count = names.length;
 	if (count > limits.maxEntries) {
 		throw invalid(
 			`Function "${slug}" archive has ${count} files; the limit is ${limits.maxEntries}. ` +
@@ -406,7 +482,13 @@ const defaultDeps: NativeTraceDeps = {
 		// not against `base`. `fileList` still comes back relative to `base`, which is what
 		// the archive keys need.
 		const result = await nodeFileTrace([join(base, entry)], { base });
-		return [...result.fileList];
+		return {
+			files: [...result.fileList],
+			// A specifier the tracer could not follow is a file that will be missing from the
+			// archive and only noticed at invoke. Not fatal — nft warns about plenty that is
+			// genuinely optional — but never silent.
+			warnings: [...result.warnings].map((warning) => warning.message),
+		};
 	},
 	installedVersion: (projectDir, pkg) =>
 		installedPackageVersion(projectDir, pkg),

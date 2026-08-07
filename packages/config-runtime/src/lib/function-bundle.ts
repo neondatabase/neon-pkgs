@@ -11,6 +11,7 @@ import {
 } from "./native-detect.js";
 import {
 	assertZipWithinLimits,
+	enforceLimits,
 	type NativeTraceDeps,
 	traceNativePackages,
 } from "./native-packages.js";
@@ -156,6 +157,9 @@ export async function buildFunctionBundle(
 	// `.node` addon needs to find its sibling libraries. Do not flatten these.
 	Object.assign(entries, traced.entries);
 
+	// Re-checked against the final archive: the staged files were measured without the
+	// bundle, so the entry count and uncompressed total are only complete now.
+	enforceLimits(fn.slug, entries);
 	const zip = await zipBundle(entries);
 	assertZipWithinLimits(fn.slug, zip, entries);
 	return zip;

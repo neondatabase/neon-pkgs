@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defineConfig, ErrorCode, PushConflictError } from "@neon/config";
@@ -649,5 +649,78 @@ describe("pushConfig", () => {
 		expect(api.history.some((h) => h.method === "updateBranch")).toBe(
 			false,
 		);
+	});
+	/**
+	 * The SDK path has to report a native dependency too, not just the CLI. A warning that
+	 * only reaches `neon config apply` leaves anyone deploying through `pushConfig` with a
+	 * function that fails at invoke and no signal at all.
+	 */
+	test("returns a warning when a function bundles an undeclared native dependency", async () => {
+		const { api, projectId } = seededFake();
+
+		// A real package with a real native binary beside the entry, so the detection runs
+		// against an actual node_modules layout rather than a described one.
+		const pkgDir = join(fnTmpDir, "node_modules", "native-ish");
+		mkdirSync(join(pkgDir, "build"), { recursive: true });
+		writeFileSync(
+			join(pkgDir, "package.json"),
+			JSON.stringify({
+				name: "native-ish",
+				version: "1.0.0",
+				main: "index.js",
+			}),
+		);
+		writeFileSync(join(pkgDir, "index.js"), "module.exports = 1;\n");
+		writeFileSync(join(pkgDir, "build", "addon.node"), "\x7fELF");
+
+		const nativeSource = join(fnTmpDir, "uses-native.ts");
+		writeFileSync(
+			nativeSource,
+			[
+				"import addon from 'native-ish';",
+				"export default { fetch(): Response { return new Response(String(addon)); } };",
+				"",
+			].join("\n"),
+		);
+
+		const config = defineConfig({
+			preview: {
+				functions: {
+					resize: { name: "Resize", source: nativeSource },
+				},
+			},
+		});
+
+		const result = await pushConfig(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+			updateExisting: true,
+		});
+
+		expect(
+			result.warnings.some(
+				(w) =>
+					w.includes("native-ish") && w.includes("externalPackages"),
+			),
+		).toBe(true);
+	});
+
+	test("returns no warnings for a function with nothing native in its graph", async () => {
+		const { api, projectId } = seededFake();
+		const config = defineConfig({
+			preview: {
+				functions: { hello: { name: "Hello", source: fnSource } },
+			},
+		});
+
+		const result = await pushConfig(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+			updateExisting: true,
+		});
+
+		expect(result.warnings).toEqual([]);
 	});
 });
