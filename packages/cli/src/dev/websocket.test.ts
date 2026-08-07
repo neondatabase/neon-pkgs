@@ -1043,7 +1043,7 @@ describe("@neon/functions/hono under neon dev", () => {
 	});
 
 	it("refuses a subprotocol the client never offered, rather than upgrading", async () => {
-		let captured: Error | null = null;
+		let captured: unknown;
 		const app = new Hono();
 		app.get(
 			"/ws",
@@ -1060,8 +1060,12 @@ describe("@neon/functions/hono under neon dev", () => {
 		expect(response.split("\r\n")[0]).toBe(
 			"HTTP/1.1 500 Internal Server Error",
 		);
-		expect(captured).toBeInstanceOf(TypeError);
-		expect((captured as unknown as Error).message).toMatch(
+		if (!(captured instanceof TypeError)) {
+			throw new Error(
+				`expected the refusal to reach onError as a TypeError, got ${String(captured)}`,
+			);
+		}
+		expect(captured.message).toMatch(
 			/did not offer the subprotocol "not-offered"/,
 		);
 	});
