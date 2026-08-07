@@ -142,7 +142,12 @@ export const analyticsMiddleware = async (args: {
 	}
 
 	client.identify({
-		userId: userId?.toString() ?? "anonymous",
+		// Use `||` not `??`: userId defaults to "" and stays "" for an
+		// unauthenticated user (a valid CLI state), and "" is not nullish, so `??`
+		// would send an empty userId - an identify with no identity that the
+		// analytics pipeline drops as missing_id. Fall back to "anonymous" like
+		// every track() call below.
+		userId: userId || "anonymous",
 	});
 
 	client.track({
