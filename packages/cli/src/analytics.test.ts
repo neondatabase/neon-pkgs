@@ -45,15 +45,15 @@ describe("storedCredentialAttribution", () => {
 describe("telemetryCredential", () => {
 	const DEFAULT_PATH = "/config/credentials.json";
 
-	it("ignores an ambient key the command never authenticated with", () => {
-		expect(telemetryCredential(null, "napi_ambient", DEFAULT_PATH)).toEqual(
-			{
-				credentialsPath: DEFAULT_PATH,
-			},
-		);
+	it("does not query a key no recorded authentication selected", () => {
+		expect(
+			telemetryCredential(null, "napi_never_selected", DEFAULT_PATH),
+		).toEqual({
+			credentialsPath: DEFAULT_PATH,
+		});
 	});
 
-	it("falls back to the local default for a command that skipped auth", () => {
+	it("falls back to the local default for a command that selected nothing", () => {
 		expect(telemetryCredential(null, undefined, DEFAULT_PATH)).toEqual({
 			credentialsPath: DEFAULT_PATH,
 		});

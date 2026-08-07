@@ -48,11 +48,17 @@ export const storedCredentialAttribution = (
  * Which credential telemetry may describe this invocation with: one to ask the API about, a
  * file to read an id out of, either, or neither.
  *
- * `ensureAuth` records a context only when it selected a credential for this invocation, so a
- * missing context means the command authenticated with nothing. An ambient `NEON_API_KEY` is
- * then not this run's identity — `neon profile list` never used it — and must not be queried
- * on its behalf, which would both attribute the run to an account it never authenticated as
- * and make a network call for a purely local command. The local default is the honest guess.
+ * `ensureAuth` records a context only when it selected a credential to authorize this
+ * invocation, so a missing context means nothing authorized it. A key sitting in `args.apiKey`
+ * is then not this run's identity — `neon profile list` never used it — and must not be queried
+ * on its behalf, which would both attribute the run to an account it never authenticated as and
+ * make a network call for a command that does no I/O of its own. The local default is the guess.
+ *
+ * The boundary is deliberately what authorized the *invocation*, not every key a handler may
+ * touch: `profile create --api-key` verifies the key it is about to store, and is attributed to
+ * the local default rather than to the account it is storing a credential for. Attributing it to
+ * that key is what produced an `identify` for the signed-in user beside an `accountId` for a
+ * different account.
  *
  * A selected key records no file, because it authenticates as its own account rather than out
  * of one. Reading `DEFAULT` for it would identify the run as whoever is signed in locally, and
