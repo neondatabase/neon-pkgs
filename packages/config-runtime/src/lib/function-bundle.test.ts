@@ -24,7 +24,14 @@ function fn(
 		source,
 		env: {},
 		runtime: "nodejs24",
-		...(externalPackages ? { externalPackages } : {}),
+		...(externalPackages
+			? {
+					externalPackages: externalPackages.map((name) => ({
+						name,
+						includeFiles: true,
+					})),
+				}
+			: {}),
 	};
 }
 

@@ -63,9 +63,11 @@ describe("@neon/config public value surface", () => {
 			  "deriveCredentialScopes",
 			  "diffConfig",
 			  "errors",
+			  "externalPackageRoot",
 			  "isPartialBranchCreateError",
 			  "isPlatformError",
 			  "loadConfigFromFile",
+			  "packagesToStage",
 			  "resolveConfig",
 			  "schemas",
 			]

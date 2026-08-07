@@ -69,7 +69,11 @@ const neonctlBundler: FunctionBundler = async (fn) =>
 	zipBundle(
 		await bundleEntry(fn.source, {
 			...(fn.externalPackages
-				? { externalPackages: fn.externalPackages }
+				? {
+						externalPackages: fn.externalPackages.map(
+							(pkg) => pkg.name,
+						),
+					}
 				: {}),
 		}),
 	);
