@@ -17,10 +17,10 @@ authenticated at all:
 - A key selected from `--api-key` or `NEON_API_KEY` records no credentials file, so telemetry
   read `DEFAULT`'s and identified the run as whoever was signed in locally — then skipped the API
   lookup that would have named the key's own account. Such runs are now identified by the key.
-- A command that authorizes nothing — `profile`, `config init`, `auth`, `--help`, a bare `neon` —
-  left an ambient `NEON_API_KEY` in play, so telemetry both read `DEFAULT`'s id and queried that
-  key, mixing two accounts into one event and making a network request to build it. The key is
-  now ignored for those commands, and no request is made.
+- A command the global auth middleware skips — `profile`, `config init`, `auth`, `--help`, a bare
+  `neon` — left an ambient `NEON_API_KEY` in play, so telemetry both read `DEFAULT`'s id and
+  queried that key, mixing two accounts into one event and adding an API request purely to build
+  it. The key is now ignored for those commands, and no telemetry request is made.
 
 No user-visible behavior changes: this only affects what the CLI reports about itself, and
-removes one network request from commands that make none of their own.
+removes a telemetry-only API request from the commands the auth middleware skips.
