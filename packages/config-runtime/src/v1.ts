@@ -72,6 +72,7 @@ export type {
 export {
 	assertZipWithinLimits,
 	DEFAULT_ARCHIVE_LIMITS,
+	enforceLimits,
 	RUNTIME_TARGET,
 	RUNTIME_TARGET_LABEL,
 	traceNativePackages,

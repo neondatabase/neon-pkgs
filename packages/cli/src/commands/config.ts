@@ -8,6 +8,7 @@ import {
 	type ConflictReport,
 	createBranch as createBranchFromPolicy,
 	describeNativeFinding,
+	enforceLimits,
 	type FunctionBundler,
 	findUndeclaredNativePackages,
 	inspect,
@@ -107,6 +108,9 @@ const neonctlBundler: FunctionBundler = async (fn) => {
 	});
 	for (const warning of traced.warnings) log.warning(warning);
 	const entries = { ...files, ...traced.entries };
+	// Re-checked against the final archive: the staged files were measured without the
+	// bundle, so the entry count and uncompressed total are only complete now.
+	enforceLimits(fn.slug, entries);
 	const zip = zipBundle(entries);
 	assertZipWithinLimits(fn.slug, zip, entries);
 	return zip;

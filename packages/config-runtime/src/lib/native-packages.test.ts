@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import {
 	assertZipWithinLimits,
+	type NativeTraceDeps,
 	RUNTIME_TARGET,
 	RUNTIME_TARGET_LABEL,
 	traceNativePackages,
@@ -25,6 +26,19 @@ import {
  * reads it — so these reach the mirror the same way `pnpm install` does.
  */
 const liveTest = test;
+
+/** A 64-byte ELF file claiming the given `e_machine`. */
+function elfHeader(machine: number): Uint8Array {
+	const buf = Buffer.alloc(64);
+	buf.write("\x7fELF", 0, "binary");
+	buf[4] = 2; // 64-bit
+	buf[5] = 1; // little-endian
+	buf.writeUInt16LE(machine, 18);
+	return new Uint8Array(buf);
+}
+
+const AARCH64 = 0xb7;
+const X86_64 = 0x3e;
 
 let dir: string;
 beforeAll(() => {
@@ -155,7 +169,9 @@ describe("traceNativePackages", () => {
 						JSON.stringify({ name: "local-dep", version: "2.3.4" }),
 					);
 				},
-				trace: async () => ["node_modules/local-dep/package.json"],
+				trace: async () => ({
+					files: ["node_modules/local-dep/package.json"],
+				}),
 			},
 		});
 
@@ -201,7 +217,9 @@ describe("traceNativePackages", () => {
 						}),
 					);
 				},
-				trace: async () => ["node_modules/exports-only/package.json"],
+				trace: async () => ({
+					files: ["node_modules/exports-only/package.json"],
+				}),
 			},
 		});
 
@@ -237,7 +255,7 @@ describe("traceNativePackages", () => {
 				},
 				trace: async (base, entry) => {
 					traceEntry = readFileSync(join(base, entry), "utf8");
-					return ["node_modules/subpath-pkg/package.json"];
+					return { files: ["node_modules/subpath-pkg/package.json"] };
 				},
 			},
 		});
@@ -264,7 +282,9 @@ describe("traceNativePackages", () => {
 						JSON.stringify({ name: "dual", version: "1.0.0" }),
 					);
 				},
-				trace: async () => ["node_modules/dual/package.json"],
+				trace: async () => ({
+					files: ["node_modules/dual/package.json"],
+				}),
 			},
 		});
 		expect(requested).toEqual(["dual"]);
@@ -293,21 +313,196 @@ describe("traceNativePackages", () => {
 						join(cwd, "node_modules", "thing-musl-arm64"),
 					);
 					writeFileSync(
+						join(musl, "package.json"),
+						JSON.stringify({
+							name: "thing-musl-arm64",
+							version: "1.0.0",
+							libc: ["musl"],
+						}),
+					);
+					writeFileSync(
 						join(musl, "index.js"),
 						"module.exports = 2;",
 					);
 				},
-				trace: async () => [
-					"node_modules/plain-pkg/package.json",
-					"node_modules/plain-pkg/lib/musl-helper.js",
-					"node_modules/thing-musl-arm64/index.js",
-				],
+				trace: async () => ({
+					files: [
+						"node_modules/plain-pkg/package.json",
+						"node_modules/plain-pkg/lib/musl-helper.js",
+						"node_modules/thing-musl-arm64/index.js",
+					],
+				}),
 			},
 		}).then((r) => Object.keys(r.entries));
 
 		expect(names).toContain("node_modules/plain-pkg/lib/musl-helper.js");
 		// The actual musl variant package is still dropped.
 		expect(names).not.toContain("node_modules/thing-musl-arm64/index.js");
+	});
+
+	/**
+	 * The check that stops the whole point of this feature being defeated. A binary built for
+	 * the developer's machine deploys fine and then fails to `dlopen` at invoke, so a
+	 * non-AArch64 file has to be refused before it is archived.
+	 */
+	const stagingWith = (
+		files: Record<string, Uint8Array | string>,
+	): Partial<NativeTraceDeps> => ({
+		install: async (cwd) => {
+			writeFileSync(
+				join(
+					mkdirp(join(cwd, "node_modules", "bin-pkg")),
+					"package.json",
+				),
+				JSON.stringify({ name: "bin-pkg", version: "1.0.0" }),
+			);
+			for (const [relative, contents] of Object.entries(files)) {
+				const target = join(cwd, relative);
+				mkdirp(join(target, ".."));
+				writeFileSync(
+					target,
+					typeof contents === "string"
+						? contents
+						: Buffer.from(contents),
+				);
+			}
+		},
+		trace: async () => ({
+			files: [
+				"node_modules/bin-pkg/package.json",
+				...Object.keys(files).filter(
+					(f) => f !== "node_modules/bin-pkg/package.json",
+				),
+			],
+		}),
+	});
+
+	const stage = (files: Record<string, Uint8Array | string>) =>
+		traceNativePackages({
+			slug: "fn1",
+			packages: ["bin-pkg"],
+			projectDir: dir,
+			deps: stagingWith(files),
+		}).then(
+			() => "unexpectedly succeeded",
+			(e: unknown) => (e as Error).message,
+		);
+
+	test("rejects a binary built for another architecture", async () => {
+		const message = await stage({
+			"node_modules/bin-pkg/addon.node": elfHeader(X86_64),
+		});
+		expect(message).toMatch(/built for a different architecture/);
+		expect(message).toContain(RUNTIME_TARGET_LABEL);
+	});
+
+	test("rejects a binary that is not an ELF at all", async () => {
+		// A Mach-O magic number: what a macOS build of the same addon looks like.
+		const machO = new Uint8Array(64);
+		machO.set([0xcf, 0xfa, 0xed, 0xfe], 0);
+		const message = await stage({
+			"node_modules/bin-pkg/addon.node": machO,
+		});
+		expect(message).toMatch(/not a Linux binary/);
+	});
+
+	test("rejects a binary too short to carry an ELF header", async () => {
+		const message = await stage({
+			"node_modules/bin-pkg/addon.node": new Uint8Array(4),
+		});
+		expect(message).toMatch(/too short to be a valid binary/);
+	});
+
+	test("accepts an aarch64 ELF and archives it", async () => {
+		const { entries } = await traceNativePackages({
+			slug: "fn1",
+			packages: ["bin-pkg"],
+			projectDir: dir,
+			deps: stagingWith({
+				"node_modules/bin-pkg/addon.node": elfHeader(AARCH64),
+			}),
+		});
+		expect(Object.keys(entries)).toContain(
+			"node_modules/bin-pkg/addon.node",
+		);
+	});
+
+	// Identified from the manifest rather than the name, the way npm decides what to
+	// install, so a package that merely reads as a variant keeps its files.
+	test("drops a sibling whose manifest excludes the runtime libc", async () => {
+		const { entries } = await traceNativePackages({
+			slug: "fn1",
+			packages: ["parent-pkg"],
+			projectDir: dir,
+			deps: {
+				install: async (cwd) => {
+					const parent = mkdirp(
+						join(cwd, "node_modules", "parent-pkg"),
+					);
+					writeFileSync(
+						join(parent, "package.json"),
+						JSON.stringify({
+							name: "parent-pkg",
+							version: "1.0.0",
+						}),
+					);
+					const musl = mkdirp(
+						join(cwd, "node_modules", "pkg-linuxmusl-arm64"),
+					);
+					writeFileSync(
+						join(musl, "package.json"),
+						JSON.stringify({
+							name: "pkg-linuxmusl-arm64",
+							version: "1.0.0",
+							os: ["linux"],
+							cpu: ["arm64"],
+							libc: ["musl"],
+						}),
+					);
+					writeFileSync(
+						join(musl, "index.js"),
+						"module.exports = 1;",
+					);
+				},
+				trace: async () => ({
+					files: [
+						"node_modules/parent-pkg/package.json",
+						"node_modules/pkg-linuxmusl-arm64/package.json",
+						"node_modules/pkg-linuxmusl-arm64/index.js",
+					],
+				}),
+			},
+		});
+		expect(Object.keys(entries)).toEqual([
+			"node_modules/parent-pkg/package.json",
+		]);
+	});
+
+	test("reports a dependency the tracer could not follow", async () => {
+		const { warnings } = await traceNativePackages({
+			slug: "fn1",
+			packages: ["parent-pkg"],
+			projectDir: dir,
+			deps: {
+				install: async (cwd) => {
+					writeFileSync(
+						join(
+							mkdirp(join(cwd, "node_modules", "parent-pkg")),
+							"package.json",
+						),
+						JSON.stringify({
+							name: "parent-pkg",
+							version: "1.0.0",
+						}),
+					);
+				},
+				trace: async () => ({
+					files: ["node_modules/parent-pkg/package.json"],
+					warnings: ["Failed to resolve dependency ./missing.node"],
+				}),
+			},
+		});
+		expect(warnings.some((w) => w.includes("./missing.node"))).toBe(true);
 	});
 
 	test("pins a scoped package the same way", async () => {
@@ -336,7 +531,9 @@ describe("traceNativePackages", () => {
 						}),
 					);
 				},
-				trace: async () => ["node_modules/@scope/dep/package.json"],
+				trace: async () => ({
+					files: ["node_modules/@scope/dep/package.json"],
+				}),
 			},
 		});
 
@@ -369,9 +566,9 @@ describe("traceNativePackages", () => {
 						}),
 					);
 				},
-				trace: async () => [
-					"node_modules/not-installed-locally/package.json",
-				],
+				trace: async () => ({
+					files: ["node_modules/not-installed-locally/package.json"],
+				}),
 			},
 		});
 		expect(requested).toEqual(["not-installed-locally"]);
@@ -410,10 +607,12 @@ describe("traceNativePackages", () => {
 				// Report the user's file as traced. Every traced path is resolved inside the
 				// staging tree, so this one is not found there — and is never fetched from the
 				// project instead.
-				trace: async () => [
-					"node_modules/host-arch-dep/package.json",
-					"node_modules/host-arch-dep/host-only.node",
-				],
+				trace: async () => ({
+					files: [
+						"node_modules/host-arch-dep/package.json",
+						"node_modules/host-arch-dep/host-only.node",
+					],
+				}),
 			},
 		}).then(
 			() => "unexpectedly succeeded",

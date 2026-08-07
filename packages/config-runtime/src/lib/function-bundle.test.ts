@@ -100,13 +100,18 @@ function fakeNativeDeps(files: Record<string, Uint8Array>): NativeTraceDeps {
 				writeFileSync(absolute, contents);
 			}
 		},
-		trace: async () => Object.keys(files),
+		trace: async () => ({ files: Object.keys(files) }),
 		installedVersion: () => undefined,
 	};
 }
 
-const pkgJson = (name: string): Uint8Array =>
-	new TextEncoder().encode(JSON.stringify({ name, version: "1.0.0" }));
+const pkgJson = (
+	name: string,
+	platform: Record<string, string[]> = {},
+): Uint8Array =>
+	new TextEncoder().encode(
+		JSON.stringify({ name, version: "1.0.0", ...platform }),
+	);
 
 describe("buildFunctionBundle", () => {
 	test("bundles a handler with esbuild and returns a ZIP containing index.mjs (no sourcemap)", async () => {
@@ -267,7 +272,7 @@ describe("buildFunctionBundle staging external package files", () => {
 				},
 				trace: async () => {
 					traced = true;
-					return [];
+					return { files: [] };
 				},
 			},
 		});
@@ -299,7 +304,7 @@ describe("buildFunctionBundle staging external package files", () => {
 					},
 					trace: async () => {
 						traced = true;
-						return [];
+						return { files: [] };
 					},
 				},
 			},
@@ -483,10 +488,28 @@ describe("buildFunctionBundle staging external package files", () => {
 			onWarning: collectWarning,
 			nativeDeps: fakeNativeDeps({
 				"node_modules/fake-addon/package.json": pkgJson("fake-addon"),
+				"node_modules/@scope/fake-addon-linux-arm64/package.json":
+					pkgJson("@scope/fake-addon-linux-arm64", {
+						os: ["linux"],
+						cpu: ["arm64"],
+						libc: ["glibc"],
+					}),
 				"node_modules/@scope/fake-addon-linux-arm64/lib/addon.node":
 					elfHeader(AARCH64),
+				// The wasm fallback declares no platform at all — npm installs it for every
+				// target, so only its name identifies it.
+				"node_modules/@scope/fake-addon-wasm32/package.json": pkgJson(
+					"@scope/fake-addon-wasm32",
+				),
 				"node_modules/@scope/fake-addon-wasm32/lib/addon.node.js":
 					new TextEncoder().encode("// wasm fallback"),
+				// The musl build says so in its own manifest, which is what excludes it.
+				"node_modules/@scope/fake-addon-linuxmusl-arm64/package.json":
+					pkgJson("@scope/fake-addon-linuxmusl-arm64", {
+						os: ["linux"],
+						cpu: ["arm64"],
+						libc: ["musl"],
+					}),
 				"node_modules/@scope/fake-addon-linuxmusl-arm64/lib/addon.node":
 					elfHeader(AARCH64),
 			}),

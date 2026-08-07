@@ -224,7 +224,8 @@ function nativeEvidence(
 		// are what mark the package as platform-gated at all.
 		const platformGated =
 			stringList(dependencyManifest.os) !== undefined ||
-			stringList(dependencyManifest.cpu) !== undefined;
+			stringList(dependencyManifest.cpu) !== undefined ||
+			stringList(dependencyManifest.libc) !== undefined;
 		if (!platformGated) continue;
 		const file = findBinary(dependencyDir, SCAN_DEPTH);
 		if (file !== undefined)
