@@ -157,8 +157,10 @@ TypeError: upgradeWebSocket() is only available inside a Neon Functions invocati
 Run your function with `neon dev` locally, or deploy it.
 ```
 
-Keep `hono` in `dependencies`, not `devDependencies`: `neon deploy` bundles your function's
-imports, and it cannot bundle what is not declared.
+Keep `hono` in `dependencies`, not `devDependencies`. `neon deploy` bundles from
+`node_modules` and never reads your manifest, so a devDependency deploys fine from a machine
+where it happens to be installed — and breaks on a CI that ran `npm ci --omit=dev`, or on a
+teammate's fresh clone.
 
 ### Types
 
@@ -169,7 +171,7 @@ not have to reach into `hono/ws` or remember the type argument:
 import type { NeonWSEvents, UpgradeWebSocketOptions } from "@neon/functions/hono";
 
 const createEvents = (): NeonWSEvents => ({
-	onMessage: (event, ws) => ws.send(event.data),
+	onMessage: (event, ws) => ws.send(`echo: ${event.data}`),
 });
 
 const options: UpgradeWebSocketOptions = { protocol: "chat.v2" };
@@ -184,15 +186,22 @@ leaves `ws.raw` as `unknown`.
 Hono's other call form works, when you want the context in hand:
 
 ```ts
-app.get("/ws", (c) => upgradeWebSocket(c, { onMessage: (e, ws) => ws.send(e.data) }));
+app.get("/ws", (c) => upgradeWebSocket(c, { onMessage: (e, ws) => ws.send(`echo: ${e.data}`) }));
 ```
 
-**This form is what the `hono` >= 4.7.8 requirement is for.** Below that version
+**This form is what the `hono` `^4.7.8` requirement is for.** Below that version
 `defineWebSocketHelper` implements only the middleware form, so the call returns a
-middleware function instead of upgrading, and the symptom is a `TypeError: res.text is not
-a function` with nothing reaching `onError`. npm refuses the install; bun installs it
-silently and pnpm warns and proceeds, so on those two the version is yours to check. The
-middleware form above works on any version that has the helper at all.
+middleware function instead of upgrading. The client gets a 500, nothing reaches `onError`,
+and the runtime logs:
+
+```
+WebSocket upgrade failed:
+TypeError: response.arrayBuffer is not a function
+```
+
+npm refuses the install; bun installs it silently and pnpm warns and proceeds, so on those
+two the version is yours to check. The middleware form above works on any version that has
+the helper at all.
 
 ### Subprotocols
 
@@ -260,6 +269,10 @@ Neon Function invocation:
 - `ws.binaryType` is Hono's own field and does not propagate to the socket. Both default to
   `"arraybuffer"`, so inbound binary arrives as an `ArrayBuffer`; set `ws.raw.binaryType` if
   you need to change it.
+- **`ws.send(event.data)` does not type-check.** Hono types inbound data as
+  `string | Blob | ArrayBufferLike` while `send` refuses a `Blob`, so echoing the raw value
+  back is an error even though the runtime only ever delivers a `string` or an `ArrayBuffer`
+  unless you asked for `"blob"`. Interpolate it, or narrow it, before sending it back.
 - `SendOptions.compress` is ignored: no extensions are negotiated.
 - Importing both helpers into one file needs an alias — the root export and this one share
   the name `upgradeWebSocket`.

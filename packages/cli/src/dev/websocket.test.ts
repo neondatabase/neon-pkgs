@@ -1099,7 +1099,7 @@ describe("@neon/functions/hono under neon dev", () => {
 		expect(logged).toContain("cors()");
 	});
 
-	it("upgrades under middleware that only reads the request", async () => {
+	it("upgrades under middleware that sets response headers after next()", async () => {
 		const app = new Hono();
 		app.use("*", secureHeaders());
 		app.get(
