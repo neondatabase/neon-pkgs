@@ -34,7 +34,7 @@ export type FunctionBundler = (
  * `Dynamic require of "x" is not supported`. Re-create those globals via `createRequire`
  * so CJS and ESM dependencies coexist in the single `index.mjs`.
  */
-const ESM_CJS_INTEROP_BANNER =
+export const ESM_CJS_INTEROP_BANNER =
 	"import{createRequire as ___cr}from'module';import{fileURLToPath as ___f}from'url';import{dirname as ___d}from'path';const require=___cr(import.meta.url);const __filename=___f(import.meta.url);const __dirname=___d(__filename);";
 
 /**
@@ -65,9 +65,12 @@ export async function buildFunctionBundle(
 	options: {
 		nativeDeps?: Partial<NativeTraceDeps>;
 		/**
-		 * Where advisory findings go — currently the undeclared-native-dependency report.
-		 * Defaults to `console.warn` so a consumer that wires up nothing still sees them; a
-		 * dropped warning about a function that will fail at invoke is worse than noise.
+		 * Where advisory findings go — the undeclared-native-dependency report, and a package
+		 * whose version could not be pinned.
+		 *
+		 * Defaults to discarding them, because a library has no business writing to the
+		 * console. Pass a handler: these are the only signal that a function will fail at
+		 * invoke, and the CLI wires this to its logger for exactly that reason.
 		 */
 		onWarning?: (message: string) => void;
 	} = {},
@@ -75,7 +78,7 @@ export async function buildFunctionBundle(
 	const esbuild = await loadEsbuild();
 	const externalPackages = fn.externalPackages ?? [];
 	const staged = packagesToStage(externalPackages);
-	const onWarning = options.onWarning ?? ((message) => console.warn(message));
+	const onWarning = options.onWarning ?? (() => {});
 
 	let result: Awaited<ReturnType<typeof esbuild.build>>;
 	try {

@@ -10,6 +10,11 @@ import { join, resolve } from "node:path";
  * "/package.json")` throw `ERR_PACKAGE_PATH_NOT_EXPORTED` even though the package is right
  * there on disk. `sharp` is one of them, so a resolver-based lookup fails on exactly the
  * package this whole feature exists for.
+ *
+ * `throwIfNoEntry: false` rather than a `try`/`catch`: a missing directory is the expected
+ * signal to keep walking, but a permission or loop error is a real fault and must propagate
+ * instead of being read as "not here" — that silently returns an ancestor's copy of the
+ * package, which is a different version than the one being deployed.
  */
 export function findPackageDir(
 	fromDir: string,
@@ -18,11 +23,8 @@ export function findPackageDir(
 	let current = resolve(fromDir);
 	for (;;) {
 		const candidate = join(current, "node_modules", ...name.split("/"));
-		try {
-			if (statSync(candidate).isDirectory()) return candidate;
-		} catch {
-			// Not at this level; keep walking up.
-		}
+		const stat = statSync(candidate, { throwIfNoEntry: false });
+		if (stat?.isDirectory()) return candidate;
 		const parent = resolve(current, "..");
 		if (parent === current) return undefined;
 		current = parent;

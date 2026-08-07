@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
-import { ErrorCode, PlatformError } from "@neon/config";
+import { ErrorCode, externalPackageRoot, PlatformError } from "@neon/config";
 import { installedPackageVersion } from "./resolve-package.js";
 
 /**
@@ -48,8 +48,26 @@ const BINARY_PATTERN = /\.(node|so)(\.\d+)*$/;
  * Shipping the wasm build is actively harmful: it would let a broken native path succeed
  * quietly on a slower code path instead of failing loudly.
  */
-const EXCLUDED_VARIANT_PATTERN =
-	/(^|[/\\])(node_modules[/\\])?@?[^/\\]*(wasm32|musl)/;
+
+/**
+ * Whether a traced path belongs to an excluded sibling variant.
+ *
+ * Matched against **package directory names only**, never the whole path: a substring test
+ * over the full path also deletes an ordinary file that happens to be called something like
+ * `musl-helper.js`, which would drop a needed file from the archive and fail at invoke.
+ */
+function isExcludedVariant(path: string): boolean {
+	const segments = path.split(/[/\\]/);
+	return segments.some(
+		(segment, index) =>
+			// Only a segment that names a package: the one directly after a `node_modules`,
+			// or the one after that when the first is a scope.
+			(segments[index - 1] === "node_modules" ||
+				(segments[index - 2] === "node_modules" &&
+					segments[index - 1]?.startsWith("@"))) &&
+			(segment.includes("wasm32") || segment.includes("musl")),
+	);
+}
 
 /** How long the staging install may take before the deploy gives up on it. */
 const INSTALL_TIMEOUT_MS = 120_000;
@@ -139,8 +157,12 @@ export async function traceNativePackages(options: {
 	const limits = options.limits ?? DEFAULT_ARCHIVE_LIMITS;
 	const deps: NativeTraceDeps = { ...defaultDeps, ...options.deps };
 
+	// `packages` are the specifiers as authored, which is what the trace entry must import.
+	// Installing and verifying work on whole packages, so those use the roots.
+	const roots = [...new Set(packages.map(externalPackageRoot))];
+
 	const warnings: string[] = [];
-	const specs = packages.map((pkg) => {
+	const specs = roots.map((pkg) => {
 		const version = deps.installedVersion(projectDir, pkg);
 		// Pin to the user's own resolution when we can see it. Without it we install the
 		// registry's latest, which is a different package than the one they tested — said
@@ -165,9 +187,11 @@ export async function traceNativePackages(options: {
 			`${JSON.stringify({ name: "neon-fn-native-staging", private: true }, null, 2)}\n`,
 		);
 		await deps.install(staging, specs);
-		verifyInstalled(slug, packages, staging);
+		verifyInstalled(slug, roots, staging);
 
-		// One entry importing every declared package, so a single trace covers them all.
+		// One entry importing every declared specifier, so a single trace covers them all.
+		// The authored specifier rather than the root: a package whose `exports` map lists
+		// only a subpath cannot be imported by its root at all.
 		writeFileSync(
 			join(staging, "trace-entry.mjs"),
 			packages.map((pkg) => `import ${JSON.stringify(pkg)};`).join("\n"),
@@ -213,7 +237,7 @@ function verifyInstalled(
 /**
  * Reduce a trace to the files worth archiving: everything under `node_modules`, minus the
  * sibling platform builds that cannot run on the runtime (see
- * {@link EXCLUDED_VARIANT_PATTERN}). The trace entry itself is dropped — the real entry is
+ * {@link isExcludedVariant}). The trace entry itself is dropped — the real entry is
  * the esbuild bundle.
  */
 function selectArchiveFiles(slug: string, traced: readonly string[]): string[] {
@@ -223,7 +247,7 @@ function selectArchiveFiles(slug: string, traced: readonly string[]): string[] {
 				path.startsWith(`node_modules${sep}`) ||
 				path.startsWith("node_modules/"),
 		)
-		.filter((path) => !EXCLUDED_VARIANT_PATTERN.test(path))
+		.filter((path) => !isExcludedVariant(path))
 		.map((path) => path.split(sep).join("/"))
 		.sort();
 
@@ -262,7 +286,15 @@ function readArchiveFiles(
 		// lstat, not stat: stat follows the link and would report the target's type, so a
 		// symlink would pass this check silently.
 		const stat = lstatSync(absolute, { throwIfNoEntry: false });
-		if (stat === undefined) continue;
+		// The tracer said this file is needed and it is not there. Skipping it would ship an
+		// archive that is quietly missing something and fail at invoke, which is the failure
+		// this whole path exists to prevent.
+		if (stat === undefined) {
+			throw invalid(
+				`Function "${slug}": traced file "${relative}" disappeared before it could be ` +
+					`read. This is a bug in the deploy — please report it.`,
+			);
+		}
 		if (stat.isSymbolicLink()) {
 			throw invalid(
 				`Function "${slug}" would ship a symbolic link, which the build does not ` +

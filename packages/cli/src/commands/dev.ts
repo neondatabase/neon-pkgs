@@ -785,9 +785,10 @@ const writeBundle = async (
 	// Left unbundled only. `bundleDir` sits inside the project's node_modules, so an
 	// externalized package resolves from the real tree at the host architecture — no install
 	// or copy is needed or wanted locally, whatever `includeFiles` says for a deploy.
-	const { files, metafile } = await bundleEntry(source, {
+	const { files, metafile, warnings } = await bundleEntry(source, {
 		...(externalPackages ? { externalPackages } : {}),
 	});
+	for (const warning of warnings) log.warning(warning);
 
 	// Local runs resolve native packages from the real tree, so a missing declaration is
 	// invisible until deploy. Reporting it here is the only signal before then.

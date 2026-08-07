@@ -54,6 +54,11 @@ export type BundleOptions = Partial<BundleDeps> & {
 export type BundleResult = {
 	files: Record<string, Uint8Array>;
 	metafile?: EsbuildMetafile;
+	/**
+	 * Advisory findings from the bundle step. Returned rather than printed so the caller
+	 * decides how to render them — this module has no logger and must not reach for one.
+	 */
+	warnings: string[];
 };
 
 const defaultDeps: BundleDeps = {
@@ -142,6 +147,7 @@ const bundleViaModule = async (
 	return {
 		files: toFilesByBasename(files),
 		...(result.metafile ? { metafile: result.metafile } : {}),
+		warnings: [],
 	};
 };
 
@@ -212,9 +218,11 @@ const bundleViaBinary = async (
 		}
 		// No `--sourcemap`: the Functions runtime has no source-map support, so an uploaded
 		// `index.mjs.map` is never consumed — emitting it only inflated the archive.
+		const metafile = readMetafile(metafilePath);
 		return {
 			files: { "index.mjs": new Uint8Array(readFileSync(outfile)) },
-			...(readMetafile(metafilePath) ?? {}),
+			...(metafile.metafile ? { metafile: metafile.metafile } : {}),
+			warnings: metafile.warnings,
 		};
 	} finally {
 		rmSync(outDir, { recursive: true, force: true });
@@ -222,20 +230,36 @@ const bundleViaBinary = async (
 };
 
 /**
- * Read the metafile the binary path wrote. Missing or unparseable is not an error: the
- * metafile only powers an advisory report, and losing it costs a warning rather than a
- * deploy.
+ * Read the metafile the binary path asked esbuild to write.
+ *
+ * We always pass `--metafile`, so an unreadable one means esbuild did not do what it was
+ * told. That is worth saying rather than swallowing — but not worth failing a deploy over,
+ * because the metafile only powers an advisory report. Reported and skipped.
  */
 const readMetafile = (
 	path: string,
-): { metafile: EsbuildMetafile } | undefined => {
+): { metafile?: EsbuildMetafile; warnings: string[] } => {
+	let parsed: unknown;
 	try {
-		const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
-		if (typeof parsed !== "object" || parsed === null) return undefined;
-		return { metafile: parsed as EsbuildMetafile };
-	} catch {
-		return undefined;
+		parsed = JSON.parse(readFileSync(path, "utf8"));
+	} catch (cause) {
+		return {
+			warnings: [
+				`esbuild was asked for a metafile but none could be read (${message(cause)}). ` +
+					`The bundle is unaffected; this deploy cannot check for an undeclared ` +
+					`native dependency.`,
+			],
+		};
 	}
+	if (typeof parsed !== "object" || parsed === null) {
+		return {
+			warnings: [
+				"esbuild wrote a metafile that is not an object. The bundle is unaffected; " +
+					"this deploy cannot check for an undeclared native dependency.",
+			],
+		};
+	}
+	return { metafile: parsed as EsbuildMetafile, warnings: [] };
 };
 
 // Bundle `source` into the files the Functions archive expects, keyed by
