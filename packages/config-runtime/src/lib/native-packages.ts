@@ -2,7 +2,6 @@ import { spawn } from "node:child_process";
 import {
 	lstatSync,
 	mkdtempSync,
-	readdirSync,
 	readFileSync,
 	rmSync,
 	writeFileSync,
@@ -45,12 +44,21 @@ const ELF = {
 const BINARY_PATTERN = /\.(node|so)(\.\d+)*$/;
 
 /**
- * The WebAssembly fallback is the one sibling variant that cannot be identified from its
- * manifest: `@img/sharp-wasm32` declares no `os`, `cpu`, or `libc` at all, so npm installs it
- * whatever target is asked for and only the name distinguishes it.
+ * The WebAssembly fallback cannot be identified from its manifest: `@img/sharp-wasm32`
+ * declares no `os`, `cpu`, or `libc` at all — wasm genuinely runs anywhere — so npm installs
+ * it whatever target is asked for and only the name distinguishes it.
  *
- * Matched as a whole dash-delimited token rather than a substring, so an ordinary package
- * that merely contains the word keeps its files.
+ * Matched as a whole dash-delimited token rather than a substring, and only when a real
+ * native build for the runtime is also being shipped. That condition is the actual semantic:
+ * the fallback is dropped *because the real thing is there*, and sharp's loader would
+ * otherwise fall through to it silently, turning a broken native path into a working but far
+ * slower one. A project where the wasm build is the only implementation keeps it.
+ *
+ * Two narrower rules were tried and both failed. Scoping to a staged package's
+ * `optionalDependencies` looked more principled and is wrong: `sharp` declares
+ * `@img/sharp-freebsd-wasm32` and `@img/sharp-webcontainers-wasm32` but not
+ * `@img/sharp-wasm32`, which arrives transitively — CI caught the fallback shipping. Matching
+ * `@img/sharp-wasm32` by name would work only for sharp.
  */
 const WASM_VARIANT_TOKEN = "wasm32";
 
@@ -66,21 +74,14 @@ const WASM_VARIANT_TOKEN = "wasm32";
  * silently, so a broken native path would succeed on much slower code instead of failing
  * loudly.
  */
-function isExcludedVariant(
-	packageName: string,
-	packageDir: string,
-	isPlatformSibling: (name: string) => boolean,
-): boolean {
-	// Scoped to a sibling platform build — an optional dependency of something being staged —
-	// so an ordinary dependency that happens to be named after wasm keeps its files.
-	if (
-		isPlatformSibling(packageName) &&
-		packageName.split(/[-/]/).includes(WASM_VARIANT_TOKEN)
-	) {
-		return true;
-	}
+function isIncompatibleWithRuntime(packageDir: string): boolean {
 	const manifest = readPackageManifest(packageDir);
 	return manifest !== undefined && !manifestRunsOnRuntime(manifest);
+}
+
+/** Whether a package name reads as a WebAssembly build. */
+function isWasmVariantName(packageName: string): boolean {
+	return packageName.split(/[-/]/).includes(WASM_VARIANT_TOKEN);
 }
 
 /** nft reports an unresolvable import as `Failed to resolve dependency "<specifier>"`. */
@@ -111,45 +112,6 @@ function concreteUnresolved(unresolved: readonly string[]): string[] {
 		),
 	];
 }
-
-/** Every package named as an optional dependency by anything installed in the staging tree. */
-function optionalDependencyNames(staging: string): Set<string> {
-	const root = join(staging, "node_modules");
-	const names = new Set<string>();
-	for (const pkg of listInstalledPackages(root)) {
-		const optional = readPackageManifest(
-			join(root, ...pkg.split("/")),
-		)?.optionalDependencies;
-		if (typeof optional !== "object" || optional === null) continue;
-		for (const dependency of Object.keys(optional)) names.add(dependency);
-	}
-	return names;
-}
-
-/** Package names directly under a `node_modules` directory, scopes expanded. */
-function listInstalledPackages(root: string): string[] {
-	const names: string[] = [];
-	for (const entry of readdirSafe(root)) {
-		if (entry.startsWith(".")) continue;
-		if (!entry.startsWith("@")) {
-			names.push(entry);
-			continue;
-		}
-		for (const scoped of readdirSafe(join(root, entry))) {
-			names.push(`${entry}/${scoped}`);
-		}
-	}
-	return names;
-}
-
-const readdirSafe = (dir: string): string[] => {
-	try {
-		return readdirSync(dir);
-	} catch {
-		// No node_modules in staging at all, which happens when nothing installed.
-		return [];
-	}
-};
 
 /** Whether a manifest's `os`/`cpu`/`libc` permit {@link RUNTIME_TARGET}. */
 function manifestRunsOnRuntime(manifest: Record<string, unknown>): boolean {
@@ -402,32 +364,45 @@ function selectArchiveFiles(
 	traced: readonly string[],
 	staging: string,
 ): string[] {
-	const platformSiblings = optionalDependencyNames(staging);
-	// Decided once per package directory rather than per file: the exclusion is a property of
-	// the package, and its manifest would otherwise be re-read for every file it contributes.
-	const excluded = new Map<string, boolean>();
-	const dropped = (path: string): boolean => {
-		const pkg = packageOfArchivePath(path);
-		if (pkg === undefined) return false;
-		const known = excluded.get(pkg.dir);
-		if (known !== undefined) return known;
-		const decision = isExcludedVariant(
-			pkg.name,
-			join(staging, ...pkg.dir.split("/")),
-			(name) => platformSiblings.has(name),
-		);
-		excluded.set(pkg.dir, decision);
-		return decision;
-	};
-
-	const files = traced
+	const inTree = traced
 		.filter(
 			(path) =>
 				path.startsWith(`node_modules${sep}`) ||
 				path.startsWith("node_modules/"),
 		)
-		.map((path) => path.split(sep).join("/"))
-		.filter((path) => !dropped(path))
+		.map((path) => path.split(sep).join("/"));
+
+	// Resolved once per package directory: the decision is a property of the package, and its
+	// manifest would otherwise be re-read for every file it contributes.
+	const incompatible = new Map<string, boolean>();
+	const isIncompatible = (dir: string): boolean => {
+		const known = incompatible.get(dir);
+		if (known !== undefined) return known;
+		const decision = isIncompatibleWithRuntime(
+			join(staging, ...dir.split("/")),
+		);
+		incompatible.set(dir, decision);
+		return decision;
+	};
+
+	// Whatever survives the manifest check and is a compiled artifact is a build that can
+	// actually load on the runtime.
+	const compatible = inTree.filter((path) => {
+		const pkg = packageOfArchivePath(path);
+		return pkg !== undefined && !isIncompatible(pkg.dir);
+	});
+	const hasNativeBuildForRuntime = compatible.some((path) =>
+		BINARY_PATTERN.test(path),
+	);
+
+	const files = compatible
+		.filter((path) => {
+			const pkg = packageOfArchivePath(path);
+			return (
+				pkg === undefined ||
+				!(hasNativeBuildForRuntime && isWasmVariantName(pkg.name))
+			);
+		})
 		.sort();
 
 	if (files.length === 0) {

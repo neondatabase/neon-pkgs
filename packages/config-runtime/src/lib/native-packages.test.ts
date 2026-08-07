@@ -602,9 +602,9 @@ describe("traceNativePackages", () => {
 		]);
 	});
 
-	// The wasm rule is scoped to a sibling platform build — an optional dependency of
-	// something staged — so an ordinary dependency named after wasm keeps its files.
-	test("keeps an ordinary package whose name contains wasm32", async () => {
+	// The fallback is dropped *because the real build is there*. With no native binary in the
+	// tree, a wasm-named package may be the only implementation, so it keeps its files.
+	test("keeps a wasm-named package when no native build for the runtime ships", async () => {
 		const names = await traceNativePackages({
 			slug: "fn1",
 			packages: ["parent-pkg"],
@@ -649,7 +649,10 @@ describe("traceNativePackages", () => {
 		expect(names).toContain("node_modules/plain-wasm32-helper/index.js");
 	});
 
-	test("drops a wasm sibling that a staged package declares as optional", async () => {
+	// Reproduces what CI caught: `@img/sharp-wasm32` is not among sharp's own
+	// optionalDependencies — it arrives transitively — so a rule keyed on that declaration
+	// shipped the fallback. Keyed on "a real build is present" instead.
+	test("drops a wasm variant that arrives transitively, alongside a real build", async () => {
 		const names = await traceNativePackages({
 			slug: "fn1",
 			packages: ["parent-pkg"],
@@ -664,11 +667,27 @@ describe("traceNativePackages", () => {
 						JSON.stringify({
 							name: "parent-pkg",
 							version: "1.0.0",
+							// Deliberately does NOT name the wasm package, mirroring sharp:
+							// it arrives transitively, which is what broke the previous rule.
 							optionalDependencies: {
-								"@scope/pkg-wasm32": "1.0.0",
+								"@scope/pkg-linux-arm64": "1.0.0",
 							},
 						}),
 					);
+					// The real build for the runtime.
+					const real = mkdirp(
+						join(cwd, "node_modules", "@scope", "pkg-linux-arm64"),
+					);
+					writeFileSync(
+						join(real, "package.json"),
+						JSON.stringify({
+							name: "@scope/pkg-linux-arm64",
+							version: "1.0.0",
+							os: ["linux"],
+							cpu: ["arm64"],
+						}),
+					);
+					writeFileSync(join(real, "addon.node"), elfHeader(AARCH64));
 					// No platform metadata at all, which is what @img/sharp-wasm32 does.
 					const wasm = mkdirp(
 						join(cwd, "node_modules", "@scope", "pkg-wasm32"),
@@ -688,6 +707,8 @@ describe("traceNativePackages", () => {
 				trace: async () => ({
 					files: [
 						"node_modules/parent-pkg/package.json",
+						"node_modules/@scope/pkg-linux-arm64/package.json",
+						"node_modules/@scope/pkg-linux-arm64/addon.node",
 						"node_modules/@scope/pkg-wasm32/package.json",
 						"node_modules/@scope/pkg-wasm32/index.js",
 					],
@@ -695,7 +716,10 @@ describe("traceNativePackages", () => {
 			},
 		}).then((r) => Object.keys(r.entries));
 
-		expect(names).toEqual(["node_modules/parent-pkg/package.json"]);
+		expect(names.filter((n) => n.includes("wasm32"))).toEqual([]);
+		expect(names).toContain(
+			"node_modules/@scope/pkg-linux-arm64/addon.node",
+		);
 	});
 
 	test("pins a scoped package the same way", async () => {
