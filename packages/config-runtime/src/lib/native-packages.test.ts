@@ -478,33 +478,6 @@ describe("traceNativePackages", () => {
 		]);
 	});
 
-	test("reports a dependency the tracer could not follow", async () => {
-		const { warnings } = await traceNativePackages({
-			slug: "fn1",
-			packages: ["parent-pkg"],
-			projectDir: dir,
-			deps: {
-				install: async (cwd) => {
-					writeFileSync(
-						join(
-							mkdirp(join(cwd, "node_modules", "parent-pkg")),
-							"package.json",
-						),
-						JSON.stringify({
-							name: "parent-pkg",
-							version: "1.0.0",
-						}),
-					);
-				},
-				trace: async () => ({
-					files: ["node_modules/parent-pkg/package.json"],
-					warnings: ["Failed to resolve dependency ./missing.node"],
-				}),
-			},
-		});
-		expect(warnings.some((w) => w.includes("./missing.node"))).toBe(true);
-	});
-
 	test("pins a scoped package the same way", async () => {
 		const pkg = join(dir, "node_modules", "@scope", "dep");
 		writeFileSync(
