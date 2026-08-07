@@ -9659,15 +9659,11 @@ exports[`neon init --agent: the orchestrator picks the next phase > greenfield �
         "options": [
           {
             "value": "hono",
-            "label": "REST API (Hono, Drizzle) — A Hono REST API on Neon Functions, backed by Lakebase Postgres via Drizzle."
+            "label": "REST API (Hono, Drizzle) — A Hono REST API on Neon Functions."
           },
           {
-            "value": "ai-sdk",
-            "label": "Image-generation agent (AI SDK, Drizzle) — A Vercel AI SDK agent that streams chat through the Neon AI Gateway and stores generated images in Neon object storage, indexed in Postgres via Drizzle."
-          },
-          {
-            "value": "mastra",
-            "label": "Personal-assistant agent (Mastra, Mastra Memory) — A Mastra agent that streams chat through the Neon AI Gateway and uses Mastra Memory on Lakebase Postgres to remember you across threads."
+            "value": "realtime-chat",
+            "label": "Realtime chat — A Next.js chat app with Neon Auth."
           },
           {
             "value": "none",
@@ -12166,7 +12162,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cla
   "skillsScope": null,
   "nextAction": {
     "type": "agent_check",
-    "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\n<installed-editors-instruction>\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
+    "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\n<ide-detection-instruction>\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
         "id": "neonctl",
@@ -12320,7 +12316,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cla
   "skillsScope": null,
   "nextAction": {
     "type": "agent_check",
-    "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\n<installed-editors-instruction>\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
+    "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\n<ide-detection-instruction>\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
         "id": "neonctl",
@@ -12661,7 +12657,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cod
   "skillsScope": null,
   "nextAction": {
     "type": "agent_check",
-    "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\n<installed-editors-instruction>\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
+    "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\n<ide-detection-instruction>\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
         "id": "neonctl",
@@ -12815,7 +12811,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cod
   "skillsScope": null,
   "nextAction": {
     "type": "agent_check",
-    "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\n<installed-editors-instruction>\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
+    "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\n<ide-detection-instruction>\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
         "id": "neonctl",
@@ -13665,7 +13661,7 @@ exports[`neon init --agent: the response depends on which agent is driving > non
   "skillsScope": null,
   "nextAction": {
     "type": "agent_check",
-    "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\n<installed-editors-instruction>\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
+    "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\n<ide-detection-instruction>\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
         "id": "neonctl",
@@ -13819,7 +13815,7 @@ exports[`neon init --agent: the response depends on which agent is driving > non
   "skillsScope": null,
   "nextAction": {
     "type": "agent_check",
-    "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\n<installed-editors-instruction>\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
+    "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\n<ide-detection-instruction>\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
         "id": "neonctl",
@@ -14030,6 +14026,332 @@ exports[`neon init --agent: the response depends on which agent is driving > non
       "command": "neon init --agent --data '{\\"step\\":\\"migrations\\"}'"
     }
   ]
+}
+--- stderr ---
+
+--- subprocesses ---
+"
+`;
+
+exports[`neon init --agent: the signed-out auth branches > a damaged credentials file is an error, not a fresh machine 1`] = `
+"exit: 1
+--- stdout ---
+
+--- stderr ---
+ERROR: <config>/credentials.json is not valid JSON, so the credential in it cannot be read. Replace it deliberately with \`neon profile create DEFAULT --force\`, or delete the file.
+--- subprocesses ---
+"
+`;
+
+exports[`neon init --agent: the signed-out auth branches > auth 1`] = `
+"exit: 0
+--- stdout ---
+{
+  "phase": "auth",
+  "status": "required",
+  "nextAction": {
+    "type": "ask_user",
+    "instructions": "IMPORTANT: You MUST present this question to the user and WAIT for their response before proceeding. Do NOT assume the answer or auto-select an option. The user's answer determines the next step.",
+    "question": "Do you have an existing Neon account, or do you need to create one?",
+    "options": [
+      {
+        "value": "existing_account",
+        "label": "I have an existing Neon account"
+      },
+      {
+        "value": "new_account",
+        "label": "I need to create a new account"
+      }
+    ],
+    "context": "Neon is a complete set of cloud backend primitives built around Lakebase Postgres. A free account is required to continue.",
+    "responseMapping": {
+      "existing_account": {
+        "action": {
+          "type": "run_command",
+          "command": "CI= npx -y neon auth",
+          "description": "This will open your browser for Neon OAuth sign-in.",
+          "timeout": 120000,
+          "onSuccess": {
+            "type": "run_shell_command",
+            "command": "neon init --agent --data '{\\"step\\":\\"auth\\",\\"verify\\":true}'"
+          },
+          "onFailure": {
+            "2": {
+              "type": "ask_user",
+              "question": "The sign-in timed out. Did you complete the sign-in in your browser?",
+              "options": [
+                "yes_retry",
+                "need_help"
+              ],
+              "responseMapping": {
+                "yes_retry": {
+                  "command": "neon init --agent --data '{\\"step\\":\\"auth\\",\\"method\\":\\"existing\\"}'"
+                },
+                "need_help": {
+                  "command": "neon init --agent --data '{\\"step\\":\\"auth\\",\\"method\\":\\"new\\"}'"
+                }
+              }
+            },
+            "other": {
+              "type": "run_shell_command",
+              "command": "neon init --agent --data '{\\"step\\":\\"auth\\"}'"
+            }
+          }
+        }
+      },
+      "new_account": {
+        "action": {
+          "type": "agent_action",
+          "steps": [
+            {
+              "id": "open_signup",
+              "description": "Open the Neon sign-up page in the user's browser",
+              "command": "open https://console.neon.tech/signup"
+            },
+            {
+              "id": "wait_for_signup",
+              "description": "Tell the user: 'I've opened the Neon sign-up page. Create your account and verify your email, then let me know when you're ready.'"
+            }
+          ],
+          "onComplete": {
+            "type": "run_shell_command",
+            "command": "neon init --agent --data '{\\"step\\":\\"auth\\",\\"method\\":\\"existing\\"}'"
+          }
+        }
+      }
+    }
+  }
+}
+--- stderr ---
+
+--- subprocesses ---
+"
+`;
+
+exports[`neon init --agent: the signed-out auth branches > auth-existing-account 1`] = `
+"exit: 0
+--- stdout ---
+{
+  "phase": "auth",
+  "status": "in_progress",
+  "nextAction": {
+    "type": "run_command",
+    "command": "CI= npx -y neon auth",
+    "description": "This will open your browser for Neon OAuth sign-in.",
+    "timeout": 120000,
+    "onSuccess": {
+      "type": "run_shell_command",
+      "command": "neon init --agent --data '{\\"step\\":\\"auth\\",\\"verify\\":true}'"
+    },
+    "onFailure": {
+      "2": {
+        "type": "ask_user",
+        "question": "The sign-in timed out. Did you complete the sign-in in your browser?",
+        "options": [
+          "yes_retry",
+          "need_help"
+        ],
+        "responseMapping": {
+          "yes_retry": {
+            "command": "neon init --agent --data '{\\"step\\":\\"auth\\",\\"method\\":\\"existing\\"}'"
+          },
+          "need_help": {
+            "command": "neon init --agent --data '{\\"step\\":\\"auth\\",\\"method\\":\\"new\\"}'"
+          }
+        }
+      },
+      "other": {
+        "type": "run_shell_command",
+        "command": "neon init --agent --data '{\\"step\\":\\"auth\\"}'"
+      }
+    }
+  }
+}
+--- stderr ---
+
+--- subprocesses ---
+"
+`;
+
+exports[`neon init --agent: the signed-out auth branches > auth-new-account 1`] = `
+"exit: 0
+--- stdout ---
+{
+  "phase": "auth",
+  "status": "in_progress",
+  "nextAction": {
+    "type": "agent_action",
+    "steps": [
+      {
+        "id": "open_signup",
+        "description": "Open the Neon sign-up page in the user's browser",
+        "command": "open https://console.neon.tech/signup"
+      },
+      {
+        "id": "wait_for_signup",
+        "description": "Tell the user: 'I've opened the Neon sign-up page. Create your account and verify your email, then let me know when you're ready.'"
+      }
+    ],
+    "onComplete": {
+      "type": "run_shell_command",
+      "command": "neon init --agent --data '{\\"step\\":\\"auth\\",\\"method\\":\\"existing\\"}'"
+    }
+  }
+}
+--- stderr ---
+
+--- subprocesses ---
+"
+`;
+
+exports[`neon init --agent: the signed-out auth branches > auth-verify 1`] = `
+"exit: 0
+--- stdout ---
+{
+  "phase": "auth",
+  "status": "not_authenticated",
+  "nextAction": {
+    "type": "run_shell_command",
+    "command": "neon init --agent --data '{\\"step\\":\\"auth\\"}'"
+  }
+}
+--- stderr ---
+
+--- subprocesses ---
+"
+`;
+
+exports[`neon init --agent: the signed-out auth branches > status 1`] = `
+"exit: 0
+--- stdout ---
+{
+  "auth": {
+    "authenticated": false
+  },
+  "tooling": {
+    "mcpServer": {
+      "configured": false,
+      "scope": null
+    },
+    "skills": {
+      "installed": false,
+      "scope": null
+    }
+  },
+  "project": {
+    "databaseUrl": false
+  },
+  "migrations": {
+    "tool": "prisma",
+    "hasMigrations": false
+  },
+  "recommendations": [
+    {
+      "priority": "high",
+      "message": "Not authenticated with Neon",
+      "command": "neon init --agent --data '{\\"step\\":\\"auth\\"}'"
+    },
+    {
+      "priority": "high",
+      "message": "No DATABASE_URL found in .env",
+      "command": "neon init --agent --data '{\\"step\\":\\"db\\"}'"
+    },
+    {
+      "priority": "medium",
+      "message": "Neon agent skills not detected in this project",
+      "command": "neon init --agent --data '{\\"step\\":\\"skills\\",\\"install\\":true}'"
+    },
+    {
+      "priority": "medium",
+      "message": "prisma detected but no migrations found",
+      "command": "neon init --agent --data '{\\"step\\":\\"migrations\\"}'"
+    }
+  ]
+}
+--- stderr ---
+
+--- subprocesses ---
+"
+`;
+
+exports[`neon init --agent: the signed-out auth branches > the orchestrator sends a signed-out caller to the auth phase 1`] = `
+"exit: 0
+--- stdout ---
+{
+  "phase": "auth",
+  "status": "required",
+  "nextAction": {
+    "type": "ask_user",
+    "instructions": "IMPORTANT: You MUST present this question to the user and WAIT for their response before proceeding. Do NOT assume the answer or auto-select an option. The user's answer determines the next step.",
+    "question": "Do you have an existing Neon account, or do you need to create one?",
+    "options": [
+      {
+        "value": "existing_account",
+        "label": "I have an existing Neon account"
+      },
+      {
+        "value": "new_account",
+        "label": "I need to create a new account"
+      }
+    ],
+    "context": "Neon is a complete set of cloud backend primitives built around Lakebase Postgres. A free account is required to continue.",
+    "responseMapping": {
+      "existing_account": {
+        "action": {
+          "type": "run_command",
+          "command": "CI= npx -y neon auth",
+          "description": "This will open your browser for Neon OAuth sign-in.",
+          "timeout": 120000,
+          "onSuccess": {
+            "type": "run_shell_command",
+            "command": "neon init --agent --data '{\\"step\\":\\"auth\\",\\"verify\\":true}'"
+          },
+          "onFailure": {
+            "2": {
+              "type": "ask_user",
+              "question": "The sign-in timed out. Did you complete the sign-in in your browser?",
+              "options": [
+                "yes_retry",
+                "need_help"
+              ],
+              "responseMapping": {
+                "yes_retry": {
+                  "command": "neon init --agent --data '{\\"step\\":\\"auth\\",\\"method\\":\\"existing\\"}'"
+                },
+                "need_help": {
+                  "command": "neon init --agent --data '{\\"step\\":\\"auth\\",\\"method\\":\\"new\\"}'"
+                }
+              }
+            },
+            "other": {
+              "type": "run_shell_command",
+              "command": "neon init --agent --data '{\\"step\\":\\"auth\\"}'"
+            }
+          }
+        }
+      },
+      "new_account": {
+        "action": {
+          "type": "agent_action",
+          "steps": [
+            {
+              "id": "open_signup",
+              "description": "Open the Neon sign-up page in the user's browser",
+              "command": "open https://console.neon.tech/signup"
+            },
+            {
+              "id": "wait_for_signup",
+              "description": "Tell the user: 'I've opened the Neon sign-up page. Create your account and verify your email, then let me know when you're ready.'"
+            }
+          ],
+          "onComplete": {
+            "type": "run_shell_command",
+            "command": "neon init --agent --data '{\\"step\\":\\"auth\\",\\"method\\":\\"existing\\"}'"
+          }
+        }
+      }
+    }
+  }
 }
 --- stderr ---
 

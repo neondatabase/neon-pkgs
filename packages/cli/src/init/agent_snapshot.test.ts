@@ -28,12 +28,16 @@
  *
  * `NEON_CLI_UNDER_TEST` points the suite at another build's `dist/cli.js`.
  * Generate the snapshots from the old build, then run against the new one: a
- * clean run is proof the two are byte-identical across the whole matrix.
+ * clean run means the two produce the same normalised output across the whole
+ * matrix. Normalisation discards a few machine-dependent spans (see
+ * `normalise`), so this is equivalence of the protocol, not of every byte.
+ *
+ * The stubs are `/bin/sh` scripts, so the suite runs on Linux and macOS.
  *
  *     NEON_CLI_UNDER_TEST=/path/to/old/packages/cli/dist/cli.js pnpm vitest run agent_snapshot -u
  *     pnpm vitest run agent_snapshot
  */
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import {
 	chmodSync,
 	mkdirSync,
@@ -280,6 +284,8 @@ let caseCounter = 0;
 
 type RunResult = {
 	status: number | null;
+	signal: NodeJS.Signals | null;
+	spawnError: string | null;
 	stdout: string;
 	stderr: string;
 	invocations: string[];
@@ -288,12 +294,20 @@ type RunResult = {
 /**
  * Materialise a fixture in its own directory and run one `neon init`
  * invocation against it, with nothing real in reach.
+ *
+ * Asynchronous on purpose. `spawnSync` blocks this process's event loop, which
+ * means the manifest server above can never answer the child — the fetch times
+ * out and the phase silently falls back to its hardcoded template list.
  */
-function runInit(
+async function runInit(
 	fixture: keyof typeof FIXTURES,
 	args: string[],
-	options: { agent?: keyof typeof AGENTS } = {},
-): RunResult {
+	options: {
+		agent?: keyof typeof AGENTS;
+		/** `null` runs with no credentials file at all. */
+		credentials?: string | null;
+	} = {},
+): Promise<RunResult> {
 	const caseDir = join(root, `case-${caseCounter++}`);
 	const cwd = join(caseDir, "project");
 	const home = join(caseDir, "home");
@@ -309,18 +323,21 @@ function runInit(
 		writeFileSync(target, contents);
 	}
 
-	// A stored API key, so credential resolution succeeds without a network call.
-	writeFileSync(
-		join(configDir, "credentials.json"),
-		JSON.stringify({ type: "api_key", api_key: "napi_snapshot" }),
-		{ mode: 0o600 },
-	);
+	// A stored API key by default, so credential resolution succeeds without a
+	// network call. Pass `credentials: null` for the signed-out branches.
+	const credentials =
+		options.credentials === undefined
+			? JSON.stringify({ type: "api_key", api_key: "napi_snapshot" })
+			: options.credentials;
+	if (credentials !== null) {
+		writeFileSync(join(configDir, "credentials.json"), credentials, {
+			mode: 0o600,
+		});
+	}
 
-	const result = spawnSync(process.execPath, [CLI, "init", ...args], {
+	const child = spawn(process.execPath, [CLI, "init", ...args], {
 		cwd,
-		encoding: "utf8",
 		stdio: ["ignore", "pipe", "pipe"],
-		timeout: 60_000,
 		env: {
 			// Deliberately not inheriting: PATH is the stub directory only, so a
 			// binary the flow forgets to stub fails loudly instead of running.
@@ -337,6 +354,33 @@ function runInit(
 		},
 	});
 
+	let stdout = "";
+	let stderr = "";
+	child.stdout.setEncoding("utf8");
+	child.stderr.setEncoding("utf8");
+	child.stdout.on("data", (chunk: string) => {
+		stdout += chunk;
+	});
+	child.stderr.on("data", (chunk: string) => {
+		stderr += chunk;
+	});
+
+	const outcome = await new Promise<{
+		status: number | null;
+		signal: NodeJS.Signals | null;
+		spawnError: string | null;
+	}>((settle) => {
+		const timer = setTimeout(() => child.kill("SIGKILL"), 60_000);
+		child.on("error", (err) => {
+			clearTimeout(timer);
+			settle({ status: null, signal: null, spawnError: err.message });
+		});
+		child.on("close", (status, signal) => {
+			clearTimeout(timer);
+			settle({ status, signal, spawnError: null });
+		});
+	});
+
 	const invocations = readFileSync(stubLog, "utf8")
 		.split("\n")
 		.filter(Boolean)
@@ -344,9 +388,9 @@ function runInit(
 		.map((line) => normalise(line, { cwd, home, configDir }));
 
 	return {
-		status: result.status,
-		stdout: normalise(result.stdout ?? "", { cwd, home, configDir }),
-		stderr: normalise(result.stderr ?? "", { cwd, home, configDir }),
+		...outcome,
+		stdout: normalise(stdout, { cwd, home, configDir }),
+		stderr: normalise(stderr, { cwd, home, configDir }),
 		invocations,
 	};
 }
@@ -373,9 +417,14 @@ function normalise(
 				/"installedEditors": (\[[\s\S]*?\]|null)/g,
 				'"installedEditors": <machine-dependent>',
 			)
+			// The sentence derived from that probe. Both variants collapse to one
+			// token, because *which* one appears is itself machine-dependent — but
+			// they are matched in full, with only the editor list wildcarded, so
+			// editing the guidance around it stops the match and shows up as a diff
+			// rather than being silently absorbed.
 			.replace(
-				/No IDE detected, but the following editors are installed:[\s\S]*?set \\"ide\\" to \\"none\\"\.|No IDE or supported editors detected\. Set \\"ide\\" to \\"none\\" in your reportBack data\./g,
-				"<installed-editors-instruction>",
+				/No IDE detected, but the following editors are installed: [^.]*\. The \\"installedEditors\\" field in this response lists them\. If the user wants the extension installed, ask which editor to install it for and include that as the \\"ide\\" field in your reportBack data\. If not, set \\"ide\\" to \\"none\\"\.|No IDE or supported editors detected\. Set \\"ide\\" to \\"none\\" in your reportBack data\./g,
+				"<ide-detection-instruction>",
 			)
 			.split(paths.configDir)
 			.join("<config>")
@@ -394,6 +443,12 @@ function normalise(
 function snapshotOf(result: RunResult) {
 	return [
 		`exit: ${result.status}`,
+		// Present only when something went wrong at the process level, so a killed
+		// or unspawnable child is diagnosable instead of just `exit: null`.
+		...(result.signal === null ? [] : [`signal: ${result.signal}`]),
+		...(result.spawnError === null
+			? []
+			: [`spawn error: ${result.spawnError}`]),
 		"--- stdout ---",
 		result.stdout.trimEnd(),
 		"--- stderr ---",
@@ -492,8 +547,8 @@ describe("neon init --agent: every step, against every project shape", () => {
 	for (const fixture of FIXTURE_NAMES) {
 		describe(fixture, () => {
 			for (const step of STEPS) {
-				test(step.name, () => {
-					const result = runInit(fixture, [
+				test(step.name, async () => {
+					const result = await runInit(fixture, [
 						"--agent",
 						"--data",
 						JSON.stringify(step.data),
@@ -507,19 +562,23 @@ describe("neon init --agent: every step, against every project shape", () => {
 
 describe("neon init --agent: the orchestrator picks the next phase", () => {
 	for (const fixture of FIXTURE_NAMES) {
-		test(`${fixture} — no --data`, () => {
-			expect(snapshotOf(runInit(fixture, ["--agent"]))).toMatchSnapshot();
-		});
-
-		test(`${fixture} — --skip-migrations`, () => {
+		test(`${fixture} — no --data`, async () => {
 			expect(
-				snapshotOf(runInit(fixture, ["--agent", "--skip-migrations"])),
+				snapshotOf(await runInit(fixture, ["--agent"])),
 			).toMatchSnapshot();
 		});
 
-		test(`${fixture} — --preview`, () => {
+		test(`${fixture} — --skip-migrations`, async () => {
 			expect(
-				snapshotOf(runInit(fixture, ["--agent", "--preview"])),
+				snapshotOf(
+					await runInit(fixture, ["--agent", "--skip-migrations"]),
+				),
+			).toMatchSnapshot();
+		});
+
+		test(`${fixture} — --preview`, async () => {
+			expect(
+				snapshotOf(await runInit(fixture, ["--agent", "--preview"])),
 			).toMatchSnapshot();
 		});
 	}
@@ -538,8 +597,8 @@ describe("neon init --agent: the response depends on which agent is driving", ()
 			]) {
 				const found = STEPS.find((s) => s.name === step);
 				if (!found) throw new Error(`no step named ${step}`);
-				test(step, () => {
-					const result = runInit(
+				test(step, async () => {
+					const result = await runInit(
 						"next-prisma",
 						["--agent", "--data", JSON.stringify(found.data)],
 						{ agent },
@@ -548,19 +607,72 @@ describe("neon init --agent: the response depends on which agent is driving", ()
 				});
 			}
 
-			test("orchestrator", () => {
+			test("orchestrator", async () => {
 				expect(
-					snapshotOf(runInit("next-prisma", ["--agent"], { agent })),
+					snapshotOf(
+						await runInit("next-prisma", ["--agent"], { agent }),
+					),
 				).toMatchSnapshot();
 			});
 		});
 	}
 });
 
+/**
+ * Every case above runs with a stored credential, which makes the auth phase
+ * answer `verified` and never reach the branches that matter when someone is
+ * actually signed out. These run with no credentials file.
+ */
+describe("neon init --agent: the signed-out auth branches", () => {
+	for (const step of [
+		{ name: "auth", data: { step: "auth" } },
+		{ name: "auth-verify", data: { step: "auth", verify: true } },
+		{
+			name: "auth-existing-account",
+			data: { step: "auth", method: "existing" },
+		},
+		{ name: "auth-new-account", data: { step: "auth", method: "new" } },
+		{ name: "status", data: { step: "status" } },
+	]) {
+		test(step.name, async () => {
+			const result = await runInit(
+				"next-prisma",
+				["--agent", "--data", JSON.stringify(step.data)],
+				{ credentials: null },
+			);
+			expect(snapshotOf(result)).toMatchSnapshot();
+		});
+	}
+
+	test("the orchestrator sends a signed-out caller to the auth phase", async () => {
+		expect(
+			snapshotOf(
+				await runInit("next-prisma", ["--agent"], {
+					credentials: null,
+				}),
+			),
+		).toMatchSnapshot();
+	});
+
+	// A credentials file that exists but cannot be parsed must not read as
+	// "signed out" — that would start a sign-in that overwrites it.
+	test("a damaged credentials file is an error, not a fresh machine", async () => {
+		expect(
+			snapshotOf(
+				await runInit(
+					"next-prisma",
+					["--agent", "--data", '{"step":"status"}'],
+					{ credentials: "{ not json" },
+				),
+			),
+		).toMatchSnapshot();
+	});
+});
+
 describe("neon init --agent: agentId in the payload overrides detection", () => {
 	for (const agentId of ["cursor", "claude-code", "vscode", "windsurf"]) {
-		test(agentId, () => {
-			const result = runInit(
+		test(agentId, async () => {
+			const result = await runInit(
 				"next-prisma",
 				[
 					"--agent",
@@ -575,8 +687,8 @@ describe("neon init --agent: agentId in the payload overrides detection", () => 
 });
 
 describe("neon init --agent: nested and string-encoded --data payloads", () => {
-	test("nested object under a data key", () => {
-		const result = runInit("next-prisma", [
+	test("nested object under a data key", async () => {
+		const result = await runInit("next-prisma", [
 			"--agent",
 			"--data",
 			JSON.stringify({
@@ -587,8 +699,8 @@ describe("neon init --agent: nested and string-encoded --data payloads", () => {
 		expect(snapshotOf(result)).toMatchSnapshot();
 	});
 
-	test("JSON-encoded string under a data key", () => {
-		const result = runInit("next-prisma", [
+	test("JSON-encoded string under a data key", async () => {
+		const result = await runInit("next-prisma", [
 			"--agent",
 			"--data",
 			JSON.stringify({
@@ -604,8 +716,8 @@ describe("neon init --agent: nested and string-encoded --data payloads", () => {
 });
 
 describe("neon init: failure output", () => {
-	test("unknown step", () => {
-		const result = runInit("next-prisma", [
+	test("unknown step", async () => {
+		const result = await runInit("next-prisma", [
 			"--agent",
 			"--data",
 			JSON.stringify({ step: "not-a-step" }),
@@ -613,16 +725,20 @@ describe("neon init: failure output", () => {
 		expect(snapshotOf(result)).toMatchSnapshot();
 	});
 
-	test("malformed --data", () => {
+	test("malformed --data", async () => {
 		expect(
 			snapshotOf(
-				runInit("next-prisma", ["--agent", "--data", "{not json"]),
+				await runInit("next-prisma", [
+					"--agent",
+					"--data",
+					"{not json",
+				]),
 			),
 		).toMatchSnapshot();
 	});
 
-	test("--data without a step falls through to the orchestrator", () => {
-		const result = runInit("next-prisma", [
+	test("--data without a step falls through to the orchestrator", async () => {
+		const result = await runInit("next-prisma", [
 			"--agent",
 			"--data",
 			JSON.stringify({ framework: "next" }),
@@ -630,10 +746,14 @@ describe("neon init: failure output", () => {
 		expect(snapshotOf(result)).toMatchSnapshot();
 	});
 
-	test("--profile is refused, as JSON", () => {
+	test("--profile is refused, as JSON", async () => {
 		expect(
 			snapshotOf(
-				runInit("next-prisma", ["--agent", "--profile", "DEFAULT"]),
+				await runInit("next-prisma", [
+					"--agent",
+					"--profile",
+					"DEFAULT",
+				]),
 			),
 		).toMatchSnapshot();
 	});
@@ -641,10 +761,10 @@ describe("neon init: failure output", () => {
 	// No agent in the environment and no `--agent`, so this is the human path:
 	// one line on stderr and nothing on stdout. `--profile` is the refusal that
 	// fails before any prompting, so it gets there without needing a TTY.
-	test("--profile is refused in plain text when no agent is detected", () => {
+	test("--profile is refused in plain text when no agent is detected", async () => {
 		expect(
 			snapshotOf(
-				runInit("next-prisma", ["--profile", "DEFAULT"], {
+				await runInit("next-prisma", ["--profile", "DEFAULT"], {
 					agent: "none",
 				}),
 			),
@@ -653,25 +773,27 @@ describe("neon init: failure output", () => {
 
 	// The same invocation with an agent in the environment is agent mode, even
 	// though `--agent` was never passed — stdin is not a TTY and detection wins.
-	test("an autodetected agent gets the JSON refusal without passing --agent", () => {
+	test("an autodetected agent gets the JSON refusal without passing --agent", async () => {
 		expect(
 			snapshotOf(
-				runInit("next-prisma", ["--profile", "DEFAULT"], {
+				await runInit("next-prisma", ["--profile", "DEFAULT"], {
 					agent: "cursor",
 				}),
 			),
 		).toMatchSnapshot();
 	});
 
-	test("an unknown profile is refused before the command runs", () => {
+	test("an unknown profile is refused before the command runs", async () => {
 		expect(
 			snapshotOf(
-				runInit("next-prisma", ["--agent", "--profile", "ghost"]),
+				await runInit("next-prisma", ["--agent", "--profile", "ghost"]),
 			),
 		).toMatchSnapshot();
 	});
 
-	test("--help", () => {
-		expect(snapshotOf(runInit("greenfield", ["--help"]))).toMatchSnapshot();
+	test("--help", async () => {
+		expect(
+			snapshotOf(await runInit("greenfield", ["--help"])),
+		).toMatchSnapshot();
 	});
 });
