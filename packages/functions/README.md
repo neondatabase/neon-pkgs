@@ -3,7 +3,8 @@
 Runtime helpers for [Neon Functions](https://neon.com):
 
 - **`waitUntil`** — defer background work past a response.
-- **`upgradeWebSocket`** — serve WebSockets from a `fetch` handler.
+- **`upgradeWebSocket`** — serve WebSockets from a `fetch` handler, or from a
+  [Hono](https://hono.dev) route via `@neon/functions/hono`.
 
 ## Install
 
@@ -11,7 +12,15 @@ Runtime helpers for [Neon Functions](https://neon.com):
 npm install @neon/functions
 ```
 
-> **Requirements:** Node.js >= 20.19.
+For the Hono route helper, install Hono alongside it:
+
+```bash
+npm install @neon/functions hono
+```
+
+> **Requirements:** Node.js >= 20.19. The `@neon/functions/hono` subpath needs
+> `hono` >= 4.6.10, declared as an optional peer — installing `@neon/functions`
+> on its own pulls in nothing and warns about nothing.
 
 ## `waitUntil`
 
@@ -99,6 +108,83 @@ no protocol is negotiated: the response header is absent and `socket.protocol` i
 `upgradeWebSocket` needs a Neon Functions runtime that provides the upgrade — deployed, or
 locally under `neon dev`. On an older runtime it throws the "only available inside a Neon
 Functions invocation" `TypeError` rather than misbehaving.
+
+## `@neon/functions/hono`
+
+The same primitive, shaped as Hono's own WebSocket helper, so a route can serve a socket
+directly. It is `defineWebSocketHelper` over `upgradeWebSocket` and nothing else — no `ws`
+dependency, and not the deprecated `@hono/node-ws`.
+
+```ts
+import { Hono } from "hono";
+import { upgradeWebSocket } from "@neon/functions/hono";
+
+const app = new Hono();
+
+app.get(
+	"/ws",
+	upgradeWebSocket((c) => ({
+		onOpen(_event, ws) {
+			ws.send("welcome");
+		},
+		onMessage(event, ws) {
+			ws.send(`echo: ${event.data}`);
+		},
+		onClose() {
+			console.log("client disconnected");
+		},
+	})),
+);
+
+export default app;
+```
+
+Hono's direct form works too, when you want the context in hand:
+
+```ts
+app.get("/ws", (c) => upgradeWebSocket(c, { onMessage: (e, ws) => ws.send(e.data) }));
+```
+
+A request without `Upgrade: websocket` is passed to the next handler, so an ordinary `GET`
+on the same path still reaches the route below the helper.
+
+### Subprotocols
+
+Pass `protocol` as the second argument, with the same rule as the low-level helper — it must
+be one the client offered:
+
+```ts
+app.get("/ws", upgradeWebSocket(createEvents, { protocol: "chat.v2" }));
+```
+
+Unlike Hono's Deno adapter, this never echoes the client's first offer on its own. A
+subprotocol the server did not ask for is one it has not agreed to speak.
+
+### Middleware
+
+Gating the route is ordinary middleware — read the token or headers and return before
+`next()`:
+
+```ts
+app.use("/ws", async (c, next) => {
+	if (c.req.query("token") !== expected) return c.text("unauthorized", 401);
+	await next();
+});
+```
+
+**Middleware that modifies the response cannot run on an upgrade route.** CORS is the usual
+one. Hono rebuilds `c.res` when middleware touches it, and rebuilding the 101 discards the
+pending upgrade — the runtime detects that and fails the request loudly rather than leaving
+the client waiting. Middleware that only inspects the request, or returns its own response
+before `next()`, is fine.
+
+### Notes
+
+- `ws.raw` is the underlying `WebSocket`, for anything the Hono context does not surface.
+- `ws.binaryType` is Hono's own field and does not propagate to the socket. Both default to
+  `"arraybuffer"`, so inbound binary arrives as an `ArrayBuffer`; set `ws.raw.binaryType` if
+  you need to change it.
+- `SendOptions.compress` is ignored: no extensions are negotiated.
 
 ## Runtime integration
 

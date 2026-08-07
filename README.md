@@ -33,7 +33,7 @@ If you're looking for a single package's docs, see its own `README.md` under `pa
 | Package | Description |
 | --- | --- |
 | `@neon/sdk` | The official TypeScript SDK for the Neon API — a modern, Fetch-based client generated from Neon's OpenAPI spec (successor to `@neondatabase/api-client`). |
-| `@neon/functions` | Runtime helpers for Neon Functions (e.g. a `waitUntil` primitive for deferring work past a response). |
+| `@neon/functions` | Runtime helpers for Neon Functions: `waitUntil` for deferring work past a response, and `upgradeWebSocket` for serving WebSockets from a `fetch` handler or a Hono route. |
 | `@neon/ai-sdk-provider` | Community [Vercel AI SDK](https://ai-sdk.dev) provider for the Neon AI Gateway. |
 
 A few renamed packages are still published as deprecated aliases (`get-db` / `neondb` → `neon-new`; `vite-plugin-db` / `@neondatabase/vite-plugin-postgres` → `vite-plugin-neon-new`); they re-export the new package and print a deprecation warning. `neonctl` is not deprecated: it is a supported compatibility package that installs and runs `neon`.

@@ -1,7 +1,7 @@
 {
 	"name": "@neon/functions",
 	"version": "0.7.0",
-	"description": "Runtime helpers for Neon Functions: `waitUntil` for deferring async work past a response, and `upgradeWebSocket` for serving WebSockets from a fetch handler.",
+	"description": "Runtime helpers for Neon Functions: `waitUntil` for deferring async work past a response, and `upgradeWebSocket` for serving WebSockets from a fetch handler or a Hono route.",
 	"keywords": [
 		"neon",
 		"database",
@@ -28,6 +28,11 @@
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js",
 			"default": "./dist/index.js"
+		},
+		"./hono": {
+			"types": "./dist/hono.d.ts",
+			"import": "./dist/hono.js",
+			"default": "./dist/hono.js"
 		}
 	},
 	"files": [
@@ -46,9 +51,18 @@
 		"@types/node": "catalog:",
 		"@vitest/coverage-v8": "catalog:",
 		"console-fail-test": "catalog:",
+		"hono": "^4.12.25",
 		"tsdown": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"
+	},
+	"peerDependencies": {
+		"hono": "^4.6.10"
+	},
+	"peerDependenciesMeta": {
+		"hono": {
+			"optional": true
+		}
 	},
 	"engines": {
 		"node": ">=20.19.0"

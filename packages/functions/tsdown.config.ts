@@ -5,7 +5,12 @@ export default defineConfig({
 	bundle: false,
 	clean: true,
 	dts: true,
-	entry: ["src/index.ts", "src/lib/**/*.ts", "!src/**/*.test.*"],
+	entry: [
+		"src/index.ts",
+		"src/hono.ts",
+		"src/lib/**/*.ts",
+		"!src/**/*.test.*",
+	],
 	format: "esm",
 	outDir: "dist",
 	treeshake: true,
