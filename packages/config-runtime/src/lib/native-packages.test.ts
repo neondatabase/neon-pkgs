@@ -41,8 +41,40 @@ const AARCH64 = 0xb7;
 const X86_64 = 0x3e;
 
 let dir: string;
+
+/**
+ * Record a package as installed in the *user's* project. Staging pins to the version resolved
+ * there and refuses to guess, so a fixture that stages a package must also be a project that
+ * depends on it — which is the real precondition, not test scaffolding.
+ */
+const userHasPackage = (name: string, version = "1.0.0"): void => {
+	writeFileSync(
+		join(
+			mkdirp(join(dir, "node_modules", ...name.split("/"))),
+			"package.json",
+		),
+		JSON.stringify({ name, version }),
+	);
+};
+
 beforeAll(() => {
 	dir = mkdtempSync(join(tmpdir(), "neon-native-"));
+	for (const name of [
+		"plain-pkg",
+		"bin-pkg",
+		"broken-native",
+		"probing-pkg",
+		"parent-pkg",
+		"dual",
+		"subpath-pkg",
+		"host-arch-dep",
+		"npm-missing-pkg",
+	]) {
+		userHasPackage(name);
+	}
+	// Real versions, so the staging install reaches npm rather than being refused here.
+	userHasPackage("@img/sharp-win32-x64", "0.35.3");
+	userHasPackage("sharp", "0.35.3");
 });
 afterAll(() => {
 	rmSync(dir, { recursive: true, force: true });
@@ -261,7 +293,7 @@ describe("traceNativePackages", () => {
 		});
 
 		// npm is given the package; the trace entry imports what the user wrote.
-		expect(requested).toEqual(["subpath-pkg"]);
+		expect(requested).toEqual(["subpath-pkg@1.0.0"]);
 		expect(traceEntry).toContain('import "subpath-pkg/native";');
 	});
 
@@ -287,7 +319,7 @@ describe("traceNativePackages", () => {
 				}),
 			},
 		});
-		expect(requested).toEqual(["dual"]);
+		expect(requested).toEqual(["dual@1.0.0"]);
 	});
 
 	// The variant filter matches package directory names. A substring test over the whole
@@ -487,8 +519,8 @@ describe("traceNativePackages", () => {
 	 * yields exactly `Failed to resolve dependency "./missing.node"` and the file is silently
 	 * absent from `fileList`.
 	 */
-	test("fails when a staged package imports a relative file that is not there", async () => {
-		const message = await traceNativePackages({
+	test("reports a relative import that is not in the staged tree", async () => {
+		const { warnings, entries } = await traceNativePackages({
 			slug: "fn1",
 			packages: ["broken-native"],
 			projectDir: dir,
@@ -510,12 +542,15 @@ describe("traceNativePackages", () => {
 					unresolved: ["./missing.node"],
 				}),
 			},
-		}).then(
-			() => "unexpectedly succeeded",
-			(e: unknown) => (e as Error).message,
-		);
+		});
 
-		expect(message).toMatch(/imports files which are not there/);
+		// Reported, not fatal: `try { require("./optional.node") } catch {}` is correct code
+		// this would otherwise refuse to deploy, and telling the two apart needs control flow
+		// the tracer does not expose.
+		expect(Object.keys(entries)).toEqual([
+			"node_modules/broken-native/package.json",
+		]);
+		const message = warnings.join("\n");
 		expect(message).toContain("./missing.node");
 	});
 
@@ -722,6 +757,84 @@ describe("traceNativePackages", () => {
 		);
 	});
 
+	/**
+	 * The reason "a real build is present" is asked per name family rather than once over the
+	 * whole tree. A function may stage two unrelated packages — one with a native build, one
+	 * where the wasm build is the only implementation — and a single flag over the tree would
+	 * delete the second package's only usable code.
+	 */
+	test("keeps a wasm-only package staged alongside an unrelated native one", async () => {
+		const names = await traceNativePackages({
+			slug: "fn1",
+			packages: ["parent-pkg", "plain-pkg"],
+			projectDir: dir,
+			deps: {
+				install: async (cwd) => {
+					for (const root of ["parent-pkg", "plain-pkg"]) {
+						writeFileSync(
+							join(
+								mkdirp(join(cwd, "node_modules", root)),
+								"package.json",
+							),
+							JSON.stringify({ name: root, version: "1.0.0" }),
+						);
+					}
+					// Family one: a real linux-arm64 build.
+					const real = mkdirp(
+						join(
+							cwd,
+							"node_modules",
+							"@scope",
+							"parent-pkg-linux-arm64",
+						),
+					);
+					writeFileSync(
+						join(real, "package.json"),
+						JSON.stringify({
+							name: "@scope/parent-pkg-linux-arm64",
+							version: "1.0.0",
+							os: ["linux"],
+							cpu: ["arm64"],
+						}),
+					);
+					writeFileSync(join(real, "addon.node"), elfHeader(AARCH64));
+					// Family two: wasm is all there is.
+					const wasm = mkdirp(
+						join(cwd, "node_modules", "@scope", "plain-pkg-wasm32"),
+					);
+					writeFileSync(
+						join(wasm, "package.json"),
+						JSON.stringify({
+							name: "@scope/plain-pkg-wasm32",
+							version: "1.0.0",
+						}),
+					);
+					writeFileSync(
+						join(wasm, "index.js"),
+						"module.exports = 1;",
+					);
+				},
+				trace: async () => ({
+					files: [
+						"node_modules/parent-pkg/package.json",
+						"node_modules/plain-pkg/package.json",
+						"node_modules/@scope/parent-pkg-linux-arm64/package.json",
+						"node_modules/@scope/parent-pkg-linux-arm64/addon.node",
+						"node_modules/@scope/plain-pkg-wasm32/package.json",
+						"node_modules/@scope/plain-pkg-wasm32/index.js",
+					],
+				}),
+			},
+		}).then((r) => Object.keys(r.entries));
+
+		expect(names).toContain(
+			"node_modules/@scope/plain-pkg-wasm32/index.js",
+		);
+		expect(names).toContain(
+			"node_modules/@scope/parent-pkg-linux-arm64/addon.node",
+		);
+	});
+
 	test("pins a scoped package the same way", async () => {
 		const pkg = join(dir, "node_modules", "@scope", "dep");
 		writeFileSync(
@@ -757,38 +870,29 @@ describe("traceNativePackages", () => {
 		expect(requested).toEqual(["@scope/dep@1.2.3"]);
 	});
 
-	test("falls back to an unpinned spec when the package is not installed locally", async () => {
-		let requested: string[] = [];
-		await traceNativePackages({
+	// Guessing here would stage code the user has never run, which surfaces as an
+	// unreproducible production bug rather than a deploy error.
+	test("fails when the staged package is not installed in the project", async () => {
+		let installed = false;
+		const message = await traceNativePackages({
 			slug: "fn1",
 			packages: ["not-installed-locally"],
 			projectDir: dir,
 			deps: {
-				install: async (cwd, specs) => {
-					requested = specs;
-					writeFileSync(
-						join(
-							mkdirp(
-								join(
-									cwd,
-									"node_modules",
-									"not-installed-locally",
-								),
-							),
-							"package.json",
-						),
-						JSON.stringify({
-							name: "not-installed-locally",
-							version: "1.0.0",
-						}),
-					);
+				install: async () => {
+					installed = true;
 				},
-				trace: async () => ({
-					files: ["node_modules/not-installed-locally/package.json"],
-				}),
+				trace: async () => ({ files: [] }),
 			},
-		});
-		expect(requested).toEqual(["not-installed-locally"]);
+		}).then(
+			() => "unexpectedly succeeded",
+			(e: unknown) => (e as Error).message,
+		);
+
+		expect(message).toMatch(/no installed copy of it could be found/);
+		expect(message).toContain("includeFiles: false");
+		// Refused before anything was installed, rather than after guessing a version.
+		expect(installed).toBe(false);
 	});
 
 	test("never reads the user's node_modules for the shipped files", async () => {

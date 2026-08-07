@@ -24,6 +24,16 @@ import type { NativeTraceDeps } from "./native-packages.js";
 let dir: string;
 beforeAll(() => {
 	dir = mkdtempSync(join(tmpdir(), "neon-bundle-"));
+	// Staging pins to the version resolved in the user's project and refuses to guess, so a
+	// fixture that stages a package must also be a project that depends on it.
+	for (const name of ["fake-addon", "not-installed-anywhere"]) {
+		const pkgDir = join(dir, "node_modules", name);
+		mkdirSync(pkgDir, { recursive: true });
+		writeFileSync(
+			join(pkgDir, "package.json"),
+			JSON.stringify({ name, version: "1.0.0" }),
+		);
+	}
 });
 afterAll(() => {
 	rmSync(dir, { recursive: true, force: true });
@@ -101,7 +111,9 @@ function fakeNativeDeps(files: Record<string, Uint8Array>): NativeTraceDeps {
 			}
 		},
 		trace: async () => ({ files: Object.keys(files) }),
-		installedVersion: () => undefined,
+		// A resolved version, since staging refuses to guess one. These cases are about what
+		// the bundler does with the staged files, not about pinning.
+		installedVersion: () => "1.0.0",
 	};
 }
 
@@ -319,7 +331,9 @@ describe("buildFunctionBundle staging external package files", () => {
 	// Staging the registry's latest instead of the version the user tested is exactly the
 	// kind of difference that shows up as an unreproducible production bug, so it is said
 	// out loud rather than left to be discovered from a deployed archive.
-	test("warns when a staged package's version cannot be read from the project", async () => {
+	// Refused rather than guessed: staging the registry's latest would ship code the user has
+	// never run, which surfaces as an unreproducible production bug instead of a deploy error.
+	test("fails the deploy when a staged package is not installed in the project", async () => {
 		const source = join(dir, "uses-native.ts");
 		writeFileSync(
 			source,
@@ -329,23 +343,16 @@ describe("buildFunctionBundle staging external package files", () => {
 			].join("\n"),
 		);
 
-		await buildFunctionBundle(fn(source, ["fake-addon"]), {
-			onWarning: collectWarning,
-			nativeDeps: fakeNativeDeps({
-				"node_modules/fake-addon/package.json": pkgJson("fake-addon"),
-				"node_modules/fake-addon/index.js": new TextEncoder().encode(
-					"module.exports = 1;",
-				),
+		await expect(
+			buildFunctionBundle(fn(source, ["fake-addon"]), {
+				onWarning: collectWarning,
+				nativeDeps: {
+					install: async () => {},
+					trace: async () => ({ files: [] }),
+					installedVersion: () => undefined,
+				},
 			}),
-		});
-
-		expect(
-			warnings.some(
-				(w) =>
-					w.includes("fake-addon") &&
-					w.includes("registry resolves as latest"),
-			),
-		).toBe(true);
+		).rejects.toThrow(/no installed copy of it could be found/);
 	});
 
 	test("ships the traced files under their node_modules paths, unflattened", async () => {

@@ -81,23 +81,59 @@ function isWasmVariantName(packageName: string): boolean {
 	return packageName.split(/[-/]/).includes(WASM_VARIANT_TOKEN);
 }
 
+/**
+ * The library a platform-variant package belongs to, taken as the name up to its first
+ * platform token: `@img/sharp` from both `@img/sharp-wasm32` and `@img/sharp-linux-arm64`.
+ *
+ * This is what lets "a real build is present" be asked per library rather than over the whole
+ * tree. A package with no platform token is its own family, so it can never be mistaken for
+ * a sibling of something else.
+ */
+function platformFamily(packageName: string): string {
+	const [scope, rest] = packageName.startsWith("@")
+		? [`${packageName.split("/")[0]}/`, packageName.split("/")[1] ?? ""]
+		: ["", packageName];
+	const parts = rest.split("-");
+	const cut = parts.findIndex((part) => PLATFORM_TOKENS.has(part));
+	return `${scope}${(cut === -1 ? parts : parts.slice(0, cut)).join("-")}`;
+}
+
+/**
+ * The tokens npm's platform-variant packages are named with. Only used to find where a name
+ * stops being the library and starts being the target, so an unrecognised token simply leaves
+ * the package in a family of its own — which keeps its files.
+ */
+const PLATFORM_TOKENS = new Set([
+	"wasm32",
+	"linux",
+	"linuxmusl",
+	"darwin",
+	"win32",
+	"freebsd",
+	"android",
+	"webcontainers",
+]);
+
 /** nft reports an unresolvable import as `Failed to resolve dependency "<specifier>"`. */
 const UNRESOLVED_PATTERN = /Failed to resolve dependency "([^"]+)"/;
 
 /**
- * The unresolved specifiers that mean a file really will be missing from the archive.
+ * The unresolved specifiers worth reporting: a file that will be missing from the archive.
  *
  * Only **relative** ones. A relative specifier names a path inside a package that is already
- * staged, so failing to resolve it means the file is not there and never will be: it is
- * absent from the trace, so nothing downstream notices, and the function fails at invoke with
- * `Cannot find module`.
+ * staged, so failing to resolve it means the file is absent from the trace and nothing
+ * downstream notices.
  *
  * A bare specifier is the opposite — on a platform-gated package it is how the loader probes.
  * `sharp` names every platform's binary in turn, so tracing a correctly staged `sharp`
  * produces about a dozen unresolved bare specifiers, one per platform that was correctly not
  * installed, plus several built by string concatenation (`@img/sharp-libvips-/package`) that
- * no tracer can follow. Measured: twelve of them, none indicating a missing file. Reporting
- * those would be wrong every time on the canonical package.
+ * no tracer can follow. Measured: twelve of them, none indicating a missing file.
+ *
+ * **Reported, never fatal.** Relative does not mean required: a package may do
+ * `try { require("./optional.node") } catch {}` and fall back to JavaScript, which is correct
+ * code that this would otherwise refuse to deploy. Telling the two apart needs control flow
+ * the tracer does not expose — the same reason the undeclared-native report is advisory.
  */
 function concreteUnresolved(unresolved: readonly string[]): string[] {
 	return [
@@ -269,16 +305,18 @@ export async function traceNativePackages(options: {
 	const warnings: string[] = [];
 	const specs = roots.map((pkg) => {
 		const version = deps.installedVersion(projectDir, pkg);
-		// Pin to the user's own resolution when we can see it. Without it we install the
-		// registry's latest, which is a different package than the one they tested — said
-		// out loud rather than left to be discovered from a deployed archive.
+		// Pinned to the user's own resolution, and refused outright when it cannot be read.
+		// The alternative is installing whatever the registry calls latest, which ships code
+		// the user has never run — a difference that surfaces as an unreproducible production
+		// bug rather than as a deploy error. Guaranteeing the declared root is pinned is what
+		// makes the remaining gap (transitive pins, overrides, patches) a bounded one.
 		if (version === undefined) {
-			warnings.push(
-				`Could not read an installed version of "${pkg}" from this project, so the ` +
-					`deploy staged whatever the registry resolves as latest. That may not be the ` +
-					`version you tested against. Install "${pkg}" locally to pin it.`,
+			throw invalid(
+				`Function "${slug}" stages "${pkg}", but no installed copy of it could be found ` +
+					`in this project, so the deploy cannot tell which version you tested ` +
+					`against. Install "${pkg}" as a dependency, or set includeFiles: false if ` +
+					`the function never reaches it.`,
 			);
-			return pkg;
 		}
 		return `${pkg}@${version}`;
 	});
@@ -303,15 +341,14 @@ export async function traceNativePackages(options: {
 		);
 
 		const traced = await deps.trace(staging, "trace-entry.mjs");
-		const missing = concreteUnresolved(traced.unresolved ?? []);
-		if (missing.length > 0) {
-			throw invalid(
-				`Function "${slug}" stages a package that imports files which are not there: ` +
-					`${missing.map((m) => `"${m}"`).join(", ")}. Those imports are relative to a ` +
-					`package that was installed, so nothing else would notice — the archive ` +
-					`would deploy and then fail at invoke with "Cannot find module". The ` +
-					`package may be broken for ${RUNTIME_TARGET_LABEL}, or may need an install ` +
-					`script the deploy cannot run.`,
+		for (const specifier of concreteUnresolved(traced.unresolved ?? [])) {
+			warnings.push(
+				`Function "${slug}" stages a package that imports "${specifier}", which is not ` +
+					`in the tree the deploy installed. The import is relative to a package that ` +
+					`*was* installed, so it will not appear in the archive and nothing else will ` +
+					`notice. If the package reaches it, the function fails at invoke with ` +
+					`"Cannot find module". If the import is wrapped in a try/catch — a native ` +
+					`accelerator behind a JavaScript fallback — the deploy is already correct.`,
 			);
 		}
 		const files = selectArchiveFiles(slug, traced.files, staging);
@@ -382,22 +419,31 @@ function selectArchiveFiles(
 		return decision;
 	};
 
-	// Whatever survives the manifest check and is a compiled artifact is a build that can
-	// actually load on the runtime.
 	const compatible = inTree.filter((path) => {
 		const pkg = packageOfArchivePath(path);
 		return pkg !== undefined && !isIncompatible(pkg.dir);
 	});
-	const hasNativeBuildForRuntime = compatible.some((path) =>
-		BINARY_PATTERN.test(path),
+
+	// The name families that ship a compiled binary able to load on the runtime. Scoped by
+	// family rather than a single flag over the whole tree: a function may stage two unrelated
+	// packages, one with a real native build and one where the wasm build is the only
+	// implementation, and a global "some binary exists" test would delete the second.
+	const familiesWithNativeBuild = new Set(
+		compatible
+			.filter((path) => BINARY_PATTERN.test(path))
+			.flatMap((path) => {
+				const pkg = packageOfArchivePath(path);
+				return pkg === undefined ? [] : [platformFamily(pkg.name)];
+			}),
 	);
 
 	const files = compatible
 		.filter((path) => {
 			const pkg = packageOfArchivePath(path);
-			return (
-				pkg === undefined ||
-				!(hasNativeBuildForRuntime && isWasmVariantName(pkg.name))
+			if (pkg === undefined) return true;
+			return !(
+				isWasmVariantName(pkg.name) &&
+				familiesWithNativeBuild.has(platformFamily(pkg.name))
 			);
 		})
 		.sort();
