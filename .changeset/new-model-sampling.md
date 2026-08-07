@@ -13,7 +13,10 @@ every other unsupported parameter is handled.
 
 The exceptions are listed by model id because nothing in the id predicts them:
 `gemini-3-1-flash-lite` accepts penalties and `gemini-3-5-flash-lite` does not, so neither the
-version nor the `-lite` suffix is the rule.
+version nor the `-lite` suffix is the rule. They are matched exactly rather than by prefix, so a
+future `gemini-3-6-flash-*` does not inherit a restriction nobody measured for it.
+
+`NEON_MODELS_DEV_IDS` gains the three ids, so they autocomplete.
 
 The penalty warning previously read "Only Gemini accepts penalties on the gateway's unified
 endpoint", which is no longer true and read as a contradiction to the Gemini users now hitting

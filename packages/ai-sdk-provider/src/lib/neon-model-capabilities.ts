@@ -58,9 +58,29 @@ export interface NeonModelCapabilities {
 
 /**
  * Gemini models the gateway rejects penalties on, by measurement. Their older
- * siblings accept penalties, so this cannot be derived from the id.
+ * siblings accept them, so this cannot be derived from the id.
+ *
+ * Matched exactly rather than by substring: `gemini-3-6-flash` is a prefix of
+ * any `gemini-3-6-flash-*` id Google may ship next, and inheriting a measured
+ * restriction on the strength of a shared prefix is how the Gemini rule was
+ * wrong for these two in the first place.
  */
-const GEMINI_NO_PENALTIES = ["gemini-3-5-flash-lite", "gemini-3-6-flash"];
+const GEMINI_NO_PENALTIES = new Set([
+	"gemini-3-5-flash-lite",
+	"gemini-3-6-flash",
+]);
+
+/** Gemini models that reject `temperature` and `topP` outright. */
+const GEMINI_NO_SAMPLING = new Set(["gemini-3-6-flash"]);
+
+/**
+ * The gateway accepts an optional `databricks-` prefix on any id, so strip it
+ * before an exact-match lookup. Prefix rules elsewhere in this file tolerate it
+ * incidentally; exact matches do not.
+ */
+function canonicalId(id: string): string {
+	return id.startsWith("databricks-") ? id.slice("databricks-".length) : id;
+}
 
 const PERMISSIVE: Omit<NeonModelCapabilities, "family"> = {
 	supportsTemperature: true,
@@ -147,13 +167,14 @@ export function getNeonModelCapabilities(
 	// because that is what was measured; a new Gemini model inherits the
 	// permissive default until someone measures it.
 	if (id.includes("gemini")) {
-		const strict = GEMINI_NO_PENALTIES.some((m) => id.includes(m));
+		const canonical = canonicalId(id);
+		const acceptsSampling = !GEMINI_NO_SAMPLING.has(canonical);
 		return {
 			family: "google",
 			...PERMISSIVE,
-			supportsTemperature: !id.includes("gemini-3-6-flash"),
-			supportsTopP: !id.includes("gemini-3-6-flash"),
-			supportsPenalties: !strict,
+			supportsTemperature: acceptsSampling,
+			supportsTopP: acceptsSampling,
+			supportsPenalties: !GEMINI_NO_PENALTIES.has(canonical),
 			supportsReasoningEffort: false,
 		};
 	}

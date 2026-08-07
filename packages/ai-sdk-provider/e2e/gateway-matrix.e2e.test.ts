@@ -229,6 +229,66 @@ describe.skipIf(!hasGatewayEnv())(
 			}, 120_000);
 		});
 
+		// Every one of these returns 400 if the provider forwards the parameter,
+		// so the capability table is the only thing keeping the call alive. A
+		// unit test proves the table says the right thing; only a live call
+		// proves the table still matches the gateway.
+		describe("sampling parameters the gateway rejects per model", () => {
+			it.each([
+				{
+					model: "kimi-k3",
+					dropped: ["frequencyPenalty", "presencePenalty"],
+				},
+				{
+					model: "gemini-3-5-flash-lite",
+					dropped: ["frequencyPenalty", "presencePenalty"],
+				},
+				{
+					model: "gemini-3-6-flash",
+					dropped: [
+						"temperature",
+						"topP",
+						"frequencyPenalty",
+						"presencePenalty",
+					],
+				},
+			])("$model answers instead of 400ing, and reports what was dropped", async ({
+				model,
+				dropped,
+			}) => {
+				const result = await generateText({
+					model: neon(model),
+					prompt: "Reply with exactly three words.",
+					maxOutputTokens: 512,
+					temperature: 0.2,
+					topP: 0.9,
+					frequencyPenalty: 0.5,
+					presencePenalty: 0.5,
+				});
+
+				expect(result.text.trim().length).toBeGreaterThan(0);
+				const reported = (result.warnings ?? [])
+					.map((w) => ("feature" in w ? w.feature : undefined))
+					.filter(Boolean);
+				expect(new Set(reported)).toEqual(new Set(dropped));
+			}, 120_000);
+
+			// The older Gemini models still take penalties. If this starts
+			// failing, the restriction has spread and the id list needs widening
+			// rather than the assertion loosening.
+			it("still sends penalties to the Gemini models that accept them", async () => {
+				const result = await generateText({
+					model: neon("gemini-3-flash"),
+					prompt: "Reply with exactly three words.",
+					maxOutputTokens: 512,
+					frequencyPenalty: 0.5,
+				});
+
+				expect(result.text.trim().length).toBeGreaterThan(0);
+				expect(result.warnings ?? []).toEqual([]);
+			}, 120_000);
+		});
+
 		describe("gpt-oss harmony normalization (#308)", () => {
 			// The gateway returns gpt-oss `message.content` as a harmony parts
 			// array; the provider normalizes it to the OpenAI Chat Completions

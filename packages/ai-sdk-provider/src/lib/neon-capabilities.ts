@@ -7,7 +7,7 @@ import type {
 import { getNeonModelCapabilities } from "./neon-model-capabilities.js";
 
 const PENALTY_DETAILS =
-	"This model rejects penalties on the gateway's unified endpoint, so it was dropped rather than sent.";
+	"This model rejects penalties, so it was dropped rather than sent.";
 const GENERIC_DETAILS =
 	"The Neon AI Gateway rejects this parameter for this model, so it was dropped rather than sent.";
 const REASONING_EFFORT_DETAILS =

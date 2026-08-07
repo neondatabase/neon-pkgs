@@ -180,6 +180,34 @@ describe("getNeonModelCapabilities", () => {
 		}
 	});
 
+	// Substring matching would hand a measured restriction to any future id that
+	// merely starts the same way, which is exactly how the blanket Gemini rule
+	// got gemini-3-6-flash wrong.
+	it("matches the strict Gemini ids exactly, not by prefix", () => {
+		for (const id of [
+			"gemini-3-6-flash-lite",
+			"gemini-3-5-flash-lite-preview",
+		]) {
+			expect({
+				id,
+				penalties: getNeonModelCapabilities(id).supportsPenalties,
+				temperature: getNeonModelCapabilities(id).supportsTemperature,
+			}).toEqual({ id, penalties: true, temperature: true });
+		}
+	});
+
+	it("applies the strict Gemini rules through the databricks- prefix", () => {
+		const prefixed = getNeonModelCapabilities(
+			"databricks-gemini-3-6-flash",
+		);
+
+		expect({
+			penalties: prefixed.supportsPenalties,
+			temperature: prefixed.supportsTemperature,
+			topP: prefixed.supportsTopP,
+		}).toEqual({ penalties: false, temperature: false, topP: false });
+	});
+
 	it("drops temperature and topP for gemini-3-6-flash only", () => {
 		const strict = getNeonModelCapabilities("gemini-3-6-flash");
 		expect({

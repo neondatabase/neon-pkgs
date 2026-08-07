@@ -66,6 +66,21 @@ describe("applyNeonCapabilities warnings", () => {
 		}
 	});
 
+	// Claude routes through /anthropic/v1, not the unified chat endpoint, so a
+	// penalty warning phrased around "the unified endpoint" would be false for
+	// every Claude model that receives it.
+	it("keeps the penalty warning true on routes other than unified chat", () => {
+		for (const id of ["claude-opus-5", "kimi-k3", "gemini-3-6-flash"]) {
+			const warning = detailsFor(id, { frequencyPenalty: 0.5 }).find(
+				(w) => w.feature === "frequencyPenalty",
+			);
+			expect({ id, details: warning?.details }).toEqual({
+				id,
+				details: expect.not.stringContaining("unified endpoint"),
+			});
+		}
+	});
+
 	it("hedges rather than asserting a 400 for an unrecognised Claude id", () => {
 		const [warning] = detailsFor("claude-3-5-sonnet-20241022", {
 			temperature: 0.2,

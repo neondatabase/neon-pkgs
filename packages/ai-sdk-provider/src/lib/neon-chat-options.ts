@@ -55,6 +55,8 @@ export const NEON_MODELS_DEV_IDS = [
 	"gemini-3-1-flash-lite",
 	"gemini-3-1-pro",
 	"gemini-3-5-flash",
+	"gemini-3-5-flash-lite",
+	"gemini-3-6-flash",
 	"gemini-3-flash",
 	"gemma-3-12b",
 	// Meta (unified MLflow endpoint)
@@ -68,6 +70,8 @@ export const NEON_MODELS_DEV_IDS = [
 	"glm-5-2",
 	// Thinking Machines (unified MLflow endpoint)
 	"inkling",
+	// Moonshot (unified MLflow endpoint)
+	"kimi-k3",
 ] as const;
 
 /** A known Neon AI Gateway model id. */
