@@ -478,6 +478,226 @@ describe("traceNativePackages", () => {
 		]);
 	});
 
+	/**
+	 * A relative import the tracer cannot resolve is the one unresolved-dependency case that
+	 * proves something: the file is inside a package that *was* installed, it never enters the
+	 * trace, so nothing downstream notices and the function fails at invoke.
+	 *
+	 * Verified against `@vercel/nft` directly: a package doing `require("./missing.node")`
+	 * yields exactly `Failed to resolve dependency "./missing.node"` and the file is silently
+	 * absent from `fileList`.
+	 */
+	test("fails when a staged package imports a relative file that is not there", async () => {
+		const message = await traceNativePackages({
+			slug: "fn1",
+			packages: ["broken-native"],
+			projectDir: dir,
+			deps: {
+				install: async (cwd) => {
+					writeFileSync(
+						join(
+							mkdirp(join(cwd, "node_modules", "broken-native")),
+							"package.json",
+						),
+						JSON.stringify({
+							name: "broken-native",
+							version: "1.0.0",
+						}),
+					);
+				},
+				trace: async () => ({
+					files: ["node_modules/broken-native/package.json"],
+					unresolved: ["./missing.node"],
+				}),
+			},
+		}).then(
+			() => "unexpectedly succeeded",
+			(e: unknown) => (e as Error).message,
+		);
+
+		expect(message).toMatch(/imports files which are not there/);
+		expect(message).toContain("./missing.node");
+	});
+
+	// The opposite case, and the reason this is classified rather than reported wholesale:
+	// a platform-gated package's loader probes every platform's binary by bare specifier, so
+	// a correctly staged `sharp` produces a dozen of these and none means anything.
+	test("ignores unresolved bare specifiers, which are how a loader probes platforms", async () => {
+		const { entries } = await traceNativePackages({
+			slug: "fn1",
+			packages: ["probing-pkg"],
+			projectDir: dir,
+			deps: {
+				install: async (cwd) => {
+					writeFileSync(
+						join(
+							mkdirp(join(cwd, "node_modules", "probing-pkg")),
+							"package.json",
+						),
+						JSON.stringify({
+							name: "probing-pkg",
+							version: "1.0.0",
+						}),
+					);
+				},
+				trace: async () => ({
+					files: ["node_modules/probing-pkg/package.json"],
+					unresolved: [
+						"@img/sharp-darwin-x64/sharp.node",
+						"@img/sharp-linuxmusl-arm64/sharp.node",
+						"@img/sharp-libvips-/package",
+					],
+				}),
+			},
+		});
+		expect(Object.keys(entries)).toEqual([
+			"node_modules/probing-pkg/package.json",
+		]);
+	});
+
+	// Anchoring on the first `node_modules` segment classifies a nested package by its
+	// parent's manifest, so an incompatible nested build survives — and an AArch64 musl
+	// binary passes the architecture check and then cannot load on glibc.
+	test("classifies a nested package by its own manifest, not its parent's", async () => {
+		const { entries } = await traceNativePackages({
+			slug: "fn1",
+			packages: ["parent-pkg"],
+			projectDir: dir,
+			deps: {
+				install: async (cwd) => {
+					const parent = mkdirp(
+						join(cwd, "node_modules", "parent-pkg"),
+					);
+					writeFileSync(
+						join(parent, "package.json"),
+						JSON.stringify({
+							name: "parent-pkg",
+							version: "1.0.0",
+						}),
+					);
+					const nested = mkdirp(
+						join(parent, "node_modules", "child-musl"),
+					);
+					writeFileSync(
+						join(nested, "package.json"),
+						JSON.stringify({
+							name: "child-musl",
+							version: "1.0.0",
+							libc: ["musl"],
+						}),
+					);
+					writeFileSync(join(nested, "addon.node"), "\x7fELF");
+				},
+				trace: async () => ({
+					files: [
+						"node_modules/parent-pkg/package.json",
+						"node_modules/parent-pkg/node_modules/child-musl/package.json",
+						"node_modules/parent-pkg/node_modules/child-musl/addon.node",
+					],
+				}),
+			},
+		});
+		expect(Object.keys(entries)).toEqual([
+			"node_modules/parent-pkg/package.json",
+		]);
+	});
+
+	// The wasm rule is scoped to a sibling platform build — an optional dependency of
+	// something staged — so an ordinary dependency named after wasm keeps its files.
+	test("keeps an ordinary package whose name contains wasm32", async () => {
+		const names = await traceNativePackages({
+			slug: "fn1",
+			packages: ["parent-pkg"],
+			projectDir: dir,
+			deps: {
+				install: async (cwd) => {
+					const parent = mkdirp(
+						join(cwd, "node_modules", "parent-pkg"),
+					);
+					writeFileSync(
+						join(parent, "package.json"),
+						JSON.stringify({
+							name: "parent-pkg",
+							version: "1.0.0",
+						}),
+					);
+					const helper = mkdirp(
+						join(cwd, "node_modules", "plain-wasm32-helper"),
+					);
+					writeFileSync(
+						join(helper, "package.json"),
+						JSON.stringify({
+							name: "plain-wasm32-helper",
+							version: "1.0.0",
+						}),
+					);
+					writeFileSync(
+						join(helper, "index.js"),
+						"module.exports = 1;",
+					);
+				},
+				trace: async () => ({
+					files: [
+						"node_modules/parent-pkg/package.json",
+						"node_modules/plain-wasm32-helper/package.json",
+						"node_modules/plain-wasm32-helper/index.js",
+					],
+				}),
+			},
+		}).then((r) => Object.keys(r.entries));
+
+		expect(names).toContain("node_modules/plain-wasm32-helper/index.js");
+	});
+
+	test("drops a wasm sibling that a staged package declares as optional", async () => {
+		const names = await traceNativePackages({
+			slug: "fn1",
+			packages: ["parent-pkg"],
+			projectDir: dir,
+			deps: {
+				install: async (cwd) => {
+					const parent = mkdirp(
+						join(cwd, "node_modules", "parent-pkg"),
+					);
+					writeFileSync(
+						join(parent, "package.json"),
+						JSON.stringify({
+							name: "parent-pkg",
+							version: "1.0.0",
+							optionalDependencies: {
+								"@scope/pkg-wasm32": "1.0.0",
+							},
+						}),
+					);
+					// No platform metadata at all, which is what @img/sharp-wasm32 does.
+					const wasm = mkdirp(
+						join(cwd, "node_modules", "@scope", "pkg-wasm32"),
+					);
+					writeFileSync(
+						join(wasm, "package.json"),
+						JSON.stringify({
+							name: "@scope/pkg-wasm32",
+							version: "1.0.0",
+						}),
+					);
+					writeFileSync(
+						join(wasm, "index.js"),
+						"module.exports = 1;",
+					);
+				},
+				trace: async () => ({
+					files: [
+						"node_modules/parent-pkg/package.json",
+						"node_modules/@scope/pkg-wasm32/package.json",
+						"node_modules/@scope/pkg-wasm32/index.js",
+					],
+				}),
+			},
+		}).then((r) => Object.keys(r.entries));
+
+		expect(names).toEqual(["node_modules/parent-pkg/package.json"]);
+	});
+
 	test("pins a scoped package the same way", async () => {
 		const pkg = join(dir, "node_modules", "@scope", "dep");
 		writeFileSync(

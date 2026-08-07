@@ -487,7 +487,21 @@ describe("buildFunctionBundle staging external package files", () => {
 		const bundle = await buildFunctionBundle(fn(source, ["fake-addon"]), {
 			onWarning: collectWarning,
 			nativeDeps: fakeNativeDeps({
-				"node_modules/fake-addon/package.json": pkgJson("fake-addon"),
+				// The sibling builds are optional dependencies, which is how a platform-gated
+				// package declares them and how the wasm rule knows one is a sibling rather
+				// than an ordinary dependency that happens to be named after wasm.
+				"node_modules/fake-addon/package.json":
+					new TextEncoder().encode(
+						JSON.stringify({
+							name: "fake-addon",
+							version: "1.0.0",
+							optionalDependencies: {
+								"@scope/fake-addon-linux-arm64": "1.0.0",
+								"@scope/fake-addon-wasm32": "1.0.0",
+								"@scope/fake-addon-linuxmusl-arm64": "1.0.0",
+							},
+						}),
+					),
 				"node_modules/@scope/fake-addon-linux-arm64/package.json":
 					pkgJson("@scope/fake-addon-linux-arm64", {
 						os: ["linux"],

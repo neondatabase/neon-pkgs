@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import {
 	lstatSync,
 	mkdtempSync,
+	readdirSync,
 	readFileSync,
 	rmSync,
 	writeFileSync,
@@ -65,13 +66,90 @@ const WASM_VARIANT_TOKEN = "wasm32";
  * silently, so a broken native path would succeed on much slower code instead of failing
  * loudly.
  */
-function isExcludedVariant(packageName: string, staging: string): boolean {
-	if (packageName.split(/[-/]/).includes(WASM_VARIANT_TOKEN)) return true;
-	const manifest = readPackageManifest(
-		join(staging, "node_modules", ...packageName.split("/")),
-	);
+function isExcludedVariant(
+	packageName: string,
+	packageDir: string,
+	isPlatformSibling: (name: string) => boolean,
+): boolean {
+	// Scoped to a sibling platform build — an optional dependency of something being staged —
+	// so an ordinary dependency that happens to be named after wasm keeps its files.
+	if (
+		isPlatformSibling(packageName) &&
+		packageName.split(/[-/]/).includes(WASM_VARIANT_TOKEN)
+	) {
+		return true;
+	}
+	const manifest = readPackageManifest(packageDir);
 	return manifest !== undefined && !manifestRunsOnRuntime(manifest);
 }
+
+/** nft reports an unresolvable import as `Failed to resolve dependency "<specifier>"`. */
+const UNRESOLVED_PATTERN = /Failed to resolve dependency "([^"]+)"/;
+
+/**
+ * The unresolved specifiers that mean a file really will be missing from the archive.
+ *
+ * Only **relative** ones. A relative specifier names a path inside a package that is already
+ * staged, so failing to resolve it means the file is not there and never will be: it is
+ * absent from the trace, so nothing downstream notices, and the function fails at invoke with
+ * `Cannot find module`.
+ *
+ * A bare specifier is the opposite — on a platform-gated package it is how the loader probes.
+ * `sharp` names every platform's binary in turn, so tracing a correctly staged `sharp`
+ * produces about a dozen unresolved bare specifiers, one per platform that was correctly not
+ * installed, plus several built by string concatenation (`@img/sharp-libvips-/package`) that
+ * no tracer can follow. Measured: twelve of them, none indicating a missing file. Reporting
+ * those would be wrong every time on the canonical package.
+ */
+function concreteUnresolved(unresolved: readonly string[]): string[] {
+	return [
+		...new Set(
+			unresolved.filter(
+				(specifier) =>
+					specifier.startsWith("./") || specifier.startsWith("../"),
+			),
+		),
+	];
+}
+
+/** Every package named as an optional dependency by anything installed in the staging tree. */
+function optionalDependencyNames(staging: string): Set<string> {
+	const root = join(staging, "node_modules");
+	const names = new Set<string>();
+	for (const pkg of listInstalledPackages(root)) {
+		const optional = readPackageManifest(
+			join(root, ...pkg.split("/")),
+		)?.optionalDependencies;
+		if (typeof optional !== "object" || optional === null) continue;
+		for (const dependency of Object.keys(optional)) names.add(dependency);
+	}
+	return names;
+}
+
+/** Package names directly under a `node_modules` directory, scopes expanded. */
+function listInstalledPackages(root: string): string[] {
+	const names: string[] = [];
+	for (const entry of readdirSafe(root)) {
+		if (entry.startsWith(".")) continue;
+		if (!entry.startsWith("@")) {
+			names.push(entry);
+			continue;
+		}
+		for (const scoped of readdirSafe(join(root, entry))) {
+			names.push(`${entry}/${scoped}`);
+		}
+	}
+	return names;
+}
+
+const readdirSafe = (dir: string): string[] => {
+	try {
+		return readdirSync(dir);
+	} catch {
+		// No node_modules in staging at all, which happens when nothing installed.
+		return [];
+	}
+};
 
 /** Whether a manifest's `os`/`cpu`/`libc` permit {@link RUNTIME_TARGET}. */
 function manifestRunsOnRuntime(manifest: Record<string, unknown>): boolean {
@@ -97,13 +175,33 @@ function manifestRunsOnRuntime(manifest: Record<string, unknown>): boolean {
 	);
 }
 
-/** The package a `node_modules/...` archive path belongs to. */
-function packageOfArchivePath(path: string): string | undefined {
+/**
+ * The package a `node_modules/...` archive path belongs to, and where its manifest sits
+ * inside the staging tree.
+ *
+ * Anchored on the **last** `node_modules` segment. Anchoring on the first attributes
+ * `node_modules/parent/node_modules/child-musl/...` to `parent`, so the nested package is
+ * classified by its parent's manifest and an incompatible build survives into the archive —
+ * where an AArch64 musl binary passes the architecture check and then fails to load on glibc.
+ */
+function packageOfArchivePath(
+	path: string,
+): { name: string; dir: string } | undefined {
 	const segments = path.split("/");
-	if (segments[0] !== "node_modules" || segments.length < 2) return undefined;
-	return segments[1].startsWith("@") && segments.length >= 3
-		? `${segments[1]}/${segments[2]}`
-		: segments[1];
+	const last = segments.lastIndexOf("node_modules");
+	if (last === -1) return undefined;
+
+	const first = segments[last + 1];
+	if (first === undefined) return undefined;
+	const scoped = first.startsWith("@");
+	const parts = scoped ? segments.slice(last + 1, last + 3) : [first];
+	if (scoped && parts.length < 2) return undefined;
+
+	return {
+		name: parts.join("/"),
+		// Everything up to and including the package's own segments.
+		dir: segments.slice(0, last + 1 + parts.length).join("/"),
+	};
 }
 
 /** How long the staging install may take before the deploy gives up on it. */
@@ -138,21 +236,16 @@ export type NativeTraceDeps = {
 	install: (cwd: string, specs: string[]) => Promise<void>;
 	/** Trace `entry` within `base`, returning archive-relative file paths. */
 	/**
-	 * Trace `entry` within `base`, returning archive-relative file paths.
+	 * Trace `entry` within `base`.
 	 *
-	 * The tracer's own warnings are deliberately not surfaced. On a platform-gated package
-	 * they are noise and nothing else: `sharp`'s loader names every platform's binary and
-	 * probes for the one that exists, so tracing a correctly staged `sharp` emits about a
-	 * dozen "could not resolve" warnings — one per platform that was correctly not
-	 * installed, plus several for specifiers built by string concatenation that no tracer
-	 * can follow. None of them indicates a missing file, and a report that is wrong every
-	 * time on the canonical package teaches people to ignore it.
-	 *
-	 * An archive that really is incomplete is caught by what does prove it: a traced file
-	 * that is absent from staging fails the deploy, and a shipped binary that is not an
-	 * AArch64 ELF fails it too.
+	 * `files` are archive-relative paths. `unresolved` are the specifiers the tracer could
+	 * not follow, which are classified rather than reported wholesale — see
+	 * {@link concreteUnresolved}.
 	 */
-	trace: (base: string, entry: string) => Promise<{ files: string[] }>;
+	trace: (
+		base: string,
+		entry: string,
+	) => Promise<{ files: string[]; unresolved?: string[] }>;
 	/** Version of `pkg` as resolved in the user's project, or undefined if not installed. */
 	installedVersion: (projectDir: string, pkg: string) => string | undefined;
 };
@@ -251,6 +344,17 @@ export async function traceNativePackages(options: {
 		);
 
 		const traced = await deps.trace(staging, "trace-entry.mjs");
+		const missing = concreteUnresolved(traced.unresolved ?? []);
+		if (missing.length > 0) {
+			throw invalid(
+				`Function "${slug}" stages a package that imports files which are not there: ` +
+					`${missing.map((m) => `"${m}"`).join(", ")}. Those imports are relative to a ` +
+					`package that was installed, so nothing else would notice — the archive ` +
+					`would deploy and then fail at invoke with "Cannot find module". The ` +
+					`package may be broken for ${RUNTIME_TARGET_LABEL}, or may need an install ` +
+					`script the deploy cannot run.`,
+			);
+		}
 		const files = selectArchiveFiles(slug, traced.files, staging);
 		const entries = readArchiveFiles(slug, staging, files);
 		enforceLimits(slug, entries, limits);
@@ -298,16 +402,21 @@ function selectArchiveFiles(
 	traced: readonly string[],
 	staging: string,
 ): string[] {
-	// Decided once per package rather than per file: the exclusion is a property of the
-	// package, and its manifest would otherwise be re-read for every file it contributes.
+	const platformSiblings = optionalDependencyNames(staging);
+	// Decided once per package directory rather than per file: the exclusion is a property of
+	// the package, and its manifest would otherwise be re-read for every file it contributes.
 	const excluded = new Map<string, boolean>();
 	const dropped = (path: string): boolean => {
 		const pkg = packageOfArchivePath(path);
 		if (pkg === undefined) return false;
-		const known = excluded.get(pkg);
+		const known = excluded.get(pkg.dir);
 		if (known !== undefined) return known;
-		const decision = isExcludedVariant(pkg, staging);
-		excluded.set(pkg, decision);
+		const decision = isExcludedVariant(
+			pkg.name,
+			join(staging, ...pkg.dir.split("/")),
+			(name) => platformSiblings.has(name),
+		);
+		excluded.set(pkg.dir, decision);
 		return decision;
 	};
 
@@ -489,10 +598,10 @@ const defaultDeps: NativeTraceDeps = {
 		const result = await nodeFileTrace([join(base, entry)], { base });
 		return {
 			files: [...result.fileList],
-			// A specifier the tracer could not follow is a file that will be missing from the
-			// archive and only noticed at invoke. Not fatal — nft warns about plenty that is
-			// genuinely optional — but never silent.
-			warnings: [...result.warnings].map((warning) => warning.message),
+			unresolved: [...result.warnings].flatMap((warning) => {
+				const specifier = UNRESOLVED_PATTERN.exec(warning.message)?.[1];
+				return specifier === undefined ? [] : [specifier];
+			}),
 		};
 	},
 	installedVersion: (projectDir, pkg) =>
