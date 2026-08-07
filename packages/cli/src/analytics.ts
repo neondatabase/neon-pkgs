@@ -50,9 +50,10 @@ export const storedCredentialAttribution = (
  *
  * `ensureAuth` records a context only when it selected a credential for this invocation, so a
  * missing context means the global auth middleware selected nothing before this ran. A key
- * sitting in `args.apiKey` is then not what authorized the run — `neon profile list` never used
- * it — and must not be queried on its behalf, which would attribute the run to an account it
- * never authenticated as and add a telemetry-only API call. The local default is the guess.
+ * sitting in `args.apiKey` is then not the credential the middleware chose — `neon profile list`
+ * never used it — and must not be queried on its behalf, which would attribute the run to an
+ * account it never authenticated as and add a telemetry-only API call. The local default is the
+ * guess.
  *
  * The boundary is deliberately the credential the middleware selected, not every key a handler
  * may go on to use. Several `profile` subcommands authenticate inside their own handlers —
