@@ -63,16 +63,13 @@ const BINARY_PATTERN = /\.(node|so)(\.\d+)*$/;
 const WASM_VARIANT_TOKEN = "wasm32";
 
 /**
- * Whether a package in the staging tree can be left out of the archive.
+ * Whether a package cannot load on the runtime at all, read from its own manifest the way npm
+ * decides what to install — `@img/sharp-linuxmusl-arm64` declares `libc: ["musl"]`, which a
+ * glibc runtime cannot load.
  *
- * Incompatible builds are identified from their own manifest, the same way npm decides what
- * to install — `@img/sharp-linuxmusl-arm64` declares `libc: ["musl"]`, which a glibc runtime
- * cannot load. That is a fact about the package rather than a guess from its name, so a
- * package called `musl-helper` is untouched.
- *
- * Dropping the wasm build is not merely a size saving: sharp's loader falls through to it
- * silently, so a broken native path would succeed on much slower code instead of failing
- * loudly.
+ * A fact about the package rather than a guess from its name, so a package called
+ * `musl-helper` is untouched. The WebAssembly fallback is the one case this cannot see, since
+ * wasm genuinely runs anywhere; {@link WASM_VARIANT_TOKEN} covers it.
  */
 function isIncompatibleWithRuntime(packageDir: string): boolean {
 	const manifest = readPackageManifest(packageDir);
@@ -355,9 +352,9 @@ function verifyInstalled(
 
 /**
  * Reduce a trace to the files worth archiving: everything under `node_modules`, minus the
- * sibling platform builds that cannot run on the runtime (see
- * {@link isExcludedVariant}). The trace entry itself is dropped — the real entry is
- * the esbuild bundle.
+ * sibling builds that cannot run on the runtime (see {@link isIncompatibleWithRuntime}) and
+ * the WebAssembly fallback when a real build is shipping (see {@link WASM_VARIANT_TOKEN}).
+ * The trace entry itself is dropped — the real entry is the esbuild bundle.
  */
 function selectArchiveFiles(
 	slug: string,
