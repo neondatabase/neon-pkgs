@@ -1,5 +1,5 @@
-import { type Dirent, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { type Dirent, readdirSync, realpathSync } from "node:fs";
+import { isAbsolute, join, resolve } from "node:path";
 import { externalPackageRoot } from "@neon/config";
 import { RUNTIME_TARGET } from "./native-packages.js";
 import { findPackageDir, readPackageManifest } from "./resolve-package.js";
@@ -27,13 +27,17 @@ const BINARY_PATTERN = /\.(node|so)(\.\d+)*$/;
 
 const GYP_PATTERN = /\b(node-gyp|node-pre-gyp|prebuild-install|cmake-js)\b/;
 
+/**
+ * Third-party manifests are arbitrary JSON, so every field is `unknown` and narrowed at use.
+ * npm accepts `os`/`cpu`/`libc` as a bare string as well as an array.
+ */
 type Manifest = {
-	os?: string[];
-	cpu?: string[];
-	libc?: string[];
+	os?: unknown;
+	cpu?: unknown;
+	libc?: unknown;
 	binary?: unknown;
-	optionalDependencies?: Record<string, string>;
-	scripts?: Record<string, string>;
+	optionalDependencies?: unknown;
+	scripts?: Record<string, unknown>;
 };
 
 /**
@@ -54,8 +58,11 @@ export function findUndeclaredNativePackages(options: {
 	metafile: { inputs?: Record<string, unknown> } | undefined;
 	declared: readonly string[];
 	projectDir: string;
+	/** What metafile input paths are relative to. Defaults to the process working directory. */
+	cwd?: string;
 }): NativeFinding[] {
 	const { metafile, declared, projectDir } = options;
+	const cwd = options.cwd ?? process.cwd();
 	const inputs = metafile?.inputs;
 	if (!inputs) return [];
 
@@ -66,15 +73,57 @@ export function findUndeclaredNativePackages(options: {
 	const findings: NativeFinding[] = [];
 	const seen = new Set<string>();
 	for (const input of Object.keys(inputs)) {
-		const name = packageNameFromInput(input);
-		if (name === undefined) continue;
-		if (declaredRoots.has(name) || seen.has(name)) continue;
-		seen.add(name);
+		const located = packageFromInput(input, cwd);
+		if (located === undefined) continue;
+		const { name } = located;
+		if (declaredRoots.has(name)) continue;
 
-		const evidence = nativeEvidence(projectDir, name);
+		// Keyed by directory, not name: pnpm and nested installs can put two versions of one
+		// package in a graph, and they are genuinely different packages to inspect.
+		const dir = located.dir ?? findPackageDir(projectDir, name);
+		if (dir === undefined || seen.has(dir)) continue;
+		seen.add(dir);
+
+		const evidence = nativeEvidence(dir, projectDir);
 		if (evidence !== undefined) findings.push({ name, evidence });
 	}
 	return findings;
+}
+
+/**
+ * The package an input belongs to, and where that exact copy lives on disk.
+ *
+ * Taking the directory straight from the input path rather than searching for the name is
+ * what makes this correct under pnpm, whose transitive dependencies are not linked at the
+ * project root at all and whose store holds several versions of the same package side by
+ * side. A search from the project root would miss the first and could inspect the wrong copy
+ * in the second.
+ */
+function packageFromInput(
+	input: string,
+	cwd: string,
+): { name: string; dir?: string } | undefined {
+	const name = packageNameFromInput(input);
+	if (name === undefined) return undefined;
+
+	const normalized = input.split("\\").join("/");
+	const marker = "node_modules/";
+	const last = normalized.lastIndexOf(marker);
+	// The path through the end of the package's own segments is its directory.
+	const prefixLength = last + marker.length + name.length;
+	const relativeDir = normalized.slice(0, prefixLength);
+	if (!relativeDir.endsWith(name)) return { name };
+
+	const absolute = isAbsolute(relativeDir)
+		? relativeDir
+		: resolve(cwd, relativeDir);
+	try {
+		// realpath so a pnpm symlink and its store target dedupe to one physical package.
+		return { name, dir: realpathSync(absolute) };
+	} catch {
+		// The path esbuild reported is not readable from here — fall back to a search.
+		return { name };
+	}
 }
 
 /**
@@ -107,15 +156,35 @@ const readManifest = (dir: string): Manifest | undefined =>
 	readPackageManifest(dir) as Manifest | undefined;
 
 /**
- * Whether a manifest's own `os`/`cpu` fields permit the Functions runtime. A package that
- * excludes it — `fsevents` is darwin-only — cannot run there whatever we do, so it is not a
- * candidate for shipping and reporting it would be noise.
+ * A manifest field npm accepts as either a string or an array of strings, narrowed to a list.
+ * Anything else is treated as absent: this is an advisory scan reading arbitrary third-party
+ * manifests, and a malformed field must not take a deploy down.
+ */
+function stringList(value: unknown): string[] | undefined {
+	if (typeof value === "string") return [value];
+	if (!Array.isArray(value)) return undefined;
+	const entries = value.filter(
+		(entry): entry is string => typeof entry === "string",
+	);
+	return entries.length === value.length ? entries : undefined;
+}
+
+function optionalDependencies(manifest: Manifest): Record<string, unknown> {
+	const value = manifest.optionalDependencies;
+	return typeof value === "object" && value !== null && !Array.isArray(value)
+		? (value as Record<string, unknown>)
+		: {};
+}
+
+/**
+ * Whether a manifest's own `os`/`cpu`/`libc` fields permit the Functions runtime. A package
+ * that excludes it — `fsevents` is darwin-only, a musl-only build cannot load on glibc —
+ * cannot run there whatever we do, so it is not a candidate for shipping and reporting it
+ * would be noise.
  */
 function runsOnRuntime(manifest: Manifest): boolean {
-	const permits = (
-		field: readonly string[] | undefined,
-		value: string,
-	): boolean => {
+	const permits = (raw: unknown, value: string): boolean => {
+		const field = stringList(raw);
 		if (field === undefined || field.length === 0) return true;
 		if (field.some((entry) => entry === `!${value}`)) return false;
 		const positives = field.filter((entry) => !entry.startsWith("!"));
@@ -123,18 +192,16 @@ function runsOnRuntime(manifest: Manifest): boolean {
 	};
 	return (
 		permits(manifest.os, RUNTIME_TARGET.os) &&
-		permits(manifest.cpu, RUNTIME_TARGET.cpu)
+		permits(manifest.cpu, RUNTIME_TARGET.cpu) &&
+		permits(manifest.libc, RUNTIME_TARGET.libc)
 	);
 }
 
 /** The first native signal a package shows, or `undefined` if it looks like plain JavaScript. */
 function nativeEvidence(
+	dir: string,
 	projectDir: string,
-	name: string,
 ): NativeEvidence | undefined {
-	const dir = findPackageDir(projectDir, name);
-	if (dir === undefined) return undefined;
-
 	const manifest = readManifest(dir);
 	if (manifest === undefined) return undefined;
 	if (!runsOnRuntime(manifest)) return undefined;
@@ -144,23 +211,33 @@ function nativeEvidence(
 
 	// The modern prebuilt pattern: the parent is pure JavaScript and the binary lives in a
 	// platform-gated optional dependency, which is why scanning only the parent misses it.
-	for (const dependency of Object.keys(manifest.optionalDependencies ?? {})) {
-		const dependencyDir = findPackageDir(projectDir, dependency);
+	for (const dependency of Object.keys(optionalDependencies(manifest))) {
+		// Search from the package's own directory first so a nested or pnpm-linked copy wins
+		// over an unrelated one at the project root, then fall back to the project.
+		const dependencyDir =
+			findPackageDir(dir, dependency) ??
+			findPackageDir(projectDir, dependency);
 		if (dependencyDir === undefined) continue;
 		const dependencyManifest = readManifest(dependencyDir);
 		if (dependencyManifest === undefined) continue;
 		// The sibling built for *this* host is the one installed locally; its os/cpu fields
 		// are what mark the package as platform-gated at all.
 		const platformGated =
-			dependencyManifest.os !== undefined ||
-			dependencyManifest.cpu !== undefined;
+			stringList(dependencyManifest.os) !== undefined ||
+			stringList(dependencyManifest.cpu) !== undefined;
 		if (!platformGated) continue;
 		const file = findBinary(dependencyDir, SCAN_DEPTH);
 		if (file !== undefined)
 			return { kind: "platformDependency", dependency, file };
 	}
 
-	const script = manifest.scripts?.install ?? manifest.scripts?.postinstall;
+	const scripts = manifest.scripts;
+	const script =
+		typeof scripts?.install === "string"
+			? scripts.install
+			: typeof scripts?.postinstall === "string"
+				? scripts.postinstall
+				: undefined;
 	if (script !== undefined && GYP_PATTERN.test(script))
 		return { kind: "buildsFromSource", script };
 

@@ -71,9 +71,10 @@ import { autoPullEnvAfterPin } from "./env.js";
  */
 const neonctlBundler: FunctionBundler = async (fn) => {
 	const externalPackages = fn.externalPackages ?? [];
-	const { files, metafile } = await bundleEntry(fn.source, {
+	const { files, metafile, warnings } = await bundleEntry(fn.source, {
 		externalPackages: externalPackages.map((pkg) => pkg.name),
 	});
+	for (const warning of warnings) log.warning(warning);
 
 	// Advisory only — the evidence cannot prove the code path is reached, so a package with a
 	// working JavaScript fallback must not have its deploy blocked. See native-detect.

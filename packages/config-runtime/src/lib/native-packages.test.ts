@@ -1,4 +1,10 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
@@ -202,6 +208,108 @@ describe("traceNativePackages", () => {
 		expect(requested).toEqual(["exports-only@0.35.3"]);
 	});
 
+	/**
+	 * A package may export only a subpath — `exports: { "./native": … }` with no `.` — in
+	 * which case importing the root throws `ERR_PACKAGE_PATH_NOT_EXPORTED` and the trace
+	 * finds nothing. The whole package is still what gets installed.
+	 */
+	test("installs the package root but traces the specifier as authored", async () => {
+		let requested: string[] = [];
+		let traceEntry = "";
+
+		await traceNativePackages({
+			slug: "fn1",
+			packages: ["subpath-pkg/native"],
+			projectDir: dir,
+			deps: {
+				install: async (cwd, specs) => {
+					requested = specs;
+					writeFileSync(
+						join(
+							mkdirp(join(cwd, "node_modules", "subpath-pkg")),
+							"package.json",
+						),
+						JSON.stringify({
+							name: "subpath-pkg",
+							version: "1.0.0",
+						}),
+					);
+				},
+				trace: async (base, entry) => {
+					traceEntry = readFileSync(join(base, entry), "utf8");
+					return ["node_modules/subpath-pkg/package.json"];
+				},
+			},
+		});
+
+		// npm is given the package; the trace entry imports what the user wrote.
+		expect(requested).toEqual(["subpath-pkg"]);
+		expect(traceEntry).toContain('import "subpath-pkg/native";');
+	});
+
+	test("installs a package once when named both bare and through a subpath", async () => {
+		let requested: string[] = [];
+		await traceNativePackages({
+			slug: "fn1",
+			packages: ["dual", "dual/sub"],
+			projectDir: dir,
+			deps: {
+				install: async (cwd, specs) => {
+					requested = specs;
+					writeFileSync(
+						join(
+							mkdirp(join(cwd, "node_modules", "dual")),
+							"package.json",
+						),
+						JSON.stringify({ name: "dual", version: "1.0.0" }),
+					);
+				},
+				trace: async () => ["node_modules/dual/package.json"],
+			},
+		});
+		expect(requested).toEqual(["dual"]);
+	});
+
+	// The variant filter matches package directory names. A substring test over the whole
+	// path also deletes an ordinary file that happens to be named like a variant, which
+	// would drop a needed file from the archive and fail at invoke.
+	test("keeps a normal file whose name merely contains musl", async () => {
+		const names = await traceNativePackages({
+			slug: "fn1",
+			packages: ["plain-pkg"],
+			projectDir: dir,
+			deps: {
+				install: async (cwd) => {
+					const pkg = mkdirp(join(cwd, "node_modules", "plain-pkg"));
+					writeFileSync(
+						join(pkg, "package.json"),
+						JSON.stringify({ name: "plain-pkg", version: "1.0.0" }),
+					);
+					writeFileSync(
+						join(mkdirp(join(pkg, "lib")), "musl-helper.js"),
+						"module.exports = 1;",
+					);
+					const musl = mkdirp(
+						join(cwd, "node_modules", "thing-musl-arm64"),
+					);
+					writeFileSync(
+						join(musl, "index.js"),
+						"module.exports = 2;",
+					);
+				},
+				trace: async () => [
+					"node_modules/plain-pkg/package.json",
+					"node_modules/plain-pkg/lib/musl-helper.js",
+					"node_modules/thing-musl-arm64/index.js",
+				],
+			},
+		}).then((r) => Object.keys(r.entries));
+
+		expect(names).toContain("node_modules/plain-pkg/lib/musl-helper.js");
+		// The actual musl variant package is still dropped.
+		expect(names).not.toContain("node_modules/thing-musl-arm64/index.js");
+	});
+
 	test("pins a scoped package the same way", async () => {
 		const pkg = join(dir, "node_modules", "@scope", "dep");
 		writeFileSync(
@@ -282,7 +390,7 @@ describe("traceNativePackages", () => {
 			"from the user's laptop",
 		);
 
-		const { entries } = await traceNativePackages({
+		const message = await traceNativePackages({
 			slug: "fn1",
 			packages: ["host-arch-dep"],
 			projectDir: dir,
@@ -299,18 +407,26 @@ describe("traceNativePackages", () => {
 						}),
 					);
 				},
-				// Report the user's file as traced. It is not in the staging tree, so it must be
-				// skipped rather than read from the project.
+				// Report the user's file as traced. Every traced path is resolved inside the
+				// staging tree, so this one is not found there — and is never fetched from the
+				// project instead.
 				trace: async () => [
 					"node_modules/host-arch-dep/package.json",
 					"node_modules/host-arch-dep/host-only.node",
 				],
 			},
-		});
+		}).then(
+			() => "unexpectedly succeeded",
+			(e: unknown) => (e as Error).message,
+		);
 
-		expect(Object.keys(entries)).toEqual([
-			"node_modules/host-arch-dep/package.json",
-		]);
+		// A traced file that is not in staging is an anomaly, and shipping an archive that is
+		// quietly missing a file fails at invoke — the failure this path exists to prevent.
+		// What matters here is that the host binary was not silently substituted for it.
+		expect(message).toMatch(/host-only\.node" disappeared/);
+		expect(readFileSync(join(userPkg, "host-only.node"), "utf8")).toBe(
+			"from the user's laptop",
+		);
 	});
 
 	/**

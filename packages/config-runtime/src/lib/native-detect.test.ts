@@ -54,6 +54,9 @@ const find = (metafile: unknown, declared: string[] = []) =>
 		metafile: metafile as { inputs?: Record<string, unknown> },
 		declared,
 		projectDir: root,
+		// Metafile paths are relative to esbuild's working directory, which for these
+		// fixtures is the temp project rather than the process cwd.
+		cwd: root,
 	});
 
 describe("packageNameFromInput", () => {
@@ -253,6 +256,64 @@ describe("findUndeclaredNativePackages", () => {
 
 	test("ignores a package that is in the graph but not installed", () => {
 		expect(find(metafileFor("never-installed"))).toEqual([]);
+	});
+
+	// pnpm does not link a transitive dependency at the project root at all, so searching for
+	// it by name from there finds nothing. The package directory has to come from the path
+	// esbuild reported.
+	test("inspects a pnpm transitive that is not linked at the project root", () => {
+		const store = join(
+			root,
+			"node_modules",
+			".pnpm",
+			"deep-native@1.0.0",
+			"node_modules",
+			"deep-native",
+		);
+		mkdirSync(join(store, "build"), { recursive: true });
+		writeFileSync(
+			join(store, "package.json"),
+			JSON.stringify({ name: "deep-native", version: "1.0.0" }),
+		);
+		writeFileSync(join(store, "build", "addon.node"), "\x7fELF");
+
+		const findings = find({
+			inputs: {
+				"node_modules/.pnpm/deep-native@1.0.0/node_modules/deep-native/index.js":
+					{},
+			},
+		});
+		expect(findings).toHaveLength(1);
+		expect(findings[0].name).toBe("deep-native");
+	});
+
+	// A manifest is arbitrary third-party JSON. npm accepts `os` as a bare string, and a
+	// malformed value must not take an advisory scan — and with it the deploy — down.
+	test("accepts os declared as a bare string rather than an array", () => {
+		writePackage("string-os", {
+			manifest: { os: "darwin" },
+			files: { "thing.node": "\x7fELF" },
+		});
+		expect(find(metafileFor("string-os"))).toEqual([]);
+	});
+
+	test("does not crash on a malformed os field", () => {
+		writePackage("weird-os", {
+			manifest: { os: { nope: true }, optionalDependencies: [] },
+			files: { "thing.node": "\x7fELF" },
+		});
+		// Unreadable platform metadata is treated as unrestricted, so it is still reported.
+		expect(find(metafileFor("weird-os"))).toHaveLength(1);
+	});
+
+	// A musl-only build cannot load on the glibc runtime, so it is not shippable and
+	// reporting it would be noise — the same reasoning as the darwin-only case.
+	test("ignores a package excluded from the runtime by libc", () => {
+		writePackage("musl-only", {
+			manifest: { libc: ["musl"] },
+			files: { "thing.node": "\x7fELF" },
+		});
+		expect(find(metafileFor("musl-only"))).toEqual([]);
 	});
 });
 

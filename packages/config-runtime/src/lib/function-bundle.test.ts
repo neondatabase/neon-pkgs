@@ -15,7 +15,10 @@ import {
 	expect,
 	test,
 } from "vitest";
-import { buildFunctionBundle } from "./function-bundle.js";
+import {
+	buildFunctionBundle,
+	ESM_CJS_INTEROP_BANNER,
+} from "./function-bundle.js";
 import type { NativeTraceDeps } from "./native-packages.js";
 
 let dir: string;
@@ -217,10 +220,12 @@ describe("buildFunctionBundle", () => {
 });
 
 describe("buildFunctionBundle staging external package files", () => {
-	// The guarantee that lets this ship: a policy that says nothing about native packages
-	// gets the archive it always did, to the byte. Written against the bytes the pre-existing
-	// code path produces (esbuild output, zipped at level 6, one entry keyed by basename)
-	// rather than a recorded constant, so it stays honest if esbuild's output changes.
+	// The guarantee that lets this ship: an undeclared policy gets the archive it always did.
+	//
+	// Checked against an independently built baseline — esbuild run directly with the
+	// pre-existing flags, zipped the way the pre-existing path zipped it. Unzipping the new
+	// archive and re-zipping its own bytes would pass no matter what the code did, including
+	// if the feature were deleted, so it would assert nothing.
 	test("produces a byte-identical archive to the pre-existing path when undeclared", async () => {
 		const source = join(dir, "plain.ts");
 		writeFileSync(
@@ -228,14 +233,25 @@ describe("buildFunctionBundle staging external package files", () => {
 			"export default { fetch(): Response { return new Response('plain'); } };",
 		);
 
-		const bundle = await buildFunctionBundle(fn(source));
-		const entries = unzipSync(bundle);
-		expect(Object.keys(entries)).toEqual(["index.mjs"]);
-
+		const esbuild = await import("esbuild");
+		const baseline = await esbuild.build({
+			entryPoints: [source],
+			bundle: true,
+			write: false,
+			outfile: "index.mjs",
+			minify: true,
+			format: "esm",
+			platform: "node",
+			banner: { js: ESM_CJS_INTEROP_BANNER },
+			logLevel: "silent",
+		});
 		const expected = zipSync(
-			{ "index.mjs": entries["index.mjs"] },
+			{ "index.mjs": baseline.outputFiles[0].contents },
 			{ level: 6 },
 		);
+
+		const bundle = await buildFunctionBundle(fn(source));
+		expect(Object.keys(unzipSync(bundle))).toEqual(["index.mjs"]);
 		expect(sha256(bundle)).toBe(sha256(expected));
 	});
 
