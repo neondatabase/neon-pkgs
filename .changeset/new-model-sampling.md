@@ -1,5 +1,5 @@
 ---
-"@neon/ai-sdk-provider": patch
+"@neon/ai-sdk-provider": minor
 ---
 
 Stop sending sampling parameters that three newly added models reject.
