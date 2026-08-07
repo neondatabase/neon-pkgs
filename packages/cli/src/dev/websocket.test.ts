@@ -1043,16 +1043,52 @@ describe("@neon/functions/hono under neon dev", () => {
 	});
 
 	it("refuses a subprotocol the client never offered, rather than upgrading", async () => {
+		let captured: Error | null = null;
 		const app = new Hono();
 		app.get(
 			"/ws",
 			honoUpgradeWebSocket(() => ({}), { protocol: "not-offered" }),
 		);
+		app.onError((error, c) => {
+			captured = error;
+			return c.text("boom", 500);
+		});
 		const port = await start({ fetch: app.fetch });
 
 		const response = await wsHandshakeFull(port);
 
-		expect(response.startsWith("HTTP/1.1 101")).toBe(false);
+		expect(response.split("\r\n")[0]).toBe(
+			"HTTP/1.1 500 Internal Server Error",
+		);
+		expect(captured).toBeInstanceOf(TypeError);
+		expect((captured as unknown as Error).message).toMatch(
+			/did not offer the subprotocol "not-offered"/,
+		);
+	});
+
+	it("runs the event factory even for an ordinary GET, as Hono's wrapper does", async () => {
+		// Hono awaits createEvents before calling the adapter, so the guard cannot
+		// run first. Pinned rather than worked around: every Hono adapter shares
+		// this, and the factory is expected to be a plain object literal. A future
+		// Hono release that reorders it should show up here.
+		let built = 0;
+		const app = new Hono();
+		app.get(
+			"/ws",
+			honoUpgradeWebSocket(() => {
+				built += 1;
+				return {};
+			}),
+			(c) => c.text("plain get"),
+		);
+
+		delete (globalThis as unknown as Record<symbol, unknown>)[
+			WS_BRIDGE_KEY
+		];
+		const response = await app.fetch(new Request("http://localhost/ws"));
+
+		expect(await response.text()).toBe("plain get");
+		expect(built).toBe(1);
 	});
 
 	it("lets auth middleware refuse the handshake before any socket exists", async () => {

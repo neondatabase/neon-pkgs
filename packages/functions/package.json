@@ -57,7 +57,7 @@
 		"vitest": "catalog:"
 	},
 	"peerDependencies": {
-		"hono": "^4.6.10"
+		"hono": "^4.7.8"
 	},
 	"peerDependenciesMeta": {
 		"hono": {

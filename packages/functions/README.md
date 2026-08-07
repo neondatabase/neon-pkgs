@@ -19,7 +19,7 @@ npm install @neon/functions hono
 ```
 
 > **Requirements:** Node.js >= 20.19. The `@neon/functions/hono` subpath needs
-> `hono` >= 4.6.10, declared as an optional peer — installing `@neon/functions`
+> `hono` >= 4.7.8, declared as an optional peer — installing `@neon/functions`
 > on its own pulls in nothing and warns about nothing.
 
 ## `waitUntil`
@@ -147,6 +147,11 @@ app.get("/ws", (c) => upgradeWebSocket(c, { onMessage: (e, ws) => ws.send(e.data
 
 A request without `Upgrade: websocket` is passed to the next handler, so an ordinary `GET`
 on the same path still reaches the route below the helper.
+
+Hono awaits your event factory before handing the request to the adapter, so the factory
+runs on those ordinary requests too — every Hono WebSocket adapter behaves this way. Keep it
+to returning the handler object; if it does real work, do that work inside `onOpen` instead,
+where it only runs for a connection that actually opened.
 
 ### Subprotocols
 

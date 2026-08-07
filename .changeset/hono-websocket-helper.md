@@ -34,6 +34,8 @@ ask, so the client's first offer is never echoed back on its own.
 A request without `Upgrade: websocket` falls through to the next handler, so an
 ordinary `GET` on the same path is unaffected.
 
-`hono` is an optional peer (`>=4.6.10`, the first release with
-`defineWebSocketHelper`). Installing `@neon/functions` without it installs
-nothing extra and warns about nothing; the root entry never reaches for it.
+`hono` is an optional peer (`>=4.7.8`, the first release whose
+`defineWebSocketHelper` implements both call forms — before it, the direct form
+silently returns middleware instead of upgrading). Installing `@neon/functions`
+without it installs nothing extra and warns about nothing; the root entry never
+reaches for it.
