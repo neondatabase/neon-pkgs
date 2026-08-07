@@ -21,6 +21,13 @@ const hasCurrentBranchArgv = (): boolean =>
 
 let client: Analytics | undefined;
 let clientInitialized = false;
+/**
+ * The account this invocation is attributed to, or `""` when nothing identified it.
+ *
+ * `""` is a reachable state rather than a placeholder — `ensureAuth` returns early for the
+ * commands that run without credentials (`profile`, `dev`, `init`, …) — and it is not
+ * nullish, so consumers must fall back with `||`. `?? "anonymous"` sends an empty identity.
+ */
 let userId = "";
 let errorEventContext: ErrorEventContext | undefined;
 
@@ -133,7 +140,10 @@ export const analyticsMiddleware = async (args: {
 				const resp = await apiClient?.getCurrentUserInfo?.();
 				userId = resp?.data?.id;
 			}
-		} else {
+		} else if (userId) {
+			// Only when stored credentials identified someone. Reporting an empty
+			// account under a method that was never used describes an
+			// authentication that did not happen; reporting neither field is honest.
 			args.accountId = userId;
 			args.authMethod = "oauth";
 		}
@@ -142,11 +152,6 @@ export const analyticsMiddleware = async (args: {
 	}
 
 	client.identify({
-		// Use `||` not `??`: userId defaults to "" and stays "" for an
-		// unauthenticated user (a valid CLI state), and "" is not nullish, so `??`
-		// would send an empty userId - an identify with no identity that the
-		// analytics pipeline drops as missing_id. Fall back to "anonymous" like
-		// every track() call below.
 		userId: userId || "anonymous",
 	});
 
