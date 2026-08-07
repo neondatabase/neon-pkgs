@@ -56,6 +56,12 @@ export interface NeonModelCapabilities {
 	claudeSamplingUnrecognized?: boolean;
 }
 
+/**
+ * Gemini models the gateway rejects penalties on, by measurement. Their older
+ * siblings accept penalties, so this cannot be derived from the id.
+ */
+const GEMINI_NO_PENALTIES = ["gemini-3-5-flash-lite", "gemini-3-6-flash"];
+
 const PERMISSIVE: Omit<NeonModelCapabilities, "family"> = {
 	supportsTemperature: true,
 	supportsTopP: true,
@@ -132,10 +138,22 @@ export function getNeonModelCapabilities(
 
 	// Google (Gemini): accepts standard sampling params but rejects the OpenAI
 	// `reasoning_effort` field (not part of Gemini's generation config).
+	//
+	// Newer Gemini models are stricter, and not in a way the id predicts: the
+	// gateway rejects penalties on `gemini-3-5-flash-lite` while accepting them
+	// on `gemini-3-1-flash-lite`, so neither the version nor the `-lite` suffix
+	// is the rule. `gemini-3-6-flash` refuses temperature and topP outright
+	// ("does not support the temperature parameter"). Both are listed by id
+	// because that is what was measured; a new Gemini model inherits the
+	// permissive default until someone measures it.
 	if (id.includes("gemini")) {
+		const strict = GEMINI_NO_PENALTIES.some((m) => id.includes(m));
 		return {
 			family: "google",
 			...PERMISSIVE,
+			supportsTemperature: !id.includes("gemini-3-6-flash"),
+			supportsTopP: !id.includes("gemini-3-6-flash"),
+			supportsPenalties: !strict,
 			supportsReasoningEffort: false,
 		};
 	}
@@ -177,9 +195,9 @@ export function getNeonModelCapabilities(
 	}
 
 	// Everything else on the unified endpoint rejects penalties with
-	// `parameter "frequency_penalty" must be equal to 0`. Gemini, handled above,
-	// is the only MLflow-routed family that accepts them. Seed and stop vary, so
-	// each family carries what was measured rather than inheriting a guess.
+	// `parameter "frequency_penalty" must be equal to 0`. Only the older Gemini
+	// models, handled above, accept them. Seed and stop vary, so each family
+	// carries what was measured rather than inheriting a guess.
 	if (id.includes("gpt-oss")) {
 		return {
 			family: "other",
@@ -199,7 +217,7 @@ export function getNeonModelCapabilities(
 		};
 	}
 
-	if (id.includes("glm") || id.includes("inkling")) {
+	if (id.includes("glm") || id.includes("inkling") || id.includes("kimi")) {
 		return { family: "other", ...PERMISSIVE, supportsPenalties: false };
 	}
 

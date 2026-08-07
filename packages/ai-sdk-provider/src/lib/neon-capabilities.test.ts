@@ -52,6 +52,20 @@ describe("applyNeonCapabilities warnings", () => {
 		}
 	});
 
+	it("does not tell a Gemini caller that only Gemini accepts penalties", () => {
+		// gemini-3-6-flash and gemini-3-5-flash-lite reject penalties while their
+		// older siblings accept them, so a rule phrased around the family reads as
+		// a contradiction to exactly the users who now hit it.
+		for (const id of ["gemini-3-6-flash", "gemini-3-5-flash-lite"]) {
+			const [warning] = detailsFor(id, { frequencyPenalty: 0.5 });
+			expect({ id, details: warning.details }).toEqual({
+				id,
+				details: expect.not.stringContaining("Only Gemini"),
+			});
+			expect(warning.details).toContain("This model rejects penalties");
+		}
+	});
+
 	it("hedges rather than asserting a 400 for an unrecognised Claude id", () => {
 		const [warning] = detailsFor("claude-3-5-sonnet-20241022", {
 			temperature: 0.2,
