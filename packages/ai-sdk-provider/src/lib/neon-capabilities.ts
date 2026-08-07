@@ -27,11 +27,10 @@ export function applyNeonCapabilities(
 	const patch: Partial<LanguageModelV3CallOptions> = {};
 
 	// The AI SDK prints the provider, the model id and the feature name ahead of
-	// `details`, so each reason says only what those cannot: why the gateway
-	// refuses it, and what to use instead. Each carries its own "was dropped"
-	// clause rather than a shared suffix — appending one everywhere restated the
-	// penalty reason and asserted a 400 for the unrecognised case, which is the
-	// overstatement this wording exists to avoid.
+	// `details`, so each reason says only what those cannot: that the call still
+	// went out, and what to reach for instead. Restating the feature name or
+	// asserting a 400 for the unrecognised case is the overstatement this
+	// wording exists to avoid.
 	const drop = (
 		feature: string,
 		details: string,

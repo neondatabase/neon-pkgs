@@ -101,6 +101,16 @@ describe("applyNeonCapabilities warnings", () => {
 		}
 	});
 
+	it("points a Claude caller at the effort option when reasoningEffort is dropped", () => {
+		const [warning] = detailsFor("claude-opus-5", {
+			providerOptions: { neon: { reasoningEffort: "high" } },
+		});
+
+		expect(warning.feature).toBe("reasoningEffort");
+		expect(warning.details).toContain("The request was sent without it");
+		expect(warning.details).toContain("providerOptions.anthropic.effort");
+	});
+
 	it("hedges rather than asserting a 400 for an unrecognised Claude id", () => {
 		const [warning] = detailsFor("claude-3-5-sonnet-20241022", {
 			temperature: 0.2,

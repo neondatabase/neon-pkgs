@@ -69,7 +69,7 @@ Which ids your branch serves is account-specific during the beta; `GET $NEON_AI_
 
 Upstream backends behind the gateway accept different subsets of the OpenAI-style parameters the AI SDK emits, and sending one an upstream rejects is a hard `400`. The provider drops those before the request and records a warning in `result.warnings`, so a call succeeds instead of failing on a parameter you passed in good faith.
 
-These rules apply on the Anthropic Messages and Chat Completions routes. The Responses route (every `gpt-*` id) relies on the upstream OpenAI model's own stripping instead, so its behaviour and its warning wording are the AI SDK's rather than described here — but `getNeonModelCapabilities` still answers for those ids, and the last row below is what it reports rather than something this provider drops.
+These rules apply on the Anthropic Messages and Chat Completions routes. The Responses route (every `gpt-*` id) relies on the upstream OpenAI model's own stripping instead, so its behaviour and its warning wording are the AI SDK's rather than described here — but `getNeonModelCapabilities` still answers for those ids, and the `gpt-5` row below is what it reports rather than something this provider drops.
 
 | Models | Dropped |
 | --- | --- |
