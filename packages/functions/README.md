@@ -18,9 +18,9 @@ For the Hono route helper, install Hono alongside it:
 npm install @neon/functions hono
 ```
 
-> **Requirements:** Node.js >= 20.19. The `@neon/functions/hono` subpath needs
-> `hono` >= 4.7.8, declared as an optional peer — installing `@neon/functions`
-> on its own pulls in nothing and warns about nothing.
+> **Requirements:** Node.js >= 20.19. The `@neon/functions/hono` subpath declares
+> `hono` `^4.7.8` as an optional peer — installing `@neon/functions` on its own
+> pulls in nothing and warns about nothing.
 
 ## `waitUntil`
 
@@ -123,7 +123,7 @@ const app = new Hono();
 
 app.get(
 	"/ws",
-	upgradeWebSocket((c) => ({
+	upgradeWebSocket(() => ({
 		onOpen(_event, ws) {
 			ws.send("welcome");
 		},
@@ -139,31 +139,69 @@ app.get(
 export default app;
 ```
 
-Hono's direct form works too, when you want the context in hand:
+A request without `Upgrade: websocket` is passed to the next handler, so an ordinary `GET`
+on the same path still reaches the route below the helper.
+
+Hono awaits your event factory before handing the request to the adapter, so the factory
+runs on those ordinary requests too. Keep it to returning the handler object; if it does
+real work, do that work inside `onOpen`, where it only runs for a connection that opened.
+
+### Running it
+
+`upgradeWebSocket` needs a runtime that provides the upgrade, so a Hono app serving a socket
+runs under `neon dev` locally and `neon deploy` in production. Serving it yourself with
+`@hono/node-server` will not work — there is no upgrade to claim, and every handshake throws:
+
+```
+TypeError: upgradeWebSocket() is only available inside a Neon Functions invocation.
+Run your function with `neon dev` locally, or deploy it.
+```
+
+Keep `hono` in `dependencies`, not `devDependencies`: `neon deploy` bundles your function's
+imports, and it cannot bundle what is not declared.
+
+### Types
+
+The subpath exports the types the handlers need, so a factory pulled out of the route does
+not have to reach into `hono/ws` or remember the type argument:
+
+```ts
+import type { NeonWSEvents, UpgradeWebSocketOptions } from "@neon/functions/hono";
+
+const createEvents = (): NeonWSEvents => ({
+	onMessage: (event, ws) => ws.send(event.data),
+});
+
+const options: UpgradeWebSocketOptions = { protocol: "chat.v2" };
+```
+
+`NeonWSEvents` and `NeonWSContext` are Hono's `WSEvents` and `WSContext` with `ws.raw`
+already bound to the platform `WebSocket`. Naming Hono's own types without that argument
+leaves `ws.raw` as `unknown`.
+
+### The direct form
+
+Hono's other call form works, when you want the context in hand:
 
 ```ts
 app.get("/ws", (c) => upgradeWebSocket(c, { onMessage: (e, ws) => ws.send(e.data) }));
 ```
 
-A request without `Upgrade: websocket` is passed to the next handler, so an ordinary `GET`
-on the same path still reaches the route below the helper.
-
-Hono awaits your event factory before handing the request to the adapter, so the factory
-runs on those ordinary requests too — every Hono WebSocket adapter behaves this way. Keep it
-to returning the handler object; if it does real work, do that work inside `onOpen` instead,
-where it only runs for a connection that actually opened.
+**This form is what the `hono` >= 4.7.8 requirement is for.** Below that version
+`defineWebSocketHelper` implements only the middleware form, so the call returns a
+middleware function instead of upgrading, and the symptom is a `TypeError: res.text is not
+a function` with nothing reaching `onError`. npm refuses the install; bun installs it
+silently and pnpm warns and proceeds, so on those two the version is yours to check. The
+middleware form above works on any version that has the helper at all.
 
 ### Subprotocols
 
-Pass `protocol` as the second argument, with the same rule as the low-level helper — it must
-be one the client offered:
+Pass `protocol` as the second argument. Nothing is negotiated unless you pass one, and it
+must be one the client offered:
 
 ```ts
 app.get("/ws", upgradeWebSocket(createEvents, { protocol: "chat.v2" }));
 ```
-
-Unlike Hono's Deno adapter, this never echoes the client's first offer on its own. A
-subprotocol the server did not ask for is one it has not agreed to speak.
 
 ### Middleware
 
@@ -177,11 +215,44 @@ app.use("/ws", async (c, next) => {
 });
 ```
 
-**Middleware that modifies the response cannot run on an upgrade route.** CORS is the usual
-one. Hono rebuilds `c.res` when middleware touches it, and rebuilding the 101 discards the
-pending upgrade — the runtime detects that and fails the request loudly rather than leaving
-the client waiting. Middleware that only inspects the request, or returns its own response
-before `next()`, is fine.
+**Middleware that touches `c.res` before `await next()`, or calls `c.header()` after it,
+breaks the upgrade.** Hono materialises and rebuilds the response in both cases, and
+rebuilding the 101 discards the pending upgrade. Reading the request is always fine, and so
+is returning your own response before `next()`.
+
+| On an upgrade route | Upgrade survives |
+| --- | --- |
+| `cors()` | no, at any option including the default |
+| reading `c.res` before `await next()`, even without modifying it | no |
+| `c.header(...)` after `await next()` | no |
+| `secureHeaders()`, `logger()`, `requestId()`, `timing()`, `bodyLimit()` | yes |
+| `c.header(...)` before `await next()` | yes, but the header is dropped from the 101 |
+| reading `c.res` after `await next()` | yes |
+
+When it breaks, the first thing you see comes from inside Hono and names none of this:
+
+```
+RangeError: init["status"] must be in the range of 200 to 599, inclusive.
+```
+
+The runtime logs `websocket_upgrade_response_lost` behind it, which does name the cause.
+
+### Lifecycle
+
+A WebSocket is a request that returns a `101`, so it lives under the same rules as any other
+Neon Function invocation:
+
+- **Each connection keeps its isolate alive**, and a connection exchanging no bytes for 15
+  minutes may be terminated. Protocol ping/pong counts as activity; the runtime answers
+  pings without involving your handlers.
+- **Isolates are evictable.** In-memory state does not survive, and clients are expected to
+  reconnect. Durable state belongs in Postgres.
+- **Connections are local to the isolate that accepted them.** A module-scope `Set` of
+  connected clients only reaches the clients on that isolate — which is every client under
+  `neon dev`, where there is one, and a fraction of them deployed, where there are several.
+  Broadcasting across isolates needs an out-of-band channel: Postgres `LISTEN`/`NOTIFY` over
+  the unpooled connection to start with, serverless Redis Pub/Sub when the per-isolate idle
+  connection becomes the cost.
 
 ### Notes
 
@@ -190,6 +261,8 @@ before `next()`, is fine.
   `"arraybuffer"`, so inbound binary arrives as an `ArrayBuffer`; set `ws.raw.binaryType` if
   you need to change it.
 - `SendOptions.compress` is ignored: no extensions are negotiated.
+- Importing both helpers into one file needs an alias — the root export and this one share
+  the name `upgradeWebSocket`.
 
 ## Runtime integration
 

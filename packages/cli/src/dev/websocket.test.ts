@@ -2,6 +2,8 @@ import { createServer, type Server } from "node:http";
 import { type AddressInfo, connect, type Socket } from "node:net";
 import { upgradeWebSocket as honoUpgradeWebSocket } from "@neon/functions/hono";
 import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { secureHeaders } from "hono/secure-headers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -1068,6 +1070,53 @@ describe("@neon/functions/hono under neon dev", () => {
 		expect(captured.message).toMatch(
 			/did not offer the subprotocol "not-offered"/,
 		);
+	});
+
+	it("fails loudly when response-rewriting middleware discards the 101", async () => {
+		// Documented in the README as the one middleware shape that cannot run on
+		// an upgrade route. Pinned here because the failure a user sees first is a
+		// RangeError from inside Hono that names nothing about WebSockets.
+		let logged = "";
+		const app = new Hono();
+		app.use("*", cors());
+		app.get(
+			"/ws",
+			honoUpgradeWebSocket(() => ({})),
+		);
+		const port = await start({
+			fetch: app.fetch,
+			log: (message) => {
+				logged += message;
+			},
+		});
+
+		const response = await wsHandshakeFull(port);
+
+		expect(response.startsWith("HTTP/1.1 101")).toBe(false);
+		expect(logged).toContain("websocket_upgrade_response_lost");
+		// The message has to reach a Hono user, who never touches the response.
+		expect(logged).toContain("@neon/functions/hono");
+		expect(logged).toContain("cors()");
+	});
+
+	it("upgrades under middleware that only reads the request", async () => {
+		const app = new Hono();
+		app.use("*", secureHeaders());
+		app.get(
+			"/ws",
+			honoUpgradeWebSocket(() => ({
+				onOpen: (_event, ws) => ws.send("still upgraded"),
+			})),
+		);
+		const port = await start({ fetch: app.fetch });
+
+		const { client, raw } = await wsHandshake(port);
+
+		expect(raw.startsWith("HTTP/1.1 101")).toBe(true);
+		expect((await client.next()).payload.toString("utf8")).toBe(
+			"still upgraded",
+		);
+		client.destroy();
 	});
 
 	it("runs the event factory even for an ordinary GET, as Hono's wrapper does", async () => {
