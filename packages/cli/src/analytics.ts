@@ -56,9 +56,14 @@ export const storedCredentialAttribution = (
 ): EventAttribution =>
 	storedUserId ? { accountId: storedUserId, authMethod: OAUTH } : {};
 
+/** A key to ask the API about, a file to read an id out of, or both. */
+export type TelemetryCredential = {
+	apiKey?: string;
+	credentialsPath?: string;
+};
+
 /**
- * Which credential telemetry may describe this invocation with: a key to ask the API about, a
- * file to read an id out of, or both.
+ * Which credential telemetry may describe this invocation with.
  *
  * `ensureAuth` records a context only when it selected a credential for this invocation, so a
  * missing context means the global auth middleware selected nothing before this ran. A key
@@ -84,7 +89,7 @@ export const telemetryCredential = (
 	authContext: AuthContext | null,
 	apiKey: string | undefined,
 	defaultCredentialsPath: string,
-): { apiKey?: string; credentialsPath?: string } => {
+): TelemetryCredential => {
 	if (authContext === null) {
 		return { credentialsPath: defaultCredentialsPath };
 	}
