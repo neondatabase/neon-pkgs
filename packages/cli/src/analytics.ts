@@ -26,11 +26,21 @@ const ANONYMOUS = "anonymous";
  *
  * Nothing is guaranteed to have identified it: a command can run with no credentials at all,
  * leaving the id empty. Segment accepts an empty `userId` and forwards it as-is rather than
- * rejecting it, so the substitution has to happen here — and because `""` is not nullish,
- * `?? ANONYMOUS` does not make it.
+ * rejecting it, so the substitution has to happen here. `""` is falsy but not nullish, which
+ * is why the fallback has to be `||`.
+ *
+ * Exported for tests.
  */
 export const analyticsUserId = (userId: string | undefined): string =>
 	userId || ANONYMOUS;
+
+/**
+ * The account fields of `cli_command_success`, produced here and read in `index.ts`.
+ */
+export type EventAttribution = {
+	accountId?: string;
+	authMethod?: string;
+};
 
 /**
  * The account an invocation that presented no API key may claim, which is nothing at all
@@ -38,15 +48,17 @@ export const analyticsUserId = (userId: string | undefined): string =>
  *
  * Both fields are omitted together. An empty account reported under a named method describes
  * an authentication that did not happen, which is worse than reporting neither.
+ *
+ * Exported for tests.
  */
 export const storedCredentialAttribution = (
-	userId: string | undefined,
-): { accountId?: string; authMethod?: string } =>
-	userId ? { accountId: userId, authMethod: OAUTH } : {};
+	storedUserId: string | undefined,
+): EventAttribution =>
+	storedUserId ? { accountId: storedUserId, authMethod: OAUTH } : {};
 
 /**
- * Which credential telemetry may describe this invocation with: one to ask the API about, a
- * file to read an id out of, either, or neither.
+ * Which credential telemetry may describe this invocation with: a key to ask the API about, a
+ * file to read an id out of, or both.
  *
  * `ensureAuth` records a context only when it selected a credential for this invocation, so a
  * missing context means the global auth middleware selected nothing before this ran. A key
@@ -59,12 +71,14 @@ export const storedCredentialAttribution = (
  * may go on to use. Several `profile` subcommands authenticate inside their own handlers —
  * `create --api-key` verifies the key it is about to store, `rotate-key` mints and revokes — and
  * those runs are attributed to the local default rather than to the account the handler talked
- * to. Attributing them to that key is what produced an `identify` for the signed-in user beside
- * an `accountId` for a different account.
+ * to. Attributing them to that key puts an `identify` for the signed-in user beside an
+ * `accountId` for a different account.
  *
  * A selected key records no file, because it authenticates as its own account rather than out
  * of one. Reading `DEFAULT` for it would identify the run as whoever is signed in locally, and
  * that borrowed id would suppress the API lookup that names the key's real owner.
+ *
+ * Exported for tests.
  */
 export const telemetryCredential = (
 	authContext: AuthContext | null,
@@ -158,37 +172,34 @@ export const analyticsMiddleware = async (args: {
 		return;
 	}
 
-	// Describe only the credential this invocation actually authenticated with. Reading
-	// `DEFAULT`'s unconditionally attributed every `--profile`-selected command to whichever
-	// account happened to be the default one.
-	const { apiKey: authenticatedWith, credentialsPath: authenticatedAs } =
+	const { apiKey: keyToQuery, credentialsPath: fileToRead } =
 		telemetryCredential(
 			getAuthContext(),
 			args.apiKey,
 			credentialsPath(args.configDir),
 		);
 
-	if (authenticatedAs !== undefined) {
+	if (fileToRead !== undefined) {
 		// Telemetry must never turn a damaged or unreadable credentials file into a failed command.
 		try {
-			const read = inspectCredentials(authenticatedAs);
+			const read = inspectCredentials(fileToRead);
 			if (
 				read.kind === "ok" &&
 				typeof read.credentials.user_id === "string"
 			) {
 				userId = read.credentials.user_id;
 			} else if (read.kind !== "ok") {
-				log.debug("No usable credentials at %s", authenticatedAs);
+				log.debug("No usable credentials at %s", fileToRead);
 			}
 		} catch (err) {
-			log.debug("Could not read %s: %s", authenticatedAs, err);
+			log.debug("Could not read %s: %s", fileToRead, err);
 		}
 	}
 
 	try {
-		if (authenticatedWith) {
+		if (keyToQuery) {
 			const apiClient = getApiClient({
-				apiKey: authenticatedWith,
+				apiKey: keyToQuery,
 				apiHost: args.apiHost,
 			});
 
