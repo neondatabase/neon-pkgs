@@ -8,6 +8,7 @@ import type {
 	ProjectBranchLogFieldValuesResponse,
 	ProjectBranchLogRecord,
 	ProjectBranchLogsQueryRequest,
+	ProjectBranchLogsQueryResponse,
 } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
 import { type Paginated, paginate } from "../paginate.js";
@@ -59,19 +60,38 @@ export class Logs<DThrow extends boolean> {
 		input?: LogQueryInput,
 		opts?: CallOptions,
 	): Paginated<ProjectBranchLogRecord> {
-		return paginate(
-			(cursor, signal) =>
-				queryProjectBranchLogs({
+		// Snapshot the filters. The endpoint returns wrong results unless every page
+		// repeats them unchanged, and a `Paginated` is lazy — reading `input` per page
+		// would let a caller mutating it afterwards change the query mid-walk.
+		const filters = { ...input };
+		return paginate<ProjectBranchLogRecord, ProjectBranchLogsQueryResponse>(
+			async (cursor, signal) => {
+				const page = await queryProjectBranchLogs({
 					client: this.#ctx.client,
 					path: { project_id: projectId, branch_id: branchId },
-					body: { ...input, cursor },
+					body: { ...filters, cursor },
 					throwOnError: false,
 					signal,
-				}),
+				});
+				// Truncated with nothing to resume from: the remaining records are
+				// unreachable. Stopping here would hand back a partial page that looks
+				// like the whole result.
+				if (page.data?.is_truncated && !page.data.next_cursor) {
+					return {
+						response: page.response,
+						error: {
+							code: "LOGS_TRUNCATED_WITHOUT_CURSOR",
+							message:
+								"Neon reported more log records than it returned but gave no cursor to reach them.",
+						},
+					};
+				}
+				return page;
+			},
 			(data) => ({
 				items: data?.logs ?? [],
-				// `next_cursor` is present but empty on the last page, so truncation
-				// is the flag that ends the walk.
+				// `next_cursor` is present but empty on the last page, so truncation is
+				// the flag that ends the walk.
 				cursor: data?.is_truncated ? data.next_cursor : undefined,
 			}),
 			() => this.#ctx.deadlineFor(opts),

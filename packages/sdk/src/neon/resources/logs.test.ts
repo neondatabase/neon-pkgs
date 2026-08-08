@@ -101,6 +101,32 @@ describe("logs.query pagination", () => {
 
 		expect(calls[0]?.body).toEqual({});
 	});
+
+	it("keeps the filters it was given when the caller mutates them later", async () => {
+		const { neon, calls } = neonQueued([
+			{ logs: [record("a")], next_cursor: "c1", is_truncated: true },
+			{ logs: [record("b")], is_truncated: false },
+		]);
+		const input = { since: "1h" };
+
+		const page = neon.logs.query("p-1", "br-1", input);
+		input.since = "6h";
+		await page.all();
+
+		expect(calls[0]?.body).toEqual({ since: "1h" });
+		expect(calls[1]?.body).toEqual({ since: "1h", cursor: "c1" });
+	});
+
+	it("errors rather than truncating silently when a page cannot be resumed", async () => {
+		const { neon } = neonQueued([
+			{ logs: [record("a")], is_truncated: true },
+		]);
+
+		const { data, error } = await neon.logs.query("p-1", "br-1").all();
+
+		expect(data).toBeUndefined();
+		expect(error?.message).toContain("no cursor");
+	});
 });
 
 describe("logs field discovery", () => {
