@@ -11,6 +11,12 @@ export const ENV_PULL_SERVICES = NEON_SERVICES.filter(
 	(service) => service !== "functions",
 );
 
+/** Why the services `env pull` leaves out are not selectable, for the refusal message. */
+export const ENV_PULL_UNAVAILABLE: Partial<Record<NeonService, string>> = {
+	functions:
+		"a function's env comes from your neon.ts, not from the branch, so there is nothing to pull",
+};
+
 /** The OS-level env vars each service contributes to a pulled `.env`. */
 const SERVICE_ENV_KEYS: Record<NeonService, readonly string[]> = {
 	postgres: Object.values(NEON_ENV_VAR_KEYS.postgres),

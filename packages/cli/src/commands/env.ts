@@ -9,6 +9,7 @@ import { resolveNeonEnvVars } from "../dev/env.js";
 import { mergeEnvFile, readEnvFile, resolveEnvFilePath } from "../env_file.js";
 import {
 	ENV_PULL_SERVICES,
+	ENV_PULL_UNAVAILABLE,
 	envServiceKeys,
 	ownedEnvServiceKeys,
 } from "../env_services.js";
@@ -77,9 +78,8 @@ export const builder = (argv: yargs.Argv) =>
 						service: servicesOption({
 							key: "service",
 							allowed: ENV_PULL_SERVICES,
-							describe:
-								"Pull only these services' variables, overriding neon.ts " +
-								"and pruning only within them",
+							describe: "Pull only these services' variables",
+							also: "Overrides neon.ts, and prunes only within the services you name.",
 						}),
 					})
 					.epilogue(
@@ -126,6 +126,7 @@ export const builder = (argv: yargs.Argv) =>
 							? {
 									services: parseServices(raw, {
 										allowed: ENV_PULL_SERVICES,
+										whyUnavailable: ENV_PULL_UNAVAILABLE,
 										flag: "--service",
 										onDeprecated: (used, canonical) =>
 											log.warning(

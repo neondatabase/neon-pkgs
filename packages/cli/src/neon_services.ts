@@ -57,8 +57,18 @@ export type ParseServicesOptions = {
 	allowed: readonly NeonService[];
 	/** The flag being parsed, for error messages. */
 	flag: string;
-	/** Accept {@link NO_SERVICES} as an explicit empty selection. Off by default. */
-	allowNone?: boolean;
+	/**
+	 * What {@link NO_SERVICES} produces here, e.g. "the bare starter policy". Present means
+	 * the command accepts it; absent means `none` is not a value it knows.
+	 */
+	noneMeans?: string;
+	/**
+	 * Why a service outside {@link ParseServicesOptions.allowed} is not selectable here. The
+	 * refusal is otherwise a fact with no reason attached, and the user's belief ("I have
+	 * functions, give me their env") is coherent — the missing piece is knowledge only the
+	 * command has. Optional per service; without one the refusal is still specific, just terse.
+	 */
+	whyUnavailable?: Partial<Record<NeonService, string>>;
 	/** Called once per deprecated spelling used, so the command can warn in its own voice. */
 	onDeprecated?: (used: string, canonical: NeonService) => void;
 };
@@ -80,9 +90,15 @@ export const parseServices = (
 	raw: readonly string[],
 	options: ParseServicesOptions,
 ): NeonService[] => {
-	const { allowed, flag, allowNone = false, onDeprecated } = options;
+	const {
+		allowed,
+		flag,
+		noneMeans,
+		whyUnavailable = {},
+		onDeprecated,
+	} = options;
 	const supported = `Supported values: ${allowed.join(", ")}${
-		allowNone ? `, ${NO_SERVICES}` : ""
+		noneMeans !== undefined ? `, ${NO_SERVICES}` : ""
 	}.`;
 
 	const names = raw
@@ -94,7 +110,7 @@ export const parseServices = (
 		throw new Error(`${flag} needs at least one service. ${supported}`);
 	}
 
-	if (allowNone && names.includes(NO_SERVICES)) {
+	if (noneMeans !== undefined && names.includes(NO_SERVICES)) {
 		// Deduplicate before deciding it was combined with something: a repeated value is
 		// a no-op everywhere else in this parser, so `-s none -s none` must be too.
 		if (new Set(names).size > 1) {
@@ -105,39 +121,62 @@ export const parseServices = (
 		return [];
 	}
 
+	// Canonicalize first and unconditionally, so a retired spelling is reported against the
+	// service it means rather than as a word nobody recognizes.
+	const deprecated = new Map<string, NeonService>();
 	const resolved = names.map((name) => {
 		const canonical = DEPRECATED_SERVICE_ALIASES[name];
-		if (canonical !== undefined && allowed.includes(canonical)) {
-			onDeprecated?.(name, canonical);
-			return canonical;
-		}
-		return name;
+		if (canonical === undefined) return name;
+		deprecated.set(name, canonical);
+		return canonical;
 	});
 
 	const unsupported = resolved.filter(
 		(name) => !allowed.some((service) => service === name),
 	);
 	if (unsupported.length > 0) {
-		// A real service this command cannot act on is a different mistake from a typo, so
-		// don't answer both with "unknown".
-		const known = unsupported.filter((name) =>
-			NEON_SERVICES.some((service) => service === name),
+		throw new Error(
+			`${unsupportedMessage(unsupported, flag, whyUnavailable)} ${supported}`,
 		);
-		const unknown = unsupported.filter((name) => !known.includes(name));
-		const problems = [
-			unknown.length > 0
-				? `Unknown service${unknown.length === 1 ? "" : "s"} ${unknown.join(", ")}.`
-				: undefined,
-			known.length > 0
-				? `${known.join(", ")} ${known.length === 1 ? "is" : "are"} not something ${flag} can select.`
-				: undefined,
-		].filter((part): part is string => part !== undefined);
-		throw new Error(`${problems.join(" ")} ${supported}`);
 	}
+
+	// Warned only once the selection is valid: a run that fails validation should not also
+	// carry a "still works" claim about a value that never took effect.
+	for (const [used, canonical] of deprecated) onDeprecated?.(used, canonical);
 
 	return NEON_SERVICES.filter(
 		(service) => allowed.includes(service) && resolved.includes(service),
 	);
+};
+
+/**
+ * The sentences explaining why a selection was refused. A real Neon service this command
+ * cannot act on is a different mistake from a typo — different cause, different fix — so the
+ * two are never answered with the same word, and each service carries its reason where the
+ * command supplied one.
+ */
+const unsupportedMessage = (
+	unsupported: readonly string[],
+	flag: string,
+	whyUnavailable: Partial<Record<NeonService, string>>,
+): string => {
+	const known = unsupported.filter((name): name is NeonService =>
+		NEON_SERVICES.some((service) => service === name),
+	);
+	const unknown = unsupported.filter(
+		(name) => !known.some((service) => service === name),
+	);
+	return [
+		unknown.length > 0
+			? `Unknown service${unknown.length === 1 ? "" : "s"} ${unknown.join(", ")}.`
+			: undefined,
+		...known.map((service) => {
+			const why = whyUnavailable[service];
+			return `${service} is not something ${flag} can select${why ? `: ${why}` : ""}.`;
+		}),
+	]
+		.filter((part): part is string => part !== undefined)
+		.join(" ");
 };
 
 /** Every spelling of the services flag, so a habit picked up on one command works on another. */
@@ -151,16 +190,23 @@ const SERVICE_FLAG_NAMES = ["s", "service", "services"] as const;
 export const servicesOption = (params: {
 	key: "service" | "services";
 	allowed: readonly NeonService[];
-	/** What selecting these services does, in this command. The value list is appended. */
+	/**
+	 * A noun phrase for what these services are, in this command — the value list is
+	 * appended to it after a colon, so it has to be something a list can attach to
+	 * ("Services the scaffolded neon.ts declares"), not a clause. Put the rest in `also`.
+	 */
 	describe: string;
-	allowNone?: boolean;
+	/** What {@link NO_SERVICES} produces here. Present means the command accepts it. */
+	noneMeans?: string;
 	/** Anything to say after the value syntax, e.g. what happens when the flag is omitted. */
 	also?: string;
 }): Options => ({
 	alias: SERVICE_FLAG_NAMES.filter((name) => name !== params.key),
 	describe: [
 		`${params.describe}: ${params.allowed.join(", ")}.`,
-		params.allowNone ? `Pass "${NO_SERVICES}" for none.` : undefined,
+		params.noneMeans !== undefined
+			? `Pass "${NO_SERVICES}" for ${params.noneMeans}.`
+			: undefined,
 		"Repeat the flag or comma-separate.",
 		params.also,
 	]

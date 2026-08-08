@@ -27,6 +27,14 @@ export const CONFIG_INIT_SERVICES = NEON_SERVICES.filter(
 	(service) => service !== "postgres" && service !== "data-api",
 );
 
+/** Why the two a policy cannot declare are not selectable, for the refusal message. */
+export const CONFIG_INIT_UNAVAILABLE: Partial<Record<NeonService, string>> = {
+	postgres:
+		"every branch has Postgres, so a policy has nothing to declare for it",
+	"data-api":
+		"enabling it with the default provider requires auth, so declare auth here and turn the Data API on with `neon data-api create`",
+};
+
 /** Slug, display name, and source path of the function scaffolded for `functions`. */
 export const FUNCTION_SLUG = "hello";
 export const FUNCTION_NAME = "Hello World";

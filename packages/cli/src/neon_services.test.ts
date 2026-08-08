@@ -1,8 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { CONFIG_INIT_SERVICES } from "./config_template.js";
+import {
+	CONFIG_INIT_SERVICES,
+	CONFIG_INIT_UNAVAILABLE,
+} from "./config_template.js";
 import {
 	ENV_PULL_SERVICES,
+	ENV_PULL_UNAVAILABLE,
 	envServiceKeys,
 	ownedEnvServiceKeys,
 } from "./env_services.js";
@@ -14,12 +18,17 @@ import {
 } from "./neon_services.js";
 
 /** The env-pull selection, which is the larger of the two allowed subsets. */
-const envPull = { allowed: ENV_PULL_SERVICES, flag: "--service" };
+const envPull = {
+	allowed: ENV_PULL_SERVICES,
+	whyUnavailable: ENV_PULL_UNAVAILABLE,
+	flag: "--service",
+};
 /** The config-init selection, which is the one that accepts `none`. */
 const configInit = {
 	allowed: CONFIG_INIT_SERVICES,
+	whyUnavailable: CONFIG_INIT_UNAVAILABLE,
 	flag: "--services",
-	allowNone: true,
+	noneMeans: "the bare starter policy",
 };
 
 describe("the service vocabulary", () => {
@@ -98,16 +107,16 @@ describe("parseServices", () => {
 		// `functions` is a Neon service; it just has no branch env. That is a different
 		// mistake from a typo, and pointing at the supported list alone would not say so.
 		expect(() => parseServices(["functions"], envPull)).toThrow(
-			/functions is not something --service can select/,
+			/functions is not something --service can select: a function's env comes from your neon\.ts/,
 		);
 		expect(() => parseServices(["postgres"], configInit)).toThrow(
-			/postgres is not something --services can select/,
+			/postgres is not something --services can select: every branch has Postgres/,
 		);
 	});
 
 	it("reports a typo and an unselectable service separately in one message", () => {
 		expect(() => parseServices(["nope", "functions"], envPull)).toThrow(
-			/Unknown service nope\. functions is not something --service can select\./,
+			/Unknown service nope\. functions is not something --service can select:/,
 		);
 	});
 
@@ -136,6 +145,17 @@ describe("parseServices", () => {
 			expect(
 				parseServices(["storage", "object-storage"], envPull),
 			).toEqual(["object-storage"]);
+		});
+
+		it("does not claim it still works when the run fails anyway", () => {
+			const onDeprecated = vi.fn();
+			expect(() =>
+				parseServices(["storage", "vectors"], {
+					...configInit,
+					onDeprecated,
+				}),
+			).toThrow(/Unknown service vectors/);
+			expect(onDeprecated).not.toHaveBeenCalled();
 		});
 	});
 
@@ -207,13 +227,14 @@ describe("servicesOption", () => {
 			servicesOption({
 				key: "services",
 				allowed: CONFIG_INIT_SERVICES,
-				allowNone: true,
+				noneMeans: "the bare starter policy",
 				describe: "Declare these",
 				also: "Omitted: ask.",
 			}).describe,
 		).toBe(
 			"Declare these: auth, functions, object-storage, ai-gateway. " +
-				'Pass "none" for none. Repeat the flag or comma-separate. Omitted: ask.',
+				'Pass "none" for the bare starter policy. ' +
+				"Repeat the flag or comma-separate. Omitted: ask.",
 		);
 	});
 });
