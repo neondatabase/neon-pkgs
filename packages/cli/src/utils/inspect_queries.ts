@@ -98,11 +98,12 @@ export const INSPECT_QUERIES = {
 	"long-running-queries": {
 		describe: "Queries running longer than 5 minutes (pg_stat_activity)",
 		fields: ["pid", "duration", "state", "query"],
-		emptyMessage: "No long-running queries.",
+		// Says "in this database" because the filter below makes the empty result
+		// a statement about one database, not about the branch.
+		emptyMessage: "No long-running queries in this database.",
 		// `pg_stat_activity` spans every database on the compute, so without the
 		// `datname` filter this reports queries the caller did not ask about and
-		// cannot see. It also drops processes attached to no database at all,
-		// whose `datname` is null and which have no user query to report.
+		// cannot act on.
 		sql: /* sql */ `
 			SELECT
 				pid,
@@ -129,7 +130,7 @@ export const INSPECT_QUERIES = {
 			"age",
 			"query",
 		],
-		emptyMessage: "No locks held.",
+		emptyMessage: "No locks held in this database.",
 		// Restricting to backends connected to this database does two things.
 		// `pg_locks` covers the whole compute, so it otherwise reports locks the
 		// caller did not ask about; and `l.relation` is an OID that only means
