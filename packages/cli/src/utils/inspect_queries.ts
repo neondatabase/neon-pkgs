@@ -98,8 +98,6 @@ export const INSPECT_QUERIES = {
 	"long-running-queries": {
 		describe: "Queries running longer than 5 minutes (pg_stat_activity)",
 		fields: ["pid", "duration", "state", "query"],
-		// Says "in this database" because the filter below makes the empty result
-		// a statement about one database, not about the branch.
 		emptyMessage: "No long-running queries in this database.",
 		// `pg_stat_activity` spans every database on the compute, so without the
 		// `datname` filter this reports queries the caller did not ask about and
