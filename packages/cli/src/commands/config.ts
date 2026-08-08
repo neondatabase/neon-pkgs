@@ -20,6 +20,7 @@ import type yargs from "yargs";
 import { getApiClient, type NeonApiClient } from "../api.js";
 import { type NeonConfigView, toNeonConfigView } from "../config_format.js";
 import {
+	CONFIG_INIT_NONE_MEANS,
 	CONFIG_INIT_SERVICES,
 	CONFIG_INIT_UNAVAILABLE,
 	FUNCTION_FILENAME,
@@ -266,7 +267,7 @@ const resolveServices = async (
 			allowed: CONFIG_INIT_SERVICES,
 			whyUnavailable: CONFIG_INIT_UNAVAILABLE,
 			flag: "--services",
-			noneMeans: "the bare starter policy",
+			noneMeans: CONFIG_INIT_NONE_MEANS,
 			onDeprecated: (used, canonical) =>
 				log.warning(deprecatedServiceMessage(used, canonical)),
 		});
@@ -498,7 +499,7 @@ export const builder = (argv: yargs.Argv) =>
 					services: servicesOption({
 						key: "services",
 						allowed: CONFIG_INIT_SERVICES,
-						noneMeans: "the bare starter policy",
+						noneMeans: CONFIG_INIT_NONE_MEANS,
 						describe: "Services the scaffolded neon.ts declares",
 						also:
 							"Omitted: pick interactively on a terminal, starter policy in " +

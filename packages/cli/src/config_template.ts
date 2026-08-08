@@ -27,6 +27,13 @@ export const CONFIG_INIT_SERVICES = NEON_SERVICES.filter(
 	(service) => service !== "postgres" && service !== "data-api",
 );
 
+/**
+ * What `config init --services none` produces. One constant because it is both the help text
+ * and what tells the parser `none` is a value here — passing the literal at each call site
+ * lets the two drift into documenting something the parser does not accept.
+ */
+export const CONFIG_INIT_NONE_MEANS = "the bare starter policy";
+
 /** Why the two a policy cannot declare are not selectable, for the refusal message. */
 export const CONFIG_INIT_UNAVAILABLE: Partial<Record<NeonService, string>> = {
 	postgres:

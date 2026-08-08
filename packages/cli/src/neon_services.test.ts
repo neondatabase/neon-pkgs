@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+	CONFIG_INIT_NONE_MEANS,
 	CONFIG_INIT_SERVICES,
 	CONFIG_INIT_UNAVAILABLE,
 } from "./config_template.js";
@@ -28,7 +29,7 @@ const configInit = {
 	allowed: CONFIG_INIT_SERVICES,
 	whyUnavailable: CONFIG_INIT_UNAVAILABLE,
 	flag: "--services",
-	noneMeans: "the bare starter policy",
+	noneMeans: CONFIG_INIT_NONE_MEANS,
 };
 
 describe("the service vocabulary", () => {
@@ -145,6 +146,32 @@ describe("parseServices", () => {
 			expect(
 				parseServices(["storage", "object-storage"], envPull),
 			).toEqual(["object-storage"]);
+		});
+
+		it("warns once however many times it is repeated", () => {
+			const onDeprecated = vi.fn();
+			parseServices(["storage", "storage,storage"], {
+				...envPull,
+				onDeprecated,
+			});
+			expect(onDeprecated).toHaveBeenCalledTimes(1);
+		});
+
+		it("is reported as the service it means where a command cannot select it", () => {
+			// Not reachable through either of today's commands, since both offer object
+			// storage. It is the shape that matters: an alias must never degrade into
+			// "unknown word" just because this command can't act on what it resolves to.
+			expect(() =>
+				parseServices(["storage"], {
+					allowed: ["postgres"],
+					flag: "--service",
+					whyUnavailable: {
+						"object-storage": "this command does not touch buckets",
+					},
+				}),
+			).toThrow(
+				/object-storage is not something --service can select: this command does not touch buckets\./,
+			);
 		});
 
 		it("does not claim it still works when the run fails anyway", () => {
