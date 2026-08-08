@@ -149,7 +149,8 @@ const { vars, credential } = await fetchEnvReusingSecrets(config, {
 // vars: { DATABASE_URL: "…", AWS_ACCESS_KEY_ID: "…", … } — ready to write or inject
 if (credential.issued) {
     console.log(`new values for ${credential.keys.join(", ")}`);
-    // credential.revoked holds the token ids it superseded
+    // credential.revoked    — ids it replaced and revoked
+    // credential.superseded — ids it replaced but left live (`revokeSuperseded: false`)
 }
 ```
 
@@ -157,7 +158,7 @@ The check is a real verification, not a presence test. A persisted secret is kep
 
 No local bookkeeping backs this: `AWS_ACCESS_KEY_ID` **is** the credential's token id, and the AI Gateway token is minted as `nt_live_<tokenIdShort>_<secret>`, so the persisted secrets already name the credential that issued them.
 
-Revoking is only safe because the call resolves everything the policy enables. Pass `revokeSuperseded: false` when yours resolves a **subset** — the credential your persisted secrets name may also back a service you are not resolving, and revoking it would break that service while its vars, which you are not rewriting, stay in place. The cost is an orphaned credential, which is the safer of the two failures. `neon env pull --service` is the caller this exists for.
+Revoking is only safe because the call resolves everything the policy enables. Pass `revokeSuperseded: false` when yours resolves a **subset** — the credential your persisted secrets name may also back a service you are not resolving, and revoking it would break that service while its vars, which you are not rewriting, stay in place. The cost is an orphaned credential, which is the safer of the two failures, and `credential.superseded` names it so you can report it rather than leave it invisible. `neon env pull --service` is the caller this exists for.
 
 ### Fetching a subset
 

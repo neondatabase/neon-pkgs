@@ -7,4 +7,4 @@
 
 New `--service` (`-s`) flag scopes a pull to `postgres`, `auth`, `data-api`, `object-storage`, and/or `ai-gateway`, overriding `neon.ts`. A scoped pull writes and prunes only within the services you name, so `neon env pull -s ai-gateway` leaves your `DATABASE_URL` alone.
 
-`fetchEnvReusingSecrets` (`@neon/env/runtime`) takes a new `revokeSuperseded` option. It defaults to `true`, the existing behaviour. Pass `false` when the call resolves only part of what a branch has: object storage and the AI Gateway share one credential, so revoking the one your persisted secrets name can break a service the call is not rewriting.
+`fetchEnvReusingSecrets` (`@neon/env/runtime`) takes a new `revokeSuperseded` option. It defaults to `true`, the existing behaviour. Pass `false` when the call resolves only part of what a branch has: object storage and the AI Gateway share one credential, so revoking the one your persisted secrets name can break a service the call is not rewriting. The credential it then leaves live is reported as `credential.superseded`, the counterpart to the existing `credential.revoked`.
