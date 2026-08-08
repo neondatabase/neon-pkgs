@@ -1,4 +1,10 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { configuredOrgId } from "@neon/e2e-harness";
@@ -26,10 +32,19 @@ import {
 const EMITTED_PREFIX = "CI= npx -y neon ";
 
 /**
- * Agent detection reads these and nothing else (`init/detect_agent.ts`). Clearing them keeps
- * the run agentless, which matters for more than determinism: with an agent id the phase
- * calls `ensureSkillsUpToDate`, which fetches the skills CLI and writes skills into the home
- * directory. A test must not reconfigure the machine it runs on.
+ * Every variable `detectAgent` and `detectIde` read (`init/detect_agent.ts`). Clearing them
+ * keeps the run agentless, which matters for more than determinism: given an agent id, the
+ * phase calls `ensureSkillsUpToDate`, which fetches the skills CLI and installs skills — into
+ * the home directory, and into the working directory it is invoked from.
+ *
+ * This has to be applied to the phase invocation itself, not only to the commands it emits.
+ * It was not, once, and the run wrote `.agents/skills/` and `skills-lock.json` into
+ * `packages/cli`. Hence also the temp working directory below, and the assertion that nothing
+ * was installed into it: a scrub that silently stops working should fail this test rather
+ * than reconfigure the machine.
+ *
+ * The value scan at `detect_agent.ts:48` only runs inside the VS Code branch, which these
+ * variables gate, so clearing them is sufficient.
  */
 const NO_AGENT_ENV: Record<string, undefined> = {
 	CLAUDECODE: undefined,
@@ -42,6 +57,10 @@ const NO_AGENT_ENV: Record<string, undefined> = {
 	CURSOR_EXTENSION_HOST_ROLE: undefined,
 	CURSOR_LAYOUT: undefined,
 	CURSOR_SPAWNED_BY_EXTENSION_ID: undefined,
+	GIT_ASKPASS: undefined,
+	VSCODE_GIT_ASKPASS_NODE: undefined,
+	VSCODE_PID: undefined,
+	VSCODE_CWD: undefined,
 };
 
 type AgentStep = { id: string; description: string; command?: string };
@@ -63,13 +82,23 @@ describe.sequential("e2e — neon init emits commands that work", () => {
 	const created: string[] = [];
 	const orgId = configuredOrgId();
 
+	/**
+	 * Everything runs here rather than in the checkout: `env pull` writes a connection string
+	 * and password into it, and the phase would install skills here if the scrub above ever
+	 * stopped working. Removed in teardown, credentials included.
+	 */
+	const workdir = mkdtempSync(join(tmpdir(), "neon-init-e2e-"));
+	const contextFile = join(workdir, ".neon");
+
 	beforeAll(async () => {
 		projectId = await createProject({
 			name: uniqueProjectName("cli-init"),
 		});
+		writeFileSync(contextFile, `${JSON.stringify({ orgId, projectId })}\n`);
 	});
 
 	afterAll(async () => {
+		rmSync(workdir, { recursive: true, force: true });
 		for (const id of [...created, projectId]) {
 			if (id) await deleteProject(id);
 		}
@@ -82,14 +111,21 @@ describe.sequential("e2e — neon init emits commands that work", () => {
 			);
 		}
 
-		const phase = await runCli([
-			"init",
-			"--agent",
-			"--data",
-			JSON.stringify({ step: "getting-started" }),
-		]);
+		const phase = await runCli(
+			[
+				"init",
+				"--agent",
+				"--data",
+				JSON.stringify({ step: "getting-started" }),
+			],
+			{ env: NO_AGENT_ENV, cwd: workdir, contextFile },
+		);
 		expect(phase.code, phase.stderr).toBe(0);
 		const response = JSON.parse(phase.stdout) as PhaseResponse;
+
+		// Nothing may have been installed by asking the phase what to do.
+		expect(existsSync(join(workdir, ".agents"))).toBe(false);
+		expect(existsSync(join(workdir, "skills-lock.json"))).toBe(false);
 
 		expect(response.nextAction?.type).toBe("agent_action");
 		const steps = response.nextAction?.steps ?? [];
@@ -104,12 +140,6 @@ describe.sequential("e2e — neon init emits commands that work", () => {
 				"pull_env",
 			]),
 		);
-
-		// A working directory for `env pull` to write into. It reads `.neon` from the cwd,
-		// which is also how a real project points the CLI at itself.
-		const workdir = mkdtempSync(join(tmpdir(), "neon-init-e2e-"));
-		const contextFile = join(workdir, ".neon");
-		writeFileSync(contextFile, `${JSON.stringify({ orgId, projectId })}\n`);
 
 		const executed: string[] = [];
 		for (const step of steps) {
@@ -154,6 +184,16 @@ describe.sequential("e2e — neon init emits commands that work", () => {
 				};
 				created.push(project.id);
 				expect(project.name).toMatch(/^neon-ts-e2e-/);
+			}
+			if (step.id === "pull_env") {
+				// Exit 0 is not the outcome that matters: `env pull` succeeds when it
+				// resolves nothing. The whole sequence exists to leave a connection string
+				// on disk, so read the file it wrote.
+				const envFile = join(workdir, ".env.local");
+				expect(existsSync(envFile)).toBe(true);
+				expect(readFileSync(envFile, "utf8")).toMatch(
+					/^DATABASE_URL="?postgresql:\/\/.+/m,
+				);
 			}
 		}
 
