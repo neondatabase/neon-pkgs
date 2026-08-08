@@ -4,7 +4,6 @@ import {
 	finalizeRestoreBranch,
 	getProjectBranch,
 	listProjectBranches,
-	recoverProjectBranch,
 	setDefaultProjectBranch,
 	updateProjectBranch,
 } from "../../client/sdk.gen.js";
@@ -354,38 +353,6 @@ export class Branches<DThrow extends boolean> {
 					signal,
 				}),
 			() => undefined,
-		);
-	}
-
-	/**
-	 * Recover a soft-deleted branch within the 7-day recovery window.
-	 *
-	 * @apiCall POST /projects/{project_id}/branches/{branch_id}/recover
-	 */
-	recover(
-		projectId: string,
-		branchId: string,
-	): Promise<Outcome<Branch, DThrow>>;
-	recover<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		opts: CallOptions<Throw>,
-	): Promise<Outcome<Branch, Throw>>;
-	recover(
-		projectId: string,
-		branchId: string,
-		opts?: CallOptions,
-	): Promise<Branch | NeonResult<Branch>> {
-		return this.#ctx.run(
-			opts,
-			(client, signal) =>
-				recoverProjectBranch({
-					client,
-					path: { project_id: projectId, branch_id: branchId },
-					throwOnError: false,
-					signal,
-				}),
-			(data) => data.branch,
 		);
 	}
 }

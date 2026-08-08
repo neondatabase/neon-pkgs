@@ -2,7 +2,7 @@
 
 import { client } from './client.gen.js';
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client/index.js';
-import type { AcceptProjectTransferRequestData, AcceptProjectTransferRequestErrors, AcceptProjectTransferRequestResponses, AddBranchNeonAuthOauthProviderData, AddBranchNeonAuthOauthProviderErrors, AddBranchNeonAuthOauthProviderResponses, AddBranchNeonAuthTrustedDomainData, AddBranchNeonAuthTrustedDomainErrors, AddBranchNeonAuthTrustedDomainResponses, AddNeonAuthDomainToRedirectUriWhitelistData, AddNeonAuthDomainToRedirectUriWhitelistErrors, AddNeonAuthDomainToRedirectUriWhitelistResponses, AddNeonAuthOauthProviderData, AddNeonAuthOauthProviderErrors, AddNeonAuthOauthProviderResponses, AddProjectJwksData, AddProjectJwksErrors, AddProjectJwksResponses, AssignOrganizationVpcEndpointData, AssignOrganizationVpcEndpointErrors, AssignOrganizationVpcEndpointResponses, AssignProjectVpcEndpointData, AssignProjectVpcEndpointErrors, AssignProjectVpcEndpointResponses, CountProjectBranchesData, CountProjectBranchesErrors, CountProjectBranchesResponses, CreateApiKeyData, CreateApiKeyErrors, CreateApiKeyResponses, CreateBranchNeonAuthNewUserData, CreateBranchNeonAuthNewUserErrors, CreateBranchNeonAuthNewUserResponses, CreateCredentialData, CreateCredentialErrors, CreateCredentialResponses, CreateNeonAuthData, CreateNeonAuthErrors, CreateNeonAuthIntegrationData, CreateNeonAuthIntegrationErrors, CreateNeonAuthIntegrationResponses, CreateNeonAuthNewUserData, CreateNeonAuthNewUserErrors, CreateNeonAuthNewUserResponses, CreateNeonAuthProviderSdkKeysData, CreateNeonAuthProviderSdkKeysErrors, CreateNeonAuthProviderSdkKeysResponses, CreateNeonAuthResponses, CreateOrganizationInvitationsData, CreateOrganizationInvitationsErrors, CreateOrganizationInvitationsResponses, CreateOrgApiKeyData, CreateOrgApiKeyErrors, CreateOrgApiKeyResponses, CreateProjectBranchAnonymizedData, CreateProjectBranchAnonymizedErrors, CreateProjectBranchAnonymizedResponses, CreateProjectBranchBucketData, CreateProjectBranchBucketErrors, CreateProjectBranchBucketResponses, CreateProjectBranchData, CreateProjectBranchDataApiData, CreateProjectBranchDataApiErrors, CreateProjectBranchDataApiResponses, CreateProjectBranchDatabaseData, CreateProjectBranchDatabaseErrors, CreateProjectBranchDatabaseResponses, CreateProjectBranchErrors, CreateProjectBranchFunctionDeploymentData, CreateProjectBranchFunctionDeploymentErrors, CreateProjectBranchFunctionDeploymentResponses, CreateProjectBranchResponses, CreateProjectBranchRoleData, CreateProjectBranchRoleErrors, CreateProjectBranchRoleResponses, CreateProjectData, CreateProjectEndpointData, CreateProjectEndpointErrors, CreateProjectEndpointResponses, CreateProjectErrors, CreateProjectResponses, CreateProjectTransferRequestData, CreateProjectTransferRequestErrors, CreateProjectTransferRequestResponses, CreateSnapshotData, CreateSnapshotErrors, CreateSnapshotResponses, DeleteBranchNeonAuthOauthProviderData, DeleteBranchNeonAuthOauthProviderErrors, DeleteBranchNeonAuthOauthProviderResponses, DeleteBranchNeonAuthTrustedDomainData, DeleteBranchNeonAuthTrustedDomainErrors, DeleteBranchNeonAuthTrustedDomainResponses, DeleteBranchNeonAuthUserData, DeleteBranchNeonAuthUserErrors, DeleteBranchNeonAuthUserResponses, DeleteNeonAuthDomainFromRedirectUriWhitelistData, DeleteNeonAuthDomainFromRedirectUriWhitelistErrors, DeleteNeonAuthDomainFromRedirectUriWhitelistResponses, DeleteNeonAuthIntegrationData, DeleteNeonAuthIntegrationErrors, DeleteNeonAuthIntegrationResponses, DeleteNeonAuthOauthProviderData, DeleteNeonAuthOauthProviderErrors, DeleteNeonAuthOauthProviderResponses, DeleteNeonAuthUserData, DeleteNeonAuthUserErrors, DeleteNeonAuthUserResponses, DeleteOrganizationSpendingLimitData, DeleteOrganizationSpendingLimitErrors, DeleteOrganizationSpendingLimitResponses, DeleteOrganizationVpcEndpointData, DeleteOrganizationVpcEndpointErrors, DeleteOrganizationVpcEndpointResponses, DeleteProjectBranchBucketData, DeleteProjectBranchBucketErrors, DeleteProjectBranchBucketObjectData, DeleteProjectBranchBucketObjectErrors, DeleteProjectBranchBucketObjectResponses, DeleteProjectBranchBucketObjectsByPrefixData, DeleteProjectBranchBucketObjectsByPrefixErrors, DeleteProjectBranchBucketObjectsByPrefixResponses, DeleteProjectBranchBucketResponses, DeleteProjectBranchData, DeleteProjectBranchDataApiData, DeleteProjectBranchDataApiErrors, DeleteProjectBranchDataApiResponses, DeleteProjectBranchDatabaseData, DeleteProjectBranchDatabaseErrors, DeleteProjectBranchDatabaseResponses, DeleteProjectBranchErrors, DeleteProjectBranchFunctionData, DeleteProjectBranchFunctionErrors, DeleteProjectBranchFunctionResponses, DeleteProjectBranchResponses, DeleteProjectBranchRoleData, DeleteProjectBranchRoleErrors, DeleteProjectBranchRoleResponses, DeleteProjectData, DeleteProjectEndpointData, DeleteProjectEndpointErrors, DeleteProjectEndpointResponses, DeleteProjectErrors, DeleteProjectJwksData, DeleteProjectJwksErrors, DeleteProjectJwksResponses, DeleteProjectResponses, DeleteProjectVpcEndpointData, DeleteProjectVpcEndpointErrors, DeleteProjectVpcEndpointResponses, DeleteSnapshotData, DeleteSnapshotErrors, DeleteSnapshotResponses, DisableNeonAuthData, DisableNeonAuthErrors, DisableNeonAuthResponses, FinalizeRestoreBranchData, FinalizeRestoreBranchErrors, FinalizeRestoreBranchResponses, GetActiveRegionsData, GetActiveRegionsErrors, GetActiveRegionsResponses, GetAnonymizedBranchStatusData, GetAnonymizedBranchStatusErrors, GetAnonymizedBranchStatusResponses, GetAuthDetailsData, GetAuthDetailsErrors, GetAuthDetailsResponses, GetAvailablePreloadLibrariesData, GetAvailablePreloadLibrariesErrors, GetAvailablePreloadLibrariesResponses, GetConnectionUriData, GetConnectionUriErrors, GetConnectionUriResponses, GetConsumptionHistoryPerBranchV2Data, GetConsumptionHistoryPerBranchV2Errors, GetConsumptionHistoryPerBranchV2Responses, GetConsumptionHistoryPerProjectData, GetConsumptionHistoryPerProjectErrors, GetConsumptionHistoryPerProjectResponses, GetConsumptionHistoryPerProjectV2Data, GetConsumptionHistoryPerProjectV2Errors, GetConsumptionHistoryPerProjectV2Responses, GetCurrentUserInfoData, GetCurrentUserInfoErrors, GetCurrentUserInfoResponses, GetCurrentUserOrganizationsData, GetCurrentUserOrganizationsErrors, GetCurrentUserOrganizationsResponses, GetMaskingRulesData, GetMaskingRulesErrors, GetMaskingRulesResponses, GetNeonAuthAllowLocalhostData, GetNeonAuthAllowLocalhostErrors, GetNeonAuthAllowLocalhostResponses, GetNeonAuthData, GetNeonAuthEmailAndPasswordConfigData, GetNeonAuthEmailAndPasswordConfigErrors, GetNeonAuthEmailAndPasswordConfigResponses, GetNeonAuthEmailProviderData, GetNeonAuthEmailProviderErrors, GetNeonAuthEmailProviderResponses, GetNeonAuthEmailServerData, GetNeonAuthEmailServerErrors, GetNeonAuthEmailServerResponses, GetNeonAuthErrors, GetNeonAuthPhoneNumberPluginData, GetNeonAuthPhoneNumberPluginErrors, GetNeonAuthPhoneNumberPluginResponses, GetNeonAuthPluginConfigsData, GetNeonAuthPluginConfigsErrors, GetNeonAuthPluginConfigsResponses, GetNeonAuthResponses, GetNeonAuthWebhookConfigData, GetNeonAuthWebhookConfigErrors, GetNeonAuthWebhookConfigResponses, GetOrganizationData, GetOrganizationErrors, GetOrganizationInvitationsData, GetOrganizationInvitationsErrors, GetOrganizationInvitationsResponses, GetOrganizationMemberData, GetOrganizationMemberErrors, GetOrganizationMemberResponses, GetOrganizationMembersData, GetOrganizationMembersErrors, GetOrganizationMembersResponses, GetOrganizationResponses, GetOrganizationSpendingLimitData, GetOrganizationSpendingLimitErrors, GetOrganizationSpendingLimitResponses, GetOrganizationVpcEndpointDetailsData, GetOrganizationVpcEndpointDetailsErrors, GetOrganizationVpcEndpointDetailsResponses, GetProjectAdvisorSecurityIssuesData, GetProjectAdvisorSecurityIssuesErrors, GetProjectAdvisorSecurityIssuesResponses, GetProjectBranchAiGatewayData, GetProjectBranchAiGatewayErrors, GetProjectBranchAiGatewayResponses, GetProjectBranchBucketObjectData, GetProjectBranchBucketObjectErrors, GetProjectBranchBucketObjectResponses, GetProjectBranchData, GetProjectBranchDataApiData, GetProjectBranchDataApiErrors, GetProjectBranchDataApiResponses, GetProjectBranchDatabaseData, GetProjectBranchDatabaseErrors, GetProjectBranchDatabaseResponses, GetProjectBranchErrors, GetProjectBranchFunctionData, GetProjectBranchFunctionErrors, GetProjectBranchFunctionResponses, GetProjectBranchResponses, GetProjectBranchRoleData, GetProjectBranchRoleErrors, GetProjectBranchRolePasswordData, GetProjectBranchRolePasswordErrors, GetProjectBranchRolePasswordResponses, GetProjectBranchRoleResponses, GetProjectBranchSchemaComparisonData, GetProjectBranchSchemaComparisonErrors, GetProjectBranchSchemaComparisonResponses, GetProjectBranchSchemaData, GetProjectBranchSchemaErrors, GetProjectBranchSchemaResponses, GetProjectBranchStorageData, GetProjectBranchStorageErrors, GetProjectBranchStorageResponses, GetProjectData, GetProjectEndpointData, GetProjectEndpointErrors, GetProjectEndpointResponses, GetProjectErrors, GetProjectJwksData, GetProjectJwksErrors, GetProjectJwksResponses, GetProjectOperationData, GetProjectOperationErrors, GetProjectOperationResponses, GetProjectResponses, GetSnapshotScheduleData, GetSnapshotScheduleErrors, GetSnapshotScheduleResponses, GrantPermissionToProjectData, GrantPermissionToProjectErrors, GrantPermissionToProjectResponses, ListApiKeysData, ListApiKeysErrors, ListApiKeysResponses, ListBranchNeonAuthOauthProvidersData, ListBranchNeonAuthOauthProvidersErrors, ListBranchNeonAuthOauthProvidersResponses, ListBranchNeonAuthTrustedDomainsData, ListBranchNeonAuthTrustedDomainsErrors, ListBranchNeonAuthTrustedDomainsResponses, ListCredentialsData, ListCredentialsErrors, ListCredentialsResponses, ListNeonAuthIntegrationsData, ListNeonAuthIntegrationsErrors, ListNeonAuthIntegrationsResponses, ListNeonAuthOauthProvidersData, ListNeonAuthOauthProvidersErrors, ListNeonAuthOauthProvidersResponses, ListNeonAuthRedirectUriWhitelistDomainsData, ListNeonAuthRedirectUriWhitelistDomainsErrors, ListNeonAuthRedirectUriWhitelistDomainsResponses, ListOrganizationVpcEndpointsAllRegionsData, ListOrganizationVpcEndpointsAllRegionsErrors, ListOrganizationVpcEndpointsAllRegionsResponses, ListOrganizationVpcEndpointsData, ListOrganizationVpcEndpointsErrors, ListOrganizationVpcEndpointsResponses, ListOrgApiKeysData, ListOrgApiKeysErrors, ListOrgApiKeysResponses, ListProjectBranchBucketObjectsData, ListProjectBranchBucketObjectsErrors, ListProjectBranchBucketObjectsResponses, ListProjectBranchBucketsData, ListProjectBranchBucketsErrors, ListProjectBranchBucketsResponses, ListProjectBranchDatabasesData, ListProjectBranchDatabasesErrors, ListProjectBranchDatabasesResponses, ListProjectBranchEndpointsData, ListProjectBranchEndpointsErrors, ListProjectBranchEndpointsResponses, ListProjectBranchesData, ListProjectBranchesErrors, ListProjectBranchesResponses, ListProjectBranchFunctionsData, ListProjectBranchFunctionsErrors, ListProjectBranchFunctionsResponses, ListProjectBranchRolesData, ListProjectBranchRolesErrors, ListProjectBranchRolesResponses, ListProjectEndpointsData, ListProjectEndpointsErrors, ListProjectEndpointsResponses, ListProjectOperationsData, ListProjectOperationsErrors, ListProjectOperationsResponses, ListProjectPermissionsData, ListProjectPermissionsErrors, ListProjectPermissionsResponses, ListProjectsData, ListProjectsErrors, ListProjectsResponses, ListProjectVpcEndpointsData, ListProjectVpcEndpointsErrors, ListProjectVpcEndpointsResponses, ListSharedProjectsData, ListSharedProjectsErrors, ListSharedProjectsResponses, ListSnapshotsData, ListSnapshotsErrors, ListSnapshotsResponses, PresignProjectBranchBucketObjectData, PresignProjectBranchBucketObjectErrors, PresignProjectBranchBucketObjectResponses, RecoverProjectBranchData, RecoverProjectBranchErrors, RecoverProjectBranchResponses, RecoverProjectData, RecoverProjectErrors, RecoverProjectResponses, RemoveOrganizationMemberData, RemoveOrganizationMemberErrors, RemoveOrganizationMemberResponses, ResetProjectBranchRolePasswordData, ResetProjectBranchRolePasswordErrors, ResetProjectBranchRolePasswordResponses, RestartProjectEndpointData, RestartProjectEndpointErrors, RestartProjectEndpointResponses, RestoreProjectBranchData, RestoreProjectBranchErrors, RestoreProjectBranchResponses, RestoreSnapshotData, RestoreSnapshotErrors, RestoreSnapshotResponses, RevokeApiKeyData, RevokeApiKeyErrors, RevokeApiKeyResponses, RevokeCredentialData, RevokeCredentialErrors, RevokeCredentialResponses, RevokeOrgApiKeyData, RevokeOrgApiKeyErrors, RevokeOrgApiKeyResponses, RevokePermissionFromProjectData, RevokePermissionFromProjectErrors, RevokePermissionFromProjectResponses, SendNeonAuthTestEmailData, SendNeonAuthTestEmailErrors, SendNeonAuthTestEmailResponses, SetDefaultProjectBranchData, SetDefaultProjectBranchErrors, SetDefaultProjectBranchResponses, SetOrganizationSpendingLimitData, SetOrganizationSpendingLimitErrors, SetOrganizationSpendingLimitResponses, SetSnapshotScheduleData, SetSnapshotScheduleErrors, SetSnapshotScheduleResponses, StartAnonymizationData, StartAnonymizationErrors, StartAnonymizationResponses, StartProjectEndpointData, StartProjectEndpointErrors, StartProjectEndpointResponses, SuspendProjectEndpointData, SuspendProjectEndpointErrors, SuspendProjectEndpointResponses, TransferNeonAuthProviderProjectData, TransferNeonAuthProviderProjectErrors, TransferNeonAuthProviderProjectResponses, TransferProjectsFromOrgToOrgData, TransferProjectsFromOrgToOrgErrors, TransferProjectsFromOrgToOrgResponses, TransferProjectsFromUserToOrgData, TransferProjectsFromUserToOrgErrors, TransferProjectsFromUserToOrgResponses, UpdateBranchNeonAuthOauthProviderData, UpdateBranchNeonAuthOauthProviderErrors, UpdateBranchNeonAuthOauthProviderResponses, UpdateMaskingRulesData, UpdateMaskingRulesErrors, UpdateMaskingRulesResponses, UpdateNeonAuthAllowLocalhostData, UpdateNeonAuthAllowLocalhostErrors, UpdateNeonAuthAllowLocalhostResponses, UpdateNeonAuthConfigData, UpdateNeonAuthConfigErrors, UpdateNeonAuthConfigResponses, UpdateNeonAuthEmailAndPasswordConfigData, UpdateNeonAuthEmailAndPasswordConfigErrors, UpdateNeonAuthEmailAndPasswordConfigResponses, UpdateNeonAuthEmailProviderData, UpdateNeonAuthEmailProviderErrors, UpdateNeonAuthEmailProviderResponses, UpdateNeonAuthEmailServerData, UpdateNeonAuthEmailServerErrors, UpdateNeonAuthEmailServerResponses, UpdateNeonAuthMagicLinkPluginData, UpdateNeonAuthMagicLinkPluginErrors, UpdateNeonAuthMagicLinkPluginResponses, UpdateNeonAuthOauthProviderData, UpdateNeonAuthOauthProviderErrors, UpdateNeonAuthOauthProviderResponses, UpdateNeonAuthOrganizationPluginData, UpdateNeonAuthOrganizationPluginErrors, UpdateNeonAuthOrganizationPluginResponses, UpdateNeonAuthPhoneNumberPluginData, UpdateNeonAuthPhoneNumberPluginErrors, UpdateNeonAuthPhoneNumberPluginResponses, UpdateNeonAuthUserRoleData, UpdateNeonAuthUserRoleErrors, UpdateNeonAuthUserRoleResponses, UpdateNeonAuthWebhookConfigData, UpdateNeonAuthWebhookConfigErrors, UpdateNeonAuthWebhookConfigResponses, UpdateOrganizationMemberData, UpdateOrganizationMemberErrors, UpdateOrganizationMemberResponses, UpdateProjectBranchData, UpdateProjectBranchDataApiData, UpdateProjectBranchDataApiErrors, UpdateProjectBranchDataApiResponses, UpdateProjectBranchDatabaseData, UpdateProjectBranchDatabaseErrors, UpdateProjectBranchDatabaseResponses, UpdateProjectBranchErrors, UpdateProjectBranchFunctionData, UpdateProjectBranchFunctionErrors, UpdateProjectBranchFunctionResponses, UpdateProjectBranchResponses, UpdateProjectData, UpdateProjectEndpointData, UpdateProjectEndpointErrors, UpdateProjectEndpointResponses, UpdateProjectErrors, UpdateProjectResponses, UpdateSnapshotData, UpdateSnapshotErrors, UpdateSnapshotResponses } from './types.gen.js';
+import type { AcceptProjectTransferRequestData, AcceptProjectTransferRequestErrors, AcceptProjectTransferRequestResponses, AddBranchNeonAuthOauthProviderData, AddBranchNeonAuthOauthProviderErrors, AddBranchNeonAuthOauthProviderResponses, AddBranchNeonAuthTrustedDomainData, AddBranchNeonAuthTrustedDomainErrors, AddBranchNeonAuthTrustedDomainResponses, AddNeonAuthDomainToRedirectUriWhitelistData, AddNeonAuthDomainToRedirectUriWhitelistErrors, AddNeonAuthDomainToRedirectUriWhitelistResponses, AddNeonAuthOauthProviderData, AddNeonAuthOauthProviderErrors, AddNeonAuthOauthProviderResponses, AddProjectJwksData, AddProjectJwksErrors, AddProjectJwksResponses, AssignOrganizationVpcEndpointData, AssignOrganizationVpcEndpointErrors, AssignOrganizationVpcEndpointResponses, AssignProjectVpcEndpointData, AssignProjectVpcEndpointErrors, AssignProjectVpcEndpointResponses, CountProjectBranchesData, CountProjectBranchesErrors, CountProjectBranchesResponses, CreateApiKeyData, CreateApiKeyErrors, CreateApiKeyResponses, CreateBranchNeonAuthNewUserData, CreateBranchNeonAuthNewUserErrors, CreateBranchNeonAuthNewUserResponses, CreateCredentialData, CreateCredentialErrors, CreateCredentialResponses, CreateNeonAuthData, CreateNeonAuthErrors, CreateNeonAuthIntegrationData, CreateNeonAuthIntegrationErrors, CreateNeonAuthIntegrationResponses, CreateNeonAuthNewUserData, CreateNeonAuthNewUserErrors, CreateNeonAuthNewUserResponses, CreateNeonAuthProviderSdkKeysData, CreateNeonAuthProviderSdkKeysErrors, CreateNeonAuthProviderSdkKeysResponses, CreateNeonAuthResponses, CreateOrganizationInvitationsData, CreateOrganizationInvitationsErrors, CreateOrganizationInvitationsResponses, CreateOrgApiKeyData, CreateOrgApiKeyErrors, CreateOrgApiKeyResponses, CreateProjectBranchAnonymizedData, CreateProjectBranchAnonymizedErrors, CreateProjectBranchAnonymizedResponses, CreateProjectBranchBucketData, CreateProjectBranchBucketErrors, CreateProjectBranchBucketResponses, CreateProjectBranchData, CreateProjectBranchDataApiData, CreateProjectBranchDataApiErrors, CreateProjectBranchDataApiResponses, CreateProjectBranchDatabaseData, CreateProjectBranchDatabaseErrors, CreateProjectBranchDatabaseResponses, CreateProjectBranchErrors, CreateProjectBranchFunctionDeploymentData, CreateProjectBranchFunctionDeploymentErrors, CreateProjectBranchFunctionDeploymentResponses, CreateProjectBranchResponses, CreateProjectBranchRoleData, CreateProjectBranchRoleErrors, CreateProjectBranchRoleResponses, CreateProjectData, CreateProjectEndpointData, CreateProjectEndpointErrors, CreateProjectEndpointResponses, CreateProjectErrors, CreateProjectResponses, CreateProjectTransferRequestData, CreateProjectTransferRequestErrors, CreateProjectTransferRequestResponses, CreateSnapshotData, CreateSnapshotErrors, CreateSnapshotResponses, DeleteBranchNeonAuthOauthProviderData, DeleteBranchNeonAuthOauthProviderErrors, DeleteBranchNeonAuthOauthProviderResponses, DeleteBranchNeonAuthTrustedDomainData, DeleteBranchNeonAuthTrustedDomainErrors, DeleteBranchNeonAuthTrustedDomainResponses, DeleteBranchNeonAuthUserData, DeleteBranchNeonAuthUserErrors, DeleteBranchNeonAuthUserResponses, DeleteNeonAuthDomainFromRedirectUriWhitelistData, DeleteNeonAuthDomainFromRedirectUriWhitelistErrors, DeleteNeonAuthDomainFromRedirectUriWhitelistResponses, DeleteNeonAuthIntegrationData, DeleteNeonAuthIntegrationErrors, DeleteNeonAuthIntegrationResponses, DeleteNeonAuthOauthProviderData, DeleteNeonAuthOauthProviderErrors, DeleteNeonAuthOauthProviderResponses, DeleteNeonAuthUserData, DeleteNeonAuthUserErrors, DeleteNeonAuthUserResponses, DeleteOrganizationSpendingLimitData, DeleteOrganizationSpendingLimitErrors, DeleteOrganizationSpendingLimitResponses, DeleteOrganizationVpcEndpointData, DeleteOrganizationVpcEndpointErrors, DeleteOrganizationVpcEndpointResponses, DeleteProjectBranchBucketData, DeleteProjectBranchBucketErrors, DeleteProjectBranchBucketObjectData, DeleteProjectBranchBucketObjectErrors, DeleteProjectBranchBucketObjectResponses, DeleteProjectBranchBucketObjectsByPrefixData, DeleteProjectBranchBucketObjectsByPrefixErrors, DeleteProjectBranchBucketObjectsByPrefixResponses, DeleteProjectBranchBucketResponses, DeleteProjectBranchData, DeleteProjectBranchDataApiData, DeleteProjectBranchDataApiErrors, DeleteProjectBranchDataApiResponses, DeleteProjectBranchDatabaseData, DeleteProjectBranchDatabaseErrors, DeleteProjectBranchDatabaseResponses, DeleteProjectBranchErrors, DeleteProjectBranchFunctionData, DeleteProjectBranchFunctionErrors, DeleteProjectBranchFunctionResponses, DeleteProjectBranchResponses, DeleteProjectBranchRoleData, DeleteProjectBranchRoleErrors, DeleteProjectBranchRoleResponses, DeleteProjectData, DeleteProjectEndpointData, DeleteProjectEndpointErrors, DeleteProjectEndpointResponses, DeleteProjectErrors, DeleteProjectJwksData, DeleteProjectJwksErrors, DeleteProjectJwksResponses, DeleteProjectResponses, DeleteProjectVpcEndpointData, DeleteProjectVpcEndpointErrors, DeleteProjectVpcEndpointResponses, DeleteSnapshotData, DeleteSnapshotErrors, DeleteSnapshotResponses, DisableNeonAuthData, DisableNeonAuthErrors, DisableNeonAuthResponses, FinalizeRestoreBranchData, FinalizeRestoreBranchErrors, FinalizeRestoreBranchResponses, GetActiveRegionsData, GetActiveRegionsErrors, GetActiveRegionsResponses, GetAnonymizedBranchStatusData, GetAnonymizedBranchStatusErrors, GetAnonymizedBranchStatusResponses, GetAuthDetailsData, GetAuthDetailsErrors, GetAuthDetailsResponses, GetAvailablePreloadLibrariesData, GetAvailablePreloadLibrariesErrors, GetAvailablePreloadLibrariesResponses, GetConnectionUriData, GetConnectionUriErrors, GetConnectionUriResponses, GetConsumptionHistoryPerBranchV2Data, GetConsumptionHistoryPerBranchV2Errors, GetConsumptionHistoryPerBranchV2Responses, GetConsumptionHistoryPerProjectData, GetConsumptionHistoryPerProjectErrors, GetConsumptionHistoryPerProjectResponses, GetConsumptionHistoryPerProjectV2Data, GetConsumptionHistoryPerProjectV2Errors, GetConsumptionHistoryPerProjectV2Responses, GetCurrentUserInfoData, GetCurrentUserInfoErrors, GetCurrentUserInfoResponses, GetCurrentUserOrganizationsData, GetCurrentUserOrganizationsErrors, GetCurrentUserOrganizationsResponses, GetMaskingRulesData, GetMaskingRulesErrors, GetMaskingRulesResponses, GetNeonAuthAllowLocalhostData, GetNeonAuthAllowLocalhostErrors, GetNeonAuthAllowLocalhostResponses, GetNeonAuthData, GetNeonAuthEmailAndPasswordConfigData, GetNeonAuthEmailAndPasswordConfigErrors, GetNeonAuthEmailAndPasswordConfigResponses, GetNeonAuthEmailProviderData, GetNeonAuthEmailProviderErrors, GetNeonAuthEmailProviderResponses, GetNeonAuthEmailServerData, GetNeonAuthEmailServerErrors, GetNeonAuthEmailServerResponses, GetNeonAuthErrors, GetNeonAuthPhoneNumberPluginData, GetNeonAuthPhoneNumberPluginErrors, GetNeonAuthPhoneNumberPluginResponses, GetNeonAuthPluginConfigsData, GetNeonAuthPluginConfigsErrors, GetNeonAuthPluginConfigsResponses, GetNeonAuthResponses, GetNeonAuthWebhookConfigData, GetNeonAuthWebhookConfigErrors, GetNeonAuthWebhookConfigResponses, GetOrganizationData, GetOrganizationErrors, GetOrganizationInvitationsData, GetOrganizationInvitationsErrors, GetOrganizationInvitationsResponses, GetOrganizationMemberData, GetOrganizationMemberErrors, GetOrganizationMemberResponses, GetOrganizationMembersData, GetOrganizationMembersErrors, GetOrganizationMembersResponses, GetOrganizationResponses, GetOrganizationSpendingLimitData, GetOrganizationSpendingLimitErrors, GetOrganizationSpendingLimitResponses, GetOrganizationVpcEndpointDetailsData, GetOrganizationVpcEndpointDetailsErrors, GetOrganizationVpcEndpointDetailsResponses, GetProjectAdvisorSecurityIssuesData, GetProjectAdvisorSecurityIssuesErrors, GetProjectAdvisorSecurityIssuesResponses, GetProjectBranchAiGatewayData, GetProjectBranchAiGatewayErrors, GetProjectBranchAiGatewayResponses, GetProjectBranchBucketObjectData, GetProjectBranchBucketObjectErrors, GetProjectBranchBucketObjectResponses, GetProjectBranchData, GetProjectBranchDataApiData, GetProjectBranchDataApiErrors, GetProjectBranchDataApiResponses, GetProjectBranchDatabaseData, GetProjectBranchDatabaseErrors, GetProjectBranchDatabaseResponses, GetProjectBranchErrors, GetProjectBranchFunctionData, GetProjectBranchFunctionErrors, GetProjectBranchFunctionResponses, GetProjectBranchResponses, GetProjectBranchRoleData, GetProjectBranchRoleErrors, GetProjectBranchRolePasswordData, GetProjectBranchRolePasswordErrors, GetProjectBranchRolePasswordResponses, GetProjectBranchRoleResponses, GetProjectBranchSchemaComparisonData, GetProjectBranchSchemaComparisonErrors, GetProjectBranchSchemaComparisonResponses, GetProjectBranchSchemaData, GetProjectBranchSchemaErrors, GetProjectBranchSchemaResponses, GetProjectBranchStorageData, GetProjectBranchStorageErrors, GetProjectBranchStorageResponses, GetProjectData, GetProjectEndpointData, GetProjectEndpointErrors, GetProjectEndpointResponses, GetProjectErrors, GetProjectJwksData, GetProjectJwksErrors, GetProjectJwksResponses, GetProjectOperationData, GetProjectOperationErrors, GetProjectOperationResponses, GetProjectResponses, GetSnapshotScheduleData, GetSnapshotScheduleErrors, GetSnapshotScheduleResponses, GrantPermissionToProjectData, GrantPermissionToProjectErrors, GrantPermissionToProjectResponses, ListApiKeysData, ListApiKeysErrors, ListApiKeysResponses, ListBranchNeonAuthOauthProvidersData, ListBranchNeonAuthOauthProvidersErrors, ListBranchNeonAuthOauthProvidersResponses, ListBranchNeonAuthTrustedDomainsData, ListBranchNeonAuthTrustedDomainsErrors, ListBranchNeonAuthTrustedDomainsResponses, ListCredentialsData, ListCredentialsErrors, ListCredentialsResponses, ListNeonAuthIntegrationsData, ListNeonAuthIntegrationsErrors, ListNeonAuthIntegrationsResponses, ListNeonAuthOauthProvidersData, ListNeonAuthOauthProvidersErrors, ListNeonAuthOauthProvidersResponses, ListNeonAuthRedirectUriWhitelistDomainsData, ListNeonAuthRedirectUriWhitelistDomainsErrors, ListNeonAuthRedirectUriWhitelistDomainsResponses, ListOrganizationVpcEndpointsAllRegionsData, ListOrganizationVpcEndpointsAllRegionsErrors, ListOrganizationVpcEndpointsAllRegionsResponses, ListOrganizationVpcEndpointsData, ListOrganizationVpcEndpointsErrors, ListOrganizationVpcEndpointsResponses, ListOrgApiKeysData, ListOrgApiKeysErrors, ListOrgApiKeysResponses, ListProjectBranchBucketObjectsData, ListProjectBranchBucketObjectsErrors, ListProjectBranchBucketObjectsResponses, ListProjectBranchBucketsData, ListProjectBranchBucketsErrors, ListProjectBranchBucketsResponses, ListProjectBranchDatabasesData, ListProjectBranchDatabasesErrors, ListProjectBranchDatabasesResponses, ListProjectBranchEndpointsData, ListProjectBranchEndpointsErrors, ListProjectBranchEndpointsResponses, ListProjectBranchesData, ListProjectBranchesErrors, ListProjectBranchesResponses, ListProjectBranchFunctionsData, ListProjectBranchFunctionsErrors, ListProjectBranchFunctionsResponses, ListProjectBranchLogFieldsData, ListProjectBranchLogFieldsErrors, ListProjectBranchLogFieldsResponses, ListProjectBranchLogFieldValuesData, ListProjectBranchLogFieldValuesErrors, ListProjectBranchLogFieldValuesResponses, ListProjectBranchRolesData, ListProjectBranchRolesErrors, ListProjectBranchRolesResponses, ListProjectEndpointsData, ListProjectEndpointsErrors, ListProjectEndpointsResponses, ListProjectMembersData, ListProjectMembersErrors, ListProjectMembersResponses, ListProjectOperationsData, ListProjectOperationsErrors, ListProjectOperationsResponses, ListProjectPermissionsData, ListProjectPermissionsErrors, ListProjectPermissionsResponses, ListProjectsData, ListProjectsErrors, ListProjectsResponses, ListProjectVpcEndpointsData, ListProjectVpcEndpointsErrors, ListProjectVpcEndpointsResponses, ListSharedProjectsData, ListSharedProjectsErrors, ListSharedProjectsResponses, ListSnapshotsData, ListSnapshotsErrors, ListSnapshotsResponses, PresignProjectBranchBucketObjectData, PresignProjectBranchBucketObjectErrors, PresignProjectBranchBucketObjectResponses, QueryProjectBranchLogsData, QueryProjectBranchLogsErrors, QueryProjectBranchLogsResponses, RecoverProjectData, RecoverProjectErrors, RecoverProjectResponses, RemoveOrganizationMemberData, RemoveOrganizationMemberErrors, RemoveOrganizationMemberResponses, RemoveProjectMemberRoleData, RemoveProjectMemberRoleErrors, RemoveProjectMemberRoleResponses, ResetProjectBranchRolePasswordData, ResetProjectBranchRolePasswordErrors, ResetProjectBranchRolePasswordResponses, RestartProjectEndpointData, RestartProjectEndpointErrors, RestartProjectEndpointResponses, RestoreProjectBranchData, RestoreProjectBranchErrors, RestoreProjectBranchResponses, RestoreSnapshotData, RestoreSnapshotErrors, RestoreSnapshotResponses, RevokeApiKeyData, RevokeApiKeyErrors, RevokeApiKeyResponses, RevokeCredentialData, RevokeCredentialErrors, RevokeCredentialResponses, RevokeOrgApiKeyData, RevokeOrgApiKeyErrors, RevokeOrgApiKeyResponses, RevokePermissionFromProjectData, RevokePermissionFromProjectErrors, RevokePermissionFromProjectResponses, SendNeonAuthTestEmailData, SendNeonAuthTestEmailErrors, SendNeonAuthTestEmailResponses, SetDefaultProjectBranchData, SetDefaultProjectBranchErrors, SetDefaultProjectBranchResponses, SetOrganizationSpendingLimitData, SetOrganizationSpendingLimitErrors, SetOrganizationSpendingLimitResponses, SetProjectMemberRoleData, SetProjectMemberRoleErrors, SetProjectMemberRoleResponses, SetSnapshotScheduleData, SetSnapshotScheduleErrors, SetSnapshotScheduleResponses, StartAnonymizationData, StartAnonymizationErrors, StartAnonymizationResponses, StartProjectEndpointData, StartProjectEndpointErrors, StartProjectEndpointResponses, SuspendProjectEndpointData, SuspendProjectEndpointErrors, SuspendProjectEndpointResponses, TransferNeonAuthProviderProjectData, TransferNeonAuthProviderProjectErrors, TransferNeonAuthProviderProjectResponses, TransferProjectsFromOrgToOrgData, TransferProjectsFromOrgToOrgErrors, TransferProjectsFromOrgToOrgResponses, TransferProjectsFromUserToOrgData, TransferProjectsFromUserToOrgErrors, TransferProjectsFromUserToOrgResponses, UpdateBranchNeonAuthOauthProviderData, UpdateBranchNeonAuthOauthProviderErrors, UpdateBranchNeonAuthOauthProviderResponses, UpdateMaskingRulesData, UpdateMaskingRulesErrors, UpdateMaskingRulesResponses, UpdateNeonAuthAllowLocalhostData, UpdateNeonAuthAllowLocalhostErrors, UpdateNeonAuthAllowLocalhostResponses, UpdateNeonAuthConfigData, UpdateNeonAuthConfigErrors, UpdateNeonAuthConfigResponses, UpdateNeonAuthEmailAndPasswordConfigData, UpdateNeonAuthEmailAndPasswordConfigErrors, UpdateNeonAuthEmailAndPasswordConfigResponses, UpdateNeonAuthEmailProviderData, UpdateNeonAuthEmailProviderErrors, UpdateNeonAuthEmailProviderResponses, UpdateNeonAuthEmailServerData, UpdateNeonAuthEmailServerErrors, UpdateNeonAuthEmailServerResponses, UpdateNeonAuthMagicLinkPluginData, UpdateNeonAuthMagicLinkPluginErrors, UpdateNeonAuthMagicLinkPluginResponses, UpdateNeonAuthOauthProviderData, UpdateNeonAuthOauthProviderErrors, UpdateNeonAuthOauthProviderResponses, UpdateNeonAuthOrganizationPluginData, UpdateNeonAuthOrganizationPluginErrors, UpdateNeonAuthOrganizationPluginResponses, UpdateNeonAuthPhoneNumberPluginData, UpdateNeonAuthPhoneNumberPluginErrors, UpdateNeonAuthPhoneNumberPluginResponses, UpdateNeonAuthUserRoleData, UpdateNeonAuthUserRoleErrors, UpdateNeonAuthUserRoleResponses, UpdateNeonAuthWebhookConfigData, UpdateNeonAuthWebhookConfigErrors, UpdateNeonAuthWebhookConfigResponses, UpdateOrganizationMemberData, UpdateOrganizationMemberErrors, UpdateOrganizationMemberResponses, UpdateProjectBranchData, UpdateProjectBranchDataApiData, UpdateProjectBranchDataApiErrors, UpdateProjectBranchDataApiResponses, UpdateProjectBranchDatabaseData, UpdateProjectBranchDatabaseErrors, UpdateProjectBranchDatabaseResponses, UpdateProjectBranchErrors, UpdateProjectBranchFunctionData, UpdateProjectBranchFunctionErrors, UpdateProjectBranchFunctionResponses, UpdateProjectBranchResponses, UpdateProjectData, UpdateProjectEndpointData, UpdateProjectEndpointErrors, UpdateProjectEndpointResponses, UpdateProjectErrors, UpdateProjectResponses, UpdateSnapshotData, UpdateSnapshotErrors, UpdateSnapshotResponses } from './types.gen.js';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -196,7 +196,7 @@ export const listProjects = <ThrowOnError extends boolean = false>(options?: Opt
  * For more information, see [Manage projects](https://neon.com/docs/manage/projects/).
  *
  * You can specify a region and Postgres version in the request body.
- * Neon currently supports PostgreSQL 14, 15, 16, 17, and 18.
+ * Neon supports Postgres 14 through 18, with 19 rolling out to enabled regions.
  * For supported regions and `region_id` values, see [Regions](https://neon.com/docs/introduction/regions/).
  *
  */
@@ -427,6 +427,88 @@ export const grantPermissionToProject = <ThrowOnError extends boolean = false>(o
         }
     ],
     url: '/projects/{project_id}/permissions',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * List org members and their project roles
+ *
+ * Lists organization members and their per-project roles for an org-owned project.
+ * Returns 404 when the project is not org-owned, per-project role management is disabled,
+ * or the caller has no access. Callers with VIEWER or EDITOR see members with
+ * effective project access. Callers with ADMIN also see unassigned org members.
+ *
+ */
+export const listProjectMembers = <ThrowOnError extends boolean = false>(options: Options<ListProjectMembersData, ThrowOnError>): RequestResult<ListProjectMembersResponses, ListProjectMembersErrors, ThrowOnError> => (options.client ?? client).get<ListProjectMembersResponses, ListProjectMembersErrors, ThrowOnError>({
+    security: [
+        { scheme: 'bearer', type: 'http' },
+        {
+            in: 'cookie',
+            name: 'zenith',
+            type: 'apiKey'
+        },
+        {
+            in: 'cookie',
+            name: 'keycloak_token',
+            type: 'apiKey'
+        }
+    ],
+    url: '/projects/{project_id}/members',
+    ...options
+});
+
+/**
+ * Remove an org member's role on a project
+ *
+ * Idempotently removes the explicit project grant. The member's organization-role
+ * default project permission still applies. Self-DELETE requires
+ * `confirm_self_lockout=true` when effective manage access would be lost.
+ *
+ */
+export const removeProjectMemberRole = <ThrowOnError extends boolean = false>(options: Options<RemoveProjectMemberRoleData, ThrowOnError>): RequestResult<RemoveProjectMemberRoleResponses, RemoveProjectMemberRoleErrors, ThrowOnError> => (options.client ?? client).delete<RemoveProjectMemberRoleResponses, RemoveProjectMemberRoleErrors, ThrowOnError>({
+    security: [
+        { scheme: 'bearer', type: 'http' },
+        {
+            in: 'cookie',
+            name: 'zenith',
+            type: 'apiKey'
+        },
+        {
+            in: 'cookie',
+            name: 'keycloak_token',
+            type: 'apiKey'
+        }
+    ],
+    url: '/projects/{project_id}/members/{member_id}/role',
+    ...options
+});
+
+/**
+ * Set an org member's role on a project
+ *
+ * Idempotently sets or updates the explicit project grant of the specified org member.
+ * Self-demotion requires `confirm_self_demotion=true`.
+ *
+ */
+export const setProjectMemberRole = <ThrowOnError extends boolean = false>(options: Options<SetProjectMemberRoleData, ThrowOnError>): RequestResult<SetProjectMemberRoleResponses, SetProjectMemberRoleErrors, ThrowOnError> => (options.client ?? client).put<SetProjectMemberRoleResponses, SetProjectMemberRoleErrors, ThrowOnError>({
+    security: [
+        { scheme: 'bearer', type: 'http' },
+        {
+            in: 'cookie',
+            name: 'zenith',
+            type: 'apiKey'
+        },
+        {
+            in: 'cookie',
+            name: 'keycloak_token',
+            type: 'apiKey'
+        }
+    ],
+    url: '/projects/{project_id}/members/{member_id}/role',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -744,7 +826,7 @@ export const createProjectBranchDataApi = <ThrowOnError extends boolean = false>
 /**
  * Create Neon Auth integration
  *
- * DEPRECATED, use `/projects/{project_id}/branches/{branch_id}/auth` instead. Creates a project on a third-party authentication provider's platform for use with Neon Auth.
+ * Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth` instead. Removal scheduled for March 1, 2026.
  * Use this endpoint if the frontend integration flow can't be used.
  *
  *
@@ -861,7 +943,7 @@ export const createNeonAuth = <ThrowOnError extends boolean = false>(options: Op
 /**
  * Delete trusted redirect URI domain
  *
- * DEPRECATED, use `/projects/{project_id}/branches/{branch_id}/auth/domains` instead. Deletes a domain from the redirect_uri whitelist for the specified project.
+ * Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/domains` instead. Removal scheduled for March 1, 2026.
  *
  *
  * @deprecated
@@ -891,7 +973,7 @@ export const deleteNeonAuthDomainFromRedirectUriWhitelist = <ThrowOnError extend
 /**
  * List trusted redirect URI domains
  *
- * DEPRECATED, use `/projects/{project_id}/branches/{branch_id}/auth/domains` instead. Lists the domains in the redirect_uri whitelist for the specified project.
+ * Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/domains` instead. Removal scheduled for March 1, 2026.
  *
  *
  * @deprecated
@@ -917,7 +999,7 @@ export const listNeonAuthRedirectUriWhitelistDomains = <ThrowOnError extends boo
 /**
  * Add trusted redirect URI domain
  *
- * DEPRECATED, use `/projects/{project_id}/branches/{branch_id}/auth/domains` instead. Adds a domain to the redirect_uri whitelist for the specified project.
+ * Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/domains` instead. Removal scheduled for March 1, 2026.
  *
  *
  * @deprecated
@@ -1059,7 +1141,7 @@ export const createNeonAuthProviderSdkKeys = <ThrowOnError extends boolean = fal
 /**
  * Create new auth user
  *
- * DEPRECATED, use `/projects/{project_id}/branches/{branch_id}/auth/users` instead. Creates a new user in Neon Auth.
+ * Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/users` instead. Removal scheduled for March 1, 2026.
  * The user will be created in your neon_auth.users_sync table and automatically propagated to your auth project, whether Neon-managed or provider-owned.
  *
  *
@@ -1174,7 +1256,7 @@ export const updateNeonAuthUserRole = <ThrowOnError extends boolean = false>(opt
 /**
  * Delete auth user
  *
- * DEPRECATED, use `/projects/{project_id}/branches/{branch_id}/auth/users/{auth_user_id}` instead. Deletes the auth user for the specified project.
+ * Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/users/{auth_user_id}` instead. Removal scheduled for March 1, 2026.
  *
  *
  * @deprecated
@@ -1228,7 +1310,7 @@ export const transferNeonAuthProviderProject = <ThrowOnError extends boolean = f
 /**
  * List active integrations with auth providers
  *
- * DEPRECATED, use `/projects/{project_id}/branches/{branch_id}/auth` instead.
+ * Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth` instead. Removal scheduled for March 1, 2026.
  *
  * @deprecated
  */
@@ -1253,7 +1335,7 @@ export const listNeonAuthIntegrations = <ThrowOnError extends boolean = false>(o
 /**
  * List OAuth providers
  *
- * DEPRECATED, use `/projects/{project_id}/branches/{branch_id}/auth/oauth_providers` instead. Lists the OAuth providers for the specified project.
+ * Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/oauth_providers` instead. Removal scheduled for March 1, 2026.
  *
  *
  * @deprecated
@@ -1279,8 +1361,7 @@ export const listNeonAuthOauthProviders = <ThrowOnError extends boolean = false>
 /**
  * Add an OAuth provider
  *
- * DEPRECATED, use `/projects/{project_id}/branches/{branch_id}/auth/oauth_providers` instead.
- * Adds an OAuth provider to the specified project.
+ * Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/oauth_providers` instead. Removal scheduled for March 1, 2026.
  *
  *
  * @deprecated
@@ -1363,7 +1444,7 @@ export const addBranchNeonAuthOauthProvider = <ThrowOnError extends boolean = fa
 /**
  * Delete OAuth provider
  *
- * DEPRECATED, use `/projects/{project_id}/branches/{branch_id}/auth/oauth_providers/{oauth_provider_id}` instead. Deletes a OAuth provider from the specified project.
+ * Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/oauth_providers/{oauth_provider_id}` instead. Removal scheduled for March 1, 2026.
  *
  *
  * @deprecated
@@ -1389,7 +1470,7 @@ export const deleteNeonAuthOauthProvider = <ThrowOnError extends boolean = false
 /**
  * Update OAuth provider
  *
- * DEPRECATED, use `/projects/{project_id}/branches/{branch_id}/auth/oauth_providers/{oauth_provider_id}` instead. Updates a OAuth provider for the specified project.
+ * Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/oauth_providers/{oauth_provider_id}` instead. Removal scheduled for March 1, 2026.
  *
  *
  * @deprecated
@@ -1419,7 +1500,7 @@ export const updateNeonAuthOauthProvider = <ThrowOnError extends boolean = false
 /**
  * Delete OAuth provider
  *
- * Deletes a OAuth provider from the specified project.
+ * Deletes an OAuth provider from the specified project.
  *
  */
 export const deleteBranchNeonAuthOauthProvider = <ThrowOnError extends boolean = false>(options: Options<DeleteBranchNeonAuthOauthProviderData, ThrowOnError>): RequestResult<DeleteBranchNeonAuthOauthProviderResponses, DeleteBranchNeonAuthOauthProviderErrors, ThrowOnError> => (options.client ?? client).delete<DeleteBranchNeonAuthOauthProviderResponses, DeleteBranchNeonAuthOauthProviderErrors, ThrowOnError>({
@@ -1443,7 +1524,7 @@ export const deleteBranchNeonAuthOauthProvider = <ThrowOnError extends boolean =
 /**
  * Update OAuth provider
  *
- * Updates a OAuth provider for the specified project.
+ * Updates an OAuth provider for the specified project.
  *
  */
 export const updateBranchNeonAuthOauthProvider = <ThrowOnError extends boolean = false>(options: Options<UpdateBranchNeonAuthOauthProviderData, ThrowOnError>): RequestResult<UpdateBranchNeonAuthOauthProviderResponses, UpdateBranchNeonAuthOauthProviderErrors, ThrowOnError> => (options.client ?? client).patch<UpdateBranchNeonAuthOauthProviderResponses, UpdateBranchNeonAuthOauthProviderErrors, ThrowOnError>({
@@ -1471,7 +1552,7 @@ export const updateBranchNeonAuthOauthProvider = <ThrowOnError extends boolean =
 /**
  * Retrieve email server configuration
  *
- * DEPRECATED, use `/projects/{project_id}/branches/{branch_id}/auth/email_provider` instead. Gets the email server configuration for the specified project.
+ * Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/email_provider` instead. Removal scheduled for March 1, 2026.
  *
  *
  * @deprecated
@@ -1497,7 +1578,7 @@ export const getNeonAuthEmailServer = <ThrowOnError extends boolean = false>(opt
 /**
  * Update email server configuration
  *
- * DEPRECATED, use `/projects/{project_id}/branches/{branch_id}/auth/email_provider` instead. Updates the email server configuration for the specified project.
+ * Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/email_provider` instead. Removal scheduled for March 1, 2026.
  *
  *
  * @deprecated
@@ -1665,7 +1746,7 @@ export const updateNeonAuthEmailProvider = <ThrowOnError extends boolean = false
 /**
  * Delete integration with auth provider
  *
- * DEPRECATED, use `/projects/{project_id}/branches/{branch_id}/auth` instead.
+ * Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth` instead. Removal scheduled for March 1, 2026.
  *
  * @deprecated
  */
@@ -2241,7 +2322,7 @@ export const restoreProjectBranch = <ThrowOnError extends boolean = false>(optio
 /**
  * Retrieve database schema
  *
- * Retrieves the schema from the specified database. The `lsn` and `timestamp` values cannot be specified at the same time. If both are omitted, the database schema is retrieved from database's head.
+ * Retrieves the database schema. Specify `lsn` or `timestamp` (not both) to read at a point in time; omit both to read from the database's head.
  */
 export const getProjectBranchSchema = <ThrowOnError extends boolean = false>(options: Options<GetProjectBranchSchemaData, ThrowOnError>): RequestResult<GetProjectBranchSchemaResponses, GetProjectBranchSchemaErrors, ThrowOnError> => (options.client ?? client).get<GetProjectBranchSchemaResponses, GetProjectBranchSchemaErrors, ThrowOnError>({
     security: [
@@ -2425,36 +2506,6 @@ export const setDefaultProjectBranch = <ThrowOnError extends boolean = false>(op
 });
 
 /**
- * Recover a deleted branch
- *
- * Recovers a deleted branch within the 7-day deletion recovery period.
- * The branch must have been soft deleted and not yet permanently deleted.
- * Recovery restores the branch and its endpoints to an idle state.
- * Connection strings remain valid after recovery.
- * TTL branches become non-TTL branches after recovery.
- *
- * To list deleted branches available for recovery, use `GET /projects/{project_id}/branches?include_deleted=true`.
- *
- */
-export const recoverProjectBranch = <ThrowOnError extends boolean = false>(options: Options<RecoverProjectBranchData, ThrowOnError>): RequestResult<RecoverProjectBranchResponses, RecoverProjectBranchErrors, ThrowOnError> => (options.client ?? client).post<RecoverProjectBranchResponses, RecoverProjectBranchErrors, ThrowOnError>({
-    security: [
-        { scheme: 'bearer', type: 'http' },
-        {
-            in: 'cookie',
-            name: 'zenith',
-            type: 'apiKey'
-        },
-        {
-            in: 'cookie',
-            name: 'keycloak_token',
-            type: 'apiKey'
-        }
-    ],
-    url: '/projects/{project_id}/branches/{branch_id}/recover',
-    ...options
-});
-
-/**
  * Finalize branch restore from snapshot
  *
  * Finalize the restore operation for a branch created from a snapshot.
@@ -2465,8 +2516,6 @@ export const recoverProjectBranch = <ThrowOnError extends boolean = false>(optio
  * - Renaming the original branch so it no longer uses the original name
  *
  * This operation only applies to branches created using the `restoreSnapshot` endpoint with `finalize_restore: false`.
- *
- * **Note**: This endpoint is currently in Beta.
  *
  */
 export const finalizeRestoreBranch = <ThrowOnError extends boolean = false>(options: Options<FinalizeRestoreBranchData, ThrowOnError>): RequestResult<FinalizeRestoreBranchResponses, FinalizeRestoreBranchErrors, ThrowOnError> => (options.client ?? client).post<FinalizeRestoreBranchResponses, FinalizeRestoreBranchErrors, ThrowOnError>({
@@ -3821,7 +3870,7 @@ export const getCurrentUserOrganizations = <ThrowOnError extends boolean = false
 /**
  * Transfer projects from personal account to organization
  *
- * DEPRECATED. Personal accounts have been migrated to organizations, making this operation no longer applicable.
+ * Deprecated. Personal accounts have been migrated to organizations, so this operation no longer applies. Removal scheduled for July 1, 2026.
  *
  *
  * @deprecated
@@ -3880,8 +3929,6 @@ export const getAuthDetails = <ThrowOnError extends boolean = false>(options?: O
  * Creates a snapshot from the specified branch.
  * This operation may initiate an asynchronous process.
  *
- * **Note**: This endpoint is currently in Beta.
- *
  */
 export const createSnapshot = <ThrowOnError extends boolean = false>(options: Options<CreateSnapshotData, ThrowOnError>): RequestResult<CreateSnapshotResponses, CreateSnapshotErrors, ThrowOnError> => (options.client ?? client).post<CreateSnapshotResponses, CreateSnapshotErrors, ThrowOnError>({
     security: [
@@ -3907,8 +3954,6 @@ export const createSnapshot = <ThrowOnError extends boolean = false>(options: Op
  * Lists the snapshots for the specified project.
  * Each snapshot represents a point-in-time backup of the project data.
  *
- * **Note**: This endpoint is currently in Beta.
- *
  */
 export const listSnapshots = <ThrowOnError extends boolean = false>(options: Options<ListSnapshotsData, ThrowOnError>): RequestResult<ListSnapshotsResponses, ListSnapshotsErrors, ThrowOnError> => (options.client ?? client).get<ListSnapshotsResponses, ListSnapshotsErrors, ThrowOnError>({
     security: [
@@ -3933,8 +3978,6 @@ export const listSnapshots = <ThrowOnError extends boolean = false>(options: Opt
  *
  * Deletes the specified snapshot.
  *
- * **Note**: This endpoint is currently in Beta.
- *
  */
 export const deleteSnapshot = <ThrowOnError extends boolean = false>(options: Options<DeleteSnapshotData, ThrowOnError>): RequestResult<DeleteSnapshotResponses, DeleteSnapshotErrors, ThrowOnError> => (options.client ?? client).delete<DeleteSnapshotResponses, DeleteSnapshotErrors, ThrowOnError>({
     security: [
@@ -3958,8 +4001,6 @@ export const deleteSnapshot = <ThrowOnError extends boolean = false>(options: Op
  * Update snapshot
  *
  * Updates the specified snapshot.
- *
- * **Note**: This endpoint is currently in Beta.
  *
  */
 export const updateSnapshot = <ThrowOnError extends boolean = false>(options: Options<UpdateSnapshotData, ThrowOnError>): RequestResult<UpdateSnapshotResponses, UpdateSnapshotErrors, ThrowOnError> => (options.client ?? client).patch<UpdateSnapshotResponses, UpdateSnapshotErrors, ThrowOnError>({
@@ -3990,8 +4031,6 @@ export const updateSnapshot = <ThrowOnError extends boolean = false>(options: Op
  * Restores the specified snapshot to a new branch,
  * and optionally finalizes the restore operation to replace the original branch.
  *
- * **Note**: This endpoint is currently in Beta.
- *
  */
 export const restoreSnapshot = <ThrowOnError extends boolean = false>(options: Options<RestoreSnapshotData, ThrowOnError>): RequestResult<RestoreSnapshotResponses, RestoreSnapshotErrors, ThrowOnError> => (options.client ?? client).post<RestoreSnapshotResponses, RestoreSnapshotErrors, ThrowOnError>({
     security: [
@@ -4020,8 +4059,6 @@ export const restoreSnapshot = <ThrowOnError extends boolean = false>(options: O
  *
  * Returns the backup schedule for the specified branch, including the configured snapshot frequencies.
  *
- * **Note**: This endpoint is currently in Beta.
- *
  */
 export const getSnapshotSchedule = <ThrowOnError extends boolean = false>(options: Options<GetSnapshotScheduleData, ThrowOnError>): RequestResult<GetSnapshotScheduleResponses, GetSnapshotScheduleErrors, ThrowOnError> => (options.client ?? client).get<GetSnapshotScheduleResponses, GetSnapshotScheduleErrors, ThrowOnError>({
     security: [
@@ -4045,9 +4082,7 @@ export const getSnapshotSchedule = <ThrowOnError extends boolean = false>(option
  * Update backup schedule
  *
  * Updates the backup schedule for the specified branch.
- * The schedule defines how often automatic snapshots are created (e.g., `daily`, `weekly`).
- *
- * **Note**: This endpoint is currently in Beta.
+ * The schedule defines how often automatic snapshots are created (for example, `daily` or `weekly`). Requires a paid plan.
  *
  */
 export const setSnapshotSchedule = <ThrowOnError extends boolean = false>(options: Options<SetSnapshotScheduleData, ThrowOnError>): RequestResult<SetSnapshotScheduleResponses, SetSnapshotScheduleErrors, ThrowOnError> => (options.client ?? client).put<SetSnapshotScheduleResponses, SetSnapshotScheduleErrors, ThrowOnError>({
@@ -4075,10 +4110,10 @@ export const setSnapshotSchedule = <ThrowOnError extends boolean = false>(option
 /**
  * List buckets on the branch
  *
- * Lists branchable object-storage buckets visible on the specified branch,
+ * Lists branchable object storage buckets visible on the specified branch,
  * including those inherited from ancestor branches.
  *
- * **Note**: This endpoint is currently in Private Beta.
+ * **Note**: This endpoint is currently in Beta.
  *
  */
 export const listProjectBranchBuckets = <ThrowOnError extends boolean = false>(options: Options<ListProjectBranchBucketsData, ThrowOnError>): RequestResult<ListProjectBranchBucketsResponses, ListProjectBranchBucketsErrors, ThrowOnError> => (options.client ?? client).get<ListProjectBranchBucketsResponses, ListProjectBranchBucketsErrors, ThrowOnError>({
@@ -4102,10 +4137,10 @@ export const listProjectBranchBuckets = <ThrowOnError extends boolean = false>(o
 /**
  * Create a bucket on the branch
  *
- * Creates a new branchable object-storage bucket on the specified branch.
- * Buckets are managed by the Neon Platform branchable-storage service.
+ * Creates a new branchable object storage bucket on the specified branch.
+ * Buckets are managed by the Neon Platform branchable object storage service.
  *
- * **Note**: This endpoint is currently in Private Beta.
+ * **Note**: This endpoint is currently in Beta.
  *
  */
 export const createProjectBranchBucket = <ThrowOnError extends boolean = false>(options: Options<CreateProjectBranchBucketData, ThrowOnError>): RequestResult<CreateProjectBranchBucketResponses, CreateProjectBranchBucketErrors, ThrowOnError> => (options.client ?? client).post<CreateProjectBranchBucketResponses, CreateProjectBranchBucketErrors, ThrowOnError>({
@@ -4135,7 +4170,7 @@ export const createProjectBranchBucket = <ThrowOnError extends boolean = false>(
  *
  * Deletes the named bucket from the specified branch.
  *
- * **Note**: This endpoint is currently in Private Beta.
+ * **Note**: This endpoint is currently in Beta.
  *
  */
 export const deleteProjectBranchBucket = <ThrowOnError extends boolean = false>(options: Options<DeleteProjectBranchBucketData, ThrowOnError>): RequestResult<DeleteProjectBranchBucketResponses, DeleteProjectBranchBucketErrors, ThrowOnError> => (options.client ?? client).delete<DeleteProjectBranchBucketResponses, DeleteProjectBranchBucketErrors, ThrowOnError>({
@@ -4157,14 +4192,14 @@ export const deleteProjectBranchBucket = <ThrowOnError extends boolean = false>(
 });
 
 /**
- * Get branch storage state
+ * Get branch object storage state
  *
- * Returns whether branchable object-storage is usable for the specified
- * branch. A 200 response means the branch is registered in the storage
+ * Returns whether branchable object storage is usable for the specified
+ * branch. A 200 response means the branch is registered in the object storage
  * service and the S3 data plane will accept requests for it. A 404
- * response includes a `reason` field indicating why storage is unavailable.
+ * response includes a `reason` field indicating why object storage is unavailable.
  *
- * **Note**: This endpoint is currently in Private Beta.
+ * **Note**: This endpoint is currently in Beta.
  *
  */
 export const getProjectBranchStorage = <ThrowOnError extends boolean = false>(options: Options<GetProjectBranchStorageData, ThrowOnError>): RequestResult<GetProjectBranchStorageResponses, GetProjectBranchStorageErrors, ThrowOnError> => (options.client ?? client).get<GetProjectBranchStorageResponses, GetProjectBranchStorageErrors, ThrowOnError>({
@@ -4193,7 +4228,7 @@ export const getProjectBranchStorage = <ThrowOnError extends boolean = false>(op
  * registered and this region serves the AI gateway. A 404 response
  * includes a `reason` field indicating why the gateway is unavailable.
  *
- * **Note**: This endpoint is currently in Private Beta.
+ * **Note**: This endpoint is currently in Beta.
  *
  */
 export const getProjectBranchAiGateway = <ThrowOnError extends boolean = false>(options: Options<GetProjectBranchAiGatewayData, ThrowOnError>): RequestResult<GetProjectBranchAiGatewayResponses, GetProjectBranchAiGatewayErrors, ThrowOnError> => (options.client ?? client).get<GetProjectBranchAiGatewayResponses, GetProjectBranchAiGatewayErrors, ThrowOnError>({
@@ -4215,6 +4250,123 @@ export const getProjectBranchAiGateway = <ThrowOnError extends boolean = false>(
 });
 
 /**
+ * Query branch logs
+ *
+ * Returns logs emitted by services running on the specified branch,
+ * ordered by timestamp according to `sort_order`.
+ *
+ * All supplied filters are combined with `AND`: a record is returned only
+ * when it matches every filter. `minimum_severity` and `severity_text` are
+ * independent filters, so setting both requires a record to clear the
+ * severity floor *and* match the exact severity text.
+ *
+ * Supply `logql` instead of the structured filters to run a raw LogQL
+ * expression. Combining it with any structured filter is rejected rather
+ * than silently ignored; `limit`, `sort_order`, and the time window still
+ * apply, because those bound the query rather than form part of the
+ * expression.
+ *
+ * Give the window either as `since` — a duration ending at `end_time`, or
+ * at the current time when `end_time` is omitted — or as an explicit
+ * `start_time`. Supplying both is rejected.
+ *
+ * A single response holds at most 1,000 records. When `is_truncated` is
+ * `true`, pass the returned `next_cursor` back as `cursor` to fetch the
+ * next page, repeating the time range and every filter unchanged.
+ *
+ * If no time range is supplied, the query covers the previous hour. The
+ * maximum supported time range is seven days. `end_time` is exclusive.
+ *
+ * **Note**: This endpoint is currently in Private Beta.
+ *
+ */
+export const queryProjectBranchLogs = <ThrowOnError extends boolean = false>(options: Options<QueryProjectBranchLogsData, ThrowOnError>): RequestResult<QueryProjectBranchLogsResponses, QueryProjectBranchLogsErrors, ThrowOnError> => (options.client ?? client).post<QueryProjectBranchLogsResponses, QueryProjectBranchLogsErrors, ThrowOnError>({
+    security: [
+        { scheme: 'bearer', type: 'http' },
+        {
+            in: 'cookie',
+            name: 'zenith',
+            type: 'apiKey'
+        },
+        {
+            in: 'cookie',
+            name: 'keycloak_token',
+            type: 'apiKey'
+        }
+    ],
+    url: '/projects/{project_id}/branches/{branch_id}/logs/query',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * List branch log fields
+ *
+ * Lists the low-cardinality log fields observed on this branch whose
+ * distinct values can be discovered with the log field-values endpoint.
+ *
+ * The set is computed per branch and grows as new fields are observed, so
+ * treat it as data rather than a fixed list: discover a field here, then
+ * pass it as `field_name` to the field-values endpoint.
+ *
+ * **Note**: This endpoint is currently in Private Beta.
+ *
+ */
+export const listProjectBranchLogFields = <ThrowOnError extends boolean = false>(options: Options<ListProjectBranchLogFieldsData, ThrowOnError>): RequestResult<ListProjectBranchLogFieldsResponses, ListProjectBranchLogFieldsErrors, ThrowOnError> => (options.client ?? client).get<ListProjectBranchLogFieldsResponses, ListProjectBranchLogFieldsErrors, ThrowOnError>({
+    security: [
+        { scheme: 'bearer', type: 'http' },
+        {
+            in: 'cookie',
+            name: 'zenith',
+            type: 'apiKey'
+        },
+        {
+            in: 'cookie',
+            name: 'keycloak_token',
+            type: 'apiKey'
+        }
+    ],
+    url: '/projects/{project_id}/branches/{branch_id}/logs/fields',
+    ...options
+});
+
+/**
+ * List branch log field values
+ *
+ * Lists the distinct values observed for a low-cardinality log field in
+ * the requested time range. Call the log fields endpoint first to learn
+ * which `field_name` values this branch supports; a field that branch has
+ * never emitted is rejected with `unknown_field`.
+ *
+ * Give the window either as `since` or as an explicit `start_time`;
+ * supplying both is rejected. If neither is given, the previous six hours
+ * are used. The maximum supported time range is seven days.
+ *
+ * **Note**: This endpoint is currently in Private Beta.
+ *
+ */
+export const listProjectBranchLogFieldValues = <ThrowOnError extends boolean = false>(options: Options<ListProjectBranchLogFieldValuesData, ThrowOnError>): RequestResult<ListProjectBranchLogFieldValuesResponses, ListProjectBranchLogFieldValuesErrors, ThrowOnError> => (options.client ?? client).get<ListProjectBranchLogFieldValuesResponses, ListProjectBranchLogFieldValuesErrors, ThrowOnError>({
+    security: [
+        { scheme: 'bearer', type: 'http' },
+        {
+            in: 'cookie',
+            name: 'zenith',
+            type: 'apiKey'
+        },
+        {
+            in: 'cookie',
+            name: 'keycloak_token',
+            type: 'apiKey'
+        }
+    ],
+    url: '/projects/{project_id}/branches/{branch_id}/logs/fields/{field_name}/values',
+    ...options
+});
+
+/**
  * List objects in a bucket
  *
  * Lists objects visible in the named bucket on the specified branch,
@@ -4226,7 +4378,7 @@ export const getProjectBranchAiGateway = <ThrowOnError extends boolean = false>(
  * browser; keys that do not contain the delimiter after `prefix` are
  * returned as `objects`.
  *
- * **Note**: This endpoint is currently in Private Beta.
+ * **Note**: This endpoint is currently in Beta.
  *
  */
 export const listProjectBranchBucketObjects = <ThrowOnError extends boolean = false>(options: Options<ListProjectBranchBucketObjectsData, ThrowOnError>): RequestResult<ListProjectBranchBucketObjectsResponses, ListProjectBranchBucketObjectsErrors, ThrowOnError> => (options.client ?? client).get<ListProjectBranchBucketObjectsResponses, ListProjectBranchBucketObjectsErrors, ThrowOnError>({
@@ -4253,7 +4405,7 @@ export const listProjectBranchBucketObjects = <ThrowOnError extends boolean = fa
  * Deletes the named object from the bucket on the specified branch.
  * Served by the user's session (no customer S3 credentials required).
  *
- * **Note**: This endpoint is currently in Private Beta.
+ * **Note**: This endpoint is currently in Beta.
  *
  */
 export const deleteProjectBranchBucketObject = <ThrowOnError extends boolean = false>(options: Options<DeleteProjectBranchBucketObjectData, ThrowOnError>): RequestResult<DeleteProjectBranchBucketObjectResponses, DeleteProjectBranchBucketObjectErrors, ThrowOnError> => (options.client ?? client).delete<DeleteProjectBranchBucketObjectResponses, DeleteProjectBranchBucketObjectErrors, ThrowOnError>({
@@ -4287,12 +4439,12 @@ export const deleteProjectBranchBucketObject = <ThrowOnError extends boolean = f
  *
  * BINARY-STREAM EXCEPTION TO THE BUILD-GENERATED-TYPES RULE (#7029): the
  * successful 200 body is the raw object stream, proxied verbatim from the
- * platform storage admin endpoint. It is modeled as an
+ * platform object storage admin endpoint. It is modeled as an
  * `application/octet-stream` binary body (not a JSON response schema) and
  * is streamed without buffering the whole object in memory. Error
  * responses still use the generated `GeneralError` shape.
  *
- * **Note**: This endpoint is currently in Private Beta.
+ * **Note**: This endpoint is currently in Beta.
  *
  */
 export const getProjectBranchBucketObject = <ThrowOnError extends boolean = false>(options: Options<GetProjectBranchBucketObjectData, ThrowOnError>): RequestResult<GetProjectBranchBucketObjectResponses, GetProjectBranchBucketObjectErrors, ThrowOnError> => (options.client ?? client).get<GetProjectBranchBucketObjectResponses, GetProjectBranchBucketObjectErrors, ThrowOnError>({
@@ -4332,7 +4484,7 @@ export const getProjectBranchBucketObject = <ThrowOnError extends boolean = fals
  * inherited from an ancestor branch via copy-on-write (not materialized on
  * this branch) are out of scope.
  *
- * **Note**: This endpoint is currently in Private Beta.
+ * **Note**: This endpoint is currently in Beta.
  *
  */
 export const deleteProjectBranchBucketObjectsByPrefix = <ThrowOnError extends boolean = false>(options: Options<DeleteProjectBranchBucketObjectsByPrefixData, ThrowOnError>): RequestResult<DeleteProjectBranchBucketObjectsByPrefixResponses, DeleteProjectBranchBucketObjectsByPrefixErrors, ThrowOnError> => (options.client ?? client).delete<DeleteProjectBranchBucketObjectsByPrefixResponses, DeleteProjectBranchBucketObjectsByPrefixErrors, ThrowOnError>({
@@ -4372,7 +4524,7 @@ export const deleteProjectBranchBucketObjectsByPrefix = <ThrowOnError extends bo
  *
  * Served by the user's session (no customer S3 credentials required).
  *
- * **Note**: This endpoint is currently in Private Beta.
+ * **Note**: This endpoint is currently in Beta.
  *
  */
 export const presignProjectBranchBucketObject = <ThrowOnError extends boolean = false>(options: Options<PresignProjectBranchBucketObjectData, ThrowOnError>): RequestResult<PresignProjectBranchBucketObjectResponses, PresignProjectBranchBucketObjectErrors, ThrowOnError> => (options.client ?? client).post<PresignProjectBranchBucketObjectResponses, PresignProjectBranchBucketObjectErrors, ThrowOnError>({
@@ -4403,7 +4555,7 @@ export const presignProjectBranchBucketObject = <ThrowOnError extends boolean = 
  * Returns metadata for customer-issued credentials on the branch.
  * Secrets are never included.
  *
- * **Note**: This endpoint is currently in Private Beta.
+ * **Note**: This endpoint is currently in Beta.
  *
  */
 export const listCredentials = <ThrowOnError extends boolean = false>(options: Options<ListCredentialsData, ThrowOnError>): RequestResult<ListCredentialsResponses, ListCredentialsErrors, ThrowOnError> => (options.client ?? client).get<ListCredentialsResponses, ListCredentialsErrors, ThrowOnError>({
@@ -4431,7 +4583,7 @@ export const listCredentials = <ThrowOnError extends boolean = false>(options: O
  * branch. The response carries `api_token` and `s3_secret_access_key`
  * exactly once — they are not stored server-side.
  *
- * **Note**: This endpoint is currently in Private Beta.
+ * **Note**: This endpoint is currently in Beta.
  *
  */
 export const createCredential = <ThrowOnError extends boolean = false>(options: Options<CreateCredentialData, ThrowOnError>): RequestResult<CreateCredentialResponses, CreateCredentialErrors, ThrowOnError> => (options.client ?? client).post<CreateCredentialResponses, CreateCredentialErrors, ThrowOnError>({
@@ -4461,7 +4613,7 @@ export const createCredential = <ThrowOnError extends boolean = false>(options: 
  *
  * Soft-deletes the credential.  Idempotent.
  *
- * **Note**: This endpoint is currently in Private Beta.
+ * **Note**: This endpoint is currently in Beta.
  *
  */
 export const revokeCredential = <ThrowOnError extends boolean = false>(options: Options<RevokeCredentialData, ThrowOnError>): RequestResult<RevokeCredentialResponses, RevokeCredentialErrors, ThrowOnError> => (options.client ?? client).delete<RevokeCredentialResponses, RevokeCredentialErrors, ThrowOnError>({
@@ -4487,7 +4639,7 @@ export const revokeCredential = <ThrowOnError extends boolean = false>(options: 
  *
  * Lists functions on the specified branch.
  *
- * **Note**: This endpoint is currently in Private Beta.
+ * **Note**: This endpoint is currently in Beta.
  *
  */
 export const listProjectBranchFunctions = <ThrowOnError extends boolean = false>(options: Options<ListProjectBranchFunctionsData, ThrowOnError>): RequestResult<ListProjectBranchFunctionsResponses, ListProjectBranchFunctionsErrors, ThrowOnError> => (options.client ?? client).get<ListProjectBranchFunctionsResponses, ListProjectBranchFunctionsErrors, ThrowOnError>({
@@ -4513,7 +4665,7 @@ export const listProjectBranchFunctions = <ThrowOnError extends boolean = false>
  *
  * Deletes the function identified by its slug.
  *
- * **Note**: This endpoint is currently in Private Beta.
+ * **Note**: This endpoint is currently in Beta.
  *
  */
 export const deleteProjectBranchFunction = <ThrowOnError extends boolean = false>(options: Options<DeleteProjectBranchFunctionData, ThrowOnError>): RequestResult<DeleteProjectBranchFunctionResponses, DeleteProjectBranchFunctionErrors, ThrowOnError> => (options.client ?? client).delete<DeleteProjectBranchFunctionResponses, DeleteProjectBranchFunctionErrors, ThrowOnError>({
@@ -4539,7 +4691,7 @@ export const deleteProjectBranchFunction = <ThrowOnError extends boolean = false
  *
  * Returns the function identified by its slug.
  *
- * **Note**: This endpoint is currently in Private Beta.
+ * **Note**: This endpoint is currently in Beta.
  *
  */
 export const getProjectBranchFunction = <ThrowOnError extends boolean = false>(options: Options<GetProjectBranchFunctionData, ThrowOnError>): RequestResult<GetProjectBranchFunctionResponses, GetProjectBranchFunctionErrors, ThrowOnError> => (options.client ?? client).get<GetProjectBranchFunctionResponses, GetProjectBranchFunctionErrors, ThrowOnError>({
@@ -4573,7 +4725,7 @@ export const getProjectBranchFunction = <ThrowOnError extends boolean = false>(o
  * branch: a branch forked before the rename keeps the name it had at
  * fork time.
  *
- * **Note**: This endpoint is currently in Private Beta.
+ * **Note**: This endpoint is currently in Beta.
  *
  */
 export const updateProjectBranchFunction = <ThrowOnError extends boolean = false>(options: Options<UpdateProjectBranchFunctionData, ThrowOnError>): RequestResult<UpdateProjectBranchFunctionResponses, UpdateProjectBranchFunctionErrors, ThrowOnError> => (options.client ?? client).patch<UpdateProjectBranchFunctionResponses, UpdateProjectBranchFunctionErrors, ThrowOnError>({
@@ -4607,7 +4759,7 @@ export const updateProjectBranchFunction = <ThrowOnError extends boolean = false
  * first deployment of a function must include zip. The newest deployment
  * becomes active.
  *
- * **Note**: This endpoint is currently in Private Beta.
+ * **Note**: This endpoint is currently in Beta.
  *
  */
 export const createProjectBranchFunctionDeployment = <ThrowOnError extends boolean = false>(options: Options<CreateProjectBranchFunctionDeploymentData, ThrowOnError>): RequestResult<CreateProjectBranchFunctionDeploymentResponses, CreateProjectBranchFunctionDeploymentErrors, ThrowOnError> => (options.client ?? client).post<CreateProjectBranchFunctionDeploymentResponses, CreateProjectBranchFunctionDeploymentErrors, ThrowOnError>({

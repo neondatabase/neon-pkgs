@@ -115,8 +115,11 @@ import {
 	listProjectBranchEndpoints as _listProjectBranchEndpoints,
 	listProjectBranches as _listProjectBranches,
 	listProjectBranchFunctions as _listProjectBranchFunctions,
+	listProjectBranchLogFields as _listProjectBranchLogFields,
+	listProjectBranchLogFieldValues as _listProjectBranchLogFieldValues,
 	listProjectBranchRoles as _listProjectBranchRoles,
 	listProjectEndpoints as _listProjectEndpoints,
+	listProjectMembers as _listProjectMembers,
 	listProjectOperations as _listProjectOperations,
 	listProjectPermissions as _listProjectPermissions,
 	listProjects as _listProjects,
@@ -124,9 +127,10 @@ import {
 	listSharedProjects as _listSharedProjects,
 	listSnapshots as _listSnapshots,
 	presignProjectBranchBucketObject as _presignProjectBranchBucketObject,
+	queryProjectBranchLogs as _queryProjectBranchLogs,
 	recoverProject as _recoverProject,
-	recoverProjectBranch as _recoverProjectBranch,
 	removeOrganizationMember as _removeOrganizationMember,
+	removeProjectMemberRole as _removeProjectMemberRole,
 	resetProjectBranchRolePassword as _resetProjectBranchRolePassword,
 	restartProjectEndpoint as _restartProjectEndpoint,
 	restoreProjectBranch as _restoreProjectBranch,
@@ -138,6 +142,7 @@ import {
 	sendNeonAuthTestEmail as _sendNeonAuthTestEmail,
 	setDefaultProjectBranch as _setDefaultProjectBranch,
 	setOrganizationSpendingLimit as _setOrganizationSpendingLimit,
+	setProjectMemberRole as _setProjectMemberRole,
 	setSnapshotSchedule as _setSnapshotSchedule,
 	startAnonymization as _startAnonymization,
 	startProjectEndpoint as _startProjectEndpoint,
@@ -280,8 +285,11 @@ export const listProjectBranchDatabases = wrapRaw(_listProjectBranchDatabases);
 export const listProjectBranchEndpoints = wrapRaw(_listProjectBranchEndpoints);
 export const listProjectBranches = wrapRaw(_listProjectBranches);
 export const listProjectBranchFunctions = wrapRaw(_listProjectBranchFunctions);
+export const listProjectBranchLogFields = wrapRaw(_listProjectBranchLogFields);
+export const listProjectBranchLogFieldValues = wrapRaw(_listProjectBranchLogFieldValues);
 export const listProjectBranchRoles = wrapRaw(_listProjectBranchRoles);
 export const listProjectEndpoints = wrapRaw(_listProjectEndpoints);
+export const listProjectMembers = wrapRaw(_listProjectMembers);
 export const listProjectOperations = wrapRaw(_listProjectOperations);
 export const listProjectPermissions = wrapRaw(_listProjectPermissions);
 export const listProjects = wrapRaw(_listProjects);
@@ -289,9 +297,10 @@ export const listProjectVpcEndpoints = wrapRaw(_listProjectVpcEndpoints);
 export const listSharedProjects = wrapRaw(_listSharedProjects);
 export const listSnapshots = wrapRaw(_listSnapshots);
 export const presignProjectBranchBucketObject = wrapRaw(_presignProjectBranchBucketObject);
+export const queryProjectBranchLogs = wrapRaw(_queryProjectBranchLogs);
 export const recoverProject = wrapRaw(_recoverProject);
-export const recoverProjectBranch = wrapRaw(_recoverProjectBranch);
 export const removeOrganizationMember = wrapRaw(_removeOrganizationMember);
+export const removeProjectMemberRole = wrapRaw(_removeProjectMemberRole);
 export const resetProjectBranchRolePassword = wrapRaw(_resetProjectBranchRolePassword);
 export const restartProjectEndpoint = wrapRaw(_restartProjectEndpoint);
 export const restoreProjectBranch = wrapRaw(_restoreProjectBranch);
@@ -303,6 +312,7 @@ export const revokePermissionFromProject = wrapRaw(_revokePermissionFromProject)
 export const sendNeonAuthTestEmail = wrapRaw(_sendNeonAuthTestEmail);
 export const setDefaultProjectBranch = wrapRaw(_setDefaultProjectBranch);
 export const setOrganizationSpendingLimit = wrapRaw(_setOrganizationSpendingLimit);
+export const setProjectMemberRole = wrapRaw(_setProjectMemberRole);
 export const setSnapshotSchedule = wrapRaw(_setSnapshotSchedule);
 export const startAnonymization = wrapRaw(_startAnonymization);
 export const startProjectEndpoint = wrapRaw(_startProjectEndpoint);

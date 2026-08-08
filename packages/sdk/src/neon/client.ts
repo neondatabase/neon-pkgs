@@ -8,6 +8,7 @@ import { Branches } from "./resources/branches.js";
 import { Consumption } from "./resources/consumption.js";
 import { Credentials } from "./resources/credentials.js";
 import { Functions } from "./resources/functions.js";
+import { Logs } from "./resources/logs.js";
 import { Operations } from "./resources/operations.js";
 import { Postgres } from "./resources/postgres.js";
 import { Projects } from "./resources/projects.js";
@@ -31,6 +32,7 @@ export interface NeonClient<DThrow extends boolean> {
 	readonly functions: Functions<DThrow>;
 	readonly credentials: Credentials<DThrow>;
 	readonly aiGateway: AiGateway<DThrow>;
+	readonly logs: Logs<DThrow>;
 	readonly snapshots: Snapshots<DThrow>;
 	readonly operations: Operations<DThrow>;
 	readonly auth: Auth<DThrow>;
@@ -68,6 +70,7 @@ export function createNeonClient<Throw extends boolean = false>(
 		functions: new Functions<Throw>(ctx),
 		credentials: new Credentials<Throw>(ctx),
 		aiGateway: new AiGateway<Throw>(ctx),
+		logs: new Logs<Throw>(ctx),
 		snapshots: new Snapshots<Throw>(ctx),
 		operations: new Operations<Throw>(ctx),
 		auth: new Auth<Throw>(ctx),

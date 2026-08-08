@@ -68,23 +68,23 @@ export const projectCreateRequest = {
   },
   'project.settings.audit_log_level': {
               type: "string",
-              description: undefined,
+              description: "Audit logging level, set only on HIPAA-enabled organizations (absent otherwise). Values: `base`, `extended`, `full`; HIPAA defaults to `extended`. Cannot be lowered back to `base` once `extended` or `full`.",
               demandOption: false,
  choices: ["base","extended","full"],
   },
   'project.settings.hipaa': {
               type: "boolean",
-              description: undefined,
+              description: "Enables HIPAA compliance mode for the project, including audit logging.",
               demandOption: false,
   },
   'project.settings.preload_libraries.use_defaults': {
               type: "boolean",
-              description: undefined,
+              description: "When true, the project's preload libraries include the platform default set in addition to any libraries listed in `enabled_libraries`.",
               demandOption: false,
   },
   'project.settings.preload_libraries.enabled_libraries': {
               type: "array",
-              description: undefined,
+              description: "Names of shared preload libraries to enable for the project.",
               demandOption: false,
   },
   'project.name': {
@@ -109,7 +109,7 @@ export const projectCreateRequest = {
   },
   'project.provisioner': {
               type: "string",
-              description: "The Neon compute provisioner.\nSpecify the `k8s-neonvm` provisioner to create a compute endpoint that supports Autoscaling.\n\nProvisioner can be one of the following values:\n* k8s-pod\n* k8s-neonvm\n* serverless-platform\n\nClients must expect, that any string value that is not documented in the description above should be treated as a error. UNKNOWN value if safe to treat as an error too.\n",
+              description: "Compute provisioner. `k8s-neonvm` (default) supports Autoscaling; `k8s-pod` is fixed-size compute. Also `docker` and `serverless-platform`.",
               demandOption: false,
   },
   'project.region_id': {
@@ -119,12 +119,12 @@ export const projectCreateRequest = {
   },
   'project.default_endpoint_settings.suspend_timeout_seconds': {
               type: "number",
-              description: "Duration of inactivity in seconds after which the compute endpoint is\nautomatically suspended. The value `0` means use the default value.\nThe value `-1` means never suspend. The default value is `300` seconds (5 minutes).\nThe minimum value is `60` seconds (1 minute).\nThe maximum value is `604800` seconds (1 week). For more information, see\n[Scale to zero configuration](https://neon.com/docs/manage/endpoints#scale-to-zero-configuration).\n",
+              description: "Scale-to-zero idle timeout, in seconds, before the compute suspends. `0` uses the plan default; `-1` disables scale-to-zero (never suspends). Minimum is plan-dependent (Scale: 60); maximum 604800 (one week). Free cannot change it; Launch can only enable or disable; Scale can set any value.",
               demandOption: false,
   },
   'project.pg_version': {
               type: "number",
-              description: "The major Postgres version number. Generally available versions are `14`, `15`, `16`, `17`, and `18`. `19` is being rolled out and is only accepted in regions where it has been enabled; requesting it in a region where it is not yet available returns an error.",
+              description: "The major Postgres version number. Supported versions are `14`, `15`, `16`, `17`, and `18`. `19` is rolling out and is accepted only in regions where it is enabled; requesting it elsewhere returns an error.",
               demandOption: false,
   },
   'project.store_passwords': {
@@ -134,12 +134,12 @@ export const projectCreateRequest = {
   },
   'project.history_retention_seconds': {
               type: "number",
-              description: "The number of seconds to retain the shared history for all branches in this project.\nThe default is 1 day (86400 seconds).\n",
+              description: "History window (point-in-time restore range) for all branches, in seconds. `0` disables it. Default 1 day (Free: 6 hours). Maximum depends on plan: Free 6 hours (21600), Launch 7 days (604800), Scale 30 days (2592000).\n",
               demandOption: false,
   },
   'project.org_id': {
               type: "string",
-              description: "Organization id in case the project created belongs to an organization.\nIf not present, project is owned by a user and not by org.\n",
+              description: "ID of the organization that will own the project. If omitted when using an organization API key, it is inferred from the key.\n",
               demandOption: false,
   },
 } as const;
@@ -212,23 +212,23 @@ export const projectUpdateRequest = {
   },
   'project.settings.audit_log_level': {
               type: "string",
-              description: undefined,
+              description: "Audit logging level, set only on HIPAA-enabled organizations (absent otherwise). Values: `base`, `extended`, `full`; HIPAA defaults to `extended`. Cannot be lowered back to `base` once `extended` or `full`.",
               demandOption: false,
  choices: ["base","extended","full"],
   },
   'project.settings.hipaa': {
               type: "boolean",
-              description: undefined,
+              description: "Enables HIPAA compliance mode for the project, including audit logging.",
               demandOption: false,
   },
   'project.settings.preload_libraries.use_defaults': {
               type: "boolean",
-              description: undefined,
+              description: "When true, the project's preload libraries include the platform default set in addition to any libraries listed in `enabled_libraries`.",
               demandOption: false,
   },
   'project.settings.preload_libraries.enabled_libraries': {
               type: "array",
-              description: undefined,
+              description: "Names of shared preload libraries to enable for the project.",
               demandOption: false,
   },
   'project.name': {
@@ -238,12 +238,12 @@ export const projectUpdateRequest = {
   },
   'project.default_endpoint_settings.suspend_timeout_seconds': {
               type: "number",
-              description: "Duration of inactivity in seconds after which the compute endpoint is\nautomatically suspended. The value `0` means use the default value.\nThe value `-1` means never suspend. The default value is `300` seconds (5 minutes).\nThe minimum value is `60` seconds (1 minute).\nThe maximum value is `604800` seconds (1 week). For more information, see\n[Scale to zero configuration](https://neon.com/docs/manage/endpoints#scale-to-zero-configuration).\n",
+              description: "Scale-to-zero idle timeout, in seconds, before the compute suspends. `0` uses the plan default; `-1` disables scale-to-zero (never suspends). Minimum is plan-dependent (Scale: 60); maximum 604800 (one week). Free cannot change it; Launch can only enable or disable; Scale can set any value.",
               demandOption: false,
   },
   'project.history_retention_seconds': {
               type: "number",
-              description: "The number of seconds to retain the shared history for all branches in this project.\nThe default is 1 day (604800 seconds).\n",
+              description: "History window (point-in-time restore range) for all branches, in seconds. `0` disables it. Default 1 day (Free: 6 hours). Maximum depends on plan: Free 6 hours (21600), Launch 7 days (604800), Scale 30 days (2592000).\n",
               demandOption: false,
   },
 } as const;
@@ -251,7 +251,7 @@ export const projectUpdateRequest = {
 export const branchCreateRequest = {
   'endpoints': {
               type: "array",
-              description: undefined,
+              description: "Compute endpoints to create together with the branch. If omitted, the branch is created without any compute endpoint. Endpoints can be added to the branch separately after creation.",
               demandOption: false,
   },
   'branch.parent_id': {
@@ -271,22 +271,22 @@ export const branchCreateRequest = {
   },
   'branch.parent_timestamp': {
               type: "string",
-              description: "A timestamp identifying a point in time on the parent branch. The branch will be created with data starting from this point in time.\nThe timestamp must be provided in ISO 8601 format; for example: `2024-02-26T12:00:00Z`.\n",
+              description: "A timestamp identifying a point in time on the parent branch. The branch will be created with data starting from this point in time. RFC 3339 format.\n",
               demandOption: false,
   },
   'branch.protected': {
               type: "boolean",
-              description: "Whether the branch is protected\n",
+              description: "Whether the branch is protected. Protected branches (and their computes) cannot be deleted, archived, or reset, and block deletion of the project. Can be gated by `protected_branches_only` in the IP allowlist. Paid plans only.\n",
               demandOption: false,
   },
   'branch.archived': {
               type: "boolean",
-              description: "Whether to create the branch as archived\n",
+              description: "Whether to create the branch in the archived state. When omitted, the branch is created as a normal (non-archived) branch.\n",
               demandOption: false,
   },
   'branch.init_source': {
               type: "string",
-              description: "The source of initialization for the branch. Valid values are `schema-only` and `parent-data` (default).\n  * `schema-only` - creates a new root branch containing only the schema. Use `parent_id` to specify the source branch. Optionally, you can provide `parent_lsn` or `parent_timestamp` to branch from a specific point in time or LSN. These fields define which branch to copy the schema from and at what point—they do not establish a parent-child relationship between the `parent_id` branch and the new schema-only branch.\n  * `parent-data` - creates the branch with both schema and data from the parent.\n",
+              description: "Source of initialization for the branch. `parent-data` copies schema and data from the parent branch. `parent-schema` copies schema only from the parent branch. `schema-only` creates a new root branch containing schema only, using `parent_id` as the source; optionally, `parent_lsn` or `parent_timestamp` can narrow the source point. `import` initializes the branch from an external import.",
               demandOption: false,
   },
   'branch.expires_at': {
@@ -299,28 +299,28 @@ export const branchCreateRequest = {
 export const branchCreateRequestEndpointOptions = {
   'type': {
               type: "string",
-              description: "The compute endpoint type. Either `read_write` or `read_only`.\n",
+              description: "Compute endpoint type. `read_write`: the primary read-write endpoint (one per branch). `read_only`: a read replica endpoint (multiple allowed per branch).",
               demandOption: true,
  choices: ["read_only","read_write"],
   },
   'settings.preload_libraries.use_defaults': {
               type: "boolean",
-              description: undefined,
+              description: "When true, the project's preload libraries include the platform default set in addition to any libraries listed in `enabled_libraries`.",
               demandOption: false,
   },
   'settings.preload_libraries.enabled_libraries': {
               type: "array",
-              description: undefined,
+              description: "Names of shared preload libraries to enable for the project.",
               demandOption: false,
   },
   'provisioner': {
               type: "string",
-              description: "The Neon compute provisioner.\nSpecify the `k8s-neonvm` provisioner to create a compute endpoint that supports Autoscaling.\n\nProvisioner can be one of the following values:\n* k8s-pod\n* k8s-neonvm\n* serverless-platform\n\nClients must expect, that any string value that is not documented in the description above should be treated as a error. UNKNOWN value if safe to treat as an error too.\n",
+              description: "Compute provisioner. `k8s-neonvm` (default) supports Autoscaling; `k8s-pod` is fixed-size compute. Also `docker` and `serverless-platform`.",
               demandOption: false,
   },
   'suspend_timeout_seconds': {
               type: "number",
-              description: "Duration of inactivity in seconds after which the compute endpoint is\nautomatically suspended. The value `0` means use the default value.\nThe value `-1` means never suspend. The default value is `300` seconds (5 minutes).\nThe minimum value is `60` seconds (1 minute).\nThe maximum value is `604800` seconds (1 week). For more information, see\n[Scale to zero configuration](https://neon.com/docs/manage/endpoints#scale-to-zero-configuration).\n",
+              description: "Scale-to-zero idle timeout, in seconds, before the compute suspends. `0` uses the plan default; `-1` disables scale-to-zero (never suspends). Minimum is plan-dependent (Scale: 60); maximum 604800 (one week). Free cannot change it; Launch can only enable or disable; Scale can set any value.",
               demandOption: false,
   },
 } as const;
@@ -328,12 +328,12 @@ export const branchCreateRequestEndpointOptions = {
 export const branchUpdateRequest = {
   'branch.name': {
               type: "string",
-              description: undefined,
+              description: "New display name for the branch.",
               demandOption: false,
   },
   'branch.protected': {
               type: "boolean",
-              description: undefined,
+              description: "Whether the branch is protected. Protected branches (and their computes) cannot be deleted, archived, or reset, and block deletion of the project. Can be gated by `protected_branches_only` in the IP allowlist. Paid plans only.\n",
               demandOption: false,
   },
   'branch.expires_at': {
@@ -356,33 +356,33 @@ export const endpointCreateRequest = {
   },
   'endpoint.type': {
               type: "string",
-              description: "The compute endpoint type. Either `read_write` or `read_only`.\n",
+              description: "Compute endpoint type. `read_write`: the primary read-write endpoint (one per branch). `read_only`: a read replica endpoint (multiple allowed per branch).",
               demandOption: true,
  choices: ["read_only","read_write"],
   },
   'endpoint.settings.preload_libraries.use_defaults': {
               type: "boolean",
-              description: undefined,
+              description: "When true, the project's preload libraries include the platform default set in addition to any libraries listed in `enabled_libraries`.",
               demandOption: false,
   },
   'endpoint.settings.preload_libraries.enabled_libraries': {
               type: "array",
-              description: undefined,
+              description: "Names of shared preload libraries to enable for the project.",
               demandOption: false,
   },
   'endpoint.provisioner': {
               type: "string",
-              description: "The Neon compute provisioner.\nSpecify the `k8s-neonvm` provisioner to create a compute endpoint that supports Autoscaling.\n\nProvisioner can be one of the following values:\n* k8s-pod\n* k8s-neonvm\n* serverless-platform\n\nClients must expect, that any string value that is not documented in the description above should be treated as a error. UNKNOWN value if safe to treat as an error too.\n",
+              description: "Compute provisioner. `k8s-neonvm` (default) supports Autoscaling; `k8s-pod` is fixed-size compute. Also `docker` and `serverless-platform`.",
               demandOption: false,
   },
   'endpoint.pooler_enabled': {
               type: "boolean",
-              description: "DEPRECATED. Whether to enable connection pooling for the compute endpoint.\nThe recommended way to enable connection pooling is to append `-pooler` to the endpoint ID in the connection string.\nSee [How to use connection pooling](https://neon.com/docs/connect/connection-pooling#how-to-use-connection-pooling)\n",
+              description: "Deprecated. To enable connection pooling, append `-pooler` to the endpoint ID in the connection string.\nSee [How to use connection pooling](https://neon.com/docs/connect/connection-pooling#how-to-use-connection-pooling)\n",
               demandOption: false,
   },
   'endpoint.pooler_mode': {
               type: "string",
-              description: "DEPRECATED. The connection pooler mode. This field is deprecated and will be removed after 2026-06-20.\n",
+              description: "Deprecated. The connection pooler mode. Removal scheduled for June 20, 2026.\n",
               demandOption: false,
  choices: ["transaction"],
   },
@@ -398,7 +398,7 @@ export const endpointCreateRequest = {
   },
   'endpoint.suspend_timeout_seconds': {
               type: "number",
-              description: "Duration of inactivity in seconds after which the compute endpoint is\nautomatically suspended. The value `0` means use the default value.\nThe value `-1` means never suspend. The default value is `300` seconds (5 minutes).\nThe minimum value is `60` seconds (1 minute).\nThe maximum value is `604800` seconds (1 week). For more information, see\n[Scale to zero configuration](https://neon.com/docs/manage/endpoints#scale-to-zero-configuration).\n",
+              description: "Scale-to-zero idle timeout, in seconds, before the compute suspends. `0` uses the plan default; `-1` disables scale-to-zero (never suspends). Minimum is plan-dependent (Scale: 60); maximum 604800 (one week). Free cannot change it; Launch can only enable or disable; Scale can set any value.",
               demandOption: false,
   },
   'endpoint.name': {
@@ -411,32 +411,32 @@ export const endpointCreateRequest = {
 export const endpointUpdateRequest = {
   'endpoint.branch_id': {
               type: "string",
-              description: "DEPRECATED: This field will be removed in a future release.\nThe destination branch ID. The destination branch must not have an existing read-write endpoint.\n",
+              description: "Deprecated. The destination branch ID; must not have an existing read-write endpoint.\n",
               demandOption: false,
   },
   'endpoint.provisioner': {
               type: "string",
-              description: "The Neon compute provisioner.\nSpecify the `k8s-neonvm` provisioner to create a compute endpoint that supports Autoscaling.\n\nProvisioner can be one of the following values:\n* k8s-pod\n* k8s-neonvm\n* serverless-platform\n\nClients must expect, that any string value that is not documented in the description above should be treated as a error. UNKNOWN value if safe to treat as an error too.\n",
+              description: "Compute provisioner. `k8s-neonvm` (default) supports Autoscaling; `k8s-pod` is fixed-size compute. Also `docker` and `serverless-platform`.",
               demandOption: false,
   },
   'endpoint.settings.preload_libraries.use_defaults': {
               type: "boolean",
-              description: undefined,
+              description: "When true, the project's preload libraries include the platform default set in addition to any libraries listed in `enabled_libraries`.",
               demandOption: false,
   },
   'endpoint.settings.preload_libraries.enabled_libraries': {
               type: "array",
-              description: undefined,
+              description: "Names of shared preload libraries to enable for the project.",
               demandOption: false,
   },
   'endpoint.pooler_enabled': {
               type: "boolean",
-              description: "DEPRECATED. Whether to enable connection pooling for the compute endpoint.\nThe recommended way to enable connection pooling is to append `-pooler` to the endpoint ID in the connection string.\nSee [How to use connection pooling](https://neon.com/docs/connect/connection-pooling#how-to-use-connection-pooling)\n",
+              description: "Deprecated. To enable connection pooling, append `-pooler` to the endpoint ID in the connection string.\nSee [How to use connection pooling](https://neon.com/docs/connect/connection-pooling#how-to-use-connection-pooling)\n",
               demandOption: false,
   },
   'endpoint.pooler_mode': {
               type: "string",
-              description: "DEPRECATED. The connection pooler mode. This field is deprecated and will be removed after 2026-06-20.\n",
+              description: "Deprecated. The connection pooler mode. Removal scheduled for June 20, 2026.\n",
               demandOption: false,
  choices: ["transaction"],
   },
@@ -452,7 +452,7 @@ export const endpointUpdateRequest = {
   },
   'endpoint.suspend_timeout_seconds': {
               type: "number",
-              description: "Duration of inactivity in seconds after which the compute endpoint is\nautomatically suspended. The value `0` means use the default value.\nThe value `-1` means never suspend. The default value is `300` seconds (5 minutes).\nThe minimum value is `60` seconds (1 minute).\nThe maximum value is `604800` seconds (1 week). For more information, see\n[Scale to zero configuration](https://neon.com/docs/manage/endpoints#scale-to-zero-configuration).\n",
+              description: "Scale-to-zero idle timeout, in seconds, before the compute suspends. `0` uses the plan default; `-1` disables scale-to-zero (never suspends). Minimum is plan-dependent (Scale: 60); maximum 604800 (one week). Free cannot change it; Launch can only enable or disable; Scale can set any value.",
               demandOption: false,
   },
   'endpoint.name': {
@@ -465,7 +465,7 @@ export const endpointUpdateRequest = {
 export const databaseCreateRequest = {
   'database.name': {
               type: "string",
-              description: "The name of the database\n",
+              description: "Name of the database to create.\n",
               demandOption: true,
   },
   'database.owner_name': {

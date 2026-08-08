@@ -232,7 +232,6 @@ await neon.projects.transfer({
 | `createWithCompute(projectId, input, { pooled? })` | **[W]** `{ branch, endpoint, connectionString }` | `input`: `{ name?, parentId?, compute?: { minCu?, maxCu?, suspendTimeoutSeconds? } }` |
 | `getDefault(projectId)` | `Branch` | resolves the default branch by the `default` flag |
 | `setDefault(projectId, branchId)` | `Branch` | |
-| `recover(projectId, branchId)` | `Branch` | beta — recover a soft-deleted branch within the 7-day window |
 | `finalizeRestore(projectId, branchId, { name? }?)` | **→void** | commits a restore previewed with `snapshots.restore({ finalize: false })` |
 
 ```ts
@@ -392,6 +391,49 @@ Branch-scoped AI Gateway endpoint metadata (beta).
 | --- | --- | --- |
 | `get(projectId, branchId)` | `BranchAiGateway` | 404 when AI Gateway is not enabled on the branch |
 
+### `neon.logs`
+
+Branch-scoped logs from the services running on a branch — Neon Functions, object
+storage, and Postgres computes (private beta). A branch that is not collecting
+telemetry answers 404 with `reason: "telemetry_not_enabled"` rather than an empty result.
+
+| Method | Returns | Notes |
+| --- | --- | --- |
+| `query(projectId, branchId, input?)` | **[P]** `ProjectBranchLogRecord` | `input`: `{ since?, start_time?, end_time?, limit?, sort_order?, source?, service_name?, scope_name?, minimum_severity?, severity_text?, body_contains?, trace_id?, logql? }` — filters combine with `AND` |
+| `fields(projectId, branchId)` | `string[]` | field names this branch has emitted, usable as `fieldName` below |
+| `fieldValues(projectId, branchId, fieldName, query?)` | `ProjectBranchLogFieldValuesResponse` | `query`: `{ since?, start_time?, end_time?, source?, limit? }` — check `is_truncated` |
+
+Give the window as **either** `since` (`"30m"`, `"6h"`, `"7d"`) **or** `start_time`;
+supplying both is rejected with `conflicting_time_range`. `logql` is an escape hatch
+that replaces the structured filters rather than adding to them — combining them is
+rejected with `conflicting_filters`. With no window the query covers the last hour, and
+seven days is the widest range served.
+
+```ts
+// Errors from a function over the last 6 hours, newest first
+const { data: errors } = await neon.logs
+  .query(projectId, branchId, {
+    since: "6h",
+    source: "function",
+    minimum_severity: "error",
+  })
+  .all();
+
+// Paging replays the filters for you — the endpoint returns wrong results otherwise
+for await (const line of neon.logs.query(projectId, branchId, { since: "1h" })) {
+  console.log(line.timestamp, line.message);
+}
+
+// Discover what you can filter on, then read one field's values
+const { data: fields } = await neon.logs.fields(projectId, branchId);
+const { data: sources } = await neon.logs.fieldValues(
+  projectId, branchId, "source", { since: "24h" },
+);
+if (sources?.is_truncated) {
+  // an arbitrary subset — narrow `since` or `source` before filtering on it
+}
+```
+
 ### `neon.snapshots`
 
 | Method | Returns | Notes |
@@ -540,6 +582,34 @@ Branch-scoped Neon Auth (the legacy project-scoped endpoints are deprecated and 
 | `list(projectId)` | `ProjectPermission[]` |
 | `grant(projectId, email)` | `ProjectPermission` |
 | `revoke(projectId, permissionId)` | `ProjectPermission` |
+
+### `neon.projects.members`
+
+Per-project roles for members of the **owning organization**. Distinct from
+`neon.projects.permissions`, which shares a project with an individual by email: these
+act on existing org members by member id, and clearing a grant leaves the member's
+organization-role default in force rather than removing their access. Org-owned projects
+only — a personal project answers 404.
+
+| Method | Returns | Notes |
+| --- | --- | --- |
+| `list(projectId, query?)` | **[P]** `ProjectMember` | `query`: `{ limit? }` |
+| `setRole(projectId, memberId, role, { confirmSelfDemotion? }?)` | `ProjectMemberRoleResponse` | `role`: `"viewer" \| "editor" \| "admin"`; idempotent |
+| `removeRole(projectId, memberId, { confirmSelfLockout? }?)` | `ProjectMemberRoleResponse` | clears the explicit grant; idempotent |
+
+The two confirmations are **off by default** so a call cannot silently cost you access to
+your own project. Pass one only when you mean to lower your own role
+(`confirmSelfDemotion`) or to drop your own grant when that removes your management
+access (`confirmSelfLockout`); without it the API rejects the call.
+
+```ts
+const { data: grant } = await neon.projects.members.setRole(
+  projectId, memberId, "editor",
+);
+// A downgrade can leave credentials the member still holds
+if (grant?.credential_rotation_recommended) { /* rotate database credentials */ }
+if (grant?.org_api_key_rotation_recommended) { /* rotate project-scoped org keys */ }
+```
 
 Also on `neon.projects`: `recover(id)` (beta — recover a soft-deleted project), and on
 `neon.postgres.endpoints`: `listByBranch(projectId, branchId)` → `Endpoint[]`.
