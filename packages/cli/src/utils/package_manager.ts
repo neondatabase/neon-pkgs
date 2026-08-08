@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 import which from "which";
 import { log } from "../log.js";
 
@@ -12,6 +14,43 @@ export const PACKAGE_MANAGERS: PackageManager[] = [
 	"yarn",
 	"bun",
 ];
+
+/**
+ * Lockfiles, and the package manager each one belongs to. npm is last on
+ * purpose: a repo with both a pnpm lockfile and a leftover `package-lock.json`
+ * (which a failed run like the one this fixes can leave behind) is a pnpm repo.
+ */
+const LOCKFILES: [file: string, pm: PackageManager][] = [
+	["pnpm-lock.yaml", "pnpm"],
+	["yarn.lock", "yarn"],
+	// bun 1.2+ writes the text `bun.lock`; older versions the binary `bun.lockb`.
+	["bun.lock", "bun"],
+	["bun.lockb", "bun"],
+	["package-lock.json", "npm"],
+];
+
+/**
+ * The package manager the project at `cwd` uses, from its lockfile. Searches
+ * `cwd` and then each parent up to the repo root: in a monorepo the lockfile
+ * sits at the root while we scaffold into a package. Stopping at the root keeps
+ * a stray lockfile above the repository from deciding how we install into it.
+ */
+export const detectProjectPackageManager = (
+	cwd: string,
+): PackageManager | undefined => {
+	let dir = cwd;
+	for (;;) {
+		for (const [file, pm] of LOCKFILES) {
+			if (existsSync(join(dir, file))) return pm;
+		}
+		// After the lockfiles, not before: the repo root's own lockfile counts.
+		// `.git` is a file rather than a directory in a worktree or submodule.
+		if (existsSync(join(dir, ".git"))) return undefined;
+		const parent = dirname(dir);
+		if (parent === dir) return undefined;
+		dir = parent;
+	}
+};
 
 /**
  * The package manager the CLI was invoked through, read from the
@@ -35,12 +74,21 @@ export const installedPackageManagers = (): PackageManager[] =>
 	PACKAGE_MANAGERS.filter((pm) => which.sync(pm, { nothrow: true }) !== null);
 
 /**
- * Pick a package manager without prompting: the one the CLI was invoked through,
- * else the first one installed, else npm. Used by non-interactive flows (e.g.
- * `config init`) where there's no scaffold prompt to hang a picker off.
+ * Pick a package manager without prompting: the one the project at `cwd` uses,
+ * else the one the CLI was invoked through, else the first one installed, else
+ * npm. Used by non-interactive flows (e.g. `config init`) where there's no
+ * scaffold prompt to hang a picker off.
+ *
+ * The project wins over the invocation on purpose. `npx neon …` inside a pnpm
+ * repo should still install with pnpm — which tool launched us says nothing
+ * about which one owns that project's `node_modules`, and running npm against
+ * pnpm's symlinked tree is what this ordering exists to prevent.
  */
-export const resolvePackageManager = (): PackageManager =>
-	detectPackageManager() ?? installedPackageManagers()[0] ?? "npm";
+export const resolvePackageManager = (cwd: string): PackageManager =>
+	detectProjectPackageManager(cwd) ??
+	detectPackageManager() ??
+	installedPackageManagers()[0] ??
+	"npm";
 
 /**
  * The argv that adds `packages` as runtime dependencies with `pm`. npm spells it
