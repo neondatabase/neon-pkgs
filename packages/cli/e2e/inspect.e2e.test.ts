@@ -120,6 +120,15 @@ describe.sequential("e2e — neon inspect db against the real API", () => {
 					await defaultSession.query(
 						`LOCK TABLE ${DEFAULT_TABLE} IN ACCESS EXCLUSIVE MODE`,
 					);
+					// Taking a table lock does not assign a transaction id — Postgres
+					// only does that when something needs one. Force it, so the
+					// database-less-lock assertion below is about this session rather
+					// than whatever else happens to be running on the compute.
+					await defaultSession.query("SELECT pg_current_xact_id()");
+					const backendPid = await defaultSession.query(
+						"SELECT pg_backend_pid()",
+					);
+					const defaultPid = String(backendPid.rows[0]?.[0]);
 
 					const fromDefault = await inspectLocks("neondb");
 					const fromOther = await inspectLocks(OTHER_DATABASE);
@@ -147,9 +156,11 @@ describe.sequential("e2e — neon inspect db against the real API", () => {
 					// Locks that have no relation must survive the database filter —
 					// they carry no `pg_locks.database`, so filtering on the lock rather
 					// than on the holding session would have dropped them.
-					expect(fromDefault.map((row) => row.locktype)).toContain(
-						"transactionid",
-					);
+					expect(
+						fromDefault
+							.filter((row) => row.pid === defaultPid)
+							.map((row) => row.locktype),
+					).toContain("transactionid");
 
 					await defaultSession.query("ROLLBACK");
 				});
