@@ -19,6 +19,7 @@ import type {
 	NeonProjectSnapshot,
 	NeonRoleSnapshot,
 } from "@neon/config";
+import { ErrorCode, PlatformError } from "@neon/config";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -274,12 +275,27 @@ class FakeNeonApi implements NeonApi {
 }
 
 /**
- * A branch whose credential endpoint fails for a reason that is not "this project has no
- * gateway" — a quota, a 500, anything. The implied gateway must not take the rest of the env
- * down with it, or `neon dev` starts with no `DATABASE_URL` because of a service the user
- * never named.
+ * A project whose credentials cannot be read at all — the shape of a region where branch
+ * credentials are not deployed. The implied gateway must not take the rest of the env down
+ * with it, or `neon dev` starts with no `DATABASE_URL` because of a service nobody named.
  */
-class BrokenCredentialsNeonApi extends FakeNeonApi {
+class UnreadableCredentialsNeonApi extends FakeNeonApi {
+	override async listCredentials(): Promise<NeonCredentialMeta[]> {
+		// The error the real adapter raises, so this also exercises `pullConfig` degrading
+		// the same read — which is why the rest of the branch still resolves.
+		throw new PlatformError(
+			ErrorCode.FeatureUnavailable,
+			"Branch credentials isn't available for this Neon project (HTTP 404 Not Found).",
+		);
+	}
+}
+
+/**
+ * Credentials read fine, but issuing one fails — a quota, a 500. Distinct from the above on
+ * purpose: once the endpoint has answered, a failure is a real failure and is not the
+ * gateway's to absorb.
+ */
+class BrokenMintNeonApi extends FakeNeonApi {
 	override async createCredential(): Promise<NeonCredentialSecret> {
 		throw new Error("credential quota exceeded for this account");
 	}
@@ -398,13 +414,13 @@ describe("resolveDevEnv", () => {
 		expect(api.credentials.filter((c) => c.revokedAt)).toEqual([]);
 	});
 
-	it("keeps the rest of the env when only the gateway fails", async () => {
+	it("keeps the rest of the env when the gateway's credentials cannot be read", async () => {
 		const result = await resolveDevEnv({
 			cwd,
 			projectId: PROJECT_ID,
 			branchId: BRANCH_ID,
 			implyAiGateway: true,
-			api: new BrokenCredentialsNeonApi(),
+			api: new UnreadableCredentialsNeonApi(),
 		});
 
 		expect(result.vars.DATABASE_URL).toBeDefined();
@@ -412,9 +428,24 @@ describe("resolveDevEnv", () => {
 		expect(result.skipped).toBeUndefined();
 	});
 
-	it("still reports a failure that was never the gateway's fault", async () => {
-		// The retry decides what belongs to the gateway. When the resolve fails without it
-		// too, the original error stands and no misleading gateway warning is printed.
+	it("surfaces a mint failure instead of absorbing it into the gateway", async () => {
+		// Once the credentials endpoint has answered, a failure is a real failure. Papering
+		// over it by resolving again without the gateway would swallow the error and strand
+		// whatever the first attempt had already issued. A branch with object storage
+		// behaves the same way, and always has.
+		const result = await resolveDevEnv({
+			cwd,
+			projectId: PROJECT_ID,
+			branchId: BRANCH_ID,
+			implyAiGateway: true,
+			api: new BrokenMintNeonApi(),
+		});
+
+		expect(result.vars).toEqual({});
+		expect(result.skipped?.reason).toMatch(/credential quota exceeded/);
+	});
+
+	it("reports a failure that was never the gateway's, without blaming it", async () => {
 		const api = new FakeNeonApi({
 			listBranches: async () => {
 				throw new Error("boom: Neon API unreachable");

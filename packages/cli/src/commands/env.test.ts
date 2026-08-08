@@ -757,7 +757,9 @@ describe("env pull with the AI Gateway implied (no neon.ts)", () => {
 		const content = readFileSync(join(cwd, ".env.local"), "utf8");
 		expect(content).toMatch(/^DATABASE_URL=/m);
 		expect(content).not.toContain("NEON_AI_GATEWAY");
-		expect(logged).toContain("Could not resolve the AI Gateway");
+		expect(logged).toContain(
+			"Could not reach the AI Gateway's credentials",
+		);
 		// The warning names the vars that were not written, and does not assert a cause the
 		// error code cannot distinguish (unavailable project vs transient failure).
 		expect(logged).toContain("NEON_AI_GATEWAY_TOKEN");

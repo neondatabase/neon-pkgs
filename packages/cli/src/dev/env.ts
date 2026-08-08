@@ -192,38 +192,72 @@ const withAiGateway = (config: Config): Config => ({
  * resolve fails: a project outside the regions where branch credentials exist would otherwise
  * lose its `DATABASE_URL` too, and `neon dev` would start with no env at all.
  *
- * Which failures belong to the gateway is decided by **retrying without it** rather than by
- * matching an error code. If the resolve then succeeds, the gateway was the cause — drop it,
- * say so, and report it as {@link ResolvedNeonEnvVars.skipped}. If it fails again, the problem
- * was never the gateway (a bad key, an unreachable API), so the original error propagates
- * unchanged and no misleading gateway warning is printed. That also avoids having to decide
- * whether `PLATFORM_FEATURE_UNAVAILABLE` means "this project has no gateway" or "the
- * credentials endpoint is having a bad minute" — a distinction the error does not carry.
+ * So the gateway is only added once its credential endpoint has been shown to answer, by
+ * reading the branch's credentials first. A project that does not have them says so on a
+ * read, before anything is minted — which is the whole question, since the gateway's env is a
+ * credential and nothing else.
+ *
+ * Deciding this **before** resolving, rather than by catching and retrying, is what keeps it
+ * honest. A retry re-runs every call the first attempt made, so it would blame the gateway for
+ * a one-off failure in shared work, and — worse — a first attempt that minted a credential and
+ * then failed would be papered over by a second that succeeds without one, swallowing the
+ * error and stranding a secret nobody holds. Once the read succeeds, a later failure is a real
+ * failure and propagates: the same thing already happens on a branch with object storage,
+ * whose credential is minted whether or not the gateway is involved.
  */
 const resolveWithImpliedGateway = async (
 	config: Config,
 	ctx: DevEnvContext,
 ): Promise<ResolvedNeonEnvVars> => {
-	try {
+	const unreachable = await credentialsUnreachable(ctx);
+	if (unreachable === null) {
 		return await fetchAndProject(withAiGateway(config), ctx);
+	}
+	// Deliberately does not assert that the project lacks the gateway: a read can also fail
+	// for a reason that has nothing to do with the feature, and this is not the place to
+	// guess which. Name both, and the command that answers it.
+	log.warning(
+		"Could not reach the AI Gateway's credentials, so %s were not resolved. Everything " +
+			"else was. Either this project does not have the AI Gateway, or the call failed — " +
+			`\`${getCliName()} env pull -s ai-gateway\` will say which.\nDetails: %s`,
+		[
+			NEON_ENV_VAR_KEYS.aiGateway.apiKey,
+			NEON_ENV_VAR_KEYS.aiGateway.baseUrl,
+		].join(" and "),
+		unreachable,
+	);
+	return {
+		...(await fetchAndProject(config, ctx)),
+		skipped: ["ai-gateway"],
+	};
+};
+
+/**
+ * Why the branch's credentials could not be read, or `null` when they could. A plain read: it
+ * mints nothing, revokes nothing, and changes nothing, so asking is free of the side effects
+ * that make a failed resolve ambiguous.
+ */
+const credentialsUnreachable = async (
+	ctx: DevEnvContext,
+): Promise<string | null> => {
+	try {
+		await apiFor(ctx).listCredentials(
+			ctx.projectId as string,
+			ctx.branchId as string,
+		);
+		return null;
 	} catch (err) {
-		const withoutGateway = await fetchAndProject(config, ctx).catch(
-			() => null,
-		);
-		if (withoutGateway === null) throw err;
-		log.warning(
-			"Could not resolve the AI Gateway, so %s were not resolved. Everything else " +
-				"was. Either this project does not have the AI Gateway, or the call failed — " +
-				`\`${getCliName()} env pull -s ai-gateway\` will say which.\nDetails: %s`,
-			[
-				NEON_ENV_VAR_KEYS.aiGateway.apiKey,
-				NEON_ENV_VAR_KEYS.aiGateway.baseUrl,
-			].join(" and "),
-			err instanceof Error ? err.message : String(err),
-		);
-		return { ...withoutGateway, skipped: ["ai-gateway"] };
+		return err instanceof Error ? err.message : String(err);
 	}
 };
+
+/** The adapter for direct branch reads: the injected one in tests, else built from options. */
+const apiFor = (ctx: DevEnvContext): NeonApi =>
+	ctx.api ??
+	createNeonApiFromOptions("neon env", {
+		...(ctx.apiKey ? { apiKey: ctx.apiKey } : {}),
+		...(ctx.apiHost ? { apiHost: ctx.apiHost } : {}),
+	});
 
 /**
  * Tier-0: resolve exactly the services `--service` named, with `neon.ts` out of the picture.
@@ -251,12 +285,7 @@ const resolveSelectedServices = async (
 	// enumerates functions and credentials, so a failure there would abort `-s auth` — and it
 	// keeps an "object storage isn't available for this project" error intact, which
 	// `pullConfig` degrades to an empty bucket list and would report as "no buckets".
-	const api =
-		ctx.api ??
-		createNeonApiFromOptions("env pull --service", {
-			...(ctx.apiKey ? { apiKey: ctx.apiKey } : {}),
-			...(ctx.apiHost ? { apiHost: ctx.apiHost } : {}),
-		});
+	const api = apiFor(ctx);
 	const has = (service: NeonService): boolean => services.includes(service);
 	const [auth, dataApiEnabled, buckets] = await Promise.all([
 		has("auth") ? api.getNeonAuth(projectId, branchId) : null,

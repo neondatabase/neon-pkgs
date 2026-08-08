@@ -76,7 +76,7 @@ export const builder = (argv: yargs.Argv) =>
  *   reason; `dev` was the one that didn't.
  */
 export const devEnvContext = (
-	props: DevProps,
+	props: Pick<DevProps, "projectId" | "apiKey" | "apiHost">,
 	branchId: string | undefined,
 	cwd: string,
 ) => {

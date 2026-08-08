@@ -23,9 +23,7 @@ describe("neon dev's resolver context", () => {
 	const props = { apiKey: "k", apiHost: "https://api", projectId: "p" };
 
 	it("asks for the AI Gateway, which nothing can detect", () => {
-		expect(devEnvContext(props as never, "br-1", cwd).implyAiGateway).toBe(
-			true,
-		);
+		expect(devEnvContext(props, "br-1", cwd).implyAiGateway).toBe(true);
 	});
 
 	it("layers the dotenv file over process.env, so one-time secrets survive a restart", () => {
@@ -34,7 +32,7 @@ describe("neon dev's resolver context", () => {
 			"NEON_AI_GATEWAY_TOKEN=nt_live_credfake0001_secret\n",
 		);
 
-		const { env } = devEnvContext(props as never, "br-1", cwd);
+		const { env } = devEnvContext(props, "br-1", cwd);
 
 		expect(env.NEON_AI_GATEWAY_TOKEN).toBe("nt_live_credfake0001_secret");
 		expect(env.PATH).toBe(process.env.PATH);
@@ -47,19 +45,19 @@ describe("neon dev's resolver context", () => {
 			"AWS_ACCESS_KEY_ID=cred-from-env-local\n",
 		);
 
-		expect(
-			devEnvContext(props as never, "br-1", cwd).env.AWS_ACCESS_KEY_ID,
-		).toBe("cred-from-env");
+		expect(devEnvContext(props, "br-1", cwd).env.AWS_ACCESS_KEY_ID).toBe(
+			"cred-from-env",
+		);
 	});
 
 	it("works in a directory with no dotenv file at all", () => {
-		const { env } = devEnvContext(props as never, "br-1", cwd);
+		const { env } = devEnvContext(props, "br-1", cwd);
 		expect(env.NEON_AI_GATEWAY_TOKEN).toBeUndefined();
 	});
 
 	it("omits the branch rather than passing undefined when none is resolved", () => {
-		expect(
-			devEnvContext(props as never, undefined, cwd),
-		).not.toHaveProperty("branchId");
+		expect(devEnvContext(props, undefined, cwd)).not.toHaveProperty(
+			"branchId",
+		);
 	});
 });
