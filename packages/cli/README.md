@@ -437,10 +437,12 @@ neon env pull --branch preview --file .env.preview
 # Only the AI Gateway
 neon env pull --service ai-gateway
 
-# Repeat the flag or comma-separate; -s is the short form
+# Repeat the flag or comma-separate; -s, --service and --services are all accepted
 neon env pull -s postgres -s data-api
 neon env pull -s postgres,auth
 ```
+
+Every services flag in the CLI takes those three spellings, the same value syntax, and the same service names — see [`config init --services`](#getting-a-neonts-config-init).
 
 | `--service` | Variables |
 | --- | --- |
@@ -516,7 +518,10 @@ Selecting nothing is a valid answer: you get the starter policy, which is also w
 neon config init
 
 # Declare services with no prompt
-neon config init --services auth,functions,storage,ai-gateway
+neon config init --services auth,functions,object-storage,ai-gateway
+
+# Repeat the flag instead, and shorten it — every services flag takes all three spellings
+neon config init -s auth -s functions
 
 # Explicitly ask for the bare starter policy
 neon config init --services none
@@ -524,6 +529,8 @@ neon config init --services none
 # Scaffold but print the install command instead of running it
 neon config init --no-install
 ```
+
+Object storage is spelled `object-storage` here, matching [`env pull --service`](#env-pull) and the rest of the CLI. The old `storage` still works and warns; it will be removed.
 
 Choosing **Functions** also writes the handler the policy points at, since `source` is only resolved when `apply` bundles it — a declared function with no file on disk fails at deploy:
 

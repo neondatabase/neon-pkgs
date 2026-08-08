@@ -20,13 +20,10 @@ import type yargs from "yargs";
 import { getApiClient, type NeonApiClient } from "../api.js";
 import { type NeonConfigView, toNeonConfigView } from "../config_format.js";
 import {
+	CONFIG_INIT_SERVICES,
 	FUNCTION_FILENAME,
 	FUNCTION_SLUG,
 	FUNCTION_TEMPLATE,
-	NEON_SERVICES,
-	type NeonService,
-	NO_SERVICES,
-	parseServices,
 	REQUIRED_PACKAGES,
 	renderNeonConfig,
 	renderNeonConfigFromView,
@@ -36,6 +33,13 @@ import { contextBranch, readContextFile } from "../context.js";
 import { isCi } from "../env.js";
 import { loadEnvFileIntoProcess } from "../env_file.js";
 import { log } from "../log.js";
+import {
+	deprecatedServiceMessage,
+	type NeonService,
+	parseServices,
+	servicesFlagValue,
+	servicesOption,
+} from "../neon_services.js";
 import type { BranchScopeProps } from "../types.js";
 import {
 	assertAiGatewayProvisionable,
@@ -219,11 +223,12 @@ export type ConfigInitProps = {
 	/** Injected command runner (tests). Defaults to the real spawn-based runner. */
 	run?: typeof runCommand;
 	/**
-	 * Raw `--services` value: comma-separated {@link NEON_SERVICES} names, or `none` for the
-	 * bare starter policy. When omitted, {@link resolveServices} picks interactively on a TTY
-	 * and falls back to the starter policy otherwise.
+	 * Raw `--services` values: {@link CONFIG_INIT_SERVICES} names, repeated and/or
+	 * comma-separated, or `none` for the bare starter policy. When omitted,
+	 * {@link resolveServices} picks interactively on a TTY and falls back to the starter
+	 * policy otherwise.
 	 */
-	services?: string;
+	services?: readonly string[];
 	/** Injected service picker (tests). Wins over the TTY check; production omits it. */
 	pickServices?: () => Promise<NeonService[]>;
 	/**
@@ -256,7 +261,13 @@ const resolveServices = async (
 	props: ConfigInitProps,
 ): Promise<NeonService[]> => {
 	if (props.services !== undefined) {
-		return parseServices(props.services);
+		return parseServices(props.services, {
+			allowed: CONFIG_INIT_SERVICES,
+			flag: "--services",
+			allowNone: true,
+			onDeprecated: (used, canonical) =>
+				log.warning(deprecatedServiceMessage(used, canonical)),
+		});
 	}
 	if (props.pickServices) {
 		return props.pickServices();
@@ -482,13 +493,15 @@ export const builder = (argv: yargs.Argv) =>
 						type: "boolean",
 						default: true,
 					},
-					services: {
-						describe:
-							`Services the scaffolded neon.ts declares, comma-separated: ${NEON_SERVICES.join(", ")}. ` +
-							`Pass "${NO_SERVICES}" for the bare starter policy. Omitted: pick interactively on a ` +
-							"terminal, starter policy in CI or without a TTY.",
-						type: "string",
-					},
+					services: servicesOption({
+						key: "services",
+						allowed: CONFIG_INIT_SERVICES,
+						allowNone: true,
+						describe: "Services the scaffolded neon.ts declares",
+						also:
+							"Omitted: pick interactively on a terminal, starter policy in " +
+							"CI or without a TTY.",
+					}),
 					"from-branch": {
 						describe:
 							"Seed neon.ts from a branch's live Neon state instead of asking. Uses the " +
@@ -500,7 +513,13 @@ export const builder = (argv: yargs.Argv) =>
 						conflicts: "services",
 					},
 				}),
-			(args) => initCmd(args as any),
+			(args) =>
+				initCmd({
+					...(args as any),
+					// `args` is untyped here, and "flag omitted" has to stay distinct from
+					// "flag given" — it decides whether the picker runs at all.
+					services: servicesFlagValue(args.services),
+				}),
 		);
 
 export const handler = (args: yargs.Argv) => {

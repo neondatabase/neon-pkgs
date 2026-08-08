@@ -15,9 +15,8 @@ import {
 	fetchEnvReusingSecrets,
 	type ReusedBranchEnv,
 } from "@neon/env/runtime";
-
-import type { EnvService } from "../env_services.js";
 import { log } from "../log.js";
+import type { NeonService } from "../neon_services.js";
 import { getCliName } from "../utils/cli_name.js";
 
 export type DevEnvContext = {
@@ -44,7 +43,7 @@ export type DevEnvContext = {
 	 * tiered resolution below is skipped and the selection is checked against the branch's
 	 * live state instead.
 	 */
-	services?: readonly EnvService[];
+	services?: readonly NeonService[];
 	/**
 	 * Add the AI Gateway to the **no-`neon.ts`** resolution. `pullConfig` cannot detect the
 	 * gateway — it has no branch-level enabled state, only a credential — so a caller that
@@ -101,7 +100,7 @@ export type ResolvedNeonEnvVars = ReusedBranchEnv & {
 	 * {@link DevEnvContext.implyAiGateway}); a service the user named explicitly raises
 	 * instead of being skipped.
 	 */
-	skipped?: readonly EnvService[];
+	skipped?: readonly NeonService[];
 };
 
 /**
@@ -240,7 +239,7 @@ const isFeatureUnavailable = (err: unknown): err is PlatformError =>
  */
 const resolveSelectedServices = async (
 	ctx: DevEnvContext,
-	services: readonly EnvService[],
+	services: readonly NeonService[],
 ): Promise<ResolvedNeonEnvVars> => {
 	const { projectId, branchId } = ctx;
 	if (!projectId || !branchId) {
@@ -262,7 +261,7 @@ const resolveSelectedServices = async (
 			...(ctx.apiKey ? { apiKey: ctx.apiKey } : {}),
 			...(ctx.apiHost ? { apiHost: ctx.apiHost } : {}),
 		});
-	const has = (service: EnvService): boolean => services.includes(service);
+	const has = (service: NeonService): boolean => services.includes(service);
 	const [auth, dataApiEnabled, buckets] = await Promise.all([
 		has("auth") ? api.getNeonAuth(projectId, branchId) : null,
 		has("data-api") ? readDataApiEnabled(api, projectId, branchId) : null,
@@ -321,7 +320,7 @@ const NEON_DEFAULT_DATABASE = "neondb";
  * about the selection.
  */
 const configForServices = (
-	services: readonly EnvService[],
+	services: readonly NeonService[],
 	branchId: string,
 	branch: {
 		authEnabled: boolean;
@@ -337,7 +336,7 @@ const configForServices = (
 		"data-api": `${getCliName()} data-api create`,
 		"object-storage": `${getCliName()} buckets create <name>`,
 	};
-	const notOnBranch = (service: EnvService, what: string): never => {
+	const notOnBranch = (service: NeonService, what: string): never => {
 		throw new ServiceNotOnBranchError(
 			`--service ${service}: branch ${branchId} has no ${what}, so there are no ` +
 				`${service} env vars to pull. Provision it first (\`${provisionWith[service]}\`, ` +

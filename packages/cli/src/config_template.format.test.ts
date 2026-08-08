@@ -6,12 +6,12 @@ import { describe, expect, it } from "vitest";
 
 import type { NeonConfigView } from "./config_format.js";
 import {
+	CONFIG_INIT_SERVICES,
 	FUNCTION_TEMPLATE,
-	NEON_SERVICES,
-	type NeonService,
 	renderNeonConfig,
 	renderNeonConfigFromView,
 } from "./config_template.js";
+import type { NeonService } from "./neon_services.js";
 
 /**
  * Both renderers build TypeScript by concatenating strings, so indentation is only as correct
@@ -51,8 +51,12 @@ const format = (source: string): string =>
 /** Every subset of the pickable services, so no combination of blocks goes unchecked. */
 const serviceSubsets = (): NeonService[][] => {
 	const subsets: NeonService[][] = [];
-	for (let mask = 0; mask < 1 << NEON_SERVICES.length; mask++) {
-		subsets.push(NEON_SERVICES.filter((_, i) => mask & (1 << i)));
+	for (let mask = 0; mask < 1 << CONFIG_INIT_SERVICES.length; mask++) {
+		subsets.push(
+			CONFIG_INIT_SERVICES.filter(
+				(_service, i: number) => mask & (1 << i),
+			),
+		);
 	}
 	return subsets;
 };

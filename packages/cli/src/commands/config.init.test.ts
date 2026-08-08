@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveConfig } from "@neon/config";
 import { loadConfigFromFile } from "@neon/config-runtime";
-import { afterEach, beforeEach, describe, expect } from "vitest";
+import { afterEach, beforeEach, describe, expect, vi } from "vitest";
 import { test } from "../test_utils/fixtures";
 import { hasNeonConfigFile, initCmd } from "./config";
 
@@ -133,7 +133,7 @@ describe("config init", () => {
 		await initCmd({
 			cwd: workspace,
 			install: false,
-			services: "auth,functions",
+			services: ["auth", "functions"],
 		});
 
 		const content = readFileSync(join(workspace, "neon.ts"), "utf8");
@@ -150,8 +150,12 @@ describe("config init", () => {
 		);
 	});
 
-	test("--services storage declares the bucket with its default visibility", async () => {
-		await initCmd({ cwd: workspace, install: false, services: "storage" });
+	test("--services object-storage declares the bucket with its default visibility", async () => {
+		await initCmd({
+			cwd: workspace,
+			install: false,
+			services: ["object-storage"],
+		});
 
 		const content = readFileSync(join(workspace, "neon.ts"), "utf8");
 		expect(content).toContain('assets: { access: "private" }');
@@ -159,10 +163,55 @@ describe("config init", () => {
 		expect(existsSync(join(workspace, "hello.ts"))).toBe(false);
 	});
 
+	test("--services storage still works, and says what to type instead", async () => {
+		// `storage` was the canonical name before the vocabulary was unified across the
+		// CLI's services flags. Anyone who scripted it keeps working; the warning is what
+		// stops it quietly becoming a second spelling.
+		const warnings: string[] = [];
+		const stderr = vi
+			.spyOn(process.stderr, "write")
+			.mockImplementation((chunk: string | Uint8Array) => {
+				warnings.push(String(chunk));
+				return true;
+			});
+		try {
+			await initCmd({
+				cwd: workspace,
+				install: false,
+				services: ["storage"],
+			});
+		} finally {
+			stderr.mockRestore();
+		}
+
+		expect(readFileSync(join(workspace, "neon.ts"), "utf8")).toContain(
+			'assets: { access: "private" }',
+		);
+		expect(warnings.join("")).toContain(
+			'"storage" is the old name for "object-storage"',
+		);
+	});
+
+	test("--services accepts the flag repeated, like every other services flag", async () => {
+		await initCmd({
+			cwd: workspace,
+			install: false,
+			services: ["auth", "ai-gateway"],
+		});
+
+		const content = readFileSync(join(workspace, "neon.ts"), "utf8");
+		expect(content).toContain("auth: true");
+		expect(content).toContain("aiGateway: true");
+	});
+
 	test("--services none writes the same file as a non-interactive run", async () => {
 		const bare = mkdtempSync(join(tmpdir(), "neonctl-config-init-bare-"));
 		try {
-			await initCmd({ cwd: workspace, install: false, services: "none" });
+			await initCmd({
+				cwd: workspace,
+				install: false,
+				services: ["none"],
+			});
 			await initCmd({ cwd: bare, install: false });
 
 			expect(readFileSync(join(workspace, "neon.ts"), "utf8")).toBe(
@@ -178,7 +227,7 @@ describe("config init", () => {
 			initCmd({
 				cwd: workspace,
 				install: false,
-				services: "auth,vectors",
+				services: ["auth,vectors"],
 			}),
 		).rejects.toThrow(/Unknown service vectors/);
 
@@ -232,7 +281,7 @@ describe("config init", () => {
 		await initCmd({
 			cwd: workspace,
 			install: false,
-			services: "functions",
+			services: ["functions"],
 		});
 
 		expect(readFileSync(join(workspace, "hello.ts"), "utf8")).toBe(
@@ -253,36 +302,38 @@ describe("config init", () => {
 	// directory left behind by a crashed run can never be committed.
 	test("every scaffolded policy loads and resolves", async () => {
 		const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
-		const cases: { services: string; expected: Record<string, unknown> }[] =
-			[
-				{
-					services: "none",
-					expected: {
-						authEnabled: false,
-						aiGateway: false,
-						functions: [],
-						buckets: [],
-					},
+		const cases: {
+			services: string[];
+			expected: Record<string, unknown>;
+		}[] = [
+			{
+				services: ["none"],
+				expected: {
+					authEnabled: false,
+					aiGateway: false,
+					functions: [],
+					buckets: [],
 				},
-				{
-					services: "auth",
-					expected: {
-						authEnabled: true,
-						aiGateway: false,
-						functions: [],
-						buckets: [],
-					},
+			},
+			{
+				services: ["auth"],
+				expected: {
+					authEnabled: true,
+					aiGateway: false,
+					functions: [],
+					buckets: [],
 				},
-				{
-					services: "auth,ai-gateway,functions,storage",
-					expected: {
-						authEnabled: true,
-						aiGateway: true,
-						functions: ["hello:./hello.ts"],
-						buckets: ["assets:private"],
-					},
+			},
+			{
+				services: ["auth,ai-gateway,functions,object-storage"],
+				expected: {
+					authEnabled: true,
+					aiGateway: true,
+					functions: ["hello:./hello.ts"],
+					buckets: ["assets:private"],
 				},
-			];
+			},
+		];
 
 		for (const { services, expected } of cases) {
 			const project = mkdtempSync(

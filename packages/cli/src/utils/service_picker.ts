@@ -1,9 +1,10 @@
 import prompts from "prompts";
-import { NEON_SERVICES, type NeonService } from "../config_template.js";
+import { CONFIG_INIT_SERVICES } from "../config_template.js";
+import type { NeonService } from "../neon_services.js";
 
 /**
- * The picker's rows, in {@link NEON_SERVICES} order. Titles use the product names from the
- * CLI's README ("Managed Better Auth", "Object Storage") rather than the `neon.ts` field
+ * The picker's rows, in {@link CONFIG_INIT_SERVICES} order. Titles use the product names from
+ * the CLI's README ("Managed Better Auth", "Object Storage") rather than the `neon.ts` field
  * names, since this is the list a user reads before they've seen a policy.
  */
 const CHOICES: { value: NeonService; title: string; description: string }[] = [
@@ -20,7 +21,7 @@ const CHOICES: { value: NeonService; title: string; description: string }[] = [
 			"Long-running, without timeouts, and closer to your database.",
 	},
 	{
-		value: "storage",
+		value: "object-storage",
 		title: "Object Storage",
 		description:
 			"S3-compatible blob storage that branches with your projects.",
@@ -66,7 +67,7 @@ export const pickServicesInteractively = async (): Promise<NeonService[]> => {
 	if (!Array.isArray(services)) {
 		throw new Error("Aborted: no services selected.");
 	}
-	// Order by NEON_SERVICES rather than selection order so the rendered neon.ts is
+	// Order canonically rather than by selection order so the rendered neon.ts is
 	// independent of the order the rows were toggled in.
-	return NEON_SERVICES.filter((service) => services.includes(service));
+	return CONFIG_INIT_SERVICES.filter((service) => services.includes(service));
 };

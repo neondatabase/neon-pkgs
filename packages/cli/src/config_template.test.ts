@@ -2,41 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import type { NeonConfigView } from "./config_format.js";
 import {
-	NEON_SERVICES,
-	parseServices,
+	CONFIG_INIT_SERVICES,
 	renderNeonConfig,
 	renderNeonConfigFromView,
 } from "./config_template.js";
-
-describe("parseServices", () => {
-	it("accepts a comma-separated list, tolerating whitespace", () => {
-		expect(parseServices("auth, functions")).toEqual(["auth", "functions"]);
-	});
-
-	it("canonicalizes order and drops duplicates", () => {
-		expect(parseServices("storage,auth,storage,ai-gateway")).toEqual([
-			"auth",
-			"storage",
-			"ai-gateway",
-		]);
-	});
-
-	it('reads "none" as no services', () => {
-		expect(parseServices("none")).toEqual([]);
-	});
-
-	it("rejects an unknown service by name, listing the supported values", () => {
-		expect(() => parseServices("auth,data-api")).toThrow(
-			/Unknown service data-api\. Supported values: auth, functions, storage, ai-gateway, none\./,
-		);
-	});
-
-	it('refuses "none" alongside a real service', () => {
-		expect(() => parseServices("none,auth")).toThrow(
-			/cannot be combined with other services/,
-		);
-	});
-});
 
 describe("renderNeonConfig", () => {
 	it("renders the starter policy when nothing is selected", () => {
@@ -67,7 +36,7 @@ export default defineConfig({
 
 	it("renders every service, with the bucket's default visibility spelled out", () => {
 		expect(
-			renderNeonConfig(NEON_SERVICES),
+			renderNeonConfig(CONFIG_INIT_SERVICES),
 		).toBe(`import { defineConfig } from "@neon/config/v1";
 
 export default defineConfig({
@@ -108,7 +77,7 @@ export default defineConfig({
 	});
 
 	it("emits a preview block with only the selected preview features", () => {
-		const rendered = renderNeonConfig(["storage"]);
+		const rendered = renderNeonConfig(["object-storage"]);
 		expect(rendered).toContain("auth: false,");
 		expect(rendered).toContain("preview: {");
 		expect(rendered).toContain('assets: { access: "private" },');

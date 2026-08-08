@@ -8,13 +8,18 @@ import { ensureGitignored } from "../context.js";
 import { resolveNeonEnvVars } from "../dev/env.js";
 import { mergeEnvFile, readEnvFile, resolveEnvFilePath } from "../env_file.js";
 import {
-	ENV_SERVICES,
-	type EnvService,
+	ENV_PULL_SERVICES,
 	envServiceKeys,
 	ownedEnvServiceKeys,
-	parseEnvServices,
 } from "../env_services.js";
 import { log } from "../log.js";
+import {
+	deprecatedServiceMessage,
+	type NeonService,
+	parseServices,
+	servicesFlagValue,
+	servicesOption,
+} from "../neon_services.js";
 import type { BranchScopeProps } from "../types.js";
 import { warnAiGateway } from "../utils/ai_gateway_notice.js";
 import { announceTargetBranch } from "../utils/branch_notice.js";
@@ -33,7 +38,7 @@ export type EnvPullProps = BranchScopeProps & {
 	 * then scoped in both directions: it writes only these services' vars, and prunes only
 	 * within them.
 	 */
-	services?: readonly EnvService[];
+	services?: readonly NeonService[];
 };
 
 export const command = "env";
@@ -69,21 +74,13 @@ export const builder = (argv: yargs.Argv) =>
 								"lines are preserved.",
 							type: "string",
 						},
-						service: {
-							// `--services` is not a second flag: `config init` spells its own
-							// service list that way, and this command does not run
-							// `strictOptions`, so without the alias a `--services auth` typed
-							// out of that habit is silently dropped and the pull runs
-							// unscoped — pruning and minting exactly what the user was
-							// scoping away from.
-							alias: ["s", "services"],
+						service: servicesOption({
+							key: "service",
+							allowed: ENV_PULL_SERVICES,
 							describe:
-								`Pull only these services' variables: ${ENV_SERVICES.join(", ")}. ` +
-								"Repeat the flag or comma-separate. Overrides neon.ts, and prunes " +
-								"only within the services you name.",
-							type: "array",
-							string: true,
-						},
+								"Pull only these services' variables, overriding neon.ts " +
+								"and pruning only within them",
+						}),
 					})
 					.epilogue(
 						[
@@ -112,11 +109,7 @@ export const builder = (argv: yargs.Argv) =>
 						"Pull only the AI Gateway and Postgres variables",
 					),
 			async (args) => {
-				// `type: "array", string: true` makes yargs hand over a string[], but the
-				// handler's `args` is untyped, so narrow rather than assert.
-				const raw = Array.isArray(args.service)
-					? args.service.map(String)
-					: undefined;
+				const raw = servicesFlagValue(args.service);
 				// Explicit `env pull` announces the branch it's reading from up front so the user
 				// can catch "pulled env from the wrong branch" before it overwrites their .env. The
 				// bundled auto-pull (link / checkout / apply) stays quiet — those already report the
@@ -129,7 +122,21 @@ export const builder = (argv: yargs.Argv) =>
 				await pull(
 					{
 						...(args as any),
-						...(raw ? { services: parseEnvServices(raw) } : {}),
+						...(raw
+							? {
+									services: parseServices(raw, {
+										allowed: ENV_PULL_SERVICES,
+										flag: "--service",
+										onDeprecated: (used, canonical) =>
+											log.warning(
+												deprecatedServiceMessage(
+													used,
+													canonical,
+												),
+											),
+									}),
+								}
+							: {}),
 					},
 					{ announce: true, implyAiGateway: raw === undefined },
 				);
@@ -184,7 +191,7 @@ export type PullOutcome =
 			 * not the complete set. Only the implied AI Gateway can land here — see
 			 * `resolveWithImpliedGateway`.
 			 */
-			skipped?: readonly EnvService[];
+			skipped?: readonly NeonService[];
 	  }
 	| { status: "empty" };
 
@@ -325,8 +332,8 @@ export const pull = async (
  * {@link unreachedButCurrent}.
  */
 const managedKeysFor = (
-	services: readonly EnvService[] | undefined,
-	unreached: readonly EnvService[],
+	services: readonly NeonService[] | undefined,
+	unreached: readonly NeonService[],
 ): string[] => {
 	const owned = services
 		? ownedEnvServiceKeys(services)
@@ -355,10 +362,10 @@ const managedKeysFor = (
  * traffic.
  */
 const unreachedButCurrent = (
-	skipped: readonly EnvService[] | undefined,
+	skipped: readonly NeonService[] | undefined,
 	existingEnv: Record<string, string>,
 	branchId: string,
-): EnvService[] => {
+): NeonService[] => {
 	if (!skipped?.includes("ai-gateway")) return [];
 	const baseUrl = existingEnv[NEON_ENV_VAR_KEYS.aiGateway.baseUrl];
 	return baseUrl !== undefined && isBranchGatewayUrl(baseUrl, branchId)
@@ -387,7 +394,7 @@ const isBranchGatewayUrl = (baseUrl: string, branchId: string): boolean =>
  */
 const pickServiceVars = (
 	vars: Record<string, string>,
-	services: readonly EnvService[] | undefined,
+	services: readonly NeonService[] | undefined,
 ): Record<string, string> => {
 	if (!services) return vars;
 	const wanted = envServiceKeys(services);
