@@ -72,6 +72,12 @@ export function runCli(
 		/** Override the shared scratch config directory. Never pass `--config-dir` in `args`. */
 		configDir?: string;
 		/**
+		 * Override the shared scratch `.neon`. Needed by anything that is supposed to read a
+		 * project from context — the default points at an empty temp file precisely so a
+		 * command cannot pick one up by accident.
+		 */
+		contextFile?: string;
+		/**
 		 * Authenticate from this profile. Suppresses `--api-key`, which is the only way to
 		 * exercise a stored credential — the two together are rejected on purpose.
 		 */
@@ -108,7 +114,7 @@ export function runCli(
 			"--api-host",
 			configuredBaseUrl(),
 			"--context-file",
-			contextFile,
+			options.contextFile ?? contextFile,
 			"--no-analytics",
 			// Only when the caller hasn't chosen one. Passing `--output` twice makes yargs
 			// hand the command an array, which it does not recognise as "json" — so the run

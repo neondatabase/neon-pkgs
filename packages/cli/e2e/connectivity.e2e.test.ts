@@ -97,12 +97,19 @@ describe.sequential("e2e — neon CLI connectivity against the real API", () => 
 	});
 
 	it("pools by suffixing the endpoint label and nothing else", async () => {
-		const uri = await connectionString(["--pooled"]);
+		const direct = await connectionString([]);
+		const pooled = await connectionString(["--pooled"]);
 
 		// The infra cell prefix and the region/cloud domain after it are load-bearing: the
 		// pooler lives on the same host with `-pooler` appended to the endpoint id alone.
 		const [label, ...rest] = endpointHost.split(".");
-		expect(uri.hostname).toBe([`${label}-pooler`, ...rest].join("."));
+		expect(pooled.hostname).toBe([`${label}-pooler`, ...rest].join("."));
+
+		// "and nothing else" — the rest of the connection has to be the direct one.
+		expect(pooled.username).toBe(direct.username);
+		expect(pooled.password).toBe(direct.password);
+		expect(pooled.pathname).toBe(direct.pathname);
+		expect(pooled.search).toBe(direct.search);
 	});
 
 	it("adds the Prisma pooling parameters only when pooled", async () => {
@@ -147,16 +154,17 @@ describe.sequential("e2e — neon CLI connectivity against the real API", () => 
 		expect(extended.role).toBe(defaultRole);
 		expect(extended.database).toBe(defaultDatabase);
 
-		// The parts have to describe the same connection the one-line form prints, or an
-		// agent reading `--extended` and a human copying the plain output end up elsewhere.
-		const uri = new URL(extended.connection_string);
-		expect(uri.hostname).toBe(extended.host);
-		expect(uri.username).toBe(extended.role);
-		expect(uri.password).toBe(extended.password);
-		expect(uri.pathname).toBe(`/${extended.database}`);
-		expect(new URLSearchParams(extended.options).get("sslmode")).toBe(
-			"require",
-		);
+		// The parts have to describe the same connection the plain command prints, or an
+		// agent reading `--extended` and a human copying the one-line output end up in
+		// different places. Comparing against the plain output, not against the extended
+		// payload's own `connection_string`, is what makes that a real check.
+		const plain = await connectionString([]);
+		expect(extended.connection_string).toBe(plain.toString());
+		expect(plain.hostname).toBe(extended.host);
+		expect(plain.username).toBe(extended.role);
+		expect(plain.password).toBe(extended.password);
+		expect(plain.pathname).toBe(`/${extended.database}`);
+		expect(plain.search).toBe(`?${extended.options}`);
 	});
 
 	/**
