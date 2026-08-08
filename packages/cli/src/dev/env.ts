@@ -252,9 +252,9 @@ const resolveSelectedServices = async (
 			...(ctx.apiHost ? { apiHost: ctx.apiHost } : {}),
 		});
 	const has = (service: EnvService): boolean => services.includes(service);
-	const [auth, dataApi, buckets] = await Promise.all([
+	const [auth, dataApiEnabled, buckets] = await Promise.all([
 		has("auth") ? api.getNeonAuth(projectId, branchId) : null,
-		has("data-api") ? readDataApi(api, projectId, branchId) : null,
+		has("data-api") ? readDataApiEnabled(api, projectId, branchId) : null,
 		has("object-storage")
 			? api.listBranchBuckets(projectId, branchId)
 			: null,
@@ -262,7 +262,7 @@ const resolveSelectedServices = async (
 
 	const config = configForServices(services, branchId, {
 		authEnabled: auth !== null,
-		dataApiEnabled: dataApi !== null,
+		dataApiEnabled,
 		buckets: buckets ?? [],
 	});
 	// A selection resolves part of the branch, so it must not revoke: the credential its
@@ -272,22 +272,35 @@ const resolveSelectedServices = async (
 };
 
 /**
- * Whether the branch has a Data API integration. It is enabled per branch *and database*, so
- * this probes the same database `fetchEnv` resolves the URL from — Neon's default `neondb`,
- * else the only/first one — which is what makes the two agree. A Data API enabled on some
- * other database reads as absent.
+ * Whether the branch has a Data API integration — or `null` when that cannot be determined.
+ *
+ * It is enabled per branch *and database*, so this has to probe the database `fetchEnv` will
+ * resolve the URL from, or the two would disagree. That is Neon's default `neondb`, else the
+ * only database; several databases with no `neondb` is a case `fetchEnv` refuses to auto-pick
+ * at all. Reporting "no Data API integration" there would be a claim this read cannot support,
+ * so it answers `null` and lets `fetchEnv` raise its own ambiguity error, which names the
+ * databases and the fix.
  */
-const readDataApi = async (
+const readDataApiEnabled = async (
 	api: NeonApi,
 	projectId: string,
 	branchId: string,
-): Promise<NeonDataApiSnapshot | null> => {
+): Promise<boolean | null> => {
 	const databases = await api.listBranchDatabases(projectId, branchId);
 	const database =
-		databases.find((db) => db.name === "neondb") ?? databases[0];
-	if (!database) return null;
-	return await api.getNeonDataApi(projectId, branchId, database.name);
+		databases.find((db) => db.name === NEON_DEFAULT_DATABASE) ??
+		(databases.length === 1 ? databases[0] : undefined);
+	if (!database) return databases.length === 0 ? false : null;
+	const dataApi: NeonDataApiSnapshot | null = await api.getNeonDataApi(
+		projectId,
+		branchId,
+		database.name,
+	);
+	return dataApi !== null;
 };
+
+/** Neon's default database, and the one `fetchEnv` prefers when a branch has several. */
+const NEON_DEFAULT_DATABASE = "neondb";
 
 /**
  * Build the `Config` an explicit `--service` selection stands for, raising
@@ -301,7 +314,8 @@ const configForServices = (
 	branchId: string,
 	branch: {
 		authEnabled: boolean;
-		dataApiEnabled: boolean;
+		/** `null` when the read could not decide — see {@link readDataApiEnabled}. */
+		dataApiEnabled: boolean | null;
 		buckets: NeonBucketSnapshot[];
 	},
 ): Config => {
@@ -319,7 +333,8 @@ const configForServices = (
 		config.auth = true;
 	}
 	if (services.includes("data-api")) {
-		if (!branch.dataApiEnabled) {
+		// Only a positive "not there" is an error; an undecidable read defers to `fetchEnv`.
+		if (branch.dataApiEnabled === false) {
 			notOnBranch("data-api", "Data API integration");
 		}
 		config.dataApi = true;

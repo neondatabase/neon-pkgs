@@ -160,8 +160,8 @@ export type PullOutcome =
 			 */
 			credential?: CredentialOutcome;
 			/**
-			 * Services that were part of the pull but yielded nothing, so the result is not the
-			 * complete set. Only the implied AI Gateway can land here — see
+			 * Services that were part of the pull but could not be reached, so the result is
+			 * not the complete set. Only the implied AI Gateway can land here — see
 			 * `resolveWithImpliedGateway`.
 			 */
 			skipped?: readonly EnvService[];
@@ -215,7 +215,10 @@ export const pull = async (
 	// Neon-owned vars the branch no longer has (e.g. NEON_AUTH_* / NEON_DATA_API_* carried over
 	// from a previous project/branch). Non-Neon lines are always preserved.
 	const { written, removed } = mergeEnvFile(targetPath, neonVars, {
-		managedKeys: managedKeysFor(props.services, skipped),
+		managedKeys: managedKeysFor(
+			props.services,
+			unreachedButCurrent(skipped, existingEnv, branchId),
+		),
 	});
 	log.info(
 		"Pulled %d Neon variable%s into %s: %s",
@@ -285,24 +288,45 @@ export const pull = async (
  *
  * A `--service` selection narrows that to the services it named: `env pull -s ai-gateway`
  * says nothing about `DATABASE_URL`, so it must not read that variable's absence from this
- * pull as "the branch no longer has it".
- *
- * A service that was *skipped* is subtracted for the same reason, and it matters more: the
- * gateway is skipped precisely when its credential could not be reached, and a
- * `PLATFORM_FEATURE_UNAVAILABLE` covers a transient incident as well as a project that
- * genuinely lacks the feature. Pruning there would delete a working token whose secret exists
- * nowhere else, and strand the live credential behind it.
+ * pull as "the branch no longer has it". `unreached` is subtracted for the same reason — see
+ * {@link unreachedButCurrent}.
  */
 const managedKeysFor = (
 	services: readonly EnvService[] | undefined,
-	skipped: readonly EnvService[] | undefined,
+	unreached: readonly EnvService[],
 ): string[] => {
 	const owned = services
 		? ownedEnvServiceKeys(services)
 		: [...NEON_OWNED_ENV_KEYS];
-	if (!skipped || skipped.length === 0) return owned;
-	const unreached = new Set(ownedEnvServiceKeys(skipped));
-	return owned.filter((key) => !unreached.has(key));
+	if (unreached.length === 0) return owned;
+	const keep = new Set(ownedEnvServiceKeys(unreached));
+	return owned.filter((key) => !keep.has(key));
+};
+
+/**
+ * Of the services this pull could not reach, the ones whose variables already on disk belong
+ * to the branch being pulled — the only ones worth keeping.
+ *
+ * Failing to reach a service is not evidence that the branch stopped having it:
+ * `PLATFORM_FEATURE_UNAVAILABLE` covers a transient incident as well as a project that
+ * genuinely lacks the feature, and pruning would delete a token whose secret exists nowhere
+ * else and strand the live credential behind it. But that only argues for keeping *this
+ * branch's* values. Variables left over from another branch are stale by definition, and
+ * keeping those would leave an app pointed at the wrong branch's gateway — a worse failure
+ * than losing a token, because it is silent.
+ *
+ * The gateway is the only service that can be unreached (only it is implied rather than
+ * observed), and its base URL is branch-scoped, so the branch id in the persisted URL is what
+ * tells the two cases apart.
+ */
+const unreachedButCurrent = (
+	skipped: readonly EnvService[] | undefined,
+	existingEnv: Record<string, string>,
+	branchId: string,
+): EnvService[] => {
+	if (!skipped?.includes("ai-gateway")) return [];
+	const baseUrl = existingEnv[NEON_ENV_VAR_KEYS.aiGateway.baseUrl];
+	return baseUrl?.includes(branchId) ? ["ai-gateway"] : [];
 };
 
 /**
@@ -375,15 +399,11 @@ export const renderAgentPullNote = (result: AutoPullResult): string => {
 			const credential = result.credential?.issued
 				? ` Issued a new branch credential, so ${result.credential.keys.join(", ")} changed.`
 				: "";
-			// A partial pull has to say so, or an agent reads "written" as "everything is here"
-			// and goes looking for vars that were never resolved.
-			const skipped =
-				result.skipped && result.skipped.length > 0
-					? ` Skipped ${result.skipped.join(", ")} (not available for this project).`
-					: "";
+			// No `skipped` note: only the implied AI Gateway can be skipped, and the auto-pull
+			// this renders never implies it.
 			return ` Pulled ${result.written.length} Neon env var${
 				result.written.length === 1 ? "" : "s"
-			} into ${result.file}.${credential}${skipped}`;
+			} into ${result.file}.${credential}`;
 		}
 		case "empty":
 			return " No Neon env vars to pull for this branch yet.";

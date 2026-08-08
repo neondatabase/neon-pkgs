@@ -34,7 +34,6 @@ import {
 	type EnvPullProps,
 	type PullOutcome,
 	pull,
-	renderAgentPullNote,
 } from "./env.js";
 
 const PROJECT_ID = "patient-art-12345";
@@ -602,6 +601,18 @@ describe("env pull --service", () => {
 		expect(api.credentials.filter((c) => c.revokedAt)).toEqual([]);
 	});
 
+	it("defers to fetchEnv when the Data API's database cannot be auto-picked", async () => {
+		// Data API is per branch *and* database. With several databases and no `neondb`,
+		// `fetchEnv` refuses to auto-pick — so claiming "this branch has no Data API" would be
+		// a statement this read cannot support. It defers, and fetchEnv names the databases.
+		await expect(
+			pull({
+				...baseProps(new TwoDatabaseNeonApi(), cwd),
+				services: ["data-api"],
+			}),
+		).rejects.toThrow(/cannot auto-pick/);
+	});
+
 	it("reports that object storage is unavailable, rather than that the branch has no buckets", async () => {
 		// Two different problems with two different fixes. A read that degrades an
 		// unavailable feature to an empty list cannot tell them apart, so the selection reads
@@ -625,6 +636,20 @@ const dropEnvLine = (path: string, key: string): void => {
 			.join("\n"),
 	);
 };
+
+/** A branch with two databases and no `neondb`, which `fetchEnv` refuses to auto-pick from. */
+class TwoDatabaseNeonApi extends FakeNeonApi {
+	override async listBranchDatabases(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonDatabaseSnapshot[]> {
+		void projectId;
+		return [
+			{ name: "orders", branchId, ownerName: "neondb_owner" },
+			{ name: "analytics", branchId, ownerName: "neondb_owner" },
+		];
+	}
+}
 
 /** A project in a region where object storage isn't deployed. */
 class NoStorageFeatureNeonApi extends FakeNeonApi {
@@ -705,9 +730,6 @@ describe("env pull with the AI Gateway implied (no neon.ts)", () => {
 		if (result?.status === "written") {
 			expect(result.skipped).toEqual(["ai-gateway"]);
 		}
-		if (result) {
-			expect(renderAgentPullNote(result)).toContain("Skipped ai-gateway");
-		}
 	});
 
 	it("keeps an existing gateway token when the gateway could not be reached", async () => {
@@ -734,6 +756,31 @@ describe("env pull with the AI Gateway implied (no neon.ts)", () => {
 		expect(content).toContain(
 			"NEON_AI_GATEWAY_TOKEN=nt_live_credfake0001_secret",
 		);
+		expect(content).toMatch(/^DATABASE_URL=/m);
+	});
+
+	it("prunes gateway vars left over from a different branch, even when the gateway is unreachable", async () => {
+		// The other half of the rule above. Not pruning is only defensible for *this* branch's
+		// values; a token carried over from another branch is stale by definition, and keeping
+		// it would leave the app sending AI traffic to the wrong branch's gateway — a silent
+		// failure, and a worse one than losing a token.
+		writeFileSync(
+			join(cwd, ".env"),
+			[
+				"NEON_AI_GATEWAY_TOKEN=nt_live_someothercred_secret",
+				"NEON_AI_GATEWAY_BASE_URL=https://br-somewhere-else-99999-api.ai.fake.neon.tech",
+				"",
+			].join("\n"),
+		);
+
+		await captureLog(async () => {
+			await pull(baseProps(new NoCredentialsNeonApi(), cwd), {
+				implyAiGateway: true,
+			});
+		});
+
+		const content = readFileSync(join(cwd, ".env"), "utf8");
+		expect(content).not.toContain("NEON_AI_GATEWAY");
 		expect(content).toMatch(/^DATABASE_URL=/m);
 	});
 
