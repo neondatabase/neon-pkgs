@@ -417,9 +417,13 @@ The human-readable summary line goes to stderr and the diff body to stdout, so `
 
 ### env pull
 
-`env pull` writes the linked branch's Neon environment variables into a local dotenv file: an existing `.env` if you have one, otherwise `.env.local` (override with `--file <path>`). Only Neon-managed keys (`DATABASE_URL`, `DATABASE_URL_UNPOOLED`, and the Neon Auth / Data API URLs when those services are enabled) are written; any other lines in the file are preserved. The branch comes from the closest `.neon` file, so no `--branch` is needed (pass `--branch <id|name>` to target another branch).
+`env pull` writes the linked branch's Neon environment variables into a local dotenv file: an existing `.env` if you have one, otherwise `.env.local` (override with `--file <path>`). Only Neon-managed keys are written; any other lines in the file are preserved. The branch comes from the closest `.neon` file, so no `--branch` is needed (pass `--branch <id|name>` to target another branch).
 
-`link` and `checkout` invoke `env pull` automatically (see above), so you usually only run it by hand to refresh vars or to pull a different branch into a specific file:
+**What gets pulled**, in precedence order:
+
+1. **`--service`**, when you pass it — exactly those services, whatever else is on the branch and whatever a `neon.ts` says.
+2. **`neon.ts`**, when the working directory has one — the policy is the source of truth, same as `neon dev` and `neon deploy`.
+3. **Everything the branch has** otherwise — Postgres, Neon Auth, the Data API, and object storage read back from the branch, plus the AI Gateway. The gateway has no branch-level state to read back (it is credential-gated, not provisioned), so a bare `env pull` asks for it rather than detecting it; on a project where branch credentials aren't available it is dropped with a warning and the rest of the pull still lands.
 
 ```bash
 # Refresh the linked branch's vars in place
@@ -427,7 +431,36 @@ neon env pull
 
 # Pull a specific branch into a specific file
 neon env pull --branch preview --file .env.preview
+
+# Only the AI Gateway
+neon env pull --service ai-gateway
+
+# Repeat the flag or comma-separate; -s is the short form
+neon env pull -s postgres -s data-api
+neon env pull -s postgres,auth
 ```
+
+| `--service` | Variables |
+| --- | --- |
+| `postgres` | `DATABASE_URL`, `DATABASE_URL_UNPOOLED` |
+| `auth` | `NEON_AUTH_BASE_URL`, `NEON_AUTH_JWKS_URL` |
+| `data-api` | `NEON_DATA_API_URL` |
+| `object-storage` | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_URL_S3`, `AWS_REGION` |
+| `ai-gateway` | `NEON_AI_GATEWAY_TOKEN`, `NEON_AI_GATEWAY_BASE_URL` |
+
+`NEON_BRANCH` is written by every pull — it is branch identity, not a service.
+
+**A scoped pull is scoped in both directions.** An unscoped `env pull` owns the Neon-named variables: pointing a directory at a branch without Neon Auth prunes the stale `NEON_AUTH_*` lines. `--service` narrows that to the services you named, so `env pull -s ai-gateway` never touches your `DATABASE_URL`. It also leaves the credentials of services you did not name alone — object storage and the AI Gateway share one branch credential, and a scoped pull will not revoke the half it was not asked about. (`AWS_*` is never pruned by any pull: those names collide with credentials you may set yourself, so `env pull` only ever writes them.)
+
+Naming a service the branch does not have is an error, not an empty pull:
+
+```
+--service auth: branch br-snowy-frost-12345 has no Neon Auth integration, so there are no
+auth env vars to pull. Provision it first (`neon deploy`, `neon config apply`, or the Neon
+Console), or drop auth from --service.
+```
+
+`link`, `checkout`, and `config apply` invoke `env pull` automatically (see above). Those bundled pulls follow rules 2 and 3 above **without** the implied AI Gateway: minting a credential for a service you never named isn't something a side effect of another command should do. Run `neon env pull` to get it.
 
 If you'd rather not keep env vars on disk, inject them at runtime instead with `neon-env run -- <your dev command>` (from `@neon/env`) or `neon dev`, and pass `--no-env-pull` to `link` / `checkout`.
 

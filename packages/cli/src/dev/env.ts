@@ -1,11 +1,23 @@
-import { type Config, loadConfigFromFile, type NeonApi } from "@neon/config";
-import { type AppliedChange, plan, pullConfig } from "@neon/config-runtime";
+import {
+	type Config,
+	ErrorCode,
+	loadConfigFromFile,
+	type NeonApi,
+	PlatformError,
+} from "@neon/config";
+import {
+	type AppliedChange,
+	type PulledBranchConfig,
+	plan,
+	pullConfig,
+} from "@neon/config-runtime";
 import {
 	type CredentialOutcome,
 	fetchEnvReusingSecrets,
 	type ReusedBranchEnv,
 } from "@neon/env/runtime";
 
+import type { EnvService } from "../env_services.js";
 import { log } from "../log.js";
 import { getCliName } from "../utils/cli_name.js";
 
@@ -27,6 +39,21 @@ export type DevEnvContext = {
 	 * them.
 	 */
 	env?: NodeJS.ProcessEnv;
+	/**
+	 * Resolve env for exactly these services, ignoring any `neon.ts`. This is
+	 * `env pull --service`: an explicit selection is the user overriding the policy, so the
+	 * tiered resolution below is skipped and the selection is checked against the branch's
+	 * live state instead.
+	 */
+	services?: readonly EnvService[];
+	/**
+	 * Add the AI Gateway to the **no-`neon.ts`** resolution. `pullConfig` cannot detect the
+	 * gateway — it has no branch-level enabled state, only a credential — so a caller that
+	 * wants it in the "everything this branch has" set has to ask. `neon env pull` does;
+	 * `neon dev` and the pull bundled into `link` / `checkout` / `apply` do not. Ignored when
+	 * {@link DevEnvContext.services} is set, since that selection already says.
+	 */
+	implyAiGateway?: boolean;
 };
 
 /** The API-targeting options every runtime call forwards from the context. */
@@ -58,12 +85,35 @@ export class MissingBranchContextError extends Error {
 }
 
 /**
+ * Thrown when an explicit `--service` selection names a service the branch does not have.
+ * Unlike the policy path — where the same situation is a {@link DevEnvMismatchError} pointing
+ * at `deploy` — the user named the service on the command line, so the fix is to provision it
+ * or drop it from the selection.
+ */
+export class ServiceNotOnBranchError extends Error {
+	override readonly name = "ServiceNotOnBranchError";
+}
+
+/** What {@link resolveNeonEnvVars} produced, and what it could not. */
+export type ResolvedNeonEnvVars = ReusedBranchEnv & {
+	/**
+	 * Services that were asked for but yielded nothing, so a caller can say so rather than
+	 * report a complete pull. Only the *implied* AI Gateway can land here (see
+	 * {@link DevEnvContext.implyAiGateway}); a service the user named explicitly raises
+	 * instead of being skipped.
+	 */
+	skipped?: readonly EnvService[];
+};
+
+/**
  * Resolve the branch's Neon env vars (pooled / direct `DATABASE_URL`, plus Auth /
  * Data API when enabled) into a `{ KEY: value }` map. Shared by `neon dev` (which
  * injects them) and `neon env pull` (which writes them to a `.env` file).
  *
  * Tiered:
  *
+ *   0. {@link DevEnvContext.services} is set -> that selection *is* the policy, and any
+ *      `neon.ts` is ignored. See {@link resolveSelectedServices}.
  *   1. a `neon.ts` policy is found -> the policy is the source of truth. We first
  *      check it against the branch's live state (`plan`); if it declares a resource
  *      the branch is missing, we stop with a {@link DevEnvMismatchError} pointing at
@@ -72,6 +122,8 @@ export class MissingBranchContextError extends Error {
  *      branch's live state (Auth / Data API enablement plus any object-storage
  *      buckets) into a config, then `fetchEnv` resolves what is actually enabled —
  *      so a branch with a bucket gets its `AWS_*` storage vars pulled with no policy.
+ *      With {@link DevEnvContext.implyAiGateway}, the AI Gateway is added on top, since
+ *      `pullConfig` cannot read it back.
  *   3. otherwise -> throw {@link MissingBranchContextError}.
  *
  * Unlike {@link resolveDevEnv}, this never swallows errors — callers decide how to
@@ -79,7 +131,11 @@ export class MissingBranchContextError extends Error {
  */
 export const resolveNeonEnvVars = async (
 	ctx: DevEnvContext,
-): Promise<ReusedBranchEnv> => {
+): Promise<ResolvedNeonEnvVars> => {
+	if (ctx.services) {
+		return await resolveSelectedServices(ctx, ctx.services);
+	}
+
 	const config = await loadNeonConfig(ctx.cwd);
 
 	if (config) {
@@ -114,13 +170,146 @@ export const resolveNeonEnvVars = async (
 		// straight into fetchEnv — no wrapping needed. pullConfig excludes functions and
 		// the AI Gateway (neither can be faithfully read back), so fetchEnv never probes
 		// the functions API here and only mints a storage credential when a bucket exists.
-		return await fetchAndProject(pulled.config, ctx);
+		if (!ctx.implyAiGateway) {
+			return await fetchAndProject(pulled.config, ctx);
+		}
+		return await resolveWithImpliedGateway(pulled.config, ctx);
 	}
 
 	throw new MissingBranchContextError(
 		`No project/branch context found. Link a branch (\`${getCliName()} link\` / ` +
 			`\`${getCliName()} checkout\`) or pass --project-id and --branch.`,
 	);
+};
+
+/** The same config with the AI Gateway enabled, leaving any other `preview` entries intact. */
+const withAiGateway = (config: Config): Config => ({
+	...config,
+	preview: { ...config.preview, aiGateway: true },
+});
+
+/**
+ * Tier-2 resolution with the AI Gateway added on top of the branch's read-back state.
+ *
+ * The gateway is not detectable — `pullConfig` reports no enabled flag for it — so it is
+ * implied rather than observed, and a project that does not have it at all only says so when
+ * the credential is minted: `createCredential` raises `PLATFORM_FEATURE_UNAVAILABLE` for a
+ * project outside the regions where branch credentials exist. Failing the whole pull on that
+ * would break every such project's `env pull`, so the gateway — the part that was never asked
+ * for by name — is dropped, reported to the user, and reported back to the caller as
+ * {@link ResolvedNeonEnvVars.skipped}. Any other error propagates.
+ */
+const resolveWithImpliedGateway = async (
+	config: Config,
+	ctx: DevEnvContext,
+): Promise<ResolvedNeonEnvVars> => {
+	try {
+		return await fetchAndProject(withAiGateway(config), ctx);
+	} catch (err) {
+		if (!isFeatureUnavailable(err)) throw err;
+		log.warning(
+			"Skipped the AI Gateway env vars — it isn't available for this project: %s",
+			err.message,
+		);
+		return {
+			...(await fetchAndProject(config, ctx)),
+			skipped: ["ai-gateway"],
+		};
+	}
+};
+
+const isFeatureUnavailable = (err: unknown): err is PlatformError =>
+	err instanceof PlatformError && err.code === ErrorCode.FeatureUnavailable;
+
+/**
+ * Tier-0: resolve exactly the services `--service` named, with `neon.ts` out of the picture.
+ *
+ * The selection is checked against the branch's live state so a service that is named but not
+ * provisioned fails by name, instead of quietly contributing no vars. `postgres` and the AI
+ * Gateway are not checked: every branch has Postgres, and the gateway has no branch-level
+ * state to check (an unavailable one surfaces when its credential is minted).
+ */
+const resolveSelectedServices = async (
+	ctx: DevEnvContext,
+	services: readonly EnvService[],
+): Promise<ResolvedNeonEnvVars> => {
+	if (!ctx.projectId || !ctx.branchId) {
+		throw new MissingBranchContextError(
+			"--service needs a project and branch to read from. " +
+				`Run \`${getCliName()} link\` and \`${getCliName()} checkout <branch>\`, or pass ` +
+				"--project-id / --branch.",
+		);
+	}
+
+	// Only these three have branch state worth reading; a selection of just `postgres` and/or
+	// the AI Gateway resolves without the extra round trips.
+	const needsBranchState = (
+		["auth", "data-api", "object-storage"] as const
+	).some((service) => services.includes(service));
+	const pulled = needsBranchState
+		? await pullConfig({
+				projectId: ctx.projectId,
+				branchId: ctx.branchId,
+				...apiOptions(ctx),
+			})
+		: null;
+
+	return await fetchAndProject(
+		configForServices(services, pulled, ctx.branchId),
+		ctx,
+	);
+};
+
+/**
+ * Build the `Config` an explicit `--service` selection stands for, raising
+ * {@link ServiceNotOnBranchError} for anything the branch does not have.
+ *
+ * Note what the Data API check can and cannot prove: it is enabled per branch *and database*,
+ * and `pullConfig` probes one database (`neondb`, else the first). That is the same database
+ * `fetchEnv` resolves the URL from, so the two agree — but a Data API enabled only on some
+ * other database reads as absent here.
+ */
+const configForServices = (
+	services: readonly EnvService[],
+	pulled: PulledBranchConfig | null,
+	branchId: string,
+): Config => {
+	const notOnBranch = (service: EnvService, what: string): never => {
+		throw new ServiceNotOnBranchError(
+			`--service ${service}: branch ${branchId} has no ${what}, so there are no ` +
+				`${service} env vars to pull. Provision it first (\`${getCliName()} deploy\`, ` +
+				`\`${getCliName()} config apply\`, or the Neon Console), or drop ${service} from --service.`,
+		);
+	};
+
+	const config: Config = {};
+	if (services.includes("auth")) {
+		if (!pulled?.config.auth) notOnBranch("auth", "Neon Auth integration");
+		config.auth = true;
+	}
+	if (services.includes("data-api")) {
+		if (!pulled?.config.dataApi) {
+			notOnBranch("data-api", "Data API integration");
+		}
+		config.dataApi = true;
+	}
+
+	const buckets = services.includes("object-storage")
+		? (pulled?.config.preview?.buckets ?? {})
+		: {};
+	if (
+		services.includes("object-storage") &&
+		Object.keys(buckets).length === 0
+	) {
+		notOnBranch("object-storage", "object-storage buckets");
+	}
+
+	const preview: NonNullable<Config["preview"]> = {};
+	if (Object.keys(buckets).length > 0) preview.buckets = buckets;
+	if (services.includes("ai-gateway")) preview.aiGateway = true;
+	if (Object.keys(preview).length > 0) config.preview = preview;
+
+	return config;
 };
 
 /**

@@ -25,9 +25,16 @@ import type {
 	NeonProjectSnapshot,
 	NeonRoleSnapshot,
 } from "@neon/config";
+import { ErrorCode, PlatformError } from "@neon/config";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { autoPullEnvAfterPin, type EnvPullProps, pull } from "./env.js";
+import {
+	autoPullEnvAfterPin,
+	type EnvPullProps,
+	type PullOutcome,
+	pull,
+	renderAgentPullNote,
+} from "./env.js";
 
 const PROJECT_ID = "patient-art-12345";
 const BRANCH_ID = "br-snowy-frost-12345";
@@ -476,6 +483,184 @@ describe("env pull", () => {
 
 		expect(api.createCalls).toBe(1);
 		expect(readFileSync(join(cwd, ".env.local"), "utf8")).toBe(afterFirst);
+	});
+});
+
+describe("env pull --service", () => {
+	let cwd: string;
+	beforeEach(() => {
+		cwd = mkdtempSync(join(tmpdir(), "neonctl-env-services-"));
+	});
+	afterEach(() => {
+		rmSync(cwd, { recursive: true, force: true });
+	});
+
+	it("writes only the selected service's vars, leaving the rest of the file alone", async () => {
+		writeFileSync(
+			join(cwd, ".env"),
+			["APP_NAME=demo", "DATABASE_URL=postgres://mine", ""].join("\n"),
+		);
+
+		await pull({
+			...baseProps(new FakeNeonApi(), cwd),
+			services: ["ai-gateway"],
+		});
+
+		const content = readFileSync(join(cwd, ".env"), "utf8");
+		expect(content).toMatch(/^NEON_AI_GATEWAY_TOKEN=/m);
+		expect(content).toMatch(
+			/^NEON_AI_GATEWAY_BASE_URL=https:\/\/br-snowy-frost-12345-api\.ai\.fake\.neon\.tech$/m,
+		);
+		// A pull scoped to the gateway says nothing about Postgres, so it neither refreshes
+		// DATABASE_URL nor prunes it.
+		expect(content).toContain("DATABASE_URL=postgres://mine");
+		expect(content).toContain("APP_NAME=demo");
+	});
+
+	it("overrides a neon.ts rather than intersecting with it", async () => {
+		// A policy that enables auth, on a branch that has it — yet `-s postgres` asked for
+		// Postgres only, so the auth vars must not be written.
+		writeFileSync(join(cwd, "neon.ts"), "export default { auth: {} };\n");
+		const api = new FakeNeonApi({
+			getNeonAuth: async () => ({
+				projectId: "auth-project",
+				jwksUrl: "https://auth.fake.neon.tech/.well-known/jwks.json",
+				baseUrl: "https://auth.fake.neon.tech",
+			}),
+		});
+
+		await pull({ ...baseProps(api, cwd), services: ["postgres"] });
+
+		const content = readFileSync(join(cwd, ".env.local"), "utf8");
+		expect(content).toMatch(/^DATABASE_URL=/m);
+		expect(content).not.toContain("NEON_AUTH_BASE_URL");
+	});
+
+	it("fails by name when a selected service is not on the branch", async () => {
+		await expect(
+			pull({ ...baseProps(new FakeNeonApi(), cwd), services: ["auth"] }),
+		).rejects.toThrow(/--service auth: branch .* no Neon Auth integration/);
+		expect(existsSync(join(cwd, ".env.local"))).toBe(false);
+	});
+
+	it("fails by name when object storage is selected but the branch has no buckets", async () => {
+		// Without the check this would resolve to nothing at all and report an empty pull,
+		// which reads as "your branch has no env" rather than "that service isn't there".
+		await expect(
+			pull({
+				...baseProps(new FakeNeonApi(), cwd),
+				services: ["object-storage"],
+			}),
+		).rejects.toThrow(
+			/--service object-storage: branch .* no object-storage buckets/,
+		);
+	});
+
+	it("does not revoke the credential behind a service it was not scoped to", async () => {
+		// Object storage and the AI Gateway share one branch credential, and the resolver
+		// revokes whatever the persisted secrets name once it mints a replacement. A pull
+		// scoped to one of them must therefore not even look at the other's secrets — or it
+		// would revoke a live credential and leave its (now dead) vars on disk, because a
+		// scoped prune deliberately keeps them.
+		const api = new StorageNeonApi();
+
+		await pull({
+			...baseProps(api, cwd),
+			services: ["object-storage"],
+		});
+		const afterStorage = readFileSync(join(cwd, ".env.local"), "utf8");
+		expect(afterStorage).toContain("AWS_ACCESS_KEY_ID=cred-fake-0001");
+
+		await pull({ ...baseProps(api, cwd), services: ["ai-gateway"] });
+
+		const content = readFileSync(join(cwd, ".env.local"), "utf8");
+		expect(content).toContain("AWS_ACCESS_KEY_ID=cred-fake-0001");
+		expect(content).toMatch(
+			/^NEON_AI_GATEWAY_TOKEN=nt_live_credfake0002_/m,
+		);
+		expect(api.credentials.filter((c) => c.revokedAt)).toEqual([]);
+	});
+});
+
+/** A project where branch credentials aren't deployed, so the AI Gateway cannot be minted. */
+class NoCredentialsNeonApi extends FakeNeonApi {
+	override async createCredential(): Promise<NeonCredentialSecret> {
+		throw new PlatformError(
+			ErrorCode.FeatureUnavailable,
+			"Branch credentials isn't available for this Neon project (HTTP 404 Not Found).",
+		);
+	}
+}
+
+describe("env pull with the AI Gateway implied (no neon.ts)", () => {
+	let cwd: string;
+	beforeEach(() => {
+		cwd = mkdtempSync(join(tmpdir(), "neonctl-env-gateway-"));
+	});
+	afterEach(() => {
+		rmSync(cwd, { recursive: true, force: true });
+	});
+
+	it("pulls the gateway vars, which the branch read-back cannot report on its own", async () => {
+		const result = await pull(baseProps(new FakeNeonApi(), cwd), {
+			implyAiGateway: true,
+		});
+
+		const content = readFileSync(join(cwd, ".env.local"), "utf8");
+		expect(content).toMatch(/^DATABASE_URL=/m);
+		expect(content).toMatch(/^NEON_AI_GATEWAY_TOKEN=/m);
+		expect(content).toMatch(/^NEON_AI_GATEWAY_BASE_URL=/m);
+		expect(result.status).toBe("written");
+		if (result.status === "written") expect(result.skipped).toBeUndefined();
+	});
+
+	it("leaves the policy in charge when a neon.ts exists", async () => {
+		writeFileSync(join(cwd, "neon.ts"), "export default {};\n");
+
+		await pull(baseProps(new FakeNeonApi(), cwd), {
+			implyAiGateway: true,
+		});
+
+		const content = readFileSync(join(cwd, ".env.local"), "utf8");
+		expect(content).toMatch(/^DATABASE_URL=/m);
+		expect(content).not.toContain("NEON_AI_GATEWAY");
+	});
+
+	it("drops the gateway and says so when the project cannot mint a credential", async () => {
+		// The gateway is implied, never named by the user, so a project that doesn't have it
+		// must still get the rest of its env — but the result has to report the gap rather
+		// than pass for a complete pull.
+		let result: PullOutcome | undefined;
+		const logged = await captureLog(async () => {
+			result = await pull(baseProps(new NoCredentialsNeonApi(), cwd), {
+				implyAiGateway: true,
+			});
+		});
+
+		const content = readFileSync(join(cwd, ".env.local"), "utf8");
+		expect(content).toMatch(/^DATABASE_URL=/m);
+		expect(content).not.toContain("NEON_AI_GATEWAY");
+		expect(logged).toContain("Skipped the AI Gateway env vars");
+		expect(result?.status).toBe("written");
+		if (result?.status === "written") {
+			expect(result.skipped).toEqual(["ai-gateway"]);
+		}
+		expect(renderAgentPullNote(result as PullOutcome)).toContain(
+			"Skipped ai-gateway",
+		);
+	});
+
+	it("stays off for the pull bundled into link / checkout / apply", async () => {
+		// An auto-pull is a side effect of another command; minting a credential for a
+		// service the user never named is not something a side effect should do.
+		await autoPullEnvAfterPin({
+			...baseProps(new FakeNeonApi(), cwd),
+			envPull: true,
+		});
+
+		const content = readFileSync(join(cwd, ".env.local"), "utf8");
+		expect(content).toMatch(/^DATABASE_URL=/m);
+		expect(content).not.toContain("NEON_AI_GATEWAY");
 	});
 });
 
