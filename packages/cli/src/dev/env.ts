@@ -169,7 +169,10 @@ export const resolveNeonEnvVars = async (
 		if (!ctx.implyAiGateway) {
 			return await fetchAndProject(pulled.config, ctx);
 		}
-		return await resolveWithImpliedGateway(pulled.config, ctx);
+		return await resolveWithImpliedGateway(pulled.config, ctx, {
+			projectId: ctx.projectId,
+			branchId: ctx.branchId,
+		});
 	}
 
 	throw new MissingBranchContextError(
@@ -208,8 +211,10 @@ const withAiGateway = (config: Config): Config => ({
 const resolveWithImpliedGateway = async (
 	config: Config,
 	ctx: DevEnvContext,
+	/** Resolved by the caller, which is the branch this env belongs to. */
+	branch: { projectId: string; branchId: string },
 ): Promise<ResolvedNeonEnvVars> => {
-	const unreachable = await credentialsUnreachable(ctx);
+	const unreachable = await credentialsUnreachable(ctx, branch);
 	if (unreachable === null) {
 		return await fetchAndProject(withAiGateway(config), ctx);
 	}
@@ -239,12 +244,10 @@ const resolveWithImpliedGateway = async (
  */
 const credentialsUnreachable = async (
 	ctx: DevEnvContext,
+	branch: { projectId: string; branchId: string },
 ): Promise<string | null> => {
 	try {
-		await apiFor(ctx).listCredentials(
-			ctx.projectId as string,
-			ctx.branchId as string,
-		);
+		await apiFor(ctx).listCredentials(branch.projectId, branch.branchId);
 		return null;
 	} catch (err) {
 		return err instanceof Error ? err.message : String(err);
