@@ -34,8 +34,10 @@ export type LogFieldValuesQuery = NonNullable<
  * object storage, and Postgres computes. Grouped under `neon.logs.*` alongside the
  * other branch-scoped product surfaces.
  *
- * Private Beta. A branch that is not collecting telemetry answers `404` with
- * `reason: "telemetry_not_enabled"` rather than an empty result.
+ * Private Beta, and it shows: a branch with nothing to serve answers `200` with an empty
+ * `logs` array in practice, though the spec also defines a `404` with
+ * `reason: "telemetry_not_enabled"`. A branch whose telemetry backend is down answers
+ * `503`, which the client retries on by default.
  */
 export class Logs<DThrow extends boolean> {
 	readonly #ctx: RequestContext;
@@ -134,8 +136,10 @@ export class Logs<DThrow extends boolean> {
 
 	/**
 	 * List the distinct values observed for one log field, for use as a filter.
-	 * `fieldName` must be one of the names {@link Logs.fields} reports; anything
-	 * else is rejected with `unknown_field`.
+	 * `fieldName` must be one of the names {@link Logs.fields} reports; anything else is
+	 * rejected with `unknown_field`. That set is narrower than the set of things
+	 * {@link Logs.query} can filter on — `source` is a filter here and there, but is not
+	 * itself an enumerable field.
 	 *
 	 * The whole response is returned rather than the bare values because
 	 * `is_truncated` decides whether the list can be trusted: when it is `true` the

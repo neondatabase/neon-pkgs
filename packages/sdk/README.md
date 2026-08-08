@@ -408,8 +408,12 @@ Branch-scoped AI Gateway endpoint metadata (beta).
 ### `neon.logs`
 
 Branch-scoped logs from the services running on a branch — Neon Functions, object
-storage, and Postgres computes (private beta). A branch that is not collecting
-telemetry answers 404 with `reason: "telemetry_not_enabled"` rather than an empty result.
+storage, and Postgres computes (private beta).
+
+Being private beta shows. A branch with nothing to serve answers `200` with an empty
+`logs` array in practice, though the spec also defines a `404` with
+`reason: "telemetry_not_enabled"`, so handle both. A branch whose telemetry backend is
+down answers `503`, which the client retries on by default.
 
 | Method | Returns | Notes |
 | --- | --- | --- |
@@ -445,16 +449,23 @@ for await (const line of neon.logs.query(projectId, branchId, { since: "1h" })) 
   console.log(line.timestamp, line.message);
 }
 
-// Discover what you can filter on, then read one field's values
+// Discover what you can enumerate, then read one field's values
 const { data: fields } = await neon.logs.fields(projectId, branchId);
-const { data: sources } = await neon.logs.fieldValues(
-  projectId, branchId, "source", { since: "24h" },
+// e.g. ["service_name", "severity_text", "scope_name", "entity_type"]
+
+const { data: services } = await neon.logs.fieldValues(
+  projectId, branchId, "service_name", { since: "24h" },
 );
-console.log(sources?.values); // ["function", "storage"]
-if (sources?.is_truncated) {
+console.log(services?.values);
+if (services?.is_truncated) {
   // an arbitrary subset — narrow `since` or `source` before filtering on it
 }
 ```
+
+**`fieldName` must be a name `fields` returned**, and that set is narrower than the set of
+things you can filter on. `source` in particular is a *filter* — on `query` and on
+`fieldValues`' own query — but is not an enumerable field, so
+`fieldValues(…, "source")` answers `400` with `reason: "unknown_field"`.
 
 `fields` returns a bare `string[]` because its response carries nothing else.
 `fieldValues` returns the whole response, because `is_truncated` is what decides whether
