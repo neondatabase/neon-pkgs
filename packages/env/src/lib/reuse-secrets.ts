@@ -95,9 +95,25 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 		 * `.env` file, typically. Defaults to `process.env`.
 		 */
 		env?: NodeJS.ProcessEnv;
+		/**
+		 * Revoke the credential a freshly-minted one supersedes. Defaults to `true`.
+		 *
+		 * Pass `false` when this resolve covers only *part* of what the branch has. Object
+		 * storage and the AI Gateway share one credential, so a partial resolve cannot tell
+		 * whether the credential its persisted secrets name also backs a service it is not
+		 * resolving — and revoking it would kill that service while its vars, which this call
+		 * is not rewriting, stay on disk and stop working. The cost is an orphaned credential,
+		 * which is the safer of the two failures. `neon env pull --service` is the caller that
+		 * needs this.
+		 */
+		revokeSuperseded?: boolean;
 	},
 ): Promise<ReusedBranchEnv> {
-	const { env: source = process.env, ...fetchOptions } = options;
+	const {
+		env: source = process.env,
+		revokeSuperseded = true,
+		...fetchOptions
+	} = options;
 	const api = options.api ?? createApiFromOptions(options);
 	const { branch, desired } = await resolveBranchPolicy(config, options, api);
 
@@ -178,13 +194,15 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 	//
 	// Revoked *after* the fetch, so a failed fetch leaves the caller's existing secrets working.
 	const ours = new Set<string>();
-	for (const meta of [named.storage, named.gateway]) {
-		if (
-			meta !== null &&
-			meta.principalType === "user" &&
-			meta.name === credentialName(branch.name)
-		) {
-			ours.add(meta.tokenId);
+	if (revokeSuperseded) {
+		for (const meta of [named.storage, named.gateway]) {
+			if (
+				meta !== null &&
+				meta.principalType === "user" &&
+				meta.name === credentialName(branch.name)
+			) {
+				ours.add(meta.tokenId);
+			}
 		}
 	}
 	for (const tokenId of ours) {

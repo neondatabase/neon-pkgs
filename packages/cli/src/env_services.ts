@@ -38,24 +38,6 @@ const SERVICE_OWNED_ENV_KEYS: Record<EnvService, readonly string[]> = {
 };
 
 /**
- * The one-time credential secrets each service's env carries. A branch credential is minted
- * once and its secrets live only in the user's env, so these are the keys
- * `fetchEnvReusingSecrets` inspects to decide whether it can reuse a credential — and, when it
- * cannot, which credential to revoke as superseded. Everything else a service emits
- * (endpoints, URLs, region) is plain branch metadata.
- */
-const SERVICE_SECRET_ENV_KEYS: Record<EnvService, readonly string[]> = {
-	postgres: [],
-	auth: [],
-	"data-api": [],
-	"object-storage": [
-		NEON_ENV_VAR_KEYS.storage.accessKeyId,
-		NEON_ENV_VAR_KEYS.storage.secretAccessKey,
-	],
-	"ai-gateway": [NEON_ENV_VAR_KEYS.aiGateway.apiKey],
-};
-
-/**
  * Branch identity. Not a service — every branch has a name — so a scoped pull refreshes it
  * alongside whatever services were selected.
  */
@@ -83,7 +65,7 @@ export const parseEnvServices = (raw: readonly string[]): EnvService[] => {
 	}
 
 	const unknown = names.filter(
-		(name) => !ENV_SERVICES.includes(name as EnvService),
+		(name) => !ENV_SERVICES.some((service) => service === name),
 	);
 	if (unknown.length > 0) {
 		throw new Error(
@@ -114,19 +96,3 @@ export const envServiceKeys = (
 export const ownedEnvServiceKeys = (
 	services: readonly EnvService[],
 ): string[] => services.flatMap((service) => SERVICE_OWNED_ENV_KEYS[service]);
-
-/**
- * The credential secrets of the services a scoped pull did *not* select.
- *
- * These have to be hidden from the resolver. Object storage and the AI Gateway share one
- * branch credential, and `fetchEnvReusingSecrets` revokes whatever the persisted secrets name
- * once it decides to mint a replacement — so a pull scoped to one of them would revoke the
- * other's credential while a scoped prune keeps the other's now-dead vars on disk. Hiding the
- * secrets leaves the unselected service's credential untouched and its vars working.
- */
-export const unselectedSecretEnvKeys = (
-	services: readonly EnvService[],
-): string[] =>
-	ENV_SERVICES.filter((service) => !services.includes(service)).flatMap(
-		(service) => SERVICE_SECRET_ENV_KEYS[service],
-	);

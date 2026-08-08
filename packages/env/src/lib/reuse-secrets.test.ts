@@ -158,6 +158,40 @@ describe("fetchEnvReusingSecrets", () => {
 		expect(live[0]?.tokenId).toBe(widened.vars.AWS_ACCESS_KEY_ID);
 	});
 
+	test("keeps the superseded credential live when the caller resolves only part of the branch", async () => {
+		// `revokeSuperseded: false` is for a caller resolving a subset — `neon env pull
+		// --service`. Here the branch has both features on one credential, but the resolve
+		// covers storage only: the replacement it mints does not carry the gateway scope, so
+		// revoking the old one would kill a gateway token the caller is not rewriting.
+		const { api, projectId } = seededFake();
+		const both = await fetchEnvReusingSecrets(bothPolicy, {
+			api,
+			projectId,
+			branch: "main",
+		});
+
+		const storageOnly = await fetchEnvReusingSecrets(storagePolicy, {
+			api,
+			projectId,
+			branch: "main",
+			// A half-present secret, so the storage credential cannot be reused.
+			env: { AWS_ACCESS_KEY_ID: both.vars.AWS_ACCESS_KEY_ID },
+			revokeSuperseded: false,
+		});
+
+		expect(storageOnly.credential.issued).toBe(true);
+		expect(storageOnly.credential.revoked).toEqual([]);
+		expect(callsTo(api, "revokeCredential")).toBe(0);
+		// Both are live: the new storage credential, and the one still backing the gateway.
+		const live = await api.listCredentials(projectId, "br-main");
+		expect(live.map((c) => c.tokenId)).toEqual(
+			expect.arrayContaining([
+				both.vars.AWS_ACCESS_KEY_ID,
+				storageOnly.vars.AWS_ACCESS_KEY_ID,
+			]),
+		);
+	});
+
 	test("never revokes a credential this tool did not issue", async () => {
 		// A credential minted by something else (a deployed function, a teammate, the console)
 		// can be kept if it fits, but must never be revoked: its secrets live somewhere we know

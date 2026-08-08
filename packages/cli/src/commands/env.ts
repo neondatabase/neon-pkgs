@@ -13,7 +13,6 @@ import {
 	envServiceKeys,
 	ownedEnvServiceKeys,
 	parseEnvServices,
-	unselectedSecretEnvKeys,
 } from "../env_services.js";
 import { log } from "../log.js";
 import type { BranchScopeProps } from "../types.js";
@@ -93,7 +92,11 @@ export const builder = (argv: yargs.Argv) =>
 						"Pull only the AI Gateway and Postgres variables",
 					),
 			async (args) => {
-				const raw = args.service as string[] | undefined;
+				// `type: "array", string: true` makes yargs hand over a string[], but the
+				// handler's `args` is untyped, so narrow rather than assert.
+				const raw = Array.isArray(args.service)
+					? args.service.map(String)
+					: undefined;
 				// Explicit `env pull` announces the branch it's reading from up front so the user
 				// can catch "pulled env from the wrong branch" before it overwrites their .env. The
 				// bundled auto-pull (link / checkout / apply) stays quiet — those already report the
@@ -191,7 +194,7 @@ export const pull = async (
 		cwd,
 		projectId: props.projectId,
 		branchId,
-		env: envSource(existingEnv, props.services),
+		env: { ...process.env, ...existingEnv },
 		...(props.services ? { services: props.services } : {}),
 		...(opts.implyAiGateway ? { implyAiGateway: true } : {}),
 		...(props.apiKey ? { apiKey: props.apiKey } : {}),
@@ -212,9 +215,7 @@ export const pull = async (
 	// Neon-owned vars the branch no longer has (e.g. NEON_AUTH_* / NEON_DATA_API_* carried over
 	// from a previous project/branch). Non-Neon lines are always preserved.
 	const { written, removed } = mergeEnvFile(targetPath, neonVars, {
-		managedKeys: props.services
-			? ownedEnvServiceKeys(props.services)
-			: NEON_OWNED_ENV_KEYS,
+		managedKeys: managedKeysFor(props.services, skipped),
 	});
 	log.info(
 		"Pulled %d Neon variable%s into %s: %s",
@@ -280,24 +281,28 @@ export const pull = async (
 };
 
 /**
- * The env source the resolver reuses one-time secrets from: the target file layered over the
- * process env.
+ * The keys this pull is allowed to prune, i.e. the ones it is authoritative for.
  *
- * A scoped pull hides the secrets of the services it did *not* select. Object storage and the
- * AI Gateway share one branch credential, and the resolver revokes whatever the persisted
- * secrets name once it mints a replacement — so without this, `env pull -s object-storage`
- * could revoke the credential behind a `NEON_AI_GATEWAY_TOKEN` that a scoped prune then leaves
- * on disk, dead. Hidden secrets are neither verified nor revoked, so the unselected service
- * keeps working.
+ * A `--service` selection narrows that to the services it named: `env pull -s ai-gateway`
+ * says nothing about `DATABASE_URL`, so it must not read that variable's absence from this
+ * pull as "the branch no longer has it".
+ *
+ * A service that was *skipped* is subtracted for the same reason, and it matters more: the
+ * gateway is skipped precisely when its credential could not be reached, and a
+ * `PLATFORM_FEATURE_UNAVAILABLE` covers a transient incident as well as a project that
+ * genuinely lacks the feature. Pruning there would delete a working token whose secret exists
+ * nowhere else, and strand the live credential behind it.
  */
-const envSource = (
-	existingEnv: Record<string, string>,
+const managedKeysFor = (
 	services: readonly EnvService[] | undefined,
-): NodeJS.ProcessEnv => {
-	const source: NodeJS.ProcessEnv = { ...process.env, ...existingEnv };
-	if (!services) return source;
-	for (const key of unselectedSecretEnvKeys(services)) delete source[key];
-	return source;
+	skipped: readonly EnvService[] | undefined,
+): string[] => {
+	const owned = services
+		? ownedEnvServiceKeys(services)
+		: [...NEON_OWNED_ENV_KEYS];
+	if (!skipped || skipped.length === 0) return owned;
+	const unreached = new Set(ownedEnvServiceKeys(skipped));
+	return owned.filter((key) => !unreached.has(key));
 };
 
 /**

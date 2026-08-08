@@ -1,16 +1,14 @@
 import {
 	type Config,
+	createNeonApiFromOptions,
 	ErrorCode,
 	loadConfigFromFile,
 	type NeonApi,
+	type NeonBucketSnapshot,
+	type NeonDataApiSnapshot,
 	PlatformError,
 } from "@neon/config";
-import {
-	type AppliedChange,
-	type PulledBranchConfig,
-	plan,
-	pullConfig,
-} from "@neon/config-runtime";
+import { type AppliedChange, plan, pullConfig } from "@neon/config-runtime";
 import {
 	type CredentialOutcome,
 	fetchEnvReusingSecrets,
@@ -233,7 +231,8 @@ const resolveSelectedServices = async (
 	ctx: DevEnvContext,
 	services: readonly EnvService[],
 ): Promise<ResolvedNeonEnvVars> => {
-	if (!ctx.projectId || !ctx.branchId) {
+	const { projectId, branchId } = ctx;
+	if (!projectId || !branchId) {
 		throw new MissingBranchContextError(
 			"--service needs a project and branch to read from. " +
 				`Run \`${getCliName()} link\` and \`${getCliName()} checkout <branch>\`, or pass ` +
@@ -241,38 +240,70 @@ const resolveSelectedServices = async (
 		);
 	}
 
-	// Only these three have branch state worth reading; a selection of just `postgres` and/or
-	// the AI Gateway resolves without the extra round trips.
-	const needsBranchState = (
-		["auth", "data-api", "object-storage"] as const
-	).some((service) => services.includes(service));
-	const pulled = needsBranchState
-		? await pullConfig({
-				projectId: ctx.projectId,
-				branchId: ctx.branchId,
-				...apiOptions(ctx),
-			})
-		: null;
+	// Read only the services that were named, rather than going through `pullConfig`. That
+	// keeps a selection independent of everything else on the branch — `pullConfig` also
+	// enumerates functions and credentials, so a failure there would abort `-s auth` — and it
+	// keeps an "object storage isn't available for this project" error intact, which
+	// `pullConfig` degrades to an empty bucket list and would report as "no buckets".
+	const api =
+		ctx.api ??
+		createNeonApiFromOptions("env pull --service", {
+			...(ctx.apiKey ? { apiKey: ctx.apiKey } : {}),
+			...(ctx.apiHost ? { apiHost: ctx.apiHost } : {}),
+		});
+	const has = (service: EnvService): boolean => services.includes(service);
+	const [auth, dataApi, buckets] = await Promise.all([
+		has("auth") ? api.getNeonAuth(projectId, branchId) : null,
+		has("data-api") ? readDataApi(api, projectId, branchId) : null,
+		has("object-storage")
+			? api.listBranchBuckets(projectId, branchId)
+			: null,
+	]);
 
-	return await fetchAndProject(
-		configForServices(services, pulled, ctx.branchId),
-		ctx,
-	);
+	const config = configForServices(services, branchId, {
+		authEnabled: auth !== null,
+		dataApiEnabled: dataApi !== null,
+		buckets: buckets ?? [],
+	});
+	// A selection resolves part of the branch, so it must not revoke: the credential its
+	// persisted secrets name may also back a service it is not resolving. See
+	// `fetchEnvReusingSecrets`'s `revokeSuperseded`.
+	return await fetchAndProject(config, ctx, { revokeSuperseded: false });
+};
+
+/**
+ * Whether the branch has a Data API integration. It is enabled per branch *and database*, so
+ * this probes the same database `fetchEnv` resolves the URL from — Neon's default `neondb`,
+ * else the only/first one — which is what makes the two agree. A Data API enabled on some
+ * other database reads as absent.
+ */
+const readDataApi = async (
+	api: NeonApi,
+	projectId: string,
+	branchId: string,
+): Promise<NeonDataApiSnapshot | null> => {
+	const databases = await api.listBranchDatabases(projectId, branchId);
+	const database =
+		databases.find((db) => db.name === "neondb") ?? databases[0];
+	if (!database) return null;
+	return await api.getNeonDataApi(projectId, branchId, database.name);
 };
 
 /**
  * Build the `Config` an explicit `--service` selection stands for, raising
- * {@link ServiceNotOnBranchError} for anything the branch does not have.
- *
- * Note what the Data API check can and cannot prove: it is enabled per branch *and database*,
- * and `pullConfig` probes one database (`neondb`, else the first). That is the same database
- * `fetchEnv` resolves the URL from, so the two agree — but a Data API enabled only on some
- * other database reads as absent here.
+ * {@link ServiceNotOnBranchError} for anything the branch does not have. Naming a service
+ * that isn't there has to fail rather than contribute no vars, or a scoped pull would report
+ * "no Neon env variables to pull" — which reads as a statement about the branch rather than
+ * about the selection.
  */
 const configForServices = (
 	services: readonly EnvService[],
-	pulled: PulledBranchConfig | null,
 	branchId: string,
+	branch: {
+		authEnabled: boolean;
+		dataApiEnabled: boolean;
+		buckets: NeonBucketSnapshot[];
+	},
 ): Config => {
 	const notOnBranch = (service: EnvService, what: string): never => {
 		throw new ServiceNotOnBranchError(
@@ -284,28 +315,28 @@ const configForServices = (
 
 	const config: Config = {};
 	if (services.includes("auth")) {
-		if (!pulled?.config.auth) notOnBranch("auth", "Neon Auth integration");
+		if (!branch.authEnabled) notOnBranch("auth", "Neon Auth integration");
 		config.auth = true;
 	}
 	if (services.includes("data-api")) {
-		if (!pulled?.config.dataApi) {
+		if (!branch.dataApiEnabled) {
 			notOnBranch("data-api", "Data API integration");
 		}
 		config.dataApi = true;
 	}
 
-	const buckets = services.includes("object-storage")
-		? (pulled?.config.preview?.buckets ?? {})
-		: {};
-	if (
-		services.includes("object-storage") &&
-		Object.keys(buckets).length === 0
-	) {
-		notOnBranch("object-storage", "object-storage buckets");
-	}
-
 	const preview: NonNullable<Config["preview"]> = {};
-	if (Object.keys(buckets).length > 0) preview.buckets = buckets;
+	if (services.includes("object-storage")) {
+		if (branch.buckets.length === 0) {
+			notOnBranch("object-storage", "object-storage buckets");
+		}
+		preview.buckets = Object.fromEntries(
+			branch.buckets.map((bucket) => [
+				bucket.name,
+				{ access: bucket.accessLevel },
+			]),
+		);
+	}
 	if (services.includes("ai-gateway")) preview.aiGateway = true;
 	if (Object.keys(preview).length > 0) config.preview = preview;
 
@@ -435,12 +466,14 @@ const isMissingResource = (change: AppliedChange): boolean =>
 const fetchAndProject = async (
 	config: Config,
 	ctx: DevEnvContext,
+	opts: { revokeSuperseded?: boolean } = {},
 ): Promise<ReusedBranchEnv> =>
 	fetchEnvReusingSecrets(config, {
 		projectId: ctx.projectId as string,
 		branch: ctx.branchId as string,
 		...apiOptions(ctx),
 		...(ctx.env ? { env: ctx.env } : {}),
+		...(opts.revokeSuperseded === false ? { revokeSuperseded: false } : {}),
 	});
 
 /**

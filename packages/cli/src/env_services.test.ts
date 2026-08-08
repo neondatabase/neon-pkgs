@@ -4,7 +4,6 @@ import {
 	envServiceKeys,
 	ownedEnvServiceKeys,
 	parseEnvServices,
-	unselectedSecretEnvKeys,
 } from "./env_services.js";
 
 describe("parseEnvServices", () => {
@@ -84,23 +83,5 @@ describe("ownedEnvServiceKeys", () => {
 			"NEON_AI_GATEWAY_TOKEN",
 			"NEON_AI_GATEWAY_BASE_URL",
 		]);
-	});
-});
-
-describe("unselectedSecretEnvKeys", () => {
-	it("names the other half of the shared branch credential", () => {
-		expect(unselectedSecretEnvKeys(["ai-gateway"])).toEqual([
-			"AWS_ACCESS_KEY_ID",
-			"AWS_SECRET_ACCESS_KEY",
-		]);
-		expect(unselectedSecretEnvKeys(["object-storage"])).toEqual([
-			"NEON_AI_GATEWAY_TOKEN",
-		]);
-	});
-
-	it("is empty when both credential-backed services are selected", () => {
-		expect(
-			unselectedSecretEnvKeys(["object-storage", "ai-gateway"]),
-		).toEqual([]);
 	});
 });
