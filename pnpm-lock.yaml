@@ -75,6 +75,9 @@ importers:
         specifier: ^4.0.27
         version: 4.0.27(zod@4.4.3)
     devDependencies:
+      '@neon/e2e-harness':
+        specifier: workspace:*
+        version: link:../../tests/e2e-harness
       '@types/node':
         specifier: 'catalog:'
         version: 20.19.17

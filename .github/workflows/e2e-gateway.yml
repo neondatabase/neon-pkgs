@@ -1,0 +1,68 @@
+# Live AI Gateway e2e for @neon/ai-sdk-provider.
+#
+# These tests call real models: the capability matrix exercises one representative per
+# gateway route family, and the SDK-version matrix generates text with *every* model the
+# branch serves on both AI SDK 6 and 7. That is well over a hundred inference requests per
+# run, which is why this is path-filtered to the provider rather than running on every pull
+# request the way e2e-live.yml does.
+#
+# No gateway credentials are stored. The suite's global setup creates a throwaway project in
+# the "neon-pkgs Integration Test Org" with the NEON_TEST_API_KEY secret, mints a branch
+# credential scoped to `ai_gateway:invoke`, and deletes both afterwards. Model access is
+# granted per account, so every project in that org sees the same catalog.
+#
+# Fork and Dependabot pull requests skip the job: GitHub does not expose repository secrets
+# to untrusted pull request code, so the suite could only fail there.
+name: e2e (live AI Gateway)
+
+on:
+    pull_request:
+        paths:
+            - "packages/ai-sdk-provider/**"
+            - "tests/e2e-harness/**"
+            - ".github/workflows/e2e-gateway.yml"
+            - "pnpm-lock.yaml"
+            - "pnpm-workspace.yaml"
+    push:
+        branches:
+            - main
+        paths:
+            - "packages/ai-sdk-provider/**"
+            - "tests/e2e-harness/**"
+            - ".github/workflows/e2e-gateway.yml"
+            - "pnpm-lock.yaml"
+            - "pnpm-workspace.yaml"
+    workflow_dispatch: ~
+
+permissions:
+    contents: read
+    id-token: write # mint the JFrog OIDC token in ./.github/actions/prepare
+
+concurrency:
+    group: e2e-gateway-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    gateway:
+        name: Live AI Gateway e2e
+        if: >-
+            github.event_name != 'pull_request' ||
+            (github.event.pull_request.head.repo.full_name == github.repository &&
+            github.actor != 'dependabot[bot]')
+        runs-on:
+            group: neondatabase-protected-runner-group
+            labels: linux-ubuntu-latest
+        timeout-minutes: 30
+        steps:
+            - name: Harden the runner (Audit all outbound calls)
+              uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
+              with:
+                  egress-policy: audit
+
+            - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+            - uses: ./.github/actions/prepare
+            - name: Run live AI Gateway e2e
+              env:
+                  NEON_API_KEY: ${{ secrets.NEON_TEST_API_KEY }}
+                  NEON_ORG_ID: ${{ vars.NEON_TEST_ORG_ID }}
+              run: pnpm --filter @neon/ai-sdk-provider test:e2e
