@@ -99,6 +99,9 @@ export const INSPECT_QUERIES = {
 		describe: "Queries running longer than 5 minutes (pg_stat_activity)",
 		fields: ["pid", "duration", "state", "query"],
 		emptyMessage: "No long-running queries.",
+		// `pg_stat_activity` spans every database on the compute, so without the
+		// `datname` filter this reports queries the caller did not ask about and
+		// cannot see. It also drops background workers, whose `datname` is null.
 		sql: /* sql */ `
 			SELECT
 				pid,
@@ -106,7 +109,8 @@ export const INSPECT_QUERIES = {
 				state,
 				query
 			FROM pg_stat_activity
-			WHERE state <> 'idle'
+			WHERE datname = current_database()
+				AND state <> 'idle'
 				AND query NOT ILIKE '%pg_stat_activity%'
 				AND now() - query_start > interval '5 minutes'
 			ORDER BY now() - query_start DESC;
@@ -125,6 +129,13 @@ export const INSPECT_QUERIES = {
 			"query",
 		],
 		emptyMessage: "No locks held.",
+		// Restricting to backends connected to this database does two things.
+		// `pg_locks` covers the whole compute, so it otherwise reports locks the
+		// caller did not ask about; and `l.relation` is an OID that only means
+		// anything in `l.database`, so joining a foreign database's OID against the
+		// local `pg_class` returned a null name, or a different relation that
+		// happened to share the OID. Every remaining lock belongs to a session in
+		// this database, whose relation OIDs do resolve here.
 		sql: /* sql */ `
 			SELECT
 				a.pid,
@@ -137,7 +148,8 @@ export const INSPECT_QUERIES = {
 			FROM pg_locks l
 			JOIN pg_stat_activity a ON a.pid = l.pid
 			LEFT JOIN pg_class c ON c.oid = l.relation
-			WHERE a.query <> '<insufficient privilege>'
+			WHERE a.datname = current_database()
+				AND a.query <> '<insufficient privilege>'
 				AND l.pid <> pg_backend_pid()
 			ORDER BY a.query_start;
 		`,
