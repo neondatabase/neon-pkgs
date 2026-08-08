@@ -48,6 +48,8 @@ export type {
 export type { ConnectionStringParams } from "./neon/resources/postgres.js";
 export type {
 	ProjectConnection,
+	RemoveRoleOptions,
+	SetRoleOptions,
 	TransferProjectsInput,
 } from "./neon/resources/projects.js";
 export type {

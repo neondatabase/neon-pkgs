@@ -48,7 +48,7 @@ const { project, connectionString } = data;
 | `baseUrl` | `string` | `https://console.neon.tech/api/v2` | Override the API base URL. |
 | `fetch` | `typeof fetch` | global `fetch` | Custom fetch implementation (proxies, tests, non-global runtimes). |
 
-Every option except `apiKey` is also accepted **per call** via the last `options` argument (`{ throwOnError?, waitForReadiness?, requestTimeoutMs?, signal? }`), overriding the client default. Paginated `list()` methods take it too, after their query.
+Every option except `apiKey` is also accepted **per call** via the last `options` argument (`{ throwOnError?, waitForReadiness?, requestTimeoutMs?, signal? }`), overriding the client default. Paginated methods take it too, after their query.
 
 ## The result model
 
@@ -234,6 +234,20 @@ await neon.projects.transfer({
 | `setDefault(projectId, branchId)` | `Branch` | |
 | `finalizeRestore(projectId, branchId, { name? }?)` | **→void** | commits a restore previewed with `snapshots.restore({ finalize: false })` |
 
+**There is no `recover`.** Neon stopped publishing `POST /projects/{project_id}/branches/{branch_id}/recover` in its OpenAPI spec, so the wrapper is gone until it returns. The endpoint still answers, so a soft-deleted branch can still be recovered through the low-level client — note that this envelope carries the API's own error body rather than a `NeonError`:
+
+```ts
+import type { BranchRecoverResponse } from "@neon/sdk";
+
+const { data } = await neon.client.post<{ 200: BranchRecoverResponse }>({
+  url: "/projects/{project_id}/branches/{branch_id}/recover",
+  path: { project_id: projectId, branch_id: branchId },
+});
+const branch = data?.branch;
+```
+
+`neon.projects.recover` is a different endpoint — it recovers a deleted **project**, not a branch.
+
 ```ts
 // Resolve the project's default ("production") branch
 const { data: prod } = await neon.branches.getDefault(projectId);
@@ -404,10 +418,17 @@ telemetry answers 404 with `reason: "telemetry_not_enabled"` rather than an empt
 | `fieldValues(projectId, branchId, fieldName, query?)` | `ProjectBranchLogFieldValuesResponse` | `query`: `{ since?, start_time?, end_time?, source?, limit? }` — check `is_truncated` |
 
 Give the window as **either** `since` (`"30m"`, `"6h"`, `"7d"`) **or** `start_time`;
-supplying both is rejected with `conflicting_time_range`. `logql` is an escape hatch
-that replaces the structured filters rather than adding to them — combining them is
-rejected with `conflicting_filters`. With no window the query covers the last hour, and
-seven days is the widest range served.
+supplying both is rejected with `conflicting_time_range`. `logql` replaces the seven
+content filters rather than adding to them — combining them is rejected with
+`conflicting_filters` — while `limit`, `sort_order`, and the time window still apply
+alongside it. Seven days is the widest range served. **The default window differs
+between the two calls:** `query` covers the last hour, `fieldValues` the last six, so a
+value discovered by one is not guaranteed to appear in the other.
+
+`query` pages for you, replaying the filters unchanged as the endpoint requires. If a
+page reports more records than it returned but no cursor to reach them, the walk fails
+with a `client`-kind `NeonError` rather than handing back a partial result as if it
+were complete.
 
 ```ts
 // Errors from a function over the last 6 hours, newest first
@@ -429,10 +450,15 @@ const { data: fields } = await neon.logs.fields(projectId, branchId);
 const { data: sources } = await neon.logs.fieldValues(
   projectId, branchId, "source", { since: "24h" },
 );
+console.log(sources?.values); // ["function", "storage"]
 if (sources?.is_truncated) {
   // an arbitrary subset — narrow `since` or `source` before filtering on it
 }
 ```
+
+`fields` returns a bare `string[]` because its response carries nothing else.
+`fieldValues` returns the whole response, because `is_truncated` is what decides whether
+the values can be trusted and unwrapping would hide it.
 
 ### `neon.snapshots`
 
@@ -525,6 +551,69 @@ for await (const project of neon.consumption.perProject({
 | `user.me()` | `CurrentUserInfoResponse` |
 | `user.organizations()` | `Organization[]` |
 
+### `neon.auth`
+
+Branch-scoped Neon Auth (the legacy project-scoped endpoints are deprecated and stay raw-only).
+
+| Method | Returns | Notes |
+| --- | --- | --- |
+| `get(projectId, branchId)` | `NeonAuthIntegration` | |
+| `create(projectId, branchId, input)` | `NeonAuthCreateIntegrationResponse` | enable the integration |
+| `disable(projectId, branchId, { deleteData? }?)` | **→void** | |
+| `updateConfig(projectId, branchId, input)` | `NeonAuthConfigResponse` | |
+| `oauthProviders.list / add / update / delete` | `NeonAuthOauthProvider`(`[]`) / **→void** | |
+| `trustedDomains.list / add / delete` | `NeonAuthRedirectUriWhitelistDomain[]` / **→void** | redirect-URI whitelist |
+| `users.create / delete / updateRole` | `NeonAuthCreateNewUserResponse` / **→void** / role | |
+
+### `neon.projects.permissions`
+
+| Method | Returns |
+| --- | --- |
+| `list(projectId)` | `ProjectPermission[]` |
+| `grant(projectId, email)` | `ProjectPermission` |
+| `revoke(projectId, permissionId)` | `ProjectPermission` |
+
+For an **org-owned** project, roles for existing organization members live on
+`neon.projects.members` below instead.
+
+### `neon.projects.members`
+
+Per-project roles for members of the **owning organization**. Distinct from
+`neon.projects.permissions`, which shares a project with an individual by email: these
+act on existing org members by member id, and clearing a grant leaves the member's
+organization-role default in force rather than removing their access. Org-owned projects
+only — a personal project answers 404.
+
+| Method | Returns | Notes |
+| --- | --- | --- |
+| `list(projectId, query?)` | **[P]** `ProjectMember` | `query`: `{ limit? }` |
+| `setRole(projectId, memberId, role, { confirmSelfDemotion? }?)` | `ProjectMemberRoleResponse` | `role`: `"viewer" \| "editor" \| "admin"`; idempotent |
+| `removeRole(projectId, memberId, { confirmSelfLockout? }?)` | `ProjectMemberRoleResponse` | clears the explicit grant; idempotent |
+
+A `ProjectMember` carries four role-ish fields. **Read `effective_project_permission`** for
+"what can this member actually do" — `VIEWER` / `EDITOR` / `ADMIN`, uppercase, unlike the
+lowercase `role` you pass to `setRole`. `grant_source` says where it came from
+(`explicit`, `org_role_default`, `org_admin_override`, `unassigned`), and
+`org_default_project_permission` and `explicit_project_permission` are the two inputs it
+was resolved from.
+
+The two confirmations are **off by default** so a call cannot silently cost you access to
+your own project. Pass one only when you mean to lower your own role
+(`confirmSelfDemotion`) or to drop your own grant when that removes your management
+access (`confirmSelfLockout`); without it the API rejects the call.
+
+```ts
+const { data: grant } = await neon.projects.members.setRole(
+  projectId, memberId, "editor",
+);
+// A downgrade can leave credentials the member still holds
+if (grant?.credential_rotation_recommended) { /* rotate database credentials */ }
+if (grant?.org_api_key_rotation_recommended) { /* rotate project-scoped org keys */ }
+```
+
+Also on `neon.projects`: `recover(id)` (beta — recover a soft-deleted project), and on
+`neon.postgres.endpoints`: `listByBranch(projectId, branchId)` → `Endpoint[]`.
+
 ---
 
 ## Raw layer (every endpoint, 1:1)
@@ -560,59 +649,6 @@ There is no `responseStyle` switch — `throwOnError` is the only one. `neon.cli
 underlying configured Fetch client; `raw.*` are the wrapped generated functions, and all
 request/response/error **types** are re-exported flat from `@neon/sdk` for
 `import type { Project, Branch, … }`.
-
-### `neon.auth`
-
-Branch-scoped Neon Auth (the legacy project-scoped endpoints are deprecated and stay raw-only).
-
-| Method | Returns | Notes |
-| --- | --- | --- |
-| `get(projectId, branchId)` | `NeonAuthIntegration` | |
-| `create(projectId, branchId, input)` | `NeonAuthCreateIntegrationResponse` | enable the integration |
-| `disable(projectId, branchId, { deleteData? }?)` | **→void** | |
-| `updateConfig(projectId, branchId, input)` | `NeonAuthConfigResponse` | |
-| `oauthProviders.list / add / update / delete` | `NeonAuthOauthProvider`(`[]`) / **→void** | |
-| `trustedDomains.list / add / delete` | `NeonAuthRedirectUriWhitelistDomain[]` / **→void** | redirect-URI whitelist |
-| `users.create / delete / updateRole` | `NeonAuthCreateNewUserResponse` / **→void** / role | |
-
-### `neon.projects.permissions`
-
-| Method | Returns |
-| --- | --- |
-| `list(projectId)` | `ProjectPermission[]` |
-| `grant(projectId, email)` | `ProjectPermission` |
-| `revoke(projectId, permissionId)` | `ProjectPermission` |
-
-### `neon.projects.members`
-
-Per-project roles for members of the **owning organization**. Distinct from
-`neon.projects.permissions`, which shares a project with an individual by email: these
-act on existing org members by member id, and clearing a grant leaves the member's
-organization-role default in force rather than removing their access. Org-owned projects
-only — a personal project answers 404.
-
-| Method | Returns | Notes |
-| --- | --- | --- |
-| `list(projectId, query?)` | **[P]** `ProjectMember` | `query`: `{ limit? }` |
-| `setRole(projectId, memberId, role, { confirmSelfDemotion? }?)` | `ProjectMemberRoleResponse` | `role`: `"viewer" \| "editor" \| "admin"`; idempotent |
-| `removeRole(projectId, memberId, { confirmSelfLockout? }?)` | `ProjectMemberRoleResponse` | clears the explicit grant; idempotent |
-
-The two confirmations are **off by default** so a call cannot silently cost you access to
-your own project. Pass one only when you mean to lower your own role
-(`confirmSelfDemotion`) or to drop your own grant when that removes your management
-access (`confirmSelfLockout`); without it the API rejects the call.
-
-```ts
-const { data: grant } = await neon.projects.members.setRole(
-  projectId, memberId, "editor",
-);
-// A downgrade can leave credentials the member still holds
-if (grant?.credential_rotation_recommended) { /* rotate database credentials */ }
-if (grant?.org_api_key_rotation_recommended) { /* rotate project-scoped org keys */ }
-```
-
-Also on `neon.projects`: `recover(id)` (beta — recover a soft-deleted project), and on
-`neon.postgres.endpoints`: `listByBranch(projectId, branchId)` → `Endpoint[]`.
 
 ## Regenerating the client
 

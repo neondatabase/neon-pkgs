@@ -50,7 +50,8 @@ type MemberListQuery = Omit<
 >;
 
 /** Per-call options for {@link Members.setRole}. */
-interface SetRoleOptions<Throw extends boolean> extends CallOptions<Throw> {
+export interface SetRoleOptions<Throw extends boolean = boolean>
+	extends CallOptions<Throw> {
 	/**
 	 * Acknowledge that the call lowers the caller's own role. The API rejects a
 	 * self-demotion without it, so it is left off by default.
@@ -59,7 +60,8 @@ interface SetRoleOptions<Throw extends boolean> extends CallOptions<Throw> {
 }
 
 /** Per-call options for {@link Members.removeRole}. */
-interface RemoveRoleOptions<Throw extends boolean> extends CallOptions<Throw> {
+export interface RemoveRoleOptions<Throw extends boolean = boolean>
+	extends CallOptions<Throw> {
 	/**
 	 * Acknowledge that the call can cost the caller management access. The API
 	 * rejects such a self-removal without it, so it is left off by default.

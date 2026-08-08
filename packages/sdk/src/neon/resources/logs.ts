@@ -11,6 +11,7 @@ import type {
 	ProjectBranchLogsQueryResponse,
 } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
+import { NeonError } from "../errors.js";
 import { type Paginated, paginate } from "../paginate.js";
 import type { NeonResult, Outcome } from "../result.js";
 
@@ -79,11 +80,10 @@ export class Logs<DThrow extends boolean> {
 				if (page.data?.is_truncated && !page.data.next_cursor) {
 					return {
 						response: page.response,
-						error: {
-							code: "LOGS_TRUNCATED_WITHOUT_CURSOR",
-							message:
-								"Neon reported more log records than it returned but gave no cursor to reach them.",
-						},
+						error: new NeonError(
+							"Neon reported more log records than it returned but gave no cursor to reach them.",
+							"client",
+						),
 					};
 				}
 				return page;

@@ -126,6 +126,8 @@ describe("logs.query pagination", () => {
 
 		expect(data).toBeUndefined();
 		expect(error?.message).toContain("no cursor");
+		// An SDK-side fault, not a 2xx masquerading as an API error.
+		expect(error?.kind).toBe("client");
 	});
 });
 
