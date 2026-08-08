@@ -11,6 +11,7 @@ import {
 	resolveFunctionsFromConfig,
 } from "../dev/functions.js";
 import { resolveWatchInputs } from "../dev/inputs.js";
+import { readEnvFile, resolveEnvFilePath } from "../env_file.js";
 import { log } from "../log.js";
 import type { CommonProps } from "../types.js";
 import { branchIdResolve } from "../utils/enrichers.js";
@@ -59,6 +60,41 @@ export const builder = (argv: yargs.Argv) =>
 		})
 		.strict();
 
+/**
+ * The resolver context for a `neon dev` run.
+ *
+ * Two things here are what make local dev match the deployed runtime, which injects a
+ * branch's whole env into a function:
+ *
+ * - **The AI Gateway is asked for**, like `env pull` does, because nothing can detect it.
+ *   Without this, a function that works deployed fails locally with no `NEON_AI_GATEWAY_*`,
+ *   which is exactly the difference `dev` exists to eliminate.
+ * - **The local dotenv file is layered in**, so the branch credential behind the gateway and
+ *   object storage is *reused* rather than re-minted. `dev` writes no file of its own, so
+ *   without a source of persisted secrets every start would mint a credential and leave the
+ *   last one live — one orphan per restart. `neon-env run` already reads the file for this
+ *   reason; `dev` was the one that didn't.
+ */
+export const devEnvContext = (
+	props: DevProps,
+	branchId: string | undefined,
+	cwd: string,
+) => {
+	const envFile = resolveEnvFilePath(cwd);
+	return {
+		cwd,
+		implyAiGateway: true,
+		env: {
+			...process.env,
+			...(existsSync(envFile) ? readEnvFile(envFile) : {}),
+		},
+		...(props.projectId ? { projectId: props.projectId } : {}),
+		...(branchId ? { branchId } : {}),
+		...(props.apiKey ? { apiKey: props.apiKey } : {}),
+		...(props.apiHost ? { apiHost: props.apiHost } : {}),
+	};
+};
+
 export const handler = async (props: DevProps): Promise<void> => {
 	if (props.source !== undefined) {
 		await runSingleSource(props);
@@ -85,13 +121,9 @@ const runSingleSource = async (props: DevProps): Promise<void> => {
 	}
 
 	const branchId = await resolveBranchId(props);
-	const { vars: neonEnv, skipped } = await resolveDevEnv({
-		cwd: process.cwd(),
-		...(props.projectId ? { projectId: props.projectId } : {}),
-		...(branchId ? { branchId } : {}),
-		...(props.apiKey ? { apiKey: props.apiKey } : {}),
-		...(props.apiHost ? { apiHost: props.apiHost } : {}),
-	});
+	const { vars: neonEnv, skipped } = await resolveDevEnv(
+		devEnvContext(props, branchId, process.cwd()),
+	);
 
 	const unit: ServedUnit = {
 		slug: null,
@@ -132,13 +164,9 @@ const runFromConfig = async (props: DevProps): Promise<void> => {
 		);
 	}
 
-	const { vars: neonEnv, skipped } = await resolveDevEnv({
-		cwd: process.cwd(),
-		...(props.projectId ? { projectId: props.projectId } : {}),
-		...(branchId ? { branchId } : {}),
-		...(props.apiKey ? { apiKey: props.apiKey } : {}),
-		...(props.apiHost ? { apiHost: props.apiHost } : {}),
-	});
+	const { vars: neonEnv, skipped } = await resolveDevEnv(
+		devEnvContext(props, branchId, process.cwd()),
+	);
 
 	const units = planFunctionsToUnits(functions, neonEnv, DEFAULT_PORT_BASE);
 

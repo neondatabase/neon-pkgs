@@ -1,12 +1,10 @@
 import {
 	type Config,
 	createNeonApiFromOptions,
-	ErrorCode,
 	loadConfigFromFile,
 	type NeonApi,
 	type NeonBucketSnapshot,
 	type NeonDataApiSnapshot,
-	PlatformError,
 } from "@neon/config";
 import { type AppliedChange, plan, pullConfig } from "@neon/config-runtime";
 import { NEON_ENV_VAR_KEYS } from "@neon/env";
@@ -190,12 +188,17 @@ const withAiGateway = (config: Config): Config => ({
  * Tier-2 resolution with the AI Gateway added on top of the branch's read-back state.
  *
  * The gateway is not detectable — `pullConfig` reports no enabled flag for it — so it is
- * implied rather than observed, and a project that does not have it at all only says so when
- * the credential is minted: `createCredential` raises `PLATFORM_FEATURE_UNAVAILABLE` for a
- * project outside the regions where branch credentials exist. Failing the whole pull on that
- * would break every such project's `env pull`, so the gateway — the part that was never asked
- * for by name — is dropped, reported to the user, and reported back to the caller as
- * {@link ResolvedNeonEnvVars.skipped}. Any other error propagates.
+ * implied rather than observed. Nobody named it, so it must never be the reason the whole
+ * resolve fails: a project outside the regions where branch credentials exist would otherwise
+ * lose its `DATABASE_URL` too, and `neon dev` would start with no env at all.
+ *
+ * Which failures belong to the gateway is decided by **retrying without it** rather than by
+ * matching an error code. If the resolve then succeeds, the gateway was the cause — drop it,
+ * say so, and report it as {@link ResolvedNeonEnvVars.skipped}. If it fails again, the problem
+ * was never the gateway (a bad key, an unreachable API), so the original error propagates
+ * unchanged and no misleading gateway warning is printed. That also avoids having to decide
+ * whether `PLATFORM_FEATURE_UNAVAILABLE` means "this project has no gateway" or "the
+ * credentials endpoint is having a bad minute" — a distinction the error does not carry.
  */
 const resolveWithImpliedGateway = async (
 	config: Config,
@@ -204,30 +207,23 @@ const resolveWithImpliedGateway = async (
 	try {
 		return await fetchAndProject(withAiGateway(config), ctx);
 	} catch (err) {
-		if (!isFeatureUnavailable(err)) throw err;
-		// Deliberately does not claim the project lacks the gateway: the same error code
-		// covers a transient failure, which is the whole reason the pull leaves any existing
-		// values in place rather than pruning them. Naming both causes, and the one command
-		// that answers which, beats asserting the wrong one.
+		const withoutGateway = await fetchAndProject(config, ctx).catch(
+			() => null,
+		);
+		if (withoutGateway === null) throw err;
 		log.warning(
-			"Could not resolve the AI Gateway, so %s were not pulled. The rest of the pull " +
-				"landed. Either this project does not have the AI Gateway, or the call failed — " +
+			"Could not resolve the AI Gateway, so %s were not resolved. Everything else " +
+				"was. Either this project does not have the AI Gateway, or the call failed — " +
 				`\`${getCliName()} env pull -s ai-gateway\` will say which.\nDetails: %s`,
 			[
 				NEON_ENV_VAR_KEYS.aiGateway.apiKey,
 				NEON_ENV_VAR_KEYS.aiGateway.baseUrl,
 			].join(" and "),
-			err.message,
+			err instanceof Error ? err.message : String(err),
 		);
-		return {
-			...(await fetchAndProject(config, ctx)),
-			skipped: ["ai-gateway"],
-		};
+		return { ...withoutGateway, skipped: ["ai-gateway"] };
 	}
 };
-
-const isFeatureUnavailable = (err: unknown): err is PlatformError =>
-	err instanceof PlatformError && err.code === ErrorCode.FeatureUnavailable;
 
 /**
  * Tier-0: resolve exactly the services `--service` named, with `neon.ts` out of the picture.
