@@ -95,7 +95,9 @@ export const parseServices = (
 	}
 
 	if (allowNone && names.includes(NO_SERVICES)) {
-		if (names.length > 1) {
+		// Deduplicate before deciding it was combined with something: a repeated value is
+		// a no-op everywhere else in this parser, so `-s none -s none` must be too.
+		if (new Set(names).size > 1) {
 			throw new Error(
 				`${flag} ${NO_SERVICES} cannot be combined with other services.`,
 			);

@@ -150,6 +150,11 @@ describe("parseServices", () => {
 			);
 		});
 
+		it("deduplicates like any other value, so repeating it is still none", () => {
+			expect(parseServices(["none", "none"], configInit)).toEqual([]);
+			expect(parseServices(["none,none"], configInit)).toEqual([]);
+		});
+
 		it("is not a service where it is not offered", () => {
 			// Pulling nothing is not a thing to ask for, so `env pull` does not accept it.
 			expect(() => parseServices(["none"], envPull)).toThrow(
