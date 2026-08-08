@@ -316,8 +316,12 @@ const managedKeysFor = (
  * than losing a token, because it is silent.
  *
  * The gateway is the only service that can be unreached (only it is implied rather than
- * observed), and its base URL is branch-scoped, so the branch id in the persisted URL is what
- * tells the two cases apart.
+ * observed), and its base URL is branch-scoped, so the persisted URL is what tells the two
+ * cases apart. The match is against the exact form `@neon/env` writes —
+ * `https://<branchId>-api.ai.<host suffix>` — rather than a substring search, so a value that
+ * merely mentions the branch id somewhere does not pass for this branch's gateway. Anything
+ * hand-edited into a shape we did not write fails the match and is pruned, which is the safe
+ * direction: a stale entry costs a re-pull, a wrongly-kept one silently misroutes traffic.
  */
 const unreachedButCurrent = (
 	skipped: readonly EnvService[] | undefined,
@@ -326,7 +330,8 @@ const unreachedButCurrent = (
 ): EnvService[] => {
 	if (!skipped?.includes("ai-gateway")) return [];
 	const baseUrl = existingEnv[NEON_ENV_VAR_KEYS.aiGateway.baseUrl];
-	return baseUrl?.includes(branchId) ? ["ai-gateway"] : [];
+	const ours = baseUrl?.startsWith(`https://${branchId}-api.ai.`) ?? false;
+	return ours ? ["ai-gateway"] : [];
 };
 
 /**

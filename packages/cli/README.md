@@ -423,7 +423,7 @@ The human-readable summary line goes to stderr and the diff body to stdout, so `
 
 1. **`--service`**, when you pass it — exactly those services, whatever else is on the branch and whatever a `neon.ts` says.
 2. **`neon.ts`**, when the working directory has one — the policy is the source of truth, same as `neon dev` and `neon deploy`.
-3. **Everything the branch has** otherwise — Postgres, Neon Auth, the Data API, and object storage read back from the branch, plus the AI Gateway. The gateway has no branch-level state to read back (it is credential-gated, not provisioned), so a bare `env pull` asks for it rather than detecting it. If its credential can't be reached, the gateway is dropped with a warning and the rest of the pull still lands — and any gateway variables already in your file are left as they are, since a pull that couldn't reach the gateway is no evidence the branch has stopped having one.
+3. **Everything the branch has** otherwise — Postgres, Neon Auth, the Data API, and object storage read back from the branch, plus the AI Gateway. The gateway has no branch-level state to read back (it is credential-gated, not provisioned), so a bare `env pull` asks for it rather than detecting it. If its credential can't be reached, the gateway is dropped with a warning and the rest of the pull still lands. Gateway variables already in your file for *this* branch are left as they are — a pull that couldn't reach the gateway is no evidence the branch has stopped having one — while ones left over from a different branch are pruned like any other stale value.
 
 ```bash
 # Refresh the linked branch's vars in place

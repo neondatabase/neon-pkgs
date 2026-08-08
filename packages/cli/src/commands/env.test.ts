@@ -784,6 +784,30 @@ describe("env pull with the AI Gateway implied (no neon.ts)", () => {
 		expect(content).toMatch(/^DATABASE_URL=/m);
 	});
 
+	it("prunes a gateway URL that merely mentions the branch id", async () => {
+		// Ownership is proven by the exact shape `@neon/env` writes, not by a substring
+		// search: a hand-edited or foreign value that happens to contain this branch's id is
+		// not this branch's gateway, and keeping it would misroute traffic silently.
+		writeFileSync(
+			join(cwd, ".env"),
+			[
+				"NEON_AI_GATEWAY_TOKEN=nt_live_someothercred_secret",
+				`NEON_AI_GATEWAY_BASE_URL=https://br-old-00000-api.ai.fake.neon.tech/?from=${BRANCH_ID}`,
+				"",
+			].join("\n"),
+		);
+
+		await captureLog(async () => {
+			await pull(baseProps(new NoCredentialsNeonApi(), cwd), {
+				implyAiGateway: true,
+			});
+		});
+
+		const content = readFileSync(join(cwd, ".env"), "utf8");
+		expect(content).not.toContain("NEON_AI_GATEWAY");
+		expect(content).toMatch(/^DATABASE_URL=/m);
+	});
+
 	it("stays off for the pull bundled into link / checkout / apply", async () => {
 		// An auto-pull is a side effect of another command; minting a credential for a
 		// service the user never named is not something a side effect should do.
