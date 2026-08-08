@@ -575,6 +575,38 @@ describe("env pull --service", () => {
 		);
 	});
 
+	it("says nothing about a previous credential on a first pull, because there isn't one", async () => {
+		// `credential.issued` is also true when nothing was persisted, so a message keyed off
+		// it would send someone hunting the Console for a credential that never existed —
+		// on the first run of the flagship example, no less.
+		const logged = await captureLog(async () => {
+			await pull({
+				...baseProps(new StorageNeonApi(), cwd),
+				services: ["object-storage"],
+			});
+		});
+
+		expect(logged).toContain("Issued a new branch credential");
+		expect(logged).not.toContain("Left the credential it replaced live");
+	});
+
+	it("names the credential a scoped pull replaced but left live", async () => {
+		const api = new StorageNeonApi();
+		await pull(baseProps(api, cwd), { implyAiGateway: true });
+		dropEnvLine(join(cwd, ".env.local"), "AWS_SECRET_ACCESS_KEY");
+
+		const logged = await captureLog(async () => {
+			await pull({
+				...baseProps(api, cwd),
+				services: ["object-storage"],
+			});
+		});
+
+		expect(logged).toContain(
+			"Left the credential it replaced live (cred-fake-0001)",
+		);
+	});
+
 	it("does not revoke a shared credential when replacing only the half it was scoped to", async () => {
 		// Object storage and the AI Gateway share one branch credential, and the resolver
 		// revokes whatever the persisted secrets name once it mints a replacement. A scoped

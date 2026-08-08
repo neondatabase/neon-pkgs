@@ -58,6 +58,7 @@ describe("fetchEnvReusingSecrets", () => {
 			issued: true,
 			keys: ["NEON_AI_GATEWAY_TOKEN"],
 			revoked: [],
+			superseded: [],
 		});
 	});
 
@@ -90,6 +91,7 @@ describe("fetchEnvReusingSecrets", () => {
 			issued: false,
 			keys: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
 			revoked: [],
+			superseded: [],
 		});
 		// The non-secret storage vars are still refreshed from the branch — only the secrets
 		// are carried through.
@@ -151,6 +153,7 @@ describe("fetchEnvReusingSecrets", () => {
 				"NEON_AI_GATEWAY_TOKEN",
 			],
 			revoked: [storageOnly.vars.AWS_ACCESS_KEY_ID],
+			superseded: [],
 		});
 		// One credential in, one out — the branch does not accumulate.
 		const live = await api.listCredentials(projectId, "br-main");
@@ -181,6 +184,10 @@ describe("fetchEnvReusingSecrets", () => {
 
 		expect(storageOnly.credential.issued).toBe(true);
 		expect(storageOnly.credential.revoked).toEqual([]);
+		// Reported rather than merely skipped, so a caller can name what it orphaned.
+		expect(storageOnly.credential.superseded).toEqual([
+			both.vars.AWS_ACCESS_KEY_ID,
+		]);
 		expect(callsTo(api, "revokeCredential")).toBe(0);
 		// Both are live: the new storage credential, and the one still backing the gateway.
 		const live = await api.listCredentials(projectId, "br-main");
@@ -216,6 +223,8 @@ describe("fetchEnvReusingSecrets", () => {
 
 		expect(result.credential.issued).toBe(true);
 		expect(result.credential.revoked).toEqual([]);
+		// Not ours, so it was never superseded either — only declined.
+		expect(result.credential.superseded).toEqual([]);
 		expect(callsTo(api, "revokeCredential")).toBe(0);
 		const live = await api.listCredentials(projectId, "br-main");
 		expect(live.map((c) => c.tokenId)).toContain(foreign.tokenId);
@@ -263,7 +272,12 @@ describe("fetchEnvReusingSecrets", () => {
 
 		expect(callsTo(api, "listCredentials")).toBe(0);
 		expect(callsTo(api, "createCredential")).toBe(0);
-		expect(credential).toEqual({ issued: false, keys: [], revoked: [] });
+		expect(credential).toEqual({
+			issued: false,
+			keys: [],
+			revoked: [],
+			superseded: [],
+		});
 		expect(vars.DATABASE_URL).toContain("postgresql://");
 		expect(vars.NEON_BRANCH).toBe("main");
 	});

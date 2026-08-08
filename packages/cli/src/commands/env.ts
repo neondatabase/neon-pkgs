@@ -268,15 +268,18 @@ export const pull = async (
 				"Revoked the credential it replaced (%s).",
 				credential.revoked.join(", "),
 			);
-		} else if (props.services) {
+		} else if (credential.superseded.length > 0) {
 			// An unscoped pull revokes what it supersedes and says so above. A scoped one
 			// cannot — it may not be the only service on that credential — so it leaves the
 			// old one live. Say that too, rather than letting the identical-looking output
-			// imply the branch is not accumulating credentials.
+			// imply the branch is not accumulating credentials. Driven by what the resolver
+			// actually declined to revoke, so a first pull (which supersedes nothing) does
+			// not send the user hunting for a credential that was never there.
 			log.info(
-				"Left the previous branch credential live: a pull scoped with --service " +
+				"Left the credential it replaced live (%s): a pull scoped with --service " +
 					"can't tell which other services still use it. Revoke it in the Neon " +
 					"Console if nothing does.",
+				credential.superseded.join(", "),
 			);
 		}
 	}

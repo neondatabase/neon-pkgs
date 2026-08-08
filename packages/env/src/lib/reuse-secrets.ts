@@ -37,6 +37,13 @@ export interface CredentialOutcome {
 	 * secrets named *and* that this tool issued; empty otherwise.
 	 */
 	revoked: string[];
+	/**
+	 * `tokenId`s this call superseded but left live, because `revokeSuperseded` was `false`.
+	 * The counterpart to {@link CredentialOutcome.revoked}: exactly the ids that would be
+	 * there instead. Lets a caller name what it orphaned rather than saying that it might
+	 * have orphaned something — always empty on the default path.
+	 */
+	superseded: string[];
 }
 
 /** A resolved branch env, ready to write to a dotenv file or inject into a process. */
@@ -130,7 +137,12 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 		const fetched = await fetchEnvKeys(config, fetchOptions, null);
 		return {
 			vars: preferPersisted(toEntries(fetched), source),
-			credential: { issued: false, keys: [], revoked: [] },
+			credential: {
+				issued: false,
+				keys: [],
+				revoked: [],
+				superseded: [],
+			},
 		};
 	}
 
@@ -181,7 +193,12 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 		}
 		return {
 			vars,
-			credential: { issued: false, keys: secretKeys, revoked: [] },
+			credential: {
+				issued: false,
+				keys: secretKeys,
+				revoked: [],
+				superseded: [],
+			},
 		};
 	}
 
@@ -194,24 +211,29 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 	//
 	// Revoked *after* the fetch, so a failed fetch leaves the caller's existing secrets working.
 	const ours = new Set<string>();
-	if (revokeSuperseded) {
-		for (const meta of [named.storage, named.gateway]) {
-			if (
-				meta !== null &&
-				meta.principalType === "user" &&
-				meta.name === credentialName(branch.name)
-			) {
-				ours.add(meta.tokenId);
-			}
+	for (const meta of [named.storage, named.gateway]) {
+		if (
+			meta !== null &&
+			meta.principalType === "user" &&
+			meta.name === credentialName(branch.name)
+		) {
+			ours.add(meta.tokenId);
 		}
 	}
-	for (const tokenId of ours) {
-		await api.revokeCredential(options.projectId, branch.id, tokenId);
+	if (revokeSuperseded) {
+		for (const tokenId of ours) {
+			await api.revokeCredential(options.projectId, branch.id, tokenId);
+		}
 	}
 
 	return {
 		vars,
-		credential: { issued: true, keys: secretKeys, revoked: [...ours] },
+		credential: {
+			issued: true,
+			keys: secretKeys,
+			revoked: revokeSuperseded ? [...ours] : [],
+			superseded: revokeSuperseded ? [] : [...ours],
+		},
 	};
 }
 
