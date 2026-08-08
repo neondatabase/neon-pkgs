@@ -317,11 +317,9 @@ const managedKeysFor = (
  *
  * The gateway is the only service that can be unreached (only it is implied rather than
  * observed), and its base URL is branch-scoped, so the persisted URL is what tells the two
- * cases apart. The match is against the exact form `@neon/env` writes —
- * `https://<branchId>-api.ai.<host suffix>` — rather than a substring search, so a value that
- * merely mentions the branch id somewhere does not pass for this branch's gateway. Anything
- * hand-edited into a shape we did not write fails the match and is pruned, which is the safe
- * direction: a stale entry costs a re-pull, a wrongly-kept one silently misroutes traffic.
+ * cases apart. Anything that does not resolve to this branch's gateway host is pruned, which
+ * is the safe direction: a stale entry costs a re-pull, a wrongly-kept one silently misroutes
+ * traffic.
  */
 const unreachedButCurrent = (
 	skipped: readonly EnvService[] | undefined,
@@ -330,9 +328,23 @@ const unreachedButCurrent = (
 ): EnvService[] => {
 	if (!skipped?.includes("ai-gateway")) return [];
 	const baseUrl = existingEnv[NEON_ENV_VAR_KEYS.aiGateway.baseUrl];
-	const ours = baseUrl?.startsWith(`https://${branchId}-api.ai.`) ?? false;
-	return ours ? ["ai-gateway"] : [];
+	return baseUrl !== undefined && isBranchGatewayUrl(baseUrl, branchId)
+		? ["ai-gateway"]
+		: [];
 };
+
+/**
+ * Whether a persisted `NEON_AI_GATEWAY_BASE_URL` addresses `branchId`'s gateway.
+ *
+ * Checks the parsed **hostname** against the shape `@neon/env` builds
+ * (`<branchId>-api.ai.<host suffix>`), not the raw string: a prefix comparison is satisfied
+ * by a URL whose userinfo carries the branch id (`https://<branchId>-api.ai.@other-host/`)
+ * while the request actually goes elsewhere. An unparseable value is not this branch's
+ * gateway either, which is an answer rather than a swallowed failure.
+ */
+const isBranchGatewayUrl = (baseUrl: string, branchId: string): boolean =>
+	URL.canParse(baseUrl) &&
+	new URL(baseUrl).hostname.startsWith(`${branchId}-api.ai.`);
 
 /**
  * Narrow the resolved vars to the selected services (plus `NEON_BRANCH`, which every pull

@@ -784,15 +784,25 @@ describe("env pull with the AI Gateway implied (no neon.ts)", () => {
 		expect(content).toMatch(/^DATABASE_URL=/m);
 	});
 
-	it("prunes a gateway URL that merely mentions the branch id", async () => {
-		// Ownership is proven by the exact shape `@neon/env` writes, not by a substring
-		// search: a hand-edited or foreign value that happens to contain this branch's id is
-		// not this branch's gateway, and keeping it would misroute traffic silently.
+	it.each([
+		[
+			"mentions the branch id elsewhere",
+			`https://br-old-00000-api.ai.fake.neon.tech/?from=${BRANCH_ID}`,
+		],
+		[
+			"carries the branch id as userinfo",
+			`https://${BRANCH_ID}-api.ai.@br-old-00000-api.ai.fake.neon.tech`,
+		],
+		["is not a URL at all", `not-a-url-${BRANCH_ID}-api.ai.`],
+	])("prunes a gateway URL that %s", async (_case, baseUrl) => {
+		// Ownership is the parsed hostname, not a prefix of the raw string. A value that only
+		// looks like this branch's gateway is not this branch's gateway, and keeping it would
+		// misroute traffic silently.
 		writeFileSync(
 			join(cwd, ".env"),
 			[
 				"NEON_AI_GATEWAY_TOKEN=nt_live_someothercred_secret",
-				`NEON_AI_GATEWAY_BASE_URL=https://br-old-00000-api.ai.fake.neon.tech/?from=${BRANCH_ID}`,
+				`NEON_AI_GATEWAY_BASE_URL=${baseUrl}`,
 				"",
 			].join("\n"),
 		);
