@@ -216,11 +216,17 @@ So `store` is only refused on the Responses route; the same option is ignored el
 
 ## End-to-end tests
 
-Against a live branch with AI Gateway enabled:
+These run against a real gateway, so they need credentials — one of two ways:
 
 ```bash
-cp .env.example .env   # fill NEON_AI_GATEWAY_BASE_URL + NEON_AI_GATEWAY_TOKEN from `neon env pull`
+cp .env.example .env
+# Either NEON_API_KEY for a throwaway org, and the suite creates a project, mints a
+# credential scoped to `ai_gateway:invoke`, and deletes both afterwards.
+# Or NEON_AI_GATEWAY_BASE_URL + NEON_AI_GATEWAY_TOKEN from `neon env pull`, to run
+# against a branch you already have.
 pnpm test:e2e
 ```
 
-The matrix covers one models.dev `neon` model per family (Anthropic, OpenAI, Codex, Gemini, Meta, Alibaba, Zhipu, Thinking Machines) across `generateText`, `streamText`, `generateObject`, tool calling, and `neon.tools.imageGeneration`. `generateObject` and tool calling run on the subset of families where they are verified (see [Capabilities](#capabilities)); a family whose representative id the branch does not serve is skipped rather than failed. It also fetches the live `/v1/models` catalog and calls every currently enabled model with both AI SDK 6 and AI SDK 7. Tests are skipped when gateway env vars are absent.
+A run with neither **fails**; it does not skip. The gateway is on every branch and needs no provisioning, so the API-key path is the one CI uses — no gateway token is stored as a secret.
+
+The matrix covers one models.dev `neon` model per family (Anthropic, OpenAI, Codex, Gemini, Meta, Alibaba, Zhipu, Thinking Machines) across `generateText`, `streamText`, `generateObject`, tool calling, and `neon.tools.imageGeneration`. `generateObject` and tool calling run on the subset of families where they are verified (see [Capabilities](#capabilities)). A family whose representative id the branch does not serve skips its cases, and a single assertion fails the run listing exactly which pinned ids went missing — so a shrinking catalog is reported rather than silently reducing coverage. Model access is granted per account, so the account behind the key needs every id in `MATRIX_MODELS`. The suite also fetches the live `/v1/models` catalog and calls every currently enabled model with both AI SDK 6 and AI SDK 7.
