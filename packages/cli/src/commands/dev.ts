@@ -3,6 +3,7 @@ import { once } from "node:events";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { CredentialOutcome } from "@neon/env/runtime";
 import chalk from "chalk";
 import type yargs from "yargs";
 import { resolveDevEnv } from "../dev/env.js";
@@ -14,6 +15,7 @@ import { resolveWatchInputs } from "../dev/inputs.js";
 import { readEnvFile, resolveEnvFilePath } from "../env_file.js";
 import { log } from "../log.js";
 import type { CommonProps } from "../types.js";
+import { getCliName } from "../utils/cli_name.js";
 import { branchIdResolve } from "../utils/enrichers.js";
 import { bundleEntry } from "../utils/esbuild.js";
 
@@ -58,6 +60,19 @@ export const builder = (argv: yargs.Argv) =>
 				type: "number",
 			},
 		})
+		.epilogue(
+			[
+				"",
+				"Functions run with the linked branch's Neon env injected, the same set the",
+				"deployed runtime gives them: DATABASE_URL, plus Neon Auth, the Data API,",
+				"object storage and the AI Gateway where the branch has them. A neon.ts in",
+				"this directory decides instead, exactly as it does for `env pull`.",
+				"",
+				"`dev` reads your .env / .env.local to reuse the branch credential behind the",
+				"AI Gateway and object storage, and never writes to them. With no such file it",
+				"issues a credential on every start, so run `env pull` once if you restart often.",
+			].join("\n"),
+		)
 		.strict();
 
 /**
@@ -95,6 +110,35 @@ export const devEnvContext = (
 	};
 };
 
+/**
+ * Say when a run issued a branch credential.
+ *
+ * `dev` has nowhere to persist one — it writes no file — so on a branch with nothing to reuse
+ * it mints per start and cannot name the previous one to revoke it. Every other command that
+ * mints says so; this is the one that runs dozens of times a day, and the server banner listing
+ * `NEON_AI_GATEWAY_TOKEN` reads as "fetched", not "just created, and the last one is still
+ * live". The note names the one action that stops it, so it disappears once followed.
+ */
+export const reportDevCredential = (
+	credential: CredentialOutcome | undefined,
+) => {
+	if (!credential?.issued) return;
+	if (credential.revoked.length > 0) {
+		log.info(
+			"Issued a new branch credential — %s changed. Revoked the one it replaced (%s).",
+			credential.keys.join(", "),
+			credential.revoked.join(", "),
+		);
+		return;
+	}
+	log.warning(
+		"Issued a branch credential for this run (%s) and left any previous one live — a dev " +
+			`server has nowhere to keep it. Run \`${getCliName()} env pull\` once to write it to ` +
+			"your .env, and restarts will reuse it instead of issuing another.",
+		credential.keys.join(", "),
+	);
+};
+
 export const handler = async (props: DevProps): Promise<void> => {
 	if (props.source !== undefined) {
 		await runSingleSource(props);
@@ -121,9 +165,12 @@ const runSingleSource = async (props: DevProps): Promise<void> => {
 	}
 
 	const branchId = await resolveBranchId(props);
-	const { vars: neonEnv, skipped } = await resolveDevEnv(
-		devEnvContext(props, branchId, process.cwd()),
-	);
+	const {
+		vars: neonEnv,
+		skipped,
+		credential,
+	} = await resolveDevEnv(devEnvContext(props, branchId, process.cwd()));
+	reportDevCredential(credential);
 
 	const unit: ServedUnit = {
 		slug: null,
@@ -164,9 +211,12 @@ const runFromConfig = async (props: DevProps): Promise<void> => {
 		);
 	}
 
-	const { vars: neonEnv, skipped } = await resolveDevEnv(
-		devEnvContext(props, branchId, process.cwd()),
-	);
+	const {
+		vars: neonEnv,
+		skipped,
+		credential,
+	} = await resolveDevEnv(devEnvContext(props, branchId, process.cwd()));
+	reportDevCredential(credential);
 
 	const units = planFunctionsToUnits(functions, neonEnv, DEFAULT_PORT_BASE);
 

@@ -1,9 +1,9 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { devEnvContext } from "./dev.js";
+import { devEnvContext, reportDevCredential } from "./dev.js";
 
 /**
  * What `neon dev` hands the resolver. Two properties matter and neither is visible from the
@@ -21,6 +21,23 @@ describe("neon dev's resolver context", () => {
 	});
 
 	const props = { apiKey: "k", apiHost: "https://api", projectId: "p" };
+
+	/** Capture what a call wrote to stderr, which is where the CLI's logger goes. */
+	const captureStderr = (run: () => void): string => {
+		const chunks: string[] = [];
+		const stderr = vi
+			.spyOn(process.stderr, "write")
+			.mockImplementation((chunk: string | Uint8Array) => {
+				chunks.push(String(chunk));
+				return true;
+			});
+		try {
+			run();
+		} finally {
+			stderr.mockRestore();
+		}
+		return chunks.join("");
+	};
 
 	it("asks for the AI Gateway, which nothing can detect", () => {
 		expect(devEnvContext(props, "br-1", cwd).implyAiGateway).toBe(true);
@@ -53,6 +70,52 @@ describe("neon dev's resolver context", () => {
 	it("works in a directory with no dotenv file at all", () => {
 		const { env } = devEnvContext(props, "br-1", cwd);
 		expect(env.NEON_AI_GATEWAY_TOKEN).toBeUndefined();
+	});
+
+	it("reports a credential it issued, and names the one thing that stops it recurring", () => {
+		// `dev` has nowhere to persist a credential, so on a branch with nothing to reuse it
+		// issues one per start and leaves the last live. Every other command that mints says
+		// so; this is the one run dozens of times a day.
+		const logged = captureStderr(() =>
+			reportDevCredential({
+				issued: true,
+				keys: ["NEON_AI_GATEWAY_TOKEN"],
+				revoked: [],
+				superseded: [],
+			}),
+		);
+
+		expect(logged).toContain("NEON_AI_GATEWAY_TOKEN");
+		expect(logged).toContain("left any previous one live");
+		expect(logged).toContain("env pull");
+	});
+
+	it("says nothing when the credential was reused", () => {
+		expect(
+			captureStderr(() =>
+				reportDevCredential({
+					issued: false,
+					keys: ["NEON_AI_GATEWAY_TOKEN"],
+					revoked: [],
+					superseded: [],
+				}),
+			),
+		).toBe("");
+		expect(captureStderr(() => reportDevCredential(undefined))).toBe("");
+	});
+
+	it("reports a revocation as a replacement, not as an orphan", () => {
+		const logged = captureStderr(() =>
+			reportDevCredential({
+				issued: true,
+				keys: ["NEON_AI_GATEWAY_TOKEN"],
+				revoked: ["cred-old-0001"],
+				superseded: [],
+			}),
+		);
+
+		expect(logged).toContain("Revoked the one it replaced (cred-old-0001)");
+		expect(logged).not.toContain("left any previous one live");
 	});
 
 	it("omits the branch rather than passing undefined when none is resolved", () => {
