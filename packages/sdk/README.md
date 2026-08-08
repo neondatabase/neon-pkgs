@@ -590,12 +590,17 @@ only — a personal project answers 404.
 | `setRole(projectId, memberId, role, { confirmSelfDemotion? }?)` | `ProjectMemberRoleResponse` | `role`: `"viewer" \| "editor" \| "admin"`; idempotent |
 | `removeRole(projectId, memberId, { confirmSelfLockout? }?)` | `ProjectMemberRoleResponse` | clears the explicit grant; idempotent |
 
-A `ProjectMember` carries four role-ish fields. **Read `effective_project_permission`** for
-"what can this member actually do" — `VIEWER` / `EDITOR` / `ADMIN`, uppercase, unlike the
-lowercase `role` you pass to `setRole`. `grant_source` says where it came from
-(`explicit`, `org_role_default`, `org_admin_override`, `unassigned`), and
-`org_default_project_permission` and `explicit_project_permission` are the two inputs it
-was resolved from.
+A `ProjectMember` carries several role-ish fields, and they are not interchangeable.
+**Read `effective_project_permission`** for "what can this member actually do" — `VIEWER`
+/ `EDITOR` / `ADMIN`, uppercase. `org_default_project_permission` and
+`explicit_project_permission` are the two inputs it was resolved from, and `grant_source`
+says which one won (`explicit`, `org_role_default`, `org_admin_override`, `unassigned`).
+
+The two lowercase fields are a different axis: `project_role` is the explicit grant you
+set with `setRole` and shares its `"viewer" | "editor" | "admin"` type, and `org_role` is
+the member's organization role. Reading back `project_role` after a `setRole` tells you
+the grant landed — it does **not** tell you the member's effective access, which the
+org-role default can still exceed.
 
 The two confirmations are **off by default** so a call cannot silently cost you access to
 your own project. Pass one only when you mean to lower your own role
