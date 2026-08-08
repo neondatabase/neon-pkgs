@@ -101,7 +101,8 @@ export const INSPECT_QUERIES = {
 		emptyMessage: "No long-running queries.",
 		// `pg_stat_activity` spans every database on the compute, so without the
 		// `datname` filter this reports queries the caller did not ask about and
-		// cannot see. It also drops background workers, whose `datname` is null.
+		// cannot see. It also drops processes attached to no database at all,
+		// whose `datname` is null and which have no user query to report.
 		sql: /* sql */ `
 			SELECT
 				pid,
@@ -134,8 +135,10 @@ export const INSPECT_QUERIES = {
 		// caller did not ask about; and `l.relation` is an OID that only means
 		// anything in `l.database`, so joining a foreign database's OID against the
 		// local `pg_class` returned a null name, or a different relation that
-		// happened to share the OID. Every remaining lock belongs to a session in
-		// this database, whose relation OIDs do resolve here.
+		// happened to share the OID. Filtering on the holding session means no
+		// foreign-database OID reaches that join. Filtering on `l.database`
+		// instead would drop `transactionid` and `virtualxid` locks, which carry
+		// no database.
 		sql: /* sql */ `
 			SELECT
 				a.pid,
