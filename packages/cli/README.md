@@ -417,13 +417,15 @@ The human-readable summary line goes to stderr and the diff body to stdout, so `
 
 ### env pull
 
-`env pull` writes the linked branch's Neon environment variables into a local dotenv file: an existing `.env` if you have one, otherwise `.env.local` (override with `--file <path>`). Only Neon-managed keys are written; any other lines in the file are preserved. The branch comes from the closest `.neon` file, so no `--branch` is needed (pass `--branch <id|name>` to target another branch).
+`env pull` writes the linked branch's Neon environment variables into a local dotenv file: an existing `.env` if you have one, otherwise `.env.local` (override with `--file <path>`). Only Neon-managed keys are written (see the table below); any other lines in the file are preserved. The branch comes from the closest `.neon` file, so no `--branch` is needed (pass `--branch <id|name>` to target another branch).
 
 **What gets pulled**, in precedence order:
 
 1. **`--service`**, when you pass it — exactly those services, whatever else is on the branch and whatever a `neon.ts` says.
 2. **`neon.ts`**, when the working directory has one — the policy is the source of truth, same as `neon dev` and `neon deploy`.
-3. **Everything the branch has** otherwise — Postgres, Neon Auth, the Data API, and object storage read back from the branch, plus the AI Gateway. The gateway has no branch-level state to read back (it is credential-gated, not provisioned), so a bare `env pull` asks for it rather than detecting it. If its credential can't be reached, the gateway is dropped with a warning and the rest of the pull still lands. Gateway variables already in your file for *this* branch are left as they are — a pull that couldn't reach the gateway is no evidence the branch has stopped having one — while ones left over from a different branch are pruned like any other stale value.
+3. **Everything the branch has** otherwise — Postgres, Neon Auth, the Data API, and object storage read back from the branch, plus the AI Gateway. The gateway has no branch-level state to read back (it is credential-gated, not provisioned), so a bare `env pull` asks for it rather than detecting it, which mints a branch credential. Use `--service` to pull everything else without it.
+
+If the gateway can't be resolved, it is dropped with a warning and the rest of the pull still lands. Gateway variables already in your file for *this* branch are left alone — a pull that couldn't reach the gateway is no evidence the branch has stopped having one — while ones left over from a different branch are pruned like any other stale value.
 
 ```bash
 # Refresh the linked branch's vars in place
@@ -452,7 +454,7 @@ neon env pull -s postgres,auth
 
 **A scoped pull is scoped in both directions.** An unscoped `env pull` owns the Neon-named variables: pointing a directory at a branch without Neon Auth prunes the stale `NEON_AUTH_*` lines. `--service` narrows that to the services you named, so `env pull -s ai-gateway` never touches your `DATABASE_URL`. (`AWS_*` is never pruned by any pull: those names collide with credentials you may set yourself, so `env pull` only ever writes them.)
 
-**A scoped pull also never revokes a credential.** Object storage and the AI Gateway share one branch credential. A pull that has to replace it normally revokes the old one so the branch doesn't accumulate one per run — but a scoped pull only sees part of the branch, so the credential it is replacing may still be the one behind a service it isn't rewriting. It leaves the old credential live instead. An orphaned credential is the safer failure; you can revoke it in the Neon Console.
+**A scoped pull also never revokes a credential.** Where an unscoped pull revokes the credential it replaces, a scoped one leaves the old one live — it can't tell which other services still use it. It says so when it happens; revoke it in the Neon Console if nothing does.
 
 Naming a service the branch does not have is an error, not an empty pull:
 

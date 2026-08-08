@@ -70,7 +70,13 @@ export const builder = (argv: yargs.Argv) =>
 							type: "string",
 						},
 						service: {
-							alias: "s",
+							// `--services` is not a second flag: `config init` spells its own
+							// service list that way, and this command does not run
+							// `strictOptions`, so without the alias a `--services auth` typed
+							// out of that habit is silently dropped and the pull runs
+							// unscoped — pruning and minting exactly what the user was
+							// scoping away from.
+							alias: ["s", "services"],
 							describe:
 								`Pull only these services' variables: ${ENV_SERVICES.join(", ")}. ` +
 								"Repeat the flag or comma-separate. Overrides neon.ts, and prunes " +
@@ -79,6 +85,20 @@ export const builder = (argv: yargs.Argv) =>
 							string: true,
 						},
 					})
+					.epilogue(
+						[
+							"",
+							"What gets pulled, in precedence order:",
+							"  1. --service, when given — exactly those, ignoring neon.ts.",
+							"  2. neon.ts, when this directory has one.",
+							"  3. Otherwise everything the branch has, plus the AI Gateway —",
+							"     which mints a branch credential for it.",
+							"",
+							"The pull bundled into link / checkout / config apply follows 2 and 3",
+							"without the AI Gateway, so it never mints a credential you did not ask",
+							"for. Run `env pull` to add it.",
+						].join("\n"),
+					)
 					.example(
 						"$0 env pull",
 						"Write the linked branch's Neon vars into .env.local (or .env if present)",
@@ -247,6 +267,16 @@ export const pull = async (
 			log.info(
 				"Revoked the credential it replaced (%s).",
 				credential.revoked.join(", "),
+			);
+		} else if (props.services) {
+			// An unscoped pull revokes what it supersedes and says so above. A scoped one
+			// cannot — it may not be the only service on that credential — so it leaves the
+			// old one live. Say that too, rather than letting the identical-looking output
+			// imply the branch is not accumulating credentials.
+			log.info(
+				"Left the previous branch credential live: a pull scoped with --service " +
+					"can't tell which other services still use it. Revoke it in the Neon " +
+					"Console if nothing does.",
 			);
 		}
 	}

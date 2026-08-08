@@ -9,6 +9,7 @@ import {
 	PlatformError,
 } from "@neon/config";
 import { type AppliedChange, plan, pullConfig } from "@neon/config-runtime";
+import { NEON_ENV_VAR_KEYS } from "@neon/env";
 import {
 	type CredentialOutcome,
 	fetchEnvReusingSecrets,
@@ -205,8 +206,18 @@ const resolveWithImpliedGateway = async (
 		return await fetchAndProject(withAiGateway(config), ctx);
 	} catch (err) {
 		if (!isFeatureUnavailable(err)) throw err;
+		// Deliberately does not claim the project lacks the gateway: the same error code
+		// covers a transient failure, which is the whole reason the pull leaves any existing
+		// values in place rather than pruning them. Naming both causes, and the one command
+		// that answers which, beats asserting the wrong one.
 		log.warning(
-			"Skipped the AI Gateway env vars — it isn't available for this project: %s",
+			"Could not resolve the AI Gateway, so %s were not pulled. The rest of the pull " +
+				"landed. Either this project does not have the AI Gateway, or the call failed — " +
+				`\`${getCliName()} env pull -s ai-gateway\` will say which.\nDetails: %s`,
+			[
+				NEON_ENV_VAR_KEYS.aiGateway.apiKey,
+				NEON_ENV_VAR_KEYS.aiGateway.baseUrl,
+			].join(" and "),
 			err.message,
 		);
 		return {
@@ -319,11 +330,18 @@ const configForServices = (
 		buckets: NeonBucketSnapshot[];
 	},
 ): Config => {
+	// The command that provisions each one, for a user who may well have no `neon.ts` — in
+	// which case `deploy` / `config apply` would be no help at all.
+	const provisionWith: Record<string, string> = {
+		auth: `${getCliName()} neon-auth enable`,
+		"data-api": `${getCliName()} data-api create`,
+		"object-storage": `${getCliName()} buckets create <name>`,
+	};
 	const notOnBranch = (service: EnvService, what: string): never => {
 		throw new ServiceNotOnBranchError(
 			`--service ${service}: branch ${branchId} has no ${what}, so there are no ` +
-				`${service} env vars to pull. Provision it first (\`${getCliName()} deploy\`, ` +
-				`\`${getCliName()} config apply\`, or the Neon Console), or drop ${service} from --service.`,
+				`${service} env vars to pull. Provision it first (\`${provisionWith[service]}\`, ` +
+				`or in the Neon Console), or drop ${service} from --service.`,
 		);
 	};
 
