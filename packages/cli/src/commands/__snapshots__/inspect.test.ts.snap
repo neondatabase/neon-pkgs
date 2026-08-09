@@ -21,5 +21,3 @@ exports[`inspect db > table-sizes --db-url bypasses the API and reports a Postgr
 exports[`inspect db > vacuum-stats --db-url bypasses the API and reports a Postgres connection error 1`] = `""`;
 
 exports[`inspect db > working-set --db-url bypasses the API and reports a Postgres connection error 1`] = `""`;
-
-exports[`inspect db > working-set --db-url bypasses the API and reports a Postgres connection error 2`] = `""`;
