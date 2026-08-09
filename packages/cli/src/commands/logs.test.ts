@@ -64,6 +64,23 @@ describe("logs", () => {
 		);
 	});
 
+	test("a truncated page accepts only portable shell-safe cursors", () => {
+		expect(() =>
+			assertReachableLogsPage({
+				is_truncated: true,
+				next_cursor: "AZaz09._~+/-=",
+			}),
+		).not.toThrow();
+		expect(() =>
+			assertReachableLogsPage({
+				is_truncated: true,
+				next_cursor: "$(echo unsafe)",
+			}),
+		).toThrow(
+			"Neon returned a pagination cursor containing characters that are unsafe in supported shells. No records were printed because the next page cannot be requested safely.",
+		);
+	});
+
 	test("the command group help states the Beta and region constraint", async ({
 		testCliCommand,
 	}) => {
@@ -452,15 +469,15 @@ describe("logs", () => {
 		);
 	});
 
-	test("query neutralizes controls in pagination guidance", async ({
+	test("query rejects a cursor that is unsafe across supported shells", async ({
 		testCliCommand,
 	}) => {
 		await testCliCommand(
 			["logs", "query", ...PROJECT, ...CONTROL_CURSOR_BRANCH],
 			{
 				mockDir: "single_org",
-				outputTable: true,
-				stderr: "INFO: More logs matched than were returned. Re-run with the same filters plus --cursor '\\u001b]52;c;ZXZpbA==\\u0007$(echo unsafe)' to fetch the next page.",
+				code: 1,
+				stderr: "ERROR: Neon returned a pagination cursor containing characters that are unsafe in supported shells. No records were printed because the next page cannot be requested safely.",
 			},
 		);
 	});
@@ -473,7 +490,7 @@ describe("logs", () => {
 			{
 				mockDir: "single_org",
 				outputTable: true,
-				stderr: "INFO: More logs matched than were returned. Re-run with the same filters plus --cursor 'eyJvZmZzZXQiOjEwMH0' to fetch the next page.",
+				stderr: "INFO: More logs matched than were returned. Re-run with the same filters plus --cursor eyJvZmZzZXQiOjEwMH0 to fetch the next page.",
 			},
 		);
 	});

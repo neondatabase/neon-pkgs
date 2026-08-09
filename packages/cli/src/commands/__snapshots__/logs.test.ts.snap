@@ -263,12 +263,6 @@ is_truncated: false
 "
 `;
 
-exports[`logs > query neutralizes controls in pagination guidance 1`] = `
-"
-No logs found in the 1h window ending now.
-"
-`;
-
 exports[`logs > query neutralizes terminal controls in table output 1`] = `
 "logs
 ┌──────────────────────────┬──────────┬──────────────┬───────────────┬────────────────────────────────────────────────┐
@@ -288,6 +282,8 @@ No logs found in the 1h window ending now.
 exports[`logs > query rejects --logql together with a structured filter 1`] = `""`;
 
 exports[`logs > query rejects --since together with --start-time 1`] = `""`;
+
+exports[`logs > query rejects a cursor that is unsafe across supported shells 1`] = `""`;
 
 exports[`logs > query rejects a malformed successful response 1`] = `""`;
 

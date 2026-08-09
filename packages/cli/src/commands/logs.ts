@@ -62,8 +62,7 @@ export const escapeLogSingleLine = (value: string): string =>
 			`\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
 	);
 
-const shellQuoteLogValue = (value: string): string =>
-	`'${escapeLogSingleLine(value).replace(/'/g, "'\\''")}'`;
+const PORTABLE_LOG_CURSOR = /^[A-Za-z0-9._~+/=-]+$/u;
 
 export const assertReachableLogsPage = ({
 	is_truncated,
@@ -75,6 +74,15 @@ export const assertReachableLogsPage = ({
 	if (is_truncated && !next_cursor) {
 		throw new Error(
 			"Neon returned an incomplete logs page without a pagination cursor. No records were printed because the result cannot be completed; retry the command.",
+		);
+	}
+	if (
+		is_truncated &&
+		next_cursor !== undefined &&
+		!PORTABLE_LOG_CURSOR.test(next_cursor)
+	) {
+		throw new Error(
+			"Neon returned a pagination cursor containing characters that are unsafe in supported shells. No records were printed because the next page cannot be requested safely.",
 		);
 	}
 };
@@ -489,7 +497,7 @@ const query = async (
 	// machine-readable envelope and must stay parseable.
 	if (data.is_truncated && data.next_cursor) {
 		log.info(
-			`More logs matched than were returned. Re-run with the same filters plus --cursor ${shellQuoteLogValue(data.next_cursor)} to fetch the next page.`,
+			`More logs matched than were returned. Re-run with the same filters plus --cursor ${data.next_cursor} to fetch the next page.`,
 		);
 	}
 };
