@@ -45,6 +45,27 @@ const LOG_FIELDS = [
 	"message",
 ] as const satisfies readonly (keyof ProjectBranchLogRecord)[];
 
+export const escapeLogTableCell = (value: string): string =>
+	value.replace(/\p{Cc}/gu, (character) =>
+		character === "\n" || character === "\t"
+			? character
+			: `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
+	);
+
+export const assertReachableLogsPage = ({
+	is_truncated,
+	next_cursor,
+}: {
+	is_truncated: boolean;
+	next_cursor?: string;
+}): void => {
+	if (is_truncated && !next_cursor) {
+		throw new Error(
+			"Neon reported more log records than it returned but gave no cursor to reach them.",
+		);
+	}
+};
+
 // The structured content filters. `--logql` replaces all of them, so supplying
 // both is rejected before the request. The window, limit, sort order and cursor
 // bound the query rather than form part of the selection, so they combine with
@@ -138,7 +159,7 @@ export const builder = (argv: yargs.Argv) =>
 						},
 						"minimum-severity": {
 							describe:
-								"Only records at or above this severity. Combines with --severity-text.",
+								"Only records at or above this severity. Combines with --severity-text. Some branch log backends reject this filter; use --severity-text when they do.",
 							type: "string",
 							choices: LOG_SEVERITIES,
 						},
@@ -287,6 +308,8 @@ const query = async (
 		buildLogsQueryBody(props),
 	);
 
+	assertReachableLogsPage(data);
+
 	if (props.output === "json" || props.output === "yaml") {
 		writer(props).end(data, {
 			fields: ["logs", "next_cursor", "is_truncated"],
@@ -294,11 +317,29 @@ const query = async (
 		return;
 	}
 
-	writer(props).end(data.logs, {
-		fields: LOG_FIELDS,
-		title: "logs",
-		emptyMessage: "No logs found.",
-	});
+	writer(props).end(
+		data.logs.map((record) => ({
+			timestamp: escapeLogTableCell(record.timestamp),
+			source:
+				record.source === undefined
+					? undefined
+					: escapeLogTableCell(record.source),
+			service_name:
+				record.service_name === undefined
+					? undefined
+					: escapeLogTableCell(record.service_name),
+			severity_text:
+				record.severity_text === undefined
+					? undefined
+					: escapeLogTableCell(record.severity_text),
+			message: escapeLogTableCell(record.message),
+		})),
+		{
+			fields: LOG_FIELDS,
+			title: "logs",
+			emptyMessage: "No logs found.",
+		},
+	);
 
 	// Guidance goes to stderr, and only in table mode: stdout carries the
 	// machine-readable envelope and must stay parseable.

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, describe, expect } from "vitest";
 import { test } from "../test_utils/fixtures";
+import { assertReachableLogsPage, escapeLogTableCell } from "./logs.js";
 
 // The mocks write the request they received to the file named by these env
 // vars, which they read in the (parent) mock-server process. That is how a test
@@ -29,9 +30,28 @@ const SCOPE = [
 // single fixture: nothing matched, and more matched than was returned.
 const EMPTY_BRANCH = ["--branch", "br-empty-logs-123456"] as const;
 const TRUNCATED_BRANCH = ["--branch", "br-truncated-logs-123456"] as const;
+const CONTROL_BRANCH = ["--branch", "br-control-logs-123456"] as const;
+const BROKEN_PAGE_BRANCH = ["--branch", "br-broken-page-123456"] as const;
 const PROJECT = ["--project-id", "test-project-123456"] as const;
 
 describe("logs", () => {
+	test("table cells neutralize terminal control sequences", () => {
+		expect(
+			escapeLogTableCell("\u001b]52;c;ZXZpbA==\u0007request failed\r"),
+		).toBe("\\u001b]52;c;ZXZpbA==\\u0007request failed\\u000d");
+	});
+
+	test("a truncated page without a cursor is rejected", () => {
+		expect(() =>
+			assertReachableLogsPage({
+				is_truncated: true,
+				next_cursor: "",
+			}),
+		).toThrow(
+			"Neon reported more log records than it returned but gave no cursor to reach them.",
+		);
+	});
+
 	test("the command group help states the Beta and region constraint", async ({
 		testCliCommand,
 	}) => {
@@ -50,6 +70,17 @@ describe("logs", () => {
 			mockDir: "single_org",
 			stderr: expect.stringContaining(
 				"Logs require Neon Platform Beta and are currently available only for projects in aws-us-east-2.",
+			),
+		});
+	});
+
+	test("query help states the minimum-severity backend limitation", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["logs", "query", "--help"], {
+			mockDir: "single_org",
+			stderr: expect.stringContaining(
+				"Some branch log backends reject this filter; use --severity-text when they do.",
 			),
 		});
 	});
@@ -310,6 +341,29 @@ describe("logs", () => {
 			outputTable: true,
 			stderr: "",
 		});
+	});
+
+	test("query neutralizes terminal controls in table output", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["logs", "query", ...PROJECT, ...CONTROL_BRANCH], {
+			mockDir: "single_org",
+			outputTable: true,
+			stderr: "",
+		});
+	});
+
+	test("query rejects a truncated page without a cursor", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			["logs", "query", ...PROJECT, ...BROKEN_PAGE_BRANCH],
+			{
+				mockDir: "single_org",
+				code: 1,
+				stderr: "ERROR: Neon reported more log records than it returned but gave no cursor to reach them.",
+			},
+		);
 	});
 
 	test("a truncated query points at the next cursor in table output", async ({

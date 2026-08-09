@@ -184,6 +184,8 @@ is_truncated: false
 
 exports[`logs > query help states the Beta and region constraint 1`] = `""`;
 
+exports[`logs > query help states the minimum-severity backend limitation 1`] = `""`;
+
 exports[`logs > query maps every structured filter onto its wire name 1`] = `
 "logs:
   - timestamp: 2025-01-01T00:00:02.000Z
@@ -211,6 +213,16 @@ is_truncated: false
 "
 `;
 
+exports[`logs > query neutralizes terminal controls in table output 1`] = `
+"logs
+┌──────────────────────────┬──────────┬──────────────┬───────────────┬────────────────────────────────────────────────┐
+│ Timestamp                │ Source   │ Service Name │ Severity Text │ Message                                        │
+├──────────────────────────┼──────────┼──────────────┼───────────────┼────────────────────────────────────────────────┤
+│ 2025-01-01T00:00:03.000Z │ function │ api          │ ERROR         │ \\u001b]52;c;ZXZpbA==\\u0007request failed\\u000d │
+└──────────────────────────┴──────────┴──────────────┴───────────────┴────────────────────────────────────────────────┘
+"
+`;
+
 exports[`logs > query prints an empty-state message in table output 1`] = `
 "
 No logs found.
@@ -220,6 +232,8 @@ No logs found.
 exports[`logs > query rejects --logql together with a structured filter 1`] = `""`;
 
 exports[`logs > query rejects --since together with --start-time 1`] = `""`;
+
+exports[`logs > query rejects a truncated page without a cursor 1`] = `""`;
 
 exports[`logs > query resolves the default branch when none is given 1`] = `
 "logs:

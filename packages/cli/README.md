@@ -794,7 +794,7 @@ $ neon logs query --since 24h --output json
 $ neon logs query --since 24h --cursor eyJvZmZzZXQiOjEwMH0 --output json
 ```
 
-Two combinations are rejected before the request: `--since` with `--start-time`, and `--logql` with any of `--source`, `--service-name`, `--scope-name`, `--minimum-severity`, `--severity-text`, `--body-contains` or `--trace-id`. `--minimum-severity` and `--severity-text` are independent filters and combine with AND.
+Two combinations are rejected before the request: `--since` with `--start-time`, and `--logql` with any of `--source`, `--service-name`, `--scope-name`, `--minimum-severity`, `--severity-text`, `--body-contains` or `--trace-id`. `--minimum-severity` and `--severity-text` are independent filters and combine with AND. Some branch log backends reject `--minimum-severity`; use `--severity-text` when they do.
 
 ## Profiles
 
