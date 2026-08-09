@@ -4,13 +4,15 @@ import { defineConfig } from "tsdown";
  * Whether a specifier is a package import rather than a file in this package.
  *
  * Shape rather than `isResolved`, because rolldown calls `external` for resolved ids too and a
- * resolved absolute path must never be treated as a package: `C:\…` on Windows starts with a
- * letter, and rolldown's virtual modules start with a NUL. `#` is a package's own subpath import,
- * which resolves locally.
+ * resolved absolute path must never be treated as a package. Both Windows forms have to be
+ * rejected on any host, since neither looks absolute to POSIX: a drive letter, and a UNC path.
+ * rolldown's virtual modules start with a NUL, and `#` is a package's own subpath import, which
+ * resolves locally.
  */
 const isPackageImport = (id: string): boolean =>
 	!id.startsWith(".") &&
 	!id.startsWith("/") &&
+	!id.startsWith("\\") &&
 	!id.startsWith("#") &&
 	!id.startsWith("\0") &&
 	!/^[a-zA-Z]:[\\/]/.test(id);
