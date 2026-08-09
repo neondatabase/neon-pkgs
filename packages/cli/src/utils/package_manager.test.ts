@@ -287,6 +287,39 @@ describe("globalInstallArgs", () => {
 		expect(formatGlobalInstall(pm)).toBe(expected);
 	});
 
+	describe("a manager that is not on PATH is not a command", () => {
+		const originalPath = process.env.PATH;
+		let bin: string;
+
+		beforeEach(() => {
+			bin = mkdtempSync(join(tmpdir(), "neonctl-pm-global-"));
+			process.env.PATH = bin;
+		});
+
+		afterEach(() => {
+			process.env.PATH = originalPath;
+			rmSync(bin, { recursive: true, force: true });
+		});
+
+		it.each([
+			"npm",
+			"pnpm",
+			"bun",
+		] as const)("returns nothing for %s when nothing is installed", (pm) => {
+			// `resolveInvokingPackageManager` ends in `?? "npm"`, a guess about
+			// a machine no one has looked at — so npm needs the same PATH check
+			// the yarn fallback gets.
+			expect(globalInstallArgs(pm, "neonctl")).toBeUndefined();
+		});
+
+		it("borrows an installed manager when the requested one is absent", () => {
+			writeFileSync(join(bin, "pnpm"), "#!/bin/sh\nexit 0\n", {
+				mode: 0o755,
+			});
+			expect(formatGlobalInstall("npm")).toBe("pnpm add -g neonctl");
+		});
+	});
+
 	describe("yarn depends on the major, which only yarn itself can report", () => {
 		const originalPath = process.env.PATH;
 		let bin: string;

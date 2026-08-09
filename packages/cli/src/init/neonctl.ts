@@ -156,12 +156,13 @@ export async function ensureNeonctl(): Promise<EnsureNeonctlResult> {
 	const pm = resolveInvokingPackageManager();
 	const install = globalInstallArgs(pm, "neonctl");
 	if (!install) {
+		// Deliberately naming no alternative: `npx` ships with npm, so the case
+		// that got us here is also the case where npx is missing.
 		return {
 			status: "failed",
 			error:
 				"No package manager on this machine can install a global CLI: " +
-				"yarn Berry dropped global installs, and npm, pnpm and bun are not on PATH. " +
-				`\`${neonctlCmd()}\` still works without a global install.`,
+				"npm, pnpm and bun are not on PATH, and yarn Berry dropped global installs.",
 		};
 	}
 	const { command, args } = install;

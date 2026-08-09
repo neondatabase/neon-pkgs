@@ -252,23 +252,23 @@ export const globalInstallArgs = (
 	pm: PackageManager,
 	pkg: string,
 ): { command: string; args: string[] } | undefined => {
-	const argsFor = (
-		manager: PackageManager,
-	): { command: string; args: string[] } =>
-		manager === "npm"
-			? { command: "npm", args: ["install", "-g", pkg] }
-			: { command: manager, args: ["add", "-g", pkg] };
+	// Running `yarn --version` at all proves yarn is on PATH.
+	if (pm === "yarn" && yarnMajor() === 1)
+		return { command: "yarn", args: ["global", "add", pkg] };
 
-	if (pm === "yarn") {
-		if (yarnMajor() === 1)
-			return { command: "yarn", args: ["global", "add", pkg] };
-		const available = installedPackageManagers().find((candidate) =>
-			GLOBAL_CAPABLE.includes(candidate),
-		);
-		return available ? argsFor(available) : undefined;
-	}
+	// Every branch checks PATH, not just the yarn fallback: `pm` can be the
+	// `?? "npm"` default from resolveInvokingPackageManager, which is a guess
+	// about a machine nobody has looked at yet.
+	const installed = installedPackageManagers();
+	const usable =
+		pm !== "yarn" && installed.includes(pm)
+			? pm
+			: installed.find((candidate) => GLOBAL_CAPABLE.includes(candidate));
+	if (!usable) return undefined;
 
-	return argsFor(pm);
+	return usable === "npm"
+		? { command: "npm", args: ["install", "-g", pkg] }
+		: { command: usable, args: ["add", "-g", pkg] };
 };
 
 /**
