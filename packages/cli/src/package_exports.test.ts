@@ -70,10 +70,9 @@ describe("the published export map", () => {
 
 /**
  * The export map only decides what is *reachable*. These two check the build actually produced
- * what the map assumes, which is the half that breaks silently: moving an internals package into
- * `dependencies`, or widening `external` in `tsdown.config.ts`, leaves a bare specifier in `dist`
- * that no consumer can resolve, and puts the shared code outside `_chunks` where nothing blocks
- * it.
+ * what the map assumes, which is the half that breaks silently: widening `external` in
+ * `tsdown.config.ts` leaves a bare specifier in `dist` that no consumer can resolve, and puts the
+ * shared code outside `_chunks`, where nothing blocks it.
  */
 describe("the built package", () => {
 	it("resolves the private internals at build time, never at runtime", () => {
@@ -112,13 +111,18 @@ describe("the built package", () => {
  * enforces: a `dependencies` entry naming an unpublished package makes `npm install neon` fail,
  * while the code would still be bundled and the build would still look fine.
  */
-describe("the published manifest", () => {
-	it("never declares a private internals package as a runtime dependency", () => {
+describe("the published manifests", () => {
+	// Both packages that bundle the internals, checked here rather than one each, because the
+	// invariant is about the internals staying unpublishable and not about either consumer.
+	it.each([
+		"../package.json",
+		"../../env/package.json",
+	])("%s never declares a private internals package as a runtime dependency", (relative) => {
 		const manifest: unknown = JSON.parse(
-			readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+			readFileSync(new URL(relative, import.meta.url), "utf8"),
 		);
 		if (!isRecord(manifest))
-			throw new Error("packages/cli/package.json is not an object.");
+			throw new Error(`${relative} is not an object.`);
 		for (const field of [
 			"dependencies",
 			"optionalDependencies",
