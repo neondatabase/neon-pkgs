@@ -1,9 +1,22 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const manifest = JSON.parse(
-	readFileSync(new URL("../package.json", import.meta.url), "utf8"),
-) as { exports: Record<string, string | null> };
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+	typeof value === "object" && value !== null;
+
+/** The published `exports` map, or a failure naming what is missing. */
+const exportMap = (): Record<string, unknown> => {
+	const manifest: unknown = JSON.parse(
+		readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+	);
+	if (!isRecord(manifest) || !isRecord(manifest.exports)) {
+		throw new Error(
+			"packages/cli/package.json has no `exports` object — the block asserted below " +
+				"cannot exist, and every dist path is public.",
+		);
+	}
+	return manifest.exports;
+};
 
 /**
  * `neon` publishes a `./dist/*` wildcard, so anything `tsc` emits is importable by path. That
@@ -18,11 +31,11 @@ const manifest = JSON.parse(
  */
 describe("the published export map", () => {
 	it("blocks the shared trees, which are implementation and not ours to publish", () => {
-		expect(manifest.exports["./dist/_shared/*"]).toBeNull();
+		expect(exportMap()["./dist/_shared/*"]).toBeNull();
 	});
 
 	it("still exposes the dist wildcard the block is carved out of", () => {
 		// Without this the block is vacuous — nothing would have been reachable anyway.
-		expect(manifest.exports["./dist/*"]).toBe("./dist/*");
+		expect(exportMap()["./dist/*"]).toBe("./dist/*");
 	});
 });
