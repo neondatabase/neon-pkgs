@@ -743,6 +743,59 @@ neon snapshots schedule set --branch main --schedule '[{"frequency":"weekly","da
 
 All sub-commands honor the [global options](#global-options), including `--output json|yaml|table`.
 
+## Logs (`logs`)
+
+`neon logs` reads the log records the services on a branch emit — Neon Functions, object storage, and Postgres computes. **Logs require Neon Platform Beta and are currently available only for projects in `aws-us-east-2`.**
+
+Every sub-command resolves the project through the standard chain (`--project-id`, then the `.neon` context file, then a single-project auto-detect), and takes `--branch <id|name>`, defaulting to the project's default branch.
+
+```bash
+# The last 30 minutes on the default branch
+neon logs query --since 30m
+
+# Postgres compute errors on main, oldest first
+neon logs query --branch main --source pg_endpoint --minimum-severity error --sort-order asc
+
+# An explicit window (--start-time replaces --since; --end-time works with either)
+neon logs query --start-time 2025-01-01T00:00:00Z --end-time 2025-01-01T01:00:00Z
+
+# One request trace, across every service that took part in it
+neon logs query --trace-id 4bf92f3577b34da6a3ce929d0e0e4736
+
+# What the structured filters cannot express: a raw LogQL selection. It replaces
+# them, but the window, --limit, --sort-order and --cursor still apply.
+neon logs query --since 1h --logql '{entity_type="function"} |= "timeout"'
+
+# Which fields this branch supports, and the values it has actually seen
+neon logs fields
+neon logs field-values service_name --since 6h --source function
+```
+
+A response holds at most `--limit` records (default 100). When more matched, table output prints the `--cursor` to repeat the same query with; `--output json|yaml` returns `is_truncated` and `next_cursor` on the envelope instead, so nothing but the payload lands on stdout:
+
+```console
+$ neon logs query --since 24h --output json
+{
+  "logs": [
+    {
+      "timestamp": "2025-01-01T00:00:02.000Z",
+      "message": "GET /api/todos 200",
+      "source": "function",
+      "service_name": "api",
+      "severity_text": "INFO",
+      "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+      "attributes": { "http_status": 200 }
+    }
+  ],
+  "next_cursor": "eyJvZmZzZXQiOjEwMH0",
+  "is_truncated": true
+}
+
+$ neon logs query --since 24h --cursor eyJvZmZzZXQiOjEwMH0 --output json
+```
+
+Two combinations are rejected before the request: `--since` with `--start-time`, and `--logql` with any of `--source`, `--service-name`, `--scope-name`, `--minimum-severity`, `--severity-text`, `--body-contains` or `--trace-id`. `--minimum-severity` and `--severity-text` are independent filters and combine with AND.
+
 ## Profiles
 
 The CLI holds one Neon account by default. A profile adds another, and is nothing more than a pointer to a credentials file:
@@ -971,6 +1024,7 @@ API keys in org-7
 | function                                                                   | `deploy`, `list`, `get`, `delete`                                                                            | Manage Neon Functions              |
 | [roles](https://neon.com/docs/reference/cli-roles)                         | `list`, `create`, `delete`                                                                                   | Manage roles                       |
 | [operations](https://neon.com/docs/reference/cli-operations)               | `list`                                                                                                       | Manage operations                  |
+| logs                                                                       | `query`, `fields`, `field-values`                                                                            | Query branch logs (Beta)           |
 | snapshots                                                                  | `list`, `get`, `create`, `update`, `delete`, `restore`, `finalize`, `schedule get`, `schedule set`           | Manage snapshots                   |
 | [connection-string](https://neon.com/docs/reference/cli-connection-string) |                                                                                                              | Get connection string              |
 | [psql](https://neon.com/docs/reference/cli-psql)                           |                                                                                                              | Connect to a database via psql     |

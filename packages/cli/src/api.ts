@@ -917,6 +917,48 @@ export const getApiClient = ({
 				}),
 			),
 
+		// ─── Logs ────────────────────────────────────────────────────────────
+		queryProjectBranchLogs: (
+			projectId: string,
+			branchId: string,
+			data: NonNullable<raw.QueryProjectBranchLogsData["body"]>,
+		) =>
+			call(() =>
+				raw.queryProjectBranchLogs({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+					body: data,
+				}),
+			),
+		listProjectBranchLogFields: (projectId: string, branchId: string) =>
+			call(() =>
+				raw.listProjectBranchLogFields({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+				}),
+			),
+		listProjectBranchLogFieldValues: ({
+			projectId,
+			branchId,
+			fieldName,
+			...query
+		}: {
+			projectId: string;
+			branchId: string;
+			fieldName: string;
+		} & NonNullable<raw.ListProjectBranchLogFieldValuesData["query"]>) =>
+			call(() =>
+				raw.listProjectBranchLogFieldValues({
+					client,
+					path: {
+						project_id: projectId,
+						branch_id: branchId,
+						field_name: fieldName,
+					},
+					query,
+				}),
+			),
+
 		// ─── Data API ────────────────────────────────────────────────────────
 		createProjectBranchDataApi: (
 			projectId: string,
