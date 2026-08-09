@@ -8,10 +8,10 @@ import {
 	fetchEnv,
 	type NeonAuthEnv,
 	type NeonEnv,
-	parseEnv,
 	toEntries,
-} from "./env.js";
+} from "../_shared/env-core/env.js";
 import { FakeNeonApi } from "./fake-neon-api.js";
+import { parseEnv } from "./parse-env.js";
 import { stubCleanNeonEnv } from "./test-utils.js";
 
 beforeEach(() => stubCleanNeonEnv());

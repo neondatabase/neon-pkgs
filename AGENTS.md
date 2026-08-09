@@ -313,20 +313,19 @@ with `@neon/config-runtime` (imperative `inspect`/`plan`/`apply` + function depl
 + inject a branch's env) both building on `config`; plus `@neon/ai-sdk-provider` and
 `@neon/functions`.
 
-**Pure and imperative halves are split by import path, and the boundary is load-bearing.** The
-`@neon/config` / `@neon/config-runtime` pair is the package-level version of it. `@neon/env` does
-the same thing with a subpath:
-
-| Entry point | For | Side effects |
-| --- | --- | --- |
-| `@neon/env` | Package consumers — apps, build scripts, a `neon.ts` policy | None. Never reads `process.env` or a file |
-| `@neon/env/runtime` | Our own tooling — the `neon-env` CLI, `packages/cli`, anything resolving one branch repeatedly | Reads an env source; mints and revokes branch credentials |
-
-`@neon/config` has the same shape, and for the same reason:
+**Pure and imperative halves are kept apart, and the boundary is load-bearing.** The
+`@neon/config` / `@neon/config-runtime` pair is the package-level version of it:
 
 | Entry point | For | Side effects |
 | --- | --- | --- |
 | `@neon/config` / `@neon/config/v1` | `neon.ts` policies, apps, anything embedding the toolchain | None. Never reads `process.env` or a file |
+
+`@neon/env` draws the same line, but **not** with a second entry point. Everything it publishes
+is pure. The stateful half — `fetchEnvReusingSecrets`, which reads an env source and mints and
+revokes branch credentials — is shared source in `shared/env-core`, compiled into `@neon/env`
+and the `neon` CLI. It was published at `@neon/env/runtime` until 0.16.0; its only consumers
+were our own two CLIs, and a library that revokes credentials because you imported it is one you
+cannot safely embed. See `packages/env/CONTRIBUTING.md`.
 
 `paths` exists because three readers each grew their own answer to "where is the config
 directory" and all three disagreed: the CLI honoured `XDG_CONFIG_HOME` but not

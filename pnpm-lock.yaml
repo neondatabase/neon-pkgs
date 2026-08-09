@@ -123,9 +123,6 @@ importers:
       '@neon/config-runtime':
         specifier: workspace:*
         version: link:../config-runtime
-      '@neon/env':
-        specifier: workspace:*
-        version: link:../env
       '@neon/sdk':
         specifier: workspace:*
         version: link:../sdk

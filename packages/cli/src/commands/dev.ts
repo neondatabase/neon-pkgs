@@ -3,9 +3,9 @@ import { once } from "node:events";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { CredentialOutcome } from "@neon/env/runtime";
 import chalk from "chalk";
 import type yargs from "yargs";
+import type { CredentialOutcome } from "../_shared/env-core/reuse-secrets.js";
 import { resolveDevEnv } from "../dev/env.js";
 import {
 	type PlannedFunction,

@@ -1,4 +1,4 @@
-import { NEON_ENV_VAR_KEYS } from "@neon/env";
+import { NEON_ENV_VAR_KEYS } from "./_shared/env-core/env.js";
 
 import { NEON_SERVICES, type NeonService } from "./neon_services.js";
 

@@ -1,9 +1,9 @@
 import { existsSync } from "node:fs";
 import type { NeonApi } from "@neon/config";
-import { NEON_ENV_VAR_KEYS } from "@neon/env";
-import type { CredentialOutcome } from "@neon/env/runtime";
 import chalk from "chalk";
 import type yargs from "yargs";
+import { NEON_ENV_VAR_KEYS } from "../_shared/env-core/env.js";
+import type { CredentialOutcome } from "../_shared/env-core/reuse-secrets.js";
 import { ensureGitignored } from "../context.js";
 import { resolveNeonEnvVars } from "../dev/env.js";
 import { mergeEnvFile, readEnvFile, resolveEnvFilePath } from "../env_file.js";

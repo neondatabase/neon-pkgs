@@ -30,11 +30,6 @@
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js",
 			"default": "./dist/index.js"
-		},
-		"./runtime": {
-			"types": "./dist/runtime.d.ts",
-			"import": "./dist/runtime.js",
-			"default": "./dist/runtime.js"
 		}
 	},
 	"files": [

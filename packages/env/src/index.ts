@@ -5,8 +5,12 @@
  * - `fetchEnv(config)` — async; resolves the branch + calls the Neon API for live
  *   connection strings. Use in build scripts / top-level await.
  * - `parseEnv(config)` — sync; reads already-injected `process.env` and validates it.
- *   Use in app bootstrap (Drizzle config, Next.js, Vite, …).
+ *   Use in app bootstrap (Drizzle config, Next.js, Vite, etc).
  * - `toEntries(env)` — project a resolved env into `{ KEY: value }` pairs.
+ *
+ * This is the whole package: one entry point, all of it side-effect-free. It reads no files
+ * and no env source of its own, so it is safe to import from an app, a build script, or a
+ * `neon.ts` policy.
  *
  * The branch policy type (`Config`) and `defineConfig` come from `@neon/config`.
  */
@@ -14,27 +18,29 @@
 export type {
 	FetchEnvOptions,
 	FilteredNeonEnv,
-	FunctionSlugOf,
 	NeonAiGatewayEnv,
 	NeonAuthEnv,
 	NeonBranchEnv,
 	NeonDataApiEnv,
 	NeonEnv,
-	NeonFunctionEnv,
 	NeonPostgresEnv,
 	NeonStorageEnv,
 	ResolvedNeonEnv,
 	SelectableEnvKey,
-} from "./lib/env.js";
+} from "./_shared/env-core/env.js";
 export {
 	fetchEnv,
 	NEON_ENV_VAR_KEYS,
-	parseEnv,
 	toEntries,
-} from "./lib/env.js";
+} from "./_shared/env-core/env.js";
+export type { FunctionSlugOf, NeonFunctionEnv } from "./lib/parse-env.js";
+export { parseEnv } from "./lib/parse-env.js";
+
 // The stateful counterpart — `fetchEnvReusingSecrets`, which reads an env source and can mint
-// and revoke credentials — lives at `@neon/env/runtime`, so this entry point stays the pure
-// "ask Neon, read process.env" surface an app or build script needs.
+// and revoke branch credentials — is deliberately absent. It is implementation shared with the
+// `neon` CLI (`shared/env-core`), not something to hand an application: a library that revokes
+// credentials because you imported it is a library you cannot safely embed. It used to be
+// published at `@neon/env/runtime`; see CHANGELOG for the removal.
 
 // The branch policy type (`Config`) and `defineConfig` live in `@neon/config`.
 // Import them from there directly:

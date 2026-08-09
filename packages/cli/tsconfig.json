@@ -16,10 +16,9 @@
       // the export map at runtime (the emitted JS keeps the bare specifiers).
       "@neon/sdk": ["node_modules/@neon/sdk/dist/index"],
       "@neon/sdk/raw": ["node_modules/@neon/sdk/dist/raw"],
-      // And for `@neon/env/runtime`, the stateful half of `@neon/env` (credential
-      // reuse / revocation), which is a subpath export so an app importing
-      // `@neon/env` is never offered it.
-      "@neon/env/runtime": ["node_modules/@neon/env/dist/runtime"],
+      // And for `@neon/config/v1`, the versioned policy surface. `src/_shared/env-core`
+      // imports it, and that code is compiled as this package's own source.
+      "@neon/config/v1": ["node_modules/@neon/config/dist/v1"],
       "@neon/e2e-harness": ["node_modules/@neon/e2e-harness/src/index"]
     },
     "resolveJsonModule": true,

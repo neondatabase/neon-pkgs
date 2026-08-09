@@ -96,7 +96,7 @@ function completionsAt(source: string): string[] {
 function fixture(configBody: string, call: string): string {
 	return [
 		'import { defineConfig } from "@neon/config/v1";',
-		'import { parseEnv } from "./env.js";',
+		'import { parseEnv } from "./parse-env.js";',
 		"",
 		`const config = defineConfig(${configBody});`,
 		"",

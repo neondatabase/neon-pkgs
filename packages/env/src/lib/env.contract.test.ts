@@ -1,6 +1,12 @@
+import { readFileSync } from "node:fs";
 import { defineConfig } from "@neon/config/v1";
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { NEON_ENV_VAR_KEYS, type NeonEnv, parseEnv, toEntries } from "./env.js";
+import {
+	NEON_ENV_VAR_KEYS,
+	type NeonEnv,
+	toEntries,
+} from "../_shared/env-core/env.js";
+import { parseEnv } from "./parse-env.js";
 import { stubCleanNeonEnv } from "./test-utils.js";
 
 beforeEach(() => stubCleanNeonEnv());
@@ -205,20 +211,26 @@ describe("@neon/env public surface", () => {
 		`);
 	});
 
-	test("the root entry point stays pure — no stateful helpers leak into it", async () => {
-		// `fetchEnvReusingSecrets` reads an env source and can mint and revoke credentials, so it
-		// belongs to `@neon/env/runtime` (mirroring `@neon/config` vs `@neon/config-runtime`).
-		// An app or build script importing `@neon/env` should not be offered it.
+	test("the package stays pure — no stateful helper leaks into it", async () => {
+		// `fetchEnvReusingSecrets` reads an env source and can mint and revoke credentials. It
+		// is shared implementation with the `neon` CLI (`shared/env-core`), not something to
+		// hand an application: a library that revokes credentials because you imported it is a
+		// library you cannot safely embed. It has no entry point of its own any more, and must
+		// not reappear on this one.
 		const surface = await import("../index.js");
 		expect(Object.keys(surface)).not.toContain("fetchEnvReusingSecrets");
 	});
 
-	test("runtime exports are stable (removing/renaming one is a breaking change)", async () => {
-		const surface = await import("../runtime.js");
-		expect(Object.keys(surface).sort()).toMatchInlineSnapshot(`
-			[
-			  "fetchEnvReusingSecrets",
-			]
-		`);
+	test("there is exactly one entry point", async () => {
+		// `./runtime` was published until 0.16.0 and is deliberately gone. A second entry point
+		// would have to be added to `package.json` `exports` *and* `tsdown.config.ts` — this
+		// pins the decision so neither happens by accident.
+		const manifest = JSON.parse(
+			readFileSync(
+				new URL("../../package.json", import.meta.url),
+				"utf8",
+			),
+		);
+		expect(Object.keys(manifest.exports)).toEqual(["."]);
 	});
 });

@@ -12,14 +12,13 @@ npm install @neon/env
 
 > **Requirements:** Node.js >= 20.19.
 
-## Two entry points
+## One entry point
 
-| Import | What it holds |
-| --- | --- |
-| `@neon/env` | The pure half: `fetchEnv` asks the Neon API for a branch's env, `parseEnv` reads what was already injected. Neither touches the filesystem or reads an env source. This is what an app, a build script, or a `neon.ts` policy needs. |
-| `@neon/env/runtime` | The stateful half: `fetchEnvReusingSecrets`, for tools that resolve the same branch repeatedly and must not re-mint a credential each time. It reads an env source and can mint and revoke credentials. Import it from a CLI or CI, never from an app bootstrap. |
+Everything is on `@neon/env`, and all of it is side-effect-free: `fetchEnv` asks the Neon API for a branch's env, `parseEnv` reads what was already injected, `toEntries` projects a resolved env into `{ KEY: value }`. None of them touches the filesystem or reads an env source, so importing this package from an app, a build script, or a `neon.ts` policy can't surprise you.
 
-The split mirrors [`@neon/config`](../config) vs [`@neon/config-runtime`](../config-runtime), for the same reason: side effects should be something you opt into by import path. Contributing to either half? See [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+> **`@neon/env/runtime` was removed in 0.16.0.** It held `fetchEnvReusingSecrets`, which reads an env source and can mint and revoke branch credentials — see [The branch credential](#the-branch-credential). That is implementation shared with the `neon` CLI, not something to hand an application, and it is no longer published. If you were importing it, use the [`neon` CLI](../cli) (`neon env pull`, `neon dev`) or `fetchEnv` plus your own persistence.
+
+Contributing? See [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
 ## Functions
 
@@ -55,7 +54,6 @@ Both return the same namespaced `NeonEnv` shape: `postgres` is always present; `
 | Function | Description |
 | --- | --- |
 | `fetchEnv(config, { projectId, branch, ... })` | Async. Calls the Neon API for the given project + branch and returns live connection strings (and Auth/Data API values when enabled). `projectId` and `branch` are required; `branch` accepts a branch **name** (e.g. `main`) or a `br-…` id. (The legacy id-only `branchId` option still works.) Pass `keys` to fetch only some vars — see [Fetching a subset](#fetching-a-subset). Reads nothing from `process.env` or disk. |
-| `fetchEnvReusingSecrets(config, { projectId, branch, env })` | Async, from **`@neon/env/runtime`**. `fetchEnv` plus reuse of one-time secrets you already hold: verifies them against the branch, keeps what's valid, mints and revokes only when it must. Returns `{ vars, credential }`. Takes an optional `revokeSuperseded`, which keeps the replaced credential live when your call resolves only part of the branch. Use this rather than `fetchEnv` anywhere the same branch is resolved repeatedly — see [The branch credential](#the-branch-credential). |
 | `parseEnv(config)` / `parseEnv(config, slug)` / `parseEnv(config, keys)` | Sync. Reads/validates the Neon env vars already present in `process.env` against the static policy toggles. With a function `slug`, also returns a typed `function` namespace of that function's declared env keys. With a `keys` array (e.g. `["DATABASE_URL"]`), only those vars are required and returned, as a narrowed namespaced shape — the keys are typesafe against the policy. Throws `PlatformError(EnvNotInjected)` listing missing vars when the env isn't populated. |
 | `toEntries(env)` | Project a resolved `NeonEnv` into `{ KEY: value }` pairs for cross-process transport (named after the web `.entries()` convention; returns a `Record`). |
 
@@ -135,11 +133,9 @@ These are the OS-level vars `fetchEnv` / `parseEnv` read and `toEntries` (so `ne
 
 Object storage and the AI Gateway are backed by one branch credential, and the Neon API returns its secrets (`s3_secret_access_key`, `api_token`) **once**, at mint time — they aren't stored server-side, and the list endpoint returns metadata only. So there is nothing to *fetch*: `fetchEnv` mints. Call it on every `neon dev` start and you leave a live credential behind each time.
 
-`fetchEnvReusingSecrets`, from the **`@neon/env/runtime`** entry point, is the wrapper that avoids that. It checks what you already hold, keeps what is still valid, and asks `fetchEnv` for only the rest:
+`fetchEnvReusingSecrets` is the wrapper that avoids that. It checks what you already hold, keeps what is still valid, and asks `fetchEnv` for only the rest. **It is not part of this package's API** — it lives in `shared/env-core` and is compiled into the `neon` CLI and into this package's own `neon-env` binary. It is described here because it is the reason `fetchEnv` behaves the way it does, and because you have to solve the same problem if you call `fetchEnv` on a loop:
 
 ```ts
-import { fetchEnvReusingSecrets } from "@neon/env/runtime";
-
 const { vars, credential } = await fetchEnvReusingSecrets(config, {
     projectId,
     branch: "main",

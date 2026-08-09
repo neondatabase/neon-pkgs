@@ -7,9 +7,10 @@ export default defineConfig({
 	dts: true,
 	entry: [
 		"src/index.ts",
-		"src/runtime.ts",
 		"src/cli.ts",
 		"src/lib/**/*.ts",
+		// Compiled as this package's own source — `scripts/sync-shared.mjs` copies it in.
+		"src/_shared/**/*.ts",
 		"!src/**/*.test.*",
 		"!src/**/*.test-d.*",
 		"!src/lib/fake-neon-api.ts",
