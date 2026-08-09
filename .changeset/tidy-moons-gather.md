@@ -27,6 +27,9 @@ case: `packagesToStage` and `externalPackageRoot`.
 A function that declares no `externalPackages`, or whose every entry sets
 `includeFiles: false`, deploys exactly the archive it did before.
 
-Validation additionally rejects the same package listed twice, and a bare name and a subpath
-of it that disagree about `includeFiles`. This is the schema and type surface; the bundler
-change that stages the files lands separately.
+A package named here must be installed in your project: the deploy stages the version you
+have rather than guessing one, and refuses if it cannot find it.
+
+Validation additionally rejects the same package listed twice, a bare name and a subpath of it
+that disagree about `includeFiles`, and an entry that does not name one installable package
+(a wildcard or a bare scope) unless it sets `includeFiles: false`.

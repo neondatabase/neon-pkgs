@@ -369,10 +369,13 @@ export interface FunctionDef {
 	 */
 	env?: Record<string, string>;
 	/**
-	 * Packages the bundler must leave alone — the deploy-time equivalent of Next.js's
-	 * `serverExternalPackages`. Every entry is passed to esbuild's `external`, so the import
-	 * survives into the bundle instead of being followed, and the package's own files are
-	 * shipped into the deployed archive beside the bundle so that import resolves.
+	 * Ship a dependency's real files into the deployed archive instead of bundling it —
+	 * `sharp` and other packages backed by a native binary.
+	 *
+	 * The deploy-time equivalent of Next.js's `serverExternalPackages`. Every entry is passed
+	 * to esbuild's `external`, so the import survives into the bundle instead of being
+	 * followed, and the package's own files are shipped beside the bundle so that import
+	 * resolves.
 	 *
 	 * Reach for this when bundling a package is impossible rather than merely undesirable.
 	 * The case that comes up is a package backed by a native `.node` binary: the binary is a

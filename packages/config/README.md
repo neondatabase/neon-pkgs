@@ -43,7 +43,7 @@ A policy is split into a **static** existential set and a **dynamic** `branch` c
 
 Service toggles accept `true` / `{}` / `{ enabled: true }` (enabled) and `false` / `{ enabled: false }` (disabled). Function slugs (record keys) must match `^[a-z0-9]{1,20}$`.
 
-### Unbundleable dependencies (`externalPackages`)
+### Shipping a dependency's files (`externalPackages`)
 
 A function's `source` is bundled with esbuild at deploy time, and a package backed by a native `.node` binary cannot be bundled by anything: the binary is a compiled object the platform loads from a real path. `sharp` is the common case, and it does not even fail the build — it loads its binary through `createRequire`, which esbuild does not follow, so it bundles cleanly and then fails at invoke with `Could not load the "sharp" module`.
 
@@ -69,9 +69,24 @@ Your own `node_modules` is never read for those files or modified. Its binaries 
 
 Requirements, all checked at deploy time rather than left to fail at invoke:
 
+- the package is installed in your project — the deploy stages the version you have, and refuses rather than guessing one
 - the package publishes a linux-arm64 glibc build (`sharp` and most `@napi-rs/*` packages do; anything compiled from source at install time does not)
 - `npm` is on `PATH`
 - the archive stays within the deploy size limits — native binaries are large, so a couple of them is the practical ceiling
+
+#### When the deploy warns about a package you did not declare
+
+A deploy (and `neon dev`) reports a package it bundled that carries native code and is not in
+`externalPackages`, because such a package deploys cleanly and then fails at invoke — `sharp`
+produces no build error at all.
+
+**The report is advisory and never fails a deploy.** It can only see that the package contains
+compiled code, not whether your function reaches it. A package with a native accelerator behind
+a working JavaScript fallback — `ws` with `bufferutil` installed is the common one — is reported
+and is already correct; no change is needed.
+
+Do not use `includeFiles: false` to silence it. That externalizes the package and ships nothing
+for it, so an import that *is* reached then fails on every invoke.
 
 #### Excluding a package's files
 
