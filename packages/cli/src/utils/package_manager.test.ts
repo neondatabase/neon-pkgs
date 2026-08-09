@@ -296,17 +296,17 @@ describe("globalInstallArgs", () => {
 		return install && `${install.command} ${install.args.join(" ")}`;
 	};
 
-	it.each([
-		["npm", "npm install -g neonctl"],
-		["pnpm", "pnpm add -g neonctl"],
-		["bun", "bun add -g neonctl"],
-	] as const)("installs globally with %s", (pm, expected) => {
-		expect(formatGlobalInstall(pm)).toBe(expected);
-	});
-
-	describe("a manager that is not on PATH is not a command", () => {
+	// Every case pins PATH. Asserting `bun add -g` on a machine that happens to
+	// have bun is not a test of anything: CI has no bun, so the unpinned version
+	// of this passed here and failed there.
+	describe("what is on PATH decides", () => {
 		const originalPath = process.env.PATH;
 		let bin: string;
+
+		const install = (name: string) =>
+			writeFileSync(join(bin, name), "#!/bin/sh\nexit 0\n", {
+				mode: 0o755,
+			});
 
 		beforeEach(() => {
 			bin = mkdtempSync(join(tmpdir(), "neonctl-pm-global-"));
@@ -316,6 +316,15 @@ describe("globalInstallArgs", () => {
 		afterEach(() => {
 			process.env.PATH = originalPath;
 			rmSync(bin, { recursive: true, force: true });
+		});
+
+		it.each([
+			["npm", "npm install -g neonctl"],
+			["pnpm", "pnpm add -g neonctl"],
+			["bun", "bun add -g neonctl"],
+		] as const)("installs globally with %s", (pm, expected) => {
+			install(pm);
+			expect(formatGlobalInstall(pm)).toBe(expected);
 		});
 
 		it.each([
@@ -330,9 +339,7 @@ describe("globalInstallArgs", () => {
 		});
 
 		it("borrows an installed manager when the requested one is absent", () => {
-			writeFileSync(join(bin, "pnpm"), "#!/bin/sh\nexit 0\n", {
-				mode: 0o755,
-			});
+			install("pnpm");
 			expect(formatGlobalInstall("npm")).toBe("pnpm add -g neonctl");
 		});
 	});
