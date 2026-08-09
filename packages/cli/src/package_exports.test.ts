@@ -79,21 +79,56 @@ describe("the built package", () => {
 	it("resolves the private internals at build time, never at runtime", () => {
 		// Anchored to the start of a line, because rolldown keeps JSDoc blocks and the internals
 		// document themselves with `import … from "@neon-internals/…"` examples. A comment naming
-		// the specifier is not an import of it.
+		// the specifier is not an import of it. Side-effect imports have no `from`.
 		const importsInternals =
-			/^\s*(?:import|export)\b[^'"`]*?from\s*["']@neon-internals\/|\bimport\s*\(\s*["']@neon-internals\//m;
+			/^\s*(?:import|export)\b[^'"`]*?from\s*["']@neon-internals\/|^\s*import\s*["']@neon-internals\/|\bimport\s*\(\s*["']@neon-internals\//m;
 		const leaking = emittedFiles().filter((path) =>
 			importsInternals.test(readFileSync(path, "utf8")),
 		);
 		expect(leaking).toEqual([]);
 	});
 
-	it("puts everything the bundler shares into the one directory the map blocks", () => {
-		const shared = emittedFiles().filter((path) =>
-			/(^|[/\\])_(chunks|virtual)[/\\]/.test(path.slice(distDir.length)),
+	it("keeps the internals' code inside the directory the map blocks", () => {
+		// A name the CLI reaches only through `@neon-internals/env-core`, so wherever it is
+		// declared is where that package's code ended up. Asserting that some chunk exists would
+		// pass on the unrelated `psql` and `cmd_pipeline` chunks this package already produces.
+		// Matched where it is *declared*, not merely called, so the modules that import it are not
+		// counted as holding it.
+		const declaresIt = emittedFiles().filter((path) =>
+			/\b(?:function|const|let|var|class)\s+fetchEnvReusingSecrets\b/.test(
+				readFileSync(path, "utf8"),
+			),
 		);
-		// Bundling `@neon-internals/*` into two entry points that both use it has to produce at
-		// least one shared chunk; zero means the internals were inlined per-entry or externalized.
-		expect(shared.length).toBeGreaterThan(0);
+		expect(declaresIt).not.toEqual([]);
+		for (const path of declaresIt) {
+			expect(path.slice(distDir.length)).toMatch(/^[/\\]_chunks[/\\]/);
+		}
+	});
+});
+
+/**
+ * `devDependencies` is not what inlines the internals — `external` in `tsdown.config.ts` is. What
+ * `devDependencies` does is keep them out of the published manifest, and that is the half npm
+ * enforces: a `dependencies` entry naming an unpublished package makes `npm install neon` fail,
+ * while the code would still be bundled and the build would still look fine.
+ */
+describe("the published manifest", () => {
+	it("never declares a private internals package as a runtime dependency", () => {
+		const manifest: unknown = JSON.parse(
+			readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+		);
+		if (!isRecord(manifest))
+			throw new Error("packages/cli/package.json is not an object.");
+		for (const field of [
+			"dependencies",
+			"optionalDependencies",
+			"peerDependencies",
+		]) {
+			const declared = manifest[field];
+			const names = isRecord(declared) ? Object.keys(declared) : [];
+			expect(
+				names.filter((name) => name.startsWith("@neon-internals/")),
+			).toEqual([]);
+		}
 	});
 });

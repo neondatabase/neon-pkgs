@@ -350,14 +350,23 @@ consumers bundle: a bare `@neon-internals/*` specifier surviving into `dist` wou
 resolve for anyone who installed from npm, and `tsc` cannot inline anything —
 [`paths` does not change emitted import paths](https://www.typescriptlang.org/tsconfig/paths.html).
 
-The dependency direction is the load-bearing part. `devDependencies`, not `dependencies`, is
-what tells the bundler to inline rather than externalize; each config spells it out as
-`external: (id) => /^[@a-zA-Z]/.test(id) && !id.startsWith("@neon-internals/")`. Putting one of
-these in `dependencies` publishes a package that cannot be installed.
+Two separate things have to be right, and it is worth not conflating them. **`external` in each
+consumer's `tsdown.config.ts` is what inlines them** — it keeps every package import a runtime
+import except `@neon-internals/*`. **`devDependencies` is what keeps them out of the published
+manifest**, and that is the half npm enforces: a `dependencies` entry naming an unpublished
+package makes `npm install neon` fail, while the code would still be bundled and the build would
+still look fine. `packages/cli/src/package_exports.test.ts` pins both.
 
 They emit declarations even though nothing publishes them: `@neon/env` re-exports types that
 originate in `env-core`, and a declaration bundler can only inline declarations that exist.
-That is what `dts: { resolve: [/@neon-internals/] }` in `packages/env/tsdown.config.ts` is for.
+That is what `dts: { resolve: [/^@neon-internals\//] }` in `packages/env/tsdown.config.ts` is for.
+
+**They are ordinary workspace dependencies, so build from the root.** `pnpm build` and
+`pnpm install` order them topologically; `pnpm --filter neon build` on its own compiles against
+whatever `internals/*/dist` is already there, exactly as it does for `@neon/config` and every
+other workspace dependency. Use `pnpm --filter neon... build` after editing one. Consumers must
+**not** build the internals themselves: two of them doing that under a recursive `pnpm build`
+race on the same `dist`, and `clean: true` means one can delete it while the other is reading.
 
 Bundled code lands in `dist/_chunks/`, kept off the `neon` tarball's public surface by
 `"./dist/_chunks/*": null` in its `exports` — without that, the `./dist/*` wildcard makes
