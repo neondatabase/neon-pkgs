@@ -81,15 +81,24 @@ const repoRoot = (dir: string): string | undefined => {
  *
  * `dirname` is lexical: given a symlink to `repo/packages/app`, its parent is
  * the symlink's directory, not `repo/packages` — so the walk would leave the
- * repository immediately and never see the root lockfile. Directories that do
- * not exist yet are left alone; `bootstrap` resolves a target before creating
- * it.
+ * repository immediately and never see the root lockfile.
+ *
+ * A path that doesn't exist yet is fine and keeps its lexical form: `bootstrap`
+ * resolves a target directory before creating it. Anything else — a permission
+ * error, a symlink loop, a path component that is not a directory — is a broken
+ * input rather than a missing one, and silently falling back to the lexical path
+ * would pick a package manager off the wrong tree.
  */
 const physicalPath = (dir: string): string => {
 	try {
 		return realpathSync(dir);
-	} catch {
-		return dir;
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code === "ENOENT") return dir;
+		throw new Error(
+			`Could not resolve ${dir} while detecting the package manager: ${
+				err instanceof Error ? err.message : String(err)
+			}`,
+		);
 	}
 };
 
@@ -220,36 +229,46 @@ const yarnMajor = (): number | undefined => {
 	return major ? Number(major[1]) : undefined;
 };
 
+/** The managers that can install a global CLI at all — yarn Berry cannot. */
+const GLOBAL_CAPABLE: readonly PackageManager[] = ["npm", "pnpm", "bun"];
+
 /**
  * The argv that installs `pkg` globally — a standalone CLI, not a project
- * dependency.
+ * dependency — or undefined when this machine has no way to do it.
  *
  * Yarn Berry removed global installs with no replacement, so `yarn global add`
- * only works on Classic and Berry answers "Unknown command". Berry therefore
- * gets npm, which is the one manager guaranteed present alongside Node.
+ * works on Classic only and Berry answers "Unknown command". Berry falls back to
+ * whichever global-capable manager is actually on PATH, which is normally npm.
  *
- * Substituting a different manager is safe *here* and nowhere else in this
- * module: a global install has no project dependency tree to be wrong about,
- * which is the whole reason the project's manager must win for
- * {@link installArgs}. The alternative — emitting a command known to fail — left
- * a Berry user with no `skills` binary and a broken esbuild hint.
+ * Substituting a manager is safe *here* and nowhere else in this module: a
+ * global install has no project dependency tree to be wrong about, which is the
+ * whole reason the project's manager must win for {@link installArgs}. What is
+ * not safe is naming a command that cannot run — npm ships with Node but is
+ * packaged separately on some Linux distributions, so returning `npm install -g`
+ * unchecked would hand a Berry user a command their machine does not have. The
+ * caller decides what to say when there is nothing to return.
  */
 export const globalInstallArgs = (
 	pm: PackageManager,
 	pkg: string,
-): { command: string; args: string[] } => {
-	switch (pm) {
-		case "pnpm":
-			return { command: "pnpm", args: ["add", "-g", pkg] };
-		case "yarn":
-			return yarnMajor() === 1
-				? { command: "yarn", args: ["global", "add", pkg] }
-				: { command: "npm", args: ["install", "-g", pkg] };
-		case "bun":
-			return { command: "bun", args: ["add", "-g", pkg] };
-		case "npm":
-			return { command: "npm", args: ["install", "-g", pkg] };
+): { command: string; args: string[] } | undefined => {
+	const argsFor = (
+		manager: PackageManager,
+	): { command: string; args: string[] } =>
+		manager === "npm"
+			? { command: "npm", args: ["install", "-g", pkg] }
+			: { command: manager, args: ["add", "-g", pkg] };
+
+	if (pm === "yarn") {
+		if (yarnMajor() === 1)
+			return { command: "yarn", args: ["global", "add", pkg] };
+		const available = installedPackageManagers().find((candidate) =>
+			GLOBAL_CAPABLE.includes(candidate),
+		);
+		return available ? argsFor(available) : undefined;
 	}
+
+	return argsFor(pm);
 };
 
 /**

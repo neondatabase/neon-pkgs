@@ -14,10 +14,10 @@ const LOCKFILE: Record<PackageManager, string> = {
 /**
  * A throwaway project directory that `resolvePackageManager` will read as `pm`.
  *
- * The `.git` marker is what makes this deterministic: without it the lockfile
- * walk continues out of the temp directory into `$TMPDIR`'s ancestors, where
- * whatever lockfile it finds first decides the answer — so the same assertion
- * passes on one machine and fails on another.
+ * The `.git` marker models a repository root, which is what a real project has
+ * and what the lockfile walk uses as its boundary. Tests that need the
+ * no-repository case should build the directory themselves rather than reach for
+ * this.
  */
 export const makeProjectDir = (
 	pm: PackageManager,

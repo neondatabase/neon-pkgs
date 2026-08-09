@@ -19,13 +19,15 @@ async function ensureSkillsCli(): Promise<void> {
 		await execa("skills", ["--version"], { stdio: "pipe", timeout: 5000 });
 	} catch {
 		// Not installed — install it globally with whatever launched us, so a
-		// pnpm/bun user doesn't get a stray npm global install.
-		const { command, args } = globalInstallArgs(
+		// pnpm/bun user doesn't get a stray npm global install. Undefined means
+		// nothing on this machine can install a global CLI at all.
+		const install = globalInstallArgs(
 			resolveInvokingPackageManager(),
 			"skills",
 		);
+		if (!install) return;
 		try {
-			await execa(command, args, {
+			await execa(install.command, install.args, {
 				stdio: "pipe",
 				timeout: 60000,
 			});

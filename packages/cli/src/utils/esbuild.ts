@@ -9,15 +9,16 @@ import {
 } from "./package_manager.js";
 
 const notFoundMessage = (): string => {
-	const { command, args } = globalInstallArgs(
+	const install = globalInstallArgs(
 		resolveInvokingPackageManager(),
 		"esbuild",
 	);
-	return (
-		"esbuild not found. neon ships esbuild for most platforms; if you see " +
-		`this, install esbuild and ensure it is on your PATH (e.g. \`${command} ${args.join(" ")}\`), ` +
-		"or set NEON_ESBUILD_PATH to an esbuild binary."
-	);
+	// Only name an install command this machine can actually run: yarn Berry has
+	// no global install, and npm may not be present to stand in for it.
+	const how = install
+		? `install esbuild and ensure it is on your PATH (e.g. \`${install.command} ${install.args.join(" ")}\`), or `
+		: "put an esbuild binary on your PATH, or ";
+	return `esbuild not found. neon ships esbuild for most platforms; if you see this, ${how}set NEON_ESBUILD_PATH to an esbuild binary.`;
 };
 
 // Prepended to the ESM bundle. Bundled dependencies are frequently CommonJS, but an ESM

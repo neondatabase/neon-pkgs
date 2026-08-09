@@ -438,9 +438,8 @@ export const initCmd = async (props: ConfigInitProps): Promise<void> => {
 			const ok = await run(pm, args, cwd);
 			if (!ok) {
 				log.warning(
-					"Could not install the config packages automatically. Run by hand: %s %s",
-					pm,
-					args.join(" "),
+					"Could not install the config packages automatically. Run by hand: %s",
+					formatInstallCommand(pm, missing),
 				);
 			}
 		}

@@ -14,6 +14,7 @@ import {
 	formatInstallCommand,
 	globalInstallArgs,
 	inferPackageManager,
+	type PackageManager,
 	resolveInvokingPackageManager,
 	resolvePackageManager,
 } from "./package_manager.js";
@@ -123,6 +124,28 @@ describe("detectProjectPackageManager outside a repository", () => {
 		mkdirSync(target, { recursive: true });
 
 		expect(detectProjectPackageManager(target)).toBe("pnpm");
+	});
+
+	it("treats a directory that does not exist yet as its lexical path", () => {
+		// bootstrap resolves a target before creating it, so this is normal.
+		mkdirSync(join(outside, ".git"));
+		writeFileSync(join(outside, "bun.lock"), "");
+
+		expect(
+			detectProjectPackageManager(join(outside, "not-created-yet")),
+		).toBe("bun");
+	});
+
+	it("refuses to guess when the path is broken rather than missing", () => {
+		// A path whose parent component is a file, not a directory: ENOTDIR. The
+		// old catch-all would silently fall back to a lexical walk from here.
+		writeFileSync(join(outside, "a-file"), "");
+
+		expect(() =>
+			detectProjectPackageManager(
+				join(outside, "a-file", "under-a-file"),
+			),
+		).toThrow(/Could not resolve/);
 	});
 
 	it("follows a symlink into the repository it really points at", () => {
@@ -251,26 +274,28 @@ describe("formatInstallCommand", () => {
 });
 
 describe("globalInstallArgs", () => {
+	const formatGlobalInstall = (pm: PackageManager): string | undefined => {
+		const install = globalInstallArgs(pm, "neonctl");
+		return install && `${install.command} ${install.args.join(" ")}`;
+	};
+
 	it.each([
 		["npm", "npm install -g neonctl"],
 		["pnpm", "pnpm add -g neonctl"],
 		["bun", "bun add -g neonctl"],
 	] as const)("installs globally with %s", (pm, expected) => {
-		const { command, args } = globalInstallArgs(pm, "neonctl");
-		expect(`${command} ${args.join(" ")}`).toBe(expected);
+		expect(formatGlobalInstall(pm)).toBe(expected);
 	});
 
 	describe("yarn depends on the major, which only yarn itself can report", () => {
 		const originalPath = process.env.PATH;
 		let bin: string;
 
-		/** A real `yarn` on PATH that reports `version`, so no mock is needed. */
-		const stubYarn = (version: string) => {
-			const script = join(bin, "yarn");
-			writeFileSync(script, `#!/bin/sh\necho "${version}"\n`, {
+		/** A real executable on PATH, so none of this needs a mock. */
+		const stub = (name: string, output: string) =>
+			writeFileSync(join(bin, name), `#!/bin/sh\necho "${output}"\n`, {
 				mode: 0o755,
 			});
-		};
 
 		beforeEach(() => {
 			bin = mkdtempSync(join(tmpdir(), "neonctl-pm-yarn-"));
@@ -283,29 +308,35 @@ describe("globalInstallArgs", () => {
 		});
 
 		it("uses `yarn global add` on Classic", () => {
-			stubYarn("1.22.22");
-			const { command, args } = globalInstallArgs("yarn", "neonctl");
-			expect(`${command} ${args.join(" ")}`).toBe(
-				"yarn global add neonctl",
-			);
+			stub("yarn", "1.22.22");
+			expect(formatGlobalInstall("yarn")).toBe("yarn global add neonctl");
 		});
 
 		it.each([
 			"2.4.3",
 			"4.1.0",
-		])("falls back to npm on Berry %s, which has no global install", (version) => {
-			stubYarn(version);
-			const { command, args } = globalInstallArgs("yarn", "neonctl");
-			expect(`${command} ${args.join(" ")}`).toBe(
-				"npm install -g neonctl",
-			);
+		])("borrows a global-capable manager on Berry %s", (version) => {
+			stub("yarn", version);
+			stub("npm", "11.0.0");
+			expect(formatGlobalInstall("yarn")).toBe("npm install -g neonctl");
 		});
 
-		it("falls back to npm when yarn cannot be run at all", () => {
-			const { command, args } = globalInstallArgs("yarn", "neonctl");
-			expect(`${command} ${args.join(" ")}`).toBe(
-				"npm install -g neonctl",
-			);
+		it("borrows pnpm when Berry is the yarn and npm is not installed", () => {
+			// npm ships with Node, but some Linux distributions package it
+			// separately, so its presence cannot be assumed.
+			stub("yarn", "4.1.0");
+			stub("pnpm", "10.0.0");
+			expect(formatGlobalInstall("yarn")).toBe("pnpm add -g neonctl");
+		});
+
+		it("returns nothing when no manager on the machine can install globally", () => {
+			stub("yarn", "4.1.0");
+			expect(globalInstallArgs("yarn", "neonctl")).toBeUndefined();
+		});
+
+		it("treats an unreadable yarn version as Berry", () => {
+			stub("npm", "11.0.0");
+			expect(formatGlobalInstall("yarn")).toBe("npm install -g neonctl");
 		});
 	});
 });
