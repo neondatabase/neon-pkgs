@@ -34,10 +34,15 @@ export type LogFieldValuesQuery = NonNullable<
  * object storage, and Postgres computes. Grouped under `neon.logs.*` alongside the
  * other branch-scoped product surfaces.
  *
- * Private Beta. Telemetry is region-gated and off in most regions, so the common answer
- * today is `404` with `reason: "telemetry_not_enabled"` rather than an empty result. A
- * branch that has telemetry but nothing recorded answers `200` with an empty array, and
- * one whose backend is down answers `503`, which the client retries on by default.
+ * Private Beta. Telemetry is region-gated, so a branch outside an enabled region answers
+ * `404` with `reason: "telemetry_not_enabled"` rather than an empty result — treat that
+ * as an ordinary outcome. A branch that has telemetry but nothing recorded answers `200`
+ * with an empty array, and one whose backend is down answers `503`, which the client
+ * retries on by default.
+ *
+ * The spec is wider than the backend: of the three `source` values only `function` and
+ * `storage` were observed emitting, and `minimum_severity` can be rejected as unsupported
+ * by a branch's log backend, where `severity_text` still works.
  */
 export class Logs<DThrow extends boolean> {
 	readonly #ctx: RequestContext;
