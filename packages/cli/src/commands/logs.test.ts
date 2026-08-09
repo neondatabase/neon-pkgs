@@ -48,7 +48,7 @@ describe("logs", () => {
 				next_cursor: "",
 			}),
 		).toThrow(
-			"Neon reported more log records than it returned but gave no cursor to reach them.",
+			"Neon returned an incomplete logs page without a pagination cursor. No records were printed because the result cannot be completed; retry the command.",
 		);
 	});
 
@@ -80,7 +80,24 @@ describe("logs", () => {
 		await testCliCommand(["logs", "query", "--help"], {
 			mockDir: "single_org",
 			stderr: expect.stringContaining(
-				"Some branch log backends reject this filter; use --severity-text when they do.",
+				"If Neon reports that this filter is unsupported",
+			),
+		});
+	});
+
+	test("help states the default windows and seven-day cap", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["logs", "query", "--help"], {
+			mockDir: "single_org",
+			stderr: expect.stringContaining(
+				"Defaults to 1h; the maximum window is 7d.",
+			),
+		});
+		await testCliCommand(["logs", "field-values", "--help"], {
+			mockDir: "single_org",
+			stderr: expect.stringContaining(
+				"Defaults to 6h; the maximum window is 7d.",
 			),
 		});
 	});
@@ -89,7 +106,7 @@ describe("logs", () => {
 		await testCliCommand(["logs"], {
 			mockDir: "single_org",
 			code: 1,
-			stderr: "ERROR: Specify a logs sub-command.",
+			stderr: "ERROR: Run `neon logs --help` to see the subcommands.",
 		});
 	});
 
@@ -99,6 +116,19 @@ describe("logs", () => {
 			code: 1,
 			stderr: expect.stringContaining("Unknown command"),
 		});
+	});
+
+	test("an unknown query option is rejected before any request", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			["logs", "query", "--serverity", "error", ...SCOPE],
+			{
+				mockDir: "single_org",
+				code: 1,
+				stderr: expect.stringContaining("Unknown argument: serverity"),
+			},
+		);
 	});
 
 	test("query (yaml)", async ({ testCliCommand }) => {
@@ -129,6 +159,36 @@ describe("logs", () => {
 		});
 
 		expect(JSON.parse(readFileSync(sink, "utf8"))).toEqual({ limit: 100 });
+	});
+
+	test("query rejects an invalid or out-of-range limit", async ({
+		testCliCommand,
+	}) => {
+		for (const value of ["abc", "0", "1001", "1.5"]) {
+			await testCliCommand(
+				["logs", "query", "--limit", value, ...SCOPE],
+				{
+					mockDir: "single_org",
+					code: 1,
+					stderr: expect.stringContaining(
+						"--limit must be an integer from 1 to 1000.",
+					),
+				},
+			);
+		}
+	});
+
+	test("query rejects repeated scalar filters", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			["logs", "query", "--since", "1h", "--since", "2h", ...SCOPE],
+			{
+				mockDir: "single_org",
+				code: 1,
+				stderr: "ERROR: --since was given more than once. Pass it at most once.",
+			},
+		);
 	});
 
 	test("query maps every structured filter onto its wire name", async ({
@@ -361,7 +421,7 @@ describe("logs", () => {
 			{
 				mockDir: "single_org",
 				code: 1,
-				stderr: "ERROR: Neon reported more log records than it returned but gave no cursor to reach them.",
+				stderr: "ERROR: Neon returned an incomplete logs page without a pagination cursor. No records were printed because the result cannot be completed; retry the command.",
 			},
 		);
 	});
@@ -507,6 +567,28 @@ describe("logs", () => {
 		});
 	});
 
+	test("field-values rejects an invalid limit", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"logs",
+				"field-values",
+				"service_name",
+				"--limit",
+				"abc",
+				...SCOPE,
+			],
+			{
+				mockDir: "single_org",
+				code: 1,
+				stderr: expect.stringContaining(
+					"--limit must be an integer from 1 to 1000.",
+				),
+			},
+		);
+	});
+
 	test("field-values rejects --since together with --start-time", async ({
 		testCliCommand,
 	}) => {
@@ -539,7 +621,7 @@ describe("logs", () => {
 			{
 				mockDir: "single_org",
 				code: 1,
-				stderr: 'ERROR: unknown log field "unknown-field"; call the log fields endpoint for the fields this branch supports',
+				stderr: 'ERROR: Unknown log field "unknown-field". Run `neon logs fields --project-id test-project-123456 --branch br-main-branch-123456` to list the fields this branch supports.',
 			},
 		);
 	});

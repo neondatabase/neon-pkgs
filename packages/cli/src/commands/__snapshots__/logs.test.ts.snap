@@ -53,6 +53,8 @@ exports[`logs > a truncated query points at the next cursor in table output 1`] 
 "
 `;
 
+exports[`logs > an unknown query option is rejected before any request 1`] = `""`;
+
 exports[`logs > an unknown sub-command is rejected 1`] = `""`;
 
 exports[`logs > field-values (yaml) 1`] = `
@@ -87,11 +89,13 @@ exports[`logs > field-values neutralizes terminal controls in table output 1`] =
 
 exports[`logs > field-values prints an empty-state message in table output 1`] = `
 "
-No values found.
+No values found in the 6h window ending now.
 "
 `;
 
 exports[`logs > field-values rejects --since together with --start-time 1`] = `""`;
+
+exports[`logs > field-values rejects an invalid limit 1`] = `""`;
 
 exports[`logs > field-values surfaces the API's rejection of an unknown field 1`] = `""`;
 
@@ -151,6 +155,10 @@ exports[`logs > fields with table output 1`] = `
 └───────────────┘
 "
 `;
+
+exports[`logs > help states the default windows and seven-day cap 1`] = `""`;
+
+exports[`logs > help states the default windows and seven-day cap 2`] = `""`;
 
 exports[`logs > query (yaml) 1`] = `
 "logs:
@@ -249,7 +257,7 @@ exports[`logs > query neutralizes terminal controls in table output 1`] = `
 
 exports[`logs > query prints an empty-state message in table output 1`] = `
 "
-No logs found.
+No logs found in the 1h window ending now.
 "
 `;
 
@@ -258,6 +266,16 @@ exports[`logs > query rejects --logql together with a structured filter 1`] = `"
 exports[`logs > query rejects --since together with --start-time 1`] = `""`;
 
 exports[`logs > query rejects a truncated page without a cursor 1`] = `""`;
+
+exports[`logs > query rejects an invalid or out-of-range limit 1`] = `""`;
+
+exports[`logs > query rejects an invalid or out-of-range limit 2`] = `""`;
+
+exports[`logs > query rejects an invalid or out-of-range limit 3`] = `""`;
+
+exports[`logs > query rejects an invalid or out-of-range limit 4`] = `""`;
+
+exports[`logs > query rejects repeated scalar filters 1`] = `""`;
 
 exports[`logs > query resolves the default branch when none is given 1`] = `
 "logs:

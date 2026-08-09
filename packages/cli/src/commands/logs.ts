@@ -5,14 +5,17 @@ import type {
 	ProjectBranchLogsQueryRequest,
 } from "@neon/sdk";
 import type yargs from "yargs";
+import { isNeonApiError } from "../api.js";
 import { log } from "../log.js";
 import type { BranchScopeProps } from "../types.js";
 import { branchIdFromProps, fillSingleProject } from "../utils/enrichers.js";
+import { noPassthrough, single } from "../utils/flags.js";
 import { writer } from "../writer.js";
 
 const BETA_NOTE =
 	"Logs require Neon Platform Beta and are currently available only for projects in aws-us-east-2.";
-const LOGS_EPILOG = `${BETA_NOTE}
+const LOGS_EPILOG = `
+${BETA_NOTE}
 
 For more information, visit https://neon.com/docs/reference/neon-cli`;
 
@@ -61,9 +64,23 @@ export const assertReachableLogsPage = ({
 }): void => {
 	if (is_truncated && !next_cursor) {
 		throw new Error(
-			"Neon reported more log records than it returned but gave no cursor to reach them.",
+			"Neon returned an incomplete logs page without a pagination cursor. No records were printed because the result cannot be completed; retry the command.",
 		);
 	}
+};
+
+const logLimit = (value: unknown): number | undefined => {
+	if (value === undefined) return undefined;
+	if (
+		Array.isArray(value) ||
+		typeof value !== "number" ||
+		!Number.isInteger(value) ||
+		value < 1 ||
+		value > 1000
+	) {
+		throw new Error("--limit must be an integer from 1 to 1000.");
+	}
+	return value;
 };
 
 // The structured content filters. `--logql` replaces all of them, so supplying
@@ -84,30 +101,35 @@ const scopeOptions = {
 	"project-id": {
 		describe: "Project ID",
 		type: "string",
+		coerce: single("project-id"),
 	},
 	branch: {
 		describe: "Branch ID or name",
 		type: "string",
+		coerce: single("branch"),
 	},
 } as const;
 
-const windowOptions = {
-	since: {
-		describe:
-			"Length of the window, ending at --end-time or now (e.g. 30m, 6h, 7d). Mutually exclusive with --start-time.",
-		type: "string",
-	},
-	"start-time": {
-		describe:
-			"Inclusive start of the window (RFC 3339, e.g. 2025-01-01T00:00:00Z). Mutually exclusive with --since.",
-		type: "string",
-	},
-	"end-time": {
-		describe:
-			"Exclusive end of the window (RFC 3339). Defaults to the current time.",
-		type: "string",
-	},
-} as const;
+const windowOptions = (defaultWindow: "1h" | "6h") =>
+	({
+		since: {
+			describe: `Length of the window, ending at --end-time or now. Defaults to ${defaultWindow}; the maximum window is 7d. Mutually exclusive with --start-time.`,
+			type: "string",
+			coerce: single("since"),
+		},
+		"start-time": {
+			describe:
+				"Inclusive start of the window (RFC 3339, e.g. 2025-01-01T00:00:00Z). The maximum window is 7d. Mutually exclusive with --since.",
+			type: "string",
+			coerce: single("start-time"),
+		},
+		"end-time": {
+			describe:
+				"Exclusive end of the window (RFC 3339). Defaults to the current time.",
+			type: "string",
+			coerce: single("end-time"),
+		},
+	}) as const;
 
 export const command = "logs";
 export const describe = "Query branch logs";
@@ -124,64 +146,75 @@ export const builder = (argv: yargs.Argv) =>
 				yargs
 					.epilogue(LOGS_EPILOG)
 					.options({
-						...windowOptions,
+						...windowOptions("1h"),
 						limit: {
 							describe:
-								"Maximum number of records to return per page",
+								"Maximum number of records to return per page (1-1000)",
 							type: "number",
 							default: 100,
+							coerce: logLimit,
 						},
 						cursor: {
 							describe:
 								"Pagination cursor returned as next_cursor by a previous call. Repeat the same time range and filters.",
 							type: "string",
+							coerce: single("cursor"),
 						},
 						"sort-order": {
 							describe:
 								"Order records by timestamp. Defaults to desc (newest first).",
 							type: "string",
 							choices: LOG_SORT_ORDERS,
+							coerce: single("sort-order"),
 						},
 						source: {
 							describe: "Only records emitted by this service",
 							type: "string",
 							choices: LOG_SOURCES,
+							coerce: single("source"),
 						},
 						"service-name": {
 							describe:
 								"Match the OpenTelemetry service.name resource attribute exactly",
 							type: "string",
+							coerce: single("service-name"),
 						},
 						"scope-name": {
 							describe:
 								"Match the OpenTelemetry instrumentation scope name exactly",
 							type: "string",
+							coerce: single("scope-name"),
 						},
 						"minimum-severity": {
 							describe:
-								"Only records at or above this severity. Combines with --severity-text. Some branch log backends reject this filter; use --severity-text when they do.",
+								"Only records at or above this severity. Combines with --severity-text. If Neon reports that this filter is unsupported, use --severity-text instead.",
 							type: "string",
 							choices: LOG_SEVERITIES,
+							coerce: single("minimum-severity"),
 						},
 						"severity-text": {
 							describe:
-								"Match the OpenTelemetry severity text exactly",
+								"Match the OpenTelemetry severity text exactly. Run `neon logs field-values severity_text` to discover the values present.",
 							type: "string",
+							coerce: single("severity-text"),
 						},
 						"body-contains": {
 							describe:
-								"Match records whose rendered message contains this case-sensitive substring",
+								"Match the case-sensitive rendered message. Structured bodies are rendered as compact JSON.",
 							type: "string",
+							coerce: single("body-contains"),
 						},
 						"trace-id": {
 							describe:
 								"Match records carrying this trace ID (32 lowercase hex digits)",
 							type: "string",
+							coerce: single("trace-id"),
 						},
 						logql: {
 							describe:
 								"Raw LogQL expression (stream selectors and line filters only). Replaces the structured filters; the window, --limit, --sort-order and --cursor still apply.",
 							type: "string",
+							coerce: single("logql"),
 						},
 					})
 					.conflicts("since", "start-time")
@@ -199,13 +232,19 @@ export const builder = (argv: yargs.Argv) =>
 							'$0 logs query --since 1h --logql \'{entity_type="function"} |= "timeout"\'',
 							"A raw LogQL selection instead of the structured filters",
 						],
-					]),
+					])
+					.strict()
+					.check(noPassthrough("logs query")),
 			(args) => query(args as any),
 		)
 		.command(
 			"fields",
 			"List the log fields whose values can be discovered on a branch",
-			(yargs) => yargs.epilogue(LOGS_EPILOG),
+			(yargs) =>
+				yargs
+					.epilogue(LOGS_EPILOG)
+					.strict()
+					.check(noPassthrough("logs fields")),
 			(args) => fields(args as any),
 		)
 		.command(
@@ -221,17 +260,19 @@ export const builder = (argv: yargs.Argv) =>
 						demandOption: true,
 					})
 					.options({
-						...windowOptions,
+						...windowOptions("6h"),
 						source: {
 							describe:
 								"Only consider records emitted by this service",
 							type: "string",
 							choices: LOG_SOURCES,
+							coerce: single("source"),
 						},
 						limit: {
 							describe:
-								"Maximum number of distinct values to return",
+								"Maximum number of distinct values to return (1-1000)",
 							type: "number",
+							coerce: logLimit,
 						},
 					})
 					.conflicts("since", "start-time")
@@ -240,10 +281,12 @@ export const builder = (argv: yargs.Argv) =>
 							"$0 logs field-values service_name --since 6h",
 							"Service names seen in the last six hours",
 						],
-					]),
+					])
+					.strict()
+					.check(noPassthrough("logs field-values")),
 			(args) => fieldValues(args as any),
 		)
-		.demandCommand(1, "Specify a logs sub-command.")
+		.demandCommand(1, "Run `neon logs --help` to see the subcommands.")
 		.epilogue(LOGS_EPILOG);
 
 export const handler = (args: yargs.Argv) => {
@@ -298,6 +341,21 @@ export const buildLogsQueryBody = (
 	return body;
 };
 
+const describeWindow = (
+	window: { since?: string; startTime?: string; endTime?: string },
+	defaultSince: "1h" | "6h",
+): string =>
+	window.startTime
+		? `window from ${window.startTime} to ${window.endTime ?? "now"}`
+		: `${window.since ?? defaultSince} window ending ${window.endTime ?? "now"}`;
+
+const apiErrorReason = (data: unknown): string | undefined => {
+	if (typeof data !== "object" || data === null || !("reason" in data)) {
+		return undefined;
+	}
+	return typeof data.reason === "string" ? data.reason : undefined;
+};
+
 const query = async (
 	props: BranchScopeProps & LogsQueryFlags,
 ): Promise<void> => {
@@ -337,7 +395,7 @@ const query = async (
 		{
 			fields: LOG_FIELDS,
 			title: "logs",
-			emptyMessage: "No logs found.",
+			emptyMessage: `No logs found in the ${describeWindow(props, "1h")}.`,
 		},
 	);
 
@@ -383,18 +441,31 @@ const fieldValues = async (
 	},
 ): Promise<void> => {
 	const branchId = await branchIdFromProps(props);
-	const { data } = await props.apiClient.listProjectBranchLogFieldValues({
-		projectId: props.projectId,
-		branchId,
-		fieldName: props.field,
-		...(props.since !== undefined ? { since: props.since } : {}),
-		...(props.startTime !== undefined
-			? { start_time: props.startTime }
-			: {}),
-		...(props.endTime !== undefined ? { end_time: props.endTime } : {}),
-		...(props.source !== undefined ? { source: props.source } : {}),
-		...(props.limit !== undefined ? { limit: props.limit } : {}),
-	});
+	let data;
+	try {
+		({ data } = await props.apiClient.listProjectBranchLogFieldValues({
+			projectId: props.projectId,
+			branchId,
+			fieldName: props.field,
+			...(props.since !== undefined ? { since: props.since } : {}),
+			...(props.startTime !== undefined
+				? { start_time: props.startTime }
+				: {}),
+			...(props.endTime !== undefined ? { end_time: props.endTime } : {}),
+			...(props.source !== undefined ? { source: props.source } : {}),
+			...(props.limit !== undefined ? { limit: props.limit } : {}),
+		}));
+	} catch (error) {
+		if (
+			isNeonApiError(error) &&
+			apiErrorReason(error.data) === "unknown_field"
+		) {
+			throw new Error(
+				`Unknown log field "${escapeLogTableCell(props.field)}". Run \`neon logs fields --project-id ${escapeLogTableCell(props.projectId)} --branch ${escapeLogTableCell(branchId)}\` to list the fields this branch supports.`,
+			);
+		}
+		throw error;
+	}
 
 	if (props.output === "json" || props.output === "yaml") {
 		writer(props).end(data, { fields: ["values", "is_truncated"] });
@@ -406,7 +477,7 @@ const fieldValues = async (
 		{
 			fields: ["value"],
 			title: "values",
-			emptyMessage: "No values found.",
+			emptyMessage: `No values found in the ${describeWindow(props, "6h")}.`,
 		},
 	);
 

@@ -747,7 +747,7 @@ All sub-commands honor the [global options](#global-options), including `--outpu
 
 `neon logs` reads the log records the services on a branch emit — Neon Functions, object storage, and Postgres computes. **Logs require Neon Platform Beta and are currently available only for projects in `aws-us-east-2`.**
 
-Every sub-command resolves the project through the standard chain (`--project-id`, then the `.neon` context file, then a single-project auto-detect), and takes `--branch <id|name>`, defaulting to the project's default branch.
+Every sub-command resolves the project through the standard chain (`--project-id`, then the `.neon` context file, then a single-project auto-detect), and takes `--branch <id|name>`, defaulting to the project's default branch. `logs query` searches the previous hour by default; `logs field-values` searches the previous six hours. The maximum time window is seven days.
 
 ```bash
 # The last 30 minutes on the default branch
@@ -771,7 +771,7 @@ neon logs fields
 neon logs field-values service_name --since 6h --source function
 ```
 
-A response holds at most `--limit` records (default 100). When more matched, table output prints the `--cursor` to repeat the same query with; `--output json|yaml` returns `is_truncated` and `next_cursor` on the envelope instead, so nothing but the payload lands on stdout:
+A response holds at most `--limit` records (1–1000; default 100). When more matched, table output prints the `--cursor` to repeat the same query with; `--output json|yaml` returns `is_truncated` and `next_cursor` on the envelope instead, so nothing but the payload lands on stdout. Table output shows the common fields; use structured output for the complete records:
 
 ```console
 $ neon logs query --since 24h --output json
@@ -790,11 +790,11 @@ $ neon logs query --since 24h --output json
   "next_cursor": "eyJvZmZzZXQiOjEwMH0",
   "is_truncated": true
 }
-
-$ neon logs query --since 24h --cursor eyJvZmZzZXQiOjEwMH0 --output json
 ```
 
-Two combinations are rejected before the request: `--since` with `--start-time`, and `--logql` with any of `--source`, `--service-name`, `--scope-name`, `--minimum-severity`, `--severity-text`, `--body-contains` or `--trace-id`. `--minimum-severity` and `--severity-text` are independent filters and combine with AND. Some branch log backends reject `--minimum-severity`; use `--severity-text` when they do.
+Two combinations are rejected before the request: `--since` with `--start-time`, and `--logql` with any of `--source`, `--service-name`, `--scope-name`, `--minimum-severity`, `--severity-text`, `--body-contains` or `--trace-id`. `--minimum-severity` and `--severity-text` are independent filters and combine with AND. If Neon reports that `--minimum-severity` is unsupported, use `--severity-text` instead; `neon logs field-values severity_text` lists the exact values present on a branch.
+
+`--body-contains` compares a case-sensitive substring against the rendered message. Structured bodies, including object storage records, are rendered as compact JSON, so match the JSON form (for example, `"http_status":200`).
 
 ## Profiles
 
