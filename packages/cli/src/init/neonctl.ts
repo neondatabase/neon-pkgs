@@ -1,5 +1,9 @@
 import { lstatSync } from "node:fs";
 import { execa } from "execa";
+import {
+	type PackageManager,
+	resolveInvokingPackageManager,
+} from "../utils/package_manager.js";
 
 /**
  * Returns the Neon CLI command prefix: "CI= npx -y neon".
@@ -16,27 +20,10 @@ export function neonctlCmd(): string {
 }
 
 /**
- * Detects which package manager was used to invoke the current process.
- * Reads the `npm_config_user_agent` env var set by npm/pnpm/yarn/bun when
- * they spawn child processes (including via `npx`, `pnpx`, `bunx`, etc.).
- *
- * Falls back to "npm" if detection fails.
- */
-export function detectPackageManager(): "npm" | "pnpm" | "yarn" | "bun" {
-	const ua = process.env.npm_config_user_agent;
-	if (ua) {
-		if (ua.startsWith("pnpm/")) return "pnpm";
-		if (ua.startsWith("yarn/")) return "yarn";
-		if (ua.startsWith("bun/")) return "bun";
-	}
-	return "npm";
-}
-
-/**
  * Returns the global install command for a given package manager.
  */
 function globalInstallArgs(
-	pm: "npm" | "pnpm" | "yarn" | "bun",
+	pm: PackageManager,
 	pkg: string,
 ): { command: string; args: string[] } {
 	switch (pm) {
@@ -185,7 +172,7 @@ export async function ensureNeonctl(): Promise<EnsureNeonctlResult> {
 		};
 	}
 
-	const pm = detectPackageManager();
+	const pm = resolveInvokingPackageManager();
 	const { command, args } = globalInstallArgs(pm, "neonctl");
 
 	try {

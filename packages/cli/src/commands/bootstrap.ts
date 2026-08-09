@@ -21,8 +21,11 @@ import type { CommonProps } from "../types.js";
 import { getCliName } from "../utils/cli_name.js";
 import {
 	detectPackageManager,
+	detectProjectPackageManager,
+	formatInstallCommand,
 	installedPackageManagers,
 	type PackageManager,
+	resolvePackageManager,
 	runCommand,
 } from "../utils/package_manager.js";
 
@@ -352,15 +355,17 @@ const runPostScaffoldSteps = async (
 	targetDir: string,
 	interactive: boolean,
 ): Promise<void> => {
-	const detected = detectPackageManager();
+	const inferred =
+		detectProjectPackageManager(targetDir) ?? detectPackageManager();
+	const defaultPm = resolvePackageManager(targetDir);
 
 	if (props.default) {
-		await runDefaultSteps(props, targetDir, detected ?? "npm");
+		await runDefaultSteps(props, targetDir, defaultPm);
 		return;
 	}
 
 	if (!interactive) {
-		printNextSteps(targetDir, detected ?? "npm", {
+		printNextSteps(targetDir, defaultPm, {
 			installed: false,
 			suggestLink: true,
 		});
@@ -368,12 +373,12 @@ const runPostScaffoldSteps = async (
 	}
 
 	// The package manager used for the install (and shown in the closing hint).
-	// When we couldn't infer it from the invocation we ask, so a globally
+	// When we couldn't infer from the project or invocation we ask, so a globally
 	// installed `neon` doesn't silently force npm on a bun/pnpm user.
-	let pm: PackageManager = detected ?? "npm";
+	let pm: PackageManager = defaultPm;
 	let installed = false;
-	if (props.install && (await confirm(installPrompt(detected)))) {
-		pm = detected ?? (await selectPackageManager());
+	if (props.install && (await confirm(installPrompt(inferred)))) {
+		pm = inferred ?? (await selectPackageManager());
 		installed = await runCommand(pm, ["install"], targetDir);
 	}
 
@@ -411,9 +416,9 @@ const runPostScaffoldSteps = async (
 	printNextSteps(targetDir, pm, { installed, suggestLink: true });
 };
 
-const installPrompt = (detected: PackageManager | undefined): string =>
-	detected
-		? `Install dependencies with ${detected}?`
+const installPrompt = (inferred: PackageManager | undefined): string =>
+	inferred
+		? `Install dependencies with ${inferred}?`
 		: "Install dependencies?";
 
 /**
@@ -638,6 +643,7 @@ const runAgent = async (props: BootstrapProps): Promise<void> => {
 
 	const dir = displayDir(targetDir);
 	const runIn = isCurrentDir(targetDir) ? "" : `cd ${shellArg(dir)} && `;
+	const installPm = resolvePackageManager(targetDir);
 	emitAgent({
 		status: "scaffolded",
 		directory: targetDir,
@@ -648,7 +654,7 @@ const runAgent = async (props: BootstrapProps): Promise<void> => {
 				action: "install_dependencies",
 				instruction:
 					"Ask the user whether to install dependencies, then run this in the project directory.",
-				command: `${runIn}npm install`,
+				command: `${runIn}${formatInstallCommand(installPm)}`,
 			},
 			{
 				action: "initialize_git",

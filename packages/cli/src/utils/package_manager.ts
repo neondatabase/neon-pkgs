@@ -1,3 +1,17 @@
+/**
+ * Package manager detection and install helpers for the Neon CLI.
+ *
+ * Every command that shells out to install dependencies should go through here
+ * rather than reading `npm_config_user_agent` or lockfiles on its own.
+ *
+ * - {@link detectProjectPackageManager} — lockfile walk from `cwd` up to the repo root
+ * - {@link detectPackageManager} — the tool that launched this process (`npx`, `pnpm dlx`, …)
+ * - {@link resolvePackageManager} — project lockfile, then invocation, then PATH, then npm
+ *   (installing into an existing project directory)
+ * - {@link resolveInvokingPackageManager} — invocation, then PATH, then npm (global installs,
+ *   or when the target directory has no lockfile yet, e.g. a fresh scaffold)
+ * - {@link formatInstallCommand} — shell-ready `pnpm install` / `npm add …` for agents and hints
+ */
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -20,7 +34,10 @@ export const PACKAGE_MANAGERS: PackageManager[] = [
  * purpose: a repo with both a pnpm lockfile and a leftover `package-lock.json`
  * (which a failed run like the one this fixes can leave behind) is a pnpm repo.
  */
-const LOCKFILES: [file: string, pm: PackageManager][] = [
+/** Lockfiles in detection order (npm last — see comment on the array). */
+export const LOCKFILES: ReadonlyArray<
+	readonly [file: string, pm: PackageManager]
+> = [
 	["pnpm-lock.yaml", "pnpm"],
 	["yarn.lock", "yarn"],
 	// bun 1.2+ writes the text `bun.lock`; older versions the binary `bun.lockb`.
@@ -91,6 +108,14 @@ export const resolvePackageManager = (cwd: string): PackageManager =>
 	"npm";
 
 /**
+ * Pick a package manager when there is no project lockfile to read — global
+ * installs, or scaffolding into a directory that does not exist yet. Same chain
+ * as {@link resolvePackageManager} minus the lockfile walk.
+ */
+export const resolveInvokingPackageManager = (): PackageManager =>
+	detectPackageManager() ?? installedPackageManagers()[0] ?? "npm";
+
+/**
  * The argv that adds `packages` as runtime dependencies with `pm`. npm spells it
  * `install`; pnpm/yarn/bun use `add`.
  */
@@ -98,6 +123,31 @@ export const addDependenciesArgs = (
 	pm: PackageManager,
 	packages: string[],
 ): string[] => (pm === "npm" ? ["install", ...packages] : ["add", ...packages]);
+
+/** argv to install every dependency from the project's manifest. */
+export const installDependenciesArgs = (pm: PackageManager): string[] => [
+	"install",
+];
+
+/**
+ * A shell-ready install line for agents and "next steps" hints — e.g.
+ * `pnpm add @neon/config @neon/env` or `npm install`.
+ */
+export const formatInstallCommand = (
+	pm: PackageManager,
+	packages?: string[],
+): string => {
+	const args = packages?.length
+		? addDependenciesArgs(pm, packages)
+		: installDependenciesArgs(pm);
+	return `${pm} ${args.join(" ")}`;
+};
+
+/**
+ * Text for agent instructions: which lockfiles to check and in what order.
+ */
+export const describeLockfileDetection = (): string =>
+	`check for ${LOCKFILES.map(([file]) => file).join(", ")}, or default to npm`;
 
 /**
  * Run a command inheriting our stdio so the user sees install / link output

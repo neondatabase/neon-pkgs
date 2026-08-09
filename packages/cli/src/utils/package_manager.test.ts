@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
 	detectProjectPackageManager,
+	formatInstallCommand,
+	resolveInvokingPackageManager,
 	resolvePackageManager,
 } from "./package_manager.js";
 
@@ -106,5 +108,44 @@ describe("resolvePackageManager", () => {
 			"yarn/4.1.0 npm/? node/v24.14.1 darwin x64";
 
 		expect(resolvePackageManager(project)).toBe("yarn");
+	});
+});
+
+describe("resolveInvokingPackageManager", () => {
+	const originalUserAgent = process.env.npm_config_user_agent;
+
+	afterEach(() => {
+		if (originalUserAgent === undefined) {
+			delete process.env.npm_config_user_agent;
+		} else {
+			process.env.npm_config_user_agent = originalUserAgent;
+		}
+	});
+
+	it("falls back to npm when nothing is inferable", () => {
+		delete process.env.npm_config_user_agent;
+		expect(resolveInvokingPackageManager()).toBe("npm");
+	});
+
+	it("reads the invoking package manager from npm_config_user_agent", () => {
+		process.env.npm_config_user_agent =
+			"bun/1.2.0 npm/? node/v24.14.1 darwin arm64";
+		expect(resolveInvokingPackageManager()).toBe("bun");
+	});
+});
+
+describe("formatInstallCommand", () => {
+	it("formats a full install", () => {
+		expect(formatInstallCommand("pnpm")).toBe("pnpm install");
+		expect(formatInstallCommand("npm")).toBe("npm install");
+	});
+
+	it("formats add-dependencies for non-npm managers", () => {
+		expect(
+			formatInstallCommand("pnpm", ["@neon/config", "@neon/env"]),
+		).toBe("pnpm add @neon/config @neon/env");
+		expect(formatInstallCommand("npm", ["@neon/config"])).toBe(
+			"npm install @neon/config",
+		);
 	});
 });

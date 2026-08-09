@@ -1,3 +1,8 @@
+import {
+	describeLockfileDetection,
+	formatInstallCommand,
+	resolvePackageManager,
+} from "../../utils/package_manager.js";
 import { neonctlCmd } from "../neonctl.js";
 import { ensureSkillsUpToDate, SKILL_REFERENCE_URLS } from "../skills.js";
 import type { PhaseResponse } from "../types.js";
@@ -30,6 +35,8 @@ export async function handleGettingStartedPhase(
 		await ensureSkillsUpToDate(options.agent);
 	}
 	const steps: { id: string; description: string; command?: string }[] = [];
+
+	const installPm = resolvePackageManager(process.cwd());
 
 	if (!options.hasConnectionString) {
 		if (options.preview) {
@@ -118,10 +125,10 @@ export async function handleGettingStartedPhase(
 			id: "install_dependencies",
 			description: [
 				"Check if node_modules exists in the project root.",
-				"If not, install project dependencies using the appropriate package manager (check for pnpm-lock.yaml, yarn.lock, bun.lockb, or default to npm).",
+				`If not, install project dependencies using the appropriate package manager (${describeLockfileDetection()}).`,
 				"This must be done before `neon env pull` because the project's Neon config file may import packages that need to be installed first.",
 			].join(" "),
-			command: "npm install",
+			command: formatInstallCommand(installPm),
 		});
 
 		// Pull environment variables (connection string, etc.) from Neon

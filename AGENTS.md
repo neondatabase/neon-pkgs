@@ -409,6 +409,7 @@ does not depend on `@neon/env` at all — it compiles the shared tree as its own
 -   **Conformance tests** (`tests/psql-conformance`) need Docker/testcontainers and are excluded from the default Vitest run; run them explicitly with `pnpm --filter <name> test:conformance`.
 -   **Sibling deps**: every internal dependency — the `@neon/*` packages — is `workspace:*`. Never pin one to a published version; see "Publish order" below for the lockfile deadlock that caused.
 -   **`neon init` lives in `src/init/`**, folded in from the retired `neon-init` package. It is the agent-driven setup flow: `orchestrate.ts` is the state machine, `phases/` are its steps, `interactive.ts` is the human path, and `bootstrap.ts` is the template scaffolding core that `commands/bootstrap.ts` also uses. It talks to Neon by shelling out to `npx -y neon` (`init/neonctl.ts`) rather than through the in-process API client, and reads credentials through its own `init/auth.ts` — so it is unaffected by `--profile`, which `neon init` refuses rather than ignores.
+-   **Package manager detection** lives in `src/utils/package_manager.ts`. Any command that installs dependencies into a project directory must call `resolvePackageManager(cwd)` (lockfile walk, then invocation, then PATH); global installs and fresh scaffolds with no lockfile yet use `resolveInvokingPackageManager()`. Agent-facing install hints should use `formatInstallCommand()` and `describeLockfileDetection()` rather than hardcoding lockfile names or `npm install`.
 
 ### The SDK package (`packages/sdk`)
 
