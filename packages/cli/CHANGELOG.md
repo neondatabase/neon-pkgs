@@ -1,5 +1,30 @@
 # neon
 
+## 2.47.0
+
+### Minor Changes
+
+- 6f8ba4d: `neon env pull` now pulls the AI Gateway variables (`NEON_AI_GATEWAY_TOKEN`, `NEON_AI_GATEWAY_BASE_URL`) when the working directory has no `neon.ts`, so a bare pull writes everything the branch can give you. A `neon.ts` still decides on its own, and the pull bundled into `link` / `checkout` / `config apply` is unchanged.
+
+  New `--service` flag scopes a pull to `postgres`, `auth`, `data-api`, `object-storage`, and/or `ai-gateway`, overriding `neon.ts`. A scoped pull writes and prunes only within the services you name, so `neon env pull -s ai-gateway` leaves your `DATABASE_URL` alone.
+
+  `neon dev` resolves the same set by the same rules, so a function running locally gets what the deployed runtime would inject — including the AI Gateway on a branch with no `neon.ts`. It also reads your `.env` / `.env.local` now to reuse the branch credential behind the AI Gateway and object storage, instead of minting one on every start.
+
+  Every services flag in the CLI now shares one vocabulary and one syntax: `-s`, `--service` and `--services` are interchangeable, values can be repeated or comma-separated, and a service is spelled the same way on every command. That renames `neon config init --services storage` to `object-storage`; the old spelling still works and warns.
+
+  `fetchEnvReusingSecrets` (`@neon/env/runtime`) takes a new `revokeSuperseded` option. It defaults to `true`, the existing behaviour. Pass `false` when the call resolves only part of what a branch has: object storage and the AI Gateway share one credential, so revoking the one your persisted secrets name can break a service the call is not rewriting. The credential it then leaves live is reported as `credential.superseded`, the counterpart to the existing `credential.revoked`.
+
+### Patch Changes
+
+- 47e6728: Install the config packages with the package manager the project actually uses
+
+  `neon config init` (and the `neon link` prompt that runs it) picked a package manager from `npm_config_user_agent` alone, which is empty for a globally installed `neon`. It then fell back to the first manager on `PATH`, effectively always npm — so setting up a pnpm, yarn, or bun project shelled out to `npm install`. In a pnpm project that fails outright: npm's dependency resolver chokes on pnpm's symlinked `node_modules` with `Cannot read properties of null (reading 'matches')`. The install leaves a `neon.ts` whose `@neon/config/v1` import can't resolve, so the env pull that follows fails too.
+
+  `resolvePackageManager` now reads the project's lockfile first, from the target directory and its parents up to the repo root — so a package in a monorepo finds the root lockfile, while a stray lockfile above the repository is ignored. A project with no lockfile falls back to the previous behaviour unchanged.
+
+- Updated dependencies [6f8ba4d]
+  - @neon/env@0.15.0
+
 ## 2.46.0
 
 ### Minor Changes

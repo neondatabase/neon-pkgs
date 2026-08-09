@@ -1,5 +1,11 @@
 # @neondatabase/env
 
+## 0.15.0
+
+### Minor Changes
+
+- 6f8ba4d: `fetchEnvReusingSecrets` (`@neon/env/runtime`) takes a new `revokeSuperseded` option. It defaults to `true`, the existing behaviour. Pass `false` when the call resolves only part of what a branch has: object storage and the AI Gateway share one credential, so revoking the one your persisted secrets name can break a service the call is not rewriting. The credential it then leaves live is reported as `credential.superseded`, the counterpart to the existing `credential.revoked`.
+
 ## 0.14.1
 
 ### Patch Changes
