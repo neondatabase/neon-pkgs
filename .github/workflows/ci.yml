@@ -75,11 +75,24 @@ jobs:
               run: pnpm --filter neonctl test:ci --coverage
             - if: matrix.suite == 'non-cli'
               run: pnpm --recursive --filter='./packages/**' --filter='!neon' --filter='!neonctl' test:ci --coverage
-            - if: always()
-              uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe # v5.5.4
+            - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  if-no-files-found: error
+                  name: coverage-${{ matrix.upload }}
+                  path: packages/*/coverage/lcov.info
+    coverage:
+        name: Coverage
+        needs: test
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+            - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              with:
+                  path: coverage
+                  pattern: coverage-*
+            - uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe # v5.5.4
               with:
                   fail_ci_if_error: true
-                  name: ${{ matrix.upload }}
                   use_oidc: true
 
 name: CI
