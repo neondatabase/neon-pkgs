@@ -1,7 +1,7 @@
 import { type Dirent, readdirSync, realpathSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { externalPackageRoot } from "@neon/config";
-import { RUNTIME_TARGET } from "./native-packages.js";
+import { RUNTIME_TARGET, RUNTIME_TARGET_LABEL } from "./native-packages.js";
 import { findPackageDir, readPackageManifest } from "./resolve-package.js";
 
 /**
@@ -277,12 +277,15 @@ export function describeNativeFinding(
 	finding: NativeFinding,
 ): string {
 	const { name, evidence } = finding;
+	// The evidence comes from the tree on *this* machine, so it names the host's build. Said
+	// out loud, because otherwise a linux-arm64 deploy reporting a darwin binary reads as a
+	// bug in the tool rather than as a description of the developer's own node_modules.
 	const because = (() => {
 		switch (evidence.kind) {
 			case "binary":
-				return `it contains a compiled binary (${evidence.file})`;
+				return `it contains a compiled binary (${evidence.file} on this machine; the deploy needs the ${RUNTIME_TARGET_LABEL} build)`;
 			case "platformDependency":
-				return `it loads a compiled binary from ${evidence.dependency} (${evidence.file})`;
+				return `it loads a compiled binary from ${evidence.dependency} (${evidence.file} on this machine; the deploy needs the ${RUNTIME_TARGET_LABEL} build)`;
 			case "buildsFromSource":
 				return `it compiles a binary at install time (${evidence.script})`;
 			case "prebuiltManifest":
@@ -292,17 +295,15 @@ export function describeNativeFinding(
 
 	return [
 		`Function "${slug}" bundles "${name}", and ${because}.`,
-		`A compiled binary cannot be bundled, so if this function reaches that code path it`,
-		`will fail at invoke rather than at deploy.`,
+		`A compiled binary cannot be bundled, so if this function evaluates that import it`,
+		`fails at invoke rather than at deploy.`,
 		"",
 		`  Ship its files with the deploy:`,
 		`      externalPackages: ["${name}"]`,
 		"",
-		`  Or, if this function never reaches it, silence this by saying so:`,
-		`      externalPackages: [{ name: "${name}", includeFiles: false }]`,
-		"",
-		`Shipping a package adds its whole file tree to the archive, which increases both`,
-		`archive size and cold start. If "${name}" is only used behind a JavaScript fallback,`,
-		`the deploy is already correct and the second form records that.`,
+		`If "${name}" is only reached behind a working JavaScript fallback, this deploy is`,
+		`already correct and needs no change — this is advisory and never fails a deploy.`,
+		`Do not add includeFiles: false to silence it: that externalizes "${name}" and ships`,
+		`nothing for it, so a top-level import of it would then fail on every invoke.`,
 	].join("\n");
 }

@@ -1,6 +1,9 @@
 import { existsSync, statSync } from "node:fs";
-import { join } from "node:path";
-
+import { dirname, join } from "node:path";
+import {
+	describeNativeFinding,
+	findUndeclaredNativePackages,
+} from "@neon/config-runtime";
 import type yargs from "yargs";
 import { isNeonApiError, retryOnLock } from "../api.js";
 import {
@@ -293,7 +296,19 @@ const deploy = async (props: DeployProps) => {
 	}
 
 	// Bundle before any network round-trip so a bundling failure fails fast.
-	const zip = zipBundle((await bundleEntry(source)).files);
+	const bundled = await bundleEntry(source);
+	for (const warning of bundled.warnings) log.warning(warning);
+	// `--src` bypasses `neon.ts`, so there is no policy to declare anything in and no way to
+	// stage files here. The advisory still runs: this is the shortest path to a function that
+	// deploys clean and then fails at invoke, so it is the last place to stay silent.
+	for (const finding of findUndeclaredNativePackages({
+		metafile: bundled.metafile,
+		declared: [],
+		projectDir: dirname(source),
+	})) {
+		log.warning(describeNativeFinding(props.slug, finding));
+	}
+	const zip = zipBundle(bundled.files);
 	const branchId = await branchIdFromProps(props);
 
 	// Snapshot the current version before deploy so we can detect the new one

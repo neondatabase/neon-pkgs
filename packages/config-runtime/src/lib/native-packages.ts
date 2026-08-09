@@ -249,10 +249,12 @@ export type NativeTraceDeps = {
 export type NativeTraceResult = {
 	entries: Record<string, Uint8Array>;
 	/**
-	 * Advisory findings from the staging run — currently a package whose version could not be
-	 * read from the project, which means the registry's latest was staged instead. The caller
-	 * must surface these; a silently different version than the one tested is exactly the
-	 * kind of thing that shows up as an unreproducible production bug.
+	 * Advisory findings from the staging run — currently a relative import the tracer could
+	 * not resolve, meaning that file will not be in the archive.
+	 *
+	 * The caller must surface these. They are advisory rather than fatal because the tracer
+	 * cannot tell a required import from one wrapped in a try/catch, but an unreported one is
+	 * a function that deploys clean and fails at invoke.
 	 */
 	warnings: string[];
 };
@@ -314,8 +316,9 @@ export async function traceNativePackages(options: {
 			throw invalid(
 				`Function "${slug}" stages "${pkg}", but no installed copy of it could be found ` +
 					`in this project, so the deploy cannot tell which version you tested ` +
-					`against. Install "${pkg}" as a dependency, or set includeFiles: false if ` +
-					`the function never reaches it.`,
+					`against. Install "${pkg}" as a dependency, or exclude it if the function ` +
+					`never reaches it:\n` +
+					`    externalPackages: [{ name: "${pkg}", includeFiles: false }]`,
 			);
 		}
 		return `${pkg}@${version}`;
@@ -380,8 +383,8 @@ function verifyInstalled(
 					`package does not publish a build for that platform, or it compiles from ` +
 					`source at install time, which the deploy cannot do. Check that it lists a ` +
 					`${RUNTIME_TARGET.os}-${RUNTIME_TARGET.cpu} build among its optional ` +
-					`dependencies. If this function never reaches "${pkg}", exclude it instead: ` +
-					`{ name: "${pkg}", includeFiles: false }.`,
+					`dependencies. If this function never reaches "${pkg}", exclude it instead:` +
+					`\n    externalPackages: [{ name: "${pkg}", includeFiles: false }]`,
 			);
 		}
 	}
@@ -424,16 +427,29 @@ function selectArchiveFiles(
 		return pkg !== undefined && !isIncompatible(pkg.dir);
 	});
 
-	// The name families that ship a compiled binary able to load on the runtime. Scoped by
-	// family rather than a single flag over the whole tree: a function may stage two unrelated
-	// packages, one with a real native build and one where the wasm build is the only
-	// implementation, and a global "some binary exists" test would delete the second.
-	const familiesWithNativeBuild = new Set(
+	/**
+	 * A wasm build is only redundant next to the real build of the *same library at the same
+	 * version*. Keying on the family alone conflates versions: a tree holding
+	 * `foo-linux-arm64@1` and a nested `foo-wasm32@2` would delete v2 — whose consumer has no
+	 * other implementation — because v1 shipped a binary.
+	 */
+	const variantKey = (name: string, dir: string): string => {
+		const version = readPackageManifest(
+			join(staging, ...dir.split("/")),
+		)?.version;
+		return `${platformFamily(name)}@${typeof version === "string" ? version : "?"}`;
+	};
+
+	// The library versions that ship a compiled binary able to load on the runtime. Scoped
+	// rather than a single flag over the whole tree: a function may stage two unrelated
+	// packages, one with a real native build and one where wasm is the only implementation,
+	// and a global "some binary exists" test would delete the second.
+	const nativeBuilds = new Set(
 		compatible
 			.filter((path) => BINARY_PATTERN.test(path))
 			.flatMap((path) => {
 				const pkg = packageOfArchivePath(path);
-				return pkg === undefined ? [] : [platformFamily(pkg.name)];
+				return pkg === undefined ? [] : [variantKey(pkg.name, pkg.dir)];
 			}),
 	);
 
@@ -443,7 +459,7 @@ function selectArchiveFiles(
 			if (pkg === undefined) return true;
 			return !(
 				isWasmVariantName(pkg.name) &&
-				familiesWithNativeBuild.has(platformFamily(pkg.name))
+				nativeBuilds.has(variantKey(pkg.name, pkg.dir))
 			);
 		})
 		.sort();
@@ -451,7 +467,8 @@ function selectArchiveFiles(
 	if (files.length === 0) {
 		throw invalid(
 			`Function "${slug}" stages external packages, but tracing the installed packages ` +
-				`found no files to ship. This is a bug in the deploy — please report it.`,
+				`found no files to ship. This is a bug in the deploy — please report it at ` +
+				`https://github.com/neondatabase/neon-pkgs/issues.`,
 		);
 	}
 	return files;
@@ -489,13 +506,15 @@ function readArchiveFiles(
 		if (stat === undefined) {
 			throw invalid(
 				`Function "${slug}": traced file "${relative}" disappeared before it could be ` +
-					`read. This is a bug in the deploy — please report it.`,
+					`read. This is a bug in the deploy — please report it at ` +
+					`https://github.com/neondatabase/neon-pkgs/issues.`,
 			);
 		}
 		if (stat.isSymbolicLink()) {
 			throw invalid(
 				`Function "${slug}" would ship a symbolic link, which the build does not ` +
-					`support: ${relative}. This is a bug in the deploy — please report it.`,
+					`support: ${relative}. This is a bug in the deploy — please report it at ` +
+					`https://github.com/neondatabase/neon-pkgs/issues.`,
 			);
 		}
 		if (!stat.isFile()) continue;
@@ -524,8 +543,8 @@ function verifyArchitecture(
 	if (contents.length < ELF.headerBytes) {
 		throw invalid(
 			`Function "${slug}" would ship "${relative}", which is ${contents.length} bytes — ` +
-				`too short to be a valid binary. The Functions runtime is ` +
-				`${RUNTIME_TARGET_LABEL}.`,
+				`too short to be a valid binary. The package may have been installed ` +
+				`incompletely; reinstall it and try again.`,
 		);
 	}
 	const isElf = contents.subarray(0, 4).toString("binary") === ELF.magic;
@@ -688,11 +707,13 @@ async function runNpmInstall(cwd: string, specs: string[]): Promise<void> {
 		// thing was asked for. Say what actually happened instead.
 		if (stderr.includes("EBADPLATFORM")) {
 			throw invalid(
-				`A package in externalPackages has no build for the Functions runtime ` +
-					`(${RUNTIME_TARGET_LABEL}), so its files cannot be staged. Use a package ` +
-					`that publishes a ${RUNTIME_TARGET.os}-${RUNTIME_TARGET.cpu} build (sharp ` +
-					`does). If this function never reaches it, exclude it instead with ` +
-					`includeFiles: false.\n\nnpm reported:\n${stderr.trim()}`,
+				`One of ${specs.map((s) => `"${s}"`).join(", ")} has no build for the ` +
+					`Functions runtime (${RUNTIME_TARGET_LABEL}), so its files cannot be ` +
+					`staged. Use a package that publishes a ` +
+					`${RUNTIME_TARGET.os}-${RUNTIME_TARGET.cpu} build (sharp does). If this ` +
+					`function never reaches it, exclude it instead:\n` +
+					`    externalPackages: [{ name: "<package>", includeFiles: false }]` +
+					`\n\nnpm reported:\n${stderr.trim()}`,
 			);
 		}
 		throw invalid(
@@ -713,8 +734,10 @@ async function loadNft(): Promise<typeof import("@vercel/nft")> {
 	} catch (cause) {
 		throw invalid(
 			"Staging a function's external packages requires `@vercel/nft`, which could not " +
-				"be loaded. It is a dependency of @neon/config-runtime — reinstall your " +
-				"dependencies (`pnpm install` / `npm install`).",
+				"be loaded. Installed from npm it is a dependency of @neon/config-runtime, so " +
+				"reinstalling your dependencies fixes it. If you are running the standalone " +
+				"`neon` binary, this is a packaging bug — please report it at " +
+				"https://github.com/neondatabase/neon-pkgs/issues.",
 			cause,
 		);
 	}

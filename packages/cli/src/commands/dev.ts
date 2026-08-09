@@ -469,6 +469,8 @@ const runSupervisor = async (
 				r.unit.source,
 				r.unit.bundleDir,
 				r.unit.externalPackages,
+				// The `neon.ts` key, so a function is named the same way here as at deploy.
+				r.unit.slug ?? undefined,
 			);
 		} catch (err) {
 			r.status = "error";
@@ -777,10 +779,18 @@ const spawnChild = (
 	});
 };
 
+/**
+ * Findings already reported for a served unit, so an advisory that cannot change between
+ * saves is not reprinted on every one. A dev session on a project with a standing false
+ * positive would otherwise repeat the whole block for its lifetime.
+ */
+const reportedFindings = new Map<string, string>();
+
 const writeBundle = async (
 	source: string,
 	bundleDir: string,
 	externalPackages?: readonly string[],
+	label?: string,
 ): Promise<string> => {
 	// Left unbundled only. `bundleDir` sits inside the project's node_modules, so an
 	// externalized package resolves from the real tree at the host architecture — no install
@@ -792,12 +802,19 @@ const writeBundle = async (
 
 	// Local runs resolve native packages from the real tree, so a missing declaration is
 	// invisible until deploy. Reporting it here is the only signal before then.
-	for (const finding of findUndeclaredNativePackages({
+	const findings = findUndeclaredNativePackages({
 		metafile,
 		declared: externalPackages ?? [],
 		projectDir: dirname(source),
-	})) {
-		log.warning(describeNativeFinding(basename(source), finding));
+	});
+	const signature = findings.map((f) => f.name).join(",");
+	if (reportedFindings.get(source) !== signature) {
+		reportedFindings.set(source, signature);
+		for (const finding of findings) {
+			log.warning(
+				describeNativeFinding(label ?? basename(source), finding),
+			);
+		}
 	}
 
 	mkdirSync(bundleDir, { recursive: true });

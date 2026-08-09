@@ -835,6 +835,79 @@ describe("traceNativePackages", () => {
 		);
 	});
 
+	/**
+	 * Two versions of one library in the same tree. Keying the "a real build is present" test
+	 * on the family name alone conflates them: v1's native build would delete v2's wasm files,
+	 * which are the only implementation v2's consumer has.
+	 */
+	test("keeps a wasm build whose own version ships no native alternative", async () => {
+		const names = await traceNativePackages({
+			slug: "fn1",
+			packages: ["parent-pkg"],
+			projectDir: dir,
+			deps: {
+				install: async (cwd) => {
+					writeFileSync(
+						join(
+							mkdirp(join(cwd, "node_modules", "parent-pkg")),
+							"package.json",
+						),
+						JSON.stringify({
+							name: "parent-pkg",
+							version: "1.0.0",
+						}),
+					);
+					// foo@1: the real linux-arm64 build.
+					const v1 = mkdirp(
+						join(cwd, "node_modules", "foo-linux-arm64"),
+					);
+					writeFileSync(
+						join(v1, "package.json"),
+						JSON.stringify({
+							name: "foo-linux-arm64",
+							version: "1.0.0",
+							os: ["linux"],
+							cpu: ["arm64"],
+						}),
+					);
+					writeFileSync(join(v1, "addon.node"), elfHeader(AARCH64));
+					// foo@2, nested: wasm only, and a different version.
+					const v2 = mkdirp(
+						join(
+							cwd,
+							"node_modules",
+							"other-pkg",
+							"node_modules",
+							"foo-wasm32",
+						),
+					);
+					writeFileSync(
+						join(v2, "package.json"),
+						JSON.stringify({
+							name: "foo-wasm32",
+							version: "2.0.0",
+						}),
+					);
+					writeFileSync(join(v2, "index.js"), "module.exports = 1;");
+				},
+				trace: async () => ({
+					files: [
+						"node_modules/parent-pkg/package.json",
+						"node_modules/foo-linux-arm64/package.json",
+						"node_modules/foo-linux-arm64/addon.node",
+						"node_modules/other-pkg/node_modules/foo-wasm32/package.json",
+						"node_modules/other-pkg/node_modules/foo-wasm32/index.js",
+					],
+				}),
+			},
+		}).then((r) => Object.keys(r.entries));
+
+		expect(names).toContain(
+			"node_modules/other-pkg/node_modules/foo-wasm32/index.js",
+		);
+		expect(names).toContain("node_modules/foo-linux-arm64/addon.node");
+	});
+
 	test("pins a scoped package the same way", async () => {
 		const pkg = join(dir, "node_modules", "@scope", "dep");
 		writeFileSync(

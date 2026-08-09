@@ -318,7 +318,7 @@ describe("findUndeclaredNativePackages", () => {
 });
 
 describe("describeNativeFinding", () => {
-	test("leads with the shipping fix and offers the opt-out second", () => {
+	test("leads with the shipping fix and warns against the opt-out", () => {
 		const message = describeNativeFinding("resize", {
 			name: "sharp",
 			evidence: {
@@ -331,24 +331,33 @@ describe("describeNativeFinding", () => {
 		expect(message).toContain('Function "resize" bundles "sharp"');
 		expect(message).toContain("@img/sharp-linux-arm64");
 		expect(message).toContain('externalPackages: ["sharp"]');
-		expect(message).toContain(
+
+		// `includeFiles: false` must never be offered as a way to silence this. For a
+		// platform-dependency finding it externalizes the parent package, so a top-level
+		// import of it then fails on every invoke — the message would be recommending the
+		// exact breakage it is warning about.
+		expect(message).toContain("Do not add includeFiles: false");
+		expect(message).not.toContain(
 			'externalPackages: [{ name: "sharp", includeFiles: false }]',
 		);
-		// The shipping form comes first: it is the one that produces a working function.
-		expect(message.indexOf('externalPackages: ["sharp"]')).toBeLessThan(
-			message.indexOf("includeFiles: false"),
-		);
+
+		// The evidence names the host's build, so it has to say which machine it came from —
+		// otherwise a linux-arm64 deploy reporting a darwin binary reads as a tool bug.
+		expect(message).toContain("on this machine");
 	});
 
 	// The evidence proves the package carries native code, never that this function reaches
 	// it, so the failure has to be stated as conditional and the no-change-needed case has
 	// to be named. `ws` with `bufferutil` installed is exactly that case.
-	test("states the failure conditionally and allows for a working fallback", () => {
+	// `ws` with `bufferutil` installed is the common false positive: correct today, needs no
+	// change. The message has to say so, or it is two edit instructions for a working deploy.
+	test("states the failure conditionally and says no change may be needed", () => {
 		const message = describeNativeFinding("resize", {
 			name: "ws",
 			evidence: { kind: "binary", file: "build/Release/bufferutil.node" },
 		});
-		expect(message).toContain("if this function reaches that code path");
-		expect(message).toContain("the deploy is already correct");
+		expect(message).toContain("if this function evaluates that import");
+		expect(message).toContain("already correct and needs no change");
+		expect(message).toContain("never fails a deploy");
 	});
 });
