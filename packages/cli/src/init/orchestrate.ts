@@ -124,6 +124,7 @@ export async function orchestrate(
 	if (!hasNeonConnection) {
 		return handleGettingStartedPhase({
 			agent: options.agent,
+			cwd,
 			hasConnectionString: false,
 			framework: inspection.framework as string | undefined,
 			orm: inspection.orm as string | undefined,

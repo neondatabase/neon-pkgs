@@ -1,4 +1,7 @@
-import { describe, expect, test, vi } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("../skills.js", async (importOriginal) => {
 	const actual = (await importOriginal()) as Record<string, unknown>;
@@ -127,6 +130,66 @@ describe("getting-started phase", () => {
 			);
 			expect(migrationStep?.command).toBe("npx knex migrate:latest");
 		}
+	});
+
+	describe("install commands follow the project's package manager", () => {
+		let project: string;
+
+		beforeEach(() => {
+			project = mkdtempSync(join(tmpdir(), "neon-getting-started-"));
+			// Stops lockfile detection from walking into $TMPDIR's ancestors.
+			mkdirSync(join(project, ".git"));
+		});
+
+		afterEach(() => {
+			rmSync(project, { recursive: true, force: true });
+		});
+
+		test("uses pnpm for both the dependency install and the driver install", async () => {
+			writeFileSync(join(project, "pnpm-lock.yaml"), "");
+
+			const result = await handleGettingStartedPhase({
+				agent: "claude",
+				cwd: project,
+				hasConnectionString: false,
+				orm: "prisma",
+			});
+
+			expect(result.nextAction.type).toBe("agent_action");
+			if (result.nextAction.type !== "agent_action") return;
+			const commandOf = (id: string) =>
+				result.nextAction.type === "agent_action"
+					? result.nextAction.steps.find((s) => s.id === id)?.command
+					: undefined;
+
+			expect(commandOf("install_dependencies")).toBe("pnpm install");
+			expect(commandOf("install_driver")).toBe(
+				"pnpm add @neondatabase/serverless @prisma/adapter-neon",
+			);
+		});
+
+		test("uses npm for an npm project", async () => {
+			writeFileSync(join(project, "package-lock.json"), "");
+
+			const result = await handleGettingStartedPhase({
+				agent: "claude",
+				cwd: project,
+				hasConnectionString: false,
+				orm: "drizzle",
+			});
+
+			expect(result.nextAction.type).toBe("agent_action");
+			if (result.nextAction.type !== "agent_action") return;
+			const commandOf = (id: string) =>
+				result.nextAction.type === "agent_action"
+					? result.nextAction.steps.find((s) => s.id === id)?.command
+					: undefined;
+
+			expect(commandOf("install_dependencies")).toBe("npm install");
+			expect(commandOf("install_driver")).toBe(
+				"npm install @neondatabase/serverless",
+			);
+		});
 	});
 
 	test("always includes verify_connection step", async () => {

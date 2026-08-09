@@ -368,7 +368,7 @@ exports[`neon init --agent: every step, against every project shape > connected 
       },
       {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, install project dependencies using the appropriate package manager (check for pnpm-lock.yaml, yarn.lock, bun.lock, bun.lockb, package-lock.json, or default to npm). This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, run the command below — it already uses this project's package manager, so do not substitute another one. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
         "command": "npm install"
       },
       {
@@ -1396,7 +1396,7 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
       },
       {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, install project dependencies using the appropriate package manager (check for pnpm-lock.yaml, yarn.lock, bun.lock, bun.lockb, package-lock.json, or default to npm). This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, run the command below — it already uses this project's package manager, so do not substitute another one. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
         "command": "npm install"
       },
       {
@@ -2424,7 +2424,7 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
       },
       {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, install project dependencies using the appropriate package manager (check for pnpm-lock.yaml, yarn.lock, bun.lock, bun.lockb, package-lock.json, or default to npm). This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, run the command below — it already uses this project's package manager, so do not substitute another one. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
         "command": "npm install"
       },
       {
@@ -3421,7 +3421,7 @@ exports[`neon init --agent: every step, against every project shape > greenfield
       },
       {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, install project dependencies using the appropriate package manager (check for pnpm-lock.yaml, yarn.lock, bun.lock, bun.lockb, package-lock.json, or default to npm). This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, run the command below — it already uses this project's package manager, so do not substitute another one. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
         "command": "npm install"
       },
       {
@@ -4454,7 +4454,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       },
       {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, install project dependencies using the appropriate package manager (check for pnpm-lock.yaml, yarn.lock, bun.lock, bun.lockb, package-lock.json, or default to npm). This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, run the command below — it already uses this project's package manager, so do not substitute another one. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
         "command": "npm install"
       },
       {
@@ -5487,7 +5487,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       },
       {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, install project dependencies using the appropriate package manager (check for pnpm-lock.yaml, yarn.lock, bun.lock, bun.lockb, package-lock.json, or default to npm). This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, run the command below — it already uses this project's package manager, so do not substitute another one. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
         "command": "npm install"
       },
       {
@@ -6515,7 +6515,7 @@ exports[`neon init --agent: every step, against every project shape > node-app >
       },
       {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, install project dependencies using the appropriate package manager (check for pnpm-lock.yaml, yarn.lock, bun.lock, bun.lockb, package-lock.json, or default to npm). This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, run the command below — it already uses this project's package manager, so do not substitute another one. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
         "command": "npm install"
       },
       {
@@ -7548,7 +7548,7 @@ exports[`neon init --agent: every step, against every project shape > other-data
       },
       {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, install project dependencies using the appropriate package manager (check for pnpm-lock.yaml, yarn.lock, bun.lock, bun.lockb, package-lock.json, or default to npm). This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, run the command below — it already uses this project's package manager, so do not substitute another one. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
         "command": "npm install"
       },
       {
@@ -8355,7 +8355,7 @@ exports[`neon init --agent: nested and string-encoded --data payloads > JSON-enc
       },
       {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, install project dependencies using the appropriate package manager (check for pnpm-lock.yaml, yarn.lock, bun.lock, bun.lockb, package-lock.json, or default to npm). This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, run the command below — it already uses this project's package manager, so do not substitute another one. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
         "command": "npm install"
       },
       {
@@ -8423,7 +8423,7 @@ exports[`neon init --agent: nested and string-encoded --data payloads > nested o
       },
       {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, install project dependencies using the appropriate package manager (check for pnpm-lock.yaml, yarn.lock, bun.lock, bun.lockb, package-lock.json, or default to npm). This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, run the command below — it already uses this project's package manager, so do not substitute another one. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
         "command": "npm install"
       },
       {
@@ -12087,7 +12087,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cla
       },
       {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, install project dependencies using the appropriate package manager (check for pnpm-lock.yaml, yarn.lock, bun.lock, bun.lockb, package-lock.json, or default to npm). This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, run the command below — it already uses this project's package manager, so do not substitute another one. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
         "command": "npm install"
       },
       {
@@ -12582,7 +12582,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cod
       },
       {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, install project dependencies using the appropriate package manager (check for pnpm-lock.yaml, yarn.lock, bun.lock, bun.lockb, package-lock.json, or default to npm). This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, run the command below — it already uses this project's package manager, so do not substitute another one. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
         "command": "npm install"
       },
       {
@@ -13077,7 +13077,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cur
       },
       {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, install project dependencies using the appropriate package manager (check for pnpm-lock.yaml, yarn.lock, bun.lock, bun.lockb, package-lock.json, or default to npm). This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, run the command below — it already uses this project's package manager, so do not substitute another one. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
         "command": "npm install"
       },
       {
@@ -13588,7 +13588,7 @@ exports[`neon init --agent: the response depends on which agent is driving > non
       },
       {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, install project dependencies using the appropriate package manager (check for pnpm-lock.yaml, yarn.lock, bun.lock, bun.lockb, package-lock.json, or default to npm). This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, run the command below — it already uses this project's package manager, so do not substitute another one. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
         "command": "npm install"
       },
       {

@@ -113,8 +113,19 @@ describe("resolvePackageManager", () => {
 
 describe("resolveInvokingPackageManager", () => {
 	const originalUserAgent = process.env.npm_config_user_agent;
+	const originalPath = process.env.PATH;
+	let emptyBin: string;
+
+	beforeEach(() => {
+		// An empty PATH makes `installedPackageManagers()` empty whatever this
+		// machine has, so the final `?? "npm"` is what these assertions see.
+		emptyBin = mkdtempSync(join(tmpdir(), "neonctl-pm-path-"));
+		process.env.PATH = emptyBin;
+	});
 
 	afterEach(() => {
+		rmSync(emptyBin, { recursive: true, force: true });
+		process.env.PATH = originalPath;
 		if (originalUserAgent === undefined) {
 			delete process.env.npm_config_user_agent;
 		} else {
@@ -135,17 +146,23 @@ describe("resolveInvokingPackageManager", () => {
 });
 
 describe("formatInstallCommand", () => {
-	it("formats a full install", () => {
-		expect(formatInstallCommand("pnpm")).toBe("pnpm install");
-		expect(formatInstallCommand("npm")).toBe("npm install");
+	it.each([
+		"npm",
+		"pnpm",
+		"yarn",
+		"bun",
+	] as const)("installs the whole manifest with `%s install`", (pm) => {
+		expect(formatInstallCommand(pm)).toBe(`${pm} install`);
 	});
 
-	it("formats add-dependencies for non-npm managers", () => {
-		expect(
-			formatInstallCommand("pnpm", ["@neon/config", "@neon/env"]),
-		).toBe("pnpm add @neon/config @neon/env");
-		expect(formatInstallCommand("npm", ["@neon/config"])).toBe(
-			"npm install @neon/config",
+	it.each([
+		["npm", "npm install @neon/config @neon/env"],
+		["pnpm", "pnpm add @neon/config @neon/env"],
+		["yarn", "yarn add @neon/config @neon/env"],
+		["bun", "bun add @neon/config @neon/env"],
+	] as const)("adds packages with %s", (pm, expected) => {
+		expect(formatInstallCommand(pm, ["@neon/config", "@neon/env"])).toBe(
+			expected,
 		);
 	});
 });

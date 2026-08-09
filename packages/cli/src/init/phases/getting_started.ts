@@ -1,5 +1,4 @@
 import {
-	describeLockfileDetection,
 	formatInstallCommand,
 	resolvePackageManager,
 } from "../../utils/package_manager.js";
@@ -18,6 +17,8 @@ export type GettingStartedPhaseOptions = {
 	features?: string[];
 	/** Preview mode — restricts project creation to new projects in AWS us-east */
 	preview?: boolean;
+	/** The project directory the emitted commands will run in. */
+	cwd?: string;
 };
 
 /**
@@ -36,7 +37,7 @@ export async function handleGettingStartedPhase(
 	}
 	const steps: { id: string; description: string; command?: string }[] = [];
 
-	const installPm = resolvePackageManager(process.cwd());
+	const installPm = resolvePackageManager(options.cwd ?? process.cwd());
 
 	if (!options.hasConnectionString) {
 		if (options.preview) {
@@ -125,7 +126,7 @@ export async function handleGettingStartedPhase(
 			id: "install_dependencies",
 			description: [
 				"Check if node_modules exists in the project root.",
-				`If not, install project dependencies using the appropriate package manager (${describeLockfileDetection()}).`,
+				"If not, run the command below — it already uses this project's package manager, so do not substitute another one.",
 				"This must be done before `neon env pull` because the project's Neon config file may import packages that need to be installed first.",
 			].join(" "),
 			command: formatInstallCommand(installPm),
@@ -151,21 +152,27 @@ export async function handleGettingStartedPhase(
 					"Install the @neondatabase/serverless driver adapter for Prisma.",
 					"This enables Prisma to use Neon's serverless driver for edge/serverless deployments.",
 				].join(" "),
-				command:
-					"npm install @neondatabase/serverless @prisma/adapter-neon",
+				command: formatInstallCommand(installPm, [
+					"@neondatabase/serverless",
+					"@prisma/adapter-neon",
+				]),
 			});
 		} else if (options.orm === "drizzle" || options.orm === "drizzle-orm") {
 			steps.push({
 				id: "install_driver",
 				description: "Install the Neon serverless driver for Drizzle.",
-				command: "npm install @neondatabase/serverless",
+				command: formatInstallCommand(installPm, [
+					"@neondatabase/serverless",
+				]),
 			});
 		} else if (!options.orm || options.orm === "none") {
 			steps.push({
 				id: "install_driver",
 				description:
 					"Install the Neon serverless driver for direct database access.",
-				command: "npm install @neondatabase/serverless",
+				command: formatInstallCommand(installPm, [
+					"@neondatabase/serverless",
+				]),
 			});
 		}
 	}
