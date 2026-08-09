@@ -1,0 +1,3 @@
+{
+  "fields": ["source", "service_name", "scope_name", "severity_text"]
+}
