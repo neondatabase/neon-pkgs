@@ -1,10 +1,8 @@
 import { defineConfig } from "tsdown";
 
 /**
- * Keep every package import external, including in the declaration output. Without this the
- * `.d.ts` inlines a copy of `@neon/config`'s types, and a consumer that bundles this package ends
- * up publishing two structurally identical `Config` types — one imported, one copied — which is
- * what a user sees on hover and in a mismatch error.
+ * Keep any future package import external in the JavaScript and declaration output. `cli-core`
+ * is dependency-free today; its consumers decide what to inline.
  */
 const isPackageImport = (id: string): boolean =>
 	!id.startsWith(".") &&
