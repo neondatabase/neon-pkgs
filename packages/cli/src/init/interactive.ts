@@ -16,6 +16,7 @@ import {
 	spinner,
 } from "@clack/prompts";
 import { execa } from "execa";
+import which from "which";
 import { bold, dim, gray, italic } from "yoctocolors";
 import { ALL_CONFIGURABLE_AGENTS, getAddMcpAgentId } from "./agents.js";
 import { ensureNeonctlAuth, isAuthenticated } from "./auth.js";
@@ -669,8 +670,17 @@ async function interactiveInitInner(
 			case "failed":
 				nctlS.stop("Failed to install Neon CLI");
 				log.warn(
-					"The Neon CLI could not be installed automatically. The setup will continue using npx.",
+					nctlResult.error ??
+						"The Neon CLI could not be installed automatically.",
 				);
+				// Only promise npx when it exists. It ships with npm, so it is
+				// gone in exactly the failure where nothing could install
+				// globally — but in the ordinary failure (EACCES, registry down)
+				// it is there, and saying so is what tells the user setup is not
+				// broken.
+				if (which.sync("npx", { nothrow: true })) {
+					log.warn("Setup will continue using npx.");
+				}
 				break;
 		}
 

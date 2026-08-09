@@ -1,5 +1,56 @@
 # neon
 
+## 3.0.0
+
+### Major Changes
+
+- 3cb16e1: Stage the real files of a function's `externalPackages` into the deployed archive, so a
+  package backed by a native binary works on Functions instead of failing at invoke. Each
+  declared package is installed for the runtime target (linux-arm64, glibc) into a throwaway
+  directory, traced for the files it actually reaches, and copied under `node_modules/` with
+  its directory layout preserved. The user's own `node_modules` is never read for those files
+  or modified.
+
+  An entry with `includeFiles: false` is externalized and nothing is staged for it, which is
+  the pre-existing behaviour. A function whose entries all opt out — or which declares none —
+  produces a byte-identical archive to before.
+
+  Deploys and `neon dev` now report a package that was bundled in, carries native code, and
+  was never declared. The report is advisory and never fails a deploy: the evidence shows the
+  package contains compiled code, not that this function reaches it, and a package with a
+  working JavaScript fallback looks identical.
+
+  Fixes version pinning for packages whose `exports` map does not list `./package.json`.
+  `sharp` is one, so the version the user had installed was never read and the registry's
+  latest was staged instead. Versions are now read from the package directory rather than
+  through the resolver, and a package whose version still cannot be determined is reported
+  instead of being staged silently.
+
+- 98c4aec: Deep imports under `neon/dist/_shared/` no longer resolve. That directory holds source compiled in
+  from the repo's shared trees — credential reading, and the branch-credential mint/revoke logic —
+  which the `./dist/*` wildcard made importable by accident. `neon/dist/_shared/credentials.js` was
+  reachable before this change. Everything else under `neon/dist/` is unaffected, and none of it was
+  ever a supported surface: the CLI's entry points are the `neon` binary, `neon` and `neon/cli`.
+
+### Patch Changes
+
+- 98c4aec: **Breaking (`@neon/env`): the `@neon/env/runtime` entry point is removed.** It held
+  `fetchEnvReusingSecrets`, which reads an env source and can mint and revoke branch credentials.
+  Its only consumers were Neon's own CLIs, and a library that revokes your credentials because you
+  imported it is one you cannot safely embed — so it is now internal shared source rather than a
+  published path. If you were importing it, use the `neon` CLI (`neon env pull`, `neon dev`), which does this for you. Rolling your own is possible but the hard part is not storing the secret — it is **verifying** it: a persisted secret is only reusable if it still names a live credential on that branch, unrevoked, unexpired, and carrying every scope the policy needs. A presence check cannot tell a real secret from a `.env.example` placeholder, which is the bug 0.12.0 shipped a fix for. `credentialScopesSatisfied` and `deriveCredentialScopes` from `@neon/config/v1`, plus `listCredentials` / `createCredential` / `revokeCredential` on a `NeonApi`, are the pieces.
+
+  Everything else is unchanged: `fetchEnv`, `parseEnv`, `toEntries` and `NEON_ENV_VAR_KEYS` stay on
+  `@neon/env` with the same signatures, and the `neon-env` binary is unaffected.
+
+- 4497de8: Refreshed `--help` text for project, branch, endpoint, and database flags from the current Neon OpenAPI spec. Several descriptions that rendered as empty now have text, and the scale-to-zero, history-retention, and provisioner flags describe their plan limits.
+- Updated dependencies [3cb16e1]
+- Updated dependencies [4497de8]
+- Updated dependencies [35299c4]
+  - @neon/config-runtime@1.0.0
+  - @neon/sdk@2.0.0
+  - @neon/config@1.0.0
+
 ## 2.47.0
 
 ### Minor Changes

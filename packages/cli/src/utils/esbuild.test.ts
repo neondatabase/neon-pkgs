@@ -220,17 +220,20 @@ describe("bundleEntry", () => {
 		});
 	});
 
-	test("prints install instructions when no esbuild can be found", async () => {
+	test("names the bad NEON_ESBUILD_PATH rather than reporting esbuild missing", async () => {
+		// Telling someone who set the variable to "set NEON_ESBUILD_PATH" is not
+		// a usable error; the value they set is the thing that is wrong.
 		const loadEsbuild = vi.fn(() =>
 			Promise.reject(new Error("should not be called")),
 		);
-		await withEnv(join(dir, "no-such-esbuild"), async () => {
+		const bogus = join(dir, "no-such-esbuild");
+		await withEnv(bogus, async () => {
 			await expect(
 				bundleEntry(join(dir, "index.ts"), {
 					isPackaged: () => true,
 					loadEsbuild,
 				}),
-			).rejects.toThrow("esbuild not found");
+			).rejects.toThrow(`NEON_ESBUILD_PATH is set to ${bogus}`);
 		});
 	});
 });

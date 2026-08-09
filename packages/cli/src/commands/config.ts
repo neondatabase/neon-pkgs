@@ -61,7 +61,8 @@ import {
 import { fillSingleProject, resolveBranchRef } from "../utils/enrichers.js";
 import { bundleEntry } from "../utils/esbuild.js";
 import {
-	addDependenciesArgs,
+	formatInstallCommand,
+	installArgs,
 	resolvePackageManager,
 	runCommand,
 } from "../utils/package_manager.js";
@@ -426,21 +427,19 @@ export const initCmd = async (props: ConfigInitProps): Promise<void> => {
 		log.info("%s are already installed.", REQUIRED_PACKAGES.join(" and "));
 	} else {
 		const pm = resolvePackageManager(cwd);
-		const args = addDependenciesArgs(pm, missing);
+		const args = installArgs(pm, missing);
 		if (props.install === false) {
 			log.info(
-				"Install the Neon config packages to use neon.ts: %s %s",
-				pm,
-				args.join(" "),
+				"Install the Neon config packages to use neon.ts: %s",
+				formatInstallCommand(pm, missing),
 			);
 		} else {
 			log.info("Installing %s with %s…", missing.join(", "), pm);
 			const ok = await run(pm, args, cwd);
 			if (!ok) {
 				log.warning(
-					"Could not install the config packages automatically. Run by hand: %s %s",
-					pm,
-					args.join(" "),
+					"Could not install the config packages automatically. Run by hand: %s",
+					formatInstallCommand(pm, missing),
 				);
 			}
 		}

@@ -3,11 +3,23 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import which from "which";
+import {
+	globalInstallCommand,
+	resolveInvokingPackageManager,
+} from "./package_manager.js";
 
-const NOT_FOUND =
-	"esbuild not found. neon ships esbuild for most platforms; if you see " +
-	"this, install esbuild and ensure it is on your PATH (e.g. `npm i -g " +
-	"esbuild`), or set NEON_ESBUILD_PATH to an esbuild binary.";
+const notFoundMessage = (): string => {
+	const install = globalInstallCommand(
+		resolveInvokingPackageManager(),
+		"esbuild",
+	);
+	// Only name an install command this machine can actually run: yarn Berry has
+	// no global install, and npm may not be present to stand in for it.
+	const how = install
+		? `install esbuild and ensure it is on your PATH (e.g. \`${install.command} ${install.args.join(" ")}\`), or `
+		: "put an esbuild binary on your PATH, or ";
+	return `esbuild not found. neon ships esbuild for most platforms, so this is unexpected. ${how[0].toUpperCase()}${how.slice(1)}set NEON_ESBUILD_PATH to an esbuild binary.`;
+};
 
 // Prepended to the ESM bundle. Bundled dependencies are frequently CommonJS, but an ESM
 // output (`--format=esm`) has no `require` / `__filename` / `__dirname` in scope — so any
@@ -158,7 +170,11 @@ const resolveEsbuild = (): string => {
 	const override = process.env.NEON_ESBUILD_PATH;
 	if (override) {
 		if (existsSync(override)) return override;
-		throw new Error(NOT_FOUND);
+		// Naming the value: the generic "esbuild not found, try setting
+		// NEON_ESBUILD_PATH" is useless advice for someone who already set it.
+		throw new Error(
+			`NEON_ESBUILD_PATH is set to ${override}, but no file exists there. Point it at an esbuild binary, or unset it to use the one neon ships.`,
+		);
 	}
 	const onPath = which.sync("esbuild", { nothrow: true });
 	if (onPath) return onPath;
@@ -166,7 +182,7 @@ const resolveEsbuild = (): string => {
 	// a devDependency. In `npm i -g` and pkg installs the PATH branch above wins.
 	const local = join(process.cwd(), "node_modules", ".bin", "esbuild");
 	if (existsSync(local)) return local;
-	throw new Error(NOT_FOUND);
+	throw new Error(notFoundMessage());
 };
 
 const runEsbuild = (

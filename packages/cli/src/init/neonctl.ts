@@ -1,5 +1,9 @@
 import { lstatSync } from "node:fs";
 import { execa } from "execa";
+import {
+	globalInstallCommand,
+	resolveInvokingPackageManager,
+} from "../utils/package_manager.js";
 
 /**
  * Returns the Neon CLI command prefix: "CI= npx -y neon".
@@ -13,42 +17,6 @@ import { execa } from "execa";
  */
 export function neonctlCmd(): string {
 	return "CI= npx -y neon";
-}
-
-/**
- * Detects which package manager was used to invoke the current process.
- * Reads the `npm_config_user_agent` env var set by npm/pnpm/yarn/bun when
- * they spawn child processes (including via `npx`, `pnpx`, `bunx`, etc.).
- *
- * Falls back to "npm" if detection fails.
- */
-export function detectPackageManager(): "npm" | "pnpm" | "yarn" | "bun" {
-	const ua = process.env.npm_config_user_agent;
-	if (ua) {
-		if (ua.startsWith("pnpm/")) return "pnpm";
-		if (ua.startsWith("yarn/")) return "yarn";
-		if (ua.startsWith("bun/")) return "bun";
-	}
-	return "npm";
-}
-
-/**
- * Returns the global install command for a given package manager.
- */
-function globalInstallArgs(
-	pm: "npm" | "pnpm" | "yarn" | "bun",
-	pkg: string,
-): { command: string; args: string[] } {
-	switch (pm) {
-		case "pnpm":
-			return { command: "pnpm", args: ["add", "-g", pkg] };
-		case "yarn":
-			return { command: "yarn", args: ["global", "add", pkg] };
-		case "bun":
-			return { command: "bun", args: ["add", "-g", pkg] };
-		default:
-			return { command: "npm", args: ["install", "-g", pkg] };
-	}
 }
 
 type NeonctlStatus = {
@@ -185,8 +153,20 @@ export async function ensureNeonctl(): Promise<EnsureNeonctlResult> {
 		};
 	}
 
-	const pm = detectPackageManager();
-	const { command, args } = globalInstallArgs(pm, "neonctl");
+	const pm = resolveInvokingPackageManager();
+	const install = globalInstallCommand(pm, "neonctl");
+	if (!install) {
+		// The next step is installing a package manager, not falling back to
+		// npx: npx ships with npm, so it is missing in exactly this case.
+		return {
+			status: "failed",
+			error:
+				"Could not install the Neon CLI: this machine has no package manager that can perform a global install. " +
+				"npm, pnpm and bun are not on PATH (yarn Berry has no global install). " +
+				"Install npm, pnpm or bun, then run this again.",
+		};
+	}
+	const { command, args } = install;
 
 	try {
 		await execa(command, args, { stdio: "pipe", timeout: 60000 });

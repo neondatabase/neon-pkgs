@@ -16,6 +16,10 @@ import {
 import { log } from "../log.js";
 import type { NeonService } from "../neon_services.js";
 import { getCliName } from "../utils/cli_name.js";
+import {
+	formatInstallCommand,
+	resolvePackageManager,
+} from "../utils/package_manager.js";
 
 export type DevEnvContext = {
 	cwd: string;
@@ -587,8 +591,7 @@ const loadNeonConfig = async (cwd: string): Promise<Config | null> => {
 		if (looksLikeMissingDependency(err)) {
 			throw new Error(
 				"Could not load neon.ts: a package it imports is not installed. " +
-					"Did you run `npm install`? Install your dependencies " +
-					"(npm / pnpm / yarn / bun), then try again.\n" +
+					`Run \`${formatInstallCommand(resolvePackageManager(cwd))}\`, then try again.\n` +
 					`Original error: ${message}`,
 			);
 		}

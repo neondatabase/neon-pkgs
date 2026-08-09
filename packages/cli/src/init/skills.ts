@@ -3,6 +3,10 @@ import { resolve } from "node:path";
 import { log, spinner } from "@clack/prompts";
 import { execa } from "execa";
 import { dim } from "yoctocolors";
+import {
+	globalInstallCommand,
+	resolveInvokingPackageManager,
+} from "../utils/package_manager.js";
 import { getSkillsAgentName as getSkillsAgentNameFromId } from "./agents.js";
 import type { Editor } from "./types.js";
 
@@ -14,14 +18,23 @@ async function ensureSkillsCli(): Promise<void> {
 	try {
 		await execa("skills", ["--version"], { stdio: "pipe", timeout: 5000 });
 	} catch {
-		// Not installed — install it globally
+		// Not installed — install it globally with whatever launched us, so a
+		// pnpm/bun user doesn't get a stray npm global install. Undefined means
+		// nothing on this machine can install a global CLI at all.
+		const install = globalInstallCommand(
+			resolveInvokingPackageManager(),
+			"skills",
+		);
+		if (!install) return;
 		try {
-			await execa("npm", ["install", "-g", "skills"], {
+			await execa(install.command, install.args, {
 				stdio: "pipe",
 				timeout: 60000,
 			});
 		} catch {
-			// Best effort — npx will fall back to downloading
+			// Swallowed because the caller reports per-skill failures with their
+			// own errors. Nothing retries this: every `skills` call below invokes
+			// the binary directly, so they all fail if this did.
 		}
 	}
 }

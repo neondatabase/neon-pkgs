@@ -1,3 +1,11 @@
+import {
+	DO_NOT_SUBSTITUTE_HINT,
+	formatExecCommand,
+	formatInstallCommand,
+	MISSING_BINARY_HINT,
+	type PackageManager,
+	resolvePackageManager,
+} from "../../utils/package_manager.js";
 import { ensureSkillsUpToDate } from "../skills.js";
 import type { PhaseResponse } from "../types.js";
 
@@ -7,6 +15,8 @@ export type MigrationsPhaseOptions = {
 	migrationDir?: string;
 	scaffold?: "prisma" | "drizzle";
 	apply?: boolean;
+	/** The project directory the emitted commands will run in. */
+	cwd: string;
 };
 
 export async function handleMigrationsPhase(
@@ -19,6 +29,7 @@ export async function handleMigrationsPhase(
 	const agentArgs = options.agent
 		? ["--agent", options.agent, "--json"]
 		: ["--json"];
+	const pm = resolvePackageManager(options.cwd);
 
 	// --scaffold: set up a new migration framework
 	if (options.scaffold) {
@@ -32,15 +43,19 @@ export async function handleMigrationsPhase(
 					steps: [
 						{
 							id: "install_prisma",
-							description: "Install Prisma as a dev dependency",
-							command: "npm install -D prisma",
+							description: `Install Prisma as a dev dependency. ${DO_NOT_SUBSTITUTE_HINT}`,
+							command: formatInstallCommand(pm, ["prisma"], {
+								dev: true,
+							}),
 						},
 						{
 							id: "init_prisma",
-							description:
-								"Initialize Prisma with PostgreSQL provider",
-							command:
-								"npx prisma init --datasource-provider postgresql",
+							description: `Initialize Prisma with PostgreSQL provider. ${MISSING_BINARY_HINT}`,
+							command: formatExecCommand(pm, "prisma", [
+								"init",
+								"--datasource-provider",
+								"postgresql",
+							]),
 						},
 						{
 							id: "configure_env",
@@ -54,15 +69,18 @@ export async function handleMigrationsPhase(
 						},
 						{
 							id: "run_migration",
-							description:
-								"Create and apply the initial migration",
-							command: "npx prisma migrate dev --name init",
+							description: `Create and apply the initial migration. ${MISSING_BINARY_HINT}`,
+							command: formatExecCommand(pm, "prisma", [
+								"migrate",
+								"dev",
+								"--name",
+								"init",
+							]),
 						},
 					],
 					onComplete: {
 						type: "complete",
-						message:
-							"Prisma is set up with your Neon database. You can now define models in schema.prisma and run migrations with `npx prisma migrate dev`.",
+						message: `Prisma is set up with your Neon database. You can now define models in schema.prisma and run migrations with \`${formatExecCommand(pm, "prisma", ["migrate", "dev"])}\`.`,
 					},
 				},
 			};
@@ -78,10 +96,16 @@ export async function handleMigrationsPhase(
 				steps: [
 					{
 						id: "install_drizzle",
-						description:
-							"Install Drizzle ORM, drizzle-kit, and the Neon serverless driver",
-						command:
-							"npm install drizzle-orm @neondatabase/serverless && npm install -D drizzle-kit",
+						description: `Install Drizzle ORM, drizzle-kit, and the Neon serverless driver. ${DO_NOT_SUBSTITUTE_HINT}`,
+						command: [
+							formatInstallCommand(pm, [
+								"drizzle-orm",
+								"@neondatabase/serverless",
+							]),
+							formatInstallCommand(pm, ["drizzle-kit"], {
+								dev: true,
+							}),
+						].join(" && "),
 					},
 					{
 						id: "create_config",
@@ -95,15 +119,13 @@ export async function handleMigrationsPhase(
 					},
 					{
 						id: "run_migration",
-						description: "Generate and apply the initial migration",
-						command:
-							"npx drizzle-kit generate && npx drizzle-kit migrate",
+						description: `Generate and apply the initial migration. ${MISSING_BINARY_HINT}`,
+						command: drizzleGenerateAndMigrate(pm),
 					},
 				],
 				onComplete: {
 					type: "complete",
-					message:
-						"Drizzle ORM is set up with your Neon database. Define tables in your schema file and run migrations with `npx drizzle-kit generate && npx drizzle-kit migrate`.",
+					message: `Drizzle ORM is set up with your Neon database. Define tables in your schema file and run migrations with \`${drizzleGenerateAndMigrate(pm)}\`.`,
 				},
 			},
 		};
@@ -111,7 +133,7 @@ export async function handleMigrationsPhase(
 
 	// --apply: apply existing migrations
 	if (options.apply && options.tool) {
-		const applySteps = getMigrationApplySteps(options.tool);
+		const applySteps = getMigrationApplySteps(options.tool, pm);
 		return {
 			phase: "migrations",
 			status: "applying",
@@ -227,7 +249,14 @@ export async function handleMigrationsPhase(
 	};
 }
 
-function getMigrationApplySteps(tool: string) {
+/** `drizzle-kit generate` then `migrate`, both through the project's runner. */
+const drizzleGenerateAndMigrate = (pm: PackageManager): string =>
+	[
+		formatExecCommand(pm, "drizzle-kit", ["generate"]),
+		formatExecCommand(pm, "drizzle-kit", ["migrate"]),
+	].join(" && ");
+
+function getMigrationApplySteps(tool: string, pm: PackageManager) {
 	switch (tool) {
 		case "prisma":
 			return [
@@ -237,13 +266,19 @@ function getMigrationApplySteps(tool: string) {
 				},
 				{
 					id: "apply",
-					description: "Apply migrations to the Neon database",
-					command: "npx prisma migrate deploy",
+					description: `Apply migrations to the Neon database. ${MISSING_BINARY_HINT}`,
+					command: formatExecCommand(pm, "prisma", [
+						"migrate",
+						"deploy",
+					]),
 				},
 				{
+					// No MISSING_BINARY_HINT: the apply step immediately above
+					// carries it, and `prisma generate` writes a client without
+					// touching a database, so that warning is not true here.
 					id: "generate",
-					description: "Generate the Prisma client",
-					command: "npx prisma generate",
+					description: "Generate the Prisma client.",
+					command: formatExecCommand(pm, "prisma", ["generate"]),
 				},
 			];
 		case "drizzle":
@@ -254,8 +289,8 @@ function getMigrationApplySteps(tool: string) {
 				},
 				{
 					id: "apply",
-					description: "Apply migrations to the Neon database",
-					command: "npx drizzle-kit migrate",
+					description: `Apply migrations to the Neon database. ${MISSING_BINARY_HINT}`,
+					command: formatExecCommand(pm, "drizzle-kit", ["migrate"]),
 				},
 			];
 		case "knex":
@@ -266,8 +301,8 @@ function getMigrationApplySteps(tool: string) {
 				},
 				{
 					id: "apply",
-					description: "Apply migrations to the Neon database",
-					command: "npx knex migrate:latest",
+					description: `Apply migrations to the Neon database. ${MISSING_BINARY_HINT}`,
+					command: formatExecCommand(pm, "knex", ["migrate:latest"]),
 				},
 			];
 		default:

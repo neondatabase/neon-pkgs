@@ -38,6 +38,9 @@ pnpm --filter neon-new test
 pnpm --filter vite-plugin-neon-new test
 ```
 
+See [CONTRIBUTING.md's Testing section](CONTRIBUTING.md#testing) for local test semantics,
+the pull-request CI sharding layout, and the coverage artifact handoff.
+
 #### Live Neon e2e tests
 
 `pnpm test:e2e:live` runs the `@neon/sdk`, `@neon/config`, `@neon/config-runtime`,
@@ -419,6 +422,7 @@ so "reach into an internal" is not a thing it can do.
 -   **Conformance tests** (`tests/psql-conformance`) need Docker/testcontainers and are excluded from the default Vitest run; run them explicitly with `pnpm --filter <name> test:conformance`.
 -   **Sibling deps**: every internal dependency — the `@neon/*` packages — is `workspace:*`. Never pin one to a published version; see "Publish order" below for the lockfile deadlock that caused.
 -   **`neon init` lives in `src/init/`**, folded in from the retired `neon-init` package. It is the agent-driven setup flow: `orchestrate.ts` is the state machine, `phases/` are its steps, `interactive.ts` is the human path, and `bootstrap.ts` is the template scaffolding core that `commands/bootstrap.ts` also uses. It talks to Neon by shelling out to `npx -y neon` (`init/neonctl.ts`) rather than through the in-process API client, and reads credentials through its own `init/auth.ts` — so it is unaffected by `--profile`, which `neon init` refuses rather than ignores.
+-   **Package manager detection** lives in `src/utils/package_manager.ts`, and it is the only module allowed to read a lockfile or `npm_config_user_agent`. Installing into a project directory uses `resolvePackageManager(cwd)` (lockfile walk, then invocation, then PATH, then npm); global installs and fresh scaffolds with no lockfile yet use `resolveInvokingPackageManager()`; an interactive flow that can prompt uses `inferPackageManager(cwd)`, which returns undefined rather than guessing. Never spell an install command by hand — `formatInstallCommand()` builds the string for agent JSON and printed hints, `installArgs()` and `globalInstallArgs()` build argv for `runCommand`, and `execCommand()` builds the line that runs a binary the project depends on (`pnpm exec drizzle-kit`, `npx --no prisma`). A hardcoded `npm install` in an agent instruction is a bug: it tells the agent to run npm against a pnpm project. A bare `npx`/`bunx` is a bug too — both download a missing package instead of failing, so use `execCommand()` for anything the project already depends on.
 
 ### The SDK package (`packages/sdk`)
 

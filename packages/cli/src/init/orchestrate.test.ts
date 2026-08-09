@@ -6,11 +6,16 @@ vi.mock("./auth.js", () => ({
 	isAuthenticated: vi.fn(),
 }));
 
+// Deliberately not spread over the real module: an fs call this suite has not
+// declared should fail loudly rather than reach the checkout, since `existsSync`
+// here describes a filesystem that does not exist.
 vi.mock("node:fs", () => ({
 	existsSync: vi.fn(),
 	readFileSync: vi.fn(),
 	writeFileSync: vi.fn(),
 	statSync: vi.fn(),
+	// Identity: these paths are fictional, so there is no symlink to resolve.
+	realpathSync: vi.fn((path: string) => path),
 }));
 
 vi.mock("node:path", async (importOriginal) => {

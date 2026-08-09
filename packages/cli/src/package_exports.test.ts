@@ -46,8 +46,8 @@ const exportMap = (): Record<string, unknown> => {
  * package accomplishes nothing if the same function is reachable at
  * `neon/dist/_chunks/<name>-<hash>.js`.
  *
- * `_virtual` is the same judgement one level down: tsdown emits rolldown's shared runtime
- * helpers there, and how we compile is not a surface anyone should import.
+ * `_virtual` is the same judgement applied to the build tool: tsdown emits rolldown's shared
+ * runtime helpers there, and how we compile is not a surface anyone should import.
  *
  * A `null` target blocks a subpath, and the more specific pattern wins over the wildcard, so
  * `./dist/commands/env.js` still resolves. Verified against Node: the blocked paths answer

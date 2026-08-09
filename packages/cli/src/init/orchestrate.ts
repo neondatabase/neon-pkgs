@@ -124,6 +124,7 @@ export async function orchestrate(
 	if (!hasNeonConnection) {
 		return handleGettingStartedPhase({
 			agent: options.agent,
+			cwd,
 			hasConnectionString: false,
 			framework: inspection.framework as string | undefined,
 			orm: inspection.orm as string | undefined,
@@ -167,7 +168,7 @@ export async function orchestrate(
 
 	// Phase 5: Migrations
 	if (!options.skipMigrations) {
-		return handleMigrationsPhase({ agent: options.agent });
+		return handleMigrationsPhase({ agent: options.agent, cwd });
 	}
 
 	// All done — clean up ephemeral _init state from .neon
