@@ -49,13 +49,6 @@ pnpm --filter @neon/env build
 pnpm --filter @neon/env test:ci
 ```
 
-Workspace packages import each other through their build output (`dist`), not their source, so
-a package's tests see a dependency's **last build** — not the source you just edited. `pnpm test`
-therefore builds the package and its workspace dependencies first (`pnpm --filter <pkg>... build`),
-which is what makes a single-package test run trustworthy after an edit anywhere in the graph.
-`test:ci` skips that: on CI, `pnpm install` runs each package's `prepare` (a build) on a fresh
-checkout, so everything is current already. Run `test:ci` locally only right after a build.
-
 See [`AGENTS.md`](./AGENTS.md) for the deeper architecture and per-package notes (especially the
 CLI package, which keeps its own toolchain).
 
@@ -65,6 +58,50 @@ package's file before changing it:
 | Package | Notes |
 | --- | --- |
 | [`@neon/env`](./packages/env/CONTRIBUTING.md) | Why the credential-reuse half lives in `shared/env-core` rather than on the published surface, and the branch-credential rules |
+
+## Testing
+
+The standard suite uses [Vitest](https://vitest.dev/) and does not call live Neon services:
+
+```bash
+pnpm test:ci                          # every package
+pnpm --filter @neon/config test:ci   # one package
+```
+
+Workspace packages import each other through their build output (`dist`), not their source, so a
+package's tests can see a dependency's last build instead of the source you just edited. Use a
+package's `test` script while developing when it has one: it builds the package and its workspace
+dependencies before running Vitest. `test:ci` skips that dependency build and is intended for a
+fresh CI checkout or a local tree you have just built.
+
+### Pull request CI
+
+The `CI` workflow splits the standard suite into five parallel jobs:
+
+- four Vitest file shards for `neon`, the CLI package
+- one job for every non-CLI package except `neonctl`
+
+`neonctl` runs after CLI shard 4 because its compatibility shim imports the built `neon` CLI.
+The four shards together select every CLI test file exactly once:
+
+```bash
+pnpm --filter neon test:ci \
+  --coverage --coverage.reporter=json --shard=1/4
+
+pnpm --recursive \
+  --filter='./packages/**' --filter='!neon' --filter='!neonctl' \
+  test:ci --coverage --coverage.reporter=json
+```
+
+Replace `1/4` with `2/4`, `3/4`, or `4/4` to reproduce another shard. Vitest shards test
+**files**, not individual tests. A large generated matrix inside one file remains on one
+runner; splitting that file is the way to distribute it further.
+
+The test runners belong to the protected runner group. They can install packages from the
+Databricks mirror but cannot reach Codecov's public verification endpoints. Each job therefore
+emits Istanbul JSON coverage, uploads the package-named reports as a GitHub artifact, and stops
+there. A dependent `Coverage` job on `ubuntu-latest` downloads all five artifacts and performs
+one OIDC-authenticated Codecov upload. Coverage upload errors fail that job.
 
 ## Live Neon e2e tests
 

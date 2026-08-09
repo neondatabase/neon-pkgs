@@ -38,6 +38,9 @@ pnpm --filter neon-new test
 pnpm --filter vite-plugin-neon-new test
 ```
 
+See [CONTRIBUTING.md's Testing section](CONTRIBUTING.md#testing) for local test semantics,
+the pull-request CI sharding layout, and the coverage artifact handoff.
+
 #### Live Neon e2e tests
 
 `pnpm test:e2e:live` runs the `@neon/sdk`, `@neon/config`, `@neon/config-runtime`,
