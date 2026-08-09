@@ -273,8 +273,11 @@ function getMigrationApplySteps(tool: string, pm: PackageManager) {
 					]),
 				},
 				{
+					// No MISSING_BINARY_HINT: the apply step immediately above
+					// carries it, and `prisma generate` writes a client without
+					// touching a database, so that warning is not true here.
 					id: "generate",
-					description: `Generate the Prisma client. ${MISSING_BINARY_HINT}`,
+					description: "Generate the Prisma client.",
 					command: formatExecCommand(pm, "prisma", ["generate"]),
 				},
 			];

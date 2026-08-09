@@ -315,9 +315,15 @@ export const formatExecCommand = (
  * and the same payload contains `npx -y` elsewhere, so `-y` looks like the house
  * style. Without this, an agent that hits the guard plausibly retries with `-y`
  * and runs an unpinned migration tool against the user's database.
+ *
+ * Worded against the outcome rather than a message, because the four managers
+ * word it differently ("canceled due to missing packages", "Command not found",
+ * "Script not found"), and against "install the dependencies" rather than "the
+ * step above", because the `--apply` and connected getting-started payloads
+ * carry no install step for it to point at.
  */
 export const MISSING_BINARY_HINT =
-	"If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.";
+	"If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (`npx` without `--no`, `pnpm dlx`, `yarn dlx`, `bunx`): those download an unpinned copy of the tool and run it against the user's database.";
 
 /**
  * Belongs in the description of any agent step whose command came from

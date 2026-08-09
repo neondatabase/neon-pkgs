@@ -412,7 +412,7 @@ exports[`neon init --agent: every step, against every project shape > connected 
     "steps": [
       {
         "id": "run_migrations",
-        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
@@ -560,12 +560,12 @@ exports[`neon init --agent: every step, against every project shape > connected 
       },
       {
         "id": "apply",
-        "description": "Apply migrations to the Neon database. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Apply migrations to the Neon database. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "generate",
-        "description": "Generate the Prisma client. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Generate the Prisma client.",
         "command": "npx --no prisma generate"
       }
     ],
@@ -641,7 +641,7 @@ exports[`neon init --agent: every step, against every project shape > connected 
       },
       {
         "id": "init_prisma",
-        "description": "Initialize Prisma with PostgreSQL provider. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Initialize Prisma with PostgreSQL provider. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma init --datasource-provider postgresql"
       },
       {
@@ -654,7 +654,7 @@ exports[`neon init --agent: every step, against every project shape > connected 
       },
       {
         "id": "run_migration",
-        "description": "Create and apply the initial migration. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Create and apply the initial migration. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate dev --name init"
       }
     ],
@@ -1440,7 +1440,7 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
     "steps": [
       {
         "id": "run_migrations",
-        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
@@ -1588,12 +1588,12 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
       },
       {
         "id": "apply",
-        "description": "Apply migrations to the Neon database. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Apply migrations to the Neon database. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "generate",
-        "description": "Generate the Prisma client. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Generate the Prisma client.",
         "command": "npx --no prisma generate"
       }
     ],
@@ -1669,7 +1669,7 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
       },
       {
         "id": "init_prisma",
-        "description": "Initialize Prisma with PostgreSQL provider. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Initialize Prisma with PostgreSQL provider. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma init --datasource-provider postgresql"
       },
       {
@@ -1682,7 +1682,7 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
       },
       {
         "id": "run_migration",
-        "description": "Create and apply the initial migration. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Create and apply the initial migration. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate dev --name init"
       }
     ],
@@ -2466,7 +2466,7 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
     "steps": [
       {
         "id": "run_migrations",
-        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
@@ -2610,12 +2610,12 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
       },
       {
         "id": "apply",
-        "description": "Apply migrations to the Neon database. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Apply migrations to the Neon database. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "generate",
-        "description": "Generate the Prisma client. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Generate the Prisma client.",
         "command": "npx --no prisma generate"
       }
     ],
@@ -2687,7 +2687,7 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
       },
       {
         "id": "init_prisma",
-        "description": "Initialize Prisma with PostgreSQL provider. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Initialize Prisma with PostgreSQL provider. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma init --datasource-provider postgresql"
       },
       {
@@ -2700,7 +2700,7 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
       },
       {
         "id": "run_migration",
-        "description": "Create and apply the initial migration. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Create and apply the initial migration. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate dev --name init"
       }
     ],
@@ -3465,7 +3465,7 @@ exports[`neon init --agent: every step, against every project shape > greenfield
     "steps": [
       {
         "id": "run_migrations",
-        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
@@ -3613,12 +3613,12 @@ exports[`neon init --agent: every step, against every project shape > greenfield
       },
       {
         "id": "apply",
-        "description": "Apply migrations to the Neon database. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Apply migrations to the Neon database. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "generate",
-        "description": "Generate the Prisma client. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Generate the Prisma client.",
         "command": "npx --no prisma generate"
       }
     ],
@@ -3694,7 +3694,7 @@ exports[`neon init --agent: every step, against every project shape > greenfield
       },
       {
         "id": "init_prisma",
-        "description": "Initialize Prisma with PostgreSQL provider. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Initialize Prisma with PostgreSQL provider. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma init --datasource-provider postgresql"
       },
       {
@@ -3707,7 +3707,7 @@ exports[`neon init --agent: every step, against every project shape > greenfield
       },
       {
         "id": "run_migration",
-        "description": "Create and apply the initial migration. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Create and apply the initial migration. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate dev --name init"
       }
     ],
@@ -4498,7 +4498,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
     "steps": [
       {
         "id": "run_migrations",
-        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
@@ -4646,12 +4646,12 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       },
       {
         "id": "apply",
-        "description": "Apply migrations to the Neon database. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Apply migrations to the Neon database. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "generate",
-        "description": "Generate the Prisma client. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Generate the Prisma client.",
         "command": "npx --no prisma generate"
       }
     ],
@@ -4727,7 +4727,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       },
       {
         "id": "init_prisma",
-        "description": "Initialize Prisma with PostgreSQL provider. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Initialize Prisma with PostgreSQL provider. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma init --datasource-provider postgresql"
       },
       {
@@ -4740,7 +4740,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       },
       {
         "id": "run_migration",
-        "description": "Create and apply the initial migration. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Create and apply the initial migration. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate dev --name init"
       }
     ],
@@ -5531,7 +5531,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
     "steps": [
       {
         "id": "run_migrations",
-        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
@@ -5679,12 +5679,12 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       },
       {
         "id": "apply",
-        "description": "Apply migrations to the Neon database. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Apply migrations to the Neon database. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "generate",
-        "description": "Generate the Prisma client. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Generate the Prisma client.",
         "command": "npx --no prisma generate"
       }
     ],
@@ -5760,7 +5760,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       },
       {
         "id": "init_prisma",
-        "description": "Initialize Prisma with PostgreSQL provider. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Initialize Prisma with PostgreSQL provider. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma init --datasource-provider postgresql"
       },
       {
@@ -5773,7 +5773,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       },
       {
         "id": "run_migration",
-        "description": "Create and apply the initial migration. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Create and apply the initial migration. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate dev --name init"
       }
     ],
@@ -6559,7 +6559,7 @@ exports[`neon init --agent: every step, against every project shape > node-app >
     "steps": [
       {
         "id": "run_migrations",
-        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
@@ -6707,12 +6707,12 @@ exports[`neon init --agent: every step, against every project shape > node-app >
       },
       {
         "id": "apply",
-        "description": "Apply migrations to the Neon database. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Apply migrations to the Neon database. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "generate",
-        "description": "Generate the Prisma client. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Generate the Prisma client.",
         "command": "npx --no prisma generate"
       }
     ],
@@ -6788,7 +6788,7 @@ exports[`neon init --agent: every step, against every project shape > node-app >
       },
       {
         "id": "init_prisma",
-        "description": "Initialize Prisma with PostgreSQL provider. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Initialize Prisma with PostgreSQL provider. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma init --datasource-provider postgresql"
       },
       {
@@ -6801,7 +6801,7 @@ exports[`neon init --agent: every step, against every project shape > node-app >
       },
       {
         "id": "run_migration",
-        "description": "Create and apply the initial migration. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Create and apply the initial migration. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate dev --name init"
       }
     ],
@@ -7592,7 +7592,7 @@ exports[`neon init --agent: every step, against every project shape > other-data
     "steps": [
       {
         "id": "run_migrations",
-        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
@@ -7740,12 +7740,12 @@ exports[`neon init --agent: every step, against every project shape > other-data
       },
       {
         "id": "apply",
-        "description": "Apply migrations to the Neon database. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Apply migrations to the Neon database. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "generate",
-        "description": "Generate the Prisma client. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Generate the Prisma client.",
         "command": "npx --no prisma generate"
       }
     ],
@@ -7821,7 +7821,7 @@ exports[`neon init --agent: every step, against every project shape > other-data
       },
       {
         "id": "init_prisma",
-        "description": "Initialize Prisma with PostgreSQL provider. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Initialize Prisma with PostgreSQL provider. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma init --datasource-provider postgresql"
       },
       {
@@ -7834,7 +7834,7 @@ exports[`neon init --agent: every step, against every project shape > other-data
       },
       {
         "id": "run_migration",
-        "description": "Create and apply the initial migration. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Create and apply the initial migration. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate dev --name init"
       }
     ],
@@ -8370,7 +8370,7 @@ exports[`neon init --agent: nested and string-encoded --data payloads > JSON-enc
       },
       {
         "id": "run_migrations",
-        "description": "Check if prisma/migrations contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Check if prisma/migrations contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
@@ -8438,7 +8438,7 @@ exports[`neon init --agent: nested and string-encoded --data payloads > nested o
       },
       {
         "id": "run_migrations",
-        "description": "Check if prisma/migrations contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
+        "description": "Check if prisma/migrations contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step. If this fails because the tool is not installed, install the project's dependencies — re-running the install step above if this payload has one — then retry this step. Do not add -y, and do not swap the runner for a fetching one (\`npx\` without \`--no\`, \`pnpm dlx\`, \`yarn dlx\`, \`bunx\`): those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {

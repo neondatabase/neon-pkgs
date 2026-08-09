@@ -18,7 +18,7 @@ const notFoundMessage = (): string => {
 	const how = install
 		? `install esbuild and ensure it is on your PATH (e.g. \`${install.command} ${install.args.join(" ")}\`), or `
 		: "put an esbuild binary on your PATH, or ";
-	return `esbuild not found. neon ships esbuild for most platforms, so this is unexpected: ${how}set NEON_ESBUILD_PATH to an esbuild binary.`;
+	return `esbuild not found. neon ships esbuild for most platforms, so this is unexpected. ${how[0].toUpperCase()}${how.slice(1)}set NEON_ESBUILD_PATH to an esbuild binary.`;
 };
 
 // Prepended to the ESM bundle. Bundled dependencies are frequently CommonJS, but an ESM

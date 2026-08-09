@@ -20,6 +20,7 @@ import { log } from "../log.js";
 import type { CommonProps } from "../types.js";
 import { getCliName } from "../utils/cli_name.js";
 import {
+	DO_NOT_SUBSTITUTE_HINT,
 	formatInstallCommand,
 	inferPackageManager,
 	installArgs,
@@ -651,8 +652,7 @@ const runAgent = async (props: BootstrapProps): Promise<void> => {
 		next_steps: [
 			{
 				action: "install_dependencies",
-				instruction:
-					"Ask the user whether to install dependencies, then run this in the project directory.",
+				instruction: `Ask the user whether to install dependencies, then run this in the project directory. ${DO_NOT_SUBSTITUTE_HINT}`,
 				command: `${runIn}${formatInstallCommand(installPm)}`,
 			},
 			{
