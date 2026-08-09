@@ -410,10 +410,16 @@ Branch-scoped AI Gateway endpoint metadata (beta).
 Branch-scoped logs from the services running on a branch — Neon Functions, object
 storage, and Postgres computes (private beta).
 
-Being private beta shows. A branch with nothing to serve answers `200` with an empty
-`logs` array in practice, though the spec also defines a `404` with
-`reason: "telemetry_not_enabled"`, so handle both. A branch whose telemetry backend is
-down answers `503`, which the client retries on by default.
+Being private beta shows, and all three calls behave the same way on a given branch:
+
+| Branch state | Response |
+| --- | --- |
+| Telemetry not available in the branch's region | `404`, `reason: "telemetry_not_enabled"` — the common case today |
+| Telemetry available, nothing recorded in the window | `200` with an empty `logs` / `values` array |
+| Telemetry available, backend down | `503`, which the client retries on by default |
+
+Expect the `404` rather than an empty result: telemetry is region-gated, and most regions
+do not have it yet.
 
 | Method | Returns | Notes |
 | --- | --- | --- |
