@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
 	detectProjectPackageManager,
+	execCommand,
 	formatInstallCommand,
 	globalInstallArgs,
 	inferPackageManager,
@@ -270,6 +271,22 @@ describe("formatInstallCommand", () => {
 		expect(formatInstallCommand("pnpm", [], { dev: true })).toBe(
 			"pnpm install",
 		);
+	});
+});
+
+describe("execCommand", () => {
+	it.each([
+		// npm keeps npx, so nothing already written for npm changes.
+		["npm", "npx drizzle-kit generate"],
+		["pnpm", "pnpm exec drizzle-kit generate"],
+		["yarn", "yarn run drizzle-kit generate"],
+		["bun", "bunx drizzle-kit generate"],
+	] as const)("runs a project binary with %s", (pm, expected) => {
+		expect(execCommand(pm, "drizzle-kit", ["generate"])).toBe(expected);
+	});
+
+	it("takes no arguments", () => {
+		expect(execCommand("pnpm", "prisma")).toBe("pnpm exec prisma");
 	});
 });
 

@@ -1,5 +1,7 @@
 import {
+	execCommand,
 	formatInstallCommand,
+	type PackageManager,
 	resolvePackageManager,
 } from "../../utils/package_manager.js";
 import { ensureSkillsUpToDate } from "../skills.js";
@@ -48,8 +50,11 @@ export async function handleMigrationsPhase(
 							id: "init_prisma",
 							description:
 								"Initialize Prisma with PostgreSQL provider",
-							command:
-								"npx prisma init --datasource-provider postgresql",
+							command: execCommand(pm, "prisma", [
+								"init",
+								"--datasource-provider",
+								"postgresql",
+							]),
 						},
 						{
 							id: "configure_env",
@@ -65,13 +70,17 @@ export async function handleMigrationsPhase(
 							id: "run_migration",
 							description:
 								"Create and apply the initial migration",
-							command: "npx prisma migrate dev --name init",
+							command: execCommand(pm, "prisma", [
+								"migrate",
+								"dev",
+								"--name",
+								"init",
+							]),
 						},
 					],
 					onComplete: {
 						type: "complete",
-						message:
-							"Prisma is set up with your Neon database. You can now define models in schema.prisma and run migrations with `npx prisma migrate dev`.",
+						message: `Prisma is set up with your Neon database. You can now define models in schema.prisma and run migrations with \`${execCommand(pm, "prisma", ["migrate", "dev"])}\`.`,
 					},
 				},
 			};
@@ -112,14 +121,12 @@ export async function handleMigrationsPhase(
 					{
 						id: "run_migration",
 						description: "Generate and apply the initial migration",
-						command:
-							"npx drizzle-kit generate && npx drizzle-kit migrate",
+						command: drizzleGenerateAndMigrate(pm),
 					},
 				],
 				onComplete: {
 					type: "complete",
-					message:
-						"Drizzle ORM is set up with your Neon database. Define tables in your schema file and run migrations with `npx drizzle-kit generate && npx drizzle-kit migrate`.",
+					message: `Drizzle ORM is set up with your Neon database. Define tables in your schema file and run migrations with \`${drizzleGenerateAndMigrate(pm)}\`.`,
 				},
 			},
 		};
@@ -127,7 +134,7 @@ export async function handleMigrationsPhase(
 
 	// --apply: apply existing migrations
 	if (options.apply && options.tool) {
-		const applySteps = getMigrationApplySteps(options.tool);
+		const applySteps = getMigrationApplySteps(options.tool, pm);
 		return {
 			phase: "migrations",
 			status: "applying",
@@ -243,7 +250,14 @@ export async function handleMigrationsPhase(
 	};
 }
 
-function getMigrationApplySteps(tool: string) {
+/** `drizzle-kit generate` then `migrate`, both through the project's runner. */
+const drizzleGenerateAndMigrate = (pm: PackageManager): string =>
+	[
+		execCommand(pm, "drizzle-kit", ["generate"]),
+		execCommand(pm, "drizzle-kit", ["migrate"]),
+	].join(" && ");
+
+function getMigrationApplySteps(tool: string, pm: PackageManager) {
 	switch (tool) {
 		case "prisma":
 			return [
@@ -254,12 +268,12 @@ function getMigrationApplySteps(tool: string) {
 				{
 					id: "apply",
 					description: "Apply migrations to the Neon database",
-					command: "npx prisma migrate deploy",
+					command: execCommand(pm, "prisma", ["migrate", "deploy"]),
 				},
 				{
 					id: "generate",
 					description: "Generate the Prisma client",
-					command: "npx prisma generate",
+					command: execCommand(pm, "prisma", ["generate"]),
 				},
 			];
 		case "drizzle":
@@ -271,7 +285,7 @@ function getMigrationApplySteps(tool: string) {
 				{
 					id: "apply",
 					description: "Apply migrations to the Neon database",
-					command: "npx drizzle-kit migrate",
+					command: execCommand(pm, "drizzle-kit", ["migrate"]),
 				},
 			];
 		case "knex":
@@ -283,7 +297,7 @@ function getMigrationApplySteps(tool: string) {
 				{
 					id: "apply",
 					description: "Apply migrations to the Neon database",
-					command: "npx knex migrate:latest",
+					command: execCommand(pm, "knex", ["migrate:latest"]),
 				},
 			];
 		default:

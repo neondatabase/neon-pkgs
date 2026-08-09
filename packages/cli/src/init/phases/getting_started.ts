@@ -1,4 +1,5 @@
 import {
+	execCommand,
 	formatInstallCommand,
 	resolvePackageManager,
 } from "../../utils/package_manager.js";
@@ -184,36 +185,44 @@ export async function handleGettingStartedPhase(
 		const hasMigrationDir = migrationDir && migrationDir !== "none";
 
 		if (tool === "drizzle") {
+			const migrate = execCommand(installPm, "drizzle-kit", ["migrate"]);
+			const generate = execCommand(installPm, "drizzle-kit", [
+				"generate",
+			]);
 			steps.push({
 				id: "run_migrations",
 				description: [
 					hasMigrationDir
 						? `Check if the ${migrationDir} directory contains .sql migration files.`
 						: "Check if a drizzle migrations directory exists with .sql files.",
-					"If .sql files exist, apply them with `npx drizzle-kit migrate`.",
-					"If the directory is empty or missing but a drizzle schema file exists (e.g. src/db/schema.ts, drizzle/schema.ts), run `npx drizzle-kit generate` first to create migrations, then `npx drizzle-kit migrate` to apply them.",
+					`If .sql files exist, apply them with \`${migrate}\`.`,
+					`If the directory is empty or missing but a drizzle schema file exists (e.g. src/db/schema.ts, drizzle/schema.ts), run \`${generate}\` first to create migrations, then \`${migrate}\` to apply them.`,
 					"If neither schema nor migrations exist, skip this step.",
 				].join(" "),
-				command: "npx drizzle-kit migrate",
+				command: migrate,
 			});
 		} else if (tool === "prisma") {
+			const deploy = execCommand(installPm, "prisma", [
+				"migrate",
+				"deploy",
+			]);
 			steps.push({
 				id: "run_migrations",
 				description: [
 					hasMigrationDir
 						? `Check if the ${migrationDir} directory contains migration folders.`
 						: "Check if prisma/migrations contains migration folders.",
-					"If migrations exist, apply them with `npx prisma migrate deploy`.",
-					"If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run `npx prisma migrate dev --name init` to create and apply the initial migration.",
+					`If migrations exist, apply them with \`${deploy}\`.`,
+					`If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`${execCommand(installPm, "prisma", ["migrate", "dev", "--name", "init"])}\` to create and apply the initial migration.`,
 					"If no models are defined, skip this step.",
 				].join(" "),
-				command: "npx prisma migrate deploy",
+				command: deploy,
 			});
 		} else if (tool === "knex") {
 			steps.push({
 				id: "run_migrations",
 				description: `Apply existing knex migrations to the Neon database.`,
-				command: "npx knex migrate:latest",
+				command: execCommand(installPm, "knex", ["migrate:latest"]),
 			});
 		}
 	} else if (options.preview) {
@@ -224,8 +233,8 @@ export async function handleGettingStartedPhase(
 			description: [
 				"Check the scaffolded project for a migration tool and schema.",
 				"Look for: drizzle.config.ts/js (Drizzle), prisma/schema.prisma (Prisma), or knexfile.ts/js (Knex).",
-				"If Drizzle is found: check if a drizzle migrations directory exists with .sql files. If .sql files exist, run `npx drizzle-kit migrate`. If the directory is empty or missing but a schema file exists, run `npx drizzle-kit generate` first, then `npx drizzle-kit migrate`.",
-				"If Prisma is found: check if prisma/migrations contains migration folders. If yes, run `npx prisma migrate deploy`. If not but models exist, run `npx prisma migrate dev --name init`.",
+				`If Drizzle is found: check if a drizzle migrations directory exists with .sql files. If .sql files exist, run \`${execCommand(installPm, "drizzle-kit", ["migrate"])}\`. If the directory is empty or missing but a schema file exists, run \`${execCommand(installPm, "drizzle-kit", ["generate"])}\` first, then \`${execCommand(installPm, "drizzle-kit", ["migrate"])}\`.`,
+				`If Prisma is found: check if prisma/migrations contains migration folders. If yes, run \`${execCommand(installPm, "prisma", ["migrate", "deploy"])}\`. If not but models exist, run \`${execCommand(installPm, "prisma", ["migrate", "dev", "--name", "init"])}\`.`,
 				"If no migration tool is found, skip this step.",
 			].join(" "),
 		});

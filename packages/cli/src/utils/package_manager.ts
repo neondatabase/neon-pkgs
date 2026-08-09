@@ -15,6 +15,8 @@
  * - {@link installArgs} / {@link globalInstallArgs} — argv to install into a project
  *   or globally
  * - {@link formatInstallCommand} — shell-ready `pnpm install` / `npm add …` for agents and hints
+ * - {@link execCommand} — shell-ready `pnpm exec drizzle-kit …` for a binary the project
+ *   already depends on
  *
  * Never re-derive any of this at a call site: a second detector is a second answer, and the
  * two disagree exactly where it hurts — an agent told to run `npm install` in a pnpm project.
@@ -269,6 +271,31 @@ export const globalInstallArgs = (
 	return usable === "npm"
 		? { command: "npm", args: ["install", "-g", pkg] }
 		: { command: usable, args: ["add", "-g", pkg] };
+};
+
+/**
+ * A shell-ready line that runs `binary` out of the project's own
+ * `node_modules/.bin` — the tool was installed as a dependency, so this is not
+ * `dlx`/`npx -y`, which fetch a package that isn't there.
+ *
+ * npm keeps `npx` because that is the idiomatic spelling for a local binary and
+ * every emitted command already reads that way.
+ */
+export const execCommand = (
+	pm: PackageManager,
+	binary: string,
+	args: string[] = [],
+): string => {
+	const runner = {
+		npm: "npx",
+		pnpm: "pnpm exec",
+		// `run` rather than `exec`, which is documented for Berry but not Classic.
+		// Both majors fall back to a node_modules/.bin binary when no script
+		// matches — so a project with a script of the same name shadows the tool.
+		yarn: "yarn run",
+		bun: "bunx",
+	}[pm];
+	return [runner, binary, ...args].join(" ");
 };
 
 /**

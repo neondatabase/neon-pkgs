@@ -145,6 +145,54 @@ describe("handleMigrationsPhase", () => {
 		});
 	});
 
+	describe("the tool is invoked through the project's runner too", () => {
+		// A step list that installs with bun and then runs the binary with npx is
+		// the inconsistency this covers.
+		test.each([
+			["bun", "bunx drizzle-kit generate && bunx drizzle-kit migrate"],
+			[
+				"pnpm",
+				"pnpm exec drizzle-kit generate && pnpm exec drizzle-kit migrate",
+			],
+			["npm", "npx drizzle-kit generate && npx drizzle-kit migrate"],
+		] as const)("drizzle on %s", async (pm, expected) => {
+			const { dir, cleanup } = makeProjectDir(pm);
+			try {
+				const result = await handleMigrationsPhase({
+					cwd: dir,
+					scaffold: "drizzle",
+				});
+				if (result.nextAction.type !== "agent_action")
+					throw new Error();
+				expect(
+					result.nextAction.steps.find(
+						(s) => s.id === "run_migration",
+					)?.command,
+				).toBe(expected);
+			} finally {
+				cleanup();
+			}
+		});
+
+		test("applying prisma migrations uses the project's runner", async () => {
+			const { dir, cleanup } = makeProjectDir("bun");
+			try {
+				const result = await handleMigrationsPhase({
+					cwd: dir,
+					apply: true,
+					tool: "prisma",
+				});
+				if (result.nextAction.type !== "agent_action")
+					throw new Error();
+				const commands = result.nextAction.steps.map((s) => s.command);
+				expect(commands).toContain("bunx prisma migrate deploy");
+				expect(commands).toContain("bunx prisma generate");
+			} finally {
+				cleanup();
+			}
+		});
+	});
+
 	test("--apply with tool returns agent_action", async () => {
 		const result = await handleMigrationsPhase({
 			cwd: project.dir,
