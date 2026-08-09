@@ -96,14 +96,20 @@ if (error?.kind === "not_found") { /* … */ }
 Branch on `kind` rather than `name` or `message`. `name` is a stable string literal on every
 class, so it survives bundling, but `message` is not a contract.
 
+`kind` tells you what happened. To reach a subclass's **own** fields — `NeonNetworkError.reason`,
+`NeonApiError.body` — narrow with `instanceof`: the result envelope types `error` as the base
+`NeonError`, so a `kind` check alone does not make those properties visible.
+
 `NeonNetworkError.reason` carries the most specific reason the platform gave — an `errno`
 code such as `ECONNRESET` when one is available, otherwise the innermost non-empty message.
 It is also interpolated into `message`, so transport faults are distinguishable in logs and
 error trackers instead of collapsing onto one string:
 
 ```ts
+import { NeonNetworkError } from "@neon/sdk";
+
 const { error } = await neon.projects.get(id);
-if (error?.kind === "network") {
+if (error instanceof NeonNetworkError) {
   error.reason; // "ECONNRESET"
   error.message; // 'Network error: no response received from the Neon API (ECONNRESET).'
 }
@@ -423,15 +429,25 @@ Being private beta shows, and all three calls behave the same way on a given bra
 region-gated and the region is fixed at project creation, so `telemetry_not_enabled` is a
 permanent property of the branch and an ordinary outcome to design around.
 `branch_not_found` is a real error — a wrong id or a key without access — and should not
-be absorbed into the same path. Both arrive as `NeonNotFoundError`; `reason` is not lifted
-onto the error, so read it off the raw body:
+be absorbed into the same path. Both arrive as `NeonNotFoundError`, and `reason` is not
+lifted onto the error, so it has to be read off the API's body, which the SDK keeps as
+`unknown`:
 
 ```ts
+import { NeonNotFoundError } from "@neon/sdk";
+
+function logsUnavailableReason(error: unknown): string | undefined {
+  if (!(error instanceof NeonNotFoundError)) return undefined;
+  const body = error.body;
+  if (typeof body !== "object" || body === null || !("reason" in body)) return undefined;
+  return typeof body.reason === "string" ? body.reason : undefined;
+}
+
 const { error } = await neon.logs.fields(projectId, branchId);
 if (error) {
-  const reason = (error.body as { reason?: string } | undefined)?.reason;
-  if (reason === "telemetry_not_enabled") { /* no logs here, ever — carry on */ }
-  else throw error;
+  if (logsUnavailableReason(error) === "telemetry_not_enabled") {
+    // no logs on this branch, ever — carry on
+  } else throw error;
 }
 ```
 
