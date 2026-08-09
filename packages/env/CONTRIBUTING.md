@@ -7,8 +7,9 @@ published surface at all, or in the shared tree the CLIs compile in.**
 
 ## One entry point, and what deliberately isn't on it
 
-Everything `@neon/env` publishes is on `src/index.ts`, and all of it is side-effect-free: it
-reads no files, no env source, and mutates nothing. That property is what lets an app, a build
+Everything `@neon/env` publishes is on `src/index.ts`, and none of it has side effects: it
+writes no files, mutates nothing, and creates or destroys nothing on a Neon project. (`parseEnv`
+reads `process.env`; that is a read, and it is the only one.) That property is what lets an app, a build
 script, or a `neon.ts` policy import this package without wondering what else it might touch.
 Keep it that way.
 
@@ -116,7 +117,6 @@ the AI Gateway share one credential, so revoking the one your persisted secrets 
 service the call is not rewriting. The cost is an orphaned credential, which is the safer of the
 two failures, and `credential.superseded` names it so the caller can report it rather than leave
 it invisible. `neon env pull --service` is why it exists.
-
 
 ## Testing this package
 
