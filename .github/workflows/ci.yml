@@ -70,16 +70,24 @@ jobs:
             - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
             - uses: ./.github/actions/prepare
             - if: matrix.suite == 'cli'
-              run: pnpm --filter neon test:ci --coverage --shard=${{ matrix.shard }}/4
+              run: pnpm --filter neon test:ci --coverage --coverage.reporter=json --shard=${{ matrix.shard }}/4
             - if: matrix.suite == 'cli' && matrix.shard == 4
-              run: pnpm --filter neonctl test:ci --coverage
+              run: pnpm --filter neonctl test:ci --coverage --coverage.reporter=json
             - if: matrix.suite == 'non-cli'
-              run: pnpm --recursive --filter='./packages/**' --filter='!neon' --filter='!neonctl' test:ci --coverage
+              run: pnpm --recursive --filter='./packages/**' --filter='!neon' --filter='!neonctl' test:ci --coverage --coverage.reporter=json
+            - name: Collect coverage
+              run: |
+                  for report in packages/*/coverage/coverage-final.json; do
+                      package_dir=${report#packages/}
+                      package=${package_dir%%/*}
+                      mkdir -p "coverage-upload/$package"
+                      cp "$report" "coverage-upload/$package/coverage-final.json"
+                  done
             - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
                   if-no-files-found: error
                   name: coverage-${{ matrix.upload }}
-                  path: packages/*/coverage/lcov.info
+                  path: coverage-upload
     coverage:
         name: Coverage
         needs: test
