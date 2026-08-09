@@ -20,9 +20,8 @@ import { log } from "../log.js";
 import type { CommonProps } from "../types.js";
 import { getCliName } from "../utils/cli_name.js";
 import {
-	detectPackageManager,
-	detectProjectPackageManager,
 	formatInstallCommand,
+	inferPackageManager,
 	installedPackageManagers,
 	type PackageManager,
 	resolvePackageManager,
@@ -355,8 +354,7 @@ const runPostScaffoldSteps = async (
 	targetDir: string,
 	interactive: boolean,
 ): Promise<void> => {
-	const inferred =
-		detectProjectPackageManager(targetDir) ?? detectPackageManager();
+	const inferred = inferPackageManager(targetDir);
 	const defaultPm = resolvePackageManager(targetDir);
 
 	if (props.default) {

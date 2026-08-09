@@ -1,7 +1,7 @@
 import { lstatSync } from "node:fs";
 import { execa } from "execa";
 import {
-	type PackageManager,
+	globalInstallArgs,
 	resolveInvokingPackageManager,
 } from "../utils/package_manager.js";
 
@@ -17,25 +17,6 @@ import {
  */
 export function neonctlCmd(): string {
 	return "CI= npx -y neon";
-}
-
-/**
- * Returns the global install command for a given package manager.
- */
-function globalInstallArgs(
-	pm: PackageManager,
-	pkg: string,
-): { command: string; args: string[] } {
-	switch (pm) {
-		case "pnpm":
-			return { command: "pnpm", args: ["add", "-g", pkg] };
-		case "yarn":
-			return { command: "yarn", args: ["global", "add", pkg] };
-		case "bun":
-			return { command: "bun", args: ["add", "-g", pkg] };
-		default:
-			return { command: "npm", args: ["install", "-g", pkg] };
-	}
 }
 
 type NeonctlStatus = {

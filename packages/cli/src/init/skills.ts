@@ -3,6 +3,10 @@ import { resolve } from "node:path";
 import { log, spinner } from "@clack/prompts";
 import { execa } from "execa";
 import { dim } from "yoctocolors";
+import {
+	globalInstallArgs,
+	resolveInvokingPackageManager,
+} from "../utils/package_manager.js";
 import { getSkillsAgentName as getSkillsAgentNameFromId } from "./agents.js";
 import type { Editor } from "./types.js";
 
@@ -14,9 +18,14 @@ async function ensureSkillsCli(): Promise<void> {
 	try {
 		await execa("skills", ["--version"], { stdio: "pipe", timeout: 5000 });
 	} catch {
-		// Not installed — install it globally
+		// Not installed — install it globally with whatever launched us, so a
+		// pnpm/bun user doesn't get a stray npm global install.
+		const { command, args } = globalInstallArgs(
+			resolveInvokingPackageManager(),
+			"skills",
+		);
 		try {
-			await execa("npm", ["install", "-g", "skills"], {
+			await execa(command, args, {
 				stdio: "pipe",
 				timeout: 60000,
 			});

@@ -18,7 +18,7 @@ export type GettingStartedPhaseOptions = {
 	/** Preview mode — restricts project creation to new projects in AWS us-east */
 	preview?: boolean;
 	/** The project directory the emitted commands will run in. */
-	cwd?: string;
+	cwd: string;
 };
 
 /**
@@ -37,7 +37,7 @@ export async function handleGettingStartedPhase(
 	}
 	const steps: { id: string; description: string; command?: string }[] = [];
 
-	const installPm = resolvePackageManager(options.cwd ?? process.cwd());
+	const installPm = resolvePackageManager(options.cwd);
 
 	if (!options.hasConnectionString) {
 		if (options.preview) {

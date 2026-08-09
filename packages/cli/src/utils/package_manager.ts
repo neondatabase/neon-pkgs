@@ -6,14 +6,20 @@
  *
  * - {@link detectProjectPackageManager} — lockfile walk from `cwd` up to the repo root
  * - {@link detectPackageManager} — the tool that launched this process (`npx`, `pnpm dlx`, …)
+ * - {@link inferPackageManager} — project, then invocation, or nothing (when there is
+ *   something to ask the user, an unanswerable guess is worse than a prompt)
  * - {@link resolvePackageManager} — project lockfile, then invocation, then PATH, then npm
  *   (installing into an existing project directory)
  * - {@link resolveInvokingPackageManager} — invocation, then PATH, then npm (global installs,
  *   or when the target directory has no lockfile yet, e.g. a fresh scaffold)
+ * - {@link addDependenciesArgs} / {@link globalInstallArgs} — argv to install into a project
+ *   or globally
  * - {@link formatInstallCommand} — shell-ready `pnpm install` / `npm add …` for agents and hints
  *
  * Never re-derive any of this at a call site: a second detector is a second answer, and the
  * two disagree exactly where it hurts — an agent told to run `npm install` in a pnpm project.
+ * That includes spelling an install command by hand. Every install string the CLI prints,
+ * emits as agent JSON, or hands to {@link runCommand} comes from the formatters here.
  */
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -91,6 +97,17 @@ export const installedPackageManagers = (): PackageManager[] =>
 	PACKAGE_MANAGERS.filter((pm) => which.sync(pm, { nothrow: true }) !== null);
 
 /**
+ * What can actually be inferred about the project at `cwd`: its lockfile, else
+ * the tool the CLI was invoked through, else nothing.
+ *
+ * Returns undefined rather than guessing, so an interactive caller can prompt.
+ * {@link resolvePackageManager} is the same chain with the unaskable fallbacks
+ * appended — use this one only where there is a user to ask.
+ */
+export const inferPackageManager = (cwd: string): PackageManager | undefined =>
+	detectProjectPackageManager(cwd) ?? detectPackageManager();
+
+/**
  * Pick a package manager without prompting: the one the project at `cwd` uses,
  * else the one the CLI was invoked through, else the first one installed, else
  * npm. Used by non-interactive flows (e.g. `config init`) where there's no
@@ -102,10 +119,7 @@ export const installedPackageManagers = (): PackageManager[] =>
  * pnpm's symlinked tree is what this ordering exists to prevent.
  */
 export const resolvePackageManager = (cwd: string): PackageManager =>
-	detectProjectPackageManager(cwd) ??
-	detectPackageManager() ??
-	installedPackageManagers()[0] ??
-	"npm";
+	inferPackageManager(cwd) ?? installedPackageManagers()[0] ?? "npm";
 
 /**
  * Pick a package manager when there is no project lockfile to read — global
@@ -115,14 +129,45 @@ export const resolvePackageManager = (cwd: string): PackageManager =>
 export const resolveInvokingPackageManager = (): PackageManager =>
 	detectPackageManager() ?? installedPackageManagers()[0] ?? "npm";
 
+/** Where an added package lands in `package.json`. */
+export type AddOptions = { dev?: boolean };
+
+/** bun spells the devDependencies flag `-d`; the rest accept `-D`. */
+const devFlag = (pm: PackageManager): string => (pm === "bun" ? "-d" : "-D");
+
 /**
- * The argv that adds `packages` as runtime dependencies with `pm`. npm spells it
- * `install`; pnpm/yarn/bun use `add`.
+ * The argv that adds `packages` to the project's manifest with `pm`. npm spells
+ * the verb `install`; pnpm/yarn/bun use `add`.
  */
 export const addDependenciesArgs = (
 	pm: PackageManager,
 	packages: string[],
-): string[] => (pm === "npm" ? ["install", ...packages] : ["add", ...packages]);
+	options?: AddOptions,
+): string[] => [
+	pm === "npm" ? "install" : "add",
+	...(options?.dev ? [devFlag(pm)] : []),
+	...packages,
+];
+
+/**
+ * The argv that installs `pkg` globally. yarn is the odd one out: `yarn global
+ * add` rather than a flag on `add`.
+ */
+export const globalInstallArgs = (
+	pm: PackageManager,
+	pkg: string,
+): { command: string; args: string[] } => {
+	switch (pm) {
+		case "pnpm":
+			return { command: "pnpm", args: ["add", "-g", pkg] };
+		case "yarn":
+			return { command: "yarn", args: ["global", "add", pkg] };
+		case "bun":
+			return { command: "bun", args: ["add", "-g", pkg] };
+		case "npm":
+			return { command: "npm", args: ["install", "-g", pkg] };
+	}
+};
 
 /**
  * A shell-ready install line for agents and "next steps" hints — e.g.
@@ -132,9 +177,10 @@ export const addDependenciesArgs = (
 export const formatInstallCommand = (
 	pm: PackageManager,
 	packages?: string[],
+	options?: AddOptions,
 ): string => {
 	const args = packages?.length
-		? addDependenciesArgs(pm, packages)
+		? addDependenciesArgs(pm, packages, options)
 		: ["install"];
 	return `${pm} ${args.join(" ")}`;
 };

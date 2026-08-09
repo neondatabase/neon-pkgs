@@ -168,7 +168,7 @@ export async function orchestrate(
 
 	// Phase 5: Migrations
 	if (!options.skipMigrations) {
-		return handleMigrationsPhase({ agent: options.agent });
+		return handleMigrationsPhase({ agent: options.agent, cwd });
 	}
 
 	// All done — clean up ephemeral _init state from .neon

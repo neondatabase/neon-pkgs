@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
 	detectProjectPackageManager,
 	formatInstallCommand,
+	globalInstallArgs,
+	inferPackageManager,
 	resolveInvokingPackageManager,
 	resolvePackageManager,
 } from "./package_manager.js";
@@ -164,5 +166,67 @@ describe("formatInstallCommand", () => {
 		expect(formatInstallCommand(pm, ["@neon/config", "@neon/env"])).toBe(
 			expected,
 		);
+	});
+
+	it.each([
+		["npm", "npm install -D prisma"],
+		["pnpm", "pnpm add -D prisma"],
+		["yarn", "yarn add -D prisma"],
+		// bun is the one that rejects -D.
+		["bun", "bun add -d prisma"],
+	] as const)("adds a dev dependency with %s", (pm, expected) => {
+		expect(formatInstallCommand(pm, ["prisma"], { dev: true })).toBe(
+			expected,
+		);
+	});
+
+	it("ignores the dev flag when installing the whole manifest", () => {
+		expect(formatInstallCommand("pnpm", [], { dev: true })).toBe(
+			"pnpm install",
+		);
+	});
+});
+
+describe("globalInstallArgs", () => {
+	it.each([
+		["npm", "npm install -g neonctl"],
+		["pnpm", "pnpm add -g neonctl"],
+		// yarn has no -g on `add`; the subcommand is `global add`.
+		["yarn", "yarn global add neonctl"],
+		["bun", "bun add -g neonctl"],
+	] as const)("installs globally with %s", (pm, expected) => {
+		const { command, args } = globalInstallArgs(pm, "neonctl");
+		expect(`${command} ${args.join(" ")}`).toBe(expected);
+	});
+});
+
+describe("inferPackageManager", () => {
+	let project: string;
+	const originalUserAgent = process.env.npm_config_user_agent;
+
+	beforeEach(() => {
+		project = mkdtempSync(join(tmpdir(), "neonctl-pm-infer-"));
+		mkdirSync(join(project, ".git"));
+	});
+
+	afterEach(() => {
+		rmSync(project, { recursive: true, force: true });
+		if (originalUserAgent === undefined) {
+			delete process.env.npm_config_user_agent;
+		} else {
+			process.env.npm_config_user_agent = originalUserAgent;
+		}
+	});
+
+	it("returns undefined rather than guessing, so a caller can prompt", () => {
+		delete process.env.npm_config_user_agent;
+		expect(inferPackageManager(project)).toBeUndefined();
+	});
+
+	it("prefers the project's lockfile over the invocation", () => {
+		process.env.npm_config_user_agent =
+			"npm/11.11.0 node/v24.14.1 darwin x64";
+		writeFileSync(join(project, "bun.lock"), "");
+		expect(inferPackageManager(project)).toBe("bun");
 	});
 });

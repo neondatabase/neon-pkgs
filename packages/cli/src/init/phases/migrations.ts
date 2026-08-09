@@ -1,3 +1,7 @@
+import {
+	formatInstallCommand,
+	resolvePackageManager,
+} from "../../utils/package_manager.js";
 import { ensureSkillsUpToDate } from "../skills.js";
 import type { PhaseResponse } from "../types.js";
 
@@ -7,6 +11,8 @@ export type MigrationsPhaseOptions = {
 	migrationDir?: string;
 	scaffold?: "prisma" | "drizzle";
 	apply?: boolean;
+	/** The project directory the emitted commands will run in. */
+	cwd: string;
 };
 
 export async function handleMigrationsPhase(
@@ -19,6 +25,7 @@ export async function handleMigrationsPhase(
 	const agentArgs = options.agent
 		? ["--agent", options.agent, "--json"]
 		: ["--json"];
+	const pm = resolvePackageManager(options.cwd);
 
 	// --scaffold: set up a new migration framework
 	if (options.scaffold) {
@@ -33,7 +40,9 @@ export async function handleMigrationsPhase(
 						{
 							id: "install_prisma",
 							description: "Install Prisma as a dev dependency",
-							command: "npm install -D prisma",
+							command: formatInstallCommand(pm, ["prisma"], {
+								dev: true,
+							}),
 						},
 						{
 							id: "init_prisma",
@@ -80,8 +89,15 @@ export async function handleMigrationsPhase(
 						id: "install_drizzle",
 						description:
 							"Install Drizzle ORM, drizzle-kit, and the Neon serverless driver",
-						command:
-							"npm install drizzle-orm @neondatabase/serverless && npm install -D drizzle-kit",
+						command: [
+							formatInstallCommand(pm, [
+								"drizzle-orm",
+								"@neondatabase/serverless",
+							]),
+							formatInstallCommand(pm, ["drizzle-kit"], {
+								dev: true,
+							}),
+						].join(" && "),
 					},
 					{
 						id: "create_config",

@@ -66,6 +66,9 @@ export async function routeDataStep(
 			return handleGettingStartedPhase({
 				agent: resolvedAgent,
 				...rest,
+				// After the spread: the directory we install into is where the
+				// CLI is running, never something the agent's payload picks.
+				cwd: process.cwd(),
 			} as Parameters<typeof handleGettingStartedPhase>[0]);
 		}
 
@@ -92,6 +95,7 @@ export async function routeDataStep(
 			return handleMigrationsPhase({
 				agent: resolvedAgent,
 				...rest,
+				cwd: process.cwd(),
 			} as Parameters<typeof handleMigrationsPhase>[0]);
 		}
 
