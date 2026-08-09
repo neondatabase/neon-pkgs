@@ -27,6 +27,23 @@ Same mechanism and the same reasons as
 `devDependencies` and build with tsdown bundling on, so it is compiled into each `dist` and
 resolves nothing at runtime.
 
+## Importing it
+
+Per-file subpaths, and **no root export** — there is deliberately no barrel, so a consumer takes
+only what it names and the rest is tree-shaken out of their bundle. `@neon-internals/cli-core` on
+its own answers `ERR_PACKAGE_PATH_NOT_EXPORTED`.
+
+The specifier is **extensionless**, unlike every relative import in this repo:
+
+```ts
+import { configDir } from "@neon-internals/cli-core/paths";     // resolves
+import { configDir } from "@neon-internals/cli-core/paths.js";  // dist/paths.js.js
+```
+
+In `packages/cli` the `.js` form passes `tsc --noEmit` — its `paths` mapping plus tsc's
+`.js`-to-`.d.ts` substitution hides it — and fails at bundle time instead. `packages/env` is on
+`NodeNext` and rejects it at both.
+
 ## Rules
 
 - **`@neon/config` is the only dependency.** Both consumers already have it. Anything else you

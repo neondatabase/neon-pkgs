@@ -18,6 +18,23 @@ resolve for anyone who installed `neon` or `@neon/env` from npm.
 It emits declarations even though nothing publishes it. `@neon/env` re-exports types that
 originate here, and a declaration bundler can only inline declarations that exist.
 
+## Importing it
+
+Per-file subpaths, and **no root export** — there is deliberately no barrel, so a consumer takes
+only what it names and the rest is tree-shaken out of their bundle. `@neon-internals/cli-core` on
+its own answers `ERR_PACKAGE_PATH_NOT_EXPORTED`.
+
+The specifier is **extensionless**, unlike every relative import in this repo:
+
+```ts
+import { configDir } from "@neon-internals/cli-core/paths";     // resolves
+import { configDir } from "@neon-internals/cli-core/paths.js";  // dist/paths.js.js
+```
+
+In `packages/cli` the `.js` form passes `tsc --noEmit` — its `paths` mapping plus tsc's
+`.js`-to-`.d.ts` substitution hides it — and fails at bundle time instead. `packages/env` is on
+`NodeNext` and rejects it at both.
+
 ## Rules
 
 - **It is not published, and one line keeps it that way.** `neon` exports a `./dist/*` wildcard,

@@ -24,6 +24,7 @@
 	"exports": {
 		".": "./dist/index.js",
 		"./cli": "./dist/cli.js",
+		"./dist/_shared/*": null,
 		"./dist/_chunks/*": null,
 		"./dist/_virtual/*": null,
 		"./dist/*": "./dist/*",

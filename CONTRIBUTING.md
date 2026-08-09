@@ -56,6 +56,17 @@ which is what makes a single-package test run trustworthy after an edit anywhere
 `test:ci` skips that: on CI, `pnpm install` runs each package's `prepare` (a build) on a fresh
 checkout, so everything is current already. Run `test:ci` locally only right after a build.
 
+That applies to `pnpm --filter <pkg> build` too, so **after editing a dependency, build with the
+`...` filter** — `pnpm --filter neon... build` — or from the root.
+
+## What is where
+
+| Directory | Holds |
+| --- | --- |
+| `packages/` | Everything published to npm, one directory per package |
+| `internals/` | `@neon-internals/*` — private, never published, bundled into the packages that use them. Currently the credential and env-resolution code shared by the `neon` CLI and `@neon/env`; each has its own README |
+| `tests/` | Test-only workspace packages, currently the live e2e harness |
+
 See [`AGENTS.md`](./AGENTS.md) for the deeper architecture and per-package notes (especially the
 CLI package, which keeps its own toolchain).
 

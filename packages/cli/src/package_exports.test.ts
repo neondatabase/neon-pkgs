@@ -58,6 +58,13 @@ describe("the published export map", () => {
 		expect(exportMap()["./dist/_chunks/*"]).toBeNull();
 	});
 
+	it("still blocks the path the internals used to be copied to", () => {
+		// Nothing emits `dist/_shared` any more, so this matches nothing today. It stays because
+		// recreating `src/_shared` is the habit of anyone who worked here before, and the entry
+		// glob is `src/**/*.ts` — the directory would compile straight back into a public subpath.
+		expect(exportMap()["./dist/_shared/*"]).toBeNull();
+	});
+
 	it("blocks the bundler's runtime helpers, which are an artifact of how we compile", () => {
 		expect(exportMap()["./dist/_virtual/*"]).toBeNull();
 	});
