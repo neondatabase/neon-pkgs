@@ -66,12 +66,26 @@ is_truncated: false
 "
 `;
 
+exports[`logs > field-values does not map a server failure to an unknown field 1`] = `""`;
+
 exports[`logs > field-values forwards the field name, window, source and limit 1`] = `
 "values:
   - api
   - postgres
   - worker
 is_truncated: false
+"
+`;
+
+exports[`logs > field-values neutralizes controls in truncation guidance 1`] = `
+"values
+┌──────────┐
+│ Value    │
+├──────────┤
+│ api      │
+├──────────┤
+│ postgres │
+└──────────┘
 "
 `;
 
@@ -94,6 +108,8 @@ No values found in the 6h window ending now.
 `;
 
 exports[`logs > field-values rejects --since together with --start-time 1`] = `""`;
+
+exports[`logs > field-values rejects a malformed successful response 1`] = `""`;
 
 exports[`logs > field-values rejects an invalid limit 1`] = `""`;
 
@@ -139,6 +155,8 @@ exports[`logs > fields prints an empty-state message in table output 1`] = `
 No log fields found.
 "
 `;
+
+exports[`logs > fields rejects a malformed successful response 1`] = `""`;
 
 exports[`logs > fields with table output 1`] = `
 "fields
@@ -245,6 +263,12 @@ is_truncated: false
 "
 `;
 
+exports[`logs > query neutralizes controls in pagination guidance 1`] = `
+"
+No logs found in the 1h window ending now.
+"
+`;
+
 exports[`logs > query neutralizes terminal controls in table output 1`] = `
 "logs
 ┌──────────────────────────┬──────────┬──────────────┬───────────────┬────────────────────────────────────────────────┐
@@ -264,6 +288,8 @@ No logs found in the 1h window ending now.
 exports[`logs > query rejects --logql together with a structured filter 1`] = `""`;
 
 exports[`logs > query rejects --since together with --start-time 1`] = `""`;
+
+exports[`logs > query rejects a malformed successful response 1`] = `""`;
 
 exports[`logs > query rejects a truncated page without a cursor 1`] = `""`;
 

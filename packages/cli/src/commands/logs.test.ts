@@ -3,7 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, describe, expect } from "vitest";
 import { test } from "../test_utils/fixtures";
-import { assertReachableLogsPage, escapeLogTableCell } from "./logs.js";
+import {
+	assertReachableLogsPage,
+	escapeLogSingleLine,
+	escapeLogTableCell,
+} from "./logs.js";
 
 // The mocks write the request they received to the file named by these env
 // vars, which they read in the (parent) mock-server process. That is how a test
@@ -31,7 +35,9 @@ const SCOPE = [
 const EMPTY_BRANCH = ["--branch", "br-empty-logs-123456"] as const;
 const TRUNCATED_BRANCH = ["--branch", "br-truncated-logs-123456"] as const;
 const CONTROL_BRANCH = ["--branch", "br-control-logs-123456"] as const;
+const CONTROL_CURSOR_BRANCH = ["--branch", "br-control-cursor-123456"] as const;
 const BROKEN_PAGE_BRANCH = ["--branch", "br-broken-page-123456"] as const;
+const MALFORMED_BRANCH = ["--branch", "br-malformed-logs-123456"] as const;
 const PROJECT = ["--project-id", "test-project-123456"] as const;
 
 describe("logs", () => {
@@ -39,6 +45,12 @@ describe("logs", () => {
 		expect(
 			escapeLogTableCell("\u001b]52;c;ZXZpbA==\u0007request failed\r"),
 		).toBe("\\u001b]52;c;ZXZpbA==\\u0007request failed\\u000d");
+	});
+
+	test("single-line output neutralizes every control sequence", () => {
+		expect(
+			escapeLogSingleLine("\u001b]52;c;ZXZpbA==\u0007next\npage\t"),
+		).toBe("\\u001b]52;c;ZXZpbA==\\u0007next\\u000apage\\u0009");
 	});
 
 	test("a truncated page without a cursor is rejected", () => {
@@ -426,6 +438,33 @@ describe("logs", () => {
 		);
 	});
 
+	test("query rejects a malformed successful response", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			["logs", "query", ...PROJECT, ...MALFORMED_BRANCH],
+			{
+				mockDir: "single_org",
+				output: "json",
+				code: 1,
+				stderr: "ERROR: Neon returned an invalid logs query response; expected logs[] and is_truncated.",
+			},
+		);
+	});
+
+	test("query neutralizes controls in pagination guidance", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			["logs", "query", ...PROJECT, ...CONTROL_CURSOR_BRANCH],
+			{
+				mockDir: "single_org",
+				outputTable: true,
+				stderr: "INFO: More logs matched than were returned. Re-run with the same filters plus --cursor '\\u001b]52;c;ZXZpbA==\\u0007$(echo unsafe)' to fetch the next page.",
+			},
+		);
+	});
+
 	test("a truncated query points at the next cursor in table output", async ({
 		testCliCommand,
 	}) => {
@@ -434,7 +473,7 @@ describe("logs", () => {
 			{
 				mockDir: "single_org",
 				outputTable: true,
-				stderr: "INFO: More logs matched than were returned. Re-run with the same filters plus --cursor eyJvZmZzZXQiOjEwMH0 to fetch the next page.",
+				stderr: "INFO: More logs matched than were returned. Re-run with the same filters plus --cursor 'eyJvZmZzZXQiOjEwMH0' to fetch the next page.",
 			},
 		);
 	});
@@ -488,6 +527,20 @@ describe("logs", () => {
 				mockDir: "single_org",
 				outputTable: true,
 				stderr: "",
+			},
+		);
+	});
+
+	test("fields rejects a malformed successful response", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			["logs", "fields", ...PROJECT, ...MALFORMED_BRANCH],
+			{
+				mockDir: "single_org",
+				output: "json",
+				code: 1,
+				stderr: "ERROR: Neon returned an invalid log fields response; expected fields[].",
 			},
 		);
 	});
@@ -589,6 +642,26 @@ describe("logs", () => {
 		);
 	});
 
+	test("field-values rejects a malformed successful response", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"logs",
+				"field-values",
+				"service_name",
+				...PROJECT,
+				...MALFORMED_BRANCH,
+			],
+			{
+				mockDir: "single_org",
+				output: "json",
+				code: 1,
+				stderr: "ERROR: Neon returned an invalid log field-values response; expected values[] and is_truncated.",
+			},
+		);
+	});
+
 	test("field-values rejects --since together with --start-time", async ({
 		testCliCommand,
 	}) => {
@@ -622,6 +695,19 @@ describe("logs", () => {
 				mockDir: "single_org",
 				code: 1,
 				stderr: 'ERROR: Unknown log field "unknown-field". Run `neon logs fields --project-id test-project-123456 --branch br-main-branch-123456` to list the fields this branch supports.',
+			},
+		);
+	});
+
+	test("field-values does not map a server failure to an unknown field", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			["logs", "field-values", "server-failure", ...SCOPE],
+			{
+				mockDir: "single_org",
+				code: 1,
+				stderr: "ERROR: telemetry service unavailable",
 			},
 		);
 	});
@@ -660,6 +746,25 @@ describe("logs", () => {
 				mockDir: "single_org",
 				outputTable: true,
 				stderr: 'INFO: More values exist than were returned for "service_name". Narrow the window with --since or --start-time, restrict --source, or raise --limit, then run it again.',
+			},
+		);
+	});
+
+	test("field-values neutralizes controls in truncation guidance", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"logs",
+				"field-values",
+				"\u001b]52;c;ZXZpbA==\u0007service\nname",
+				...PROJECT,
+				...TRUNCATED_BRANCH,
+			],
+			{
+				mockDir: "single_org",
+				outputTable: true,
+				stderr: 'INFO: More values exist than were returned for "\\u001b]52;c;ZXZpbA==\\u0007service\\u000aname". Narrow the window with --since or --start-time, restrict --source, or raise --limit, then run it again.',
 			},
 		);
 	});

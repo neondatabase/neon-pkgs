@@ -4,6 +4,14 @@ import { writeFileSync } from 'node:fs';
 // never emitted; every other name returns values and captures the query string
 // the CLI sent.
 export default function (req, res) {
+  if (req.params.field_name === 'server-failure') {
+    res.status(500).json({
+      code: 'internal_server_error',
+      message: 'telemetry service unavailable',
+      reason: 'unknown_field',
+    });
+    return;
+  }
   if (req.params.field_name === 'unknown-field') {
     res.status(400).json({
       code: 'invalid_query',

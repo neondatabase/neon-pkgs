@@ -55,6 +55,16 @@ export const escapeLogTableCell = (value: string): string =>
 			: `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
 	);
 
+export const escapeLogSingleLine = (value: string): string =>
+	value.replace(
+		/\p{Cc}/gu,
+		(character) =>
+			`\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
+	);
+
+const shellQuoteLogValue = (value: string): string =>
+	`'${escapeLogSingleLine(value).replace(/'/g, "'\\''")}'`;
+
 export const assertReachableLogsPage = ({
 	is_truncated,
 	next_cursor,
@@ -356,6 +366,81 @@ const apiErrorReason = (data: unknown): string | undefined => {
 	return typeof data.reason === "string" ? data.reason : undefined;
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+	typeof value === "object" && value !== null && !Array.isArray(value);
+
+const isOptionalString = (value: unknown): value is string | undefined =>
+	value === undefined || typeof value === "string";
+
+const isProjectBranchLogRecord = (
+	value: unknown,
+): value is ProjectBranchLogRecord =>
+	isRecord(value) &&
+	typeof value.timestamp === "string" &&
+	!Number.isNaN(Date.parse(value.timestamp)) &&
+	typeof value.message === "string" &&
+	(value.source === undefined ||
+		LOG_SOURCES.some((source) => source === value.source)) &&
+	isOptionalString(value.entity_id) &&
+	isOptionalString(value.service_name) &&
+	isOptionalString(value.scope_name) &&
+	isOptionalString(value.severity_text) &&
+	(value.severity_number === undefined ||
+		(typeof value.severity_number === "number" &&
+			Number.isInteger(value.severity_number) &&
+			value.severity_number >= 0 &&
+			value.severity_number <= 24)) &&
+	isOptionalString(value.trace_id) &&
+	isOptionalString(value.span_id) &&
+	isRecord(value.attributes);
+
+function assertLogsQueryResponse(value: unknown): asserts value is {
+	logs: ProjectBranchLogRecord[];
+	next_cursor?: string;
+	is_truncated: boolean;
+} {
+	if (
+		!isRecord(value) ||
+		!Array.isArray(value.logs) ||
+		!value.logs.every(isProjectBranchLogRecord) ||
+		!isOptionalString(value.next_cursor) ||
+		typeof value.is_truncated !== "boolean"
+	) {
+		throw new Error(
+			"Neon returned an invalid logs query response; expected logs[] and is_truncated.",
+		);
+	}
+}
+
+function assertLogFieldsResponse(
+	value: unknown,
+): asserts value is { fields: string[] } {
+	if (
+		!isRecord(value) ||
+		!Array.isArray(value.fields) ||
+		!value.fields.every((field) => typeof field === "string")
+	) {
+		throw new Error(
+			"Neon returned an invalid log fields response; expected fields[].",
+		);
+	}
+}
+
+function assertLogFieldValuesResponse(
+	value: unknown,
+): asserts value is { values: string[]; is_truncated: boolean } {
+	if (
+		!isRecord(value) ||
+		!Array.isArray(value.values) ||
+		!value.values.every((field) => typeof field === "string") ||
+		typeof value.is_truncated !== "boolean"
+	) {
+		throw new Error(
+			"Neon returned an invalid log field-values response; expected values[] and is_truncated.",
+		);
+	}
+}
+
 const query = async (
 	props: BranchScopeProps & LogsQueryFlags,
 ): Promise<void> => {
@@ -366,6 +451,7 @@ const query = async (
 		buildLogsQueryBody(props),
 	);
 
+	assertLogsQueryResponse(data);
 	assertReachableLogsPage(data);
 
 	if (props.output === "json" || props.output === "yaml") {
@@ -403,7 +489,7 @@ const query = async (
 	// machine-readable envelope and must stay parseable.
 	if (data.is_truncated && data.next_cursor) {
 		log.info(
-			`More logs matched than were returned. Re-run with the same filters plus --cursor ${data.next_cursor} to fetch the next page.`,
+			`More logs matched than were returned. Re-run with the same filters plus --cursor ${shellQuoteLogValue(data.next_cursor)} to fetch the next page.`,
 		);
 	}
 };
@@ -414,6 +500,8 @@ const fields = async (props: BranchScopeProps): Promise<void> => {
 		props.projectId,
 		branchId,
 	);
+
+	assertLogFieldsResponse(data);
 
 	if (props.output === "json" || props.output === "yaml") {
 		writer(props).end(data, { fields: ["fields"] });
@@ -458,14 +546,17 @@ const fieldValues = async (
 	} catch (error) {
 		if (
 			isNeonApiError(error) &&
+			error.status === 400 &&
 			apiErrorReason(error.data) === "unknown_field"
 		) {
 			throw new Error(
-				`Unknown log field "${escapeLogTableCell(props.field)}". Run \`neon logs fields --project-id ${escapeLogTableCell(props.projectId)} --branch ${escapeLogTableCell(branchId)}\` to list the fields this branch supports.`,
+				`Unknown log field "${escapeLogSingleLine(props.field)}". Run \`neon logs fields --project-id ${escapeLogSingleLine(props.projectId)} --branch ${escapeLogSingleLine(branchId)}\` to list the fields this branch supports.`,
 			);
 		}
 		throw error;
 	}
+
+	assertLogFieldValuesResponse(data);
 
 	if (props.output === "json" || props.output === "yaml") {
 		writer(props).end(data, { fields: ["values", "is_truncated"] });
@@ -483,7 +574,7 @@ const fieldValues = async (
 
 	if (data.is_truncated) {
 		log.info(
-			`More values exist than were returned for "${props.field}". Narrow the window with --since or --start-time, restrict --source, or raise --limit, then run it again.`,
+			`More values exist than were returned for "${escapeLogSingleLine(props.field)}". Narrow the window with --since or --start-time, restrict --source, or raise --limit, then run it again.`,
 		);
 	}
 };
