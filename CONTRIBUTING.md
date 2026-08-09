@@ -79,8 +79,8 @@ pnpm --filter @neon/config test:ci
 ```
 
 `neonctl` is the important exception: its tests import `neon/dist/cli.js`, but its `test` script
-does not build `neon`. Build `neon` first when running that suite locally. CI starts from a fresh
-checkout where `pnpm install` has built package dependencies.
+does not build `neon`. Build `neon` first when running that suite locally. CI handles this
+explicitly: shard 4 runs `neon test:ci`, which builds the CLI, before it runs `neonctl test:ci`.
 
 ### Pull request CI
 
