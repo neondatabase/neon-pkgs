@@ -69,10 +69,18 @@ pnpm --filter @neon/config test:ci   # one package
 ```
 
 Workspace packages import each other through their build output (`dist`), not their source, so a
-package's tests can see a dependency's last build instead of the source you just edited. Use a
-package's `test` script while developing when it has one: it builds the package and its workspace
-dependencies before running Vitest. `test:ci` skips that dependency build and is intended for a
-fresh CI checkout or a local tree you have just built.
+package's tests can see a dependency's last build instead of the source you just edited. Some
+packages build their workspace dependencies in `test`; check the package script rather than
+assuming it does. The reliable sequence is:
+
+```bash
+pnpm --filter @neon/config... build
+pnpm --filter @neon/config test:ci
+```
+
+`neonctl` is the important exception: its tests import `neon/dist/cli.js`, but its `test` script
+does not build `neon`. Build `neon` first when running that suite locally. CI starts from a fresh
+checkout where `pnpm install` has built package dependencies.
 
 ### Pull request CI
 
