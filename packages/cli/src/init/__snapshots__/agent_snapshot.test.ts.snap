@@ -368,7 +368,7 @@ exports[`neon init --agent: every step, against every project shape > connected 
       },
       {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, run the command below — it already uses this project's package manager, so do not substitute another one. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
         "command": "npm install"
       },
       {
@@ -378,7 +378,7 @@ exports[`neon init --agent: every step, against every project shape > connected 
       },
       {
         "id": "install_driver",
-        "description": "Install the Neon serverless driver for direct database access.",
+        "description": "Install the Neon serverless driver for direct database access. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager.",
         "command": "npm install @neondatabase/serverless"
       },
       {
@@ -412,7 +412,7 @@ exports[`neon init --agent: every step, against every project shape > connected 
     "steps": [
       {
         "id": "run_migrations",
-        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step.",
+        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
@@ -560,12 +560,12 @@ exports[`neon init --agent: every step, against every project shape > connected 
       },
       {
         "id": "apply",
-        "description": "Apply migrations to the Neon database",
+        "description": "Apply migrations to the Neon database. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "generate",
-        "description": "Generate the Prisma client",
+        "description": "Generate the Prisma client. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma generate"
       }
     ],
@@ -636,12 +636,12 @@ exports[`neon init --agent: every step, against every project shape > connected 
     "steps": [
       {
         "id": "install_prisma",
-        "description": "Install Prisma as a dev dependency",
+        "description": "Install Prisma as a dev dependency. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager.",
         "command": "npm install -D prisma"
       },
       {
         "id": "init_prisma",
-        "description": "Initialize Prisma with PostgreSQL provider",
+        "description": "Initialize Prisma with PostgreSQL provider. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma init --datasource-provider postgresql"
       },
       {
@@ -654,7 +654,7 @@ exports[`neon init --agent: every step, against every project shape > connected 
       },
       {
         "id": "run_migration",
-        "description": "Create and apply the initial migration",
+        "description": "Create and apply the initial migration. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate dev --name init"
       }
     ],
@@ -1396,7 +1396,7 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
       },
       {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, run the command below — it already uses this project's package manager, so do not substitute another one. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
         "command": "npm install"
       },
       {
@@ -1406,7 +1406,7 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
       },
       {
         "id": "install_driver",
-        "description": "Install the Neon serverless driver for direct database access.",
+        "description": "Install the Neon serverless driver for direct database access. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager.",
         "command": "npm install @neondatabase/serverless"
       },
       {
@@ -1440,7 +1440,7 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
     "steps": [
       {
         "id": "run_migrations",
-        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step.",
+        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
@@ -1588,12 +1588,12 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
       },
       {
         "id": "apply",
-        "description": "Apply migrations to the Neon database",
+        "description": "Apply migrations to the Neon database. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "generate",
-        "description": "Generate the Prisma client",
+        "description": "Generate the Prisma client. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma generate"
       }
     ],
@@ -1664,12 +1664,12 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
     "steps": [
       {
         "id": "install_prisma",
-        "description": "Install Prisma as a dev dependency",
+        "description": "Install Prisma as a dev dependency. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager.",
         "command": "npm install -D prisma"
       },
       {
         "id": "init_prisma",
-        "description": "Initialize Prisma with PostgreSQL provider",
+        "description": "Initialize Prisma with PostgreSQL provider. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma init --datasource-provider postgresql"
       },
       {
@@ -1682,7 +1682,7 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
       },
       {
         "id": "run_migration",
-        "description": "Create and apply the initial migration",
+        "description": "Create and apply the initial migration. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate dev --name init"
       }
     ],
@@ -2424,7 +2424,7 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
       },
       {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, run the command below — it already uses this project's package manager, so do not substitute another one. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
         "command": "npm install"
       },
       {
@@ -2434,7 +2434,7 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
       },
       {
         "id": "install_driver",
-        "description": "Install the Neon serverless driver for direct database access.",
+        "description": "Install the Neon serverless driver for direct database access. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager.",
         "command": "npm install @neondatabase/serverless"
       },
       {
@@ -2466,7 +2466,7 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
     "steps": [
       {
         "id": "run_migrations",
-        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step.",
+        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
@@ -2610,12 +2610,12 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
       },
       {
         "id": "apply",
-        "description": "Apply migrations to the Neon database",
+        "description": "Apply migrations to the Neon database. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "generate",
-        "description": "Generate the Prisma client",
+        "description": "Generate the Prisma client. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma generate"
       }
     ],
@@ -2682,12 +2682,12 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
     "steps": [
       {
         "id": "install_prisma",
-        "description": "Install Prisma as a dev dependency",
+        "description": "Install Prisma as a dev dependency. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager.",
         "command": "npm install -D prisma"
       },
       {
         "id": "init_prisma",
-        "description": "Initialize Prisma with PostgreSQL provider",
+        "description": "Initialize Prisma with PostgreSQL provider. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma init --datasource-provider postgresql"
       },
       {
@@ -2700,7 +2700,7 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
       },
       {
         "id": "run_migration",
-        "description": "Create and apply the initial migration",
+        "description": "Create and apply the initial migration. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate dev --name init"
       }
     ],
@@ -3421,7 +3421,7 @@ exports[`neon init --agent: every step, against every project shape > greenfield
       },
       {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, run the command below — it already uses this project's package manager, so do not substitute another one. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
         "command": "npm install"
       },
       {
@@ -3431,7 +3431,7 @@ exports[`neon init --agent: every step, against every project shape > greenfield
       },
       {
         "id": "install_driver",
-        "description": "Install the Neon serverless driver for direct database access.",
+        "description": "Install the Neon serverless driver for direct database access. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager.",
         "command": "npm install @neondatabase/serverless"
       },
       {
@@ -3465,7 +3465,7 @@ exports[`neon init --agent: every step, against every project shape > greenfield
     "steps": [
       {
         "id": "run_migrations",
-        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step.",
+        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
@@ -3613,12 +3613,12 @@ exports[`neon init --agent: every step, against every project shape > greenfield
       },
       {
         "id": "apply",
-        "description": "Apply migrations to the Neon database",
+        "description": "Apply migrations to the Neon database. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "generate",
-        "description": "Generate the Prisma client",
+        "description": "Generate the Prisma client. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma generate"
       }
     ],
@@ -3689,12 +3689,12 @@ exports[`neon init --agent: every step, against every project shape > greenfield
     "steps": [
       {
         "id": "install_prisma",
-        "description": "Install Prisma as a dev dependency",
+        "description": "Install Prisma as a dev dependency. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager.",
         "command": "npm install -D prisma"
       },
       {
         "id": "init_prisma",
-        "description": "Initialize Prisma with PostgreSQL provider",
+        "description": "Initialize Prisma with PostgreSQL provider. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma init --datasource-provider postgresql"
       },
       {
@@ -3707,7 +3707,7 @@ exports[`neon init --agent: every step, against every project shape > greenfield
       },
       {
         "id": "run_migration",
-        "description": "Create and apply the initial migration",
+        "description": "Create and apply the initial migration. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate dev --name init"
       }
     ],
@@ -4454,7 +4454,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       },
       {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, run the command below — it already uses this project's package manager, so do not substitute another one. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
         "command": "npm install"
       },
       {
@@ -4464,7 +4464,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       },
       {
         "id": "install_driver",
-        "description": "Install the Neon serverless driver for direct database access.",
+        "description": "Install the Neon serverless driver for direct database access. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager.",
         "command": "npm install @neondatabase/serverless"
       },
       {
@@ -4498,7 +4498,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
     "steps": [
       {
         "id": "run_migrations",
-        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step.",
+        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
@@ -4646,12 +4646,12 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       },
       {
         "id": "apply",
-        "description": "Apply migrations to the Neon database",
+        "description": "Apply migrations to the Neon database. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "generate",
-        "description": "Generate the Prisma client",
+        "description": "Generate the Prisma client. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma generate"
       }
     ],
@@ -4722,12 +4722,12 @@ exports[`neon init --agent: every step, against every project shape > next-prism
     "steps": [
       {
         "id": "install_prisma",
-        "description": "Install Prisma as a dev dependency",
+        "description": "Install Prisma as a dev dependency. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager.",
         "command": "npm install -D prisma"
       },
       {
         "id": "init_prisma",
-        "description": "Initialize Prisma with PostgreSQL provider",
+        "description": "Initialize Prisma with PostgreSQL provider. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma init --datasource-provider postgresql"
       },
       {
@@ -4740,7 +4740,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       },
       {
         "id": "run_migration",
-        "description": "Create and apply the initial migration",
+        "description": "Create and apply the initial migration. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate dev --name init"
       }
     ],
@@ -5487,7 +5487,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       },
       {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, run the command below — it already uses this project's package manager, so do not substitute another one. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
         "command": "npm install"
       },
       {
@@ -5497,7 +5497,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       },
       {
         "id": "install_driver",
-        "description": "Install the Neon serverless driver for direct database access.",
+        "description": "Install the Neon serverless driver for direct database access. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager.",
         "command": "npm install @neondatabase/serverless"
       },
       {
@@ -5531,7 +5531,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
     "steps": [
       {
         "id": "run_migrations",
-        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step.",
+        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
@@ -5679,12 +5679,12 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       },
       {
         "id": "apply",
-        "description": "Apply migrations to the Neon database",
+        "description": "Apply migrations to the Neon database. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "generate",
-        "description": "Generate the Prisma client",
+        "description": "Generate the Prisma client. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma generate"
       }
     ],
@@ -5755,12 +5755,12 @@ exports[`neon init --agent: every step, against every project shape > next-prism
     "steps": [
       {
         "id": "install_prisma",
-        "description": "Install Prisma as a dev dependency",
+        "description": "Install Prisma as a dev dependency. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager.",
         "command": "npm install -D prisma"
       },
       {
         "id": "init_prisma",
-        "description": "Initialize Prisma with PostgreSQL provider",
+        "description": "Initialize Prisma with PostgreSQL provider. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma init --datasource-provider postgresql"
       },
       {
@@ -5773,7 +5773,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       },
       {
         "id": "run_migration",
-        "description": "Create and apply the initial migration",
+        "description": "Create and apply the initial migration. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate dev --name init"
       }
     ],
@@ -6515,7 +6515,7 @@ exports[`neon init --agent: every step, against every project shape > node-app >
       },
       {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, run the command below — it already uses this project's package manager, so do not substitute another one. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
         "command": "npm install"
       },
       {
@@ -6525,7 +6525,7 @@ exports[`neon init --agent: every step, against every project shape > node-app >
       },
       {
         "id": "install_driver",
-        "description": "Install the Neon serverless driver for direct database access.",
+        "description": "Install the Neon serverless driver for direct database access. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager.",
         "command": "npm install @neondatabase/serverless"
       },
       {
@@ -6559,7 +6559,7 @@ exports[`neon init --agent: every step, against every project shape > node-app >
     "steps": [
       {
         "id": "run_migrations",
-        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step.",
+        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
@@ -6707,12 +6707,12 @@ exports[`neon init --agent: every step, against every project shape > node-app >
       },
       {
         "id": "apply",
-        "description": "Apply migrations to the Neon database",
+        "description": "Apply migrations to the Neon database. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "generate",
-        "description": "Generate the Prisma client",
+        "description": "Generate the Prisma client. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma generate"
       }
     ],
@@ -6783,12 +6783,12 @@ exports[`neon init --agent: every step, against every project shape > node-app >
     "steps": [
       {
         "id": "install_prisma",
-        "description": "Install Prisma as a dev dependency",
+        "description": "Install Prisma as a dev dependency. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager.",
         "command": "npm install -D prisma"
       },
       {
         "id": "init_prisma",
-        "description": "Initialize Prisma with PostgreSQL provider",
+        "description": "Initialize Prisma with PostgreSQL provider. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma init --datasource-provider postgresql"
       },
       {
@@ -6801,7 +6801,7 @@ exports[`neon init --agent: every step, against every project shape > node-app >
       },
       {
         "id": "run_migration",
-        "description": "Create and apply the initial migration",
+        "description": "Create and apply the initial migration. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate dev --name init"
       }
     ],
@@ -7548,7 +7548,7 @@ exports[`neon init --agent: every step, against every project shape > other-data
       },
       {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, run the command below — it already uses this project's package manager, so do not substitute another one. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
         "command": "npm install"
       },
       {
@@ -7558,7 +7558,7 @@ exports[`neon init --agent: every step, against every project shape > other-data
       },
       {
         "id": "install_driver",
-        "description": "Install the Neon serverless driver for direct database access.",
+        "description": "Install the Neon serverless driver for direct database access. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager.",
         "command": "npm install @neondatabase/serverless"
       },
       {
@@ -7592,7 +7592,7 @@ exports[`neon init --agent: every step, against every project shape > other-data
     "steps": [
       {
         "id": "run_migrations",
-        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step.",
+        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
@@ -7740,12 +7740,12 @@ exports[`neon init --agent: every step, against every project shape > other-data
       },
       {
         "id": "apply",
-        "description": "Apply migrations to the Neon database",
+        "description": "Apply migrations to the Neon database. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "generate",
-        "description": "Generate the Prisma client",
+        "description": "Generate the Prisma client. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma generate"
       }
     ],
@@ -7816,12 +7816,12 @@ exports[`neon init --agent: every step, against every project shape > other-data
     "steps": [
       {
         "id": "install_prisma",
-        "description": "Install Prisma as a dev dependency",
+        "description": "Install Prisma as a dev dependency. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager.",
         "command": "npm install -D prisma"
       },
       {
         "id": "init_prisma",
-        "description": "Initialize Prisma with PostgreSQL provider",
+        "description": "Initialize Prisma with PostgreSQL provider. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma init --datasource-provider postgresql"
       },
       {
@@ -7834,7 +7834,7 @@ exports[`neon init --agent: every step, against every project shape > other-data
       },
       {
         "id": "run_migration",
-        "description": "Create and apply the initial migration",
+        "description": "Create and apply the initial migration. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate dev --name init"
       }
     ],
@@ -8355,7 +8355,7 @@ exports[`neon init --agent: nested and string-encoded --data payloads > JSON-enc
       },
       {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, run the command below — it already uses this project's package manager, so do not substitute another one. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
         "command": "npm install"
       },
       {
@@ -8365,12 +8365,12 @@ exports[`neon init --agent: nested and string-encoded --data payloads > JSON-enc
       },
       {
         "id": "install_driver",
-        "description": "Install the Neon serverless driver for direct database access.",
+        "description": "Install the Neon serverless driver for direct database access. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager.",
         "command": "npm install @neondatabase/serverless"
       },
       {
         "id": "run_migrations",
-        "description": "Check if prisma/migrations contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step.",
+        "description": "Check if prisma/migrations contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
@@ -8423,7 +8423,7 @@ exports[`neon init --agent: nested and string-encoded --data payloads > nested o
       },
       {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, run the command below — it already uses this project's package manager, so do not substitute another one. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
         "command": "npm install"
       },
       {
@@ -8433,12 +8433,12 @@ exports[`neon init --agent: nested and string-encoded --data payloads > nested o
       },
       {
         "id": "install_driver",
-        "description": "Install the Neon serverless driver for direct database access.",
+        "description": "Install the Neon serverless driver for direct database access. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager.",
         "command": "npm install @neondatabase/serverless"
       },
       {
         "id": "run_migrations",
-        "description": "Check if prisma/migrations contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step.",
+        "description": "Check if prisma/migrations contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step. If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.",
         "command": "npx --no prisma migrate deploy"
       },
       {
@@ -12087,7 +12087,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cla
       },
       {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, run the command below — it already uses this project's package manager, so do not substitute another one. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
         "command": "npm install"
       },
       {
@@ -12097,7 +12097,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cla
       },
       {
         "id": "install_driver",
-        "description": "Install the Neon serverless driver for direct database access.",
+        "description": "Install the Neon serverless driver for direct database access. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager.",
         "command": "npm install @neondatabase/serverless"
       },
       {
@@ -12582,7 +12582,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cod
       },
       {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, run the command below — it already uses this project's package manager, so do not substitute another one. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
         "command": "npm install"
       },
       {
@@ -12592,7 +12592,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cod
       },
       {
         "id": "install_driver",
-        "description": "Install the Neon serverless driver for direct database access.",
+        "description": "Install the Neon serverless driver for direct database access. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager.",
         "command": "npm install @neondatabase/serverless"
       },
       {
@@ -13077,7 +13077,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cur
       },
       {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, run the command below — it already uses this project's package manager, so do not substitute another one. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
         "command": "npm install"
       },
       {
@@ -13087,7 +13087,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cur
       },
       {
         "id": "install_driver",
-        "description": "Install the Neon serverless driver for direct database access.",
+        "description": "Install the Neon serverless driver for direct database access. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager.",
         "command": "npm install @neondatabase/serverless"
       },
       {
@@ -13588,7 +13588,7 @@ exports[`neon init --agent: the response depends on which agent is driving > non
       },
       {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, run the command below — it already uses this project's package manager, so do not substitute another one. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
         "command": "npm install"
       },
       {
@@ -13598,7 +13598,7 @@ exports[`neon init --agent: the response depends on which agent is driving > non
       },
       {
         "id": "install_driver",
-        "description": "Install the Neon serverless driver for direct database access.",
+        "description": "Install the Neon serverless driver for direct database access. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager.",
         "command": "npm install @neondatabase/serverless"
       },
       {

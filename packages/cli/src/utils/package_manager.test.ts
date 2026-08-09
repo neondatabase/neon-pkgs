@@ -11,9 +11,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
 	detectProjectPackageManager,
-	execCommand,
+	formatExecCommand,
 	formatInstallCommand,
-	globalInstallArgs,
+	globalInstallCommand,
 	inferPackageManager,
 	type PackageManager,
 	resolveInvokingPackageManager,
@@ -260,7 +260,7 @@ describe("formatInstallCommand", () => {
 		["pnpm", "pnpm add -D prisma"],
 		["yarn", "yarn add -D prisma"],
 		// bun is the one that rejects -D.
-		["bun", "bun add -d prisma"],
+		["bun", "bun add -D prisma"],
 	] as const)("adds a dev dependency with %s", (pm, expected) => {
 		expect(formatInstallCommand(pm, ["prisma"], { dev: true })).toBe(
 			expected,
@@ -274,14 +274,16 @@ describe("formatInstallCommand", () => {
 	});
 });
 
-describe("execCommand", () => {
+describe("formatExecCommand", () => {
 	it.each([
 		["npm", "npx --no drizzle-kit generate"],
 		["pnpm", "pnpm exec drizzle-kit generate"],
 		["yarn", "yarn run drizzle-kit generate"],
 		["bun", "bun run drizzle-kit generate"],
 	] as const)("runs a project binary with %s", (pm, expected) => {
-		expect(execCommand(pm, "drizzle-kit", ["generate"])).toBe(expected);
+		expect(formatExecCommand(pm, "drizzle-kit", ["generate"])).toBe(
+			expected,
+		);
 	});
 
 	it.each([
@@ -293,20 +295,20 @@ describe("execCommand", () => {
 		// Bare `npx`/`bunx` and the `dlx` subcommands all fetch. A migration
 		// step that silently downloads an unpinned drizzle-kit and runs it
 		// against a database is the failure this guards.
-		const command = execCommand(pm, "drizzle-kit", ["migrate"]);
+		const command = formatExecCommand(pm, "drizzle-kit", ["migrate"]);
 		expect(command).not.toMatch(/\bdlx\b/);
 		expect(command).not.toMatch(/^bunx\b/);
 		expect(command).not.toMatch(/^npx (?!--no\b)/);
 	});
 
 	it("takes no arguments", () => {
-		expect(execCommand("pnpm", "prisma")).toBe("pnpm exec prisma");
+		expect(formatExecCommand("pnpm", "prisma")).toBe("pnpm exec prisma");
 	});
 });
 
-describe("globalInstallArgs", () => {
+describe("globalInstallCommand", () => {
 	const formatGlobalInstall = (pm: PackageManager): string | undefined => {
-		const install = globalInstallArgs(pm, "neonctl");
+		const install = globalInstallCommand(pm, "neonctl");
 		return install && `${install.command} ${install.args.join(" ")}`;
 	};
 
@@ -349,7 +351,7 @@ describe("globalInstallArgs", () => {
 			// `resolveInvokingPackageManager` ends in `?? "npm"`, a guess about
 			// a machine no one has looked at — so npm needs the same PATH check
 			// the yarn fallback gets.
-			expect(globalInstallArgs(pm, "neonctl")).toBeUndefined();
+			expect(globalInstallCommand(pm, "neonctl")).toBeUndefined();
 		});
 
 		it("borrows an installed manager when the requested one is absent", () => {
@@ -402,7 +404,7 @@ describe("globalInstallArgs", () => {
 
 		it("returns nothing when no manager on the machine can install globally", () => {
 			stub("yarn", "4.1.0");
-			expect(globalInstallArgs("yarn", "neonctl")).toBeUndefined();
+			expect(globalInstallCommand("yarn", "neonctl")).toBeUndefined();
 		});
 
 		it("treats an unreadable yarn version as Berry", () => {

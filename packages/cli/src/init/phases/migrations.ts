@@ -1,6 +1,8 @@
 import {
-	execCommand,
+	DO_NOT_SUBSTITUTE_HINT,
+	formatExecCommand,
 	formatInstallCommand,
+	MISSING_BINARY_HINT,
 	type PackageManager,
 	resolvePackageManager,
 } from "../../utils/package_manager.js";
@@ -41,16 +43,15 @@ export async function handleMigrationsPhase(
 					steps: [
 						{
 							id: "install_prisma",
-							description: "Install Prisma as a dev dependency",
+							description: `Install Prisma as a dev dependency. ${DO_NOT_SUBSTITUTE_HINT}`,
 							command: formatInstallCommand(pm, ["prisma"], {
 								dev: true,
 							}),
 						},
 						{
 							id: "init_prisma",
-							description:
-								"Initialize Prisma with PostgreSQL provider",
-							command: execCommand(pm, "prisma", [
+							description: `Initialize Prisma with PostgreSQL provider. ${MISSING_BINARY_HINT}`,
+							command: formatExecCommand(pm, "prisma", [
 								"init",
 								"--datasource-provider",
 								"postgresql",
@@ -68,9 +69,8 @@ export async function handleMigrationsPhase(
 						},
 						{
 							id: "run_migration",
-							description:
-								"Create and apply the initial migration",
-							command: execCommand(pm, "prisma", [
+							description: `Create and apply the initial migration. ${MISSING_BINARY_HINT}`,
+							command: formatExecCommand(pm, "prisma", [
 								"migrate",
 								"dev",
 								"--name",
@@ -80,7 +80,7 @@ export async function handleMigrationsPhase(
 					],
 					onComplete: {
 						type: "complete",
-						message: `Prisma is set up with your Neon database. You can now define models in schema.prisma and run migrations with \`${execCommand(pm, "prisma", ["migrate", "dev"])}\`.`,
+						message: `Prisma is set up with your Neon database. You can now define models in schema.prisma and run migrations with \`${formatExecCommand(pm, "prisma", ["migrate", "dev"])}\`.`,
 					},
 				},
 			};
@@ -96,8 +96,7 @@ export async function handleMigrationsPhase(
 				steps: [
 					{
 						id: "install_drizzle",
-						description:
-							"Install Drizzle ORM, drizzle-kit, and the Neon serverless driver",
+						description: `Install Drizzle ORM, drizzle-kit, and the Neon serverless driver. ${DO_NOT_SUBSTITUTE_HINT}`,
 						command: [
 							formatInstallCommand(pm, [
 								"drizzle-orm",
@@ -120,7 +119,7 @@ export async function handleMigrationsPhase(
 					},
 					{
 						id: "run_migration",
-						description: "Generate and apply the initial migration",
+						description: `Generate and apply the initial migration. ${MISSING_BINARY_HINT}`,
 						command: drizzleGenerateAndMigrate(pm),
 					},
 				],
@@ -253,8 +252,8 @@ export async function handleMigrationsPhase(
 /** `drizzle-kit generate` then `migrate`, both through the project's runner. */
 const drizzleGenerateAndMigrate = (pm: PackageManager): string =>
 	[
-		execCommand(pm, "drizzle-kit", ["generate"]),
-		execCommand(pm, "drizzle-kit", ["migrate"]),
+		formatExecCommand(pm, "drizzle-kit", ["generate"]),
+		formatExecCommand(pm, "drizzle-kit", ["migrate"]),
 	].join(" && ");
 
 function getMigrationApplySteps(tool: string, pm: PackageManager) {
@@ -267,13 +266,16 @@ function getMigrationApplySteps(tool: string, pm: PackageManager) {
 				},
 				{
 					id: "apply",
-					description: "Apply migrations to the Neon database",
-					command: execCommand(pm, "prisma", ["migrate", "deploy"]),
+					description: `Apply migrations to the Neon database. ${MISSING_BINARY_HINT}`,
+					command: formatExecCommand(pm, "prisma", [
+						"migrate",
+						"deploy",
+					]),
 				},
 				{
 					id: "generate",
-					description: "Generate the Prisma client",
-					command: execCommand(pm, "prisma", ["generate"]),
+					description: `Generate the Prisma client. ${MISSING_BINARY_HINT}`,
+					command: formatExecCommand(pm, "prisma", ["generate"]),
 				},
 			];
 		case "drizzle":
@@ -284,8 +286,8 @@ function getMigrationApplySteps(tool: string, pm: PackageManager) {
 				},
 				{
 					id: "apply",
-					description: "Apply migrations to the Neon database",
-					command: execCommand(pm, "drizzle-kit", ["migrate"]),
+					description: `Apply migrations to the Neon database. ${MISSING_BINARY_HINT}`,
+					command: formatExecCommand(pm, "drizzle-kit", ["migrate"]),
 				},
 			];
 		case "knex":
@@ -296,8 +298,8 @@ function getMigrationApplySteps(tool: string, pm: PackageManager) {
 				},
 				{
 					id: "apply",
-					description: "Apply migrations to the Neon database",
-					command: execCommand(pm, "knex", ["migrate:latest"]),
+					description: `Apply migrations to the Neon database. ${MISSING_BINARY_HINT}`,
+					command: formatExecCommand(pm, "knex", ["migrate:latest"]),
 				},
 			];
 		default:

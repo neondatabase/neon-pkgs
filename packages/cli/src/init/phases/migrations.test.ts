@@ -94,7 +94,7 @@ describe("handleMigrationsPhase", () => {
 			["npm", "npm install -D prisma"],
 			["pnpm", "pnpm add -D prisma"],
 			["yarn", "yarn add -D prisma"],
-			["bun", "bun add -d prisma"],
+			["bun", "bun add -D prisma"],
 		] as const)("prisma on %s", async (pm, expected) => {
 			const { dir, cleanup } = makeProjectDir(pm);
 			try {
@@ -124,7 +124,7 @@ describe("handleMigrationsPhase", () => {
 			],
 			[
 				"bun",
-				"bun add drizzle-orm @neondatabase/serverless && bun add -d drizzle-kit",
+				"bun add drizzle-orm @neondatabase/serverless && bun add -D drizzle-kit",
 			],
 		] as const)("drizzle on %s", async (pm, expected) => {
 			const { dir, cleanup } = makeProjectDir(pm);

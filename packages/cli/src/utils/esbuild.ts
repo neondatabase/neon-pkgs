@@ -4,12 +4,12 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import which from "which";
 import {
-	globalInstallArgs,
+	globalInstallCommand,
 	resolveInvokingPackageManager,
 } from "./package_manager.js";
 
 const notFoundMessage = (): string => {
-	const install = globalInstallArgs(
+	const install = globalInstallCommand(
 		resolveInvokingPackageManager(),
 		"esbuild",
 	);
@@ -18,7 +18,7 @@ const notFoundMessage = (): string => {
 	const how = install
 		? `install esbuild and ensure it is on your PATH (e.g. \`${install.command} ${install.args.join(" ")}\`), or `
 		: "put an esbuild binary on your PATH, or ";
-	return `esbuild not found. neon ships esbuild for most platforms; if you see this, ${how}set NEON_ESBUILD_PATH to an esbuild binary.`;
+	return `esbuild not found. neon ships esbuild for most platforms, so this is unexpected: ${how}set NEON_ESBUILD_PATH to an esbuild binary.`;
 };
 
 // Prepended to the ESM bundle. Bundled dependencies are frequently CommonJS, but an ESM
@@ -170,7 +170,11 @@ const resolveEsbuild = (): string => {
 	const override = process.env.NEON_ESBUILD_PATH;
 	if (override) {
 		if (existsSync(override)) return override;
-		throw new Error(notFoundMessage());
+		// Naming the value: the generic "esbuild not found, try setting
+		// NEON_ESBUILD_PATH" is useless advice for someone who already set it.
+		throw new Error(
+			`NEON_ESBUILD_PATH is set to ${override}, but no file exists there. Point it at an esbuild binary, or unset it to use the one neon ships.`,
+		);
 	}
 	const onPath = which.sync("esbuild", { nothrow: true });
 	if (onPath) return onPath;

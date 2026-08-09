@@ -4,7 +4,7 @@ import { log, spinner } from "@clack/prompts";
 import { execa } from "execa";
 import { dim } from "yoctocolors";
 import {
-	globalInstallArgs,
+	globalInstallCommand,
 	resolveInvokingPackageManager,
 } from "../utils/package_manager.js";
 import { getSkillsAgentName as getSkillsAgentNameFromId } from "./agents.js";
@@ -21,7 +21,7 @@ async function ensureSkillsCli(): Promise<void> {
 		// Not installed — install it globally with whatever launched us, so a
 		// pnpm/bun user doesn't get a stray npm global install. Undefined means
 		// nothing on this machine can install a global CLI at all.
-		const install = globalInstallArgs(
+		const install = globalInstallCommand(
 			resolveInvokingPackageManager(),
 			"skills",
 		);

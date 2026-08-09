@@ -668,8 +668,12 @@ async function interactiveInitInner(
 				break;
 			case "failed":
 				nctlS.stop("Failed to install Neon CLI");
+				// The reported reason, not a fixed line: one of the failures is
+				// "nothing here can install globally", and npx is missing in
+				// exactly that case, so promising npx would be false.
 				log.warn(
-					"The Neon CLI could not be installed automatically. The setup will continue using npx.",
+					nctlResult.error ??
+						"The Neon CLI could not be installed automatically. The setup will continue using npx.",
 				);
 				break;
 		}

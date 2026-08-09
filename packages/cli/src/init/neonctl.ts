@@ -1,7 +1,7 @@
 import { lstatSync } from "node:fs";
 import { execa } from "execa";
 import {
-	globalInstallArgs,
+	globalInstallCommand,
 	resolveInvokingPackageManager,
 } from "../utils/package_manager.js";
 
@@ -154,15 +154,16 @@ export async function ensureNeonctl(): Promise<EnsureNeonctlResult> {
 	}
 
 	const pm = resolveInvokingPackageManager();
-	const install = globalInstallArgs(pm, "neonctl");
+	const install = globalInstallCommand(pm, "neonctl");
 	if (!install) {
-		// Deliberately naming no alternative: `npx` ships with npm, so the case
-		// that got us here is also the case where npx is missing.
+		// The next step is installing a package manager, not falling back to
+		// npx: npx ships with npm, so it is missing in exactly this case.
 		return {
 			status: "failed",
 			error:
-				"No package manager on this machine can install a global CLI: " +
-				"npm, pnpm and bun are not on PATH, and yarn Berry dropped global installs.",
+				"Could not install the Neon CLI: this machine has no package manager that can perform a global install. " +
+				"npm, pnpm and bun are not on PATH (yarn Berry has no global install). " +
+				"Install npm, pnpm or bun, then run this again.",
 		};
 	}
 	const { command, args } = install;

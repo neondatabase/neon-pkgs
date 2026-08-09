@@ -4,19 +4,22 @@
  * Every command that shells out to install dependencies should go through here
  * rather than reading `npm_config_user_agent` or lockfiles on its own.
  *
+ * **`detect*` may return undefined, `resolve*` never does**, and `inferPackageManager` is the
+ * composed detector for callers that can prompt rather than guess.
+ *
  * - {@link detectProjectPackageManager} — lockfile walk from `cwd` up to the repo root
- * - {@link detectPackageManager} — the tool that launched this process (`npx`, `pnpm dlx`, …)
+ * - {@link detectInvokingPackageManager} — the tool that launched us (`npx`, `pnpm dlx`, …)
  * - {@link inferPackageManager} — project, then invocation, or nothing (when there is
  *   something to ask the user, an unanswerable guess is worse than a prompt)
  * - {@link resolvePackageManager} — project lockfile, then invocation, then PATH, then npm
  *   (installing into an existing project directory)
  * - {@link resolveInvokingPackageManager} — invocation, then PATH, then npm (global installs,
  *   or when the target directory has no lockfile yet, e.g. a fresh scaffold)
- * - {@link installArgs} / {@link globalInstallArgs} — argv to install into a project
- *   or globally
+ * - {@link installArgs} — argv to install into a project; {@link globalInstallCommand} —
+ *   command and argv to install a CLI globally, or undefined when nothing here can
  * - {@link formatInstallCommand} — shell-ready `pnpm install` / `npm add …` for agents and hints
- * - {@link execCommand} — shell-ready `pnpm exec drizzle-kit …` for a binary the project
- *   already depends on
+ * - {@link formatExecCommand} — shell-ready `pnpm exec drizzle-kit …` for a binary the project
+ *   already depends on, plus {@link MISSING_BINARY_HINT} for the step that carries it
  *
  * Never re-derive any of this at a call site: a second detector is a second answer, and the
  * two disagree exactly where it hurts — an agent told to run `npm install` in a pnpm project.
@@ -142,7 +145,7 @@ export const detectProjectPackageManager = (
  * `neon`/`neonctl` — so the caller can ask (or fall back) instead of silently
  * assuming npm.
  */
-export const detectPackageManager = (): PackageManager | undefined => {
+export const detectInvokingPackageManager = (): PackageManager | undefined => {
 	const ua = process.env.npm_config_user_agent ?? "";
 	if (ua.startsWith("pnpm")) return "pnpm";
 	if (ua.startsWith("yarn")) return "yarn";
@@ -164,7 +167,7 @@ export const installedPackageManagers = (): PackageManager[] =>
  * appended — use this one only where there is a user to ask.
  */
 export const inferPackageManager = (cwd: string): PackageManager | undefined =>
-	detectProjectPackageManager(cwd) ?? detectPackageManager();
+	detectProjectPackageManager(cwd) ?? detectInvokingPackageManager();
 
 /**
  * Pick a package manager without prompting: the one the project at `cwd` uses,
@@ -186,13 +189,10 @@ export const resolvePackageManager = (cwd: string): PackageManager =>
  * as {@link resolvePackageManager} minus the lockfile walk.
  */
 export const resolveInvokingPackageManager = (): PackageManager =>
-	detectPackageManager() ?? installedPackageManagers()[0] ?? "npm";
+	detectInvokingPackageManager() ?? installedPackageManagers()[0] ?? "npm";
 
 /** Where an added package lands in `package.json`. */
 export type AddOptions = { dev?: boolean };
-
-/** bun spells the devDependencies flag `-d`; the rest accept `-D`. */
-const devFlag = (pm: PackageManager): string => (pm === "bun" ? "-d" : "-D");
 
 /**
  * The argv for an install with `pm`: every dependency in the manifest when
@@ -211,7 +211,8 @@ export const installArgs = (
 	packages?.length
 		? [
 				pm === "npm" ? "install" : "add",
-				...(options?.dev ? [devFlag(pm)] : []),
+				// All four accept -D for devDependencies, bun included.
+				...(options?.dev ? ["-D"] : []),
 				...packages,
 			]
 		: ["install"];
@@ -250,7 +251,7 @@ const GLOBAL_CAPABLE: readonly PackageManager[] = ["npm", "pnpm", "bun"];
  * unchecked would hand a Berry user a command their machine does not have. The
  * caller decides what to say when there is nothing to return.
  */
-export const globalInstallArgs = (
+export const globalInstallCommand = (
 	pm: PackageManager,
 	pkg: string,
 ): { command: string; args: string[] } | undefined => {
@@ -291,7 +292,7 @@ export const globalInstallArgs = (
  * Like `bun run`, it prefers a package.json script of the same name, so a script
  * called `prisma` would shadow the binary.
  */
-export const execCommand = (
+export const formatExecCommand = (
 	pm: PackageManager,
 	binary: string,
 	args: string[] = [],
@@ -304,6 +305,28 @@ export const execCommand = (
 	}[pm];
 	return [runner, binary, ...args].join(" ");
 };
+
+/**
+ * Belongs in the description of any agent step whose command came from
+ * {@link formatExecCommand}.
+ *
+ * npm's own refusal reads "npx canceled due to missing packages and no YES
+ * option", which hands the reader the exact flag that defeats the protection —
+ * and the same payload contains `npx -y` elsewhere, so `-y` looks like the house
+ * style. Without this, an agent that hits the guard plausibly retries with `-y`
+ * and runs an unpinned migration tool against the user's database.
+ */
+export const MISSING_BINARY_HINT =
+	"If this fails saying the package is missing, the install step above did not complete — run that step, then retry this one. Do not add -y, and do not switch to npx, pnpm dlx, yarn dlx or bunx: those download an unpinned copy of the tool and run it against the user's database.";
+
+/**
+ * Belongs in the description of any agent step whose command came from
+ * {@link formatInstallCommand}. The command already names the project's package
+ * manager, and an agent normalising it to npm is the bug this module exists to
+ * prevent.
+ */
+export const DO_NOT_SUBSTITUTE_HINT =
+	"Run this step's `command` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager.";
 
 /**
  * A shell-ready install line for agents and "next steps" hints — e.g.
