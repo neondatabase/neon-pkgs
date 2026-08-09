@@ -12,11 +12,11 @@ npm install @neon/env
 
 > **Requirements:** Node.js >= 20.19.
 
-## One entry point
+## What's in it
 
-Everything is on `@neon/env`, and all of it is side-effect-free: `fetchEnv` asks the Neon API for a branch's env, `parseEnv` reads what was already injected, `toEntries` projects a resolved env into `{ KEY: value }`. None of them touches the filesystem or reads an env source, so importing this package from an app, a build script, or a `neon.ts` policy can't surprise you.
+Everything is on `@neon/env`, and none of it has side effects: `fetchEnv` asks the Neon API for a branch's env, `parseEnv` validates what was already injected into `process.env`, `toEntries` projects a resolved env into `{ KEY: value }`. Nothing here writes a file, mutates `process.env`, or creates or destroys anything on your Neon project — so importing this package from an app, a build script, or a `neon.ts` policy can't surprise you.
 
-> **`@neon/env/runtime` was removed in 0.16.0.** It held `fetchEnvReusingSecrets`, which reads an env source and can mint and revoke branch credentials — see [The branch credential](#the-branch-credential). That is implementation shared with the `neon` CLI, not something to hand an application, and it is no longer published. If you were importing it, use the [`neon` CLI](../cli) (`neon env pull`, `neon dev`) or `fetchEnv` plus your own persistence.
+> **`@neon/env/runtime` was removed in 0.16.0.** It held `fetchEnvReusingSecrets`, which reads an env source and can mint and revoke branch credentials — see [The branch credential](#the-branch-credential). That is implementation shared with the `neon` CLI, not something to hand an application, and it is no longer published. If you were importing it, use the [`neon` CLI](../cli) (`neon env pull`, `neon dev`), which does this for you. Rolling your own is possible but the hard part is not storing the secret — it is **verifying** it: a persisted secret is only reusable if it still names a live credential on that branch, unrevoked, unexpired, and carrying every scope the policy needs. A presence check cannot tell a real secret from a `.env.example` placeholder, which is the bug 0.12.0 shipped a fix for. `credentialScopesSatisfied` and `deriveCredentialScopes` from `@neon/config/v1`, plus `listCredentials` / `createCredential` / `revokeCredential` on a `NeonApi`, are the pieces.
 
 Contributing? See [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
@@ -133,28 +133,11 @@ These are the OS-level vars `fetchEnv` / `parseEnv` read and `toEntries` (so `ne
 
 Object storage and the AI Gateway are backed by one branch credential, and the Neon API returns its secrets (`s3_secret_access_key`, `api_token`) **once**, at mint time — they aren't stored server-side, and the list endpoint returns metadata only. So there is nothing to *fetch*: `fetchEnv` mints. Call it on every `neon dev` start and you leave a live credential behind each time.
 
-`fetchEnvReusingSecrets` is the wrapper that avoids that. It checks what you already hold, keeps what is still valid, and asks `fetchEnv` for only the rest. **It is not part of this package's API** — it lives in `shared/env-core` and is compiled into the `neon` CLI and into this package's own `neon-env` binary. It is described here because it is the reason `fetchEnv` behaves the way it does, and because you have to solve the same problem if you call `fetchEnv` on a loop:
+Handling that is the caller's problem, and it is not just "cache the secret": a persisted secret is only reusable if it still names a live credential on that branch — unrevoked, unexpired, and carrying every scope the policy needs. A presence check cannot tell a real secret from a `.env.example` placeholder.
 
-```ts
-const { vars, credential } = await fetchEnvReusingSecrets(config, {
-    projectId,
-    branch: "main",
-    env: { ...process.env, ...readEnvFile(".env") },
-});
+No local bookkeeping is needed to do it, because the secrets carry their own credential id: `AWS_ACCESS_KEY_ID` **is** the credential's token id, and the AI Gateway token is minted as `nt_live_<tokenIdShort>_<secret>`. So the `.env` you are about to rewrite already records which credential issued it.
 
-// vars: { DATABASE_URL: "…", AWS_ACCESS_KEY_ID: "…", … } — ready to write or inject
-if (credential.issued) {
-    console.log(`new values for ${credential.keys.join(", ")}`);
-    // credential.revoked    — ids it replaced and revoked
-    // credential.superseded — ids it replaced but left live (`revokeSuperseded: false`)
-}
-```
-
-The check is a real verification, not a presence test. A persisted secret is kept only when it names a credential that still exists on the branch, isn't revoked or expired, and carries every scope the policy needs. A `.env.example` placeholder, a credential revoked in the console, one copied from another branch, or one predating a newly-enabled feature all fail that check and get replaced — and the credential being replaced is revoked, so a branch doesn't accumulate one per call.
-
-No local bookkeeping backs this: `AWS_ACCESS_KEY_ID` **is** the credential's token id, and the AI Gateway token is minted as `nt_live_<tokenIdShort>_<secret>`, so the persisted secrets already name the credential that issued them.
-
-Revoking is only safe because the call resolves everything the policy enables. Pass `revokeSuperseded: false` when yours resolves a **subset** — the credential your persisted secrets name may also back a service you are not resolving, and revoking it would break that service while its vars, which you are not rewriting, stay in place. The cost is an orphaned credential, which is the safer of the two failures, and `credential.superseded` names it so you can report it rather than leave it invisible. `neon env pull --service` is the caller this exists for.
+The [`neon` CLI](../cli) does all of this — `neon env pull` and `neon dev` reuse a branch credential rather than issuing one per run. If you are calling `fetchEnv` on a loop yourself, `credentialScopesSatisfied` and `deriveCredentialScopes` from `@neon/config/v1`, plus `listCredentials` / `createCredential` / `revokeCredential` on a `NeonApi`, are the pieces you need.
 
 ### Fetching a subset
 

@@ -39,8 +39,13 @@ packages](https://github.com/vercel/vercel/blob/main/internals/types/package.jso
 that way, inlined by `esbuild({ bundle: true, external: dependencies })`. We cannot, because
 `packages/env` builds with tsdown `bundle: false` and `packages/cli` with plain `tsc`, so a bare
 specifier survives into `dist` and has to resolve from `node_modules` — which an unpublished
-package cannot do for anyone who installed from npm. Put the two published artifacts on a
-bundler and this directory becomes a normal private package.
+package cannot do for anyone who installed from npm.
+
+Putting the two published artifacts on a bundler would make both shared trees normal private
+packages and delete `sync-shared.mjs` — but it is not a chore. `neon` publishes `./dist/*`, so
+its emitted file layout **is** a published interface, and `@yao-pkg/pkg` cross-compiles the
+standalone binaries from `dist/cli.js`. Changing how those files are produced is a breaking
+change to the CLI, not a build tweak.
 
 ## Rules
 

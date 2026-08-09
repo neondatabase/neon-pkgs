@@ -28,6 +28,10 @@ A workspace package would not work here, and the reasons are worth recording:
 
 ## Rules
 
+- **It is not published, and one line keeps it that way.** `neon` exports a `./dist/*` wildcard,
+  so every file compiled from here is importable by path unless blocked. `"./dist/_shared/*":
+  null` in `packages/cli/package.json` is what stops `neon/dist/_shared/credentials.js` being a
+  public credential reader; `packages/cli/src/package_exports.test.ts` pins it.
 - **Edit `shared/cli-core/src`, never `packages/*/src/_shared`.** The latter is generated and
   overwritten on every build.
 - **Keep it dependency-free.** Node builtins only. It is compiled into each consumer as that

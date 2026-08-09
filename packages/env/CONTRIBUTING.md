@@ -2,8 +2,8 @@
 
 General setup, the Node floors, and how to run the live e2e suites live in the
 [repo-root `CONTRIBUTING.md`](../../CONTRIBUTING.md). This file covers the one thing about this
-package you have to get right before adding anything to it: **which of the two entry points your
-code belongs in.**
+package you have to get right before adding anything to it: **whether your code belongs on the
+published surface at all, or in the shared tree the CLIs compile in.**
 
 ## One entry point, and what deliberately isn't on it
 
@@ -74,7 +74,8 @@ it. Anything else becomes a runtime dependency of both.
 
 ## The branch credential, in one place
 
-Everything that knows how a branch credential works lives in `src/lib/reuse-secrets.ts`. The
+Everything that knows how a branch credential works lives in
+`shared/env-core/src/reuse-secrets.ts`. The
 facts worth knowing before you touch it:
 
 - **`AWS_ACCESS_KEY_ID` is the credential's `tokenId`.** The full id, not `tokenIdShort` — the
@@ -93,6 +94,29 @@ sidecar file. Don't add one.
   those minted under this package's own `neon-env <branch>` name. Anything else may belong to a
   teammate, another checkout, or a deployed function, and nothing observable distinguishes those
   from an orphan of our own. Widening this needs a very good argument.
+
+The call signature, since it is no longer documented anywhere a consumer can read:
+
+```ts
+const { vars, credential } = await fetchEnvReusingSecrets(config, {
+    projectId,
+    branch: "main",
+    env: { ...process.env, ...readEnvFile(".env") },
+    revokeSuperseded: false, // default: true
+});
+
+// credential.issued     — a new credential was minted
+// credential.keys       — the env vars its secrets surface under
+// credential.revoked    — ids it replaced and revoked
+// credential.superseded — ids it replaced but left live (`revokeSuperseded: false`)
+```
+
+`revokeSuperseded: false` is for a caller resolving a **subset** of a branch: object storage and
+the AI Gateway share one credential, so revoking the one your persisted secrets name can break a
+service the call is not rewriting. The cost is an orphaned credential, which is the safer of the
+two failures, and `credential.superseded` names it so the caller can report it rather than leave
+it invisible. `neon env pull --service` is why it exists.
+
 
 ## Testing this package
 

@@ -336,7 +336,7 @@ the `@neon/config/paths` subpath is gone — it was a workaround for having nowh
 implementor-only code, was never documented in the package's README, and nothing outside this
 repo imported it. See below.
 
-### `shared/cli-core` — code every CLI compiles as its own
+### `shared/` — code every CLI compiles as its own
 
 Credential reading, profile resolution and config paths are shared by `neon` and `@neon/env`
 from `shared/cli-core/src` — the two that read a credential off disk; `@neon/config` takes an
@@ -347,7 +347,15 @@ typechecks a consumer's source runs it first; that copy is gitignored, and the i
 relative, so the code is compiled into every `dist` and nothing resolves at runtime. **If you
 add a script that reads `src/`, add the sync to it** — otherwise it can compile a stale copy.
 
-It is not a workspace package because it cannot be one. Every package here builds with
+`shared/env-core` is the second tree, on the same mechanism: `fetchEnv` and
+`fetchEnvReusingSecrets`, compiled into `@neon/env` and `neon`. It lands at
+`_shared/env-core/` while `cli-core` copies flat, so two trees can never collide on a filename;
+`sync-shared.mjs` lists them explicitly rather than globbing `shared/*`, so a new directory
+there cannot silently start shipping inside two published packages. Both are kept out of the
+`neon` tarball's public surface by `"./dist/_shared/*": null` in its `exports` — without that,
+the `./dist/*` wildcard makes every copied file importable.
+
+Neither is a workspace package because neither can be one. Every package here builds with
 `bundle: false` or plain `tsc`, so a bare specifier survives into `dist` and must resolve
 from `node_modules` — which an unpublished package cannot do for anyone who installed `neon`
 from npm. `bundledDependencies` is the mechanism for exactly that and pnpm refuses it here
@@ -382,12 +390,12 @@ flow (`packages/cli/src/init/auth.ts`, which triggers OAuth by spawning `neon` a
 rather than running the browser flow in-process). Copy one rather than pushing the lookup back
 down.
 
-Before adding an export to `@neon/env`, or reaching into one of its internals from
-`packages/cli`, read **[`packages/env/CONTRIBUTING.md`](packages/env/CONTRIBUTING.md)**. It has
-the test for which side a change belongs on, why the credential-reuse logic cannot live on the
-root export, why it stays in that package rather than moving into the CLI, and the `tsconfig`
-`paths` entry a new subpath needs because `packages/cli` runs classic `moduleResolution: node`
-and so ignores package `exports`.
+Before adding an export to `@neon/env`, read
+**[`packages/env/CONTRIBUTING.md`](packages/env/CONTRIBUTING.md)**. It has the test for whether
+a change belongs on the published surface or in `shared/env-core`, why the credential-reuse
+logic cannot live on the root export, and what each of the three homes holds. `packages/cli`
+does not depend on `@neon/env` at all — it compiles the shared tree as its own source — so
+"reach into an internal" is not a thing it can do.
 
 ### The CLI package (`packages/cli`)
 
