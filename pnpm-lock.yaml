@@ -247,6 +247,9 @@ importers:
       strip-ansi:
         specifier: 7.1.0
         version: 7.1.0
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.14.1(@arethetypeswrong/core@0.18.3)(typescript@5.9.3)
       tsx:
         specifier: 4.22.3
         version: 4.22.3
