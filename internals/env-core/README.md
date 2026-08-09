@@ -30,14 +30,16 @@ resolves nothing at runtime.
 ## Importing it
 
 Per-file subpaths, and **no root export** — there is deliberately no barrel, so a consumer takes
-only what it names and the rest is tree-shaken out of their bundle. `@neon-internals/cli-core` on
-its own answers `ERR_PACKAGE_PATH_NOT_EXPORTED`.
+only what it names and the rest is tree-shaken out of their bundle. That matters most here:
+`env.ts` is safe to import and `reuse-secrets.ts` mints and revokes credentials, and nothing
+should reach the second by asking for the first. `@neon-internals/env-core` on its own answers
+`ERR_PACKAGE_PATH_NOT_EXPORTED`.
 
 The specifier is **extensionless**, unlike every relative import in this repo:
 
 ```ts
-import { configDir } from "@neon-internals/cli-core/paths";     // resolves
-import { configDir } from "@neon-internals/cli-core/paths.js";  // dist/paths.js.js
+import { fetchEnv } from "@neon-internals/env-core/env";     // resolves
+import { fetchEnv } from "@neon-internals/env-core/env.js";  // dist/env.js.js
 ```
 
 In `packages/cli` the `.js` form passes `tsc --noEmit` — its `paths` mapping plus tsc's
