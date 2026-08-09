@@ -415,16 +415,30 @@ Being private beta shows, and all three calls behave the same way on a given bra
 | Branch state | Response |
 | --- | --- |
 | Telemetry not available in the branch's region | `404`, `reason: "telemetry_not_enabled"` |
+| Project or branch missing, or no access to it | `404`, `reason: "branch_not_found"` |
 | Telemetry available, nothing recorded in the window | `200` with an empty `logs` / `values` array |
 | Telemetry available, backend down | `503`, which the client retries on by default |
 
-**Telemetry is region-gated**, so handle the `404` as an ordinary outcome rather than an
-error in your integration — a branch in the wrong region never returns logs, and the
-region is fixed at project creation.
+**The two 404s need different handling, and only `reason` tells them apart.** Telemetry is
+region-gated and the region is fixed at project creation, so `telemetry_not_enabled` is a
+permanent property of the branch and an ordinary outcome to design around.
+`branch_not_found` is a real error — a wrong id or a key without access — and should not
+be absorbed into the same path. Both arrive as `NeonNotFoundError`; `reason` is not lifted
+onto the error, so read it off the raw body:
+
+```ts
+const { error } = await neon.logs.fields(projectId, branchId);
+if (error) {
+  const reason = (error.body as { reason?: string } | undefined)?.reason;
+  if (reason === "telemetry_not_enabled") { /* no logs here, ever — carry on */ }
+  else throw error;
+}
+```
 
 Two more limits worth knowing, because the spec is wider than the backend. `source` is a
 three-value enum, but only `function` and `storage` were observed emitting; no branch
-produced a `pg_endpoint` record. And `minimum_severity` can be rejected outright —
+produced a `pg_endpoint` record. And `minimum_severity` can be rejected outright with a
+`400` (`NeonApiError`, `kind: "api"`) reading
 `"minimum_severity is not supported by this branch's log backend"` — so filter on
 `severity_text` if you need it to work everywhere.
 
@@ -453,6 +467,7 @@ const { data: errors } = await neon.logs
   .query(projectId, branchId, {
     since: "6h",
     source: "function",
+    // some branches' log backends reject minimum_severity; severity_text always works
     minimum_severity: "error",
   })
   .all();
@@ -475,10 +490,10 @@ if (services?.is_truncated) {
 }
 ```
 
-**`fieldName` must be a name `fields` returned**, and that set is narrower than the set of
-things you can filter on. `source` in particular is a *filter* — on `query` and on
-`fieldValues`' own query — but is not an enumerable field, so
-`fieldValues(…, "source")` answers `400` with `reason: "unknown_field"`.
+**`fieldName` must be a name `fields` returned.** The enumerable set and the filterable
+set overlap rather than nest: `source` is a filter — on `query` and on `fieldValues`' own
+query — but is not enumerable, so `fieldValues(…, "source")` answers `400` with
+`reason: "unknown_field"`; `entity_type` is enumerable but is not a filter on `query`.
 
 `fields` returns a bare `string[]` because its response carries nothing else.
 `fieldValues` returns the whole response, because `is_truncated` is what decides whether

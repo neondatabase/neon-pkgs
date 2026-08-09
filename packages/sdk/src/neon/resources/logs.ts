@@ -55,10 +55,10 @@ export class Logs<DThrow extends boolean> {
 	 * Query branch logs (cursor-paginated). Every supplied filter is combined with
 	 * `AND`.
 	 *
-	 * Give the window as either `since` or `start_time` — supplying both is
-	 * rejected — and treat `logql` as an alternative to the structured filters
-	 * rather than an addition to them. With no window the query covers the last
-	 * hour, and seven days is the widest range served.
+	 * Give the window as either `since` or `start_time` — supplying both is rejected.
+	 * `logql` replaces the seven content filters rather than adding to them, while
+	 * `limit`, `sort_order`, and the time window still apply alongside it. With no
+	 * window the query covers the last hour, and seven days is the widest range served.
 	 *
 	 * @apiCall POST /projects/{project_id}/branches/{branch_id}/logs/query (cursor-paginated)
 	 */
@@ -142,9 +142,9 @@ export class Logs<DThrow extends boolean> {
 	/**
 	 * List the distinct values observed for one log field, for use as a filter.
 	 * `fieldName` must be one of the names {@link Logs.fields} reports; anything else is
-	 * rejected with `unknown_field`. That set is narrower than the set of things
-	 * {@link Logs.query} can filter on — `source` is a filter here and there, but is not
-	 * itself an enumerable field.
+	 * rejected with `unknown_field`. The enumerable set and the set {@link Logs.query} can
+	 * filter on overlap rather than nest: `source` is a filter but is not enumerable, and
+	 * `entity_type` is enumerable but is not a filter.
 	 *
 	 * The whole response is returned rather than the bare values because
 	 * `is_truncated` decides whether the list can be trusted: when it is `true` the
