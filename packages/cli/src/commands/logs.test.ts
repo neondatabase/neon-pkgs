@@ -275,6 +275,22 @@ describe("logs", () => {
 		});
 	});
 
+	test("query cursor guidance syntax preserves leading shell metacharacters", async ({
+		testCliCommand,
+	}) => {
+		for (const [index, cursor] of ["~next-page", "-next-page"].entries()) {
+			const sink = join(TEST_TMP, `query-cursor-${index}.json`);
+			process.env.NEONCTL_TEST_LOGS_QUERY_SINK = sink;
+
+			await testCliCommand(
+				["logs", "query", `--cursor=${cursor}`, ...SCOPE],
+				{ mockDir: "single_org" },
+			);
+
+			expect(JSON.parse(readFileSync(sink, "utf8")).cursor).toBe(cursor);
+		}
+	});
+
 	test("query sends an explicit start time instead of a duration", async ({
 		testCliCommand,
 	}) => {
@@ -490,7 +506,7 @@ describe("logs", () => {
 			{
 				mockDir: "single_org",
 				outputTable: true,
-				stderr: "INFO: More logs matched than were returned. Re-run with the same filters plus --cursor eyJvZmZzZXQiOjEwMH0 to fetch the next page.",
+				stderr: "INFO: More logs matched than were returned. Re-run with the same filters plus --cursor=eyJvZmZzZXQiOjEwMH0 to fetch the next page.",
 			},
 		);
 	});

@@ -497,7 +497,7 @@ const query = async (
 	// machine-readable envelope and must stay parseable.
 	if (data.is_truncated && data.next_cursor) {
 		log.info(
-			`More logs matched than were returned. Re-run with the same filters plus --cursor ${data.next_cursor} to fetch the next page.`,
+			`More logs matched than were returned. Re-run with the same filters plus --cursor=${data.next_cursor} to fetch the next page.`,
 		);
 	}
 };

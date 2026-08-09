@@ -232,6 +232,60 @@ is_truncated: false
 "
 `;
 
+exports[`logs > query cursor guidance syntax preserves leading shell metacharacters 1`] = `
+"logs:
+  - timestamp: 2025-01-01T00:00:02.000Z
+    message: GET /api/todos 200
+    source: function
+    entity_id: fn-api
+    service_name: api
+    scope_name: http
+    severity_number: 9
+    severity_text: INFO
+    trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+    span_id: 00f067aa0ba902b7
+    attributes:
+      http_status: 200
+  - timestamp: 2025-01-01T00:00:01.000Z
+    message: connection to database failed
+    source: pg_endpoint
+    entity_id: ep-quiet-hill-123456
+    service_name: postgres
+    severity_number: 17
+    severity_text: ERROR
+    attributes: {}
+next_cursor: ""
+is_truncated: false
+"
+`;
+
+exports[`logs > query cursor guidance syntax preserves leading shell metacharacters 2`] = `
+"logs:
+  - timestamp: 2025-01-01T00:00:02.000Z
+    message: GET /api/todos 200
+    source: function
+    entity_id: fn-api
+    service_name: api
+    scope_name: http
+    severity_number: 9
+    severity_text: INFO
+    trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+    span_id: 00f067aa0ba902b7
+    attributes:
+      http_status: 200
+  - timestamp: 2025-01-01T00:00:01.000Z
+    message: connection to database failed
+    source: pg_endpoint
+    entity_id: ep-quiet-hill-123456
+    service_name: postgres
+    severity_number: 17
+    severity_text: ERROR
+    attributes: {}
+next_cursor: ""
+is_truncated: false
+"
+`;
+
 exports[`logs > query help states the Beta and region constraint 1`] = `""`;
 
 exports[`logs > query help states the minimum-severity backend limitation 1`] = `""`;
