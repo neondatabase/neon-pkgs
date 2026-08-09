@@ -73,6 +73,18 @@ is_truncated: false
 "
 `;
 
+exports[`logs > field-values neutralizes terminal controls in table output 1`] = `
+"values
+┌───────────────────────────────────┐
+│ Value                             │
+├───────────────────────────────────┤
+│ api                               │
+├───────────────────────────────────┤
+│ \\u001b]52;c;ZXZpbA==\\u0007service │
+└───────────────────────────────────┘
+"
+`;
+
 exports[`logs > field-values prints an empty-state message in table output 1`] = `
 "
 No values found.
@@ -103,6 +115,18 @@ exports[`logs > fields (yaml) 1`] = `
   - service_name
   - scope_name
   - severity_text
+"
+`;
+
+exports[`logs > fields neutralizes terminal controls in table output 1`] = `
+"fields
+┌─────────────────────────────────┐
+│ Field                           │
+├─────────────────────────────────┤
+│ service_name                    │
+├─────────────────────────────────┤
+│ \\u001b]52;c;ZXZpbA==\\u0007field │
+└─────────────────────────────────┘
 "
 `;
 

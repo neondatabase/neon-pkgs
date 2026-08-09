@@ -419,6 +419,19 @@ describe("logs", () => {
 		});
 	});
 
+	test("fields neutralizes terminal controls in table output", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			["logs", "fields", ...PROJECT, ...CONTROL_BRANCH],
+			{
+				mockDir: "single_org",
+				outputTable: true,
+				stderr: "",
+			},
+		);
+	});
+
 	test("field-values (yaml)", async ({ testCliCommand }) => {
 		await testCliCommand(
 			["logs", "field-values", "service_name", ...SCOPE],
@@ -432,6 +445,25 @@ describe("logs", () => {
 	test("field-values with table output", async ({ testCliCommand }) => {
 		await testCliCommand(
 			["logs", "field-values", "service_name", ...SCOPE],
+			{
+				mockDir: "single_org",
+				outputTable: true,
+				stderr: "",
+			},
+		);
+	});
+
+	test("field-values neutralizes terminal controls in table output", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"logs",
+				"field-values",
+				"service_name",
+				...PROJECT,
+				...CONTROL_BRANCH,
+			],
 			{
 				mockDir: "single_org",
 				outputTable: true,

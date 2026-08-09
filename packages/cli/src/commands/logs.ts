@@ -363,7 +363,7 @@ const fields = async (props: BranchScopeProps): Promise<void> => {
 	}
 
 	writer(props).end(
-		data.fields.map((field) => ({ field })),
+		data.fields.map((field) => ({ field: escapeLogTableCell(field) })),
 		{
 			fields: ["field"],
 			title: "fields",
@@ -402,7 +402,7 @@ const fieldValues = async (
 	}
 
 	writer(props).end(
-		data.values.map((value) => ({ value })),
+		data.values.map((value) => ({ value: escapeLogTableCell(value) })),
 		{
 			fields: ["value"],
 			title: "values",
