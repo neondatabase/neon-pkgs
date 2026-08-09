@@ -123,10 +123,25 @@ Adding a **new** variable? Read it through `tests/e2e-harness`, add it to every 
 [`AGENTS.md`](./AGENTS.md), which cover the repository secret or variable and the workflow
 mapping.
 
+### The AI Gateway suite
+
+`pnpm --filter @neon/ai-sdk-provider test:e2e` is the sixth live suite and is **not** part of
+`test:e2e:live`, because a run calls well over a hundred live models — it exercises every model
+the branch serves on two major AI SDK versions.
+
+It takes the same `NEON_API_KEY` and provisions its own gateway: a throwaway project, then a
+branch credential scoped to `ai_gateway:invoke`, both removed when the run ends. The gateway
+exists on every branch and needs no setup, but **model access is granted per account**, so the
+account behind the key needs every id in `packages/ai-sdk-provider/e2e/helpers.ts`. To run
+against a branch you already have instead, set `NEON_AI_GATEWAY_BASE_URL` and
+`NEON_AI_GATEWAY_TOKEN` (both, or neither) from `neon env pull`.
+
 ### In CI
 
 These run as the `e2e (live Neon)` workflow on every pull request from this repository, using a
-maintained throwaway org. The workflow maps the repository secret `NEON_TEST_API_KEY` onto
+maintained throwaway org. The gateway suite runs as `e2e (live AI Gateway)`, path-filtered to
+changes under `packages/ai-sdk-provider/` and `tests/e2e-harness/` so its model spend tracks
+the code it covers. Both workflows map the repository secret `NEON_TEST_API_KEY` onto
 `NEON_API_KEY` and the repository variable `NEON_TEST_ORG_ID` onto `NEON_ORG_ID`, so the
 contract is identical to your local one.
 

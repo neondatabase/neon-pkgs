@@ -389,7 +389,7 @@ export const initCmd = async (props: ConfigInitProps): Promise<void> => {
 	if (missing.length === 0) {
 		log.info("%s are already installed.", REQUIRED_PACKAGES.join(" and "));
 	} else {
-		const pm = resolvePackageManager();
+		const pm = resolvePackageManager(cwd);
 		const args = addDependenciesArgs(pm, missing);
 		if (props.install === false) {
 			log.info(

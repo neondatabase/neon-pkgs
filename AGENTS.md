@@ -77,7 +77,7 @@ Every variable the live suites read, and where it comes from:
 | `NEON_ORG_ID` | recommended | harness `configuredOrgId()`; the CLI suite maps it to `--org-id` | Pins create, list and sweep to one org. **Required in practice for a user-scoped key**, or the sweep ranges over every org the key can see |
 | `NEON_PROJECT_ID` | only for project-scoped keys | harness `detectApiKeyScope()` | Targets a fixed project; create-paths skip themselves |
 | `NEON_API_BASE_URL` | no | harness `api.ts` | Point the harness at a non-production API. Defaults to `https://console.neon.tech/api/v2` |
-| `NEON_AI_GATEWAY_BASE_URL`, `NEON_AI_GATEWAY_TOKEN` | for that suite only | `@neon/ai-sdk-provider` | Live AI Gateway. **Not** part of `test:e2e:live` |
+| `NEON_AI_GATEWAY_BASE_URL`, `NEON_AI_GATEWAY_TOKEN` | no | `@neon/ai-sdk-provider` | Run the gateway suite against a branch you already have. Set both or neither; with neither, that suite provisions its own from `NEON_API_KEY` |
 
 **Resolution order**, highest priority first — implemented in the harness's `loadEnv`:
 
@@ -151,9 +151,44 @@ suite that has already started creating projects. Across concurrent CI runs, saf
 comes from the sweep ignoring projects younger than an hour, so a sibling run's
 in-flight project is never deleted underneath it.
 
-`@neon/ai-sdk-provider` also has a `test:e2e`, but it targets a live AI Gateway with a
-different pair of credentials (`NEON_AI_GATEWAY_BASE_URL`, `NEON_AI_GATEWAY_TOKEN`) and
-is not part of `test:e2e:live`.
+##### The AI Gateway suite (`@neon/ai-sdk-provider`)
+
+`pnpm --filter @neon/ai-sdk-provider test:e2e` is the sixth live suite. It runs as its own
+workflow rather than inside `test:e2e:live`:
+
+| | |
+| --- | --- |
+| **Workflow** | `.github/workflows/e2e-gateway.yml` — path-filtered to `packages/ai-sdk-provider/**` and `tests/e2e-harness/**`, plus pushes to `main` and `workflow_dispatch` |
+| **Why separate** | A run makes well over a hundred inference requests: `sdk-version-matrix` generates text with **every** model the branch serves on both AI SDK 6 and 7. Attaching that to every pull request would spend on changes it cannot cover |
+| **Credentials** | The same `NEON_TEST_API_KEY`. **No gateway token is stored** |
+
+`e2e/global-setup.ts` supplies the gateway one of two ways and fails if it can do neither —
+there is deliberately no skip path, because a gateway suite that runs zero tests and reports
+green is the failure this workflow exists to prevent:
+
+1. `NEON_AI_GATEWAY_BASE_URL` + `NEON_AI_GATEWAY_TOKEN`, for a branch you already have. Both
+   or neither; one alone throws rather than half-configuring the run.
+2. `NEON_API_KEY` — it creates a throwaway project, mints a branch credential scoped to
+   `ai_gateway:invoke`, derives the branch's gateway host, and revokes then deletes both
+   afterwards.
+
+Three things make that work, and each one is a fact about the platform rather than a choice:
+
+- **The gateway needs no provisioning.** It exists on every branch. `preview.aiGateway` in a
+  `neon.ts` policy produces no plan step — it only widens the branch credential's scope and
+  adds the two env vars to what `@neon/env` emits.
+- **The token is minted, not stored.** `POST /projects/{id}/branches/{branch}/credentials`
+  returns `api_token` exactly once. Storing one as a repository secret would only give it time
+  to go stale, so setup masks it with `::add-mask::` and revokes it in teardown.
+- **Model access is per account, not per project**, so a throwaway project sees the same
+  catalog as any other in the org. It follows that the catalog is also what breaks: the org
+  needs every id in `MATRIX_MODELS`, and "serves every model the matrix pins" fails with the
+  missing ids when it doesn't. Without that assertion the per-family `skipIf` would quietly
+  shrink coverage to nothing.
+
+It imports the harness **by subpath** (`@neon/e2e-harness/projects`, `/api`, `/env`), never the
+barrel: the barrel re-exports the `e2eTest` fixture, which imports `vitest`, and Vitest runs
+`globalSetup` outside a worker where that throws.
 
 ##### The shared harness (`tests/e2e-harness`)
 

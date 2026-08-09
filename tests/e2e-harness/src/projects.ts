@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { apiRequest, sleep, statusOf } from "./api.js";
+import { apiRequest, describeError, sleep, statusOf } from "./api.js";
 import { configuredOrgId } from "./env.js";
 
 /**
@@ -122,7 +122,20 @@ export async function createProject(args: {
 			},
 		},
 	});
-	await waitForProjectReady(body.project.id);
+	// The project exists from here on, but the caller has no id to clean up with until this
+	// function returns — so a failure while waiting has to take it back down here. Otherwise
+	// it survives until a sweep an hour later, which is exactly the leak the age guard makes
+	// unavoidable rather than merely slow.
+	try {
+		await waitForProjectReady(body.project.id);
+	} catch (err) {
+		await deleteProject(body.project.id).catch((cleanupErr: unknown) => {
+			console.error(
+				`[e2e cleanup] failed to delete ${body.project.id} after it never became ready: ${describeError(cleanupErr)}`,
+			);
+		});
+		throw err;
+	}
 	return body.project.id;
 }
 

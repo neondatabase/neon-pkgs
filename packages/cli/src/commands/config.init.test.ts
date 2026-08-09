@@ -67,6 +67,26 @@ describe("config init", () => {
 		expect(calls[0].cwd).toBe(workspace);
 	});
 
+	test("installs with the package manager the project uses, not the one that invoked us", async () => {
+		// yarn on purpose: this repo and its test runner are both pnpm, so a pnpm
+		// lockfile here would pass even if the cwd never reached the resolver.
+		writeFileSync(join(workspace, "yarn.lock"), "");
+		const calls: { cmd: string; args: string[] }[] = [];
+
+		await initCmd({
+			cwd: workspace,
+			install: true,
+			run: (cmd, args) => {
+				calls.push({ cmd, args });
+				return Promise.resolve(true);
+			},
+		});
+
+		expect(calls).toHaveLength(1);
+		expect(calls[0].cmd).toBe("yarn");
+		expect(calls[0].args[0]).toBe("add");
+	});
+
 	test("only installs the packages that aren't already declared", async () => {
 		writeFileSync(
 			join(workspace, "package.json"),
