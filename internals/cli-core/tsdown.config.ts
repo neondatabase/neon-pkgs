@@ -11,5 +11,4 @@ export default defineConfig({
 	format: "esm",
 	outDir: "dist",
 	treeshake: true,
-	external: (id) => /^[@a-zA-Z]/.test(id),
 });

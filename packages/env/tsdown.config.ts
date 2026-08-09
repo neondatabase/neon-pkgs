@@ -1,5 +1,26 @@
 import { defineConfig } from "tsdown";
 
+/**
+ * Keep every package import a runtime import, except the private `@neon-internals/*` packages,
+ * which have to be compiled in — they are never published, so a bare specifier surviving into
+ * `dist` cannot resolve for anyone who installed from npm.
+ *
+ * tsdown externalizes declared runtime dependencies only, so without the first test a
+ * devDependency reached from shipped source gets inlined with its whole transitive graph.
+ *
+ * The shape tests rather than `isResolved`, because rolldown calls `external` for resolved ids
+ * too and a resolved absolute path must never be treated as a package: `C:\…` on Windows starts
+ * with a letter, and rolldown's virtual modules start with a NUL. `#` is a package's own subpath
+ * import, which resolves locally.
+ */
+const externalExceptInternals = (id: string): boolean =>
+	!id.startsWith(".") &&
+	!id.startsWith("/") &&
+	!id.startsWith("#") &&
+	!id.startsWith("\0") &&
+	!/^[a-zA-Z]:[\\/]/.test(id) &&
+	!id.startsWith("@neon-internals/");
+
 export default defineConfig({
 	name: "@neon/env",
 	// Bundled so `@neon-internals/*` — private, never published — is compiled into
@@ -21,8 +42,5 @@ export default defineConfig({
 	hash: false,
 	outDir: "dist",
 	treeshake: true,
-	// Every bare specifier stays a runtime import except the private internals, which
-	// are the whole reason this package bundles.
-	external: (id) =>
-		/^[@a-zA-Z]/.test(id) && !id.startsWith("@neon-internals/"),
+	external: externalExceptInternals,
 });

@@ -77,8 +77,13 @@ describe("the published export map", () => {
  */
 describe("the built package", () => {
 	it("resolves the private internals at build time, never at runtime", () => {
+		// Anchored to the start of a line, because rolldown keeps JSDoc blocks and the internals
+		// document themselves with `import … from "@neon-internals/…"` examples. A comment naming
+		// the specifier is not an import of it.
+		const importsInternals =
+			/^\s*(?:import|export)\b[^'"`]*?from\s*["']@neon-internals\/|\bimport\s*\(\s*["']@neon-internals\//m;
 		const leaking = emittedFiles().filter((path) =>
-			/from\s*["']@neon-internals\//.test(readFileSync(path, "utf8")),
+			importsInternals.test(readFileSync(path, "utf8")),
 		);
 		expect(leaking).toEqual([]);
 	});
