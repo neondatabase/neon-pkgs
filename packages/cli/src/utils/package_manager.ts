@@ -31,7 +31,7 @@ export type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
 
 // npm first so it's the default/preselected choice; the rest follow in rough
 // popularity order.
-export const PACKAGE_MANAGERS: PackageManager[] = [
+const PACKAGE_MANAGERS: readonly PackageManager[] = [
 	"npm",
 	"pnpm",
 	"yarn",
@@ -50,28 +50,58 @@ const LOCKFILES: ReadonlyArray<readonly [file: string, pm: PackageManager]> = [
 	["bun.lock", "bun"],
 	["bun.lockb", "bun"],
 	["package-lock.json", "npm"],
+	["npm-shrinkwrap.json", "npm"],
 ];
 
+const lockfileIn = (dir: string): PackageManager | undefined => {
+	for (const [file, pm] of LOCKFILES) {
+		if (existsSync(join(dir, file))) return pm;
+	}
+	return undefined;
+};
+
+/** `.git` is a file rather than a directory in a worktree or a submodule. */
+const isRepoRoot = (dir: string): boolean => existsSync(join(dir, ".git"));
+
 /**
- * The package manager the project at `cwd` uses, from its lockfile. Searches
- * `cwd` and then each parent up to the repo root: in a monorepo the lockfile
- * sits at the root while we scaffold into a package. Stopping at the root keeps
- * a stray lockfile above the repository from deciding how we install into it.
+ * The repository `dir` belongs to, or undefined when it belongs to none.
+ */
+const repoRoot = (dir: string): string | undefined => {
+	let current = dir;
+	for (;;) {
+		if (isRepoRoot(current)) return current;
+		const parent = dirname(current);
+		if (parent === current) return undefined;
+		current = parent;
+	}
+};
+
+/**
+ * The package manager the project at `cwd` uses, from its lockfile.
+ *
+ * The repository is the search boundary, and it is located *first*. Inside one,
+ * the walk climbs from `cwd` to the repo root, because in a monorepo the
+ * lockfile sits at the root while we install into a package. Outside any
+ * repository — a directory `bootstrap` is about to scaffold into, which has no
+ * `.git` until a later step — only `cwd` itself is read.
+ *
+ * Locating the boundary first is what makes that second case safe. Climbing and
+ * checking as it went, a fresh scaffold under `~` would inherit a stray
+ * `~/package-lock.json` and install with npm on the strength of a lockfile
+ * belonging to nothing.
  */
 export const detectProjectPackageManager = (
 	cwd: string,
 ): PackageManager | undefined => {
+	const root = repoRoot(cwd);
+	if (root === undefined) return lockfileIn(cwd);
+
 	let dir = cwd;
 	for (;;) {
-		for (const [file, pm] of LOCKFILES) {
-			if (existsSync(join(dir, file))) return pm;
-		}
-		// After the lockfiles, not before: the repo root's own lockfile counts.
-		// `.git` is a file rather than a directory in a worktree or submodule.
-		if (existsSync(join(dir, ".git"))) return undefined;
-		const parent = dirname(dir);
-		if (parent === dir) return undefined;
-		dir = parent;
+		const found = lockfileIn(dir);
+		if (found) return found;
+		if (dir === root) return undefined;
+		dir = dirname(dir);
 	}
 };
 
@@ -152,6 +182,13 @@ export const addDependenciesArgs = (
 /**
  * The argv that installs `pkg` globally. yarn is the odd one out: `yarn global
  * add` rather than a flag on `add`.
+ *
+ * `yarn global add` is Yarn Classic only — Berry removed global installs and has
+ * no replacement, so it answers with "Unknown command". Deliberately not
+ * substituted with npm: silently installing through a different manager than the
+ * user's is how this module's bug class started. Both callers surface the yarn
+ * error and fall back to running the tool through `npx`, which is what a Berry
+ * user would do by hand anyway.
  */
 export const globalInstallArgs = (
 	pm: PackageManager,

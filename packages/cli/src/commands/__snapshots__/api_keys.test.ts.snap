@@ -172,4 +172,6 @@ exports[`api-keys revoke > refuses a non-numeric id instead of sending NaN 1`] =
 
 exports[`api-keys revoke > refuses a non-numeric id, naming what was typed 1`] = `""`;
 
+exports[`api-keys revoke > refuses a non-numeric id, naming what was typed 2`] = `""`;
+
 exports[`api-keys revoke > refuses an empty --org-id rather than hitting the account endpoint 1`] = `""`;

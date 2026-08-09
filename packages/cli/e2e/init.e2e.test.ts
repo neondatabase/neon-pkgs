@@ -1,5 +1,6 @@
 import {
 	existsSync,
+	mkdirSync,
 	mkdtempSync,
 	readFileSync,
 	rmSync,
@@ -91,6 +92,12 @@ describe.sequential("e2e — neon init emits commands that work", () => {
 	const contextFile = join(workdir, ".neon");
 
 	beforeAll(async () => {
+		// Make the workdir a pnpm project: the emitted install steps must follow
+		// it rather than the npm this suite used to assert, and the `.git` marker
+		// stops the lockfile walk from climbing into $TMPDIR's ancestors.
+		mkdirSync(join(workdir, ".git"));
+		writeFileSync(join(workdir, "pnpm-lock.yaml"), "");
+
 		projectId = await createProject({
 			name: uniqueProjectName("cli-init"),
 		});
@@ -145,10 +152,10 @@ describe.sequential("e2e — neon init emits commands that work", () => {
 		for (const step of steps) {
 			if (!step.command) continue;
 
-			// `npm install` steps belong to the user's package manager, not to us. Assert we
-			// recognise them rather than running an install on the machine.
+			// Install steps belong to the user's package manager, not to us. Assert we
+			// addressed the workdir's pnpm rather than running an install on the machine.
 			if (!step.command.startsWith(EMITTED_PREFIX)) {
-				expect(step.command).toMatch(/^npm install/);
+				expect(step.command).toMatch(/^pnpm (install|add) ?/);
 				continue;
 			}
 

@@ -3,11 +3,22 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import which from "which";
+import {
+	globalInstallArgs,
+	resolveInvokingPackageManager,
+} from "./package_manager.js";
 
-const NOT_FOUND =
-	"esbuild not found. neon ships esbuild for most platforms; if you see " +
-	"this, install esbuild and ensure it is on your PATH (e.g. `npm i -g " +
-	"esbuild`), or set NEON_ESBUILD_PATH to an esbuild binary.";
+const notFoundMessage = (): string => {
+	const { command, args } = globalInstallArgs(
+		resolveInvokingPackageManager(),
+		"esbuild",
+	);
+	return (
+		"esbuild not found. neon ships esbuild for most platforms; if you see " +
+		`this, install esbuild and ensure it is on your PATH (e.g. \`${command} ${args.join(" ")}\`), ` +
+		"or set NEON_ESBUILD_PATH to an esbuild binary."
+	);
+};
 
 // Prepended to the ESM bundle. Bundled dependencies are frequently CommonJS, but an ESM
 // output (`--format=esm`) has no `require` / `__filename` / `__dirname` in scope — so any
@@ -158,7 +169,7 @@ const resolveEsbuild = (): string => {
 	const override = process.env.NEON_ESBUILD_PATH;
 	if (override) {
 		if (existsSync(override)) return override;
-		throw new Error(NOT_FOUND);
+		throw new Error(notFoundMessage());
 	}
 	const onPath = which.sync("esbuild", { nothrow: true });
 	if (onPath) return onPath;
@@ -166,7 +177,7 @@ const resolveEsbuild = (): string => {
 	// a devDependency. In `npm i -g` and pkg installs the PATH branch above wins.
 	const local = join(process.cwd(), "node_modules", ".bin", "esbuild");
 	if (existsSync(local)) return local;
-	throw new Error(NOT_FOUND);
+	throw new Error(notFoundMessage());
 };
 
 const runEsbuild = (

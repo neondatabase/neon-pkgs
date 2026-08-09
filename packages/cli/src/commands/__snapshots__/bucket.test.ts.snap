@@ -285,6 +285,8 @@ exports[`bucket > object put surfaces the server message when presign fails with
 
 exports[`bucket > object put without a bucket is rejected client-side 1`] = `""`;
 
+exports[`bucket > object put without a bucket is rejected client-side 2`] = `""`;
+
 exports[`bucket > object put without a key is rejected client-side 1`] = `""`;
 
 exports[`bucket > object rm alias 1`] = `""`;

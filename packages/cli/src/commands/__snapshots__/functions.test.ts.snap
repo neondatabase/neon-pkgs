@@ -2,6 +2,8 @@
 
 exports[`functions > delete 1`] = `""`;
 
+exports[`functions > delete 2`] = `""`;
+
 exports[`functions > delete reports a friendly error when the function is missing 1`] = `""`;
 
 exports[`functions > deploy --env encodes environment as JSON 1`] = `

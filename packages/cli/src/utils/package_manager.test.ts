@@ -33,6 +33,7 @@ describe("detectProjectPackageManager", () => {
 		["bun.lock", "bun"],
 		["bun.lockb", "bun"],
 		["package-lock.json", "npm"],
+		["npm-shrinkwrap.json", "npm"],
 	])("reads %s as %s", (lockfile, expected) => {
 		writeFileSync(join(project, lockfile), "");
 		expect(detectProjectPackageManager(project)).toBe(expected);
@@ -74,6 +75,48 @@ describe("detectProjectPackageManager", () => {
 
 	it("reports no lockfile for a project without one", () => {
 		expect(detectProjectPackageManager(project)).toBeUndefined();
+	});
+});
+
+describe("detectProjectPackageManager outside a repository", () => {
+	// What `bootstrap` scaffolds into: the directory has no `.git` yet, because
+	// `git init` is a later step in the flow.
+	let outside: string;
+
+	beforeEach(() => {
+		outside = mkdtempSync(join(tmpdir(), "neonctl-pm-loose-"));
+	});
+
+	afterEach(() => {
+		rmSync(outside, { recursive: true, force: true });
+	});
+
+	it("reads the directory's own lockfile", () => {
+		const target = join(outside, "new-app");
+		mkdirSync(target);
+		writeFileSync(join(target, "bun.lock"), "");
+
+		expect(detectProjectPackageManager(target)).toBe("bun");
+	});
+
+	it("ignores an ancestor's lockfile when no repository contains it", () => {
+		// The bug this guards: a scaffold under a directory that merely happens to
+		// have a lockfile above it would install with that manager, on the strength
+		// of a lockfile belonging to no project of ours.
+		writeFileSync(join(outside, "package-lock.json"), "");
+		const target = join(outside, "new-app");
+		mkdirSync(target);
+
+		expect(detectProjectPackageManager(target)).toBeUndefined();
+	});
+
+	it("still reads an ancestor's lockfile once a repository contains both", () => {
+		mkdirSync(join(outside, ".git"));
+		writeFileSync(join(outside, "pnpm-lock.yaml"), "");
+		const target = join(outside, "packages", "new-app");
+		mkdirSync(target, { recursive: true });
+
+		expect(detectProjectPackageManager(target)).toBe("pnpm");
 	});
 });
 

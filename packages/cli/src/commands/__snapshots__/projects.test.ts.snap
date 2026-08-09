@@ -236,6 +236,18 @@ settings:
 "
 `;
 
+exports[`projects > update project with default autoscaled CU 2`] = `
+"id: test
+name: test_project_with_autoscaling
+created_at: 2019-01-01T00:00:00Z
+settings:
+  allowed_ips:
+    ips:
+      - 192.168.1.1
+    protected_branches_only: false
+"
+`;
+
 exports[`projects > update project with default fixed size CU 1`] = `
 "id: test
 name: test_project_with_fixed_cu
