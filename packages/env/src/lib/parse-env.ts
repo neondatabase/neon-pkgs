@@ -3,9 +3,9 @@
  * already injected into `process.env`, validate them against the policy, and return them in the
  * same namespaced shape.
  *
- * Lives in this package rather than in `shared/env-core` because nothing else needs it. The
- * `neon` CLI resolves env from the API and injects it; it never reads it back. Keeping it here
- * also keeps `zod` out of the shared tree, and so out of every consumer that copies it.
+ * Lives in this package rather than in `@neon-internals/env-core` because nothing else needs
+ * it. The `neon` CLI resolves env from the API and injects it; it never reads it back. Keeping
+ * it here also keeps `zod` out of that package, and so out of every consumer that bundles it.
  */
 
 import {

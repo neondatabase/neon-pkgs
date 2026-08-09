@@ -7,14 +7,10 @@ export default defineConfig({
 	bundle: true,
 	clean: true,
 	// `resolve` because the internals are reached through `node_modules`, which the
-	// declaration bundler skips by default. `index.ts` re-exports types from
-	// `@neon-internals/env-core/env`, and without this they land in the emitted `.d.ts`
-	// as names with no definition.
-	// `resolve` because the internals are reached through `node_modules`, which the
 	// declaration bundler leaves external by default. `index.ts` re-exports types from
 	// `@neon-internals/env-core/env`, and without this they land in the emitted `.d.ts`
 	// as names with no definition.
-	dts: { resolve: [/@neon-internals/] },
+	dts: { resolve: [/^@neon-internals\//] },
 	// The two things this package exposes: the `.` export and the `neon-env` bin.
 	// Everything else is reached through them, so nothing else needs to be an entry —
 	// `exports` names no subpath, so no other emitted file was ever importable.

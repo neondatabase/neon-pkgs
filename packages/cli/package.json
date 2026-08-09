@@ -42,10 +42,11 @@
 	},
 	"scripts": {
 		"generateParams": "tsx generateOptionsFromSpec.ts",
-		"codegen": "node scripts/set-vsx-gallery.mjs",
+		"internals": "pnpm --filter '@neon-internals/*' build",
+		"codegen": "pnpm internals && node scripts/set-vsx-gallery.mjs",
 		"clean": "rm -rf dist",
 		"build": "pnpm codegen && pnpm generateParams && tsc --noEmit && tsdown && cp src/*.html ./dist",
-		"build:internal": "node scripts/set-vsx-gallery.mjs https://cursor-vsx-proxy.cloud.databricks.com/gallery && pnpm generateParams && tsc --noEmit && tsdown && cp src/*.html ./dist",
+		"build:internal": "pnpm internals && node scripts/set-vsx-gallery.mjs https://cursor-vsx-proxy.cloud.databricks.com/gallery && pnpm generateParams && tsc --noEmit && tsdown && cp src/*.html ./dist",
 		"bundle": "node pkg.js",
 		"typecheck": "pnpm codegen && tsc --noEmit",
 		"lint": "pnpm codegen && pnpm typecheck && biome check src",

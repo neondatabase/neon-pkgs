@@ -1,8 +1,28 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null;
+
+const distDir = fileURLToPath(new URL("../dist", import.meta.url));
+
+/** Every emitted `.js` file, or a failure saying the build has to run first. */
+const emittedFiles = (): string[] => {
+	if (!existsSync(distDir)) {
+		throw new Error(
+			`No ${distDir}. This spec asserts what the built package exposes, so run ` +
+				"`pnpm --filter neon build` before it (`test` and `test:ci` already do).",
+		);
+	}
+	const walk = (dir: string): string[] =>
+		readdirSync(dir).flatMap((entry) => {
+			const path = join(dir, entry);
+			return statSync(path).isDirectory() ? walk(path) : [path];
+		});
+	return walk(distDir).filter((path) => path.endsWith(".js"));
+};
 
 /** The published `exports` map, or a failure naming what is missing. */
 const exportMap = (): Record<string, unknown> => {
@@ -45,5 +65,30 @@ describe("the published export map", () => {
 	it("still exposes the dist wildcard the block is carved out of", () => {
 		// Without this the block is vacuous — nothing would have been reachable anyway.
 		expect(exportMap()["./dist/*"]).toBe("./dist/*");
+	});
+});
+
+/**
+ * The export map only decides what is *reachable*. These two check the build actually produced
+ * what the map assumes, which is the half that breaks silently: moving an internals package into
+ * `dependencies`, or widening `external` in `tsdown.config.ts`, leaves a bare specifier in `dist`
+ * that no consumer can resolve, and puts the shared code outside `_chunks` where nothing blocks
+ * it.
+ */
+describe("the built package", () => {
+	it("resolves the private internals at build time, never at runtime", () => {
+		const leaking = emittedFiles().filter((path) =>
+			/from\s*["']@neon-internals\//.test(readFileSync(path, "utf8")),
+		);
+		expect(leaking).toEqual([]);
+	});
+
+	it("puts everything the bundler shares into the one directory the map blocks", () => {
+		const shared = emittedFiles().filter((path) =>
+			/(^|[/\\])_(chunks|virtual)[/\\]/.test(path.slice(distDir.length)),
+		);
+		// Bundling `@neon-internals/*` into two entry points that both use it has to produce at
+		// least one shared chunk; zero means the internals were inlined per-entry or externalized.
+		expect(shared.length).toBeGreaterThan(0);
 	});
 });

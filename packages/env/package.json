@@ -38,12 +38,13 @@
 		"package.json"
 	],
 	"scripts": {
-		"build": "tsc --noEmit && tsdown",
+		"internals": "pnpm --filter '@neon-internals/*' build",
+		"build": "pnpm internals && tsc --noEmit && tsdown",
 		"prepare": "npm run build",
-		"test": "pnpm --filter @neon/env... build && vitest --passWithNoTests",
-		"test:ci": "vitest run --passWithNoTests",
-		"test:types": "vitest run --typecheck.enabled --typecheck.only",
-		"test:e2e": "vitest run --config vitest.e2e.config.ts",
+		"test": "pnpm internals && pnpm --filter @neon/env... build && vitest --passWithNoTests",
+		"test:ci": "pnpm internals && vitest run --passWithNoTests",
+		"test:types": "pnpm internals && vitest run --typecheck.enabled --typecheck.only",
+		"test:e2e": "pnpm internals && vitest run --config vitest.e2e.config.ts",
 		"tsc": "tsc"
 	},
 	"devDependencies": {

@@ -2,10 +2,9 @@
  * The Neon env core — resolving a branch's env from the Neon API, and projecting it into
  * OS-level `{ KEY: value }` pairs.
  *
- * Shared source, not a package: `scripts/sync-shared.mjs` copies it into `@neon/env` (which
- * publishes it as `fetchEnv` / `toEntries`) and into the `neon` CLI (which needs the
- * credential-reuse half in `reuse-secrets.ts`). See `shared/env-core/README.md` for why it is
- * a copy rather than an import.
+ * Private, and bundled into both consumers: `@neon/env` publishes it as `fetchEnv` /
+ * `toEntries`, and the `neon` CLI needs the credential-reuse half in `reuse-secrets.ts`.
+ * See `README.md` for why it is not published.
  *
  * The counterpart that reads `process.env` — `parseEnv` and its zod schemas — is not here. It
  * has no consumer outside `@neon/env`, so it stays in that package and imports this.

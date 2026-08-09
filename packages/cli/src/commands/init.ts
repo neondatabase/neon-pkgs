@@ -125,7 +125,7 @@ export const handler = async (argv: {
 				// carries whatever the caller put in it — a connection string, an API key —
 				// and V8 quotes a window of the input around the syntax error, so both would
 				// travel into the error message, onto stdout, and into `sendError`'s
-				// analytics payload. `shared/cli-core/src/credentials.ts` discards the same
+				// analytics payload. `@neon-internals/cli-core/credentials` discards the same
 				// message for the same reason. The position is a number and says enough.
 				throw new Error(
 					`Invalid JSON in --data flag${parsePosition(parseError)}. Expected a JSON object.`,

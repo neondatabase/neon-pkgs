@@ -38,7 +38,7 @@ export { parseEnv } from "./lib/parse-env.js";
 
 // The stateful counterpart — `fetchEnvReusingSecrets`, which reads an env source and can mint
 // and revoke branch credentials — is deliberately absent. It is implementation shared with the
-// `neon` CLI (`shared/env-core`), not something to hand an application: a library that revokes
+// `neon` CLI (`@neon-internals/env-core`), not something to hand an application: a library that revokes
 // credentials because you imported it is a library you cannot safely embed. It used to be
 // published at `@neon/env/runtime`; see CHANGELOG for the removal.
 

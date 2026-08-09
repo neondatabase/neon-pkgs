@@ -84,7 +84,7 @@ interface PersistedSecrets {
  * the record of what the last call issued.
  *
  * ```ts
- * import { fetchEnvReusingSecrets } from "../_shared/env-core/reuse-secrets.js";
+ * import { fetchEnvReusingSecrets } from "@neon-internals/env-core/reuse-secrets";
  *
  * const { vars, credential } = await fetchEnvReusingSecrets(config, {
  *     projectId,
