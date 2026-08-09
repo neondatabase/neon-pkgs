@@ -322,8 +322,8 @@ with `@neon/config-runtime` (imperative `inspect`/`plan`/`apply` + function depl
 
 `@neon/env` draws the same line, but **not** with a second entry point. Everything it publishes
 is pure. The stateful half — `fetchEnvReusingSecrets`, which reads an env source and mints and
-revokes branch credentials — is shared source in `shared/env-core`, compiled into `@neon/env`
-and the `neon` CLI. It was published at `@neon/env/runtime` until 0.16.0; its only consumers
+revokes branch credentials — lives in the private `@neon-internals/env-core`, bundled into
+`@neon/env` and the `neon` CLI. It was published at `@neon/env/runtime` until 0.16.0; its only consumers
 were our own two CLIs, and a library that revokes credentials because you imported it is one you
 cannot safely embed. See `packages/env/CONTRIBUTING.md`.
 
@@ -331,46 +331,47 @@ cannot safely embed. See `packages/env/CONTRIBUTING.md`.
 directory" and all three disagreed: the CLI honoured `XDG_CONFIG_HOME` but not
 `NEONCTL_CONFIG_DIR`, `@neon/env` honoured the env var but not XDG, and the init flow
 hardcoded `~/.config/neonctl`. With `XDG_CONFIG_HOME` set, the CLI wrote credentials
-somewhere the other two never looked. **That implementation now lives in `shared/cli-core`**, and
+somewhere the other two never looked. **That implementation now lives in `@neon-internals/cli-core`**, and
 the `@neon/config/paths` subpath is gone — it was a workaround for having nowhere else to put
 implementor-only code, was never documented in the package's README, and nothing outside this
 repo imported it. See below.
 
-### `shared/` — code every CLI compiles as its own
+### `internals/` — private packages bundled into their consumers
 
 Credential reading, profile resolution and config paths are shared by `neon` and `@neon/env`
-from `shared/cli-core/src` — the two that read a credential off disk; `@neon/config` takes an
-explicit key and reads nothing. It is **not a package**:
-`scripts/sync-shared.mjs <dir>` copies it into that one consumer's `src/_shared`, atomically
-and one package per invocation so concurrent builds cannot race. Every script that compiles or
-typechecks a consumer's source runs it first; that copy is gitignored, and the imports are
-relative, so the code is compiled into every `dist` and nothing resolves at runtime. **If you
-add a script that reads `src/`, add the sync to it** — otherwise it can compile a stale copy.
+from `@neon-internals/cli-core` — the two that read a credential off disk; `@neon/config` takes
+an explicit key and reads nothing. `@neon-internals/env-core` is the second one, holding
+`fetchEnv` and `fetchEnvReusingSecrets`.
 
-`shared/env-core` is the second tree, on the same mechanism: `fetchEnv` and
-`fetchEnvReusingSecrets`, compiled into `@neon/env` and `neon`. It lands at
-`_shared/env-core/` while `cli-core` copies flat, so two trees can never collide on a filename;
-`sync-shared.mjs` lists them explicitly rather than globbing `shared/*`, so a new directory
-there cannot silently start shipping inside two published packages. Both are kept out of the
-`neon` tarball's public surface by `"./dist/_shared/*": null` in its `exports` — without that,
-the `./dist/*` wildcard makes every copied file importable.
+Both are `"private": true`, listed in each consumer's **`devDependencies`**, and inlined at
+build time because `packages/cli` and `packages/env` build with tsdown bundling on. So the code
+is compiled into every `dist` and nothing resolves at runtime. That is the whole reason the
+consumers bundle: a bare `@neon-internals/*` specifier surviving into `dist` would fail to
+resolve for anyone who installed from npm, and `tsc` cannot inline anything —
+[`paths` does not change emitted import paths](https://www.typescriptlang.org/tsconfig/paths.html).
 
-Neither is a workspace package because neither can be one. Every package here builds with
-`bundle: false` or plain `tsc`, so a bare specifier survives into `dist` and must resolve
-from `node_modules` — which an unpublished package cannot do for anyone who installed `neon`
-from npm. `bundledDependencies` is the mechanism for exactly that and pnpm refuses it here
-(`ERR_PNPM_BUNDLED_DEPENDENCIES_WITHOUT_HOISTED`; it needs `nodeLinker: hoisted`). Publishing
-it would put an internal surface on the registry, and `@neon/config` — the one published
-package all of this could hang off — is consumer-facing.
+The dependency direction is the load-bearing part. `devDependencies`, not `dependencies`, is
+what tells the bundler to inline rather than externalize; each config spells it out as
+`external: (id) => /^[@a-zA-Z]/.test(id) && !id.startsWith("@neon-internals/")`. Putting one of
+these in `dependencies` publishes a package that cannot be installed.
 
-**Edit `shared/cli-core/src`, never `packages/*/src/_shared`.** Keep it dependency-free (Node
-builtins only — it is compiled into consumers as their own source, so anything it imports
-becomes a runtime dependency of each of them), and keep loggers, yargs and
-API clients out of it — take a callback or a value instead. Its own unit tests live in `packages/cli`; `@neon/env`
-also exercises it through `resolve-api-key.test.ts`, which is where the two CLIs' precedence is
-checked against each other. Nothing re-exports it from a published
-package: the code reaches each CLI by being compiled into it, so credential paths and ownership
-checks cannot become someone else's public API by accident.
+They emit declarations even though nothing publishes them: `@neon/env` re-exports types that
+originate in `env-core`, and a declaration bundler can only inline declarations that exist.
+That is what `dts: { resolve: [/@neon-internals/] }` in `packages/env/tsdown.config.ts` is for.
+
+Bundled code lands in `dist/_chunks/`, kept off the `neon` tarball's public surface by
+`"./dist/_chunks/*": null` in its `exports` — without that, the `./dist/*` wildcard makes
+`neon/dist/_chunks/credentials-<hash>.js` a public credential reader.
+`packages/cli/src/package_exports.test.ts` pins it.
+
+**Keep them dependency-free** (`cli-core`: Node builtins only; `env-core`: `@neon/config` and
+nothing else) — they are bundled into each consumer, so anything they import becomes a runtime
+dependency of every consumer. Keep loggers, yargs and API clients out; take a callback or a
+value instead. `cli-core`'s unit tests live in `packages/cli` and `env-core`'s in
+`packages/env`, so each is covered once; `@neon/env`'s `resolve-api-key.test.ts` additionally
+checks that the two CLIs agree on credential precedence. Nothing re-exports them from a
+published package, so credential paths and ownership checks cannot become someone else's public
+API by accident.
 
 The directory is `neon`; `neonctl` is the pre-rename name and is **read forever, in place**.
 Nothing is moved, copied, or deleted, so a second copy of a credential can never go stale
@@ -392,16 +393,16 @@ down.
 
 Before adding an export to `@neon/env`, read
 **[`packages/env/CONTRIBUTING.md`](packages/env/CONTRIBUTING.md)**. It has the test for whether
-a change belongs on the published surface or in `shared/env-core`, why the credential-reuse
-logic cannot live on the root export, and what each of the three homes holds. `packages/cli`
-does not depend on `@neon/env` at all — it compiles the shared tree as its own source — so
-"reach into an internal" is not a thing it can do.
+a change belongs on the published surface or in `@neon-internals/env-core`, why the
+credential-reuse logic cannot live on the root export, and what each of the three homes holds.
+`packages/cli` does not depend on `@neon/env` at all — it bundles the same internals package —
+so "reach into an internal" is not a thing it can do.
 
 ### The CLI package (`packages/cli`)
 
 `packages/cli` is the **Neon CLI**, migrated from [`neondatabase/neonctl`](https://github.com/neondatabase/neonctl), and is published as **`neon`**. `packages/neonctl` is a lightweight compatibility package whose executable imports `neon/cli`; it contains no CLI implementation or build output. The two packages are a Changesets fixed group and release at the same version. The primary package is linted/formatted with Biome like the rest of the repo, but its **build** toolchain differs:
 
--   **Build**: `pnpm --filter <name> build` runs `codegen` (the `shared/cli-core` sync plus `scripts/set-vsx-gallery.mjs`) and swagger param generation (`generateOptionsFromSpec.ts` → `src/parameters.gen.ts`, a committed generated file), then `tsc -p tsconfig.build.json` to `dist/`, then copies `callback.html` into `dist/`. It compiles file-by-file with `tsc` (not bundled with tsdown) and **publishes from the package root** (`bin: dist/cli.js`, `files: ["dist", …]`). The param generator reads the OpenAPI spec from the `@neon/sdk` workspace package's vendored copy (`../sdk/spec/neon-openapi.json`, kept in sync via its `spec:pull` script), so it works offline within the monorepo.
+-   **Build**: `pnpm --filter <name> build` runs `codegen` (`scripts/set-vsx-gallery.mjs`) and swagger param generation (`generateOptionsFromSpec.ts` → `src/parameters.gen.ts`, a committed generated file), then `tsc --noEmit` and `tsdown` to `dist/`, then copies `callback.html` into `dist/`. Every non-test source file is an entry, so each keeps its own path under `dist/` and the `./dist/*` wildcard export still resolves; only the private `@neon-internals/*` packages are inlined, into `dist/_chunks/`. It **publishes from the package root** (`bin: dist/cli.js`, `files: ["dist", …]`). The param generator reads the OpenAPI spec from the `@neon/sdk` workspace package's vendored copy (`../sdk/spec/neon-openapi.json`, kept in sync via its `spec:pull` script), so it works offline within the monorepo.
 -   **`codegen` runs before anything that reads `src/`.** `scripts/set-vsx-gallery.mjs` writes the gitignored `src/init/build_config.ts`, so a fresh clone fails to typecheck without it. `build:internal` is the same build with the Databricks VSX proxy gallery baked into that file; the public `build` bakes an empty string and `NEON_VSX_GALLERY_URL` overrides either at runtime.
 -   **Lint**: Biome, via a `packages/cli/**` override in the root `biome.json` (relaxes some rules for the migrated upstream code, and enforces `noConsole` since the CLI routes all output through its writer/logger). Root `pnpm lint:ci` (`biome ci`) covers it. `pnpm --filter <name> lint` additionally runs `tsc --noEmit` then `biome check src`.
 -   **Coverage**: needs `@vitest/coverage-v8` because the root CI runs `pnpm test:ci --coverage` (the flag is appended to every package's `test:ci`). Pin it to the package's `vitest` major.

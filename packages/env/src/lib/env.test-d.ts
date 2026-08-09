@@ -1,5 +1,4 @@
 import { type Config, defineConfig } from "@neon/config/v1";
-import { describe, expectTypeOf, test } from "vitest";
 import type {
 	FetchEnvOptions,
 	FilteredNeonEnv,
@@ -11,7 +10,8 @@ import type {
 	NeonPostgresEnv,
 	NeonStorageEnv,
 	SelectableEnvKey,
-} from "../_shared/env-core/env.js";
+} from "@neon-internals/env-core/env";
+import { describe, expectTypeOf, test } from "vitest";
 import type {
 	FunctionSlugOf,
 	NeonFunctionEnv,

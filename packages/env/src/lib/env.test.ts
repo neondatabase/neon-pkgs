@@ -3,13 +3,13 @@ import {
 	ErrorCode,
 	type GetConnectionUriInput,
 } from "@neon/config/v1";
-import { beforeEach, describe, expect, test, vi } from "vitest";
 import {
 	fetchEnv,
 	type NeonAuthEnv,
 	type NeonEnv,
 	toEntries,
-} from "../_shared/env-core/env.js";
+} from "@neon-internals/env-core/env";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { FakeNeonApi } from "./fake-neon-api.js";
 import { parseEnv } from "./parse-env.js";
 import { stubCleanNeonEnv } from "./test-utils.js";

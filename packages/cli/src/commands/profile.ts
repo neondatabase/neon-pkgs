@@ -1,8 +1,6 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { basename } from "node:path";
-import prompts from "prompts";
-import type yargs from "yargs";
-import { credentialInputs } from "../_shared/auth_selection.js";
+import { credentialInputs } from "@neon-internals/cli-core/auth_selection";
 import {
 	API_KEY,
 	apiKeyCredentials,
@@ -18,7 +16,7 @@ import {
 	type StoredCredentials,
 	scopeOf,
 	writeCredentials,
-} from "../_shared/credentials.js";
+} from "@neon-internals/cli-core/credentials";
 import {
 	assertProfilesUsable,
 	assertValidProfileName,
@@ -31,8 +29,10 @@ import {
 	resolveProfile,
 	selectProfileName,
 	upsertProfile,
-} from "../_shared/profiles.js";
-import { writeSecretFile } from "../_shared/secure_file.js";
+} from "@neon-internals/cli-core/profiles";
+import { writeSecretFile } from "@neon-internals/cli-core/secure_file";
+import prompts from "prompts";
+import type yargs from "yargs";
 import { getApiClient, isNeonApiError, type NeonApiClient } from "../api.js";
 import { auth, revokeToken } from "../auth.js";
 import { setAuthContext } from "../auth_context.js";

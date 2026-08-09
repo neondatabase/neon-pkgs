@@ -27,12 +27,12 @@ export type {
 	NeonStorageEnv,
 	ResolvedNeonEnv,
 	SelectableEnvKey,
-} from "./_shared/env-core/env.js";
+} from "@neon-internals/env-core/env";
 export {
 	fetchEnv,
 	NEON_ENV_VAR_KEYS,
 	toEntries,
-} from "./_shared/env-core/env.js";
+} from "@neon-internals/env-core/env";
 export type { FunctionSlugOf, NeonFunctionEnv } from "./lib/parse-env.js";
 export { parseEnv } from "./lib/parse-env.js";
 

@@ -7,12 +7,12 @@ import {
 	type NeonDataApiSnapshot,
 } from "@neon/config";
 import { type AppliedChange, plan, pullConfig } from "@neon/config-runtime";
-import { NEON_ENV_VAR_KEYS } from "../_shared/env-core/env.js";
+import { NEON_ENV_VAR_KEYS } from "@neon-internals/env-core/env";
 import {
 	type CredentialOutcome,
 	fetchEnvReusingSecrets,
 	type ReusedBranchEnv,
-} from "../_shared/env-core/reuse-secrets.js";
+} from "@neon-internals/env-core/reuse-secrets";
 import { log } from "../log.js";
 import type { NeonService } from "../neon_services.js";
 import { getCliName } from "../utils/cli_name.js";

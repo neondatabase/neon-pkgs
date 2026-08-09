@@ -1,13 +1,16 @@
 import {
 	displacedProfileWarning,
 	selectCredential,
-} from "../../_shared/auth_selection.js";
+} from "@neon-internals/cli-core/auth_selection";
 import {
 	inspectCredentials,
 	interpretCredentials,
-} from "../../_shared/credentials.js";
-import { configDir, resolveConfigFile } from "../../_shared/paths.js";
-import { DEFAULT_PROFILE, resolveProfile } from "../../_shared/profiles.js";
+} from "@neon-internals/cli-core/credentials";
+import { configDir, resolveConfigFile } from "@neon-internals/cli-core/paths";
+import {
+	DEFAULT_PROFILE,
+	resolveProfile,
+} from "@neon-internals/cli-core/profiles";
 
 /**
  * Resolve the Neon API key for a `neon-env` CLI invocation.

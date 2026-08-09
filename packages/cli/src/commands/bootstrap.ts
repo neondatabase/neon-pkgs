@@ -1,10 +1,9 @@
 import { existsSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-
+import { credentialInputs } from "@neon-internals/cli-core/auth_selection";
 import chalk from "chalk";
 import prompts, { type InitialReturnValue } from "prompts";
 import type yargs from "yargs";
-import { credentialInputs } from "../_shared/auth_selection.js";
 import { isCi } from "../env.js";
 import {
 	BootstrapInputError,

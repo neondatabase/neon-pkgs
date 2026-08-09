@@ -20,21 +20,22 @@ const exportMap = (): Record<string, unknown> => {
 
 /**
  * `neon` publishes a `./dist/*` wildcard, so every emitted file is importable by path. That
- * is fine for the CLI's own modules and wrong for `src/_shared`, which is source copied in from
- * `shared/` and compiled as ours: `reuse-secrets.js` mints and revokes branch credentials, and
- * `credentials.js` reads them off disk. Removing `@neon/env/runtime` accomplishes nothing if
- * the same function is reachable at `neon/dist/_shared/env-core/reuse-secrets.js`.
+ * is fine for the CLI's own modules and wrong for what the bundler puts in `dist/_chunks`,
+ * which is where `@neon-internals/*` lands: `env-core/reuse-secrets` mints and revokes branch
+ * credentials, and `cli-core/credentials` reads them off disk. Keeping those out of a published
+ * package accomplishes nothing if the same function is reachable at
+ * `neon/dist/_chunks/<name>-<hash>.js`.
  *
- * `_virtual` is the same judgement applied to the build tool: tsdown emits rolldown's shared
- * runtime helpers there, and how we compile is not a surface anyone should import.
+ * `_virtual` is the same judgement one level down: tsdown emits rolldown's shared runtime
+ * helpers there, and how we compile is not a surface anyone should import.
  *
  * A `null` target blocks a subpath, and the more specific pattern wins over the wildcard, so
  * `./dist/commands/env.js` still resolves. Verified against Node: the blocked paths answer
  * `ERR_PACKAGE_PATH_NOT_EXPORTED`.
  */
 describe("the published export map", () => {
-	it("blocks the shared trees, which are implementation and not ours to publish", () => {
-		expect(exportMap()["./dist/_shared/*"]).toBeNull();
+	it("blocks the bundler's chunks, where the private internals are compiled to", () => {
+		expect(exportMap()["./dist/_chunks/*"]).toBeNull();
 	});
 
 	it("blocks the bundler's runtime helpers, which are an artifact of how we compile", () => {

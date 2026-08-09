@@ -9,7 +9,7 @@ export {
 	defaultDir,
 	isInsideConfigDir,
 	isOwnedCredentialPath,
-} from "./_shared/paths.js";
+} from "@neon-internals/cli-core/paths";
 
 export const ensureConfigDir = ({
 	"config-dir": configDirArg,

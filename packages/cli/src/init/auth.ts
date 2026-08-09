@@ -1,11 +1,11 @@
 import { log } from "@clack/prompts";
-import { execa } from "execa";
 import {
 	inspectCredentials,
 	interpretCredentials,
-} from "../_shared/credentials.js";
-import { resolveConfigFile } from "../_shared/paths.js";
-import { DEFAULT_PROFILE } from "../_shared/profiles.js";
+} from "@neon-internals/cli-core/credentials";
+import { resolveConfigFile } from "@neon-internals/cli-core/paths";
+import { DEFAULT_PROFILE } from "@neon-internals/cli-core/profiles";
+import { execa } from "execa";
 
 export type AuthOptions = {
 	json?: boolean;

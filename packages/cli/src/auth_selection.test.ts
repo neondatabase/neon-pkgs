@@ -1,9 +1,9 @@
-import { describe, expect, test } from "vitest";
 import {
 	type CredentialSelection,
 	displacedProfileWarning,
 	selectCredential,
-} from "./_shared/auth_selection.js";
+} from "@neon-internals/cli-core/auth_selection";
+import { describe, expect, test } from "vitest";
 
 describe("selectCredential", () => {
 	test("an explicit --api-key is used as given", () => {

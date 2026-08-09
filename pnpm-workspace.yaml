@@ -1,7 +1,9 @@
 packages:
     - "packages/*"
-    # Test-only, never published. Kept out of `packages/` so that folder means
-    # exactly one thing: packages we ship.
+    # Private, never published, bundled into their consumers. Kept out of
+    # `packages/` so that folder means exactly one thing: packages we ship.
+    - "internals/*"
+    # Test-only, never published. Same reason.
     - "tests/e2e-harness"
 
 # pnpm 10 blocks dependency lifecycle/build scripts by default. node-pty has

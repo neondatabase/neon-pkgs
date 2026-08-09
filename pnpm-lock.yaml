@@ -57,6 +57,34 @@ importers:
         specifier: 'catalog:'
         version: 5.9.3
 
+  internals/cli-core:
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 20.19.17
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.14.1(@arethetypeswrong/core@0.18.3)(typescript@5.9.3)
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
+  internals/env-core:
+    dependencies:
+      '@neon/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 20.19.17
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.14.1(@arethetypeswrong/core@0.18.3)(typescript@5.9.3)
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
   packages/ai-sdk-provider:
     dependencies:
       '@ai-sdk/anthropic':
@@ -184,6 +212,12 @@ importers:
       '@apidevtools/swagger-parser':
         specifier: 12.1.0
         version: 12.1.0(openapi-types@12.1.3)
+      '@neon-internals/cli-core':
+        specifier: workspace:*
+        version: link:../../internals/cli-core
+      '@neon-internals/env-core':
+        specifier: workspace:*
+        version: link:../../internals/env-core
       '@neon/e2e-harness':
         specifier: workspace:*
         version: link:../../tests/e2e-harness
@@ -350,6 +384,12 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
+      '@neon-internals/cli-core':
+        specifier: workspace:*
+        version: link:../../internals/cli-core
+      '@neon-internals/env-core':
+        specifier: workspace:*
+        version: link:../../internals/env-core
       '@neon/e2e-harness':
         specifier: workspace:*
         version: link:../../tests/e2e-harness

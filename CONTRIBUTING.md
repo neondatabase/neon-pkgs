@@ -64,7 +64,7 @@ package's file before changing it:
 
 | Package | Notes |
 | --- | --- |
-| [`@neon/env`](./packages/env/CONTRIBUTING.md) | Why the credential-reuse half lives in `shared/env-core` rather than on the published surface, and the branch-credential rules |
+| [`@neon/env`](./packages/env/CONTRIBUTING.md) | Why the credential-reuse half lives in `internals/env-core` rather than on the published surface, and the branch-credential rules |
 
 ## Live Neon e2e tests
 

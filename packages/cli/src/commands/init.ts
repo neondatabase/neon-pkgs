@@ -1,5 +1,5 @@
+import { credentialInputs } from "@neon-internals/cli-core/auth_selection";
 import type yargs from "yargs";
-import { credentialInputs } from "../_shared/auth_selection.js";
 import { closeAnalytics, sendError } from "../analytics.js";
 import { detectAgent } from "../init/detect_agent.js";
 import { enrichResponse } from "../init/enrich_output.js";

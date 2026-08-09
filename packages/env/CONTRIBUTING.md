@@ -3,7 +3,7 @@
 General setup, the Node floors, and how to run the live e2e suites live in the
 [repo-root `CONTRIBUTING.md`](../../CONTRIBUTING.md). This file covers the one thing about this
 package you have to get right before adding anything to it: **whether your code belongs on the
-published surface at all, or in the shared tree the CLIs compile in.**
+published surface at all, or in the private package the CLIs bundle.**
 
 ## One entry point, and what deliberately isn't on it
 
@@ -25,40 +25,40 @@ credential", and a tool that resolves the same branch on every `neon dev` start,
 Avoiding that requires state: you have to look at the secrets a previous run persisted, work out
 whether they are still usable, and revoke the ones you supersede. That is a genuinely different
 kind of operation, and `fetchEnvReusingSecrets` is where it lives — in
-[`shared/env-core`](../../shared/env-core), compiled into this package and into the `neon` CLI
-as their own source.
+[`@neon-internals/env-core`](../../internals/env-core), a private workspace package bundled
+into this package and into the `neon` CLI.
 
 It was published as `@neon/env/runtime` until 0.16.0. That was the wrong shape: its only
 consumers are our own two CLIs, and a library that revokes your credentials because you imported
 it is a library you cannot safely embed. A subpath export was a way of moving code between two
-packages in this repo, and shared source is what that actually is.
+packages in this repo, and a private package is what that actually is.
 
 **So: if your change needs an env source, a file path, a previous run's output, or a decision
-about creating or destroying something remote, it belongs in `shared/env-core`, not here.** If
+about creating or destroying something remote, it belongs in `internals/env-core`, not here.** If
 you find yourself widening this package's exports so `packages/cli` can reach an internal, stop
-— that is the signal the code belongs in the shared tree instead.
+— that is the signal the code belongs in the internals package instead.
 
 ### What lives where
 
 | Location | Holds | May it read an env source or mutate anything remote? |
 | --- | --- | --- |
-| `shared/env-core/src/env.ts` | `fetchEnv`, `NEON_ENV_VAR_KEYS`, the `NeonEnv` shapes, `toEntries` | No |
-| `shared/env-core/src/reuse-secrets.ts` | `fetchEnvReusingSecrets` | Yes — mints and revokes branch credentials |
+| `internals/env-core/src/env.ts` | `fetchEnv`, `NEON_ENV_VAR_KEYS`, the `NeonEnv` shapes, `toEntries` | No |
+| `internals/env-core/src/reuse-secrets.ts` | `fetchEnvReusingSecrets` | Yes — mints and revokes branch credentials |
 | `packages/env/src/lib/parse-env.ts` | `parseEnv` and its zod schemas | Reads `process.env`, mutates nothing |
 | `packages/env/src/index.ts` | The published surface: re-exports the pure parts of the two above | No |
 
-`parseEnv` stays in this package rather than moving to the shared tree because nothing else
+`parseEnv` stays in this package rather than moving to the internals package because nothing else
 needs it — the `neon` CLI resolves env from the API and injects it, and never reads it back.
-That also keeps `zod` out of the shared tree, and so out of every consumer that copies it.
+That also keeps `zod` out of the internals package, and so out of every consumer that bundles it.
 
 One contract test in `src/lib/env.contract.test.ts` pins this: an inline snapshot of the entry
 point's exports (so removing or renaming one is a visible breaking change), an assertion that
 `fetchEnvReusingSecrets` never appears on it, and an assertion that `package.json` `exports` has
 exactly one key.
 
-## Consumers of the shared tree
+## Consumers of the internals package
 
-Changing `shared/env-core` is not free — these all have to keep working:
+Changing `internals/env-core` is not free — these all have to keep working:
 
 | Consumer | Uses it for |
 | --- | --- |
@@ -66,17 +66,16 @@ Changing `shared/env-core` is not free — these all have to keep working:
 | `neon-env run` / `neon-env export` (`src/lib/cli/`) | Injecting a branch's env into a subprocess without minting a credential per invocation |
 | `neon env pull`, `neon dev`, `neon link`, `neon checkout` (`packages/cli/src/dev/env.ts`) | The shared tiered resolver behind all four |
 
-`scripts/sync-shared.mjs` copies it into `packages/{cli,env}/src/_shared/env-core/` before
-either builds; that copy is gitignored. **Edit `shared/env-core/src`, never the copy.** Any
-script that reads a consumer's `src/` has to run the sync first, or it compiles a stale tree.
+Both consumers list it in `devDependencies` and bundle it, so it is compiled into each `dist`
+and resolves nothing at runtime.
 
-`@neon/config` is the only dependency the shared tree may take — both consumers already have
-it. Anything else becomes a runtime dependency of both.
+`@neon/config` is the only dependency it may take — both consumers already have it. Anything
+else becomes a runtime dependency of both.
 
 ## The branch credential, in one place
 
 Everything that knows how a branch credential works lives in
-`shared/env-core/src/reuse-secrets.ts`. The
+`internals/env-core/src/reuse-secrets.ts`. The
 facts worth knowing before you touch it:
 
 - **`AWS_ACCESS_KEY_ID` is the credential's `tokenId`.** The full id, not `tokenIdShort` — the

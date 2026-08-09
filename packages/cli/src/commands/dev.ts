@@ -7,9 +7,9 @@ import {
 	describeNativeFinding,
 	findUndeclaredNativePackages,
 } from "@neon/config-runtime";
+import type { CredentialOutcome } from "@neon-internals/env-core/reuse-secrets";
 import chalk from "chalk";
 import type yargs from "yargs";
-import type { CredentialOutcome } from "../_shared/env-core/reuse-secrets.js";
 import { resolveDevEnv } from "../dev/env.js";
 import {
 	type PlannedFunction,

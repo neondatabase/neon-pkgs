@@ -9,7 +9,7 @@ import {
 	type NeonApi,
 	PlatformError,
 } from "@neon/config/v1";
-import { fetchEnvReusingSecrets } from "../../_shared/env-core/reuse-secrets.js";
+import { fetchEnvReusingSecrets } from "@neon-internals/env-core/reuse-secrets";
 import { resolveApiKey } from "./resolve-api-key.js";
 import { resolveContext } from "./resolve-context.js";
 

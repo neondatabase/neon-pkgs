@@ -14,8 +14,6 @@ import {
 	PlatformError,
 	type ServiceToggleInput,
 } from "@neon/config/v1";
-import { z } from "zod";
-
 import {
 	type FilteredNeonEnv,
 	NEON_ENV_VAR_KEYS,
@@ -27,7 +25,8 @@ import {
 	type NeonPostgresEnv,
 	type NeonStorageEnv,
 	type SelectableEnvKey,
-} from "../_shared/env-core/env.js";
+} from "@neon-internals/env-core/env";
+import { z } from "zod";
 
 /** The static `preview.functions` record of a config, or an empty record when absent. */
 type PreviewFunctionsOf<C extends Config> =

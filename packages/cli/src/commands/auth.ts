@@ -1,11 +1,10 @@
 import { createHash } from "node:crypto";
 import { existsSync, rmSync } from "node:fs";
-import type yargs from "yargs";
 import {
 	credentialInputs,
 	displacedProfileWarning,
 	selectCredential,
-} from "../_shared/auth_selection.js";
+} from "@neon-internals/cli-core/auth_selection";
 import {
 	API_KEY,
 	type CredentialKind,
@@ -15,7 +14,7 @@ import {
 	readCredentials,
 	type StoredCredentials,
 	writeCredentials,
-} from "../_shared/credentials.js";
+} from "@neon-internals/cli-core/credentials";
 import {
 	assertProfilesUsable,
 	assertValidProfileName,
@@ -25,7 +24,8 @@ import {
 	resolveProfile,
 	selectProfileName,
 	upsertProfile,
-} from "../_shared/profiles.js";
+} from "@neon-internals/cli-core/profiles";
+import type yargs from "yargs";
 import type { NeonApiClient } from "../api.js";
 import { getApiClient } from "../api.js";
 import { auth, refreshToken } from "../auth.js";

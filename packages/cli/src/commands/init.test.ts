@@ -181,7 +181,7 @@ describe("init", () => {
 	// that is the seam the test has to set. See `shared/cli-core/src/auth_selection.ts`.
 	test("refuses NEON_PROFILE just as firmly as the flag", async () => {
 		const { recordCredentialInputs } = await import(
-			"../_shared/auth_selection.js"
+			"@neon-internals/cli-core/auth_selection"
 		);
 		recordCredentialInputs({
 			apiKeyFlag: "",
