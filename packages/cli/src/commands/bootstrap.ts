@@ -22,6 +22,7 @@ import { getCliName } from "../utils/cli_name.js";
 import {
 	formatInstallCommand,
 	inferPackageManager,
+	installArgs,
 	installedPackageManagers,
 	type PackageManager,
 	resolvePackageManager,
@@ -377,7 +378,7 @@ const runPostScaffoldSteps = async (
 	let installed = false;
 	if (props.install && (await confirm(installPrompt(inferred)))) {
 		pm = inferred ?? (await selectPackageManager());
-		installed = await runCommand(pm, ["install"], targetDir);
+		installed = await runCommand(pm, installArgs(pm), targetDir);
 	}
 
 	if (
@@ -396,7 +397,7 @@ const runPostScaffoldSteps = async (
 		if (!installed && hasNeonConfig(targetDir)) {
 			log.info(
 				`Skipping the Neon link step: \`${getCliName()} link\` reads this project's neon.ts ` +
-					`to pull env vars, which needs its dependencies. Run \`${pm} install\`, ` +
+					`to pull env vars, which needs its dependencies. Run \`${formatInstallCommand(pm)}\`, ` +
 					`then \`${getCliName()} link\`.`,
 			);
 		} else if (
@@ -433,7 +434,7 @@ const runDefaultSteps = async (
 	log.info("Quick start (--default): running setup without prompting.");
 	let installed = false;
 	if (props.install) {
-		installed = await runCommand(pm, ["install"], targetDir);
+		installed = await runCommand(pm, installArgs(pm), targetDir);
 	}
 	if (props.git && !isGitRepo(targetDir)) {
 		await initGitRepo(targetDir);
@@ -564,7 +565,7 @@ const printNextSteps = (
 		log.info("  cd %s", displayDir(targetDir));
 	}
 	if (!opts.installed) {
-		log.info("  %s install", pm);
+		log.info("  %s", formatInstallCommand(pm));
 	}
 	if (opts.suggestLink) {
 		log.info(`  ${getCliName()} link`);

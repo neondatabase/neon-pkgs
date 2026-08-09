@@ -12,7 +12,7 @@
  *   (installing into an existing project directory)
  * - {@link resolveInvokingPackageManager} — invocation, then PATH, then npm (global installs,
  *   or when the target directory has no lockfile yet, e.g. a fresh scaffold)
- * - {@link addDependenciesArgs} / {@link globalInstallArgs} — argv to install into a project
+ * - {@link installArgs} / {@link globalInstallArgs} — argv to install into a project
  *   or globally
  * - {@link formatInstallCommand} — shell-ready `pnpm install` / `npm add …` for agents and hints
  *
@@ -21,8 +21,8 @@
  * That includes spelling an install command by hand. Every install string the CLI prints,
  * emits as agent JSON, or hands to {@link runCommand} comes from the formatters here.
  */
-import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 import which from "which";
 import { log } from "../log.js";
@@ -77,6 +77,23 @@ const repoRoot = (dir: string): string | undefined => {
 };
 
 /**
+ * The physical path, so the walk climbs real parents.
+ *
+ * `dirname` is lexical: given a symlink to `repo/packages/app`, its parent is
+ * the symlink's directory, not `repo/packages` — so the walk would leave the
+ * repository immediately and never see the root lockfile. Directories that do
+ * not exist yet are left alone; `bootstrap` resolves a target before creating
+ * it.
+ */
+const physicalPath = (dir: string): string => {
+	try {
+		return realpathSync(dir);
+	} catch {
+		return dir;
+	}
+};
+
+/**
  * The package manager the project at `cwd` uses, from its lockfile.
  *
  * The repository is the search boundary, and it is located *first*. Inside one,
@@ -93,10 +110,11 @@ const repoRoot = (dir: string): string | undefined => {
 export const detectProjectPackageManager = (
 	cwd: string,
 ): PackageManager | undefined => {
-	const root = repoRoot(cwd);
-	if (root === undefined) return lockfileIn(cwd);
+	const start = physicalPath(cwd);
+	const root = repoRoot(start);
+	if (root === undefined) return lockfileIn(start);
 
-	let dir = cwd;
+	let dir = start;
 	for (;;) {
 		const found = lockfileIn(dir);
 		if (found) return found;
@@ -166,29 +184,55 @@ export type AddOptions = { dev?: boolean };
 const devFlag = (pm: PackageManager): string => (pm === "bun" ? "-d" : "-D");
 
 /**
- * The argv that adds `packages` to the project's manifest with `pm`. npm spells
- * the verb `install`; pnpm/yarn/bun use `add`.
+ * The argv for an install with `pm`: every dependency in the manifest when
+ * `packages` is empty, otherwise those packages added to it. npm spells the add
+ * verb `install`; pnpm/yarn/bun use `add`. All four spell the whole-manifest
+ * install `install`.
+ *
+ * The one argv builder — pass its result to {@link runCommand}, or use
+ * {@link formatInstallCommand} for a string. Nothing else assembles these words.
  */
-export const addDependenciesArgs = (
+export const installArgs = (
 	pm: PackageManager,
-	packages: string[],
+	packages?: string[],
 	options?: AddOptions,
-): string[] => [
-	pm === "npm" ? "install" : "add",
-	...(options?.dev ? [devFlag(pm)] : []),
-	...packages,
-];
+): string[] =>
+	packages?.length
+		? [
+				pm === "npm" ? "install" : "add",
+				...(options?.dev ? [devFlag(pm)] : []),
+				...packages,
+			]
+		: ["install"];
 
 /**
- * The argv that installs `pkg` globally. yarn is the odd one out: `yarn global
- * add` rather than a flag on `add`.
+ * yarn's major version, or undefined when it can't be read. Only consulted on
+ * the global-install path, which already spawns.
+ */
+const yarnMajor = (): number | undefined => {
+	const result = spawnSync("yarn", ["--version"], {
+		encoding: "utf8",
+		timeout: 5000,
+		// yarn ships as a .cmd shim on Windows, which needs a shell.
+		shell: process.platform === "win32",
+	});
+	const major = result.stdout?.trim().match(/^(\d+)\./);
+	return major ? Number(major[1]) : undefined;
+};
+
+/**
+ * The argv that installs `pkg` globally — a standalone CLI, not a project
+ * dependency.
  *
- * `yarn global add` is Yarn Classic only — Berry removed global installs and has
- * no replacement, so it answers with "Unknown command". Deliberately not
- * substituted with npm: silently installing through a different manager than the
- * user's is how this module's bug class started. Both callers surface the yarn
- * error and fall back to running the tool through `npx`, which is what a Berry
- * user would do by hand anyway.
+ * Yarn Berry removed global installs with no replacement, so `yarn global add`
+ * only works on Classic and Berry answers "Unknown command". Berry therefore
+ * gets npm, which is the one manager guaranteed present alongside Node.
+ *
+ * Substituting a different manager is safe *here* and nowhere else in this
+ * module: a global install has no project dependency tree to be wrong about,
+ * which is the whole reason the project's manager must win for
+ * {@link installArgs}. The alternative — emitting a command known to fail — left
+ * a Berry user with no `skills` binary and a broken esbuild hint.
  */
 export const globalInstallArgs = (
 	pm: PackageManager,
@@ -198,7 +242,9 @@ export const globalInstallArgs = (
 		case "pnpm":
 			return { command: "pnpm", args: ["add", "-g", pkg] };
 		case "yarn":
-			return { command: "yarn", args: ["global", "add", pkg] };
+			return yarnMajor() === 1
+				? { command: "yarn", args: ["global", "add", pkg] }
+				: { command: "npm", args: ["install", "-g", pkg] };
 		case "bun":
 			return { command: "bun", args: ["add", "-g", pkg] };
 		case "npm":
@@ -215,12 +261,7 @@ export const formatInstallCommand = (
 	pm: PackageManager,
 	packages?: string[],
 	options?: AddOptions,
-): string => {
-	const args = packages?.length
-		? addDependenciesArgs(pm, packages, options)
-		: ["install"];
-	return `${pm} ${args.join(" ")}`;
-};
+): string => `${pm} ${installArgs(pm, packages, options).join(" ")}`;
 
 /**
  * Run a command inheriting our stdio so the user sees install / link output

@@ -1,4 +1,10 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+	mkdirSync,
+	mkdtempSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -118,6 +124,20 @@ describe("detectProjectPackageManager outside a repository", () => {
 
 		expect(detectProjectPackageManager(target)).toBe("pnpm");
 	});
+
+	it("follows a symlink into the repository it really points at", () => {
+		// `dirname` is lexical, so walking the link's own path leaves the repo
+		// immediately and never reaches the root lockfile.
+		mkdirSync(join(outside, "repo", ".git"), { recursive: true });
+		writeFileSync(join(outside, "repo", "yarn.lock"), "");
+		const real = join(outside, "repo", "packages", "app");
+		mkdirSync(real, { recursive: true });
+
+		const link = join(outside, "link-to-app");
+		symlinkSync(real, link);
+
+		expect(detectProjectPackageManager(link)).toBe("yarn");
+	});
 });
 
 describe("resolvePackageManager", () => {
@@ -234,12 +254,59 @@ describe("globalInstallArgs", () => {
 	it.each([
 		["npm", "npm install -g neonctl"],
 		["pnpm", "pnpm add -g neonctl"],
-		// yarn has no -g on `add`; the subcommand is `global add`.
-		["yarn", "yarn global add neonctl"],
 		["bun", "bun add -g neonctl"],
 	] as const)("installs globally with %s", (pm, expected) => {
 		const { command, args } = globalInstallArgs(pm, "neonctl");
 		expect(`${command} ${args.join(" ")}`).toBe(expected);
+	});
+
+	describe("yarn depends on the major, which only yarn itself can report", () => {
+		const originalPath = process.env.PATH;
+		let bin: string;
+
+		/** A real `yarn` on PATH that reports `version`, so no mock is needed. */
+		const stubYarn = (version: string) => {
+			const script = join(bin, "yarn");
+			writeFileSync(script, `#!/bin/sh\necho "${version}"\n`, {
+				mode: 0o755,
+			});
+		};
+
+		beforeEach(() => {
+			bin = mkdtempSync(join(tmpdir(), "neonctl-pm-yarn-"));
+			process.env.PATH = bin;
+		});
+
+		afterEach(() => {
+			process.env.PATH = originalPath;
+			rmSync(bin, { recursive: true, force: true });
+		});
+
+		it("uses `yarn global add` on Classic", () => {
+			stubYarn("1.22.22");
+			const { command, args } = globalInstallArgs("yarn", "neonctl");
+			expect(`${command} ${args.join(" ")}`).toBe(
+				"yarn global add neonctl",
+			);
+		});
+
+		it.each([
+			"2.4.3",
+			"4.1.0",
+		])("falls back to npm on Berry %s, which has no global install", (version) => {
+			stubYarn(version);
+			const { command, args } = globalInstallArgs("yarn", "neonctl");
+			expect(`${command} ${args.join(" ")}`).toBe(
+				"npm install -g neonctl",
+			);
+		});
+
+		it("falls back to npm when yarn cannot be run at all", () => {
+			const { command, args } = globalInstallArgs("yarn", "neonctl");
+			expect(`${command} ${args.join(" ")}`).toBe(
+				"npm install -g neonctl",
+			);
+		});
 	});
 });
 

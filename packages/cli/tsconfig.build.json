@@ -4,6 +4,15 @@
   // thus never ships in the published package). Typecheck (`tsc --noEmit` on
   // tsconfig.json) still covers test files. `exclude` is not inherited via
   // `extends`, so it is declared here.
+  //
+  // `src/test_utils/` is test-only support that no runtime source imports, but
+  // it isn't named `*.test.ts`, so it was being emitted and published — and
+  // `"./dist/*"` in exports makes anything in dist reachable to consumers.
   "extends": "./tsconfig.json",
-  "exclude": ["src/**/*.test.ts", "src/**/*.spec.ts", "e2e/**"]
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/**/*.spec.ts",
+    "src/test_utils/**",
+    "e2e/**"
+  ]
 }

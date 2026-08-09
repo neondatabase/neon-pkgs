@@ -30,7 +30,9 @@ async function ensureSkillsCli(): Promise<void> {
 				timeout: 60000,
 			});
 		} catch {
-			// Best effort — npx will fall back to downloading
+			// Swallowed because the caller reports per-skill failures with their
+			// own errors. Nothing retries this: every `skills` call below invokes
+			// the binary directly, so they all fail if this did.
 		}
 	}
 }
