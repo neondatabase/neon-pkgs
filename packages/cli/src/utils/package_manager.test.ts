@@ -276,13 +276,27 @@ describe("formatInstallCommand", () => {
 
 describe("execCommand", () => {
 	it.each([
-		// npm keeps npx, so nothing already written for npm changes.
-		["npm", "npx drizzle-kit generate"],
+		["npm", "npx --no drizzle-kit generate"],
 		["pnpm", "pnpm exec drizzle-kit generate"],
 		["yarn", "yarn run drizzle-kit generate"],
-		["bun", "bunx drizzle-kit generate"],
+		["bun", "bun run drizzle-kit generate"],
 	] as const)("runs a project binary with %s", (pm, expected) => {
 		expect(execCommand(pm, "drizzle-kit", ["generate"])).toBe(expected);
+	});
+
+	it.each([
+		"npm",
+		"pnpm",
+		"yarn",
+		"bun",
+	] as const)("never emits a form that downloads a missing package (%s)", (pm) => {
+		// Bare `npx`/`bunx` and the `dlx` subcommands all fetch. A migration
+		// step that silently downloads an unpinned drizzle-kit and runs it
+		// against a database is the failure this guards.
+		const command = execCommand(pm, "drizzle-kit", ["migrate"]);
+		expect(command).not.toMatch(/\bdlx\b/);
+		expect(command).not.toMatch(/^bunx\b/);
+		expect(command).not.toMatch(/^npx (?!--no\b)/);
 	});
 
 	it("takes no arguments", () => {

@@ -412,8 +412,8 @@ exports[`neon init --agent: every step, against every project shape > connected 
     "steps": [
       {
         "id": "run_migrations",
-        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step.",
-        "command": "npx prisma migrate deploy"
+        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step.",
+        "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "verify_connection",
@@ -561,12 +561,12 @@ exports[`neon init --agent: every step, against every project shape > connected 
       {
         "id": "apply",
         "description": "Apply migrations to the Neon database",
-        "command": "npx prisma migrate deploy"
+        "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "generate",
         "description": "Generate the Prisma client",
-        "command": "npx prisma generate"
+        "command": "npx --no prisma generate"
       }
     ],
     "onComplete": {
@@ -642,7 +642,7 @@ exports[`neon init --agent: every step, against every project shape > connected 
       {
         "id": "init_prisma",
         "description": "Initialize Prisma with PostgreSQL provider",
-        "command": "npx prisma init --datasource-provider postgresql"
+        "command": "npx --no prisma init --datasource-provider postgresql"
       },
       {
         "id": "configure_env",
@@ -655,12 +655,12 @@ exports[`neon init --agent: every step, against every project shape > connected 
       {
         "id": "run_migration",
         "description": "Create and apply the initial migration",
-        "command": "npx prisma migrate dev --name init"
+        "command": "npx --no prisma migrate dev --name init"
       }
     ],
     "onComplete": {
       "type": "complete",
-      "message": "Prisma is set up with your Neon database. You can now define models in schema.prisma and run migrations with \`npx prisma migrate dev\`."
+      "message": "Prisma is set up with your Neon database. You can now define models in schema.prisma and run migrations with \`npx --no prisma migrate dev\`."
     }
   }
 }
@@ -1440,8 +1440,8 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
     "steps": [
       {
         "id": "run_migrations",
-        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step.",
-        "command": "npx prisma migrate deploy"
+        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step.",
+        "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "verify_connection",
@@ -1589,12 +1589,12 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
       {
         "id": "apply",
         "description": "Apply migrations to the Neon database",
-        "command": "npx prisma migrate deploy"
+        "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "generate",
         "description": "Generate the Prisma client",
-        "command": "npx prisma generate"
+        "command": "npx --no prisma generate"
       }
     ],
     "onComplete": {
@@ -1670,7 +1670,7 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
       {
         "id": "init_prisma",
         "description": "Initialize Prisma with PostgreSQL provider",
-        "command": "npx prisma init --datasource-provider postgresql"
+        "command": "npx --no prisma init --datasource-provider postgresql"
       },
       {
         "id": "configure_env",
@@ -1683,12 +1683,12 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
       {
         "id": "run_migration",
         "description": "Create and apply the initial migration",
-        "command": "npx prisma migrate dev --name init"
+        "command": "npx --no prisma migrate dev --name init"
       }
     ],
     "onComplete": {
       "type": "complete",
-      "message": "Prisma is set up with your Neon database. You can now define models in schema.prisma and run migrations with \`npx prisma migrate dev\`."
+      "message": "Prisma is set up with your Neon database. You can now define models in schema.prisma and run migrations with \`npx --no prisma migrate dev\`."
     }
   }
 }
@@ -2466,8 +2466,8 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
     "steps": [
       {
         "id": "run_migrations",
-        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step.",
-        "command": "npx prisma migrate deploy"
+        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step.",
+        "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "verify_connection",
@@ -2611,12 +2611,12 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
       {
         "id": "apply",
         "description": "Apply migrations to the Neon database",
-        "command": "npx prisma migrate deploy"
+        "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "generate",
         "description": "Generate the Prisma client",
-        "command": "npx prisma generate"
+        "command": "npx --no prisma generate"
       }
     ],
     "onComplete": {
@@ -2688,7 +2688,7 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
       {
         "id": "init_prisma",
         "description": "Initialize Prisma with PostgreSQL provider",
-        "command": "npx prisma init --datasource-provider postgresql"
+        "command": "npx --no prisma init --datasource-provider postgresql"
       },
       {
         "id": "configure_env",
@@ -2701,12 +2701,12 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
       {
         "id": "run_migration",
         "description": "Create and apply the initial migration",
-        "command": "npx prisma migrate dev --name init"
+        "command": "npx --no prisma migrate dev --name init"
       }
     ],
     "onComplete": {
       "type": "complete",
-      "message": "Prisma is set up with your Neon database. You can now define models in schema.prisma and run migrations with \`npx prisma migrate dev\`."
+      "message": "Prisma is set up with your Neon database. You can now define models in schema.prisma and run migrations with \`npx --no prisma migrate dev\`."
     }
   }
 }
@@ -3465,8 +3465,8 @@ exports[`neon init --agent: every step, against every project shape > greenfield
     "steps": [
       {
         "id": "run_migrations",
-        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step.",
-        "command": "npx prisma migrate deploy"
+        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step.",
+        "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "verify_connection",
@@ -3614,12 +3614,12 @@ exports[`neon init --agent: every step, against every project shape > greenfield
       {
         "id": "apply",
         "description": "Apply migrations to the Neon database",
-        "command": "npx prisma migrate deploy"
+        "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "generate",
         "description": "Generate the Prisma client",
-        "command": "npx prisma generate"
+        "command": "npx --no prisma generate"
       }
     ],
     "onComplete": {
@@ -3695,7 +3695,7 @@ exports[`neon init --agent: every step, against every project shape > greenfield
       {
         "id": "init_prisma",
         "description": "Initialize Prisma with PostgreSQL provider",
-        "command": "npx prisma init --datasource-provider postgresql"
+        "command": "npx --no prisma init --datasource-provider postgresql"
       },
       {
         "id": "configure_env",
@@ -3708,12 +3708,12 @@ exports[`neon init --agent: every step, against every project shape > greenfield
       {
         "id": "run_migration",
         "description": "Create and apply the initial migration",
-        "command": "npx prisma migrate dev --name init"
+        "command": "npx --no prisma migrate dev --name init"
       }
     ],
     "onComplete": {
       "type": "complete",
-      "message": "Prisma is set up with your Neon database. You can now define models in schema.prisma and run migrations with \`npx prisma migrate dev\`."
+      "message": "Prisma is set up with your Neon database. You can now define models in schema.prisma and run migrations with \`npx --no prisma migrate dev\`."
     }
   }
 }
@@ -4498,8 +4498,8 @@ exports[`neon init --agent: every step, against every project shape > next-prism
     "steps": [
       {
         "id": "run_migrations",
-        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step.",
-        "command": "npx prisma migrate deploy"
+        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step.",
+        "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "verify_connection",
@@ -4647,12 +4647,12 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       {
         "id": "apply",
         "description": "Apply migrations to the Neon database",
-        "command": "npx prisma migrate deploy"
+        "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "generate",
         "description": "Generate the Prisma client",
-        "command": "npx prisma generate"
+        "command": "npx --no prisma generate"
       }
     ],
     "onComplete": {
@@ -4728,7 +4728,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       {
         "id": "init_prisma",
         "description": "Initialize Prisma with PostgreSQL provider",
-        "command": "npx prisma init --datasource-provider postgresql"
+        "command": "npx --no prisma init --datasource-provider postgresql"
       },
       {
         "id": "configure_env",
@@ -4741,12 +4741,12 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       {
         "id": "run_migration",
         "description": "Create and apply the initial migration",
-        "command": "npx prisma migrate dev --name init"
+        "command": "npx --no prisma migrate dev --name init"
       }
     ],
     "onComplete": {
       "type": "complete",
-      "message": "Prisma is set up with your Neon database. You can now define models in schema.prisma and run migrations with \`npx prisma migrate dev\`."
+      "message": "Prisma is set up with your Neon database. You can now define models in schema.prisma and run migrations with \`npx --no prisma migrate dev\`."
     }
   }
 }
@@ -5531,8 +5531,8 @@ exports[`neon init --agent: every step, against every project shape > next-prism
     "steps": [
       {
         "id": "run_migrations",
-        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step.",
-        "command": "npx prisma migrate deploy"
+        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step.",
+        "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "verify_connection",
@@ -5680,12 +5680,12 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       {
         "id": "apply",
         "description": "Apply migrations to the Neon database",
-        "command": "npx prisma migrate deploy"
+        "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "generate",
         "description": "Generate the Prisma client",
-        "command": "npx prisma generate"
+        "command": "npx --no prisma generate"
       }
     ],
     "onComplete": {
@@ -5761,7 +5761,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       {
         "id": "init_prisma",
         "description": "Initialize Prisma with PostgreSQL provider",
-        "command": "npx prisma init --datasource-provider postgresql"
+        "command": "npx --no prisma init --datasource-provider postgresql"
       },
       {
         "id": "configure_env",
@@ -5774,12 +5774,12 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       {
         "id": "run_migration",
         "description": "Create and apply the initial migration",
-        "command": "npx prisma migrate dev --name init"
+        "command": "npx --no prisma migrate dev --name init"
       }
     ],
     "onComplete": {
       "type": "complete",
-      "message": "Prisma is set up with your Neon database. You can now define models in schema.prisma and run migrations with \`npx prisma migrate dev\`."
+      "message": "Prisma is set up with your Neon database. You can now define models in schema.prisma and run migrations with \`npx --no prisma migrate dev\`."
     }
   }
 }
@@ -6559,8 +6559,8 @@ exports[`neon init --agent: every step, against every project shape > node-app >
     "steps": [
       {
         "id": "run_migrations",
-        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step.",
-        "command": "npx prisma migrate deploy"
+        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step.",
+        "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "verify_connection",
@@ -6708,12 +6708,12 @@ exports[`neon init --agent: every step, against every project shape > node-app >
       {
         "id": "apply",
         "description": "Apply migrations to the Neon database",
-        "command": "npx prisma migrate deploy"
+        "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "generate",
         "description": "Generate the Prisma client",
-        "command": "npx prisma generate"
+        "command": "npx --no prisma generate"
       }
     ],
     "onComplete": {
@@ -6789,7 +6789,7 @@ exports[`neon init --agent: every step, against every project shape > node-app >
       {
         "id": "init_prisma",
         "description": "Initialize Prisma with PostgreSQL provider",
-        "command": "npx prisma init --datasource-provider postgresql"
+        "command": "npx --no prisma init --datasource-provider postgresql"
       },
       {
         "id": "configure_env",
@@ -6802,12 +6802,12 @@ exports[`neon init --agent: every step, against every project shape > node-app >
       {
         "id": "run_migration",
         "description": "Create and apply the initial migration",
-        "command": "npx prisma migrate dev --name init"
+        "command": "npx --no prisma migrate dev --name init"
       }
     ],
     "onComplete": {
       "type": "complete",
-      "message": "Prisma is set up with your Neon database. You can now define models in schema.prisma and run migrations with \`npx prisma migrate dev\`."
+      "message": "Prisma is set up with your Neon database. You can now define models in schema.prisma and run migrations with \`npx --no prisma migrate dev\`."
     }
   }
 }
@@ -7592,8 +7592,8 @@ exports[`neon init --agent: every step, against every project shape > other-data
     "steps": [
       {
         "id": "run_migrations",
-        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step.",
-        "command": "npx prisma migrate deploy"
+        "description": "Check if the prisma/migrations directory contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step.",
+        "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "verify_connection",
@@ -7741,12 +7741,12 @@ exports[`neon init --agent: every step, against every project shape > other-data
       {
         "id": "apply",
         "description": "Apply migrations to the Neon database",
-        "command": "npx prisma migrate deploy"
+        "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "generate",
         "description": "Generate the Prisma client",
-        "command": "npx prisma generate"
+        "command": "npx --no prisma generate"
       }
     ],
     "onComplete": {
@@ -7822,7 +7822,7 @@ exports[`neon init --agent: every step, against every project shape > other-data
       {
         "id": "init_prisma",
         "description": "Initialize Prisma with PostgreSQL provider",
-        "command": "npx prisma init --datasource-provider postgresql"
+        "command": "npx --no prisma init --datasource-provider postgresql"
       },
       {
         "id": "configure_env",
@@ -7835,12 +7835,12 @@ exports[`neon init --agent: every step, against every project shape > other-data
       {
         "id": "run_migration",
         "description": "Create and apply the initial migration",
-        "command": "npx prisma migrate dev --name init"
+        "command": "npx --no prisma migrate dev --name init"
       }
     ],
     "onComplete": {
       "type": "complete",
-      "message": "Prisma is set up with your Neon database. You can now define models in schema.prisma and run migrations with \`npx prisma migrate dev\`."
+      "message": "Prisma is set up with your Neon database. You can now define models in schema.prisma and run migrations with \`npx --no prisma migrate dev\`."
     }
   }
 }
@@ -8370,8 +8370,8 @@ exports[`neon init --agent: nested and string-encoded --data payloads > JSON-enc
       },
       {
         "id": "run_migrations",
-        "description": "Check if prisma/migrations contains migration folders. If migrations exist, apply them with \`npx prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step.",
-        "command": "npx prisma migrate deploy"
+        "description": "Check if prisma/migrations contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step.",
+        "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "verify_connection",
@@ -8438,8 +8438,8 @@ exports[`neon init --agent: nested and string-encoded --data payloads > nested o
       },
       {
         "id": "run_migrations",
-        "description": "Check if prisma/migrations contains migration folders. If migrations exist, apply them with \`npx prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step.",
-        "command": "npx prisma migrate deploy"
+        "description": "Check if prisma/migrations contains migration folders. If migrations exist, apply them with \`npx --no prisma migrate deploy\`. If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`npx --no prisma migrate dev --name init\` to create and apply the initial migration. If no models are defined, skip this step.",
+        "command": "npx --no prisma migrate deploy"
       },
       {
         "id": "verify_connection",

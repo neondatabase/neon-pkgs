@@ -275,11 +275,21 @@ export const globalInstallArgs = (
 
 /**
  * A shell-ready line that runs `binary` out of the project's own
- * `node_modules/.bin` — the tool was installed as a dependency, so this is not
- * `dlx`/`npx -y`, which fetch a package that isn't there.
+ * `node_modules/.bin`.
  *
- * npm keeps `npx` because that is the idiomatic spelling for a local binary and
- * every emitted command already reads that way.
+ * Every form here is local-only, which is the point: bare `npx` and `bunx` fall
+ * back to downloading a package that isn't installed, so a skipped install step
+ * would migrate someone's database with an unpinned tool fetched mid-run instead
+ * of failing. `npx --no` refuses with "canceled due to missing packages", and
+ * `bun run` with "Script not found".
+ *
+ * `pnpm exec` and `yarn run` are already local-only — `dlx` is the fetching
+ * counterpart in both. Use those deliberately, not these, to run something the
+ * project does not depend on.
+ *
+ * `yarn run` over `yarn exec`, which is documented for Berry but not Classic.
+ * Like `bun run`, it prefers a package.json script of the same name, so a script
+ * called `prisma` would shadow the binary.
  */
 export const execCommand = (
 	pm: PackageManager,
@@ -287,13 +297,10 @@ export const execCommand = (
 	args: string[] = [],
 ): string => {
 	const runner = {
-		npm: "npx",
+		npm: "npx --no",
 		pnpm: "pnpm exec",
-		// `run` rather than `exec`, which is documented for Berry but not Classic.
-		// Both majors fall back to a node_modules/.bin binary when no script
-		// matches — so a project with a script of the same name shadows the tool.
 		yarn: "yarn run",
-		bun: "bunx",
+		bun: "bun run",
 	}[pm];
 	return [runner, binary, ...args].join(" ");
 };

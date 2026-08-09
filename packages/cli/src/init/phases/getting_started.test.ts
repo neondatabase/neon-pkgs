@@ -131,7 +131,9 @@ describe("getting-started phase", () => {
 			const migrationStep = result.nextAction.steps.find(
 				(s) => s.id === "run_migrations",
 			);
-			expect(migrationStep?.command).toBe("npx prisma migrate deploy");
+			expect(migrationStep?.command).toBe(
+				"npx --no prisma migrate deploy",
+			);
 		}
 	});
 
@@ -147,7 +149,7 @@ describe("getting-started phase", () => {
 			const migrationStep = result.nextAction.steps.find(
 				(s) => s.id === "run_migrations",
 			);
-			expect(migrationStep?.command).toBe("npx knex migrate:latest");
+			expect(migrationStep?.command).toBe("npx --no knex migrate:latest");
 		}
 	});
 
