@@ -1,5 +1,20 @@
 import { defineConfig } from "tsdown";
 
+/**
+ * Whether a specifier is a package import rather than a file in this package.
+ *
+ * Shape rather than `isResolved`, because rolldown calls `external` for resolved ids too and a
+ * resolved absolute path must never be treated as a package: `C:\…` on Windows starts with a
+ * letter, and rolldown's virtual modules start with a NUL. `#` is a package's own subpath import,
+ * which resolves locally.
+ */
+const isPackageImport = (id: string): boolean =>
+	!id.startsWith(".") &&
+	!id.startsWith("/") &&
+	!id.startsWith("#") &&
+	!id.startsWith("\0") &&
+	!/^[a-zA-Z]:[\\/]/.test(id);
+
 export default defineConfig({
 	name: "neon",
 	bundle: false,
@@ -18,5 +33,5 @@ export default defineConfig({
 	// externalizes declared runtime dependencies only, so without this `src/test_utils/*`
 	// — which imports vitest, express and emocks — drags those devDependencies and their
 	// transitive graph into `dist/node_modules/`.
-	external: (id) => /^[@a-zA-Z]/.test(id),
+	external: isPackageImport,
 });
