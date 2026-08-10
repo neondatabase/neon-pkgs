@@ -19,7 +19,7 @@ import {
 } from "../context.js";
 import { isCi } from "../env.js";
 import { log } from "../log.js";
-import type { CommonProps } from "../types.js";
+import type { AgentBranchOption, CommonProps } from "../types.js";
 import {
 	createBranch,
 	pickBranchInteractively,
@@ -83,6 +83,13 @@ type AgentResponse =
 			status: "needs_project_details";
 			instruction: string;
 			regions: AgentRegionOption[];
+			next_command_template: string;
+	  }
+	| {
+			status: "needs_branch";
+			instruction: string;
+			options: AgentBranchOption[];
+			context: AgentContext;
 			next_command_template: string;
 	  }
 	| {
@@ -956,12 +963,24 @@ const runAgent = async (props: LinkProps, inputs: Inputs) => {
 			});
 			return;
 		}
+		// Linked, but no branch pinned yet — this is NOT the terminal state: there
+		// is no branch and no env. Return `needs_branch` (mirroring needs_org /
+		// needs_project) so an agent continues into `checkout --agent` instead of
+		// stopping at a false "linked".
+		const { data: branchData } = await props.apiClient.listProjectBranches({
+			projectId,
+		});
 		emitAgent({
-			status: "linked",
-			context_file: props.contextFile,
+			status: "needs_branch",
+			instruction:
+				"Linked, but no branch is pinned and no env is written yet. Ask the user which branch to check out (or accept the default), then run the next_command_template to pin it and pull its env vars.",
+			options: branchData.branches.map((b) => ({
+				id: b.id,
+				name: b.name ?? b.id,
+				default: Boolean(b.default),
+			})),
 			context: { orgId, projectId },
-			project: { id: projectId },
-			message: `Linked ${props.contextFile} to project ${projectId}${orgSuffix}. No branch pinned — run \`${getCliName()} checkout <branch>\` (omit the branch to list options) to pin one and pull its env vars.`,
+			next_command_template: `${getCliName()} checkout <branch> --agent --project-id ${shellArg(projectId)}`,
 		});
 		return;
 	}

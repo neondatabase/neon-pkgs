@@ -7,7 +7,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect } from "vitest";
+import { beforeAll, describe, expect } from "vitest";
 
 import { test as originalTest } from "../test_utils/fixtures";
 import { ENV_PULL_SKIPPED_HINT } from "./env";
@@ -16,6 +16,25 @@ import { ENV_PULL_SKIPPED_HINT } from "./env";
 // normalized in snapshots to `<TMP>` so absolute paths in command output stay
 // stable across runs and machines.
 const TEST_TMP = mkdtempSync(join(tmpdir(), "neonctl-checkout-"));
+
+const TMP_TOKEN = "<TMP>";
+
+beforeAll(() => {
+	// Replace the per-run tmp directory with a stable token so snapshots (e.g. the
+	// `checked_out` agent JSON, which carries the absolute context-file path) only
+	// keep the deterministic suffix.
+	expect.addSnapshotSerializer({
+		test: (val) => typeof val === "string" && val.includes(TEST_TMP),
+		serialize: (val, config, indentation, depth, refs, printer) =>
+			printer(
+				(val as string).split(TEST_TMP).join(TMP_TOKEN),
+				config,
+				indentation,
+				depth,
+				refs,
+			),
+	});
+});
 
 const test = originalTest.extend<{
 	readFile: (name: string) => string;
@@ -283,5 +302,107 @@ describe("checkout", () => {
 			},
 		);
 		removeFile(ctx);
+	});
+
+	describe("--agent mode", () => {
+		test("no branch arg on a multi-branch project emits needs_branch JSON", async ({
+			testCliCommand,
+			removeFile,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("agent_needs_branch");
+			await testCliCommand([
+				"checkout",
+				"--agent",
+				"--project-id",
+				"test",
+				"--context-file",
+				ctx,
+			]);
+			removeFile(ctx);
+		});
+
+		test("a branch name pins it and emits checked_out JSON", async ({
+			testCliCommand,
+			readFile,
+			removeFile,
+			tmpContext,
+		}) => {
+			// --no-env-pull keeps the response deterministic against the mock; the
+			// env-pull path is covered by the live e2e. The context_file path in the
+			// JSON is normalized to <TMP> by the snapshot serializer above.
+			const ctx = tmpContext("agent_checked_out");
+			await testCliCommand([
+				"checkout",
+				"main",
+				"--agent",
+				"--no-env-pull",
+				"--project-id",
+				"test",
+				"--context-file",
+				ctx,
+			]);
+			expect(parseContext(readFile(ctx))).toEqual({
+				projectId: "test",
+				branch: "main",
+			});
+			removeFile(ctx);
+		});
+
+		test("a nonexistent branch emits needs_branch (never silently creates)", async ({
+			testCliCommand,
+			removeFile,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("agent_not_found");
+			await testCliCommand([
+				"checkout",
+				"no-such-branch",
+				"--agent",
+				"--project-id",
+				"test",
+				"--context-file",
+				ctx,
+			]);
+			removeFile(ctx);
+		});
+
+		test("with no resolvable project emits an error JSON, never a prompt", async ({
+			testCliCommand,
+			removeFile,
+			tmpContext,
+		}) => {
+			// Fresh .neon, no --project-id, and the mock account has no projects to
+			// auto-detect. The human path offers an interactive `link` here; agent
+			// mode must never prompt, so it has to fall through to an error JSON on
+			// stdout (exit 1) that the caller can parse.
+			const ctx = tmpContext("agent_no_project");
+			await testCliCommand(
+				["checkout", "main", "--agent", "--context-file", ctx],
+				{ mockDir: "checkout_no_project", code: 1 },
+			);
+			removeFile(ctx);
+		});
+
+		test("--agent emits parseable JSON on stdout with the invoked binary name in the template", async ({
+			testCliCommand,
+			removeFile,
+			tmpContext,
+		}) => {
+			// A regression guard: the agent output must be valid JSON (not prose)
+			// and its next_command_template must name `neon`, never the removed
+			// `neonctl` binary. testCliCommand snapshots stdout; the assertions in
+			// the other cases pin the shapes.
+			const ctx = tmpContext("agent_json_shape");
+			await testCliCommand([
+				"checkout",
+				"--agent",
+				"--project-id",
+				"test",
+				"--context-file",
+				ctx,
+			]);
+			removeFile(ctx);
+		});
 	});
 });

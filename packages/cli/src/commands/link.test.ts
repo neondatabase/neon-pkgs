@@ -423,7 +423,7 @@ describe("link", () => {
 			removeFile(ctx);
 		});
 
-		test("with org+project emits linked JSON (no branch) and writes .neon", async ({
+		test("with org+project (no branch) emits needs_branch JSON and writes .neon", async ({
 			testCliCommand,
 			readFile,
 			tmpContext,
@@ -443,7 +443,7 @@ describe("link", () => {
 			expect(readFile(ctx)).toMatchSnapshot();
 		});
 
-		test("with only --project-id infers the org and emits linked JSON", async ({
+		test("with only --project-id infers the org and emits needs_branch JSON", async ({
 			testCliCommand,
 			readFile,
 			tmpContext,
