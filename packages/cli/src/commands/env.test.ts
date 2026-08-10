@@ -50,6 +50,8 @@ type FakeOverrides = {
  * the NEON_AUTH_BASE_URL pull.
  */
 class FakeNeonApi implements NeonApi {
+	credentialCreateCalls = 0;
+
 	constructor(private readonly overrides: FakeOverrides = {}) {}
 
 	async listProjects(): Promise<NeonProjectSnapshot[]> {
@@ -182,6 +184,7 @@ class FakeNeonApi implements NeonApi {
 		branchId: string,
 		input: CreateCredentialInput,
 	): Promise<NeonCredentialSecret> {
+		this.credentialCreateCalls += 1;
 		return {
 			tokenId: "cred-fake-0000",
 			tokenIdShort: "credfake0000",
@@ -655,6 +658,122 @@ describe("env pull --service", () => {
 				services: ["object-storage"],
 			}),
 		).rejects.toThrow(/isn't available for this Neon project/);
+	});
+});
+
+describe("env pull --env", () => {
+	let cwd: string;
+	beforeEach(() => {
+		cwd = mkdtempSync(join(tmpdir(), "neonctl-env-keys-"));
+	});
+	afterEach(() => {
+		rmSync(cwd, { recursive: true, force: true });
+	});
+
+	it("writes exactly the selected env variable", async () => {
+		await pull({
+			...baseProps(new FakeNeonApi(), cwd),
+			envKeys: ["DATABASE_URL"],
+		});
+
+		expect(readEnvFile(join(cwd, ".env.local"))).toEqual({
+			DATABASE_URL:
+				"postgresql://neondb_owner:pw@br-snowy-frost-12345-pooler.fake.neon.tech/neondb?sslmode=require",
+		});
+	});
+
+	it("unions exact env variables with complete service bundles", async () => {
+		const api = new FakeNeonApi({
+			getNeonAuth: async () => ({
+				projectId: "auth-project",
+				jwksUrl: "https://auth.fake.neon.tech/.well-known/jwks.json",
+				baseUrl: "https://auth.fake.neon.tech",
+			}),
+		});
+
+		await pull({
+			...baseProps(api, cwd),
+			services: ["auth"],
+			envKeys: ["DATABASE_URL"],
+		});
+
+		expect(readEnvFile(join(cwd, ".env.local"))).toEqual({
+			DATABASE_URL:
+				"postgresql://neondb_owner:pw@br-snowy-frost-12345-pooler.fake.neon.tech/neondb?sslmode=require",
+			NEON_BRANCH: "main",
+			NEON_AUTH_BASE_URL: "https://auth.fake.neon.tech",
+			NEON_AUTH_JWKS_URL:
+				"https://auth.fake.neon.tech/.well-known/jwks.json",
+		});
+	});
+
+	it("overrides neon.ts instead of intersecting with it", async () => {
+		writeFileSync(join(cwd, "neon.ts"), "export default { auth: {} };\n");
+		const api = new FakeNeonApi({
+			getNeonAuth: async () => ({
+				projectId: "auth-project",
+				jwksUrl: "https://auth.fake.neon.tech/.well-known/jwks.json",
+				baseUrl: "https://auth.fake.neon.tech",
+			}),
+		});
+
+		await pull({
+			...baseProps(api, cwd),
+			envKeys: ["DATABASE_URL"],
+		});
+
+		expect(readEnvFile(join(cwd, ".env.local"))).toEqual({
+			DATABASE_URL:
+				"postgresql://neondb_owner:pw@br-snowy-frost-12345-pooler.fake.neon.tech/neondb?sslmode=require",
+		});
+	});
+
+	it("leaves every unselected existing variable untouched", async () => {
+		writeFileSync(
+			join(cwd, ".env"),
+			[
+				"DATABASE_URL=postgres://stale",
+				"DATABASE_URL_UNPOOLED=postgres://mine",
+				"NEON_AUTH_BASE_URL=https://mine.example",
+				"",
+			].join("\n"),
+		);
+
+		await pull({
+			...baseProps(new FakeNeonApi(), cwd),
+			envKeys: ["DATABASE_URL"],
+		});
+
+		const env = readEnvFile(join(cwd, ".env"));
+		expect(env.DATABASE_URL).toContain("-pooler.fake.neon.tech");
+		expect(env.DATABASE_URL_UNPOOLED).toBe("postgres://mine");
+		expect(env.NEON_AUTH_BASE_URL).toBe("https://mine.example");
+	});
+
+	it("does not mint a credential for the AI Gateway base URL alone", async () => {
+		const api = new FakeNeonApi();
+
+		await pull({
+			...baseProps(api, cwd),
+			envKeys: ["NEON_AI_GATEWAY_BASE_URL"],
+		});
+
+		expect(readEnvFile(join(cwd, ".env.local"))).toEqual({
+			NEON_AI_GATEWAY_BASE_URL:
+				"https://br-snowy-frost-12345-api.ai.fake.neon.tech",
+		});
+		expect(api.credentialCreateCalls).toBe(0);
+	});
+
+	it("names --env when the selected variable is unavailable", async () => {
+		await expect(
+			pull({
+				...baseProps(new FakeNeonApi(), cwd),
+				envKeys: ["NEON_AUTH_BASE_URL"],
+			}),
+		).rejects.toThrow(
+			/--env NEON_AUTH_BASE_URL: branch .* no Neon Auth integration/,
+		);
 	});
 });
 

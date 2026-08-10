@@ -282,6 +282,55 @@ describe("fetchEnvReusingSecrets", () => {
 		expect(vars.NEON_BRANCH).toBe("main");
 	});
 
+	test("does not mint a credential when only a non-secret gateway variable is selected", async () => {
+		const { api, projectId } = seededFake();
+
+		const { vars, credential } = await fetchEnvReusingSecrets(
+			gatewayPolicy,
+			{
+				api,
+				projectId,
+				branch: "main",
+				keys: ["NEON_AI_GATEWAY_BASE_URL"],
+			},
+		);
+
+		expect(vars).toEqual({
+			NEON_AI_GATEWAY_BASE_URL:
+				"https://br-main-api.ai.aws-us-east-1.fake.neon.tech",
+		});
+		expect(callsTo(api, "listCredentials")).toBe(0);
+		expect(callsTo(api, "createCredential")).toBe(0);
+		expect(credential).toEqual({
+			issued: false,
+			keys: [],
+			revoked: [],
+			superseded: [],
+		});
+	});
+
+	test("does not widen a credential for a selected non-secret variable", async () => {
+		const { api, projectId } = seededFake();
+
+		await fetchEnvReusingSecrets(bothPolicy, {
+			api,
+			projectId,
+			branch: "main",
+			keys: [
+				"AWS_ACCESS_KEY_ID",
+				"AWS_SECRET_ACCESS_KEY",
+				"NEON_AI_GATEWAY_BASE_URL",
+			],
+		});
+
+		const create = api.history.find(
+			(entry) => entry.method === "createCredential",
+		);
+		expect(create?.args[2]).toMatchObject({
+			scopes: ["storage:read", "storage:write"],
+		});
+	});
+
 	test("does not look up credentials when nothing is persisted to verify", async () => {
 		// A first run has nothing to check, so the list call would be wasted.
 		const { api, projectId } = seededFake();

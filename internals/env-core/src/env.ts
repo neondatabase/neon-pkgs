@@ -622,11 +622,11 @@ export async function fetchEnvKeys(
 	// A credential is minted only for its *secrets*. The endpoint, region and gateway host
 	// are plain branch metadata, so selecting only those touches no credential at all — which
 	// is how a caller holding valid secrets refreshes the rest without issuing a new one.
-	const wantsCredential =
-		(storageEnabled &&
-			(wants(K.storage.accessKeyId) ||
-				wants(K.storage.secretAccessKey))) ||
-		(gatewayEnabled && wants(K.aiGateway.apiKey));
+	const wantsStorageCredential =
+		storageEnabled &&
+		(wants(K.storage.accessKeyId) || wants(K.storage.secretAccessKey));
+	const wantsGatewayCredential = gatewayEnabled && wants(K.aiGateway.apiKey);
+	const wantsCredential = wantsStorageCredential || wantsGatewayCredential;
 
 	if (wantsStorage || wantsGateway) {
 		// Read the branch's storage settings *before* minting: a policy that declares buckets
@@ -653,7 +653,10 @@ export async function fetchEnvKeys(
 					projectId,
 					branchId: branch.id,
 					branchName: branch.name,
-					scopes: previewCredentialScopes(desired.preview),
+					scopes: previewCredentialScopes(desired.preview, {
+						storage: wantsStorageCredential,
+						aiGateway: wantsGatewayCredential,
+					}),
 				})
 			: null;
 
@@ -740,18 +743,17 @@ export async function resolveBranchPolicy(
 }
 
 /**
- * Scopes the branch credential should carry for a resolved branch policy. Only object storage
- * and the AI Gateway *require* a credential; functions never force one (they have no credential
- * of their own), but `functions:invoke` is added to the scope set when a credential is already
- * being minted for storage / the AI Gateway, so the one credential can invoke the branch's
- * functions too. Returns `[]` only when nothing credential-bearing is enabled.
+ * Scopes the branch credential should carry for a resolved branch policy and optional key
+ * selection. Only object storage and the AI Gateway *require* a credential; functions never
+ * force one, but `functions:invoke` rides along when another selected feature mints one.
  */
 export function previewCredentialScopes(
 	preview: ResolvedPreviewConfig | undefined,
+	selected?: { storage: boolean; aiGateway: boolean },
 ): CredentialScope[] {
 	if (!preview) return [];
-	const storage = preview.buckets.length > 0;
-	const aiGateway = preview.aiGatewayEnabled;
+	const storage = preview.buckets.length > 0 && (selected?.storage ?? true);
+	const aiGateway = preview.aiGatewayEnabled && (selected?.aiGateway ?? true);
 	if (!storage && !aiGateway) return [];
 	return deriveCredentialScopes({
 		storage,

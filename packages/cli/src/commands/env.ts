@@ -8,10 +8,14 @@ import { ensureGitignored } from "../context.js";
 import { resolveNeonEnvVars } from "../dev/env.js";
 import { mergeEnvFile, readEnvFile, resolveEnvFilePath } from "../env_file.js";
 import {
+	ENV_PULL_KEYS,
 	ENV_PULL_SERVICES,
 	ENV_PULL_UNAVAILABLE,
-	envServiceKeys,
+	type EnvPullKey,
+	envKeysForSelection,
+	envPullFlagValue,
 	ownedEnvServiceKeys,
+	parseEnvPullKeys,
 } from "../env_services.js";
 import { log } from "../log.js";
 import {
@@ -40,6 +44,11 @@ export type EnvPullProps = BranchScopeProps & {
 	 * within them.
 	 */
 	services?: readonly NeonService[];
+	/**
+	 * Pull exactly these OS-level env vars (`--env`). Combined with `services` as a union:
+	 * complete service bundles plus these individual keys.
+	 */
+	envKeys?: readonly EnvPullKey[];
 };
 
 export const command = "env";
@@ -79,14 +88,25 @@ export const builder = (argv: yargs.Argv) =>
 							key: "service",
 							allowed: ENV_PULL_SERVICES,
 							describe: "Pull only these services' variables",
-							also: "Overrides neon.ts, and prunes only within the services you name.",
+							also:
+								"Overrides neon.ts, and prunes only within the services you name. " +
+								"Combines with --env as a union.",
 						}),
+						env: {
+							alias: "e",
+							describe:
+								`Pull only these individual variables: ${ENV_PULL_KEYS.join(", ")}. ` +
+								"Repeat the flag or comma-separate. Overrides neon.ts. Combines " +
+								"with --service as a union.",
+							type: "array",
+							string: true,
+						},
 					})
 					.epilogue(
 						[
 							"",
 							"What gets pulled, in precedence order:",
-							"  1. --service, when given — exactly those, ignoring neon.ts.",
+							"  1. --service / --env, when given — their union, ignoring neon.ts.",
 							"  2. neon.ts, when this directory has one.",
 							"  3. Otherwise everything the branch has, plus the AI Gateway —",
 							"     which mints a branch credential for it.",
@@ -107,9 +127,35 @@ export const builder = (argv: yargs.Argv) =>
 					.example(
 						"$0 env pull -s ai-gateway -s postgres",
 						"Pull only the AI Gateway and Postgres variables",
+					)
+					.example(
+						"$0 env pull -e DATABASE_URL",
+						"Pull only the pooled Postgres connection string",
+					)
+					.example(
+						"$0 env pull -s auth -e DATABASE_URL",
+						"Pull all Auth variables plus DATABASE_URL",
 					),
 			async (args) => {
-				const raw = servicesFlagValue(args.service);
+				const rawServices = servicesFlagValue(args.service);
+				const rawEnvKeys = envPullFlagValue(args.env);
+				const services = rawServices
+					? parseServices(rawServices, {
+							allowed: ENV_PULL_SERVICES,
+							whyUnavailable: ENV_PULL_UNAVAILABLE,
+							flag: "--service",
+							onDeprecated: (used, canonical) =>
+								log.warning(
+									deprecatedServiceMessage(used, canonical),
+								),
+						})
+					: undefined;
+				const envKeys = rawEnvKeys
+					? parseEnvPullKeys(rawEnvKeys, "--env")
+					: undefined;
+				if (services !== undefined || envKeys !== undefined) {
+					envKeysForSelection(services ?? [], envKeys ?? []);
+				}
 				// Explicit `env pull` announces the branch it's reading from up front so the user
 				// can catch "pulled env from the wrong branch" before it overwrites their .env. The
 				// bundled auto-pull (link / checkout / apply) stays quiet — those already report the
@@ -122,24 +168,15 @@ export const builder = (argv: yargs.Argv) =>
 				await pull(
 					{
 						...(args as any),
-						...(raw
-							? {
-									services: parseServices(raw, {
-										allowed: ENV_PULL_SERVICES,
-										whyUnavailable: ENV_PULL_UNAVAILABLE,
-										flag: "--service",
-										onDeprecated: (used, canonical) =>
-											log.warning(
-												deprecatedServiceMessage(
-													used,
-													canonical,
-												),
-											),
-									}),
-								}
-							: {}),
+						...(services ? { services } : {}),
+						...(envKeys ? { envKeys } : {}),
 					},
-					{ announce: true, implyAiGateway: raw === undefined },
+					{
+						announce: true,
+						implyAiGateway:
+							rawServices === undefined &&
+							rawEnvKeys === undefined,
+					},
 				);
 			},
 		)
@@ -165,7 +202,7 @@ const NEON_VAR_NAMES = Object.values(NEON_ENV_VAR_KEYS).flatMap((group) =>
  * writes them, never prunes them. The AI Gateway is emitted solely under its Neon-branded
  * vars (`NEON_AI_GATEWAY_*`), which are owned and pruned.
  */
-const NEON_OWNED_ENV_KEYS: readonly string[] = [
+const NEON_OWNED_ENV_KEYS: readonly EnvPullKey[] = [
 	...Object.values(NEON_ENV_VAR_KEYS.postgres),
 	...Object.values(NEON_ENV_VAR_KEYS.auth),
 	...Object.values(NEON_ENV_VAR_KEYS.dataApi),
@@ -201,6 +238,10 @@ export const pull = async (
 	opts: { announce?: boolean; implyAiGateway?: boolean } = {},
 ): Promise<PullOutcome> => {
 	const cwd = props.cwd ?? process.cwd();
+	const selectedKeys =
+		props.services !== undefined || props.envKeys !== undefined
+			? envKeysForSelection(props.services ?? [], props.envKeys ?? [])
+			: undefined;
 	const branch = await resolveBranchRef(props);
 	if (opts.announce) {
 		announceTargetBranch(props, branch, "Pulling env from branch");
@@ -224,13 +265,14 @@ export const pull = async (
 		branchId,
 		env: { ...process.env, ...existingEnv },
 		...(props.services ? { services: props.services } : {}),
+		...(props.envKeys ? { envKeys: props.envKeys } : {}),
 		...(opts.implyAiGateway ? { implyAiGateway: true } : {}),
 		...(props.apiKey ? { apiKey: props.apiKey } : {}),
 		...(props.apiHost ? { apiHost: props.apiHost } : {}),
 		...(props.runtimeApi ? { api: props.runtimeApi } : {}),
 	});
 
-	const neonVars = pickServiceVars(pickNeonVars(vars), props.services);
+	const neonVars = pickSelectedVars(pickNeonVars(vars), selectedKeys);
 	if (Object.keys(neonVars).length === 0) {
 		log.info(
 			"No Neon env variables to pull for this branch (no DATABASE_URL or " +
@@ -244,7 +286,7 @@ export const pull = async (
 	// from a previous project/branch). Non-Neon lines are always preserved.
 	const { written, removed } = mergeEnvFile(targetPath, neonVars, {
 		managedKeys: managedKeysFor(
-			props.services,
+			selectedKeys,
 			unreachedButCurrent(skipped, existingEnv, branchId),
 		),
 	});
@@ -284,8 +326,8 @@ export const pull = async (
 			// actually declined to revoke, so a first pull (which supersedes nothing) does
 			// not send the user hunting for a credential that was never there.
 			log.info(
-				"Left the credential it replaced live (%s): a pull scoped with --service " +
-					"can't tell which other services still use it. Revoke it in the Neon " +
+				"Left the credential it replaced live (%s): an explicitly scoped pull " +
+					"can't tell which other variables still use it. Revoke it in the Neon " +
 					"Console if nothing does.",
 				credential.superseded.join(", "),
 			);
@@ -327,17 +369,17 @@ export const pull = async (
 /**
  * The keys this pull is allowed to prune, i.e. the ones it is authoritative for.
  *
- * A `--service` selection narrows that to the services it named: `env pull -s ai-gateway`
- * says nothing about `DATABASE_URL`, so it must not read that variable's absence from this
- * pull as "the branch no longer has it". `unreached` is subtracted for the same reason — see
+ * An explicit selection narrows that to the service bundles and individual keys it named:
+ * `env pull -s ai-gateway` and `env pull -e NEON_AI_GATEWAY_TOKEN` both say nothing about
+ * `DATABASE_URL`. `unreached` is subtracted for the same reason — see
  * {@link unreachedButCurrent}.
  */
 const managedKeysFor = (
-	services: readonly NeonService[] | undefined,
+	selectedKeys: readonly EnvPullKey[] | undefined,
 	unreached: readonly NeonService[],
 ): string[] => {
-	const owned = services
-		? ownedEnvServiceKeys(services)
+	const owned = selectedKeys
+		? NEON_OWNED_ENV_KEYS.filter((key) => selectedKeys.includes(key))
 		: [...NEON_OWNED_ENV_KEYS];
 	if (unreached.length === 0) return owned;
 	const keep = new Set(ownedEnvServiceKeys(unreached));
@@ -388,17 +430,16 @@ const isBranchGatewayUrl = (baseUrl: string, branchId: string): boolean =>
 	new URL(baseUrl).hostname.startsWith(`${branchId}-api.ai.`);
 
 /**
- * Narrow the resolved vars to the selected services (plus `NEON_BRANCH`, which every pull
- * refreshes). Needed because the two `DATABASE_URL*` vars are always resolved — `fetchEnv`
- * reads both connection URIs regardless, since the AI Gateway host is derived from the direct
- * one — so `--service ai-gateway` has to drop them here rather than avoid fetching them.
+ * Narrow the resolved vars to the explicit service/key union. `fetchEnv` may resolve
+ * supporting values that were not selected (the direct connection URI derives the AI Gateway
+ * host, for example); those must not land in the target file.
  */
-const pickServiceVars = (
+const pickSelectedVars = (
 	vars: Record<string, string>,
-	services: readonly NeonService[] | undefined,
+	selectedKeys: readonly EnvPullKey[] | undefined,
 ): Record<string, string> => {
-	if (!services) return vars;
-	const wanted = envServiceKeys(services);
+	if (!selectedKeys) return vars;
+	const wanted = new Set<string>(selectedKeys);
 	return Object.fromEntries(
 		Object.entries(vars).filter(([key]) => wanted.has(key)),
 	);

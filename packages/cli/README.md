@@ -421,7 +421,7 @@ The human-readable summary line goes to stderr and the diff body to stdout, so `
 
 **What gets pulled**, in precedence order:
 
-1. **`--service`**, when you pass it — exactly those services, whatever else is on the branch and whatever a `neon.ts` says.
+1. **`--service` and/or `--env`**, when you pass either — their union is the complete selection, ignoring `neon.ts` and unselected branch variables. `--service` adds a service's complete variable bundle; `--env` adds only the individual variables you name.
 2. **`neon.ts`**, when the working directory has one — the policy is the source of truth, same as `neon dev` and `neon deploy`.
 3. **Everything the branch has** otherwise — Postgres, Neon Auth, the Data API, and object storage read back from the branch, plus the AI Gateway. The gateway has no branch-level state to read back (it is credential-gated, not provisioned), so a bare `env pull` asks for it rather than detecting it, which mints a branch credential. To leave it out, name the services you do want with `--service`.
 
@@ -440,6 +440,13 @@ neon env pull --service ai-gateway
 # Repeat the flag or comma-separate; -s, --service and --services are all accepted
 neon env pull -s postgres -s data-api
 neon env pull -s postgres,auth
+
+# Pull one exact variable; repeat -e or comma-separate for more
+neon env pull -e DATABASE_URL
+neon env pull -e DATABASE_URL,NEON_AUTH_BASE_URL
+
+# The selectors compose as a union: all Auth vars plus DATABASE_URL
+neon env pull -s auth -e DATABASE_URL
 ```
 
 Every services flag in the CLI takes those three spellings, the same value syntax, and the same service names — see [`config init --services`](#getting-a-neonts-config-init).
@@ -452,11 +459,13 @@ Every services flag in the CLI takes those three spellings, the same value synta
 | `object-storage` | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_URL_S3`, `AWS_REGION` |
 | `ai-gateway` | `NEON_AI_GATEWAY_TOKEN`, `NEON_AI_GATEWAY_BASE_URL` |
 
-`NEON_BRANCH` is written by every pull — it is branch identity, not a service.
+`-e, --env` accepts any variable in the table plus `NEON_BRANCH`. It is case-sensitive and rejects unknown names rather than silently widening the pull. `NEON_BRANCH` is written by unscoped and service-scoped pulls because it is branch identity, not a service; an env-only pull writes it only when you select it.
 
-**A scoped pull is scoped in both directions.** An unscoped `env pull` owns the Neon-named variables: pointing a directory at a branch without Neon Auth prunes the stale `NEON_AUTH_*` lines. `--service` narrows that to the services you named, so `env pull -s ai-gateway` never touches your `DATABASE_URL`. (`AWS_*` is never pruned by any pull: those names collide with credentials you may set yourself, so `env pull` only ever writes them.)
+**A scoped pull is scoped in both directions.** An unscoped `env pull` owns the Neon-named variables: pointing a directory at a branch without Neon Auth prunes the stale `NEON_AUTH_*` lines. `--service` narrows that to the services you named, while `--env` narrows it to the exact keys you named, so `env pull -e DATABASE_URL` never touches `DATABASE_URL_UNPOOLED`. (`AWS_*` is never pruned by any pull: those names collide with credentials you may set yourself, so `env pull` only ever writes them.)
 
-**A scoped pull also never revokes a credential.** Where an unscoped pull revokes the credential it replaces, a scoped one leaves the old one live — it can't tell which other services still use it. It says so when it happens; revoke it in the Neon Console if nothing does.
+**A scoped pull also never revokes a credential.** Where an unscoped pull revokes the credential it replaces, a scoped one leaves the old one live — it can't tell which other variables still use it. It says so when it happens; revoke it in the Neon Console if nothing does.
+
+`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` must be selected together. Neon issues them as one object-storage credential; pulling only one would pair a fresh half with whatever old half remains in the file.
 
 Naming a service the branch does not have is an error, not an empty pull:
 

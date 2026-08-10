@@ -17,8 +17,19 @@ export const ENV_PULL_UNAVAILABLE: Partial<Record<NeonService, string>> = {
 		"a function's env comes from your neon.ts, not from the branch, so there is nothing to pull",
 };
 
+/** Every OS-level env var `env pull` can write, in stable emit order. */
+export const ENV_PULL_KEYS = [
+	...Object.values(NEON_ENV_VAR_KEYS.postgres),
+	NEON_ENV_VAR_KEYS.branch.name,
+	...Object.values(NEON_ENV_VAR_KEYS.auth),
+	...Object.values(NEON_ENV_VAR_KEYS.dataApi),
+	...Object.values(NEON_ENV_VAR_KEYS.storage),
+	...Object.values(NEON_ENV_VAR_KEYS.aiGateway),
+] as const;
+export type EnvPullKey = (typeof ENV_PULL_KEYS)[number];
+
 /** The OS-level env vars each service contributes to a pulled `.env`. */
-const SERVICE_ENV_KEYS: Record<NeonService, readonly string[]> = {
+const SERVICE_ENV_KEYS: Record<NeonService, readonly EnvPullKey[]> = {
 	postgres: Object.values(NEON_ENV_VAR_KEYS.postgres),
 	auth: Object.values(NEON_ENV_VAR_KEYS.auth),
 	"data-api": Object.values(NEON_ENV_VAR_KEYS.dataApi),
@@ -44,6 +55,33 @@ const SERVICE_OWNED_ENV_KEYS: Record<NeonService, readonly string[]> = {
  */
 export const BRANCH_ENV_KEY = NEON_ENV_VAR_KEYS.branch.name;
 
+/** The service that produces a key, or `null` for branch identity. */
+const ENV_KEY_SERVICE: Record<EnvPullKey, NeonService | null> = {
+	DATABASE_URL: "postgres",
+	DATABASE_URL_UNPOOLED: "postgres",
+	NEON_BRANCH: null,
+	NEON_AUTH_BASE_URL: "auth",
+	NEON_AUTH_JWKS_URL: "auth",
+	NEON_DATA_API_URL: "data-api",
+	AWS_ACCESS_KEY_ID: "object-storage",
+	AWS_SECRET_ACCESS_KEY: "object-storage",
+	AWS_ENDPOINT_URL_S3: "object-storage",
+	AWS_REGION: "object-storage",
+	NEON_AI_GATEWAY_TOKEN: "ai-gateway",
+	NEON_AI_GATEWAY_BASE_URL: "ai-gateway",
+};
+
+export const serviceForEnvKey = (key: EnvPullKey): NeonService | null =>
+	ENV_KEY_SERVICE[key];
+
+/** Services that must be resolved to produce the selected env keys. */
+export const servicesForEnvKeys = (
+	keys: readonly EnvPullKey[],
+): NeonService[] =>
+	ENV_PULL_SERVICES.filter((service) =>
+		keys.some((key) => ENV_KEY_SERVICE[key] === service),
+	);
+
 /** Every env var the selected services contribute, plus branch identity. */
 export const envServiceKeys = (
 	services: readonly NeonService[],
@@ -63,3 +101,64 @@ export const envServiceKeys = (
 export const ownedEnvServiceKeys = (
 	services: readonly NeonService[],
 ): string[] => services.flatMap((service) => SERVICE_OWNED_ENV_KEYS[service]);
+
+/**
+ * The exact env vars an explicit selection writes. Services contribute their complete
+ * bundles plus branch identity; `--env` contributes only the named keys. The two selectors
+ * compose as a union.
+ */
+export const envKeysForSelection = (
+	services: readonly NeonService[],
+	envKeys: readonly EnvPullKey[],
+): EnvPullKey[] => {
+	const selected =
+		services.length > 0 ? envServiceKeys(services) : new Set<string>();
+	for (const key of envKeys) selected.add(key);
+
+	const hasStorageAccessKey = selected.has(
+		NEON_ENV_VAR_KEYS.storage.accessKeyId,
+	);
+	const hasStorageSecret = selected.has(
+		NEON_ENV_VAR_KEYS.storage.secretAccessKey,
+	);
+	if (hasStorageAccessKey !== hasStorageSecret) {
+		throw new Error(
+			"AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be selected together: " +
+				"they are two halves of one newly issued object-storage credential.",
+		);
+	}
+
+	return ENV_PULL_KEYS.filter((key) => selected.has(key));
+};
+
+/** Parse repeated or comma-separated `--env` values into canonical env-key order. */
+export const parseEnvPullKeys = (
+	raw: readonly string[],
+	flag: string,
+): EnvPullKey[] => {
+	const names = raw
+		.flatMap((value) => value.split(","))
+		.map((name) => name.trim())
+		.filter((name) => name !== "");
+	const supported = `Supported values: ${ENV_PULL_KEYS.join(", ")}.`;
+	if (names.length === 0) {
+		throw new Error(
+			`${flag} needs at least one env variable. ${supported}`,
+		);
+	}
+
+	const unknown = names.filter(
+		(name) => !ENV_PULL_KEYS.some((key) => key === name),
+	);
+	if (unknown.length > 0) {
+		throw new Error(
+			`Unknown env variable${unknown.length === 1 ? "" : "s"} ${unknown.join(", ")}. ${supported}`,
+		);
+	}
+
+	return ENV_PULL_KEYS.filter((key) => names.includes(key));
+};
+
+/** Narrow yargs' array option value without accepting any other runtime shape. */
+export const envPullFlagValue = (value: unknown): string[] | undefined =>
+	Array.isArray(value) ? value.map(String) : undefined;
