@@ -11,10 +11,13 @@ npm install @neon/tools
 ```ts
 import { createNeonTools } from "@neon/tools";
 
+const apiKey = process.env.NEON_API_KEY;
+if (!apiKey) throw new Error("NEON_API_KEY is required");
+
 const operations = ["listProjects", "createProject"] as const;
 
 const tools = createNeonTools({
-	apiKey: process.env.NEON_API_KEY,
+	apiKey,
 	operations,
 });
 
@@ -52,9 +55,12 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { createNeonTools } from "@neon/tools";
 import { registerNeonTools } from "@neon/tools/mcp";
 
+const apiKey = process.env.NEON_API_KEY;
+if (!apiKey) throw new Error("NEON_API_KEY is required");
+
 const server = new McpServer({ name: "neon", version: "1.0.0" });
 const tools = createNeonTools({
-	apiKey: process.env.NEON_API_KEY,
+	apiKey,
 	operations: ["listProjects", "createProject"] as const,
 });
 
@@ -80,10 +86,13 @@ import { defineTool } from "eve/tools";
 import { createNeonTool } from "@neon/tools";
 import { toEveTool } from "@neon/tools/eve";
 
+const apiKey = process.env.NEON_API_KEY;
+if (!apiKey) throw new Error("NEON_API_KEY is required");
+
 const createProject = defineTool(
 	toEveTool(
 		createNeonTool("createProject", {
-			apiKey: process.env.NEON_API_KEY,
+			apiKey,
 		}),
 	),
 );
@@ -100,8 +109,11 @@ import { createTool } from "@mastra/core/tools";
 import { createNeonTools } from "@neon/tools";
 import { toMastraTools } from "@neon/tools/mastra";
 
+const apiKey = process.env.NEON_API_KEY;
+if (!apiKey) throw new Error("NEON_API_KEY is required");
+
 const neonTools = createNeonTools({
-	apiKey: process.env.NEON_API_KEY,
+	apiKey,
 	operations: ["listProjects", "createProject"] as const,
 });
 const configs = toMastraTools(neonTools);
@@ -114,16 +126,19 @@ The adapter maps approval requirements to Mastra's `requireApproval` field and f
 
 ## Safety and binary data
 
-Every non-read operation is conservatively marked as potentially destructive and requires approval. Reads that return credentials, such as connection URIs and role passwords, also require approval.
+Every non-read operation is conservatively marked as potentially destructive and requires approval. Reads that return connection credentials, role passwords, or Neon Auth provider secrets also require approval.
 
 Binary request fields accept base64 strings:
 
 ```ts
 import { createNeonTool } from "@neon/tools";
 
+const apiKey = process.env.NEON_API_KEY;
+if (!apiKey) throw new Error("NEON_API_KEY is required");
+
 const deployFunction = createNeonTool(
 	"createProjectBranchFunctionDeployment",
-	{ apiKey: process.env.NEON_API_KEY },
+	{ apiKey },
 );
 
 await deployFunction.execute({
