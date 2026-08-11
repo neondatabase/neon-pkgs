@@ -55,6 +55,51 @@ const dereference = (value) => {
 	return current;
 };
 
+const allOfPropertyNames = (schema, references = new Set()) => {
+	if (!schema || typeof schema !== "object") return new Set();
+	if (schema.$ref) {
+		if (references.has(schema.$ref)) return new Set();
+		const nextReferences = new Set(references);
+		nextReferences.add(schema.$ref);
+		return allOfPropertyNames(resolveReference(schema.$ref), nextReferences);
+	}
+	const names = new Set(Object.keys(schema.properties ?? {}));
+	for (const child of schema.allOf ?? []) {
+		for (const name of allOfPropertyNames(child, references)) {
+			names.add(name);
+		}
+	}
+	return names;
+};
+
+const assertDisjointAllOf = (value, location = "#") => {
+	if (Array.isArray(value)) {
+		value.forEach((child, index) =>
+			assertDisjointAllOf(child, `${location}/${index}`),
+		);
+		return;
+	}
+	if (!value || typeof value !== "object") return;
+	if (Array.isArray(value.allOf)) {
+		const names = new Set();
+		for (const child of value.allOf) {
+			for (const name of allOfPropertyNames(child)) {
+				if (names.has(name)) {
+					throw new Error(
+						`Cannot merge overlapping OpenAPI allOf property "${name}" at ${location}.`,
+					);
+				}
+				names.add(name);
+			}
+		}
+	}
+	for (const [key, child] of Object.entries(value)) {
+		assertDisjointAllOf(child, `${location}/${key}`);
+	}
+};
+
+assertDisjointAllOf(document);
+
 const pascalCase = (value) => value[0].toUpperCase() + value.slice(1);
 
 const camelCase = (value) => {

@@ -74,6 +74,7 @@ describe("generated operation coverage", () => {
 			"getNeonAuthEmailProvider",
 			"getNeonAuthEmailServer",
 			"getNeonAuthPluginConfigs",
+			"getProjectBranchRolePassword",
 			"listBranchNeonAuthOauthProviders",
 			"listNeonAuthOauthProviders",
 		] as const) {
