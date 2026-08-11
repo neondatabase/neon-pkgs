@@ -236,6 +236,33 @@ describe("fetchEnv key filter (types)", () => {
 		fetchEnv(config, options);
 	});
 
+	test("requires both storage credential halves in every tuple-position alternative", () => {
+		const config = defineConfig({
+			preview: { buckets: { uploads: {} } },
+		});
+		const eitherCredential =
+			Math.random() > 0.5
+				? ("AWS_ACCESS_KEY_ID" as const)
+				: ("AWS_SECRET_ACCESS_KEY" as const);
+		const secretOrRegion =
+			Math.random() > 0.5
+				? ("AWS_SECRET_ACCESS_KEY" as const)
+				: ("AWS_REGION" as const);
+
+		// @ts-expect-error each runtime alternative contains only one credential half
+		fetchEnv(config, {
+			projectId: "proj",
+			branch: "main",
+			keys: [eitherCredential],
+		});
+		// @ts-expect-error the secret key is not guaranteed to accompany the access key
+		fetchEnv(config, {
+			projectId: "proj",
+			branch: "main",
+			keys: ["AWS_ACCESS_KEY_ID", secretOrRegion],
+		});
+	});
+
 	test("preserves valid storage tuple alternatives exactly", () => {
 		const config = defineConfig({
 			preview: { buckets: { uploads: {} } },

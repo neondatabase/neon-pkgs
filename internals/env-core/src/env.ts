@@ -419,6 +419,25 @@ export type SelectedNeonEnv<Keys extends readonly string[]> =
 
 type StorageCredentialEnvKey = "AWS_ACCESS_KEY_ID" | "AWS_SECRET_ACCESS_KEY";
 
+type TupleDefinitelyContains<
+	Keys extends readonly string[],
+	Key extends string,
+> = Keys extends readonly [
+	infer Head extends string,
+	...infer Tail extends readonly string[],
+]
+	? [Head] extends [Key]
+		? true
+		: TupleDefinitelyContains<Tail, Key>
+	: false;
+
+type TupleDefinitelyContainsStoragePair<Keys extends readonly string[]> =
+	TupleDefinitelyContains<Keys, "AWS_ACCESS_KEY_ID"> extends true
+		? TupleDefinitelyContains<Keys, "AWS_SECRET_ACCESS_KEY"> extends true
+			? true
+			: false
+		: false;
+
 /**
  * Reject a fixed key tuple that contains only one half of the storage credential. Dynamic
  * arrays are checked at runtime because their contents are not known to TypeScript.
@@ -429,7 +448,7 @@ type InvalidStorageKeyTuple<Keys extends readonly string[]> =
 			? never
 			: [Extract<Keys[number], StorageCredentialEnvKey>] extends [never]
 				? never
-				: StorageCredentialEnvKey extends Keys[number]
+				: TupleDefinitelyContainsStoragePair<Keys> extends true
 					? never
 					: Keys
 		: never;
