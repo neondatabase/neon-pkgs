@@ -19,7 +19,7 @@ describe("env pull key selection", () => {
 
 	it("rejects unknown keys instead of silently widening the pull", () => {
 		expect(() => parseEnvPullKeys(["DATABSE_URL"], "--env")).toThrow(
-			`Unknown env variable <redacted invalid value>. Supported values: ${ENV_PULL_KEYS.join(", ")}.`,
+			`Unknown env variable <redacted invalid value>. Did you mean DATABASE_URL? Supported values: ${ENV_PULL_KEYS.join(", ")}.`,
 		);
 	});
 

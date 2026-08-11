@@ -153,8 +153,19 @@ export const parseEnvPullKeys = (
 	);
 	if (unknown.length > 0) {
 		const displayNames = unknown.map(redactUnknownEnvValue);
+		const suggestions = [
+			...new Set(
+				unknown
+					.map(suggestEnvPullKey)
+					.filter((key): key is EnvPullKey => key !== null),
+			),
+		];
+		const suggestion =
+			suggestions.length > 0
+				? ` Did you mean ${suggestions.join(" or ")}?`
+				: "";
 		throw new Error(
-			`Unknown env variable${unknown.length === 1 ? "" : "s"} ${displayNames.join(", ")}. ${supported}`,
+			`Unknown env variable${unknown.length === 1 ? "" : "s"} ${displayNames.join(", ")}.${suggestion} ${supported}`,
 		);
 	}
 
@@ -170,6 +181,34 @@ const redactUnknownEnvValue = (value: string): string => {
 			: "<redacted invalid value>";
 	}
 	return "<redacted invalid value>";
+};
+
+const suggestEnvPullKey = (value: string): EnvPullKey | null => {
+	if (value.includes("=")) return null;
+	const closest = ENV_PULL_KEYS.map(
+		(key) => [key, editDistance(value, key)] as const,
+	).sort((a, b) => a[1] - b[1])[0];
+	return closest && closest[1] <= 2 ? closest[0] : null;
+};
+
+const editDistance = (left: string, right: string): number => {
+	let previous = Array.from(
+		{ length: right.length + 1 },
+		(_, index) => index,
+	);
+	for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+		const current = [leftIndex];
+		for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+			current[rightIndex] = Math.min(
+				(previous[rightIndex] ?? 0) + 1,
+				(current[rightIndex - 1] ?? 0) + 1,
+				(previous[rightIndex - 1] ?? 0) +
+					(left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1),
+			);
+		}
+		previous = current;
+	}
+	return previous[right.length] ?? right.length;
 };
 
 /** Narrow yargs' array option value without accepting any other runtime shape. */
