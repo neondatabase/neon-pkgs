@@ -42,6 +42,21 @@ const PROJECTS_LIST_LIMIT = 100;
 export const command = "projects";
 export const describe = "Manage projects";
 export const aliases = ["project"];
+export const projectsListBuilder = (argv: yargs.Argv) =>
+	argv.options({
+		"org-id": {
+			describe: "List projects of a given organization",
+			type: "string",
+		},
+		"recoverable-only": {
+			describe:
+				"List only deleted projects within their deletion grace period",
+			type: "boolean",
+		},
+	});
+export const projectsListHandler = async (args: yargs.Arguments) => {
+	await handleMissingOrgId(args as any, list);
+};
 export const builder = (argv: yargs.Argv) => {
 	return argv
 		.usage("$0 projects <sub-command> [options]")
@@ -52,21 +67,8 @@ export const builder = (argv: yargs.Argv) => {
 		.command(
 			"list",
 			"List projects",
-			(yargs) =>
-				yargs.options({
-					"org-id": {
-						describe: "List projects of a given organization",
-						type: "string",
-					},
-					"recoverable-only": {
-						describe:
-							"List only deleted projects within their deletion grace period",
-						type: "boolean",
-					},
-				}),
-			async (args) => {
-				await handleMissingOrgId(args as any, list);
-			},
+			projectsListBuilder,
+			projectsListHandler,
 		)
 		.command(
 			"create",

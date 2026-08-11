@@ -40,6 +40,9 @@ const NO_SUBCOMMANDS_VERBS = [
 	"login",
 	"me",
 
+	// alias of `projects list`
+	"list",
+
 	// aliases
 	"cs",
 	"connection-string",

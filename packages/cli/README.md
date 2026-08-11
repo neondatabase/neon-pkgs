@@ -64,6 +64,17 @@ neon projects list --api-key <neon_api_key>
 
 For information about obtaining an Neon API key, see [Authentication](https://api-docs.neon.tech/reference/authentication), in the _Neon API Reference_.
 
+## List projects
+
+`neon list` is a shortcut for `neon projects list`. It supports the same options
+and output formats:
+
+```bash
+neon list
+neon list --org-id <organization-id>
+neon list --recoverable-only
+```
+
 ## Project and branch creation
 
 Choose the PostgreSQL version when creating a project:
@@ -1028,6 +1039,7 @@ API keys in org-7
 | profile                                                                    | `list`, `create`, `rotate-key`, `remove`                                                                     | Manage named sets of credentials   |
 | api-keys                                                                   | `list`, `create`, `revoke`                                                                                   | Manage API keys                    |
 | [projects](https://neon.com/docs/reference/cli-projects)                   | `list`, `create`, `update`, `delete`, `get`                                                                  | Manage projects                    |
+| list                                                                       |                                                                                                              | Alias for `projects list`          |
 | [ip-allow](https://neon.com/docs/reference/cli-ip-allow)                   | `list`, `add`, `remove`, `reset`                                                                             | Manage IP Allow                    |
 | [me](https://neon.com/docs/reference/cli-me)                               |                                                                                                              | Show current user                  |
 | [branches](https://neon.com/docs/reference/cli-branches)                   | `list`, `create`, `rename`, `add-compute`, `set-default`, `set-expiration`, `delete`, `get`                  | Manage branches                    |
