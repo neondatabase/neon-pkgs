@@ -66,8 +66,9 @@ For information about obtaining an Neon API key, see [Authentication](https://ap
 
 ## List projects (`list`)
 
-`neon list` is a shortcut for `neon projects list`. It lists projects you own
-and projects shared with you, with the same options and output formats:
+`neon list` is a shortcut for `neon projects list`. By default, it lists
+projects you own and projects shared with you. `--org-id` and
+`--recoverable-only` narrow the output to projects you own:
 
 ```bash
 neon list
