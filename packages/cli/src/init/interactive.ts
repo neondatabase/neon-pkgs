@@ -185,6 +185,12 @@ async function selectTemplate(
 
 export type InteractiveInitOptions = {
 	preview?: boolean;
+	/** Existing project to use — carried into the agent hand-off command. */
+	projectId?: string;
+	/** Existing org to scope to — carried into the agent hand-off command. */
+	orgId?: string;
+	/** Branch to target — carried into the agent hand-off command. */
+	branchId?: string;
 };
 
 export async function interactiveInit(
@@ -783,6 +789,11 @@ async function interactiveInitInner(
 	if (selectedFeatures.length > 0)
 		gettingStartedData.features = selectedFeatures;
 	if (options.preview) gettingStartedData.preview = true;
+	// Carry any explicitly provided IDs into the hand-off so the agent runs the
+	// verified fast path (single `neon link`) instead of the selection flow.
+	if (options.projectId) gettingStartedData.projectId = options.projectId;
+	if (options.orgId) gettingStartedData.orgId = options.orgId;
+	if (options.branchId) gettingStartedData.branchId = options.branchId;
 
 	// Build a prompt for the user to paste into their agent chat
 	const cmd = `neon init --agent --data '${JSON.stringify({ step: "getting-started", ...gettingStartedData })}'`;

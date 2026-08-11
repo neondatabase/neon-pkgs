@@ -3,6 +3,7 @@ import type yargs from "yargs";
 import { closeAnalytics, sendError } from "../analytics.js";
 import { detectAgent } from "../init/detect_agent.js";
 import { enrichResponse } from "../init/enrich_output.js";
+import { assertSafeId } from "../init/ids.js";
 import { interactiveInit } from "../init/interactive.js";
 import { orchestrate } from "../init/orchestrate.js";
 import { routeDataStep } from "../init/route_command.js";
@@ -37,6 +38,21 @@ export const builder = (yargs: yargs.Argv) =>
 			default: false,
 			describe:
 				"Enable preview features (e.g. project bootstrapping from templates).",
+		})
+		.option("project-id", {
+			type: "string",
+			describe:
+				"Use an existing Neon project by ID. Skips organization and project selection.",
+		})
+		.option("org-id", {
+			type: "string",
+			describe:
+				"Scope setup to an existing organization by ID. Skips organization selection.",
+		})
+		.option("branch-id", {
+			type: "string",
+			describe:
+				"Target a specific branch by ID when pulling environment variables.",
 		})
 		.strict(false);
 
@@ -77,6 +93,9 @@ export const handler = async (argv: {
 	data?: string;
 	skipMigrations?: boolean;
 	preview?: boolean;
+	projectId?: string;
+	orgId?: string;
+	branchId?: string;
 	profile?: string;
 }) => {
 	// Auto-detect agent from environment. When --agent is explicitly passed,
@@ -115,6 +134,13 @@ export const handler = async (argv: {
 			);
 		}
 
+		// Validate IDs up front — they are interpolated into shell commands
+		// downstream, and an early, well-shaped rejection beats a confusing
+		// failure several phases later.
+		if (argv.projectId) assertSafeId(argv.projectId, "project ID");
+		if (argv.orgId) assertSafeId(argv.orgId, "org ID");
+		if (argv.branchId) assertSafeId(argv.branchId, "branch ID");
+
 		// --data with a "step" field routes to the appropriate phase
 		if (argv.data && isAgentMode) {
 			let data: Record<string, unknown>;
@@ -143,10 +169,18 @@ export const handler = async (argv: {
 					agent,
 					skipMigrations: argv.skipMigrations,
 					preview: argv.preview,
+					projectId: argv.projectId,
+					orgId: argv.orgId,
+					branchId: argv.branchId,
 				}),
 			);
 		} else {
-			await interactiveInit({ preview: argv.preview });
+			await interactiveInit({
+				preview: argv.preview,
+				projectId: argv.projectId,
+				orgId: argv.orgId,
+				branchId: argv.branchId,
+			});
 		}
 	} catch (error) {
 		const cause = error instanceof Error ? error : new Error(String(error));

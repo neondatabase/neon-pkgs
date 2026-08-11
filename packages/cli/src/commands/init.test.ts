@@ -77,6 +77,9 @@ describe("init", () => {
 			agent: "cursor",
 			skipMigrations: undefined,
 			preview: undefined,
+			projectId: undefined,
+			orgId: undefined,
+			branchId: undefined,
 		});
 		expect(interactiveInit).not.toHaveBeenCalled();
 	});
@@ -96,6 +99,9 @@ describe("init", () => {
 			agent: "claude",
 			skipMigrations: true,
 			preview: undefined,
+			projectId: undefined,
+			orgId: undefined,
+			branchId: undefined,
 		});
 	});
 
@@ -105,7 +111,12 @@ describe("init", () => {
 
 		await handler({ preview: true });
 
-		expect(interactiveInit).toHaveBeenCalledWith({ preview: true });
+		expect(interactiveInit).toHaveBeenCalledWith({
+			preview: true,
+			projectId: undefined,
+			orgId: undefined,
+			branchId: undefined,
+		});
 	});
 
 	test("should pass preview to orchestrate in agent mode", async () => {
@@ -120,6 +131,9 @@ describe("init", () => {
 			agent: "cursor",
 			skipMigrations: undefined,
 			preview: true,
+			projectId: undefined,
+			orgId: undefined,
+			branchId: undefined,
 		});
 	});
 

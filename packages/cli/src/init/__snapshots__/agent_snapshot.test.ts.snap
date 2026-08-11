@@ -14564,6 +14564,15 @@ Options:
 --preview
 └────────────────>  Enable preview features (e.g. project bootstrapping from tem
                     plates). [boolean] [default: false]
+--project-id
+└────────────────>  Use an existing Neon project by ID. Skips organization and p
+                    roject selection. [string]
+--org-id
+└────────────────>  Scope setup to an existing organization by ID. Skips organiz
+                    ation selection. [string]
+--branch-id
+└────────────────>  Target a specific branch by ID when pulling environment vari
+                    ables. [string]
 --- subprocesses ---
 "
 `;

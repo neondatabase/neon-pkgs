@@ -1,23 +1,13 @@
+import { assertSafeId } from "../ids.js";
 import { neonctlCmd } from "../neonctl.js";
 import { SKILL_REFERENCE_URLS } from "../skills.js";
 import type { PhaseResponse } from "../types.js";
-
-/**
- * Validates that an ID contains only safe characters for shell interpolation.
- * Neon org/project IDs are typically UUIDs or slug-like strings.
- */
-function assertSafeId(value: string, label: string): void {
-	if (!/^[\w.:-]+$/.test(value)) {
-		throw new Error(
-			`Invalid ${label}: "${value}". Expected alphanumeric, hyphens, underscores, dots, or colons.`,
-		);
-	}
-}
 
 export type DbPhaseOptions = {
 	agent?: string;
 	orgId?: string;
 	projectId?: string;
+	branchId?: string;
 	orgsResult?: string;
 	projectsResult?: string;
 	framework?: string;
@@ -35,6 +25,7 @@ export async function handleDbPhase(
 	// Validate IDs that will be interpolated into shell commands
 	if (options.projectId) assertSafeId(options.projectId, "project ID");
 	if (options.orgId) assertSafeId(options.orgId, "org ID");
+	if (options.branchId) assertSafeId(options.branchId, "branch ID");
 
 	// Error from a previous step
 	if (options.error) {
@@ -59,10 +50,16 @@ export async function handleDbPhase(
 
 	// If we have a project ID, we're in the "wire it up" phase
 	if (options.projectId) {
+		const branchFlag = options.branchId
+			? ` --branch-id ${options.branchId}`
+			: "";
 		return {
 			phase: "db",
 			status: "project_ready",
-			project: { id: options.projectId },
+			project: {
+				id: options.projectId,
+				...(options.branchId ? { branchId: options.branchId } : {}),
+			},
 			nextAction: {
 				type: "agent_action",
 				prerequisite: SKILL_REFERENCE_URLS.connectionMethods,
@@ -70,7 +67,7 @@ export async function handleDbPhase(
 					{
 						id: "get_connection_string",
 						description: "Get the database connection string",
-						command: `${neonctlCmd()} connection-string --project-id ${options.projectId}`,
+						command: `${neonctlCmd()} connection-string --project-id ${options.projectId}${branchFlag}`,
 					},
 					{
 						id: "store_env",

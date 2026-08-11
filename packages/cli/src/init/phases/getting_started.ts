@@ -5,6 +5,7 @@ import {
 	MISSING_BINARY_HINT,
 	resolvePackageManager,
 } from "../../utils/package_manager.js";
+import { assertSafeId } from "../ids.js";
 import { neonctlCmd } from "../neonctl.js";
 import { ensureSkillsUpToDate, SKILL_REFERENCE_URLS } from "../skills.js";
 import type { PhaseResponse } from "../types.js";
@@ -20,6 +21,15 @@ export type GettingStartedPhaseOptions = {
 	features?: string[];
 	/** Preview mode — restricts project creation to new projects in AWS us-east */
 	preview?: boolean;
+	/**
+	 * Existing project to use. When set, org/project selection is skipped and a
+	 * single verified `neon link` step writes the .neon context.
+	 */
+	projectId?: string;
+	/** Existing org to scope to. When set (without projectId), org selection is skipped. */
+	orgId?: string;
+	/** Branch to target — recorded in the .neon context so `env pull` uses it. */
+	branchId?: string;
 	/** The project directory the emitted commands will run in. */
 	cwd: string;
 };
@@ -43,45 +53,41 @@ export async function handleGettingStartedPhase(
 	const installPm = resolvePackageManager(options.cwd);
 
 	if (!options.hasConnectionString) {
-		if (options.preview) {
-			// Public beta: platform features are only in AWS us-east-2 for now
-			steps.push(
-				{
-					id: "select_org",
-					description: [
-						"List the user's Neon organizations using the CLI command below.",
-						"If only one org exists, use it automatically.",
-						"If multiple orgs exist, ask the user which one to use.",
-						"Remember the selected org ID for the next steps.",
-					].join(" "),
-					command: `${neonctlCmd()} orgs list --output json`,
-				},
-				{
-					id: "select_or_create_project",
-					description: [
-						"List existing Neon projects in the selected organization using the CLI command below (replace <org-id> with the selected org ID).",
-						"IMPORTANT: Neon features (Functions, Object Storage, and AI Gateway) are currently in beta and only available in the AWS us-east-2 region (more regions coming shortly). Projects must have region_id 'aws-us-east-2' and be created on or after 2026-06-15.",
-						"Filter the project list to ONLY show projects where region_id is 'aws-us-east-2' AND created_at is on or after '2026-06-15'.",
-						"If eligible projects exist, present them alongside a 'Create new project' option.",
-						"If no eligible projects exist, tell the user and proceed directly to creating a new one.",
-						"IMPORTANT: Always include --org-id when creating a project to avoid interactive prompts.",
-					].join(" "),
-					command: `${neonctlCmd()} projects list --org-id <org-id> --output json`,
-				},
-				{
-					id: "create_project_if_needed",
-					description: [
-						"If the user chose to create a new project, create it in the AWS us-east-2 region using the CLI command below (replace <org-id> and <project-name>).",
-						"Ask the user for a project name (suggest the current directory name).",
-						"If the user chose an existing eligible project, skip this step.",
-					].join(" "),
-					command: `${neonctlCmd()} projects create --name <project-name> --org-id <org-id> --region-id aws-us-east-2 --output json`,
-				},
-			);
+		if (options.projectId) {
+			// Verified fast path: the user named an existing project, so there is
+			// nothing to list or ask. A single `neon link` verifies the IDs against
+			// the account, infers the org, records the branch, and writes .neon —
+			// which makes the org/project selection steps and create_neon_context
+			// below unnecessary.
+			assertSafeId(options.projectId, "project ID");
+			const linkFlags = [`--project-id ${options.projectId}`];
+			if (options.orgId) {
+				assertSafeId(options.orgId, "org ID");
+				linkFlags.push(`--org-id ${options.orgId}`);
+			}
+			if (options.branchId) {
+				assertSafeId(options.branchId, "branch ID");
+				linkFlags.push(`--branch-id ${options.branchId}`);
+			}
+			steps.push({
+				id: "link_project",
+				description: [
+					"Link this directory to the existing Neon project using the CLI command below.",
+					"This verifies the IDs against the user's Neon account, infers the organization, and writes the .neon context file (merging into any existing file — do NOT overwrite it).",
+					"No organization or project selection is needed.",
+				].join(" "),
+				command: `${neonctlCmd()} link ${linkFlags.join(" ")}`,
+			});
 		} else {
-			// Standard mode: let user choose existing or create new
-			steps.push(
-				{
+			// No project chosen yet. If an org was provided, skip org selection and
+			// scope the project commands to it; otherwise start by listing orgs.
+			const orgKnown = Boolean(options.orgId);
+			if (orgKnown) assertSafeId(options.orgId as string, "org ID");
+			const orgRef = options.orgId ?? "<org-id>";
+			const orgFlag = `--org-id ${orgRef}`;
+
+			if (!orgKnown) {
+				steps.push({
 					id: "select_org",
 					description: [
 						"List the user's Neon organizations using the CLI command below.",
@@ -90,39 +96,77 @@ export async function handleGettingStartedPhase(
 						"Remember the selected org ID for the next steps.",
 					].join(" "),
 					command: `${neonctlCmd()} orgs list --output json`,
-				},
-				{
-					id: "select_or_create_project",
-					description: [
-						"List existing Neon projects in the selected organization using the CLI command below (replace <org-id> with the selected org ID).",
-						"Ask the user whether they want to use an existing project or create a new one.",
-						"If creating new, ask the user for a project name (suggest the current directory name).",
-						"IMPORTANT: Always include --org-id when creating a project to avoid interactive prompts.",
-					].join(" "),
-					command: `${neonctlCmd()} projects list --org-id <org-id> --output json`,
-				},
-				{
-					id: "create_project_if_needed",
-					description: [
-						"If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>).",
-						"If the user chose an existing project, skip this step.",
-					].join(" "),
-					command: `${neonctlCmd()} projects create --name <project-name> --org-id <org-id> --output json`,
-				},
-			);
-		}
+				});
+			}
 
-		// Create/update .neon context file
-		steps.push({
-			id: "create_neon_context",
-			description: [
-				"Update the .neon context file in the project root with the selected org and project IDs.",
-				"IMPORTANT: If a .neon file already exists, you MUST read it first, then merge the new orgId and projectId into the existing content. Do NOT overwrite the file — other fields (like _init, branch, etc.) must be preserved.",
-				"If no .neon file exists, create one.",
-				'The file is JSON. Add/update only the orgId and projectId fields: {"orgId": "<org-id>", "projectId": "<project-id>", ...existing fields}.',
-				"This file is safe to commit — it contains no secrets.",
-			].join(" "),
-		});
+			const orgPhrase = orgKnown
+				? `organization ${orgRef}`
+				: "selected organization";
+			const listSuffix = orgKnown
+				? ""
+				: " (replace <org-id> with the selected org ID)";
+
+			if (options.preview) {
+				// Public beta: platform features are only in AWS us-east-2 for now
+				steps.push(
+					{
+						id: "select_or_create_project",
+						description: [
+							`List existing Neon projects in the ${orgPhrase} using the CLI command below${listSuffix}.`,
+							"IMPORTANT: Neon features (Functions, Object Storage, and AI Gateway) are currently in beta and only available in the AWS us-east-2 region (more regions coming shortly). Projects must have region_id 'aws-us-east-2' and be created on or after 2026-06-15.",
+							"Filter the project list to ONLY show projects where region_id is 'aws-us-east-2' AND created_at is on or after '2026-06-15'.",
+							"If eligible projects exist, present them alongside a 'Create new project' option.",
+							"If no eligible projects exist, tell the user and proceed directly to creating a new one.",
+							"IMPORTANT: Always include --org-id when creating a project to avoid interactive prompts.",
+						].join(" "),
+						command: `${neonctlCmd()} projects list ${orgFlag} --output json`,
+					},
+					{
+						id: "create_project_if_needed",
+						description: [
+							`If the user chose to create a new project, create it in the AWS us-east-2 region using the CLI command below${orgKnown ? "" : " (replace <org-id> and <project-name>)"}.`,
+							"Ask the user for a project name (suggest the current directory name).",
+							"If the user chose an existing eligible project, skip this step.",
+						].join(" "),
+						command: `${neonctlCmd()} projects create --name <project-name> ${orgFlag} --region-id aws-us-east-2 --output json`,
+					},
+				);
+			} else {
+				// Standard mode: let user choose existing or create new
+				steps.push(
+					{
+						id: "select_or_create_project",
+						description: [
+							`List existing Neon projects in the ${orgPhrase} using the CLI command below${listSuffix}.`,
+							"Ask the user whether they want to use an existing project or create a new one.",
+							"If creating new, ask the user for a project name (suggest the current directory name).",
+							"IMPORTANT: Always include --org-id when creating a project to avoid interactive prompts.",
+						].join(" "),
+						command: `${neonctlCmd()} projects list ${orgFlag} --output json`,
+					},
+					{
+						id: "create_project_if_needed",
+						description: [
+							`If the user chose to create a new project, create it using the CLI command below${orgKnown ? "" : " (replace <org-id> and <project-name>)"}.`,
+							"If the user chose an existing project, skip this step.",
+						].join(" "),
+						command: `${neonctlCmd()} projects create --name <project-name> ${orgFlag} --output json`,
+					},
+				);
+			}
+
+			// Create/update .neon context file
+			steps.push({
+				id: "create_neon_context",
+				description: [
+					"Update the .neon context file in the project root with the selected org and project IDs.",
+					"IMPORTANT: If a .neon file already exists, you MUST read it first, then merge the new orgId and projectId into the existing content. Do NOT overwrite the file — other fields (like _init, branch, etc.) must be preserved.",
+					"If no .neon file exists, create one.",
+					'The file is JSON. Add/update only the orgId and projectId fields: {"orgId": "<org-id>", "projectId": "<project-id>", ...existing fields}.',
+					"This file is safe to commit — it contains no secrets.",
+				].join(" "),
+			});
+		}
 
 		// Install project dependencies (required before env pull — config files may import packages)
 		steps.push({

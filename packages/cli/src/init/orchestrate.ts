@@ -15,6 +15,12 @@ export type OrchestratorOptions = {
 	skipMigrations?: boolean;
 	/** Enable preview features (e.g. project bootstrapping from templates) */
 	preview?: boolean;
+	/** Existing project to use — skips org/project selection in getting-started */
+	projectId?: string;
+	/** Existing org to scope to — skips org selection in getting-started */
+	orgId?: string;
+	/** Branch to target when pulling env */
+	branchId?: string;
 };
 
 /**
@@ -132,6 +138,9 @@ export async function orchestrate(
 			migrationDir: inspection.migrationDir as string | undefined,
 			features,
 			preview: options.preview,
+			projectId: options.projectId,
+			orgId: options.orgId,
+			branchId: options.branchId,
 		});
 	}
 
