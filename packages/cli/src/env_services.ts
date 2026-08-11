@@ -165,13 +165,11 @@ const redactUnknownEnvValue = (value: string): string => {
 	const separator = value.indexOf("=");
 	if (separator !== -1) {
 		const key = value.slice(0, separator);
-		return /^[A-Za-z][A-Za-z0-9_]*$/.test(key)
+		return ENV_PULL_KEYS.some((supportedKey) => supportedKey === key)
 			? `${key}=<redacted>`
 			: "<redacted invalid value>";
 	}
-	return /^[A-Za-z][A-Za-z0-9_]*$/.test(value)
-		? value
-		: "<redacted invalid value>";
+	return "<redacted invalid value>";
 };
 
 /** Narrow yargs' array option value without accepting any other runtime shape. */

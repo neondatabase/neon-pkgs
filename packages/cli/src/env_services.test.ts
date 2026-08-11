@@ -19,19 +19,22 @@ describe("env pull key selection", () => {
 
 	it("rejects unknown keys instead of silently widening the pull", () => {
 		expect(() => parseEnvPullKeys(["DATABSE_URL"], "--env")).toThrow(
-			`Unknown env variable DATABSE_URL. Supported values: ${ENV_PULL_KEYS.join(", ")}.`,
+			`Unknown env variable <redacted invalid value>. Supported values: ${ENV_PULL_KEYS.join(", ")}.`,
 		);
 	});
 
 	it("does not echo a value pasted into --env", () => {
-		const secret = "postgres://user:s3cr3t@example.com/db";
-		expect(() =>
-			parseEnvPullKeys([`DATABASE_URL=${secret}`], "--env"),
-		).toThrow("Unknown env variable DATABASE_URL=<redacted>.");
-		try {
-			parseEnvPullKeys([`DATABASE_URL=${secret}`], "--env");
-		} catch (error) {
-			expect(String(error)).not.toContain(secret);
+		expect.assertions(3);
+		for (const value of [
+			"DATABASE_URL=postgres://user:s3cr3t@example.com/db",
+			"napi_live_secret123",
+			"secret_prefix,secret_suffix",
+		]) {
+			try {
+				parseEnvPullKeys([value], "--env");
+			} catch (error) {
+				expect(String(error)).not.toContain(value);
+			}
 		}
 	});
 

@@ -770,12 +770,22 @@ describe("env pull --env", () => {
 	it("rejects the AI Gateway base URL when the gateway is not enabled", async () => {
 		await expect(
 			pull({
-				...baseProps(new NoCredentialsNeonApi(), cwd),
+				...baseProps(new UnsupportedCredentialsNeonApi(), cwd),
 				envKeys: ["NEON_AI_GATEWAY_BASE_URL"],
 			}),
 		).rejects.toThrow(
 			/--env NEON_AI_GATEWAY_BASE_URL: AI Gateway is not available for this Neon project/,
 		);
+		expect(existsSync(join(cwd, ".env.local"))).toBe(false);
+	});
+
+	it("preserves transient AI Gateway credential-read failures", async () => {
+		await expect(
+			pull({
+				...baseProps(new NoCredentialsNeonApi(), cwd),
+				envKeys: ["NEON_AI_GATEWAY_BASE_URL"],
+			}),
+		).rejects.toThrow(/HTTP 503 Service Unavailable/);
 		expect(existsSync(join(cwd, ".env.local"))).toBe(false);
 	});
 
@@ -832,6 +842,7 @@ class NoCredentialsNeonApi extends FakeNeonApi {
 		throw new PlatformError(
 			ErrorCode.FeatureUnavailable,
 			"Branch credentials isn't available for this Neon project (HTTP 503 Service Unavailable).",
+			{ details: { status: 503 } },
 		);
 	};
 	override async createCredential(): Promise<NeonCredentialSecret> {
@@ -839,6 +850,17 @@ class NoCredentialsNeonApi extends FakeNeonApi {
 	}
 	override async listCredentials(): Promise<NeonCredentialMeta[]> {
 		return this.unavailable();
+	}
+}
+
+/** A project whose region does not expose the branch-credentials endpoint. */
+class UnsupportedCredentialsNeonApi extends FakeNeonApi {
+	override async listCredentials(): Promise<NeonCredentialMeta[]> {
+		throw new PlatformError(
+			ErrorCode.FeatureUnavailable,
+			"Branch credentials isn't available for this Neon project (HTTP 404 Not Found).",
+			{ details: { status: 404 } },
+		);
 	}
 }
 

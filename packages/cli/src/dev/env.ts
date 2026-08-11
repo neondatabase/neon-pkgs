@@ -400,7 +400,8 @@ const readAiGatewayAvailable = async (
 	} catch (error) {
 		if (
 			isPlatformError(error) &&
-			error.code === ErrorCode.FeatureUnavailable
+			error.code === ErrorCode.FeatureUnavailable &&
+			(error.details.status === 404 || error.details.status === 501)
 		) {
 			return false;
 		}
