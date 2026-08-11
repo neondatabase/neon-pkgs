@@ -47,36 +47,28 @@ export const aliases = ["project"];
 const setProjectIdForAnalytics = (args: any) => {
 	args.projectId = args.id;
 };
-const projectsListBuilder = (argv: yargs.Argv) =>
-	argv.options({
-		"org-id": {
-			describe: "List projects of a given organization",
-			type: "string",
-		},
-		"recoverable-only": {
-			describe:
-				"List only deleted projects within their deletion grace period",
-			type: "boolean",
-		},
-	});
-const projectsListHandler = async (args: yargs.Arguments) => {
-	await handleMissingOrgId(args as any, list);
-};
 export const builder = (argv: yargs.Argv) => {
 	return argv
 		.usage("$0 projects [sub-command] [options]")
 		.middleware(setProjectIdForAnalytics)
 		.command(
-			"$0",
+			["list", "$0"],
 			"List projects",
-			projectsListBuilder,
-			projectsListHandler,
-		)
-		.command(
-			"list",
-			"List projects",
-			projectsListBuilder,
-			projectsListHandler,
+			(yargs) =>
+				yargs.options({
+					"org-id": {
+						describe: "List projects of a given organization",
+						type: "string",
+					},
+					"recoverable-only": {
+						describe:
+							"List only deleted projects within their deletion grace period",
+						type: "boolean",
+					},
+				}),
+			async (args) => {
+				await handleMissingOrgId(args as any, list);
+			},
 		)
 		.command(
 			"create",

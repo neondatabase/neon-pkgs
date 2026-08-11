@@ -75,7 +75,9 @@ neon branches --project-id <project-id>
 ```
 
 `neon projects` lists projects you own and projects shared with you.
-`--org-id` and `--recoverable-only` narrow the output to projects you own:
+`--org-id` lists one organization's projects, while `--recoverable-only` lists
+deleted projects still inside their recovery window. Neither flag includes the
+separate "Shared with you" section:
 
 ```bash
 neon projects --org-id <organization-id>
