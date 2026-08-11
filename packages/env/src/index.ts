@@ -27,6 +27,7 @@ export type {
 	NeonStorageEnv,
 	ResolvedNeonEnv,
 	SelectableEnvKey,
+	SelectedNeonEnv,
 } from "@neon-internals/env-core/env";
 export {
 	fetchEnv,

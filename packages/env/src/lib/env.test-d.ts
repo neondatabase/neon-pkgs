@@ -10,7 +10,9 @@ import type {
 	NeonPostgresEnv,
 	NeonStorageEnv,
 	SelectableEnvKey,
+	SelectedNeonEnv,
 } from "@neon-internals/env-core/env";
+import { fetchEnv } from "@neon-internals/env-core/env";
 import { describe, expectTypeOf, test } from "vitest";
 import type {
 	FunctionSlugOf,
@@ -72,6 +74,137 @@ describe("parseEnv key filter (types)", () => {
 		expectTypeOf<SelectableEnvKey<typeof config>>().toEqualTypeOf<
 			"DATABASE_URL" | "DATABASE_URL_UNPOOLED" | "NEON_BRANCH"
 		>();
+	});
+});
+
+describe("fetchEnv key filter (types)", () => {
+	test("keeps an inline literal selection exact", () => {
+		const config = defineConfig({});
+		const env = fetchEnv(config, {
+			projectId: "proj",
+			branch: "main",
+			keys: ["DATABASE_URL"],
+		});
+
+		expectTypeOf(env).toEqualTypeOf<
+			Promise<{ postgres: { databaseUrl: string } }>
+		>();
+	});
+
+	test("makes a dynamic selection safely optional", () => {
+		const config = defineConfig({});
+		const keys: Array<"DATABASE_URL" | "NEON_BRANCH"> =
+			Math.random() > 0.5 ? ["DATABASE_URL"] : ["NEON_BRANCH"];
+		const env = fetchEnv(config, {
+			projectId: "proj",
+			branch: "main",
+			keys,
+		});
+
+		expectTypeOf(env).toEqualTypeOf<
+			Promise<{
+				postgres?: { databaseUrl?: string };
+				branch?: { name?: string };
+			}>
+		>();
+	});
+
+	test("an empty dynamic selection does not claim its element type is present", () => {
+		const config = defineConfig({});
+		const keys: "DATABASE_URL"[] = [];
+		const env = fetchEnv(config, {
+			projectId: "proj",
+			branch: "main",
+			keys,
+		});
+
+		expectTypeOf(env).toEqualTypeOf<
+			Promise<{ postgres?: { databaseUrl?: string } }>
+		>();
+	});
+
+	test("a tuple containing a union-valued key stays conservative", () => {
+		const config = defineConfig({});
+		const key =
+			Math.random() > 0.5
+				? ("DATABASE_URL" as const)
+				: ("NEON_BRANCH" as const);
+		const env = fetchEnv(config, {
+			projectId: "proj",
+			branch: "main",
+			keys: [key],
+		});
+
+		expectTypeOf(env).toEqualTypeOf<
+			Promise<{
+				postgres?: { databaseUrl?: string };
+				branch?: { name?: string };
+			}>
+		>();
+	});
+
+	test("a rest tuple never overstates which repeated keys are present", () => {
+		const config = defineConfig({});
+		const keys: readonly ["DATABASE_URL", ..."NEON_BRANCH"[]] = [
+			"DATABASE_URL",
+		];
+		const env = fetchEnv(config, {
+			projectId: "proj",
+			branch: "main",
+			keys,
+		});
+
+		expectTypeOf(env).toEqualTypeOf<
+			Promise<{
+				postgres?: { databaseUrl?: string };
+				branch?: { name?: string };
+			}>
+		>();
+	});
+
+	test("a union of whole literal tuples preserves its exact alternatives", () => {
+		const config = defineConfig({});
+		const keys =
+			Math.random() > 0.5
+				? (["DATABASE_URL"] as const)
+				: (["NEON_BRANCH"] as const);
+		const env = fetchEnv(config, {
+			projectId: "proj",
+			branch: "main",
+			keys,
+		});
+
+		expectTypeOf(env).toEqualTypeOf<
+			Promise<
+				| { postgres: { databaseUrl: string } }
+				| { branch: { name: string } }
+			>
+		>();
+	});
+
+	test("keeps existing explicit generic calls valid and conservative", () => {
+		const config = defineConfig({});
+		const env = fetchEnv<typeof config, "DATABASE_URL">(config, {
+			projectId: "proj",
+			branch: "main",
+			keys: ["DATABASE_URL"],
+		});
+
+		expectTypeOf(env).toEqualTypeOf<
+			Promise<{ postgres?: { databaseUrl?: string } }>
+		>();
+	});
+
+	test("rejects unknown and policy-disabled keys", () => {
+		const config = defineConfig({});
+		// @ts-expect-error not a real Neon env var
+		fetchEnv(config, { projectId: "proj", branch: "main", keys: ["NOPE"] });
+		// @ts-expect-error auth is not enabled by this policy
+		fetchEnv(config, {
+			projectId: "proj",
+			branch: "main",
+			keys: ["NEON_AUTH_BASE_URL"],
+		});
 	});
 });
 
@@ -424,6 +557,9 @@ describe("env type-export surface", () => {
 		expectTypeOf<NeonFunctionEnv<typeof sample, "hello">>().not.toBeAny();
 		expectTypeOf<NeonPostgresEnv>().not.toBeAny();
 		expectTypeOf<NeonStorageEnv>().not.toBeAny();
+		expectTypeOf<
+			SelectedNeonEnv<readonly ["DATABASE_URL"]>
+		>().not.toBeAny();
 		expectTypeOf<SelectableEnvKey<typeof sample>>().not.toBeAny();
 	});
 });

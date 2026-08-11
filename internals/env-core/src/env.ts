@@ -366,6 +366,57 @@ export type FilteredNeonEnv<K extends string> = {
 	};
 };
 
+/**
+ * A filtered result when the exact runtime contents of a key array are unknown. Both the
+ * namespace and its selected properties are optional because the array may omit any member of
+ * its element union, or be empty.
+ */
+type OptionalFilteredNeonEnv<K extends string> = {
+	[N in keyof EnvKeysByNamespace as [
+		Extract<K, EnvKeysByNamespace[N]>,
+	] extends [never]
+		? never
+		: N]?: {
+		[P in Extract<K, EnvKeysByNamespace[N]> as EnvKeyToProp[P &
+			keyof EnvKeyToProp]]?: NamespaceEnv[N][EnvKeyToProp[P &
+			keyof EnvKeyToProp] &
+			keyof NamespaceEnv[N]];
+	};
+};
+
+/** Whether `T` is a union rather than one concrete type. */
+type IsUnion<T, Whole = T> = T extends Whole
+	? [Whole] extends [T]
+		? false
+		: true
+	: never;
+
+/** Whether any fixed tuple position can hold more than one key at runtime. */
+type TupleHasUnion<T extends readonly unknown[]> = T extends readonly []
+	? false
+	: T extends readonly [infer Head, ...infer Tail extends readonly unknown[]]
+		? true extends IsUnion<Head>
+			? true
+			: TupleHasUnion<Tail>
+		: true;
+
+/**
+ * The sound result of selecting an array of OS-level env-var keys.
+ *
+ * Inline literal tuples remain exact. Widened arrays, rest tuples, and tuple positions whose
+ * value is a union are conservative because their runtime contents may be any subset of the
+ * element type. The leading conditional distributes unions of whole literal tuples, preserving
+ * each exact alternative.
+ */
+export type SelectedNeonEnv<Keys extends readonly string[]> =
+	Keys extends readonly string[]
+		? number extends Keys["length"]
+			? OptionalFilteredNeonEnv<Keys[number]>
+			: TupleHasUnion<Keys> extends true
+				? OptionalFilteredNeonEnv<Keys[number]>
+				: FilteredNeonEnv<Keys[number]>
+		: never;
+
 export interface FetchEnvOptions {
 	/**
 	 * Neon project id. **Required** — the management API addresses branches through their
@@ -449,14 +500,16 @@ export interface FetchEnvOptions {
  */
 export async function fetchEnv<
 	const C extends Config,
-	const K extends SelectableEnvKey<C>,
+	K extends SelectableEnvKey<C>,
+	const Keys extends readonly K[] = readonly K[],
 >(
 	config: C,
 	options: FetchEnvOptions & {
 		/**
 		 * Fetch only these OS-level env vars, instead of everything the policy enables. The
 		 * keys autocomplete from the policy ({@link SelectableEnvKey}), and the result is
-		 * narrowed to match ({@link FilteredNeonEnv}).
+		 * narrowed to match ({@link SelectedNeonEnv}). Inline literal arrays produce an exact
+		 * result; runtime-built arrays make their possible namespaces and properties optional.
 		 *
 		 * The point is not just a smaller result: **work is skipped too.** Leave out
 		 * `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `NEON_AI_GATEWAY_TOKEN` and no branch
@@ -468,9 +521,9 @@ export async function fetchEnv<
 		 * The selection **intersects** with the policy rather than overriding it: naming a var
 		 * the branch policy does not enable is not an error, it simply yields nothing.
 		 */
-		keys: readonly K[];
+		keys: Keys;
 	},
-): Promise<FilteredNeonEnv<K>>;
+): Promise<SelectedNeonEnv<Keys>>;
 export async function fetchEnv<const C extends Config>(
 	config: C,
 	options: FetchEnvOptions,

@@ -152,6 +152,17 @@ const { storage } = await fetchEnv(config, {
 storage.endpoint; // string — `accessKeyId` is absent, and never fetched
 ```
 
+Inline key arrays autocomplete from the services enabled in `config`, reject unknown or disabled keys, and narrow the result exactly without `as const`. A runtime-built array returns the same selected values with optional namespaces and properties, because the array may contain any subset of its declared key union:
+
+```ts
+const keys: Array<"DATABASE_URL" | "NEON_BRANCH"> =
+    process.env.INCLUDE_BRANCH ? ["DATABASE_URL", "NEON_BRANCH"] : ["DATABASE_URL"];
+const selected = await fetchEnv(config, { projectId, branch: "main", keys });
+
+selected.postgres?.databaseUrl; // string | undefined
+selected.branch?.name; // string | undefined
+```
+
 Work is skipped, not just the result narrowed. Leave out `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `NEON_AI_GATEWAY_TOKEN` and **no credential is minted at all** — which is exactly how `fetchEnvReusingSecrets` refreshes everything else while keeping secrets you already have. The non-secret vars of those features (`AWS_ENDPOINT_URL_S3`, `AWS_REGION`, `NEON_AI_GATEWAY_BASE_URL`) are branch metadata and stay available on their own.
 
 ## Connection role & database selection
