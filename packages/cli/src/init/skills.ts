@@ -39,19 +39,12 @@ async function ensureSkillsCli(): Promise<void> {
 	}
 }
 
-/** Base skills installed for all invocations */
+/** Skills installed by `neon init`. */
 const BASE_SKILLS = ["neon", "neon-postgres"];
 
-/** Additional skills installed for preview (non-bootstrap) invocations */
-const PREVIEW_SKILLS = [
-	"neon-object-storage",
-	"neon-functions",
-	"neon-ai-gateway",
-];
-
-/** Returns the skill list based on whether preview mode is active */
-export function getSkillList(preview?: boolean): string[] {
-	return preview ? [...BASE_SKILLS, ...PREVIEW_SKILLS] : BASE_SKILLS;
+/** Returns the list of Neon agent skills to install. */
+export function getSkillList(): string[] {
+	return BASE_SKILLS;
 }
 
 const SKILL_BASE_URL =
@@ -107,7 +100,6 @@ function editorToSkillsAgent(editor: Editor): string {
 export type InstallSkillsOptions = {
 	json?: boolean;
 	scope?: "global" | "project";
-	preview?: boolean;
 };
 
 /**
@@ -133,7 +125,7 @@ export async function installAgentSkills(
 	let anyFailed = false;
 
 	await ensureSkillsCli();
-	const skills = getSkillList(options?.preview);
+	const skills = getSkillList();
 
 	for (const editor of editorsWithSkills) {
 		const agentName = editorToSkillsAgent(editor);
@@ -266,10 +258,9 @@ function skillsAreFresh(agent: string, requiredSkills: string[]): boolean {
 export async function ensureSkillsUpToDate(
 	agent: string | undefined,
 	scope?: "global" | "project",
-	preview?: boolean,
 ): Promise<boolean> {
 	const resolvedAgent = agent || "cursor";
-	const skills = getSkillList(preview);
+	const skills = getSkillList();
 	if (skillsAreFresh(resolvedAgent, skills)) return true;
 
 	await ensureSkillsCli();

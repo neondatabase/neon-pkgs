@@ -477,23 +477,10 @@ const FIXTURE_NAMES = Object.keys(FIXTURES) as (keyof typeof FIXTURES)[];
  * names; this table has to stay in step with it.
  */
 const STEPS: { name: string; data: Record<string, unknown> }[] = [
-	{ name: "status", data: { step: "status" } },
 	{ name: "auth", data: { step: "auth" } },
 	{ name: "auth-verify", data: { step: "auth", verify: true } },
 	{ name: "auth-existing", data: { step: "auth", method: "existing" } },
 	{ name: "auth-new", data: { step: "auth", method: "new" } },
-	{ name: "db", data: { step: "db" } },
-	{ name: "db-with-org", data: { step: "db", orgId: "org-snap-1" } },
-	{
-		name: "db-with-project",
-		data: {
-			step: "db",
-			projectId: "proj-snap-1",
-			framework: "next",
-			orm: "prisma",
-		},
-	},
-	{ name: "db-error", data: { step: "db", error: "project create failed" } },
 	{ name: "setup", data: { step: "setup" } },
 	{
 		name: "setup-defaults",
@@ -501,7 +488,6 @@ const STEPS: { name: string; data: Record<string, unknown> }[] = [
 			step: "setup",
 			mode: "defaults",
 			mcpConfigured: false,
-			connectionString: false,
 			isVscodeIde: true,
 			installExtension: false,
 		},
@@ -516,18 +502,6 @@ const STEPS: { name: string; data: Record<string, unknown> }[] = [
 			installExtension: false,
 		},
 	},
-	{ name: "getting-started", data: { step: "getting-started" } },
-	{
-		name: "getting-started-stack",
-		data: {
-			step: "getting-started",
-			hasConnectionString: true,
-			framework: "next",
-			orm: "prisma",
-			migrationTool: "prisma",
-			migrationDir: "prisma/migrations",
-		},
-	},
 	{ name: "mcp-status", data: { step: "mcp", status: true } },
 	{
 		name: "mcp-install",
@@ -536,22 +510,6 @@ const STEPS: { name: string; data: Record<string, unknown> }[] = [
 	{ name: "skills-status", data: { step: "skills", status: true } },
 	{ name: "skills-install", data: { step: "skills", install: true } },
 	{ name: "skills-update", data: { step: "skills", update: true } },
-	{ name: "migrations", data: { step: "migrations" } },
-	{ name: "migrations-prisma", data: { step: "migrations", tool: "prisma" } },
-	{
-		name: "migrations-scaffold",
-		data: { step: "migrations", scaffold: "prisma" },
-	},
-	{
-		name: "migrations-apply",
-		data: { step: "migrations", apply: true, tool: "prisma" },
-	},
-	{ name: "neon-auth-info", data: { step: "neon-auth", info: true } },
-	{
-		name: "neon-auth-setup",
-		data: { step: "neon-auth", setup: true, projectId: "proj-snap-1" },
-	},
-	{ name: "finalize", data: { step: "finalize" } },
 ];
 
 describe("neon init --agent: every step, against every project shape", () => {
@@ -578,20 +536,6 @@ describe("neon init --agent: the orchestrator picks the next phase", () => {
 				snapshotOf(await runInit(fixture, ["--agent"])),
 			).toMatchSnapshot();
 		});
-
-		test(`${fixture} — --skip-migrations`, async () => {
-			expect(
-				snapshotOf(
-					await runInit(fixture, ["--agent", "--skip-migrations"]),
-				),
-			).toMatchSnapshot();
-		});
-
-		test(`${fixture} — --preview`, async () => {
-			expect(
-				snapshotOf(await runInit(fixture, ["--agent", "--preview"])),
-			).toMatchSnapshot();
-		});
 	}
 });
 
@@ -599,12 +543,10 @@ describe("neon init --agent: the response depends on which agent is driving", ()
 	for (const agent of Object.keys(AGENTS) as (keyof typeof AGENTS)[]) {
 		describe(agent, () => {
 			for (const step of [
-				"status",
 				"auth",
 				"setup",
 				"mcp-status",
 				"skills-status",
-				"getting-started",
 			]) {
 				const found = STEPS.find((s) => s.name === step);
 				if (!found) throw new Error(`no step named ${step}`);
@@ -643,7 +585,6 @@ describe("neon init --agent: the signed-out auth branches", () => {
 			data: { step: "auth", method: "existing" },
 		},
 		{ name: "auth-new-account", data: { step: "auth", method: "new" } },
-		{ name: "status", data: { step: "status" } },
 	]) {
 		test(step.name, async () => {
 			const result = await runInit(
@@ -672,7 +613,7 @@ describe("neon init --agent: the signed-out auth branches", () => {
 			snapshotOf(
 				await runInit(
 					"next-prisma",
-					["--agent", "--data", '{"step":"status"}'],
+					["--agent", "--data", '{"step":"auth","verify":true}'],
 					{ credentials: "{ not json" },
 				),
 			),
@@ -703,8 +644,8 @@ describe("neon init --agent: nested and string-encoded --data payloads", () => {
 			"--agent",
 			"--data",
 			JSON.stringify({
-				step: "getting-started",
-				data: { framework: "next", migrationTool: "prisma" },
+				step: "skills",
+				data: { status: true },
 			}),
 		]);
 		expect(snapshotOf(result)).toMatchSnapshot();
@@ -715,11 +656,8 @@ describe("neon init --agent: nested and string-encoded --data payloads", () => {
 			"--agent",
 			"--data",
 			JSON.stringify({
-				step: "getting-started",
-				data: JSON.stringify({
-					framework: "next",
-					migrationTool: "prisma",
-				}),
+				step: "skills",
+				data: JSON.stringify({ status: true }),
 			}),
 		]);
 		expect(snapshotOf(result)).toMatchSnapshot();

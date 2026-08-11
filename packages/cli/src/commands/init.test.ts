@@ -73,68 +73,8 @@ describe("init", () => {
 
 		await handler({ agent: true });
 
-		expect(orchestrate).toHaveBeenCalledWith({
-			agent: "cursor",
-			skipMigrations: undefined,
-			preview: undefined,
-			projectId: undefined,
-			orgId: undefined,
-			branchId: undefined,
-		});
+		expect(orchestrate).toHaveBeenCalledWith({ agent: "cursor" });
 		expect(interactiveInit).not.toHaveBeenCalled();
-	});
-
-	test("should pass skipMigrations to orchestrate", async () => {
-		const { handler } = await import("./init.js");
-		const { orchestrate } = await import("../init/orchestrate.js");
-		const { detectAgent } = await import("../init/detect_agent.js");
-		vi.mocked(detectAgent).mockReturnValue("claude");
-
-		await handler({
-			agent: true,
-			skipMigrations: true,
-		});
-
-		expect(orchestrate).toHaveBeenCalledWith({
-			agent: "claude",
-			skipMigrations: true,
-			preview: undefined,
-			projectId: undefined,
-			orgId: undefined,
-			branchId: undefined,
-		});
-	});
-
-	test("should pass preview to interactiveInit", async () => {
-		const { handler } = await import("./init.js");
-		const { interactiveInit } = await import("../init/interactive.js");
-
-		await handler({ preview: true });
-
-		expect(interactiveInit).toHaveBeenCalledWith({
-			preview: true,
-			projectId: undefined,
-			orgId: undefined,
-			branchId: undefined,
-		});
-	});
-
-	test("should pass preview to orchestrate in agent mode", async () => {
-		const { handler } = await import("./init.js");
-		const { orchestrate } = await import("../init/orchestrate.js");
-		const { detectAgent } = await import("../init/detect_agent.js");
-		vi.mocked(detectAgent).mockReturnValue("cursor");
-
-		await handler({ agent: true, preview: true });
-
-		expect(orchestrate).toHaveBeenCalledWith({
-			agent: "cursor",
-			skipMigrations: undefined,
-			preview: true,
-			projectId: undefined,
-			orgId: undefined,
-			branchId: undefined,
-		});
 	});
 
 	test("routes a --data step and writes the enriched response as bare JSON on stdout", async () => {

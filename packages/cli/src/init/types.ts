@@ -18,13 +18,7 @@ export type Editor =
 // Agent-driven state machine protocol
 // ---------------------------------------------------------------------------
 
-export type Phase =
-	| "auth"
-	| "tooling"
-	| "setup"
-	| "db"
-	| "neon_auth"
-	| "migrations";
+export type Phase = "auth" | "tooling" | "setup";
 
 // -- NextAction discriminated union ----------------------------------------
 
@@ -34,7 +28,6 @@ export type NextAction =
 	| RunNeonInitAction
 	| AgentCheckAction
 	| AgentActionAction
-	| RestartRequiredAction
 	| CompleteAction;
 
 export type AskUserAction = {
@@ -110,12 +103,6 @@ export type AgentActionAction = {
 	onComplete: RunNeonInitAction | CompleteAction;
 };
 
-export type RestartRequiredAction = {
-	type: "restart_required";
-	reason: string;
-	resumeCommand: string;
-};
-
 export type CompleteAction = {
 	type: "complete";
 	message: string;
@@ -128,30 +115,4 @@ export type PhaseResponse = {
 	status: string;
 	nextAction: NextAction;
 	[key: string]: unknown;
-};
-
-// -- Status response (read-only, no nextAction) ----------------------------
-
-export type StatusResponse = {
-	auth: {
-		authenticated: boolean;
-		user?: string;
-	};
-	tooling: {
-		mcpServer: {
-			configured: boolean | null;
-			scope?: string | null;
-			location?: string;
-		};
-		skills: { installed: boolean; scope?: string | null };
-		extension?: { installed: boolean; editor: string } | null;
-	};
-	project: {
-		databaseUrl: boolean;
-	};
-	migrations: {
-		tool: string | null;
-		hasMigrations: boolean;
-	};
-	recommendations: { priority: string; message: string; command: string }[];
 };

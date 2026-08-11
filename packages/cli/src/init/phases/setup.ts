@@ -1,21 +1,13 @@
-import { writeFileSync } from "node:fs";
 import { unlink } from "node:fs/promises";
-import { resolve } from "node:path";
 import { execa } from "execa";
 import { resolveAddMcpAgentId } from "../agents.js";
-import {
-	FALLBACK_TEMPLATES,
-	fetchTemplates,
-	findTemplate,
-	type NeonFeature,
-	scaffoldTemplate,
-} from "../bootstrap.js";
 import {
 	detectIde,
 	isCursorInstalled,
 	isVSCodeInstalled,
 } from "../detect_agent.js";
 import { findEditorCommand } from "../extension.js";
+import { handoffAction } from "../handoff.js";
 import { inspectProject } from "../inspect.js";
 import { ensureNeonctl } from "../neonctl.js";
 import { ensureSkillsUpToDate } from "../skills.js";
@@ -26,25 +18,9 @@ export type SetupPhaseOptions = {
 	agent?: string;
 	/** The IDE/editor the user is running in (e.g. "cursor", "vscode") — reported by agent */
 	ide?: string;
-	/** Enable preview skills (neon-object-storage, neon-functions, neon-ai-gateway) */
-	preview?: boolean;
-	/** Whether the directory already contains an application */
-	hasApp?: boolean;
-	/** Template ID to scaffold (when bootstrapping a new project) */
-	template?: string;
-	/** Neon features required by the selected template */
-	templateRequires?: NeonFeature[];
-	/** Neon features selected by the user (brownfield flows) */
-	features?: NeonFeature[];
 	// Inspection results — pre-filled by orchestrator or reported by agent
 	mcpConfigured?: boolean | null;
 	skillsInstalled?: boolean | null;
-	connectionString?: boolean | null;
-	connectionParams?: string; // JSON with host/dbname/etc if found
-	framework?: string;
-	orm?: string;
-	migrationTool?: string;
-	migrationDir?: string;
 	isVscodeIde?: boolean | null;
 	// User preferences (also used for pre-detected scope from inspection)
 	mode?: string;
@@ -56,48 +32,25 @@ export type SetupPhaseOptions = {
 };
 
 /**
- * Comprehensive setup phase: inspects repo state, collects user preferences,
- * then batches all installation commands together.
+ * Setup phase: inspects tooling state, collects install preferences, then
+ * batches the MCP server / skills / extension installs together.
  *
- * With --data JSON, the agent sends inspection results AND user preferences
- * in a single call, so the CLI can go straight to installation.
+ * With --data JSON, the agent sends inspection results AND user preferences in
+ * a single call, so the CLI can go straight to installation. Once install
+ * finishes, `neon init` hands off to the agent (see {@link handoffAction}) — it
+ * does not connect a database or configure features.
  */
 export async function handleSetupPhase(
 	options: SetupPhaseOptions,
 ): Promise<PhaseResponse> {
-	// Parse features from comma-separated string (e.g. "database,auth" from agent --data)
-	if (typeof options.features === "string") {
-		options.features = (options.features as unknown as string)
-			.split(",")
-			.map((f) => f.trim()) as NeonFeature[];
-	}
-
-	// Treat "none" as no template selected
-	const templateWasAnswered = options.template !== undefined;
-	if (options.template === "none") {
-		options.template = undefined;
-	}
-
-	// Resolve template requirements if a template was selected but requires not yet populated
-	if (options.template && !options.templateRequires) {
-		const templates = await fetchTemplates();
-		const selected = templates.find((t) => t.id === options.template);
-		if (selected) {
-			options.templateRequires = selected.requires;
-		}
-	}
-
 	// --execute: run the batched installation (legacy path)
 	if (options.execute) {
 		return executeBatchedInstallation(await mergeCliInspection(options));
 	}
 
 	// Treat any explicit mode value that isn't "customize"/"custom" as defaults.
-	// Also treat as defaults when mode is missing but agent reported back
-	// (template was answered, nothing left to customize).
-	const hasReportedBack = options.mode || templateWasAnswered;
 	if (
-		hasReportedBack &&
+		options.mode &&
 		options.mode !== "customize" &&
 		options.mode !== "custom"
 	) {
@@ -123,49 +76,13 @@ export async function handleSetupPhase(
 		});
 	}
 
-	// Default: send inspection checks with user preferences (all in one response)
+	// Default: send inspection checks with install preferences (all in one response)
 	return buildBulkInspection(options);
-}
-
-function buildTemplatePreference(
-	templates: {
-		id: string;
-		title: string;
-		description: string;
-		tools?: string[];
-	}[],
-) {
-	return [
-		{
-			id: "template",
-			question:
-				"No application was detected in this directory. Would you like to scaffold a new project from a template?",
-			phase: "before_checks" as const,
-			options: [
-				...templates.map((t) => {
-					const tools =
-						t.tools && t.tools.length > 0
-							? ` (${t.tools.join(", ")})`
-							: "";
-					return {
-						value: t.id,
-						label: `${t.title}${tools} — ${t.description}`,
-					};
-				}),
-				{
-					value: "none",
-					label: "No thanks — continue without scaffolding",
-				},
-			],
-			default: "none",
-		},
-	];
 }
 
 async function buildBulkInspection(
 	options: SetupPhaseOptions,
 ): Promise<PhaseResponse> {
-	const hasApp = options.hasApp !== false;
 	const detectedIde = detectIde();
 
 	// If no IDE detected (e.g. standalone terminal), check what's installed
@@ -175,20 +92,16 @@ async function buildBulkInspection(
 		if (isVSCodeInstalled()) installedEditors.push("vscode");
 	}
 
-	// Fetch available templates when no app is detected
-	let templatePreferences: ReturnType<typeof buildTemplatePreference> = [];
-	if (!hasApp) {
-		let templates = FALLBACK_TEMPLATES;
-		try {
-			const fetched = await fetchTemplates();
-			if (fetched && fetched.length > 0) templates = fetched;
-		} catch {}
-		templatePreferences = buildTemplatePreference(templates);
-	}
+	const isPartialSkills = String(options.skillsScope ?? "").includes(
+		"partial",
+	);
+	const needsMcpChoice = !options.mcpConfigured;
+	const needsSkillsChoice = !options.skillsInstalled && !isPartialSkills;
+	const hasModeQuestion = needsMcpChoice || needsSkillsChoice;
 
 	return {
 		phase: "setup",
-		status: hasApp ? "pending" : "bootstrap_needed",
+		status: "pending",
 		detectedIde: detectedIde?.toLowerCase() ?? null,
 		installedEditors: installedEditors.length > 0 ? installedEditors : null,
 		// Pre-detected state from filesystem inspection
@@ -199,13 +112,11 @@ async function buildBulkInspection(
 		nextAction: {
 			type: "agent_check",
 			instructions: [
-				"IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.",
+				"IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the agent checks and the first userPreference question.",
 				"",
-				hasApp
-					? "Perform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the `condition` field — only show a question if its condition is met."
-					: "No application was detected in this directory. Ask the user if they'd like to scaffold a new project from a template (the `template` preference). Present ALL template options and the 'No thanks' option — do NOT auto-select even if there is only one template. If the user selects a template, the scaffolded template includes agent skills so skills installation will be skipped. If the user chooses 'none', continue with the remaining setup preferences normally. Then perform the agent checks and present the remaining preferences ONE AT A TIME.",
+				"Perform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the `condition` field — only show a question if its condition is met.",
 				"",
-				`The CLI has pre-detected the following from the filesystem: MCP server: ${options.mcpConfigured ? `configured (${options.mcpScope})` : "not configured"}. Agent skills: ${options.skillsInstalled ? `installed (${options.skillsScope})` : String(options.skillsScope ?? "").includes("partial") ? `partially installed (${options.skillsScope}) — missing skills will be auto-installed to the same scope` : "not installed"}. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.`,
+				`The CLI has pre-detected the following from the filesystem: MCP server: ${options.mcpConfigured ? `configured (${options.mcpScope})` : "not configured"}. Agent skills: ${options.skillsInstalled ? `installed (${options.skillsScope})` : isPartialSkills ? `partially installed (${options.skillsScope}) — missing skills will be auto-installed to the same scope` : "not installed"}. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.`,
 				"",
 				"IMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.",
 				"",
@@ -258,70 +169,34 @@ async function buildBulkInspection(
 					: []),
 			],
 			userPreferences: [
-				...templatePreferences,
-				// For brownfield flows, ask which Neon features to enable
-				...(hasApp
+				// Only show defaults/customize when there's something to customize:
+				// MCP not configured, or skills need a scope choice.
+				...(hasModeQuestion
 					? [
 							{
-								id: "features",
-								question:
-									"Which Neon features would you like to enable for this project?",
+								id: "mode",
+								question: "Use default settings or customize?",
 								phase: "after_checks" as const,
 								options: [
 									{
-										value: "database",
-										label: "Database (always included)",
+										value: "defaults",
+										label: "Use defaults (Neon CLI, MCP: global, skills: project-level — already-configured components will be skipped)",
 									},
 									{
-										value: "database,auth",
-										label: "Database + Neon Auth (adds authentication via Neon)",
+										value: "customize",
+										label: "Customize installation settings",
 									},
 								],
-								default: "database",
-								context:
-									"Database connectivity is always set up. Neon Auth adds user authentication powered by Neon. More features (Functions, AI Gateway, Object Storage) will be available soon.",
+								default: "defaults",
 							},
 						]
 					: []),
-				// Only show defaults/customize when there's something to customize:
-				// MCP not configured, skills need scope choice, or extension not detected.
-				...(() => {
-					const isPartialSkills = String(
-						options.skillsScope ?? "",
-					).includes("partial");
-					const needsMcpChoice = !options.mcpConfigured;
-					const needsSkillsChoice =
-						!options.skillsInstalled && !isPartialSkills;
-					const hasCustomizableOptions =
-						needsMcpChoice || needsSkillsChoice;
-					if (!hasCustomizableOptions) return [];
-					return [
-						{
-							id: "mode",
-							question: "Use default settings or customize?",
-							phase: "after_checks" as const,
-							options: [
-								{
-									value: "defaults",
-									label: hasApp
-										? "Use defaults (Neon CLI, MCP: global, skills: project-level — already-configured components will be skipped)"
-										: "Use defaults (Neon CLI, MCP: global — skills included in template)",
-								},
-								{
-									value: "customize",
-									label: "Customize installation settings",
-								},
-							],
-							default: "defaults",
-						},
-					];
-				})(),
 				{
 					id: "mcpScope",
 					question: "Where should the Neon MCP server be configured?",
 					context:
 						"SKIP this question entirely if the mcp_server check found it is already configured. Only ask if MCP is NOT yet configured. NOTE: Cursor disables project-level MCP servers by default — if the user is in Cursor, recommend global scope or warn that they will need to manually enable the server in Cursor Settings > MCP.",
-					phase: "after_checks",
+					phase: "after_checks" as const,
 					options: [
 						{
 							value: "global",
@@ -342,8 +217,7 @@ async function buildBulkInspection(
 				},
 				// Show skills scope when skills aren't detected and no partial install exists.
 				// Partial installations are auto-completed to the same scope silently.
-				...(!options.skillsInstalled &&
-				!String(options.skillsScope ?? "").includes("partial")
+				...(needsSkillsChoice
 					? [
 							{
 								id: "skillsScope",
@@ -375,7 +249,7 @@ async function buildBulkInspection(
 					id: "installExtension",
 					question:
 						"Install the Neon editor extension for local database browsing?",
-					phase: "after_checks",
+					phase: "after_checks" as const,
 					options: [
 						{ value: "true", label: "Yes" },
 						{ value: "false", label: "No" },
@@ -394,37 +268,22 @@ async function buildBulkInspection(
 					"--json",
 					"--data",
 					(() => {
-						const partialScope = String(
-							options.skillsScope ?? "",
-						).replace("-partial", "");
-						const hasPartial = String(
-							options.skillsScope ?? "",
-						).includes("partial");
-						const previewFlag = options.preview
-							? ", preview: true"
-							: "";
-						const needsMcpChoice = !options.mcpConfigured;
-						const needsSkillsChoice =
-							!options.skillsInstalled && !hasPartial;
-						const hasModeQuestion =
-							needsMcpChoice || needsSkillsChoice;
+						const prefilledSkills =
+							options.skillsInstalled || isPartialSkills
+								? `, skillsScope: "${options.skillsInstalled ? options.skillsScope || "project" : String(options.skillsScope ?? "").replace("-partial", "")}"`
+								: needsSkillsChoice
+									? ", skillsScope?: 'global'|'project'"
+									: "";
 						const modeField = hasModeQuestion
 							? ", mode: string"
 							: "";
 						const mcpField = hasModeQuestion
 							? ", mcpScope?: 'global'|'project'|'none'"
 							: "";
-						const skillsField = needsSkillsChoice
-							? ", skillsScope?: string"
-							: "";
 						const extField = hasModeQuestion
 							? ", installExtension?: bool"
 							: "";
-						const prefilledSkills =
-							options.skillsInstalled || hasPartial
-								? `, skillsScope: "${options.skillsInstalled ? options.skillsScope || "project" : partialScope}"`
-								: skillsField;
-						return `<json: { agent: string, ide: string, mcpConfigured: bool${prefilledSkills}${previewFlag}${modeField}${mcpField}${extField}${hasApp ? ", features?: string" : ", template: string"} }>`;
+						return `<json: { agent: string, ide: string, mcpConfigured: bool${prefilledSkills}${modeField}${mcpField}${extField} }>`;
 					})(),
 				],
 			},
@@ -446,7 +305,7 @@ type InstallResult = {
 /**
  * Executes the batched installation of MCP server, skills, and extension.
  * Runs commands directly in the CLI process — the agent does NOT run these.
- * Returns results and chains to the getting-started phase.
+ * Once install finishes, hands off to the agent (see {@link handoffAction}).
  */
 async function executeBatchedInstallation(
 	options: SetupPhaseOptions,
@@ -457,45 +316,6 @@ async function executeBatchedInstallation(
 	const installExt = options.installExtension === true;
 
 	const results: InstallResult[] = [];
-	const isBootstrap = !!options.template;
-
-	// Step 0: Bootstrap project from template if specified
-	if (isBootstrap && options.template) {
-		try {
-			const templates = await fetchTemplates();
-			const template =
-				findTemplate(templates, options.template) ??
-				findTemplate(FALLBACK_TEMPLATES, options.template);
-			if (!template) {
-				throw new Error(`Unknown template "${options.template}".`);
-			}
-			await scaffoldTemplate(template, ".");
-			results.push({
-				id: "bootstrap",
-				description: `Scaffolded project from template "${options.template}"`,
-				status: "success",
-			});
-
-			// Write template features to .neon under _init (ephemeral, cleaned up when init completes)
-			if (options.templateRequires) {
-				const neonContextPath = resolve(process.cwd(), ".neon");
-				const context: Record<string, unknown> = {
-					_init: { features: options.templateRequires },
-				};
-				writeFileSync(
-					neonContextPath,
-					`${JSON.stringify(context, null, 2)}\n`,
-				);
-			}
-		} catch (err) {
-			results.push({
-				id: "bootstrap",
-				description: `Failed to scaffold project from template "${options.template}"`,
-				status: "failed",
-				error: err instanceof Error ? err.message : "Unknown error",
-			});
-		}
-	}
 
 	// Step 1: Ensure the Neon CLI is installed and up to date
 	const neonctlResult = await ensureNeonctl();
@@ -603,45 +423,33 @@ async function executeBatchedInstallation(
 		}
 	}
 
-	// Step 3: Install/update skills (skip when bootstrapping — templates bundle skills)
-	if (isBootstrap) {
+	// Step 3: Install/update skills
+	const skillsScope = (options.skillsScope ?? "project") as
+		| "global"
+		| "project";
+	const skillsOk = await ensureSkillsUpToDate(agentId, skillsScope);
+	if (skillsOk) {
 		results.push({
 			id: "install_skills",
-			description: "Neon agent skills included in template",
+			description: "Neon agent skills installed",
 			status: "success",
 		});
 	} else {
-		const skillsScope = (options.skillsScope ?? "project") as
-			| "global"
-			| "project";
-		const skillsOk = await ensureSkillsUpToDate(
-			agentId,
-			skillsScope,
-			options.preview,
+		// Build the install commands for the agent to run directly
+		// (sandboxed environments may block child process writes)
+		const { getSkillList } = await import("../skills.js");
+		const skillList = getSkillList();
+		const cmds = skillList.map(
+			(s) =>
+				`skills add neondatabase/agent-skills --skill ${s} --agent ${agentId}${skillsScope === "global" ? " -g" : ""} -y`,
 		);
-		if (skillsOk) {
-			results.push({
-				id: "install_skills",
-				description: "Neon agent skills installed",
-				status: "success",
-			});
-		} else {
-			// Build the install commands for the agent to run directly
-			// (sandboxed environments may block child process writes)
-			const { getSkillList } = await import("../skills.js");
-			const skillList = getSkillList(options.preview);
-			const cmds = skillList.map(
-				(s) =>
-					`skills add neondatabase/agent-skills --skill ${s} --agent ${agentId}${skillsScope === "global" ? " -g" : ""} -y`,
-			);
-			results.push({
-				id: "install_skills",
-				description:
-					"Failed to install Neon agent skills automatically. Run these commands to install manually:",
-				status: "failed",
-				commands: cmds,
-			});
-		}
+		results.push({
+			id: "install_skills",
+			description:
+				"Failed to install Neon agent skills automatically. Run these commands to install manually:",
+			status: "failed",
+			commands: cmds,
+		});
 	}
 
 	// Step 4: Install editor extension if requested
@@ -652,75 +460,32 @@ async function executeBatchedInstallation(
 		results.push(extResult);
 	}
 
-	// Step 5: Write selected features to .neon under _init for brownfield flows
-	// (Bootstrap flows already wrote _init in step 0)
-	if (!isBootstrap && options.features && options.features.length > 0) {
-		const neonContextPath = resolve(process.cwd(), ".neon");
-		const context: Record<string, unknown> = {
-			_init: { features: options.features },
-		};
-		writeFileSync(neonContextPath, `${JSON.stringify(context, null, 2)}\n`);
-	}
-
 	const allSucceeded = results.every((r) => r.status === "success");
-
-	// Build args to chain to the getting-started phase as a separate CLI call.
-	// This ensures the agent gets a clean response with ONLY the getting-started
-	// action — no competing "results" array to distract it.
-	const gettingStartedData: Record<string, unknown> = {};
-	if (options.connectionString) gettingStartedData.hasConnectionString = true;
-	if (options.framework) gettingStartedData.framework = options.framework;
-	if (options.orm) gettingStartedData.orm = options.orm;
-	if (options.migrationTool)
-		gettingStartedData.migrationTool = options.migrationTool;
-	if (options.migrationDir)
-		gettingStartedData.migrationDir = options.migrationDir;
-	// Pass features so getting-started knows which phases to chain to
-	const resolvedFeatures = options.templateRequires ?? options.features;
-	if (resolvedFeatures && resolvedFeatures.length > 0)
-		gettingStartedData.features = resolvedFeatures;
-	// Bootstrap implies preview mode (new project in us-east required)
-	if (isBootstrap) gettingStartedData.preview = true;
-	const gettingStartedArgs = [
-		"getting-started",
-		"--json",
-		"--data",
-		JSON.stringify(gettingStartedData),
-	];
 
 	return {
 		phase: "setup",
 		status: allSucceeded ? "installed" : "partial",
 		results,
-		nextAction: {
-			type: "run_neon_init",
-			args: gettingStartedArgs,
-		},
+		nextAction: handoffAction(),
 	};
 }
 
 /**
- * Fills in missing filesystem inspection fields by running inspectProject().
+ * Fills in the IDE-related inspection fields when the agent didn't report them.
  * Agent-reported data (mcpConfigured, agent, mode, scopes) is preserved.
- * CLI-detectable fields (framework, orm, migrations, connectionString, isVscodeIde)
- * are filled in only if not already present.
  */
 async function mergeCliInspection(
 	options: SetupPhaseOptions,
 ): Promise<SetupPhaseOptions> {
-	// If the agent already provided these, no need to re-inspect
-	if (options.framework !== undefined && options.orm !== undefined) {
+	// If the agent already told us the IDE, no need to re-inspect.
+	if (options.ide !== undefined && options.isVscodeIde !== undefined) {
 		return options;
 	}
 
 	const inspection = await inspectProject([
-		{ id: "connection_string", description: "", lookFor: [] },
-		{ id: "project_stack", description: "", lookFor: [] },
-		{ id: "migrations", description: "", lookFor: [] },
 		{ id: "ide_type", description: "", lookFor: [] },
 	]);
 
-	// Also detect IDE if not already reported by the agent
 	const ide =
 		options.ide?.toLowerCase().replace(/\s+/g, "-") ||
 		detectIde()?.toLowerCase().replace(/\s+/g, "-") ||
@@ -729,18 +494,6 @@ async function mergeCliInspection(
 	return {
 		...options,
 		ide,
-		connectionString:
-			options.connectionString ??
-			(inspection.connectionString as boolean | undefined),
-		framework:
-			options.framework ?? (inspection.framework as string | undefined),
-		orm: options.orm ?? (inspection.orm as string | undefined),
-		migrationTool:
-			options.migrationTool ??
-			(inspection.migrationTool as string | undefined),
-		migrationDir:
-			options.migrationDir ??
-			(inspection.migrationDir as string | undefined),
 		isVscodeIde:
 			options.isVscodeIde ??
 			(inspection.isVscodeIde as boolean | undefined),

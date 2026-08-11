@@ -64,14 +64,6 @@ export function enrichResponse(obj: unknown): unknown {
 	// Rename run_neon_init → run_shell_command so agents don't infer subcommand patterns
 	if (result.type === "run_neon_init") {
 		result.type = "run_shell_command";
-		// Help agents understand finalize is the terminal step
-		if (
-			typeof result.command === "string" &&
-			result.command.includes('"step":"finalize"')
-		) {
-			result.description =
-				"Run this command to complete the setup. This is the final step — do not run any other neon init commands after this.";
-		}
 	}
 
 	return result;
