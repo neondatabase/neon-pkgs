@@ -154,9 +154,6 @@ export const builder = (argv: yargs.Argv) =>
 				const envKeys = rawEnvKeys
 					? parseEnvPullKeys(rawEnvKeys, "--env")
 					: undefined;
-				if (services !== undefined || envKeys !== undefined) {
-					envKeysForSelection(services ?? [], envKeys ?? []);
-				}
 				// Explicit `env pull` announces the branch it's reading from up front so the user
 				// can catch "pulled env from the wrong branch" before it overwrites their .env. The
 				// bundled auto-pull (link / checkout / apply) stays quiet — those already report the
