@@ -28,7 +28,7 @@ const result = await tools.listProjects.execute({
 
 The returned record is keyed by OpenAPI operation ID. Each tool includes its generated Zod 4 `inputSchema`, snake-case `id`, title, description, safety annotations, stability metadata, and an `execute()` function. Inputs group API parameters under `path`, `query`, `headers`, and `body`.
 
-`operationIds` exports every valid selector. `execute()` validates the input and returns typed, JSON-safe `{ data }`. Neon SDK errors remain typed and are thrown to the caller.
+`operationIds` exports every valid selector. `execute()` strictly validates the input, rejects unknown fields instead of dropping them, and returns typed, JSON-safe `{ data }`. Neon SDK errors remain typed and are thrown to the caller.
 
 ## Request schemas
 
@@ -45,6 +45,8 @@ const body = zCreateProjectBody.parse({
 	project: { name: "agent-project" },
 });
 ```
+
+These schemas are strict. If a newly added API field is not recognized, upgrade `@neon/tools`; use `@neon/sdk` directly until a matching tools release is available.
 
 ## MCP
 
