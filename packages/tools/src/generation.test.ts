@@ -3,6 +3,8 @@ import { describe, expect, test } from "vitest";
 import * as z from "zod";
 import { createNeonTool, type NeonOperationId, operationIds } from "./index.js";
 import {
+	zCreateProjectBody,
+	zCreateProjectBranchBody,
 	zListProjectsQuery,
 	zSetOrganizationSpendingLimitBody,
 } from "./schemas.js";
@@ -27,6 +29,10 @@ const specOperationIds = Object.values(document.paths)
 	.map((operation) => operation.operationId)
 	.filter((operationId): operationId is string => operationId !== undefined)
 	.sort();
+const generatedSchemaSource = readFileSync(
+	new URL("./generated/zod.gen.ts", import.meta.url),
+	"utf8",
+);
 
 describe("generated operation coverage", () => {
 	test("matches every operationId in the vendored OpenAPI document", () => {
@@ -55,11 +61,13 @@ describe("generated operation coverage", () => {
 			destructiveHint: true,
 		});
 		expect(deleteProject.requiresApproval).toBe(true);
+		expect(deleteProject.annotations.idempotentHint).toBeUndefined();
 
 		const getConnectionUri = createNeonTool("getConnectionURI", {
 			apiKey: "test-key",
 		});
 		expect(getConnectionUri.annotations.readOnlyHint).toBe(true);
+		expect(getConnectionUri.annotations.idempotentHint).toBeUndefined();
 		expect(getConnectionUri.requiresApproval).toBe(true);
 
 		for (const operationId of [
@@ -73,6 +81,14 @@ describe("generated operation coverage", () => {
 			expect(tool.annotations.readOnlyHint).toBe(true);
 			expect(tool.requiresApproval).toBe(true);
 		}
+
+		for (const operationId of [
+			"getProjectBranchRole",
+			"listProjectBranchRoles",
+		] as const) {
+			const tool = createNeonTool(operationId, { apiKey: "test-key" });
+			expect(tool.requiresApproval).toBe(false);
+		}
 	});
 
 	test("exports operation ids as a selector type", () => {
@@ -83,12 +99,29 @@ describe("generated operation coverage", () => {
 	test("exports generated request schemas", () => {
 		expect(zListProjectsQuery.parse({ limit: 1 })).toEqual({
 			limit: 1,
-			recoverable: false,
+		});
+		expect(
+			zListProjectsQuery.safeParse({ limit: 1, limti: 2 }).success,
+		).toBe(false);
+		expect(
+			zCreateProjectBody.safeParse({
+				project: { name: "demo", nmae: "typo" },
+			}).success,
+		).toBe(false);
+		expect(
+			zCreateProjectBranchBody.parse({
+				branch: { name: "feature" },
+				annotation_value: { commit: "abc123" },
+			}),
+		).toEqual({
+			branch: { name: "feature" },
+			annotation_value: { commit: "abc123" },
 		});
 		expect(
 			zSetOrganizationSpendingLimitBody.safeParse({
 				spending_limit_cents: 0,
 			}).success,
 		).toBe(false);
+		expect(generatedSchemaSource).not.toContain(".default(");
 	});
 });

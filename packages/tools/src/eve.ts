@@ -5,8 +5,12 @@ export interface EveToolContext {
 	abortSignal: AbortSignal;
 }
 
-export const toEveTool = <const InputSchema extends z.ZodType>(
-	tool: NeonTool<InputSchema>,
+export const toEveTool = <
+	const InputSchema extends z.ZodType,
+	const Id extends string,
+	Output,
+>(
+	tool: NeonTool<InputSchema, Id, Output>,
 ) => ({
 	description: tool.description,
 	inputSchema: tool.inputSchema,

@@ -7,6 +7,8 @@ import {
 } from "./operations.gen.js";
 
 export type {
+	JsonSafe,
+	JsonSafeBlob,
 	NeonTool,
 	NeonToolAnnotations,
 	NeonToolExecutionContext,
@@ -40,6 +42,16 @@ const createRawClient = (options: NeonToolsClientOptions) =>
 		...(options.fetch === undefined ? {} : { fetch: options.fetch }),
 	}).client;
 
+const operationFactoryFor = (operationId: NeonOperationId) => {
+	const knownOperationId = operationIds.find(
+		(candidate) => candidate === operationId,
+	);
+	if (knownOperationId === undefined) {
+		throw new TypeError(`Unknown Neon operation "${operationId}".`);
+	}
+	return operationFactories[knownOperationId];
+};
+
 function assertNeonTools<Operations extends readonly NeonOperationId[]>(
 	value: unknown,
 	operations: Operations,
@@ -62,14 +74,18 @@ export const createNeonTools = <
 	options: CreateNeonToolsOptions<Operations>,
 ): NeonTools<Operations> => {
 	const selected = new Set<NeonOperationId>();
-	const client = createRawClient(options);
-	const entries = options.operations.map((operationId) => {
+	const selectedFactories = options.operations.map((operationId) => {
 		if (selected.has(operationId)) {
 			throw new Error(`Duplicate Neon operation "${operationId}"`);
 		}
 		selected.add(operationId);
-		return [operationId, operationFactories[operationId](client)] as const;
+		return [operationId, operationFactoryFor(operationId)] as const;
 	});
+	const client = createRawClient(options);
+	const entries = selectedFactories.map(([operationId, factory]) => [
+		operationId,
+		factory(client),
+	]);
 	const tools: unknown = Object.fromEntries(entries);
 	assertNeonTools(tools, options.operations);
 	return tools;
@@ -83,5 +99,6 @@ export function createNeonTool(
 	operationId: NeonOperationId,
 	options: NeonToolsClientOptions,
 ): NeonTool {
-	return operationFactories[operationId](createRawClient(options));
+	const factory = operationFactoryFor(operationId);
+	return factory(createRawClient(options));
 }

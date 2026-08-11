@@ -28,7 +28,7 @@ const result = await tools.listProjects.execute({
 
 The returned record is keyed by OpenAPI operation ID. Each tool includes its generated Zod 4 `inputSchema`, snake-case `id`, title, description, safety annotations, stability metadata, and an `execute()` function. Inputs group API parameters under `path`, `query`, `headers`, and `body`.
 
-`execute()` validates the input and returns `{ data }`. Neon SDK errors remain typed and are thrown to the caller.
+`operationIds` exports every valid selector. `execute()` validates the input and returns typed, JSON-safe `{ data }`. Neon SDK errors remain typed and are thrown to the caller.
 
 ## Request schemas
 
@@ -67,7 +67,7 @@ const tools = createNeonTools({
 registerNeonTools(server, tools);
 ```
 
-Existing MCP 1.x servers can use the isolated compatibility entry point:
+Existing MCP 1.x servers can use the version-specific entry point:
 
 ```ts
 import { registerNeonTools } from "@neon/tools/mcp-v1";
@@ -82,6 +82,7 @@ MCP annotations are advisory; the protocol does not enforce approval. Tools expo
 Eve requires Node.js 24 or later.
 
 ```ts
+// agent/tools/create_project.ts
 import { defineTool } from "eve/tools";
 import { createNeonTool } from "@neon/tools";
 import { toEveTool } from "@neon/tools/eve";
@@ -89,7 +90,7 @@ import { toEveTool } from "@neon/tools/eve";
 const apiKey = process.env.NEON_API_KEY;
 if (!apiKey) throw new Error("NEON_API_KEY is required");
 
-const createProject = defineTool(
+export default defineTool(
 	toEveTool(
 		createNeonTool("createProject", {
 			apiKey,
@@ -98,7 +99,7 @@ const createProject = defineTool(
 );
 ```
 
-The adapter maps approval requirements to Eve's `approval` hook and forwards its abort signal.
+Eve uses the filename as the model-facing tool name, so name the file after the tool's snake-case `id`. The adapter maps approval requirements to Eve's `approval` hook and forwards its abort signal.
 
 ## Mastra
 

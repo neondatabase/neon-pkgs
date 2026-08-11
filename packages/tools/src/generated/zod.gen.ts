@@ -9,7 +9,7 @@ export const zProvisioner = z.string();
 /**
  * Cursor-based pagination. The `cursor` value reflects the endpoint's sort field (for example, an ID or timestamp), so pass it back unchanged.
  */
-export const zPagination = z.object({
+export const zPagination = z.strictObject({
     cursor: z.string().min(1).register(z.globalRegistry, {
         description: 'Cursor marking the last item in this response. Pass it unchanged as the `cursor` query parameter to fetch the next page.'
     })
@@ -17,7 +17,7 @@ export const zPagination = z.object({
     description: 'Cursor-based pagination. The `cursor` value reflects the endpoint\'s sort field (for example, an ID or timestamp), so pass it back unchanged.'
 });
 
-export const zPaginationResponse = z.object({
+export const zPaginationResponse = z.strictObject({
     pagination: zPagination.optional()
 });
 
@@ -28,12 +28,12 @@ export const zEmptyResponse = z.record(z.string(), z.unknown()).register(z.globa
     description: 'Empty response.'
 });
 
-export const zPlanVersion = z.object({
+export const zPlanVersion = z.strictObject({
     major: z.int(),
     minor: z.int()
 });
 
-export const zPlanDetails = z.object({
+export const zPlanDetails = z.strictObject({
     name: z.string().register(z.globalRegistry, {
         description: 'Plan name, for example `free`, `launch`, or `scale`.'
     }),
@@ -43,7 +43,7 @@ export const zPlanDetails = z.object({
 /**
  * Add a new JWKS to a specific endpoint of a project
  */
-export const zAddProjectJwksRequest = z.object({
+export const zAddProjectJwksRequest = z.strictObject({
     jwks_url: z.string().register(z.globalRegistry, {
         description: 'URL of the provider\'s JWKS endpoint used to verify JWTs.'
     }),
@@ -61,12 +61,12 @@ export const zAddProjectJwksRequest = z.object({
     }).optional(),
     skip_role_creation: z.boolean().register(z.globalRegistry, {
         description: 'Deprecated. Only used with Neon RLS. If true, role creation is skipped.'
-    }).optional().default(false)
+    }).optional()
 }).register(z.globalRegistry, {
     description: 'Add a new JWKS to a specific endpoint of a project'
 });
 
-export const zJwks = z.object({
+export const zJwks = z.strictObject({
     id: z.string().register(z.globalRegistry, {
         description: 'The JWKS configuration\'s ID.'
     }),
@@ -99,7 +99,7 @@ export const zJwks = z.object({
 /**
  * The list of configured JWKS definitions for a project
  */
-export const zProjectJwksResponse = z.object({
+export const zProjectJwksResponse = z.strictObject({
     jwks: z.array(zJwks).register(z.globalRegistry, {
         description: 'JWKS configurations associated with the project.'
     })
@@ -114,7 +114,7 @@ export const zAdvisorCategory = z.enum(['SECURITY', 'PERFORMANCE']).register(z.g
     description: 'Category of an advisor issue'
 });
 
-export const zAdvisorIssue = z.object({
+export const zAdvisorIssue = z.strictObject({
     name: z.string().register(z.globalRegistry, {
         description: 'Unique identifier for the issue type'
     }),
@@ -147,19 +147,19 @@ export const zAdvisorIssue = z.object({
     })
 });
 
-export const zApiKeyCreateRequest = z.object({
+export const zApiKeyCreateRequest = z.strictObject({
     key_name: z.string().max(64).register(z.globalRegistry, {
         description: 'A user-specified API key name. This value is required when creating an API key.'
     })
 });
 
-export const zOrgApiKeyCreateRequest = zApiKeyCreateRequest.and(z.object({
+export const zOrgApiKeyCreateRequest = zApiKeyCreateRequest.merge(z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'If set, the API key can access only this project'
     }).optional()
 }));
 
-export const zApiKeyCreateResponse = z.object({
+export const zApiKeyCreateResponse = z.strictObject({
     id: z.int().register(z.globalRegistry, {
         description: 'The API key\'s unique numeric ID. Distinct from the API key token (`key`).'
     }),
@@ -177,13 +177,13 @@ export const zApiKeyCreateResponse = z.object({
     })
 });
 
-export const zOrgApiKeyCreateResponse = zApiKeyCreateResponse.and(z.object({
+export const zOrgApiKeyCreateResponse = zApiKeyCreateResponse.merge(z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'If set, the API key can access only this project'
     }).optional()
 }));
 
-export const zApiKeyRevokeResponse = z.object({
+export const zApiKeyRevokeResponse = z.strictObject({
     id: z.int().register(z.globalRegistry, {
         description: 'The API key\'s unique numeric ID. Distinct from the API key token (`key`).'
     }),
@@ -205,7 +205,7 @@ export const zApiKeyRevokeResponse = z.object({
     })
 });
 
-export const zOrgApiKeyRevokeResponse = zApiKeyRevokeResponse.and(z.object({
+export const zOrgApiKeyRevokeResponse = zApiKeyRevokeResponse.merge(z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'If set, the API key can access only this project'
     }).optional()
@@ -214,7 +214,7 @@ export const zOrgApiKeyRevokeResponse = zApiKeyRevokeResponse.and(z.object({
 /**
  * The user data of the user that created this API key.
  */
-export const zApiKeyCreatorData = z.object({
+export const zApiKeyCreatorData = z.strictObject({
     id: z.uuid().register(z.globalRegistry, {
         description: 'ID of the user who created this API key'
     }),
@@ -228,7 +228,7 @@ export const zApiKeyCreatorData = z.object({
     description: 'The user data of the user that created this API key.'
 });
 
-export const zApiKeysListResponseItem = z.object({
+export const zApiKeysListResponseItem = z.strictObject({
     id: z.int().register(z.globalRegistry, {
         description: 'The API key\'s unique numeric ID. Distinct from the API key token (`key`).'
     }),
@@ -245,7 +245,7 @@ export const zApiKeysListResponseItem = z.object({
     })
 });
 
-export const zOrgApiKeysListResponseItem = zApiKeysListResponseItem.and(z.object({
+export const zOrgApiKeysListResponseItem = zApiKeysListResponseItem.merge(z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'If set, the API key can access only this project'
     }).optional()
@@ -314,7 +314,7 @@ export const zOperationStatus = z.enum([
 /**
  * An asynchronous action Neon performs on your resources (for example, starting a compute or creating a branch). Fields such as `action`, `status`, and `total_duration_ms` describe the operation and its progress.
  */
-export const zOperation = z.object({
+export const zOperation = z.strictObject({
     id: z.uuid().register(z.globalRegistry, {
         description: 'The operation ID'
     }),
@@ -351,15 +351,15 @@ export const zOperation = z.object({
     description: 'An asynchronous action Neon performs on your resources (for example, starting a compute or creating a branch). Fields such as `action`, `status`, and `total_duration_ms` describe the operation and its progress.'
 });
 
-export const zOperationResponse = z.object({
+export const zOperationResponse = z.strictObject({
     operation: zOperation
 });
 
-export const zOperationsResponse = z.object({
+export const zOperationsResponse = z.strictObject({
     operations: z.array(zOperation)
 });
 
-export const zProjectTransferRequestResponse = z.object({
+export const zProjectTransferRequestResponse = z.strictObject({
     id: z.uuid().register(z.globalRegistry, {
         description: 'The unique identifier for the transfer request'
     }),
@@ -374,8 +374,8 @@ export const zProjectTransferRequestResponse = z.object({
     })
 });
 
-export const zAcceptProjectTransferRequestSatisfiesPlanError = z.object({
-    reasons: z.array(z.object({
+export const zAcceptProjectTransferRequestSatisfiesPlanError = z.strictObject({
+    reasons: z.array(z.strictObject({
         message: z.string().register(z.globalRegistry, {
             description: 'Description of why the plan is not satisfied'
         }),
@@ -387,7 +387,7 @@ export const zAcceptProjectTransferRequestSatisfiesPlanError = z.object({
     })
 });
 
-export const zProjectPermission = z.object({
+export const zProjectPermission = z.strictObject({
     id: z.string().register(z.globalRegistry, {
         description: 'The project permission\'s ID.'
     }),
@@ -402,11 +402,11 @@ export const zProjectPermission = z.object({
     }).optional()
 });
 
-export const zProjectPermissions = z.object({
+export const zProjectPermissions = z.strictObject({
     project_permissions: z.array(zProjectPermission)
 });
 
-export const zGrantPermissionToProjectRequest = z.object({
+export const zGrantPermissionToProjectRequest = z.strictObject({
     email: z.email().min(1).max(256).register(z.globalRegistry, {
         description: 'Email address of the user to grant project access to.'
     })
@@ -468,7 +468,7 @@ export const zProjectMemberOrgRole = z.enum([
     description: 'Organization-level role used by project member role management.\n'
 });
 
-export const zProjectMember = z.object({
+export const zProjectMember = z.strictObject({
     member_id: z.uuid().register(z.globalRegistry, {
         description: 'The organization member ID.'
     }),
@@ -489,11 +489,11 @@ export const zProjectMember = z.object({
     grant_source: zProjectMemberGrantSource.optional()
 });
 
-export const zSetProjectMemberRoleRequest = z.object({
+export const zSetProjectMemberRoleRequest = z.strictObject({
     role: zProjectRole
 });
 
-export const zProjectMemberRoleResponse = z.object({
+export const zProjectMemberRoleResponse = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
     member_id: z.uuid(),
     user_id: z.uuid(),
@@ -516,7 +516,7 @@ export const zProjectMemberRoleResponse = z.object({
     }).optional()
 });
 
-export const zConsumptionHistoryPerTimeframe = z.object({
+export const zConsumptionHistoryPerTimeframe = z.strictObject({
     timeframe_start: z.iso.datetime().register(z.globalRegistry, {
         description: 'The specified start date-time for the reported consumption.\n'
     }),
@@ -546,7 +546,7 @@ export const zConsumptionHistoryPerTimeframe = z.object({
     }).optional()
 });
 
-export const zConsumptionHistoryPerPeriod = z.object({
+export const zConsumptionHistoryPerPeriod = z.strictObject({
     period_id: z.uuid().register(z.globalRegistry, {
         description: 'The ID assigned to the specified billing period.'
     }),
@@ -564,7 +564,7 @@ export const zConsumptionHistoryPerPeriod = z.object({
     })
 });
 
-export const zConsumptionHistoryPerProject = z.object({
+export const zConsumptionHistoryPerProject = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID. Returned as `id` from `GET /projects`.'
     }),
@@ -573,13 +573,13 @@ export const zConsumptionHistoryPerProject = z.object({
     })
 });
 
-export const zConsumptionHistoryPerProjectResponse = z.object({
+export const zConsumptionHistoryPerProjectResponse = z.strictObject({
     projects: z.array(zConsumptionHistoryPerProject).register(z.globalRegistry, {
         description: 'Per-project consumption history records included in the response.'
     })
 });
 
-export const zConsumptionMetricValue = z.object({
+export const zConsumptionMetricValue = z.strictObject({
     metric_name: z.string().register(z.globalRegistry, {
         description: 'Name of the consumption metric, such as compute_time or data_storage_bytes_hour.'
     }),
@@ -588,7 +588,7 @@ export const zConsumptionMetricValue = z.object({
     })
 });
 
-export const zConsumptionHistoryPerTimeframeV2 = z.object({
+export const zConsumptionHistoryPerTimeframeV2 = z.strictObject({
     timeframe_start: z.iso.datetime().register(z.globalRegistry, {
         description: 'The specified start date-time for the reported consumption.\n'
     }).optional(),
@@ -600,7 +600,7 @@ export const zConsumptionHistoryPerTimeframeV2 = z.object({
     }).optional()
 });
 
-export const zConsumptionHistoryPerPeriodV2 = z.object({
+export const zConsumptionHistoryPerPeriodV2 = z.strictObject({
     period_id: z.uuid().register(z.globalRegistry, {
         description: 'The ID assigned to the specified billing period.'
     }),
@@ -618,7 +618,7 @@ export const zConsumptionHistoryPerPeriodV2 = z.object({
     })
 });
 
-export const zConsumptionHistoryPerProjectV2 = z.object({
+export const zConsumptionHistoryPerProjectV2 = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID. Returned as `id` from `GET /projects`.'
     }),
@@ -627,13 +627,13 @@ export const zConsumptionHistoryPerProjectV2 = z.object({
     })
 });
 
-export const zConsumptionHistoryPerProjectV2Response = z.object({
+export const zConsumptionHistoryPerProjectV2Response = z.strictObject({
     projects: z.array(zConsumptionHistoryPerProjectV2).register(z.globalRegistry, {
         description: 'Per-project consumption history entries for the requested time range.'
     })
 });
 
-export const zConsumptionHistoryPerBranchV2 = z.object({
+export const zConsumptionHistoryPerBranchV2 = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The ID of the project that owns this branch.'
     }),
@@ -645,7 +645,7 @@ export const zConsumptionHistoryPerBranchV2 = z.object({
     })
 });
 
-export const zConsumptionHistoryPerBranchV2Response = z.object({
+export const zConsumptionHistoryPerBranchV2Response = z.strictObject({
     branches: z.array(zConsumptionHistoryPerBranchV2).register(z.globalRegistry, {
         description: 'Per-branch consumption history records returned for the requested time range.'
     })
@@ -665,7 +665,7 @@ export const zProjectAuditLogLevel = z.enum([
     'full'
 ]);
 
-export const zAvailablePreloadLibrary = z.object({
+export const zAvailablePreloadLibrary = z.strictObject({
     library_name: z.string().register(z.globalRegistry, {
         description: 'Name of the Postgres shared preload library as it appears in the `shared_preload_libraries` parameter (for example, `pg_stat_statements`).'
     }),
@@ -683,7 +683,7 @@ export const zAvailablePreloadLibrary = z.object({
     })
 });
 
-export const zAvailablePreloadLibraries = z.object({
+export const zAvailablePreloadLibraries = z.strictObject({
     libraries: z.array(zAvailablePreloadLibrary).register(z.globalRegistry, {
         description: 'Preload libraries available for the project\'s Postgres version. Each entry includes `library_name`, `description`, `is_default`, `is_experimental`, and `version`.'
     }).optional()
@@ -715,7 +715,7 @@ export const zBranchRestoreStatus = z.string().register(z.globalRegistry, {
  * An action that is currently restricted for the branch and the reason why.
  *
  */
-export const zBranchRestrictedAction = z.object({
+export const zBranchRestrictedAction = z.strictObject({
     name: z.string().register(z.globalRegistry, {
         description: 'The name of a restricted action on a branch. `restore`: the branch cannot be used as a restore target. `delete-rw-endpoint`: the read-write endpoint for the branch cannot be deleted.\n'
     }),
@@ -733,7 +733,7 @@ export const zBranchRestrictedAction = z.object({
  * This is part of the Branch Recovery feature, which is in preview and not available to all users.
  *
  */
-export const zBranchRecoveryInfo = z.object({
+export const zBranchRecoveryInfo = z.strictObject({
     deleted_at: z.iso.datetime().register(z.globalRegistry, {
         description: 'Timestamp when the branch was deleted\n'
     }),
@@ -747,7 +747,7 @@ export const zBranchRecoveryInfo = z.object({
     description: 'Recovery information for a deleted branch. Only present when listing deleted branches\nwith `include_deleted=true`.\n\nThis is part of the Branch Recovery feature, which is in preview and not available to all users.\n'
 });
 
-export const zBranch = z.object({
+export const zBranch = z.strictObject({
     id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The branch ID. This value is generated when a branch is created. A `branch_id` value has a `br` prefix. For example: `br-small-term-683261`.\n'
     }),
@@ -816,7 +816,7 @@ export const zBranch = z.object({
     last_reset_at: z.iso.datetime().register(z.globalRegistry, {
         description: 'A timestamp indicating when the branch was last reset\n'
     }).optional(),
-    created_by: z.object({
+    created_by: z.strictObject({
         name: z.string().register(z.globalRegistry, {
             description: 'Display name of the user who created the branch.'
         }).optional(),
@@ -842,8 +842,8 @@ export const zBranch = z.object({
     recovery: zBranchRecoveryInfo.optional()
 });
 
-export const zBranchUpdateRequest = z.object({
-    branch: z.object({
+export const zBranchUpdateRequest = z.strictObject({
+    branch: z.strictObject({
         name: z.string().min(1).max(256).register(z.globalRegistry, {
             description: 'New display name for the branch.'
         }).optional(),
@@ -856,7 +856,7 @@ export const zBranchUpdateRequest = z.object({
     })
 });
 
-export const zBranchRestoreRequest = z.object({
+export const zBranchRestoreRequest = z.strictObject({
     source_branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The `branch_id` of the restore source branch.\nIf `source_timestamp` and `source_lsn` are omitted, the branch will be restored to head.\nIf `source_branch_id` is equal to the branch\'s id, `source_timestamp` or `source_lsn` is required.\n'
     }),
@@ -871,29 +871,29 @@ export const zBranchRestoreRequest = z.object({
     }).optional()
 });
 
-export const zBranchResponse = z.object({
+export const zBranchResponse = z.strictObject({
     branch: zBranch
 });
 
-export const zBranchSchemaCompareResponse = z.object({
+export const zBranchSchemaCompareResponse = z.strictObject({
     diff: z.string().register(z.globalRegistry, {
         description: 'Unified diff of the SQL schema changes between the compared branches.'
     }).optional()
 });
 
-export const zBranchesResponse = z.object({
+export const zBranchesResponse = z.strictObject({
     branches: z.array(zBranch).register(z.globalRegistry, {
         description: 'Branches in the project. Each includes `id`, `name`, `current_state`, and `created_at`.'
     })
 });
 
-export const zBranchesCountResponse = z.object({
+export const zBranchesCountResponse = z.strictObject({
     count: z.int().register(z.globalRegistry, {
         description: 'Total number of branches in the project.'
     })
 });
 
-export const zMaskingRule = z.object({
+export const zMaskingRule = z.strictObject({
     database_name: z.string().register(z.globalRegistry, {
         description: 'The name of the database containing the table to be masked\n'
     }),
@@ -914,13 +914,13 @@ export const zMaskingRule = z.object({
     }).optional()
 });
 
-export const zMaskingRulesResponse = z.object({
+export const zMaskingRulesResponse = z.strictObject({
     masking_rules: z.array(zMaskingRule).register(z.globalRegistry, {
         description: 'List of masking rules for the branch\n'
     })
 });
 
-export const zMaskingRulesUpdateRequest = z.object({
+export const zMaskingRulesUpdateRequest = z.strictObject({
     masking_rules: z.array(zMaskingRule).register(z.globalRegistry, {
         description: 'List of masking rules to apply to the branch.\nThis will replace all existing masking rules for the branch.\n'
     })
@@ -929,7 +929,7 @@ export const zMaskingRulesUpdateRequest = z.object({
 /**
  * Metadata about the most recent anonymization attempt for the branch.
  */
-export const zAnonymizationRunMetadata = z.object({
+export const zAnonymizationRunMetadata = z.strictObject({
     started_at: z.iso.datetime().register(z.globalRegistry, {
         description: 'Timestamp indicating when the latest anonymization attempt started.\n'
     }).optional(),
@@ -949,7 +949,7 @@ export const zAnonymizationRunMetadata = z.object({
     description: 'Metadata about the most recent anonymization attempt for the branch.'
 });
 
-export const zAnonymizedBranchStatusResponse = z.object({
+export const zAnonymizedBranchStatusResponse = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The ID of the project this branch belongs to.'
     }),
@@ -974,7 +974,7 @@ export const zAnonymizedBranchStatusResponse = z.object({
     last_run: zAnonymizationRunMetadata.optional()
 });
 
-export const zConnectionParameters = z.object({
+export const zConnectionParameters = z.strictObject({
     database: z.string().register(z.globalRegistry, {
         description: 'Name of the Postgres database used in the connection URI.\n'
     }),
@@ -992,14 +992,14 @@ export const zConnectionParameters = z.object({
     })
 });
 
-export const zConnectionDetails = z.object({
+export const zConnectionDetails = z.strictObject({
     connection_uri: z.string().register(z.globalRegistry, {
         description: 'The connection URI is defined as specified here: [Connection URIs](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING-URIS)\nThe connection URI can be used to connect to a Postgres database with psql or defined in a DATABASE_URL environment variable.\nWhen creating a branch from a parent with more than one role or database, the response body does not include a connection URI.\n'
     }),
     connection_parameters: zConnectionParameters
 });
 
-export const zConnectionUriResponse = z.object({
+export const zConnectionUriResponse = z.strictObject({
     uri: z.string().register(z.globalRegistry, {
         description: 'The connection URI.\n'
     })
@@ -1052,7 +1052,7 @@ export const zSuspendTimeoutSeconds = z.int().gte(-1).lte(604800).register(z.glo
  * If protected_branches_only is true, the list will be applied only to protected branches.
  *
  */
-export const zAllowedIps = z.object({
+export const zAllowedIps = z.strictObject({
     ips: z.array(z.string()).register(z.globalRegistry, {
         description: 'A list of IP addresses that are allowed to connect to the endpoint.'
     }).optional(),
@@ -1069,7 +1069,7 @@ export const zAllowedIps = z.object({
  * interrupted.
  *
  */
-export const zMaintenanceWindow = z.object({
+export const zMaintenanceWindow = z.strictObject({
     weekdays: z.array(z.int()).register(z.globalRegistry, {
         description: 'A list of weekdays when the maintenance window is active.\nEncoded as ints, where 1 - Monday, and 7 - Sunday.\n'
     }),
@@ -1087,7 +1087,7 @@ export const zMaintenanceWindow = z.object({
  * The shared libraries to preload into the project's compute instances.
  *
  */
-export const zPreloadLibraries = z.object({
+export const zPreloadLibraries = z.strictObject({
     use_defaults: z.boolean().register(z.globalRegistry, {
         description: 'When true, the project\'s preload libraries include the platform default set in addition to any libraries listed in `enabled_libraries`.'
     }).optional(),
@@ -1098,19 +1098,19 @@ export const zPreloadLibraries = z.object({
     description: 'The shared libraries to preload into the project\'s compute instances.\n'
 });
 
-export const zConnectionUrisResponse = z.object({
+export const zConnectionUrisResponse = z.strictObject({
     connection_uris: z.array(zConnectionDetails).register(z.globalRegistry, {
         description: 'Connection URIs for the project. Each entry contains credentials and should be treated as sensitive.'
     })
 });
 
-export const zConnectionUrisOptionalResponse = z.object({
+export const zConnectionUrisOptionalResponse = z.strictObject({
     connection_uris: z.array(zConnectionDetails).register(z.globalRegistry, {
         description: 'Connection URIs for the compute endpoint, including credentials.'
     }).optional()
 });
 
-export const zVpcEndpoint = z.object({
+export const zVpcEndpoint = z.strictObject({
     vpc_endpoint_id: z.string().register(z.globalRegistry, {
         description: 'Cloud provider identifier for the VPC endpoint.'
     }),
@@ -1119,25 +1119,25 @@ export const zVpcEndpoint = z.object({
     })
 });
 
-export const zVpcEndpointsResponse = z.object({
+export const zVpcEndpointsResponse = z.strictObject({
     endpoints: z.array(zVpcEndpoint).register(z.globalRegistry, {
         description: 'List of VPC endpoints returned by the request.'
     })
 });
 
-export const zVpcEndpointWithRegion = zVpcEndpoint.and(z.object({
+export const zVpcEndpointWithRegion = zVpcEndpoint.merge(z.strictObject({
     region_id: z.string().register(z.globalRegistry, {
         description: 'The region where the VPC endpoint is located'
     })
 }));
 
-export const zVpcEndpointsWithRegionResponse = z.object({
+export const zVpcEndpointsWithRegionResponse = z.strictObject({
     endpoints: z.array(zVpcEndpointWithRegion).register(z.globalRegistry, {
         description: 'VPC endpoints associated with the region.'
     })
 });
 
-export const zVpcEndpointDetails = z.object({
+export const zVpcEndpointDetails = z.strictObject({
     vpc_endpoint_id: z.string().register(z.globalRegistry, {
         description: 'Cloud provider identifier for the VPC endpoint.'
     }),
@@ -1155,13 +1155,13 @@ export const zVpcEndpointDetails = z.object({
     })
 });
 
-export const zVpcEndpointAssignment = z.object({
+export const zVpcEndpointAssignment = z.strictObject({
     label: z.string().register(z.globalRegistry, {
         description: 'Human-readable name for the VPC endpoint assignment, used to identify it within the organization.'
     })
 });
 
-export const zRole = z.object({
+export const zRole = z.strictObject({
     branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The ID of the branch this role belongs to.'
     }),
@@ -1185,8 +1185,8 @@ export const zRole = z.object({
     })
 });
 
-export const zRoleCreateRequest = z.object({
-    role: z.object({
+export const zRoleCreateRequest = z.strictObject({
+    role: z.strictObject({
         name: z.string().register(z.globalRegistry, {
             description: 'The role name. Cannot exceed 63 bytes in length.\n'
         }),
@@ -1198,27 +1198,27 @@ export const zRoleCreateRequest = z.object({
     })
 });
 
-export const zRoleResponse = z.object({
+export const zRoleResponse = z.strictObject({
     role: zRole
 });
 
-export const zJwksResponse = z.object({
+export const zJwksResponse = z.strictObject({
     jwks: zJwks
 });
 
-export const zRolesResponse = z.object({
+export const zRolesResponse = z.strictObject({
     roles: z.array(zRole).register(z.globalRegistry, {
         description: 'Roles belonging to the branch. Each role includes fields such as `branch_id`, `name`, `protected`, `created_at`, and `updated_at`.\n'
     })
 });
 
-export const zRolePasswordResponse = z.object({
+export const zRolePasswordResponse = z.strictObject({
     password: z.string().register(z.globalRegistry, {
         description: 'The role password\n'
     })
 });
 
-export const zPaymentSourceBankCard = z.object({
+export const zPaymentSourceBankCard = z.strictObject({
     last4: z.string().register(z.globalRegistry, {
         description: 'Last 4 digits of the card.\n'
     }),
@@ -1242,20 +1242,20 @@ export const zPaymentSourceBankCard = z.object({
     }).optional()
 });
 
-export const zPaymentSource = z.object({
+export const zPaymentSource = z.strictObject({
     type: z.string().register(z.globalRegistry, {
         description: 'Type of payment source. E.g. "card".\n'
     }),
     card: zPaymentSourceBankCard.optional()
 });
 
-export const zSpendingLimitUpdateRequest = z.object({
+export const zSpendingLimitUpdateRequest = z.strictObject({
     spending_limit_cents: z.int().gte(1).register(z.globalRegistry, {
         description: 'Monthly spending cap in cents. Must be positive. To remove a\npreviously configured limit, send a DELETE request to the\nspending_limit endpoint — `0` and `null` are rejected here.\nThe cap is alert-only: notifications fire at 80% and 100%, but\ncomputes are not suspended. Setting a cap below the period\'s\nalready-accrued spend is permitted and will trigger the\nover-limit notification on the next worker run.\n'
     })
 });
 
-export const zSpendingLimitResponse = z.object({
+export const zSpendingLimitResponse = z.strictObject({
     spending_limit_cents: z.int().nullable()
 });
 
@@ -1315,7 +1315,7 @@ export const zBillingPaymentMethod = z.enum([
     description: 'Indicates whether and how an account makes payments.\n'
 });
 
-export const zBillingAccount = z.object({
+export const zBillingAccount = z.strictObject({
     state: zBillingAccountState,
     payment_source: zPaymentSource,
     subscription_type: zBillingSubscriptionType,
@@ -1363,7 +1363,7 @@ export const zBillingAccount = z.object({
     spending_limit_cents: z.int().nullish()
 });
 
-export const zDatabase = z.object({
+export const zDatabase = z.strictObject({
     id: z.int().register(z.globalRegistry, {
         description: 'The database ID\n'
     }),
@@ -1384,8 +1384,8 @@ export const zDatabase = z.object({
     })
 });
 
-export const zDatabaseCreateRequest = z.object({
-    database: z.object({
+export const zDatabaseCreateRequest = z.strictObject({
+    database: z.strictObject({
         name: z.string().register(z.globalRegistry, {
             description: 'Name of the database to create.\n'
         }),
@@ -1397,8 +1397,8 @@ export const zDatabaseCreateRequest = z.object({
     })
 });
 
-export const zDatabaseUpdateRequest = z.object({
-    database: z.object({
+export const zDatabaseUpdateRequest = z.strictObject({
+    database: z.strictObject({
         name: z.string().register(z.globalRegistry, {
             description: 'Name of the database to update.\n'
         }).optional(),
@@ -1410,11 +1410,11 @@ export const zDatabaseUpdateRequest = z.object({
     })
 });
 
-export const zDatabaseResponse = z.object({
+export const zDatabaseResponse = z.strictObject({
     database: zDatabase
 });
 
-export const zDatabasesResponse = z.object({
+export const zDatabasesResponse = z.strictObject({
     databases: z.array(zDatabase).register(z.globalRegistry, {
         description: 'Databases on the branch. Each includes `id`, `name`, `owner_name`, and `created_at`.'
     })
@@ -1433,7 +1433,7 @@ export const zMemberRole = z.enum([
     description: 'Organization member\'s role. `admin`: full administrative access. `editor` (and its legacy alias `member`): standard access governed by project permissions. `viewer` and `collaborator`: additional scoped project roles. Some values may not be available for all organizations.'
 });
 
-export const zInvitation = z.object({
+export const zInvitation = z.strictObject({
     id: z.uuid().register(z.globalRegistry, {
         description: 'The invitation ID.'
     }),
@@ -1452,7 +1452,7 @@ export const zInvitation = z.object({
     role: zMemberRole
 });
 
-export const zMember = z.object({
+export const zMember = z.strictObject({
     id: z.uuid().register(z.globalRegistry, {
         description: 'The organization member\'s ID.'
     }),
@@ -1468,7 +1468,7 @@ export const zMember = z.object({
     }).optional()
 });
 
-export const zMemberUserInfo = z.object({
+export const zMemberUserInfo = z.strictObject({
     email: z.email().min(1).max(256).register(z.globalRegistry, {
         description: 'Email address of the organization member\'s user account.'
     }),
@@ -1480,12 +1480,12 @@ export const zMemberUserInfo = z.object({
     }).optional()
 });
 
-export const zMemberWithUser = z.object({
+export const zMemberWithUser = z.strictObject({
     member: zMember,
     user: zMemberUserInfo
 });
 
-export const zOrganization = z.object({
+export const zOrganization = z.strictObject({
     id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon organization ID. Use as the `org_id` path parameter in other endpoints.'
     }),
@@ -1515,42 +1515,42 @@ export const zOrganization = z.object({
     }).optional()
 });
 
-export const zOrganizationsResponse = z.object({
+export const zOrganizationsResponse = z.strictObject({
     organizations: z.array(zOrganization).register(z.globalRegistry, {
         description: 'Organizations returned by the request. Each includes `id`, `name`, `handle`, and `plan`.'
     })
 });
 
-export const zOrganizationInvitationsResponse = z.object({
+export const zOrganizationInvitationsResponse = z.strictObject({
     invitations: z.array(zInvitation).register(z.globalRegistry, {
         description: 'List of pending invitations for the organization.'
     })
 });
 
-export const zOrganizationInviteCreateRequest = z.object({
+export const zOrganizationInviteCreateRequest = z.strictObject({
     email: z.email().min(1).max(256).register(z.globalRegistry, {
         description: 'Email address of the person to invite to the organization.'
     }),
     role: zMemberRole
 });
 
-export const zOrganizationInvitesCreateRequest = z.object({
+export const zOrganizationInvitesCreateRequest = z.strictObject({
     invitations: z.array(zOrganizationInviteCreateRequest).register(z.globalRegistry, {
         description: 'Invitations to create for the organization.'
     })
 });
 
-export const zOrganizationMemberUpdateRequest = z.object({
+export const zOrganizationMemberUpdateRequest = z.strictObject({
     role: zMemberRole
 });
 
-export const zOrganizationMembersResponse = z.object({
+export const zOrganizationMembersResponse = z.strictObject({
     members: z.array(zMemberWithUser).register(z.globalRegistry, {
         description: 'Members of the organization, each combining membership details (role, status) with the associated user\'s identity.'
     })
 });
 
-export const zRegionResponse = z.object({
+export const zRegionResponse = z.strictObject({
     region_id: z.string().register(z.globalRegistry, {
         description: 'Cloud region where the resource\'s Postgres compute and storage reside (for example, `aws-us-east-1`). Valid values are returned by `GET /regions`.'
     }),
@@ -1568,13 +1568,13 @@ export const zRegionResponse = z.object({
     })
 });
 
-export const zActiveRegionsResponse = z.object({
+export const zActiveRegionsResponse = z.strictObject({
     regions: z.array(zRegionResponse).register(z.globalRegistry, {
         description: 'The list of active regions'
     })
 });
 
-export const zAuthDetailsResponse = z.object({
+export const zAuthDetailsResponse = z.strictObject({
     account_id: z.string().register(z.globalRegistry, {
         description: 'The ID of the account associated with this authentication record.'
     }),
@@ -1590,7 +1590,7 @@ export const zAuthDetailsResponse = z.object({
     auth_data: z.string().optional()
 });
 
-export const zTransferProjectsToOrganizationRequest = z.object({
+export const zTransferProjectsToOrganizationRequest = z.strictObject({
     destination_org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The destination organization identifier'
     }),
@@ -1614,7 +1614,7 @@ export const zIdentityProviderId = z.enum([
     description: 'Identity provider id from keycloak'
 });
 
-export const zCurrentUserAuthAccount = z.object({
+export const zCurrentUserAuthAccount = z.strictObject({
     email: z.email().min(1).max(256).register(z.globalRegistry, {
         description: 'Email address associated with this auth account.'
     }),
@@ -1630,7 +1630,7 @@ export const zCurrentUserAuthAccount = z.object({
     provider: zIdentityProviderId
 });
 
-export const zCurrentUserInfoResponse = z.object({
+export const zCurrentUserInfoResponse = z.strictObject({
     active_seconds_limit: z.int().register(z.globalRegistry, {
         description: 'Control plane observes active endpoints of a user this amount of wall-clock time.\n'
     }),
@@ -1691,7 +1691,7 @@ export const zCurrentUserInfoResponse = z.object({
  * A zero or empty quota value means “unlimited.”
  *
  */
-export const zProjectQuota = z.object({
+export const zProjectQuota = z.strictObject({
     active_time_seconds: z.int().gte(0).register(z.globalRegistry, {
         description: 'The total amount of wall-clock time allowed to be spent by the project\'s compute endpoints.\n'
     }).optional(),
@@ -1711,7 +1711,7 @@ export const zProjectQuota = z.object({
     description: 'Per-project consumption quotas. If a quota is exceeded, all active computes\nare automatically suspended and cannot be started via API calls or incoming connections.\n\nThe exception is `logical_size_bytes`, which is enforced per branch.\nIf a branch exceeds its `logical_size_bytes` quota, computes can still be started,\nbut write operations will fail—allowing data to be deleted to free up space.\nComputes on other branches are not affected.\n\nSetting `logical_size_bytes` overrides any lower value set by the `neon.max_cluster_size` Postgres setting.\n\nQuotas are enforced using per-project consumption metrics with the same names.\nThese metrics reset at the start of each billing period. `logical_size_bytes`\nis also an exception—it reflects the total data stored in a branch and does not reset.\n\nA zero or empty quota value means “unlimited.”\n'
 });
 
-export const zProjectSettingsData = z.object({
+export const zProjectSettingsData = z.strictObject({
     quota: zProjectQuota.optional(),
     allowed_ips: zAllowedIps.optional(),
     enable_logical_replication: z.boolean().register(z.globalRegistry, {
@@ -1751,7 +1751,7 @@ export const zPgbouncerSettingsData = z.record(z.string(), z.string()).register(
 /**
  * A collection of settings for a compute endpoint
  */
-export const zEndpointSettingsData = z.object({
+export const zEndpointSettingsData = z.strictObject({
     pg_settings: zPgSettingsData.optional(),
     pgbouncer_settings: zPgbouncerSettingsData.optional(),
     preload_libraries: zPreloadLibraries.optional()
@@ -1759,7 +1759,7 @@ export const zEndpointSettingsData = z.object({
     description: 'A collection of settings for a compute endpoint'
 });
 
-export const zBranchCreateRequestEndpointOptions = z.object({
+export const zBranchCreateRequestEndpointOptions = z.strictObject({
     type: zEndpointType,
     settings: zEndpointSettingsData.optional(),
     autoscaling_limit_min_cu: zComputeUnit.optional(),
@@ -1768,11 +1768,11 @@ export const zBranchCreateRequestEndpointOptions = z.object({
     suspend_timeout_seconds: zSuspendTimeoutSeconds.optional()
 });
 
-export const zBranchCreateRequest = z.object({
+export const zBranchCreateRequest = z.strictObject({
     endpoints: z.array(zBranchCreateRequestEndpointOptions).register(z.globalRegistry, {
         description: 'Compute endpoints to create together with the branch. If omitted, the branch is created without any compute endpoint. Endpoints can be added to the branch separately after creation.'
     }).optional(),
-    branch: z.object({
+    branch: z.strictObject({
         parent_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
             description: 'The `branch_id` of the parent branch. If omitted or empty, the branch will be created from the project\'s default branch.\n'
         }).optional(),
@@ -1787,7 +1787,7 @@ export const zBranchCreateRequest = z.object({
         }).optional(),
         protected: z.boolean().register(z.globalRegistry, {
             description: 'Whether the branch is protected. Protected branches (and their computes) cannot be deleted, archived, or reset, and block deletion of the project. Can be gated by `protected_branches_only` in the IP allowlist. Paid plans only.\n'
-        }).optional().default(false),
+        }).optional(),
         archived: z.boolean().register(z.globalRegistry, {
             description: 'Whether to create the branch in the archived state. When omitted, the branch is created as a normal (non-archived) branch.\n'
         }).optional(),
@@ -1802,7 +1802,7 @@ export const zBranchCreateRequest = z.object({
     }).optional()
 });
 
-export const zEndpoint = z.object({
+export const zEndpoint = z.strictObject({
     host: z.string().register(z.globalRegistry, {
         description: 'The hostname of the compute endpoint. This is the hostname specified when connecting to a Neon database.\n'
     }),
@@ -1865,8 +1865,8 @@ export const zEndpoint = z.object({
     }).optional()
 });
 
-export const zEndpointCreateRequest = z.object({
-    endpoint: z.object({
+export const zEndpointCreateRequest = z.strictObject({
+    endpoint: z.strictObject({
         branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
             description: 'The ID of the branch the compute endpoint will be associated with\n'
         }),
@@ -1897,8 +1897,8 @@ export const zEndpointCreateRequest = z.object({
     })
 });
 
-export const zEndpointUpdateRequest = z.object({
-    endpoint: z.object({
+export const zEndpointUpdateRequest = z.strictObject({
+    endpoint: z.strictObject({
         branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
             description: 'Deprecated. The destination branch ID; must not have an existing read-write endpoint.\n'
         }).optional(),
@@ -1925,17 +1925,17 @@ export const zEndpointUpdateRequest = z.object({
     })
 });
 
-export const zEndpointResponse = z.object({
+export const zEndpointResponse = z.strictObject({
     endpoint: zEndpoint
 });
 
-export const zEndpointsResponse = z.object({
+export const zEndpointsResponse = z.strictObject({
     endpoints: z.array(zEndpoint).register(z.globalRegistry, {
         description: 'Compute endpoints in the project. Each includes `id`, `branch_id`, `host`, and `type`.'
     })
 });
 
-export const zEndpointsOptionalResponse = z.object({
+export const zEndpointsOptionalResponse = z.strictObject({
     endpoints: z.array(zEndpoint).register(z.globalRegistry, {
         description: 'Compute endpoints associated with the project.'
     }).optional()
@@ -1944,7 +1944,7 @@ export const zEndpointsOptionalResponse = z.object({
 /**
  * A collection of settings for a Neon endpoint
  */
-export const zDefaultEndpointSettings = z.object({
+export const zDefaultEndpointSettings = z.strictObject({
     pg_settings: zPgSettingsData.optional(),
     pgbouncer_settings: zPgbouncerSettingsData.optional(),
     autoscaling_limit_min_cu: zComputeUnit.optional(),
@@ -1954,8 +1954,8 @@ export const zDefaultEndpointSettings = z.object({
     description: 'A collection of settings for a Neon endpoint'
 });
 
-export const zProjectUpdateRequest = z.object({
-    project: z.object({
+export const zProjectUpdateRequest = z.strictObject({
+    project: z.strictObject({
         settings: zProjectSettingsData.optional(),
         name: z.string().min(1).max(256).register(z.globalRegistry, {
             description: 'The project name'
@@ -1972,13 +1972,13 @@ export const zProjectUpdateRequest = z.object({
  */
 export const zPgVersion = z.int().gte(14).lte(19).register(z.globalRegistry, {
     description: 'The major Postgres version number. Supported versions are `14`, `15`, `16`, `17`, and `18`. `19` is rolling out and is accepted only in regions where it is enabled; requesting it elsewhere returns an error.'
-}).default(18);
+});
 
 /**
  * Essential data about the project. Full data is available at `GET /projects/{project_id}`.
  *
  */
-export const zProjectListItem = z.object({
+export const zProjectListItem = z.strictObject({
     id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID. Use as the `project_id` path parameter in other endpoints.'
     }),
@@ -2060,7 +2060,7 @@ export const zProjectListItem = z.object({
     description: 'Essential data about the project. Full data is available at `GET /projects/{project_id}`.\n'
 });
 
-export const zProjectsResponse = z.object({
+export const zProjectsResponse = z.strictObject({
     projects: z.array(zProjectListItem).register(z.globalRegistry, {
         description: 'List of projects accessible to the caller. Projects that exist but could not be retrieved are identified in `unavailable_project_ids`.'
     }),
@@ -2069,7 +2069,7 @@ export const zProjectsResponse = z.object({
     }).optional()
 });
 
-export const zProjectOwnerData = z.object({
+export const zProjectOwnerData = z.strictObject({
     email: z.email().min(1).max(256).register(z.globalRegistry, {
         description: 'Email address of the project owner.'
     }),
@@ -2082,7 +2082,7 @@ export const zProjectOwnerData = z.object({
     subscription_type: zBillingSubscriptionType
 });
 
-export const zProject = z.object({
+export const zProject = z.strictObject({
     data_storage_bytes_hour: z.int().gte(0).register(z.globalRegistry, {
         description: 'Bytes-Hour. Project consumed that much Postgres storage hourly during the billing period. The value has some lag.\nThe value is reset at the beginning of each billing period.\n'
     }),
@@ -2175,14 +2175,14 @@ export const zProject = z.object({
     effective_project_permission: zProjectPermissionLevel.nullish()
 });
 
-export const zProjectResponse = z.object({
+export const zProjectResponse = z.strictObject({
     project: zProject
 });
 
-export const zProjectRecoverResponse = zProjectResponse.and(zBranchesResponse);
+export const zProjectRecoverResponse = zProjectResponse.merge(zBranchesResponse);
 
-export const zLimitsUnsatisfiedResponse = z.object({
-    limits: z.array(z.object({
+export const zLimitsUnsatisfiedResponse = z.strictObject({
+    limits: z.array(z.strictObject({
         name: z.string().register(z.globalRegistry, {
             description: 'Identifier of the unsatisfied limit. Possible values are:\n- subscription_type\n- projects_count\n- project_region\n'
         }),
@@ -2197,8 +2197,8 @@ export const zLimitsUnsatisfiedResponse = z.object({
     })
 });
 
-export const zProjectsWithIntegrationResponse = z.object({
-    projects: z.array(z.object({
+export const zProjectsWithIntegrationResponse = z.strictObject({
+    projects: z.array(z.strictObject({
         id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
             description: 'The Neon project ID. Use as the `project_id` path parameter in other endpoints.'
         }),
@@ -2213,13 +2213,13 @@ export const zProjectsWithIntegrationResponse = z.object({
 /**
  * Configuration settings for the Neon Data API
  */
-export const zDataApiSettings = z.object({
+export const zDataApiSettings = z.strictObject({
     db_aggregates_enabled: z.boolean().register(z.globalRegistry, {
         description: 'Enable aggregates feature'
-    }).optional().default(true),
+    }).optional(),
     db_anon_role: z.string().register(z.globalRegistry, {
         description: 'Database role to use for anonymous requests'
-    }).optional().default('anonymous'),
+    }).optional(),
     db_extra_search_path: z.string().register(z.globalRegistry, {
         description: 'Extra schemas to add to the search path'
     }).optional(),
@@ -2231,13 +2231,13 @@ export const zDataApiSettings = z.object({
     }).optional(),
     jwt_role_claim_key: z.string().register(z.globalRegistry, {
         description: 'JWT claim key to use for role extraction'
-    }).optional().default('.role'),
+    }).optional(),
     jwt_cache_max_lifetime: z.int().register(z.globalRegistry, {
         description: 'Maximum lifetime of the Data API\'s JWT cache, in seconds.'
     }).optional(),
     openapi_mode: z.string().register(z.globalRegistry, {
         description: 'OpenAPI specification mode (ignore-privileges, disabled)'
-    }).optional().default('disabled'),
+    }).optional(),
     server_cors_allowed_origins: z.string().register(z.globalRegistry, {
         description: 'CORS allowed origins'
     }).optional(),
@@ -2251,7 +2251,7 @@ export const zDataApiSettings = z.object({
 /**
  * Create Neon Data API
  */
-export const zDataApiCreateRequest = z.object({
+export const zDataApiCreateRequest = z.strictObject({
     auth_provider: z.enum(['neon_auth', 'external']).register(z.globalRegistry, {
         description: 'Authentication provider for the Neon Data API. `neon_auth`: use Neon\'s built-in managed authentication (no JWKS configuration required). `external`: use an external JWT provider, which requires `jwks_url`. When omitted, no auth provider is configured (existing setup is kept).'
     }).optional(),
@@ -2266,10 +2266,10 @@ export const zDataApiCreateRequest = z.object({
     }).optional(),
     add_default_grants: z.boolean().register(z.globalRegistry, {
         description: 'Grant all permissions to the tables in the public schema to authenticated users'
-    }).optional().default(false),
+    }).optional(),
     skip_auth_schema: z.boolean().register(z.globalRegistry, {
         description: 'Skip creating the auth schema and RLS functions'
-    }).optional().default(false),
+    }).optional(),
     settings: zDataApiSettings.optional()
 }).register(z.globalRegistry, {
     description: 'Create Neon Data API'
@@ -2278,7 +2278,7 @@ export const zDataApiCreateRequest = z.object({
 /**
  * Neon Data API created successfully
  */
-export const zDataApiCreateResponse = z.object({
+export const zDataApiCreateResponse = z.strictObject({
     url: z.url().register(z.globalRegistry, {
         description: 'URL of the created Data API endpoint.'
     })
@@ -2289,7 +2289,7 @@ export const zDataApiCreateResponse = z.object({
 /**
  * Neon Data API response
  */
-export const zDataApiReponse = z.object({
+export const zDataApiReponse = z.strictObject({
     url: z.url().register(z.globalRegistry, {
         description: 'The URL of the Neon Data API'
     }),
@@ -2305,7 +2305,7 @@ export const zDataApiReponse = z.object({
 /**
  * Update Neon Data API
  */
-export const zDataApiUpdateRequest = z.object({
+export const zDataApiUpdateRequest = z.strictObject({
     settings: zDataApiSettings.optional()
 }).register(z.globalRegistry, {
     description: 'Update Neon Data API'
@@ -2326,40 +2326,40 @@ export const zNeonAuthProviderProjectOwnedBy = z.enum(['user', 'neon']);
 
 export const zNeonAuthProviderProjectTransferStatus = z.enum(['initiated', 'finished']);
 
-export const zNeonAuthRedirectUriWhitelistDomain = z.object({
+export const zNeonAuthRedirectUriWhitelistDomain = z.strictObject({
     domain: z.string().register(z.globalRegistry, {
         description: 'Allowed redirect URI domain for the auth provider.'
     }),
     auth_provider: zNeonAuthSupportedAuthProvider
 });
 
-export const zNeonAuthRedirectUriWhitelistResponse = z.object({
+export const zNeonAuthRedirectUriWhitelistResponse = z.strictObject({
     domains: z.array(zNeonAuthRedirectUriWhitelistDomain).register(z.globalRegistry, {
         description: 'Domains permitted as redirect URI targets in the whitelist.'
     })
 });
 
-export const zNeonAuthAddDomainToRedirectUriWhitelistRequest = z.object({
+export const zNeonAuthAddDomainToRedirectUriWhitelistRequest = z.strictObject({
     domain: z.url().register(z.globalRegistry, {
         description: 'URI to add to the redirect URI allowlist for the auth provider.'
     }),
     auth_provider: zNeonAuthSupportedAuthProvider
 });
 
-export const zNeonAuthDeleteDomainFromRedirectUriWhitelistItem = z.object({
+export const zNeonAuthDeleteDomainFromRedirectUriWhitelistItem = z.strictObject({
     domain: z.url().register(z.globalRegistry, {
         description: 'URI to remove from the redirect URI whitelist.'
     })
 });
 
-export const zNeonAuthDeleteDomainFromRedirectUriWhitelistRequest = z.object({
+export const zNeonAuthDeleteDomainFromRedirectUriWhitelistRequest = z.strictObject({
     auth_provider: zNeonAuthSupportedAuthProvider,
     domains: z.array(zNeonAuthDeleteDomainFromRedirectUriWhitelistItem).register(z.globalRegistry, {
         description: 'Domain names to remove from the redirect URI whitelist for the specified auth provider.'
     })
 });
 
-export const zNeonAuthCreateIntegrationRequest = z.object({
+export const zNeonAuthCreateIntegrationRequest = z.strictObject({
     auth_provider: zNeonAuthSupportedAuthProvider,
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID. Returned as `id` from `GET /projects`.'
@@ -2375,14 +2375,14 @@ export const zNeonAuthCreateIntegrationRequest = z.object({
     }).optional()
 });
 
-export const zEnableNeonAuthIntegrationRequest = z.object({
+export const zEnableNeonAuthIntegrationRequest = z.strictObject({
     auth_provider: zNeonAuthSupportedAuthProvider,
     database_name: z.string().register(z.globalRegistry, {
         description: 'Name of the database to enable Neon Auth on. When omitted, the integration uses the project\'s default database.'
     }).optional()
 });
 
-export const zNeonAuthCreateIntegrationResponse = z.object({
+export const zNeonAuthCreateIntegrationResponse = z.strictObject({
     auth_provider: zNeonAuthSupportedAuthProvider,
     auth_provider_project_id: z.string().register(z.globalRegistry, {
         description: 'Project ID assigned by the auth provider for this integration.'
@@ -2407,14 +2407,14 @@ export const zNeonAuthCreateIntegrationResponse = z.object({
     }).optional()
 });
 
-export const zNeonAuthCreateAuthProviderSdkKeysRequest = z.object({
+export const zNeonAuthCreateAuthProviderSdkKeysRequest = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID. Returned as `id` from `GET /projects`.'
     }),
     auth_provider: zNeonAuthSupportedAuthProvider
 });
 
-export const zNeonAuthCreateNewUserRequest = z.object({
+export const zNeonAuthCreateNewUserRequest = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID. Returned as `id` from `GET /projects`.'
     }),
@@ -2427,7 +2427,7 @@ export const zNeonAuthCreateNewUserRequest = z.object({
     }).optional()
 });
 
-export const zCreateBranchNeonAuthNewUserRequest = z.object({
+export const zCreateBranchNeonAuthNewUserRequest = z.strictObject({
     email: z.email().min(1).max(256).register(z.globalRegistry, {
         description: 'Email address of the new Neon Auth user to create.'
     }),
@@ -2436,55 +2436,55 @@ export const zCreateBranchNeonAuthNewUserRequest = z.object({
     }).optional()
 });
 
-export const zNeonAuthCreateNewUserResponse = z.object({
+export const zNeonAuthCreateNewUserResponse = z.strictObject({
     id: z.string().register(z.globalRegistry, {
         description: 'ID of newly created user'
     })
 });
 
-export const zUpdateNeonAuthUserRoleRequest = z.object({
+export const zUpdateNeonAuthUserRoleRequest = z.strictObject({
     roles: z.array(z.string()).min(1).register(z.globalRegistry, {
         description: 'Roles to assign to the user in the Neon Auth (Better Auth) directory. `user` and `admin` are the built-in roles; custom role strings are also supported.'
     })
 });
 
-export const zUpdateNeonAuthUserRoleResponse = z.object({
+export const zUpdateNeonAuthUserRoleResponse = z.strictObject({
     id: z.string().register(z.globalRegistry, {
         description: 'ID of the updated user'
     })
 });
 
-export const zNeonAuthAllowLocalhostResponse = z.object({
+export const zNeonAuthAllowLocalhostResponse = z.strictObject({
     allow_localhost: z.boolean().register(z.globalRegistry, {
         description: 'Whether to allow localhost connections'
     })
 });
 
-export const zUpdateNeonAuthAllowLocalhostRequest = z.object({
+export const zUpdateNeonAuthAllowLocalhostRequest = z.strictObject({
     allow_localhost: z.boolean().register(z.globalRegistry, {
         description: 'Whether to allow localhost connections'
     })
 });
 
-export const zNeonAuthOrganizationConfig = z.object({
+export const zNeonAuthOrganizationConfig = z.strictObject({
     enabled: z.boolean().register(z.globalRegistry, {
         description: 'Whether the organization plugin is enabled.'
-    }).default(true),
+    }),
     organization_limit: z.int().gte(1).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }).register(z.globalRegistry, {
         description: 'Maximum organizations a user can belong to (created or joined). At the limit, the user cannot create or join more.'
-    }).default(10),
+    }),
     membership_limit: z.int().gte(1).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }).register(z.globalRegistry, {
         description: 'Maximum number of members per organization.'
-    }).default(100),
+    }),
     creator_role: z.enum(['admin', 'owner']).register(z.globalRegistry, {
         description: 'Role of the organization\'s creator. `owner`: full control, including deleting the org and transferring ownership. `admin`: manage members and settings only.'
-    }).default('owner'),
+    }),
     send_invitation_email: z.boolean().register(z.globalRegistry, {
         description: 'Whether to send invitation emails when inviting members to an organization.'
-    }).default(false)
+    })
 });
 
-export const zNeonAuthOrganizationConfigUpdate = z.object({
+export const zNeonAuthOrganizationConfigUpdate = z.strictObject({
     enabled: z.boolean().register(z.globalRegistry, {
         description: 'Controls whether the organization plugin is active for the organization.'
     }).optional(),
@@ -2502,19 +2502,19 @@ export const zNeonAuthOrganizationConfigUpdate = z.object({
     }).optional()
 });
 
-export const zNeonAuthMagicLinkConfig = z.object({
+export const zNeonAuthMagicLinkConfig = z.strictObject({
     enabled: z.boolean().register(z.globalRegistry, {
         description: 'Whether the magic link plugin is enabled.'
-    }).default(false),
+    }),
     expires_in: z.int().gte(5).lte(1440).register(z.globalRegistry, {
         description: 'Minutes until the magic link expires.'
-    }).default(5),
+    }),
     disable_sign_up: z.boolean().register(z.globalRegistry, {
         description: 'Whether to disable sign-up via magic link.'
-    }).default(false)
+    })
 });
 
-export const zNeonAuthMagicLinkConfigUpdate = z.object({
+export const zNeonAuthMagicLinkConfigUpdate = z.strictObject({
     enabled: z.boolean().register(z.globalRegistry, {
         description: 'Whether to enable the magic link plugin.'
     }).optional(),
@@ -2526,16 +2526,16 @@ export const zNeonAuthMagicLinkConfigUpdate = z.object({
     }).optional()
 });
 
-export const zNeonAuthPhoneNumberConfig = z.object({
+export const zNeonAuthPhoneNumberConfig = z.strictObject({
     enabled: z.boolean().register(z.globalRegistry, {
         description: 'Whether the phone number plugin is enabled.'
-    }).default(false),
+    }),
     otp_expires_in: z.int().gte(60).lte(600).register(z.globalRegistry, {
         description: 'Time in seconds before the OTP expires'
-    }).optional().default(300)
+    }).optional()
 });
 
-export const zNeonAuthPhoneNumberConfigUpdate = z.object({
+export const zNeonAuthPhoneNumberConfigUpdate = z.strictObject({
     enabled: z.boolean().register(z.globalRegistry, {
         description: 'Whether the phone number plugin is enabled.'
     }).optional(),
@@ -2544,20 +2544,20 @@ export const zNeonAuthPhoneNumberConfigUpdate = z.object({
     }).optional()
 });
 
-export const zNeonAuthTransferAuthProviderProjectRequest = z.object({
+export const zNeonAuthTransferAuthProviderProjectRequest = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID. Returned as `id` from `GET /projects`.'
     }),
     auth_provider: zNeonAuthSupportedAuthProvider
 });
 
-export const zNeonAuthTransferAuthProviderProjectResponse = z.object({
+export const zNeonAuthTransferAuthProviderProjectResponse = z.strictObject({
     url: z.string().register(z.globalRegistry, {
         description: 'URL for completing the process of ownership transfer'
     })
 });
 
-export const zNeonAuthWebhookConfig = z.object({
+export const zNeonAuthWebhookConfig = z.strictObject({
     enabled: z.boolean().register(z.globalRegistry, {
         description: 'Whether the webhook is active.'
     }),
@@ -2577,7 +2577,7 @@ export const zNeonAuthWebhookConfig = z.object({
     }).optional(),
     timeout_seconds: z.int().gte(1).lte(10).register(z.globalRegistry, {
         description: 'Maximum time, in seconds, to wait for a response from the webhook endpoint.'
-    }).optional().default(5)
+    }).optional()
 });
 
 export const zNeonAuthOauthProviderId = z.enum([
@@ -2589,7 +2589,7 @@ export const zNeonAuthOauthProviderId = z.enum([
 
 export const zNeonAuthOauthProviderType = z.enum(['standard', 'shared']);
 
-export const zNeonAuthOauthProvider = z.object({
+export const zNeonAuthOauthProvider = z.strictObject({
     id: zNeonAuthOauthProviderId,
     type: zNeonAuthOauthProviderType,
     client_id: z.string().register(z.globalRegistry, {
@@ -2600,13 +2600,13 @@ export const zNeonAuthOauthProvider = z.object({
     }).optional()
 });
 
-export const zListNeonAuthOauthProvidersResponse = z.object({
+export const zListNeonAuthOauthProvidersResponse = z.strictObject({
     providers: z.array(zNeonAuthOauthProvider).register(z.globalRegistry, {
         description: 'OAuth providers configured for Neon Auth on the project.'
     })
 });
 
-export const zNeonAuthAddOAuthProviderRequest = z.object({
+export const zNeonAuthAddOAuthProviderRequest = z.strictObject({
     id: zNeonAuthOauthProviderId,
     client_id: z.string().register(z.globalRegistry, {
         description: 'The client ID issued by the OAuth provider for your application. Used to identify the application during the OAuth flow.'
@@ -2619,7 +2619,7 @@ export const zNeonAuthAddOAuthProviderRequest = z.object({
     }).optional()
 });
 
-export const zNeonAuthUpdateOAuthProviderRequest = z.object({
+export const zNeonAuthUpdateOAuthProviderRequest = z.strictObject({
     client_id: z.string().register(z.globalRegistry, {
         description: 'The OAuth client ID registered with the provider. Omit to keep the currently configured value.'
     }).optional(),
@@ -2631,7 +2631,7 @@ export const zNeonAuthUpdateOAuthProviderRequest = z.object({
     }).optional()
 });
 
-export const zSharedEmailServer = z.object({
+export const zSharedEmailServer = z.strictObject({
     sender_email: z.string().register(z.globalRegistry, {
         description: 'Email address used as the sender for outgoing messages from this shared email server.'
     }).optional(),
@@ -2640,7 +2640,7 @@ export const zSharedEmailServer = z.object({
     }).optional()
 });
 
-export const zStandardEmailServer = z.object({
+export const zStandardEmailServer = z.strictObject({
     host: z.string().register(z.globalRegistry, {
         description: 'Hostname of the email server.'
     }),
@@ -2666,13 +2666,13 @@ export const zNeonAuthEmailServerConfig = z.discriminatedUnion('type', [
     zSharedEmailServer.extend({ type: z.literal('shared') })
 ]);
 
-export const zSendNeonAuthTestEmailRequest = zStandardEmailServer.and(z.object({
+export const zSendNeonAuthTestEmailRequest = zStandardEmailServer.merge(z.strictObject({
     recipient_email: z.email().min(1).max(256).register(z.globalRegistry, {
         description: 'The email address to send the test email to.'
     })
 }));
 
-export const zSendNeonAuthTestEmailResponse = z.object({
+export const zSendNeonAuthTestEmailResponse = z.strictObject({
     success: z.boolean().register(z.globalRegistry, {
         description: 'Whether the test email was sent successfully.'
     }),
@@ -2691,7 +2691,7 @@ export const zNeonAuthEmailVerificationMethod = z.enum(['link', 'otp']).register
     description: 'The email verification method to use.\n- `link`: Sends a verification link via email\n- `otp`: Sends a one-time password (OTP) via email\n'
 });
 
-export const zNeonAuthEmailAndPasswordConfig = z.object({
+export const zNeonAuthEmailAndPasswordConfig = z.strictObject({
     enabled: z.boolean().register(z.globalRegistry, {
         description: 'Whether email and password authentication is enabled'
     }),
@@ -2716,7 +2716,7 @@ export const zNeonAuthEmailAndPasswordConfig = z.object({
 /**
  * Aggregated plugin configurations for Neon Auth
  */
-export const zNeonAuthPluginConfigs = z.object({
+export const zNeonAuthPluginConfigs = z.strictObject({
     organization: zNeonAuthOrganizationConfig.optional(),
     magic_link: zNeonAuthMagicLinkConfig.optional(),
     phone_number: zNeonAuthPhoneNumberConfig.optional(),
@@ -2732,7 +2732,7 @@ export const zNeonAuthPluginConfigs = z.object({
     description: 'Aggregated plugin configurations for Neon Auth'
 });
 
-export const zNeonAuthEmailAndPasswordConfigUpdate = z.object({
+export const zNeonAuthEmailAndPasswordConfigUpdate = z.strictObject({
     enabled: z.boolean().register(z.globalRegistry, {
         description: 'Controls whether email and password authentication is enabled for this project. When omitted from an update request, the current value is unchanged.'
     }).optional(),
@@ -2754,7 +2754,7 @@ export const zNeonAuthEmailAndPasswordConfigUpdate = z.object({
     }).optional()
 });
 
-export const zNeonAuthIntegration = z.object({
+export const zNeonAuthIntegration = z.strictObject({
     auth_provider: zNeonAuthSupportedAuthProvider,
     auth_provider_project_id: z.string().register(z.globalRegistry, {
         description: 'Project identifier assigned by the auth provider for this integration.'
@@ -2781,27 +2781,27 @@ export const zNeonAuthIntegration = z.object({
     }).optional()
 });
 
-export const zListNeonAuthIntegrationsResponse = z.object({
+export const zListNeonAuthIntegrationsResponse = z.strictObject({
     data: z.array(zNeonAuthIntegration).register(z.globalRegistry, {
         description: 'Neon Auth integrations configured for the project.'
     })
 });
 
-export const zNeonAuthConfigUpdate = z.object({
+export const zNeonAuthConfigUpdate = z.strictObject({
     name: z.string().min(1).max(256).register(z.globalRegistry, {
         description: 'The application name used in auth emails and communications.'
     })
 });
 
-export const zNeonAuthConfigResponse = z.object({
+export const zNeonAuthConfigResponse = z.strictObject({
     name: z.string().register(z.globalRegistry, {
         description: 'The application name used in auth emails and communications.'
     })
 });
 
-export const zErrorCode = z.string().default('');
+export const zErrorCode = z.string();
 
-export const zGeneralError = z.object({
+export const zGeneralError = z.strictObject({
     request_id: z.string().register(z.globalRegistry, {
         description: 'Unique identifier for the request, useful for debugging.\nYou can set this value manually by including an `X-Request-ID` header in the request. If not provided, the value will be generated automatically.\n'
     }).optional(),
@@ -2811,17 +2811,17 @@ export const zGeneralError = z.object({
     })
 });
 
-export const zBranchOperations = zBranchResponse.and(zOperationsResponse);
+export const zBranchOperations = zBranchResponse.merge(zOperationsResponse);
 
-export const zBranchRecoverResponse = zBranchResponse.and(zEndpointsOptionalResponse);
+export const zBranchRecoverResponse = zBranchResponse.merge(zEndpointsOptionalResponse);
 
-export const zEndpointOperations = zEndpointResponse.and(zOperationsResponse);
+export const zEndpointOperations = zEndpointResponse.merge(zOperationsResponse);
 
-export const zDatabaseOperations = zDatabaseResponse.and(zOperationsResponse);
+export const zDatabaseOperations = zDatabaseResponse.merge(zOperationsResponse);
 
-export const zRoleOperations = zRoleResponse.and(zOperationsResponse);
+export const zRoleOperations = zRoleResponse.merge(zOperationsResponse);
 
-export const zJwksCreationOperation = zJwksResponse.and(zOperationsResponse);
+export const zJwksCreationOperation = zJwksResponse.merge(zOperationsResponse);
 
 /**
  * A free-form map of string key-value pairs for attaching metadata to a resource (for example, a git commit reference). Maximum 50 entries.
@@ -2830,13 +2830,13 @@ export const zAnnotationValueData = z.record(z.string(), z.string()).register(z.
     description: 'A free-form map of string key-value pairs for attaching metadata to a resource (for example, a git commit reference). Maximum 50 entries.'
 });
 
-export const zProjectCreateRequest = z.object({
-    project: z.object({
+export const zProjectCreateRequest = z.strictObject({
+    project: z.strictObject({
         settings: zProjectSettingsData.optional(),
         name: z.string().min(1).max(256).register(z.globalRegistry, {
             description: 'The project name. If not specified, the name will be identical to the generated project ID'
         }).optional(),
-        branch: z.object({
+        branch: z.strictObject({
             name: z.string().min(1).max(256).register(z.globalRegistry, {
                 description: 'The default branch name. If not specified, the default branch name, `main`, will be used.\n'
             }).optional(),
@@ -2872,7 +2872,7 @@ export const zProjectCreateRequest = z.object({
     })
 });
 
-export const zAnnotationObjectData = z.object({
+export const zAnnotationObjectData = z.strictObject({
     type: z.string().register(z.globalRegistry, {
         description: 'Kind of resource the annotation is attached to, for example "branch" or "endpoint".'
     }),
@@ -2881,7 +2881,7 @@ export const zAnnotationObjectData = z.object({
     })
 });
 
-export const zAnnotationData = z.object({
+export const zAnnotationData = z.strictObject({
     object: zAnnotationObjectData,
     value: zAnnotationValueData,
     created_at: z.iso.datetime().register(z.globalRegistry, {
@@ -2892,25 +2892,25 @@ export const zAnnotationData = z.object({
     }).optional()
 });
 
-export const zAnnotationCreateValueRequest = z.object({
+export const zAnnotationCreateValueRequest = z.strictObject({
     annotation_value: zAnnotationValueData.optional()
 });
 
-export const zBranchAnonymizedCreateRequest = zAnnotationCreateValueRequest.and(z.object({
+export const zBranchAnonymizedCreateRequest = zAnnotationCreateValueRequest.merge(z.strictObject({
     branch_create: zBranchCreateRequest.optional(),
     masking_rules: z.array(zMaskingRule).register(z.globalRegistry, {
         description: 'List of masking rules to apply to the branch.\n'
     }).optional(),
     start_anonymization: z.boolean().register(z.globalRegistry, {
         description: 'If true, automatically start anonymization after the branch is created.\nDefaults to false.\n'
-    }).optional().default(false)
+    }).optional()
 }));
 
-export const zAnnotationResponse = z.object({
+export const zAnnotationResponse = z.strictObject({
     annotation: zAnnotationData
 });
 
-export const zAnnotationsMapResponse = z.object({
+export const zAnnotationsMapResponse = z.strictObject({
     annotations: z.record(z.string(), zAnnotationData).register(z.globalRegistry, {
         description: 'Map of annotations keyed by resource identifier, where each value contains the annotation data for that resource.'
     })
@@ -2932,7 +2932,7 @@ export const zApplicationType = z.enum([
  * A map where key is a project ID and a value is a list of installed applications.
  *
  */
-export const zProjectsApplicationsMapResponse = z.object({
+export const zProjectsApplicationsMapResponse = z.strictObject({
     applications: z.record(z.string(), z.array(zApplicationType)).register(z.globalRegistry, {
         description: 'Map of project IDs to their installed applications. Each key is a project ID; each value is an array of application types (for example, `vercel`, `github`).'
     })
@@ -2944,7 +2944,7 @@ export const zProjectsApplicationsMapResponse = z.object({
  * A map where key is a project ID and a value is a list of installed integrations.
  *
  */
-export const zProjectsIntegrationsMapResponse = z.object({
+export const zProjectsIntegrationsMapResponse = z.strictObject({
     integrations: z.record(z.string(), z.array(zApplicationType)).register(z.globalRegistry, {
         description: 'Map of project IDs to their associated integration details.'
     })
@@ -2955,7 +2955,7 @@ export const zProjectsIntegrationsMapResponse = z.object({
 /**
  * To paginate the response, issue an initial request with `limit` value. Then, add the value returned in the response `.pagination.next` attribute into the request under the `cursor` query parameter to the subsequent request to retrieve next page in pagination. The contents on cursor `next` are opaque, clients are not expected to make any assumptions on the format of the data inside the cursor.
  */
-export const zCursorPagination = z.object({
+export const zCursorPagination = z.strictObject({
     next: z.string().register(z.globalRegistry, {
         description: 'Cursor for the next page of results. Pass it as the `cursor` query parameter on the next request. Absent on the last page.'
     }).optional(),
@@ -2969,16 +2969,16 @@ export const zCursorPagination = z.object({
     description: 'To paginate the response, issue an initial request with `limit` value. Then, add the value returned in the response `.pagination.next` attribute into the request under the `cursor` query parameter to the subsequent request to retrieve next page in pagination. The contents on cursor `next` are opaque, clients are not expected to make any assumptions on the format of the data inside the cursor.'
 });
 
-export const zProjectMembers = z.object({
+export const zProjectMembers = z.strictObject({
     project_members: z.array(zProjectMember),
     pagination: zCursorPagination.optional()
 });
 
-export const zCursorPaginationResponse = z.object({
+export const zCursorPaginationResponse = z.strictObject({
     pagination: zCursorPagination.optional()
 });
 
-export const zSnapshot = z.object({
+export const zSnapshot = z.strictObject({
     id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The snapshot ID.'
     }),
@@ -3011,8 +3011,8 @@ export const zSnapshot = z.object({
     }).optional()
 });
 
-export const zSnapshotUpdateRequest = z.object({
-    snapshot: z.object({
+export const zSnapshotUpdateRequest = z.strictObject({
+    snapshot: z.strictObject({
         name: z.string().register(z.globalRegistry, {
             description: 'Human-readable label for the snapshot.'
         }).optional(),
@@ -3022,7 +3022,7 @@ export const zSnapshotUpdateRequest = z.object({
     })
 });
 
-export const zBackupScheduleItem = z.object({
+export const zBackupScheduleItem = z.strictObject({
     frequency: z.string().register(z.globalRegistry, {
         description: 'How often to take snapshots. Known values: `daily`, `weekly`, `monthly`.\n'
     }),
@@ -3037,24 +3037,24 @@ export const zBackupScheduleItem = z.object({
     }).optional(),
     retention_seconds: z.int().gte(3600).lte(3024000).register(z.globalRegistry, {
         description: 'How long to keep a scheduled snapshot (in seconds) before it\'s automatically deleted.\nThe default is 3024000 seconds (35 days), which is also the maximum.\nManually created snapshots have no maximum retention: set their `expires_at` instead.\n'
-    }).optional().default(3024000)
+    }).optional()
 });
 
-export const zBackupSchedule = z.object({
+export const zBackupSchedule = z.strictObject({
     schedule: z.array(zBackupScheduleItem).register(z.globalRegistry, {
         description: 'List of schedule entries defining the backup frequency. At least one entry is required.'
     })
 });
 
-export const zBranchSchemaJson = z.object({
-    tables: z.array(z.object({
+export const zBranchSchemaJson = z.strictObject({
+    tables: z.array(z.strictObject({
         schema: z.string().register(z.globalRegistry, {
             description: 'Postgres schema (namespace) that contains the table, for example `public`.'
         }),
         name: z.string().register(z.globalRegistry, {
             description: 'Name of the table within the schema.'
         }),
-        columns: z.array(z.object({
+        columns: z.array(z.strictObject({
             name: z.string().register(z.globalRegistry, {
                 description: 'Name of the column.'
             }),
@@ -3070,7 +3070,7 @@ export const zBranchSchemaJson = z.object({
         })).register(z.globalRegistry, {
             description: 'Columns belonging to this table, each describing a column\'s name and attributes.'
         }),
-        constraints: z.array(z.object({
+        constraints: z.array(z.strictObject({
             type: z.string().register(z.globalRegistry, {
                 description: 'Type of constraint. Possible values: `primary_key`, `unique`, `foreign_key`\n'
             }),
@@ -3080,7 +3080,7 @@ export const zBranchSchemaJson = z.object({
             name: z.string().register(z.globalRegistry, {
                 description: 'Optional name of the constraint'
             }).optional(),
-            referenced_table: z.object({
+            referenced_table: z.strictObject({
                 schema: z.string().register(z.globalRegistry, {
                     description: 'Schema of the referenced table'
                 }),
@@ -3101,7 +3101,7 @@ export const zBranchSchemaJson = z.object({
     })
 });
 
-export const zBranchSchemaResponse = z.object({
+export const zBranchSchemaResponse = z.strictObject({
     sql: z.string().register(z.globalRegistry, {
         description: 'Branch schema expressed as SQL DDL statements.'
     }).optional(),
@@ -3119,7 +3119,7 @@ export const zBucketAccessLevel = z.enum(['private', 'public_read']).register(z.
     description: 'Controls anonymous access to objects in the bucket.\n- `private`: all reads and writes require authenticated requests (default).\n- `public_read`: anonymous `GetObject`/`HeadObject` requests succeed; listing,\n  writes, and deletes still require authenticated requests.\n'
 });
 
-export const zBucket = z.object({
+export const zBucket = z.strictObject({
     name: z.string().register(z.globalRegistry, {
         description: 'The bucket name (unique within a branch).'
     }),
@@ -3129,24 +3129,24 @@ export const zBucket = z.object({
     })
 });
 
-export const zBucketCreateRequest = z.object({
+export const zBucketCreateRequest = z.strictObject({
     name: z.string().min(1).max(255).register(z.globalRegistry, {
         description: 'The bucket name.'
     }),
     access_level: z.enum(['private', 'public_read']).register(z.globalRegistry, {
         description: 'Access level for the bucket. Defaults to `private`. Set to `public_read`\nto allow anonymous `GetObject`/`HeadObject` on objects in this bucket.\n'
-    }).optional().default('private')
+    }).optional()
 });
 
-export const zBucketResponse = z.object({
+export const zBucketResponse = z.strictObject({
     bucket: zBucket
 });
 
-export const zBucketsListResponse = z.object({
+export const zBucketsListResponse = z.strictObject({
     buckets: z.array(zBucket)
 });
 
-export const zBranchStorage = z.object({
+export const zBranchStorage = z.strictObject({
     enabled: z.boolean().register(z.globalRegistry, {
         description: 'Always `true` in 200 responses. Present for forward compatibility: a\nfuture version may add intermediate states; callers should treat `true`\nas "object storage is usable for this branch right now."\n'
     }),
@@ -3161,7 +3161,7 @@ export const zBranchStorage = z.object({
     })
 });
 
-export const zBranchStorageNotEnabled = z.object({
+export const zBranchStorageNotEnabled = z.strictObject({
     code: z.string(),
     message: z.string(),
     reason: z.enum([
@@ -3211,7 +3211,7 @@ export const zProjectBranchLogDuration = z.string().regex(/^[0-9]{1,6}(ms|s|m|h|
     description: 'A length of time as a count and a unit, for example `30m`, `6h`, or\n`7d`. Valid units are `ms`, `s`, `m`, `h`, and `d`.\n'
 });
 
-export const zProjectBranchLogsNotAvailable = z.object({
+export const zProjectBranchLogsNotAvailable = z.strictObject({
     code: z.string(),
     message: z.string(),
     reason: z.enum(['branch_not_found', 'telemetry_not_enabled']).register(z.globalRegistry, {
@@ -3219,7 +3219,7 @@ export const zProjectBranchLogsNotAvailable = z.object({
     })
 });
 
-export const zProjectBranchLogsInvalidQuery = z.object({
+export const zProjectBranchLogsInvalidQuery = z.strictObject({
     code: z.string(),
     message: z.string(),
     reason: z.enum([
@@ -3235,7 +3235,7 @@ export const zProjectBranchLogsInvalidQuery = z.object({
     })
 });
 
-export const zProjectBranchLogsQueryRequest = z.object({
+export const zProjectBranchLogsQueryRequest = z.strictObject({
     since: zProjectBranchLogDuration.optional(),
     start_time: z.iso.datetime().register(z.globalRegistry, {
         description: 'Inclusive beginning of the query window. Mutually exclusive with\n`since`. Defaults to one hour before `end_time`, or one hour before\nthe current time when both bounds are omitted.\n'
@@ -3245,13 +3245,13 @@ export const zProjectBranchLogsQueryRequest = z.object({
     }).optional(),
     limit: z.int().gte(1).lte(1000).register(z.globalRegistry, {
         description: 'Maximum number of log records to return per page.'
-    }).optional().default(100),
+    }).optional(),
     cursor: z.string().register(z.globalRegistry, {
         description: 'Opaque pagination cursor returned as `next_cursor` by a previous\ncall. Resume the query after the last record of the previous page,\nrepeating the time range and every filter unchanged.\n'
     }).optional(),
     sort_order: z.enum(['asc', 'desc']).register(z.globalRegistry, {
         description: 'Order matching records by timestamp. `desc`, the default, returns\nthe newest records first.\n'
-    }).optional().default('desc'),
+    }).optional(),
     source: zProjectBranchLogSource.optional(),
     service_name: z.string().min(1).register(z.globalRegistry, {
         description: 'Match the OpenTelemetry `service.name` resource attribute exactly.'
@@ -3274,7 +3274,7 @@ export const zProjectBranchLogsQueryRequest = z.object({
     }).optional()
 });
 
-export const zProjectBranchLogRecord = z.object({
+export const zProjectBranchLogRecord = z.strictObject({
     timestamp: z.iso.datetime().register(z.globalRegistry, {
         description: 'The OpenTelemetry record timestamp in UTC.'
     }),
@@ -3308,7 +3308,7 @@ export const zProjectBranchLogRecord = z.object({
     })
 });
 
-export const zProjectBranchLogsQueryResponse = z.object({
+export const zProjectBranchLogsQueryResponse = z.strictObject({
     logs: z.array(zProjectBranchLogRecord),
     next_cursor: z.string().register(z.globalRegistry, {
         description: 'Pagination cursor to pass as `cursor` on the next request. Empty\nwhen the response is not truncated.\n'
@@ -3318,20 +3318,20 @@ export const zProjectBranchLogsQueryResponse = z.object({
     })
 });
 
-export const zProjectBranchLogFieldsResponse = z.object({
+export const zProjectBranchLogFieldsResponse = z.strictObject({
     fields: z.array(z.string()).register(z.globalRegistry, {
         description: 'Log field names observed on this branch, each usable as `field_name`\non the log field-values endpoint. Computed per branch rather than\nfixed by this specification, so clients should not assume a\nparticular set.\n'
     })
 });
 
-export const zProjectBranchLogFieldValuesResponse = z.object({
+export const zProjectBranchLogFieldValuesResponse = z.strictObject({
     values: z.array(z.string()),
     is_truncated: z.boolean().register(z.globalRegistry, {
         description: 'True when more distinct values exist than were returned, because\neither the requested `limit` or the server\'s own scan cap was\nreached. A caller that filters on a partial list is choosing from an\narbitrary subset, so narrow `since` or `source` and ask again when\nthis is `true`.\n'
     })
 });
 
-export const zBranchAiGateway = z.object({
+export const zBranchAiGateway = z.strictObject({
     enabled: z.boolean().register(z.globalRegistry, {
         description: 'Always `true` in 200 responses. Present for forward compatibility,\nmirroring BranchStorage.enabled.\n'
     }),
@@ -3340,7 +3340,7 @@ export const zBranchAiGateway = z.object({
     })
 });
 
-export const zBranchAiGatewayNotEnabled = z.object({
+export const zBranchAiGatewayNotEnabled = z.strictObject({
     code: z.string(),
     message: z.string(),
     reason: z.enum(['ai_gateway_unavailable', 'branch_not_found']).register(z.globalRegistry, {
@@ -3348,7 +3348,7 @@ export const zBranchAiGatewayNotEnabled = z.object({
     })
 });
 
-export const zBucketObject = z.object({
+export const zBucketObject = z.strictObject({
     key: z.string().register(z.globalRegistry, {
         description: 'The full object key.'
     }),
@@ -3363,7 +3363,7 @@ export const zBucketObject = z.object({
     })
 });
 
-export const zBucketObjectsListResponse = z.object({
+export const zBucketObjectsListResponse = z.strictObject({
     folders: z.array(z.string()).register(z.globalRegistry, {
         description: 'Common prefixes (folder names) collapsed under the requested\n`delimiter`. Empty when no `delimiter` was supplied.\n'
     }),
@@ -3381,7 +3381,7 @@ export const zBucketObjectsListResponse = z.object({
     })
 });
 
-export const zBucketObjectsDeletePrefixResponse = z.object({
+export const zBucketObjectsDeletePrefixResponse = z.strictObject({
     deleted: z.int().register(z.globalRegistry, {
         description: 'The number of objects soft-deleted under the prefix. 0 when no live\nobject matched the prefix on this branch.\n'
     })
@@ -3392,7 +3392,7 @@ export const zBucketObjectsDeletePrefixResponse = z.object({
  * or download (`GET`); the remaining fields are optional.
  *
  */
-export const zPresignRequest = z.object({
+export const zPresignRequest = z.strictObject({
     operation: z.enum(['upload', 'download']).register(z.globalRegistry, {
         description: 'The transfer direction. `upload` returns a presigned `PUT` URL;\n`download` returns a presigned `GET` URL.\n'
     }),
@@ -3401,12 +3401,12 @@ export const zPresignRequest = z.object({
     }).optional(),
     expires_in_seconds: z.int().gte(1).lte(604800).register(z.globalRegistry, {
         description: 'How long the presigned URL stays valid, in seconds. Defaults to 900\n(15 minutes); capped at 604800 (7 days).\n'
-    }).optional().default(900)
+    }).optional()
 }).register(z.globalRegistry, {
     description: 'Options for the presigned URL. The `operation` selects upload (`PUT`)\nor download (`GET`); the remaining fields are optional.\n'
 });
 
-export const zPresignResponse = z.object({
+export const zPresignResponse = z.strictObject({
     url: z.string().register(z.globalRegistry, {
         description: 'The presigned URL. Transfer the object bytes by issuing\n`method url` with the returned `headers`.\n'
     }),
@@ -3436,7 +3436,7 @@ export const zCredentialScope = z.enum([
     description: 'A single capability a credential may exercise. A credential is granted\na set of these; it may only perform actions explicitly listed in its\nscopes.\n'
 });
 
-export const zCreateCredentialRequest = z.object({
+export const zCreateCredentialRequest = z.strictObject({
     name: z.string().max(256).register(z.globalRegistry, {
         description: 'Free-form customer label for the credential.'
     }).optional(),
@@ -3446,7 +3446,7 @@ export const zCreateCredentialRequest = z.object({
     })
 });
 
-export const zCreateCredentialResponse = z.object({
+export const zCreateCredentialResponse = z.strictObject({
     token_id: z.string().register(z.globalRegistry, {
         description: 'Opaque credential id (e.g. nak_live_<32hex>).'
     }),
@@ -3470,7 +3470,7 @@ export const zCreateCredentialResponse = z.object({
     }).optional()
 });
 
-export const zCredentialMeta = z.object({
+export const zCredentialMeta = z.strictObject({
     token_id: z.string().register(z.globalRegistry, {
         description: 'Opaque credential id (e.g. nak_live_<32hex>).'
     }),
@@ -3490,11 +3490,11 @@ export const zCredentialMeta = z.object({
     }).optional()
 });
 
-export const zListCredentialsResponse = z.object({
+export const zListCredentialsResponse = z.strictObject({
     credentials: z.array(zCredentialMeta)
 });
 
-export const zNeonFunctionDeployment = z.object({
+export const zNeonFunctionDeployment = z.strictObject({
     id: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }).register(z.globalRegistry, {
         description: 'The deployment id, which is the platform version number (monotonic per function).'
     }),
@@ -3517,7 +3517,7 @@ export const zNeonFunctionDeployment = z.object({
     }).optional()
 });
 
-export const zNeonFunction = z.object({
+export const zNeonFunction = z.strictObject({
     id: z.string().register(z.globalRegistry, {
         description: 'Opaque, stable function identifier.'
     }),
@@ -3535,23 +3535,23 @@ export const zNeonFunction = z.object({
     created_at: z.string()
 });
 
-export const zNeonFunctionResponse = z.object({
+export const zNeonFunctionResponse = z.strictObject({
     function: zNeonFunction
 });
 
-export const zNeonFunctionsListResponse = z.object({
+export const zNeonFunctionsListResponse = z.strictObject({
     functions: z.array(zNeonFunction)
 });
 
-export const zNeonFunctionUpdateRequest = z.object({
+export const zNeonFunctionUpdateRequest = z.strictObject({
     name: z.string().min(1).max(256).nullable()
 });
 
-export const zNeonFunctionDeploymentResponse = z.object({
+export const zNeonFunctionDeploymentResponse = z.strictObject({
     deployment: zNeonFunctionDeployment
 });
 
-export const zFunctionDeployRequest = z.object({
+export const zFunctionDeployRequest = z.strictObject({
     zip: z.string().register(z.globalRegistry, {
         description: 'Optional ZIP archive of the function source code. Omit to reuse the\nlatest version\'s bundle (a config-only change). Required for the\nfirst deployment of a function.\n'
     }).optional(),
@@ -3580,7 +3580,7 @@ export const zLimitParam = z.int().gte(1).lte(10000).register(z.globalRegistry, 
  */
 export const zSortOrderParam = z.enum(['asc', 'desc']).register(z.globalRegistry, {
     description: 'Defines the sorting order of entities.'
-}).default('desc');
+});
 
 /**
  * Specify an explicit timeout in milliseconds to limit response delay.
@@ -3593,13 +3593,13 @@ export const zTimeoutParam = z.int().gte(100).lte(30000).register(z.globalRegist
     description: 'Specify an explicit timeout in milliseconds to limit response delay.\nAfter timing out, the incomplete list of project data fetched so far will be returned.\nProjects still being fetched when the timeout occurred are listed in the "unavailable" attribute of the response.\nIf not specified, an implicit implementation defined timeout is chosen with the same behaviour as above\n'
 });
 
-export const zGetProjectAdvisorSecurityIssuesPath = z.object({
+export const zGetProjectAdvisorSecurityIssuesPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'Neon project ID'
     })
 });
 
-export const zGetProjectAdvisorSecurityIssuesQuery = z.object({
+export const zGetProjectAdvisorSecurityIssuesQuery = z.strictObject({
     branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'Branch ID to analyze. If not specified, the project\'s default branch is used.'
     }).optional(),
@@ -3618,13 +3618,13 @@ export const zGetProjectAdvisorSecurityIssuesQuery = z.object({
 
 export const zCreateApiKeyBody = zApiKeyCreateRequest;
 
-export const zRevokeApiKeyPath = z.object({
+export const zRevokeApiKeyPath = z.strictObject({
     key_id: z.int().register(z.globalRegistry, {
         description: 'The API key ID'
     })
 });
 
-export const zGetProjectOperationPath = z.object({
+export const zGetProjectOperationPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -3633,13 +3633,13 @@ export const zGetProjectOperationPath = z.object({
     })
 });
 
-export const zListProjectsQuery = z.object({
+export const zListProjectsQuery = z.strictObject({
     cursor: z.string().register(z.globalRegistry, {
         description: 'Specify the cursor value from the previous response to retrieve the next batch of projects.'
     }).optional(),
     limit: z.int().gte(1).lte(400).register(z.globalRegistry, {
         description: 'Specify a value from 1 to 400 to limit number of projects in the response.'
-    }).optional().default(10),
+    }).optional(),
     search: z.string().register(z.globalRegistry, {
         description: 'Search by project `name` or `id`. You can specify partial `name` or `id` values to filter results.'
     }).optional(),
@@ -3651,18 +3651,18 @@ export const zListProjectsQuery = z.object({
     }).optional(),
     recoverable: z.boolean().register(z.globalRegistry, {
         description: 'Show only deleted projects within the recovery window.\n'
-    }).optional().default(false)
+    }).optional()
 });
 
 export const zCreateProjectBody = zProjectCreateRequest;
 
-export const zListSharedProjectsQuery = z.object({
+export const zListSharedProjectsQuery = z.strictObject({
     cursor: z.string().register(z.globalRegistry, {
         description: 'Specify the cursor value from the previous response to get the next batch of projects.'
     }).optional(),
     limit: z.int().gte(1).lte(400).register(z.globalRegistry, {
         description: 'Specify a value from 1 to 400 to limit number of projects in the response.'
-    }).optional().default(10),
+    }).optional(),
     search: z.string().register(z.globalRegistry, {
         description: 'Search query by name or id.'
     }).optional(),
@@ -3671,13 +3671,13 @@ export const zListSharedProjectsQuery = z.object({
     }).optional()
 });
 
-export const zDeleteProjectPath = z.object({
+export const zDeleteProjectPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     })
 });
 
-export const zGetProjectPath = z.object({
+export const zGetProjectPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     })
@@ -3685,25 +3685,25 @@ export const zGetProjectPath = z.object({
 
 export const zUpdateProjectBody = zProjectUpdateRequest;
 
-export const zUpdateProjectPath = z.object({
+export const zUpdateProjectPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     })
 });
 
-export const zRecoverProjectPath = z.object({
+export const zRecoverProjectPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     })
 });
 
-export const zListProjectOperationsPath = z.object({
+export const zListProjectOperationsPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     })
 });
 
-export const zListProjectOperationsQuery = z.object({
+export const zListProjectOperationsQuery = z.strictObject({
     cursor: z.string().register(z.globalRegistry, {
         description: 'Specify the cursor value from the previous response to get the next batch of operations'
     }).optional(),
@@ -3712,21 +3712,21 @@ export const zListProjectOperationsQuery = z.object({
     }).optional()
 });
 
-export const zListProjectPermissionsPath = z.object({
+export const zListProjectPermissionsPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
 });
 
 export const zGrantPermissionToProjectBody = zGrantPermissionToProjectRequest;
 
-export const zGrantPermissionToProjectPath = z.object({
+export const zGrantPermissionToProjectPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
 });
 
-export const zListProjectMembersPath = z.object({
+export const zListProjectMembersPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
 });
 
-export const zListProjectMembersQuery = z.object({
+export const zListProjectMembersQuery = z.strictObject({
     cursor: z.string().register(z.globalRegistry, {
         description: 'A cursor to use in pagination. A cursor defines your place in the data list. Include `response.pagination.next` in subsequent API calls to fetch next page of the list.'
     }).optional(),
@@ -3735,54 +3735,54 @@ export const zListProjectMembersQuery = z.object({
     }).optional()
 });
 
-export const zRemoveProjectMemberRolePath = z.object({
+export const zRemoveProjectMemberRolePath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
     member_id: z.uuid()
 });
 
-export const zRemoveProjectMemberRoleQuery = z.object({
+export const zRemoveProjectMemberRoleQuery = z.strictObject({
     confirm_self_lockout: z.boolean().optional()
 });
 
 export const zSetProjectMemberRoleBody = zSetProjectMemberRoleRequest;
 
-export const zSetProjectMemberRolePath = z.object({
+export const zSetProjectMemberRolePath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
     member_id: z.uuid()
 });
 
-export const zSetProjectMemberRoleQuery = z.object({
+export const zSetProjectMemberRoleQuery = z.strictObject({
     confirm_self_demotion: z.boolean().optional()
 });
 
-export const zRevokePermissionFromProjectPath = z.object({
+export const zRevokePermissionFromProjectPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
     permission_id: z.string()
 });
 
-export const zGetAvailablePreloadLibrariesPath = z.object({
+export const zGetAvailablePreloadLibrariesPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
 });
 
-export const zCreateProjectTransferRequestBody = z.object({
+export const zCreateProjectTransferRequestBody = z.strictObject({
     ttl_seconds: z.int().register(z.globalRegistry, {
         description: 'Number of seconds the transfer request stays valid before it expires. Defaults to 86400 (24 hours).\n'
-    }).optional().default(86400)
+    }).optional()
 });
 
-export const zCreateProjectTransferRequestPath = z.object({
+export const zCreateProjectTransferRequestPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     })
 });
 
-export const zAcceptProjectTransferRequestBody = z.object({
+export const zAcceptProjectTransferRequestBody = z.strictObject({
     org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon organization ID to transfer the project to. If not provided, the project will be\ntransferred to the current user or organization account.\n'
     }).optional()
 });
 
-export const zAcceptProjectTransferRequestPath = z.object({
+export const zAcceptProjectTransferRequestPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -3791,7 +3791,7 @@ export const zAcceptProjectTransferRequestPath = z.object({
     })
 });
 
-export const zGetProjectJwksPath = z.object({
+export const zGetProjectJwksPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     })
@@ -3799,13 +3799,13 @@ export const zGetProjectJwksPath = z.object({
 
 export const zAddProjectJwksBody = zAddProjectJwksRequest;
 
-export const zAddProjectJwksPath = z.object({
+export const zAddProjectJwksPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     })
 });
 
-export const zDeleteProjectJwksPath = z.object({
+export const zDeleteProjectJwksPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -3814,7 +3814,7 @@ export const zDeleteProjectJwksPath = z.object({
     })
 });
 
-export const zDeleteProjectBranchDataApiPath = z.object({
+export const zDeleteProjectBranchDataApiPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -3826,7 +3826,7 @@ export const zDeleteProjectBranchDataApiPath = z.object({
     })
 });
 
-export const zGetProjectBranchDataApiPath = z.object({
+export const zGetProjectBranchDataApiPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -3840,7 +3840,7 @@ export const zGetProjectBranchDataApiPath = z.object({
 
 export const zUpdateProjectBranchDataApiBody = zDataApiUpdateRequest;
 
-export const zUpdateProjectBranchDataApiPath = z.object({
+export const zUpdateProjectBranchDataApiPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -3854,7 +3854,7 @@ export const zUpdateProjectBranchDataApiPath = z.object({
 
 export const zCreateProjectBranchDataApiBody = zDataApiCreateRequest;
 
-export const zCreateProjectBranchDataApiPath = z.object({
+export const zCreateProjectBranchDataApiPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -3868,13 +3868,13 @@ export const zCreateProjectBranchDataApiPath = z.object({
 
 export const zCreateNeonAuthIntegrationBody = zNeonAuthCreateIntegrationRequest;
 
-export const zDisableNeonAuthBody = z.object({
+export const zDisableNeonAuthBody = z.strictObject({
     delete_data: z.boolean().register(z.globalRegistry, {
         description: 'If true, deletes the `neon_auth` schema from the database'
-    }).optional().default(false)
+    }).optional()
 });
 
-export const zDisableNeonAuthPath = z.object({
+export const zDisableNeonAuthPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -3883,7 +3883,7 @@ export const zDisableNeonAuthPath = z.object({
     })
 });
 
-export const zGetNeonAuthPath = z.object({
+export const zGetNeonAuthPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -3894,7 +3894,7 @@ export const zGetNeonAuthPath = z.object({
 
 export const zCreateNeonAuthBody = zEnableNeonAuthIntegrationRequest;
 
-export const zCreateNeonAuthPath = z.object({
+export const zCreateNeonAuthPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -3905,13 +3905,13 @@ export const zCreateNeonAuthPath = z.object({
 
 export const zDeleteNeonAuthDomainFromRedirectUriWhitelistBody = zNeonAuthDeleteDomainFromRedirectUriWhitelistRequest;
 
-export const zDeleteNeonAuthDomainFromRedirectUriWhitelistPath = z.object({
+export const zDeleteNeonAuthDomainFromRedirectUriWhitelistPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     })
 });
 
-export const zListNeonAuthRedirectUriWhitelistDomainsPath = z.object({
+export const zListNeonAuthRedirectUriWhitelistDomainsPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     })
@@ -3919,7 +3919,7 @@ export const zListNeonAuthRedirectUriWhitelistDomainsPath = z.object({
 
 export const zAddNeonAuthDomainToRedirectUriWhitelistBody = zNeonAuthAddDomainToRedirectUriWhitelistRequest;
 
-export const zAddNeonAuthDomainToRedirectUriWhitelistPath = z.object({
+export const zAddNeonAuthDomainToRedirectUriWhitelistPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     })
@@ -3927,7 +3927,7 @@ export const zAddNeonAuthDomainToRedirectUriWhitelistPath = z.object({
 
 export const zDeleteBranchNeonAuthTrustedDomainBody = zNeonAuthDeleteDomainFromRedirectUriWhitelistRequest;
 
-export const zDeleteBranchNeonAuthTrustedDomainPath = z.object({
+export const zDeleteBranchNeonAuthTrustedDomainPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -3936,7 +3936,7 @@ export const zDeleteBranchNeonAuthTrustedDomainPath = z.object({
     })
 });
 
-export const zListBranchNeonAuthTrustedDomainsPath = z.object({
+export const zListBranchNeonAuthTrustedDomainsPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -3947,7 +3947,7 @@ export const zListBranchNeonAuthTrustedDomainsPath = z.object({
 
 export const zAddBranchNeonAuthTrustedDomainBody = zNeonAuthAddDomainToRedirectUriWhitelistRequest;
 
-export const zAddBranchNeonAuthTrustedDomainPath = z.object({
+export const zAddBranchNeonAuthTrustedDomainPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -3962,7 +3962,7 @@ export const zCreateNeonAuthNewUserBody = zNeonAuthCreateNewUserRequest;
 
 export const zCreateBranchNeonAuthNewUserBody = zCreateBranchNeonAuthNewUserRequest;
 
-export const zCreateBranchNeonAuthNewUserPath = z.object({
+export const zCreateBranchNeonAuthNewUserPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -3971,7 +3971,7 @@ export const zCreateBranchNeonAuthNewUserPath = z.object({
     })
 });
 
-export const zDeleteBranchNeonAuthUserPath = z.object({
+export const zDeleteBranchNeonAuthUserPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -3985,7 +3985,7 @@ export const zDeleteBranchNeonAuthUserPath = z.object({
 
 export const zUpdateNeonAuthUserRoleBody = zUpdateNeonAuthUserRoleRequest;
 
-export const zUpdateNeonAuthUserRolePath = z.object({
+export const zUpdateNeonAuthUserRolePath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -3997,7 +3997,7 @@ export const zUpdateNeonAuthUserRolePath = z.object({
     })
 });
 
-export const zDeleteNeonAuthUserPath = z.object({
+export const zDeleteNeonAuthUserPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4008,13 +4008,13 @@ export const zDeleteNeonAuthUserPath = z.object({
 
 export const zTransferNeonAuthProviderProjectBody = zNeonAuthTransferAuthProviderProjectRequest;
 
-export const zListNeonAuthIntegrationsPath = z.object({
+export const zListNeonAuthIntegrationsPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     })
 });
 
-export const zListNeonAuthOauthProvidersPath = z.object({
+export const zListNeonAuthOauthProvidersPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     })
@@ -4022,13 +4022,13 @@ export const zListNeonAuthOauthProvidersPath = z.object({
 
 export const zAddNeonAuthOauthProviderBody = zNeonAuthAddOAuthProviderRequest;
 
-export const zAddNeonAuthOauthProviderPath = z.object({
+export const zAddNeonAuthOauthProviderPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     })
 });
 
-export const zListBranchNeonAuthOauthProvidersPath = z.object({
+export const zListBranchNeonAuthOauthProvidersPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4039,7 +4039,7 @@ export const zListBranchNeonAuthOauthProvidersPath = z.object({
 
 export const zAddBranchNeonAuthOauthProviderBody = zNeonAuthAddOAuthProviderRequest;
 
-export const zAddBranchNeonAuthOauthProviderPath = z.object({
+export const zAddBranchNeonAuthOauthProviderPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4048,7 +4048,7 @@ export const zAddBranchNeonAuthOauthProviderPath = z.object({
     })
 });
 
-export const zDeleteNeonAuthOauthProviderPath = z.object({
+export const zDeleteNeonAuthOauthProviderPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4057,14 +4057,14 @@ export const zDeleteNeonAuthOauthProviderPath = z.object({
 
 export const zUpdateNeonAuthOauthProviderBody = zNeonAuthUpdateOAuthProviderRequest;
 
-export const zUpdateNeonAuthOauthProviderPath = z.object({
+export const zUpdateNeonAuthOauthProviderPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
     oauth_provider_id: zNeonAuthOauthProviderId
 });
 
-export const zDeleteBranchNeonAuthOauthProviderPath = z.object({
+export const zDeleteBranchNeonAuthOauthProviderPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4076,7 +4076,7 @@ export const zDeleteBranchNeonAuthOauthProviderPath = z.object({
 
 export const zUpdateBranchNeonAuthOauthProviderBody = zNeonAuthUpdateOAuthProviderRequest;
 
-export const zUpdateBranchNeonAuthOauthProviderPath = z.object({
+export const zUpdateBranchNeonAuthOauthProviderPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4086,7 +4086,7 @@ export const zUpdateBranchNeonAuthOauthProviderPath = z.object({
     oauth_provider_id: zNeonAuthOauthProviderId
 });
 
-export const zGetNeonAuthEmailServerPath = z.object({
+export const zGetNeonAuthEmailServerPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     })
@@ -4094,7 +4094,7 @@ export const zGetNeonAuthEmailServerPath = z.object({
 
 export const zUpdateNeonAuthEmailServerBody = zNeonAuthEmailServerConfig;
 
-export const zUpdateNeonAuthEmailServerPath = z.object({
+export const zUpdateNeonAuthEmailServerPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     })
@@ -4102,7 +4102,7 @@ export const zUpdateNeonAuthEmailServerPath = z.object({
 
 export const zSendNeonAuthTestEmailBody = zSendNeonAuthTestEmailRequest;
 
-export const zSendNeonAuthTestEmailPath = z.object({
+export const zSendNeonAuthTestEmailPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4111,7 +4111,7 @@ export const zSendNeonAuthTestEmailPath = z.object({
     })
 });
 
-export const zGetNeonAuthEmailAndPasswordConfigPath = z.object({
+export const zGetNeonAuthEmailAndPasswordConfigPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4122,7 +4122,7 @@ export const zGetNeonAuthEmailAndPasswordConfigPath = z.object({
 
 export const zUpdateNeonAuthEmailAndPasswordConfigBody = zNeonAuthEmailAndPasswordConfigUpdate;
 
-export const zUpdateNeonAuthEmailAndPasswordConfigPath = z.object({
+export const zUpdateNeonAuthEmailAndPasswordConfigPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4131,7 +4131,7 @@ export const zUpdateNeonAuthEmailAndPasswordConfigPath = z.object({
     })
 });
 
-export const zGetNeonAuthEmailProviderPath = z.object({
+export const zGetNeonAuthEmailProviderPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4142,7 +4142,7 @@ export const zGetNeonAuthEmailProviderPath = z.object({
 
 export const zUpdateNeonAuthEmailProviderBody = zNeonAuthEmailServerConfig;
 
-export const zUpdateNeonAuthEmailProviderPath = z.object({
+export const zUpdateNeonAuthEmailProviderPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4151,26 +4151,26 @@ export const zUpdateNeonAuthEmailProviderPath = z.object({
     })
 });
 
-export const zDeleteNeonAuthIntegrationBody = z.object({
+export const zDeleteNeonAuthIntegrationBody = z.strictObject({
     delete_data: z.boolean().register(z.globalRegistry, {
         description: 'If true, deletes the `neon_auth` schema from the database'
-    }).optional().default(false)
+    }).optional()
 });
 
-export const zDeleteNeonAuthIntegrationPath = z.object({
+export const zDeleteNeonAuthIntegrationPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
     auth_provider: zNeonAuthSupportedAuthProvider
 });
 
-export const zGetConnectionUriPath = z.object({
+export const zGetConnectionUriPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     })
 });
 
-export const zGetConnectionUriQuery = z.object({
+export const zGetConnectionUriQuery = z.strictObject({
     branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The branch ID. Defaults to your project\'s default `branch_id` if not specified.'
     }).optional(),
@@ -4188,7 +4188,7 @@ export const zGetConnectionUriQuery = z.object({
     }).optional()
 });
 
-export const zGetNeonAuthAllowLocalhostPath = z.object({
+export const zGetNeonAuthAllowLocalhostPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4199,7 +4199,7 @@ export const zGetNeonAuthAllowLocalhostPath = z.object({
 
 export const zUpdateNeonAuthAllowLocalhostBody = zUpdateNeonAuthAllowLocalhostRequest;
 
-export const zUpdateNeonAuthAllowLocalhostPath = z.object({
+export const zUpdateNeonAuthAllowLocalhostPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4208,7 +4208,7 @@ export const zUpdateNeonAuthAllowLocalhostPath = z.object({
     })
 });
 
-export const zGetNeonAuthPluginConfigsPath = z.object({
+export const zGetNeonAuthPluginConfigsPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4219,7 +4219,7 @@ export const zGetNeonAuthPluginConfigsPath = z.object({
 
 export const zUpdateNeonAuthOrganizationPluginBody = zNeonAuthOrganizationConfigUpdate;
 
-export const zUpdateNeonAuthOrganizationPluginPath = z.object({
+export const zUpdateNeonAuthOrganizationPluginPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4230,7 +4230,7 @@ export const zUpdateNeonAuthOrganizationPluginPath = z.object({
 
 export const zUpdateNeonAuthConfigBody = zNeonAuthConfigUpdate;
 
-export const zUpdateNeonAuthConfigPath = z.object({
+export const zUpdateNeonAuthConfigPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4241,7 +4241,7 @@ export const zUpdateNeonAuthConfigPath = z.object({
 
 export const zUpdateNeonAuthMagicLinkPluginBody = zNeonAuthMagicLinkConfigUpdate;
 
-export const zUpdateNeonAuthMagicLinkPluginPath = z.object({
+export const zUpdateNeonAuthMagicLinkPluginPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4250,7 +4250,7 @@ export const zUpdateNeonAuthMagicLinkPluginPath = z.object({
     })
 });
 
-export const zGetNeonAuthPhoneNumberPluginPath = z.object({
+export const zGetNeonAuthPhoneNumberPluginPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4261,7 +4261,7 @@ export const zGetNeonAuthPhoneNumberPluginPath = z.object({
 
 export const zUpdateNeonAuthPhoneNumberPluginBody = zNeonAuthPhoneNumberConfigUpdate;
 
-export const zUpdateNeonAuthPhoneNumberPluginPath = z.object({
+export const zUpdateNeonAuthPhoneNumberPluginPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4270,7 +4270,7 @@ export const zUpdateNeonAuthPhoneNumberPluginPath = z.object({
     })
 });
 
-export const zGetNeonAuthWebhookConfigPath = z.object({
+export const zGetNeonAuthWebhookConfigPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4281,7 +4281,7 @@ export const zGetNeonAuthWebhookConfigPath = z.object({
 
 export const zUpdateNeonAuthWebhookConfigBody = zNeonAuthWebhookConfig;
 
-export const zUpdateNeonAuthWebhookConfigPath = z.object({
+export const zUpdateNeonAuthWebhookConfigPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4290,13 +4290,13 @@ export const zUpdateNeonAuthWebhookConfigPath = z.object({
     })
 });
 
-export const zListProjectBranchesPath = z.object({
+export const zListProjectBranchesPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     })
 });
 
-export const zListProjectBranchesQuery = z.object({
+export const zListProjectBranchesQuery = z.strictObject({
     search: z.string().register(z.globalRegistry, {
         description: 'Search by branch `name` or `id`. You can specify partial `name` or `id` values to filter results.'
     }).optional(),
@@ -4306,24 +4306,24 @@ export const zListProjectBranchesQuery = z.object({
         'updated_at'
     ]).register(z.globalRegistry, {
         description: 'Sort the branches by sort_field. If not provided, branches will be sorted by updated_at descending order'
-    }).optional().default('updated_at'),
+    }).optional(),
     cursor: z.string().register(z.globalRegistry, {
         description: 'A cursor to use in pagination. A cursor defines your place in the data list. Include `response.pagination.next` in subsequent API calls to fetch next page of the list.'
     }).optional(),
     sort_order: z.enum(['asc', 'desc']).register(z.globalRegistry, {
         description: 'Defines the sorting order of entities.'
-    }).optional().default('desc'),
+    }).optional(),
     limit: z.int().gte(1).lte(10000).register(z.globalRegistry, {
         description: 'The maximum number of records to be returned in the response'
     }).optional(),
     include_deleted: z.boolean().register(z.globalRegistry, {
         description: 'If true, return recoverable deleted branches too (soft-deleted within the recovery window).\nIf false or not provided, return only active (non-deleted) branches.\n\nThis parameter is part of the Branch Recovery feature, which is in preview and not available to all users.\n'
-    }).optional().default(false)
+    }).optional()
 });
 
-export const zCreateProjectBranchBody = zBranchCreateRequest.and(zAnnotationCreateValueRequest);
+export const zCreateProjectBranchBody = zBranchCreateRequest.merge(zAnnotationCreateValueRequest);
 
-export const zCreateProjectBranchPath = z.object({
+export const zCreateProjectBranchPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     })
@@ -4331,25 +4331,25 @@ export const zCreateProjectBranchPath = z.object({
 
 export const zCreateProjectBranchAnonymizedBody = zBranchAnonymizedCreateRequest;
 
-export const zCreateProjectBranchAnonymizedPath = z.object({
+export const zCreateProjectBranchAnonymizedPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     })
 });
 
-export const zCountProjectBranchesPath = z.object({
+export const zCountProjectBranchesPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     })
 });
 
-export const zCountProjectBranchesQuery = z.object({
+export const zCountProjectBranchesQuery = z.strictObject({
     search: z.string().register(z.globalRegistry, {
         description: 'Count branches matching the `name` in search query'
     }).optional()
 });
 
-export const zDeleteProjectBranchPath = z.object({
+export const zDeleteProjectBranchPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4358,13 +4358,13 @@ export const zDeleteProjectBranchPath = z.object({
     })
 });
 
-export const zDeleteProjectBranchQuery = z.object({
+export const zDeleteProjectBranchQuery = z.strictObject({
     hard_delete: z.boolean().register(z.globalRegistry, {
         description: 'If true, the branch is permanently deleted immediately without a recovery window.\nIf false (default), the branch can be recovered within 7 days via the recover endpoint.\n\nThis parameter is part of the Branch Recovery feature, which is in preview and not available to all users.\n'
-    }).optional().default(false)
+    }).optional()
 });
 
-export const zGetProjectBranchPath = z.object({
+export const zGetProjectBranchPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4375,7 +4375,7 @@ export const zGetProjectBranchPath = z.object({
 
 export const zUpdateProjectBranchBody = zBranchUpdateRequest;
 
-export const zUpdateProjectBranchPath = z.object({
+export const zUpdateProjectBranchPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4386,7 +4386,7 @@ export const zUpdateProjectBranchPath = z.object({
 
 export const zRestoreProjectBranchBody = zBranchRestoreRequest;
 
-export const zRestoreProjectBranchPath = z.object({
+export const zRestoreProjectBranchPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4395,7 +4395,7 @@ export const zRestoreProjectBranchPath = z.object({
     })
 });
 
-export const zGetProjectBranchSchemaPath = z.object({
+export const zGetProjectBranchSchemaPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4404,7 +4404,7 @@ export const zGetProjectBranchSchemaPath = z.object({
     })
 });
 
-export const zGetProjectBranchSchemaQuery = z.object({
+export const zGetProjectBranchSchemaQuery = z.strictObject({
     db_name: z.string().register(z.globalRegistry, {
         description: 'Name of the database for which the schema is retrieved'
     }),
@@ -4419,7 +4419,7 @@ export const zGetProjectBranchSchemaQuery = z.object({
     }).optional()
 });
 
-export const zGetProjectBranchSchemaComparisonPath = z.object({
+export const zGetProjectBranchSchemaComparisonPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4428,7 +4428,7 @@ export const zGetProjectBranchSchemaComparisonPath = z.object({
     })
 });
 
-export const zGetProjectBranchSchemaComparisonQuery = z.object({
+export const zGetProjectBranchSchemaComparisonQuery = z.strictObject({
     base_branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The branch ID to compare the schema with'
     }).optional(),
@@ -4449,7 +4449,7 @@ export const zGetProjectBranchSchemaComparisonQuery = z.object({
     }).optional()
 });
 
-export const zGetMaskingRulesPath = z.object({
+export const zGetMaskingRulesPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4460,7 +4460,7 @@ export const zGetMaskingRulesPath = z.object({
 
 export const zUpdateMaskingRulesBody = zMaskingRulesUpdateRequest;
 
-export const zUpdateMaskingRulesPath = z.object({
+export const zUpdateMaskingRulesPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4469,7 +4469,7 @@ export const zUpdateMaskingRulesPath = z.object({
     })
 });
 
-export const zGetAnonymizedBranchStatusPath = z.object({
+export const zGetAnonymizedBranchStatusPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4478,7 +4478,7 @@ export const zGetAnonymizedBranchStatusPath = z.object({
     })
 });
 
-export const zStartAnonymizationPath = z.object({
+export const zStartAnonymizationPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4487,7 +4487,7 @@ export const zStartAnonymizationPath = z.object({
     })
 });
 
-export const zSetDefaultProjectBranchPath = z.object({
+export const zSetDefaultProjectBranchPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4496,13 +4496,13 @@ export const zSetDefaultProjectBranchPath = z.object({
     })
 });
 
-export const zFinalizeRestoreBranchBody = z.object({
+export const zFinalizeRestoreBranchBody = z.strictObject({
     name: z.string().register(z.globalRegistry, {
         description: 'Name for the replaced branch. If omitted, a unique name is generated.'
     }).optional()
 });
 
-export const zFinalizeRestoreBranchPath = z.object({
+export const zFinalizeRestoreBranchPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4511,7 +4511,7 @@ export const zFinalizeRestoreBranchPath = z.object({
     })
 });
 
-export const zListProjectBranchEndpointsPath = z.object({
+export const zListProjectBranchEndpointsPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4520,7 +4520,7 @@ export const zListProjectBranchEndpointsPath = z.object({
     })
 });
 
-export const zListProjectBranchDatabasesPath = z.object({
+export const zListProjectBranchDatabasesPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4531,7 +4531,7 @@ export const zListProjectBranchDatabasesPath = z.object({
 
 export const zCreateProjectBranchDatabaseBody = zDatabaseCreateRequest;
 
-export const zCreateProjectBranchDatabasePath = z.object({
+export const zCreateProjectBranchDatabasePath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4540,7 +4540,7 @@ export const zCreateProjectBranchDatabasePath = z.object({
     })
 });
 
-export const zDeleteProjectBranchDatabasePath = z.object({
+export const zDeleteProjectBranchDatabasePath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4552,7 +4552,7 @@ export const zDeleteProjectBranchDatabasePath = z.object({
     })
 });
 
-export const zGetProjectBranchDatabasePath = z.object({
+export const zGetProjectBranchDatabasePath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4566,7 +4566,7 @@ export const zGetProjectBranchDatabasePath = z.object({
 
 export const zUpdateProjectBranchDatabaseBody = zDatabaseUpdateRequest;
 
-export const zUpdateProjectBranchDatabasePath = z.object({
+export const zUpdateProjectBranchDatabasePath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4578,7 +4578,7 @@ export const zUpdateProjectBranchDatabasePath = z.object({
     })
 });
 
-export const zListProjectBranchRolesPath = z.object({
+export const zListProjectBranchRolesPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4589,7 +4589,7 @@ export const zListProjectBranchRolesPath = z.object({
 
 export const zCreateProjectBranchRoleBody = zRoleCreateRequest;
 
-export const zCreateProjectBranchRolePath = z.object({
+export const zCreateProjectBranchRolePath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4598,19 +4598,7 @@ export const zCreateProjectBranchRolePath = z.object({
     })
 });
 
-export const zDeleteProjectBranchRolePath = z.object({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
-        description: 'The Neon project ID'
-    }),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
-        description: 'The branch ID'
-    }),
-    role_name: z.string().register(z.globalRegistry, {
-        description: 'The role name'
-    })
-});
-
-export const zGetProjectBranchRolePath = z.object({
+export const zDeleteProjectBranchRolePath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4622,7 +4610,7 @@ export const zGetProjectBranchRolePath = z.object({
     })
 });
 
-export const zGetProjectBranchRolePasswordPath = z.object({
+export const zGetProjectBranchRolePath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4634,7 +4622,7 @@ export const zGetProjectBranchRolePasswordPath = z.object({
     })
 });
 
-export const zResetProjectBranchRolePasswordPath = z.object({
+export const zGetProjectBranchRolePasswordPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4646,13 +4634,25 @@ export const zResetProjectBranchRolePasswordPath = z.object({
     })
 });
 
-export const zListProjectVpcEndpointsPath = z.object({
+export const zResetProjectBranchRolePasswordPath = z.strictObject({
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
+        description: 'The Neon project ID'
+    }),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
+        description: 'The branch ID'
+    }),
+    role_name: z.string().register(z.globalRegistry, {
+        description: 'The role name'
+    })
+});
+
+export const zListProjectVpcEndpointsPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     })
 });
 
-export const zDeleteProjectVpcEndpointPath = z.object({
+export const zDeleteProjectVpcEndpointPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4663,7 +4663,7 @@ export const zDeleteProjectVpcEndpointPath = z.object({
 
 export const zAssignProjectVpcEndpointBody = zVpcEndpointAssignment;
 
-export const zAssignProjectVpcEndpointPath = z.object({
+export const zAssignProjectVpcEndpointPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4672,7 +4672,7 @@ export const zAssignProjectVpcEndpointPath = z.object({
     })
 });
 
-export const zListProjectEndpointsPath = z.object({
+export const zListProjectEndpointsPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     })
@@ -4680,13 +4680,13 @@ export const zListProjectEndpointsPath = z.object({
 
 export const zCreateProjectEndpointBody = zEndpointCreateRequest;
 
-export const zCreateProjectEndpointPath = z.object({
+export const zCreateProjectEndpointPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     })
 });
 
-export const zDeleteProjectEndpointPath = z.object({
+export const zDeleteProjectEndpointPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4695,7 +4695,7 @@ export const zDeleteProjectEndpointPath = z.object({
     })
 });
 
-export const zGetProjectEndpointPath = z.object({
+export const zGetProjectEndpointPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4706,7 +4706,7 @@ export const zGetProjectEndpointPath = z.object({
 
 export const zUpdateProjectEndpointBody = zEndpointUpdateRequest;
 
-export const zUpdateProjectEndpointPath = z.object({
+export const zUpdateProjectEndpointPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4715,7 +4715,7 @@ export const zUpdateProjectEndpointPath = z.object({
     })
 });
 
-export const zStartProjectEndpointPath = z.object({
+export const zStartProjectEndpointPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4724,7 +4724,7 @@ export const zStartProjectEndpointPath = z.object({
     })
 });
 
-export const zSuspendProjectEndpointPath = z.object({
+export const zSuspendProjectEndpointPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4733,7 +4733,7 @@ export const zSuspendProjectEndpointPath = z.object({
     })
 });
 
-export const zRestartProjectEndpointPath = z.object({
+export const zRestartProjectEndpointPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -4742,13 +4742,13 @@ export const zRestartProjectEndpointPath = z.object({
     })
 });
 
-export const zGetConsumptionHistoryPerProjectQuery = z.object({
+export const zGetConsumptionHistoryPerProjectQuery = z.strictObject({
     cursor: z.string().register(z.globalRegistry, {
         description: 'Specify the cursor value from the previous response to get the next batch of projects.'
     }).optional(),
     limit: z.int().gte(1).lte(100).register(z.globalRegistry, {
         description: 'Specify a value from 1 to 100 to limit number of projects in the response.'
-    }).optional().default(10),
+    }).optional(),
     project_ids: z.array(z.string().regex(/^([a-z0-9-]{1,60}(,[a-z0-9-]{1,60}){0,99})?$/)).min(0).max(100).register(z.globalRegistry, {
         description: 'Specify a list of project IDs to filter the response.\nIf omitted, the response will contain all projects.\nA list of project IDs can be specified as an array of parameter values or as a comma-separated list in a single parameter value.\n- As an array of parameter values: `project_ids=cold-poetry-09157238%20&project_ids=quiet-snow-71788278`\n- As a comma-separated list in a single parameter value: `project_ids=cold-poetry-09157238,quiet-snow-71788278`\n'
     }).optional(),
@@ -4768,13 +4768,13 @@ export const zGetConsumptionHistoryPerProjectQuery = z.object({
     metrics: zConsumptionHistoryQueryMetrics.optional()
 });
 
-export const zGetConsumptionHistoryPerProjectV2Query = z.object({
+export const zGetConsumptionHistoryPerProjectV2Query = z.strictObject({
     cursor: z.string().register(z.globalRegistry, {
         description: 'Cursor from the previous response (`pagination.cursor`). Pass it to fetch the next page\nof projects. Pages are ordered by project creation order (newest first).\n'
     }).optional(),
     limit: z.int().gte(1).lte(100).register(z.globalRegistry, {
         description: 'Maximum number of projects per page. Allowed range: 1 to 100. Default: 10.\n'
-    }).optional().default(10),
+    }).optional(),
     project_ids: z.array(z.string().regex(/^([a-z0-9-]{1,60}(,[a-z0-9-]{1,60}){0,99})?$/)).min(0).max(100).register(z.globalRegistry, {
         description: 'Optional project IDs to filter the response (up to 100). If omitted, projects in the\norganization are included across pages (use `cursor` and `limit`).\n\nPass multiple IDs as repeated query parameters or a comma-separated list:\n- `project_ids=cold-poetry-09157238&project_ids=quiet-snow-71788278`\n- `project_ids=cold-poetry-09157238,quiet-snow-71788278`\n'
     }).optional(),
@@ -4791,13 +4791,13 @@ export const zGetConsumptionHistoryPerProjectV2Query = z.object({
     metrics: zConsumptionHistoryQueryMetrics
 });
 
-export const zGetConsumptionHistoryPerBranchV2Query = z.object({
+export const zGetConsumptionHistoryPerBranchV2Query = z.strictObject({
     cursor: z.string().register(z.globalRegistry, {
         description: 'Cursor from the previous response (`pagination.cursor`). Pass it to fetch the next page\nof branches. Pages are ordered by project ID, then branch ID.\n'
     }).optional(),
     limit: z.int().gte(1).lte(1000).register(z.globalRegistry, {
         description: 'Maximum number of branches per page. Allowed range: 1 to 1000. Default: 100.\n'
-    }).optional().default(100),
+    }).optional(),
     project_ids: z.array(z.string().regex(/^([a-z0-9-]{1,60}(,[a-z0-9-]{1,60}){0,99})?$/)).min(1).max(100).register(z.globalRegistry, {
         description: 'Project IDs to include (required, 1 to 100). Returns metrics for branches in these projects.\n\nPass multiple IDs as repeated query parameters or a comma-separated list:\n- `project_ids=cold-poetry-09157238&project_ids=quiet-snow-71788278`\n- `project_ids=cold-poetry-09157238,quiet-snow-71788278`\n'
     }),
@@ -4817,13 +4817,13 @@ export const zGetConsumptionHistoryPerBranchV2Query = z.object({
     metrics: zConsumptionHistoryQueryMetrics
 });
 
-export const zGetOrganizationPath = z.object({
+export const zGetOrganizationPath = z.strictObject({
     org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon organization ID'
     })
 });
 
-export const zListOrgApiKeysPath = z.object({
+export const zListOrgApiKeysPath = z.strictObject({
     org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon organization ID'
     })
@@ -4831,13 +4831,13 @@ export const zListOrgApiKeysPath = z.object({
 
 export const zCreateOrgApiKeyBody = zOrgApiKeyCreateRequest;
 
-export const zCreateOrgApiKeyPath = z.object({
+export const zCreateOrgApiKeyPath = z.strictObject({
     org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon organization ID'
     })
 });
 
-export const zRevokeOrgApiKeyPath = z.object({
+export const zRevokeOrgApiKeyPath = z.strictObject({
     org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon organization ID'
     }),
@@ -4846,13 +4846,13 @@ export const zRevokeOrgApiKeyPath = z.object({
     })
 });
 
-export const zDeleteOrganizationSpendingLimitPath = z.object({
+export const zDeleteOrganizationSpendingLimitPath = z.strictObject({
     org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon organization ID'
     })
 });
 
-export const zGetOrganizationSpendingLimitPath = z.object({
+export const zGetOrganizationSpendingLimitPath = z.strictObject({
     org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon organization ID'
     })
@@ -4860,38 +4860,38 @@ export const zGetOrganizationSpendingLimitPath = z.object({
 
 export const zSetOrganizationSpendingLimitBody = zSpendingLimitUpdateRequest;
 
-export const zSetOrganizationSpendingLimitPath = z.object({
+export const zSetOrganizationSpendingLimitPath = z.strictObject({
     org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon organization ID'
     })
 });
 
-export const zGetOrganizationMembersPath = z.object({
+export const zGetOrganizationMembersPath = z.strictObject({
     org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon organization ID'
     })
 });
 
-export const zGetOrganizationMembersQuery = z.object({
+export const zGetOrganizationMembersQuery = z.strictObject({
     sort_by: z.enum([
         'email',
         'role',
         'joined_at'
     ]).register(z.globalRegistry, {
         description: 'Sort the members by the specified field. Defaults to `joined_at`.'
-    }).optional().default('joined_at'),
+    }).optional(),
     cursor: z.string().register(z.globalRegistry, {
         description: 'A cursor to use in pagination. A cursor defines your place in the data list. Include `response.pagination.next` in subsequent API calls to fetch next page of the list.'
     }).optional(),
     sort_order: z.enum(['asc', 'desc']).register(z.globalRegistry, {
         description: 'Defines the sorting order of entities.'
-    }).optional().default('desc'),
+    }).optional(),
     limit: z.int().gte(1).lte(500).register(z.globalRegistry, {
         description: 'The maximum number of members to return in the response'
     }).optional()
 });
 
-export const zRemoveOrganizationMemberPath = z.object({
+export const zRemoveOrganizationMemberPath = z.strictObject({
     org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon organization ID'
     }),
@@ -4900,7 +4900,7 @@ export const zRemoveOrganizationMemberPath = z.object({
     })
 });
 
-export const zGetOrganizationMemberPath = z.object({
+export const zGetOrganizationMemberPath = z.strictObject({
     org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon organization ID'
     }),
@@ -4911,7 +4911,7 @@ export const zGetOrganizationMemberPath = z.object({
 
 export const zUpdateOrganizationMemberBody = zOrganizationMemberUpdateRequest;
 
-export const zUpdateOrganizationMemberPath = z.object({
+export const zUpdateOrganizationMemberPath = z.strictObject({
     org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon organization ID'
     }),
@@ -4920,7 +4920,7 @@ export const zUpdateOrganizationMemberPath = z.object({
     })
 });
 
-export const zGetOrganizationInvitationsPath = z.object({
+export const zGetOrganizationInvitationsPath = z.strictObject({
     org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon organization ID'
     })
@@ -4928,7 +4928,7 @@ export const zGetOrganizationInvitationsPath = z.object({
 
 export const zCreateOrganizationInvitationsBody = zOrganizationInvitesCreateRequest;
 
-export const zCreateOrganizationInvitationsPath = z.object({
+export const zCreateOrganizationInvitationsPath = z.strictObject({
     org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon organization ID'
     })
@@ -4936,19 +4936,19 @@ export const zCreateOrganizationInvitationsPath = z.object({
 
 export const zTransferProjectsFromOrgToOrgBody = zTransferProjectsToOrganizationRequest;
 
-export const zTransferProjectsFromOrgToOrgPath = z.object({
+export const zTransferProjectsFromOrgToOrgPath = z.strictObject({
     source_org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon organization ID (source org, which currently owns the project)'
     })
 });
 
-export const zListOrganizationVpcEndpointsAllRegionsPath = z.object({
+export const zListOrganizationVpcEndpointsAllRegionsPath = z.strictObject({
     org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon organization ID'
     })
 });
 
-export const zListOrganizationVpcEndpointsPath = z.object({
+export const zListOrganizationVpcEndpointsPath = z.strictObject({
     org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon organization ID'
     }),
@@ -4957,7 +4957,7 @@ export const zListOrganizationVpcEndpointsPath = z.object({
     })
 });
 
-export const zDeleteOrganizationVpcEndpointPath = z.object({
+export const zDeleteOrganizationVpcEndpointPath = z.strictObject({
     org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon organization ID'
     }),
@@ -4969,7 +4969,7 @@ export const zDeleteOrganizationVpcEndpointPath = z.object({
     })
 });
 
-export const zGetOrganizationVpcEndpointDetailsPath = z.object({
+export const zGetOrganizationVpcEndpointDetailsPath = z.strictObject({
     org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon organization ID'
     }),
@@ -4983,7 +4983,7 @@ export const zGetOrganizationVpcEndpointDetailsPath = z.object({
 
 export const zAssignOrganizationVpcEndpointBody = zVpcEndpointAssignment;
 
-export const zAssignOrganizationVpcEndpointPath = z.object({
+export const zAssignOrganizationVpcEndpointPath = z.strictObject({
     org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon organization ID'
     }),
@@ -4995,7 +4995,7 @@ export const zAssignOrganizationVpcEndpointPath = z.object({
     })
 });
 
-export const zGetActiveRegionsQuery = z.object({
+export const zGetActiveRegionsQuery = z.strictObject({
     org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'Organization ID. When provided, returns only regions available to this organization.\nRecommended for accurate region availability.\n'
     }).optional()
@@ -5003,7 +5003,7 @@ export const zGetActiveRegionsQuery = z.object({
 
 export const zTransferProjectsFromUserToOrgBody = zTransferProjectsToOrganizationRequest;
 
-export const zCreateSnapshotPath = z.object({
+export const zCreateSnapshotPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -5012,7 +5012,7 @@ export const zCreateSnapshotPath = z.object({
     })
 });
 
-export const zCreateSnapshotQuery = z.object({
+export const zCreateSnapshotQuery = z.strictObject({
     lsn: z.string().register(z.globalRegistry, {
         description: 'The target Log Sequence Number (LSN) to take the snapshot from.\nMust fall within the restore window. Cannot be used with `timestamp`\n'
     }).optional(),
@@ -5027,13 +5027,13 @@ export const zCreateSnapshotQuery = z.object({
     }).optional()
 });
 
-export const zListSnapshotsPath = z.object({
+export const zListSnapshotsPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     })
 });
 
-export const zDeleteSnapshotPath = z.object({
+export const zDeleteSnapshotPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -5044,7 +5044,7 @@ export const zDeleteSnapshotPath = z.object({
 
 export const zUpdateSnapshotBody = zSnapshotUpdateRequest;
 
-export const zUpdateSnapshotPath = z.object({
+export const zUpdateSnapshotPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -5053,7 +5053,7 @@ export const zUpdateSnapshotPath = z.object({
     })
 });
 
-export const zRestoreSnapshotBody = z.object({
+export const zRestoreSnapshotBody = z.strictObject({
     name: z.string().register(z.globalRegistry, {
         description: 'A name for the newly restored branch. If not provided, the server generates a unique name for the branch automatically.\n'
     }).optional(),
@@ -5062,10 +5062,10 @@ export const zRestoreSnapshotBody = z.object({
     }).optional(),
     finalize_restore: z.boolean().register(z.globalRegistry, {
         description: 'Set to `true` to finalize the restore operation immediately.\nThis will complete the restore and move any associated computes to the new branch,\nsimilar to the `finalizeRestoreBranch` operation.\nDefaults to `false` to allow previewing the restored snapshot data first.\n'
-    }).optional().default(false)
+    }).optional()
 });
 
-export const zRestoreSnapshotPath = z.object({
+export const zRestoreSnapshotPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -5074,13 +5074,13 @@ export const zRestoreSnapshotPath = z.object({
     })
 });
 
-export const zRestoreSnapshotQuery = z.object({
+export const zRestoreSnapshotQuery = z.strictObject({
     name: z.string().register(z.globalRegistry, {
         description: 'Deprecated. Use the `name` field in the request body instead. Removal scheduled for November 29, 2025.\nA name for the newly restored branch. If omitted, a default name will be generated.\n'
     }).optional()
 });
 
-export const zGetSnapshotSchedulePath = z.object({
+export const zGetSnapshotSchedulePath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -5091,7 +5091,7 @@ export const zGetSnapshotSchedulePath = z.object({
 
 export const zSetSnapshotScheduleBody = zBackupSchedule;
 
-export const zSetSnapshotSchedulePath = z.object({
+export const zSetSnapshotSchedulePath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -5100,7 +5100,7 @@ export const zSetSnapshotSchedulePath = z.object({
     })
 });
 
-export const zListProjectBranchBucketsPath = z.object({
+export const zListProjectBranchBucketsPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -5111,7 +5111,7 @@ export const zListProjectBranchBucketsPath = z.object({
 
 export const zCreateProjectBranchBucketBody = zBucketCreateRequest;
 
-export const zCreateProjectBranchBucketPath = z.object({
+export const zCreateProjectBranchBucketPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -5120,7 +5120,7 @@ export const zCreateProjectBranchBucketPath = z.object({
     })
 });
 
-export const zDeleteProjectBranchBucketPath = z.object({
+export const zDeleteProjectBranchBucketPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -5132,7 +5132,7 @@ export const zDeleteProjectBranchBucketPath = z.object({
     })
 });
 
-export const zGetProjectBranchStoragePath = z.object({
+export const zGetProjectBranchStoragePath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -5141,7 +5141,7 @@ export const zGetProjectBranchStoragePath = z.object({
     })
 });
 
-export const zGetProjectBranchAiGatewayPath = z.object({
+export const zGetProjectBranchAiGatewayPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -5152,7 +5152,7 @@ export const zGetProjectBranchAiGatewayPath = z.object({
 
 export const zQueryProjectBranchLogsBody = zProjectBranchLogsQueryRequest;
 
-export const zQueryProjectBranchLogsPath = z.object({
+export const zQueryProjectBranchLogsPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -5161,7 +5161,7 @@ export const zQueryProjectBranchLogsPath = z.object({
     })
 });
 
-export const zListProjectBranchLogFieldsPath = z.object({
+export const zListProjectBranchLogFieldsPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -5170,7 +5170,7 @@ export const zListProjectBranchLogFieldsPath = z.object({
     })
 });
 
-export const zListProjectBranchLogFieldValuesPath = z.object({
+export const zListProjectBranchLogFieldValuesPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -5182,7 +5182,7 @@ export const zListProjectBranchLogFieldValuesPath = z.object({
     })
 });
 
-export const zListProjectBranchLogFieldValuesQuery = z.object({
+export const zListProjectBranchLogFieldValuesQuery = z.strictObject({
     since: zProjectBranchLogDuration.optional(),
     start_time: z.iso.datetime().register(z.globalRegistry, {
         description: 'Inclusive beginning of the lookup window. Mutually exclusive with\n`since`.\n'
@@ -5193,10 +5193,10 @@ export const zListProjectBranchLogFieldValuesQuery = z.object({
     source: zProjectBranchLogSource.optional(),
     limit: z.int().gte(1).lte(1000).register(z.globalRegistry, {
         description: 'Maximum number of distinct values to return. The response sets\n`is_truncated` when this bound, or the server\'s own scan cap, cut the\nlist short.\n'
-    }).optional().default(100)
+    }).optional()
 });
 
-export const zListProjectBranchBucketObjectsPath = z.object({
+export const zListProjectBranchBucketObjectsPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -5208,7 +5208,7 @@ export const zListProjectBranchBucketObjectsPath = z.object({
     })
 });
 
-export const zListProjectBranchBucketObjectsQuery = z.object({
+export const zListProjectBranchBucketObjectsQuery = z.strictObject({
     prefix: z.string().register(z.globalRegistry, {
         description: 'Only list objects whose key starts with this prefix.'
     }).optional(),
@@ -5220,10 +5220,10 @@ export const zListProjectBranchBucketObjectsQuery = z.object({
     }).optional(),
     limit: z.int().gte(1).lte(1000).register(z.globalRegistry, {
         description: 'Maximum number of items (objects + folders) to return.'
-    }).optional().default(1000)
+    }).optional()
 });
 
-export const zDeleteProjectBranchBucketObjectPath = z.object({
+export const zDeleteProjectBranchBucketObjectPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -5238,7 +5238,7 @@ export const zDeleteProjectBranchBucketObjectPath = z.object({
     })
 });
 
-export const zGetProjectBranchBucketObjectPath = z.object({
+export const zGetProjectBranchBucketObjectPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -5253,7 +5253,7 @@ export const zGetProjectBranchBucketObjectPath = z.object({
     })
 });
 
-export const zDeleteProjectBranchBucketObjectsByPrefixPath = z.object({
+export const zDeleteProjectBranchBucketObjectsByPrefixPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -5265,7 +5265,7 @@ export const zDeleteProjectBranchBucketObjectsByPrefixPath = z.object({
     })
 });
 
-export const zDeleteProjectBranchBucketObjectsByPrefixQuery = z.object({
+export const zDeleteProjectBranchBucketObjectsByPrefixQuery = z.strictObject({
     prefix: z.string().min(1).max(1024).register(z.globalRegistry, {
         description: 'The key prefix (folder) to delete. Must be non-empty and end with\n`/`. Every object on this branch whose key starts with this prefix\nis soft-deleted.\n'
     })
@@ -5273,7 +5273,7 @@ export const zDeleteProjectBranchBucketObjectsByPrefixQuery = z.object({
 
 export const zPresignProjectBranchBucketObjectBody = zPresignRequest;
 
-export const zPresignProjectBranchBucketObjectPath = z.object({
+export const zPresignProjectBranchBucketObjectPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -5288,7 +5288,7 @@ export const zPresignProjectBranchBucketObjectPath = z.object({
     })
 });
 
-export const zListCredentialsPath = z.object({
+export const zListCredentialsPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -5299,7 +5299,7 @@ export const zListCredentialsPath = z.object({
 
 export const zCreateCredentialBody = zCreateCredentialRequest;
 
-export const zCreateCredentialPath = z.object({
+export const zCreateCredentialPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -5308,7 +5308,7 @@ export const zCreateCredentialPath = z.object({
     })
 });
 
-export const zRevokeCredentialPath = z.object({
+export const zRevokeCredentialPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -5320,7 +5320,7 @@ export const zRevokeCredentialPath = z.object({
     })
 });
 
-export const zListProjectBranchFunctionsPath = z.object({
+export const zListProjectBranchFunctionsPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -5329,7 +5329,7 @@ export const zListProjectBranchFunctionsPath = z.object({
     })
 });
 
-export const zListProjectBranchFunctionsQuery = z.object({
+export const zListProjectBranchFunctionsQuery = z.strictObject({
     cursor: z.string().register(z.globalRegistry, {
         description: 'A cursor to use in pagination. A cursor defines your place in the data list. Include `response.pagination.next` in subsequent API calls to fetch next page of the list.'
     }).optional(),
@@ -5338,7 +5338,7 @@ export const zListProjectBranchFunctionsQuery = z.object({
     }).optional()
 });
 
-export const zDeleteProjectBranchFunctionPath = z.object({
+export const zDeleteProjectBranchFunctionPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -5350,7 +5350,7 @@ export const zDeleteProjectBranchFunctionPath = z.object({
     })
 });
 
-export const zGetProjectBranchFunctionPath = z.object({
+export const zGetProjectBranchFunctionPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -5364,7 +5364,7 @@ export const zGetProjectBranchFunctionPath = z.object({
 
 export const zUpdateProjectBranchFunctionBody = zNeonFunctionUpdateRequest;
 
-export const zUpdateProjectBranchFunctionPath = z.object({
+export const zUpdateProjectBranchFunctionPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),
@@ -5378,7 +5378,7 @@ export const zUpdateProjectBranchFunctionPath = z.object({
 
 export const zCreateProjectBranchFunctionDeploymentBody = zFunctionDeployRequest;
 
-export const zCreateProjectBranchFunctionDeploymentPath = z.object({
+export const zCreateProjectBranchFunctionDeploymentPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),

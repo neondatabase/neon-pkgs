@@ -23,8 +23,9 @@ export type MastraTools<Tools extends Readonly<Record<string, NeonTool>>> = {
 export const toMastraTool = <
 	const InputSchema extends z.ZodType,
 	const Id extends string,
+	Output,
 >(
-	tool: NeonTool<InputSchema, Id>,
+	tool: NeonTool<InputSchema, Id, Output>,
 ) => ({
 	id: tool.id,
 	description: tool.description,

@@ -21,13 +21,38 @@ export interface NeonToolMetadata {
 	tags: readonly string[];
 }
 
-export interface NeonToolResult {
-	data: unknown;
+export interface JsonSafeBlob {
+	base64: string;
+	contentType: string;
+	size: number;
+}
+
+export type JsonSafe<Value> = unknown extends Value
+	? unknown
+	: Value extends null
+		? null
+		: Value extends void
+			? null
+			: Value extends bigint | Date
+				? string
+				: Value extends Blob
+					? JsonSafeBlob
+					: Value extends string | number | boolean
+						? Value
+						: Value extends readonly (infer Item)[]
+							? JsonSafe<Item>[]
+							: Value extends object
+								? { [Key in keyof Value]: JsonSafe<Value[Key]> }
+								: unknown;
+
+export interface NeonToolResult<Data = unknown> {
+	data: Data;
 }
 
 export interface NeonTool<
 	InputSchema extends z.ZodType = z.ZodType,
 	Id extends string = string,
+	Output = unknown,
 > {
 	operationId: string;
 	id: Id;
@@ -40,12 +65,13 @@ export interface NeonTool<
 	execute(
 		input: z.input<InputSchema>,
 		context?: NeonToolExecutionContext,
-	): Promise<NeonToolResult>;
+	): Promise<NeonToolResult<Output>>;
 }
 
 export interface NeonOperation<
 	InputSchema extends z.ZodType,
 	Id extends string = string,
+	Output = unknown,
 > {
 	operationId: string;
 	id: Id;
@@ -59,23 +85,25 @@ export interface NeonOperation<
 		client: Client,
 		input: z.output<InputSchema>,
 		signal?: AbortSignal,
-	): Promise<unknown>;
+	): Promise<Output>;
 }
 
 export const defineOperation = <
 	const InputSchema extends z.ZodType,
 	const Id extends string,
+	Output,
 >(
-	operation: NeonOperation<InputSchema, Id>,
+	operation: NeonOperation<InputSchema, Id, Output>,
 ) => operation;
 
 export const bindOperation = <
 	const InputSchema extends z.ZodType,
 	const Id extends string,
+	Output,
 >(
-	operation: NeonOperation<InputSchema, Id>,
+	operation: NeonOperation<InputSchema, Id, Output>,
 	client: Client,
-): NeonTool<InputSchema, Id> => ({
+): NeonTool<InputSchema, Id, JsonSafe<Awaited<Output>>> => ({
 	operationId: operation.operationId,
 	id: operation.id,
 	title: operation.title,

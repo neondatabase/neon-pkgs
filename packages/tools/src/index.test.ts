@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { createNeonTools } from "./index.js";
+import { createNeonTool, createNeonTools } from "./index.js";
 
 const jsonResponse = (body: unknown, status = 200) =>
 	new Response(JSON.stringify(body), {
@@ -40,7 +40,7 @@ describe("createNeonTools", () => {
 		expect(requests).toHaveLength(1);
 		expect(requests[0].method).toBe("GET");
 		expect(requests[0].url).toBe(
-			"https://console.neon.tech/api/v2/projects?limit=1&search=demo&recoverable=false",
+			"https://console.neon.tech/api/v2/projects?limit=1&search=demo",
 		);
 		expect(requests[0].headers.get("authorization")).toBe(
 			"Bearer test-key",
@@ -49,6 +49,11 @@ describe("createNeonTools", () => {
 		expect(
 			tools.listProjects.inputSchema.safeParse({
 				query: { limit: "one" },
+			}).success,
+		).toBe(false);
+		expect(
+			tools.listProjects.inputSchema.safeParse({
+				query: { serch: "demo" },
 			}).success,
 		).toBe(false);
 	});
@@ -70,8 +75,13 @@ describe("createNeonTools", () => {
 
 		expect(requests[0].method).toBe("POST");
 		expect(await requests[0].json()).toEqual({
-			project: { name: "tool-created", pg_version: 18 },
+			project: { name: "tool-created" },
 		});
+		expect(
+			tools.createProject.inputSchema.safeParse({
+				body: { project: { nmae: "tool-created" } },
+			}).success,
+		).toBe(false);
 		expect(tools.createProject.requiresApproval).toBe(true);
 		expect(tools.createProject.annotations.readOnlyHint).toBe(false);
 		expect(tools.createProject.annotations.destructiveHint).toBe(true);
@@ -84,5 +94,19 @@ describe("createNeonTools", () => {
 				operations: ["listProjects", "listProjects"],
 			}),
 		).toThrow('Duplicate Neon operation "listProjects"');
+	});
+
+	test("reports unknown runtime operation ids", () => {
+		expect(() =>
+			Reflect.apply(createNeonTools, undefined, [
+				{ apiKey: "test-key", operations: ["listProjcts"] },
+			]),
+		).toThrow('Unknown Neon operation "listProjcts"');
+		expect(() =>
+			Reflect.apply(createNeonTool, undefined, [
+				"listProjcts",
+				{ apiKey: "test-key" },
+			]),
+		).toThrow('Unknown Neon operation "listProjcts"');
 	});
 });

@@ -54,8 +54,8 @@ jobs:
             - name: Fail when spec or generated packages drifted
               run: |
                   # Stage so the diff also catches newly added / removed generated files.
-                  git add -A -- packages/sdk/spec packages/sdk/src/client packages/tools/src/generated packages/tools/src/operations.gen.ts
-                  if ! git diff --cached --exit-code -- packages/sdk/spec packages/sdk/src/client packages/tools/src/generated packages/tools/src/operations.gen.ts; then
+                  git add -A -- packages/sdk/spec packages/sdk/src/client packages/tools/src/generated packages/tools/src/operations.gen.ts packages/tools/src/schemas.ts
+                  if ! git diff --cached --exit-code -- packages/sdk/spec packages/sdk/src/client packages/tools/src/generated packages/tools/src/operations.gen.ts packages/tools/src/schemas.ts; then
                       echo "::error::@neon/sdk or @neon/tools is stale — the live Neon OpenAPI spec drifted from the committed generated packages."
                       echo "Refresh it locally and open a PR:"
                       echo "  pnpm --filter @neon/sdk spec:pull"

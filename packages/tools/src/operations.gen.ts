@@ -188,7 +188,7 @@ export const operationFactories = {
 				id: "accept_project_transfer_request",
 				title: "Accept a project transfer request",
 				description: "Accepts a transfer request for the specified project, transferring it to the specified organization\nor user. If org_id is not passed, the project will be transferred to the current user or organization account.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zAcceptProjectTransferRequestBody.optional(),
 	path: zod.zAcceptProjectTransferRequestPath,
 }),
@@ -218,7 +218,7 @@ export const operationFactories = {
 				id: "add_branch_neon_auth_oauth_provider",
 				title: "Add an OAuth provider",
 				description: "Adds an OAuth provider configuration to the specified branch's Neon Auth integration.\nAfter adding, users can authenticate using the configured provider.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zAddBranchNeonAuthOauthProviderBody,
 	path: zod.zAddBranchNeonAuthOauthProviderPath,
 }),
@@ -248,7 +248,7 @@ export const operationFactories = {
 				id: "add_branch_neon_auth_trusted_domain",
 				title: "Add domain to redirect_uri whitelist",
 				description: "Adds a domain to the redirect URI whitelist for the specified branch.\nOnly domains in this list are permitted as redirect targets after authentication.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zAddBranchNeonAuthTrustedDomainBody,
 	path: zod.zAddBranchNeonAuthTrustedDomainPath,
 }),
@@ -278,7 +278,7 @@ export const operationFactories = {
 				id: "add_neon_auth_domain_to_redirect_uri_whitelist",
 				title: "Add trusted redirect URI domain",
 				description: "Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/domains` instead. Removal scheduled for March 1, 2026.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zAddNeonAuthDomainToRedirectUriWhitelistBody,
 	path: zod.zAddNeonAuthDomainToRedirectUriWhitelistPath,
 }),
@@ -308,7 +308,7 @@ export const operationFactories = {
 				id: "add_neon_auth_oauth_provider",
 				title: "Add an OAuth provider",
 				description: "Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/oauth_providers` instead. Removal scheduled for March 1, 2026.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zAddNeonAuthOauthProviderBody,
 	path: zod.zAddNeonAuthOauthProviderPath,
 }),
@@ -338,7 +338,7 @@ export const operationFactories = {
 				id: "add_project_jwks",
 				title: "Add JWKS URL",
 				description: "Adds a JWKS URL to the specified project for verifying JWTs used as the authentication mechanism.\n\nThe URL must be a valid HTTPS URL that returns a JSON Web Key Set.\n\nThe `provider_name` field allows you to specify which authentication provider you're using (e.g., Clerk, Auth0, AWS Cognito).\n\nThe `branch_id` scopes the JWKS URL to specific branches; if not specified, it applies to all branches.\n\nThe `role_names` scopes the URL to specific roles; if not specified, default roles are used (`authenticator`, `authenticated`, `anonymous`).\n\nThe `jwt_audience` specifies which `aud` values are accepted in JWTs.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zAddProjectJwksBody,
 	path: zod.zAddProjectJwksPath,
 }),
@@ -368,7 +368,7 @@ export const operationFactories = {
 				id: "assign_organization_vpc_endpoint",
 				title: "Assign or update VPC endpoint",
 				description: "Assigns a VPC endpoint to a Neon organization or updates its existing assignment.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zAssignOrganizationVpcEndpointBody,
 	path: zod.zAssignOrganizationVpcEndpointPath,
 }),
@@ -398,7 +398,7 @@ export const operationFactories = {
 				id: "assign_project_vpc_endpoint",
 				title: "Set VPC endpoint restriction",
 				description: "Sets or updates a VPC endpoint restriction for a Neon project.\nWhen a VPC endpoint restriction is set, the project only accepts connections\nfrom the specified VPC.\nA VPC endpoint can be set as a restriction only after it is assigned to the\nparent organization of the Neon project.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zAssignProjectVpcEndpointBody,
 	path: zod.zAssignProjectVpcEndpointPath,
 }),
@@ -428,11 +428,11 @@ export const operationFactories = {
 				id: "count_project_branches",
 				title: "Retrieve number of branches",
 				description: "Retrieves the total number of branches in the specified project.\nSupports an optional `search` parameter to count branches matching a name filter.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zCountProjectBranchesPath,
 	query: zod.zCountProjectBranchesQuery.optional(),
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -458,7 +458,7 @@ export const operationFactories = {
 				id: "create_api_key",
 				title: "Create API key",
 				description: "Creates an API key.\nThe `key_name` is a user-specified name for the key.\nReturns an `id` and `key`; the `key` is a randomly generated, 64-bit token required to access the Neon API.\nStore the key securely — it is only returned once.\nAPI keys can also be managed in the Neon Console.\nSee [Manage API keys](https://neon.com/docs/manage/api-keys/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zCreateApiKeyBody,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -487,7 +487,7 @@ export const operationFactories = {
 				id: "create_branch_neon_auth_new_user",
 				title: "Create new auth user",
 				description: "Creates a new user in the Neon Auth user directory for the specified branch.\nThe user is created in the `neon_auth.users_sync` table and can immediately authenticate\nusing the branch's configured auth providers.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zCreateBranchNeonAuthNewUserBody,
 	path: zod.zCreateBranchNeonAuthNewUserPath,
 }),
@@ -517,7 +517,7 @@ export const operationFactories = {
 				id: "create_credential",
 				title: "Issue a scoped credential on the branch",
 				description: "Issues a new scoped service credential anchored to the specified\nbranch. The response carries `api_token` and `s3_secret_access_key`\nexactly once — they are not stored server-side.\n\n**Note**: This endpoint is currently in Beta.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zCreateCredentialBody,
 	path: zod.zCreateCredentialPath,
 }),
@@ -547,7 +547,7 @@ export const operationFactories = {
 				id: "create_neon_auth",
 				title: "Enable Neon Auth for the branch",
 				description: "Enables Neon Auth for the specified branch by connecting it to an authentication provider.\nCreating the integration provisions the `neon_auth` schema in the branch database, which stores user identity data synchronized from the provider.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zCreateNeonAuthBody,
 	path: zod.zCreateNeonAuthPath,
 }),
@@ -577,7 +577,7 @@ export const operationFactories = {
 				id: "create_neon_auth_integration",
 				title: "Create Neon Auth integration",
 				description: "Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth` instead. Removal scheduled for March 1, 2026.\nUse this endpoint if the frontend integration flow can't be used.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zCreateNeonAuthIntegrationBody,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -606,7 +606,7 @@ export const operationFactories = {
 				id: "create_neon_auth_new_user",
 				title: "Create new auth user",
 				description: "Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/users` instead. Removal scheduled for March 1, 2026.\nThe user will be created in your neon_auth.users_sync table and automatically propagated to your auth project, whether Neon-managed or provider-owned.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zCreateNeonAuthNewUserBody,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -635,7 +635,7 @@ export const operationFactories = {
 				id: "create_neon_auth_provider_sdk_keys",
 				title: "Create Auth Provider SDK keys",
 				description: "Generates SDK or API Keys for the auth provider. These might be called different things depending\non the auth provider you're using, but are generally used for setting up the frontend and backend SDKs.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zCreateNeonAuthProviderSdkKeysBody,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -664,7 +664,7 @@ export const operationFactories = {
 				id: "create_organization_invitations",
 				title: "Create organization invitations",
 				description: "Creates invitations for a specific organization.\nIf the invited user has an existing account, they automatically join as a member.\nIf they don't yet have an account, they are invited to create one, after which they become a member.\nEach invited user receives an email notification.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zCreateOrganizationInvitationsBody,
 	path: zod.zCreateOrganizationInvitationsPath,
 }),
@@ -694,7 +694,7 @@ export const operationFactories = {
 				id: "create_org_api_key",
 				title: "Create organization API key",
 				description: "Creates an API key for the specified organization.\nThe `key_name` is a user-specified name for the key.\nReturns an `id` and `key`; the `key` is a randomly generated, 64-bit token required to access the Neon API.\nStore the key securely — it is only returned once.\nAPI keys can also be managed in the Neon Console.\nSee [Manage API keys](https://neon.com/docs/manage/api-keys/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zCreateOrgApiKeyBody,
 	path: zod.zCreateOrgApiKeyPath,
 }),
@@ -724,7 +724,7 @@ export const operationFactories = {
 				id: "create_project",
 				title: "Create project",
 				description: "Creates a Neon project within an organization.\nIf using a personal API key, include the `org_id` parameter to specify which organization to create the project in.\nIf using an org API key, `org_id` is automatically inferred from the key.\nPlan limits define how many projects you can create.\nFor more information, see [Manage projects](https://neon.com/docs/manage/projects/).\n\nYou can specify a region and Postgres version in the request body.\nNeon supports Postgres 14 through 18, with 19 rolling out to enabled regions.\nFor supported regions and `region_id` values, see [Regions](https://neon.com/docs/introduction/regions/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zCreateProjectBody,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -753,7 +753,7 @@ export const operationFactories = {
 				id: "create_project_branch",
 				title: "Create branch",
 				description: "Creates a branch in the specified project.\nNo request body is required, but you can specify one to create a compute endpoint or select a non-default parent branch.\nBy default, the branch is created from the project's default branch with no compute endpoint, and the branch name is auto-generated.\nTo access the branch, add a `read_write` endpoint.\nEach branch supports one read-write endpoint and multiple read-only endpoints.\nFor related information, see [Manage branches](https://neon.com/docs/manage/branches/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zCreateProjectBranchBody.optional(),
 	path: zod.zCreateProjectBranchPath,
 }),
@@ -783,7 +783,7 @@ export const operationFactories = {
 				id: "create_project_branch_anonymized",
 				title: "Create anonymized branch",
 				description: "Creates a new branch with anonymized data using PostgreSQL Anonymizer for static masking.\nThis allows developers to work with masked production data.\nOptionally, provide `masking_rules` to set initial masking rules for the branch\nand `start_anonymization` to automatically start anonymization after creation. This\ncombines functionality of updating masking rules and starting anonymization into the\nbranch creation request.\n\n**Note**: This endpoint is currently in Beta.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zCreateProjectBranchAnonymizedBody,
 	path: zod.zCreateProjectBranchAnonymizedPath,
 }),
@@ -813,7 +813,7 @@ export const operationFactories = {
 				id: "create_project_branch_bucket",
 				title: "Create a bucket on the branch",
 				description: "Creates a new branchable object storage bucket on the specified branch.\nBuckets are managed by the Neon Platform branchable object storage service.\n\n**Note**: This endpoint is currently in Beta.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zCreateProjectBranchBucketBody,
 	path: zod.zCreateProjectBranchBucketPath,
 }),
@@ -843,7 +843,7 @@ export const operationFactories = {
 				id: "create_project_branch_data_api",
 				title: "Create Neon Data API",
 				description: "Creates a new instance of Neon Data API in the specified branch.\nThe Data API exposes a REST interface over the branch database. The `database_name` path parameter determines which database the API serves.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zCreateProjectBranchDataApiBody.optional(),
 	path: zod.zCreateProjectBranchDataApiPath,
 }),
@@ -873,7 +873,7 @@ export const operationFactories = {
 				id: "create_project_branch_database",
 				title: "Create database",
 				description: "Creates a database in the specified branch.\nA branch can have multiple databases.\nFor related information, see [Manage databases](https://neon.com/docs/manage/databases/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zCreateProjectBranchDatabaseBody,
 	path: zod.zCreateProjectBranchDatabasePath,
 }),
@@ -903,7 +903,7 @@ export const operationFactories = {
 				id: "create_project_branch_function_deployment",
 				title: "Deploy code to a function",
 				description: "Creates a deployment for the function. Supply any subset of zip,\nenvironment, and runtime; omitted fields inherit the\nfunction's latest version. At least one field must be supplied. The\nfirst deployment of a function must include zip. The newest deployment\nbecomes active.\n\n**Note**: This endpoint is currently in Beta.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zCreateProjectBranchFunctionDeploymentBody.safeExtend({ "zip": z.base64().describe("Base64-encoded binary file contents.").optional() }),
 	path: zod.zCreateProjectBranchFunctionDeploymentPath,
 }),
@@ -940,7 +940,7 @@ export const operationFactories = {
 				id: "create_project_branch_role",
 				title: "Create role",
 				description: "Creates a Postgres role in the specified branch.\nFor related information, see [Manage roles](https://neon.com/docs/manage/roles/).\n\nConnections established to the active compute endpoint will be dropped.\nIf the compute endpoint is idle, the endpoint becomes active for a short period of time and is suspended afterward.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zCreateProjectBranchRoleBody,
 	path: zod.zCreateProjectBranchRolePath,
 }),
@@ -970,7 +970,7 @@ export const operationFactories = {
 				id: "create_project_endpoint",
 				title: "Create compute endpoint",
 				description: "Creates a compute endpoint for the specified branch.\nA compute endpoint is a Neon compute instance.\nThere is a maximum of one read-write compute endpoint per branch.\nIf the specified branch already has a read-write compute endpoint, the operation fails.\nA branch can have multiple read-only compute endpoints.\n\nFor more information about compute endpoints, see [Manage computes](https://neon.com/docs/manage/endpoints/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zCreateProjectEndpointBody,
 	path: zod.zCreateProjectEndpointPath,
 }),
@@ -1000,7 +1000,7 @@ export const operationFactories = {
 				id: "create_project_transfer_request",
 				title: "Create a project transfer request",
 				description: "Creates a transfer request for the specified project. The request expires after a set period.\nTo accept the request, the recipient calls `PUT /projects/{project_id}/transfer_requests/{request_id}`\nor uses the Neon Console claim link.\nThe optional `ru` parameter redirects the recipient after acceptance.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zCreateProjectTransferRequestBody.optional(),
 	path: zod.zCreateProjectTransferRequestPath,
 }),
@@ -1030,7 +1030,7 @@ export const operationFactories = {
 				id: "create_snapshot",
 				title: "Create snapshot",
 				description: "Creates a snapshot from the specified branch.\nThis operation may initiate an asynchronous process.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zCreateSnapshotPath,
 	query: zod.zCreateSnapshotQuery.optional(),
 }),
@@ -1060,7 +1060,7 @@ export const operationFactories = {
 				id: "delete_branch_neon_auth_oauth_provider",
 				title: "Delete OAuth provider",
 				description: "Deletes an OAuth provider from the specified project.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zDeleteBranchNeonAuthOauthProviderPath,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -1089,7 +1089,7 @@ export const operationFactories = {
 				id: "delete_branch_neon_auth_trusted_domain",
 				title: "Delete domain from redirect_uri whitelist",
 				description: "Removes a domain from the redirect URI whitelist for the specified branch.\nAfter removal, the domain can no longer be used as a redirect target after authentication.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zDeleteBranchNeonAuthTrustedDomainBody,
 	path: zod.zDeleteBranchNeonAuthTrustedDomainPath,
 }),
@@ -1119,7 +1119,7 @@ export const operationFactories = {
 				id: "delete_branch_neon_auth_user",
 				title: "Delete auth user",
 				description: "Deletes the specified user from the Neon Auth user directory for the specified branch.\nRemoves the user record from `neon_auth.users_sync`. This action cannot be undone.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zDeleteBranchNeonAuthUserPath,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -1148,7 +1148,7 @@ export const operationFactories = {
 				id: "delete_neon_auth_domain_from_redirect_uri_whitelist",
 				title: "Delete trusted redirect URI domain",
 				description: "Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/domains` instead. Removal scheduled for March 1, 2026.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zDeleteNeonAuthDomainFromRedirectUriWhitelistBody,
 	path: zod.zDeleteNeonAuthDomainFromRedirectUriWhitelistPath,
 }),
@@ -1178,7 +1178,7 @@ export const operationFactories = {
 				id: "delete_neon_auth_integration",
 				title: "Delete integration with auth provider",
 				description: "Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth` instead. Removal scheduled for March 1, 2026.",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zDeleteNeonAuthIntegrationBody.optional(),
 	path: zod.zDeleteNeonAuthIntegrationPath,
 }),
@@ -1208,7 +1208,7 @@ export const operationFactories = {
 				id: "delete_neon_auth_oauth_provider",
 				title: "Delete OAuth provider",
 				description: "Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/oauth_providers/{oauth_provider_id}` instead. Removal scheduled for March 1, 2026.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zDeleteNeonAuthOauthProviderPath,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -1237,7 +1237,7 @@ export const operationFactories = {
 				id: "delete_neon_auth_user",
 				title: "Delete auth user",
 				description: "Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/users/{auth_user_id}` instead. Removal scheduled for March 1, 2026.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zDeleteNeonAuthUserPath,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -1266,7 +1266,7 @@ export const operationFactories = {
 				id: "delete_organization_spending_limit",
 				title: "Remove organization spending limit",
 				description: "Removes the configured monthly spending limit for the specified organization.\nIdempotent — removing an already-unset limit still succeeds.\nAvailable to organization admins on Launch and Scale plans only.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zDeleteOrganizationSpendingLimitPath,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -1295,7 +1295,7 @@ export const operationFactories = {
 				id: "delete_organization_vpc_endpoint",
 				title: "Delete VPC endpoint",
 				description: "Deletes the VPC endpoint from the specified Neon organization.\nIf you delete a VPC endpoint from a Neon organization, that VPC endpoint cannot\nbe added back to the Neon organization.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zDeleteOrganizationVpcEndpointPath,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -1324,7 +1324,7 @@ export const operationFactories = {
 				id: "delete_project",
 				title: "Delete project",
 				description: "Deletes the specified project and all its endpoints, branches, databases, and users.\nDeleted projects can be recovered within 7 days using `POST /projects/{project_id}/recover`.\nTo list recoverable projects, use `GET /projects?recoverable=true`.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zDeleteProjectPath,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -1353,7 +1353,7 @@ export const operationFactories = {
 				id: "delete_project_branch",
 				title: "Delete branch",
 				description: "Deletes the specified branch from a project and places all compute endpoints into an idle state, breaking existing client connections.\n\nThe deletion completes after all operations finish.\nYou cannot delete a project's root or default branch, or a branch that has a child branch.\nA project must have at least one branch.\n\nBy default, deleted branches can be recovered within a 7-day grace period.\nUse the `hard_delete` parameter to permanently delete the branch immediately.\nFor related information, see [Manage branches](https://neon.com/docs/manage/branches/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zDeleteProjectBranchPath,
 	query: zod.zDeleteProjectBranchQuery.optional(),
 }),
@@ -1383,7 +1383,7 @@ export const operationFactories = {
 				id: "delete_project_branch_bucket",
 				title: "Delete a bucket on the branch",
 				description: "Deletes the named bucket from the specified branch.\n\n**Note**: This endpoint is currently in Beta.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zDeleteProjectBranchBucketPath,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -1412,7 +1412,7 @@ export const operationFactories = {
 				id: "delete_project_branch_bucket_object",
 				title: "Delete an object in a bucket",
 				description: "Deletes the named object from the bucket on the specified branch.\nServed by the user's session (no customer S3 credentials required).\n\n**Note**: This endpoint is currently in Beta.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zDeleteProjectBranchBucketObjectPath,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -1441,7 +1441,7 @@ export const operationFactories = {
 				id: "delete_project_branch_bucket_objects_by_prefix",
 				title: "Delete every object under a key prefix (folder) in a bucket",
 				description: "Soft-deletes every object on the specified branch whose key starts with\n`prefix`, in a single call. Intended to back a \"delete folder\" action in\nan object browser: a `prefix` of `app/avatars/` removes every object\nbeneath that folder. Served by the user's session (no customer S3\ncredentials required).\n\n`prefix` must be non-empty, end with `/`, be at most 1024 bytes, and\ncontain no control characters - a partial-segment prefix cannot\naccidentally delete sibling keys. Returns the number of objects\nsoft-deleted (`deleted`), which may be 0 when no live object matched the\nprefix on this branch.\n\nOnly objects physically present on this branch are tombstoned; objects\ninherited from an ancestor branch via copy-on-write (not materialized on\nthis branch) are out of scope.\n\n**Note**: This endpoint is currently in Beta.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zDeleteProjectBranchBucketObjectsByPrefixPath,
 	query: zod.zDeleteProjectBranchBucketObjectsByPrefixQuery,
 }),
@@ -1471,7 +1471,7 @@ export const operationFactories = {
 				id: "delete_project_branch_data_api",
 				title: "Delete Neon Data API",
 				description: "Deletes the Neon Data API for the specified branch.\nExisting connections using the Data API endpoint will fail after deletion.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zDeleteProjectBranchDataApiPath,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -1500,7 +1500,7 @@ export const operationFactories = {
 				id: "delete_project_branch_database",
 				title: "Delete database",
 				description: "Deletes the specified database from the branch.\nFor related information, see [Manage databases](https://neon.com/docs/manage/databases/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zDeleteProjectBranchDatabasePath,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -1529,7 +1529,7 @@ export const operationFactories = {
 				id: "delete_project_branch_function",
 				title: "Delete a function on the branch",
 				description: "Deletes the function identified by its slug.\n\n**Note**: This endpoint is currently in Beta.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zDeleteProjectBranchFunctionPath,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -1558,7 +1558,7 @@ export const operationFactories = {
 				id: "delete_project_branch_role",
 				title: "Delete role",
 				description: "Deletes the specified Postgres role from the branch.\nFor related information, see [Manage roles](https://neon.com/docs/manage/roles/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zDeleteProjectBranchRolePath,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -1587,7 +1587,7 @@ export const operationFactories = {
 				id: "delete_project_endpoint",
 				title: "Delete compute endpoint",
 				description: "Deletes the specified compute endpoint.\nA compute endpoint is a Neon compute instance.\nDeleting a compute endpoint drops existing network connections to the compute endpoint.\nThe deletion is completed when the last operation in the chain finishes successfully.\n\nAn `endpoint_id` has an `ep-` prefix.\nFor information about compute endpoints, see [Manage computes](https://neon.com/docs/manage/endpoints/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zDeleteProjectEndpointPath,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -1616,7 +1616,7 @@ export const operationFactories = {
 				id: "delete_project_jwks",
 				title: "Delete JWKS URL",
 				description: "Removes the specified JWKS URL from the project.\nJWTs signed by keys from the removed URL can no longer authenticate to the project's endpoints.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zDeleteProjectJwksPath,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -1645,7 +1645,7 @@ export const operationFactories = {
 				id: "delete_project_vpc_endpoint",
 				title: "Delete VPC endpoint restriction",
 				description: "Removes the specified VPC endpoint restriction from a Neon project.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zDeleteProjectVpcEndpointPath,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -1674,7 +1674,7 @@ export const operationFactories = {
 				id: "delete_snapshot",
 				title: "Delete snapshot",
 				description: "Deletes the specified snapshot.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zDeleteSnapshotPath,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -1703,7 +1703,7 @@ export const operationFactories = {
 				id: "disable_neon_auth",
 				title: "Disable Neon Auth for the branch",
 				description: "Disables the Neon Auth integration for the specified branch, removing the connection\nto the authentication provider.\nIf `delete_data` is `true`, also deletes the `neon_auth` schema and all associated tables\nfrom the branch database.\nThe integration can be re-enabled by calling `POST /projects/{project_id}/branches/{branch_id}/auth`.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zDisableNeonAuthBody.optional(),
 	path: zod.zDisableNeonAuthPath,
 }),
@@ -1733,7 +1733,7 @@ export const operationFactories = {
 				id: "finalize_restore_branch",
 				title: "Finalize branch restore from snapshot",
 				description: "Finalize the restore operation for a branch created from a snapshot.\nThis operation updates the branch so it functions as the original branch it replaced.\nThis includes:\n  - Reassigning any computes from the original branch to the restored branch (this will restart the computes)\n  - Renaming the restored branch to the original branch's name\n  - Renaming the original branch so it no longer uses the original name\n\nThis operation only applies to branches created using the `restoreSnapshot` endpoint with `finalize_restore: false`.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zFinalizeRestoreBranchBody.optional(),
 	path: zod.zFinalizeRestoreBranchPath,
 }),
@@ -1763,10 +1763,10 @@ export const operationFactories = {
 				id: "get_active_regions",
 				title: "List supported regions",
 				description: "Lists supported Neon regions.\n\n**Note:** Not all regions are available to all organizations. Pass the `org_id`\nparameter to get an accurate list of regions available to your organization.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	query: zod.zGetActiveRegionsQuery.optional(),
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -1792,10 +1792,10 @@ export const operationFactories = {
 				id: "get_anonymized_branch_status",
 				title: "Retrieve anonymized branch status",
 				description: "Retrieves the current status of an anonymized branch, including its state and progress information.\nThis endpoint allows you to monitor the anonymization process from initialization through completion.\nOnly anonymized branches will have status information available.\n\n**Note**: This endpoint is currently in Beta.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetAnonymizedBranchStatusPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -1821,10 +1821,10 @@ export const operationFactories = {
 				id: "get_auth_details",
 				title: "Retrieve request authentication details",
 				description: "Returns authentication details for the credentials used in the request,\nincluding the credential type (API key, Bearer token, or OAuth session)\nand the associated identity.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -1850,10 +1850,10 @@ export const operationFactories = {
 				id: "get_available_preload_libraries",
 				title: "List available shared preload libraries",
 				description: "Returns the shared preload libraries available for the specified project's Postgres version.\nShared preload libraries are Postgres extensions that require the `shared_preload_libraries`\nsetting and a compute restart to activate.\nUse this list to determine which libraries can be enabled in the project's\n`settings.preload_libraries` configuration.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetAvailablePreloadLibrariesPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -1879,11 +1879,11 @@ export const operationFactories = {
 				id: "get_connection_uri",
 				title: "Retrieve connection URI",
 				description: "Retrieves a connection URI for the specified database.\nThe URI uses the standard PostgreSQL connection string format. Set `pooled=true` to include the `-pooler` suffix for a connection pooler URI.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetConnectionUriPath,
 	query: zod.zGetConnectionUriQuery,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: true,
 				metadata: {
 					method: "GET",
@@ -1909,10 +1909,10 @@ export const operationFactories = {
 				id: "get_consumption_history_per_branch_v2",
 				title: "Retrieve branch consumption metrics",
 				description: "Returns consumption metrics for each branch across one or more projects listed in\n`project_ids` (1 to 100 projects). Available for accounts on paid usage-based Launch, Scale,\nAgent, and Enterprise plans.\n\nHistory starts when the account first ingests branch-level consumption data.\n\nThe `metrics` query parameter is required. Only these six values are supported on this\nendpoint:\n`compute_unit_seconds`, `root_branch_bytes_month`, `child_branch_bytes_month`,\n`instant_restore_bytes_month`, `public_network_transfer_bytes`, `private_network_transfer_bytes`.\n\nThis endpoint does not support `extra_branches_month` or `snapshot_storage_bytes_month`.\nUse `GET /consumption_history/v2/projects` for those.\n\nConsumption metrics within each branch are returned in ascending time order (oldest first).\nThis request does not wake project computes.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	query: zod.zGetConsumptionHistoryPerBranchV2Query,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -1938,10 +1938,10 @@ export const operationFactories = {
 				id: "get_consumption_history_per_project",
 				title: "Retrieve project consumption metrics (legacy plans)",
 				description: "Retrieves consumption metrics for Scale, Business, and Enterprise plan projects. History begins at the time of upgrade.\nResults are ordered by time in ascending order (oldest to newest).\nIssuing a call to this API does not wake a project's compute endpoint.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	query: zod.zGetConsumptionHistoryPerProjectQuery,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -1967,10 +1967,10 @@ export const operationFactories = {
 				id: "get_consumption_history_per_project_v2",
 				title: "Retrieve project consumption metrics",
 				description: "Returns consumption metrics for up to `limit` projects per page. If `project_ids` is omitted,\nprojects in the organization are included across pages (use `cursor`). If `project_ids` is\nprovided, the response is limited to those projects (up to 100). Available for accounts on\nLaunch, Scale, Agent, Business, and Enterprise plans.\n\nHistory starts when the account upgrades to an eligible plan.\n\nThe `metrics` query parameter is required. Supported values:\n`compute_unit_seconds`, `root_branch_bytes_month`, `child_branch_bytes_month`,\n`instant_restore_bytes_month`, `public_network_transfer_bytes`, `private_network_transfer_bytes`,\n`extra_branches_month`, `snapshot_storage_bytes_month`.\n\nConsumption metrics within each project are returned in ascending time order (oldest first).\nThis request does not wake project computes.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	query: zod.zGetConsumptionHistoryPerProjectV2Query,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -1996,10 +1996,10 @@ export const operationFactories = {
 				id: "get_current_user_info",
 				title: "Retrieve current user details",
 				description: "Retrieves information about the currently authenticated Neon user,\nincluding account identifiers, plan details, and linked auth accounts.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2025,10 +2025,10 @@ export const operationFactories = {
 				id: "get_current_user_organizations",
 				title: "List organizations for the current user",
 				description: "Retrieves the organizations that the currently authenticated user belongs to.\n\nWhen called with an organization- or project-scoped API key (which is not\ntied to a user), this returns the single organization that owns the key.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2054,10 +2054,10 @@ export const operationFactories = {
 				id: "get_masking_rules",
 				title: "Retrieve masking rules",
 				description: "Retrieves the masking rules for the specified anonymized branch.\nMasking rules define how sensitive data should be anonymized using PostgreSQL Anonymizer.\n\n**Note**: This endpoint is currently in Beta.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetMaskingRulesPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2083,10 +2083,10 @@ export const operationFactories = {
 				id: "get_neon_auth",
 				title: "Retrieve Neon Auth details for the branch",
 				description: "Retrieves the Neon Auth integration details for the specified branch,\nincluding the auth provider type and integration status.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetNeonAuthPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2112,10 +2112,10 @@ export const operationFactories = {
 				id: "get_neon_auth_allow_localhost",
 				title: "Retrieve localhost allow setting",
 				description: "Retrieves the localhost allow setting for the specified branch's Neon Auth integration.\nWhen enabled, authentication flows work from `localhost` without adding it to the redirect URI whitelist.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetNeonAuthAllowLocalhostPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2141,10 +2141,10 @@ export const operationFactories = {
 				id: "get_neon_auth_email_and_password_config",
 				title: "Retrieve email and password configuration",
 				description: "Retrieves the email and password authentication configuration for the specified branch's Neon Auth integration,\nincluding whether it is enabled and the email verification method.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetNeonAuthEmailAndPasswordConfigPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2170,10 +2170,10 @@ export const operationFactories = {
 				id: "get_neon_auth_email_provider",
 				title: "Retrieve email provider configuration",
 				description: "Retrieves the email provider configuration for the specified branch's Neon Auth integration,\nincluding the provider type and server settings.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetNeonAuthEmailProviderPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: true,
 				metadata: {
 					method: "GET",
@@ -2199,10 +2199,10 @@ export const operationFactories = {
 				id: "get_neon_auth_email_server",
 				title: "Retrieve email server configuration",
 				description: "Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/email_provider` instead. Removal scheduled for March 1, 2026.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetNeonAuthEmailServerPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: true,
 				metadata: {
 					method: "GET",
@@ -2228,10 +2228,10 @@ export const operationFactories = {
 				id: "get_neon_auth_phone_number_plugin",
 				title: "Retrieve phone number plugin configuration",
 				description: "Returns the phone number plugin configuration for Neon Auth.\nThe phone number plugin enables phone-based OTP authentication.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetNeonAuthPhoneNumberPluginPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2257,10 +2257,10 @@ export const operationFactories = {
 				id: "get_neon_auth_plugin_configs",
 				title: "Retrieve Neon Auth plugin configurations",
 				description: "Returns all plugin configurations for Neon Auth in a single response.\nThis endpoint aggregates organization, email provider, email and password,\nOAuth providers, and localhost settings.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetNeonAuthPluginConfigsPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: true,
 				metadata: {
 					method: "GET",
@@ -2286,10 +2286,10 @@ export const operationFactories = {
 				id: "get_neon_auth_webhook_config",
 				title: "Retrieve Neon Auth webhook configuration",
 				description: "Returns the webhook configuration for the specified branch's Neon Auth integration,\nincluding the endpoint URL and the events that trigger it.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetNeonAuthWebhookConfigPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2315,10 +2315,10 @@ export const operationFactories = {
 				id: "get_organization",
 				title: "Retrieve organization details",
 				description: "Retrieves details for the specified organization, including its name, plan, and configuration.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetOrganizationPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2344,10 +2344,10 @@ export const operationFactories = {
 				id: "get_organization_invitations",
 				title: "List organization invitations",
 				description: "Retrieves pending and accepted invitations for the specified organization.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetOrganizationInvitationsPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2373,10 +2373,10 @@ export const operationFactories = {
 				id: "get_organization_member",
 				title: "Retrieve organization member details",
 				description: "Retrieves information about the specified organization member.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetOrganizationMemberPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2402,11 +2402,11 @@ export const operationFactories = {
 				id: "get_organization_members",
 				title: "List organization members",
 				description: "Retrieves a paginated list of members for the specified organization.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetOrganizationMembersPath,
 	query: zod.zGetOrganizationMembersQuery.optional(),
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2432,10 +2432,10 @@ export const operationFactories = {
 				id: "get_organization_spending_limit",
 				title: "Retrieve organization spending limit",
 				description: "Returns the configured monthly spending limit for the specified organization.\n`spending_limit_cents: null` indicates that no limit is currently set.\nAvailable to organization members with read access on Launch and Scale plans only.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetOrganizationSpendingLimitPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2461,10 +2461,10 @@ export const operationFactories = {
 				id: "get_organization_vpc_endpoint_details",
 				title: "Retrieve VPC endpoint details",
 				description: "Retrieves the current state and configuration details of a specified VPC endpoint.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetOrganizationVpcEndpointDetailsPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2490,10 +2490,10 @@ export const operationFactories = {
 				id: "get_project",
 				title: "Retrieve project details",
 				description: "Retrieves information about the specified project.\nReturned details include the project settings, compute configuration, history retention, owner information, and current usage metrics.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetProjectPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2519,11 +2519,11 @@ export const operationFactories = {
 				id: "get_project_advisor_security_issues",
 				title: "Get advisor issues",
 				description: "Analyzes the database for security and performance issues.\nReturns a list of issues categorized by severity (ERROR, WARN, INFO).\n\nRequires read access to the project and Data API enabled.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetProjectAdvisorSecurityIssuesPath,
 	query: zod.zGetProjectAdvisorSecurityIssuesQuery.optional(),
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2549,10 +2549,10 @@ export const operationFactories = {
 				id: "get_project_branch",
 				title: "Retrieve branch details",
 				description: "Retrieves information about the specified branch.\nA `branch_id` value has a `br-` prefix.\n\nEach Neon project is initially created with a root and default branch named `main`.\nA project can contain one or more branches.\nA parent branch is identified by a `parent_id` value, which is the `id` of the parent branch.\nFor related information, see [Manage branches](https://neon.com/docs/manage/branches/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetProjectBranchPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2578,10 +2578,10 @@ export const operationFactories = {
 				id: "get_project_branch_ai_gateway",
 				title: "Get branch AI Gateway endpoint",
 				description: "Returns the AI Gateway endpoint host for the specified branch, used to\nrender code-snippet base URLs. A 200 response means the branch is\nregistered and this region serves the AI gateway. A 404 response\nincludes a `reason` field indicating why the gateway is unavailable.\n\n**Note**: This endpoint is currently in Beta.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetProjectBranchAiGatewayPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2607,10 +2607,10 @@ export const operationFactories = {
 				id: "get_project_branch_bucket_object",
 				title: "Download an object's bytes",
 				description: "Streams the raw bytes of the named object from the bucket on the\nspecified branch, including objects inherited from ancestor branches.\nServed by the user's session (no customer S3 credentials required).\n\nThe body is returned as `application/octet-stream` so a browser treats\nit as a download; the `Content-Length` and `ETag` response headers echo\nthe stored object metadata.\n\nBINARY-STREAM EXCEPTION TO THE BUILD-GENERATED-TYPES RULE (#7029): the\nsuccessful 200 body is the raw object stream, proxied verbatim from the\nplatform object storage admin endpoint. It is modeled as an\n`application/octet-stream` binary body (not a JSON response schema) and\nis streamed without buffering the whole object in memory. Error\nresponses still use the generated `GeneralError` shape.\n\n**Note**: This endpoint is currently in Beta.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetProjectBranchBucketObjectPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2636,10 +2636,10 @@ export const operationFactories = {
 				id: "get_project_branch_data_api",
 				title: "Retrieve Neon Data API configuration",
 				description: "Retrieves the Neon Data API configuration for the specified branch,\nincluding endpoint URL, enabled state, and database settings.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetProjectBranchDataApiPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2665,10 +2665,10 @@ export const operationFactories = {
 				id: "get_project_branch_database",
 				title: "Retrieve database details",
 				description: "Retrieves information about the specified database.\nFor related information, see [Manage databases](https://neon.com/docs/manage/databases/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetProjectBranchDatabasePath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2694,10 +2694,10 @@ export const operationFactories = {
 				id: "get_project_branch_function",
 				title: "Get function details",
 				description: "Returns the function identified by its slug.\n\n**Note**: This endpoint is currently in Beta.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetProjectBranchFunctionPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2723,10 +2723,10 @@ export const operationFactories = {
 				id: "get_project_branch_role",
 				title: "Retrieve role details",
 				description: "Retrieves details about the specified role.\nIn Neon, the terms \"role\" and \"user\" are synonymous.\nFor related information, see [Manage roles](https://neon.com/docs/manage/roles/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetProjectBranchRolePath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2752,10 +2752,10 @@ export const operationFactories = {
 				id: "get_project_branch_role_password",
 				title: "Retrieve role password",
 				description: "Retrieves the password for the specified Postgres role, if possible.\nFor related information, see [Manage roles](https://neon.com/docs/manage/roles/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetProjectBranchRolePasswordPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: true,
 				metadata: {
 					method: "GET",
@@ -2781,11 +2781,11 @@ export const operationFactories = {
 				id: "get_project_branch_schema",
 				title: "Retrieve database schema",
 				description: "Retrieves the database schema. Specify `lsn` or `timestamp` (not both) to read at a point in time; omit both to read from the database's head.",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetProjectBranchSchemaPath,
 	query: zod.zGetProjectBranchSchemaQuery,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2811,11 +2811,11 @@ export const operationFactories = {
 				id: "get_project_branch_schema_comparison",
 				title: "Compare database schema",
 				description: "Compares the schema from the specified database with another branch's schema.",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetProjectBranchSchemaComparisonPath,
 	query: zod.zGetProjectBranchSchemaComparisonQuery,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2841,10 +2841,10 @@ export const operationFactories = {
 				id: "get_project_branch_storage",
 				title: "Get branch object storage state",
 				description: "Returns whether branchable object storage is usable for the specified\nbranch. A 200 response means the branch is registered in the object storage\nservice and the S3 data plane will accept requests for it. A 404\nresponse includes a `reason` field indicating why object storage is unavailable.\n\n**Note**: This endpoint is currently in Beta.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetProjectBranchStoragePath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2870,10 +2870,10 @@ export const operationFactories = {
 				id: "get_project_endpoint",
 				title: "Retrieve compute endpoint details",
 				description: "Retrieves information about the specified compute endpoint.\nA compute endpoint is a Neon compute instance.\nAn `endpoint_id` has an `ep-` prefix.\nFor information about compute endpoints, see [Manage computes](https://neon.com/docs/manage/endpoints/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetProjectEndpointPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2899,10 +2899,10 @@ export const operationFactories = {
 				id: "get_project_jwks",
 				title: "List JWKS URLs",
 				description: "Returns the JWKS URLs available for verifying JWTs used as the authentication mechanism for the specified project.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetProjectJwksPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2928,10 +2928,10 @@ export const operationFactories = {
 				id: "get_project_operation",
 				title: "Retrieve operation details",
 				description: "Retrieves details for the specified operation.\nAn operation is an action performed on a Neon project resource.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetProjectOperationPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2957,10 +2957,10 @@ export const operationFactories = {
 				id: "get_snapshot_schedule",
 				title: "Retrieve backup schedule",
 				description: "Returns the backup schedule for the specified branch, including the configured snapshot frequencies.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zGetSnapshotSchedulePath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2986,7 +2986,7 @@ export const operationFactories = {
 				id: "grant_permission_to_project",
 				title: "Grant project access",
 				description: "Grants project access to the account associated with the specified email address.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zGrantPermissionToProjectBody,
 	path: zod.zGrantPermissionToProjectPath,
 }),
@@ -3016,10 +3016,10 @@ export const operationFactories = {
 				id: "list_api_keys",
 				title: "List API keys",
 				description: "Retrieves the API keys for your Neon account.\nThe response does not include API key tokens. A token is only provided when creating an API key.\nAPI keys can also be managed in the Neon Console.\nFor more information, see [Manage API keys](https://neon.com/docs/manage/api-keys/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3045,10 +3045,10 @@ export const operationFactories = {
 				id: "list_branch_neon_auth_oauth_providers",
 				title: "List OAuth providers for the branch",
 				description: "Lists the OAuth providers configured for the specified branch's Neon Auth integration.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zListBranchNeonAuthOauthProvidersPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: true,
 				metadata: {
 					method: "GET",
@@ -3074,10 +3074,10 @@ export const operationFactories = {
 				id: "list_branch_neon_auth_trusted_domains",
 				title: "List domains in redirect_uri whitelist",
 				description: "Lists the trusted domains in the redirect URI whitelist for the specified branch.\nOnly domains in this list are permitted as redirect targets after authentication.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zListBranchNeonAuthTrustedDomainsPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3103,10 +3103,10 @@ export const operationFactories = {
 				id: "list_credentials",
 				title: "List credentials on the branch",
 				description: "Returns metadata for customer-issued credentials on the branch.\nSecrets are never included.\n\n**Note**: This endpoint is currently in Beta.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zListCredentialsPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3132,10 +3132,10 @@ export const operationFactories = {
 				id: "list_neon_auth_integrations",
 				title: "List active integrations with auth providers",
 				description: "Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth` instead. Removal scheduled for March 1, 2026.",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zListNeonAuthIntegrationsPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3161,10 +3161,10 @@ export const operationFactories = {
 				id: "list_neon_auth_oauth_providers",
 				title: "List OAuth providers",
 				description: "Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/oauth_providers` instead. Removal scheduled for March 1, 2026.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zListNeonAuthOauthProvidersPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: true,
 				metadata: {
 					method: "GET",
@@ -3190,10 +3190,10 @@ export const operationFactories = {
 				id: "list_neon_auth_redirect_uri_whitelist_domains",
 				title: "List trusted redirect URI domains",
 				description: "Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/domains` instead. Removal scheduled for March 1, 2026.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zListNeonAuthRedirectUriWhitelistDomainsPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3219,10 +3219,10 @@ export const operationFactories = {
 				id: "list_organization_vpc_endpoints",
 				title: "List VPC endpoints",
 				description: "Retrieves the list of VPC endpoints for the specified Neon organization.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zListOrganizationVpcEndpointsPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3248,10 +3248,10 @@ export const operationFactories = {
 				id: "list_organization_vpc_endpoints_all_regions",
 				title: "List VPC endpoints across all regions",
 				description: "Retrieves the list of VPC endpoints for the specified Neon organization across all regions.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zListOrganizationVpcEndpointsAllRegionsPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3277,10 +3277,10 @@ export const operationFactories = {
 				id: "list_org_api_keys",
 				title: "List organization API keys",
 				description: "Retrieves the API keys for the specified organization.\nThe response does not include API key tokens. A token is only provided when creating an API key.\nAPI keys can also be managed in the Neon Console.\nFor more information, see [Manage API keys](https://neon.com/docs/manage/api-keys/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zListOrgApiKeysPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3306,11 +3306,11 @@ export const operationFactories = {
 				id: "list_project_branch_bucket_objects",
 				title: "List objects in a bucket",
 				description: "Lists objects visible in the named bucket on the specified branch,\nincluding those inherited from ancestor branches. Listing is served by\nthe user's session (no customer S3 credentials required).\n\nWhen `delimiter` is supplied (typically `/`), keys are collapsed into\ncommon prefixes (`folders`) so callers can render a folder-style\nbrowser; keys that do not contain the delimiter after `prefix` are\nreturned as `objects`.\n\n**Note**: This endpoint is currently in Beta.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zListProjectBranchBucketObjectsPath,
 	query: zod.zListProjectBranchBucketObjectsQuery.optional(),
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3336,10 +3336,10 @@ export const operationFactories = {
 				id: "list_project_branch_buckets",
 				title: "List buckets on the branch",
 				description: "Lists branchable object storage buckets visible on the specified branch,\nincluding those inherited from ancestor branches.\n\n**Note**: This endpoint is currently in Beta.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zListProjectBranchBucketsPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3365,10 +3365,10 @@ export const operationFactories = {
 				id: "list_project_branch_databases",
 				title: "List databases",
 				description: "Retrieves a list of databases for the specified branch.\nA branch can have multiple databases.\nFor related information, see [Manage databases](https://neon.com/docs/manage/databases/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zListProjectBranchDatabasesPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3394,10 +3394,10 @@ export const operationFactories = {
 				id: "list_project_branch_endpoints",
 				title: "List branch endpoints",
 				description: "Retrieves a list of compute endpoints for the specified branch.\nNeon permits only one read-write compute endpoint per branch.\nA branch can have multiple read-only compute endpoints.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zListProjectBranchEndpointsPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3423,11 +3423,11 @@ export const operationFactories = {
 				id: "list_project_branches",
 				title: "List branches",
 				description: "Retrieves a list of branches for the specified project.\n\nEach Neon project has a root branch named `main`.\nA `branch_id` value has a `br-` prefix.\nA project may contain child branches that were branched from `main` or from another branch.\nA parent branch is identified by the `parent_id` value, which is the `id` of the parent branch.\nFor related information, see [Manage branches](https://neon.com/docs/manage/branches/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zListProjectBranchesPath,
 	query: zod.zListProjectBranchesQuery.optional(),
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3453,11 +3453,11 @@ export const operationFactories = {
 				id: "list_project_branch_functions",
 				title: "List functions on the branch",
 				description: "Lists functions on the specified branch.\n\n**Note**: This endpoint is currently in Beta.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zListProjectBranchFunctionsPath,
 	query: zod.zListProjectBranchFunctionsQuery.optional(),
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3483,10 +3483,10 @@ export const operationFactories = {
 				id: "list_project_branch_log_fields",
 				title: "List branch log fields",
 				description: "Lists the low-cardinality log fields observed on this branch whose\ndistinct values can be discovered with the log field-values endpoint.\n\nThe set is computed per branch and grows as new fields are observed, so\ntreat it as data rather than a fixed list: discover a field here, then\npass it as `field_name` to the field-values endpoint.\n\n**Note**: This endpoint is currently in Private Beta.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zListProjectBranchLogFieldsPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3512,11 +3512,11 @@ export const operationFactories = {
 				id: "list_project_branch_log_field_values",
 				title: "List branch log field values",
 				description: "Lists the distinct values observed for a low-cardinality log field in\nthe requested time range. Call the log fields endpoint first to learn\nwhich `field_name` values this branch supports; a field that branch has\nnever emitted is rejected with `unknown_field`.\n\nGive the window either as `since` or as an explicit `start_time`;\nsupplying both is rejected. If neither is given, the previous six hours\nare used. The maximum supported time range is seven days.\n\n**Note**: This endpoint is currently in Private Beta.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zListProjectBranchLogFieldValuesPath,
 	query: zod.zListProjectBranchLogFieldValuesQuery.optional(),
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3542,10 +3542,10 @@ export const operationFactories = {
 				id: "list_project_branch_roles",
 				title: "List roles",
 				description: "Retrieves a list of Postgres roles from the specified branch.\nFor related information, see [Manage roles](https://neon.com/docs/manage/roles/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zListProjectBranchRolesPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3571,10 +3571,10 @@ export const operationFactories = {
 				id: "list_project_endpoints",
 				title: "List compute endpoints",
 				description: "Retrieves a list of compute endpoints for the specified project.\nA compute endpoint is a Neon compute instance.\nFor information about compute endpoints, see [Manage computes](https://neon.com/docs/manage/endpoints/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zListProjectEndpointsPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3600,11 +3600,11 @@ export const operationFactories = {
 				id: "list_project_members",
 				title: "List org members and their project roles",
 				description: "Lists organization members and their per-project roles for an org-owned project.\nReturns 404 when the project is not org-owned, per-project role management is disabled,\nor the caller has no access. Callers with VIEWER or EDITOR see members with\neffective project access. Callers with ADMIN also see unassigned org members.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zListProjectMembersPath,
 	query: zod.zListProjectMembersQuery.optional(),
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3630,11 +3630,11 @@ export const operationFactories = {
 				id: "list_project_operations",
 				title: "List operations",
 				description: "Retrieves a list of operations for the specified Neon project.\nThe number of operations returned can be large.\nTo paginate the response, issue an initial request with a `limit` value.\nThen, add the `cursor` value that was returned in the response to the next request.\nOperations older than 6 months may be deleted from our systems.\nIf you need more history than that, you should store your own history.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zListProjectOperationsPath,
 	query: zod.zListProjectOperationsQuery.optional(),
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3660,10 +3660,10 @@ export const operationFactories = {
 				id: "list_project_permissions",
 				title: "List project access",
 				description: "Retrieves details about users who have access to the project, including the permission `id`, the granted-to email address, and the date project access was granted.",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zListProjectPermissionsPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3689,10 +3689,10 @@ export const operationFactories = {
 				id: "list_projects",
 				title: "List projects",
 				description: "Retrieves a list of projects for the specified organization.\nIf using a personal API key, include the `org_id` parameter to specify which organization to work with.\nIf using an org API key, `org_id` is automatically inferred from the key.\nFor more information, see [Manage organizations using the Neon API](https://neon.com/docs/manage/orgs-api)\nand [Manage projects](https://neon.com/docs/manage/projects/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	query: zod.zListProjectsQuery.optional(),
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3718,10 +3718,10 @@ export const operationFactories = {
 				id: "list_project_vpc_endpoints",
 				title: "List VPC endpoint restrictions",
 				description: "Lists VPC endpoint restrictions for the specified Neon project.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zListProjectVpcEndpointsPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3747,10 +3747,10 @@ export const operationFactories = {
 				id: "list_shared_projects",
 				title: "List shared projects",
 				description: "Retrieves a list of projects shared with your Neon account.\nFor more information, see [Manage projects](https://neon.com/docs/manage/projects/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	query: zod.zListSharedProjectsQuery.optional(),
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3776,10 +3776,10 @@ export const operationFactories = {
 				id: "list_snapshots",
 				title: "List project snapshots",
 				description: "Lists the snapshots for the specified project.\nEach snapshot represents a point-in-time backup of the project data.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zListSnapshotsPath,
 }),
-				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: true },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3805,7 +3805,7 @@ export const operationFactories = {
 				id: "presign_project_branch_bucket_object",
 				title: "Presign an upload or download for an object in a bucket",
 				description: "Returns a presigned URL that transfers bytes directly to or from the\nobject's bucket on the specified branch, without the caller ever\nhandling S3 credentials. The `operation` field selects the direction:\n\n- `upload` returns a presigned `PUT` URL (the caller `PUT`s the file\n  bytes straight to `url` with the returned `headers`). Authorized with\n  project write access.\n- `download` returns a presigned `GET` URL (the caller `GET`s the\n  bytes straight from `url`). Authorized with project read access.\n\nThe platform mints a short-lived credential and builds the SigV4-signed\nURL against the branch's S3 data-plane host, returning it together with\nthe HTTP method, any headers the caller must echo, and the URL's expiry.\n\nServed by the user's session (no customer S3 credentials required).\n\n**Note**: This endpoint is currently in Beta.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zPresignProjectBranchBucketObjectBody,
 	path: zod.zPresignProjectBranchBucketObjectPath,
 }),
@@ -3835,7 +3835,7 @@ export const operationFactories = {
 				id: "query_project_branch_logs",
 				title: "Query branch logs",
 				description: "Returns logs emitted by services running on the specified branch,\nordered by timestamp according to `sort_order`.\n\nAll supplied filters are combined with `AND`: a record is returned only\nwhen it matches every filter. `minimum_severity` and `severity_text` are\nindependent filters, so setting both requires a record to clear the\nseverity floor *and* match the exact severity text.\n\nSupply `logql` instead of the structured filters to run a raw LogQL\nexpression. Combining it with any structured filter is rejected rather\nthan silently ignored; `limit`, `sort_order`, and the time window still\napply, because those bound the query rather than form part of the\nexpression.\n\nGive the window either as `since` — a duration ending at `end_time`, or\nat the current time when `end_time` is omitted — or as an explicit\n`start_time`. Supplying both is rejected.\n\nA single response holds at most 1,000 records. When `is_truncated` is\n`true`, pass the returned `next_cursor` back as `cursor` to fetch the\nnext page, repeating the time range and every filter unchanged.\n\nIf no time range is supplied, the query covers the previous hour. The\nmaximum supported time range is seven days. `end_time` is exclusive.\n\n**Note**: This endpoint is currently in Private Beta.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zQueryProjectBranchLogsBody,
 	path: zod.zQueryProjectBranchLogsPath,
 }),
@@ -3865,7 +3865,7 @@ export const operationFactories = {
 				id: "recover_project",
 				title: "Recover a deleted project",
 				description: "Recovers a deleted project within the 7-day deletion recovery period.\nRestores branches, endpoints, settings, and connection strings.\nSome integrations require manual reconfiguration after recovery.\nTo list recoverable projects, use `GET /projects?recoverable=true`.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zRecoverProjectPath,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -3894,7 +3894,7 @@ export const operationFactories = {
 				id: "remove_organization_member",
 				title: "Remove organization member",
 				description: "Removes the specified member from the organization.\nOnly organization admins can perform this action.\nThe last admin in an organization cannot be removed.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zRemoveOrganizationMemberPath,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -3923,7 +3923,7 @@ export const operationFactories = {
 				id: "remove_project_member_role",
 				title: "Remove an org member's role on a project",
 				description: "Idempotently removes the explicit project grant. The member's organization-role\ndefault project permission still applies. Self-DELETE requires\n`confirm_self_lockout=true` when effective manage access would be lost.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zRemoveProjectMemberRolePath,
 	query: zod.zRemoveProjectMemberRoleQuery.optional(),
 }),
@@ -3953,7 +3953,7 @@ export const operationFactories = {
 				id: "reset_project_branch_role_password",
 				title: "Reset role password",
 				description: "Resets the password for the specified Postgres role.\nReturns a new password and operations. The new password is ready to use when the last operation finishes.\nThe old password remains valid until last operation finishes.\nConnections to the compute endpoint are dropped. If idle,\nthe compute endpoint becomes active for a short period of time.\n\nFor related information, see [Manage roles](https://neon.com/docs/manage/roles/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zResetProjectBranchRolePasswordPath,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -3982,7 +3982,7 @@ export const operationFactories = {
 				id: "restart_project_endpoint",
 				title: "Restart compute endpoint",
 				description: "Restarts the specified compute endpoint by immediately suspending it and then starting it again.\nAn `endpoint_id` has an `ep-` prefix.\nFor information about compute endpoints, see [Manage computes](https://neon.com/docs/manage/endpoints/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zRestartProjectEndpointPath,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -4011,7 +4011,7 @@ export const operationFactories = {
 				id: "restore_project_branch",
 				title: "Restore branch to a historical state",
 				description: "Restores a branch to an earlier state in its own or another branch's history\nby specifying an LSN or timestamp.\nCreates a new branch from the historical state.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zRestoreProjectBranchBody,
 	path: zod.zRestoreProjectBranchPath,
 }),
@@ -4041,7 +4041,7 @@ export const operationFactories = {
 				id: "restore_snapshot",
 				title: "Restore snapshot",
 				description: "Restores the specified snapshot to a new branch,\nand optionally finalizes the restore operation to replace the original branch.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zRestoreSnapshotBody.optional(),
 	path: zod.zRestoreSnapshotPath,
 	query: zod.zRestoreSnapshotQuery.optional(),
@@ -4072,7 +4072,7 @@ export const operationFactories = {
 				id: "revoke_api_key",
 				title: "Revoke API key",
 				description: "Revokes the specified API key.\nAn API key that is no longer needed can be revoked.\nThis action cannot be reversed.\nAPI keys can also be managed in the Neon Console.\nSee [Manage API keys](https://neon.com/docs/manage/api-keys/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zRevokeApiKeyPath,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -4101,7 +4101,7 @@ export const operationFactories = {
 				id: "revoke_credential",
 				title: "Revoke a credential",
 				description: "Soft-deletes the credential.  Idempotent.\n\n**Note**: This endpoint is currently in Beta.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zRevokeCredentialPath,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -4130,7 +4130,7 @@ export const operationFactories = {
 				id: "revoke_org_api_key",
 				title: "Revoke organization API key",
 				description: "Revokes the specified organization API key.\nAn API key that is no longer needed can be revoked.\nThis action cannot be reversed.\nAPI keys can also be managed in the Neon Console.\nSee [Manage API keys](https://neon.com/docs/manage/api-keys/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zRevokeOrgApiKeyPath,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -4159,7 +4159,7 @@ export const operationFactories = {
 				id: "revoke_permission_from_project",
 				title: "Revoke project access",
 				description: "Revokes project access from the user associated with the specified permission `id`. You can retrieve a user's permission `id` by listing project access.",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zRevokePermissionFromProjectPath,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -4188,7 +4188,7 @@ export const operationFactories = {
 				id: "send_neon_auth_test_email",
 				title: "Send test email",
 				description: "Sends a test email using the configured email server settings to verify SMTP connectivity and credentials.\nThe request body must include the SMTP server settings\n(`host`, `port`, `username`, `password`, `sender_email`, `sender_name`) and the `recipient_email` address.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zSendNeonAuthTestEmailBody,
 	path: zod.zSendNeonAuthTestEmailPath,
 }),
@@ -4218,7 +4218,7 @@ export const operationFactories = {
 				id: "set_default_project_branch",
 				title: "Set branch as default",
 				description: "Sets the specified branch as the project's default branch.\nThe default designation is automatically removed from the previous default branch.\nFor more information, see [Manage branches](https://neon.com/docs/manage/branches/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zSetDefaultProjectBranchPath,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -4247,7 +4247,7 @@ export const operationFactories = {
 				id: "set_organization_spending_limit",
 				title: "Set organization spending limit",
 				description: "Sets the monthly spending limit for the specified organization.\nTo remove a previously configured limit, send a DELETE request to this endpoint.\nWhen a limit is configured, email notifications are sent at 80% and 100% of the limit.\nComputes are not suspended when the limit is reached.\nAvailable to organization admins on Launch and Scale plans only.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zSetOrganizationSpendingLimitBody,
 	path: zod.zSetOrganizationSpendingLimitPath,
 }),
@@ -4277,7 +4277,7 @@ export const operationFactories = {
 				id: "set_project_member_role",
 				title: "Set an org member's role on a project",
 				description: "Idempotently sets or updates the explicit project grant of the specified org member.\nSelf-demotion requires `confirm_self_demotion=true`.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zSetProjectMemberRoleBody,
 	path: zod.zSetProjectMemberRolePath,
 	query: zod.zSetProjectMemberRoleQuery.optional(),
@@ -4308,7 +4308,7 @@ export const operationFactories = {
 				id: "set_snapshot_schedule",
 				title: "Update backup schedule",
 				description: "Updates the backup schedule for the specified branch.\nThe schedule defines how often automatic snapshots are created (for example, `daily` or `weekly`). Requires a paid plan.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zSetSnapshotScheduleBody,
 	path: zod.zSetSnapshotSchedulePath,
 }),
@@ -4338,7 +4338,7 @@ export const operationFactories = {
 				id: "start_anonymization",
 				title: "Start anonymization",
 				description: "Starts the anonymization process for an anonymized branch that is in the initialized, error, or anonymized state.\nThis will apply all defined masking rules to anonymize sensitive data in the branch databases.\nThe branch must be an anonymized branch to start anonymization.\n\n**Note**: This endpoint is currently in Beta.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zStartAnonymizationPath,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -4367,7 +4367,7 @@ export const operationFactories = {
 				id: "start_project_endpoint",
 				title: "Start compute endpoint",
 				description: "Starts a compute endpoint.\nThe compute endpoint is ready to use after the last operation in the chain finishes successfully.\n\nAn `endpoint_id` has an `ep-` prefix.\nFor information about compute endpoints, see [Manage computes](https://neon.com/docs/manage/endpoints/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zStartProjectEndpointPath,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -4396,7 +4396,7 @@ export const operationFactories = {
 				id: "suspend_project_endpoint",
 				title: "Suspend compute endpoint",
 				description: "Suspends the specified compute endpoint.\nAn `endpoint_id` has an `ep-` prefix.\nFor information about compute endpoints, see [Manage computes](https://neon.com/docs/manage/endpoints/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	path: zod.zSuspendProjectEndpointPath,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -4425,7 +4425,7 @@ export const operationFactories = {
 				id: "transfer_neon_auth_provider_project",
 				title: "Transfer Neon-managed auth project to your own account",
 				description: "Transfers ownership of your Neon-managed auth project to your own auth provider account.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zTransferNeonAuthProviderProjectBody,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -4454,7 +4454,7 @@ export const operationFactories = {
 				id: "transfer_projects_from_org_to_org",
 				title: "Transfer projects between organizations",
 				description: "Transfers selected projects, identified by their IDs, from your organization to another specified organization.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zTransferProjectsFromOrgToOrgBody,
 	path: zod.zTransferProjectsFromOrgToOrgPath,
 }),
@@ -4484,7 +4484,7 @@ export const operationFactories = {
 				id: "transfer_projects_from_user_to_org",
 				title: "Transfer projects from personal account to organization",
 				description: "Deprecated. Personal accounts have been migrated to organizations, so this operation no longer applies. Removal scheduled for July 1, 2026.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zTransferProjectsFromUserToOrgBody,
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -4513,7 +4513,7 @@ export const operationFactories = {
 				id: "update_branch_neon_auth_oauth_provider",
 				title: "Update OAuth provider",
 				description: "Updates an OAuth provider for the specified project.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zUpdateBranchNeonAuthOauthProviderBody,
 	path: zod.zUpdateBranchNeonAuthOauthProviderPath,
 }),
@@ -4543,7 +4543,7 @@ export const operationFactories = {
 				id: "update_masking_rules",
 				title: "Update masking rules",
 				description: "Updates the masking rules for the specified anonymized branch.\nMasking rules define how sensitive data should be anonymized using PostgreSQL Anonymizer.\n\n**Note**: This endpoint is currently in Beta.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zUpdateMaskingRulesBody,
 	path: zod.zUpdateMaskingRulesPath,
 }),
@@ -4573,7 +4573,7 @@ export const operationFactories = {
 				id: "update_neon_auth_allow_localhost",
 				title: "Update localhost allow setting",
 				description: "Updates the localhost allow setting for the specified branch's Neon Auth integration.\nWhen enabled, authentication flows work from `localhost` without adding it to the redirect URI whitelist.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zUpdateNeonAuthAllowLocalhostBody,
 	path: zod.zUpdateNeonAuthAllowLocalhostPath,
 }),
@@ -4603,7 +4603,7 @@ export const operationFactories = {
 				id: "update_neon_auth_config",
 				title: "Update auth configuration",
 				description: "Updates the auth configuration for the branch.\nCurrently supports updating the application name used in auth emails.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zUpdateNeonAuthConfigBody,
 	path: zod.zUpdateNeonAuthConfigPath,
 }),
@@ -4633,7 +4633,7 @@ export const operationFactories = {
 				id: "update_neon_auth_email_and_password_config",
 				title: "Update email and password configuration",
 				description: "Updates the email and password authentication configuration for the specified branch's Neon Auth integration.\nOnly the fields provided in the request body are updated.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zUpdateNeonAuthEmailAndPasswordConfigBody,
 	path: zod.zUpdateNeonAuthEmailAndPasswordConfigPath,
 }),
@@ -4663,7 +4663,7 @@ export const operationFactories = {
 				id: "update_neon_auth_email_provider",
 				title: "Update email provider configuration",
 				description: "Updates the email provider configuration for the specified branch's Neon Auth integration.\nThe email provider handles transactional messages such as verification emails and password reset links.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zUpdateNeonAuthEmailProviderBody,
 	path: zod.zUpdateNeonAuthEmailProviderPath,
 }),
@@ -4693,7 +4693,7 @@ export const operationFactories = {
 				id: "update_neon_auth_email_server",
 				title: "Update email server configuration",
 				description: "Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/email_provider` instead. Removal scheduled for March 1, 2026.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zUpdateNeonAuthEmailServerBody,
 	path: zod.zUpdateNeonAuthEmailServerPath,
 }),
@@ -4723,7 +4723,7 @@ export const operationFactories = {
 				id: "update_neon_auth_magic_link_plugin",
 				title: "Update magic link plugin configuration",
 				description: "Updates the magic link plugin configuration for Neon Auth.\nThe magic link plugin enables passwordless authentication via email magic links.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zUpdateNeonAuthMagicLinkPluginBody,
 	path: zod.zUpdateNeonAuthMagicLinkPluginPath,
 }),
@@ -4753,7 +4753,7 @@ export const operationFactories = {
 				id: "update_neon_auth_oauth_provider",
 				title: "Update OAuth provider",
 				description: "Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/oauth_providers/{oauth_provider_id}` instead. Removal scheduled for March 1, 2026.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zUpdateNeonAuthOauthProviderBody,
 	path: zod.zUpdateNeonAuthOauthProviderPath,
 }),
@@ -4783,7 +4783,7 @@ export const operationFactories = {
 				id: "update_neon_auth_organization_plugin",
 				title: "Update organization plugin configuration",
 				description: "Updates the organization plugin configuration for Neon Auth.\nThe organization plugin enables multi-tenant organization support.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zUpdateNeonAuthOrganizationPluginBody,
 	path: zod.zUpdateNeonAuthOrganizationPluginPath,
 }),
@@ -4813,7 +4813,7 @@ export const operationFactories = {
 				id: "update_neon_auth_phone_number_plugin",
 				title: "Update phone number plugin configuration",
 				description: "Updates the phone number plugin configuration for Neon Auth.\nOnly the fields provided in the request body are updated; omitted fields retain their current values.\nThe phone number plugin enables phone-based OTP authentication.\nOTP codes are delivered via the `send.otp` webhook event with `delivery_preference: \"sms\"`.\nA webhook must be configured with the `send.otp` event enabled for SMS delivery to work.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zUpdateNeonAuthPhoneNumberPluginBody,
 	path: zod.zUpdateNeonAuthPhoneNumberPluginPath,
 }),
@@ -4843,7 +4843,7 @@ export const operationFactories = {
 				id: "update_neon_auth_user_role",
 				title: "Update auth user role",
 				description: "Updates the role of a user in the Neon Auth user directory for the specified branch.\nThe role controls the user's level of access within the Neon Auth integration.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zUpdateNeonAuthUserRoleBody,
 	path: zod.zUpdateNeonAuthUserRolePath,
 }),
@@ -4873,7 +4873,7 @@ export const operationFactories = {
 				id: "update_neon_auth_webhook_config",
 				title: "Update Neon Auth webhook configuration",
 				description: "Updates the webhook configuration for the specified branch's Neon Auth integration.\nWebhooks notify an external endpoint when auth events occur, such as user creation or sign-in.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zUpdateNeonAuthWebhookConfigBody,
 	path: zod.zUpdateNeonAuthWebhookConfigPath,
 }),
@@ -4903,7 +4903,7 @@ export const operationFactories = {
 				id: "update_organization_member",
 				title: "Update role for organization member",
 				description: "Updates the role of an existing member in the specified organization.\nThe requested role must be valid for the organization.\nOnly organization admins can call this endpoint.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zUpdateOrganizationMemberBody,
 	path: zod.zUpdateOrganizationMemberPath,
 }),
@@ -4933,7 +4933,7 @@ export const operationFactories = {
 				id: "update_project",
 				title: "Update project",
 				description: "Updates the specified project.\nConfigurable properties include the project name, default compute settings, history retention period, and IP allowlist.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zUpdateProjectBody,
 	path: zod.zUpdateProjectPath,
 }),
@@ -4963,7 +4963,7 @@ export const operationFactories = {
 				id: "update_project_branch",
 				title: "Update branch",
 				description: "Updates the specified branch.\nFor more information, see [Manage branches](https://neon.com/docs/manage/branches/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zUpdateProjectBranchBody,
 	path: zod.zUpdateProjectBranchPath,
 }),
@@ -4993,7 +4993,7 @@ export const operationFactories = {
 				id: "update_project_branch_data_api",
 				title: "Update Neon Data API",
 				description: "Updates the Neon Data API configuration for the specified branch.\nYou can optionally provide settings to update the Data API configuration.\nThe schema cache is always refreshed as part of this operation.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zUpdateProjectBranchDataApiBody.optional(),
 	path: zod.zUpdateProjectBranchDataApiPath,
 }),
@@ -5023,7 +5023,7 @@ export const operationFactories = {
 				id: "update_project_branch_database",
 				title: "Update database",
 				description: "Updates the specified database in the branch.\nFor related information, see [Manage databases](https://neon.com/docs/manage/databases/).\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zUpdateProjectBranchDatabaseBody,
 	path: zod.zUpdateProjectBranchDatabasePath,
 }),
@@ -5053,7 +5053,7 @@ export const operationFactories = {
 				id: "update_project_branch_function",
 				title: "Update a function",
 				description: "Updates the function's mutable metadata — currently only the display\n`name`. A string sets the display name; `null` clears it, after which\nthe function's `name` falls back to its slug. Leading and trailing\nwhitespace is trimmed; a whitespace-only name is rejected. Acts only\non a function owned by the branch: a slug that is only inherited from\nan ancestor branch returns 404 — rename it on the branch that owns\nit. Like every other change on a branch, a rename is isolated per\nbranch: a branch forked before the rename keeps the name it had at\nfork time.\n\n**Note**: This endpoint is currently in Beta.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zUpdateProjectBranchFunctionBody,
 	path: zod.zUpdateProjectBranchFunctionPath,
 }),
@@ -5083,7 +5083,7 @@ export const operationFactories = {
 				id: "update_project_endpoint",
 				title: "Update compute endpoint",
 				description: "Updates the specified compute endpoint.\n\nAn `endpoint_id` has an `ep-` prefix. A `branch_id` has a `br-` prefix.\nFor more information about compute endpoints, see [Manage computes](https://neon.com/docs/manage/endpoints/).\n\nIf the returned list of operations is not empty, the compute endpoint is not ready to use.\nThe client must wait for the last operation to finish before using the compute endpoint.\nIf the compute endpoint was idle before the update, it becomes active for a short period of time,\nand the control plane suspends it again after the update.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zUpdateProjectEndpointBody,
 	path: zod.zUpdateProjectEndpointPath,
 }),
@@ -5113,7 +5113,7 @@ export const operationFactories = {
 				id: "update_snapshot",
 				title: "Update snapshot",
 				description: "Updates the specified snapshot.\n",
-				inputSchema: z.object({
+				inputSchema: z.strictObject({
 	body: zod.zUpdateSnapshotBody,
 	path: zod.zUpdateSnapshotPath,
 }),

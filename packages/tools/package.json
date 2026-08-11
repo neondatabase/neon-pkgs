@@ -70,7 +70,7 @@
 	"scripts": {
 		"build": "tsc --noEmit && tsdown && tsc -p tsconfig.build.json",
 		"generate": "openapi-ts && node scripts/generate-tools.mjs",
-		"generate:check": "pnpm generate && git diff --exit-code -- src/generated src/operations.gen.ts",
+		"generate:check": "pnpm generate && git diff --exit-code -- src/generated src/operations.gen.ts src/schemas.ts",
 		"prepare": "npm run build",
 		"test": "vitest --passWithNoTests",
 		"test:ci": "pnpm generate:check && vitest run --passWithNoTests",

@@ -1,7 +1,8 @@
 import { encodeBlob } from "./binary.js";
-import type { NeonToolResult } from "./operation.js";
+import type { JsonSafe, NeonToolResult } from "./operation.js";
 
-const toJsonSafe = async (value: unknown): Promise<unknown> => {
+function toJsonSafe<Value>(value: Value): Promise<JsonSafe<Value>>;
+async function toJsonSafe(value: unknown): Promise<unknown> {
 	if (value === undefined || value === null) {
 		return null;
 	}
@@ -34,10 +35,10 @@ const toJsonSafe = async (value: unknown): Promise<unknown> => {
 		return Object.fromEntries(entries);
 	}
 	throw new TypeError(`Unsupported tool result value: ${typeof value}`);
-};
+}
 
-export const toToolResult = async (
-	value: unknown,
-): Promise<NeonToolResult> => ({
+export const toToolResult = async <Value>(
+	value: Value,
+): Promise<NeonToolResult<JsonSafe<Value>>> => ({
 	data: await toJsonSafe(value),
 });
