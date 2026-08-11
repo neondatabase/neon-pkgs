@@ -50,7 +50,7 @@ describe("env pull key selection", () => {
 
 	it("requires the two object-storage credential variables together", () => {
 		expect(() => envKeysForSelection([], ["AWS_ACCESS_KEY_ID"])).toThrow(
-			"AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be selected together",
+			/AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be selected together.*Add the missing key to --env, or use --service object-storage/,
 		);
 
 		expect(

@@ -461,6 +461,8 @@ Every services flag in the CLI takes those three spellings, the same value synta
 
 `-e, --env` accepts any variable in the table plus `NEON_BRANCH`. It is case-sensitive and rejects unknown names rather than silently widening the pull. `NEON_BRANCH` is written by unscoped and service-scoped pulls because it is branch identity, not a service; an env-only pull writes it only when you select it.
 
+`--env` never narrows `--service`: `neon env pull -s postgres -e DATABASE_URL` still pulls the complete Postgres bundle (`DATABASE_URL`, `DATABASE_URL_UNPOOLED`, and `NEON_BRANCH`). The two selectors always form a union.
+
 **A scoped pull is scoped in both directions.** An unscoped `env pull` owns the Neon-named variables: pointing a directory at a branch without Neon Auth prunes the stale `NEON_AUTH_*` lines. `--service` narrows that to the services you named, while `--env` narrows it to the exact keys you named, so `env pull -e DATABASE_URL` never touches `DATABASE_URL_UNPOOLED`. (`AWS_*` is never pruned by any pull: those names collide with credentials you may set yourself, so `env pull` only ever writes them.)
 
 **A scoped pull also never revokes a credential.** Where an unscoped pull revokes the credential it replaces, a scoped one leaves the old one live — it can't tell which other variables still use it. It says so when it happens; revoke it in the Neon Console if nothing does.

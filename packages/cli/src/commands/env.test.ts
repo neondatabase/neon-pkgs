@@ -27,10 +27,12 @@ import type {
 } from "@neon/config";
 import { ErrorCode, PlatformError } from "@neon/config";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import yargs from "yargs/yargs";
 
 import { readEnvFile } from "../env_file.js";
 import {
 	autoPullEnvAfterPin,
+	builder,
 	type EnvPullProps,
 	type PullOutcome,
 	pull,
@@ -1040,5 +1042,19 @@ describe("autoPullEnvAfterPin (bundled into link / checkout)", () => {
 		expect(result.status).toBe("failed");
 		// Nothing is written when the pull fails before resolving any vars.
 		expect(existsSync(join(cwd, ".env.local"))).toBe(false);
+	});
+});
+
+describe("env pull option parsing", () => {
+	it("rejects a misspelled selector before starting an unscoped pull", () => {
+		const parser = builder(
+			yargs(["pull", "--envs", "DATABASE_URL"])
+				.exitProcess(false)
+				.fail((message, error) => {
+					throw error ?? new Error(message);
+				}),
+		);
+
+		expect(() => parser.parse()).toThrow("Unknown argument: envs");
 	});
 });

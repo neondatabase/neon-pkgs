@@ -97,7 +97,7 @@ export const builder = (argv: yargs.Argv) =>
 							describe:
 								`Pull only these individual variables: ${ENV_PULL_KEYS.join(", ")}. ` +
 								"Repeat the flag or comma-separate. Overrides neon.ts. Combines " +
-								"with --service as a union.",
+								"with --service as a union; it never narrows a service bundle.",
 							type: "array",
 							string: true,
 						},
@@ -135,7 +135,8 @@ export const builder = (argv: yargs.Argv) =>
 					.example(
 						"$0 env pull -s auth -e DATABASE_URL",
 						"Pull all Auth variables plus DATABASE_URL",
-					),
+					)
+					.strict(),
 			async (args) => {
 				const rawServices = servicesFlagValue(args.service);
 				const rawEnvKeys = envPullFlagValue(args.env);

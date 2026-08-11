@@ -124,7 +124,8 @@ export const envKeysForSelection = (
 	if (hasStorageAccessKey !== hasStorageSecret) {
 		throw new Error(
 			"AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be selected together: " +
-				"they are two halves of one newly issued object-storage credential.",
+				"they are two halves of one newly issued object-storage credential. " +
+				"Add the missing key to --env, or use --service object-storage.",
 		);
 	}
 
