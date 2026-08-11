@@ -81,7 +81,7 @@ const assertDisjointAllOf = (value, location = "#") => {
 	}
 	if (!value || typeof value !== "object") return;
 	if (Array.isArray(value.allOf)) {
-		const names = new Set();
+		const names = new Set(Object.keys(value.properties ?? {}));
 		for (const child of value.allOf) {
 			for (const name of allOfPropertyNames(child)) {
 				if (names.has(name)) {
