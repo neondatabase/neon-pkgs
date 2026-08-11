@@ -210,12 +210,74 @@ describe("fetchEnv key filter (types)", () => {
 			}>
 		>();
 
+		// @ts-expect-error storage credential halves must be selected together
 		fetchEnv(config, {
 			projectId: "proj",
 			branch: "main",
-			// @ts-expect-error storage credential halves must be selected together
 			keys: ["AWS_ACCESS_KEY_ID"],
 		});
+	});
+
+	test("requires both storage credential halves in every tuple alternative", () => {
+		const config = defineConfig({
+			preview: { buckets: { uploads: {} } },
+		});
+		const keys =
+			Math.random() > 0.5
+				? (["AWS_ACCESS_KEY_ID"] as const)
+				: (["AWS_SECRET_ACCESS_KEY"] as const);
+
+		const options = {
+			projectId: "proj",
+			branch: "main",
+			keys,
+		};
+		// @ts-expect-error every tuple alternative must contain both credential halves
+		fetchEnv(config, options);
+	});
+
+	test("preserves valid storage tuple alternatives exactly", () => {
+		const config = defineConfig({
+			preview: { buckets: { uploads: {} } },
+		});
+		const keys =
+			Math.random() > 0.5
+				? (["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"] as const)
+				: (["AWS_ENDPOINT_URL_S3"] as const);
+		const env = fetchEnv(config, {
+			projectId: "proj",
+			branch: "main",
+			keys,
+		});
+
+		expectTypeOf(env).toEqualTypeOf<
+			Promise<
+				| {
+						storage: {
+							accessKeyId: string;
+							secretAccessKey: string;
+						};
+				  }
+				| { storage: { endpoint: string } }
+			>
+		>();
+	});
+
+	test("does not infer the explicit-generic overload from a contextual return", () => {
+		const config = defineConfig({
+			preview: { buckets: { uploads: {} } },
+		});
+		// @ts-expect-error an invalid selection cannot produce a complete storage credential
+		const completeStorage: Promise<{
+			storage: { accessKeyId: string; secretAccessKey: string };
+		}> =
+			// @ts-expect-error inferred callers cannot bypass the storage pair rule
+			fetchEnv(config, {
+				projectId: "proj",
+				branch: "main",
+				keys: ["AWS_ACCESS_KEY_ID"],
+			});
+		void completeStorage;
 	});
 
 	test("accepts a dynamic storage selection for runtime validation", () => {

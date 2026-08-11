@@ -423,14 +423,31 @@ type StorageCredentialEnvKey = "AWS_ACCESS_KEY_ID" | "AWS_SECRET_ACCESS_KEY";
  * Reject a fixed key tuple that contains only one half of the storage credential. Dynamic
  * arrays are checked at runtime because their contents are not known to TypeScript.
  */
-type StorageKeyPairConstraint<Keys extends readonly string[]> =
-	number extends Keys["length"]
-		? unknown
-		: [Extract<Keys[number], StorageCredentialEnvKey>] extends [never]
-			? unknown
-			: StorageCredentialEnvKey extends Keys[number]
-				? unknown
-				: never;
+type InvalidStorageKeyTuple<Keys extends readonly string[]> =
+	Keys extends unknown
+		? number extends Keys["length"]
+			? never
+			: [Extract<Keys[number], StorageCredentialEnvKey>] extends [never]
+				? never
+				: StorageCredentialEnvKey extends Keys[number]
+					? never
+					: Keys
+		: never;
+
+type StorageKeyPairConstraint<Keys extends readonly string[]> = [
+	InvalidStorageKeyTuple<Keys>,
+] extends [never]
+	? unknown
+	: never;
+
+type FetchEnvKeysFromArgs<Args extends readonly unknown[]> = Args[0] extends {
+	keys: infer Keys extends readonly string[];
+}
+	? Keys
+	: never;
+
+type StorageKeyPairArgsConstraint<Args extends readonly unknown[]> =
+	StorageKeyPairConstraint<FetchEnvKeysFromArgs<Args>>;
 
 /** Preserve the same pair rule for callers that explicitly provide the legacy `K` generic. */
 type StorageKeyUnionConstraint<K extends string> = [
@@ -524,42 +541,46 @@ export interface FetchEnvOptions {
  */
 export async function fetchEnv<
 	const C extends Config,
-	const Keys extends readonly SelectableEnvKey<C>[],
+	const Args extends readonly [
+		options: FetchEnvOptions & {
+			/**
+			 * Fetch only these OS-level env vars, instead of everything the policy enables. The
+			 * keys autocomplete from the policy ({@link SelectableEnvKey}), and the result is
+			 * narrowed to match ({@link SelectedNeonEnv}). Inline literal arrays produce an exact
+			 * result; runtime-built arrays make their possible namespaces and properties optional.
+			 * `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` must be selected together.
+			 *
+			 * The point is not just a smaller result: **work is skipped too.** Leave out
+			 * `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `NEON_AI_GATEWAY_TOKEN` and no branch
+			 * credential is minted at all, so a caller that already holds valid secrets can refresh
+			 * everything else without issuing a new one. The non-secret vars of the same features
+			 * (`AWS_ENDPOINT_URL_S3`, `AWS_REGION`, `NEON_AI_GATEWAY_BASE_URL`) are not
+			 * credential-backed and stay available on their own.
+			 *
+			 * The selection **intersects** with the policy rather than overriding it: naming a var
+			 * the branch policy does not enable is not an error, it simply yields nothing.
+			 */
+			keys: readonly SelectableEnvKey<C>[];
+		},
+	],
 >(
 	config: C,
-	options: FetchEnvOptions & {
-		/**
-		 * Fetch only these OS-level env vars, instead of everything the policy enables. The
-		 * keys autocomplete from the policy ({@link SelectableEnvKey}), and the result is
-		 * narrowed to match ({@link SelectedNeonEnv}). Inline literal arrays produce an exact
-		 * result; runtime-built arrays make their possible namespaces and properties optional.
-		 * `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` must be selected together.
-		 *
-		 * The point is not just a smaller result: **work is skipped too.** Leave out
-		 * `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `NEON_AI_GATEWAY_TOKEN` and no branch
-		 * credential is minted at all, so a caller that already holds valid secrets can refresh
-		 * everything else without issuing a new one. The non-secret vars of the same features
-		 * (`AWS_ENDPOINT_URL_S3`, `AWS_REGION`, `NEON_AI_GATEWAY_BASE_URL`) are not
-		 * credential-backed and stay available on their own.
-		 *
-		 * The selection **intersects** with the policy rather than overriding it: naming a var
-		 * the branch policy does not enable is not an error, it simply yields nothing.
-		 */
-		keys: Keys & StorageKeyPairConstraint<Keys>;
-	},
-): Promise<SelectedNeonEnv<Keys>>;
+	...args: Args & StorageKeyPairArgsConstraint<NoInfer<Args>>
+): Promise<SelectedNeonEnv<FetchEnvKeysFromArgs<NoInfer<Args>>>>;
 export async function fetchEnv<
 	const C extends Config,
-	const K extends SelectableEnvKey<C>,
+	const K extends SelectableEnvKey<C> = never,
 >(
 	config: C,
-	options: FetchEnvOptions & {
-		keys: readonly K[] & StorageKeyUnionConstraint<K>;
-	},
-): Promise<FilteredNeonEnv<K>>;
+	options: [NoInfer<K>] extends [never]
+		? never
+		: FetchEnvOptions & {
+				keys: readonly NoInfer<K>[];
+			} & StorageKeyUnionConstraint<NoInfer<K>>,
+): Promise<FilteredNeonEnv<NoInfer<K>>>;
 export async function fetchEnv<const C extends Config>(
 	config: C,
-	options: FetchEnvOptions,
+	options: FetchEnvOptions & { keys?: never },
 ): Promise<NeonEnv<C>>;
 export async function fetchEnv(
 	config: Config,
