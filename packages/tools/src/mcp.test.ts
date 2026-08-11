@@ -1,0 +1,143 @@
+import {
+	Client as ClientV2,
+	InMemoryTransport as InMemoryTransportV2,
+} from "@modelcontextprotocol/client";
+import { Client as ClientV1 } from "@modelcontextprotocol/sdk-v1/client/index.js";
+import { InMemoryTransport as InMemoryTransportV1 } from "@modelcontextprotocol/sdk-v1/inMemory.js";
+import { McpServer as McpServerV1 } from "@modelcontextprotocol/sdk-v1/server/mcp.js";
+import { McpServer as McpServerV2 } from "@modelcontextprotocol/server";
+import { afterEach, describe, expect, test } from "vitest";
+import { createNeonTools } from "./index.js";
+import {
+	type McpToolResult,
+	registerNeonTools as registerNeonToolsV2,
+} from "./mcp.js";
+import { registerNeonTools as registerNeonToolsV1 } from "./mcp-v1.js";
+
+const closeables: Array<{ close(): Promise<void> }> = [];
+
+afterEach(async () => {
+	await Promise.all(closeables.splice(0).map((value) => value.close()));
+});
+
+const tools = () =>
+	createNeonTools({
+		apiKey: "test-key",
+		operations: ["listProjects"],
+		fetch: async () =>
+			new Response(
+				JSON.stringify({
+					projects: [{ id: "project-id" }],
+					pagination: {},
+				}),
+				{ headers: { "content-type": "application/json" } },
+			),
+	});
+
+describe("MCP v2 compatibility", () => {
+	test("lists, validates, and calls registered Neon tools", async () => {
+		const server = new McpServerV2({
+			name: "test-server",
+			version: "1.0.0",
+		});
+		registerNeonToolsV2(server, tools());
+		const client = new ClientV2({ name: "test-client", version: "1.0.0" });
+		const [clientTransport, serverTransport] =
+			InMemoryTransportV2.createLinkedPair();
+		await Promise.all([
+			server.connect(serverTransport),
+			client.connect(clientTransport),
+		]);
+		closeables.push(client, server);
+
+		const listed = await client.listTools();
+		expect(listed.tools.map((tool) => tool.name)).toEqual([
+			"list_projects",
+		]);
+		expect(listed.tools[0].annotations?.readOnlyHint).toBe(true);
+		expect(listed.tools[0]._meta?.["neon/requiresApproval"]).toBe(false);
+
+		const called = await client.callTool({
+			name: "list_projects",
+			arguments: {},
+		});
+		expect(called.structuredContent).toEqual({
+			data: { projects: [{ id: "project-id" }], pagination: {} },
+		});
+
+		const invalid = await client.callTool({
+			name: "list_projects",
+			arguments: { query: { limit: "one" } },
+		});
+		expect(invalid.isError).toBe(true);
+	});
+
+	test("returns API failures as structured MCP errors", async () => {
+		type ToolHandler = (
+			input: unknown,
+			context: unknown,
+		) => Promise<McpToolResult>;
+		let handler: ToolHandler | undefined;
+		const server = {
+			registerTool(
+				_name: string,
+				_config: unknown,
+				registeredHandler: ToolHandler,
+			) {
+				handler = registeredHandler;
+			},
+		};
+		const failingTools = createNeonTools({
+			apiKey: "bad-key",
+			operations: ["listProjects"],
+			fetch: async () =>
+				new Response(
+					JSON.stringify({ message: "Authentication failed" }),
+					{
+						status: 401,
+						headers: { "content-type": "application/json" },
+					},
+				),
+		});
+		registerNeonToolsV2(server, failingTools);
+		if (handler === undefined) {
+			throw new Error("Expected MCP tool registration.");
+		}
+
+		const result = await handler({}, {});
+		expect(result).toMatchObject({
+			isError: true,
+			structuredContent: {
+				error: {
+					message: expect.stringContaining("Authentication failed"),
+				},
+			},
+		});
+	});
+});
+
+describe("MCP v1 compatibility", () => {
+	test("registers and calls the same Zod 4 tool schema", async () => {
+		const server = new McpServerV1({
+			name: "test-server",
+			version: "1.0.0",
+		});
+		registerNeonToolsV1(server, tools());
+		const client = new ClientV1({ name: "test-client", version: "1.0.0" });
+		const [clientTransport, serverTransport] =
+			InMemoryTransportV1.createLinkedPair();
+		await Promise.all([
+			server.connect(serverTransport),
+			client.connect(clientTransport),
+		]);
+		closeables.push(client, server);
+
+		const called = await client.callTool({
+			name: "list_projects",
+			arguments: {},
+		});
+		expect(called.structuredContent).toEqual({
+			data: { projects: [{ id: "project-id" }], pagination: {} },
+		});
+	});
+});

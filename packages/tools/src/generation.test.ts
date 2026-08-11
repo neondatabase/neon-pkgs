@@ -1,0 +1,74 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, test } from "vitest";
+import * as z from "zod";
+import { createNeonTool, type NeonOperationId, operationIds } from "./index.js";
+import { zListProjectsQuery } from "./schemas.js";
+
+interface OpenApiOperation {
+	operationId?: string;
+}
+
+interface OpenApiDocument {
+	paths: Record<string, Record<string, OpenApiOperation>>;
+}
+
+const document: OpenApiDocument = JSON.parse(
+	readFileSync(
+		new URL("../../sdk/spec/neon-openapi.json", import.meta.url),
+		"utf8",
+	),
+);
+
+const specOperationIds = Object.values(document.paths)
+	.flatMap((path) => Object.values(path))
+	.map((operation) => operation.operationId)
+	.filter((operationId): operationId is string => operationId !== undefined)
+	.sort();
+
+describe("generated operation coverage", () => {
+	test("matches every operationId in the vendored OpenAPI document", () => {
+		expect(operationIds).toHaveLength(168);
+		expect([...operationIds].sort()).toEqual(specOperationIds);
+	});
+
+	test("produces unique framework-safe ids and JSON schemas", () => {
+		const toolIds = new Set<string>();
+
+		for (const operationId of operationIds) {
+			const tool = createNeonTool(operationId, { apiKey: "test-key" });
+			expect(tool.id).toMatch(/^[a-z0-9_]+$/);
+			expect(toolIds.has(tool.id)).toBe(false);
+			toolIds.add(tool.id);
+			expect(z.toJSONSchema(tool.inputSchema).type).toBe("object");
+		}
+	});
+
+	test("requires approval for mutations and reads that return secrets", () => {
+		const deleteProject = createNeonTool("deleteProject", {
+			apiKey: "test-key",
+		});
+		expect(deleteProject.annotations).toMatchObject({
+			readOnlyHint: false,
+			destructiveHint: true,
+		});
+		expect(deleteProject.requiresApproval).toBe(true);
+
+		const getConnectionUri = createNeonTool("getConnectionURI", {
+			apiKey: "test-key",
+		});
+		expect(getConnectionUri.annotations.readOnlyHint).toBe(true);
+		expect(getConnectionUri.requiresApproval).toBe(true);
+	});
+
+	test("exports operation ids as a selector type", () => {
+		const operationId: NeonOperationId = "listProjects";
+		expect(operationId).toBe("listProjects");
+	});
+
+	test("exports generated request schemas", () => {
+		expect(zListProjectsQuery.parse({ limit: 1 })).toEqual({
+			limit: 1,
+			recoverable: false,
+		});
+	});
+});
