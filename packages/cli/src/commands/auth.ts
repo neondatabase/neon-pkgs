@@ -316,6 +316,11 @@ export const ensureAuth = async (
 		return;
 	}
 
+	// `open` only reads the linked project from `.neon` and launches its Console URL.
+	if (props._[0] === "open") {
+		return;
+	}
+
 	// `dev` runs a function locally. It injects the selected branch's env vars
 	// when credentials happen to be available, but must never trigger an
 	// interactive login: use an API key or existing stored credentials if
