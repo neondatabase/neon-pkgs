@@ -127,6 +127,13 @@ export function messageFromBody(body: unknown): string | undefined {
 		const message = body.message;
 		if (typeof message === "string") return message;
 	}
+	if (body && typeof body === "object" && "error" in body) {
+		const error = body.error;
+		if (error && typeof error === "object" && "message" in error) {
+			const message = error.message;
+			if (typeof message === "string") return message;
+		}
+	}
 	return undefined;
 }
 
@@ -135,6 +142,13 @@ export function codeFromBody(body: unknown): string | undefined {
 	if (body && typeof body === "object" && "code" in body) {
 		const code = body.code;
 		if (typeof code === "string") return code;
+	}
+	if (body && typeof body === "object" && "error" in body) {
+		const error = body.error;
+		if (error && typeof error === "object" && "code" in error) {
+			const code = error.code;
+			if (typeof code === "string") return code;
+		}
 	}
 	return undefined;
 }

@@ -5,6 +5,12 @@ import type yargs from "yargs";
 
 import { log } from "./log.js";
 
+export type ClaimableContext = {
+	version: 1;
+	/** Claimable Neon authorization-server origin, without the `/v1` API prefix. */
+	origin: string;
+};
+
 export type Context = {
 	orgId?: string;
 	projectId?: string;
@@ -20,6 +26,12 @@ export type Context = {
 	 * dropped the next time the context is written.
 	 */
 	branchId?: string;
+	/**
+	 * Present while this project is owned by Claimable Neon. The durable identity assertion
+	 * stays in the owner-only CLI config directory; `.neon` carries only the public issuer
+	 * needed to find it.
+	 */
+	claimable?: ClaimableContext;
 };
 
 /**
@@ -82,6 +94,13 @@ export const isConfigInit = (args: {
  */
 export const isProfileCommand = (args: { _: (string | number)[] }): boolean =>
 	args._[0] === "profile" || args._[0] === "profiles";
+
+/**
+ * `claim` / `claimable` talks to the Claimable Neon authorization service and manages its
+ * own durable assertion. It must never trigger account authentication first.
+ */
+export const isClaimCommand = (args: { _: (string | number)[] }): boolean =>
+	args._[0] === "claim" || args._[0] === "claimable";
 
 /**
  * `neon api-keys …`, under either spelling. Exempts the group from context enrichment: how
@@ -225,6 +244,11 @@ export const enrichFromContext = (
 		return;
 	}
 	if (isSkillsCommand(args)) {
+		return;
+	}
+	// Claim commands resolve their own project and assertion. Letting `.neon` populate their
+	// arguments would make `claim list` accidentally target whichever directory it runs from.
+	if (isClaimCommand(args)) {
 		return;
 	}
 	const context = readContextFile(args.contextFile);

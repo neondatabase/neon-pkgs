@@ -4,7 +4,7 @@ import { wrapNeonError } from "./wrap-neon-error.js";
 
 function axiosLike(
 	status: number,
-	body?: { message?: string; code?: string; request_id?: string },
+	body?: object,
 ): { response: { status: number; data?: object } } {
 	const err: { response: { status: number; data?: object } } = {
 		response: { status },
@@ -50,6 +50,26 @@ describe("wrapNeonError — HTTP status mapping", () => {
 		expect(p.message).toContain(
 			"Project-scoped keys can only operate on their own project",
 		);
+	});
+
+	test("maps a nested Claimable Neon capability error without API-key advice", () => {
+		const err = wrapNeonError(
+			axiosLike(403, {
+				error: {
+					code: "capability_requires_claim",
+					message: "functions requires a claimed project",
+					request_id: "req-claimable",
+				},
+			}),
+			CTX,
+		);
+		const p = err as PlatformError;
+		expect(p.code).toBe(ErrorCode.FeatureUnavailable);
+		expect(p.message).toContain("functions requires a claimed project");
+		expect(p.message).toContain("Claim the project");
+		expect(p.message).not.toContain("API key");
+		expect(p.details.requestId).toBe("req-claimable");
+		expect(p.details.neonCode).toBe("capability_requires_claim");
 	});
 
 	test("404 → NotFound + verifies project id when present", () => {

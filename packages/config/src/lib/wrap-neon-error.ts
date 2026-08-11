@@ -49,6 +49,17 @@ export function wrapNeonError(
 		: "";
 	const apiSummaryWithRequestId = `${apiSummary}${requestIdSuffix}.`;
 
+	if (httpInfo.neonCode === "capability_requires_claim") {
+		return new PlatformError(
+			ErrorCode.FeatureUnavailable,
+			[
+				`${context.op} failed: ${httpInfo.neonMessage ?? "This capability requires a claimed project."}`,
+				"Claim the project before enabling this service.",
+			].join(" "),
+			{ cause: err, details: httpDetails(context, httpInfo) },
+		);
+	}
+
 	switch (httpInfo.status) {
 		case 401:
 			return new PlatformError(
@@ -151,12 +162,20 @@ function extractHttpInfo(err: unknown): HttpInfo | null {
 	const out: HttpInfo = { status };
 	if (data !== null && typeof data === "object") {
 		const dataObj = data as Record<string, unknown>;
-		if (typeof dataObj.message === "string" && dataObj.message !== "")
-			out.neonMessage = dataObj.message;
-		if (typeof dataObj.code === "string" && dataObj.code !== "")
-			out.neonCode = dataObj.code;
-		if (typeof dataObj.request_id === "string" && dataObj.request_id !== "")
-			out.requestId = dataObj.request_id;
+		const nested = dataObj.error;
+		const errorObj =
+			nested !== null && typeof nested === "object"
+				? (nested as Record<string, unknown>)
+				: dataObj;
+		if (typeof errorObj.message === "string" && errorObj.message !== "")
+			out.neonMessage = errorObj.message;
+		if (typeof errorObj.code === "string" && errorObj.code !== "")
+			out.neonCode = errorObj.code;
+		if (
+			typeof errorObj.request_id === "string" &&
+			errorObj.request_id !== ""
+		)
+			out.requestId = errorObj.request_id;
 	}
 	return out;
 }

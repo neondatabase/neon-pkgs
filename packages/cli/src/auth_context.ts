@@ -5,7 +5,11 @@ import { isOwnedCredentialPath } from "./config.js";
  * The 401 handler runs outside yargs, so it needs the exact authentication source
  * to avoid clearing DEFAULT after a named-profile failure.
  */
-export type AuthSource = "api-key" | "profile-api-key" | "stored-credentials";
+export type AuthSource =
+	| "api-key"
+	| "profile-api-key"
+	| "stored-credentials"
+	| "claimable";
 
 export type AuthContext = {
 	source: AuthSource;
@@ -78,6 +82,10 @@ export const authFailureMessage = (context: AuthContext | null): string => {
 	if (context?.source === "profile-api-key") {
 		// Not `rotate-key`: a rejected key cannot authenticate to mint its own replacement.
 		return `Authentication failed: the Neon API rejected profile "${profile}"'s API key${where}. Replace it with \`neon profile create ${profile} --mint\`, or store another with \`neon profile create ${profile} --api-key -\`.`;
+	}
+
+	if (context?.source === "claimable") {
+		return `Authentication failed: Claimable Neon rejected the linked project's short-lived access token${where}. Retry the command to exchange the saved identity assertion again; if it still fails, run \`neon claim status\`.`;
 	}
 
 	// Reached only when the session was not ours to clear, i.e. an adopted credentials file.

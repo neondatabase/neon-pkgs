@@ -5,6 +5,7 @@ import * as bootstrap from "./bootstrap.js";
 import * as branches from "./branches.js";
 import * as bucket from "./bucket.js";
 import * as checkout from "./checkout.js";
+import * as claim from "./claim.js";
 import * as config from "./config.js";
 import * as cs from "./connection_string.js";
 import * as dataApi from "./data_api.js";
@@ -59,6 +60,7 @@ export default [
 	checkout,
 	link,
 	open,
+	claim,
 	init,
 	mcp,
 	skills,

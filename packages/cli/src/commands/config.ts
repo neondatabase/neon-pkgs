@@ -24,6 +24,7 @@ import chalk from "chalk";
 import type yargs from "yargs";
 import { getApiClient, type NeonApiClient } from "../api.js";
 import { type NeonConfigView, toNeonConfigView } from "../config_format.js";
+import { declaredNeonServices } from "../config_services.js";
 import {
 	CONFIG_INIT_NONE_MEANS,
 	CONFIG_INIT_SERVICES,
@@ -748,20 +749,6 @@ export const applyCmd = async (props: ConfigProps): Promise<void> => {
 type ReportMode = "plan" | "apply";
 
 /**
- * A static service toggle (`auth` / `dataApi` / `preview.aiGateway`) is "on" unless
- * explicitly disabled: `true` / `{}` / `{ enabled: true }` enable it; `false` /
- * `{ enabled: false }` / absent leave it off. Mirrors the runtime's `isServiceEnabled`
- * (which isn't exported), kept tiny and pure so it can be read straight off the policy.
- */
-const isToggleEnabled = (
-	toggle: boolean | { enabled?: boolean } | undefined,
-): boolean => {
-	if (toggle === undefined) return false;
-	if (typeof toggle === "boolean") return toggle;
-	return toggle.enabled !== false;
-};
-
-/**
  * Human-readable list of the services a `neon.ts` policy utilizes on the branch, shown under
  * the plan/apply table. Postgres is always present (every branch has it); the rest are listed
  * only when the policy declares them. This deliberately surfaces services that produce **no**
@@ -771,17 +758,18 @@ const isToggleEnabled = (
  * lives in the per-branch closure), so reading it straight off `config` is accurate.
  */
 const utilizedServices = (config: Config): string[] => {
-	const services = ["Postgres"];
-	if (isToggleEnabled(config.auth)) services.push("Neon Auth");
-	if (isToggleEnabled(config.dataApi)) services.push("Data API");
-	if (Object.keys(config.preview?.buckets ?? {}).length > 0) {
-		services.push("Object Storage");
-	}
-	if (Object.keys(config.preview?.functions ?? {}).length > 0) {
-		services.push("Functions");
-	}
-	if (isToggleEnabled(config.preview?.aiGateway)) services.push("AI Gateway");
-	return services;
+	const labels: Record<NeonService, string> = {
+		postgres: "Postgres",
+		auth: "Neon Auth",
+		"data-api": "Data API",
+		"object-storage": "Object Storage",
+		functions: "Functions",
+		"ai-gateway": "AI Gateway",
+	};
+	return [
+		labels.postgres,
+		...declaredNeonServices(config).map((service) => labels[service]),
+	];
 };
 
 /**
