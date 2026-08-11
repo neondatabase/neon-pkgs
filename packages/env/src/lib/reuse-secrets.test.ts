@@ -1,6 +1,6 @@
 import { defineConfig } from "@neon/config/v1";
+import { fetchEnvReusingSecrets } from "@neon-internals/env-core/reuse-secrets";
 import { beforeEach, describe, expect, test } from "vitest";
-import { fetchEnvReusingSecrets } from "../runtime.js";
 import { FakeNeonApi } from "./fake-neon-api.js";
 import { stubCleanNeonEnv } from "./test-utils.js";
 
@@ -58,6 +58,7 @@ describe("fetchEnvReusingSecrets", () => {
 			issued: true,
 			keys: ["NEON_AI_GATEWAY_TOKEN"],
 			revoked: [],
+			superseded: [],
 		});
 	});
 
@@ -90,6 +91,7 @@ describe("fetchEnvReusingSecrets", () => {
 			issued: false,
 			keys: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
 			revoked: [],
+			superseded: [],
 		});
 		// The non-secret storage vars are still refreshed from the branch — only the secrets
 		// are carried through.
@@ -151,11 +153,50 @@ describe("fetchEnvReusingSecrets", () => {
 				"NEON_AI_GATEWAY_TOKEN",
 			],
 			revoked: [storageOnly.vars.AWS_ACCESS_KEY_ID],
+			superseded: [],
 		});
 		// One credential in, one out — the branch does not accumulate.
 		const live = await api.listCredentials(projectId, "br-main");
 		expect(live).toHaveLength(1);
 		expect(live[0]?.tokenId).toBe(widened.vars.AWS_ACCESS_KEY_ID);
+	});
+
+	test("keeps the superseded credential live when the caller resolves only part of the branch", async () => {
+		// `revokeSuperseded: false` is for a caller resolving a subset — `neon env pull
+		// --service`. Here the branch has both features on one credential, but the resolve
+		// covers storage only: the replacement it mints does not carry the gateway scope, so
+		// revoking the old one would kill a gateway token the caller is not rewriting.
+		const { api, projectId } = seededFake();
+		const both = await fetchEnvReusingSecrets(bothPolicy, {
+			api,
+			projectId,
+			branch: "main",
+		});
+
+		const storageOnly = await fetchEnvReusingSecrets(storagePolicy, {
+			api,
+			projectId,
+			branch: "main",
+			// A half-present secret, so the storage credential cannot be reused.
+			env: { AWS_ACCESS_KEY_ID: both.vars.AWS_ACCESS_KEY_ID },
+			revokeSuperseded: false,
+		});
+
+		expect(storageOnly.credential.issued).toBe(true);
+		expect(storageOnly.credential.revoked).toEqual([]);
+		// Reported rather than merely skipped, so a caller can name what it orphaned.
+		expect(storageOnly.credential.superseded).toEqual([
+			both.vars.AWS_ACCESS_KEY_ID,
+		]);
+		expect(callsTo(api, "revokeCredential")).toBe(0);
+		// Both are live: the new storage credential, and the one still backing the gateway.
+		const live = await api.listCredentials(projectId, "br-main");
+		expect(live.map((c) => c.tokenId)).toEqual(
+			expect.arrayContaining([
+				both.vars.AWS_ACCESS_KEY_ID,
+				storageOnly.vars.AWS_ACCESS_KEY_ID,
+			]),
+		);
 	});
 
 	test("never revokes a credential this tool did not issue", async () => {
@@ -182,6 +223,8 @@ describe("fetchEnvReusingSecrets", () => {
 
 		expect(result.credential.issued).toBe(true);
 		expect(result.credential.revoked).toEqual([]);
+		// Not ours, so it was never superseded either — only declined.
+		expect(result.credential.superseded).toEqual([]);
 		expect(callsTo(api, "revokeCredential")).toBe(0);
 		const live = await api.listCredentials(projectId, "br-main");
 		expect(live.map((c) => c.tokenId)).toContain(foreign.tokenId);
@@ -229,7 +272,12 @@ describe("fetchEnvReusingSecrets", () => {
 
 		expect(callsTo(api, "listCredentials")).toBe(0);
 		expect(callsTo(api, "createCredential")).toBe(0);
-		expect(credential).toEqual({ issued: false, keys: [], revoked: [] });
+		expect(credential).toEqual({
+			issued: false,
+			keys: [],
+			revoked: [],
+			superseded: [],
+		});
 		expect(vars.DATABASE_URL).toContain("postgresql://");
 		expect(vars.NEON_BRANCH).toBe("main");
 	});

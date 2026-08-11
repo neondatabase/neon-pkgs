@@ -1,5 +1,8 @@
+import {
+	inspectCredentials,
+	OAUTH,
+} from "@neon-internals/cli-core/credentials";
 import { Analytics, type TrackParams } from "@segment/analytics-node";
-import { inspectCredentials, OAUTH } from "./_shared/credentials.js";
 import { getApiClient, isNeonApiError } from "./api.js";
 import { type AuthContext, getAuthContext } from "./auth_context.js";
 import { credentialsPath } from "./config.js";

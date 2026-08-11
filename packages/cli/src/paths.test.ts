@@ -1,12 +1,12 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterEach, describe, expect, test } from "vitest";
 import {
 	configDir,
 	legacyConfigDir,
 	resolveConfigFile,
-} from "./_shared/paths.js";
+} from "@neon-internals/cli-core/paths";
+import { afterEach, describe, expect, test } from "vitest";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {

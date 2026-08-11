@@ -1,12 +1,16 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { resolveConfig } from "@neon/config";
+import { dirname, join } from "node:path";
+import { packagesToStage, resolveConfig } from "@neon/config";
 import {
 	apply,
+	assertZipWithinLimits,
 	type Config,
 	type ConflictReport,
 	createBranch as createBranchFromPolicy,
+	describeNativeFinding,
+	enforceLimits,
 	type FunctionBundler,
+	findUndeclaredNativePackages,
 	inspect,
 	isPartialBranchCreateError,
 	loadConfigFromFile,
@@ -14,19 +18,19 @@ import {
 	PushConflictError,
 	type PushResult,
 	plan,
+	traceNativePackages,
 } from "@neon/config-runtime";
 import chalk from "chalk";
 import type yargs from "yargs";
 import { getApiClient, type NeonApiClient } from "../api.js";
 import { type NeonConfigView, toNeonConfigView } from "../config_format.js";
 import {
+	CONFIG_INIT_NONE_MEANS,
+	CONFIG_INIT_SERVICES,
+	CONFIG_INIT_UNAVAILABLE,
 	FUNCTION_FILENAME,
 	FUNCTION_SLUG,
 	FUNCTION_TEMPLATE,
-	NEON_SERVICES,
-	type NeonService,
-	NO_SERVICES,
-	parseServices,
 	REQUIRED_PACKAGES,
 	renderNeonConfig,
 	renderNeonConfigFromView,
@@ -36,6 +40,13 @@ import { contextBranch, readContextFile } from "../context.js";
 import { isCi } from "../env.js";
 import { loadEnvFileIntoProcess } from "../env_file.js";
 import { log } from "../log.js";
+import {
+	deprecatedServiceMessage,
+	type NeonService,
+	parseServices,
+	servicesFlagValue,
+	servicesOption,
+} from "../neon_services.js";
 import type { BranchScopeProps } from "../types.js";
 import {
 	assertAiGatewayProvisionable,
@@ -50,7 +61,8 @@ import {
 import { fillSingleProject, resolveBranchRef } from "../utils/enrichers.js";
 import { bundleEntry } from "../utils/esbuild.js";
 import {
-	addDependenciesArgs,
+	formatInstallCommand,
+	installArgs,
 	resolvePackageManager,
 	runCommand,
 } from "../utils/package_manager.js";
@@ -65,14 +77,45 @@ import { autoPullEnvAfterPin } from "./env.js";
  * out of config-runtime's static module graph — and therefore out of the packaged
  * neonctl snapshot, which resolves esbuild dynamically at deploy time.
  */
-const neonctlBundler: FunctionBundler = async (fn) =>
-	zipBundle(
-		await bundleEntry(fn.source, {
-			...(fn.externalPackages
-				? { externalPackages: fn.externalPackages }
-				: {}),
-		}),
-	);
+const neonctlBundler: FunctionBundler = async (fn) => {
+	const externalPackages = fn.externalPackages ?? [];
+	const { files, metafile, warnings } = await bundleEntry(fn.source, {
+		externalPackages: externalPackages.map((pkg) => pkg.name),
+	});
+	for (const warning of warnings) log.warning(warning);
+
+	// Advisory only — the evidence cannot prove the code path is reached, so a package with a
+	// working JavaScript fallback must not have its deploy blocked. See native-detect.
+	for (const finding of findUndeclaredNativePackages({
+		metafile,
+		declared: externalPackages.map((pkg) => pkg.name),
+		projectDir: dirname(fn.source),
+	})) {
+		log.warning(describeNativeFinding(fn.slug, finding));
+	}
+
+	const staged = packagesToStage(externalPackages);
+	// Nothing to stage is the pre-existing path: zip the esbuild output and nothing else,
+	// producing the archive it always did.
+	if (staged.length === 0) return zipBundle(files);
+
+	// Staged packages are installed for the runtime target, traced, and merged in under their
+	// `node_modules/...` paths. The tree layout is load-bearing — a `.node` addon finds its
+	// sibling shared libraries relative to its own directory.
+	const traced = await traceNativePackages({
+		slug: fn.slug,
+		packages: staged,
+		projectDir: dirname(fn.source),
+	});
+	for (const warning of traced.warnings) log.warning(warning);
+	const entries = { ...files, ...traced.entries };
+	// Re-checked against the final archive: the staged files were measured without the
+	// bundle, so the entry count and uncompressed total are only complete now.
+	enforceLimits(fn.slug, entries);
+	const zip = zipBundle(entries);
+	assertZipWithinLimits(fn.slug, zip, entries);
+	return zip;
+};
 
 const INSPECT_FIELDS = ["project", "branch", "config"] as const;
 
@@ -219,11 +262,12 @@ export type ConfigInitProps = {
 	/** Injected command runner (tests). Defaults to the real spawn-based runner. */
 	run?: typeof runCommand;
 	/**
-	 * Raw `--services` value: comma-separated {@link NEON_SERVICES} names, or `none` for the
-	 * bare starter policy. When omitted, {@link resolveServices} picks interactively on a TTY
-	 * and falls back to the starter policy otherwise.
+	 * Raw `--services` values: {@link CONFIG_INIT_SERVICES} names, repeated and/or
+	 * comma-separated, or `none` for the bare starter policy. When omitted,
+	 * {@link resolveServices} picks interactively on a TTY and falls back to the starter
+	 * policy otherwise.
 	 */
-	services?: string;
+	services?: readonly string[];
 	/** Injected service picker (tests). Wins over the TTY check; production omits it. */
 	pickServices?: () => Promise<NeonService[]>;
 	/**
@@ -256,7 +300,14 @@ const resolveServices = async (
 	props: ConfigInitProps,
 ): Promise<NeonService[]> => {
 	if (props.services !== undefined) {
-		return parseServices(props.services);
+		return parseServices(props.services, {
+			allowed: CONFIG_INIT_SERVICES,
+			whyUnavailable: CONFIG_INIT_UNAVAILABLE,
+			flag: "--services",
+			noneMeans: CONFIG_INIT_NONE_MEANS,
+			onDeprecated: (used, canonical) =>
+				log.warning(deprecatedServiceMessage(used, canonical)),
+		});
 	}
 	if (props.pickServices) {
 		return props.pickServices();
@@ -375,22 +426,20 @@ export const initCmd = async (props: ConfigInitProps): Promise<void> => {
 	if (missing.length === 0) {
 		log.info("%s are already installed.", REQUIRED_PACKAGES.join(" and "));
 	} else {
-		const pm = resolvePackageManager();
-		const args = addDependenciesArgs(pm, missing);
+		const pm = resolvePackageManager(cwd);
+		const args = installArgs(pm, missing);
 		if (props.install === false) {
 			log.info(
-				"Install the Neon config packages to use neon.ts: %s %s",
-				pm,
-				args.join(" "),
+				"Install the Neon config packages to use neon.ts: %s",
+				formatInstallCommand(pm, missing),
 			);
 		} else {
 			log.info("Installing %s with %s…", missing.join(", "), pm);
 			const ok = await run(pm, args, cwd);
 			if (!ok) {
 				log.warning(
-					"Could not install the config packages automatically. Run by hand: %s %s",
-					pm,
-					args.join(" "),
+					"Could not install the config packages automatically. Run by hand: %s",
+					formatInstallCommand(pm, missing),
 				);
 			}
 		}
@@ -482,13 +531,15 @@ export const builder = (argv: yargs.Argv) =>
 						type: "boolean",
 						default: true,
 					},
-					services: {
-						describe:
-							`Services the scaffolded neon.ts declares, comma-separated: ${NEON_SERVICES.join(", ")}. ` +
-							`Pass "${NO_SERVICES}" for the bare starter policy. Omitted: pick interactively on a ` +
-							"terminal, starter policy in CI or without a TTY.",
-						type: "string",
-					},
+					services: servicesOption({
+						key: "services",
+						allowed: CONFIG_INIT_SERVICES,
+						noneMeans: CONFIG_INIT_NONE_MEANS,
+						describe: "Services the scaffolded neon.ts declares",
+						also:
+							"Omitted: pick interactively on a terminal, starter policy in " +
+							"CI or without a TTY.",
+					}),
 					"from-branch": {
 						describe:
 							"Seed neon.ts from a branch's live Neon state instead of asking. Uses the " +
@@ -500,7 +551,13 @@ export const builder = (argv: yargs.Argv) =>
 						conflicts: "services",
 					},
 				}),
-			(args) => initCmd(args as any),
+			(args) =>
+				initCmd({
+					...(args as any),
+					// `args` is untyped here, and "flag omitted" has to stay distinct from
+					// "flag given" — it decides whether the picker runs at all.
+					services: servicesFlagValue(args.services),
+				}),
 		);
 
 export const handler = (args: yargs.Argv) => {

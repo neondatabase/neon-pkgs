@@ -1,3 +1,10 @@
+import {
+	DO_NOT_SUBSTITUTE_HINT,
+	formatExecCommand,
+	formatInstallCommand,
+	MISSING_BINARY_HINT,
+	resolvePackageManager,
+} from "../../utils/package_manager.js";
 import { neonctlCmd } from "../neonctl.js";
 import { ensureSkillsUpToDate, SKILL_REFERENCE_URLS } from "../skills.js";
 import type { PhaseResponse } from "../types.js";
@@ -13,6 +20,8 @@ export type GettingStartedPhaseOptions = {
 	features?: string[];
 	/** Preview mode — restricts project creation to new projects in AWS us-east */
 	preview?: boolean;
+	/** The project directory the emitted commands will run in. */
+	cwd: string;
 };
 
 /**
@@ -30,6 +39,8 @@ export async function handleGettingStartedPhase(
 		await ensureSkillsUpToDate(options.agent);
 	}
 	const steps: { id: string; description: string; command?: string }[] = [];
+
+	const installPm = resolvePackageManager(options.cwd);
 
 	if (!options.hasConnectionString) {
 		if (options.preview) {
@@ -117,11 +128,11 @@ export async function handleGettingStartedPhase(
 		steps.push({
 			id: "install_dependencies",
 			description: [
-				"Check if node_modules exists in the project root.",
-				"If not, install project dependencies using the appropriate package manager (check for pnpm-lock.yaml, yarn.lock, bun.lockb, or default to npm).",
+				"Check if node_modules exists in the project root. If not, install the project's dependencies.",
+				DO_NOT_SUBSTITUTE_HINT,
 				"This must be done before `neon env pull` because the project's Neon config file may import packages that need to be installed first.",
 			].join(" "),
-			command: "npm install",
+			command: formatInstallCommand(installPm),
 		});
 
 		// Pull environment variables (connection string, etc.) from Neon
@@ -143,22 +154,28 @@ export async function handleGettingStartedPhase(
 				description: [
 					"Install the @neondatabase/serverless driver adapter for Prisma.",
 					"This enables Prisma to use Neon's serverless driver for edge/serverless deployments.",
+					DO_NOT_SUBSTITUTE_HINT,
 				].join(" "),
-				command:
-					"npm install @neondatabase/serverless @prisma/adapter-neon",
+				command: formatInstallCommand(installPm, [
+					"@neondatabase/serverless",
+					"@prisma/adapter-neon",
+				]),
 			});
 		} else if (options.orm === "drizzle" || options.orm === "drizzle-orm") {
 			steps.push({
 				id: "install_driver",
-				description: "Install the Neon serverless driver for Drizzle.",
-				command: "npm install @neondatabase/serverless",
+				description: `Install the Neon serverless driver for Drizzle. ${DO_NOT_SUBSTITUTE_HINT}`,
+				command: formatInstallCommand(installPm, [
+					"@neondatabase/serverless",
+				]),
 			});
 		} else if (!options.orm || options.orm === "none") {
 			steps.push({
 				id: "install_driver",
-				description:
-					"Install the Neon serverless driver for direct database access.",
-				command: "npm install @neondatabase/serverless",
+				description: `Install the Neon serverless driver for direct database access. ${DO_NOT_SUBSTITUTE_HINT}`,
+				command: formatInstallCommand(installPm, [
+					"@neondatabase/serverless",
+				]),
 			});
 		}
 	}
@@ -170,36 +187,50 @@ export async function handleGettingStartedPhase(
 		const hasMigrationDir = migrationDir && migrationDir !== "none";
 
 		if (tool === "drizzle") {
+			const migrate = formatExecCommand(installPm, "drizzle-kit", [
+				"migrate",
+			]);
+			const generate = formatExecCommand(installPm, "drizzle-kit", [
+				"generate",
+			]);
 			steps.push({
 				id: "run_migrations",
 				description: [
 					hasMigrationDir
 						? `Check if the ${migrationDir} directory contains .sql migration files.`
 						: "Check if a drizzle migrations directory exists with .sql files.",
-					"If .sql files exist, apply them with `npx drizzle-kit migrate`.",
-					"If the directory is empty or missing but a drizzle schema file exists (e.g. src/db/schema.ts, drizzle/schema.ts), run `npx drizzle-kit generate` first to create migrations, then `npx drizzle-kit migrate` to apply them.",
+					`If .sql files exist, apply them with \`${migrate}\`.`,
+					`If the directory is empty or missing but a drizzle schema file exists (e.g. src/db/schema.ts, drizzle/schema.ts), run \`${generate}\` first to create migrations, then \`${migrate}\` to apply them.`,
 					"If neither schema nor migrations exist, skip this step.",
+					MISSING_BINARY_HINT,
 				].join(" "),
-				command: "npx drizzle-kit migrate",
+				command: migrate,
 			});
 		} else if (tool === "prisma") {
+			const deploy = formatExecCommand(installPm, "prisma", [
+				"migrate",
+				"deploy",
+			]);
 			steps.push({
 				id: "run_migrations",
 				description: [
 					hasMigrationDir
 						? `Check if the ${migrationDir} directory contains migration folders.`
 						: "Check if prisma/migrations contains migration folders.",
-					"If migrations exist, apply them with `npx prisma migrate deploy`.",
-					"If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run `npx prisma migrate dev --name init` to create and apply the initial migration.",
+					`If migrations exist, apply them with \`${deploy}\`.`,
+					`If the migrations directory is empty or missing but prisma/schema.prisma has models defined, run \`${formatExecCommand(installPm, "prisma", ["migrate", "dev", "--name", "init"])}\` to create and apply the initial migration.`,
 					"If no models are defined, skip this step.",
+					MISSING_BINARY_HINT,
 				].join(" "),
-				command: "npx prisma migrate deploy",
+				command: deploy,
 			});
 		} else if (tool === "knex") {
 			steps.push({
 				id: "run_migrations",
-				description: `Apply existing knex migrations to the Neon database.`,
-				command: "npx knex migrate:latest",
+				description: `Apply existing knex migrations to the Neon database. ${MISSING_BINARY_HINT}`,
+				command: formatExecCommand(installPm, "knex", [
+					"migrate:latest",
+				]),
 			});
 		}
 	} else if (options.preview) {
@@ -210,9 +241,10 @@ export async function handleGettingStartedPhase(
 			description: [
 				"Check the scaffolded project for a migration tool and schema.",
 				"Look for: drizzle.config.ts/js (Drizzle), prisma/schema.prisma (Prisma), or knexfile.ts/js (Knex).",
-				"If Drizzle is found: check if a drizzle migrations directory exists with .sql files. If .sql files exist, run `npx drizzle-kit migrate`. If the directory is empty or missing but a schema file exists, run `npx drizzle-kit generate` first, then `npx drizzle-kit migrate`.",
-				"If Prisma is found: check if prisma/migrations contains migration folders. If yes, run `npx prisma migrate deploy`. If not but models exist, run `npx prisma migrate dev --name init`.",
+				`If Drizzle is found: check if a drizzle migrations directory exists with .sql files. If .sql files exist, run \`${formatExecCommand(installPm, "drizzle-kit", ["migrate"])}\`. If the directory is empty or missing but a schema file exists, run \`${formatExecCommand(installPm, "drizzle-kit", ["generate"])}\` first, then \`${formatExecCommand(installPm, "drizzle-kit", ["migrate"])}\`.`,
+				`If Prisma is found: check if prisma/migrations contains migration folders. If yes, run \`${formatExecCommand(installPm, "prisma", ["migrate", "deploy"])}\`. If not but models exist, run \`${formatExecCommand(installPm, "prisma", ["migrate", "dev", "--name", "init"])}\`.`,
 				"If no migration tool is found, skip this step.",
+				MISSING_BINARY_HINT,
 			].join(" "),
 		});
 	}

@@ -184,6 +184,163 @@ describe("configInputSchema", () => {
 		expect(result.success).toBe(false);
 	});
 
+	const withExternalPackages = (externalPackages: unknown) =>
+		configInputSchema.safeParse({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: "./hello.ts",
+						externalPackages,
+					},
+				},
+			},
+		});
+
+	test("accepts the object form with includeFiles false", () => {
+		const result = withExternalPackages([
+			"sharp",
+			{ name: "canvas", includeFiles: false },
+		]);
+		expect(result.success).toBe(true);
+	});
+
+	test("accepts an explicit includeFiles: true", () => {
+		expect(
+			withExternalPackages([{ name: "sharp", includeFiles: true }])
+				.success,
+		).toBe(true);
+	});
+
+	test("accepts the object form without includeFiles", () => {
+		expect(withExternalPackages([{ name: "sharp" }]).success).toBe(true);
+	});
+
+	test("rejects an unknown key in the object form", () => {
+		expect(
+			withExternalPackages([{ name: "sharp", includeFile: false }])
+				.success,
+		).toBe(false);
+	});
+
+	test("rejects a non-boolean includeFiles", () => {
+		expect(
+			withExternalPackages([{ name: "sharp", includeFiles: "yes" }])
+				.success,
+		).toBe(false);
+	});
+
+	test("rejects an object entry with no name", () => {
+		expect(withExternalPackages([{ includeFiles: false }]).success).toBe(
+			false,
+		);
+	});
+
+	test("rejects a relative path in the object form too", () => {
+		const result = withExternalPackages([{ name: "./local-addon.node" }]);
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(formatZodIssues(result.error).join("\n")).toMatch(
+				/not a relative or absolute path/,
+			);
+		}
+	});
+
+	// A subpath is legal: it narrows what esbuild leaves unresolved. Files are staged per
+	// package, so the subpath's package is what ships.
+	test("accepts a subpath entry", () => {
+		expect(withExternalPackages(["pkg/sub"]).success).toBe(true);
+	});
+
+	test("rejects the same package listed twice", () => {
+		const result = withExternalPackages(["sharp", "sharp"]);
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			const issues = formatZodIssues(result.error).join("\n");
+			expect(issues).toMatch(/listed more than once/);
+			// Reported against the offending entry, not the whole function.
+			expect(issues).toMatch(/externalPackages\[1\]/);
+		}
+	});
+
+	test("rejects a bare name and a subpath of it that disagree about includeFiles", () => {
+		const result = withExternalPackages([
+			"sharp",
+			{ name: "sharp/lib/index.js", includeFiles: false },
+		]);
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(formatZodIssues(result.error).join("\n")).toMatch(
+				/disagree about includeFiles/,
+			);
+		}
+	});
+
+	test("accepts a bare name and a subpath of it that agree", () => {
+		expect(
+			withExternalPackages(["sharp", "sharp/lib/index.js"]).success,
+		).toBe(true);
+	});
+
+	// A staged entry's root is handed to `npm install`, so it has to name one package.
+	// esbuild's `external` also accepts a wildcard and a bare scope, which name a set.
+	test("rejects a wildcard entry that would be staged", () => {
+		const result = withExternalPackages(["@scope/*"]);
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(formatZodIssues(result.error).join("\n")).toMatch(
+				/does not name a single installable package/,
+			);
+		}
+	});
+
+	test("accepts a wildcard entry that stages nothing", () => {
+		expect(
+			withExternalPackages([{ name: "@scope/*", includeFiles: false }])
+				.success,
+		).toBe(true);
+	});
+
+	test("rejects a bare scope that would be staged", () => {
+		expect(withExternalPackages(["@scope"]).success).toBe(false);
+	});
+
+	test("rejects a protocol specifier that would be staged", () => {
+		expect(withExternalPackages(["node:fs"]).success).toBe(false);
+	});
+
+	// Whatever passes here becomes an `npm install` argument, so the root is held to npm's
+	// own naming rules rather than merely "not a path".
+	test.each([
+		["a space", "foo bar"],
+		["a leading hash", "#alias"],
+		["an empty path segment", "foo//bar"],
+		["a parent-directory segment", "@scope/pkg/../../escape"],
+		["an uppercase name", "Foo"],
+		["a name starting with a dot", ".hidden"],
+	])("rejects %s in a staged entry", (_label, value) => {
+		expect(withExternalPackages([value]).success).toBe(false);
+	});
+
+	test.each([
+		["a plain name", "sharp"],
+		["a scoped name", "@img/sharp-linux-arm64"],
+		["a name with dots and underscores", "some.pkg_name"],
+		["a subpath", "pkg/sub/deep.js"],
+	])("accepts %s in a staged entry", (_label, value) => {
+		expect(withExternalPackages([value]).success).toBe(true);
+	});
+
+	test("accepts two scoped packages sharing a scope", () => {
+		// Same scope, different packages — not the same root, so not a conflict.
+		expect(
+			withExternalPackages([
+				{ name: "@img/sharp-linux-arm64", includeFiles: false },
+				"@img/colour",
+			]).success,
+		).toBe(true);
+	});
+
 	test("rejects an unknown key in the function dev block (e.g. removed `portless`)", () => {
 		const result = configInputSchema.safeParse({
 			preview: {

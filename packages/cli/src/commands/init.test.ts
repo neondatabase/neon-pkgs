@@ -178,10 +178,10 @@ describe("init", () => {
 
 	// `NEON_PROFILE` reaches the handler through the credential inputs the
 	// `resolveApiKeyFromEnv` middleware records, not through `process.env` directly, so
-	// that is the seam the test has to set. See `shared/cli-core/src/auth_selection.ts`.
+	// that is the seam the test has to set. See `@neon-internals/cli-core/auth_selection`.
 	test("refuses NEON_PROFILE just as firmly as the flag", async () => {
 		const { recordCredentialInputs } = await import(
-			"../_shared/auth_selection.js"
+			"@neon-internals/cli-core/auth_selection"
 		);
 		recordCredentialInputs({
 			apiKeyFlag: "",

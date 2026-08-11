@@ -1,5 +1,5 @@
+import { credentialInputs } from "@neon-internals/cli-core/auth_selection";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { credentialInputs } from "../_shared/auth_selection.js";
 import { resolveApiKeyFromEnv } from "./middlewares.js";
 
 afterEach(() => {

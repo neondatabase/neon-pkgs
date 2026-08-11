@@ -7,7 +7,6 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterEach, describe, expect, test, vi } from "vitest";
 import {
 	DEFAULT_PROFILE,
 	listProfiles,
@@ -18,7 +17,8 @@ import {
 	resolveProfile,
 	selectProfileName,
 	upsertProfile,
-} from "./_shared/profiles.js";
+} from "@neon-internals/cli-core/profiles";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {

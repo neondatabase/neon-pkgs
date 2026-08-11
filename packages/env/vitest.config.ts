@@ -8,10 +8,8 @@ import { defineConfig } from "vitest/config";
 // `config/src` is ahead of `config/dist` (local edits between builds, or CI's `test` job,
 // which installs but never builds). Pointing at `src` makes the suite deterministic and
 // always reflect current source.
-const configSrc = resolve(
-	dirname(fileURLToPath(import.meta.url)),
-	"../config/src",
-);
+const here = dirname(fileURLToPath(import.meta.url));
+const configSrc = resolve(here, "../config/src");
 
 export default defineConfig({
 	resolve: {
@@ -25,6 +23,14 @@ export default defineConfig({
 			{
 				find: /^@neondatabase\/config$/,
 				replacement: resolve(configSrc, "index.ts"),
+			},
+			// The private internals for the same reason: their `exports` point at `dist/`, so
+			// without this the specs that cover them run against the last build. Aliasing to
+			// source also puts `internals/*/src` in the watch graph, so editing the credential
+			// code re-runs the specs that cover it.
+			{
+				find: /^@neon-internals\/(cli-core|env-core)\/(.+)$/,
+				replacement: resolve(here, "../../internals/$1/src/$2.ts"),
 			},
 		],
 	},

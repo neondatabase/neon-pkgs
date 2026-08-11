@@ -8,7 +8,6 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterEach, describe, expect, test } from "vitest";
 import {
 	API_KEY,
 	apiKeyCredentials,
@@ -21,7 +20,8 @@ import {
 	readCredentials,
 	scopeOf,
 	writeCredentials,
-} from "./_shared/credentials.js";
+} from "@neon-internals/cli-core/credentials";
+import { afterEach, describe, expect, test } from "vitest";
 
 /**
  * Where a credential lives and which profile points at it.

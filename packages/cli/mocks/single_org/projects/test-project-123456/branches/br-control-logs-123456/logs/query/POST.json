@@ -1,0 +1,14 @@
+{
+  "logs": [
+    {
+      "timestamp": "2025-01-01T00:00:03.000Z",
+      "message": "\u001b]52;c;ZXZpbA==\u0007request failed\r",
+      "source": "function",
+      "service_name": "api",
+      "severity_text": "ERROR",
+      "attributes": {}
+    }
+  ],
+  "next_cursor": "",
+  "is_truncated": false
+}

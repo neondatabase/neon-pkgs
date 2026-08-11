@@ -1,6 +1,6 @@
 {
 	"name": "neon",
-	"version": "2.46.0",
+	"version": "3.1.0",
 	"description": "CLI tool for Neon, the cloud backend primitives built around Lakebase Postgres",
 	"keywords": [
 		"neon",
@@ -24,6 +24,9 @@
 	"exports": {
 		".": "./dist/index.js",
 		"./cli": "./dist/cli.js",
+		"./dist/_shared/*": null,
+		"./dist/_chunks/*": null,
+		"./dist/_virtual/*": null,
 		"./dist/*": "./dist/*",
 		"./package.json": "./package.json"
 	},
@@ -40,10 +43,10 @@
 	},
 	"scripts": {
 		"generateParams": "tsx generateOptionsFromSpec.ts",
-		"codegen": "node ../../scripts/sync-shared.mjs . && node scripts/set-vsx-gallery.mjs",
+		"codegen": "node scripts/set-vsx-gallery.mjs",
 		"clean": "rm -rf dist",
-		"build": "pnpm codegen && pnpm generateParams && pnpm clean && tsc -p tsconfig.build.json && cp src/*.html ./dist",
-		"build:internal": "node ../../scripts/sync-shared.mjs . && node scripts/set-vsx-gallery.mjs https://cursor-vsx-proxy.cloud.databricks.com/gallery && pnpm generateParams && pnpm clean && tsc -p tsconfig.build.json && cp src/*.html ./dist",
+		"build": "pnpm codegen && pnpm generateParams && tsc --noEmit && tsdown && cp src/*.html ./dist",
+		"build:internal": "node scripts/set-vsx-gallery.mjs https://cursor-vsx-proxy.cloud.databricks.com/gallery && pnpm generateParams && tsc --noEmit && tsdown && cp src/*.html ./dist",
 		"bundle": "node pkg.js",
 		"typecheck": "pnpm codegen && tsc --noEmit",
 		"lint": "pnpm codegen && pnpm typecheck && biome check src",
@@ -60,7 +63,6 @@
 		"@neon/sdk": "workspace:*",
 		"@neon/config": "workspace:*",
 		"@neon/config-runtime": "workspace:*",
-		"@neon/env": "workspace:*",
 		"@segment/analytics-node": "1.3.0",
 		"chalk": "5.3.0",
 		"chokidar": "5.0.0",
@@ -85,6 +87,8 @@
 	},
 	"devDependencies": {
 		"@apidevtools/swagger-parser": "12.1.0",
+		"@neon-internals/cli-core": "workspace:*",
+		"@neon-internals/env-core": "workspace:*",
 		"@neon/e2e-harness": "workspace:*",
 		"@rollup/plugin-commonjs": "25.0.8",
 		"@rollup/plugin-json": "6.1.0",
@@ -106,6 +110,7 @@
 		"openapi-types": "12.1.3",
 		"rollup": "3.29.4",
 		"strip-ansi": "7.1.0",
+		"tsdown": "catalog:",
 		"tsx": "4.22.3",
 		"typescript": "catalog:",
 		"vitest": "catalog:"

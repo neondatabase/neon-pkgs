@@ -43,36 +43,64 @@ A policy is split into a **static** existential set and a **dynamic** `branch` c
 
 Service toggles accept `true` / `{}` / `{ enabled: true }` (enabled) and `false` / `{ enabled: false }` (disabled). Function slugs (record keys) must match `^[a-z0-9]{1,20}$`.
 
-### Unbundleable dependencies (`externalPackages`)
+### Shipping a dependency's files (`externalPackages`)
 
-A function's `source` is bundled with esbuild at deploy time, and some packages cannot be bundled at all: a native `.node` addon has no esbuild loader, and a library may reference an optional peer dependency on a code path the function never takes. Either one fails the deploy with a resolve or loader error naming the package, and neither is fixable from the function's own source.
+A function's `source` is bundled with esbuild at deploy time, and a package backed by a native `.node` binary cannot be bundled by anything: the binary is a compiled object the platform loads from a real path. `sharp` is the common case, and it does not even fail the build — it loads its binary through `createRequire`, which esbuild does not follow, so it bundles cleanly and then fails at invoke with `Could not load the "sharp" module`.
 
-`externalPackages` is the escape hatch, and the deploy-time counterpart of Next.js's `serverExternalPackages` — every entry is passed to esbuild's `external`, so the import survives into the bundle instead of being followed:
+`externalPackages` is the deploy-time counterpart of Next.js's `serverExternalPackages`. Every entry is passed to esbuild's `external`, so the import survives into the bundle instead of being followed, and the package's own files are shipped into the archive beside the bundle so that import resolves:
 
 ```ts
 export default defineConfig({
   preview: {
     functions: {
-      agent: {
-        name: "Agent",
-        source: "./functions/agent.ts",
-        externalPackages: ["microsandbox", "@mongodb-js/zstd"],
+      resize: {
+        name: "Resize",
+        source: "./functions/resize.ts",
+        externalPackages: ["sharp"],
       },
     },
   },
 });
 ```
 
-**An external package is not resolvable at runtime.** The deployed archive is a single `index.mjs` with no `node_modules` beside it, so anything listed here throws `Cannot find module` if the function actually reaches it. The option unblocks an import that is never evaluated; it does not make a dependency usable.
+Each declared package is installed for the Functions runtime target — **linux-arm64, glibc** — into a throwaway directory, traced for the files it actually reaches, and copied into the archive under `node_modules/` with its directory layout intact. The layout matters: a `.node` addon finds its sibling shared libraries relative to its own directory, so a flattened tree fails to load.
 
-A dependency the handler actually calls has to be bundled, and whether that is possible depends on what it is:
+Your own `node_modules` is never read for those files or modified. Its binaries are built for your machine rather than the deploy target, and a cross-platform install does not survive your next plain `npm install`, so the target's packages are resolved fresh on each deploy.
 
-- **Pure JavaScript** — bundling is the normal case, and a failure is usually something specific and fixable in the entry.
-- **Backed by a native `.node` binary** — cannot be bundled by any bundler; the binary is a compiled object the platform loads from a real path. Such a package cannot work on Functions until the archive can carry files alongside the bundle. Listing it here does not help, it only moves the error from deploy to invoke.
+Requirements, all checked at deploy time rather than left to fail at invoke:
 
-A native package may also bundle without needing this option at all. `sharp` loads its binary through `createRequire`, which esbuild does not follow, so it bundles cleanly and then fails at invoke with `Could not load the "sharp" module`.
+- the package is installed in your project — the deploy stages the version you have, and refuses rather than guessing one
+- the package publishes a linux-arm64 glibc build (`sharp` and most `@napi-rs/*` packages do; anything compiled from source at install time does not)
+- `npm` is on `PATH`
+- the archive stays within the deploy size limits — native binaries are large, so a couple of them is the practical ceiling
 
-Entries are package names, optionally with a subpath (`pkg`, `@scope/pkg`, `pkg/sub`). A relative or absolute path is rejected at validation time. `neon dev` applies the same list, so a local run bundles like a deploy.
+#### When the deploy warns about a package you did not declare
+
+A deploy (and `neon dev`) reports a package it bundled that carries native code and is not in
+`externalPackages`, because such a package deploys cleanly and then fails at invoke — `sharp`
+produces no build error at all.
+
+**The report is advisory and never fails a deploy.** It can only see that the package contains
+compiled code, not whether your function reaches it. A package with a native accelerator behind
+a working JavaScript fallback — `ws` with `bufferutil` installed is the common one — is reported
+and is already correct; no change is needed.
+
+Do not use `includeFiles: false` to silence it. That externalizes the package and ships nothing
+for it, so an import that *is* reached then fails on every invoke.
+
+#### Excluding a package's files
+
+`includeFiles: false` externalizes an import without shipping anything for it. That is the escape hatch for a package that cannot be staged — no build for the runtime target, or too large — and that the function never actually reaches:
+
+```ts
+externalPackages: ["sharp", { name: "canvas", includeFiles: false }],
+```
+
+**An excluded package is not resolvable at runtime.** Nothing is shipped for it, so it throws `Cannot find module` if the function reaches it. It unblocks an import that is never evaluated; it does not make a dependency usable.
+
+Entries are package names, optionally with a subpath (`pkg`, `@scope/pkg`, `pkg/sub`). A relative or absolute path is rejected at validation time. Files are staged per package, so a subpath narrows what esbuild leaves unresolved without narrowing what ships.
+
+Under `neon dev` the list only keeps the package out of the bundle. Nothing is installed or copied, and it resolves from your own `node_modules` against your host architecture — which is what you want locally.
 
 ### Data API
 

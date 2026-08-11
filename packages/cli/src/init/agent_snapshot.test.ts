@@ -315,6 +315,10 @@ async function runInit(
 	const stubLog = join(caseDir, "stub.log");
 	for (const dir of [cwd, home, configDir])
 		mkdirSync(dir, { recursive: true });
+	// A repo boundary, so package-manager detection stops here instead of walking
+	// up through $TMPDIR — where another checkout's lockfile would decide which
+	// install command the snapshots contain.
+	mkdirSync(join(cwd, ".git"), { recursive: true });
 	writeFileSync(stubLog, "");
 
 	for (const [relative, contents] of Object.entries(FIXTURES[fixture])) {

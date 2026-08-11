@@ -48,7 +48,7 @@ const { project, connectionString } = data;
 | `baseUrl` | `string` | `https://console.neon.tech/api/v2` | Override the API base URL. |
 | `fetch` | `typeof fetch` | global `fetch` | Custom fetch implementation (proxies, tests, non-global runtimes). |
 
-Every option except `apiKey` is also accepted **per call** via the last `options` argument (`{ throwOnError?, waitForReadiness?, requestTimeoutMs?, signal? }`), overriding the client default. Paginated `list()` methods take it too, after their query.
+Every option except `apiKey` is also accepted **per call** via the last `options` argument (`{ throwOnError?, waitForReadiness?, requestTimeoutMs?, signal? }`), overriding the client default. Paginated methods take it too, after their query.
 
 ## The result model
 
@@ -96,14 +96,20 @@ if (error?.kind === "not_found") { /* … */ }
 Branch on `kind` rather than `name` or `message`. `name` is a stable string literal on every
 class, so it survives bundling, but `message` is not a contract.
 
+`kind` tells you what happened. To reach a subclass's **own** fields — `NeonNetworkError.reason`,
+`NeonApiError.body` — narrow with `instanceof`: the result envelope types `error` as the base
+`NeonError`, so a `kind` check alone does not make those properties visible.
+
 `NeonNetworkError.reason` carries the most specific reason the platform gave — an `errno`
 code such as `ECONNRESET` when one is available, otherwise the innermost non-empty message.
 It is also interpolated into `message`, so transport faults are distinguishable in logs and
 error trackers instead of collapsing onto one string:
 
 ```ts
+import { NeonNetworkError } from "@neon/sdk";
+
 const { error } = await neon.projects.get(id);
-if (error?.kind === "network") {
+if (error instanceof NeonNetworkError) {
   error.reason; // "ECONNRESET"
   error.message; // 'Network error: no response received from the Neon API (ECONNRESET).'
 }
@@ -232,8 +238,21 @@ await neon.projects.transfer({
 | `createWithCompute(projectId, input, { pooled? })` | **[W]** `{ branch, endpoint, connectionString }` | `input`: `{ name?, parentId?, compute?: { minCu?, maxCu?, suspendTimeoutSeconds? } }` |
 | `getDefault(projectId)` | `Branch` | resolves the default branch by the `default` flag |
 | `setDefault(projectId, branchId)` | `Branch` | |
-| `recover(projectId, branchId)` | `Branch` | beta — recover a soft-deleted branch within the 7-day window |
 | `finalizeRestore(projectId, branchId, { name? }?)` | **→void** | commits a restore previewed with `snapshots.restore({ finalize: false })` |
+
+**There is no `recover`.** Neon stopped publishing `POST /projects/{project_id}/branches/{branch_id}/recover` in its OpenAPI spec, so the wrapper is gone until it returns. The endpoint still answers, so a soft-deleted branch can still be recovered through the low-level client — note that this envelope carries the API's own error body rather than a `NeonError`:
+
+```ts
+import type { BranchRecoverResponse } from "@neon/sdk";
+
+const { data } = await neon.client.post<{ 200: BranchRecoverResponse }>({
+  url: "/projects/{project_id}/branches/{branch_id}/recover",
+  path: { project_id: projectId, branch_id: branchId },
+});
+const branch = data?.branch;
+```
+
+`neon.projects.recover` is a different endpoint — it recovers a deleted **project**, not a branch.
 
 ```ts
 // Resolve the project's default ("production") branch
@@ -392,6 +411,110 @@ Branch-scoped AI Gateway endpoint metadata (beta).
 | --- | --- | --- |
 | `get(projectId, branchId)` | `BranchAiGateway` | 404 when AI Gateway is not enabled on the branch |
 
+### `neon.logs`
+
+Branch-scoped logs from the services running on a branch — Neon Functions, object
+storage, and Postgres computes (private beta).
+
+Being private beta shows, and all three calls behave the same way on a given branch:
+
+| Branch state | Response |
+| --- | --- |
+| Telemetry not available in the branch's region | `404`, `reason: "telemetry_not_enabled"` |
+| Project or branch missing, or no access to it | `404`, `reason: "branch_not_found"` |
+| Telemetry available, nothing recorded in the window | `200` with an empty `logs` / `values` array |
+| Telemetry available, backend down | `503`, which the client retries on by default |
+
+**The two 404s need different handling, and only `reason` tells them apart.** Telemetry is
+region-gated and the region is fixed at project creation, so `telemetry_not_enabled` is a
+permanent property of the branch and an ordinary outcome to design around.
+`branch_not_found` is a real error — a wrong id or a key without access — and should not
+be absorbed into the same path. Both arrive as `NeonNotFoundError`, and `reason` is not
+lifted onto the error, so it has to be read off the API's body, which the SDK keeps as
+`unknown`:
+
+```ts
+import { NeonNotFoundError } from "@neon/sdk";
+
+function logsUnavailableReason(error: unknown): string | undefined {
+  if (!(error instanceof NeonNotFoundError)) return undefined;
+  const body = error.body;
+  if (typeof body !== "object" || body === null || !("reason" in body)) return undefined;
+  return typeof body.reason === "string" ? body.reason : undefined;
+}
+
+const { error } = await neon.logs.fields(projectId, branchId);
+if (error) {
+  if (logsUnavailableReason(error) === "telemetry_not_enabled") {
+    // no logs on this branch, ever — carry on
+  } else throw error;
+}
+```
+
+Two more limits worth knowing, because the spec is wider than the backend. `source` is a
+three-value enum, but only `function` and `storage` were observed emitting; no branch
+produced a `pg_endpoint` record. And `minimum_severity` can be rejected outright with a
+`400` (`NeonApiError`, `kind: "api"`) reading
+`"minimum_severity is not supported by this branch's log backend"` — so filter on
+`severity_text` if you need it to work everywhere.
+
+| Method | Returns | Notes |
+| --- | --- | --- |
+| `query(projectId, branchId, input?)` | **[P]** `ProjectBranchLogRecord` | `input`: `{ since?, start_time?, end_time?, limit?, sort_order?, source?, service_name?, scope_name?, minimum_severity?, severity_text?, body_contains?, trace_id?, logql? }` — filters combine with `AND` |
+| `fields(projectId, branchId)` | `string[]` | field names this branch has emitted, usable as `fieldName` below |
+| `fieldValues(projectId, branchId, fieldName, query?)` | `ProjectBranchLogFieldValuesResponse` | `query`: `{ since?, start_time?, end_time?, source?, limit? }` — check `is_truncated` |
+
+Give the window as **either** `since` (`"30m"`, `"6h"`, `"7d"`) **or** `start_time`;
+supplying both is rejected with `conflicting_time_range`. `logql` replaces the seven
+content filters rather than adding to them — combining them is rejected with
+`conflicting_filters` — while `limit`, `sort_order`, and the time window still apply
+alongside it. Seven days is the widest range served. **The default window differs
+between the two calls:** `query` covers the last hour, `fieldValues` the last six, so a
+value discovered by one is not guaranteed to appear in the other.
+
+`query` pages for you, replaying the filters unchanged as the endpoint requires. If a
+page reports more records than it returned but no cursor to reach them, the walk fails
+with a `client`-kind `NeonError` rather than handing back a partial result as if it
+were complete.
+
+```ts
+// Errors from a function over the last 6 hours, newest first
+const { data: errors } = await neon.logs
+  .query(projectId, branchId, {
+    since: "6h",
+    source: "function",
+    // some branches' log backends reject minimum_severity; severity_text always works
+    minimum_severity: "error",
+  })
+  .all();
+
+// Paging replays the filters for you — the endpoint returns wrong results otherwise
+for await (const line of neon.logs.query(projectId, branchId, { since: "1h" })) {
+  console.log(line.timestamp, line.message);
+}
+
+// Discover what you can enumerate, then read one field's values
+const { data: fields } = await neon.logs.fields(projectId, branchId);
+// e.g. ["service_name", "severity_text", "scope_name", "entity_type"]
+
+const { data: services } = await neon.logs.fieldValues(
+  projectId, branchId, "service_name", { since: "24h" },
+);
+console.log(services?.values);
+if (services?.is_truncated) {
+  // an arbitrary subset — narrow `since` or `source` before filtering on it
+}
+```
+
+**`fieldName` must be a name `fields` returned.** The enumerable set and the filterable
+set overlap rather than nest: `source` is a filter — on `query` and on `fieldValues`' own
+query — but is not enumerable, so `fieldValues(…, "source")` answers `400` with
+`reason: "unknown_field"`; `entity_type` is enumerable but is not a filter on `query`.
+
+`fields` returns a bare `string[]` because its response carries nothing else.
+`fieldValues` returns the whole response, because `is_truncated` is what decides whether
+the values can be trusted and unwrapping would hide it.
+
 ### `neon.snapshots`
 
 | Method | Returns | Notes |
@@ -483,6 +606,74 @@ for await (const project of neon.consumption.perProject({
 | `user.me()` | `CurrentUserInfoResponse` |
 | `user.organizations()` | `Organization[]` |
 
+### `neon.auth`
+
+Branch-scoped Neon Auth (the legacy project-scoped endpoints are deprecated and stay raw-only).
+
+| Method | Returns | Notes |
+| --- | --- | --- |
+| `get(projectId, branchId)` | `NeonAuthIntegration` | |
+| `create(projectId, branchId, input)` | `NeonAuthCreateIntegrationResponse` | enable the integration |
+| `disable(projectId, branchId, { deleteData? }?)` | **→void** | |
+| `updateConfig(projectId, branchId, input)` | `NeonAuthConfigResponse` | |
+| `oauthProviders.list / add / update / delete` | `NeonAuthOauthProvider`(`[]`) / **→void** | |
+| `trustedDomains.list / add / delete` | `NeonAuthRedirectUriWhitelistDomain[]` / **→void** | redirect-URI whitelist |
+| `users.create / delete / updateRole` | `NeonAuthCreateNewUserResponse` / **→void** / role | |
+
+### `neon.projects.permissions`
+
+| Method | Returns |
+| --- | --- |
+| `list(projectId)` | `ProjectPermission[]` |
+| `grant(projectId, email)` | `ProjectPermission` |
+| `revoke(projectId, permissionId)` | `ProjectPermission` |
+
+For an **org-owned** project, roles for existing organization members live on
+`neon.projects.members` below instead.
+
+### `neon.projects.members`
+
+Per-project roles for members of the **owning organization**. Distinct from
+`neon.projects.permissions`, which shares a project with an individual by email: these
+act on existing org members by member id, and clearing a grant leaves the member's
+organization-role default in force rather than removing their access. Org-owned projects
+only — a personal project answers 404.
+
+| Method | Returns | Notes |
+| --- | --- | --- |
+| `list(projectId, query?)` | **[P]** `ProjectMember` | `query`: `{ limit? }` |
+| `setRole(projectId, memberId, role, { confirmSelfDemotion? }?)` | `ProjectMemberRoleResponse` | `role`: `"viewer" \| "editor" \| "admin"`; idempotent |
+| `removeRole(projectId, memberId, { confirmSelfLockout? }?)` | `ProjectMemberRoleResponse` | clears the explicit grant; idempotent |
+
+A `ProjectMember` carries several role-ish fields, and they are not interchangeable.
+**Read `effective_project_permission`** for "what can this member actually do" — `VIEWER`
+/ `EDITOR` / `ADMIN`, uppercase. `org_default_project_permission` and
+`explicit_project_permission` are the two inputs it was resolved from, and `grant_source`
+says which one won (`explicit`, `org_role_default`, `org_admin_override`, `unassigned`).
+
+The two lowercase fields are a different axis: `project_role` is the explicit grant you
+set with `setRole` and shares its `"viewer" | "editor" | "admin"` type, and `org_role` is
+the member's organization role. Reading back `project_role` after a `setRole` tells you
+the grant landed — it does **not** tell you the member's effective access, which the
+org-role default can still exceed.
+
+The two confirmations are **off by default** so a call cannot silently cost you access to
+your own project. Pass one only when you mean to lower your own role
+(`confirmSelfDemotion`) or to drop your own grant when that removes your management
+access (`confirmSelfLockout`); without it the API rejects the call.
+
+```ts
+const { data: grant } = await neon.projects.members.setRole(
+  projectId, memberId, "editor",
+);
+// A downgrade can leave credentials the member still holds
+if (grant?.credential_rotation_recommended) { /* rotate database credentials */ }
+if (grant?.org_api_key_rotation_recommended) { /* rotate project-scoped org keys */ }
+```
+
+Also on `neon.projects`: `recover(id)` (beta — recover a soft-deleted project), and on
+`neon.postgres.endpoints`: `listByBranch(projectId, branchId)` → `Endpoint[]`.
+
 ---
 
 ## Raw layer (every endpoint, 1:1)
@@ -518,31 +709,6 @@ There is no `responseStyle` switch — `throwOnError` is the only one. `neon.cli
 underlying configured Fetch client; `raw.*` are the wrapped generated functions, and all
 request/response/error **types** are re-exported flat from `@neon/sdk` for
 `import type { Project, Branch, … }`.
-
-### `neon.auth`
-
-Branch-scoped Neon Auth (the legacy project-scoped endpoints are deprecated and stay raw-only).
-
-| Method | Returns | Notes |
-| --- | --- | --- |
-| `get(projectId, branchId)` | `NeonAuthIntegration` | |
-| `create(projectId, branchId, input)` | `NeonAuthCreateIntegrationResponse` | enable the integration |
-| `disable(projectId, branchId, { deleteData? }?)` | **→void** | |
-| `updateConfig(projectId, branchId, input)` | `NeonAuthConfigResponse` | |
-| `oauthProviders.list / add / update / delete` | `NeonAuthOauthProvider`(`[]`) / **→void** | |
-| `trustedDomains.list / add / delete` | `NeonAuthRedirectUriWhitelistDomain[]` / **→void** | redirect-URI whitelist |
-| `users.create / delete / updateRole` | `NeonAuthCreateNewUserResponse` / **→void** / role | |
-
-### `neon.projects.permissions`
-
-| Method | Returns |
-| --- | --- |
-| `list(projectId)` | `ProjectPermission[]` |
-| `grant(projectId, email)` | `ProjectPermission` |
-| `revoke(projectId, permissionId)` | `ProjectPermission` |
-
-Also on `neon.projects`: `recover(id)` (beta — recover a soft-deleted project), and on
-`neon.postgres.endpoints`: `listByBranch(projectId, branchId)` → `Endpoint[]`.
 
 ## Regenerating the client
 

@@ -1,5 +1,97 @@
 # neon
 
+## 3.1.0
+
+### Minor Changes
+
+- 5305087: Add `neon logs query`, `neon logs fields` and `neon logs field-values <field>` for reading the logs a branch's functions, object storage and Postgres computes emit. Requires Neon Platform Beta, and is currently available only for projects in `aws-us-east-2`.
+
+### Patch Changes
+
+- 9f51632: Install and tool commands now use your project's package manager everywhere, not just in `neon config init`
+
+  `neon bootstrap` and the `neon init` getting-started and migration steps told agents to run `npm install`, `npm install @neondatabase/serverless`, and `npm install -D prisma` regardless of the project's lockfile — which fails outright in a pnpm project, where npm's resolver chokes on the symlinked `node_modules`. They now emit the command for the manager the project actually uses (`pnpm add -D prisma`, `bun add -D drizzle-kit`, and so on).
+
+  The tools those steps then run follow the project too: `pnpm exec drizzle-kit migrate` and `bun run prisma generate` rather than `npx`. These are local-only forms, so a step that runs before its dependencies are installed now fails instead of silently downloading an unpinned copy of the tool.
+
+  The global `neonctl` and `skills` installs follow the package manager that invoked the CLI instead of always using npm, and report clearly when the machine has no way to install a CLI globally.
+
+## 3.0.0
+
+### Major Changes
+
+- 3cb16e1: Stage the real files of a function's `externalPackages` into the deployed archive, so a
+  package backed by a native binary works on Functions instead of failing at invoke. Each
+  declared package is installed for the runtime target (linux-arm64, glibc) into a throwaway
+  directory, traced for the files it actually reaches, and copied under `node_modules/` with
+  its directory layout preserved. The user's own `node_modules` is never read for those files
+  or modified.
+
+  An entry with `includeFiles: false` is externalized and nothing is staged for it, which is
+  the pre-existing behaviour. A function whose entries all opt out — or which declares none —
+  produces a byte-identical archive to before.
+
+  Deploys and `neon dev` now report a package that was bundled in, carries native code, and
+  was never declared. The report is advisory and never fails a deploy: the evidence shows the
+  package contains compiled code, not that this function reaches it, and a package with a
+  working JavaScript fallback looks identical.
+
+  Fixes version pinning for packages whose `exports` map does not list `./package.json`.
+  `sharp` is one, so the version the user had installed was never read and the registry's
+  latest was staged instead. Versions are now read from the package directory rather than
+  through the resolver, and a package whose version still cannot be determined is reported
+  instead of being staged silently.
+
+- 98c4aec: Deep imports under `neon/dist/_shared/` no longer resolve. That directory holds source compiled in
+  from the repo's shared trees — credential reading, and the branch-credential mint/revoke logic —
+  which the `./dist/*` wildcard made importable by accident. `neon/dist/_shared/credentials.js` was
+  reachable before this change. Everything else under `neon/dist/` is unaffected, and none of it was
+  ever a supported surface: the CLI's entry points are the `neon` binary, `neon` and `neon/cli`.
+
+### Patch Changes
+
+- 98c4aec: **Breaking (`@neon/env`): the `@neon/env/runtime` entry point is removed.** It held
+  `fetchEnvReusingSecrets`, which reads an env source and can mint and revoke branch credentials.
+  Its only consumers were Neon's own CLIs, and a library that revokes your credentials because you
+  imported it is one you cannot safely embed — so it is now internal shared source rather than a
+  published path. If you were importing it, use the `neon` CLI (`neon env pull`, `neon dev`), which does this for you. Rolling your own is possible but the hard part is not storing the secret — it is **verifying** it: a persisted secret is only reusable if it still names a live credential on that branch, unrevoked, unexpired, and carrying every scope the policy needs. A presence check cannot tell a real secret from a `.env.example` placeholder, which is the bug 0.12.0 shipped a fix for. `credentialScopesSatisfied` and `deriveCredentialScopes` from `@neon/config/v1`, plus `listCredentials` / `createCredential` / `revokeCredential` on a `NeonApi`, are the pieces.
+
+  Everything else is unchanged: `fetchEnv`, `parseEnv`, `toEntries` and `NEON_ENV_VAR_KEYS` stay on
+  `@neon/env` with the same signatures, and the `neon-env` binary is unaffected.
+
+- 4497de8: Refreshed `--help` text for project, branch, endpoint, and database flags from the current Neon OpenAPI spec. Several descriptions that rendered as empty now have text, and the scale-to-zero, history-retention, and provisioner flags describe their plan limits.
+- Updated dependencies [3cb16e1]
+- Updated dependencies [4497de8]
+- Updated dependencies [35299c4]
+  - @neon/config-runtime@1.0.0
+  - @neon/sdk@2.0.0
+  - @neon/config@1.0.0
+
+## 2.47.0
+
+### Minor Changes
+
+- 6f8ba4d: `neon env pull` now pulls the AI Gateway variables (`NEON_AI_GATEWAY_TOKEN`, `NEON_AI_GATEWAY_BASE_URL`) when the working directory has no `neon.ts`, so a bare pull writes everything the branch can give you. A `neon.ts` still decides on its own, and the pull bundled into `link` / `checkout` / `config apply` is unchanged.
+
+  New `--service` flag scopes a pull to `postgres`, `auth`, `data-api`, `object-storage`, and/or `ai-gateway`, overriding `neon.ts`. A scoped pull writes and prunes only within the services you name, so `neon env pull -s ai-gateway` leaves your `DATABASE_URL` alone.
+
+  `neon dev` resolves the same set by the same rules, so a function running locally gets what the deployed runtime would inject — including the AI Gateway on a branch with no `neon.ts`. It also reads your `.env` / `.env.local` now to reuse the branch credential behind the AI Gateway and object storage, instead of minting one on every start.
+
+  Every services flag in the CLI now shares one vocabulary and one syntax: `-s`, `--service` and `--services` are interchangeable, values can be repeated or comma-separated, and a service is spelled the same way on every command. That renames `neon config init --services storage` to `object-storage`; the old spelling still works and warns.
+
+  `fetchEnvReusingSecrets` (`@neon/env/runtime`) takes a new `revokeSuperseded` option. It defaults to `true`, the existing behaviour. Pass `false` when the call resolves only part of what a branch has: object storage and the AI Gateway share one credential, so revoking the one your persisted secrets name can break a service the call is not rewriting. The credential it then leaves live is reported as `credential.superseded`, the counterpart to the existing `credential.revoked`.
+
+### Patch Changes
+
+- 47e6728: Install the config packages with the package manager the project actually uses
+
+  `neon config init` (and the `neon link` prompt that runs it) picked a package manager from `npm_config_user_agent` alone, which is empty for a globally installed `neon`. It then fell back to the first manager on `PATH`, effectively always npm — so setting up a pnpm, yarn, or bun project shelled out to `npm install`. In a pnpm project that fails outright: npm's dependency resolver chokes on pnpm's symlinked `node_modules` with `Cannot read properties of null (reading 'matches')`. The install leaves a `neon.ts` whose `@neon/config/v1` import can't resolve, so the env pull that follows fails too.
+
+  `resolvePackageManager` now reads the project's lockfile first, from the target directory and its parents up to the repo root — so a package in a monorepo finds the root lockfile, while a stray lockfile above the repository is ignored. A project with no lockfile falls back to the previous behaviour unchanged.
+
+- Updated dependencies [6f8ba4d]
+  - @neon/env@0.15.0
+
 ## 2.46.0
 
 ### Minor Changes

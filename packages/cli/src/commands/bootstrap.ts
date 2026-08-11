@@ -1,10 +1,9 @@
 import { existsSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-
+import { credentialInputs } from "@neon-internals/cli-core/auth_selection";
 import chalk from "chalk";
 import prompts, { type InitialReturnValue } from "prompts";
 import type yargs from "yargs";
-import { credentialInputs } from "../_shared/auth_selection.js";
 import { isCi } from "../env.js";
 import {
 	BootstrapInputError,
@@ -20,9 +19,13 @@ import { log } from "../log.js";
 import type { CommonProps } from "../types.js";
 import { getCliName } from "../utils/cli_name.js";
 import {
-	detectPackageManager,
+	DO_NOT_SUBSTITUTE_HINT,
+	formatInstallCommand,
+	inferPackageManager,
+	installArgs,
 	installedPackageManagers,
 	type PackageManager,
+	resolvePackageManager,
 	runCommand,
 } from "../utils/package_manager.js";
 
@@ -352,15 +355,16 @@ const runPostScaffoldSteps = async (
 	targetDir: string,
 	interactive: boolean,
 ): Promise<void> => {
-	const detected = detectPackageManager();
+	const inferred = inferPackageManager(targetDir);
+	const defaultPm = resolvePackageManager(targetDir);
 
 	if (props.default) {
-		await runDefaultSteps(props, targetDir, detected ?? "npm");
+		await runDefaultSteps(props, targetDir, defaultPm);
 		return;
 	}
 
 	if (!interactive) {
-		printNextSteps(targetDir, detected ?? "npm", {
+		printNextSteps(targetDir, defaultPm, {
 			installed: false,
 			suggestLink: true,
 		});
@@ -368,13 +372,13 @@ const runPostScaffoldSteps = async (
 	}
 
 	// The package manager used for the install (and shown in the closing hint).
-	// When we couldn't infer it from the invocation we ask, so a globally
+	// When we couldn't infer from the project or invocation we ask, so a globally
 	// installed `neon` doesn't silently force npm on a bun/pnpm user.
-	let pm: PackageManager = detected ?? "npm";
+	let pm: PackageManager = defaultPm;
 	let installed = false;
-	if (props.install && (await confirm(installPrompt(detected)))) {
-		pm = detected ?? (await selectPackageManager());
-		installed = await runCommand(pm, ["install"], targetDir);
+	if (props.install && (await confirm(installPrompt(inferred)))) {
+		pm = inferred ?? (await selectPackageManager());
+		installed = await runCommand(pm, installArgs(pm), targetDir);
 	}
 
 	if (
@@ -393,7 +397,7 @@ const runPostScaffoldSteps = async (
 		if (!installed && hasNeonConfig(targetDir)) {
 			log.info(
 				`Skipping the Neon link step: \`${getCliName()} link\` reads this project's neon.ts ` +
-					`to pull env vars, which needs its dependencies. Run \`${pm} install\`, ` +
+					`to pull env vars, which needs its dependencies. Run \`${formatInstallCommand(pm)}\`, ` +
 					`then \`${getCliName()} link\`.`,
 			);
 		} else if (
@@ -411,9 +415,9 @@ const runPostScaffoldSteps = async (
 	printNextSteps(targetDir, pm, { installed, suggestLink: true });
 };
 
-const installPrompt = (detected: PackageManager | undefined): string =>
-	detected
-		? `Install dependencies with ${detected}?`
+const installPrompt = (inferred: PackageManager | undefined): string =>
+	inferred
+		? `Install dependencies with ${inferred}?`
 		: "Install dependencies?";
 
 /**
@@ -430,7 +434,7 @@ const runDefaultSteps = async (
 	log.info("Quick start (--default): running setup without prompting.");
 	let installed = false;
 	if (props.install) {
-		installed = await runCommand(pm, ["install"], targetDir);
+		installed = await runCommand(pm, installArgs(pm), targetDir);
 	}
 	if (props.git && !isGitRepo(targetDir)) {
 		await initGitRepo(targetDir);
@@ -561,7 +565,7 @@ const printNextSteps = (
 		log.info("  cd %s", displayDir(targetDir));
 	}
 	if (!opts.installed) {
-		log.info("  %s install", pm);
+		log.info("  %s", formatInstallCommand(pm));
 	}
 	if (opts.suggestLink) {
 		log.info(`  ${getCliName()} link`);
@@ -638,6 +642,7 @@ const runAgent = async (props: BootstrapProps): Promise<void> => {
 
 	const dir = displayDir(targetDir);
 	const runIn = isCurrentDir(targetDir) ? "" : `cd ${shellArg(dir)} && `;
+	const installPm = resolvePackageManager(targetDir);
 	emitAgent({
 		status: "scaffolded",
 		directory: targetDir,
@@ -646,9 +651,8 @@ const runAgent = async (props: BootstrapProps): Promise<void> => {
 		next_steps: [
 			{
 				action: "install_dependencies",
-				instruction:
-					"Ask the user whether to install dependencies, then run this in the project directory.",
-				command: `${runIn}npm install`,
+				instruction: `Ask the user whether to install dependencies, then run this in the project directory. ${DO_NOT_SUBSTITUTE_HINT}`,
+				command: `${runIn}${formatInstallCommand(installPm)}`,
 			},
 			{
 				action: "initialize_git",

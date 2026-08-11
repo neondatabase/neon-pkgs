@@ -3,11 +3,23 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import which from "which";
+import {
+	globalInstallCommand,
+	resolveInvokingPackageManager,
+} from "./package_manager.js";
 
-const NOT_FOUND =
-	"esbuild not found. neon ships esbuild for most platforms; if you see " +
-	"this, install esbuild and ensure it is on your PATH (e.g. `npm i -g " +
-	"esbuild`), or set NEON_ESBUILD_PATH to an esbuild binary.";
+const notFoundMessage = (): string => {
+	const install = globalInstallCommand(
+		resolveInvokingPackageManager(),
+		"esbuild",
+	);
+	// Only name an install command this machine can actually run: yarn Berry has
+	// no global install, and npm may not be present to stand in for it.
+	const how = install
+		? `install esbuild and ensure it is on your PATH (e.g. \`${install.command} ${install.args.join(" ")}\`), or `
+		: "put an esbuild binary on your PATH, or ";
+	return `esbuild not found. neon ships esbuild for most platforms, so this is unexpected. ${how[0].toUpperCase()}${how.slice(1)}set NEON_ESBUILD_PATH to an esbuild binary.`;
+};
 
 // Prepended to the ESM bundle. Bundled dependencies are frequently CommonJS, but an ESM
 // output (`--format=esm`) has no `require` / `__filename` / `__dirname` in scope — so any
@@ -19,9 +31,12 @@ const ESM_CJS_INTEROP_BANNER =
 
 // esbuild's JS module, narrowed to the one call we use. Typed structurally so
 // we never statically import from 'esbuild' (see bundleViaModule for why).
+type EsbuildMetafile = { inputs?: Record<string, unknown> };
+
 type EsbuildModule = {
 	build: (opts: Record<string, unknown>) => Promise<{
 		outputFiles?: readonly { path: string; contents: Uint8Array }[];
+		metafile?: EsbuildMetafile;
 	}>;
 };
 
@@ -31,14 +46,31 @@ export type BundleDeps = {
 };
 
 /**
- * Bundling knobs a caller may set, alongside the injectable deps. `externalPackages` comes
- * from a function's `neon.ts` `externalPackages` and is handed to esbuild's `external`, so
- * a package esbuild cannot bundle (a native addon, an optional peer on an untaken code
- * path) stops failing the build. It does NOT become resolvable in the deployed archive —
- * see `FunctionDef.externalPackages` in @neon/config.
+ * Bundling knobs a caller may set, alongside the injectable deps. `externalPackages` are the
+ * names from a function's `neon.ts` `externalPackages`, handed to esbuild's `external` so a
+ * package esbuild cannot bundle stops failing the build. Whether such a package's files then
+ * ship into the archive is `includeFiles`, which the deploy bundler acts on — not this
+ * helper's job. See `FunctionDef.externalPackages` in @neon/config.
  */
 export type BundleOptions = Partial<BundleDeps> & {
 	externalPackages?: readonly string[];
+};
+
+/**
+ * The bundle, plus the graph esbuild resolved to produce it.
+ *
+ * The metafile is what lets a deploy notice a native dependency that was bundled in but never
+ * declared. It is absent on the packaged-binary path when esbuild writes no metafile, and
+ * callers treat that as "no findings" rather than an error.
+ */
+export type BundleResult = {
+	files: Record<string, Uint8Array>;
+	metafile?: EsbuildMetafile;
+	/**
+	 * Advisory findings from the bundle step. Returned rather than printed so the caller
+	 * decides how to render them — this module has no logger and must not reach for one.
+	 */
+	warnings: string[];
 };
 
 const defaultDeps: BundleDeps = {
@@ -67,7 +99,7 @@ const bundleViaModule = async (
 	source: string,
 	loadEsbuild: BundleDeps["loadEsbuild"],
 	externalPackages: readonly string[],
-): Promise<Record<string, Uint8Array>> => {
+): Promise<BundleResult> => {
 	// esbuild is resolved by a COMPUTED specifier, never the literal string
 	// 'esbuild'. Both rollup (bundle step) and @yao-pkg/pkg (binary step)
 	// statically scan for literal import()/require() calls and would otherwise
@@ -105,6 +137,9 @@ const bundleViaModule = async (
 			banner: { js: ESM_CJS_INTEROP_BANNER },
 			// Only what the policy declared unbundleable; everything else is still inlined.
 			external: [...externalPackages],
+			// Reveals which packages were inlined, so a deploy can report an undeclared
+			// native dependency. Free here — esbuild is already running.
+			metafile: true,
 			logLevel: "silent",
 		})
 		.catch((err: unknown) => {
@@ -121,7 +156,11 @@ const bundleViaModule = async (
 			`Failed to bundle function from ${source}. esbuild produced no output.`,
 		);
 	}
-	return toFilesByBasename(files);
+	return {
+		files: toFilesByBasename(files),
+		...(result.metafile ? { metafile: result.metafile } : {}),
+		warnings: [],
+	};
 };
 
 // Find the esbuild binary at deploy time. An explicit override is authoritative
@@ -131,7 +170,11 @@ const resolveEsbuild = (): string => {
 	const override = process.env.NEON_ESBUILD_PATH;
 	if (override) {
 		if (existsSync(override)) return override;
-		throw new Error(NOT_FOUND);
+		// Naming the value: the generic "esbuild not found, try setting
+		// NEON_ESBUILD_PATH" is useless advice for someone who already set it.
+		throw new Error(
+			`NEON_ESBUILD_PATH is set to ${override}, but no file exists there. Point it at an esbuild binary, or unset it to use the one neon ships.`,
+		);
 	}
 	const onPath = which.sync("esbuild", { nothrow: true });
 	if (onPath) return onPath;
@@ -139,7 +182,7 @@ const resolveEsbuild = (): string => {
 	// a devDependency. In `npm i -g` and pkg installs the PATH branch above wins.
 	const local = join(process.cwd(), "node_modules", ".bin", "esbuild");
 	if (existsSync(local)) return local;
-	throw new Error(NOT_FOUND);
+	throw new Error(notFoundMessage());
 };
 
 const runEsbuild = (
@@ -163,10 +206,11 @@ const runEsbuild = (
 const bundleViaBinary = async (
 	source: string,
 	externalPackages: readonly string[],
-): Promise<Record<string, Uint8Array>> => {
+): Promise<BundleResult> => {
 	const bin = resolveEsbuild();
 	const outDir = mkdtempSync(join(tmpdir(), "neon-fn-bundle-"));
 	const outfile = join(outDir, "index.mjs");
+	const metafilePath = join(outDir, "meta.json");
 	try {
 		const { code, stderr } = await runEsbuild(bin, [
 			source,
@@ -178,6 +222,9 @@ const bundleViaBinary = async (
 			`--banner:js=${ESM_CJS_INTEROP_BANNER}`,
 			// One flag per package, mirroring the module path's `external` array.
 			...externalPackages.map((pkg) => `--external:${pkg}`),
+			// Written beside the output so a deploy can report an undeclared native
+			// dependency here too, not only on the module path.
+			`--metafile=${metafilePath}`,
 			"--log-level=error",
 		]);
 		if (code !== 0) {
@@ -187,12 +234,48 @@ const bundleViaBinary = async (
 		}
 		// No `--sourcemap`: the Functions runtime has no source-map support, so an uploaded
 		// `index.mjs.map` is never consumed — emitting it only inflated the archive.
+		const metafile = readMetafile(metafilePath);
 		return {
-			"index.mjs": new Uint8Array(readFileSync(outfile)),
+			files: { "index.mjs": new Uint8Array(readFileSync(outfile)) },
+			...(metafile.metafile ? { metafile: metafile.metafile } : {}),
+			warnings: metafile.warnings,
 		};
 	} finally {
 		rmSync(outDir, { recursive: true, force: true });
 	}
+};
+
+/**
+ * Read the metafile the binary path asked esbuild to write.
+ *
+ * We always pass `--metafile`, so an unreadable one means esbuild did not do what it was
+ * told. That is worth saying rather than swallowing — but not worth failing a deploy over,
+ * because the metafile only powers an advisory report. Reported and skipped.
+ */
+const readMetafile = (
+	path: string,
+): { metafile?: EsbuildMetafile; warnings: string[] } => {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(readFileSync(path, "utf8"));
+	} catch (cause) {
+		return {
+			warnings: [
+				`esbuild was asked for a metafile but none could be read (${message(cause)}). ` +
+					`The bundle is unaffected; this deploy cannot check for an undeclared ` +
+					`native dependency.`,
+			],
+		};
+	}
+	if (typeof parsed !== "object" || parsed === null) {
+		return {
+			warnings: [
+				"esbuild wrote a metafile that is not an object. The bundle is unaffected; " +
+					"this deploy cannot check for an undeclared native dependency.",
+			],
+		};
+	}
+	return { metafile: parsed as EsbuildMetafile, warnings: [] };
 };
 
 // Bundle `source` into the files the Functions archive expects, keyed by
@@ -201,16 +284,16 @@ const bundleViaBinary = async (
 export const bundleEntry = async (
 	source: string,
 	options: BundleOptions = {},
-): Promise<Record<string, Uint8Array>> => {
+): Promise<BundleResult> => {
 	const isPackaged = options.isPackaged ?? defaultDeps.isPackaged;
 	const loadEsbuild = options.loadEsbuild ?? defaultDeps.loadEsbuild;
-	const externalPackages = options.externalPackages ?? [];
-	if (isPackaged()) return bundleViaBinary(source, externalPackages);
+	const external = options.externalPackages ?? [];
+	if (isPackaged()) return bundleViaBinary(source, external);
 	try {
-		return await bundleViaModule(source, loadEsbuild, externalPackages);
+		return await bundleViaModule(source, loadEsbuild, external);
 	} catch (err) {
 		if (err instanceof ModuleNotAvailable)
-			return bundleViaBinary(source, externalPackages);
+			return bundleViaBinary(source, external);
 		throw err;
 	}
 };

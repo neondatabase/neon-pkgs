@@ -1,4 +1,4 @@
-import { recordCredentialInputs } from "../_shared/auth_selection.js";
+import { recordCredentialInputs } from "@neon-internals/cli-core/auth_selection";
 
 /**
  * Resolves `--api-key` from `NEON_API_KEY` when the flag is absent, leaving it an

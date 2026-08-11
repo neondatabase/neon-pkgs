@@ -79,8 +79,14 @@ export const resolveFunctionsFromConfig = async (
 				? { port: devPort(fn.dev) as number }
 				: {}),
 			env: { ...fn.env },
+			// Names only: locally every entry is simply left unbundled, and `includeFiles`
+			// governs the deployed archive, which `neon dev` does not build.
 			...(fn.externalPackages
-				? { externalPackages: [...fn.externalPackages] }
+				? {
+						externalPackages: fn.externalPackages.map(
+							(pkg) => pkg.name,
+						),
+					}
 				: {}),
 		};
 	});

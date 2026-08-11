@@ -2,6 +2,7 @@ import { fork } from "node:child_process";
 import {
 	existsSync,
 	lstatSync,
+	mkdirSync,
 	mkdtempSync,
 	readFileSync,
 	readlinkSync,
@@ -15,6 +16,7 @@ import { join } from "node:path";
 import express from "express";
 import { gzipSync } from "fflate";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { makeProjectDir } from "../test_utils/project_dir.js";
 
 // A fixture file in the template repo: its POSIX `mode`/`type` decide whether it
 // lands as a regular file, an executable, or a symlink.
@@ -335,6 +337,11 @@ describe("bootstrap", () => {
 		});
 
 		test("scaffolds and returns the install + git + link next steps", async () => {
+			// Pin the target to npm so the assertion below doesn't depend on
+			// which package manager launched the test run.
+			mkdirSync(join(dest, ".git"));
+			writeFileSync(join(dest, "package-lock.json"), "");
+
 			const { code, stdout, stderr } = await runBootstrap(server, [
 				"--agent",
 				dest,
@@ -364,9 +371,30 @@ describe("bootstrap", () => {
 				"initialize_git",
 				"link_neon_project",
 			]);
-			expect(steps[0].command).toContain("npm install");
+			// Anchored, because "pnpm install" contains "npm install" as a
+			// substring — a toContain here passes whichever manager we emit.
+			expect(steps[0].command).toMatch(/ && npm install$/);
 			expect(steps[1].command).toContain("git init");
 			expect(steps[2].command).toContain("neon link --agent");
+		});
+
+		test("the install step uses the target project's package manager", async () => {
+			const { dir, cleanup } = makeProjectDir("pnpm");
+			try {
+				const { code, stdout, stderr } = await runBootstrap(server, [
+					"--agent",
+					dir,
+					"--template",
+					"hono",
+					"--force",
+				]);
+				expect(code, stderr).toBe(0);
+				const res = parseAgentOutput(stdout);
+				const steps = res.next_steps as Record<string, unknown>[];
+				expect(steps[0].command).toMatch(/ && pnpm install$/);
+			} finally {
+				cleanup();
+			}
 		});
 
 		test("errors with UNKNOWN_TEMPLATE for a bad template id", async () => {

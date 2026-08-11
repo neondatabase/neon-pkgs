@@ -41,9 +41,15 @@ export type {
 	BranchWithCompute,
 	CreateWithComputeInput,
 } from "./neon/resources/branches.js";
+export type {
+	LogFieldValuesQuery,
+	LogQueryInput,
+} from "./neon/resources/logs.js";
 export type { ConnectionStringParams } from "./neon/resources/postgres.js";
 export type {
 	ProjectConnection,
+	RemoveRoleOptions,
+	SetRoleOptions,
 	TransferProjectsInput,
 } from "./neon/resources/projects.js";
 export type {

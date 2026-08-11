@@ -37,6 +37,13 @@ export interface CredentialOutcome {
 	 * secrets named *and* that this tool issued; empty otherwise.
 	 */
 	revoked: string[];
+	/**
+	 * `tokenId`s this call superseded but left live, because `revokeSuperseded` was `false`.
+	 * The counterpart to {@link CredentialOutcome.revoked}: exactly the ids that would be
+	 * there instead. Lets a caller name what it orphaned rather than saying that it might
+	 * have orphaned something — always empty on the default path.
+	 */
+	superseded: string[];
 }
 
 /** A resolved branch env, ready to write to a dotenv file or inject into a process. */
@@ -77,7 +84,7 @@ interface PersistedSecrets {
  * the record of what the last call issued.
  *
  * ```ts
- * import { fetchEnvReusingSecrets } from "@neon/env/runtime";
+ * import { fetchEnvReusingSecrets } from "@neon-internals/env-core/reuse-secrets";
  *
  * const { vars, credential } = await fetchEnvReusingSecrets(config, {
  *     projectId,
@@ -95,9 +102,25 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 		 * `.env` file, typically. Defaults to `process.env`.
 		 */
 		env?: NodeJS.ProcessEnv;
+		/**
+		 * Revoke the credential a freshly-minted one supersedes. Defaults to `true`.
+		 *
+		 * Pass `false` when this resolve covers only *part* of what the branch has. Object
+		 * storage and the AI Gateway share one credential, so a partial resolve cannot tell
+		 * whether the credential its persisted secrets name also backs a service it is not
+		 * resolving — and revoking it would kill that service while its vars, which this call
+		 * is not rewriting, stay on disk and stop working. The cost is an orphaned credential,
+		 * which is the safer of the two failures. `neon env pull --service` is the caller that
+		 * needs this.
+		 */
+		revokeSuperseded?: boolean;
 	},
 ): Promise<ReusedBranchEnv> {
-	const { env: source = process.env, ...fetchOptions } = options;
+	const {
+		env: source = process.env,
+		revokeSuperseded = true,
+		...fetchOptions
+	} = options;
 	const api = options.api ?? createApiFromOptions(options);
 	const { branch, desired } = await resolveBranchPolicy(config, options, api);
 
@@ -114,7 +137,12 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 		const fetched = await fetchEnvKeys(config, fetchOptions, null);
 		return {
 			vars: preferPersisted(toEntries(fetched), source),
-			credential: { issued: false, keys: [], revoked: [] },
+			credential: {
+				issued: false,
+				keys: [],
+				revoked: [],
+				superseded: [],
+			},
 		};
 	}
 
@@ -165,7 +193,12 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 		}
 		return {
 			vars,
-			credential: { issued: false, keys: secretKeys, revoked: [] },
+			credential: {
+				issued: false,
+				keys: secretKeys,
+				revoked: [],
+				superseded: [],
+			},
 		};
 	}
 
@@ -187,13 +220,20 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 			ours.add(meta.tokenId);
 		}
 	}
-	for (const tokenId of ours) {
-		await api.revokeCredential(options.projectId, branch.id, tokenId);
+	if (revokeSuperseded) {
+		for (const tokenId of ours) {
+			await api.revokeCredential(options.projectId, branch.id, tokenId);
+		}
 	}
 
 	return {
 		vars,
-		credential: { issued: true, keys: secretKeys, revoked: [...ours] },
+		credential: {
+			issued: true,
+			keys: secretKeys,
+			revoked: revokeSuperseded ? [...ours] : [],
+			superseded: revokeSuperseded ? [] : [...ours],
+		},
 	};
 }
 

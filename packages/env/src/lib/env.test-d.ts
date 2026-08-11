@@ -1,19 +1,23 @@
 import { type Config, defineConfig } from "@neon/config/v1";
-import { describe, expectTypeOf, test } from "vitest";
 import type {
 	FetchEnvOptions,
 	FilteredNeonEnv,
-	FunctionSlugOf,
 	NeonAiGatewayEnv,
 	NeonAuthEnv,
 	NeonBranchEnv,
 	NeonDataApiEnv,
-	NeonFunctionEnv,
+	NeonEnv,
 	NeonPostgresEnv,
 	NeonStorageEnv,
+	SelectableEnvKey,
+} from "@neon-internals/env-core/env";
+import { describe, expectTypeOf, test } from "vitest";
+import type {
+	FunctionSlugOf,
+	NeonFunctionEnv,
 	NoFunctionScopeHint,
-} from "./env.js";
-import { type NeonEnv, parseEnv, type SelectableEnvKey } from "./env.js";
+} from "./parse-env.js";
+import { parseEnv } from "./parse-env.js";
 
 // Type-level tests for `parseEnv`. Run via `pnpm --filter @neon/env test:types`
 // (Vitest typecheck mode) and additionally enforced by `tsc --noEmit` during the build,
