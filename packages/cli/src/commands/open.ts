@@ -9,10 +9,16 @@ type OpenProps = CommonProps & {
 };
 
 export const command = "open";
-export const describe = "Open the current project in the Neon Console";
+export const describe = "Open the linked project in the Neon Console";
 
 export const builder = (argv: yargs.Argv) =>
-	argv.usage("$0 open").example("$0 open", describe);
+	argv
+		.usage("$0 open [options]")
+		.option("project-id", {
+			describe: "Project ID (defaults to the project linked in .neon)",
+			type: "string",
+		})
+		.example("$0 open", describe);
 
 export const projectConsoleUrl = (projectId: string): string =>
 	`https://console.neon.tech/app/projects/${encodeURIComponent(projectId)}`;

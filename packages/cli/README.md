@@ -202,12 +202,6 @@ The Neon CLI supports autocompletion, which you can configure in a few easy step
 
 `neon link` is a Vercel-style command that binds the current directory to a Neon project. It picks (or creates) an organization and a project and writes a `.neon` file (`{ "orgId", "projectId", "branch" }`) that subsequent commands run in this directory (or any sub-directory) pick up automatically.
 
-Open the linked project in the Neon Console from the same directory:
-
-```bash
-neon open
-```
-
 `link` resolves what it can and **verifies every identifier you pass** before writing, so a `.neon` is never left half-written or pointing at something that doesn't exist:
 
 - **org** is inferred from the project (so `--project-id` alone is enough); it's omitted only when the project has no organization (personal account).
@@ -357,6 +351,19 @@ How today's `set-context` uses map onto `link`:
 | a raw local write (no network)          | `neon link --no-checks --org-id <id> --project-id <id>`                    |
 
 The key difference: `link` resolves and **verifies** before writing (so you never get a half-written or stale `.neon`), whereas `set-context` writes whatever you give it verbatim. The closest like-for-like replacement for the old raw write is `link --no-checks`.
+
+### open
+
+`open` launches the linked project's page in the Neon Console. It reads the closest `.neon` file without authenticating or calling the Neon API, so it works from any sub-directory of a linked project.
+
+```bash
+neon open
+
+# Open a project without changing the linked context
+neon open --project-id polished-snowflake-12345678
+```
+
+A branch pinned in `.neon` does not change the destination. `.neon` stores the branch as a name, while the Console route requires its ID; resolving it would turn this local command into an authenticated API call.
 
 ### checkout
 

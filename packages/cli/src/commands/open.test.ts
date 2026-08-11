@@ -13,6 +13,33 @@ afterEach(() => {
 	}
 });
 
+const runCli = (args: string[]) => {
+	const workspace = mkdtempSync(join(tmpdir(), "neon-open-"));
+	workspaces.push(workspace);
+
+	return spawnSync(
+		process.execPath,
+		[
+			resolve(process.cwd(), "dist/cli.js"),
+			"--config-dir",
+			join(workspace, "config"),
+			"--context-file",
+			join(workspace, ".neon"),
+			"--no-analytics",
+			...args,
+		],
+		{
+			encoding: "utf8",
+			env: {
+				...process.env,
+				CI: "1",
+				NEON_API_KEY: "",
+				NEON_PROFILE: "",
+			},
+		},
+	);
+};
+
 describe("open", () => {
 	test("builds the Console URL for the linked project", () => {
 		expect(projectConsoleUrl("quiet-frog-12345678")).toBe(
@@ -27,30 +54,7 @@ describe("open", () => {
 	});
 
 	test("bare open reaches the handler without authenticating", () => {
-		const workspace = mkdtempSync(join(tmpdir(), "neon-open-"));
-		workspaces.push(workspace);
-
-		const result = spawnSync(
-			process.execPath,
-			[
-				resolve(process.cwd(), "dist/cli.js"),
-				"--config-dir",
-				join(workspace, "config"),
-				"--context-file",
-				join(workspace, ".neon"),
-				"--no-analytics",
-				"open",
-			],
-			{
-				encoding: "utf8",
-				env: {
-					...process.env,
-					CI: "1",
-					NEON_API_KEY: "",
-					NEON_PROFILE: "",
-				},
-			},
-		);
+		const result = runCli(["open"]);
 
 		expect(result.status).toBe(1);
 		expect(result.stdout).toBe("");
@@ -58,6 +62,16 @@ describe("open", () => {
 		expect(result.stderr).toContain("`neon link`");
 		expect(result.stderr).not.toContain(
 			"Cannot run interactive auth in CI",
+		);
+	});
+
+	test("documents the explicit project override", () => {
+		const result = runCli(["open", "--help"]);
+
+		expect(result.status).toBe(0);
+		expect(result.stderr).toContain("--project-id");
+		expect(result.stderr).toContain(
+			"defaults to the project linked in .neon",
 		);
 	});
 });
