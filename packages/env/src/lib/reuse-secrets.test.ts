@@ -161,6 +161,32 @@ describe("fetchEnvReusingSecrets", () => {
 		expect(live[0]?.tokenId).toBe(widened.vars.AWS_ACCESS_KEY_ID);
 	});
 
+	test("revokes the credential it replaces when the branch switches features", async () => {
+		const { api, projectId } = seededFake();
+		const storageOnly = await fetchEnvReusingSecrets(storagePolicy, {
+			api,
+			projectId,
+			branch: "main",
+		});
+
+		const gatewayOnly = await fetchEnvReusingSecrets(gatewayPolicy, {
+			api,
+			projectId,
+			branch: "main",
+			env: { ...process.env, ...storageOnly.vars },
+		});
+
+		expect(gatewayOnly.credential).toEqual({
+			issued: true,
+			keys: ["NEON_AI_GATEWAY_TOKEN"],
+			revoked: [storageOnly.vars.AWS_ACCESS_KEY_ID],
+			superseded: [],
+		});
+		const live = await api.listCredentials(projectId, "br-main");
+		expect(live).toHaveLength(1);
+		expect(live[0]?.scopes).toEqual(["ai_gateway:invoke"]);
+	});
+
 	test("keeps the superseded credential live when the caller resolves only part of the branch", async () => {
 		// `revokeSuperseded: false` is for a caller resolving a subset — `neon env pull
 		// --service`. Here the branch has both features on one credential, but the resolve

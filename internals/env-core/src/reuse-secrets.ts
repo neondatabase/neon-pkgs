@@ -170,18 +170,21 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 	}
 
 	const persisted = readPersistedSecrets(source);
+	const storageCredentialManaged =
+		requested === null || storageCredentialSelected;
+	const gatewayCredentialManaged =
+		requested === null || gatewayCredentialSelected;
 	const complete =
 		(!storageCredentialSelected ||
 			Boolean(persisted.accessKeyId && persisted.secretAccessKey)) &&
 		(!gatewayCredentialSelected || Boolean(persisted.apiToken));
 
-	// Look the persisted secrets up whenever there are any — not only when they're complete.
-	// An incomplete set still names the credential a newly-enabled feature is about to
-	// supersede (a storage-only credential on a branch that just gained the AI Gateway), and
-	// that one should be revoked rather than left live.
+	// An unscoped pull replaces the branch's complete env, so persisted secrets from a feature
+	// the policy just disabled still name a credential the replacement supersedes. An explicit
+	// key selection manages only the selected credential halves.
 	const named =
-		(storageCredentialSelected && persisted.accessKeyId !== "") ||
-		(gatewayCredentialSelected && persisted.apiToken !== "")
+		(storageCredentialManaged && persisted.accessKeyId !== "") ||
+		(gatewayCredentialManaged && persisted.apiToken !== "")
 			? namedCredentials(
 					await api.listCredentials(options.projectId, branch.id),
 					persisted,
@@ -241,8 +244,8 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 	// Revoked *after* the fetch, so a failed fetch leaves the caller's existing secrets working.
 	const ours = new Set<string>();
 	for (const meta of [
-		storageCredentialSelected ? named.storage : null,
-		gatewayCredentialSelected ? named.gateway : null,
+		storageCredentialManaged ? named.storage : null,
+		gatewayCredentialManaged ? named.gateway : null,
 	]) {
 		if (
 			meta !== null &&
