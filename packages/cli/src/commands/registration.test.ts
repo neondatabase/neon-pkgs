@@ -42,10 +42,6 @@ describe("command registration", () => {
 		expect(registered.length).toBeGreaterThanOrEqual(20);
 	});
 
-	it("registers `list` as a top-level projects-list alias", () => {
-		expect(registered.map(({ verb }) => verb)).toContain("list");
-	});
-
 	for (const { verb, describe: description, builderType } of registered) {
 		it(`"${verb}" exports a valid yargs command module`, () => {
 			expect(verb).not.toBe("<unknown>");

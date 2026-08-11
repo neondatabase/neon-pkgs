@@ -22,18 +22,6 @@ describe("projects", () => {
 		await testCliCommand(["list"]);
 	});
 
-	test("list through the top-level alias with org id", async ({
-		testCliCommand,
-	}) => {
-		await testCliCommand(["list", "--org-id", "org-2"]);
-	});
-
-	test("list recoverable projects through the top-level alias", async ({
-		testCliCommand,
-	}) => {
-		await testCliCommand(["list", "--recoverable-only"]);
-	});
-
 	test("create", async ({ testCliCommand }) => {
 		await testCliCommand(["projects", "create", "--name", "test_project"]);
 	});

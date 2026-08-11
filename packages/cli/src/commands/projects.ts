@@ -42,6 +42,9 @@ const PROJECTS_LIST_LIMIT = 100;
 export const command = "projects";
 export const describe = "Manage projects";
 export const aliases = ["project"];
+export const setProjectIdForAnalytics = (args: any) => {
+	args.projectId = args.id;
+};
 export const projectsListBuilder = (argv: yargs.Argv) =>
 	argv.options({
 		"org-id": {
@@ -60,10 +63,7 @@ export const projectsListHandler = async (args: yargs.Arguments) => {
 export const builder = (argv: yargs.Argv) => {
 	return argv
 		.usage("$0 projects <sub-command> [options]")
-		.middleware((args: any) => {
-			// Provide alias for analytics
-			args.projectId = args.id;
-		})
+		.middleware(setProjectIdForAnalytics)
 		.command(
 			"list",
 			"List projects",
