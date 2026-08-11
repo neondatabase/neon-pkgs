@@ -42,6 +42,8 @@ const PROJECTS_LIST_LIMIT = 100;
 export const command = "projects";
 export const describe = "Manage projects";
 export const aliases = ["project"];
+// Project commands inherit projectId from .neon. Attribute analytics to an
+// explicit positional id; account-level listing clears the inherited value.
 export const setProjectIdForAnalytics = (args: any) => {
 	args.projectId = args.id;
 };

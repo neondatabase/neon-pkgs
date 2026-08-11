@@ -209,6 +209,8 @@ created_at: 2019-01-01T00:00:00.000Z
 "
 `;
 
+exports[`projects > top-level alias help names the listed resource 1`] = `""`;
+
 exports[`projects > update enables logical replication with confirmation bypass 1`] = `
 "id: test
 name: test_project

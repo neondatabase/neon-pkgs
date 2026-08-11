@@ -22,6 +22,14 @@ describe("projects", () => {
 		await testCliCommand(["list"]);
 	});
 
+	test("top-level alias help names the listed resource", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["list", "--help"], {
+			stderr: expect.stringContaining("List projects"),
+		});
+	});
+
 	test("create", async ({ testCliCommand }) => {
 		await testCliCommand(["projects", "create", "--name", "test_project"]);
 	});

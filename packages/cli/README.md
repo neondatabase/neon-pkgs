@@ -64,10 +64,10 @@ neon projects list --api-key <neon_api_key>
 
 For information about obtaining an Neon API key, see [Authentication](https://api-docs.neon.tech/reference/authentication), in the _Neon API Reference_.
 
-## List projects
+## List projects (`list`)
 
-`neon list` is a shortcut for `neon projects list`. It supports the same options
-and output formats:
+`neon list` is a shortcut for `neon projects list`. It lists projects you own
+and projects shared with you, with the same options and output formats:
 
 ```bash
 neon list
