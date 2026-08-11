@@ -159,6 +159,41 @@ describe("fetchEnv", () => {
 		expect(toEntries(env).NEON_BRANCH).toBe("main");
 	});
 
+	test("a branch-only key filter skips unrelated Postgres reads", async () => {
+		const { api, projectId } = seededFake();
+		const env = await fetchEnv(defineConfig({}), {
+			api,
+			projectId,
+			branchId: "br-main",
+			keys: ["NEON_BRANCH"],
+		});
+
+		expect(toEntries(env)).toEqual({ NEON_BRANCH: "main" });
+		const methods = api.history.map((entry) => entry.method);
+		expect(methods).not.toContain("listBranchRoles");
+		expect(methods).not.toContain("listBranchDatabases");
+		expect(methods).not.toContain("getConnectionUri");
+	});
+
+	test("a pooled-URL key filter fetches no direct connection URI", async () => {
+		const { api, projectId } = seededFake();
+		const env = await fetchEnv(defineConfig({}), {
+			api,
+			projectId,
+			branchId: "br-main",
+			keys: ["DATABASE_URL"],
+		});
+
+		expect(toEntries(env)).toEqual({
+			DATABASE_URL: expect.stringContaining("postgresql://"),
+		});
+		const connectionCalls = api.history.filter(
+			(entry) => entry.method === "getConnectionUri",
+		);
+		expect(connectionCalls).toHaveLength(1);
+		expect(connectionCalls[0]?.args[1]).toMatchObject({ pooled: true });
+	});
+
 	test("requires auth integration when policy enables auth", async () => {
 		const { api, projectId } = seededFake();
 		const config = defineConfig({ auth: true });

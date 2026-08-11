@@ -482,6 +482,14 @@ export async function fetchEnv(
 	return fetchEnvKeys(config, options, options.keys ?? null);
 }
 
+/** Fail loudly when selected-key dependency planning and execution disagree. */
+function requiredValue<T>(value: T | null, description: string): T {
+	if (value === null) {
+		throw new Error(`fetchEnv: missing ${description}.`);
+	}
+	return value;
+}
+
 /**
  * The {@link fetchEnv} body, with the key selection as a plain argument and no generic
  * narrowing. Exists for callers that compute the selection at runtime — notably
@@ -505,55 +513,86 @@ export async function fetchEnvKeys(
 		selection === null || selection.has(key);
 
 	const result: ResolvedNeonEnv = {};
-	const [roles, databases] = await Promise.all([
-		api.listBranchRoles(projectId, branch.id),
-		api.listBranchDatabases(projectId, branch.id),
-	]);
-
-	const roleName = pickRoleName(roles, branch, options.roleName);
-	const databaseName = pickDatabaseName(
-		databases,
-		branch,
-		options.databaseName,
-	);
-
-	// Fan out: always fetch both Postgres URIs — the direct one also derives the AI Gateway
-	// host, so a selection that drops `DATABASE_URL_UNPOOLED` still needs it. Conditionally
-	// fetch auth + dataApi based on the branch policy and the selection. Auth key fields are
-	// only returned at integration creation time; for Better Auth they may legitimately be
-	// empty, so they can come back as empty strings.
 	const K = NEON_ENV_VAR_KEYS;
+	const wantsPooled = wants(K.postgres.databaseUrl);
+	const wantsUnpooled = wants(K.postgres.databaseUrlUnpooled);
 	const wantsAuth =
 		desired.authEnabled && (wants(K.auth.baseUrl) || wants(K.auth.jwksUrl));
 	const wantsDataApi = desired.dataApiEnabled && wants(K.dataApi.url);
+	const gatewayEnabled = desired.preview?.aiGatewayEnabled ?? false;
+	const needsUnpooled =
+		wantsUnpooled || (gatewayEnabled && wants(K.aiGateway.baseUrl));
+	const needsConnectionTarget = wantsPooled || needsUnpooled;
+	const needsDatabase = needsConnectionTarget || wantsDataApi;
+	const [roles, databases] = await Promise.all([
+		needsConnectionTarget
+			? api.listBranchRoles(projectId, branch.id)
+			: Promise.resolve([]),
+		needsDatabase
+			? api.listBranchDatabases(projectId, branch.id)
+			: Promise.resolve([]),
+	]);
 
+	const databaseName = needsDatabase
+		? pickDatabaseName(databases, branch, options.databaseName)
+		: null;
+	const connectionTarget = needsConnectionTarget
+		? {
+				roleName: pickRoleName(roles, branch, options.roleName),
+				databaseName: requiredValue(
+					databaseName,
+					"database for a selected connection URI",
+				),
+			}
+		: null;
+	const getConnectionUri = (pooled: boolean) => {
+		const target = requiredValue(
+			connectionTarget,
+			"role and database for a selected connection URI",
+		);
+		return api.getConnectionUri(projectId, {
+			branchId: branch.id,
+			...target,
+			pooled,
+		});
+	};
+
+	// Fetch only what the selected keys depend on. The direct Postgres URI also derives the
+	// AI Gateway host, while Auth, storage, branch identity, and gateway tokens need no
+	// Postgres metadata. Auth key fields are only returned at integration creation time; for
+	// Better Auth they may legitimately be empty, so they can come back as empty strings.
 	const [pooled, unpooled, authSnapshot, dataApiSnapshot] = await Promise.all(
 		[
-			api.getConnectionUri(projectId, {
-				branchId: branch.id,
-				databaseName,
-				roleName,
-				pooled: true,
-			}),
-			api.getConnectionUri(projectId, {
-				branchId: branch.id,
-				databaseName,
-				roleName,
-				pooled: false,
-			}),
+			wantsPooled ? getConnectionUri(true) : Promise.resolve(null),
+			needsUnpooled ? getConnectionUri(false) : Promise.resolve(null),
 			wantsAuth
 				? api.getNeonAuth(projectId, branch.id)
 				: Promise.resolve(null),
 			wantsDataApi
-				? api.getNeonDataApi(projectId, branch.id, databaseName)
+				? api.getNeonDataApi(
+						projectId,
+						branch.id,
+						requiredValue(
+							databaseName,
+							"database for the selected Data API URL",
+						),
+					)
 				: Promise.resolve(null),
 		],
 	);
 
 	const postgres: Partial<NeonPostgresEnv> = {};
-	if (wants(K.postgres.databaseUrl)) postgres.databaseUrl = pooled.uri;
-	if (wants(K.postgres.databaseUrlUnpooled)) {
-		postgres.databaseUrlUnpooled = unpooled.uri;
+	if (wantsPooled) {
+		postgres.databaseUrl = requiredValue(
+			pooled,
+			"pooled connection URI response",
+		).uri;
+	}
+	if (wantsUnpooled) {
+		postgres.databaseUrlUnpooled = requiredValue(
+			unpooled,
+			"direct connection URI response",
+		).uri;
 	}
 	if (Object.keys(postgres).length > 0) result.postgres = postgres;
 
@@ -585,17 +624,21 @@ export async function fetchEnvKeys(
 
 	if (wantsDataApi) {
 		if (!dataApiSnapshot) {
+			const selectedDatabase = requiredValue(
+				databaseName,
+				"database for the selected Data API URL",
+			);
 			throw new PlatformError(
 				ErrorCode.NotFound,
 				[
-					`fetchEnv: branch policy enables dataApi but no Data API integration is enabled on branch ${branch.name} (${branch.id}) database ${databaseName}.`,
+					`fetchEnv: branch policy enables dataApi but no Data API integration is enabled on branch ${branch.name} (${branch.id}) database ${selectedDatabase}.`,
 					"Enable it via `apply(config, { projectId, branchId })` or in the Neon Console — then re-run fetchEnv. Or return dataApi.enabled=false.",
 				].join(" "),
 				{
 					details: {
 						projectId,
 						branchId: branch.id,
-						databaseName,
+						databaseName: selectedDatabase,
 					},
 				},
 			);
@@ -609,7 +652,6 @@ export async function fetchEnvKeys(
 	// never touches the credentials/storage endpoints (and keeps working on production, where
 	// they may not exist yet).
 	const storageEnabled = (desired.preview?.buckets.length ?? 0) > 0;
-	const gatewayEnabled = desired.preview?.aiGatewayEnabled ?? false;
 	const wantsStorage =
 		storageEnabled &&
 		(wants(K.storage.accessKeyId) ||
@@ -683,7 +725,13 @@ export async function fetchEnvKeys(
 				// Bare branch-scoped gateway host derived from the branch's connection URI —
 				// not the control-plane API origin (which doesn't serve the gateway). Clients
 				// append the dialect route (/v1, /openai/v1, /anthropic/v1) themselves.
-				gateway.baseUrl = aiGatewayBaseUrl(branch.id, unpooled.uri);
+				gateway.baseUrl = aiGatewayBaseUrl(
+					branch.id,
+					requiredValue(
+						unpooled,
+						"direct connection URI for the selected AI Gateway base URL",
+					).uri,
+				);
 			}
 			result.aiGateway = gateway;
 		}

@@ -282,6 +282,68 @@ describe("fetchEnvReusingSecrets", () => {
 		expect(vars.NEON_BRANCH).toBe("main");
 	});
 
+	test("mints and reuses only the selected gateway secret", async () => {
+		const { api, projectId } = seededFake();
+		const first = await fetchEnvReusingSecrets(bothPolicy, {
+			api,
+			projectId,
+			branch: "main",
+			keys: ["NEON_AI_GATEWAY_TOKEN"],
+		});
+
+		expect(Object.keys(first.vars)).toEqual(["NEON_AI_GATEWAY_TOKEN"]);
+		expect(first.vars.NEON_AI_GATEWAY_TOKEN).toMatch(/^nt_live_/);
+		const create = api.history.find(
+			(entry) => entry.method === "createCredential",
+		);
+		expect(create?.args[2]).toMatchObject({
+			scopes: ["ai_gateway:invoke"],
+		});
+
+		const second = await fetchEnvReusingSecrets(bothPolicy, {
+			api,
+			projectId,
+			branch: "main",
+			keys: ["NEON_AI_GATEWAY_TOKEN"],
+			env: { ...process.env, ...first.vars },
+		});
+
+		expect(callsTo(api, "createCredential")).toBe(1);
+		expect(second.vars).toEqual(first.vars);
+		expect(second.credential).toEqual({
+			issued: false,
+			keys: ["NEON_AI_GATEWAY_TOKEN"],
+			revoked: [],
+			superseded: [],
+		});
+	});
+
+	test("reports but does not revoke a credential replaced by an exact secret pull", async () => {
+		const { api, projectId } = seededFake();
+		const storageOnly = await api.createCredential(projectId, "br-main", {
+			scopes: ["storage:read", "storage:write"],
+			principalType: "user",
+			name: "neon-env main",
+		});
+
+		const result = await fetchEnvReusingSecrets(bothPolicy, {
+			api,
+			projectId,
+			branch: "main",
+			keys: ["NEON_AI_GATEWAY_TOKEN"],
+			env: { NEON_AI_GATEWAY_TOKEN: storageOnly.apiToken },
+			revokeSuperseded: false,
+		});
+
+		expect(result.credential).toEqual({
+			issued: true,
+			keys: ["NEON_AI_GATEWAY_TOKEN"],
+			revoked: [],
+			superseded: [storageOnly.tokenId],
+		});
+		expect(callsTo(api, "revokeCredential")).toBe(0);
+	});
+
 	test("does not mint a credential when only a non-secret gateway variable is selected", async () => {
 		const { api, projectId } = seededFake();
 

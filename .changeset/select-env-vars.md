@@ -1,5 +1,6 @@
 ---
 "neon": patch
+"@neon/env": patch
 ---
 
-Add `neon env pull -e, --env` to pull exact environment variables, alone or unioned with `--service`.
+Add exact environment-variable selection to `neon env pull` and scope `fetchEnv({ keys })` credential issuance to the selected variables.
