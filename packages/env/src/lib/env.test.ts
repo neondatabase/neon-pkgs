@@ -194,6 +194,25 @@ describe("fetchEnv", () => {
 		expect(connectionCalls[0]?.args[1]).toMatchObject({ pooled: true });
 	});
 
+	test("rejects an incomplete storage credential selection before API reads", async () => {
+		const { api, projectId } = seededFake();
+		const keys: Array<"AWS_ACCESS_KEY_ID" | "AWS_SECRET_ACCESS_KEY"> = [
+			"AWS_ACCESS_KEY_ID",
+		];
+
+		await expect(
+			fetchEnv(defineConfig({ preview: { buckets: { uploads: {} } } }), {
+				api,
+				projectId,
+				branchId: "br-main",
+				keys,
+			}),
+		).rejects.toThrow(
+			"fetchEnv: AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be selected together. Pass both in `keys`, or omit both.",
+		);
+		expect(api.history).toHaveLength(0);
+	});
+
 	test("requires auth integration when policy enables auth", async () => {
 		const { api, projectId } = seededFake();
 		const config = defineConfig({ auth: true });

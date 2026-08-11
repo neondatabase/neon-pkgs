@@ -417,6 +417,30 @@ export type SelectedNeonEnv<Keys extends readonly string[]> =
 				: FilteredNeonEnv<Keys[number]>
 		: never;
 
+type StorageCredentialEnvKey = "AWS_ACCESS_KEY_ID" | "AWS_SECRET_ACCESS_KEY";
+
+/**
+ * Reject a fixed key tuple that contains only one half of the storage credential. Dynamic
+ * arrays are checked at runtime because their contents are not known to TypeScript.
+ */
+type StorageKeyPairConstraint<Keys extends readonly string[]> =
+	number extends Keys["length"]
+		? unknown
+		: [Extract<Keys[number], StorageCredentialEnvKey>] extends [never]
+			? unknown
+			: StorageCredentialEnvKey extends Keys[number]
+				? unknown
+				: never;
+
+/** Preserve the same pair rule for callers that explicitly provide the legacy `K` generic. */
+type StorageKeyUnionConstraint<K extends string> = [
+	Extract<K, StorageCredentialEnvKey>,
+] extends [never]
+	? unknown
+	: StorageCredentialEnvKey extends K
+		? unknown
+		: never;
+
 export interface FetchEnvOptions {
 	/**
 	 * Neon project id. **Required** — the management API addresses branches through their
@@ -500,8 +524,7 @@ export interface FetchEnvOptions {
  */
 export async function fetchEnv<
 	const C extends Config,
-	K extends SelectableEnvKey<C>,
-	const Keys extends readonly K[] = readonly K[],
+	const Keys extends readonly SelectableEnvKey<C>[],
 >(
 	config: C,
 	options: FetchEnvOptions & {
@@ -510,6 +533,7 @@ export async function fetchEnv<
 		 * keys autocomplete from the policy ({@link SelectableEnvKey}), and the result is
 		 * narrowed to match ({@link SelectedNeonEnv}). Inline literal arrays produce an exact
 		 * result; runtime-built arrays make their possible namespaces and properties optional.
+		 * `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` must be selected together.
 		 *
 		 * The point is not just a smaller result: **work is skipped too.** Leave out
 		 * `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `NEON_AI_GATEWAY_TOKEN` and no branch
@@ -521,9 +545,18 @@ export async function fetchEnv<
 		 * The selection **intersects** with the policy rather than overriding it: naming a var
 		 * the branch policy does not enable is not an error, it simply yields nothing.
 		 */
-		keys: Keys;
+		keys: Keys & StorageKeyPairConstraint<Keys>;
 	},
 ): Promise<SelectedNeonEnv<Keys>>;
+export async function fetchEnv<
+	const C extends Config,
+	const K extends SelectableEnvKey<C>,
+>(
+	config: C,
+	options: FetchEnvOptions & {
+		keys: readonly K[] & StorageKeyUnionConstraint<K>;
+	},
+): Promise<FilteredNeonEnv<K>>;
 export async function fetchEnv<const C extends Config>(
 	config: C,
 	options: FetchEnvOptions,
@@ -532,7 +565,19 @@ export async function fetchEnv(
 	config: Config,
 	options: FetchEnvOptions & { keys?: readonly string[] },
 ): Promise<unknown> {
+	if (options.keys) assertStorageCredentialKeyPair(options.keys);
 	return fetchEnvKeys(config, options, options.keys ?? null);
+}
+
+function assertStorageCredentialKeyPair(keys: readonly string[]): void {
+	const hasAccessKey = keys.includes(NEON_ENV_VAR_KEYS.storage.accessKeyId);
+	const hasSecretKey = keys.includes(
+		NEON_ENV_VAR_KEYS.storage.secretAccessKey,
+	);
+	if (hasAccessKey === hasSecretKey) return;
+	throw new TypeError(
+		"fetchEnv: AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be selected together. Pass both in `keys`, or omit both.",
+	);
 }
 
 /** Fail loudly when selected-key dependency planning and execution disagree. */

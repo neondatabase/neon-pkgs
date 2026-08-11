@@ -182,7 +182,7 @@ describe("fetchEnv key filter (types)", () => {
 		>();
 	});
 
-	test("keeps existing explicit generic calls valid and conservative", () => {
+	test("keeps existing explicit generic calls exact", () => {
 		const config = defineConfig({});
 		const env = fetchEnv<typeof config, "DATABASE_URL">(config, {
 			projectId: "proj",
@@ -191,7 +191,47 @@ describe("fetchEnv key filter (types)", () => {
 		});
 
 		expectTypeOf(env).toEqualTypeOf<
-			Promise<{ postgres?: { databaseUrl?: string } }>
+			Promise<{ postgres: { databaseUrl: string } }>
+		>();
+	});
+
+	test("requires both storage credential halves in a literal selection", () => {
+		const config = defineConfig({
+			preview: { buckets: { uploads: {} } },
+		});
+		const env = fetchEnv(config, {
+			projectId: "proj",
+			branch: "main",
+			keys: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
+		});
+		expectTypeOf(env).toEqualTypeOf<
+			Promise<{
+				storage: { accessKeyId: string; secretAccessKey: string };
+			}>
+		>();
+
+		fetchEnv(config, {
+			projectId: "proj",
+			branch: "main",
+			// @ts-expect-error storage credential halves must be selected together
+			keys: ["AWS_ACCESS_KEY_ID"],
+		});
+	});
+
+	test("accepts a dynamic storage selection for runtime validation", () => {
+		const config = defineConfig({
+			preview: { buckets: { uploads: {} } },
+		});
+		const keys: Array<"AWS_ACCESS_KEY_ID" | "AWS_SECRET_ACCESS_KEY"> = [];
+		const env = fetchEnv(config, {
+			projectId: "proj",
+			branch: "main",
+			keys,
+		});
+		expectTypeOf(env).toEqualTypeOf<
+			Promise<{
+				storage?: { accessKeyId?: string; secretAccessKey?: string };
+			}>
 		>();
 	});
 

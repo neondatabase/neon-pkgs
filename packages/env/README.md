@@ -163,6 +163,8 @@ selected.postgres?.databaseUrl; // string | undefined
 selected.branch?.name; // string | undefined
 ```
 
+`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` are one credential and must be selected together. Literal lists that contain only one half are a type error; a runtime-built list that resolves to one half throws before any API request or credential issuance.
+
 Work is skipped, not just the result narrowed. Leave out `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `NEON_AI_GATEWAY_TOKEN` and **no credential is minted at all** — which is exactly how `fetchEnvReusingSecrets` refreshes everything else while keeping secrets you already have. The non-secret vars of those features (`AWS_ENDPOINT_URL_S3`, `AWS_REGION`, `NEON_AI_GATEWAY_BASE_URL`) are branch metadata and stay available on their own.
 
 ## Connection role & database selection
