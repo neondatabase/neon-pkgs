@@ -23,6 +23,18 @@ describe("env pull key selection", () => {
 		);
 	});
 
+	it("does not echo a value pasted into --env", () => {
+		const secret = "postgres://user:s3cr3t@example.com/db";
+		expect(() =>
+			parseEnvPullKeys([`DATABASE_URL=${secret}`], "--env"),
+		).toThrow("Unknown env variable DATABASE_URL=<redacted>.");
+		try {
+			parseEnvPullKeys([`DATABASE_URL=${secret}`], "--env");
+		} catch (error) {
+			expect(String(error)).not.toContain(secret);
+		}
+	});
+
 	it("maps selected keys to only the services needed to resolve them", () => {
 		expect(
 			servicesForEnvKeys([

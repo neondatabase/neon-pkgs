@@ -328,10 +328,10 @@ describe("fetchEnv key filter (types)", () => {
 		const config = defineConfig({});
 		// @ts-expect-error not a real Neon env var
 		fetchEnv(config, { projectId: "proj", branch: "main", keys: ["NOPE"] });
-		// @ts-expect-error auth is not enabled by this policy
 		fetchEnv(config, {
 			projectId: "proj",
 			branch: "main",
+			// @ts-expect-error auth is not enabled by this policy
 			keys: ["NEON_AUTH_BASE_URL"],
 		});
 	});

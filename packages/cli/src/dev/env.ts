@@ -1,6 +1,8 @@
 import {
 	type Config,
 	createNeonApiFromOptions,
+	ErrorCode,
+	isPlatformError,
 	loadConfigFromFile,
 	type NeonApi,
 	type NeonBucketSnapshot,
@@ -61,10 +63,10 @@ export type DevEnvContext = {
 	envKeys?: readonly EnvPullKey[];
 	/**
 	 * Add the AI Gateway to the **no-`neon.ts`** resolution. `pullConfig` cannot detect the
-	 * gateway — it has no branch-level enabled state, only a credential — so a caller that
-	 * wants it in the "everything this branch has" set has to ask. `neon env pull` does;
-	 * `neon dev` and the pull bundled into `link` / `checkout` / `apply` do not. Ignored when
-	 * {@link DevEnvContext.services} is set, since that selection already says.
+	 * gateway — it has no branch-level enabled state, only branch-credential capability — so
+	 * a caller that wants it in the "everything this branch has" set has to ask. `neon env
+	 * pull` does; `neon dev` and the pull bundled into `link` / `checkout` / `apply` do not.
+	 * Ignored when {@link DevEnvContext.services} is set, since that selection already says.
 	 */
 	implyAiGateway?: boolean;
 };
@@ -287,10 +289,9 @@ const apiFor = (ctx: DevEnvContext): NeonApi =>
 /**
  * Tier-0: resolve exactly what `--service` / `--env` selected, with `neon.ts` ignored.
  *
- * The selection is checked against the branch's live state so a service that is named but not
- * provisioned fails by name, instead of quietly contributing no vars. `postgres` and the AI
- * Gateway are not checked: every branch has Postgres, and the gateway has no branch-level
- * state to check (an unavailable one surfaces when its credential is minted).
+ * The selection is checked against live project and branch state so a service that is named
+ * but not provisioned fails by name, instead of quietly contributing dead vars. `postgres`
+ * needs no check because every branch has it.
  */
 const resolveSelectedServices = async (
 	ctx: DevEnvContext,
@@ -321,13 +322,22 @@ const resolveSelectedServices = async (
 	const api = apiFor(ctx);
 	const has = (service: (typeof ENV_PULL_SERVICES)[number]): boolean =>
 		services.includes(service);
-	const [auth, dataApiEnabled, buckets] = await Promise.all([
-		has("auth") ? api.getNeonAuth(projectId, branchId) : null,
-		has("data-api") ? readDataApiEnabled(api, projectId, branchId) : null,
-		has("object-storage")
-			? api.listBranchBuckets(projectId, branchId)
-			: null,
-	]);
+	const checkAiGateway =
+		has("ai-gateway") &&
+		!selectedKeys.includes(NEON_ENV_VAR_KEYS.aiGateway.apiKey);
+	const [auth, dataApiEnabled, buckets, aiGatewayAvailable] =
+		await Promise.all([
+			has("auth") ? api.getNeonAuth(projectId, branchId) : null,
+			has("data-api")
+				? readDataApiEnabled(api, projectId, branchId)
+				: null,
+			has("object-storage")
+				? api.listBranchBuckets(projectId, branchId)
+				: null,
+			checkAiGateway
+				? readAiGatewayAvailable(api, projectId, branchId)
+				: null,
+		]);
 
 	const config = configForServices(
 		services,
@@ -336,6 +346,9 @@ const resolveSelectedServices = async (
 			authEnabled: auth !== null,
 			dataApiEnabled,
 			buckets: buckets ?? [],
+			// A token selection validates availability while minting. The read-only check is
+			// needed only when the base URL was selected on its own.
+			aiGatewayAvailable: aiGatewayAvailable ?? true,
 		},
 		{ directServices, envKeys },
 	);
@@ -376,6 +389,25 @@ const readDataApiEnabled = async (
 	return dataApi !== null;
 };
 
+const readAiGatewayAvailable = async (
+	api: NeonApi,
+	projectId: string,
+	branchId: string,
+): Promise<boolean> => {
+	try {
+		await api.listCredentials(projectId, branchId);
+		return true;
+	} catch (error) {
+		if (
+			isPlatformError(error) &&
+			error.code === ErrorCode.FeatureUnavailable
+		) {
+			return false;
+		}
+		throw error;
+	}
+};
+
 /** Neon's default database, and the one `fetchEnv` prefers when a branch has several. */
 const NEON_DEFAULT_DATABASE = "neondb";
 
@@ -394,6 +426,7 @@ const configForServices = (
 		/** `null` when the read could not decide — see {@link readDataApiEnabled}. */
 		dataApiEnabled: boolean | null;
 		buckets: NeonBucketSnapshot[];
+		aiGatewayAvailable: boolean;
 	},
 	selection: {
 		directServices: readonly NeonService[];
@@ -425,6 +458,22 @@ const configForServices = (
 				`or in the Neon Console), or drop ${service} from --service.`,
 		);
 	};
+	const aiGatewayUnavailable = (): never => {
+		const reason =
+			"AI Gateway is not available for this Neon project because branch credentials are unavailable";
+		if (selection.directServices.includes("ai-gateway")) {
+			throw new ServiceNotOnBranchError(
+				`--service ai-gateway: ${reason}. Use another project, or drop ai-gateway from --service.`,
+			);
+		}
+		const names = selection.envKeys
+			.filter((key) => serviceForEnvKey(key) === "ai-gateway")
+			.join(", ");
+		throw new ServiceNotOnBranchError(
+			`--env ${names}: ${reason}, so ${names} cannot be pulled. ` +
+				`Use another project, or drop ${names} from --env.`,
+		);
+	};
 
 	const config: Config = {};
 	if (services.includes("auth")) {
@@ -451,7 +500,10 @@ const configForServices = (
 			]),
 		);
 	}
-	if (services.includes("ai-gateway")) preview.aiGateway = true;
+	if (services.includes("ai-gateway")) {
+		if (!branch.aiGatewayAvailable) aiGatewayUnavailable();
+		preview.aiGateway = true;
+	}
 	if (Object.keys(preview).length > 0) config.preview = preview;
 
 	return config;

@@ -767,6 +767,18 @@ describe("env pull --env", () => {
 		expect(api.credentialCreateCalls).toBe(0);
 	});
 
+	it("rejects the AI Gateway base URL when the gateway is not enabled", async () => {
+		await expect(
+			pull({
+				...baseProps(new NoCredentialsNeonApi(), cwd),
+				envKeys: ["NEON_AI_GATEWAY_BASE_URL"],
+			}),
+		).rejects.toThrow(
+			/--env NEON_AI_GATEWAY_BASE_URL: AI Gateway is not available for this Neon project/,
+		);
+		expect(existsSync(join(cwd, ".env.local"))).toBe(false);
+	});
+
 	it("names --env when the selected variable is unavailable", async () => {
 		await expect(
 			pull({

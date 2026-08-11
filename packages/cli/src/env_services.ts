@@ -152,12 +152,26 @@ export const parseEnvPullKeys = (
 		(name) => !ENV_PULL_KEYS.some((key) => key === name),
 	);
 	if (unknown.length > 0) {
+		const displayNames = unknown.map(redactUnknownEnvValue);
 		throw new Error(
-			`Unknown env variable${unknown.length === 1 ? "" : "s"} ${unknown.join(", ")}. ${supported}`,
+			`Unknown env variable${unknown.length === 1 ? "" : "s"} ${displayNames.join(", ")}. ${supported}`,
 		);
 	}
 
 	return ENV_PULL_KEYS.filter((key) => names.includes(key));
+};
+
+const redactUnknownEnvValue = (value: string): string => {
+	const separator = value.indexOf("=");
+	if (separator !== -1) {
+		const key = value.slice(0, separator);
+		return /^[A-Za-z][A-Za-z0-9_]*$/.test(key)
+			? `${key}=<redacted>`
+			: "<redacted invalid value>";
+	}
+	return /^[A-Za-z][A-Za-z0-9_]*$/.test(value)
+		? value
+		: "<redacted invalid value>";
 };
 
 /** Narrow yargs' array option value without accepting any other runtime shape. */

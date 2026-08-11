@@ -419,6 +419,10 @@ export type SelectedNeonEnv<Keys extends readonly string[]> =
 
 type StorageCredentialEnvKey = "AWS_ACCESS_KEY_ID" | "AWS_SECRET_ACCESS_KEY";
 
+type StorageKeyPairError = {
+	readonly "fetchEnv keys must include AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY together": never;
+};
+
 type TupleDefinitelyContains<
 	Keys extends readonly string[],
 	Key extends string,
@@ -457,7 +461,7 @@ type StorageKeyPairConstraint<Keys extends readonly string[]> = [
 	InvalidStorageKeyTuple<Keys>,
 ] extends [never]
 	? unknown
-	: never;
+	: StorageKeyPairError;
 
 type FetchEnvKeysFromArgs<Args extends readonly unknown[]> = Args[0] extends {
 	keys: infer Keys extends readonly string[];
@@ -475,7 +479,7 @@ type StorageKeyUnionConstraint<K extends string> = [
 	? unknown
 	: StorageCredentialEnvKey extends K
 		? unknown
-		: never;
+		: StorageKeyPairError;
 
 export interface FetchEnvOptions {
 	/**
@@ -601,6 +605,14 @@ export async function fetchEnv<const C extends Config>(
 	config: C,
 	options: FetchEnvOptions & { keys?: never },
 ): Promise<NeonEnv<C>>;
+/** Diagnostic-only fallback: valid keyed calls resolve through the exact overload above. */
+export async function fetchEnv<
+	const C extends Config,
+	const Keys extends readonly SelectableEnvKey<C>[],
+>(
+	config: C,
+	options: FetchEnvOptions & { keys: Keys } & StorageKeyPairError,
+): Promise<never>;
 export async function fetchEnv(
 	config: Config,
 	options: FetchEnvOptions & { keys?: readonly string[] },
