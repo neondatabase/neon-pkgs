@@ -64,17 +64,27 @@ neon projects list --api-key <neon_api_key>
 
 For information about obtaining an Neon API key, see [Authentication](https://api-docs.neon.tech/reference/authentication), in the _Neon API Reference_.
 
-## List projects (`list`)
+## List projects and branches
 
-`neon list` is a shortcut for `neon projects list`. By default, it lists
-projects you own and projects shared with you. `--org-id` and
-`--recoverable-only` narrow the output to projects you own:
+The `projects` and `branches` commands default to their `list` subcommand, so
+the explicit `list` is optional:
 
 ```bash
-neon list
-neon list --org-id <organization-id>
-neon list --recoverable-only
+neon projects
+neon branches --project-id <project-id>
 ```
+
+`neon projects` lists projects you own and projects shared with you.
+`--org-id` and `--recoverable-only` narrow the output to projects you own:
+
+```bash
+neon projects --org-id <organization-id>
+neon projects --recoverable-only
+```
+
+For `neon branches`, pass `--project-id` or run the command from a directory
+linked to a project with `.neon`. The explicit forms, `neon projects list` and
+`neon branches list`, remain supported.
 
 ## Project and branch creation
 
@@ -1039,11 +1049,10 @@ API keys in org-7
 | [auth](https://neon.com/docs/reference/cli-auth)                           |                                                                                                              | Authenticate                       |
 | profile                                                                    | `list`, `create`, `rotate-key`, `remove`                                                                     | Manage named sets of credentials   |
 | api-keys                                                                   | `list`, `create`, `revoke`                                                                                   | Manage API keys                    |
-| [projects](https://neon.com/docs/reference/cli-projects)                   | `list`, `create`, `update`, `delete`, `get`                                                                  | Manage projects                    |
-| list                                                                       |                                                                                                              | Alias for `projects list`          |
+| [projects](https://neon.com/docs/reference/cli-projects)                   | `list` (default), `create`, `update`, `delete`, `get`                                                        | Manage projects                    |
 | [ip-allow](https://neon.com/docs/reference/cli-ip-allow)                   | `list`, `add`, `remove`, `reset`                                                                             | Manage IP Allow                    |
 | [me](https://neon.com/docs/reference/cli-me)                               |                                                                                                              | Show current user                  |
-| [branches](https://neon.com/docs/reference/cli-branches)                   | `list`, `create`, `rename`, `add-compute`, `set-default`, `set-expiration`, `delete`, `get`                  | Manage branches                    |
+| [branches](https://neon.com/docs/reference/cli-branches)                   | `list` (default), `create`, `rename`, `add-compute`, `set-default`, `set-expiration`, `delete`, `get`        | Manage branches                    |
 | [databases](https://neon.com/docs/reference/cli-databases)                 | `list`, `create`, `delete`                                                                                   | Manage databases                   |
 | function                                                                   | `deploy`, `list`, `get`, `delete`                                                                            | Manage Neon Functions              |
 | [roles](https://neon.com/docs/reference/cli-roles)                         | `list`, `create`, `delete`                                                                                   | Manage roles                       |

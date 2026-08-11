@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe } from "vitest";
+import { describe, expect } from "vitest";
 
 import { test } from "../test_utils/fixtures";
 
@@ -18,6 +18,16 @@ describe("branches", () => {
 		});
 	});
 
+	test("list by default", async ({ testCliCommand }) => {
+		await testCliCommand(["branches", "--project-id", "test"]);
+	});
+
+	test("list by default through the singular alias", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["branch", "--project-id", "test"]);
+	});
+
 	test("list/table marks the branch pinned in .neon as [current]", async ({
 		testCliCommand,
 	}) => {
@@ -32,20 +42,30 @@ describe("branches", () => {
 			}),
 		);
 		try {
-			await testCliCommand(
-				[
-					"branches",
-					"list",
-					"--project-id",
-					"test",
-					"--context-file",
-					ctx,
-				],
-				{ outputTable: true },
-			);
+			await testCliCommand(["branches", "--context-file", ctx], {
+				outputTable: true,
+			});
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
+	});
+
+	test("show branch command help instead of listing", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["branches", "--help"], {
+			unreachableHost: true,
+			stderr: expect.stringContaining("branches create"),
+		});
+	});
+
+	test("show branch command help through the singular alias", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["branch", "--help"], {
+			unreachableHost: true,
+			stderr: expect.stringContaining("branch create"),
+		});
 	});
 
 	/* create */

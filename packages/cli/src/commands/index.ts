@@ -18,7 +18,6 @@ import * as init from "./init.js";
 import * as inspect from "./inspect.js";
 import * as ipAllow from "./ip_allow.js";
 import * as link from "./link.js";
-import * as list from "./list.js";
 import * as logs from "./logs.js";
 import * as neonAuth from "./neon_auth.js";
 import * as operations from "./operations.js";
@@ -41,7 +40,6 @@ export default [
 	users,
 	orgs,
 	projects,
-	list,
 	ipAllow,
 	vpcEndpoints,
 	neonAuth,

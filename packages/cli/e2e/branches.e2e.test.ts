@@ -41,6 +41,11 @@ describe.sequential("e2e — neon CLI branch commands against the real API", () 
 		expect(branches.every((branch) => typeof branch.id === "string")).toBe(
 			true,
 		);
+
+		const branchesViaDefault = await runCliJson<
+			{ id: string; name: string }[]
+		>(["branches", "--project-id", projectId]);
+		expect(branchesViaDefault).toEqual(branches);
 	});
 
 	it("creates and deletes a branch", async () => {

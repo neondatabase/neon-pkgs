@@ -30,7 +30,7 @@ import pkg from "./pkg.js";
 import { getCliName } from "./utils/cli_name.js";
 import { fillInArgs, resolveApiKeyFromEnv } from "./utils/middlewares.js";
 
-const NO_SUBCOMMANDS_VERBS = [
+const HELP_FALLBACK_EXEMPT_VERBS = [
 	// `api <path>` has a handler but no subcommands (like `status`), so the
 	// help-fallback middleware must not intercept a bare `neon api /projects`.
 	"api",
@@ -40,8 +40,11 @@ const NO_SUBCOMMANDS_VERBS = [
 	"login",
 	"me",
 
-	// alias of `projects list`
-	"list",
+	// Resource commands whose bare forms default to their `list` subcommands.
+	"projects",
+	"project",
+	"branches",
+	"branch",
 
 	// aliases
 	"cs",
@@ -182,7 +185,7 @@ builder = builder
 		if (
 			args.help ||
 			(args._.length === 1 &&
-				!NO_SUBCOMMANDS_VERBS.includes(args._[0] as string))
+				!HELP_FALLBACK_EXEMPT_VERBS.includes(args._[0] as string))
 		) {
 			await showHelp(builder);
 		}

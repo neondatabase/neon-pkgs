@@ -43,9 +43,11 @@ const BRANCH_FIELDS_RESET: readonly (keyof Branch)[] = [
 export const command = "branches";
 export const describe = "Manage branches";
 export const aliases = ["branch"];
+const branchesListBuilder = (argv: yargs.Argv) => argv;
+const branchesListHandler = (args: yargs.Arguments) => list(args as any);
 export const builder = (argv: yargs.Argv) =>
 	argv
-		.usage("$0 branches <sub-command> [options]")
+		.usage("$0 branches [sub-command] [options]")
 		.options({
 			"project-id": {
 				describe: "Project ID",
@@ -58,10 +60,16 @@ export const builder = (argv: yargs.Argv) =>
 			args.branchId ??= args.id;
 		})
 		.command(
+			"$0",
+			"List branches",
+			branchesListBuilder,
+			branchesListHandler,
+		)
+		.command(
 			"list",
 			"List branches",
-			(yargs) => yargs,
-			(args) => list(args as any),
+			branchesListBuilder,
+			branchesListHandler,
 		)
 		.command(
 			"create",

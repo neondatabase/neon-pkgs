@@ -44,10 +44,10 @@ export const describe = "Manage projects";
 export const aliases = ["project"];
 // Project commands inherit projectId from .neon. Attribute analytics to an
 // explicit positional id; account-level listing clears the inherited value.
-export const setProjectIdForAnalytics = (args: any) => {
+const setProjectIdForAnalytics = (args: any) => {
 	args.projectId = args.id;
 };
-export const projectsListBuilder = (argv: yargs.Argv) =>
+const projectsListBuilder = (argv: yargs.Argv) =>
 	argv.options({
 		"org-id": {
 			describe: "List projects of a given organization",
@@ -59,13 +59,19 @@ export const projectsListBuilder = (argv: yargs.Argv) =>
 			type: "boolean",
 		},
 	});
-export const projectsListHandler = async (args: yargs.Arguments) => {
+const projectsListHandler = async (args: yargs.Arguments) => {
 	await handleMissingOrgId(args as any, list);
 };
 export const builder = (argv: yargs.Argv) => {
 	return argv
-		.usage("$0 projects <sub-command> [options]")
+		.usage("$0 projects [sub-command] [options]")
 		.middleware(setProjectIdForAnalytics)
+		.command(
+			"$0",
+			"List projects",
+			projectsListBuilder,
+			projectsListHandler,
+		)
 		.command(
 			"list",
 			"List projects",

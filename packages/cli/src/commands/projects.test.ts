@@ -18,15 +18,39 @@ describe("projects", () => {
 		await testCliCommand(["projects", "list", "--recoverable-only"]);
 	});
 
-	test("list through the top-level alias", async ({ testCliCommand }) => {
-		await testCliCommand(["list"]);
+	test("list by default", async ({ testCliCommand }) => {
+		await testCliCommand(["projects"]);
 	});
 
-	test("top-level alias help names the listed resource", async ({
+	test("list by default with org id", async ({ testCliCommand }) => {
+		await testCliCommand(["projects", "--org-id", "org-2"]);
+	});
+
+	test("list recoverable projects by default", async ({ testCliCommand }) => {
+		await testCliCommand(["projects", "--recoverable-only"]);
+	});
+
+	test("list by default through the singular alias", async ({
 		testCliCommand,
 	}) => {
-		await testCliCommand(["list", "--help"], {
-			stderr: expect.stringContaining("List projects"),
+		await testCliCommand(["project"]);
+	});
+
+	test("show project command help instead of listing", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["projects", "--help"], {
+			unreachableHost: true,
+			stderr: expect.stringContaining("projects create"),
+		});
+	});
+
+	test("show project command help through the singular alias", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["project", "--help"], {
+			unreachableHost: true,
+			stderr: expect.stringContaining("project create"),
 		});
 	});
 

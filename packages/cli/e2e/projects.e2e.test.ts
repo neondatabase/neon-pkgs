@@ -55,12 +55,12 @@ describe.sequential("e2e — neon CLI projects against the real API", () => {
 			]);
 			expect(listed.map((project) => project.id)).toContain(projectId);
 
-			const listedViaAlias = await runCliJson<BareProject[]>([
-				"list",
+			const listedViaDefault = await runCliJson<BareProject[]>([
+				"projects",
 				...orgArgs(),
 			]);
 			expect(
-				listedViaAlias.find((project) => project.id === projectId),
+				listedViaDefault.find((project) => project.id === projectId),
 			).toEqual(listed.find((project) => project.id === projectId));
 
 			const deleted = await runCliJson<BareProject>([
