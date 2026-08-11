@@ -20,7 +20,12 @@ const httpMethods = new Set([
 
 const approvalRequiredReads = new Set([
 	"getConnectionURI",
+	"getNeonAuthEmailProvider",
+	"getNeonAuthEmailServer",
+	"getNeonAuthPluginConfigs",
 	"getProjectBranchRolePassword",
+	"listBranchNeonAuthOauthProviders",
+	"listNeonAuthOauthProviders",
 ]);
 
 const resolveReference = (reference) => {
@@ -325,19 +330,28 @@ ${operationsSource}
 } as const;
 `;
 
-const zodSource = readFileSync(zodPath, "utf8").replace(
-	/\.(?:min|max)\(BigInt\((?:['"])?-?\d+(?:['"])?\), \{ error: ['"][^'"]+['"] \}\)/g,
-	"",
-).replace(
-	/\.default\(BigInt\((['"]?)(-?\d+)\1\)\)/g,
-	(_match, _quote, digits) => {
-		const value = Number(digits);
-		if (!Number.isSafeInteger(value)) {
-			throw new Error(`Unsafe int64 default cannot be a JSON number: ${digits}`);
-		}
-		return `.default(${digits})`;
-	},
-);
+const zodSource = readFileSync(zodPath, "utf8")
+	.replace(
+		/\.(min|max|gte|lte|gt|lt)\(BigInt\((['"]?)(-?\d+)\2\)(, \{ error: ['"][^'"]+['"] \})?\)/g,
+		(_match, method, _quote, digits, options = "") => {
+			const value = Number(digits);
+			return Number.isSafeInteger(value)
+				? `.${method}(${digits}${options})`
+				: "";
+		},
+	)
+	.replace(
+		/\.default\(BigInt\((['"]?)(-?\d+)\1\)\)/g,
+		(_match, _quote, digits) => {
+			const value = Number(digits);
+			if (!Number.isSafeInteger(value)) {
+				throw new Error(
+					`Unsafe int64 default cannot be a JSON number: ${digits}`,
+				);
+			}
+			return `.default(${digits})`;
+		},
+	);
 writeFileSync(zodPath, zodSource);
 writeFileSync(outPath, source);
 console.log(

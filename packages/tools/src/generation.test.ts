@@ -2,7 +2,10 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import * as z from "zod";
 import { createNeonTool, type NeonOperationId, operationIds } from "./index.js";
-import { zListProjectsQuery } from "./schemas.js";
+import {
+	zListProjectsQuery,
+	zSetOrganizationSpendingLimitBody,
+} from "./schemas.js";
 
 interface OpenApiOperation {
 	operationId?: string;
@@ -58,6 +61,18 @@ describe("generated operation coverage", () => {
 		});
 		expect(getConnectionUri.annotations.readOnlyHint).toBe(true);
 		expect(getConnectionUri.requiresApproval).toBe(true);
+
+		for (const operationId of [
+			"getNeonAuthEmailProvider",
+			"getNeonAuthEmailServer",
+			"getNeonAuthPluginConfigs",
+			"listBranchNeonAuthOauthProviders",
+			"listNeonAuthOauthProviders",
+		] as const) {
+			const tool = createNeonTool(operationId, { apiKey: "test-key" });
+			expect(tool.annotations.readOnlyHint).toBe(true);
+			expect(tool.requiresApproval).toBe(true);
+		}
 	});
 
 	test("exports operation ids as a selector type", () => {
@@ -70,5 +85,10 @@ describe("generated operation coverage", () => {
 			limit: 1,
 			recoverable: false,
 		});
+		expect(
+			zSetOrganizationSpendingLimitBody.safeParse({
+				spending_limit_cents: 0,
+			}).success,
+		).toBe(false);
 	});
 });

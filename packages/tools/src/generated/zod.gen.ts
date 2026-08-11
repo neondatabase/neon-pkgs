@@ -523,25 +523,25 @@ export const zConsumptionHistoryPerTimeframe = z.object({
     timeframe_end: z.iso.datetime().register(z.globalRegistry, {
         description: 'The specified end date-time for the reported consumption.\n'
     }),
-    active_time_seconds: z.int().register(z.globalRegistry, {
+    active_time_seconds: z.int().min(0, { error: 'Invalid value: Expected uint64 to be >= 0' }).register(z.globalRegistry, {
         description: 'Seconds. The amount of time the compute endpoints have been active.\n'
     }),
-    compute_time_seconds: z.int().register(z.globalRegistry, {
+    compute_time_seconds: z.int().min(0, { error: 'Invalid value: Expected uint64 to be >= 0' }).register(z.globalRegistry, {
         description: 'Seconds. The number of CPU seconds used by compute endpoints, including compute endpoints that have been deleted.\n'
     }),
-    written_data_bytes: z.int().register(z.globalRegistry, {
+    written_data_bytes: z.int().min(0, { error: 'Invalid value: Expected uint64 to be >= 0' }).register(z.globalRegistry, {
         description: 'Bytes. The amount of written data for all branches.\n'
     }),
-    synthetic_storage_size_bytes: z.int().register(z.globalRegistry, {
+    synthetic_storage_size_bytes: z.int().min(0, { error: 'Invalid value: Expected uint64 to be >= 0' }).register(z.globalRegistry, {
         description: 'Bytes. The space occupied in Postgres storage. Synthetic Postgres storage size combines the logical data size and Write-Ahead Log (WAL) size for all branches.\n'
     }),
-    data_storage_bytes_hour: z.int().register(z.globalRegistry, {
+    data_storage_bytes_hour: z.int().min(0, { error: 'Invalid value: Expected uint64 to be >= 0' }).register(z.globalRegistry, {
         description: 'Bytes-Hour. The amount of Postgres storage consumed hourly.\n'
     }).optional(),
-    logical_size_bytes: z.int().register(z.globalRegistry, {
+    logical_size_bytes: z.int().min(0, { error: 'Invalid value: Expected uint64 to be >= 0' }).register(z.globalRegistry, {
         description: 'Bytes. The amount of logical size consumed.\n'
     }).optional(),
-    logical_size_bytes_hour: z.int().register(z.globalRegistry, {
+    logical_size_bytes_hour: z.int().min(0, { error: 'Invalid value: Expected uint64 to be >= 0' }).register(z.globalRegistry, {
         description: 'Bytes-Hour. The amount of logical size consumed hourly.\n'
     }).optional()
 });
@@ -1042,7 +1042,7 @@ export const zEndpointPoolerMode = z.enum(['transaction']).register(z.globalRegi
  * [Scale to zero configuration](https://neon.com/docs/manage/endpoints#scale-to-zero-configuration).
  *
  */
-export const zSuspendTimeoutSeconds = z.int().register(z.globalRegistry, {
+export const zSuspendTimeoutSeconds = z.int().gte(-1).lte(604800).register(z.globalRegistry, {
     description: 'Duration of inactivity in seconds after which the compute endpoint is\nautomatically suspended. The value `0` means use the default value.\nThe value `-1` means never suspend. The default value is `300` seconds (5 minutes).\nThe minimum value is `60` seconds (1 minute).\nThe maximum value is `604800` seconds (1 week). For more information, see\n[Scale to zero configuration](https://neon.com/docs/manage/endpoints#scale-to-zero-configuration).\n'
 });
 
@@ -1250,7 +1250,7 @@ export const zPaymentSource = z.object({
 });
 
 export const zSpendingLimitUpdateRequest = z.object({
-    spending_limit_cents: z.int().register(z.globalRegistry, {
+    spending_limit_cents: z.int().gte(1).register(z.globalRegistry, {
         description: 'Monthly spending cap in cents. Must be positive. To remove a\npreviously configured limit, send a DELETE request to the\nspending_limit endpoint — `0` and `null` are rejected here.\nThe cap is alert-only: notifications fire at 80% and 100%, but\ncomputes are not suspended. Setting a cap below the period\'s\nalready-accrued spend is permitted and will trigger the\nover-limit notification on the next worker run.\n'
     })
 });
@@ -1692,19 +1692,19 @@ export const zCurrentUserInfoResponse = z.object({
  *
  */
 export const zProjectQuota = z.object({
-    active_time_seconds: z.int().register(z.globalRegistry, {
+    active_time_seconds: z.int().gte(0).register(z.globalRegistry, {
         description: 'The total amount of wall-clock time allowed to be spent by the project\'s compute endpoints.\n'
     }).optional(),
-    compute_time_seconds: z.int().register(z.globalRegistry, {
+    compute_time_seconds: z.int().gte(0).register(z.globalRegistry, {
         description: 'The total amount of CPU seconds allowed to be spent by the project\'s compute endpoints.\n'
     }).optional(),
-    written_data_bytes: z.int().register(z.globalRegistry, {
+    written_data_bytes: z.int().gte(0).register(z.globalRegistry, {
         description: 'Total amount of data written to all of a project\'s branches.\n'
     }).optional(),
-    data_transfer_bytes: z.int().register(z.globalRegistry, {
+    data_transfer_bytes: z.int().gte(0).register(z.globalRegistry, {
         description: 'Total amount of data transferred from all of a project\'s branches using the proxy.\n'
     }).optional(),
-    logical_size_bytes: z.int().register(z.globalRegistry, {
+    logical_size_bytes: z.int().gte(0).register(z.globalRegistry, {
         description: 'Limit on the logical size of every project\'s branch.\n\nIf a branch exceeds its `logical_size_bytes` quota, computes can still be started,\nbut write operations will fail—allowing data to be deleted to free up space.\nComputes on other branches are not affected.\n\nSetting `logical_size_bytes` overrides any lower value set by the `neon.max_cluster_size` Postgres setting.\n'
     }).optional()
 }).register(z.globalRegistry, {
@@ -2007,7 +2007,7 @@ export const zProjectListItem = z.object({
     store_passwords: z.boolean().register(z.globalRegistry, {
         description: 'Whether or not passwords are stored for roles in the Neon project. Storing passwords facilitates access to Neon features that require authorization.\n'
     }),
-    active_time: z.int().register(z.globalRegistry, {
+    active_time: z.int().gte(0).register(z.globalRegistry, {
         description: 'Control plane observed endpoints of this project being active this amount of wall-clock time.\n'
     }),
     cpu_used_sec: z.int().register(z.globalRegistry, {
@@ -2083,19 +2083,19 @@ export const zProjectOwnerData = z.object({
 });
 
 export const zProject = z.object({
-    data_storage_bytes_hour: z.int().register(z.globalRegistry, {
+    data_storage_bytes_hour: z.int().gte(0).register(z.globalRegistry, {
         description: 'Bytes-Hour. Project consumed that much Postgres storage hourly during the billing period. The value has some lag.\nThe value is reset at the beginning of each billing period.\n'
     }),
-    data_transfer_bytes: z.int().register(z.globalRegistry, {
+    data_transfer_bytes: z.int().gte(0).register(z.globalRegistry, {
         description: 'Bytes. Egress traffic from the Neon cloud to the client for given project over the billing period.\nIncludes deleted endpoints. The value has some lag. The value is reset at the beginning of each billing period.\n'
     }),
-    written_data_bytes: z.int().register(z.globalRegistry, {
+    written_data_bytes: z.int().gte(0).register(z.globalRegistry, {
         description: 'Bytes. Amount of WAL that travelled through Postgres storage for given project across all branches.\nThe value has some lag. The value is reset at the beginning of each billing period.\n'
     }),
-    compute_time_seconds: z.int().register(z.globalRegistry, {
+    compute_time_seconds: z.int().gte(0).register(z.globalRegistry, {
         description: 'Seconds. The number of CPU seconds used by the project\'s compute endpoints, including compute endpoints that have been deleted.\nThe value has some lag. The value is reset at the beginning of each billing period.\nExamples:\n1. An endpoint that uses 1 CPU for 1 second is equal to `compute_time=1`.\n2. An endpoint that uses 2 CPUs simultaneously for 1 second is equal to `compute_time=2`.\n'
     }),
-    active_time_seconds: z.int().register(z.globalRegistry, {
+    active_time_seconds: z.int().gte(0).register(z.globalRegistry, {
         description: 'Seconds. Control plane observed endpoints of this project being active this amount of wall-clock time.\nThe value has some lag.\nThe value is reset at the beginning of each billing period.\n'
     }),
     cpu_used_sec: z.int().register(z.globalRegistry, {
@@ -3399,7 +3399,7 @@ export const zPresignRequest = z.object({
     content_type: z.string().register(z.globalRegistry, {
         description: 'The `Content-Type` to bind into the signed request. Only meaningful\nfor `upload`: when set, the caller MUST send the same `Content-Type`\nheader on the `PUT`, and the value is echoed back in the response\n`headers`. Ignored for `download`.\n'
     }).optional(),
-    expires_in_seconds: z.int().register(z.globalRegistry, {
+    expires_in_seconds: z.int().gte(1).lte(604800).register(z.globalRegistry, {
         description: 'How long the presigned URL stays valid, in seconds. Defaults to 900\n(15 minutes); capped at 604800 (7 days).\n'
     }).optional().default(900)
 }).register(z.globalRegistry, {

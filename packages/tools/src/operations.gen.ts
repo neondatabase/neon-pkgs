@@ -2174,7 +2174,7 @@ export const operationFactories = {
 	path: zod.zGetNeonAuthEmailProviderPath,
 }),
 				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
-				requiresApproval: false,
+				requiresApproval: true,
 				metadata: {
 					method: "GET",
 					path: "/projects/{project_id}/branches/{branch_id}/auth/email_provider",
@@ -2203,7 +2203,7 @@ export const operationFactories = {
 	path: zod.zGetNeonAuthEmailServerPath,
 }),
 				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
-				requiresApproval: false,
+				requiresApproval: true,
 				metadata: {
 					method: "GET",
 					path: "/projects/{project_id}/auth/email_server",
@@ -2261,7 +2261,7 @@ export const operationFactories = {
 	path: zod.zGetNeonAuthPluginConfigsPath,
 }),
 				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
-				requiresApproval: false,
+				requiresApproval: true,
 				metadata: {
 					method: "GET",
 					path: "/projects/{project_id}/branches/{branch_id}/auth/plugins",
@@ -3049,7 +3049,7 @@ export const operationFactories = {
 	path: zod.zListBranchNeonAuthOauthProvidersPath,
 }),
 				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
-				requiresApproval: false,
+				requiresApproval: true,
 				metadata: {
 					method: "GET",
 					path: "/projects/{project_id}/branches/{branch_id}/auth/oauth_providers",
@@ -3165,7 +3165,7 @@ export const operationFactories = {
 	path: zod.zListNeonAuthOauthProvidersPath,
 }),
 				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
-				requiresApproval: false,
+				requiresApproval: true,
 				metadata: {
 					method: "GET",
 					path: "/projects/{project_id}/auth/oauth_providers",

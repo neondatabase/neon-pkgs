@@ -25,9 +25,12 @@ export interface NeonToolResult {
 	data: unknown;
 }
 
-export interface NeonTool<InputSchema extends z.ZodType = z.ZodType> {
+export interface NeonTool<
+	InputSchema extends z.ZodType = z.ZodType,
+	Id extends string = string,
+> {
 	operationId: string;
-	id: string;
+	id: Id;
 	title: string;
 	description: string;
 	inputSchema: InputSchema;
@@ -40,9 +43,12 @@ export interface NeonTool<InputSchema extends z.ZodType = z.ZodType> {
 	): Promise<NeonToolResult>;
 }
 
-export interface NeonOperation<InputSchema extends z.ZodType> {
+export interface NeonOperation<
+	InputSchema extends z.ZodType,
+	Id extends string = string,
+> {
 	operationId: string;
-	id: string;
+	id: Id;
 	title: string;
 	description: string;
 	inputSchema: InputSchema;
@@ -56,14 +62,20 @@ export interface NeonOperation<InputSchema extends z.ZodType> {
 	): Promise<unknown>;
 }
 
-export const defineOperation = <const InputSchema extends z.ZodType>(
-	operation: NeonOperation<InputSchema>,
+export const defineOperation = <
+	const InputSchema extends z.ZodType,
+	const Id extends string,
+>(
+	operation: NeonOperation<InputSchema, Id>,
 ) => operation;
 
-export const bindOperation = <const InputSchema extends z.ZodType>(
-	operation: NeonOperation<InputSchema>,
+export const bindOperation = <
+	const InputSchema extends z.ZodType,
+	const Id extends string,
+>(
+	operation: NeonOperation<InputSchema, Id>,
 	client: Client,
-): NeonTool<InputSchema> => ({
+): NeonTool<InputSchema, Id> => ({
 	operationId: operation.operationId,
 	id: operation.id,
 	title: operation.title,

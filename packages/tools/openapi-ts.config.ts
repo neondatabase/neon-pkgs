@@ -39,12 +39,10 @@ export default defineConfig({
 					chain.current = $(symbols.z)
 						.attr(schema.type === "integer" ? "int" : "number")
 						.call();
-					if (schema.format !== "int64") {
-						const minimum = nodes.min(context);
-						if (minimum) chain.current = minimum;
-						const maximum = nodes.max(context);
-						if (maximum) chain.current = maximum;
-					}
+					const minimum = nodes.min(context);
+					if (minimum) chain.current = minimum;
+					const maximum = nodes.max(context);
+					if (maximum) chain.current = maximum;
 					return chain.current;
 				},
 			},
