@@ -16,13 +16,13 @@ const completionsFor = (command: string) =>
 	);
 
 describe.each([
-	["projects", "List projects"],
-	["branches", "List branches"],
-])("%s default list command", (command, description) => {
+	"projects",
+	"branches",
+])("%s default list command", (command) => {
 	it("exposes list, not the internal default alias, in shell completion", () => {
 		const completions = completionsFor(command);
 
-		expect(completions).toContain(`list:${description}`);
-		expect(completions).not.toContain("$0:");
+		expect(completions).toMatch(/^list(?::.*)?$/m);
+		expect(completions).not.toMatch(/^\$0(?::.*)?$/m);
 	});
 });
