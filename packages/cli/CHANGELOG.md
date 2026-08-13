@@ -1,5 +1,11 @@
 # neon
 
+## 3.2.0
+
+### Minor Changes
+
+- 998728b: Add `neon open` to open the project linked in `.neon` in the Neon Console.
+
 ## 3.1.1
 
 ### Patch Changes
