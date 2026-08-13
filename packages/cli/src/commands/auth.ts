@@ -13,6 +13,7 @@ import {
 	OAUTH,
 	type StoredCredentials,
 } from "@neon-internals/cli-core/credentials";
+import { isOwnedCredentialPath } from "@neon-internals/cli-core/paths";
 import {
 	assertProfilesUsable,
 	assertValidProfileName,
@@ -111,19 +112,22 @@ export const authFlow = async ({
 	// sign-in, and worse, the write in between lands on a path chosen from metadata this
 	// refuses to trust.
 	assertProfilesUsable(configDir, profileName);
+	const credentialsPath =
+		isNamed && !readProfiles(configDir, log.warning)?.profiles[profileName]
+			? newProfileCredentialsPath(configDir, profileName)
+			: credentialsPathFor({ configDir, profile });
 	// Packaged binaries cannot load the native addon. Opening a browser and then
 	// failing to save is a used-up sign-in; refuse before the browser opens.
-	storeFor(configDir).assertPreferredWritable();
+	// Adopted paths stay file-backed and do not need the addon.
+	if (isOwnedCredentialPath(configDir, credentialsPath)) {
+		storeFor(configDir).assertPreferredWritable();
+	}
 
 	const tokenSet = await auth({
 		oauthHost: oauthHost,
 		clientId: clientId,
 		allowUnsafeTls,
 	});
-	const credentialsPath =
-		isNamed && !readProfiles(configDir, log.warning)?.profiles[profileName]
-			? newProfileCredentialsPath(configDir, profileName)
-			: credentialsPathFor({ configDir, profile });
 
 	let identity: { id?: string; email?: string } = {};
 	try {

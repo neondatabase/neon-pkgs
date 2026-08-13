@@ -885,6 +885,11 @@ const createByMinting = async (props: CreateProps) => {
 		);
 	}
 
+	const credentialsPathForMint = credentialsPathFor(props.configDir, name);
+	if (isOwnedCredentialPath(props.configDir, credentialsPathForMint)) {
+		storeFor(props.configDir).assertPreferredWritable();
+	}
+
 	const oauthProps = {
 		oauthHost: props.oauthHost,
 		clientId: props.clientId,

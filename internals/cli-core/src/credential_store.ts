@@ -17,7 +17,6 @@ import {
 	CRED_STORAGE_FILE,
 	CRED_STORAGE_KEYRING,
 	type CredStorage,
-	NEON_TOKEN_STORAGE,
 	readCliConfig,
 	resolveCredStorage,
 	type StoragePreference,
@@ -313,10 +312,7 @@ export const createCredentialStore = (
 					`Wrote credentials to the OS keyring for ${at.path} but could not read them back.`,
 				);
 			}
-			// An env override is one invocation. Deleting the file would migrate.
-			if (owned && preference().source !== NEON_TOKEN_STORAGE) {
-				deleteFileIfPresent(at.path);
-			}
+			if (owned) deleteFileIfPresent(at.path);
 			return {
 				credentials,
 				backend: CRED_STORAGE_KEYRING,
@@ -326,6 +322,12 @@ export const createCredentialStore = (
 		}
 
 		writeCredentials(at.path, credentials);
+		// A leftover in the other store stays selectable after this invocation.
+		// Only touch the keyring when this install has opted in — napi delete of
+		// a missing item still hits the OS store.
+		if (owned && keyring !== null && keyringMayHoldCopy()) {
+			keyring.delete(KEYRING_SERVICE, accountFor(at.path));
+		}
 		return {
 			credentials,
 			backend: CRED_STORAGE_FILE,
@@ -334,13 +336,16 @@ export const createCredentialStore = (
 		};
 	};
 
+	const keyringMayHoldCopy = (): boolean =>
+		preference().credStorage === CRED_STORAGE_KEYRING ||
+		readCliConfig(dir).credStorage === CRED_STORAGE_KEYRING;
+
 	const del = (at: CredentialLocation): void => {
 		if (!isOwnedCredentialPath(dir, at.path)) return;
+		const fileWasPresent = existsSync(at.path);
 		deleteFileIfPresent(at.path);
-		if (
-			keyring !== null &&
-			preference().credStorage === CRED_STORAGE_KEYRING
-		) {
+		if (keyring === null) return;
+		if (keyringMayHoldCopy() || !fileWasPresent) {
 			keyring.delete(KEYRING_SERVICE, accountFor(at.path));
 		}
 	};

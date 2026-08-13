@@ -43,7 +43,7 @@
  * `ERR_INVALID_ARG_TYPE` from `resolveEntryPath`.
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { writeSecretFile } from "./secure_file.js";
 
 export const OAUTH = "oauth";
@@ -120,11 +120,13 @@ export const credentialKind = (
  */
 export const credentialsRepairHint = (
 	at: CredentialLocation,
-	store: "file" | "keyring" = "file",
-): string =>
-	store === "keyring"
+	store?: "file" | "keyring",
+): string => {
+	const where = store ?? (existsSync(at.path) ? "file" : "keyring");
+	return where === "keyring"
 		? `Replace it deliberately with \`neon profile create ${at.profile} --force\`, or remove the profile with \`neon profile remove ${at.profile}\`.`
 		: `Replace it deliberately with \`neon profile create ${at.profile} --force\`, or delete the file.`;
+};
 
 /** A credentials file resolved far enough to authenticate with. */
 export type InterpretedCredentials =

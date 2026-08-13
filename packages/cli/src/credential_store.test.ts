@@ -22,6 +22,7 @@ import {
 	keyringAccount,
 	keyringIdentityPath,
 } from "@neon-internals/cli-core/credential_store";
+import { interpretCredentials } from "@neon-internals/cli-core/credentials";
 import { defaultDir, legacyConfigDir } from "@neon-internals/cli-core/paths";
 import { afterEach, describe, expect, test } from "vitest";
 
@@ -176,7 +177,7 @@ describe("createCredentialStore", () => {
 		expect(ring.size()).toBe(1);
 	});
 
-	test("NEON_TOKEN_STORAGE=keyring writes the keyring and leaves the file", () => {
+	test("NEON_TOKEN_STORAGE=keyring write deletes the file so the old secret is not selectable", () => {
 		const dir = makeDir({
 			"credentials.json": JSON.stringify(key),
 		});
@@ -187,9 +188,66 @@ describe("createCredentialStore", () => {
 		});
 		const location = at(dir);
 		store.write(location, key);
-		expect(existsSync(location.path)).toBe(true);
+		expect(existsSync(location.path)).toBe(false);
 		expect(store.read(location)?.backend).toBe(CRED_STORAGE_KEYRING);
 		expect(ring.size()).toBe(1);
+	});
+
+	test("a file write under a keyring config deletes the keyring copy", () => {
+		const dir = makeDir({
+			"config.json": JSON.stringify({ credStorage: "keyring" }),
+		});
+		const ring = memoryKeyring();
+		ring.set(
+			KEYRING_SERVICE,
+			keyringAccount(resolve(dir, "credentials.json")),
+			JSON.stringify({ type: "api_key", api_key: "napi_old" }),
+		);
+		const store = createCredentialStore(dir, {
+			env: { [NEON_TOKEN_STORAGE]: "file" },
+			keyring: ring,
+		});
+		store.write(at(dir), key);
+		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
+		expect(ring.size()).toBe(0);
+	});
+
+	test("delete removes a keyring leftover when the file is already gone", () => {
+		const dir = makeDir();
+		const ring = memoryKeyring();
+		ring.set(
+			KEYRING_SERVICE,
+			keyringAccount(resolve(dir, "credentials.json")),
+			JSON.stringify(key),
+		);
+		const store = createCredentialStore(dir, {
+			env: {},
+			keyring: ring,
+		});
+		store.delete(at(dir));
+		expect(ring.size()).toBe(0);
+	});
+
+	test("delete of a present file does not touch the keyring on a file-only install", () => {
+		const dir = makeDir({
+			"credentials.json": JSON.stringify(key),
+		});
+		let deletes = 0;
+		const ring = memoryKeyring();
+		const store = createCredentialStore(dir, {
+			env: {},
+			keyring: {
+				get: ring.get,
+				set: ring.set,
+				delete: (service, account) => {
+					deletes += 1;
+					return ring.delete(service, account);
+				},
+			},
+		});
+		store.delete(at(dir));
+		expect(deletes).toBe(0);
+		expect(existsSync(resolve(dir, "credentials.json"))).toBe(false);
 	});
 
 	test("a file write does not touch the keyring", () => {
@@ -500,5 +558,25 @@ describe("createCredentialStore", () => {
 			expect(String(err)).toMatch(/profile remove DEFAULT/);
 			expect(String(err)).not.toMatch(/delete the file/);
 		}
+	});
+
+	test("a keyring item with an unknown type does not say to delete the file", () => {
+		const dir = makeDir();
+		const ring = memoryKeyring();
+		ring.set(
+			KEYRING_SERVICE,
+			keyringAccount(resolve(dir, "credentials.json")),
+			JSON.stringify({ type: "unknown", api_key: "napi_LEAKED" }),
+		);
+		const store = createCredentialStore(dir, {
+			env: { [NEON_TOKEN_STORAGE]: "keyring" },
+			keyring: ring,
+		});
+		const loaded = store.read(at(dir));
+		expect(loaded).not.toBeNull();
+		if (loaded === null) return;
+		expect(() => interpretCredentials(loaded.credentials, at(dir))).toThrow(
+			/profile remove DEFAULT/,
+		);
 	});
 });
