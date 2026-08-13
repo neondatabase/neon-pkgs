@@ -404,6 +404,7 @@ export const createCredentialStore = (
 	): MigrateResult => {
 		if (mode === CRED_STORAGE_KEYRING) requireKeyring();
 		const force = migrateOptions?.force === true;
+		const mayHold = keyringMayHoldCopy();
 
 		const migrated: MigratedProfile[] = [];
 		const adopted: MigratedProfile[] = [];
@@ -469,9 +470,9 @@ export const createCredentialStore = (
 
 		if (mode === CRED_STORAGE_FILE) {
 			for (const item of migrated) {
-				if (keyringPaths.has(item.path)) {
-					removeKeyringItem(accountFor(item.path), item.path, true);
-				}
+				const known = mayHold || keyringPaths.has(item.path);
+				if (!known) continue;
+				removeKeyringItem(accountFor(item.path), item.path, !force);
 			}
 		}
 

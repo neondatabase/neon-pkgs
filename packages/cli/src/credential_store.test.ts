@@ -751,6 +751,37 @@ describe("createCredentialStore", () => {
 		).toEqual(key);
 	});
 
+	test("migrateTo file clears a keyring leftover when the file was preferred", () => {
+		const dir = makeDir({
+			"config.json": JSON.stringify({ credStorage: "keyring" }),
+			"credentials.json": JSON.stringify(key),
+		});
+		const ring = memoryKeyring();
+		ring.set(
+			KEYRING_SERVICE,
+			keyringAccount(resolve(dir, "credentials.json")),
+			JSON.stringify({
+				type: "api_key",
+				api_key: "napi_old_keyring",
+			}),
+		);
+		const store = createCredentialStore(dir, {
+			env: { [NEON_TOKEN_STORAGE]: "file" },
+			keyring: ring,
+		});
+		const result = store.migrateTo(CRED_STORAGE_FILE);
+		expect(result.migrated).toEqual([
+			{ name: "DEFAULT", path: resolve(dir, "credentials.json") },
+		]);
+		expect(ring.size()).toBe(0);
+		expect(
+			JSON.parse(readFileSync(resolve(dir, "credentials.json"), "utf8")),
+		).toEqual(key);
+		expect(
+			JSON.parse(readFileSync(resolve(dir, "config.json"), "utf8")),
+		).toEqual({ credStorage: "file" });
+	});
+
 	test("migrateTo file throws when keyring is preferred and get returns null", () => {
 		const dir = makeDir({
 			"config.json": JSON.stringify({ credStorage: "keyring" }),
