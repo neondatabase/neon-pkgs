@@ -42,7 +42,12 @@ In `packages/cli` the `.js` form passes `tsc --noEmit` — its `paths` mapping p
   `packages/cli/package.json` is what stops `neon/dist/_chunks/credentials-<hash>.js` being a
   public credential reader; `packages/cli/src/package_exports.test.ts` pins it.
 - **Keep it dependency-free.** Node builtins only. It is bundled into each consumer, so
-  anything it imports becomes a runtime dependency of all of them.
+  anything it imports becomes a runtime dependency of all of them. The OS keyring adapter
+  (`@napi-rs/keyring`) lives in each consumer, not here; this package takes a
+  `KeyringBackend` and never loads a native addon.
+- **`config.json` is not a secret.** It records `credStorage: "file" | "keyring"`. The
+  secret stays in the credentials file or the keyring. `NEON_TOKEN_STORAGE` overrides
+  that preference for one invocation and does not migrate.
 - **No logger, no yargs, no API client.** Take a callback or a value instead; the imperative
   shell belongs in the consumer.
 - Unit tests live in `packages/cli`, so the code is covered once rather than three times.

@@ -108,7 +108,7 @@ export const credentialKind = (
 	// corrupted or hand-edited file can put a key anywhere in it — including here. Naming the
 	// file is enough to act on, and it cannot leak what the file holds.
 	throw new Error(
-		`${at.path} declares a "type" this version does not understand. Expected "${OAUTH}" or "${API_KEY}". ${repair(at)}`,
+		`${at.path} declares a "type" this version does not understand. Expected "${OAUTH}" or "${API_KEY}". ${credentialsRepairHint(at)}`,
 	);
 };
 
@@ -118,7 +118,7 @@ export const credentialKind = (
  * One sentence, shared by every such error, because they all have the same two answers: write
  * a new credential over it, or delete it and start again.
  */
-const repair = (at: CredentialLocation): string =>
+export const credentialsRepairHint = (at: CredentialLocation): string =>
 	`Replace it deliberately with \`neon profile create ${at.profile} --force\`, or delete the file.`;
 
 /** A credentials file resolved far enough to authenticate with. */
@@ -141,7 +141,7 @@ export const interpretCredentials = (
 	const apiKey = nonEmpty(credentials.api_key);
 	if (apiKey === undefined) {
 		throw new Error(
-			`${at.path} declares "type": "${API_KEY}" but has no "api_key" value. ${repair(at)}`,
+			`${at.path} declares "type": "${API_KEY}" but has no "api_key" value. ${credentialsRepairHint(at)}`,
 		);
 	}
 	return { kind: API_KEY, apiKey };
@@ -168,28 +168,23 @@ export type CredentialsRead =
  * we cannot see, and treating that as absent would send the user to a browser login that
  * overwrites it.
  */
-export const inspectCredentials = (path: string): CredentialsRead => {
-	let contents: string;
-	try {
-		contents = readFileSync(path, "utf8");
-	} catch (err) {
-		if ((err as NodeJS.ErrnoException).code === "ENOENT")
-			return { kind: "absent" };
-		throw err;
-	}
-
+/**
+ * Classify a credentials JSON string without quoting its contents.
+ *
+ * Shared by the file reader and the keyring reader. V8's JSON parser quotes a
+ * window of the input around a syntax error, and that window is secret material.
+ */
+export const parseCredentialsJson = (
+	contents: string,
+	label: string,
+): CredentialsRead => {
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(contents);
 	} catch {
-		// The parser's message is deliberately discarded. V8 quotes a window of the input
-		// around the syntax error — on Node 24 a truncated credentials file produced
-		// `Unexpected token 'a', ..."api_key":napi_SUPERS"... is not valid JSON` — and this
-		// reason is printed by `profile list` and by every failed authentication. A malformed
-		// secret file is exactly when a diagnostic must say less, not more.
 		return {
 			kind: "unusable",
-			reason: `${path} is not valid JSON, so the credential in it cannot be read`,
+			reason: `${label} is not valid JSON, so the credential in it cannot be read`,
 		};
 	}
 	if (
@@ -199,10 +194,22 @@ export const inspectCredentials = (path: string): CredentialsRead => {
 	) {
 		return {
 			kind: "unusable",
-			reason: `${path} does not contain a credentials object`,
+			reason: `${label} does not contain a credentials object`,
 		};
 	}
 	return { kind: "ok", credentials: parsed as StoredCredentials };
+};
+
+export const inspectCredentials = (path: string): CredentialsRead => {
+	let contents: string;
+	try {
+		contents = readFileSync(path, "utf8");
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code === "ENOENT")
+			return { kind: "absent" };
+		throw err;
+	}
+	return parseCredentialsJson(contents, path);
 };
 
 /**
@@ -222,7 +229,7 @@ export const readCredentials = (
 ): StoredCredentials | null => {
 	const read = inspectCredentials(at.path);
 	if (read.kind === "unusable") {
-		throw new Error(`${read.reason}. ${repair(at)}`);
+		throw new Error(`${read.reason}. ${credentialsRepairHint(at)}`);
 	}
 	return read.kind === "ok" ? read.credentials : null;
 };

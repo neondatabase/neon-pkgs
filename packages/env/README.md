@@ -86,7 +86,12 @@ For example, [varlock](https://varlock.dev) can bulk-load Neon's branch env via 
 # @setValuesBulk(exec(`neon-env export --format json`), format=json)
 ```
 
-Flags (both commands): `--config <path>`, `--project-id`, `--branch`, `--api-key`, `--debug`. `export` also takes `--format dotenv|json`.
+Flags (both commands): `--config <path>`, `--project-id`, `--branch`, `--api-key`, `--profile`, `--debug`. `export` also takes `--format dotenv|json`.
+
+`--api-key` and `NEON_API_KEY` skip stored credentials. Otherwise `neon-env` reads the same
+Neon CLI profile the `neon` CLI does, including a secret stored in the OS keyring after
+`neon profile storage keyring`. Keyring storage needs a compatible npm-installed
+`@neon/env`; packaged binaries cannot load it.
 
 ## Env vars produced
 

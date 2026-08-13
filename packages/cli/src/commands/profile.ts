@@ -2,21 +2,25 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { basename } from "node:path";
 import { credentialInputs } from "@neon-internals/cli-core/auth_selection";
 import {
+	CRED_STORAGE_FILE,
+	CRED_STORAGE_KEYRING,
+	isCredStorage,
+	type StoragePreference,
+} from "@neon-internals/cli-core/cli_config";
+import {
 	API_KEY,
 	apiKeyCredentials,
 	type CredentialLocation,
 	credentialKind,
 	describeScope,
-	inspectCredentials,
 	interpretCredentials,
 	isSameCredential,
 	type KeyScope,
 	OAUTH,
-	readCredentials,
 	type StoredCredentials,
 	scopeOf,
-	writeCredentials,
 } from "@neon-internals/cli-core/credentials";
+import { isOwnedCredentialPath } from "@neon-internals/cli-core/paths";
 import {
 	assertProfilesUsable,
 	assertValidProfileName,
@@ -36,7 +40,7 @@ import type yargs from "yargs";
 import { getApiClient, isNeonApiError, type NeonApiClient } from "../api.js";
 import { auth, revokeToken } from "../auth.js";
 import { setAuthContext } from "../auth_context.js";
-import { isInsideConfigDir } from "../config.js";
+import { storeFor } from "../credential_io.js";
 import { isCi } from "../env.js";
 import { log } from "../log.js";
 import {
@@ -172,6 +176,22 @@ export const builder = (argv: yargs.Argv) =>
 				),
 		)
 		.command(
+			"storage [mode]",
+			"Show or set where credentials are stored (file or OS keyring)",
+			(y) =>
+				y
+					.positional("mode", {
+						describe: 'Storage backend: "file" or "keyring"',
+						type: "string",
+					})
+					.strict()
+					.check(noPassthrough("profile storage")),
+			async (args) =>
+				await storage(
+					args as unknown as ProfileProps & { mode?: string },
+				),
+		)
+		.command(
 			"remove <name>",
 			"Revoke a profile's credential where possible, and remove it",
 			(y) =>
@@ -281,20 +301,30 @@ const describeAuth = (
  * the broken profile pointed at a different row than the one that was broken.
  */
 const inspectForListing = (
+	configDir: string,
 	at: CredentialLocation,
-): { stored: StoredCredentials | null; auth: string; file: string } => {
-	const read = inspectCredentials(at.path);
-	if (read.kind === "unusable") {
-		log.warning(read.reason);
-		return { stored: null, auth: "-", file: "invalid" };
+): {
+	stored: StoredCredentials | null;
+	auth: string;
+	file: string;
+	storage: string;
+} => {
+	const listing = storeFor(configDir).inspect(at);
+	if (listing.reason !== undefined) log.warning(listing.reason);
+	if (listing.credentials === null) {
+		return {
+			stored: null,
+			auth: "-",
+			file: listing.file,
+			storage: listing.storage,
+		};
 	}
-	if (read.kind === "absent")
-		return { stored: null, auth: "-", file: "missing" };
-	const auth = describeAuth(read.credentials, at);
+	const auth = describeAuth(listing.credentials, at);
 	return {
-		stored: read.credentials,
+		stored: listing.credentials,
 		auth,
-		file: auth === "invalid" ? "invalid" : "ok",
+		file: auth === "invalid" ? "invalid" : listing.file,
+		storage: listing.storage,
 	};
 };
 
@@ -308,10 +338,13 @@ const list = async (props: ProfileProps) => {
 		resolveProfile(props.configDir, active);
 	}
 	const rows = listProfiles(props.configDir).map((p) => {
-		const { stored, auth, file } = inspectForListing({
-			path: p.credentialsPath,
-			profile: p.name,
-		});
+		const { stored, auth, file, storage } = inspectForListing(
+			props.configDir,
+			{
+				path: p.credentialsPath,
+				profile: p.name,
+			},
+		);
 		const storedUserId =
 			typeof stored?.user_id === "string" ? stored.user_id : undefined;
 		return {
@@ -328,6 +361,7 @@ const list = async (props: ProfileProps) => {
 			// which claims the credential is ready to use — a thing reading a file cannot show,
 			// and the wrong answer for the dead key someone runs this to diagnose.
 			file,
+			storage,
 			// The basename in the table, because `cli-table` neither wraps nor truncates and a
 			// real path pushes the row past most terminals. Structured output keeps the path,
 			// which is what a script actually wants.
@@ -346,8 +380,84 @@ const list = async (props: ProfileProps) => {
 			"auth",
 			"scope",
 			"file",
+			"storage",
 			"credentials",
 		],
+	});
+};
+
+const describePreference = (preference: StoragePreference): string => {
+	if (preference.source === "default")
+		return `${preference.credStorage} (default)`;
+	if (preference.source === "NEON_TOKEN_STORAGE") {
+		return `${preference.credStorage} (NEON_TOKEN_STORAGE)`;
+	}
+	return `${preference.credStorage} (config.json)`;
+};
+
+const storage = async (props: ProfileProps & { mode?: string }) => {
+	rejectApiKeyFlag("storage");
+	const store = storeFor(props.configDir);
+	const current = store.preference();
+	if (current.source === "NEON_TOKEN_STORAGE") {
+		log.warning(
+			"NEON_TOKEN_STORAGE is set and overrides config.json for this invocation.",
+		);
+	}
+
+	const mode = props.mode?.trim();
+	if (mode === undefined || mode === "") {
+		const out = writer(props);
+		if (props.output === "table") {
+			log.info("Credential storage: %s", describePreference(current));
+			return;
+		}
+		out.end(current as never, {
+			fields: ["credStorage", "source"] as never,
+			title: "Storage",
+		});
+		return;
+	}
+
+	if (!isCredStorage(mode)) {
+		throw new Error(
+			`Unknown storage mode "${mode}". Expected "${CRED_STORAGE_FILE}" or "${CRED_STORAGE_KEYRING}".`,
+		);
+	}
+
+	const result = store.migrateTo(mode);
+	for (const adopted of result.adopted) {
+		log.warning(
+			'Left profile "%s" on disk at %s — not created by neon, so it was not migrated.',
+			adopted.name,
+			adopted.path,
+		);
+	}
+	const out = writer(props);
+	const record = {
+		credStorage: result.credStorage,
+		source: "config.json" as const,
+		migrated: result.migrated.length,
+		adopted: result.adopted.length,
+		skipped: result.skipped.length,
+	};
+	if (props.output === "table") {
+		log.info(
+			"Credential storage is now %s. Migrated %d profile(s).",
+			mode,
+			result.migrated.length,
+		);
+		return;
+	}
+	out.end(record as never, {
+		fields: [
+			"credStorage",
+			"source",
+			"migrated",
+			"adopted",
+			"skipped",
+		] as never,
+		title: "Storage",
 	});
 };
 
@@ -371,9 +481,10 @@ type OutgoingCredential =
  * CLI. There is nothing to revoke in a file we cannot parse, so this says so and moves on.
  */
 const readOutgoingCredential = (
+	configDir: string,
 	at: CredentialLocation,
 ): OutgoingCredential | null => {
-	const read = inspectCredentials(at.path);
+	const listing = storeFor(configDir).inspect(at);
 	const unusable = (reason: string): null => {
 		// `reason` comes from several sources, some of which end in a period. Trim it so the
 		// sentence does not run "…cannot be read.. Nothing in it…".
@@ -384,8 +495,10 @@ const readOutgoingCredential = (
 		return null;
 	};
 
-	if (read.kind === "unusable") return unusable(read.reason);
-	if (read.kind === "absent") return null;
+	if (listing.reason !== undefined && listing.credentials === null) {
+		return unusable(listing.reason);
+	}
+	if (listing.credentials === null) return null;
 
 	// Interpreted, not merely classified. A file declaring `api_key` with no key satisfies
 	// `credentialKind` and would then reach `getApiClient` with `undefined` behind a cast — a
@@ -393,17 +506,17 @@ const readOutgoingCredential = (
 	// genuinely nothing to revoke here, which is what `unusable` says; and saying it rather
 	// than throwing is what keeps the file removable.
 	try {
-		const credential = interpretCredentials(read.credentials, at);
+		const credential = interpretCredentials(listing.credentials, at);
 		if (credential.kind === OAUTH) {
-			return { kind: OAUTH, tokens: read.credentials };
+			return { kind: OAUTH, tokens: listing.credentials };
 		}
 		return {
 			kind: API_KEY,
 			apiKey: credential.apiKey,
-			...(typeof read.credentials.key_id === "number"
-				? { keyId: read.credentials.key_id }
+			...(typeof listing.credentials.key_id === "number"
+				? { keyId: listing.credentials.key_id }
 				: {}),
-			scope: scopeOf(read.credentials),
+			scope: scopeOf(listing.credentials),
 		};
 	} catch (err) {
 		return unusable(err instanceof Error ? err.message : String(err));
@@ -436,10 +549,11 @@ const assertReplaceable = (props: CreateProps): void => {
 	if (force) return;
 	const declared = readProfiles(configDir)?.profiles[name];
 	const path = credentialsPathFor(configDir, name);
-	if (!declared && !(name === DEFAULT_PROFILE && existsSync(path))) return;
+	const listing = storeFor(configDir).inspect({ path, profile: name });
+	const present = listing.file !== "missing" || listing.storage !== "-";
+	if (!declared && !(name === DEFAULT_PROFILE && present)) return;
 
-	const existing = inspectCredentials(path);
-	const stored = existing.kind === "ok" ? existing.credentials : null;
+	const stored = listing.credentials;
 	// Only offer `rotate-key` when it would actually work: it refuses anything that is not
 	// already an API-key profile, and `DEFAULT` is an OAuth profile on nearly every install.
 	const holdsKey =
@@ -601,7 +715,7 @@ const create = async (props: CreateProps) => {
 			);
 		}
 		const credentialsPath = credentialsPathFor(props.configDir, name);
-		const previous = readOutgoingCredential({
+		const previous = readOutgoingCredential(props.configDir, {
 			path: credentialsPath,
 			profile: name,
 		});
@@ -629,13 +743,13 @@ const create = async (props: CreateProps) => {
 	const apiKey = resolveKeyToStore(props);
 	const identity = await verifyKey(props, apiKey);
 	const credentialsPath = credentialsPathFor(props.configDir, name);
-	const previous = readOutgoingCredential({
+	const previous = readOutgoingCredential(props.configDir, {
 		path: credentialsPath,
 		profile: name,
 	});
 
-	writeCredentials(
-		credentialsPath,
+	storeFor(props.configDir).write(
+		{ path: credentialsPath, profile: name },
 		apiKeyCredentials({
 			apiKey,
 			...(identity.userId !== undefined
@@ -710,6 +824,7 @@ const report = (
 		scope: string;
 		keyId?: number;
 		credentials: string;
+		storage?: string;
 	},
 ): void => {
 	const out = writer(props);
@@ -732,6 +847,7 @@ const report = (
 			"scope",
 			...(record.keyId !== undefined ? ["keyId"] : []),
 			"credentials",
+			...(record.storage !== undefined ? ["storage"] : []),
 		] as never,
 		title: "Profile",
 	});
@@ -800,13 +916,13 @@ const createByMinting = async (props: CreateProps) => {
 		minted = await mintKey(session, name, scope);
 		const identity = await verifyKey(props, minted.key, "minted");
 		const credentialsPath = credentialsPathFor(props.configDir, name);
-		const previous = readOutgoingCredential({
+		const previous = readOutgoingCredential(props.configDir, {
 			path: credentialsPath,
 			profile: name,
 		});
 
-		writeCredentials(
-			credentialsPath,
+		storeFor(props.configDir).write(
+			{ path: credentialsPath, profile: name },
 			apiKeyCredentials({
 				apiKey: minted.key,
 				keyId: minted.id,
@@ -1025,7 +1141,7 @@ const rotateKey = async (props: ProfileProps & { name: string }) => {
 		);
 	}
 
-	const stored = readCredentials(at);
+	const stored = storeFor(props.configDir).read(at)?.credentials ?? null;
 	const scope = stored !== null ? scopeOf(stored) : {};
 	const previousKeyId =
 		typeof stored?.key_id === "number" ? stored.key_id : undefined;
@@ -1079,8 +1195,8 @@ const rotateKey = async (props: ProfileProps & { name: string }) => {
 	// keeps working — and the new key is named in the error rather than silently orphaned on
 	// the account with no way to find it again.
 	try {
-		writeCredentials(
-			profile.credentialsPath,
+		storeFor(props.configDir).write(
+			at,
 			apiKeyCredentials({
 				apiKey: created.key,
 				keyId: created.id,
@@ -1173,7 +1289,7 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 	//    unreachable by us. Best-effort: a profile is often removed precisely because its
 	//    access already broke.
 	const at = { path: profile.credentialsPath, profile: name };
-	const stored = readOutgoingCredential(at);
+	const stored = readOutgoingCredential(props.configDir, at);
 
 	if (stored?.kind === API_KEY) {
 		const { keyId, scope } = stored;
@@ -1204,19 +1320,24 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 		);
 	}
 
-	// 2. Delete the credentials file only if we created it. A profile pointing outside the
+	// 2. Delete the credential only if we created it. A profile pointing outside the
 	//    config directory was adopted from elsewhere; unlink it and say so, because the
 	//    secret is still on disk and silence would imply otherwise.
-	if (existsSync(profile.credentialsPath)) {
-		if (isInsideConfigDir(props.configDir, profile.credentialsPath)) {
-			rmSync(profile.credentialsPath);
+	const owned = isOwnedCredentialPath(
+		props.configDir,
+		profile.credentialsPath,
+	);
+	const listing = storeFor(props.configDir).inspect(at);
+	if (owned) {
+		storeFor(props.configDir).delete(at);
+		if (listing.file !== "missing" || listing.storage !== "-") {
 			log.info("Deleted %s", profile.credentialsPath);
-		} else {
-			log.info(
-				"Left %s on disk — not created by neon",
-				profile.credentialsPath,
-			);
 		}
+	} else if (existsSync(profile.credentialsPath)) {
+		log.info(
+			"Left %s on disk — not created by neon",
+			profile.credentialsPath,
+		);
 	}
 
 	// 3. Drop the entry, and the file once nothing but DEFAULT is left — the mirror image

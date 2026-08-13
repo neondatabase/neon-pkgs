@@ -1,11 +1,9 @@
 import { log } from "@clack/prompts";
-import {
-	inspectCredentials,
-	interpretCredentials,
-} from "@neon-internals/cli-core/credentials";
-import { resolveConfigFile } from "@neon-internals/cli-core/paths";
+import { interpretCredentials } from "@neon-internals/cli-core/credentials";
+import { configDir, resolveConfigFile } from "@neon-internals/cli-core/paths";
 import { DEFAULT_PROFILE } from "@neon-internals/cli-core/profiles";
 import { execa } from "execa";
+import { storeFor } from "../credential_io.js";
 
 export type AuthOptions = {
 	json?: boolean;
@@ -71,20 +69,13 @@ export async function isAuthenticated(): Promise<boolean> {
  */
 async function getNeonctlAccessToken(): Promise<string | null> {
 	const { path } = resolveConfigFile("credentials.json");
-	const read = inspectCredentials(path);
-	if (read.kind === "absent") return null;
-	if (read.kind === "unusable") {
-		throw new Error(
-			`${read.reason}. Replace it deliberately with \`neon profile create ${DEFAULT_PROFILE} --force\`, or delete the file.`,
-		);
-	}
+	const at = { path, profile: DEFAULT_PROFILE };
+	const loaded = storeFor(configDir()).read(at);
+	if (loaded === null) return null;
 	// `neon init` has no profile selection — it reads the default credential and refuses
 	// when one is named, so `DEFAULT` is the only profile this can ever be about.
-	const credential = interpretCredentials(read.credentials, {
-		path,
-		profile: DEFAULT_PROFILE,
-	});
+	const credential = interpretCredentials(loaded.credentials, at);
 	if (credential.kind === "api_key") return credential.apiKey;
-	const token = read.credentials.access_token;
+	const token = loaded.credentials.access_token;
 	return typeof token === "string" && token.trim() !== "" ? token : null;
 }

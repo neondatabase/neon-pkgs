@@ -246,7 +246,8 @@ async function handleError(msg: string, err: unknown): Promise<boolean> {
 			}
 			log.info("Authentication failed, deleting credentials...");
 			try {
-				deleteCredentialsAt(staleCredentials);
+				if (context === null) return false;
+				deleteCredentialsAt(staleCredentials, context.configDir);
 				return true; // Allow retry for auth failures
 			} catch (deleteErr) {
 				log.debug(

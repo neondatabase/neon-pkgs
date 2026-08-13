@@ -834,27 +834,30 @@ The CLI holds one Neon account by default. A profile adds another, and is nothin
 ```bash
 neon profile create work     # a browser sign-in, or an API key — see below
 neon profile list
+neon profile storage         # file (default), or keyring after you opt in
 neon profile remove work
 ```
 
 ```console
 $ neon profile list
 Profiles
-┌────────┬─────────┬───────────────────────┬─────────┬────────────────┬──────┬────────────────────────┐
-│ Active │ Name    │ Account               │ Auth    │ Scope          │ File │ Credentials            │
-├────────┼─────────┼───────────────────────┼─────────┼────────────────┼──────┼────────────────────────┤
-│ *      │ DEFAULT │ me@example.com        │ oauth   │ -              │ ok   │ credentials.json       │
-├────────┼─────────┼───────────────────────┼─────────┼────────────────┼──────┼────────────────────────┤
-│        │ work    │ me@example.com        │ api key │ account        │ ok   │ credentials.work.json  │
-├────────┼─────────┼───────────────────────┼─────────┼────────────────┼──────┼────────────────────────┤
-│        │ ci      │ org-old-flower-827148 │ api key │ project proj-1 │ ok   │ credentials.ci.json    │
-└────────┴─────────┴───────────────────────┴─────────┴────────────────┴──────┴────────────────────────┘
+┌────────┬─────────┬───────────────────────┬─────────┬────────────────┬──────┬─────────┬────────────────────────┐
+│ Active │ Name    │ Account               │ Auth    │ Scope          │ File │ Storage │ Credentials            │
+├────────┼─────────┼───────────────────────┼─────────┼────────────────┼──────┼─────────┼────────────────────────┤
+│ *      │ DEFAULT │ me@example.com        │ oauth   │ -              │ ok   │ file    │ credentials.json       │
+├────────┼─────────┼───────────────────────┼─────────┼────────────────┼──────┼─────────┼────────────────────────┤
+│        │ work    │ me@example.com        │ api key │ account        │ ok   │ file    │ credentials.work.json  │
+├────────┼─────────┼───────────────────────┼─────────┼────────────────┼──────┼─────────┼────────────────────────┤
+│        │ ci      │ org-old-flower-827148 │ api key │ project proj-1 │ ok   │ file    │ credentials.ci.json    │
+└────────┴─────────┴───────────────────────┴─────────┴────────────────┴──────┴─────────┴────────────────────────┘
 ```
 
 `Scope` is what a key can reach; an OAuth session has none of its own, so it shows `-`. `File`
 says whether the credentials file can be read and understood — `ok`, `invalid` or `missing` —
-which is not the same as the credential still working; only using it shows that. The table shows
-the file name, `--output json` the full path.
+which is not the same as the credential still working; only using it shows that. `Storage` is
+where the secret currently lives — `file`, `keyring`, or `-` when neither store has one. After
+a migrate to the OS keyring the file column is `missing` and storage is `keyring`. The table
+shows the file name, `--output json` the full path.
 
 Select one per invocation with `--profile`, or per shell with `NEON_PROFILE`. There is no `profile use` command and nothing is stored about which profile is "current", so what you type is always what runs.
 
@@ -878,6 +881,27 @@ CI or behind a pipe, it refuses rather than prompting into the void. It deletes 
 file only when the CLI created it: an adopted path like the one above is unlinked and left on
 disk, and the command says so. Removing the last named profile deletes `profiles.json`,
 returning you to the single-account layout. `neon profile remove DEFAULT` signs you out.
+
+### Where the secret is stored
+
+The default is a credentials file. `neon profile storage keyring` moves every **owned**
+profile into the OS keyring (macOS Keychain, Windows Credential Manager, Linux Secret
+Service) and records the preference in `config.json`. `neon profile storage file` moves
+them back. Reads never migrate; only this command does.
+
+```bash
+neon profile storage           # file (default)
+neon profile storage keyring   # write config.json, migrate owned profiles, delete those files
+neon profile storage file      # migrate back to files, clear the keyring items
+```
+
+`NEON_TOKEN_STORAGE=file|keyring` overrides `config.json` for one invocation and does not
+migrate. `--api-key` and `NEON_API_KEY` skip both stores.
+
+A path a profile adopted from outside the config directory stays on disk. Packaged
+binaries and older CLI releases cannot read a keyring profile — after a migrate they
+see the file as missing. Keyring storage needs a compatible npm-installed `neon` or
+`@neon/env`.
 
 ### A profile holds either a sign-in or an API key
 
@@ -926,7 +950,7 @@ the key never leaves the CLI.
 { "type": "api_key", "api_key": "napi_…", "key_id": 123, "org_id": "org-…" }
 ```
 
-Nothing is carried over when a profile is replaced, so one profile can never hold two credentials — or two different accounts. The secret stays in that file and never goes into `profiles.json`, so listing profiles cannot leak one. Both files are written owner-only through a temporary file and a rename, which also repairs the permissions of a file created too permissively.
+Nothing is carried over when a profile is replaced, so one profile can never hold two credentials — or two different accounts. The secret stays in the credentials file or the OS keyring and never goes into `profiles.json`, so listing profiles cannot leak one. Files are written owner-only through a temporary file and a rename, which also repairs the permissions of a file created too permissively.
 
 `--mint` is the one to reach for. It signs you in through the browser once, mints a key with that session, stores only the key, and signs the session back out — so afterwards nothing about the profile can open a browser, and no half-forgotten login is left behind. `--org-id` and `--project-id` narrow what the minted key can reach, exactly as they do on [`neon api-keys create`](#api-keys); a project-scoped key cannot create projects, mint keys, or read any other project.
 
@@ -1038,7 +1062,7 @@ API keys in org-7
 | Command                                                                    | Subcommands                                                                                                  | Description                        |
 | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------- |
 | [auth](https://neon.com/docs/reference/cli-auth)                           |                                                                                                              | Authenticate                       |
-| profile                                                                    | `list`, `create`, `rotate-key`, `remove`                                                                     | Manage named sets of credentials   |
+| profile                                                                    | `list`, `create`, `rotate-key`, `storage`, `remove`                                                          | Manage named sets of credentials   |
 | api-keys                                                                   | `list`, `create`, `revoke`                                                                                   | Manage API keys                    |
 | [projects](https://neon.com/docs/reference/cli-projects)                   | `list`, `create`, `update`, `delete`, `get`                                                                  | Manage projects                    |
 | [ip-allow](https://neon.com/docs/reference/cli-ip-allow)                   | `list`, `add`, `remove`, `reset`                                                                             | Manage IP Allow                    |
@@ -1089,7 +1113,7 @@ Global options are supported with any Neon CLI command.
 
 - <a id="config-dir"></a>`--config-dir`
 
-  Specifies the path to the `neon` configuration directory, which holds the `credentials.json` written by `neon auth`. The default is `$XDG_CONFIG_HOME/neon`, or `~/.config/neon`; run `neon --help` to see the resolved path. This option is only necessary if you keep your configuration somewhere else.
+  Specifies the path to the `neon` configuration directory, which holds the `credentials.json` written by `neon auth` (or `config.json` when you opt into keyring storage). The default is `$XDG_CONFIG_HOME/neon`, or `~/.config/neon`; run `neon --help` to see the resolved path. This option is only necessary if you keep your configuration somewhere else.
 
   The directory was called `neonctl` before the CLI was renamed. An existing one is still read, and is used **in place** — nothing is moved or copied, so there is never a second credentials file to go stale. A directory you pass explicitly is used exactly as given and never falls back to the legacy name, so pointing a CI run at a scratch directory cannot pick up local credentials.
 

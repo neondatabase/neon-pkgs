@@ -305,7 +305,7 @@ describe("deleteCredentialsAt", () => {
 
 		expect(existsSync(credentialsPath)).toBe(true);
 
-		deleteCredentialsAt(credentialsPath);
+		deleteCredentialsAt(credentialsPath, configDir);
 
 		expect(existsSync(credentialsPath)).toBe(false);
 	});
@@ -323,7 +323,7 @@ describe("deleteCredentialsAt", () => {
 
 		// Should not throw an error
 		expect(() => {
-			deleteCredentialsAt(credentialsPath);
+			deleteCredentialsAt(credentialsPath, nonExistentDir);
 		}).not.toThrow();
 
 		rmSync(nonExistentDir, { recursive: true });

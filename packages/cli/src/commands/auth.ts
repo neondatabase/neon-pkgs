@@ -1,19 +1,17 @@
 import { createHash } from "node:crypto";
-import { existsSync, rmSync } from "node:fs";
 import {
 	credentialInputs,
 	displacedProfileWarning,
 	selectCredential,
 } from "@neon-internals/cli-core/auth_selection";
+import type { CredStorage } from "@neon-internals/cli-core/cli_config";
 import {
 	API_KEY,
 	type CredentialKind,
 	type CredentialLocation,
 	interpretCredentials,
 	OAUTH,
-	readCredentials,
 	type StoredCredentials,
-	writeCredentials,
 } from "@neon-internals/cli-core/credentials";
 import {
 	assertProfilesUsable,
@@ -36,6 +34,7 @@ import {
 	isCurrentBranchProbe,
 	isProfileCommand,
 } from "../context.js";
+import { storeFor } from "../credential_io.js";
 import { isCi } from "../env.js";
 import { log } from "../log.js";
 import type { ExtendedTokenSet } from "../types.js";
@@ -126,12 +125,13 @@ export const authFlow = async ({
 	let identity: { id?: string; email?: string } = {};
 	try {
 		identity = await preserveCredentials(
-			credentialsPath,
+			{ path: credentialsPath, profile: profileName },
 			tokenSet,
 			getApiClient({
 				apiKey: tokenSet.access_token || "",
 				apiHost,
 			}),
+			configDir,
 		);
 	} catch {
 		log.error("Failed to save credentials");
@@ -156,9 +156,11 @@ export const authFlow = async ({
  * email — which is why identifying a stored profile offline is otherwise impossible.
  */
 const preserveCredentials = async (
-	path: string,
+	at: CredentialLocation,
 	credentials: ExtendedTokenSet,
 	apiClient: NeonApiClient,
+	configDir: string,
+	backend?: CredStorage,
 ): Promise<{ id?: string; email?: string }> => {
 	const {
 		data: { id, email },
@@ -172,8 +174,12 @@ const preserveCredentials = async (
 		type: OAUTH,
 		...(id !== undefined ? { user_id: id } : {}),
 	};
-	writeCredentials(path, stored);
-	log.debug("Saved credentials to %s", path);
+	storeFor(configDir).write(
+		at,
+		stored,
+		backend !== undefined ? { backend } : undefined,
+	);
+	log.debug("Saved credentials to %s", at.path);
 	log.debug("Credentials MD5 hash: %s", md5hash(JSON.stringify(stored)));
 	return { ...(id ? { id } : {}), ...(email ? { email } : {}) };
 };
@@ -188,8 +194,9 @@ export type CredentialProps = {
 
 const handleExistingToken = async (
 	tokenSet: ExtendedTokenSet,
-	props: CredentialProps,
-	credentialsPath: string,
+	props: CredentialProps & { configDir: string },
+	at: CredentialLocation,
+	backend: CredStorage,
 ): Promise<{ apiKey: string; apiClient: NeonApiClient } | null> => {
 	// Use existing access_token, if present and valid
 	if (tokenSet.access_token && tokenSet.expires_at > Date.now()) {
@@ -233,7 +240,13 @@ const handleExistingToken = async (
 			apiHost: props.apiHost,
 		});
 
-		await preserveCredentials(credentialsPath, extendedTokenSet, apiClient);
+		await preserveCredentials(
+			at,
+			extendedTokenSet,
+			apiClient,
+			props.configDir,
+			backend,
+		);
 		log.debug("Token refresh successful");
 
 		return { apiKey, apiClient };
@@ -254,31 +267,31 @@ const handleExistingToken = async (
  * an interactive login would be authenticating something other than what the command is about.
  */
 export const usableCredential = async (
-	props: CredentialProps,
+	props: CredentialProps & { configDir: string },
 	at: CredentialLocation,
 ): Promise<{ apiKey: string; kind: CredentialKind } | null> => {
-	const credentialsPath = at.path;
-	const stored = readCredentials(at);
-	if (stored === null) return null;
+	const loaded = storeFor(props.configDir).read(at);
+	if (loaded === null) return null;
 
 	// A file that declares an unusable kind throws, rather than being reported as "no
 	// credential" — the user needs to know it is broken, not that it is absent.
-	const credential = interpretCredentials(stored, at);
+	const credential = interpretCredentials(loaded.credentials, at);
 	if (credential.kind === API_KEY) {
 		return { apiKey: credential.apiKey, kind: API_KEY };
 	}
 
 	try {
 		const result = await handleExistingToken(
-			stored as ExtendedTokenSet,
+			loaded.credentials as ExtendedTokenSet,
 			props,
-			credentialsPath,
+			at,
+			loaded.backend,
 		);
 		return result ? { apiKey: result.apiKey, kind: OAUTH } : null;
 	} catch (err) {
 		log.debug(
 			"Could not use the stored OAuth session at %s: %s",
-			credentialsPath,
+			at.path,
 			err instanceof Error ? err.message : "unknown error",
 		);
 		return null;
@@ -383,13 +396,13 @@ export const ensureAuth = async (
 		selection.profile,
 	);
 	const at = { path: credentialsPath, profile: selection.profile };
-	const stored = readCredentials(at);
+	const loaded = storeFor(props.configDir).read(at);
 
-	if (stored !== null) {
+	if (loaded !== null) {
 		log.debug("Trying to read credentials from %s", credentialsPath);
 		// Throws on a file whose declared kind is unusable. That is deliberate: falling
 		// through to a browser login would replace the credential the user is fixing.
-		const credential = interpretCredentials(stored, at);
+		const credential = interpretCredentials(loaded.credentials, at);
 
 		if (credential.kind === API_KEY) {
 			log.debug(
@@ -412,9 +425,10 @@ export const ensureAuth = async (
 
 		try {
 			const result = await handleExistingToken(
-				stored as ExtendedTokenSet,
+				loaded.credentials as ExtendedTokenSet,
 				props,
-				credentialsPath,
+				at,
+				loaded.backend,
 			);
 			if (result) {
 				props.apiKey = result.apiKey;
@@ -488,10 +502,16 @@ export const ensureAuth = async (
  * `--profile`-selected account deleted whatever `DEFAULT` pointed at — signing the user out
  * of an account whose credentials the failed request had never touched.
  */
-export const deleteCredentialsAt = (credentialsPath: string): void => {
+export const deleteCredentialsAt = (
+	credentialsPath: string,
+	configDir: string,
+): void => {
 	try {
-		if (existsSync(credentialsPath)) {
-			rmSync(credentialsPath);
+		const store = storeFor(configDir);
+		const at = { path: credentialsPath, profile: "DEFAULT" };
+		const before = store.inspect(at);
+		store.delete(at);
+		if (before.file !== "missing" || before.storage !== "-") {
 			log.info("Deleted credentials from %s", credentialsPath);
 		} else {
 			log.debug("Credentials file %s does not exist", credentialsPath);

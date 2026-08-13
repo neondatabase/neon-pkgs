@@ -256,12 +256,14 @@ describe("profile list", () => {
 				name: "DEFAULT",
 				auth: "oauth",
 				file: "ok",
+				storage: "file",
 			}),
 			expect.objectContaining({
 				name: "work",
 				auth: "api key",
 				account: "work@example.com",
 				file: "ok",
+				storage: "file",
 			}),
 		]);
 
@@ -298,6 +300,7 @@ describe("profile list", () => {
 					name: "gone",
 					auth: "-",
 					file: "missing",
+					storage: "-",
 				}),
 			]),
 		);
@@ -1405,6 +1408,110 @@ describe("profile rotate-key", () => {
 		expect(code).toBe(1);
 		expect(stderr).toContain("no usable credential");
 		expect(stderr).toContain("neon profile create work --mint --force");
+	});
+});
+
+describe("profile storage", () => {
+	test("shows file as the default", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": API_KEY_FILE,
+		});
+		const { code, stdout } = await runCli([
+			"profile",
+			"storage",
+			"--config-dir",
+			dir,
+			"--output",
+			"json",
+		]);
+		expect(code).toBe(0);
+		expect(JSON.parse(stdout)).toEqual({
+			credStorage: "file",
+			source: "default",
+		});
+	});
+
+	test("NEON_TOKEN_STORAGE overrides config.json without migrating", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": API_KEY_FILE,
+			"config.json": JSON.stringify({ credStorage: "keyring" }),
+		});
+		const { code, stdout } = await runCli(
+			["profile", "storage", "--config-dir", dir, "--output", "json"],
+			{ NEON_TOKEN_STORAGE: "file" },
+		);
+		expect(code).toBe(0);
+		expect(JSON.parse(stdout)).toEqual({
+			credStorage: "file",
+			source: "NEON_TOKEN_STORAGE",
+		});
+		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
+	});
+
+	test("setting file writes config.json and leaves the credentials file", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": API_KEY_FILE,
+		});
+		const { code, stdout } = await runCli([
+			"profile",
+			"storage",
+			"file",
+			"--config-dir",
+			dir,
+			"--output",
+			"json",
+		]);
+		expect(code).toBe(0);
+		expect(JSON.parse(stdout)).toEqual({
+			credStorage: "file",
+			source: "config.json",
+			migrated: 1,
+			adopted: 0,
+			skipped: 0,
+		});
+		expect(
+			JSON.parse(readFileSync(resolve(dir, "config.json"), "utf8")),
+		).toEqual({
+			credStorage: "file",
+		});
+		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
+	});
+
+	test("an unknown mode is refused and deletes nothing", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": API_KEY_FILE,
+		});
+		const { code, stderr } = await runCli([
+			"profile",
+			"storage",
+			"auto",
+			"--config-dir",
+			dir,
+		]);
+		expect(code).toBe(1);
+		expect(stderr).toContain('Expected "file" or "keyring"');
+		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
+		expect(existsSync(resolve(dir, "config.json"))).toBe(false);
+	});
+});
+
+describe("--api-key skips stored credential config", () => {
+	test("an invalid config.json does not break --api-key", async () => {
+		const dir = makeConfigDir({
+			"config.json": '{"credStorage":napi_LEAKED',
+		});
+		const { code, stderr } = await runCli([
+			"me",
+			"--config-dir",
+			dir,
+			"--api-key",
+			"napi_flag_only",
+		]);
+		// The host is unreachable, so the command fails after auth — not while
+		// parsing config.json. The leaked fragment must not appear.
+		expect(stderr).not.toContain("napi_LEAKED");
+		expect(stderr).not.toContain("not valid JSON");
+		expect(code).not.toBe(0);
 	});
 });
 

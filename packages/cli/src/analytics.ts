@@ -1,12 +1,10 @@
-import {
-	inspectCredentials,
-	OAUTH,
-} from "@neon-internals/cli-core/credentials";
+import { OAUTH } from "@neon-internals/cli-core/credentials";
 import { Analytics, type TrackParams } from "@segment/analytics-node";
 import { getApiClient, isNeonApiError } from "./api.js";
 import { type AuthContext, getAuthContext } from "./auth_context.js";
 import { credentialsPath } from "./config.js";
 import { isCurrentBranchProbe } from "./context.js";
+import { storeFor } from "./credential_io.js";
 import { getGithubEnvVars, isCi } from "./env.js";
 import type { ErrorCode } from "./errors.js";
 import { log } from "./log.js";
@@ -190,13 +188,13 @@ export const analyticsMiddleware = async (args: {
 	if (fileToRead !== undefined) {
 		// Telemetry must never turn a damaged or unreadable credentials file into a failed command.
 		try {
-			const read = inspectCredentials(fileToRead);
-			if (
-				read.kind === "ok" &&
-				typeof read.credentials.user_id === "string"
-			) {
-				userId = read.credentials.user_id;
-			} else if (read.kind !== "ok") {
+			const listing = storeFor(args.configDir).inspect({
+				path: fileToRead,
+				profile: "DEFAULT",
+			});
+			if (typeof listing.credentials?.user_id === "string") {
+				userId = listing.credentials.user_id;
+			} else {
 				log.debug("No usable credentials at %s", fileToRead);
 			}
 		} catch (err) {
