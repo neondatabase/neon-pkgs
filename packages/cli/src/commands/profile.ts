@@ -475,11 +475,17 @@ const storage = async (
 			"Packaged binaries and older neon releases cannot read keyring profiles.",
 		);
 	}
-	if (mode === CRED_STORAGE_FILE && result.skipped.length > 0) {
+	if (mode === CRED_STORAGE_FILE) {
 		for (const skipped of result.skipped) {
 			log.warning(
 				'No credential was readable for profile "%s". If one is in the OS keyring and access was denied, it is still there; it is not used while storage is file.',
 				skipped.name,
+			);
+		}
+		for (const leftover of result.uncleared) {
+			log.warning(
+				'Could not confirm the OS keyring item for profile "%s" is gone. It is not used while storage is file.',
+				leftover.name,
 			);
 		}
 	}

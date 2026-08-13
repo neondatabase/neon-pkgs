@@ -919,6 +919,56 @@ describe("createCredentialStore", () => {
 		).toEqual({ credStorage: "file" });
 	});
 
+	test("migrateTo file persists when a file is present and the keyring item cannot be confirmed", () => {
+		const dir = makeDir({
+			"config.json": JSON.stringify({ credStorage: "keyring" }),
+			"credentials.json": JSON.stringify(key),
+		});
+		const store = createCredentialStore(dir, {
+			env: {},
+			keyring: {
+				get: () => null,
+				set: () => undefined,
+				delete: () => false,
+			},
+		});
+		const result = store.migrateTo(CRED_STORAGE_FILE);
+		expect(result.migrated).toHaveLength(1);
+		expect(result.uncleared).toEqual([
+			{ name: "DEFAULT", path: resolve(dir, "credentials.json") },
+		]);
+		expect(
+			JSON.parse(readFileSync(resolve(dir, "config.json"), "utf8")),
+		).toEqual({ credStorage: "file" });
+		expect(
+			JSON.parse(readFileSync(resolve(dir, "credentials.json"), "utf8")),
+		).toEqual(key);
+	});
+
+	test("migrateTo file with force persists when a visible leftover cannot be deleted", () => {
+		const dir = makeDir({
+			"config.json": JSON.stringify({ credStorage: "keyring" }),
+		});
+		const secret = JSON.stringify(key);
+		const store = createCredentialStore(dir, {
+			env: {},
+			keyring: {
+				get: () => secret,
+				set: () => undefined,
+				delete: () => false,
+			},
+		});
+		const result = store.migrateTo(CRED_STORAGE_FILE, { force: true });
+		expect(result.migrated).toHaveLength(1);
+		expect(result.uncleared).toHaveLength(1);
+		expect(
+			JSON.parse(readFileSync(resolve(dir, "config.json"), "utf8")),
+		).toEqual({ credStorage: "file" });
+		expect(
+			JSON.parse(readFileSync(resolve(dir, "credentials.json"), "utf8")),
+		).toEqual(key);
+	});
+
 	test("migrateTo file persists when keyring is preferred and nothing is stored", () => {
 		const dir = makeDir({
 			"config.json": JSON.stringify({ credStorage: "keyring" }),

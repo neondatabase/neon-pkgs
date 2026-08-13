@@ -1477,6 +1477,35 @@ describe("profile storage", () => {
 		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
 	});
 
+	test("storage file persists when a file exists and the keyring cannot be confirmed", async () => {
+		const dir = makeConfigDir({
+			"config.json": JSON.stringify({ credStorage: "keyring" }),
+			"credentials.json": API_KEY_FILE,
+		});
+		const { code, stdout, stderr } = await runCli([
+			"profile",
+			"storage",
+			"file",
+			"--config-dir",
+			dir,
+			"--output",
+			"json",
+		]);
+		expect(code).toBe(0);
+		expect(JSON.parse(stdout)).toEqual({
+			credStorage: "file",
+			source: "config.json",
+			migrated: 1,
+			adopted: 0,
+			skipped: 0,
+		});
+		expect(stderr).toContain(
+			"Could not confirm the OS keyring item for profile",
+		);
+		expect(stderr).not.toContain("run `neon profile storage file`");
+		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
+	});
+
 	test("storage file persists when keyring is preferred and nothing is stored", async () => {
 		const dir = makeConfigDir({
 			"config.json": JSON.stringify({ credStorage: "keyring" }),

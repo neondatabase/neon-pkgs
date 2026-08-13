@@ -121,6 +121,7 @@ export type MigrateResult = {
 	migrated: MigratedProfile[];
 	adopted: MigratedProfile[];
 	skipped: SkippedProfile[];
+	uncleared: MigratedProfile[];
 };
 
 export type CreateCredentialStoreOptions = {
@@ -373,10 +374,10 @@ export const createCredentialStore = (
 		account: string,
 		path: string,
 		required: boolean,
-	): void => {
+	): "cleared" | "unconfirmed" | "left" => {
 		if (keyring === null) {
 			if (required) throw new KeyringUnavailableError();
-			return;
+			return "unconfirmed";
 		}
 		let raw: string | null;
 		try {
@@ -386,7 +387,7 @@ export const createCredentialStore = (
 		}
 		if (raw === null) {
 			if (required) throw new KeyringClearError(path, "unconfirmed");
-			return;
+			return "unconfirmed";
 		}
 		const deleted = keyring.delete(KEYRING_SERVICE, account);
 		let still: string | null;
@@ -396,8 +397,10 @@ export const createCredentialStore = (
 			throw err instanceof Error ? err : new Error(String(err));
 		}
 		if (!deleted || still !== null) {
-			throw new KeyringClearError(path, "visible");
+			if (required) throw new KeyringClearError(path, "visible");
+			return "left";
 		}
+		return "cleared";
 	};
 
 	const del = (at: CredentialLocation): void => {
@@ -423,6 +426,7 @@ export const createCredentialStore = (
 		const migrated: MigratedProfile[] = [];
 		const adopted: MigratedProfile[] = [];
 		const skipped: SkippedProfile[] = [];
+		const uncleared: MigratedProfile[] = [];
 		const keyringPaths = new Set<string>();
 		const keyringWrites: string[] = [];
 
@@ -495,9 +499,14 @@ export const createCredentialStore = (
 
 			if (mode === CRED_STORAGE_FILE) {
 				for (const item of migrated) {
-					const known = mayHold || keyringPaths.has(item.path);
-					if (!known) continue;
-					removeKeyringItem(accountFor(item.path), item.path, !force);
+					const sawKeyring = keyringPaths.has(item.path);
+					if (!mayHold && !sawKeyring) continue;
+					const status = removeKeyringItem(
+						accountFor(item.path),
+						item.path,
+						sawKeyring && !force,
+					);
+					if (status !== "cleared") uncleared.push(item);
 				}
 			}
 
@@ -514,7 +523,7 @@ export const createCredentialStore = (
 			}
 		}
 
-		return { credStorage: mode, migrated, adopted, skipped };
+		return { credStorage: mode, migrated, adopted, skipped, uncleared };
 	};
 
 	return {
