@@ -902,6 +902,14 @@ migrate. `--api-key` and `NEON_API_KEY` skip both stores. `profile storage file`
 `profile remove` refuse when the OS store cannot confirm the item is gone; `--force` on
 `storage file` is the explicit exception and may leave a leftover in the keyring.
 
+When this CLI cannot use the OS keyring (packaged binary, or the native addon is missing),
+`neon profile storage file --force` still persists file mode. The same hatch with an
+override works from any other command that refuses:
+
+```bash
+NEON_TOKEN_STORAGE=file neon profile storage file --force
+```
+
 A path a profile adopted from outside the config directory stays on disk. Packaged
 binaries and older CLI releases cannot read a keyring profile — after a migrate they
 see the file as missing. Keyring storage needs a compatible npm-installed `neon` or

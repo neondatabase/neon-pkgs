@@ -899,6 +899,21 @@ describe("createCredentialStore", () => {
 		).toEqual({ credStorage: "keyring" });
 	});
 
+	test("migrateTo file with force persists when the keyring addon is missing", () => {
+		const dir = makeDir({
+			"config.json": JSON.stringify({ credStorage: "keyring" }),
+		});
+		const store = createCredentialStore(dir, {
+			env: {},
+			keyring: null,
+		});
+		const result = store.migrateTo(CRED_STORAGE_FILE, { force: true });
+		expect(result.skipped).toHaveLength(1);
+		expect(
+			JSON.parse(readFileSync(resolve(dir, "config.json"), "utf8")),
+		).toEqual({ credStorage: "file" });
+	});
+
 	test("migrateTo file with force persists file mode when the keyring item cannot be read", () => {
 		const dir = makeDir({
 			"config.json": JSON.stringify({ credStorage: "keyring" }),

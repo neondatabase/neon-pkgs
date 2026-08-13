@@ -450,6 +450,16 @@ const storage = async (
 	}
 
 	const result = store.migrateTo(mode, { force: props.force === true });
+	if (mode === CRED_STORAGE_KEYRING) {
+		log.warning(
+			"Packaged binaries and older neon releases cannot read keyring profiles.",
+		);
+	}
+	if (props.force === true) {
+		log.warning(
+			"A keyring item that could not be read may still be in the OS store.",
+		);
+	}
 	for (const adopted of result.adopted) {
 		log.warning(
 			'Left profile "%s" on disk at %s — not created by neon, so it was not migrated.',

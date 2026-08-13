@@ -1492,6 +1492,7 @@ describe("profile storage", () => {
 		expect(stderr).toMatch(
 			/Could not clear the OS keyring item|cannot use the OS keyring/,
 		);
+		expect(stderr).toMatch(/--force/);
 		expect(
 			JSON.parse(readFileSync(resolve(dir, "config.json"), "utf8")),
 		).toEqual({ credStorage: "keyring" });
