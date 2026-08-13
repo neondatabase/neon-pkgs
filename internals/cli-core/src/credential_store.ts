@@ -73,7 +73,7 @@ export const keyringIdentityPath = (
 
 export class KeyringUnavailableError extends Error {
 	constructor(
-		message = "This CLI cannot use the OS keyring. Use the npm-installed neon CLI, or run `NEON_TOKEN_STORAGE=file neon profile storage file --force` to persist file mode.",
+		message = "This CLI cannot use the OS keyring. Use the npm-installed neon CLI, or run `NEON_CRED_STORAGE=file neon profile storage file --force` to persist file mode.",
 	) {
 		super(message);
 		this.name = "KeyringUnavailableError";
@@ -83,7 +83,7 @@ export class KeyringUnavailableError extends Error {
 export class KeyringClearError extends Error {
 	constructor(path: string) {
 		super(
-			`Could not clear the OS keyring item for ${path}. The OS store does not distinguish a missing item from denied access. Unlock the OS keyring and retry, or run \`neon profile storage file --force\` (may leave a leftover in the OS store).`,
+			`Could not clear the OS keyring item for ${path}. The OS store does not distinguish a missing item from denied access. If you never stored a credential in the keyring, run \`neon profile storage file --force\`. Otherwise unlock the OS keyring and retry.`,
 		);
 		this.name = "KeyringClearError";
 	}
@@ -459,13 +459,6 @@ export const createCredentialStore = (
 					}
 				}
 				if (loaded === null) {
-					if (
-						mode === CRED_STORAGE_FILE &&
-						keyringMayHoldCopy() &&
-						!force
-					) {
-						throw new KeyringClearError(at.path);
-					}
 					skipped.push({
 						name: profile.name,
 						path: at.path,

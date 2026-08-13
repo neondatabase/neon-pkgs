@@ -1431,19 +1431,19 @@ describe("profile storage", () => {
 		});
 	});
 
-	test("NEON_TOKEN_STORAGE overrides config.json without migrating", async () => {
+	test("NEON_CRED_STORAGE overrides config.json without migrating", async () => {
 		const dir = makeConfigDir({
 			"credentials.json": API_KEY_FILE,
 			"config.json": JSON.stringify({ credStorage: "keyring" }),
 		});
 		const { code, stdout } = await runCli(
 			["profile", "storage", "--config-dir", dir, "--output", "json"],
-			{ NEON_TOKEN_STORAGE: "file" },
+			{ NEON_CRED_STORAGE: "file" },
 		);
 		expect(code).toBe(0);
 		expect(JSON.parse(stdout)).toEqual({
 			credStorage: "file",
-			source: "NEON_TOKEN_STORAGE",
+			source: "NEON_CRED_STORAGE",
 		});
 		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
 	});
@@ -1477,25 +1477,64 @@ describe("profile storage", () => {
 		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
 	});
 
-	test("storage file refuses when keyring is preferred and nothing is readable", async () => {
+	test("storage file persists when keyring is preferred and nothing is stored", async () => {
 		const dir = makeConfigDir({
 			"config.json": JSON.stringify({ credStorage: "keyring" }),
 		});
-		const { code, stderr } = await runCli([
+		const { code, stdout } = await runCli([
 			"profile",
 			"storage",
 			"file",
 			"--config-dir",
 			dir,
+			"--output",
+			"json",
 		]);
-		expect(code).toBe(1);
-		expect(stderr).toMatch(
-			/Could not clear the OS keyring item|cannot use the OS keyring/,
-		);
-		expect(stderr).toMatch(/--force/);
+		expect(code).toBe(0);
+		expect(JSON.parse(stdout)).toEqual({
+			credStorage: "file",
+			source: "config.json",
+			migrated: 0,
+			adopted: 0,
+			skipped: 1,
+		});
 		expect(
 			JSON.parse(readFileSync(resolve(dir, "config.json"), "utf8")),
-		).toEqual({ credStorage: "keyring" });
+		).toEqual({ credStorage: "file" });
+	});
+
+	test("setting storage refuses when NEON_CRED_STORAGE names a different mode", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": API_KEY_FILE,
+		});
+		const { code, stderr } = await runCli(
+			["profile", "storage", "keyring", "--config-dir", dir],
+			{ NEON_CRED_STORAGE: "file" },
+		);
+		expect(code).toBe(1);
+		expect(stderr).toContain("NEON_CRED_STORAGE=file");
+		expect(stderr).toContain("Unset NEON_CRED_STORAGE");
+		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
+		expect(existsSync(resolve(dir, "config.json"))).toBe(false);
+	});
+
+	test("--api-key is refused because storage does not use a command-line key", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": API_KEY_FILE,
+		});
+		const { code, stderr } = await runCli([
+			"profile",
+			"storage",
+			"--config-dir",
+			dir,
+			"--api-key",
+			"napi_flag_only",
+		]);
+		expect(code).toBe(1);
+		expect(stderr).toContain("moves stored credentials between backends");
+		expect(stderr).not.toContain(
+			"the credential the profile already holds",
+		);
 	});
 
 	test("storage file --force persists file mode when the keyring cannot be read", async () => {

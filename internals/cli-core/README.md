@@ -46,12 +46,13 @@ In `packages/cli` the `.js` form passes `tsc --noEmit` — its `paths` mapping p
   (`@napi-rs/keyring`) lives in each consumer, not here; this package takes a
   `KeyringBackend` and never loads a native addon.
 - **`config.json` is not a secret.** It records `credStorage: "file" | "keyring"`. The
-  secret stays in the credentials file or the keyring. `NEON_TOKEN_STORAGE` overrides
+  secret stays in the credentials file or the keyring. `NEON_CRED_STORAGE` overrides
   that preference for one invocation and does not migrate.
 - **A keyring get of `null` or delete of `false` is not proof the item is gone.**
   `@napi-rs/keyring@1.3.0` collapses locked and denied access the same way. `profile
-  remove` and `profile storage file` refuse rather than drop the profile.
-  `profile storage file --force` persists file mode anyway.
+  remove` refuses rather than drop the profile. `profile storage file` persists when
+  nothing is stored; `--force` persists when a leftover cannot be cleared. File
+  preference does not select a leftover keyring item.
 - **No logger, no yargs, no API client.** Take a callback or a value instead; the imperative
   shell belongs in the consumer.
 - Unit tests live in `packages/cli`, so the code is covered once rather than three times.

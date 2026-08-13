@@ -11,7 +11,7 @@ import { resolveConfigFile } from "./paths.js";
 import { writeSecretFile } from "./secure_file.js";
 
 export const CONFIG_FILE = "config.json";
-export const NEON_TOKEN_STORAGE = "NEON_TOKEN_STORAGE";
+export const NEON_CRED_STORAGE = "NEON_CRED_STORAGE";
 
 export const CRED_STORAGE_FILE = "file";
 export const CRED_STORAGE_KEYRING = "keyring";
@@ -30,7 +30,7 @@ export type CliConfig = {
 
 export type StoragePreferenceSource =
 	| "config.json"
-	| typeof NEON_TOKEN_STORAGE
+	| typeof NEON_CRED_STORAGE
 	| "default";
 
 export type StoragePreference = {
@@ -86,13 +86,13 @@ export const resolveCredStorage = (
 	dir: string,
 	env: NodeJS.ProcessEnv = process.env,
 ): StoragePreference => {
-	const raw = env[NEON_TOKEN_STORAGE];
+	const raw = env[NEON_CRED_STORAGE];
 	if (typeof raw === "string" && raw.trim() !== "") {
 		const value = raw.trim();
 		if (!isCredStorage(value)) {
-			throw new Error(invalidStorageMessage(NEON_TOKEN_STORAGE));
+			throw new Error(invalidStorageMessage(NEON_CRED_STORAGE));
 		}
-		return { credStorage: value, source: NEON_TOKEN_STORAGE };
+		return { credStorage: value, source: NEON_CRED_STORAGE };
 	}
 
 	const config = readCliConfig(dir);

@@ -5,6 +5,7 @@ import {
 	CRED_STORAGE_FILE,
 	CRED_STORAGE_KEYRING,
 	isCredStorage,
+	NEON_CRED_STORAGE,
 	type StoragePreference,
 } from "@neon-internals/cli-core/cli_config";
 import {
@@ -406,8 +407,8 @@ const list = async (props: ProfileProps) => {
 const describePreference = (preference: StoragePreference): string => {
 	if (preference.source === "default")
 		return `${preference.credStorage} (default)`;
-	if (preference.source === "NEON_TOKEN_STORAGE") {
-		return `${preference.credStorage} (NEON_TOKEN_STORAGE)`;
+	if (preference.source === NEON_CRED_STORAGE) {
+		return `${preference.credStorage} (${NEON_CRED_STORAGE})`;
 	}
 	return `${preference.credStorage} (config.json)`;
 };
@@ -415,7 +416,11 @@ const describePreference = (preference: StoragePreference): string => {
 const storage = async (
 	props: ProfileProps & { mode?: string; force?: boolean },
 ) => {
-	rejectApiKeyFlag("storage");
+	if (credentialInputs().apiKeyFlag.trim() !== "") {
+		throw new Error(
+			`--api-key does not apply to \`profile storage\`, which moves stored credentials between backends and never uses a key given on the command line.`,
+		);
+	}
 	const named = props.profile?.trim();
 	if (named) {
 		throw new Error(
@@ -424,9 +429,9 @@ const storage = async (
 	}
 	const store = storeFor(props.configDir);
 	const current = store.preference();
-	if (current.source === "NEON_TOKEN_STORAGE") {
+	if (current.source === NEON_CRED_STORAGE) {
 		log.warning(
-			"NEON_TOKEN_STORAGE is set and overrides config.json for this invocation.",
+			`${NEON_CRED_STORAGE} is set and overrides config.json for this invocation.`,
 		);
 	}
 
@@ -454,6 +459,11 @@ const storage = async (
 			`Unknown storage mode "${mode}". Expected "${CRED_STORAGE_FILE}" or "${CRED_STORAGE_KEYRING}".`,
 		);
 	}
+	if (current.source === NEON_CRED_STORAGE && current.credStorage !== mode) {
+		throw new Error(
+			`${NEON_CRED_STORAGE}=${current.credStorage} overrides config.json for this invocation, so setting storage to ${mode} would not take effect until it is unset. Unset ${NEON_CRED_STORAGE} and retry.`,
+		);
+	}
 
 	const result = store.migrateTo(mode, { force: props.force === true });
 	if (mode === CRED_STORAGE_KEYRING) {
@@ -463,7 +473,7 @@ const storage = async (
 	}
 	if (props.force === true) {
 		log.warning(
-			"A keyring item that could not be read may still be in the OS store.",
+			"A keyring item that could not be read may still be in the OS store. It is not used while storage is file. `neon profile remove <name>` clears it if the OS store lets this CLI see it.",
 		);
 	}
 	for (const adopted of result.adopted) {
@@ -473,10 +483,11 @@ const storage = async (
 			adopted.path,
 		);
 	}
+	const effective = store.preference();
 	const out = writer(props);
 	const record = {
-		credStorage: result.credStorage,
-		source: "config.json" as const,
+		credStorage: effective.credStorage,
+		source: effective.source,
 		migrated: result.migrated.length,
 		adopted: result.adopted.length,
 		skipped: result.skipped.length,
@@ -484,7 +495,7 @@ const storage = async (
 	if (props.output === "table") {
 		log.info(
 			"Credential storage is now %s. Migrated %d profile(s).",
-			mode,
+			describePreference(effective),
 			result.migrated.length,
 		);
 		return;

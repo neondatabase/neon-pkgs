@@ -90,8 +90,9 @@ Flags (both commands): `--config <path>`, `--project-id`, `--branch`, `--api-key
 
 `--api-key` and `NEON_API_KEY` skip stored credentials. Otherwise `neon-env` reads the same
 Neon CLI profile the `neon` CLI does, including a secret stored in the OS keyring after
-`neon profile storage keyring`. Keyring storage needs a compatible npm-installed
-`@neon/env`; packaged binaries cannot load it.
+`neon profile storage keyring`. `NEON_CRED_STORAGE` overrides `config.json` for one
+invocation. Keyring storage needs a compatible npm-installed `@neon/env`; packaged
+binaries cannot load it.
 
 ## Env vars produced
 

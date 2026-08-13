@@ -12,7 +12,7 @@ import { join, resolve } from "node:path";
 import {
 	CRED_STORAGE_FILE,
 	CRED_STORAGE_KEYRING,
-	NEON_TOKEN_STORAGE,
+	NEON_CRED_STORAGE,
 	resolveCredStorage,
 } from "@neon-internals/cli-core/cli_config";
 import {
@@ -80,25 +80,25 @@ describe("resolveCredStorage", () => {
 		});
 	});
 
-	test("NEON_TOKEN_STORAGE overrides config.json", () => {
+	test("NEON_CRED_STORAGE overrides config.json", () => {
 		const dir = makeDir({
 			"config.json": JSON.stringify({ credStorage: "keyring" }),
 		});
 		expect(
-			resolveCredStorage(dir, { [NEON_TOKEN_STORAGE]: "file" }),
+			resolveCredStorage(dir, { [NEON_CRED_STORAGE]: "file" }),
 		).toEqual({
 			credStorage: CRED_STORAGE_FILE,
-			source: NEON_TOKEN_STORAGE,
+			source: NEON_CRED_STORAGE,
 		});
 	});
 
 	test("rejects an unknown env value without quoting it", () => {
 		const dir = makeDir();
 		expect(() =>
-			resolveCredStorage(dir, { [NEON_TOKEN_STORAGE]: "auto" }),
+			resolveCredStorage(dir, { [NEON_CRED_STORAGE]: "auto" }),
 		).toThrow(/must be "file" or "keyring"/);
 		expect(() =>
-			resolveCredStorage(dir, { [NEON_TOKEN_STORAGE]: "auto" }),
+			resolveCredStorage(dir, { [NEON_CRED_STORAGE]: "auto" }),
 		).not.toThrow(/auto/);
 	});
 
@@ -164,7 +164,7 @@ describe("createCredentialStore", () => {
 	test("a failed rollback after a failed keyring write is fatal", () => {
 		const dir = makeDir();
 		const store = createCredentialStore(dir, {
-			env: { [NEON_TOKEN_STORAGE]: "keyring" },
+			env: { [NEON_CRED_STORAGE]: "keyring" },
 			keyring: {
 				get: () => {
 					throw new Error("keyring locked");
@@ -180,7 +180,7 @@ describe("createCredentialStore", () => {
 		const dir = makeDir();
 		const items = new Map<string, string>();
 		const store = createCredentialStore(dir, {
-			env: { [NEON_TOKEN_STORAGE]: "keyring" },
+			env: { [NEON_CRED_STORAGE]: "keyring" },
 			keyring: {
 				get: () => {
 					throw new Error("keyring locked");
@@ -200,7 +200,7 @@ describe("createCredentialStore", () => {
 		const dir = makeDir();
 		const items = new Map<string, string>();
 		const store = createCredentialStore(dir, {
-			env: { [NEON_TOKEN_STORAGE]: "keyring" },
+			env: { [NEON_CRED_STORAGE]: "keyring" },
 			keyring: {
 				get: () => null,
 				set: (service, account, password) => {
@@ -235,13 +235,13 @@ describe("createCredentialStore", () => {
 		expect(ring.size()).toBe(1);
 	});
 
-	test("NEON_TOKEN_STORAGE=keyring write deletes the file so the old secret is not selectable", () => {
+	test("NEON_CRED_STORAGE=keyring write deletes the file so the old secret is not selectable", () => {
 		const dir = makeDir({
 			"credentials.json": JSON.stringify(key),
 		});
 		const ring = memoryKeyring();
 		const store = createCredentialStore(dir, {
-			env: { [NEON_TOKEN_STORAGE]: "keyring" },
+			env: { [NEON_CRED_STORAGE]: "keyring" },
 			keyring: ring,
 		});
 		const location = at(dir);
@@ -262,7 +262,7 @@ describe("createCredentialStore", () => {
 			JSON.stringify({ type: "api_key", api_key: "napi_old" }),
 		);
 		const store = createCredentialStore(dir, {
-			env: { [NEON_TOKEN_STORAGE]: "file" },
+			env: { [NEON_CRED_STORAGE]: "file" },
 			keyring: ring,
 		});
 		store.write(at(dir), key);
@@ -421,7 +421,7 @@ describe("createCredentialStore", () => {
 			}),
 		);
 		const store = createCredentialStore(dir, {
-			env: { [NEON_TOKEN_STORAGE]: "keyring" },
+			env: { [NEON_CRED_STORAGE]: "keyring" },
 			keyring: ring,
 		});
 		const location = at(dir);
@@ -473,7 +473,7 @@ describe("createCredentialStore", () => {
 		);
 		const ring = memoryKeyring();
 		const store = createCredentialStore(dir, {
-			env: { [NEON_TOKEN_STORAGE]: "keyring" },
+			env: { [NEON_CRED_STORAGE]: "keyring" },
 			keyring: ring,
 		});
 		const location = { path: adopted, profile: "work" };
@@ -491,7 +491,7 @@ describe("createCredentialStore", () => {
 		});
 		const ring = memoryKeyring();
 		const store = createCredentialStore(dir, {
-			env: { [NEON_TOKEN_STORAGE]: "keyring" },
+			env: { [NEON_CRED_STORAGE]: "keyring" },
 			keyring: ring,
 		});
 		const location = at(dir);
@@ -707,7 +707,7 @@ describe("createCredentialStore", () => {
 			'{"api_key":napi_LEAKED',
 		);
 		const store = createCredentialStore(dir, {
-			env: { [NEON_TOKEN_STORAGE]: "keyring" },
+			env: { [NEON_CRED_STORAGE]: "keyring" },
 			keyring: ring,
 		});
 		expect(() => store.read(at(dir))).toThrow(/not valid JSON/);
@@ -729,7 +729,7 @@ describe("createCredentialStore", () => {
 			JSON.stringify({ type: "unknown", api_key: "napi_LEAKED" }),
 		);
 		const store = createCredentialStore(dir, {
-			env: { [NEON_TOKEN_STORAGE]: "keyring" },
+			env: { [NEON_CRED_STORAGE]: "keyring" },
 			keyring: ring,
 		});
 		const loaded = store.read(at(dir));
@@ -821,7 +821,7 @@ describe("createCredentialStore", () => {
 			JSON.stringify({ type: "api_key", api_key: "napi_old" }),
 		);
 		const store = createCredentialStore(dir, {
-			env: { [NEON_TOKEN_STORAGE]: "file" },
+			env: { [NEON_CRED_STORAGE]: "file" },
 			keyring: ring,
 		});
 		try {
@@ -839,7 +839,7 @@ describe("createCredentialStore", () => {
 			"config.json": JSON.stringify({ credStorage: "keyring" }),
 		});
 		const store = createCredentialStore(dir, {
-			env: { [NEON_TOKEN_STORAGE]: "file" },
+			env: { [NEON_CRED_STORAGE]: "file" },
 			keyring: null,
 		});
 		expect(() => store.write(at(dir), key)).toThrow(
@@ -853,7 +853,7 @@ describe("createCredentialStore", () => {
 			"config.json": JSON.stringify({ credStorage: "keyring" }),
 		});
 		const store = createCredentialStore(dir, {
-			env: { [NEON_TOKEN_STORAGE]: "file" },
+			env: { [NEON_CRED_STORAGE]: "file" },
 			keyring: {
 				get: () => null,
 				set: () => undefined,
@@ -875,7 +875,7 @@ describe("createCredentialStore", () => {
 			api_key: "napi_old",
 		});
 		const store = createCredentialStore(dir, {
-			env: { [NEON_TOKEN_STORAGE]: "file" },
+			env: { [NEON_CRED_STORAGE]: "file" },
 			keyring: {
 				get: () => leftover,
 				set: () => undefined,
@@ -903,7 +903,7 @@ describe("createCredentialStore", () => {
 			}),
 		);
 		const store = createCredentialStore(dir, {
-			env: { [NEON_TOKEN_STORAGE]: "file" },
+			env: { [NEON_CRED_STORAGE]: "file" },
 			keyring: ring,
 		});
 		const result = store.migrateTo(CRED_STORAGE_FILE);
@@ -919,7 +919,7 @@ describe("createCredentialStore", () => {
 		).toEqual({ credStorage: "file" });
 	});
 
-	test("migrateTo file throws when keyring is preferred and get returns null", () => {
+	test("migrateTo file persists when keyring is preferred and nothing is stored", () => {
 		const dir = makeDir({
 			"config.json": JSON.stringify({ credStorage: "keyring" }),
 		});
@@ -931,12 +931,11 @@ describe("createCredentialStore", () => {
 				delete: () => false,
 			},
 		});
-		expect(() => store.migrateTo(CRED_STORAGE_FILE)).toThrow(
-			KeyringClearError,
-		);
+		const result = store.migrateTo(CRED_STORAGE_FILE);
+		expect(result.skipped).toHaveLength(1);
 		expect(
 			JSON.parse(readFileSync(resolve(dir, "config.json"), "utf8")),
-		).toEqual({ credStorage: "keyring" });
+		).toEqual({ credStorage: "file" });
 	});
 
 	test("migrateTo file with force persists when the keyring addon is missing", () => {

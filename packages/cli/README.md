@@ -897,19 +897,21 @@ neon profile storage file --force
 # persist file mode when a keyring item cannot be read (item may still be in the OS store)
 ```
 
-`NEON_TOKEN_STORAGE=file|keyring` overrides `config.json` for one invocation and does not
+`NEON_CRED_STORAGE=file|keyring` overrides `config.json` for one invocation and does not
 migrate. `--api-key` and `NEON_API_KEY` skip both stores. `--profile` does not apply —
-storage mode is per config directory, not per profile. `profile storage file` and
-`profile remove` refuse when the OS store cannot confirm the item is gone; `--force` on
-`storage file` is the explicit exception and may leave a leftover in the keyring. File
-mode does not read a leftover keyring item.
+storage mode is per config directory, not per profile. Setting a mode that disagrees
+with `NEON_CRED_STORAGE` is refused. `profile storage file` persists when nothing is
+stored. `profile remove` refuses when the OS store cannot confirm a keyring item is
+gone; `--force` on `storage file` persists file mode when a leftover cannot be
+cleared and may leave that leftover unused. File mode does not read a leftover
+keyring item.
 
 When this CLI cannot use the OS keyring (packaged binary, or the native addon is missing),
 `neon profile storage file --force` still persists file mode. The same hatch with an
 override works from any other command that refuses:
 
 ```bash
-NEON_TOKEN_STORAGE=file neon profile storage file --force
+NEON_CRED_STORAGE=file neon profile storage file --force
 ```
 
 A path a profile adopted from outside the config directory stays on disk. Packaged
