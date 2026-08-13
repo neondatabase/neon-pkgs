@@ -74,7 +74,11 @@ async function getNeonctlAccessToken(): Promise<string | null> {
 	if (loaded === null) return null;
 	// `neon init` has no profile selection — it reads the default credential and refuses
 	// when one is named, so `DEFAULT` is the only profile this can ever be about.
-	const credential = interpretCredentials(loaded.credentials, at);
+	const credential = interpretCredentials(
+		loaded.credentials,
+		at,
+		loaded.backend,
+	);
 	if (credential.kind === "api_key") return credential.apiKey;
 	const token = loaded.credentials.access_token;
 	return typeof token === "string" && token.trim() !== "" ? token : null;

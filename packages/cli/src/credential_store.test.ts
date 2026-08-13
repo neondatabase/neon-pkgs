@@ -575,8 +575,25 @@ describe("createCredentialStore", () => {
 		const loaded = store.read(at(dir));
 		expect(loaded).not.toBeNull();
 		if (loaded === null) return;
-		expect(() => interpretCredentials(loaded.credentials, at(dir))).toThrow(
-			/profile remove DEFAULT/,
-		);
+		expect(() =>
+			interpretCredentials(loaded.credentials, at(dir), loaded.backend),
+		).toThrow(/profile remove DEFAULT/);
+		writeFileSync(resolve(dir, "credentials.json"), JSON.stringify(key), {
+			mode: 0o600,
+		});
+		expect(() =>
+			interpretCredentials(loaded.credentials, at(dir), loaded.backend),
+		).not.toThrow(/delete the file/);
+	});
+
+	test("delete throws when keyring is preferred and unavailable", () => {
+		const dir = makeDir({
+			"config.json": JSON.stringify({ credStorage: "keyring" }),
+		});
+		const store = createCredentialStore(dir, {
+			env: {},
+			keyring: null,
+		});
+		expect(() => store.delete(at(dir))).toThrow(KeyringUnavailableError);
 	});
 });

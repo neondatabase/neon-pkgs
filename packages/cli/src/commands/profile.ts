@@ -271,16 +271,20 @@ const rejectApiKeyFlag = (sub: string, instead?: string): void => {
  * rather than throwing: one broken profile must not hide every other row, and the whole point
  * of `list` is to show the state of things including the broken parts.
  */
+const hintStore = (storage: string): "file" | "keyring" =>
+	storage === "keyring" ? "keyring" : "file";
+
 const describeAuth = (
 	stored: StoredCredentials | null,
 	at: CredentialLocation,
+	store: "file" | "keyring" = "file",
 ): string => {
 	if (stored === null) return "-";
 	try {
 		// `interpretCredentials`, not `credentialKind`: the kind is a declaration, and a file
 		// declaring `api_key` with no key satisfies it. Reporting that as a working API-key
 		// profile is the wrong answer for the one command run to find out what is broken.
-		return interpretCredentials(stored, at).kind === API_KEY
+		return interpretCredentials(stored, at, store).kind === API_KEY
 			? "api key"
 			: "oauth";
 	} catch (err) {
@@ -319,7 +323,11 @@ const inspectForListing = (
 			storage: listing.storage,
 		};
 	}
-	const auth = describeAuth(listing.credentials, at);
+	const auth = describeAuth(
+		listing.credentials,
+		at,
+		hintStore(listing.storage),
+	);
 	return {
 		stored: listing.credentials,
 		auth,
@@ -506,7 +514,11 @@ const readOutgoingCredential = (
 	// genuinely nothing to revoke here, which is what `unusable` says; and saying it rather
 	// than throwing is what keeps the file removable.
 	try {
-		const credential = interpretCredentials(listing.credentials, at);
+		const credential = interpretCredentials(
+			listing.credentials,
+			at,
+			hintStore(listing.storage),
+		);
 		if (credential.kind === OAUTH) {
 			return { kind: OAUTH, tokens: listing.credentials };
 		}
@@ -558,7 +570,11 @@ const assertReplaceable = (props: CreateProps): void => {
 	// already an API-key profile, and `DEFAULT` is an OAuth profile on nearly every install.
 	const holdsKey =
 		stored !== null &&
-		credentialKind(stored, { path, profile: name }) === API_KEY;
+		credentialKind(
+			stored,
+			{ path, profile: name },
+			hintStore(listing.storage),
+		) === API_KEY;
 	const keyId =
 		typeof stored?.key_id === "number" ? stored.key_id : undefined;
 

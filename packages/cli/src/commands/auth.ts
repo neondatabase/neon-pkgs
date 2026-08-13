@@ -282,7 +282,11 @@ export const usableCredential = async (
 
 	// A file that declares an unusable kind throws, rather than being reported as "no
 	// credential" — the user needs to know it is broken, not that it is absent.
-	const credential = interpretCredentials(loaded.credentials, at);
+	const credential = interpretCredentials(
+		loaded.credentials,
+		at,
+		loaded.backend,
+	);
 	if (credential.kind === API_KEY) {
 		return { apiKey: credential.apiKey, kind: API_KEY };
 	}
@@ -409,7 +413,11 @@ export const ensureAuth = async (
 		log.debug("Trying to read credentials from %s", credentialsPath);
 		// Throws on a file whose declared kind is unusable. That is deliberate: falling
 		// through to a browser login would replace the credential the user is fixing.
-		const credential = interpretCredentials(loaded.credentials, at);
+		const credential = interpretCredentials(
+			loaded.credentials,
+			at,
+			loaded.backend,
+		);
 
 		if (credential.kind === API_KEY) {
 			log.debug(

@@ -343,9 +343,12 @@ export const createCredentialStore = (
 	const del = (at: CredentialLocation): void => {
 		if (!isOwnedCredentialPath(dir, at.path)) return;
 		const fileWasPresent = existsSync(at.path);
+		const needKeyring = keyringMayHoldCopy() || !fileWasPresent;
+		if (needKeyring && keyring === null && keyringMayHoldCopy()) {
+			throw new KeyringUnavailableError();
+		}
 		deleteFileIfPresent(at.path);
-		if (keyring === null) return;
-		if (keyringMayHoldCopy() || !fileWasPresent) {
+		if (keyring !== null && needKeyring) {
 			keyring.delete(KEYRING_SERVICE, accountFor(at.path));
 		}
 	};

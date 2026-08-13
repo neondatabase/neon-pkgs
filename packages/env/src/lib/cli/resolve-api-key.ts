@@ -116,7 +116,11 @@ function readStoredCredential(
 		);
 	}
 
-	const credential = interpretCredentials(loaded.credentials, at);
+	const credential = interpretCredentials(
+		loaded.credentials,
+		at,
+		loaded.backend,
+	);
 	if (credential.kind === "api_key") return credential.apiKey;
 	const token = loaded.credentials.access_token;
 	if (typeof token === "string" && token.trim() !== "") return token.trim();

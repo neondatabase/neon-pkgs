@@ -43,7 +43,7 @@
  * `ERR_INVALID_ARG_TYPE` from `resolveEntryPath`.
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { writeSecretFile } from "./secure_file.js";
 
 export const OAUTH = "oauth";
@@ -100,6 +100,7 @@ export type CredentialLocation = {
 export const credentialKind = (
 	credentials: StoredCredentials,
 	at: CredentialLocation,
+	store: "file" | "keyring" = "file",
 ): CredentialKind => {
 	const declared = credentials.type;
 	if (declared === undefined || declared === OAUTH) return OAUTH;
@@ -108,7 +109,7 @@ export const credentialKind = (
 	// corrupted or hand-edited file can put a key anywhere in it — including here. Naming the
 	// file is enough to act on, and it cannot leak what the file holds.
 	throw new Error(
-		`${at.path} declares a "type" this version does not understand. Expected "${OAUTH}" or "${API_KEY}". ${credentialsRepairHint(at)}`,
+		`${at.path} declares a "type" this version does not understand. Expected "${OAUTH}" or "${API_KEY}". ${credentialsRepairHint(at, store)}`,
 	);
 };
 
@@ -120,13 +121,11 @@ export const credentialKind = (
  */
 export const credentialsRepairHint = (
 	at: CredentialLocation,
-	store?: "file" | "keyring",
-): string => {
-	const where = store ?? (existsSync(at.path) ? "file" : "keyring");
-	return where === "keyring"
+	store: "file" | "keyring" = "file",
+): string =>
+	store === "keyring"
 		? `Replace it deliberately with \`neon profile create ${at.profile} --force\`, or remove the profile with \`neon profile remove ${at.profile}\`.`
 		: `Replace it deliberately with \`neon profile create ${at.profile} --force\`, or delete the file.`;
-};
 
 /** A credentials file resolved far enough to authenticate with. */
 export type InterpretedCredentials =
@@ -143,12 +142,14 @@ export type InterpretedCredentials =
 export const interpretCredentials = (
 	credentials: StoredCredentials,
 	at: CredentialLocation,
+	store: "file" | "keyring" = "file",
 ): InterpretedCredentials => {
-	if (credentialKind(credentials, at) === OAUTH) return { kind: OAUTH };
+	if (credentialKind(credentials, at, store) === OAUTH)
+		return { kind: OAUTH };
 	const apiKey = nonEmpty(credentials.api_key);
 	if (apiKey === undefined) {
 		throw new Error(
-			`${at.path} declares "type": "${API_KEY}" but has no "api_key" value. ${credentialsRepairHint(at)}`,
+			`${at.path} declares "type": "${API_KEY}" but has no "api_key" value. ${credentialsRepairHint(at, store)}`,
 		);
 	}
 	return { kind: API_KEY, apiKey };
