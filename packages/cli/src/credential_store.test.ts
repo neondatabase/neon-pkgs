@@ -161,6 +161,21 @@ describe("createCredentialStore", () => {
 		expect(JSON.parse(readFileSync(location.path, "utf8"))).toEqual(key);
 	});
 
+	test("a failed rollback after a failed keyring write is fatal", () => {
+		const dir = makeDir();
+		const store = createCredentialStore(dir, {
+			env: { [NEON_TOKEN_STORAGE]: "keyring" },
+			keyring: {
+				get: () => {
+					throw new Error("keyring locked");
+				},
+				set: () => undefined,
+				delete: () => false,
+			},
+		});
+		expect(() => store.write(at(dir), key)).toThrow(KeyringClearError);
+	});
+
 	test("rolls back a keyring write when verification get throws", () => {
 		const dir = makeDir();
 		const items = new Map<string, string>();

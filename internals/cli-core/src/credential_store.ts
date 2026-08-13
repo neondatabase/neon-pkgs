@@ -185,7 +185,16 @@ export const createCredentialStore = (
 				);
 			}
 		} catch (err) {
-			kr.delete(KEYRING_SERVICE, account);
+			const deleted = kr.delete(KEYRING_SERVICE, account);
+			let still: string | null = null;
+			try {
+				still = kr.get(KEYRING_SERVICE, account);
+			} catch {
+				still = null;
+			}
+			if (!deleted || still !== null) {
+				throw new KeyringClearError(label);
+			}
 			throw err instanceof Error ? err : new Error(String(err));
 		}
 	};
