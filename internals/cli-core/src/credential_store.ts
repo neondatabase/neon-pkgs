@@ -338,7 +338,7 @@ export const createCredentialStore = (
 
 		writeCredentials(at.path, credentials);
 		if (owned && keyring !== null && keyringMayHoldCopy()) {
-			removeKeyringItem(accountFor(at.path), at.path, false);
+			removeKeyringItem(accountFor(at.path), at.path, true);
 		}
 		return {
 			credentials,
