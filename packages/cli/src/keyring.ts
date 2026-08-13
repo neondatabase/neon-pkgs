@@ -2,7 +2,7 @@ import { createRequire } from "node:module";
 import type { KeyringBackend } from "@neon-internals/cli-core/credential_store";
 
 type NapiEntry = {
-	getPassword(): string;
+	getPassword(): string | null;
 	setPassword(password: string): void;
 	deletePassword(): boolean;
 };

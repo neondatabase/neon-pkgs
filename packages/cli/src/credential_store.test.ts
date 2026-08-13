@@ -18,6 +18,7 @@ import {
 	createCredentialStore,
 	KEYRING_SERVICE,
 	type KeyringBackend,
+	KeyringClearError,
 	KeyringUnavailableError,
 	keyringAccount,
 	keyringIdentityPath,
@@ -595,5 +596,110 @@ describe("createCredentialStore", () => {
 			keyring: null,
 		});
 		expect(() => store.delete(at(dir))).toThrow(KeyringUnavailableError);
+	});
+
+	test("delete leaves the file when the keyring is preferred and get returns null", () => {
+		const dir = makeDir({
+			"config.json": JSON.stringify({ credStorage: "keyring" }),
+			"credentials.json": JSON.stringify(key),
+		});
+		const store = createCredentialStore(dir, {
+			env: {},
+			keyring: {
+				get: () => null,
+				set: () => undefined,
+				delete: () => false,
+			},
+		});
+		expect(() => store.delete(at(dir))).toThrow(KeyringClearError);
+		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
+	});
+
+	test("delete leaves the file when the keyring item is visible but delete returns false", () => {
+		const dir = makeDir({
+			"config.json": JSON.stringify({ credStorage: "keyring" }),
+			"credentials.json": JSON.stringify(key),
+		});
+		const secret = JSON.stringify(key);
+		const store = createCredentialStore(dir, {
+			env: {},
+			keyring: {
+				get: () => secret,
+				set: () => undefined,
+				delete: () => false,
+			},
+		});
+		expect(() => store.delete(at(dir))).toThrow(KeyringClearError);
+		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
+	});
+
+	test("delete leaves the file when delete reports success but the item is still readable", () => {
+		const dir = makeDir({
+			"config.json": JSON.stringify({ credStorage: "keyring" }),
+			"credentials.json": JSON.stringify(key),
+		});
+		const secret = JSON.stringify(key);
+		const store = createCredentialStore(dir, {
+			env: {},
+			keyring: {
+				get: () => secret,
+				set: () => undefined,
+				delete: () => true,
+			},
+		});
+		expect(() => store.delete(at(dir))).toThrow(KeyringClearError);
+		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
+	});
+
+	test("a file write under a keyring config leaves the file unwritten when the leftover cannot be cleared", () => {
+		const dir = makeDir({
+			"config.json": JSON.stringify({ credStorage: "keyring" }),
+		});
+		const leftover = JSON.stringify({
+			type: "api_key",
+			api_key: "napi_old",
+		});
+		const store = createCredentialStore(dir, {
+			env: { [NEON_TOKEN_STORAGE]: "file" },
+			keyring: {
+				get: () => leftover,
+				set: () => undefined,
+				delete: () => false,
+			},
+		});
+		expect(() => store.write(at(dir), key)).toThrow(KeyringClearError);
+		expect(existsSync(resolve(dir, "credentials.json"))).toBe(false);
+	});
+
+	test("migrateTo file throws when a keyring item cannot be cleared", () => {
+		const dir = makeDir({
+			"config.json": JSON.stringify({ credStorage: "keyring" }),
+		});
+		const secret = JSON.stringify(key);
+		const items = new Map<string, string>([
+			[
+				`${KEYRING_SERVICE}\0${keyringAccount(resolve(dir, "credentials.json"))}`,
+				secret,
+			],
+		]);
+		const store = createCredentialStore(dir, {
+			env: {},
+			keyring: {
+				get: (service, account) =>
+					items.get(`${service}\0${account}`) ?? null,
+				set: () => undefined,
+				delete: () => false,
+			},
+		});
+		expect(() => store.migrateTo(CRED_STORAGE_FILE)).toThrow(
+			KeyringClearError,
+		);
+		expect(
+			JSON.parse(readFileSync(resolve(dir, "config.json"), "utf8")),
+		).toEqual({ credStorage: "file" });
+		expect(
+			JSON.parse(readFileSync(resolve(dir, "credentials.json"), "utf8")),
+		).toEqual(key);
+		expect(items.size).toBe(1);
 	});
 });

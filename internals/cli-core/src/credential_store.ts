@@ -37,6 +37,11 @@ import { listProfiles } from "./profiles.js";
 
 export const KEYRING_SERVICE = "com.neon.neon-cli";
 
+/**
+ * `@napi-rs/keyring@1.3.0` maps every OS error to `null` (get) or `false`
+ * (delete), including locked or denied access. Do not treat those as absence
+ * or success when a keyring copy may exist.
+ */
 export type KeyringBackend = {
 	get(service: string, account: string): string | null;
 	set(service: string, account: string, password: string): void;
@@ -71,6 +76,15 @@ export class KeyringUnavailableError extends Error {
 	) {
 		super(message);
 		this.name = "KeyringUnavailableError";
+	}
+}
+
+export class KeyringClearError extends Error {
+	constructor(path: string) {
+		super(
+			`Could not clear the OS keyring item for ${path}. The OS store does not distinguish a missing item from denied access. Unlock the OS keyring and retry, or set storage to file with \`neon profile storage file\`.`,
+		);
+		this.name = "KeyringClearError";
 	}
 }
 
@@ -321,13 +335,10 @@ export const createCredentialStore = (
 			};
 		}
 
-		writeCredentials(at.path, credentials);
-		// A leftover in the other store stays selectable after this invocation.
-		// Only touch the keyring when this install has opted in — napi delete of
-		// a missing item still hits the OS store.
 		if (owned && keyring !== null && keyringMayHoldCopy()) {
-			keyring.delete(KEYRING_SERVICE, accountFor(at.path));
+			removeKeyringItem(accountFor(at.path), at.path, false);
 		}
+		writeCredentials(at.path, credentials);
 		return {
 			credentials,
 			backend: CRED_STORAGE_FILE,
@@ -340,17 +351,47 @@ export const createCredentialStore = (
 		preference().credStorage === CRED_STORAGE_KEYRING ||
 		readCliConfig(dir).credStorage === CRED_STORAGE_KEYRING;
 
+	const removeKeyringItem = (
+		account: string,
+		path: string,
+		required: boolean,
+	): void => {
+		if (keyring === null) {
+			if (required) throw new KeyringUnavailableError();
+			return;
+		}
+		let raw: string | null;
+		try {
+			raw = keyring.get(KEYRING_SERVICE, account);
+		} catch (err) {
+			throw err instanceof Error ? err : new Error(String(err));
+		}
+		if (raw === null) {
+			if (required) throw new KeyringClearError(path);
+			return;
+		}
+		const deleted = keyring.delete(KEYRING_SERVICE, account);
+		let still: string | null;
+		try {
+			still = keyring.get(KEYRING_SERVICE, account);
+		} catch (err) {
+			throw err instanceof Error ? err : new Error(String(err));
+		}
+		if (!deleted || still !== null) {
+			throw new KeyringClearError(path);
+		}
+	};
+
 	const del = (at: CredentialLocation): void => {
 		if (!isOwnedCredentialPath(dir, at.path)) return;
-		const fileWasPresent = existsSync(at.path);
-		const needKeyring = keyringMayHoldCopy() || !fileWasPresent;
-		if (needKeyring && keyring === null && keyringMayHoldCopy()) {
+		const required = keyringMayHoldCopy();
+		if (required && keyring === null) {
 			throw new KeyringUnavailableError();
 		}
-		deleteFileIfPresent(at.path);
-		if (keyring !== null && needKeyring) {
-			keyring.delete(KEYRING_SERVICE, accountFor(at.path));
+		if (keyring !== null && (required || !existsSync(at.path))) {
+			removeKeyringItem(accountFor(at.path), at.path, required);
 		}
+		deleteFileIfPresent(at.path);
 	};
 
 	const migrateTo = (mode: CredStorage): MigrateResult => {
@@ -359,7 +400,7 @@ export const createCredentialStore = (
 		const migrated: MigratedProfile[] = [];
 		const adopted: MigratedProfile[] = [];
 		const skipped: SkippedProfile[] = [];
-		let sawKeyring = false;
+		const keyringPaths = new Set<string>();
 
 		for (const profile of listProfiles(dir)) {
 			const at = {
@@ -381,7 +422,9 @@ export const createCredentialStore = (
 				continue;
 			}
 
-			if (loaded.backend === CRED_STORAGE_KEYRING) sawKeyring = true;
+			if (loaded.backend === CRED_STORAGE_KEYRING) {
+				keyringPaths.add(at.path);
+			}
 			if (loaded.backend !== mode) {
 				if (mode === CRED_STORAGE_KEYRING) {
 					const kr = requireKeyring();
@@ -415,8 +458,8 @@ export const createCredentialStore = (
 		for (const item of migrated) {
 			if (mode === CRED_STORAGE_KEYRING) {
 				deleteFileIfPresent(item.path);
-			} else if (keyring !== null && sawKeyring) {
-				keyring.delete(KEYRING_SERVICE, accountFor(item.path));
+			} else if (keyringPaths.has(item.path)) {
+				removeKeyringItem(accountFor(item.path), item.path, true);
 			}
 		}
 
