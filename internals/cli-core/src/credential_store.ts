@@ -336,6 +336,9 @@ export const createCredentialStore = (
 			};
 		}
 
+		if (owned && keyringMayHoldCopy() && keyring === null) {
+			throw new KeyringUnavailableError();
+		}
 		writeCredentials(at.path, credentials);
 		if (owned && keyring !== null && keyringMayHoldCopy()) {
 			removeKeyringItem(accountFor(at.path), at.path, true);

@@ -697,6 +697,20 @@ describe("createCredentialStore", () => {
 		expect(ring.size()).toBe(1);
 	});
 
+	test("a file write under a keyring config throws when the keyring is unavailable", () => {
+		const dir = makeDir({
+			"config.json": JSON.stringify({ credStorage: "keyring" }),
+		});
+		const store = createCredentialStore(dir, {
+			env: { [NEON_TOKEN_STORAGE]: "file" },
+			keyring: null,
+		});
+		expect(() => store.write(at(dir), key)).toThrow(
+			KeyringUnavailableError,
+		);
+		expect(existsSync(resolve(dir, "credentials.json"))).toBe(false);
+	});
+
 	test("a file write under a keyring config throws when get returns null", () => {
 		const dir = makeDir({
 			"config.json": JSON.stringify({ credStorage: "keyring" }),
