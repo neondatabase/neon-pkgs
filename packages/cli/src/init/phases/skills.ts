@@ -1,5 +1,5 @@
 import { getSkillsAgentName } from "../agents.js";
-import { SKILL_REFERENCE_URLS } from "../skills.js";
+import { DOC_REFERENCE_URLS } from "../skills.js";
 import type { Editor, PhaseResponse } from "../types.js";
 
 export type SkillsPhaseOptions = {
@@ -73,7 +73,7 @@ export async function handleSkillsPhase(
 					},
 				},
 			},
-			skillReferences: SKILL_REFERENCE_URLS,
+			docReferences: DOC_REFERENCE_URLS,
 		};
 	}
 

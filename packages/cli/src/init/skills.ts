@@ -54,18 +54,21 @@ export function getSkillList(preview?: boolean): string[] {
 	return preview ? [...BASE_SKILLS, ...PREVIEW_SKILLS] : BASE_SKILLS;
 }
 
-const SKILL_BASE_URL =
-	"https://neon.com/docs/ai/skills/neon-postgres/references";
+// Canonical docs URLs surfaced to agents as `prerequisite`/`context` hints. The
+// old `/docs/ai/skills/neon-postgres/references/*.md` skill files were retired
+// and now redirect here, so we point at the canonical pages directly rather than
+// rely on the redirect hop.
+const DOCS_BASE_URL = "https://neon.com/docs";
 
-export const SKILL_REFERENCE_URLS: Record<string, string> = {
-	gettingStarted: `${SKILL_BASE_URL}/getting-started.md`,
-	connectionMethods: `${SKILL_BASE_URL}/connection-methods.md`,
-	neonAuth: `${SKILL_BASE_URL}/neon-auth.md`,
-	serverlessDriver: `${SKILL_BASE_URL}/neon-serverless.md`,
-	neonCli: `${SKILL_BASE_URL}/neon-cli.md`,
-	devtools: `${SKILL_BASE_URL}/devtools.md`,
-	branching: `${SKILL_BASE_URL}/branching.md`,
-	neonJs: `${SKILL_BASE_URL}/neon-js.md`,
+export const DOC_REFERENCE_URLS: Record<string, string> = {
+	gettingStarted: `${DOCS_BASE_URL}/get-started/backend-overview.md`,
+	connectionMethods: `${DOCS_BASE_URL}/connect/choose-connection.md`,
+	neonAuth: `${DOCS_BASE_URL}/auth/overview.md`,
+	serverlessDriver: `${DOCS_BASE_URL}/serverless/serverless-driver.md`,
+	neonCli: `${DOCS_BASE_URL}/cli/install.md`,
+	devtools: `${DOCS_BASE_URL}/reference/api.md`,
+	branching: `${DOCS_BASE_URL}/introduction/branching.md`,
+	neonJs: `${DOCS_BASE_URL}/reference/javascript-sdk.md`,
 };
 
 /**

@@ -6,12 +6,14 @@ import {
 } from "../utils/package_manager.js";
 
 /**
- * Returns the Neon CLI command prefix: "CI= npx -y neon".
+ * Returns the Neon CLI command prefix emitted to users and agents:
+ * `CI= npx -y neon`.
  *
  * The CLI reads NEON_API_HOST and NEON_OAUTH_HOST from the environment
- * directly, so no extra flags are needed. The `neon` package ships both the
- * `neon` and `neonctl` binaries; we surface the cleaner `neon` command in the
- * examples emitted to users and agents.
+ * directly, so no extra flags are needed. The published package is `neon`
+ * (its binary is `neon`; the older `neonctl` alias is no longer shipped). `npx`
+ * runs it with zero global-install assumptions, and the leading `CI=` keeps the
+ * CLI non-interactive.
  *
  * Usage: `${neonctlCmd()} orgs list --output json`
  */
@@ -27,29 +29,38 @@ type NeonctlStatus = {
 };
 
 /**
- * Gets the currently available neonctl version.
- * Tries the global binary first, then falls back to npx.
+ * The global binaries that indicate the Neon CLI is installed. The current
+ * package ships `neon`; `neonctl` is the legacy alias, kept in the probe so an
+ * older global install still counts as "installed" (and isn't reinstalled).
  */
-async function getNeonctlVersion(): Promise<string | null> {
-	// Try global binary first (fast path)
-	try {
-		const result = await execa("neonctl", ["--version"], {
-			stdio: "pipe",
-			timeout: 5000,
-		});
-		const match = result.stdout.trim().match(/(\d+\.\d+\.\d+)/);
-		if (match) return match[1];
-	} catch {
-		// Not globally installed — that's fine
+const NEON_CLI_BINARIES = ["neon", "neonctl"] as const;
+
+/**
+ * Gets the currently installed Neon CLI version, probing the `neon` binary
+ * first and falling back to the legacy `neonctl` alias. Returns null when the
+ * CLI isn't on PATH.
+ */
+async function getNeonCliVersion(): Promise<string | null> {
+	for (const bin of NEON_CLI_BINARIES) {
+		try {
+			const result = await execa(bin, ["--version"], {
+				stdio: "pipe",
+				timeout: 5000,
+			});
+			const match = result.stdout.trim().match(/(\d+\.\d+\.\d+)/);
+			if (match) return match[1];
+		} catch {
+			// This binary isn't installed — try the next one.
+		}
 	}
 	return null;
 }
 
 /**
- * Checks whether the neonctl CLI is globally installed and whether it's up to date.
+ * Checks whether the Neon CLI is globally installed and whether it's up to date.
  */
 export async function checkNeonctl(): Promise<NeonctlStatus> {
-	const currentVersion = await getNeonctlVersion();
+	const currentVersion = await getNeonCliVersion();
 
 	if (!currentVersion) {
 		return {
@@ -63,7 +74,7 @@ export async function checkNeonctl(): Promise<NeonctlStatus> {
 	// Check latest version from npm registry
 	let latestVersion: string | null = null;
 	try {
-		const result = await execa("npm", ["view", "neonctl", "version"], {
+		const result = await execa("npm", ["view", "neon", "version"], {
 			stdio: "pipe",
 			timeout: 10000,
 		});
@@ -111,17 +122,20 @@ function isLocalDevSymlink(): boolean {
 	try {
 		const home = process.env.HOME || process.env.USERPROFILE || "";
 		const nvmDir = process.env.NVM_DIR || `${home}/.nvm`;
-		// Check common global module locations for a symlink
-		const candidates = [
-			`${nvmDir}/versions/node/${process.version}/lib/node_modules/neonctl`,
-			`${home}/.nvm/versions/node/${process.version}/lib/node_modules/neonctl`,
+		// Check common global module locations for a symlink, under both the
+		// current `neon` package name and the legacy `neonctl` one.
+		const roots = [
+			`${nvmDir}/versions/node/${process.version}/lib/node_modules`,
+			`${home}/.nvm/versions/node/${process.version}/lib/node_modules`,
 		];
-		for (const candidate of candidates) {
-			try {
-				const stat = lstatSync(candidate);
-				if (stat.isSymbolicLink()) return true;
-			} catch {
-				// path doesn't exist
+		for (const root of roots) {
+			for (const pkg of NEON_CLI_BINARIES) {
+				try {
+					const stat = lstatSync(`${root}/${pkg}`);
+					if (stat.isSymbolicLink()) return true;
+				} catch {
+					// path doesn't exist
+				}
 			}
 		}
 		return false;
@@ -137,7 +151,7 @@ function isLocalDevSymlink(): boolean {
 export async function ensureNeonctl(): Promise<EnsureNeonctlResult> {
 	// Skip install for local dev symlinks to avoid permission errors
 	if (isLocalDevSymlink()) {
-		const version = await getNeonctlVersion();
+		const version = await getNeonCliVersion();
 		return {
 			status: "already_current",
 			version: version ?? "dev",
@@ -154,7 +168,7 @@ export async function ensureNeonctl(): Promise<EnsureNeonctlResult> {
 	}
 
 	const pm = resolveInvokingPackageManager();
-	const install = globalInstallCommand(pm, "neonctl");
+	const install = globalInstallCommand(pm, "neon");
 	if (!install) {
 		// The next step is installing a package manager, not falling back to
 		// npx: npx ships with npm, so it is missing in exactly this case.
@@ -172,7 +186,7 @@ export async function ensureNeonctl(): Promise<EnsureNeonctlResult> {
 		await execa(command, args, { stdio: "pipe", timeout: 60000 });
 
 		// Verify installation
-		const version = await getNeonctlVersion();
+		const version = await getNeonCliVersion();
 		return {
 			status: check.installed ? "updated" : "installed",
 			version: version ?? undefined,

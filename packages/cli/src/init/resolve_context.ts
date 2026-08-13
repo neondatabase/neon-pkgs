@@ -58,7 +58,7 @@ export async function resolveNeonContext(
 	try {
 		const result = await execa(
 			"npx",
-			["-y", "neonctl", "orgs", "list", "--output", "json"],
+			["-y", "neon", "orgs", "list", "--output", "json"],
 			{
 				stdio: "pipe",
 				timeout: 30000,
@@ -80,7 +80,7 @@ export async function resolveNeonContext(
 				"npx",
 				[
 					"-y",
-					"neonctl",
+					"neon",
 					"projects",
 					"list",
 					"--org-id",
@@ -105,7 +105,7 @@ export async function resolveNeonContext(
 					"npx",
 					[
 						"-y",
-						"neonctl",
+						"neon",
 						"connection-string",
 						"--project-id",
 						project.id,

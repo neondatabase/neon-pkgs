@@ -12,10 +12,10 @@ import { isNeonApiError, messageFromBody } from "../api.js";
 import {
 	applyContext,
 	type Context,
+	clearContextFile,
 	contextBranch,
 	readContextFile,
 	setContext,
-	updateContextFile,
 } from "../context.js";
 import { isCi } from "../env.js";
 import { log } from "../log.js";
@@ -322,7 +322,7 @@ const canResolveNonInteractively = (
 // ----------------------------------------------------------------------------
 
 const clearContext = (contextFile: string): void => {
-	updateContextFile(contextFile, {});
+	clearContextFile(contextFile);
 	process.stdout.write(
 		`Cleared ${contextFile}. The directory is no longer linked to a Neon org/project/branch.\n`,
 	);

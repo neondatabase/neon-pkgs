@@ -292,7 +292,7 @@ exports[`neon init --agent: every step, against every project shape > connected 
   },
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
+    "prerequisite": "https://neon.com/docs/connect/choose-connection.md",
     "steps": [
       {
         "id": "get_connection_string",
@@ -345,31 +345,17 @@ exports[`neon init --agent: every step, against every project shape > connected 
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
-        "id": "select_org",
-        "description": "List the user's Neon organizations using the CLI command below. If only one org exists, use it automatically. If multiple orgs exist, ask the user which one to use. Remember the selected org ID for the next steps.",
-        "command": "CI= npx -y neon orgs list --output json"
-      },
-      {
-        "id": "select_or_create_project",
-        "description": "List existing Neon projects in the selected organization using the CLI command below (replace <org-id> with the selected org ID). Ask the user whether they want to use an existing project or create a new one. If creating new, ask the user for a project name (suggest the current directory name). IMPORTANT: Always include --org-id when creating a project to avoid interactive prompts.",
-        "command": "CI= npx -y neon projects list --org-id <org-id> --output json"
-      },
-      {
-        "id": "create_project_if_needed",
-        "description": "If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>). If the user chose an existing project, skip this step.",
-        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json"
-      },
-      {
-        "id": "create_neon_context",
-        "description": "Update the .neon context file in the project root with the selected org and project IDs. IMPORTANT: If a .neon file already exists, you MUST read it first, then merge the new orgId and projectId into the existing content. Do NOT overwrite the file — other fields (like _init, branch, etc.) must be preserved. If no .neon file exists, create one. The file is JSON. Add/update only the orgId and projectId fields: {\\"orgId\\": \\"<org-id>\\", \\"projectId\\": \\"<project-id>\\", ...existing fields}. This file is safe to commit — it contains no secrets."
-      },
-      {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. Do this before linking or pulling env: \`neon env pull\` (and link's own env pull) may import the project's Neon config file, which can require these packages.",
         "command": "npm install"
+      },
+      {
+        "id": "link_project",
+        "description": "Select or create the Neon project for this app and link the directory to it by running the CLI command below. It returns JSON with a \`status\` field that drives a short state machine; at each step re-run the returned \`next_command_template\` with the user's choice: \`needs_org\` — show the listed organizations and have the user pick one (auto-select if there is only one), then re-run with the chosen \`--org-id\`; \`needs_project\` — ask whether to use an existing project (re-run \`next_command_template\` with \`--project-id\`) or create a new one (use \`create_option.next_command_template\` with \`--project-name\`, suggesting the current directory name); \`needs_project_details\` — pick a region from the list and re-run with \`--region-id\`. Repeat until \`status\` is \`linked\`. \`neon link\` writes the org, project, and (for a newly created project) branch into the .neon context file — do NOT edit .neon by hand.",
+        "command": "CI= npx -y neon link --agent"
       },
       {
         "id": "pull_env",
@@ -383,7 +369,7 @@ exports[`neon init --agent: every step, against every project shape > connected 
       },
       {
         "id": "verify_connection",
-        "description": "Verify the database connection works by running a SQL query against the Neon database. Write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Do NOT use the Neon CLI or MCP tools for this — use a direct database connection to verify end-to-end connectivity."
+        "description": "Verify the database connection works by running a SQL query against the Neon database. Primary check (definitive): write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Use a direct database connection — this proves the app's own driver and DATABASE_URL work end-to-end, so do NOT replace it with a CLI or MCP call. As a quick preliminary sanity check you may also run \`CI= npx -y neon psql -- -c \\"SELECT 1\\"\`; it confirms the project is reachable but does not substitute for the driver check above."
       }
     ],
     "onComplete": {
@@ -408,7 +394,7 @@ exports[`neon init --agent: every step, against every project shape > connected 
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
         "id": "run_migrations",
@@ -417,7 +403,7 @@ exports[`neon init --agent: every step, against every project shape > connected 
       },
       {
         "id": "verify_connection",
-        "description": "Verify the database connection works by running a SQL query against the Neon database. Write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Do NOT use the Neon CLI or MCP tools for this — use a direct database connection to verify end-to-end connectivity."
+        "description": "Verify the database connection works by running a SQL query against the Neon database. Primary check (definitive): write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Use a direct database connection — this proves the app's own driver and DATABASE_URL work end-to-end, so do NOT replace it with a CLI or MCP call. As a quick preliminary sanity check you may also run \`CI= npx -y neon psql -- -c \\"SELECT 1\\"\`; it confirms the project is reachable but does not substitute for the driver check above."
       }
     ],
     "onComplete": {
@@ -691,7 +677,7 @@ exports[`neon init --agent: every step, against every project shape > connected 
         "label": "No, skip for now"
       }
     ],
-    "context": "Full documentation: https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "context": "Full documentation: https://neon.com/docs/auth/overview.md",
     "responseMapping": {
       "yes": {
         "command": "neon init --agent --data '{\\"step\\":\\"neon-auth\\",\\"agent\\":\\"cursor\\",\\"setup\\":true}'"
@@ -718,7 +704,7 @@ exports[`neon init --agent: every step, against every project shape > connected 
   "status": "in_progress",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "prerequisite": "https://neon.com/docs/auth/overview.md",
     "steps": [
       {
         "id": "provision",
@@ -946,8 +932,8 @@ exports[`neon init --agent: every step, against every project shape > connected 
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -985,8 +971,8 @@ exports[`neon init --agent: every step, against every project shape > connected 
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -1015,15 +1001,15 @@ exports[`neon init --agent: every step, against every project shape > connected 
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -1084,15 +1070,15 @@ exports[`neon init --agent: every step, against every project shape > connected 
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -1320,7 +1306,7 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
   },
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
+    "prerequisite": "https://neon.com/docs/connect/choose-connection.md",
     "steps": [
       {
         "id": "get_connection_string",
@@ -1373,31 +1359,17 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
-        "id": "select_org",
-        "description": "List the user's Neon organizations using the CLI command below. If only one org exists, use it automatically. If multiple orgs exist, ask the user which one to use. Remember the selected org ID for the next steps.",
-        "command": "CI= npx -y neon orgs list --output json"
-      },
-      {
-        "id": "select_or_create_project",
-        "description": "List existing Neon projects in the selected organization using the CLI command below (replace <org-id> with the selected org ID). Ask the user whether they want to use an existing project or create a new one. If creating new, ask the user for a project name (suggest the current directory name). IMPORTANT: Always include --org-id when creating a project to avoid interactive prompts.",
-        "command": "CI= npx -y neon projects list --org-id <org-id> --output json"
-      },
-      {
-        "id": "create_project_if_needed",
-        "description": "If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>). If the user chose an existing project, skip this step.",
-        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json"
-      },
-      {
-        "id": "create_neon_context",
-        "description": "Update the .neon context file in the project root with the selected org and project IDs. IMPORTANT: If a .neon file already exists, you MUST read it first, then merge the new orgId and projectId into the existing content. Do NOT overwrite the file — other fields (like _init, branch, etc.) must be preserved. If no .neon file exists, create one. The file is JSON. Add/update only the orgId and projectId fields: {\\"orgId\\": \\"<org-id>\\", \\"projectId\\": \\"<project-id>\\", ...existing fields}. This file is safe to commit — it contains no secrets."
-      },
-      {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. Do this before linking or pulling env: \`neon env pull\` (and link's own env pull) may import the project's Neon config file, which can require these packages.",
         "command": "npm install"
+      },
+      {
+        "id": "link_project",
+        "description": "Select or create the Neon project for this app and link the directory to it by running the CLI command below. It returns JSON with a \`status\` field that drives a short state machine; at each step re-run the returned \`next_command_template\` with the user's choice: \`needs_org\` — show the listed organizations and have the user pick one (auto-select if there is only one), then re-run with the chosen \`--org-id\`; \`needs_project\` — ask whether to use an existing project (re-run \`next_command_template\` with \`--project-id\`) or create a new one (use \`create_option.next_command_template\` with \`--project-name\`, suggesting the current directory name); \`needs_project_details\` — pick a region from the list and re-run with \`--region-id\`. Repeat until \`status\` is \`linked\`. \`neon link\` writes the org, project, and (for a newly created project) branch into the .neon context file — do NOT edit .neon by hand.",
+        "command": "CI= npx -y neon link --agent"
       },
       {
         "id": "pull_env",
@@ -1411,7 +1383,7 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
       },
       {
         "id": "verify_connection",
-        "description": "Verify the database connection works by running a SQL query against the Neon database. Write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Do NOT use the Neon CLI or MCP tools for this — use a direct database connection to verify end-to-end connectivity."
+        "description": "Verify the database connection works by running a SQL query against the Neon database. Primary check (definitive): write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Use a direct database connection — this proves the app's own driver and DATABASE_URL work end-to-end, so do NOT replace it with a CLI or MCP call. As a quick preliminary sanity check you may also run \`CI= npx -y neon psql -- -c \\"SELECT 1\\"\`; it confirms the project is reachable but does not substitute for the driver check above."
       }
     ],
     "onComplete": {
@@ -1436,7 +1408,7 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
         "id": "run_migrations",
@@ -1445,7 +1417,7 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
       },
       {
         "id": "verify_connection",
-        "description": "Verify the database connection works by running a SQL query against the Neon database. Write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Do NOT use the Neon CLI or MCP tools for this — use a direct database connection to verify end-to-end connectivity."
+        "description": "Verify the database connection works by running a SQL query against the Neon database. Primary check (definitive): write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Use a direct database connection — this proves the app's own driver and DATABASE_URL work end-to-end, so do NOT replace it with a CLI or MCP call. As a quick preliminary sanity check you may also run \`CI= npx -y neon psql -- -c \\"SELECT 1\\"\`; it confirms the project is reachable but does not substitute for the driver check above."
       }
     ],
     "onComplete": {
@@ -1719,7 +1691,7 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
         "label": "No, skip for now"
       }
     ],
-    "context": "Full documentation: https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "context": "Full documentation: https://neon.com/docs/auth/overview.md",
     "responseMapping": {
       "yes": {
         "command": "neon init --agent --data '{\\"step\\":\\"neon-auth\\",\\"agent\\":\\"cursor\\",\\"setup\\":true}'"
@@ -1746,7 +1718,7 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
   "status": "in_progress",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "prerequisite": "https://neon.com/docs/auth/overview.md",
     "steps": [
       {
         "id": "provision",
@@ -1974,8 +1946,8 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -2013,8 +1985,8 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -2043,15 +2015,15 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -2112,15 +2084,15 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -2348,7 +2320,7 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
   },
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
+    "prerequisite": "https://neon.com/docs/connect/choose-connection.md",
     "steps": [
       {
         "id": "get_connection_string",
@@ -2401,31 +2373,17 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
-        "id": "select_org",
-        "description": "List the user's Neon organizations using the CLI command below. If only one org exists, use it automatically. If multiple orgs exist, ask the user which one to use. Remember the selected org ID for the next steps.",
-        "command": "CI= npx -y neon orgs list --output json"
-      },
-      {
-        "id": "select_or_create_project",
-        "description": "List existing Neon projects in the selected organization using the CLI command below (replace <org-id> with the selected org ID). Ask the user whether they want to use an existing project or create a new one. If creating new, ask the user for a project name (suggest the current directory name). IMPORTANT: Always include --org-id when creating a project to avoid interactive prompts.",
-        "command": "CI= npx -y neon projects list --org-id <org-id> --output json"
-      },
-      {
-        "id": "create_project_if_needed",
-        "description": "If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>). If the user chose an existing project, skip this step.",
-        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json"
-      },
-      {
-        "id": "create_neon_context",
-        "description": "Update the .neon context file in the project root with the selected org and project IDs. IMPORTANT: If a .neon file already exists, you MUST read it first, then merge the new orgId and projectId into the existing content. Do NOT overwrite the file — other fields (like _init, branch, etc.) must be preserved. If no .neon file exists, create one. The file is JSON. Add/update only the orgId and projectId fields: {\\"orgId\\": \\"<org-id>\\", \\"projectId\\": \\"<project-id>\\", ...existing fields}. This file is safe to commit — it contains no secrets."
-      },
-      {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. Do this before linking or pulling env: \`neon env pull\` (and link's own env pull) may import the project's Neon config file, which can require these packages.",
         "command": "npm install"
+      },
+      {
+        "id": "link_project",
+        "description": "Select or create the Neon project for this app and link the directory to it by running the CLI command below. It returns JSON with a \`status\` field that drives a short state machine; at each step re-run the returned \`next_command_template\` with the user's choice: \`needs_org\` — show the listed organizations and have the user pick one (auto-select if there is only one), then re-run with the chosen \`--org-id\`; \`needs_project\` — ask whether to use an existing project (re-run \`next_command_template\` with \`--project-id\`) or create a new one (use \`create_option.next_command_template\` with \`--project-name\`, suggesting the current directory name); \`needs_project_details\` — pick a region from the list and re-run with \`--region-id\`. Repeat until \`status\` is \`linked\`. \`neon link\` writes the org, project, and (for a newly created project) branch into the .neon context file — do NOT edit .neon by hand.",
+        "command": "CI= npx -y neon link --agent"
       },
       {
         "id": "pull_env",
@@ -2439,7 +2397,7 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
       },
       {
         "id": "verify_connection",
-        "description": "Verify the database connection works by running a SQL query against the Neon database. Write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Do NOT use the Neon CLI or MCP tools for this — use a direct database connection to verify end-to-end connectivity."
+        "description": "Verify the database connection works by running a SQL query against the Neon database. Primary check (definitive): write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Use a direct database connection — this proves the app's own driver and DATABASE_URL work end-to-end, so do NOT replace it with a CLI or MCP call. As a quick preliminary sanity check you may also run \`CI= npx -y neon psql -- -c \\"SELECT 1\\"\`; it confirms the project is reachable but does not substitute for the driver check above."
       }
     ],
     "onComplete": {
@@ -2462,7 +2420,7 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
         "id": "run_migrations",
@@ -2471,7 +2429,7 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
       },
       {
         "id": "verify_connection",
-        "description": "Verify the database connection works by running a SQL query against the Neon database. Write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Do NOT use the Neon CLI or MCP tools for this — use a direct database connection to verify end-to-end connectivity."
+        "description": "Verify the database connection works by running a SQL query against the Neon database. Primary check (definitive): write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Use a direct database connection — this proves the app's own driver and DATABASE_URL work end-to-end, so do NOT replace it with a CLI or MCP call. As a quick preliminary sanity check you may also run \`CI= npx -y neon psql -- -c \\"SELECT 1\\"\`; it confirms the project is reachable but does not substitute for the driver check above."
       }
     ],
     "onComplete": {
@@ -2735,7 +2693,7 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
         "label": "No, skip for now"
       }
     ],
-    "context": "Full documentation: https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "context": "Full documentation: https://neon.com/docs/auth/overview.md",
     "responseMapping": {
       "yes": {
         "command": "neon init --agent --data '{\\"step\\":\\"neon-auth\\",\\"agent\\":\\"cursor\\",\\"setup\\":true}'"
@@ -2760,7 +2718,7 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
   "status": "in_progress",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "prerequisite": "https://neon.com/docs/auth/overview.md",
     "steps": [
       {
         "id": "provision",
@@ -2986,8 +2944,8 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version"
 `;
@@ -3023,8 +2981,8 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version"
 `;
@@ -3051,15 +3009,15 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -3120,15 +3078,15 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -3345,7 +3303,7 @@ exports[`neon init --agent: every step, against every project shape > greenfield
   },
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
+    "prerequisite": "https://neon.com/docs/connect/choose-connection.md",
     "steps": [
       {
         "id": "get_connection_string",
@@ -3398,31 +3356,17 @@ exports[`neon init --agent: every step, against every project shape > greenfield
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
-        "id": "select_org",
-        "description": "List the user's Neon organizations using the CLI command below. If only one org exists, use it automatically. If multiple orgs exist, ask the user which one to use. Remember the selected org ID for the next steps.",
-        "command": "CI= npx -y neon orgs list --output json"
-      },
-      {
-        "id": "select_or_create_project",
-        "description": "List existing Neon projects in the selected organization using the CLI command below (replace <org-id> with the selected org ID). Ask the user whether they want to use an existing project or create a new one. If creating new, ask the user for a project name (suggest the current directory name). IMPORTANT: Always include --org-id when creating a project to avoid interactive prompts.",
-        "command": "CI= npx -y neon projects list --org-id <org-id> --output json"
-      },
-      {
-        "id": "create_project_if_needed",
-        "description": "If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>). If the user chose an existing project, skip this step.",
-        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json"
-      },
-      {
-        "id": "create_neon_context",
-        "description": "Update the .neon context file in the project root with the selected org and project IDs. IMPORTANT: If a .neon file already exists, you MUST read it first, then merge the new orgId and projectId into the existing content. Do NOT overwrite the file — other fields (like _init, branch, etc.) must be preserved. If no .neon file exists, create one. The file is JSON. Add/update only the orgId and projectId fields: {\\"orgId\\": \\"<org-id>\\", \\"projectId\\": \\"<project-id>\\", ...existing fields}. This file is safe to commit — it contains no secrets."
-      },
-      {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. Do this before linking or pulling env: \`neon env pull\` (and link's own env pull) may import the project's Neon config file, which can require these packages.",
         "command": "npm install"
+      },
+      {
+        "id": "link_project",
+        "description": "Select or create the Neon project for this app and link the directory to it by running the CLI command below. It returns JSON with a \`status\` field that drives a short state machine; at each step re-run the returned \`next_command_template\` with the user's choice: \`needs_org\` — show the listed organizations and have the user pick one (auto-select if there is only one), then re-run with the chosen \`--org-id\`; \`needs_project\` — ask whether to use an existing project (re-run \`next_command_template\` with \`--project-id\`) or create a new one (use \`create_option.next_command_template\` with \`--project-name\`, suggesting the current directory name); \`needs_project_details\` — pick a region from the list and re-run with \`--region-id\`. Repeat until \`status\` is \`linked\`. \`neon link\` writes the org, project, and (for a newly created project) branch into the .neon context file — do NOT edit .neon by hand.",
+        "command": "CI= npx -y neon link --agent"
       },
       {
         "id": "pull_env",
@@ -3436,7 +3380,7 @@ exports[`neon init --agent: every step, against every project shape > greenfield
       },
       {
         "id": "verify_connection",
-        "description": "Verify the database connection works by running a SQL query against the Neon database. Write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Do NOT use the Neon CLI or MCP tools for this — use a direct database connection to verify end-to-end connectivity."
+        "description": "Verify the database connection works by running a SQL query against the Neon database. Primary check (definitive): write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Use a direct database connection — this proves the app's own driver and DATABASE_URL work end-to-end, so do NOT replace it with a CLI or MCP call. As a quick preliminary sanity check you may also run \`CI= npx -y neon psql -- -c \\"SELECT 1\\"\`; it confirms the project is reachable but does not substitute for the driver check above."
       }
     ],
     "onComplete": {
@@ -3461,7 +3405,7 @@ exports[`neon init --agent: every step, against every project shape > greenfield
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
         "id": "run_migrations",
@@ -3470,7 +3414,7 @@ exports[`neon init --agent: every step, against every project shape > greenfield
       },
       {
         "id": "verify_connection",
-        "description": "Verify the database connection works by running a SQL query against the Neon database. Write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Do NOT use the Neon CLI or MCP tools for this — use a direct database connection to verify end-to-end connectivity."
+        "description": "Verify the database connection works by running a SQL query against the Neon database. Primary check (definitive): write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Use a direct database connection — this proves the app's own driver and DATABASE_URL work end-to-end, so do NOT replace it with a CLI or MCP call. As a quick preliminary sanity check you may also run \`CI= npx -y neon psql -- -c \\"SELECT 1\\"\`; it confirms the project is reachable but does not substitute for the driver check above."
       }
     ],
     "onComplete": {
@@ -3744,7 +3688,7 @@ exports[`neon init --agent: every step, against every project shape > greenfield
         "label": "No, skip for now"
       }
     ],
-    "context": "Full documentation: https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "context": "Full documentation: https://neon.com/docs/auth/overview.md",
     "responseMapping": {
       "yes": {
         "command": "neon init --agent --data '{\\"step\\":\\"neon-auth\\",\\"agent\\":\\"cursor\\",\\"setup\\":true}'"
@@ -3771,7 +3715,7 @@ exports[`neon init --agent: every step, against every project shape > greenfield
   "status": "in_progress",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "prerequisite": "https://neon.com/docs/auth/overview.md",
     "steps": [
       {
         "id": "provision",
@@ -3999,8 +3943,8 @@ exports[`neon init --agent: every step, against every project shape > greenfield
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -4038,8 +3982,8 @@ exports[`neon init --agent: every step, against every project shape > greenfield
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -4068,15 +4012,15 @@ exports[`neon init --agent: every step, against every project shape > greenfield
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -4137,15 +4081,15 @@ exports[`neon init --agent: every step, against every project shape > greenfield
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -4378,7 +4322,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
   },
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
+    "prerequisite": "https://neon.com/docs/connect/choose-connection.md",
     "steps": [
       {
         "id": "get_connection_string",
@@ -4431,31 +4375,17 @@ exports[`neon init --agent: every step, against every project shape > next-prism
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
-        "id": "select_org",
-        "description": "List the user's Neon organizations using the CLI command below. If only one org exists, use it automatically. If multiple orgs exist, ask the user which one to use. Remember the selected org ID for the next steps.",
-        "command": "CI= npx -y neon orgs list --output json"
-      },
-      {
-        "id": "select_or_create_project",
-        "description": "List existing Neon projects in the selected organization using the CLI command below (replace <org-id> with the selected org ID). Ask the user whether they want to use an existing project or create a new one. If creating new, ask the user for a project name (suggest the current directory name). IMPORTANT: Always include --org-id when creating a project to avoid interactive prompts.",
-        "command": "CI= npx -y neon projects list --org-id <org-id> --output json"
-      },
-      {
-        "id": "create_project_if_needed",
-        "description": "If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>). If the user chose an existing project, skip this step.",
-        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json"
-      },
-      {
-        "id": "create_neon_context",
-        "description": "Update the .neon context file in the project root with the selected org and project IDs. IMPORTANT: If a .neon file already exists, you MUST read it first, then merge the new orgId and projectId into the existing content. Do NOT overwrite the file — other fields (like _init, branch, etc.) must be preserved. If no .neon file exists, create one. The file is JSON. Add/update only the orgId and projectId fields: {\\"orgId\\": \\"<org-id>\\", \\"projectId\\": \\"<project-id>\\", ...existing fields}. This file is safe to commit — it contains no secrets."
-      },
-      {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. Do this before linking or pulling env: \`neon env pull\` (and link's own env pull) may import the project's Neon config file, which can require these packages.",
         "command": "npm install"
+      },
+      {
+        "id": "link_project",
+        "description": "Select or create the Neon project for this app and link the directory to it by running the CLI command below. It returns JSON with a \`status\` field that drives a short state machine; at each step re-run the returned \`next_command_template\` with the user's choice: \`needs_org\` — show the listed organizations and have the user pick one (auto-select if there is only one), then re-run with the chosen \`--org-id\`; \`needs_project\` — ask whether to use an existing project (re-run \`next_command_template\` with \`--project-id\`) or create a new one (use \`create_option.next_command_template\` with \`--project-name\`, suggesting the current directory name); \`needs_project_details\` — pick a region from the list and re-run with \`--region-id\`. Repeat until \`status\` is \`linked\`. \`neon link\` writes the org, project, and (for a newly created project) branch into the .neon context file — do NOT edit .neon by hand.",
+        "command": "CI= npx -y neon link --agent"
       },
       {
         "id": "pull_env",
@@ -4469,7 +4399,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       },
       {
         "id": "verify_connection",
-        "description": "Verify the database connection works by running a SQL query against the Neon database. Write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Do NOT use the Neon CLI or MCP tools for this — use a direct database connection to verify end-to-end connectivity."
+        "description": "Verify the database connection works by running a SQL query against the Neon database. Primary check (definitive): write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Use a direct database connection — this proves the app's own driver and DATABASE_URL work end-to-end, so do NOT replace it with a CLI or MCP call. As a quick preliminary sanity check you may also run \`CI= npx -y neon psql -- -c \\"SELECT 1\\"\`; it confirms the project is reachable but does not substitute for the driver check above."
       }
     ],
     "onComplete": {
@@ -4494,7 +4424,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
         "id": "run_migrations",
@@ -4503,7 +4433,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       },
       {
         "id": "verify_connection",
-        "description": "Verify the database connection works by running a SQL query against the Neon database. Write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Do NOT use the Neon CLI or MCP tools for this — use a direct database connection to verify end-to-end connectivity."
+        "description": "Verify the database connection works by running a SQL query against the Neon database. Primary check (definitive): write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Use a direct database connection — this proves the app's own driver and DATABASE_URL work end-to-end, so do NOT replace it with a CLI or MCP call. As a quick preliminary sanity check you may also run \`CI= npx -y neon psql -- -c \\"SELECT 1\\"\`; it confirms the project is reachable but does not substitute for the driver check above."
       }
     ],
     "onComplete": {
@@ -4777,7 +4707,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
         "label": "No, skip for now"
       }
     ],
-    "context": "Full documentation: https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "context": "Full documentation: https://neon.com/docs/auth/overview.md",
     "responseMapping": {
       "yes": {
         "command": "neon init --agent --data '{\\"step\\":\\"neon-auth\\",\\"agent\\":\\"cursor\\",\\"setup\\":true}'"
@@ -4804,7 +4734,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
   "status": "in_progress",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "prerequisite": "https://neon.com/docs/auth/overview.md",
     "steps": [
       {
         "id": "provision",
@@ -5032,8 +4962,8 @@ exports[`neon init --agent: every step, against every project shape > next-prism
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -5071,8 +5001,8 @@ exports[`neon init --agent: every step, against every project shape > next-prism
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -5101,15 +5031,15 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -5170,15 +5100,15 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -5411,7 +5341,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
   },
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
+    "prerequisite": "https://neon.com/docs/connect/choose-connection.md",
     "steps": [
       {
         "id": "get_connection_string",
@@ -5464,31 +5394,17 @@ exports[`neon init --agent: every step, against every project shape > next-prism
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
-        "id": "select_org",
-        "description": "List the user's Neon organizations using the CLI command below. If only one org exists, use it automatically. If multiple orgs exist, ask the user which one to use. Remember the selected org ID for the next steps.",
-        "command": "CI= npx -y neon orgs list --output json"
-      },
-      {
-        "id": "select_or_create_project",
-        "description": "List existing Neon projects in the selected organization using the CLI command below (replace <org-id> with the selected org ID). Ask the user whether they want to use an existing project or create a new one. If creating new, ask the user for a project name (suggest the current directory name). IMPORTANT: Always include --org-id when creating a project to avoid interactive prompts.",
-        "command": "CI= npx -y neon projects list --org-id <org-id> --output json"
-      },
-      {
-        "id": "create_project_if_needed",
-        "description": "If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>). If the user chose an existing project, skip this step.",
-        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json"
-      },
-      {
-        "id": "create_neon_context",
-        "description": "Update the .neon context file in the project root with the selected org and project IDs. IMPORTANT: If a .neon file already exists, you MUST read it first, then merge the new orgId and projectId into the existing content. Do NOT overwrite the file — other fields (like _init, branch, etc.) must be preserved. If no .neon file exists, create one. The file is JSON. Add/update only the orgId and projectId fields: {\\"orgId\\": \\"<org-id>\\", \\"projectId\\": \\"<project-id>\\", ...existing fields}. This file is safe to commit — it contains no secrets."
-      },
-      {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. Do this before linking or pulling env: \`neon env pull\` (and link's own env pull) may import the project's Neon config file, which can require these packages.",
         "command": "npm install"
+      },
+      {
+        "id": "link_project",
+        "description": "Select or create the Neon project for this app and link the directory to it by running the CLI command below. It returns JSON with a \`status\` field that drives a short state machine; at each step re-run the returned \`next_command_template\` with the user's choice: \`needs_org\` — show the listed organizations and have the user pick one (auto-select if there is only one), then re-run with the chosen \`--org-id\`; \`needs_project\` — ask whether to use an existing project (re-run \`next_command_template\` with \`--project-id\`) or create a new one (use \`create_option.next_command_template\` with \`--project-name\`, suggesting the current directory name); \`needs_project_details\` — pick a region from the list and re-run with \`--region-id\`. Repeat until \`status\` is \`linked\`. \`neon link\` writes the org, project, and (for a newly created project) branch into the .neon context file — do NOT edit .neon by hand.",
+        "command": "CI= npx -y neon link --agent"
       },
       {
         "id": "pull_env",
@@ -5502,7 +5418,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       },
       {
         "id": "verify_connection",
-        "description": "Verify the database connection works by running a SQL query against the Neon database. Write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Do NOT use the Neon CLI or MCP tools for this — use a direct database connection to verify end-to-end connectivity."
+        "description": "Verify the database connection works by running a SQL query against the Neon database. Primary check (definitive): write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Use a direct database connection — this proves the app's own driver and DATABASE_URL work end-to-end, so do NOT replace it with a CLI or MCP call. As a quick preliminary sanity check you may also run \`CI= npx -y neon psql -- -c \\"SELECT 1\\"\`; it confirms the project is reachable but does not substitute for the driver check above."
       }
     ],
     "onComplete": {
@@ -5527,7 +5443,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
         "id": "run_migrations",
@@ -5536,7 +5452,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       },
       {
         "id": "verify_connection",
-        "description": "Verify the database connection works by running a SQL query against the Neon database. Write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Do NOT use the Neon CLI or MCP tools for this — use a direct database connection to verify end-to-end connectivity."
+        "description": "Verify the database connection works by running a SQL query against the Neon database. Primary check (definitive): write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Use a direct database connection — this proves the app's own driver and DATABASE_URL work end-to-end, so do NOT replace it with a CLI or MCP call. As a quick preliminary sanity check you may also run \`CI= npx -y neon psql -- -c \\"SELECT 1\\"\`; it confirms the project is reachable but does not substitute for the driver check above."
       }
     ],
     "onComplete": {
@@ -5810,7 +5726,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
         "label": "No, skip for now"
       }
     ],
-    "context": "Full documentation: https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "context": "Full documentation: https://neon.com/docs/auth/overview.md",
     "responseMapping": {
       "yes": {
         "command": "neon init --agent --data '{\\"step\\":\\"neon-auth\\",\\"agent\\":\\"cursor\\",\\"setup\\":true}'"
@@ -5837,7 +5753,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
   "status": "in_progress",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "prerequisite": "https://neon.com/docs/auth/overview.md",
     "steps": [
       {
         "id": "provision",
@@ -6065,8 +5981,8 @@ exports[`neon init --agent: every step, against every project shape > next-prism
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -6104,8 +6020,8 @@ exports[`neon init --agent: every step, against every project shape > next-prism
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -6134,15 +6050,15 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -6203,15 +6119,15 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -6439,7 +6355,7 @@ exports[`neon init --agent: every step, against every project shape > node-app >
   },
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
+    "prerequisite": "https://neon.com/docs/connect/choose-connection.md",
     "steps": [
       {
         "id": "get_connection_string",
@@ -6492,31 +6408,17 @@ exports[`neon init --agent: every step, against every project shape > node-app >
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
-        "id": "select_org",
-        "description": "List the user's Neon organizations using the CLI command below. If only one org exists, use it automatically. If multiple orgs exist, ask the user which one to use. Remember the selected org ID for the next steps.",
-        "command": "CI= npx -y neon orgs list --output json"
-      },
-      {
-        "id": "select_or_create_project",
-        "description": "List existing Neon projects in the selected organization using the CLI command below (replace <org-id> with the selected org ID). Ask the user whether they want to use an existing project or create a new one. If creating new, ask the user for a project name (suggest the current directory name). IMPORTANT: Always include --org-id when creating a project to avoid interactive prompts.",
-        "command": "CI= npx -y neon projects list --org-id <org-id> --output json"
-      },
-      {
-        "id": "create_project_if_needed",
-        "description": "If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>). If the user chose an existing project, skip this step.",
-        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json"
-      },
-      {
-        "id": "create_neon_context",
-        "description": "Update the .neon context file in the project root with the selected org and project IDs. IMPORTANT: If a .neon file already exists, you MUST read it first, then merge the new orgId and projectId into the existing content. Do NOT overwrite the file — other fields (like _init, branch, etc.) must be preserved. If no .neon file exists, create one. The file is JSON. Add/update only the orgId and projectId fields: {\\"orgId\\": \\"<org-id>\\", \\"projectId\\": \\"<project-id>\\", ...existing fields}. This file is safe to commit — it contains no secrets."
-      },
-      {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. Do this before linking or pulling env: \`neon env pull\` (and link's own env pull) may import the project's Neon config file, which can require these packages.",
         "command": "npm install"
+      },
+      {
+        "id": "link_project",
+        "description": "Select or create the Neon project for this app and link the directory to it by running the CLI command below. It returns JSON with a \`status\` field that drives a short state machine; at each step re-run the returned \`next_command_template\` with the user's choice: \`needs_org\` — show the listed organizations and have the user pick one (auto-select if there is only one), then re-run with the chosen \`--org-id\`; \`needs_project\` — ask whether to use an existing project (re-run \`next_command_template\` with \`--project-id\`) or create a new one (use \`create_option.next_command_template\` with \`--project-name\`, suggesting the current directory name); \`needs_project_details\` — pick a region from the list and re-run with \`--region-id\`. Repeat until \`status\` is \`linked\`. \`neon link\` writes the org, project, and (for a newly created project) branch into the .neon context file — do NOT edit .neon by hand.",
+        "command": "CI= npx -y neon link --agent"
       },
       {
         "id": "pull_env",
@@ -6530,7 +6432,7 @@ exports[`neon init --agent: every step, against every project shape > node-app >
       },
       {
         "id": "verify_connection",
-        "description": "Verify the database connection works by running a SQL query against the Neon database. Write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Do NOT use the Neon CLI or MCP tools for this — use a direct database connection to verify end-to-end connectivity."
+        "description": "Verify the database connection works by running a SQL query against the Neon database. Primary check (definitive): write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Use a direct database connection — this proves the app's own driver and DATABASE_URL work end-to-end, so do NOT replace it with a CLI or MCP call. As a quick preliminary sanity check you may also run \`CI= npx -y neon psql -- -c \\"SELECT 1\\"\`; it confirms the project is reachable but does not substitute for the driver check above."
       }
     ],
     "onComplete": {
@@ -6555,7 +6457,7 @@ exports[`neon init --agent: every step, against every project shape > node-app >
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
         "id": "run_migrations",
@@ -6564,7 +6466,7 @@ exports[`neon init --agent: every step, against every project shape > node-app >
       },
       {
         "id": "verify_connection",
-        "description": "Verify the database connection works by running a SQL query against the Neon database. Write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Do NOT use the Neon CLI or MCP tools for this — use a direct database connection to verify end-to-end connectivity."
+        "description": "Verify the database connection works by running a SQL query against the Neon database. Primary check (definitive): write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Use a direct database connection — this proves the app's own driver and DATABASE_URL work end-to-end, so do NOT replace it with a CLI or MCP call. As a quick preliminary sanity check you may also run \`CI= npx -y neon psql -- -c \\"SELECT 1\\"\`; it confirms the project is reachable but does not substitute for the driver check above."
       }
     ],
     "onComplete": {
@@ -6838,7 +6740,7 @@ exports[`neon init --agent: every step, against every project shape > node-app >
         "label": "No, skip for now"
       }
     ],
-    "context": "Full documentation: https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "context": "Full documentation: https://neon.com/docs/auth/overview.md",
     "responseMapping": {
       "yes": {
         "command": "neon init --agent --data '{\\"step\\":\\"neon-auth\\",\\"agent\\":\\"cursor\\",\\"setup\\":true}'"
@@ -6865,7 +6767,7 @@ exports[`neon init --agent: every step, against every project shape > node-app >
   "status": "in_progress",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "prerequisite": "https://neon.com/docs/auth/overview.md",
     "steps": [
       {
         "id": "provision",
@@ -7093,8 +6995,8 @@ exports[`neon init --agent: every step, against every project shape > node-app >
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -7132,8 +7034,8 @@ exports[`neon init --agent: every step, against every project shape > node-app >
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -7162,15 +7064,15 @@ exports[`neon init --agent: every step, against every project shape > node-app >
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -7231,15 +7133,15 @@ exports[`neon init --agent: every step, against every project shape > node-app >
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -7472,7 +7374,7 @@ exports[`neon init --agent: every step, against every project shape > other-data
   },
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
+    "prerequisite": "https://neon.com/docs/connect/choose-connection.md",
     "steps": [
       {
         "id": "get_connection_string",
@@ -7525,31 +7427,17 @@ exports[`neon init --agent: every step, against every project shape > other-data
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
-        "id": "select_org",
-        "description": "List the user's Neon organizations using the CLI command below. If only one org exists, use it automatically. If multiple orgs exist, ask the user which one to use. Remember the selected org ID for the next steps.",
-        "command": "CI= npx -y neon orgs list --output json"
-      },
-      {
-        "id": "select_or_create_project",
-        "description": "List existing Neon projects in the selected organization using the CLI command below (replace <org-id> with the selected org ID). Ask the user whether they want to use an existing project or create a new one. If creating new, ask the user for a project name (suggest the current directory name). IMPORTANT: Always include --org-id when creating a project to avoid interactive prompts.",
-        "command": "CI= npx -y neon projects list --org-id <org-id> --output json"
-      },
-      {
-        "id": "create_project_if_needed",
-        "description": "If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>). If the user chose an existing project, skip this step.",
-        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json"
-      },
-      {
-        "id": "create_neon_context",
-        "description": "Update the .neon context file in the project root with the selected org and project IDs. IMPORTANT: If a .neon file already exists, you MUST read it first, then merge the new orgId and projectId into the existing content. Do NOT overwrite the file — other fields (like _init, branch, etc.) must be preserved. If no .neon file exists, create one. The file is JSON. Add/update only the orgId and projectId fields: {\\"orgId\\": \\"<org-id>\\", \\"projectId\\": \\"<project-id>\\", ...existing fields}. This file is safe to commit — it contains no secrets."
-      },
-      {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. Do this before linking or pulling env: \`neon env pull\` (and link's own env pull) may import the project's Neon config file, which can require these packages.",
         "command": "npm install"
+      },
+      {
+        "id": "link_project",
+        "description": "Select or create the Neon project for this app and link the directory to it by running the CLI command below. It returns JSON with a \`status\` field that drives a short state machine; at each step re-run the returned \`next_command_template\` with the user's choice: \`needs_org\` — show the listed organizations and have the user pick one (auto-select if there is only one), then re-run with the chosen \`--org-id\`; \`needs_project\` — ask whether to use an existing project (re-run \`next_command_template\` with \`--project-id\`) or create a new one (use \`create_option.next_command_template\` with \`--project-name\`, suggesting the current directory name); \`needs_project_details\` — pick a region from the list and re-run with \`--region-id\`. Repeat until \`status\` is \`linked\`. \`neon link\` writes the org, project, and (for a newly created project) branch into the .neon context file — do NOT edit .neon by hand.",
+        "command": "CI= npx -y neon link --agent"
       },
       {
         "id": "pull_env",
@@ -7563,7 +7451,7 @@ exports[`neon init --agent: every step, against every project shape > other-data
       },
       {
         "id": "verify_connection",
-        "description": "Verify the database connection works by running a SQL query against the Neon database. Write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Do NOT use the Neon CLI or MCP tools for this — use a direct database connection to verify end-to-end connectivity."
+        "description": "Verify the database connection works by running a SQL query against the Neon database. Primary check (definitive): write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Use a direct database connection — this proves the app's own driver and DATABASE_URL work end-to-end, so do NOT replace it with a CLI or MCP call. As a quick preliminary sanity check you may also run \`CI= npx -y neon psql -- -c \\"SELECT 1\\"\`; it confirms the project is reachable but does not substitute for the driver check above."
       }
     ],
     "onComplete": {
@@ -7588,7 +7476,7 @@ exports[`neon init --agent: every step, against every project shape > other-data
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
         "id": "run_migrations",
@@ -7597,7 +7485,7 @@ exports[`neon init --agent: every step, against every project shape > other-data
       },
       {
         "id": "verify_connection",
-        "description": "Verify the database connection works by running a SQL query against the Neon database. Write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Do NOT use the Neon CLI or MCP tools for this — use a direct database connection to verify end-to-end connectivity."
+        "description": "Verify the database connection works by running a SQL query against the Neon database. Primary check (definitive): write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Use a direct database connection — this proves the app's own driver and DATABASE_URL work end-to-end, so do NOT replace it with a CLI or MCP call. As a quick preliminary sanity check you may also run \`CI= npx -y neon psql -- -c \\"SELECT 1\\"\`; it confirms the project is reachable but does not substitute for the driver check above."
       }
     ],
     "onComplete": {
@@ -7871,7 +7759,7 @@ exports[`neon init --agent: every step, against every project shape > other-data
         "label": "No, skip for now"
       }
     ],
-    "context": "Full documentation: https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "context": "Full documentation: https://neon.com/docs/auth/overview.md",
     "responseMapping": {
       "yes": {
         "command": "neon init --agent --data '{\\"step\\":\\"neon-auth\\",\\"agent\\":\\"cursor\\",\\"setup\\":true}'"
@@ -7898,7 +7786,7 @@ exports[`neon init --agent: every step, against every project shape > other-data
   "status": "in_progress",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "prerequisite": "https://neon.com/docs/auth/overview.md",
     "steps": [
       {
         "id": "provision",
@@ -8126,8 +8014,8 @@ exports[`neon init --agent: every step, against every project shape > other-data
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -8165,8 +8053,8 @@ exports[`neon init --agent: every step, against every project shape > other-data
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -8195,15 +8083,15 @@ exports[`neon init --agent: every step, against every project shape > other-data
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -8264,15 +8152,15 @@ exports[`neon init --agent: every step, against every project shape > other-data
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -8332,31 +8220,17 @@ exports[`neon init --agent: nested and string-encoded --data payloads > JSON-enc
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
-        "id": "select_org",
-        "description": "List the user's Neon organizations using the CLI command below. If only one org exists, use it automatically. If multiple orgs exist, ask the user which one to use. Remember the selected org ID for the next steps.",
-        "command": "CI= npx -y neon orgs list --output json"
-      },
-      {
-        "id": "select_or_create_project",
-        "description": "List existing Neon projects in the selected organization using the CLI command below (replace <org-id> with the selected org ID). Ask the user whether they want to use an existing project or create a new one. If creating new, ask the user for a project name (suggest the current directory name). IMPORTANT: Always include --org-id when creating a project to avoid interactive prompts.",
-        "command": "CI= npx -y neon projects list --org-id <org-id> --output json"
-      },
-      {
-        "id": "create_project_if_needed",
-        "description": "If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>). If the user chose an existing project, skip this step.",
-        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json"
-      },
-      {
-        "id": "create_neon_context",
-        "description": "Update the .neon context file in the project root with the selected org and project IDs. IMPORTANT: If a .neon file already exists, you MUST read it first, then merge the new orgId and projectId into the existing content. Do NOT overwrite the file — other fields (like _init, branch, etc.) must be preserved. If no .neon file exists, create one. The file is JSON. Add/update only the orgId and projectId fields: {\\"orgId\\": \\"<org-id>\\", \\"projectId\\": \\"<project-id>\\", ...existing fields}. This file is safe to commit — it contains no secrets."
-      },
-      {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. Do this before linking or pulling env: \`neon env pull\` (and link's own env pull) may import the project's Neon config file, which can require these packages.",
         "command": "npm install"
+      },
+      {
+        "id": "link_project",
+        "description": "Select or create the Neon project for this app and link the directory to it by running the CLI command below. It returns JSON with a \`status\` field that drives a short state machine; at each step re-run the returned \`next_command_template\` with the user's choice: \`needs_org\` — show the listed organizations and have the user pick one (auto-select if there is only one), then re-run with the chosen \`--org-id\`; \`needs_project\` — ask whether to use an existing project (re-run \`next_command_template\` with \`--project-id\`) or create a new one (use \`create_option.next_command_template\` with \`--project-name\`, suggesting the current directory name); \`needs_project_details\` — pick a region from the list and re-run with \`--region-id\`. Repeat until \`status\` is \`linked\`. \`neon link\` writes the org, project, and (for a newly created project) branch into the .neon context file — do NOT edit .neon by hand.",
+        "command": "CI= npx -y neon link --agent"
       },
       {
         "id": "pull_env",
@@ -8375,7 +8249,7 @@ exports[`neon init --agent: nested and string-encoded --data payloads > JSON-enc
       },
       {
         "id": "verify_connection",
-        "description": "Verify the database connection works by running a SQL query against the Neon database. Write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Do NOT use the Neon CLI or MCP tools for this — use a direct database connection to verify end-to-end connectivity."
+        "description": "Verify the database connection works by running a SQL query against the Neon database. Primary check (definitive): write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Use a direct database connection — this proves the app's own driver and DATABASE_URL work end-to-end, so do NOT replace it with a CLI or MCP call. As a quick preliminary sanity check you may also run \`CI= npx -y neon psql -- -c \\"SELECT 1\\"\`; it confirms the project is reachable but does not substitute for the driver check above."
       }
     ],
     "onComplete": {
@@ -8400,31 +8274,17 @@ exports[`neon init --agent: nested and string-encoded --data payloads > nested o
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
-        "id": "select_org",
-        "description": "List the user's Neon organizations using the CLI command below. If only one org exists, use it automatically. If multiple orgs exist, ask the user which one to use. Remember the selected org ID for the next steps.",
-        "command": "CI= npx -y neon orgs list --output json"
-      },
-      {
-        "id": "select_or_create_project",
-        "description": "List existing Neon projects in the selected organization using the CLI command below (replace <org-id> with the selected org ID). Ask the user whether they want to use an existing project or create a new one. If creating new, ask the user for a project name (suggest the current directory name). IMPORTANT: Always include --org-id when creating a project to avoid interactive prompts.",
-        "command": "CI= npx -y neon projects list --org-id <org-id> --output json"
-      },
-      {
-        "id": "create_project_if_needed",
-        "description": "If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>). If the user chose an existing project, skip this step.",
-        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json"
-      },
-      {
-        "id": "create_neon_context",
-        "description": "Update the .neon context file in the project root with the selected org and project IDs. IMPORTANT: If a .neon file already exists, you MUST read it first, then merge the new orgId and projectId into the existing content. Do NOT overwrite the file — other fields (like _init, branch, etc.) must be preserved. If no .neon file exists, create one. The file is JSON. Add/update only the orgId and projectId fields: {\\"orgId\\": \\"<org-id>\\", \\"projectId\\": \\"<project-id>\\", ...existing fields}. This file is safe to commit — it contains no secrets."
-      },
-      {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. Do this before linking or pulling env: \`neon env pull\` (and link's own env pull) may import the project's Neon config file, which can require these packages.",
         "command": "npm install"
+      },
+      {
+        "id": "link_project",
+        "description": "Select or create the Neon project for this app and link the directory to it by running the CLI command below. It returns JSON with a \`status\` field that drives a short state machine; at each step re-run the returned \`next_command_template\` with the user's choice: \`needs_org\` — show the listed organizations and have the user pick one (auto-select if there is only one), then re-run with the chosen \`--org-id\`; \`needs_project\` — ask whether to use an existing project (re-run \`next_command_template\` with \`--project-id\`) or create a new one (use \`create_option.next_command_template\` with \`--project-name\`, suggesting the current directory name); \`needs_project_details\` — pick a region from the list and re-run with \`--region-id\`. Repeat until \`status\` is \`linked\`. \`neon link\` writes the org, project, and (for a newly created project) branch into the .neon context file — do NOT edit .neon by hand.",
+        "command": "CI= npx -y neon link --agent"
       },
       {
         "id": "pull_env",
@@ -8443,7 +8303,7 @@ exports[`neon init --agent: nested and string-encoded --data payloads > nested o
       },
       {
         "id": "verify_connection",
-        "description": "Verify the database connection works by running a SQL query against the Neon database. Write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Do NOT use the Neon CLI or MCP tools for this — use a direct database connection to verify end-to-end connectivity."
+        "description": "Verify the database connection works by running a SQL query against the Neon database. Primary check (definitive): write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Use a direct database connection — this proves the app's own driver and DATABASE_URL work end-to-end, so do NOT replace it with a CLI or MCP call. As a quick preliminary sanity check you may also run \`CI= npx -y neon psql -- -c \\"SELECT 1\\"\`; it confirms the project is reachable but does not substitute for the driver check above."
       }
     ],
     "onComplete": {
@@ -9570,7 +9430,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > fully-config
 --- stderr ---
 
 --- subprocesses ---
-<stub>/npx -y neonctl orgs list --output json"
+<stub>/npx -y neon orgs list --output json"
 `;
 
 exports[`neon init --agent: the orchestrator picks the next phase > fully-configured — no --data 1`] = `
@@ -9602,7 +9462,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > fully-config
 --- stderr ---
 
 --- subprocesses ---
-<stub>/npx -y neonctl orgs list --output json
+<stub>/npx -y neon orgs list --output json
 <stub>/skills --version"
 `;
 
@@ -12064,31 +11924,17 @@ exports[`neon init --agent: the response depends on which agent is driving > cla
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
-        "id": "select_org",
-        "description": "List the user's Neon organizations using the CLI command below. If only one org exists, use it automatically. If multiple orgs exist, ask the user which one to use. Remember the selected org ID for the next steps.",
-        "command": "CI= npx -y neon orgs list --output json"
-      },
-      {
-        "id": "select_or_create_project",
-        "description": "List existing Neon projects in the selected organization using the CLI command below (replace <org-id> with the selected org ID). Ask the user whether they want to use an existing project or create a new one. If creating new, ask the user for a project name (suggest the current directory name). IMPORTANT: Always include --org-id when creating a project to avoid interactive prompts.",
-        "command": "CI= npx -y neon projects list --org-id <org-id> --output json"
-      },
-      {
-        "id": "create_project_if_needed",
-        "description": "If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>). If the user chose an existing project, skip this step.",
-        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json"
-      },
-      {
-        "id": "create_neon_context",
-        "description": "Update the .neon context file in the project root with the selected org and project IDs. IMPORTANT: If a .neon file already exists, you MUST read it first, then merge the new orgId and projectId into the existing content. Do NOT overwrite the file — other fields (like _init, branch, etc.) must be preserved. If no .neon file exists, create one. The file is JSON. Add/update only the orgId and projectId fields: {\\"orgId\\": \\"<org-id>\\", \\"projectId\\": \\"<project-id>\\", ...existing fields}. This file is safe to commit — it contains no secrets."
-      },
-      {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. Do this before linking or pulling env: \`neon env pull\` (and link's own env pull) may import the project's Neon config file, which can require these packages.",
         "command": "npm install"
+      },
+      {
+        "id": "link_project",
+        "description": "Select or create the Neon project for this app and link the directory to it by running the CLI command below. It returns JSON with a \`status\` field that drives a short state machine; at each step re-run the returned \`next_command_template\` with the user's choice: \`needs_org\` — show the listed organizations and have the user pick one (auto-select if there is only one), then re-run with the chosen \`--org-id\`; \`needs_project\` — ask whether to use an existing project (re-run \`next_command_template\` with \`--project-id\`) or create a new one (use \`create_option.next_command_template\` with \`--project-name\`, suggesting the current directory name); \`needs_project_details\` — pick a region from the list and re-run with \`--region-id\`. Repeat until \`status\` is \`linked\`. \`neon link\` writes the org, project, and (for a newly created project) branch into the .neon context file — do NOT edit .neon by hand.",
+        "command": "CI= npx -y neon link --agent"
       },
       {
         "id": "pull_env",
@@ -12102,7 +11948,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cla
       },
       {
         "id": "verify_connection",
-        "description": "Verify the database connection works by running a SQL query against the Neon database. Write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Do NOT use the Neon CLI or MCP tools for this — use a direct database connection to verify end-to-end connectivity."
+        "description": "Verify the database connection works by running a SQL query against the Neon database. Primary check (definitive): write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Use a direct database connection — this proves the app's own driver and DATABASE_URL work end-to-end, so do NOT replace it with a CLI or MCP call. As a quick preliminary sanity check you may also run \`CI= npx -y neon psql -- -c \\"SELECT 1\\"\`; it confirms the project is reachable but does not substitute for the driver check above."
       }
     ],
     "onComplete": {
@@ -12559,31 +12405,17 @@ exports[`neon init --agent: the response depends on which agent is driving > cod
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
-        "id": "select_org",
-        "description": "List the user's Neon organizations using the CLI command below. If only one org exists, use it automatically. If multiple orgs exist, ask the user which one to use. Remember the selected org ID for the next steps.",
-        "command": "CI= npx -y neon orgs list --output json"
-      },
-      {
-        "id": "select_or_create_project",
-        "description": "List existing Neon projects in the selected organization using the CLI command below (replace <org-id> with the selected org ID). Ask the user whether they want to use an existing project or create a new one. If creating new, ask the user for a project name (suggest the current directory name). IMPORTANT: Always include --org-id when creating a project to avoid interactive prompts.",
-        "command": "CI= npx -y neon projects list --org-id <org-id> --output json"
-      },
-      {
-        "id": "create_project_if_needed",
-        "description": "If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>). If the user chose an existing project, skip this step.",
-        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json"
-      },
-      {
-        "id": "create_neon_context",
-        "description": "Update the .neon context file in the project root with the selected org and project IDs. IMPORTANT: If a .neon file already exists, you MUST read it first, then merge the new orgId and projectId into the existing content. Do NOT overwrite the file — other fields (like _init, branch, etc.) must be preserved. If no .neon file exists, create one. The file is JSON. Add/update only the orgId and projectId fields: {\\"orgId\\": \\"<org-id>\\", \\"projectId\\": \\"<project-id>\\", ...existing fields}. This file is safe to commit — it contains no secrets."
-      },
-      {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. Do this before linking or pulling env: \`neon env pull\` (and link's own env pull) may import the project's Neon config file, which can require these packages.",
         "command": "npm install"
+      },
+      {
+        "id": "link_project",
+        "description": "Select or create the Neon project for this app and link the directory to it by running the CLI command below. It returns JSON with a \`status\` field that drives a short state machine; at each step re-run the returned \`next_command_template\` with the user's choice: \`needs_org\` — show the listed organizations and have the user pick one (auto-select if there is only one), then re-run with the chosen \`--org-id\`; \`needs_project\` — ask whether to use an existing project (re-run \`next_command_template\` with \`--project-id\`) or create a new one (use \`create_option.next_command_template\` with \`--project-name\`, suggesting the current directory name); \`needs_project_details\` — pick a region from the list and re-run with \`--region-id\`. Repeat until \`status\` is \`linked\`. \`neon link\` writes the org, project, and (for a newly created project) branch into the .neon context file — do NOT edit .neon by hand.",
+        "command": "CI= npx -y neon link --agent"
       },
       {
         "id": "pull_env",
@@ -12597,7 +12429,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cod
       },
       {
         "id": "verify_connection",
-        "description": "Verify the database connection works by running a SQL query against the Neon database. Write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Do NOT use the Neon CLI or MCP tools for this — use a direct database connection to verify end-to-end connectivity."
+        "description": "Verify the database connection works by running a SQL query against the Neon database. Primary check (definitive): write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Use a direct database connection — this proves the app's own driver and DATABASE_URL work end-to-end, so do NOT replace it with a CLI or MCP call. As a quick preliminary sanity check you may also run \`CI= npx -y neon psql -- -c \\"SELECT 1\\"\`; it confirms the project is reachable but does not substitute for the driver check above."
       }
     ],
     "onComplete": {
@@ -13054,31 +12886,17 @@ exports[`neon init --agent: the response depends on which agent is driving > cur
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
-        "id": "select_org",
-        "description": "List the user's Neon organizations using the CLI command below. If only one org exists, use it automatically. If multiple orgs exist, ask the user which one to use. Remember the selected org ID for the next steps.",
-        "command": "CI= npx -y neon orgs list --output json"
-      },
-      {
-        "id": "select_or_create_project",
-        "description": "List existing Neon projects in the selected organization using the CLI command below (replace <org-id> with the selected org ID). Ask the user whether they want to use an existing project or create a new one. If creating new, ask the user for a project name (suggest the current directory name). IMPORTANT: Always include --org-id when creating a project to avoid interactive prompts.",
-        "command": "CI= npx -y neon projects list --org-id <org-id> --output json"
-      },
-      {
-        "id": "create_project_if_needed",
-        "description": "If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>). If the user chose an existing project, skip this step.",
-        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json"
-      },
-      {
-        "id": "create_neon_context",
-        "description": "Update the .neon context file in the project root with the selected org and project IDs. IMPORTANT: If a .neon file already exists, you MUST read it first, then merge the new orgId and projectId into the existing content. Do NOT overwrite the file — other fields (like _init, branch, etc.) must be preserved. If no .neon file exists, create one. The file is JSON. Add/update only the orgId and projectId fields: {\\"orgId\\": \\"<org-id>\\", \\"projectId\\": \\"<project-id>\\", ...existing fields}. This file is safe to commit — it contains no secrets."
-      },
-      {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. Do this before linking or pulling env: \`neon env pull\` (and link's own env pull) may import the project's Neon config file, which can require these packages.",
         "command": "npm install"
+      },
+      {
+        "id": "link_project",
+        "description": "Select or create the Neon project for this app and link the directory to it by running the CLI command below. It returns JSON with a \`status\` field that drives a short state machine; at each step re-run the returned \`next_command_template\` with the user's choice: \`needs_org\` — show the listed organizations and have the user pick one (auto-select if there is only one), then re-run with the chosen \`--org-id\`; \`needs_project\` — ask whether to use an existing project (re-run \`next_command_template\` with \`--project-id\`) or create a new one (use \`create_option.next_command_template\` with \`--project-name\`, suggesting the current directory name); \`needs_project_details\` — pick a region from the list and re-run with \`--region-id\`. Repeat until \`status\` is \`linked\`. \`neon link\` writes the org, project, and (for a newly created project) branch into the .neon context file — do NOT edit .neon by hand.",
+        "command": "CI= npx -y neon link --agent"
       },
       {
         "id": "pull_env",
@@ -13092,7 +12910,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cur
       },
       {
         "id": "verify_connection",
-        "description": "Verify the database connection works by running a SQL query against the Neon database. Write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Do NOT use the Neon CLI or MCP tools for this — use a direct database connection to verify end-to-end connectivity."
+        "description": "Verify the database connection works by running a SQL query against the Neon database. Primary check (definitive): write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Use a direct database connection — this proves the app's own driver and DATABASE_URL work end-to-end, so do NOT replace it with a CLI or MCP call. As a quick preliminary sanity check you may also run \`CI= npx -y neon psql -- -c \\"SELECT 1\\"\`; it confirms the project is reachable but does not substitute for the driver check above."
       }
     ],
     "onComplete": {
@@ -13565,31 +13383,17 @@ exports[`neon init --agent: the response depends on which agent is driving > non
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
-        "id": "select_org",
-        "description": "List the user's Neon organizations using the CLI command below. If only one org exists, use it automatically. If multiple orgs exist, ask the user which one to use. Remember the selected org ID for the next steps.",
-        "command": "CI= npx -y neon orgs list --output json"
-      },
-      {
-        "id": "select_or_create_project",
-        "description": "List existing Neon projects in the selected organization using the CLI command below (replace <org-id> with the selected org ID). Ask the user whether they want to use an existing project or create a new one. If creating new, ask the user for a project name (suggest the current directory name). IMPORTANT: Always include --org-id when creating a project to avoid interactive prompts.",
-        "command": "CI= npx -y neon projects list --org-id <org-id> --output json"
-      },
-      {
-        "id": "create_project_if_needed",
-        "description": "If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>). If the user chose an existing project, skip this step.",
-        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json"
-      },
-      {
-        "id": "create_neon_context",
-        "description": "Update the .neon context file in the project root with the selected org and project IDs. IMPORTANT: If a .neon file already exists, you MUST read it first, then merge the new orgId and projectId into the existing content. Do NOT overwrite the file — other fields (like _init, branch, etc.) must be preserved. If no .neon file exists, create one. The file is JSON. Add/update only the orgId and projectId fields: {\\"orgId\\": \\"<org-id>\\", \\"projectId\\": \\"<project-id>\\", ...existing fields}. This file is safe to commit — it contains no secrets."
-      },
-      {
         "id": "install_dependencies",
-        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. This must be done before \`neon env pull\` because the project's Neon config file may import packages that need to be installed first.",
+        "description": "Check if node_modules exists in the project root. If not, install the project's dependencies. Run this step's \`command\` exactly as written — it already uses this project's package manager. Do not rewrite it to npm or any other manager. Do this before linking or pulling env: \`neon env pull\` (and link's own env pull) may import the project's Neon config file, which can require these packages.",
         "command": "npm install"
+      },
+      {
+        "id": "link_project",
+        "description": "Select or create the Neon project for this app and link the directory to it by running the CLI command below. It returns JSON with a \`status\` field that drives a short state machine; at each step re-run the returned \`next_command_template\` with the user's choice: \`needs_org\` — show the listed organizations and have the user pick one (auto-select if there is only one), then re-run with the chosen \`--org-id\`; \`needs_project\` — ask whether to use an existing project (re-run \`next_command_template\` with \`--project-id\`) or create a new one (use \`create_option.next_command_template\` with \`--project-name\`, suggesting the current directory name); \`needs_project_details\` — pick a region from the list and re-run with \`--region-id\`. Repeat until \`status\` is \`linked\`. \`neon link\` writes the org, project, and (for a newly created project) branch into the .neon context file — do NOT edit .neon by hand.",
+        "command": "CI= npx -y neon link --agent"
       },
       {
         "id": "pull_env",
@@ -13603,7 +13407,7 @@ exports[`neon init --agent: the response depends on which agent is driving > non
       },
       {
         "id": "verify_connection",
-        "description": "Verify the database connection works by running a SQL query against the Neon database. Write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Do NOT use the Neon CLI or MCP tools for this — use a direct database connection to verify end-to-end connectivity."
+        "description": "Verify the database connection works by running a SQL query against the Neon database. Primary check (definitive): write and run a short script that connects using DATABASE_URL from the project's env file and executes \`SELECT 1\` (or queries a table from the migration if migrations were run). Use a direct database connection — this proves the app's own driver and DATABASE_URL work end-to-end, so do NOT replace it with a CLI or MCP call. As a quick preliminary sanity check you may also run \`CI= npx -y neon psql -- -c \\"SELECT 1\\"\`; it confirms the project is reachable but does not substitute for the driver check above."
       }
     ],
     "onComplete": {

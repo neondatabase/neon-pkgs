@@ -11,9 +11,11 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 import {
 	applyContext,
+	clearContextFile,
 	currentContextFile,
 	ensureGitignored,
 	isCurrentBranchProbe,
+	updateContextFile,
 	walkContextFile,
 } from "./context.js";
 
@@ -351,5 +353,113 @@ describe("applyContext", () => {
 		expect(readFileSync(join(workspace, ".gitignore"), "utf-8")).toBe(
 			"node_modules\n",
 		);
+	});
+});
+
+describe("updateContextFile foreign-key preservation", () => {
+	let workspace: string;
+
+	beforeEach(() => {
+		workspace = mkdtempSync(join(tmpdir(), "neonctl-update-"));
+	});
+
+	afterEach(() => {
+		rmSync(workspace, { recursive: true, force: true });
+	});
+
+	test("preserves foreign keys (e.g. init's _init) while writing managed fields", () => {
+		const file = join(workspace, ".neon");
+		writeFileSync(
+			file,
+			JSON.stringify({ orgId: "org-old", _init: { features: ["auth"] } }),
+		);
+
+		updateContextFile(file, {
+			orgId: "org-new",
+			projectId: "proj-1",
+			branch: "main",
+		});
+
+		expect(JSON.parse(readFileSync(file, "utf-8"))).toEqual({
+			orgId: "org-new",
+			projectId: "proj-1",
+			branch: "main",
+			_init: { features: ["auth"] },
+		});
+	});
+
+	test("drops managed fields absent from the write, keeps foreign ones", () => {
+		const file = join(workspace, ".neon");
+		writeFileSync(
+			file,
+			JSON.stringify({
+				orgId: "org-1",
+				projectId: "proj-1",
+				branch: "feat",
+				_init: { step: "getting-started" },
+			}),
+		);
+
+		// Re-link the same project without a branch: the stale branch must clear,
+		// but the foreign _init must survive.
+		updateContextFile(file, { orgId: "org-1", projectId: "proj-1" });
+
+		expect(JSON.parse(readFileSync(file, "utf-8"))).toEqual({
+			orgId: "org-1",
+			projectId: "proj-1",
+			_init: { step: "getting-started" },
+		});
+	});
+
+	test("replaces the legacy branchId rather than preserving it as foreign", () => {
+		const file = join(workspace, ".neon");
+		writeFileSync(
+			file,
+			JSON.stringify({ projectId: "proj-1", branchId: "br-old" }),
+		);
+
+		updateContextFile(file, { projectId: "proj-1", branch: "main" });
+
+		expect(JSON.parse(readFileSync(file, "utf-8"))).toEqual({
+			projectId: "proj-1",
+			branch: "main",
+		});
+	});
+
+	test("writes managed fields as-is when the file does not yet exist", () => {
+		const file = join(workspace, ".neon");
+		updateContextFile(file, { orgId: "org-1", projectId: "proj-1" });
+		expect(JSON.parse(readFileSync(file, "utf-8"))).toEqual({
+			orgId: "org-1",
+			projectId: "proj-1",
+		});
+	});
+});
+
+describe("clearContextFile", () => {
+	let workspace: string;
+
+	beforeEach(() => {
+		workspace = mkdtempSync(join(tmpdir(), "neonctl-clear-"));
+	});
+
+	afterEach(() => {
+		rmSync(workspace, { recursive: true, force: true });
+	});
+
+	test("wipes the file wholesale, dropping foreign keys too", () => {
+		const file = join(workspace, ".neon");
+		writeFileSync(
+			file,
+			JSON.stringify({
+				orgId: "org-1",
+				projectId: "proj-1",
+				_init: { features: ["auth"] },
+			}),
+		);
+
+		clearContextFile(file);
+
+		expect(JSON.parse(readFileSync(file, "utf-8"))).toEqual({});
 	});
 });

@@ -1,5 +1,5 @@
 import { neonctlCmd } from "../neonctl.js";
-import { ensureSkillsUpToDate, SKILL_REFERENCE_URLS } from "../skills.js";
+import { DOC_REFERENCE_URLS, ensureSkillsUpToDate } from "../skills.js";
 import type { PhaseResponse } from "../types.js";
 
 export type NeonAuthPhaseOptions = {
@@ -36,7 +36,7 @@ export async function handleNeonAuthPhase(
 					{ value: "yes", label: "Yes, set up Neon Auth" },
 					{ value: "no", label: "No, skip for now" },
 				],
-				context: `Full documentation: ${SKILL_REFERENCE_URLS.neonAuth}`,
+				context: `Full documentation: ${DOC_REFERENCE_URLS.neonAuth}`,
 				responseMapping: {
 					yes: {
 						args: [
@@ -72,7 +72,7 @@ export async function handleNeonAuthPhase(
 			status: "in_progress",
 			nextAction: {
 				type: "agent_action",
-				prerequisite: SKILL_REFERENCE_URLS.neonAuth,
+				prerequisite: DOC_REFERENCE_URLS.neonAuth,
 				steps: [
 					{
 						id: "provision",

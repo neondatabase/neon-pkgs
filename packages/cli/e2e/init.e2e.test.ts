@@ -10,12 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { configuredOrgId } from "@neon/e2e-harness";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import {
-	createProject,
-	deleteProject,
-	runCli,
-	uniqueProjectName,
-} from "./helpers.js";
+import { deleteProject, runCli, uniqueProjectName } from "./helpers.js";
 
 /**
  * `neon init --agent` is a protocol rather than a command that does the work: it answers with
@@ -78,43 +73,50 @@ type PhaseResponse = {
 };
 
 describe.sequential("e2e — neon init emits commands that work", () => {
-	let projectId: string;
-	/** Projects the emitted `projects create` produced, removed in teardown. */
+	/** Projects created by driving `neon link`, removed in teardown. */
 	const created: string[] = [];
 	const orgId = configuredOrgId();
 
 	/**
-	 * Everything runs here rather than in the checkout: `env pull` writes a connection string
-	 * and password into it, and the phase would install skills here if the scrub above ever
-	 * stopped working. Removed in teardown, credentials included.
+	 * Everything runs here rather than in the checkout: `neon link` and `env pull` write the
+	 * `.neon` context and a connection string into it, and the phase would install skills here
+	 * if the scrub above ever stopped working. Removed in teardown, credentials included.
 	 */
 	const workdir = mkdtempSync(join(tmpdir(), "neon-init-e2e-"));
 	const contextFile = join(workdir, ".neon");
 
-	beforeAll(async () => {
-		// Make the workdir a pnpm project: the emitted install steps must follow
-		// it rather than the npm this suite used to assert, and the `.git` marker
-		// stops the lockfile walk from climbing into $TMPDIR's ancestors.
+	beforeAll(() => {
+		// Make the workdir a pnpm project: the emitted install step must follow it, and the
+		// `.git` marker stops the lockfile walk from climbing into $TMPDIR's ancestors.
 		mkdirSync(join(workdir, ".git"));
 		writeFileSync(join(workdir, "pnpm-lock.yaml"), "");
-
-		projectId = await createProject({
-			name: uniqueProjectName("cli-init"),
-		});
-		writeFileSync(contextFile, `${JSON.stringify({ orgId, projectId })}\n`);
 	});
 
 	afterAll(async () => {
 		rmSync(workdir, { recursive: true, force: true });
-		for (const id of [...created, projectId]) {
+		for (const id of created) {
 			if (id) await deleteProject(id);
 		}
 	});
 
-	it("hands an agent a working org, project and env sequence", async () => {
+	/** Strip the emitted `CI= npx -y neon ` prefix and split into CLI args. */
+	const emittedArgs = (command: string): string[] => {
+		expect(command.startsWith(EMITTED_PREFIX)).toBe(true);
+		return command.slice(EMITTED_PREFIX.length).split(/\s+/);
+	};
+
+	/** Run one `neon link --agent` turn against the real API, non-interactively. */
+	const link = (args: string[]) =>
+		runCli(["link", "--agent", ...args], {
+			env: { ...NO_AGENT_ENV, CI: "" },
+			cwd: workdir,
+			contextFile,
+		});
+
+	it("hands an agent a link → env sequence that creates and connects a project", async () => {
 		if (!orgId) {
 			throw new Error(
-				"NEON_ORG_ID is required: the emitted commands take an --org-id, and substituting one is the point of this test.",
+				"NEON_ORG_ID is required: `neon link` takes an --org-id, and supplying one is the point of this test.",
 			);
 		}
 
@@ -137,82 +139,96 @@ describe.sequential("e2e — neon init emits commands that work", () => {
 		expect(response.nextAction?.type).toBe("agent_action");
 		const steps = response.nextAction?.steps ?? [];
 		const ids = steps.map((step) => step.id);
-		// The sequence a user is walked through. Pinned so a step disappearing from the
-		// flow fails here rather than quietly reducing what this test exercises.
+		// The standard flow delegates org/project selection to `neon link`. Pinned so a step
+		// disappearing from the flow fails here rather than quietly reducing what runs.
 		expect(ids).toEqual(
 			expect.arrayContaining([
-				"select_org",
-				"select_or_create_project",
-				"create_project_if_needed",
+				"link_project",
+				"install_dependencies",
 				"pull_env",
+				"verify_connection",
 			]),
 		);
 
-		const executed: string[] = [];
-		for (const step of steps) {
-			if (!step.command) continue;
+		const linkStep = steps.find((step) => step.id === "link_project");
+		const pullStep = steps.find((step) => step.id === "pull_env");
+		expect(linkStep?.command).toBe(`${EMITTED_PREFIX}link --agent`);
+		expect(pullStep?.command).toBe(`${EMITTED_PREFIX}env pull`);
 
-			// Install steps belong to the user's package manager, not to us. Assert we
-			// addressed the workdir's pnpm rather than running an install on the machine.
-			if (!step.command.startsWith(EMITTED_PREFIX)) {
-				expect(step.command).toMatch(/^pnpm (install|add) ?/);
-				continue;
-			}
+		// 1. The emitted link command runs and returns a state-machine response — either org
+		//    selection or project selection, depending on how many orgs the key can see.
+		const first = await runCli(emittedArgs(linkStep?.command ?? ""), {
+			env: { ...NO_AGENT_ENV, CI: "" },
+			cwd: workdir,
+			contextFile,
+		});
+		expect(first.code, first.stderr).toBe(0);
+		const firstStatus = (JSON.parse(first.stdout) as { status: string })
+			.status;
+		expect(["needs_org", "needs_project"]).toContain(firstStatus);
 
-			const args = step.command
-				.slice(EMITTED_PREFIX.length)
-				.replace("<org-id>", orgId)
-				.replace("<project-name>", uniqueProjectName("init-emitted"))
-				.split(/\s+/);
-
-			const result = await runCli(args, {
-				env: { ...NO_AGENT_ENV, CI: "" },
-				cwd: workdir,
-				contextFile,
-			});
-			expect(result.code, `${step.command}\n${result.stderr}`).toBe(0);
-			executed.push(step.id);
-
-			if (step.id === "select_org") {
-				const orgs = JSON.parse(result.stdout) as { id: string }[];
-				expect(orgs.map((org) => org.id)).toContain(orgId);
-			}
-			if (step.id === "select_or_create_project") {
-				// The phase tells the agent to filter this list, so it has to be parseable
-				// and it has to contain the project the agent would pick.
-				const projects = JSON.parse(result.stdout) as { id: string }[];
-				expect(projects.map((project) => project.id)).toContain(
-					projectId,
-				);
-			}
-			if (step.id === "create_project_if_needed") {
-				const { project } = JSON.parse(result.stdout) as {
-					project: { id: string; name: string };
-				};
-				created.push(project.id);
-				expect(project.name).toMatch(/^neon-ts-e2e-/);
-			}
-			if (step.id === "pull_env") {
-				// Exit 0 is not the outcome that matters: `env pull` succeeds when it
-				// resolves nothing. The whole sequence exists to leave a connection string
-				// on disk, so read the file it wrote.
-				const envFile = join(workdir, ".env.local");
-				expect(existsSync(envFile)).toBe(true);
-				expect(readFileSync(envFile, "utf8")).toMatch(
-					/^DATABASE_URL="?postgresql:\/\/.+/m,
-				);
-			}
-		}
-
-		// Every command the flow emits for us must have run, or this test proved less than
-		// it claims. `pull_env` last: it is the step that produces the connection string the
-		// whole sequence exists to obtain.
-		expect(executed).toEqual([
-			"select_org",
-			"select_or_create_project",
-			"create_project_if_needed",
-			"pull_env",
+		// 2. Ask to create a project without a region → the CLI lists the regions to pick from.
+		const projectName = uniqueProjectName("init-link");
+		const details = await link([
+			"--org-id",
+			orgId,
+			"--project-name",
+			projectName,
 		]);
+		expect(details.code, details.stderr).toBe(0);
+		const detailsResp = JSON.parse(details.stdout) as {
+			status: string;
+			regions?: { id: string; default: boolean }[];
+		};
+		expect(detailsResp.status).toBe("needs_project_details");
+		const region =
+			detailsResp.regions?.find((r) => r.default) ??
+			detailsResp.regions?.[0];
+		expect(region, "link should return at least one region").toBeTruthy();
+
+		// 3. Create + link with the chosen region → status linked, and `.neon` written for us.
+		const linked = await link([
+			"--org-id",
+			orgId,
+			"--project-name",
+			projectName,
+			"--region-id",
+			region?.id ?? "",
+		]);
+		expect(linked.code, linked.stderr).toBe(0);
+		const linkedResp = JSON.parse(linked.stdout) as {
+			status: string;
+			project?: { id: string };
+		};
+		// Track for teardown the moment we know the id, ahead of the assertions below.
+		if (linkedResp.project?.id) created.push(linkedResp.project.id);
+		expect(linkedResp.status).toBe("linked");
+
+		// `neon link` records org, project AND branch — the gap the old hand-edited .neon left.
+		const context = JSON.parse(readFileSync(contextFile, "utf8")) as {
+			orgId?: string;
+			projectId?: string;
+			branch?: string;
+		};
+		expect(context.orgId).toBe(orgId);
+		expect(context.projectId).toBe(linkedResp.project?.id);
+		expect(
+			context.branch,
+			".neon should pin the created project's branch",
+		).toBeTruthy();
+
+		// 4. The emitted pull_env step writes a real connection string to disk.
+		const pull = await runCli(emittedArgs(pullStep?.command ?? ""), {
+			env: { ...NO_AGENT_ENV, CI: "" },
+			cwd: workdir,
+			contextFile,
+		});
+		expect(pull.code, pull.stderr).toBe(0);
+		const envFile = join(workdir, ".env.local");
+		expect(existsSync(envFile)).toBe(true);
+		expect(readFileSync(envFile, "utf8")).toMatch(
+			/^DATABASE_URL="?postgresql:\/\/.+/m,
+		);
 	});
 
 	it("reports an unknown step instead of guessing", async () => {

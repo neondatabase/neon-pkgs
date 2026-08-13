@@ -33,13 +33,13 @@ describe("getting-started phase", () => {
 
 		if (result.nextAction.type === "agent_action") {
 			expect(result.nextAction.prerequisite).toContain(
-				"getting-started.md",
+				"backend-overview.md",
 			);
 			expect(result.nextAction.onComplete.type).toBe("run_neon_init");
 		}
 	});
 
-	test("includes org selection, project selection, and connection string steps when no connection string", async () => {
+	test("uses `neon link` to select/create the project when no connection string", async () => {
 		const result = await handleGettingStartedPhase({
 			agent: "claude",
 			cwd: project.dir,
@@ -48,21 +48,41 @@ describe("getting-started phase", () => {
 
 		if (result.nextAction.type === "agent_action") {
 			const stepIds = result.nextAction.steps.map((s) => s.id);
-			expect(stepIds).toContain("select_org");
-			expect(stepIds).toContain("select_or_create_project");
-			expect(stepIds).toContain("create_project_if_needed");
+			// The standard flow delegates org/project/.neon to `neon link` instead
+			// of hand-rolled select/create/edit steps.
+			expect(stepIds).toContain("link_project");
 			expect(stepIds).toContain("pull_env");
-			// Org step should list orgs first
-			const orgStep = result.nextAction.steps.find(
-				(s) => s.id === "select_org",
+			expect(stepIds).not.toContain("select_org");
+			expect(stepIds).not.toContain("create_project_if_needed");
+			expect(stepIds).not.toContain("create_neon_context");
+
+			const linkStep = result.nextAction.steps.find(
+				(s) => s.id === "link_project",
 			);
-			expect(orgStep?.command).toContain("neon orgs list");
-			expect(orgStep?.description).toContain("CLI");
-			// Create step should include --org-id
+			expect(linkStep?.command).toContain("link --agent");
+			expect(linkStep?.description).toContain("next_command_template");
+		}
+	});
+
+	test("preview mode keeps the manual org/project selection and .neon write", async () => {
+		const result = await handleGettingStartedPhase({
+			agent: "claude",
+			cwd: project.dir,
+			hasConnectionString: false,
+			preview: true,
+		});
+
+		if (result.nextAction.type === "agent_action") {
+			const stepIds = result.nextAction.steps.map((s) => s.id);
+			expect(stepIds).toContain("select_org");
+			expect(stepIds).toContain("create_project_if_needed");
+			expect(stepIds).toContain("create_neon_context");
+			expect(stepIds).not.toContain("link_project");
+			// Preview creation is pinned to the beta region.
 			const createStep = result.nextAction.steps.find(
 				(s) => s.id === "create_project_if_needed",
 			);
-			expect(createStep?.command).toContain("--org-id");
+			expect(createStep?.command).toContain("--region-id aws-us-east-2");
 		}
 	});
 
@@ -75,6 +95,7 @@ describe("getting-started phase", () => {
 
 		if (result.nextAction.type === "agent_action") {
 			const stepIds = result.nextAction.steps.map((s) => s.id);
+			expect(stepIds).not.toContain("link_project");
 			expect(stepIds).not.toContain("select_org");
 			expect(stepIds).not.toContain("select_or_create_project");
 			expect(stepIds).not.toContain("pull_env");

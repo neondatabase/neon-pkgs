@@ -25,11 +25,11 @@ export async function ensureNeonctlAuth(
 	if (existingToken) return true;
 
 	try {
-		// Use execa to authenticate with neonctl
-		await execa("npx", ["-y", "neonctl", "me"], {
+		// Run `neon me`, which triggers the OAuth flow when not signed in.
+		await execa("npx", ["-y", "neon", "me"], {
 			// Shows OAuth URL and prompts to the user
 			stdio: "inherit",
-			// Unset CI so neonctl doesn't refuse to open the browser (e.g. when run from agent chat)
+			// Unset CI so the CLI doesn't refuse to open the browser (e.g. when run from agent chat)
 			env: { ...process.env, CI: undefined },
 		});
 		return true;
