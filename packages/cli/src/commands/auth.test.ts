@@ -6,6 +6,10 @@ import {
 	writeFileSync,
 } from "node:fs";
 import type { AddressInfo } from "node:net";
+import {
+	createCredentialStore,
+	KeyringUnavailableError,
+} from "@neon-internals/cli-core/credential_store";
 import type { OAuth2Server } from "oauth2-mock-server";
 import { join } from "path";
 import {
@@ -19,6 +23,7 @@ import {
 } from "vitest";
 import type { NeonApiClient } from "../api.js";
 import * as authModule from "../auth";
+import * as credentialIo from "../credential_io.js";
 import { test } from "../test_utils/fixtures";
 import { startOauthServer } from "../test_utils/oauth_server";
 import { authFlow, deleteCredentialsAt, ensureAuth } from "./auth";
@@ -69,6 +74,40 @@ describe("auth", () => {
 		expect(credentials.access_token).toEqual(expect.any(String));
 		expect(credentials.refresh_token).toEqual(expect.any(String));
 		expect(credentials.user_id).toEqual(expect.any(String));
+	});
+
+	test("refuses to open a browser when keyring is preferred and unavailable", async ({
+		runMockServer,
+	}) => {
+		const server = await runMockServer("main");
+		writeFileSync(
+			join(configDir, "config.json"),
+			JSON.stringify({ credStorage: "keyring" }),
+		);
+		const authSpy = vi.spyOn(authModule, "auth");
+		const storeSpy = vi
+			.spyOn(credentialIo, "storeFor")
+			.mockImplementation((dir: string) =>
+				createCredentialStore(dir, { env: {}, keyring: null }),
+			);
+		try {
+			await expect(
+				authFlow({
+					_: ["auth"],
+					apiHost: `http://localhost:${(server.address() as AddressInfo).port}`,
+					clientId: "test-client-id",
+					configDir,
+					forceAuth: true,
+					oauthHost: `http://localhost:${oauthServer.address().port}`,
+					allowUnsafeTls: true,
+				}),
+			).rejects.toBeInstanceOf(KeyringUnavailableError);
+			expect(authSpy).not.toHaveBeenCalled();
+		} finally {
+			authSpy.mockRestore();
+			storeSpy.mockRestore();
+			rmSync(join(configDir, "config.json"), { force: true });
+		}
 	});
 });
 

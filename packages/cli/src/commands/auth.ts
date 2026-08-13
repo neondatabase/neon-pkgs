@@ -111,6 +111,9 @@ export const authFlow = async ({
 	// sign-in, and worse, the write in between lands on a path chosen from metadata this
 	// refuses to trust.
 	assertProfilesUsable(configDir, profileName);
+	// Packaged binaries cannot load the native addon. Opening a browser and then
+	// failing to save is a used-up sign-in; refuse before the browser opens.
+	storeFor(configDir).assertPreferredWritable();
 
 	const tokenSet = await auth({
 		oauthHost: oauthHost,

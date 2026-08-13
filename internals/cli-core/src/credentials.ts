@@ -113,13 +113,18 @@ export const credentialKind = (
 };
 
 /**
- * The way out of a credentials file that cannot be read.
+ * The way out of a credential that cannot be read.
  *
  * One sentence, shared by every such error, because they all have the same two answers: write
- * a new credential over it, or delete it and start again.
+ * a new credential over it, or remove the broken one and start again.
  */
-export const credentialsRepairHint = (at: CredentialLocation): string =>
-	`Replace it deliberately with \`neon profile create ${at.profile} --force\`, or delete the file.`;
+export const credentialsRepairHint = (
+	at: CredentialLocation,
+	store: "file" | "keyring" = "file",
+): string =>
+	store === "keyring"
+		? `Replace it deliberately with \`neon profile create ${at.profile} --force\`, or remove the profile with \`neon profile remove ${at.profile}\`.`
+		: `Replace it deliberately with \`neon profile create ${at.profile} --force\`, or delete the file.`;
 
 /** A credentials file resolved far enough to authenticate with. */
 export type InterpretedCredentials =

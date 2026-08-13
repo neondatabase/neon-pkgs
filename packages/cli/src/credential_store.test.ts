@@ -20,7 +20,9 @@ import {
 	type KeyringBackend,
 	KeyringUnavailableError,
 	keyringAccount,
+	keyringIdentityPath,
 } from "@neon-internals/cli-core/credential_store";
+import { defaultDir, legacyConfigDir } from "@neon-internals/cli-core/paths";
 import { afterEach, describe, expect, test } from "vitest";
 
 const cleanups: Array<() => void> = [];
@@ -119,6 +121,29 @@ describe("keyringAccount", () => {
 	});
 });
 
+describe("keyringIdentityPath", () => {
+	test("keeps a path already inside the config directory", () => {
+		const dir = "/tmp/neon-config";
+		expect(keyringIdentityPath(dir, `${dir}/credentials.json`)).toBe(
+			resolve(dir, "credentials.json"),
+		);
+	});
+
+	test("does not remap an adopted path", () => {
+		expect(
+			keyringIdentityPath("/tmp/neon-config", "/tmp/other/creds.json"),
+		).toBe(resolve("/tmp/other/creds.json"));
+	});
+
+	test("maps a legacy neonctl path onto the current config directory", () => {
+		const legacy = legacyConfigDir();
+		if (legacy === undefined) return;
+		expect(
+			keyringIdentityPath(defaultDir, join(legacy, "credentials.json")),
+		).toBe(resolve(defaultDir, "credentials.json"));
+	});
+});
+
 describe("createCredentialStore", () => {
 	test("reads and writes a file when storage is file", () => {
 		const dir = makeDir();
@@ -136,10 +161,11 @@ describe("createCredentialStore", () => {
 	test("writes to the keyring and deletes the owned file", () => {
 		const dir = makeDir({
 			"credentials.json": JSON.stringify(key),
+			"config.json": JSON.stringify({ credStorage: "keyring" }),
 		});
 		const ring = memoryKeyring();
 		const store = createCredentialStore(dir, {
-			env: { [NEON_TOKEN_STORAGE]: "keyring" },
+			env: {},
 			keyring: ring,
 		});
 		const location = at(dir);
@@ -148,6 +174,80 @@ describe("createCredentialStore", () => {
 		expect(store.read(location)?.backend).toBe(CRED_STORAGE_KEYRING);
 		expect(store.read(location)?.credentials).toEqual(key);
 		expect(ring.size()).toBe(1);
+	});
+
+	test("NEON_TOKEN_STORAGE=keyring writes the keyring and leaves the file", () => {
+		const dir = makeDir({
+			"credentials.json": JSON.stringify(key),
+		});
+		const ring = memoryKeyring();
+		const store = createCredentialStore(dir, {
+			env: { [NEON_TOKEN_STORAGE]: "keyring" },
+			keyring: ring,
+		});
+		const location = at(dir);
+		store.write(location, key);
+		expect(existsSync(location.path)).toBe(true);
+		expect(store.read(location)?.backend).toBe(CRED_STORAGE_KEYRING);
+		expect(ring.size()).toBe(1);
+	});
+
+	test("a file write does not touch the keyring", () => {
+		const dir = makeDir();
+		let deletes = 0;
+		let gets = 0;
+		const ring = memoryKeyring();
+		const store = createCredentialStore(dir, {
+			env: {},
+			keyring: {
+				get: (service, account) => {
+					gets += 1;
+					return ring.get(service, account);
+				},
+				set: ring.set,
+				delete: (service, account) => {
+					deletes += 1;
+					return ring.delete(service, account);
+				},
+			},
+		});
+		store.write(at(dir), key);
+		expect(deletes).toBe(0);
+		expect(gets).toBe(0);
+		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
+	});
+
+	test("inspect in file mode does not probe the keyring when the file is ok", () => {
+		const dir = makeDir({
+			"credentials.json": JSON.stringify(key),
+		});
+		const store = createCredentialStore(dir, {
+			env: {},
+			keyring: {
+				get: () => {
+					throw new Error("keyring locked");
+				},
+				set: () => undefined,
+				delete: () => false,
+			},
+		});
+		expect(store.inspect(at(dir))).toMatchObject({
+			file: "ok",
+			storage: "file",
+		});
+	});
+
+	test("assertPreferredWritable throws when keyring is preferred and unavailable", () => {
+		const dir = makeDir({
+			"config.json": JSON.stringify({ credStorage: "keyring" }),
+		});
+		const store = createCredentialStore(dir, {
+			env: {},
+			keyring: null,
+		});
+		expect(() => store.assertPreferredWritable()).toThrow(
+			KeyringUnavailableError,
+		);
 	});
 
 	test("does not migrate on read when both stores are present", () => {
@@ -397,6 +497,8 @@ describe("createCredentialStore", () => {
 			store.read(at(dir));
 		} catch (err) {
 			expect(String(err)).not.toContain("napi_LEAKED");
+			expect(String(err)).toMatch(/profile remove DEFAULT/);
+			expect(String(err)).not.toMatch(/delete the file/);
 		}
 	});
 });

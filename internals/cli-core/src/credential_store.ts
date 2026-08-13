@@ -12,10 +12,12 @@
 
 import { createHash } from "node:crypto";
 import { existsSync, rmSync } from "node:fs";
+import { basename, resolve } from "node:path";
 import {
 	CRED_STORAGE_FILE,
 	CRED_STORAGE_KEYRING,
 	type CredStorage,
+	NEON_TOKEN_STORAGE,
 	readCliConfig,
 	resolveCredStorage,
 	type StoragePreference,
@@ -31,7 +33,7 @@ import {
 	type StoredCredentials,
 	writeCredentials,
 } from "./credentials.js";
-import { isOwnedCredentialPath } from "./paths.js";
+import { isInsideConfigDir, isOwnedCredentialPath } from "./paths.js";
 import { listProfiles } from "./profiles.js";
 
 export const KEYRING_SERVICE = "com.neon.neon-cli";
@@ -44,6 +46,25 @@ export type KeyringBackend = {
 
 export const keyringAccount = (path: string): string =>
 	`cli:${createHash("sha256").update(path).digest("hex")}`;
+
+/**
+ * The path whose hash is the keyring account.
+ *
+ * A legacy `neonctl/credentials.json` is owned, but deleting it makes the next
+ * resolve land on `neon/credentials.json`. Hashing the current-dir basename
+ * keeps the item findable after that delete. Adopted paths are not remapped.
+ */
+export const keyringIdentityPath = (
+	configDirectory: string,
+	path: string,
+): string => {
+	const resolved = resolve(path);
+	if (isInsideConfigDir(configDirectory, resolved)) return resolved;
+	if (isOwnedCredentialPath(configDirectory, resolved)) {
+		return resolve(configDirectory, basename(resolved));
+	}
+	return resolved;
+};
 
 export class KeyringUnavailableError extends Error {
 	constructor(
@@ -102,6 +123,7 @@ export type CredentialStore = {
 	): LoadedCredential;
 	delete(at: CredentialLocation): void;
 	migrateTo(mode: CredStorage): MigrateResult;
+	assertPreferredWritable(): void;
 };
 
 const deleteFileIfPresent = (path: string): boolean => {
@@ -112,12 +134,13 @@ const deleteFileIfPresent = (path: string): boolean => {
 
 const inspectKeyringItem = (
 	keyring: KeyringBackend | null,
-	path: string,
+	account: string,
+	label: string,
 ): CredentialsRead => {
 	if (keyring === null) return { kind: "absent" };
-	const raw = keyring.get(KEYRING_SERVICE, keyringAccount(path));
+	const raw = keyring.get(KEYRING_SERVICE, account);
 	if (raw === null) return { kind: "absent" };
-	return parseCredentialsJson(raw, `the OS keyring item for ${path}`);
+	return parseCredentialsJson(raw, `the OS keyring item for ${label}`);
 };
 
 export const createCredentialStore = (
@@ -134,6 +157,18 @@ export const createCredentialStore = (
 		return keyring;
 	};
 
+	const accountFor = (path: string): string =>
+		keyringAccount(keyringIdentityPath(dir, path));
+
+	const assertPreferredWritable = (): void => {
+		if (
+			preference().credStorage === CRED_STORAGE_KEYRING &&
+			keyring === null
+		) {
+			throw new KeyringUnavailableError();
+		}
+	};
+
 	const inspect = (at: CredentialLocation): CredentialListing => {
 		const fileRead = inspectCredentials(at.path);
 		const file =
@@ -146,13 +181,28 @@ export const createCredentialStore = (
 			fileRead.kind === "unusable" ? fileRead.reason : undefined;
 
 		const owned = isOwnedCredentialPath(dir, at.path);
-		const keyringRead = owned
-			? inspectKeyringItem(keyring, at.path)
-			: { kind: "absent" as const };
+		const preferred = preference().credStorage;
+		const shouldProbeKeyring =
+			owned &&
+			keyring !== null &&
+			(preferred === CRED_STORAGE_KEYRING || file !== "ok");
+		let keyringRead: CredentialsRead = { kind: "absent" };
+		if (shouldProbeKeyring) {
+			try {
+				keyringRead = inspectKeyringItem(
+					keyring,
+					accountFor(at.path),
+					at.path,
+				);
+			} catch (err) {
+				if (preferred === CRED_STORAGE_KEYRING && file === "missing") {
+					throw err instanceof Error ? err : new Error(String(err));
+				}
+			}
+		}
 		const keyringReason =
 			keyringRead.kind === "unusable" ? keyringRead.reason : undefined;
 
-		const preferred = preference().credStorage;
 		const fileCreds = fileRead.kind === "ok" ? fileRead.credentials : null;
 		const keyringCreds =
 			keyringRead.kind === "ok" ? keyringRead.credentials : null;
@@ -202,7 +252,13 @@ export const createCredentialStore = (
 			}
 			return null;
 		}
-		const raw = keyring.get(KEYRING_SERVICE, keyringAccount(at.path));
+		let raw: string | null;
+		try {
+			raw = keyring.get(KEYRING_SERVICE, accountFor(at.path));
+		} catch (err) {
+			if (preference().credStorage !== CRED_STORAGE_KEYRING) return null;
+			throw err instanceof Error ? err : new Error(String(err));
+		}
 		if (raw === null) return null;
 		const parsed = parseCredentialsJson(
 			raw,
@@ -211,7 +267,7 @@ export const createCredentialStore = (
 		if (parsed.kind !== "ok") {
 			if (parsed.kind === "unusable") {
 				throw new Error(
-					`${parsed.reason}. ${credentialsRepairHint(at)}`,
+					`${parsed.reason}. ${credentialsRepairHint(at, "keyring")}`,
 				);
 			}
 			return null;
@@ -250,14 +306,17 @@ export const createCredentialStore = (
 
 		if (target === CRED_STORAGE_KEYRING) {
 			const kr = requireKeyring();
-			const account = keyringAccount(at.path);
+			const account = accountFor(at.path);
 			kr.set(KEYRING_SERVICE, account, JSON.stringify(credentials));
 			if (kr.get(KEYRING_SERVICE, account) === null) {
 				throw new Error(
 					`Wrote credentials to the OS keyring for ${at.path} but could not read them back.`,
 				);
 			}
-			if (owned) deleteFileIfPresent(at.path);
+			// An env override is one invocation. Deleting the file would migrate.
+			if (owned && preference().source !== NEON_TOKEN_STORAGE) {
+				deleteFileIfPresent(at.path);
+			}
 			return {
 				credentials,
 				backend: CRED_STORAGE_KEYRING,
@@ -267,9 +326,6 @@ export const createCredentialStore = (
 		}
 
 		writeCredentials(at.path, credentials);
-		if (owned && keyring !== null) {
-			keyring.delete(KEYRING_SERVICE, keyringAccount(at.path));
-		}
 		return {
 			credentials,
 			backend: CRED_STORAGE_FILE,
@@ -281,8 +337,11 @@ export const createCredentialStore = (
 	const del = (at: CredentialLocation): void => {
 		if (!isOwnedCredentialPath(dir, at.path)) return;
 		deleteFileIfPresent(at.path);
-		if (keyring !== null) {
-			keyring.delete(KEYRING_SERVICE, keyringAccount(at.path));
+		if (
+			keyring !== null &&
+			preference().credStorage === CRED_STORAGE_KEYRING
+		) {
+			keyring.delete(KEYRING_SERVICE, accountFor(at.path));
 		}
 	};
 
@@ -318,7 +377,7 @@ export const createCredentialStore = (
 			if (loaded.backend !== mode) {
 				if (mode === CRED_STORAGE_KEYRING) {
 					const kr = requireKeyring();
-					const account = keyringAccount(at.path);
+					const account = accountFor(at.path);
 					kr.set(
 						KEYRING_SERVICE,
 						account,
@@ -349,7 +408,7 @@ export const createCredentialStore = (
 			if (mode === CRED_STORAGE_KEYRING) {
 				deleteFileIfPresent(item.path);
 			} else if (keyring !== null && sawKeyring) {
-				keyring.delete(KEYRING_SERVICE, keyringAccount(item.path));
+				keyring.delete(KEYRING_SERVICE, accountFor(item.path));
 			}
 		}
 
@@ -363,5 +422,6 @@ export const createCredentialStore = (
 		write,
 		delete: del,
 		migrateTo,
+		assertPreferredWritable,
 	};
 };
