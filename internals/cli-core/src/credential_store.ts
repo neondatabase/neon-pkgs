@@ -6,9 +6,9 @@
  * that path, so two profiles never share a slot, and an adopted path outside
  * the config directory stays file-backed forever.
  *
- * Reads never migrate. Switching storage is `migrateTo`, which writes and
- * verifies the destination, deletes the source, then persists `config.json`.
- * Persisting first would leave file mode after a failed keyring clear.
+ * Reads never migrate. Switching storage is `migrateTo`. Destination is
+ * written first. Then: keyring→file clears the keyring before persisting
+ * file mode; file→keyring persists keyring mode before deleting the file.
  */
 
 import { createHash } from "node:crypto";
@@ -464,16 +464,22 @@ export const createCredentialStore = (
 			migrated.push({ name: profile.name, path: at.path });
 		}
 
-		for (const item of migrated) {
-			if (mode === CRED_STORAGE_KEYRING) {
-				deleteFileIfPresent(item.path);
-			} else if (keyringPaths.has(item.path)) {
-				removeKeyringItem(accountFor(item.path), item.path, true);
+		if (mode === CRED_STORAGE_FILE) {
+			for (const item of migrated) {
+				if (keyringPaths.has(item.path)) {
+					removeKeyringItem(accountFor(item.path), item.path, true);
+				}
 			}
 		}
 
 		const config = readCliConfig(dir);
 		writeCliConfig(dir, { ...config, credStorage: mode });
+
+		if (mode === CRED_STORAGE_KEYRING) {
+			for (const item of migrated) {
+				deleteFileIfPresent(item.path);
+			}
+		}
 
 		return { credStorage: mode, migrated, adopted, skipped };
 	};

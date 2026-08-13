@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+	chmodSync,
 	existsSync,
 	mkdtempSync,
 	readFileSync,
@@ -405,7 +406,7 @@ describe("createCredentialStore", () => {
 		expect(store.read(location)).toBeNull();
 	});
 
-	test("migrateTo writes the destination, clears the source, then persists config", () => {
+	test("migrateTo keyring persists config before deleting the credentials file", () => {
 		const dir = makeDir({
 			"credentials.json": JSON.stringify(key),
 		});
@@ -426,6 +427,27 @@ describe("createCredentialStore", () => {
 			credStorage: "keyring",
 		});
 		expect(store.read(location)?.backend).toBe(CRED_STORAGE_KEYRING);
+	});
+
+	test("migrateTo keyring leaves the file when config.json cannot be written", () => {
+		const dir = makeDir({
+			"credentials.json": JSON.stringify(key),
+		});
+		const ring = memoryKeyring();
+		const store = createCredentialStore(dir, {
+			env: {},
+			keyring: ring,
+		});
+		const location = at(dir);
+		try {
+			chmodSync(dir, 0o555);
+			expect(() => store.migrateTo(CRED_STORAGE_KEYRING)).toThrow();
+		} finally {
+			chmodSync(dir, 0o755);
+		}
+		expect(existsSync(location.path)).toBe(true);
+		expect(existsSync(resolve(dir, "config.json"))).toBe(false);
+		expect(ring.size()).toBe(1);
 	});
 
 	test("migrateTo leaves the source when the destination cannot be written", () => {
