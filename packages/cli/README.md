@@ -894,7 +894,7 @@ neon profile storage           # file (default)
 neon profile storage keyring   # write config.json, migrate owned profiles, delete those files
 neon profile storage file      # migrate back to files, clear the keyring items
 neon profile storage file --force
-# persist file mode when a leftover cannot be cleared (item may still be in the OS store; unused)
+# persist file mode when a leftover cannot be read (item may still be in the OS store; unused)
 ```
 
 `NEON_CRED_STORAGE=file|keyring` overrides `config.json` for one invocation and does not
@@ -903,7 +903,7 @@ storage mode is per config directory, not per profile. Setting a mode that disag
 with `NEON_CRED_STORAGE` is refused. `profile storage file` persists when nothing is
 stored. `profile remove` refuses when the OS store cannot confirm a keyring item is
 gone; `--force` on `storage file` persists file mode when a leftover cannot be
-cleared and may leave that leftover unused. File mode does not read a leftover
+read and may leave that leftover unused. File mode does not read a leftover
 keyring item.
 
 When this CLI cannot use the OS keyring (packaged binary, or the native addon is missing),

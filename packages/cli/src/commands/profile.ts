@@ -429,12 +429,6 @@ const storage = async (
 	}
 	const store = storeFor(props.configDir);
 	const current = store.preference();
-	if (current.source === NEON_CRED_STORAGE) {
-		log.warning(
-			`${NEON_CRED_STORAGE} is set and overrides config.json for this invocation.`,
-		);
-	}
-
 	const mode = props.mode?.trim();
 	if (props.force === true && mode !== CRED_STORAGE_FILE) {
 		throw new Error(
@@ -442,6 +436,11 @@ const storage = async (
 		);
 	}
 	if (mode === undefined || mode === "") {
+		if (current.source === NEON_CRED_STORAGE) {
+			log.warning(
+				`${NEON_CRED_STORAGE} is set and overrides config.json for this invocation.`,
+			);
+		}
 		const out = writer(props);
 		if (props.output === "table") {
 			log.info("Credential storage: %s", describePreference(current));
@@ -464,6 +463,11 @@ const storage = async (
 			`${NEON_CRED_STORAGE}=${current.credStorage} overrides config.json for this invocation, so setting storage to ${mode} would not take effect until it is unset. Unset ${NEON_CRED_STORAGE} and retry.`,
 		);
 	}
+	if (current.source === NEON_CRED_STORAGE) {
+		log.warning(
+			`${NEON_CRED_STORAGE} is set and overrides config.json for this invocation.`,
+		);
+	}
 
 	const result = store.migrateTo(mode, { force: props.force === true });
 	if (mode === CRED_STORAGE_KEYRING) {
@@ -471,10 +475,13 @@ const storage = async (
 			"Packaged binaries and older neon releases cannot read keyring profiles.",
 		);
 	}
-	if (props.force === true) {
-		log.warning(
-			"A keyring item that could not be read may still be in the OS store. It is not used while storage is file.",
-		);
+	if (mode === CRED_STORAGE_FILE && result.skipped.length > 0) {
+		for (const skipped of result.skipped) {
+			log.warning(
+				'No credential was readable for profile "%s". If one is in the OS keyring and access was denied, it is still there; it is not used while storage is file.',
+				skipped.name,
+			);
+		}
 	}
 	for (const adopted of result.adopted) {
 		log.warning(

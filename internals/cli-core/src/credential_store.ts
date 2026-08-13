@@ -81,9 +81,11 @@ export class KeyringUnavailableError extends Error {
 }
 
 export class KeyringClearError extends Error {
-	constructor(path: string) {
+	constructor(path: string, kind: "unconfirmed" | "visible" = "visible") {
 		super(
-			`Could not clear the OS keyring item for ${path}. The OS store does not distinguish a missing item from denied access. If you never stored a credential in the keyring, run \`neon profile storage file --force\`. Otherwise unlock the OS keyring and retry.`,
+			kind === "unconfirmed"
+				? `Could not confirm the OS keyring item for ${path} is gone. The OS store does not distinguish a missing item from denied access. Unlock the OS keyring and retry, or run \`neon profile storage file\` to persist file mode (a leftover would not be used).`
+				: `Could not clear the OS keyring item for ${path}. Unlock the OS keyring and retry, or run \`neon profile storage file --force\` (may leave a leftover; it is not used while storage is file).`,
 		);
 		this.name = "KeyringClearError";
 	}
@@ -383,7 +385,7 @@ export const createCredentialStore = (
 			throw err instanceof Error ? err : new Error(String(err));
 		}
 		if (raw === null) {
-			if (required) throw new KeyringClearError(path);
+			if (required) throw new KeyringClearError(path, "unconfirmed");
 			return;
 		}
 		const deleted = keyring.delete(KEYRING_SERVICE, account);
@@ -394,7 +396,7 @@ export const createCredentialStore = (
 			throw err instanceof Error ? err : new Error(String(err));
 		}
 		if (!deleted || still !== null) {
-			throw new KeyringClearError(path);
+			throw new KeyringClearError(path, "visible");
 		}
 	};
 

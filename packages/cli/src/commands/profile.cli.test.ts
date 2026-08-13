@@ -1481,7 +1481,7 @@ describe("profile storage", () => {
 		const dir = makeConfigDir({
 			"config.json": JSON.stringify({ credStorage: "keyring" }),
 		});
-		const { code, stdout } = await runCli([
+		const { code, stdout, stderr } = await runCli([
 			"profile",
 			"storage",
 			"file",
@@ -1498,6 +1498,8 @@ describe("profile storage", () => {
 			adopted: 0,
 			skipped: 1,
 		});
+		expect(stderr).toContain("No credential was readable for profile");
+		expect(stderr).toContain("not used while storage is file");
 		expect(
 			JSON.parse(readFileSync(resolve(dir, "config.json"), "utf8")),
 		).toEqual({ credStorage: "file" });
@@ -1514,6 +1516,9 @@ describe("profile storage", () => {
 		expect(code).toBe(1);
 		expect(stderr).toContain("NEON_CRED_STORAGE=file");
 		expect(stderr).toContain("Unset NEON_CRED_STORAGE");
+		expect(stderr).not.toMatch(
+			/NEON_CRED_STORAGE is set and overrides config.json for this invocation/,
+		);
 		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
 		expect(existsSync(resolve(dir, "config.json"))).toBe(false);
 	});
@@ -1541,7 +1546,7 @@ describe("profile storage", () => {
 		const dir = makeConfigDir({
 			"config.json": JSON.stringify({ credStorage: "keyring" }),
 		});
-		const { code, stdout } = await runCli([
+		const { code, stdout, stderr } = await runCli([
 			"profile",
 			"storage",
 			"file",
@@ -1559,6 +1564,10 @@ describe("profile storage", () => {
 			adopted: 0,
 			skipped: 1,
 		});
+		expect(stderr).toContain("No credential was readable for profile");
+		expect(stderr).not.toContain(
+			"A keyring item that could not be read may still be in the OS store.",
+		);
 		expect(
 			JSON.parse(readFileSync(resolve(dir, "config.json"), "utf8")),
 		).toEqual({ credStorage: "file" });
