@@ -184,11 +184,20 @@ export const builder = (argv: yargs.Argv) =>
 						describe: 'Storage backend: "file" or "keyring"',
 						type: "string",
 					})
+					.option("force", {
+						describe:
+							"Persist file mode even if a keyring item cannot be read",
+						type: "boolean",
+						default: false,
+					})
 					.strict()
 					.check(noPassthrough("profile storage")),
 			async (args) =>
 				await storage(
-					args as unknown as ProfileProps & { mode?: string },
+					args as unknown as ProfileProps & {
+						mode?: string;
+						force?: boolean;
+					},
 				),
 		)
 		.command(
@@ -403,7 +412,9 @@ const describePreference = (preference: StoragePreference): string => {
 	return `${preference.credStorage} (config.json)`;
 };
 
-const storage = async (props: ProfileProps & { mode?: string }) => {
+const storage = async (
+	props: ProfileProps & { mode?: string; force?: boolean },
+) => {
 	rejectApiKeyFlag("storage");
 	const store = storeFor(props.configDir);
 	const current = store.preference();
@@ -433,7 +444,13 @@ const storage = async (props: ProfileProps & { mode?: string }) => {
 		);
 	}
 
-	const result = store.migrateTo(mode);
+	if (props.force === true && mode !== CRED_STORAGE_FILE) {
+		throw new Error(
+			"`--force` only applies to `neon profile storage file`.",
+		);
+	}
+
+	const result = store.migrateTo(mode, { force: props.force === true });
 	for (const adopted of result.adopted) {
 		log.warning(
 			'Left profile "%s" on disk at %s — not created by neon, so it was not migrated.',

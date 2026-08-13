@@ -671,6 +671,60 @@ describe("createCredentialStore", () => {
 		expect(existsSync(resolve(dir, "credentials.json"))).toBe(false);
 	});
 
+	test("migrateTo file throws when keyring is preferred and get returns null", () => {
+		const dir = makeDir({
+			"config.json": JSON.stringify({ credStorage: "keyring" }),
+		});
+		const store = createCredentialStore(dir, {
+			env: {},
+			keyring: {
+				get: () => null,
+				set: () => undefined,
+				delete: () => false,
+			},
+		});
+		expect(() => store.migrateTo(CRED_STORAGE_FILE)).toThrow(
+			KeyringClearError,
+		);
+		expect(
+			JSON.parse(readFileSync(resolve(dir, "config.json"), "utf8")),
+		).toEqual({ credStorage: "keyring" });
+	});
+
+	test("migrateTo file with force persists file mode when the keyring item cannot be read", () => {
+		const dir = makeDir({
+			"config.json": JSON.stringify({ credStorage: "keyring" }),
+		});
+		const leftover = JSON.stringify(key);
+		const items = new Map<string, string>([
+			[
+				`${KEYRING_SERVICE}\0${keyringAccount(resolve(dir, "credentials.json"))}`,
+				leftover,
+			],
+		]);
+		const store = createCredentialStore(dir, {
+			env: {},
+			keyring: {
+				get: () => null,
+				set: () => undefined,
+				delete: (service, account) =>
+					items.delete(`${service}\0${account}`),
+			},
+		});
+		const result = store.migrateTo(CRED_STORAGE_FILE, { force: true });
+		expect(result.skipped).toEqual([
+			{
+				name: "DEFAULT",
+				path: resolve(dir, "credentials.json"),
+				reason: "no stored credential",
+			},
+		]);
+		expect(
+			JSON.parse(readFileSync(resolve(dir, "config.json"), "utf8")),
+		).toEqual({ credStorage: "file" });
+		expect(items.size).toBe(1);
+	});
+
 	test("migrateTo file throws when a keyring item cannot be cleared", () => {
 		const dir = makeDir({
 			"config.json": JSON.stringify({ credStorage: "keyring" }),

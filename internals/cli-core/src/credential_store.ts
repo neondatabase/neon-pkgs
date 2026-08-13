@@ -135,7 +135,7 @@ export type CredentialStore = {
 		options?: { backend?: CredStorage },
 	): LoadedCredential;
 	delete(at: CredentialLocation): void;
-	migrateTo(mode: CredStorage): MigrateResult;
+	migrateTo(mode: CredStorage, options?: { force?: boolean }): MigrateResult;
 	assertPreferredWritable(): void;
 };
 
@@ -394,8 +394,12 @@ export const createCredentialStore = (
 		deleteFileIfPresent(at.path);
 	};
 
-	const migrateTo = (mode: CredStorage): MigrateResult => {
+	const migrateTo = (
+		mode: CredStorage,
+		migrateOptions?: { force?: boolean },
+	): MigrateResult => {
 		if (mode === CRED_STORAGE_KEYRING) requireKeyring();
+		const force = migrateOptions?.force === true;
 
 		const migrated: MigratedProfile[] = [];
 		const adopted: MigratedProfile[] = [];
@@ -414,6 +418,13 @@ export const createCredentialStore = (
 
 			const loaded = read(at);
 			if (loaded === null) {
+				if (
+					mode === CRED_STORAGE_FILE &&
+					keyringMayHoldCopy() &&
+					!force
+				) {
+					throw new KeyringClearError(at.path);
+				}
 				skipped.push({
 					name: profile.name,
 					path: at.path,

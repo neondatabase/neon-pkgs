@@ -1477,6 +1477,72 @@ describe("profile storage", () => {
 		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
 	});
 
+	test("storage file refuses when keyring is preferred and nothing is readable", async () => {
+		const dir = makeConfigDir({
+			"config.json": JSON.stringify({ credStorage: "keyring" }),
+		});
+		const { code, stderr } = await runCli([
+			"profile",
+			"storage",
+			"file",
+			"--config-dir",
+			dir,
+		]);
+		expect(code).toBe(1);
+		expect(stderr).toMatch(
+			/Could not clear the OS keyring item|cannot use the OS keyring/,
+		);
+		expect(
+			JSON.parse(readFileSync(resolve(dir, "config.json"), "utf8")),
+		).toEqual({ credStorage: "keyring" });
+	});
+
+	test("storage file --force persists file mode when the keyring cannot be read", async () => {
+		const dir = makeConfigDir({
+			"config.json": JSON.stringify({ credStorage: "keyring" }),
+		});
+		const { code, stdout } = await runCli([
+			"profile",
+			"storage",
+			"file",
+			"--force",
+			"--config-dir",
+			dir,
+			"--output",
+			"json",
+		]);
+		expect(code).toBe(0);
+		expect(JSON.parse(stdout)).toEqual({
+			credStorage: "file",
+			source: "config.json",
+			migrated: 0,
+			adopted: 0,
+			skipped: 1,
+		});
+		expect(
+			JSON.parse(readFileSync(resolve(dir, "config.json"), "utf8")),
+		).toEqual({ credStorage: "file" });
+	});
+
+	test("--force is refused on storage keyring", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": API_KEY_FILE,
+		});
+		const { code, stderr } = await runCli([
+			"profile",
+			"storage",
+			"keyring",
+			"--force",
+			"--config-dir",
+			dir,
+		]);
+		expect(code).toBe(1);
+		expect(stderr).toContain(
+			"`--force` only applies to `neon profile storage file`.",
+		);
+		expect(existsSync(resolve(dir, "config.json"))).toBe(false);
+	});
+
 	test("an unknown mode is refused and deletes nothing", async () => {
 		const dir = makeConfigDir({
 			"credentials.json": API_KEY_FILE,

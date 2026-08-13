@@ -893,10 +893,14 @@ them back. Reads never migrate; only this command does.
 neon profile storage           # file (default)
 neon profile storage keyring   # write config.json, migrate owned profiles, delete those files
 neon profile storage file      # migrate back to files, clear the keyring items
+neon profile storage file --force
+# persist file mode when a keyring item cannot be read (item may still be in the OS store)
 ```
 
 `NEON_TOKEN_STORAGE=file|keyring` overrides `config.json` for one invocation and does not
-migrate. `--api-key` and `NEON_API_KEY` skip both stores.
+migrate. `--api-key` and `NEON_API_KEY` skip both stores. `profile storage file` and
+`profile remove` refuse when the OS store cannot confirm the item is gone; `--force` on
+`storage file` is the explicit exception and may leave a leftover in the keyring.
 
 A path a profile adopted from outside the config directory stays on disk. Packaged
 binaries and older CLI releases cannot read a keyring profile — after a migrate they

@@ -51,6 +51,7 @@ In `packages/cli` the `.js` form passes `tsc --noEmit` — its `paths` mapping p
 - **A keyring get of `null` or delete of `false` is not proof the item is gone.**
   `@napi-rs/keyring@1.3.0` collapses locked and denied access the same way. `profile
   remove` and `profile storage file` refuse rather than drop the profile.
+  `profile storage file --force` persists file mode anyway.
 - **No logger, no yargs, no API client.** Take a callback or a value instead; the imperative
   shell belongs in the consumer.
 - Unit tests live in `packages/cli`, so the code is covered once rather than three times.
