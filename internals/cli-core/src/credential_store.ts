@@ -171,6 +171,25 @@ export const createCredentialStore = (
 		return keyring;
 	};
 
+	const setKeyringOrRollback = (
+		account: string,
+		credentials: StoredCredentials,
+		label: string,
+	): void => {
+		const kr = requireKeyring();
+		kr.set(KEYRING_SERVICE, account, JSON.stringify(credentials));
+		try {
+			if (kr.get(KEYRING_SERVICE, account) === null) {
+				throw new Error(
+					`Wrote credentials to the OS keyring for ${label} but could not read them back.`,
+				);
+			}
+		} catch (err) {
+			kr.delete(KEYRING_SERVICE, account);
+			throw err instanceof Error ? err : new Error(String(err));
+		}
+	};
+
 	const accountFor = (path: string): string =>
 		keyringAccount(keyringIdentityPath(dir, path));
 
@@ -319,15 +338,8 @@ export const createCredentialStore = (
 			: CRED_STORAGE_FILE;
 
 		if (target === CRED_STORAGE_KEYRING) {
-			const kr = requireKeyring();
 			const account = accountFor(at.path);
-			kr.set(KEYRING_SERVICE, account, JSON.stringify(credentials));
-			if (kr.get(KEYRING_SERVICE, account) === null) {
-				kr.delete(KEYRING_SERVICE, account);
-				throw new Error(
-					`Wrote credentials to the OS keyring for ${at.path} but could not read them back.`,
-				);
-			}
+			setKeyringOrRollback(account, credentials, at.path);
 			if (owned) deleteFileIfPresent(at.path);
 			return {
 				credentials,
@@ -453,19 +465,11 @@ export const createCredentialStore = (
 				}
 				if (loaded.backend !== mode) {
 					if (mode === CRED_STORAGE_KEYRING) {
-						const kr = requireKeyring();
-						const account = accountFor(at.path);
-						kr.set(
-							KEYRING_SERVICE,
-							account,
-							JSON.stringify(loaded.credentials),
+						setKeyringOrRollback(
+							accountFor(at.path),
+							loaded.credentials,
+							`profile "${profile.name}"`,
 						);
-						if (kr.get(KEYRING_SERVICE, account) === null) {
-							kr.delete(KEYRING_SERVICE, account);
-							throw new Error(
-								`Could not verify the keyring write for profile "${profile.name}". Left the credentials file in place.`,
-							);
-						}
 						keyringWrites.push(at.path);
 					} else {
 						writeCredentials(at.path, loaded.credentials);
