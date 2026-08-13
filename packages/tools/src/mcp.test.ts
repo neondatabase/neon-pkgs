@@ -116,6 +116,115 @@ describe("MCP v2 compatibility", () => {
 	});
 });
 
+const captureHandler = () => {
+	type ToolHandler = (
+		input: unknown,
+		context: unknown,
+	) => Promise<McpToolResult>;
+	let handler: ToolHandler | undefined;
+	const server = {
+		registerTool(
+			_name: string,
+			_config: unknown,
+			registeredHandler: ToolHandler,
+		) {
+			handler = registeredHandler;
+		},
+	};
+	return {
+		server,
+		handler: () => {
+			if (handler === undefined) {
+				throw new Error("Expected MCP tool registration.");
+			}
+			return handler;
+		},
+	};
+};
+
+const toolsWithCapturedAuth = () => {
+	const requests: Request[] = [];
+	const tools = createNeonTools({
+		apiKey: "constructor-key",
+		operations: ["listProjects"],
+		fetch: async (input, init) => {
+			requests.push(new Request(input, init));
+			return new Response(
+				JSON.stringify({
+					projects: [{ id: "project-id" }],
+					pagination: {},
+				}),
+				{ headers: { "content-type": "application/json" } },
+			);
+		},
+	});
+	return { requests, tools };
+};
+
+describe("MCP request credentials", () => {
+	test("sends MCP v2 http.authInfo.token as the Bearer credential", async () => {
+		const { server, handler } = captureHandler();
+		const { requests, tools } = toolsWithCapturedAuth();
+		registerNeonToolsV2(server, tools);
+
+		await handler()(
+			{},
+			{ http: { authInfo: { token: "oauth-access-token" } } },
+		);
+
+		expect(requests[0].headers.get("authorization")).toBe(
+			"Bearer oauth-access-token",
+		);
+	});
+
+	test("sends MCP v1 authInfo.token as the Bearer credential", async () => {
+		const { server, handler } = captureHandler();
+		const { requests, tools } = toolsWithCapturedAuth();
+		registerNeonToolsV1(server, tools);
+
+		await handler()({}, { authInfo: { token: "oauth-access-token" } });
+
+		expect(requests[0].headers.get("authorization")).toBe(
+			"Bearer oauth-access-token",
+		);
+	});
+
+	test("uses the constructor credential when MCP extra has no authInfo", async () => {
+		const { server, handler } = captureHandler();
+		const { requests, tools } = toolsWithCapturedAuth();
+		registerNeonToolsV2(server, tools);
+
+		await handler()({}, {});
+
+		expect(requests[0].headers.get("authorization")).toBe(
+			"Bearer constructor-key",
+		);
+	});
+
+	test("does not fall back to the constructor credential when authInfo is present without a token", async () => {
+		const { server, handler } = captureHandler();
+		const { requests, tools } = toolsWithCapturedAuth();
+		registerNeonToolsV2(server, tools);
+
+		const result = await handler()(
+			{},
+			{ http: { authInfo: { token: "" } } },
+		);
+
+		expect(result).toMatchObject({
+			isError: true,
+			structuredContent: {
+				error: {
+					message: expect.stringContaining(
+						"A Neon API key or OAuth access token is required",
+					),
+				},
+			},
+		});
+		expect(requests).toHaveLength(0);
+	});
+});
+
 describe("MCP v1 compatibility", () => {
 	test("registers and calls the same Zod 4 tool schema", async () => {
 		const server = new McpServerV1({

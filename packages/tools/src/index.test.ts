@@ -110,3 +110,125 @@ describe("createNeonTools", () => {
 		).toThrow('Unknown Neon operation "listProjcts"');
 	});
 });
+
+describe("Bearer credentials", () => {
+	const listProjects = (options: Parameters<typeof createNeonTools>[0]) => {
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			...options,
+			operations: ["listProjects"] as const,
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse({ projects: [], pagination: {} });
+			},
+		});
+		return { requests, tools };
+	};
+
+	test("sends an OAuth access token as a Bearer credential", async () => {
+		const { requests, tools } = listProjects({
+			apiKey: "oauth-access-token",
+			operations: ["listProjects"],
+		});
+
+		await tools.listProjects.execute({});
+
+		expect(requests[0].headers.get("authorization")).toBe(
+			"Bearer oauth-access-token",
+		);
+	});
+
+	test("resolves a credential getter on every execute", async () => {
+		let issued = 0;
+		const { requests, tools } = listProjects({
+			apiKey: () => {
+				issued += 1;
+				return `oauth-access-token-${issued}`;
+			},
+			operations: ["listProjects"],
+		});
+
+		await tools.listProjects.execute({});
+		await tools.listProjects.execute({});
+
+		expect(issued).toBeGreaterThanOrEqual(2);
+		expect(requests).toHaveLength(2);
+		expect(requests[0].headers.get("authorization")).toMatch(
+			/^Bearer oauth-access-token-\d+$/,
+		);
+		expect(requests[1].headers.get("authorization")).toMatch(
+			/^Bearer oauth-access-token-\d+$/,
+		);
+		expect(requests[1].headers.get("authorization")).not.toBe(
+			requests[0].headers.get("authorization"),
+		);
+	});
+
+	test("uses an execute-time credential instead of the constructor credential", async () => {
+		const { requests, tools } = listProjects({
+			apiKey: "constructor-key",
+			operations: ["listProjects"],
+		});
+
+		await tools.listProjects.execute({}, { apiKey: "oauth-access-token" });
+
+		expect(requests[0].headers.get("authorization")).toBe(
+			"Bearer oauth-access-token",
+		);
+	});
+
+	test("keeps concurrent execute-time credentials isolated", async () => {
+		const { requests, tools } = listProjects({
+			apiKey: "constructor-key",
+			operations: ["listProjects"],
+		});
+
+		await Promise.all([
+			tools.listProjects.execute({}, { apiKey: "oauth-token-a" }),
+			tools.listProjects.execute({}, { apiKey: "oauth-token-b" }),
+		]);
+
+		expect(
+			[
+				...requests.map((request) =>
+					request.headers.get("authorization"),
+				),
+			].sort(),
+		).toEqual(["Bearer oauth-token-a", "Bearer oauth-token-b"]);
+	});
+
+	test("requires a credential at execute when none was given at construction", async () => {
+		const { requests, tools } = listProjects({
+			operations: ["listProjects"],
+		});
+
+		await expect(tools.listProjects.execute({})).rejects.toThrow(
+			"A Neon API key or OAuth access token is required",
+		);
+		expect(requests).toHaveLength(0);
+	});
+
+	test("does not fall back to the constructor credential when execute overrides it with an empty value", async () => {
+		const { requests, tools } = listProjects({
+			apiKey: "constructor-key",
+			operations: ["listProjects"],
+		});
+
+		await expect(
+			tools.listProjects.execute({}, { apiKey: "" }),
+		).rejects.toThrow("A Neon API key or OAuth access token is required");
+		expect(requests).toHaveLength(0);
+	});
+
+	test("does not fall back to the constructor credential when an execute-time getter resolves empty", async () => {
+		const { requests, tools } = listProjects({
+			apiKey: "constructor-key",
+			operations: ["listProjects"],
+		});
+
+		await expect(
+			tools.listProjects.execute({}, { apiKey: () => "" }),
+		).rejects.toThrow("A Neon API key or OAuth access token is required");
+		expect(requests).toHaveLength(0);
+	});
+});

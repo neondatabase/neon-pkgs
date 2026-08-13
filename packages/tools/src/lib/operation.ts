@@ -1,5 +1,6 @@
-import type { Client } from "@neon/sdk/raw";
+import { type Client, createClient } from "@neon/sdk/raw";
 import type * as z from "zod";
+import { type NeonBearerCredential, requireBearerCredential } from "./auth.js";
 import { toToolResult } from "./result.js";
 
 export interface NeonToolAnnotations {
@@ -11,6 +12,7 @@ export interface NeonToolAnnotations {
 
 export interface NeonToolExecutionContext {
 	signal?: AbortSignal;
+	apiKey?: NeonBearerCredential;
 }
 
 export interface NeonToolMetadata {
@@ -114,7 +116,28 @@ export const bindOperation = <
 	metadata: operation.metadata,
 	async execute(input, context) {
 		const parsed = await operation.inputSchema.parseAsync(input);
-		const result = await operation.invoke(client, parsed, context?.signal);
+		const activeClient =
+			context !== undefined && "apiKey" in context
+				? clientWithCredential(client, context.apiKey)
+				: client;
+		const result = await operation.invoke(
+			activeClient,
+			parsed,
+			context?.signal,
+		);
 		return toToolResult(result);
 	},
 });
+
+const clientWithCredential = (
+	client: Client,
+	apiKey: NeonBearerCredential | undefined,
+): Client => {
+	if (apiKey === undefined) {
+		throw new TypeError("A Neon API key or OAuth access token is required");
+	}
+	return createClient({
+		...client.getConfig(),
+		auth: requireBearerCredential(apiKey),
+	});
+};

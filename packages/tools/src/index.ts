@@ -1,4 +1,9 @@
 import { createNeonClient, type NeonConfig, NeonError } from "@neon/sdk";
+import {
+	missingBearerCredential,
+	type NeonBearerCredential,
+	requireBearerCredential,
+} from "./lib/auth.js";
 import type { NeonTool } from "./lib/operation.js";
 import {
 	type NeonOperationId,
@@ -6,6 +11,7 @@ import {
 	operationIds,
 } from "./operations.gen.js";
 
+export type { NeonBearerCredential } from "./lib/auth.js";
 export type {
 	JsonSafe,
 	JsonSafeBlob,
@@ -27,7 +33,9 @@ export type NeonTools<Operations extends readonly NeonOperationId[]> = {
 };
 
 export interface NeonToolsClientOptions
-	extends Pick<NeonConfig, "apiKey" | "baseUrl" | "fetch"> {}
+	extends Pick<NeonConfig, "baseUrl" | "fetch"> {
+	apiKey?: NeonBearerCredential;
+}
 
 export interface CreateNeonToolsOptions<
 	Operations extends readonly NeonOperationId[],
@@ -37,7 +45,10 @@ export interface CreateNeonToolsOptions<
 
 const createRawClient = (options: NeonToolsClientOptions) =>
 	createNeonClient({
-		apiKey: options.apiKey,
+		apiKey:
+			options.apiKey === undefined
+				? missingBearerCredential
+				: requireBearerCredential(options.apiKey),
 		...(options.baseUrl === undefined ? {} : { baseUrl: options.baseUrl }),
 		...(options.fetch === undefined ? {} : { fetch: options.fetch }),
 	}).client;

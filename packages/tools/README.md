@@ -8,6 +8,8 @@ npm install @neon/tools
 
 ## Create tools
 
+`apiKey` is a Bearer credential: a Neon API key or a Neon OAuth access token. A function is called on every request, which is how short-lived OAuth tokens get refreshed. A credential is required when a tool executes — at construction, on `execute()`, or from MCP `authInfo` — and an empty value is rejected rather than ignored.
+
 ```ts
 import { createNeonTools } from "@neon/tools";
 
@@ -24,6 +26,26 @@ const tools = createNeonTools({
 const result = await tools.listProjects.execute({
 	query: { limit: 10 },
 });
+```
+
+OAuth access tokens use the same option. Pass a getter when the token can change:
+
+```ts
+const tools = createNeonTools({
+	apiKey: () => oauth.getAccessToken(),
+	operations,
+});
+```
+
+Or supply the token per call:
+
+```ts
+const tools = createNeonTools({ operations });
+
+await tools.listProjects.execute(
+	{ query: { limit: 10 } },
+	{ apiKey: oauthAccessToken },
+);
 ```
 
 The returned record is keyed by OpenAPI operation ID. Each tool includes its generated Zod 4 `inputSchema`, snake-case `id`, title, description, safety annotations, stability metadata, and an `execute()` function. Inputs group API parameters under `path`, `query`, `headers`, and `body`.
@@ -68,6 +90,17 @@ const tools = createNeonTools({
 
 registerNeonTools(server, tools);
 ```
+
+For a remote MCP server that already authenticated the client, omit `apiKey` at construction. `registerNeonTools` sends `authInfo.token` as the Bearer credential: MCP 2.x `http.authInfo.token`, MCP 1.x `authInfo.token`. The host must put a Neon API key or Neon OAuth access token there. A present `authInfo` with an empty token is an error, not a fall back to a constructor key.
+
+```ts
+const tools = createNeonTools({
+	operations: ["listProjects", "createProject"] as const,
+});
+registerNeonTools(server, tools);
+```
+
+This package does not implement an OAuth authorization server. That is [mcp-server-neon](https://github.com/neondatabase/mcp-server-neon) at `mcp.neon.tech`.
 
 Existing MCP 1.x servers can use the version-specific entry point:
 

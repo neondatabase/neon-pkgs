@@ -23,6 +23,15 @@ tools.listProjects.execute({ query: { limit: "one" } });
 const listProjects = createNeonTool("listProjects", { apiKey: "test-key" });
 listProjects.execute({ query: { search: "demo" } });
 
+const oauthTools = createNeonTools({
+	operations: ["listProjects"] as const,
+});
+oauthTools.listProjects.execute({}, { apiKey: "oauth-access-token" });
+oauthTools.listProjects.execute(
+	{},
+	{ apiKey: async () => "oauth-access-token" },
+);
+
 // @ts-expect-error createNeonTool preserves the operation request schema
 listProjects.execute({ body: { project: { name: "wrong-operation" } } });
 

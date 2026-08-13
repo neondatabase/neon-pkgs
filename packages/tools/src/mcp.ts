@@ -13,16 +13,53 @@ export interface McpToolServer {
 const errorMessage = (error: unknown): string =>
 	error instanceof Error ? error.message : String(error);
 
-const signalFrom = (context: unknown): AbortSignal | undefined => {
-	if (
-		typeof context !== "object" ||
-		context === null ||
-		!("signal" in context) ||
-		!(context.signal instanceof AbortSignal)
-	) {
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+	typeof value === "object" && value !== null;
+
+const authInfoFrom = (context: unknown): unknown => {
+	if (!isRecord(context)) {
 		return undefined;
 	}
-	return context.signal;
+	if (isRecord(context.http) && "authInfo" in context.http) {
+		return context.http.authInfo;
+	}
+	if ("authInfo" in context) {
+		return context.authInfo;
+	}
+	return undefined;
+};
+
+const bearerCredentialFromMcpContext = (
+	context: unknown,
+): string | undefined => {
+	const authInfo = authInfoFrom(context);
+	if (authInfo === undefined) {
+		return undefined;
+	}
+	if (
+		!isRecord(authInfo) ||
+		typeof authInfo.token !== "string" ||
+		authInfo.token.length === 0
+	) {
+		throw new TypeError("A Neon API key or OAuth access token is required");
+	}
+	return authInfo.token;
+};
+
+const signalFrom = (context: unknown): AbortSignal | undefined => {
+	if (!isRecord(context)) {
+		return undefined;
+	}
+	if (context.signal instanceof AbortSignal) {
+		return context.signal;
+	}
+	if (
+		isRecord(context.mcpReq) &&
+		context.mcpReq.signal instanceof AbortSignal
+	) {
+		return context.mcpReq.signal;
+	}
+	return undefined;
 };
 
 export const registerNeonTools = (
@@ -48,8 +85,10 @@ export const registerNeonTools = (
 				context: unknown,
 			): Promise<McpToolResult> => {
 				try {
+					const apiKey = bearerCredentialFromMcpContext(context);
 					const result = await tool.execute(input, {
 						signal: signalFrom(context),
+						...(apiKey === undefined ? {} : { apiKey }),
 					});
 					const structuredContent = { data: result.data };
 					return {
