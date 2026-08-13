@@ -225,9 +225,7 @@ export const createCredentialStore = (
 		const owned = isOwnedCredentialPath(dir, at.path);
 		const preferred = preference().credStorage;
 		const shouldProbeKeyring =
-			owned &&
-			keyring !== null &&
-			(preferred === CRED_STORAGE_KEYRING || file !== "ok");
+			owned && keyring !== null && preferred === CRED_STORAGE_KEYRING;
 		let keyringRead: CredentialsRead = { kind: "absent" };
 		if (shouldProbeKeyring) {
 			try {
@@ -237,7 +235,7 @@ export const createCredentialStore = (
 					at.path,
 				);
 			} catch (err) {
-				if (preferred === CRED_STORAGE_KEYRING && file === "missing") {
+				if (file === "missing") {
 					throw err instanceof Error ? err : new Error(String(err));
 				}
 			}
@@ -252,12 +250,6 @@ export const createCredentialStore = (
 		let storage: CredStorage | "-" = "-";
 		let credentials: StoredCredentials | null = null;
 		if (preferred === CRED_STORAGE_KEYRING && keyringCreds !== null) {
-			storage = CRED_STORAGE_KEYRING;
-			credentials = keyringCreds;
-		} else if (preferred === CRED_STORAGE_FILE && fileCreds !== null) {
-			storage = CRED_STORAGE_FILE;
-			credentials = fileCreds;
-		} else if (keyringCreds !== null) {
 			storage = CRED_STORAGE_KEYRING;
 			credentials = keyringCreds;
 		} else if (fileCreds !== null) {
@@ -331,9 +323,7 @@ export const createCredentialStore = (
 			if (fromKeyring !== null) return fromKeyring;
 			return readFile(at);
 		}
-		const fromFile = readFile(at);
-		if (fromFile !== null) return fromFile;
-		return readKeyring(at);
+		return readFile(at);
 	};
 
 	const write = (

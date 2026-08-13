@@ -416,6 +416,12 @@ const storage = async (
 	props: ProfileProps & { mode?: string; force?: boolean },
 ) => {
 	rejectApiKeyFlag("storage");
+	const named = props.profile?.trim();
+	if (named) {
+		throw new Error(
+			`--profile does not apply to \`profile storage\`, which sets storage for every profile. Drop --profile.`,
+		);
+	}
 	const store = storeFor(props.configDir);
 	const current = store.preference();
 	if (current.source === "NEON_TOKEN_STORAGE") {

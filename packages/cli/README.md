@@ -898,9 +898,11 @@ neon profile storage file --force
 ```
 
 `NEON_TOKEN_STORAGE=file|keyring` overrides `config.json` for one invocation and does not
-migrate. `--api-key` and `NEON_API_KEY` skip both stores. `profile storage file` and
+migrate. `--api-key` and `NEON_API_KEY` skip both stores. `--profile` does not apply —
+storage mode is per config directory, not per profile. `profile storage file` and
 `profile remove` refuse when the OS store cannot confirm the item is gone; `--force` on
-`storage file` is the explicit exception and may leave a leftover in the keyring.
+`storage file` is the explicit exception and may leave a leftover in the keyring. File
+mode does not read a leftover keyring item.
 
 When this CLI cannot use the OS keyring (packaged binary, or the native addon is missing),
 `neon profile storage file --force` still persists file mode. The same hatch with an

@@ -333,6 +333,46 @@ describe("createCredentialStore", () => {
 		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
 	});
 
+	test("file preference does not select a leftover keyring item", () => {
+		const dir = makeDir({
+			"config.json": JSON.stringify({ credStorage: "file" }),
+		});
+		const ring = memoryKeyring();
+		ring.set(
+			KEYRING_SERVICE,
+			keyringAccount(resolve(dir, "credentials.json")),
+			JSON.stringify({ type: "api_key", api_key: "napi_old" }),
+		);
+		const store = createCredentialStore(dir, {
+			env: {},
+			keyring: ring,
+		});
+		expect(store.read(at(dir))).toBeNull();
+		expect(store.inspect(at(dir))).toMatchObject({
+			file: "missing",
+			storage: "-",
+			credentials: null,
+		});
+	});
+
+	test("inspect in file mode does not probe the keyring when the file is missing", () => {
+		const dir = makeDir();
+		const store = createCredentialStore(dir, {
+			env: {},
+			keyring: {
+				get: () => {
+					throw new Error("keyring locked");
+				},
+				set: () => undefined,
+				delete: () => false,
+			},
+		});
+		expect(store.inspect(at(dir))).toMatchObject({
+			file: "missing",
+			storage: "-",
+		});
+	});
+
 	test("inspect in file mode does not probe the keyring when the file is ok", () => {
 		const dir = makeDir({
 			"credentials.json": JSON.stringify(key),
@@ -946,6 +986,18 @@ describe("createCredentialStore", () => {
 			JSON.parse(readFileSync(resolve(dir, "config.json"), "utf8")),
 		).toEqual({ credStorage: "file" });
 		expect(items.size).toBe(1);
+		const after = createCredentialStore(dir, {
+			env: {},
+			keyring: {
+				get: (service, account) =>
+					items.get(`${service}\0${account}`) ?? null,
+				set: () => undefined,
+				delete: (service, account) =>
+					items.delete(`${service}\0${account}`),
+			},
+		});
+		expect(after.read(at(dir))).toBeNull();
+		expect(after.inspect(at(dir)).storage).toBe("-");
 	});
 
 	test("migrateTo file throws when a keyring item cannot be cleared", () => {

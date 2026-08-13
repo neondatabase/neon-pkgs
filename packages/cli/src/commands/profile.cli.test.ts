@@ -1561,6 +1561,35 @@ describe("profile storage", () => {
 		expect(existsSync(resolve(dir, "config.json"))).toBe(false);
 	});
 
+	test("--profile is refused because storage is global", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": API_KEY_FILE,
+			"credentials.work.json": API_KEY_FILE,
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: {
+					DEFAULT: { credentials: "credentials.json" },
+					work: { credentials: "credentials.work.json" },
+				},
+			}),
+		});
+		const { code, stderr } = await runCli([
+			"profile",
+			"storage",
+			"keyring",
+			"--profile",
+			"work",
+			"--config-dir",
+			dir,
+		]);
+		expect(code).toBe(1);
+		expect(stderr).toContain("sets storage for every profile");
+		expect(stderr).toContain("Drop --profile");
+		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
+		expect(existsSync(resolve(dir, "credentials.work.json"))).toBe(true);
+		expect(existsSync(resolve(dir, "config.json"))).toBe(false);
+	});
+
 	test("an unknown mode is refused and deletes nothing", async () => {
 		const dir = makeConfigDir({
 			"credentials.json": API_KEY_FILE,
