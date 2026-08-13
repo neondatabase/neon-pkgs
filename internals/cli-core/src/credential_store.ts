@@ -323,6 +323,7 @@ export const createCredentialStore = (
 			const account = accountFor(at.path);
 			kr.set(KEYRING_SERVICE, account, JSON.stringify(credentials));
 			if (kr.get(KEYRING_SERVICE, account) === null) {
+				kr.delete(KEYRING_SERVICE, account);
 				throw new Error(
 					`Wrote credentials to the OS keyring for ${at.path} but could not read them back.`,
 				);
@@ -410,74 +411,89 @@ export const createCredentialStore = (
 		const adopted: MigratedProfile[] = [];
 		const skipped: SkippedProfile[] = [];
 		const keyringPaths = new Set<string>();
+		const keyringWrites: string[] = [];
 
-		for (const profile of listProfiles(dir)) {
-			const at = {
-				path: profile.credentialsPath,
-				profile: profile.name,
-			};
-			if (!isOwnedCredentialPath(dir, at.path)) {
-				adopted.push({ name: profile.name, path: at.path });
-				continue;
+		const rollbackKeyringWrites = (): void => {
+			if (keyring === null) return;
+			for (const path of keyringWrites) {
+				keyring.delete(KEYRING_SERVICE, accountFor(path));
 			}
+		};
 
-			const loaded = read(at);
-			if (loaded === null) {
-				if (
-					mode === CRED_STORAGE_FILE &&
-					keyringMayHoldCopy() &&
-					!force
-				) {
-					throw new KeyringClearError(at.path);
+		try {
+			for (const profile of listProfiles(dir)) {
+				const at = {
+					path: profile.credentialsPath,
+					profile: profile.name,
+				};
+				if (!isOwnedCredentialPath(dir, at.path)) {
+					adopted.push({ name: profile.name, path: at.path });
+					continue;
 				}
-				skipped.push({
-					name: profile.name,
-					path: at.path,
-					reason: "no stored credential",
-				});
-				continue;
-			}
 
-			if (loaded.backend === CRED_STORAGE_KEYRING) {
-				keyringPaths.add(at.path);
-			}
-			if (loaded.backend !== mode) {
-				if (mode === CRED_STORAGE_KEYRING) {
-					const kr = requireKeyring();
-					const account = accountFor(at.path);
-					kr.set(
-						KEYRING_SERVICE,
-						account,
-						JSON.stringify(loaded.credentials),
-					);
-					if (kr.get(KEYRING_SERVICE, account) === null) {
-						throw new Error(
-							`Could not verify the keyring write for profile "${profile.name}". Left the credentials file in place.`,
-						);
+				const loaded = read(at);
+				if (loaded === null) {
+					if (
+						mode === CRED_STORAGE_FILE &&
+						keyringMayHoldCopy() &&
+						!force
+					) {
+						throw new KeyringClearError(at.path);
 					}
-				} else {
-					writeCredentials(at.path, loaded.credentials);
-					const verify = inspectCredentials(at.path);
-					if (verify.kind !== "ok") {
-						throw new Error(
-							`Could not verify the credentials file write for profile "${profile.name}". Left the keyring item in place.`,
+					skipped.push({
+						name: profile.name,
+						path: at.path,
+						reason: "no stored credential",
+					});
+					continue;
+				}
+
+				if (loaded.backend === CRED_STORAGE_KEYRING) {
+					keyringPaths.add(at.path);
+				}
+				if (loaded.backend !== mode) {
+					if (mode === CRED_STORAGE_KEYRING) {
+						const kr = requireKeyring();
+						const account = accountFor(at.path);
+						kr.set(
+							KEYRING_SERVICE,
+							account,
+							JSON.stringify(loaded.credentials),
 						);
+						if (kr.get(KEYRING_SERVICE, account) === null) {
+							kr.delete(KEYRING_SERVICE, account);
+							throw new Error(
+								`Could not verify the keyring write for profile "${profile.name}". Left the credentials file in place.`,
+							);
+						}
+						keyringWrites.push(at.path);
+					} else {
+						writeCredentials(at.path, loaded.credentials);
+						const verify = inspectCredentials(at.path);
+						if (verify.kind !== "ok") {
+							throw new Error(
+								`Could not verify the credentials file write for profile "${profile.name}". Left the keyring item in place.`,
+							);
+						}
 					}
 				}
+				migrated.push({ name: profile.name, path: at.path });
 			}
-			migrated.push({ name: profile.name, path: at.path });
-		}
 
-		if (mode === CRED_STORAGE_FILE) {
-			for (const item of migrated) {
-				const known = mayHold || keyringPaths.has(item.path);
-				if (!known) continue;
-				removeKeyringItem(accountFor(item.path), item.path, !force);
+			if (mode === CRED_STORAGE_FILE) {
+				for (const item of migrated) {
+					const known = mayHold || keyringPaths.has(item.path);
+					if (!known) continue;
+					removeKeyringItem(accountFor(item.path), item.path, !force);
+				}
 			}
-		}
 
-		const config = readCliConfig(dir);
-		writeCliConfig(dir, { ...config, credStorage: mode });
+			const config = readCliConfig(dir);
+			writeCliConfig(dir, { ...config, credStorage: mode });
+		} catch (err) {
+			rollbackKeyringWrites();
+			throw err instanceof Error ? err : new Error(String(err));
+		}
 
 		if (mode === CRED_STORAGE_KEYRING) {
 			for (const item of migrated) {

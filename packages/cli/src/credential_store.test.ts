@@ -161,6 +161,27 @@ describe("createCredentialStore", () => {
 		expect(JSON.parse(readFileSync(location.path, "utf8"))).toEqual(key);
 	});
 
+	test("rolls back a keyring write that cannot be read back", () => {
+		const dir = makeDir();
+		const items = new Map<string, string>();
+		const store = createCredentialStore(dir, {
+			env: { [NEON_TOKEN_STORAGE]: "keyring" },
+			keyring: {
+				get: () => null,
+				set: (service, account, password) => {
+					items.set(`${service}\0${account}`, password);
+				},
+				delete: (service, account) =>
+					items.delete(`${service}\0${account}`),
+			},
+		});
+		expect(() => store.write(at(dir), key)).toThrow(
+			/could not read them back/,
+		);
+		expect(items.size).toBe(0);
+		expect(existsSync(resolve(dir, "credentials.json"))).toBe(false);
+	});
+
 	test("writes to the keyring and deletes the owned file", () => {
 		const dir = makeDir({
 			"credentials.json": JSON.stringify(key),
@@ -447,7 +468,48 @@ describe("createCredentialStore", () => {
 		}
 		expect(existsSync(location.path)).toBe(true);
 		expect(existsSync(resolve(dir, "config.json"))).toBe(false);
-		expect(ring.size()).toBe(1);
+		expect(ring.size()).toBe(0);
+	});
+
+	test("migrateTo keyring rolls back earlier profiles when a later write fails", () => {
+		const dir = makeDir({
+			"credentials.json": JSON.stringify(key),
+			"credentials.work.json": JSON.stringify({
+				type: "api_key",
+				api_key: "napi_work",
+				user_id: "u2",
+			}),
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: {
+					DEFAULT: { credentials: "credentials.json" },
+					work: { credentials: "credentials.work.json" },
+				},
+			}),
+		});
+		const items = new Map<string, string>();
+		let sets = 0;
+		const store = createCredentialStore(dir, {
+			env: {},
+			keyring: {
+				get: (service, account) =>
+					items.get(`${service}\0${account}`) ?? null,
+				set: (service, account, password) => {
+					sets += 1;
+					if (sets > 1) throw new Error("keyring full");
+					items.set(`${service}\0${account}`, password);
+				},
+				delete: (service, account) =>
+					items.delete(`${service}\0${account}`),
+			},
+		});
+		expect(() => store.migrateTo(CRED_STORAGE_KEYRING)).toThrow(
+			/keyring full/,
+		);
+		expect(items.size).toBe(0);
+		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
+		expect(existsSync(resolve(dir, "credentials.work.json"))).toBe(true);
+		expect(existsSync(resolve(dir, "config.json"))).toBe(false);
 	});
 
 	test("migrateTo leaves the source when the destination cannot be written", () => {
