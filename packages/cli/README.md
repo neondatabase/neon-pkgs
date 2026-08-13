@@ -894,7 +894,7 @@ neon profile storage           # file (default)
 neon profile storage keyring   # write config.json, migrate owned profiles, delete those files
 neon profile storage file      # migrate back to files, clear the keyring items
 neon profile storage file --force
-# persist file mode when a keyring item cannot be read (item may still be in the OS store)
+# persist file mode when a leftover cannot be cleared (item may still be in the OS store; unused)
 ```
 
 `NEON_CRED_STORAGE=file|keyring` overrides `config.json` for one invocation and does not

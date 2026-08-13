@@ -473,7 +473,7 @@ const storage = async (
 	}
 	if (props.force === true) {
 		log.warning(
-			"A keyring item that could not be read may still be in the OS store. It is not used while storage is file. `neon profile remove <name>` clears it if the OS store lets this CLI see it.",
+			"A keyring item that could not be read may still be in the OS store. It is not used while storage is file.",
 		);
 	}
 	for (const adopted of result.adopted) {
