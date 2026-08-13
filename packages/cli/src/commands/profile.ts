@@ -425,6 +425,11 @@ const storage = async (
 	}
 
 	const mode = props.mode?.trim();
+	if (props.force === true && mode !== CRED_STORAGE_FILE) {
+		throw new Error(
+			"`--force` only applies to `neon profile storage file`.",
+		);
+	}
 	if (mode === undefined || mode === "") {
 		const out = writer(props);
 		if (props.output === "table") {
@@ -441,12 +446,6 @@ const storage = async (
 	if (!isCredStorage(mode)) {
 		throw new Error(
 			`Unknown storage mode "${mode}". Expected "${CRED_STORAGE_FILE}" or "${CRED_STORAGE_KEYRING}".`,
-		);
-	}
-
-	if (props.force === true && mode !== CRED_STORAGE_FILE) {
-		throw new Error(
-			"`--force` only applies to `neon profile storage file`.",
 		);
 	}
 

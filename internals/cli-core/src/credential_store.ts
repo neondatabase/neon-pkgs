@@ -7,7 +7,8 @@
  * the config directory stays file-backed forever.
  *
  * Reads never migrate. Switching storage is `migrateTo`, which writes and
- * verifies the destination, persists `config.json`, then deletes the source.
+ * verifies the destination, deletes the source, then persists `config.json`.
+ * Persisting first would leave file mode after a failed keyring clear.
  */
 
 import { createHash } from "node:crypto";
@@ -463,9 +464,6 @@ export const createCredentialStore = (
 			migrated.push({ name: profile.name, path: at.path });
 		}
 
-		const config = readCliConfig(dir);
-		writeCliConfig(dir, { ...config, credStorage: mode });
-
 		for (const item of migrated) {
 			if (mode === CRED_STORAGE_KEYRING) {
 				deleteFileIfPresent(item.path);
@@ -473,6 +471,9 @@ export const createCredentialStore = (
 				removeKeyringItem(accountFor(item.path), item.path, true);
 			}
 		}
+
+		const config = readCliConfig(dir);
+		writeCliConfig(dir, { ...config, credStorage: mode });
 
 		return { credStorage: mode, migrated, adopted, skipped };
 	};

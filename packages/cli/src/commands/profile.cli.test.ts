@@ -1524,6 +1524,23 @@ describe("profile storage", () => {
 		).toEqual({ credStorage: "file" });
 	});
 
+	test("--force is refused on the show form", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": API_KEY_FILE,
+		});
+		const { code, stderr } = await runCli([
+			"profile",
+			"storage",
+			"--force",
+			"--config-dir",
+			dir,
+		]);
+		expect(code).toBe(1);
+		expect(stderr).toContain(
+			"`--force` only applies to `neon profile storage file`.",
+		);
+	});
+
 	test("--force is refused on storage keyring", async () => {
 		const dir = makeConfigDir({
 			"credentials.json": API_KEY_FILE,

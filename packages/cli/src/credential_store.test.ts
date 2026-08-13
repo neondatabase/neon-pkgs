@@ -405,7 +405,7 @@ describe("createCredentialStore", () => {
 		expect(store.read(location)).toBeNull();
 	});
 
-	test("migrateTo writes the destination, then config, then deletes the source", () => {
+	test("migrateTo writes the destination, clears the source, then persists config", () => {
 		const dir = makeDir({
 			"credentials.json": JSON.stringify(key),
 		});
@@ -750,7 +750,7 @@ describe("createCredentialStore", () => {
 		);
 		expect(
 			JSON.parse(readFileSync(resolve(dir, "config.json"), "utf8")),
-		).toEqual({ credStorage: "file" });
+		).toEqual({ credStorage: "keyring" });
 		expect(
 			JSON.parse(readFileSync(resolve(dir, "credentials.json"), "utf8")),
 		).toEqual(key);
