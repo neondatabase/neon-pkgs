@@ -20,6 +20,9 @@ const getProjectTools = (options: NeonToolsClientOptions = {}) => {
 		operations: ["getProject"] as const,
 		fetch: async (input, init) => {
 			requests.push(new Request(input, init));
+			if (options.fetch) {
+				return options.fetch(input, init);
+			}
 			return jsonResponse({ project: { id: "project-id" } });
 		},
 	});
@@ -435,5 +438,519 @@ describe("path injection", () => {
 		expect(requests[0].url).toBe(
 			"https://console.neon.tech/api/v2/projects/granted-project",
 		);
+	});
+});
+
+describe("description overrides (createNeonTool and contracts)", () => {
+	test("applies a map override on createNeonTool", () => {
+		const tool = createNeonTool("listProjects", {
+			apiKey: "test-key",
+			descriptions: {
+				listProjects: "List Neon projects in your account.",
+			},
+		});
+
+		expect(tool.description).toBe("List Neon projects in your account.");
+	});
+
+	test("passes operationId, id, title, and the generated description to a function", () => {
+		const generated = createNeonTool("deleteProject", {
+			apiKey: "test-key",
+		});
+		const seen: unknown[] = [];
+
+		createNeonTools({
+			apiKey: "test-key",
+			operations: ["deleteProject"] as const,
+			descriptions: (tool) => {
+				seen.push(tool);
+				return `${tool.title}: do not run autonomously.`;
+			},
+		});
+
+		expect(seen).toEqual([
+			{
+				operationId: "deleteProject",
+				id: "delete_project",
+				title: generated.title,
+				description: generated.description,
+			},
+		]);
+	});
+
+	test("keeps generated text when the map is empty", () => {
+		const generated = createNeonTool("listProjects", {
+			apiKey: "test-key",
+		});
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			operations: ["listProjects"] as const,
+			descriptions: {},
+		});
+
+		expect(tools.listProjects.description).toBe(generated.description);
+	});
+
+	test("rejects a non-string map value", () => {
+		expect(() =>
+			createNeonTools({
+				apiKey: "test-key",
+				operations: ["listProjects"] as const,
+				descriptions: {
+					listProjects: 1 as unknown as string,
+				},
+			}),
+		).toThrow("Neon tool description overrides must be strings");
+	});
+});
+
+describe("onExecute failure and isolation", () => {
+	test("does not fetch when the hook throws before execute", async () => {
+		const { requests, tools } = getProjectTools({
+			onExecute: async () => {
+				throw new Error("tracker down");
+			},
+		});
+
+		await expect(
+			tools.getProject.execute({ path: { project_id: "project-id" } }),
+		).rejects.toThrow("tracker down");
+		expect(requests).toHaveLength(0);
+	});
+
+	test("fetches before a hook error thrown after execute", async () => {
+		const { requests, tools } = getProjectTools({
+			onExecute: async ({ execute }) => {
+				await execute();
+				throw new Error("span flush failed");
+			},
+		});
+
+		await expect(
+			tools.getProject.execute({ path: { project_id: "project-id" } }),
+		).rejects.toThrow("span flush failed");
+		expect(requests).toHaveLength(1);
+	});
+
+	test("observes API failures from event.execute", async () => {
+		const seen: string[] = [];
+		const { tools } = getProjectTools({
+			fetch: async () =>
+				jsonResponse({ message: "Authentication failed" }, 401),
+			onExecute: async ({ execute }) => {
+				try {
+					return await execute();
+				} catch (error) {
+					seen.push(
+						error instanceof Error ? error.message : String(error),
+					);
+					throw error;
+				}
+			},
+		});
+
+		await expect(
+			tools.getProject.execute({ path: { project_id: "project-id" } }),
+		).rejects.toThrow(/Authentication failed/);
+		expect(seen[0]).toEqual(
+			expect.stringContaining("Authentication failed"),
+		);
+	});
+
+	test("passes the caller input to the hook, not the injected path", async () => {
+		const seen: unknown[] = [];
+		const { tools } = getProjectTools({
+			inject: { projectId: "granted-project", omitFromSchema: true },
+			onExecute: async ({ input, execute }) => {
+				seen.push(input);
+				return execute();
+			},
+		});
+
+		await tools.getProject.execute({});
+
+		expect(seen).toEqual([{}]);
+	});
+
+	test("does not let a mutated clone change a caller-supplied fill-mode id", async () => {
+		const { requests, tools } = getProjectTools({
+			inject: { projectId: "granted-project" },
+			onExecute: async ({ input, execute }) => {
+				(input as { path: { project_id: string } }).path.project_id =
+					"mutated-project";
+				return execute();
+			},
+		});
+
+		await tools.getProject.execute({
+			path: { project_id: "caller-project" },
+		});
+
+		expect(requests[0].url).toBe(
+			"https://console.neon.tech/api/v2/projects/caller-project",
+		);
+	});
+
+	test("wraps createNeonTool execute", async () => {
+		const events: string[] = [];
+		const requests: Request[] = [];
+		const tool = createNeonTool("getProject", {
+			apiKey: "test-key",
+			onExecute: async ({ id, execute }) => {
+				events.push(id);
+				return execute();
+			},
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse({ project: { id: "project-id" } });
+			},
+		});
+
+		await tool.execute({ path: { project_id: "project-id" } });
+
+		expect(events).toEqual(["get_project"]);
+		expect(requests).toHaveLength(1);
+	});
+});
+
+describe("path injection (fill, omit, and non-path fields)", () => {
+	test("treats inject.projectId: undefined as no injector", async () => {
+		const { requests, tools } = getProjectTools({
+			inject: { projectId: undefined },
+		});
+
+		await expect(tools.getProject.execute({})).rejects.toThrow();
+		expect(requests).toHaveLength(0);
+		expect(z.toJSONSchema(tools.getProject.inputSchema).required).toEqual([
+			"path",
+		]);
+	});
+
+	test("rejects a non-string static inject value at construction", () => {
+		expect(() =>
+			createNeonTools({
+				apiKey: "test-key",
+				operations: ["getProject"] as const,
+				inject: { projectId: 1 as unknown as string },
+			}),
+		).toThrow("A projectId inject value is required");
+	});
+
+	test("rejects an empty static branchId at construction", () => {
+		expect(() =>
+			createNeonTools({
+				apiKey: "test-key",
+				operations: ["deleteProjectBranch"] as const,
+				inject: { branchId: "" },
+			}),
+		).toThrow("A branchId inject value is required");
+	});
+
+	test("in fill mode, a missing getter leaves original schema validation", async () => {
+		const { requests, tools } = getProjectTools({
+			inject: { projectId: () => undefined },
+		});
+
+		await expect(tools.getProject.execute({})).rejects.toThrow(
+			/invalid_type|required|project_id/i,
+		);
+		expect(requests).toHaveLength(0);
+	});
+
+	test("rejects an empty getter result before fetch", async () => {
+		const { requests, tools } = getProjectTools({
+			inject: { projectId: () => "" },
+		});
+
+		await expect(tools.getProject.execute({})).rejects.toThrow(
+			"A projectId inject value is required",
+		);
+		expect(requests).toHaveLength(0);
+	});
+
+	test("rejects a non-string getter result before fetch", async () => {
+		const { requests, tools } = getProjectTools({
+			inject: {
+				projectId: () => 1 as unknown as string,
+			},
+		});
+
+		await expect(tools.getProject.execute({})).rejects.toThrow(
+			"A projectId inject value is required",
+		);
+		expect(requests).toHaveLength(0);
+	});
+
+	test("in omit mode, rejects an empty getter result", async () => {
+		const { requests, tools } = getProjectTools({
+			inject: {
+				projectId: () => "",
+				omitFromSchema: true,
+			},
+		});
+
+		await expect(tools.getProject.execute({})).rejects.toThrow(
+			"A projectId inject value is required",
+		);
+		expect(requests).toHaveLength(0);
+	});
+
+	test("fills path: {} in fill mode", async () => {
+		const { requests, tools } = getProjectTools({
+			inject: { projectId: "granted-project" },
+		});
+
+		await tools.getProject.execute({ path: {} });
+
+		expect(requests[0].url).toBe(
+			"https://console.neon.tech/api/v2/projects/granted-project",
+		);
+	});
+
+	test("does not normalize null, arrays, or non-objects", async () => {
+		const { requests, tools } = getProjectTools({
+			inject: { projectId: "granted-project" },
+		});
+
+		await expect(tools.getProject.execute(null as never)).rejects.toThrow();
+		await expect(tools.getProject.execute([] as never)).rejects.toThrow();
+		await expect(
+			tools.getProject.execute("nope" as never),
+		).rejects.toThrow();
+		expect(requests).toHaveLength(0);
+	});
+
+	test("still rejects unknown fields after injection", async () => {
+		const { requests, tools } = getProjectTools({
+			inject: { projectId: "granted-project", omitFromSchema: true },
+		});
+
+		await expect(
+			tools.getProject.execute({ extra: true } as never),
+		).rejects.toThrow();
+		expect(requests).toHaveLength(0);
+	});
+
+	test("keeps query and body when injecting path", async () => {
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			operations: ["deleteProjectBranch", "createProjectBranch"] as const,
+			inject: { projectId: "granted-project", omitFromSchema: true },
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse({ branch: { id: "br-id" } });
+			},
+		});
+
+		await tools.deleteProjectBranch.execute({
+			path: { branch_id: "br-id" },
+			query: { hard_delete: true },
+		});
+		await tools.createProjectBranch.execute({
+			body: { branch: { name: "feature" } },
+		});
+
+		expect(requests[0].url).toBe(
+			"https://console.neon.tech/api/v2/projects/granted-project/branches/br-id?hard_delete=true",
+		);
+		expect(requests[1].method).toBe("POST");
+		expect(requests[1].url).toBe(
+			"https://console.neon.tech/api/v2/projects/granted-project/branches",
+		);
+		expect(await requests[1].json()).toEqual({
+			branch: { name: "feature" },
+		});
+	});
+
+	test("does not write inject.branchId into query.branch_id", async () => {
+		const requests: Request[] = [];
+		let branchGetterCalls = 0;
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			operations: ["getConnectionURI"] as const,
+			inject: {
+				projectId: "granted-project",
+				branchId: () => {
+					branchGetterCalls += 1;
+					return "injected-branch";
+				},
+				omitFromSchema: true,
+			},
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse({ uri: "postgresql://example" });
+			},
+		});
+
+		await tools.getConnectionURI.execute({
+			query: {
+				database_name: "neondb",
+				role_name: "neondb_owner",
+				branch_id: "caller-branch",
+			},
+		});
+
+		expect(branchGetterCalls).toBe(0);
+		expect(requests[0].url).toContain(
+			"/projects/granted-project/connection_uri",
+		);
+		expect(requests[0].url).toContain("branch_id=caller-branch");
+		expect(requests[0].url).not.toContain("injected-branch");
+	});
+
+	test("can omit only branch_id and leave project_id on the schema", async () => {
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			operations: ["deleteProjectBranch"] as const,
+			inject: {
+				branchId: "granted-branch",
+				omitFromSchema: true,
+			},
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse({ branch: { id: "granted-branch" } });
+			},
+		});
+
+		await tools.deleteProjectBranch.execute({
+			path: { project_id: "caller-project" },
+		});
+
+		expect(requests[0].url).toBe(
+			"https://console.neon.tech/api/v2/projects/caller-project/branches/granted-branch",
+		);
+		const schema = z.toJSONSchema(tools.deleteProjectBranch.inputSchema);
+		const pathSchema = (
+			schema.properties as {
+				path: {
+					properties: Record<string, unknown>;
+					required?: string[];
+				};
+			}
+		).path;
+		expect(Object.keys(pathSchema.properties)).toEqual(["project_id"]);
+		expect(pathSchema.required).toEqual(["project_id"]);
+	});
+
+	test("in fill mode, still calls the remaining getter when the caller supplied one id", async () => {
+		let branchGetterCalls = 0;
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			operations: ["deleteProjectBranch"] as const,
+			inject: {
+				projectId: "granted-project",
+				branchId: () => {
+					branchGetterCalls += 1;
+					return "granted-branch";
+				},
+			},
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse({ branch: { id: "granted-branch" } });
+			},
+		});
+
+		await tools.deleteProjectBranch.execute({
+			path: { project_id: "caller-project" },
+		});
+
+		expect(branchGetterCalls).toBe(1);
+		expect(requests[0].url).toBe(
+			"https://console.neon.tech/api/v2/projects/caller-project/branches/granted-branch",
+		);
+	});
+
+	test("published omit schema accepts {} and rejects a supplied project_id object", () => {
+		const { tools } = getProjectTools({
+			inject: { projectId: "granted-project", omitFromSchema: true },
+		});
+
+		expect(tools.getProject.inputSchema.safeParse({}).success).toBe(true);
+		expect(
+			tools.getProject.inputSchema.safeParse({
+				path: { project_id: "caller-project" },
+			}).success,
+		).toBe(false);
+	});
+
+	test("published fill schema accepts omitted and supplied project_id", () => {
+		const { tools } = getProjectTools({
+			inject: { projectId: "granted-project" },
+		});
+
+		expect(tools.getProject.inputSchema.safeParse({}).success).toBe(true);
+		expect(
+			tools.getProject.inputSchema.safeParse({
+				path: { project_id: "caller-project" },
+			}).success,
+		).toBe(true);
+		expect(
+			tools.getProject.inputSchema.safeParse({
+				path: { project_id: "NOT VALID" },
+			}).success,
+		).toBe(false);
+	});
+
+	test("keeps published schemas closed", () => {
+		const { tools } = getProjectTools({
+			inject: { projectId: "granted-project" },
+		});
+
+		expect(
+			tools.getProject.inputSchema.safeParse({ extra: true }).success,
+		).toBe(false);
+		expect(z.toJSONSchema(tools.getProject.inputSchema)).toMatchObject({
+			additionalProperties: false,
+		});
+	});
+
+	test("drops path from createProjectBranch when project_id is omitted", () => {
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			operations: ["createProjectBranch"] as const,
+			inject: { projectId: "granted-project", omitFromSchema: true },
+		});
+
+		const schema = z.toJSONSchema(tools.createProjectBranch.inputSchema);
+		expect(schema.properties).not.toHaveProperty("path");
+		expect(schema.properties).toHaveProperty("body");
+		expect(
+			tools.createProjectBranch.inputSchema.safeParse({}).success,
+		).toBe(true);
+	});
+
+	test("isolates request-scoped getters through host AsyncLocalStorage", async () => {
+		const { AsyncLocalStorage } = await import("node:async_hooks");
+		const grant = new AsyncLocalStorage<{ projectId: string }>();
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			operations: ["getProject"] as const,
+			inject: {
+				projectId: () => grant.getStore()?.projectId,
+				omitFromSchema: true,
+			},
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse({ project: { id: "project-id" } });
+			},
+		});
+
+		await Promise.all([
+			grant.run({ projectId: "project-a" }, () =>
+				tools.getProject.execute({}),
+			),
+			grant.run({ projectId: "project-b" }, () =>
+				tools.getProject.execute({}),
+			),
+		]);
+
+		expect([...requests.map((request) => request.url)].sort()).toEqual([
+			"https://console.neon.tech/api/v2/projects/project-a",
+			"https://console.neon.tech/api/v2/projects/project-b",
+		]);
 	});
 });

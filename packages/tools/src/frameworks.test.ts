@@ -77,4 +77,34 @@ describe("Mastra compatibility", () => {
 			tools.getProject.inputSchema,
 		);
 	});
+
+	test("executes an omitted project tool through Eve and Mastra", async () => {
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			operations: ["getProject"],
+			descriptions: { get_project: "Granted project details." },
+			inject: { projectId: "granted-project", omitFromSchema: true },
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse({ project: { id: "granted-project" } });
+			},
+		});
+
+		const eve = toEveTool(tools.getProject);
+		const mastra = toMastraTools(tools).get_project;
+		expect(eve.description).toBe("Granted project details.");
+		expect(mastra.description).toBe("Granted project details.");
+
+		await eve.execute({}, { abortSignal: new AbortController().signal });
+		await mastra.execute({}, {});
+
+		expect(requests).toHaveLength(2);
+		expect(requests[0].url).toBe(
+			"https://console.neon.tech/api/v2/projects/granted-project",
+		);
+		expect(requests[1].url).toBe(
+			"https://console.neon.tech/api/v2/projects/granted-project",
+		);
+	});
 });

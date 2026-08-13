@@ -126,3 +126,32 @@ const mastraOmitted = toMastraTools(omittedProject);
 mastraOmitted.get_project.execute({}, {}).then((result) => {
 	expectTypeOf(result.data.project.id).toEqualTypeOf<string>();
 });
+
+const omittedBoth = createNeonTools({
+	apiKey: "test-key",
+	operations: ["deleteProjectBranch"] as const,
+	inject: {
+		projectId: "granted-project",
+		branchId: "granted-branch",
+		omitFromSchema: true,
+	},
+});
+omittedBoth.deleteProjectBranch.execute({});
+
+const omittedCreateNeonTool = createNeonTool("getProject", {
+	apiKey: "test-key",
+	inject: { projectId: "granted-project", omitFromSchema: true },
+});
+omittedCreateNeonTool.execute({});
+
+const describedOnly = createNeonTools({
+	apiKey: "test-key",
+	operations: ["getProject"] as const,
+	descriptions: { getProject: "Describe one project." },
+});
+// @ts-expect-error description overrides do not optionalize path
+describedOnly.getProject.execute({});
+
+const uninjectedProject = createNeonTool("getProject", { apiKey: "test-key" });
+// @ts-expect-error path.project_id is required without inject
+uninjectedProject.execute({});
