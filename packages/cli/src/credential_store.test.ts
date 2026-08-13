@@ -673,7 +673,31 @@ describe("createCredentialStore", () => {
 		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
 	});
 
-	test("a file write under a keyring config leaves the file unwritten when the leftover cannot be cleared", () => {
+	test("a file write under a keyring config leaves the keyring item when the file cannot be written", () => {
+		const dir = makeDir({
+			"config.json": JSON.stringify({ credStorage: "keyring" }),
+		});
+		const ring = memoryKeyring();
+		ring.set(
+			KEYRING_SERVICE,
+			keyringAccount(resolve(dir, "credentials.json")),
+			JSON.stringify({ type: "api_key", api_key: "napi_old" }),
+		);
+		const store = createCredentialStore(dir, {
+			env: { [NEON_TOKEN_STORAGE]: "file" },
+			keyring: ring,
+		});
+		try {
+			chmodSync(dir, 0o555);
+			expect(() => store.write(at(dir), key)).toThrow();
+		} finally {
+			chmodSync(dir, 0o755);
+		}
+		expect(existsSync(resolve(dir, "credentials.json"))).toBe(false);
+		expect(ring.size()).toBe(1);
+	});
+
+	test("a file write under a keyring config keeps the file when the leftover cannot be cleared", () => {
 		const dir = makeDir({
 			"config.json": JSON.stringify({ credStorage: "keyring" }),
 		});
@@ -690,7 +714,9 @@ describe("createCredentialStore", () => {
 			},
 		});
 		expect(() => store.write(at(dir), key)).toThrow(KeyringClearError);
-		expect(existsSync(resolve(dir, "credentials.json"))).toBe(false);
+		expect(
+			JSON.parse(readFileSync(resolve(dir, "credentials.json"), "utf8")),
+		).toEqual(key);
 	});
 
 	test("migrateTo file throws when keyring is preferred and get returns null", () => {

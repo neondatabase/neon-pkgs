@@ -336,10 +336,10 @@ export const createCredentialStore = (
 			};
 		}
 
+		writeCredentials(at.path, credentials);
 		if (owned && keyring !== null && keyringMayHoldCopy()) {
 			removeKeyringItem(accountFor(at.path), at.path, false);
 		}
-		writeCredentials(at.path, credentials);
 		return {
 			credentials,
 			backend: CRED_STORAGE_FILE,
