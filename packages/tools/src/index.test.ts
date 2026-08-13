@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { createNeonTool, createNeonTools } from "./index.js";
+import {
+	createNeonTool,
+	createNeonTools,
+	type NeonToolsClientOptions,
+} from "./index.js";
 
 const jsonResponse = (body: unknown, status = 200) =>
 	new Response(JSON.stringify(body), {
@@ -112,7 +116,7 @@ describe("createNeonTools", () => {
 });
 
 describe("Bearer credentials", () => {
-	const listProjects = (options: Parameters<typeof createNeonTools>[0]) => {
+	const listProjects = (options: NeonToolsClientOptions) => {
 		const requests: Request[] = [];
 		const tools = createNeonTools({
 			...options,
@@ -128,7 +132,6 @@ describe("Bearer credentials", () => {
 	test("sends an OAuth access token as a Bearer credential", async () => {
 		const { requests, tools } = listProjects({
 			apiKey: "oauth-access-token",
-			operations: ["listProjects"],
 		});
 
 		await tools.listProjects.execute({});
@@ -145,7 +148,6 @@ describe("Bearer credentials", () => {
 				issued += 1;
 				return `oauth-access-token-${issued}`;
 			},
-			operations: ["listProjects"],
 		});
 
 		await tools.listProjects.execute({});
@@ -167,7 +169,6 @@ describe("Bearer credentials", () => {
 	test("uses an execute-time credential instead of the constructor credential", async () => {
 		const { requests, tools } = listProjects({
 			apiKey: "constructor-key",
-			operations: ["listProjects"],
 		});
 
 		await tools.listProjects.execute({}, { apiKey: "oauth-access-token" });
@@ -180,7 +181,6 @@ describe("Bearer credentials", () => {
 	test("keeps concurrent execute-time credentials isolated", async () => {
 		const { requests, tools } = listProjects({
 			apiKey: "constructor-key",
-			operations: ["listProjects"],
 		});
 
 		await Promise.all([
@@ -198,9 +198,7 @@ describe("Bearer credentials", () => {
 	});
 
 	test("requires a credential at execute when none was given at construction", async () => {
-		const { requests, tools } = listProjects({
-			operations: ["listProjects"],
-		});
+		const { requests, tools } = listProjects({});
 
 		await expect(tools.listProjects.execute({})).rejects.toThrow(
 			"A Neon API key or OAuth access token is required",
@@ -211,7 +209,6 @@ describe("Bearer credentials", () => {
 	test("does not fall back to the constructor credential when execute overrides it with an empty value", async () => {
 		const { requests, tools } = listProjects({
 			apiKey: "constructor-key",
-			operations: ["listProjects"],
 		});
 
 		await expect(
@@ -223,7 +220,6 @@ describe("Bearer credentials", () => {
 	test("does not fall back to the constructor credential when an execute-time getter resolves empty", async () => {
 		const { requests, tools } = listProjects({
 			apiKey: "constructor-key",
-			operations: ["listProjects"],
 		});
 
 		await expect(

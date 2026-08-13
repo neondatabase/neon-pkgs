@@ -62,4 +62,19 @@ describe("Mastra compatibility", () => {
 		expect(createProject.id).toBe("create_project");
 		expect(createProject.requireApproval).toBe(true);
 	});
+
+	test("forwards omitted path schemas from inject", () => {
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			operations: ["getProject"],
+			inject: { projectId: "granted-project", omitFromSchema: true },
+		});
+
+		expect(toMastraTools(tools).get_project.inputSchema).toBe(
+			tools.getProject.inputSchema,
+		);
+		expect(toEveTool(tools.getProject).inputSchema).toBe(
+			tools.getProject.inputSchema,
+		);
+	});
 });

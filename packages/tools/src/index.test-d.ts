@@ -87,3 +87,42 @@ revokeCredential
 	.then((result) => {
 		expectTypeOf(result.data).toEqualTypeOf<null>();
 	});
+
+const omittedProject = createNeonTools({
+	apiKey: "test-key",
+	operations: ["getProject"] as const,
+	inject: { projectId: "granted-project", omitFromSchema: true },
+});
+omittedProject.getProject.execute({}).then((result) => {
+	expectTypeOf(result.data.project.id).toEqualTypeOf<string>();
+});
+
+const filledProject = createNeonTools({
+	apiKey: "test-key",
+	operations: ["getProject"] as const,
+	inject: { projectId: "granted-project" },
+});
+filledProject.getProject.execute({});
+filledProject.getProject.execute({ path: { project_id: "caller-project" } });
+
+const omittedBranch = createNeonTools({
+	apiKey: "test-key",
+	operations: ["deleteProjectBranch"] as const,
+	inject: { projectId: "granted-project", omitFromSchema: true },
+});
+omittedBranch.deleteProjectBranch.execute({ path: { branch_id: "br-id" } });
+
+// @ts-expect-error omitted project_id still requires the remaining path fields
+omittedBranch.deleteProjectBranch.execute({});
+
+const eveOmitted = toEveTool(omittedProject.getProject);
+eveOmitted
+	.execute({}, { abortSignal: new AbortController().signal })
+	.then((result) => {
+		expectTypeOf(result.data.project.id).toEqualTypeOf<string>();
+	});
+
+const mastraOmitted = toMastraTools(omittedProject);
+mastraOmitted.get_project.execute({}, {}).then((result) => {
+	expectTypeOf(result.data.project.id).toEqualTypeOf<string>();
+});

@@ -52,6 +52,90 @@ The returned record is keyed by OpenAPI operation ID. Each tool includes its gen
 
 `operationIds` exports every valid selector. `execute()` strictly validates the input, rejects unknown fields instead of dropping them, and returns typed, JSON-safe `{ data }`. Neon SDK errors remain typed and are thrown to the caller.
 
+## Optional host add-ons
+
+None of these change the default `createNeonTools({ apiKey, operations })` path. They exist so a host can replace hand-written Management API tools without losing descriptions, call tracking, or a grant-scoped project/branch.
+
+### Descriptions
+
+Pass a map keyed by OpenAPI operation ID or snake-case tool `id`, or a function that can append to the generated text:
+
+```ts
+const tools = createNeonTools({
+	apiKey,
+	operations,
+	descriptions: {
+		listProjects:
+			"List Neon projects in your account. Do not use for projects shared with you.",
+		delete_project:
+			"Delete a Neon project and all its data. NEVER run autonomously; always ask the user first.",
+	},
+});
+
+const noticed = createNeonTools({
+	apiKey,
+	operations,
+	descriptions: (tool) => `${tool.description}\nNotice: scoped to one project.`,
+});
+```
+
+### Tracking
+
+`onExecute` wraps the call. The host must call `event.execute()`. That inner call performs getter resolution, path injection, original schema validation, auth, and the API request, so tracking and spans see those failures:
+
+```ts
+const tools = createNeonTools({
+	apiKey,
+	operations,
+	onExecute: async ({ id, execute }) => {
+		// record `id`, wrap in a span, then:
+		return execute();
+	},
+});
+```
+
+This package does not send analytics. Mutating `event.input` does not change a grant-locked project or branch id.
+
+### Project and branch injection
+
+Generated tools take OpenAPI path parameters (`path.project_id`, `path.branch_id`). A host that already knows those values can inject them. Without `omitFromSchema`, the published field becomes optional and a caller-supplied value wins. With `omitFromSchema: true`, the field is removed from the published schema and the injector is the only source:
+
+```ts
+const tools = createNeonTools({
+	apiKey,
+	operations: ["getProject", "deleteProjectBranch"] as const,
+	inject: {
+		projectId: "project-id",
+		omitFromSchema: true,
+	},
+});
+
+await tools.getProject.execute({});
+await tools.deleteProjectBranch.execute({ path: { branch_id: "br-id" } });
+```
+
+Use a getter when the value is request-scoped. The getter can read the host's own `AsyncLocalStorage` (this package does not export one):
+
+```ts
+import { AsyncLocalStorage } from "node:async_hooks";
+
+const grant = new AsyncLocalStorage<{ projectId: string }>();
+
+const tools = createNeonTools({
+	operations: ["getProject"] as const,
+	inject: {
+		projectId: () => grant.getStore()?.projectId,
+		omitFromSchema: true,
+	},
+});
+
+await grant.run({ projectId: "project-id" }, () => tools.getProject.execute({}));
+```
+
+Injectors only apply to tools that have that path key. `listProjects` is unchanged. Empty inject values fail closed. Invalid ids still fail the original path schema before fetch.
+
+These add-ons do not flatten `{ path, query, body }` into camelCase `projectId`, do not rename tools (`get_project` is not `describe_project`), and do not add host-only behavior such as returning a connection string from `createProject`. Grant filtering, read-only filtering, and access-control notices stay in the host. `branchId` injection fills `path.branch_id` only — query/body branch selectors such as `getConnectionURI`'s `query.branch_id` are unchanged.
+
 ## Request schemas
 
 Generated request schemas are available independently:

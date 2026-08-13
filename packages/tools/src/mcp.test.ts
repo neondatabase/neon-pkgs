@@ -250,3 +250,54 @@ describe("MCP v1 compatibility", () => {
 		});
 	});
 });
+
+describe("MCP path injection", () => {
+	test("lists and calls a project-scoped tool without a project_id argument", async () => {
+		const requests: Request[] = [];
+		const scoped = createNeonTools({
+			apiKey: "test-key",
+			operations: ["getProject"],
+			inject: {
+				projectId: "granted-project",
+				omitFromSchema: true,
+			},
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return new Response(
+					JSON.stringify({ project: { id: "granted-project" } }),
+					{ headers: { "content-type": "application/json" } },
+				);
+			},
+		});
+		const server = new McpServerV2({
+			name: "test-server",
+			version: "1.0.0",
+		});
+		registerNeonToolsV2(server, scoped);
+		const client = new ClientV2({ name: "test-client", version: "1.0.0" });
+		const [clientTransport, serverTransport] =
+			InMemoryTransportV2.createLinkedPair();
+		await Promise.all([
+			server.connect(serverTransport),
+			client.connect(clientTransport),
+		]);
+		closeables.push(client, server);
+
+		const listed = await client.listTools();
+		expect(listed.tools[0].inputSchema).toMatchObject({
+			type: "object",
+			properties: {},
+		});
+
+		const called = await client.callTool({
+			name: "get_project",
+			arguments: {},
+		});
+		expect(called.structuredContent).toEqual({
+			data: { project: { id: "granted-project" } },
+		});
+		expect(requests[0].url).toBe(
+			"https://console.neon.tech/api/v2/projects/granted-project",
+		);
+	});
+});

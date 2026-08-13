@@ -4,7 +4,14 @@ import {
 	type NeonBearerCredential,
 	requireBearerCredential,
 } from "./lib/auth.js";
-import type { NeonTool } from "./lib/operation.js";
+import {
+	applyToolCustomization,
+	assertToolCustomizeOptions,
+	hasToolCustomization,
+	type InjectedNeonTool,
+	type NeonToolCustomizeOptions,
+	type NeonToolInjectOptions,
+} from "./lib/customize.js";
 import {
 	type NeonOperationId,
 	operationFactories,
@@ -12,6 +19,16 @@ import {
 } from "./operations.gen.js";
 
 export type { NeonBearerCredential } from "./lib/auth.js";
+export type {
+	InjectedNeonTool,
+	NeonToolCustomizeOptions,
+	NeonToolDescriptionOverrides,
+	NeonToolDescriptionSource,
+	NeonToolInjectOptions,
+	NeonToolInjectValue,
+	NeonToolOnExecute,
+	NeonToolOnExecuteEvent,
+} from "./lib/customize.js";
 export type {
 	JsonSafe,
 	JsonSafeBlob,
@@ -32,8 +49,19 @@ export type NeonTools<Operations extends readonly NeonOperationId[]> = {
 	>;
 };
 
+export type InjectedNeonTools<
+	Operations extends readonly NeonOperationId[],
+	Inject,
+> = {
+	[Operation in Operations[number]]: InjectedNeonTool<
+		ReturnType<OperationFactories[Operation]>,
+		Inject
+	>;
+};
+
 export interface NeonToolsClientOptions
-	extends Pick<NeonConfig, "baseUrl" | "fetch"> {
+	extends Pick<NeonConfig, "baseUrl" | "fetch">,
+		NeonToolCustomizeOptions {
 	apiKey?: NeonBearerCredential;
 }
 
@@ -79,11 +107,10 @@ function assertNeonTools<Operations extends readonly NeonOperationId[]>(
 	}
 }
 
-export const createNeonTools = <
-	const Operations extends readonly NeonOperationId[],
->(
+const bindTools = <Operations extends readonly NeonOperationId[]>(
 	options: CreateNeonToolsOptions<Operations>,
 ): NeonTools<Operations> => {
+	assertToolCustomizeOptions(options);
 	const selected = new Set<NeonOperationId>();
 	const selectedFactories = options.operations.map((operationId) => {
 		if (selected.has(operationId)) {
@@ -93,23 +120,47 @@ export const createNeonTools = <
 		return [operationId, operationFactoryFor(operationId)] as const;
 	});
 	const client = createRawClient(options);
-	const entries = selectedFactories.map(([operationId, factory]) => [
-		operationId,
-		factory(client),
-	]);
+	const entries = selectedFactories.map(([operationId, factory]) => {
+		const tool = factory(client);
+		return [
+			operationId,
+			hasToolCustomization(options)
+				? applyToolCustomization(tool, options)
+				: tool,
+		] as const;
+	});
 	const tools: unknown = Object.fromEntries(entries);
 	assertNeonTools(tools, options.operations);
 	return tools;
 };
 
-export function createNeonTool<const Operation extends NeonOperationId>(
+export const createNeonTools = <
+	const Operations extends readonly NeonOperationId[],
+	const Inject extends NeonToolInjectOptions | undefined = undefined,
+>(
+	options: CreateNeonToolsOptions<Operations> & { inject?: Inject },
+): Inject extends NeonToolInjectOptions
+	? InjectedNeonTools<Operations, Inject>
+	: NeonTools<Operations> =>
+	bindTools(options) as Inject extends NeonToolInjectOptions
+		? InjectedNeonTools<Operations, Inject>
+		: NeonTools<Operations>;
+
+export function createNeonTool<
+	const Operation extends NeonOperationId,
+	const Inject extends NeonToolInjectOptions | undefined = undefined,
+>(
 	operationId: Operation,
-	options: NeonToolsClientOptions,
-): ReturnType<OperationFactories[Operation]>;
-export function createNeonTool(
-	operationId: NeonOperationId,
-	options: NeonToolsClientOptions,
-): NeonTool {
-	const factory = operationFactoryFor(operationId);
-	return factory(createRawClient(options));
+	options: NeonToolsClientOptions & { inject?: Inject },
+): Inject extends NeonToolInjectOptions
+	? InjectedNeonTool<ReturnType<OperationFactories[Operation]>, Inject>
+	: ReturnType<OperationFactories[Operation]> {
+	assertToolCustomizeOptions(options);
+	const tool = operationFactoryFor(operationId)(createRawClient(options));
+	const customized = hasToolCustomization(options)
+		? applyToolCustomization(tool, options)
+		: tool;
+	return customized as Inject extends NeonToolInjectOptions
+		? InjectedNeonTool<ReturnType<OperationFactories[Operation]>, Inject>
+		: ReturnType<OperationFactories[Operation]>;
 }

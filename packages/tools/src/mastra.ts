@@ -1,5 +1,9 @@
 import type * as z from "zod";
-import type { NeonTool } from "./lib/operation.js";
+import type {
+	NeonTool,
+	NeonToolExecutionContext,
+	NeonToolResult,
+} from "./lib/operation.js";
 
 export interface MastraToolContext {
 	abortSignal?: AbortSignal;
@@ -11,7 +15,7 @@ export type MastraToolConfig<Tool extends NeonTool> = {
 	inputSchema: Tool["inputSchema"];
 	requireApproval: boolean;
 	execute(
-		input: z.input<Tool["inputSchema"]>,
+		input: Parameters<Tool["execute"]>[0],
 		context: MastraToolContext,
 	): ReturnType<Tool["execute"]>;
 };
@@ -20,19 +24,31 @@ export type MastraTools<Tools extends Readonly<Record<string, NeonTool>>> = {
 	[Tool in Tools[keyof Tools] as Tool["id"]]: MastraToolConfig<Tool>;
 };
 
-export const toMastraTool = <
-	const InputSchema extends z.ZodType,
-	const Id extends string,
-	Output,
->(
-	tool: NeonTool<InputSchema, Id, Output>,
+type MastraToolSource = {
+	id: string;
+	description: string;
+	inputSchema: z.ZodType;
+	requiresApproval: boolean;
+	execute: (
+		input: never,
+		context?: NeonToolExecutionContext,
+	) => Promise<NeonToolResult<unknown>>;
+};
+
+export const toMastraTool = <const Tool extends MastraToolSource>(
+	tool: Tool,
 ) => ({
 	id: tool.id,
 	description: tool.description,
 	inputSchema: tool.inputSchema,
 	requireApproval: tool.requiresApproval,
-	execute: (input: z.input<InputSchema>, context: MastraToolContext) =>
-		tool.execute(input, { signal: context.abortSignal }),
+	execute: (
+		input: Parameters<Tool["execute"]>[0],
+		context: MastraToolContext,
+	): ReturnType<Tool["execute"]> =>
+		tool.execute(input, { signal: context.abortSignal }) as ReturnType<
+			Tool["execute"]
+		>,
 });
 
 function assertMastraTools<Tools extends Readonly<Record<string, NeonTool>>>(

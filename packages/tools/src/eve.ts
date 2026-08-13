@@ -1,20 +1,32 @@
 import type * as z from "zod";
-import type { NeonTool } from "./lib/operation.js";
+import type {
+	NeonToolExecutionContext,
+	NeonToolResult,
+} from "./lib/operation.js";
 
 export interface EveToolContext {
 	abortSignal: AbortSignal;
 }
 
-export const toEveTool = <
-	const InputSchema extends z.ZodType,
-	const Id extends string,
-	Output,
->(
-	tool: NeonTool<InputSchema, Id, Output>,
-) => ({
+type EveToolSource = {
+	description: string;
+	inputSchema: z.ZodType;
+	requiresApproval: boolean;
+	execute: (
+		input: never,
+		context?: NeonToolExecutionContext,
+	) => Promise<NeonToolResult<unknown>>;
+};
+
+export const toEveTool = <const Tool extends EveToolSource>(tool: Tool) => ({
 	description: tool.description,
 	inputSchema: tool.inputSchema,
 	...(tool.requiresApproval ? { approval: () => true } : {}),
-	execute: (input: z.input<InputSchema>, context: EveToolContext) =>
-		tool.execute(input, { signal: context.abortSignal }),
+	execute: (
+		input: Parameters<Tool["execute"]>[0],
+		context: EveToolContext,
+	): ReturnType<Tool["execute"]> =>
+		tool.execute(input, { signal: context.abortSignal }) as ReturnType<
+			Tool["execute"]
+		>,
 });
