@@ -205,15 +205,72 @@ export const enrichFromContext = (
 	}
 };
 
+/**
+ * The context fields these commands own. On write we replace exactly these keys
+ * from the supplied `context`; every *other* key already in the file (e.g. the
+ * ephemeral `_init` state `neon init` stashes, or anything a user hand-added) is
+ * carried forward untouched. `branchId` is listed as managed — not to preserve
+ * it, but so the legacy field is replaced/dropped like the others rather than
+ * lingering as a "foreign" key (see {@link Context.branchId}).
+ */
+const MANAGED_CONTEXT_KEYS = new Set<string>([
+	"orgId",
+	"projectId",
+	"branch",
+	"branchId",
+]);
+
+/** The keys in an existing `.neon` that a context write must not disturb. */
+const readForeignKeys = (file: string): Record<string, unknown> => {
+	let raw: unknown;
+	try {
+		raw = JSON.parse(readFileSync(file, "utf-8"));
+	} catch {
+		return {};
+	}
+	if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+		return {};
+	}
+	const foreign: Record<string, unknown> = {};
+	for (const [key, value] of Object.entries(raw)) {
+		if (!MANAGED_CONTEXT_KEYS.has(key)) {
+			foreign[key] = value;
+		}
+	}
+	return foreign;
+};
+
+/**
+ * Persist the managed context fields to `.neon` while preserving any foreign
+ * keys already in the file.
+ *
+ * The managed keys ({@link MANAGED_CONTEXT_KEYS}) are governed entirely by
+ * `context`: a field absent from `context` is dropped from the file, so
+ * re-linking a project without a branch still clears a stale one. Everything
+ * else in the file — most importantly the ephemeral `_init` state that
+ * `neon init` writes — is read back and merged in, so a single `neon link` no
+ * longer clobbers an in-progress init. To wipe the file wholesale (foreign keys
+ * included), use {@link clearContextFile}.
+ */
 export const updateContextFile = (file: string, context: Context) => {
-	writeFileSync(file, JSON.stringify(context, null, 2));
+	const merged = { ...readForeignKeys(file), ...context };
+	writeFileSync(file, JSON.stringify(merged, null, 2));
+};
+
+/**
+ * Reset `.neon` to an empty context, dropping foreign keys too — the `--clear`
+ * "forget this directory" path, distinct from the field-preserving
+ * {@link updateContextFile}.
+ */
+export const clearContextFile = (file: string) => {
+	writeFileSync(file, JSON.stringify({}, null, 2));
 };
 
 /**
  * Shared primitive used by `link`, the deprecated `set-context`, and `checkout`
- * to persist context. Mirrors the destructive write semantics of
- * `updateContextFile` — any field not present in `context` is dropped from the
- * file.
+ * to persist context. Delegates to {@link updateContextFile}, so the managed
+ * fields in `context` are written while foreign keys (like init's `_init`) are
+ * preserved.
  *
  * `.gitignore` scaffolding only happens when the context file is being
  * *created* (it didn't exist before this write). On updates to an existing
