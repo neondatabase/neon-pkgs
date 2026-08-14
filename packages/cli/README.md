@@ -712,7 +712,7 @@ $ echo $?
 
 That message reports where parsing stopped and nothing more. `--data` carries whatever you put in it, and the JSON parser's own message quotes a window of the input, so echoing either would put a connection string or an API key on stdout.
 
-**One exception to "JSON on stdout".** Credentials are resolved before any command runs, so a failure in that step — an unknown `--profile` or `NEON_PROFILE`, `--api-key` and `--profile` together, or a `credentials.json` that cannot be read — prints `ERROR: …` on stderr, leaves stdout empty, and exits 1. Treat a non-zero exit with empty stdout as a credential problem and read stderr.
+**One exception to "JSON on stdout".** Credentials are resolved before any command runs, so a failure in that step — an unknown `--profile` or `NEON_PROFILE`, `--api-key` and `--profile` together, a `credentials.json` that cannot be read, or an OS keyring item that cannot be read — prints `ERROR: …` on stderr, leaves stdout empty, and exits 1. Treat a non-zero exit with empty stdout as a credential problem and read stderr.
 
 | Option | |
 | --- | --- |

@@ -92,7 +92,7 @@ export class KeyringUnreadableError extends Error {
 				? "`neon auth`"
 				: `\`neon auth --profile ${profile}\``;
 		super(
-			`Profile "${profile}" stores its credential in the OS keyring (${path}), and the keyring did not return it. Access may have been denied, the keyring may be locked, or the item may have been removed. This CLI will not start a browser sign-in in that situation. Unlock the keyring and retry, or pass --api-key / NEON_API_KEY. To replace the credential, run ${replace}. To stop using the keyring, run \`neon profile storage file\`.`,
+			`Profile "${profile}" uses the OS keyring item for ${path}, and the keyring did not return it. Access may have been denied, the keyring may be locked, or the item may have been removed. This CLI will not start a browser sign-in in that situation. Unlock the keyring and retry, or pass --api-key / NEON_API_KEY. To replace the credential, run ${replace}. To stop using the keyring, run \`neon profile storage file\`.`,
 		);
 		this.name = "KeyringUnreadableError";
 	}
@@ -471,7 +471,13 @@ export const createCredentialStore = (
 		mode: CredStorage,
 		migrateOptions?: { force?: boolean },
 	): MigrateResult => {
-		if (mode === CRED_STORAGE_KEYRING) requireKeyring();
+		if (mode === CRED_STORAGE_KEYRING) {
+			if (keyring === null) {
+				throw new KeyringUnavailableError(
+					"This CLI cannot use the OS keyring. Use the npm-installed neon CLI.",
+				);
+			}
+		}
 		const force = migrateOptions?.force === true;
 		const mayHold = keyringMayHoldCopy();
 

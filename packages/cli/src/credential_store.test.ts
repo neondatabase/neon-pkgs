@@ -669,6 +669,24 @@ describe("createCredentialStore", () => {
 		expect(existsSync(resolve(dir, "credentials.json"))).toBe(false);
 	});
 
+	test("migrateTo keyring names the npm CLI when the addon is missing", () => {
+		const dir = makeDir({
+			"credentials.json": JSON.stringify(key),
+		});
+		const store = createCredentialStore(dir, {
+			env: {},
+			keyring: null,
+		});
+		try {
+			store.migrateTo(CRED_STORAGE_KEYRING);
+			throw new Error("expected migrateTo keyring to throw");
+		} catch (err) {
+			expect(err).toBeInstanceOf(KeyringUnavailableError);
+			expect(String(err)).toMatch(/npm-installed neon CLI/);
+			expect(String(err)).not.toMatch(/persist file mode/);
+		}
+	});
+
 	test("migrateTo file does not touch the keyring when nothing lived there", () => {
 		const dir = makeDir({
 			"credentials.json": JSON.stringify(key),
