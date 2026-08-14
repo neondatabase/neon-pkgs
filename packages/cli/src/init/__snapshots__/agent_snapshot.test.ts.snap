@@ -946,8 +946,8 @@ exports[`neon init --agent: every step, against every project shape > connected 
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -985,8 +985,8 @@ exports[`neon init --agent: every step, against every project shape > connected 
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -1974,8 +1974,8 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -2013,8 +2013,8 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -2986,8 +2986,8 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version"
 `;
@@ -3023,8 +3023,8 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version"
 `;
@@ -3999,8 +3999,8 @@ exports[`neon init --agent: every step, against every project shape > greenfield
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -4038,8 +4038,8 @@ exports[`neon init --agent: every step, against every project shape > greenfield
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -5032,8 +5032,8 @@ exports[`neon init --agent: every step, against every project shape > next-prism
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -5071,8 +5071,8 @@ exports[`neon init --agent: every step, against every project shape > next-prism
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -6065,8 +6065,8 @@ exports[`neon init --agent: every step, against every project shape > next-prism
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -6104,8 +6104,8 @@ exports[`neon init --agent: every step, against every project shape > next-prism
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -7093,8 +7093,8 @@ exports[`neon init --agent: every step, against every project shape > node-app >
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -7132,8 +7132,8 @@ exports[`neon init --agent: every step, against every project shape > node-app >
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -8126,8 +8126,8 @@ exports[`neon init --agent: every step, against every project shape > other-data
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -8165,8 +8165,8 @@ exports[`neon init --agent: every step, against every project shape > other-data
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -9570,7 +9570,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > fully-config
 --- stderr ---
 
 --- subprocesses ---
-<stub>/npx -y neonctl orgs list --output json"
+<stub>/npx -y neon orgs list --output json"
 `;
 
 exports[`neon init --agent: the orchestrator picks the next phase > fully-configured — no --data 1`] = `
@@ -9602,7 +9602,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > fully-config
 --- stderr ---
 
 --- subprocesses ---
-<stub>/npx -y neonctl orgs list --output json
+<stub>/npx -y neon orgs list --output json
 <stub>/skills --version"
 `;
 

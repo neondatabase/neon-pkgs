@@ -42,7 +42,7 @@ function extractNeonHost(cwd: string): string | null {
  *
  * Strategy:
  * 1. Extract endpoint hostname from .env
- * 2. List orgs via neonctl
+ * 2. List orgs via the Neon CLI
  * 3. For each org, list projects
  * 4. For each project, get connection string and compare hostnames
  * 5. Return the matching org/project
@@ -58,7 +58,7 @@ export async function resolveNeonContext(
 	try {
 		const result = await execa(
 			"npx",
-			["-y", "neonctl", "orgs", "list", "--output", "json"],
+			["-y", "neon", "orgs", "list", "--output", "json"],
 			{
 				stdio: "pipe",
 				timeout: 30000,
@@ -80,7 +80,7 @@ export async function resolveNeonContext(
 				"npx",
 				[
 					"-y",
-					"neonctl",
+					"neon",
 					"projects",
 					"list",
 					"--org-id",
@@ -105,7 +105,7 @@ export async function resolveNeonContext(
 					"npx",
 					[
 						"-y",
-						"neonctl",
+						"neon",
 						"connection-string",
 						"--project-id",
 						project.id,

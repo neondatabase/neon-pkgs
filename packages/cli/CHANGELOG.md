@@ -1,5 +1,17 @@
 # neon
 
+## 3.2.1
+
+### Patch Changes
+
+- ad7cf9a: `neon init` now detects and installs the `neon` CLI instead of the retired `neonctl` alias. Version probing checks `neon` first (falling back to `neonctl` so an existing global install still counts as installed), the update check reads `npm view neon`, and auth/context lookups shell out to `neon`.
+
+## 3.2.0
+
+### Minor Changes
+
+- 998728b: Add `neon open` to open the project linked in `.neon` in the Neon Console.
+
 ## 3.1.1
 
 ### Patch Changes

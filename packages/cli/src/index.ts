@@ -52,6 +52,8 @@ const NO_SUBCOMMANDS_VERBS = [
 
 	"link",
 
+	"open",
+
 	"init",
 
 	"dev",

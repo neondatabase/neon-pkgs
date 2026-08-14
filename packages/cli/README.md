@@ -352,6 +352,19 @@ How today's `set-context` uses map onto `link`:
 
 The key difference: `link` resolves and **verifies** before writing (so you never get a half-written or stale `.neon`), whereas `set-context` writes whatever you give it verbatim. The closest like-for-like replacement for the old raw write is `link --no-checks`.
 
+### open
+
+`open` launches the linked project's page in the Neon Console. It reads the closest `.neon` file without authenticating or calling the Neon API, so it works from any sub-directory of a linked project.
+
+```bash
+neon open
+
+# Open a project without changing the linked context
+neon open --project-id polished-snowflake-12345678
+```
+
+A branch pinned in `.neon` does not change the destination. `.neon` stores the branch as a name, while the Console route requires its ID; resolving it would turn this local command into an authenticated API call.
+
 ### checkout
 
 `checkout [id|name]` pins a branch in the local context so subsequent commands target it — it's the focused companion to `link` for the common "switch the branch I'm working on" case (`link` resolves org + project; `checkout` pins the branch). It resolves the branch (by name or id) against the project, then **heals** the `.neon` file: it always (re)writes `projectId`, `branch`, and `orgId` (when the project has one), so a `.neon` that was missing fields or drifted ends up complete and consistent. The branch is stored as its **name** when known (matching `link`). When `orgId` isn't already known (from `--org-id` or the existing `.neon`), it's looked up from the project itself.
@@ -1044,6 +1057,7 @@ API keys in org-7
 | checkout                                                                   |                                                                                                              | Pin a branch in `.neon`            |
 | diff                                                                       |                                                                                                              | Git-style schema diff vs a branch  |
 | [link](https://neon.com/docs/reference/cli-link)                           |                                                                                                              | Link a directory to a project      |
+| open                                                                       |                                                                                                              | Open the linked project in Console |
 | config                                                                     | `init`, `status`, `plan`, `apply`                                                                            | Drive a branch from `neon.ts`      |
 | deploy                                                                     |                                                                                                              | Alias for `config apply`           |
 | bootstrap                                                                  |                                                                                                              | Scaffold a project from a template |
