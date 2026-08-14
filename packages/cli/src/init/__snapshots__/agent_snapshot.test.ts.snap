@@ -6455,7 +6455,7 @@ exports[`neon init --agent: the signed-out auth branches > auth 1`] = `
       "existing_account": {
         "action": {
           "type": "run_command",
-          "command": "CI= npx -y neon auth",
+          "command": "CI= neon auth",
           "description": "This will open your browser for Neon OAuth sign-in.",
           "timeout": 120000,
           "onSuccess": {
@@ -6523,7 +6523,7 @@ exports[`neon init --agent: the signed-out auth branches > auth-existing-account
   "status": "in_progress",
   "nextAction": {
     "type": "run_command",
-    "command": "CI= npx -y neon auth",
+    "command": "CI= neon auth",
     "description": "This will open your browser for Neon OAuth sign-in.",
     "timeout": 120000,
     "onSuccess": {
@@ -6633,7 +6633,7 @@ exports[`neon init --agent: the signed-out auth branches > the orchestrator send
       "existing_account": {
         "action": {
           "type": "run_command",
-          "command": "CI= npx -y neon auth",
+          "command": "CI= neon auth",
           "description": "This will open your browser for Neon OAuth sign-in.",
           "timeout": 120000,
           "onSuccess": {

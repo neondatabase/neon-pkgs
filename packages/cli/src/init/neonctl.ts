@@ -1,22 +1,32 @@
 import { lstatSync } from "node:fs";
 import { execa } from "execa";
+import which from "which";
 import {
 	globalInstallCommand,
 	resolveInvokingPackageManager,
 } from "../utils/package_manager.js";
 
 /**
- * Returns the Neon CLI command prefix: "CI= npx -y neon".
+ * Returns the Neon CLI command prefix the flow emits to agents/users, e.g.
+ * `"CI= neon"` or `"CI= npx -y neon"`.
  *
- * The CLI reads NEON_API_HOST and NEON_OAUTH_HOST from the environment
- * directly, so no extra flags are needed. The `neon` package ships both the
- * `neon` and `neonctl` binaries; we surface the cleaner `neon` command in the
- * examples emitted to users and agents.
+ * `neon init` installs the Neon CLI (see {@link ensureNeonctl}), so once a `neon`
+ * binary is on PATH we emit it directly — the agent drives the installed CLI
+ * instead of paying npx's resolution cost on every command. When nothing is
+ * installed yet — a first run started with `npx neon init`, before setup has
+ * installed the CLI — we fall back to `npx -y neon` so the emitted command still
+ * works. Detection happens per call (at response-build time) so the prefix
+ * reflects the machine's current state.
+ *
+ * The CLI reads NEON_API_HOST and NEON_OAUTH_HOST from the environment directly,
+ * so no extra flags are needed. The `neon` package ships both the `neon` and
+ * `neonctl` binaries; we surface the cleaner `neon` command.
  *
  * Usage: `${neonctlCmd()} orgs list --output json`
  */
 export function neonctlCmd(): string {
-	return "CI= npx -y neon";
+	const installed = which.sync("neon", { nothrow: true });
+	return installed ? "CI= neon" : "CI= npx -y neon";
 }
 
 type NeonctlStatus = {
