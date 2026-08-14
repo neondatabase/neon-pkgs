@@ -180,7 +180,7 @@ async function buildBulkInspection(
 								options: [
 									{
 										value: "defaults",
-										label: "Use defaults (Neon CLI, MCP: global, skills: project-level — already-configured components will be skipped)",
+										label: "Use defaults (MCP: global, skills:project-level, install extension later) (Recommended)",
 									},
 									{
 										value: "customize",

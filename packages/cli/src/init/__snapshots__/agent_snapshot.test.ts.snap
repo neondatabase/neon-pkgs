@@ -313,7 +313,7 @@ exports[`neon init --agent: every step, against every project shape > connected 
         "options": [
           {
             "value": "defaults",
-            "label": "Use defaults (Neon CLI, MCP: global, skills: project-level — already-configured components will be skipped)"
+            "label": "Use defaults (MCP: global, skills:project-level, install extension later) (Recommended)"
           },
           {
             "value": "customize",
@@ -788,7 +788,7 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
         "options": [
           {
             "value": "defaults",
-            "label": "Use defaults (Neon CLI, MCP: global, skills: project-level — already-configured components will be skipped)"
+            "label": "Use defaults (MCP: global, skills:project-level, install extension later) (Recommended)"
           },
           {
             "value": "customize",
@@ -1263,7 +1263,7 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
         "options": [
           {
             "value": "defaults",
-            "label": "Use defaults (Neon CLI, MCP: global, skills: project-level — already-configured components will be skipped)"
+            "label": "Use defaults (MCP: global, skills:project-level, install extension later) (Recommended)"
           },
           {
             "value": "customize",
@@ -1734,7 +1734,7 @@ exports[`neon init --agent: every step, against every project shape > greenfield
         "options": [
           {
             "value": "defaults",
-            "label": "Use defaults (Neon CLI, MCP: global, skills: project-level — already-configured components will be skipped)"
+            "label": "Use defaults (MCP: global, skills:project-level, install extension later) (Recommended)"
           },
           {
             "value": "customize",
@@ -2209,7 +2209,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
         "options": [
           {
             "value": "defaults",
-            "label": "Use defaults (Neon CLI, MCP: global, skills: project-level — already-configured components will be skipped)"
+            "label": "Use defaults (MCP: global, skills:project-level, install extension later) (Recommended)"
           },
           {
             "value": "customize",
@@ -2684,7 +2684,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
         "options": [
           {
             "value": "defaults",
-            "label": "Use defaults (Neon CLI, MCP: global, skills: project-level — already-configured components will be skipped)"
+            "label": "Use defaults (MCP: global, skills:project-level, install extension later) (Recommended)"
           },
           {
             "value": "customize",
@@ -3159,7 +3159,7 @@ exports[`neon init --agent: every step, against every project shape > node-app >
         "options": [
           {
             "value": "defaults",
-            "label": "Use defaults (Neon CLI, MCP: global, skills: project-level — already-configured components will be skipped)"
+            "label": "Use defaults (MCP: global, skills:project-level, install extension later) (Recommended)"
           },
           {
             "value": "customize",
@@ -3634,7 +3634,7 @@ exports[`neon init --agent: every step, against every project shape > other-data
         "options": [
           {
             "value": "defaults",
-            "label": "Use defaults (Neon CLI, MCP: global, skills: project-level — already-configured components will be skipped)"
+            "label": "Use defaults (MCP: global, skills:project-level, install extension later) (Recommended)"
           },
           {
             "value": "customize",
@@ -4025,7 +4025,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > connected �
         "options": [
           {
             "value": "defaults",
-            "label": "Use defaults (Neon CLI, MCP: global, skills: project-level — already-configured components will be skipped)"
+            "label": "Use defaults (MCP: global, skills:project-level, install extension later) (Recommended)"
           },
           {
             "value": "customize",
@@ -4170,7 +4170,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > drizzle — 
         "options": [
           {
             "value": "defaults",
-            "label": "Use defaults (Neon CLI, MCP: global, skills: project-level — already-configured components will be skipped)"
+            "label": "Use defaults (MCP: global, skills:project-level, install extension later) (Recommended)"
           },
           {
             "value": "customize",
@@ -4332,7 +4332,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > greenfield �
         "options": [
           {
             "value": "defaults",
-            "label": "Use defaults (Neon CLI, MCP: global, skills: project-level — already-configured components will be skipped)"
+            "label": "Use defaults (MCP: global, skills:project-level, install extension later) (Recommended)"
           },
           {
             "value": "customize",
@@ -4477,7 +4477,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > next-prisma 
         "options": [
           {
             "value": "defaults",
-            "label": "Use defaults (Neon CLI, MCP: global, skills: project-level — already-configured components will be skipped)"
+            "label": "Use defaults (MCP: global, skills:project-level, install extension later) (Recommended)"
           },
           {
             "value": "customize",
@@ -4622,7 +4622,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > next-prisma-
         "options": [
           {
             "value": "defaults",
-            "label": "Use defaults (Neon CLI, MCP: global, skills: project-level — already-configured components will be skipped)"
+            "label": "Use defaults (MCP: global, skills:project-level, install extension later) (Recommended)"
           },
           {
             "value": "customize",
@@ -4767,7 +4767,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > node-app —
         "options": [
           {
             "value": "defaults",
-            "label": "Use defaults (Neon CLI, MCP: global, skills: project-level — already-configured components will be skipped)"
+            "label": "Use defaults (MCP: global, skills:project-level, install extension later) (Recommended)"
           },
           {
             "value": "customize",
@@ -4912,7 +4912,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > other-databa
         "options": [
           {
             "value": "defaults",
-            "label": "Use defaults (Neon CLI, MCP: global, skills: project-level — already-configured components will be skipped)"
+            "label": "Use defaults (MCP: global, skills:project-level, install extension later) (Recommended)"
           },
           {
             "value": "customize",
@@ -5095,7 +5095,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cla
         "options": [
           {
             "value": "defaults",
-            "label": "Use defaults (Neon CLI, MCP: global, skills: project-level — already-configured components will be skipped)"
+            "label": "Use defaults (MCP: global, skills:project-level, install extension later) (Recommended)"
           },
           {
             "value": "customize",
@@ -5232,7 +5232,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cla
         "options": [
           {
             "value": "defaults",
-            "label": "Use defaults (Neon CLI, MCP: global, skills: project-level — already-configured components will be skipped)"
+            "label": "Use defaults (MCP: global, skills:project-level, install extension later) (Recommended)"
           },
           {
             "value": "customize",
@@ -5445,7 +5445,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cod
         "options": [
           {
             "value": "defaults",
-            "label": "Use defaults (Neon CLI, MCP: global, skills: project-level — already-configured components will be skipped)"
+            "label": "Use defaults (MCP: global, skills:project-level, install extension later) (Recommended)"
           },
           {
             "value": "customize",
@@ -5582,7 +5582,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cod
         "options": [
           {
             "value": "defaults",
-            "label": "Use defaults (Neon CLI, MCP: global, skills: project-level — already-configured components will be skipped)"
+            "label": "Use defaults (MCP: global, skills:project-level, install extension later) (Recommended)"
           },
           {
             "value": "customize",
@@ -5803,7 +5803,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cur
         "options": [
           {
             "value": "defaults",
-            "label": "Use defaults (Neon CLI, MCP: global, skills: project-level — already-configured components will be skipped)"
+            "label": "Use defaults (MCP: global, skills:project-level, install extension later) (Recommended)"
           },
           {
             "value": "customize",
@@ -5948,7 +5948,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cur
         "options": [
           {
             "value": "defaults",
-            "label": "Use defaults (Neon CLI, MCP: global, skills: project-level — already-configured components will be skipped)"
+            "label": "Use defaults (MCP: global, skills:project-level, install extension later) (Recommended)"
           },
           {
             "value": "customize",
@@ -6161,7 +6161,7 @@ exports[`neon init --agent: the response depends on which agent is driving > non
         "options": [
           {
             "value": "defaults",
-            "label": "Use defaults (Neon CLI, MCP: global, skills: project-level — already-configured components will be skipped)"
+            "label": "Use defaults (MCP: global, skills:project-level, install extension later) (Recommended)"
           },
           {
             "value": "customize",
@@ -6298,7 +6298,7 @@ exports[`neon init --agent: the response depends on which agent is driving > non
         "options": [
           {
             "value": "defaults",
-            "label": "Use defaults (Neon CLI, MCP: global, skills: project-level — already-configured components will be skipped)"
+            "label": "Use defaults (MCP: global, skills:project-level, install extension later) (Recommended)"
           },
           {
             "value": "customize",
@@ -6746,7 +6746,7 @@ exports[`neon init: failure output > --data without a step falls through to the 
         "options": [
           {
             "value": "defaults",
-            "label": "Use defaults (Neon CLI, MCP: global, skills: project-level — already-configured components will be skipped)"
+            "label": "Use defaults (MCP: global, skills:project-level, install extension later) (Recommended)"
           },
           {
             "value": "customize",
