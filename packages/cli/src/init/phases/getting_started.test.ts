@@ -33,7 +33,7 @@ describe("getting-started phase", () => {
 
 		if (result.nextAction.type === "agent_action") {
 			expect(result.nextAction.prerequisite).toContain(
-				"getting-started.md",
+				"backend-overview.md",
 			);
 			expect(result.nextAction.onComplete.type).toBe("run_neon_init");
 		}

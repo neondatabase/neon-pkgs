@@ -1,5 +1,5 @@
 import { neonctlCmd } from "../neonctl.js";
-import { SKILL_REFERENCE_URLS } from "../skills.js";
+import { DOC_REFERENCE_URLS } from "../skills.js";
 import type { PhaseResponse } from "../types.js";
 
 /**
@@ -65,7 +65,7 @@ export async function handleDbPhase(
 			project: { id: options.projectId },
 			nextAction: {
 				type: "agent_action",
-				prerequisite: SKILL_REFERENCE_URLS.connectionMethods,
+				prerequisite: DOC_REFERENCE_URLS.connectionMethods,
 				steps: [
 					{
 						id: "get_connection_string",

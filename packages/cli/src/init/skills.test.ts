@@ -1,10 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { SKILL_REFERENCE_URLS } from "./skills.js";
+import { DOC_REFERENCE_URLS } from "./skills.js";
 
-describe("SKILL_REFERENCE_URLS", () => {
+describe("DOC_REFERENCE_URLS", () => {
 	test("contains gettingStarted URL", () => {
-		expect(SKILL_REFERENCE_URLS.gettingStarted).toBe(
-			"https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+		expect(DOC_REFERENCE_URLS.gettingStarted).toBe(
+			"https://neon.com/docs/get-started/backend-overview.md",
 		);
 	});
 
@@ -20,13 +20,13 @@ describe("SKILL_REFERENCE_URLS", () => {
 			"neonJs",
 		];
 		for (const key of expectedKeys) {
-			expect(SKILL_REFERENCE_URLS).toHaveProperty(key);
-			expect(SKILL_REFERENCE_URLS[key]).toMatch(/^https:\/\/neon\.com\//);
+			expect(DOC_REFERENCE_URLS).toHaveProperty(key);
+			expect(DOC_REFERENCE_URLS[key]).toMatch(/^https:\/\/neon\.com\//);
 		}
 	});
 
 	test("all URLs end with .md", () => {
-		for (const url of Object.values(SKILL_REFERENCE_URLS)) {
+		for (const url of Object.values(DOC_REFERENCE_URLS)) {
 			expect(url).toMatch(/\.md$/);
 		}
 	});

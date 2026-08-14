@@ -75,7 +75,7 @@ describe("handleDbPhase", () => {
 			expect(result.nextAction.steps).toHaveLength(3);
 			expect(result.nextAction.steps[0].command).toContain("proj-xyz");
 			expect(result.nextAction.prerequisite).toContain(
-				"connection-methods",
+				"choose-connection",
 			);
 		}
 	});

@@ -292,7 +292,7 @@ exports[`neon init --agent: every step, against every project shape > connected 
   },
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
+    "prerequisite": "https://neon.com/docs/connect/choose-connection.md",
     "steps": [
       {
         "id": "get_connection_string",
@@ -345,7 +345,7 @@ exports[`neon init --agent: every step, against every project shape > connected 
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
         "id": "select_org",
@@ -408,7 +408,7 @@ exports[`neon init --agent: every step, against every project shape > connected 
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
         "id": "run_migrations",
@@ -691,7 +691,7 @@ exports[`neon init --agent: every step, against every project shape > connected 
         "label": "No, skip for now"
       }
     ],
-    "context": "Full documentation: https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "context": "Full documentation: https://neon.com/docs/auth/overview.md",
     "responseMapping": {
       "yes": {
         "command": "neon init --agent --data '{\\"step\\":\\"neon-auth\\",\\"agent\\":\\"cursor\\",\\"setup\\":true}'"
@@ -718,7 +718,7 @@ exports[`neon init --agent: every step, against every project shape > connected 
   "status": "in_progress",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "prerequisite": "https://neon.com/docs/auth/overview.md",
     "steps": [
       {
         "id": "provision",
@@ -1015,15 +1015,15 @@ exports[`neon init --agent: every step, against every project shape > connected 
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -1084,15 +1084,15 @@ exports[`neon init --agent: every step, against every project shape > connected 
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -1320,7 +1320,7 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
   },
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
+    "prerequisite": "https://neon.com/docs/connect/choose-connection.md",
     "steps": [
       {
         "id": "get_connection_string",
@@ -1373,7 +1373,7 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
         "id": "select_org",
@@ -1436,7 +1436,7 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
         "id": "run_migrations",
@@ -1719,7 +1719,7 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
         "label": "No, skip for now"
       }
     ],
-    "context": "Full documentation: https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "context": "Full documentation: https://neon.com/docs/auth/overview.md",
     "responseMapping": {
       "yes": {
         "command": "neon init --agent --data '{\\"step\\":\\"neon-auth\\",\\"agent\\":\\"cursor\\",\\"setup\\":true}'"
@@ -1746,7 +1746,7 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
   "status": "in_progress",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "prerequisite": "https://neon.com/docs/auth/overview.md",
     "steps": [
       {
         "id": "provision",
@@ -2043,15 +2043,15 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -2112,15 +2112,15 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -2348,7 +2348,7 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
   },
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
+    "prerequisite": "https://neon.com/docs/connect/choose-connection.md",
     "steps": [
       {
         "id": "get_connection_string",
@@ -2401,7 +2401,7 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
         "id": "select_org",
@@ -2462,7 +2462,7 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
         "id": "run_migrations",
@@ -2735,7 +2735,7 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
         "label": "No, skip for now"
       }
     ],
-    "context": "Full documentation: https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "context": "Full documentation: https://neon.com/docs/auth/overview.md",
     "responseMapping": {
       "yes": {
         "command": "neon init --agent --data '{\\"step\\":\\"neon-auth\\",\\"agent\\":\\"cursor\\",\\"setup\\":true}'"
@@ -2760,7 +2760,7 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
   "status": "in_progress",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "prerequisite": "https://neon.com/docs/auth/overview.md",
     "steps": [
       {
         "id": "provision",
@@ -3051,15 +3051,15 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -3120,15 +3120,15 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -3345,7 +3345,7 @@ exports[`neon init --agent: every step, against every project shape > greenfield
   },
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
+    "prerequisite": "https://neon.com/docs/connect/choose-connection.md",
     "steps": [
       {
         "id": "get_connection_string",
@@ -3398,7 +3398,7 @@ exports[`neon init --agent: every step, against every project shape > greenfield
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
         "id": "select_org",
@@ -3461,7 +3461,7 @@ exports[`neon init --agent: every step, against every project shape > greenfield
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
         "id": "run_migrations",
@@ -3744,7 +3744,7 @@ exports[`neon init --agent: every step, against every project shape > greenfield
         "label": "No, skip for now"
       }
     ],
-    "context": "Full documentation: https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "context": "Full documentation: https://neon.com/docs/auth/overview.md",
     "responseMapping": {
       "yes": {
         "command": "neon init --agent --data '{\\"step\\":\\"neon-auth\\",\\"agent\\":\\"cursor\\",\\"setup\\":true}'"
@@ -3771,7 +3771,7 @@ exports[`neon init --agent: every step, against every project shape > greenfield
   "status": "in_progress",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "prerequisite": "https://neon.com/docs/auth/overview.md",
     "steps": [
       {
         "id": "provision",
@@ -4068,15 +4068,15 @@ exports[`neon init --agent: every step, against every project shape > greenfield
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -4137,15 +4137,15 @@ exports[`neon init --agent: every step, against every project shape > greenfield
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -4378,7 +4378,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
   },
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
+    "prerequisite": "https://neon.com/docs/connect/choose-connection.md",
     "steps": [
       {
         "id": "get_connection_string",
@@ -4431,7 +4431,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
         "id": "select_org",
@@ -4494,7 +4494,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
         "id": "run_migrations",
@@ -4777,7 +4777,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
         "label": "No, skip for now"
       }
     ],
-    "context": "Full documentation: https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "context": "Full documentation: https://neon.com/docs/auth/overview.md",
     "responseMapping": {
       "yes": {
         "command": "neon init --agent --data '{\\"step\\":\\"neon-auth\\",\\"agent\\":\\"cursor\\",\\"setup\\":true}'"
@@ -4804,7 +4804,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
   "status": "in_progress",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "prerequisite": "https://neon.com/docs/auth/overview.md",
     "steps": [
       {
         "id": "provision",
@@ -5101,15 +5101,15 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -5170,15 +5170,15 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -5411,7 +5411,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
   },
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
+    "prerequisite": "https://neon.com/docs/connect/choose-connection.md",
     "steps": [
       {
         "id": "get_connection_string",
@@ -5464,7 +5464,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
         "id": "select_org",
@@ -5527,7 +5527,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
         "id": "run_migrations",
@@ -5810,7 +5810,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
         "label": "No, skip for now"
       }
     ],
-    "context": "Full documentation: https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "context": "Full documentation: https://neon.com/docs/auth/overview.md",
     "responseMapping": {
       "yes": {
         "command": "neon init --agent --data '{\\"step\\":\\"neon-auth\\",\\"agent\\":\\"cursor\\",\\"setup\\":true}'"
@@ -5837,7 +5837,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
   "status": "in_progress",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "prerequisite": "https://neon.com/docs/auth/overview.md",
     "steps": [
       {
         "id": "provision",
@@ -6134,15 +6134,15 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -6203,15 +6203,15 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -6439,7 +6439,7 @@ exports[`neon init --agent: every step, against every project shape > node-app >
   },
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
+    "prerequisite": "https://neon.com/docs/connect/choose-connection.md",
     "steps": [
       {
         "id": "get_connection_string",
@@ -6492,7 +6492,7 @@ exports[`neon init --agent: every step, against every project shape > node-app >
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
         "id": "select_org",
@@ -6555,7 +6555,7 @@ exports[`neon init --agent: every step, against every project shape > node-app >
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
         "id": "run_migrations",
@@ -6838,7 +6838,7 @@ exports[`neon init --agent: every step, against every project shape > node-app >
         "label": "No, skip for now"
       }
     ],
-    "context": "Full documentation: https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "context": "Full documentation: https://neon.com/docs/auth/overview.md",
     "responseMapping": {
       "yes": {
         "command": "neon init --agent --data '{\\"step\\":\\"neon-auth\\",\\"agent\\":\\"cursor\\",\\"setup\\":true}'"
@@ -6865,7 +6865,7 @@ exports[`neon init --agent: every step, against every project shape > node-app >
   "status": "in_progress",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "prerequisite": "https://neon.com/docs/auth/overview.md",
     "steps": [
       {
         "id": "provision",
@@ -7162,15 +7162,15 @@ exports[`neon init --agent: every step, against every project shape > node-app >
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -7231,15 +7231,15 @@ exports[`neon init --agent: every step, against every project shape > node-app >
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -7472,7 +7472,7 @@ exports[`neon init --agent: every step, against every project shape > other-data
   },
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
+    "prerequisite": "https://neon.com/docs/connect/choose-connection.md",
     "steps": [
       {
         "id": "get_connection_string",
@@ -7525,7 +7525,7 @@ exports[`neon init --agent: every step, against every project shape > other-data
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
         "id": "select_org",
@@ -7588,7 +7588,7 @@ exports[`neon init --agent: every step, against every project shape > other-data
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
         "id": "run_migrations",
@@ -7871,7 +7871,7 @@ exports[`neon init --agent: every step, against every project shape > other-data
         "label": "No, skip for now"
       }
     ],
-    "context": "Full documentation: https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "context": "Full documentation: https://neon.com/docs/auth/overview.md",
     "responseMapping": {
       "yes": {
         "command": "neon init --agent --data '{\\"step\\":\\"neon-auth\\",\\"agent\\":\\"cursor\\",\\"setup\\":true}'"
@@ -7898,7 +7898,7 @@ exports[`neon init --agent: every step, against every project shape > other-data
   "status": "in_progress",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
+    "prerequisite": "https://neon.com/docs/auth/overview.md",
     "steps": [
       {
         "id": "provision",
@@ -8195,15 +8195,15 @@ exports[`neon init --agent: every step, against every project shape > other-data
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -8264,15 +8264,15 @@ exports[`neon init --agent: every step, against every project shape > other-data
       }
     }
   },
-  "skillReferences": {
-    "gettingStarted": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
-    "connectionMethods": "https://neon.com/docs/ai/skills/neon-postgres/references/connection-methods.md",
-    "neonAuth": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-auth.md",
-    "serverlessDriver": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-serverless.md",
-    "neonCli": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-cli.md",
-    "devtools": "https://neon.com/docs/ai/skills/neon-postgres/references/devtools.md",
-    "branching": "https://neon.com/docs/ai/skills/neon-postgres/references/branching.md",
-    "neonJs": "https://neon.com/docs/ai/skills/neon-postgres/references/neon-js.md"
+  "docReferences": {
+    "gettingStarted": "https://neon.com/docs/get-started/backend-overview.md",
+    "connectionMethods": "https://neon.com/docs/connect/choose-connection.md",
+    "neonAuth": "https://neon.com/docs/auth/overview.md",
+    "serverlessDriver": "https://neon.com/docs/serverless/serverless-driver.md",
+    "neonCli": "https://neon.com/docs/cli/install.md",
+    "devtools": "https://neon.com/docs/reference/api.md",
+    "branching": "https://neon.com/docs/introduction/branching.md",
+    "neonJs": "https://neon.com/docs/reference/javascript-sdk.md"
   }
 }
 --- stderr ---
@@ -8332,7 +8332,7 @@ exports[`neon init --agent: nested and string-encoded --data payloads > JSON-enc
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
         "id": "select_org",
@@ -8400,7 +8400,7 @@ exports[`neon init --agent: nested and string-encoded --data payloads > nested o
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
         "id": "select_org",
@@ -12064,7 +12064,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cla
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
         "id": "select_org",
@@ -12559,7 +12559,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cod
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
         "id": "select_org",
@@ -13054,7 +13054,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cur
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
         "id": "select_org",
@@ -13565,7 +13565,7 @@ exports[`neon init --agent: the response depends on which agent is driving > non
   "status": "getting_started",
   "nextAction": {
     "type": "agent_action",
-    "prerequisite": "https://neon.com/docs/ai/skills/neon-postgres/references/getting-started.md",
+    "prerequisite": "https://neon.com/docs/get-started/backend-overview.md",
     "steps": [
       {
         "id": "select_org",

@@ -6,7 +6,7 @@ import {
 	resolvePackageManager,
 } from "../../utils/package_manager.js";
 import { neonctlCmd } from "../neonctl.js";
-import { ensureSkillsUpToDate, SKILL_REFERENCE_URLS } from "../skills.js";
+import { DOC_REFERENCE_URLS, ensureSkillsUpToDate } from "../skills.js";
 import type { PhaseResponse } from "../types.js";
 
 export type GettingStartedPhaseOptions = {
@@ -264,7 +264,7 @@ export async function handleGettingStartedPhase(
 		status: "getting_started",
 		nextAction: {
 			type: "agent_action",
-			prerequisite: SKILL_REFERENCE_URLS.gettingStarted,
+			prerequisite: DOC_REFERENCE_URLS.gettingStarted,
 			steps,
 			onComplete: buildOnComplete(options),
 		},
