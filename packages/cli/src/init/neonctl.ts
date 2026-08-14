@@ -1,32 +1,26 @@
-import { lstatSync } from "node:fs";
+import { lstatSync, realpathSync } from "node:fs";
+import { sep } from "node:path";
 import { execa } from "execa";
 import which from "which";
 import {
 	globalInstallCommand,
 	resolveInvokingPackageManager,
 } from "../utils/package_manager.js";
+import { neonBin } from "./neon_bin.js";
 
 /**
  * Returns the Neon CLI command prefix the flow emits to agents/users, e.g.
- * `"CI= neon"` or `"CI= npx -y neon"`.
+ * `"CI= neon"` or `"CI= npx -y neon"` (see {@link neonBin} for how the `neon`
+ * vs `npx -y neon` choice is made).
  *
- * `neon init` installs the Neon CLI (see {@link ensureNeonctl}), so once a `neon`
- * binary is on PATH we emit it directly — the agent drives the installed CLI
- * instead of paying npx's resolution cost on every command. When nothing is
- * installed yet — a first run started with `npx neon init`, before setup has
- * installed the CLI — we fall back to `npx -y neon` so the emitted command still
- * works. Detection happens per call (at response-build time) so the prefix
- * reflects the machine's current state.
- *
- * The CLI reads NEON_API_HOST and NEON_OAUTH_HOST from the environment directly,
- * so no extra flags are needed. The `neon` package ships both the `neon` and
- * `neonctl` binaries; we surface the cleaner `neon` command.
+ * The `CI=` prefix keeps the emitted subcommands (`orgs list`, `auth`, …)
+ * non-interactive. The CLI reads NEON_API_HOST and NEON_OAUTH_HOST from the
+ * environment directly, so no extra flags are needed.
  *
  * Usage: `${neonctlCmd()} orgs list --output json`
  */
 export function neonctlCmd(): string {
-	const installed = which.sync("neon", { nothrow: true });
-	return installed ? "CI= neon" : "CI= npx -y neon";
+	return `CI= ${neonBin()}`;
 }
 
 type NeonctlStatus = {
@@ -120,7 +114,7 @@ function isLocalDevSymlink(): boolean {
 	try {
 		const home = process.env.HOME || process.env.USERPROFILE || "";
 		const nvmDir = process.env.NVM_DIR || `${home}/.nvm`;
-		// Check common global module locations for a symlink
+		// `pnpm link` / `npm link` create a package symlink under global node_modules.
 		const candidates = [
 			`${nvmDir}/versions/node/${process.version}/lib/node_modules/neon`,
 			`${home}/.nvm/versions/node/${process.version}/lib/node_modules/neon`,
@@ -131,6 +125,26 @@ function isLocalDevSymlink(): boolean {
 				if (stat.isSymbolicLink()) return true;
 			} catch {
 				// path doesn't exist
+			}
+		}
+
+		// A bare bin symlink (e.g. `ln -s <repo>/dist/cli.js <bin>/neon`) points the
+		// `neon` binary straight at a working tree. A real global install is also a
+		// bin symlink, but one that resolves into a `node_modules` directory — so a
+		// `neon` symlink resolving anywhere else is a developer's own build. Gated on
+		// the bin being a symlink so a plain-file `neon` (a real install elsewhere, or
+		// a test stub) is left to the normal install/update path.
+		const bin = which.sync("neon", { nothrow: true });
+		if (bin) {
+			try {
+				if (
+					lstatSync(bin).isSymbolicLink() &&
+					!realpathSync(bin).includes(`${sep}node_modules${sep}`)
+				) {
+					return true;
+				}
+			} catch {
+				// unreadable — fall through
 			}
 		}
 		return false;

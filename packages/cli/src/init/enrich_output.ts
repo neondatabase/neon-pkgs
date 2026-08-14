@@ -1,6 +1,10 @@
+import { neonBin } from "./neon_bin.js";
+
 /**
- * Converts a phase's `args` (e.g. ["neon-auth", "--json", "--setup"]) into the
- * `neon init --agent --data` invocation that reaches the same handler.
+ * Converts a phase's `args` (e.g. ["setup", "--json", "--data", …]) into the
+ * `neon init --agent --data` invocation that reaches the same handler. Uses the
+ * installed `neon` binary when present, else `npx -y neon` (see {@link neonBin}),
+ * so the chaining commands work even on a first run started with `npx neon init`.
  */
 function argsToCommand(args: string[]): string {
 	const data: Record<string, unknown> = {};
@@ -35,7 +39,7 @@ function argsToCommand(args: string[]): string {
 		}
 	}
 
-	return `neon init --agent --data '${JSON.stringify(data)}'`;
+	return `${neonBin()} init --agent --data '${JSON.stringify(data)}'`;
 }
 
 /**
