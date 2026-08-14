@@ -526,7 +526,7 @@ export const deleteCredentialsAt = (
 		const at = { path: credentialsPath, profile: "DEFAULT" };
 		const before = store.inspect(at);
 		store.delete(at);
-		if (before.file !== "missing" || before.storage !== "-") {
+		if (before.credentials !== null || before.file !== "missing") {
 			log.info("Deleted credentials from %s", credentialsPath);
 		} else {
 			log.debug("Credentials file %s does not exist", credentialsPath);

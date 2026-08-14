@@ -49,11 +49,13 @@ In `packages/cli` the `.js` form passes `tsc --noEmit` — its `paths` mapping p
   secret stays in the credentials file or the keyring. `NEON_CRED_STORAGE` overrides
   that preference for one invocation and does not migrate.
 - **A keyring get of `null` or delete of `false` is not proof the item is gone.**
-  `@napi-rs/keyring@1.3.0` collapses locked and denied access the same way. `profile
-  remove` refuses rather than drop the profile. `profile storage file` persists when
-  nothing is stored and warns that a denied leftover would stay unused. `--force`
-  persists when a leftover cannot be read. File preference does not select a leftover
-  keyring item.
+  `@napi-rs/keyring@1.3.0` collapses locked and denied access the same way. When
+  keyring is preferred and no leftover file remains, `read()` throws
+  `KeyringUnreadableError` rather than returning null — that is not "never signed
+  in", and it must not start OAuth. `profile remove` refuses rather than drop the
+  profile. `profile storage file` persists when nothing is stored and warns that a
+  denied leftover would stay unused. `--force` persists when a leftover cannot be
+  read. File preference does not select a leftover keyring item.
 - **No logger, no yargs, no API client.** Take a callback or a value instead; the imperative
   shell belongs in the consumer.
 - Unit tests live in `packages/cli`, so the code is covered once rather than three times.

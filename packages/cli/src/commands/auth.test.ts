@@ -9,6 +9,7 @@ import type { AddressInfo } from "node:net";
 import {
 	createCredentialStore,
 	KeyringUnavailableError,
+	KeyringUnreadableError,
 } from "@neon-internals/cli-core/credential_store";
 import type { OAuth2Server } from "oauth2-mock-server";
 import { join } from "path";
@@ -184,6 +185,38 @@ describe("ensureAuth", () => {
 		expect(refreshTokenSpy).toHaveBeenCalledTimes(1);
 		expect(authSpy).toHaveBeenCalledTimes(1);
 		expect(props.apiKey).toBe("new-auth-token");
+	});
+
+	test("does not start OAuth when keyring is preferred and get returns null", async ({
+		runMockServer,
+	}) => {
+		const server = await runMockServer("main");
+		writeFileSync(
+			join(configDir, "config.json"),
+			JSON.stringify({ credStorage: "keyring" }),
+		);
+		rmSync(join(configDir, "credentials.json"), { force: true });
+		const storeSpy = vi
+			.spyOn(credentialIo, "storeFor")
+			.mockImplementation((dir: string) =>
+				createCredentialStore(dir, {
+					env: {},
+					keyring: {
+						get: () => null,
+						set: () => undefined,
+						delete: () => false,
+					},
+				}),
+			);
+		try {
+			await expect(
+				ensureAuth(setupTestProps(server)),
+			).rejects.toBeInstanceOf(KeyringUnreadableError);
+			expect(authSpy).not.toHaveBeenCalled();
+		} finally {
+			storeSpy.mockRestore();
+			rmSync(join(configDir, "config.json"), { force: true });
+		}
 	});
 
 	test("should trigger auth flow when credentials.json does not exist", async ({

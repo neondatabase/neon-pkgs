@@ -92,7 +92,8 @@ Flags (both commands): `--config <path>`, `--project-id`, `--branch`, `--api-key
 Neon CLI profile the `neon` CLI does, including a secret stored in the OS keyring after
 `neon profile storage keyring`. `NEON_CRED_STORAGE` overrides `config.json` for one
 invocation. Keyring storage needs a compatible npm-installed `@neon/env`; packaged
-binaries cannot load it.
+binaries cannot load it. A keyring-mode profile whose item cannot be read is an error,
+not "not signed in".
 
 ## Env vars produced
 

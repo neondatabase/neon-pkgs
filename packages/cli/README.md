@@ -855,9 +855,11 @@ Profiles
 `Scope` is what a key can reach; an OAuth session has none of its own, so it shows `-`. `File`
 says whether the credentials file can be read and understood — `ok`, `invalid` or `missing` —
 which is not the same as the credential still working; only using it shows that. `Storage` is
-where the secret currently lives — `file`, `keyring`, or `-` when neither store has one. After
-a migrate to the OS keyring the file column is `missing` and storage is `keyring`. The table
-shows the file name, `--output json` the full path.
+which store this profile uses — `file`, `keyring`, or `-` when file mode is in effect and
+neither store has a readable secret. In keyring mode a missing file still shows `keyring`:
+the secret is not on disk, and a keyring that returns nothing is unreadable, not signed-out.
+After a migrate to the OS keyring the file column is `missing` and storage is `keyring`. The
+table shows the file name, `--output json` the full path.
 
 Select one per invocation with `--profile`, or per shell with `NEON_PROFILE`. There is no `profile use` command and nothing is stored about which profile is "current", so what you type is always what runs.
 
@@ -918,6 +920,11 @@ A path a profile adopted from outside the config directory stays on disk. Packag
 binaries and older CLI releases cannot read a keyring profile — after a migrate they
 see the file as missing. Keyring storage needs a compatible npm-installed `neon` or
 `@neon/env`.
+
+A missing credentials file in keyring mode is not treated as signed-out. Commands that
+would otherwise open a browser fail: the profile uses the OS keyring, and the keyring
+did not return the credential (locked, access denied, or removed). `neon auth` still
+signs in when you ask it to.
 
 ### A profile holds either a sign-in or an API key
 

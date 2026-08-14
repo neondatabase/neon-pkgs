@@ -275,6 +275,47 @@ describe("profile list", () => {
 		}
 	});
 
+	test("keyring mode with a missing file lists storage as keyring, not signed-out", async () => {
+		const dir = makeConfigDir({
+			"config.json": JSON.stringify({ credStorage: "keyring" }),
+		});
+		const { code, stdout, stderr } = await runCli([
+			"profile",
+			"list",
+			"--config-dir",
+			dir,
+			"--output",
+			"json",
+		]);
+
+		expect(code).toBe(0);
+		expect(JSON.parse(stdout)).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					name: "DEFAULT",
+					auth: "-",
+					file: "missing",
+					storage: "keyring",
+				}),
+			]),
+		);
+		expect(stderr).toMatch(/OS keyring/);
+	});
+
+	test("projects list does not start OAuth when keyring is preferred and unread", async () => {
+		const dir = makeConfigDir({
+			"config.json": JSON.stringify({ credStorage: "keyring" }),
+		});
+		const { code, stderr } = await runCli(
+			["projects", "list", "--config-dir", dir],
+			{ CI: "true" },
+		);
+
+		expect(code).toBe(1);
+		expect(stderr).toMatch(/OS keyring/);
+		expect(stderr).not.toContain("Cannot run interactive auth in CI");
+	});
+
 	test("a profile whose file is missing is listed as unavailable", async () => {
 		const dir = makeConfigDir({
 			"profiles.json": JSON.stringify({
@@ -464,6 +505,20 @@ describe("profile create", () => {
 
 	// The no-flag form is what an agent tries first, and `authFlow` answered it with a bare
 	// "Cannot run interactive auth in CI" — true, and with no way forward from it.
+	test("keyring mode with no readable item does not look like an existing profile", async () => {
+		const dir = makeConfigDir({
+			"config.json": JSON.stringify({ credStorage: "keyring" }),
+		});
+		const { code, stderr } = await runCli(
+			["profile", "create", "DEFAULT", "--config-dir", dir],
+			{ CI: "true" },
+		);
+
+		expect(code).toBe(1);
+		expect(stderr).not.toContain("already exists");
+		expect(stderr).toContain("cannot happen in CI");
+	});
+
 	test("with no key in CI, says how to pass one instead", async () => {
 		const dir = makeConfigDir({});
 		const { code, stderr } = await runCli(

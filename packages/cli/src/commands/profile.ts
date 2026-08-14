@@ -618,7 +618,7 @@ const assertReplaceable = (props: CreateProps): void => {
 	const declared = readProfiles(configDir)?.profiles[name];
 	const path = credentialsPathFor(configDir, name);
 	const listing = storeFor(configDir).inspect({ path, profile: name });
-	const present = listing.file !== "missing" || listing.storage !== "-";
+	const present = listing.credentials !== null || listing.file !== "missing";
 	if (!declared && !(name === DEFAULT_PROFILE && present)) return;
 
 	const stored = listing.credentials;
@@ -1407,7 +1407,7 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 	const listing = storeFor(props.configDir).inspect(at);
 	if (owned) {
 		storeFor(props.configDir).delete(at);
-		if (listing.file !== "missing" || listing.storage !== "-") {
+		if (listing.credentials !== null || listing.file !== "missing") {
 			log.info("Deleted %s", profile.credentialsPath);
 		}
 	} else if (existsSync(profile.credentialsPath)) {

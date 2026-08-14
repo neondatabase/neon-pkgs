@@ -1,7 +1,8 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
+import * as keyring from "./keyring.js";
 import { resolveApiKey } from "./resolve-api-key.js";
 
 const cleanups: Array<() => void> = [];
@@ -151,6 +152,29 @@ describe("resolveApiKey — nothing stored", () => {
 
 	test("no home directory resolvable", () => {
 		expect(resolveApiKey({ env: {} })).toBeUndefined();
+	});
+
+	test("keyring mode with no readable item is not signed-out", () => {
+		const home = makeHome(null, "neon");
+		writeFileSync(
+			resolve(home, ".config", "neon", "config.json"),
+			JSON.stringify({ credStorage: "keyring" }),
+		);
+		const spy = vi.spyOn(keyring, "tryLoadKeyring").mockReturnValue({
+			get: () => null,
+			set: () => undefined,
+			delete: () => false,
+		});
+		try {
+			expect(() => resolveApiKey({ env: { HOME: home } })).toThrow(
+				/OS keyring/,
+			);
+			expect(() => resolveApiKey({ env: { HOME: home } })).toThrow(
+				/will not start a browser/,
+			);
+		} finally {
+			spy.mockRestore();
+		}
 	});
 
 	test("an OAuth file with no usable token is an error, not silence", () => {

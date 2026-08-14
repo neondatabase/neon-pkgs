@@ -21,6 +21,7 @@ import {
 	type KeyringBackend,
 	KeyringClearError,
 	KeyringUnavailableError,
+	KeyringUnreadableError,
 	keyringAccount,
 	keyringIdentityPath,
 } from "@neon-internals/cli-core/credential_store";
@@ -499,7 +500,7 @@ describe("createCredentialStore", () => {
 		store.delete(location);
 		expect(existsSync(location.path)).toBe(false);
 		expect(ring.size()).toBe(0);
-		expect(store.read(location)).toBeNull();
+		expect(() => store.read(location)).toThrow(KeyringUnreadableError);
 	});
 
 	test("migrateTo keyring persists config before deleting the credentials file", () => {
@@ -673,6 +674,48 @@ describe("createCredentialStore", () => {
 		expect(listing.file).toBe("missing");
 		expect(listing.storage).toBe(CRED_STORAGE_KEYRING);
 		expect(listing.credentials).toEqual(key);
+	});
+
+	test("throws when keyring is preferred, get returns null, and no file remains", () => {
+		const dir = makeDir({
+			"config.json": JSON.stringify({ credStorage: "keyring" }),
+		});
+		const store = createCredentialStore(dir, {
+			env: {},
+			keyring: {
+				get: () => null,
+				set: () => undefined,
+				delete: () => false,
+			},
+		});
+		expect(() => store.read(at(dir))).toThrow(KeyringUnreadableError);
+		expect(() => store.read(at(dir))).toThrow(/will not start a browser/);
+		expect(store.inspect(at(dir))).toMatchObject({
+			file: "missing",
+			storage: CRED_STORAGE_KEYRING,
+			credentials: null,
+		});
+		expect(store.inspect(at(dir)).reason).toMatch(/OS keyring/);
+	});
+
+	test("falls back to a leftover file when keyring is preferred and get returns null", () => {
+		const dir = makeDir({
+			"config.json": JSON.stringify({ credStorage: "keyring" }),
+			"credentials.json": JSON.stringify(key),
+		});
+		const store = createCredentialStore(dir, {
+			env: {},
+			keyring: {
+				get: () => null,
+				set: () => undefined,
+				delete: () => false,
+			},
+		});
+		expect(store.read(at(dir))?.backend).toBe(CRED_STORAGE_FILE);
+		expect(store.inspect(at(dir))).toMatchObject({
+			file: "ok",
+			storage: CRED_STORAGE_FILE,
+		});
 	});
 
 	test("throws when keyring is preferred, unavailable, and no file remains", () => {
