@@ -62,16 +62,16 @@ const CLI =
 
 /** Every executable the init flow shells out to, with a fixed answer. */
 const STUBS: Record<string, string> = {
-	// `neonctl --version` and `npm view neonctl version` agreeing is what makes
+	// `neon --version` and `npm view neon version` agreeing is what makes
 	// `ensureNeonctl` report `already_current` instead of trying to install.
-	neonctl: `case "$1" in
+	neon: `case "$1" in
   --version) echo "2.45.0" ;;
   *) exit 0 ;;
 esac`,
 	npm: `if [ "$1" = "view" ]; then echo "2.45.0"; fi
 exit 0`,
 	npx: "exit 0",
-	neon: "exit 0",
+	neonctl: "exit 0",
 	skills: `if [ "$1" = "--version" ]; then echo "1.0.0"; fi
 exit 0`,
 	claude: `if [ "$1" = "--version" ]; then echo "1.0.0 (Claude Code)"; fi

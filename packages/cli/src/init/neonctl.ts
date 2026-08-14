@@ -37,13 +37,12 @@ type NeonctlStatus = {
 };
 
 /**
- * Gets the currently available neonctl version.
- * Tries the global binary first, then falls back to npx.
+ * Gets the currently installed `neon` CLI version, or null if it isn't on PATH.
  */
 async function getNeonctlVersion(): Promise<string | null> {
 	// Try global binary first (fast path)
 	try {
-		const result = await execa("neonctl", ["--version"], {
+		const result = await execa("neon", ["--version"], {
 			stdio: "pipe",
 			timeout: 5000,
 		});
@@ -56,7 +55,7 @@ async function getNeonctlVersion(): Promise<string | null> {
 }
 
 /**
- * Checks whether the neonctl CLI is globally installed and whether it's up to date.
+ * Checks whether the neon CLI is globally installed and whether it's up to date.
  */
 export async function checkNeonctl(): Promise<NeonctlStatus> {
 	const currentVersion = await getNeonctlVersion();
@@ -73,7 +72,7 @@ export async function checkNeonctl(): Promise<NeonctlStatus> {
 	// Check latest version from npm registry
 	let latestVersion: string | null = null;
 	try {
-		const result = await execa("npm", ["view", "neonctl", "version"], {
+		const result = await execa("npm", ["view", "neon", "version"], {
 			stdio: "pipe",
 			timeout: 10000,
 		});
@@ -114,7 +113,7 @@ export type EnsureNeonctlResult = {
 };
 
 /**
- * Checks if neonctl is installed via a local dev symlink.
+ * Checks if the neon CLI is installed via a local dev symlink.
  * If so, skip install/update — the developer manages it manually.
  */
 function isLocalDevSymlink(): boolean {
@@ -123,8 +122,8 @@ function isLocalDevSymlink(): boolean {
 		const nvmDir = process.env.NVM_DIR || `${home}/.nvm`;
 		// Check common global module locations for a symlink
 		const candidates = [
-			`${nvmDir}/versions/node/${process.version}/lib/node_modules/neonctl`,
-			`${home}/.nvm/versions/node/${process.version}/lib/node_modules/neonctl`,
+			`${nvmDir}/versions/node/${process.version}/lib/node_modules/neon`,
+			`${home}/.nvm/versions/node/${process.version}/lib/node_modules/neon`,
 		];
 		for (const candidate of candidates) {
 			try {
@@ -141,7 +140,7 @@ function isLocalDevSymlink(): boolean {
 }
 
 /**
- * Ensures neonctl is globally installed and up to date.
+ * Ensures the `neon` CLI is globally installed and up to date.
  * Uses the same package manager that invoked the init command.
  */
 export async function ensureNeonctl(): Promise<EnsureNeonctlResult> {
@@ -164,7 +163,7 @@ export async function ensureNeonctl(): Promise<EnsureNeonctlResult> {
 	}
 
 	const pm = resolveInvokingPackageManager();
-	const install = globalInstallCommand(pm, "neonctl");
+	const install = globalInstallCommand(pm, "neon");
 	if (!install) {
 		// The next step is installing a package manager, not falling back to
 		// npx: npx ships with npm, so it is missing in exactly this case.
