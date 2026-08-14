@@ -922,9 +922,8 @@ see the file as missing. Keyring storage needs a compatible npm-installed `neon`
 `@neon/env`.
 
 A missing credentials file in keyring mode is not treated as signed-out. Commands that
-would otherwise open a browser fail: the profile uses the OS keyring, and the keyring
-did not return the credential (locked, access denied, or removed). `neon auth` still
-signs in when you ask it to.
+would otherwise open a browser fail: could not read the OS keyring item. Unlock it and
+retry, or run `neon auth`.
 
 ### A profile holds either a sign-in or an API key
 

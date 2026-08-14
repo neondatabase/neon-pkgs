@@ -738,7 +738,9 @@ describe("createCredentialStore", () => {
 			},
 		});
 		expect(() => store.read(at(dir))).toThrow(KeyringUnreadableError);
-		expect(() => store.read(at(dir))).toThrow(/will not start a browser/);
+		expect(() => store.read(at(dir))).toThrow(
+			/Unlock the keyring and retry/,
+		);
 		expect(store.inspect(at(dir))).toMatchObject({
 			file: "missing",
 			storage: CRED_STORAGE_KEYRING,

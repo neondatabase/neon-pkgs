@@ -170,7 +170,7 @@ describe("resolveApiKey — nothing stored", () => {
 				/OS keyring/,
 			);
 			expect(() => resolveApiKey({ env: { HOME: home } })).toThrow(
-				/will not start a browser/,
+				/Unlock the keyring and retry/,
 			);
 		} finally {
 			spy.mockRestore();

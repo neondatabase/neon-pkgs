@@ -86,13 +86,13 @@ export class KeyringUnavailableError extends Error {
  * null, so this is not "never signed in".
  */
 export class KeyringUnreadableError extends Error {
-	constructor(profile: string, path: string) {
+	constructor(profile: string) {
 		const replace =
 			profile === "DEFAULT"
 				? "`neon auth`"
 				: `\`neon auth --profile ${profile}\``;
 		super(
-			`Profile "${profile}" uses the OS keyring item for ${path}, and the keyring did not return it. Access may have been denied, the keyring may be locked, or the item may have been removed. This CLI will not start a browser sign-in in that situation. Unlock the keyring and retry, or pass --api-key / NEON_API_KEY. To replace the credential, run ${replace}. To stop using the keyring, run \`neon profile storage file\`.`,
+			`Could not read the OS keyring item for profile "${profile}". Unlock the keyring and retry, or run ${replace}.`,
 		);
 		this.name = "KeyringUnreadableError";
 	}
@@ -308,7 +308,7 @@ export const createCredentialStore = (
 			owned && preferred === CRED_STORAGE_KEYRING && credentials === null
 				? keyring === null
 					? "This CLI cannot use the OS keyring."
-					: `Could not read the OS keyring item for ${at.path}. Access may have been denied, the keyring may be locked, or the item may be gone.`
+					: `Could not read the OS keyring item for profile "${at.profile}".`
 				: undefined;
 		const reason = fileReason ?? keyringReason ?? unreadReason;
 		return {
@@ -376,7 +376,7 @@ export const createCredentialStore = (
 			if (fromKeyring !== null) return fromKeyring;
 			const fromFile = readFile(at);
 			if (fromFile !== null) return fromFile;
-			throw new KeyringUnreadableError(at.profile, at.path);
+			throw new KeyringUnreadableError(at.profile);
 		}
 		return readFile(at);
 	};
