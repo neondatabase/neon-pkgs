@@ -197,6 +197,37 @@ describe("createCredentialStore", () => {
 		expect(items.size).toBe(0);
 	});
 
+	test("restores the previous keyring item when a write cannot be verified", () => {
+		const dir = makeDir();
+		const items = new Map<string, string>();
+		const account = keyringAccount(resolve(dir, "credentials.json"));
+		items.set(`${KEYRING_SERVICE}\0${account}`, JSON.stringify(key));
+		let gets = 0;
+		const store = createCredentialStore(dir, {
+			env: { [NEON_CRED_STORAGE]: "keyring" },
+			keyring: {
+				get: (service, acc) => {
+					gets += 1;
+					if (gets === 2) return null;
+					return items.get(`${service}\0${acc}`) ?? null;
+				},
+				set: (service, acc, password) => {
+					items.set(`${service}\0${acc}`, password);
+				},
+				delete: (service, acc) => items.delete(`${service}\0${acc}`),
+			},
+		});
+		expect(() =>
+			store.write(at(dir), {
+				type: "api_key",
+				api_key: "napi_replacement",
+			}),
+		).toThrow(/could not read them back/);
+		expect(
+			JSON.parse(items.get(`${KEYRING_SERVICE}\0${account}`) ?? ""),
+		).toEqual(key);
+	});
+
 	test("rolls back a keyring write that cannot be read back", () => {
 		const dir = makeDir();
 		const items = new Map<string, string>();
@@ -761,6 +792,30 @@ describe("createCredentialStore", () => {
 			expect(String(err)).toMatch(/profile remove DEFAULT/);
 			expect(String(err)).not.toMatch(/delete the file/);
 		}
+	});
+
+	test("inspect does not select a leftover file when the keyring item is unusable", () => {
+		const dir = makeDir({
+			"credentials.json": JSON.stringify(key),
+		});
+		const ring = memoryKeyring();
+		ring.set(
+			KEYRING_SERVICE,
+			keyringAccount(resolve(dir, "credentials.json")),
+			'{"api_key":napi_LEAKED',
+		);
+		const store = createCredentialStore(dir, {
+			env: { [NEON_CRED_STORAGE]: "keyring" },
+			keyring: ring,
+		});
+		expect(() => store.read(at(dir))).toThrow(/not valid JSON/);
+		expect(store.inspect(at(dir))).toMatchObject({
+			file: "ok",
+			storage: CRED_STORAGE_KEYRING,
+			credentials: null,
+		});
+		expect(store.inspect(at(dir)).reason).toMatch(/not valid JSON/);
+		expect(store.inspect(at(dir)).reason).not.toContain("napi_LEAKED");
 	});
 
 	test("a keyring item with an unknown type does not say to delete the file", () => {

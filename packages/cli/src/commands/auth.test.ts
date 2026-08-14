@@ -219,6 +219,50 @@ describe("ensureAuth", () => {
 		}
 	});
 
+	test("does not start OAuth when a refreshed token cannot be persisted", async ({
+		runMockServer,
+	}) => {
+		refreshTokenSpy.mockImplementationOnce(() =>
+			Promise.resolve({
+				access_token: "new-token",
+				refresh_token: "new-refresh-token",
+				expires_at: Math.floor(Date.now() / 1000) + 3600,
+			}),
+		);
+		const server = await runMockServer("main");
+		writeFileSync(
+			join(configDir, "credentials.json"),
+			JSON.stringify({
+				access_token: "expired-token",
+				refresh_token: "refresh-token",
+				expires_at: Date.now() - 3600 * 1000,
+			}),
+			{ mode: 0o700 },
+		);
+		const storeSpy = vi
+			.spyOn(credentialIo, "storeFor")
+			.mockImplementation((dir: string) => {
+				const store = createCredentialStore(dir, {
+					env: {},
+					keyring: null,
+				});
+				return {
+					...store,
+					write: () => {
+						throw new Error("keyring write failed");
+					},
+				};
+			});
+		try {
+			await expect(ensureAuth(setupTestProps(server))).rejects.toThrow(
+				/keyring write failed/,
+			);
+			expect(authSpy).not.toHaveBeenCalled();
+		} finally {
+			storeSpy.mockRestore();
+		}
+	});
+
 	test("should trigger auth flow when credentials.json does not exist", async ({
 		runMockServer,
 	}) => {

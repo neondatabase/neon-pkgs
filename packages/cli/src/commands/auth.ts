@@ -228,41 +228,41 @@ const handleExistingToken = async (
 		return null;
 	}
 
+	let refreshedTokenSet: ExtendedTokenSet;
 	try {
-		const refreshedTokenSet = await refreshToken(
-			{
-				oauthHost: props.oauthHost,
-				clientId: props.clientId,
-				allowUnsafeTls: props.allowUnsafeTls,
-			},
-			tokenSet,
+		refreshedTokenSet = extendTokenSet(
+			await refreshToken(
+				{
+					oauthHost: props.oauthHost,
+					clientId: props.clientId,
+					allowUnsafeTls: props.allowUnsafeTls,
+				},
+				tokenSet,
+			),
 		);
-
-		// Extend the token set with expires_at
-		const extendedTokenSet = extendTokenSet(refreshedTokenSet);
-
-		const apiKey = extendedTokenSet.access_token;
-		const apiClient = getApiClient({
-			apiKey,
-			apiHost: props.apiHost,
-		});
-
-		await preserveCredentials(
-			at,
-			extendedTokenSet,
-			apiClient,
-			props.configDir,
-			backend,
-		);
-		log.debug("Token refresh successful");
-
-		return { apiKey, apiClient };
 	} catch (err: unknown) {
 		const typedErr =
 			err instanceof Error ? err : new Error("Unknown error");
 		log.debug("Failed to refresh token: %s", typedErr.message);
 		throw new Error("AUTH_REFRESH_FAILED");
 	}
+
+	const apiKey = refreshedTokenSet.access_token;
+	const apiClient = getApiClient({
+		apiKey,
+		apiHost: props.apiHost,
+	});
+
+	await preserveCredentials(
+		at,
+		refreshedTokenSet,
+		apiClient,
+		props.configDir,
+		backend,
+	);
+	log.debug("Token refresh successful");
+
+	return { apiKey, apiClient };
 };
 
 /**

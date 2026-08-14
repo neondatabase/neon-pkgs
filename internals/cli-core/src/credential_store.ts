@@ -198,6 +198,12 @@ export const createCredentialStore = (
 		label: string,
 	): void => {
 		const kr = requireKeyring();
+		let previous: string | null = null;
+		try {
+			previous = kr.get(KEYRING_SERVICE, account);
+		} catch {
+			previous = null;
+		}
 		kr.set(KEYRING_SERVICE, account, JSON.stringify(credentials));
 		try {
 			if (kr.get(KEYRING_SERVICE, account) === null) {
@@ -206,6 +212,19 @@ export const createCredentialStore = (
 				);
 			}
 		} catch (err) {
+			if (previous !== null) {
+				kr.set(KEYRING_SERVICE, account, previous);
+				let restored: string | null = null;
+				try {
+					restored = kr.get(KEYRING_SERVICE, account);
+				} catch {
+					restored = null;
+				}
+				if (restored === null) {
+					throw new KeyringClearError(label);
+				}
+				throw err instanceof Error ? err : new Error(String(err));
+			}
 			const deleted = kr.delete(KEYRING_SERVICE, account);
 			let still: string | null = null;
 			try {
@@ -273,6 +292,11 @@ export const createCredentialStore = (
 		if (preferred === CRED_STORAGE_KEYRING && keyringCreds !== null) {
 			storage = CRED_STORAGE_KEYRING;
 			credentials = keyringCreds;
+		} else if (
+			preferred === CRED_STORAGE_KEYRING &&
+			keyringRead.kind === "unusable"
+		) {
+			storage = CRED_STORAGE_KEYRING;
 		} else if (fileCreds !== null) {
 			storage = CRED_STORAGE_FILE;
 			credentials = fileCreds;
