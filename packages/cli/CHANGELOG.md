@@ -1,5 +1,17 @@
 # neon
 
+## 3.2.2
+
+### Patch Changes
+
+- e8715cd: `neon init --agent` labels the CLI install step `neon`, and the README says init installs `neon` globally. `npm i -g neon` only puts `neon` on PATH.
+
+## 3.2.1
+
+### Patch Changes
+
+- ad7cf9a: `neon init` now detects and installs the `neon` CLI instead of the retired `neonctl` alias. Version probing checks `neon` first (falling back to `neonctl` so an existing global install still counts as installed), the update check reads `npm view neon`, and auth/context lookups shell out to `neon`.
+
 ## 3.2.0
 
 ### Minor Changes

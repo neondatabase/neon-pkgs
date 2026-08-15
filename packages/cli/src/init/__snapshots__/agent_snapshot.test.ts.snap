@@ -770,7 +770,7 @@ exports[`neon init --agent: every step, against every project shape > connected 
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -923,7 +923,7 @@ exports[`neon init --agent: every step, against every project shape > connected 
   "status": "installed",
   "results": [
     {
-      "id": "neonctl",
+      "id": "neon",
       "description": "Neon CLI is up to date (v2.45.0)",
       "status": "success"
     },
@@ -946,8 +946,8 @@ exports[`neon init --agent: every step, against every project shape > connected 
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -962,7 +962,7 @@ exports[`neon init --agent: every step, against every project shape > connected 
   "status": "installed",
   "results": [
     {
-      "id": "neonctl",
+      "id": "neon",
       "description": "Neon CLI is up to date (v2.45.0)",
       "status": "success"
     },
@@ -985,8 +985,8 @@ exports[`neon init --agent: every step, against every project shape > connected 
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -1798,7 +1798,7 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -1951,7 +1951,7 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
   "status": "installed",
   "results": [
     {
-      "id": "neonctl",
+      "id": "neon",
       "description": "Neon CLI is up to date (v2.45.0)",
       "status": "success"
     },
@@ -1974,8 +1974,8 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -1990,7 +1990,7 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
   "status": "installed",
   "results": [
     {
-      "id": "neonctl",
+      "id": "neon",
       "description": "Neon CLI is up to date (v2.45.0)",
       "status": "success"
     },
@@ -2013,8 +2013,8 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -2810,7 +2810,7 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -2963,7 +2963,7 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
   "status": "installed",
   "results": [
     {
-      "id": "neonctl",
+      "id": "neon",
       "description": "Neon CLI is up to date (v2.45.0)",
       "status": "success"
     },
@@ -2986,8 +2986,8 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version"
 `;
@@ -3000,7 +3000,7 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
   "status": "installed",
   "results": [
     {
-      "id": "neonctl",
+      "id": "neon",
       "description": "Neon CLI is up to date (v2.45.0)",
       "status": "success"
     },
@@ -3023,8 +3023,8 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version"
 `;
@@ -3823,7 +3823,7 @@ exports[`neon init --agent: every step, against every project shape > greenfield
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -3976,7 +3976,7 @@ exports[`neon init --agent: every step, against every project shape > greenfield
   "status": "installed",
   "results": [
     {
-      "id": "neonctl",
+      "id": "neon",
       "description": "Neon CLI is up to date (v2.45.0)",
       "status": "success"
     },
@@ -3999,8 +3999,8 @@ exports[`neon init --agent: every step, against every project shape > greenfield
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -4015,7 +4015,7 @@ exports[`neon init --agent: every step, against every project shape > greenfield
   "status": "installed",
   "results": [
     {
-      "id": "neonctl",
+      "id": "neon",
       "description": "Neon CLI is up to date (v2.45.0)",
       "status": "success"
     },
@@ -4038,8 +4038,8 @@ exports[`neon init --agent: every step, against every project shape > greenfield
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -4856,7 +4856,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -5009,7 +5009,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
   "status": "installed",
   "results": [
     {
-      "id": "neonctl",
+      "id": "neon",
       "description": "Neon CLI is up to date (v2.45.0)",
       "status": "success"
     },
@@ -5032,8 +5032,8 @@ exports[`neon init --agent: every step, against every project shape > next-prism
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -5048,7 +5048,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
   "status": "installed",
   "results": [
     {
-      "id": "neonctl",
+      "id": "neon",
       "description": "Neon CLI is up to date (v2.45.0)",
       "status": "success"
     },
@@ -5071,8 +5071,8 @@ exports[`neon init --agent: every step, against every project shape > next-prism
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -5889,7 +5889,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -6042,7 +6042,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
   "status": "installed",
   "results": [
     {
-      "id": "neonctl",
+      "id": "neon",
       "description": "Neon CLI is up to date (v2.45.0)",
       "status": "success"
     },
@@ -6065,8 +6065,8 @@ exports[`neon init --agent: every step, against every project shape > next-prism
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -6081,7 +6081,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
   "status": "installed",
   "results": [
     {
-      "id": "neonctl",
+      "id": "neon",
       "description": "Neon CLI is up to date (v2.45.0)",
       "status": "success"
     },
@@ -6104,8 +6104,8 @@ exports[`neon init --agent: every step, against every project shape > next-prism
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -6917,7 +6917,7 @@ exports[`neon init --agent: every step, against every project shape > node-app >
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -7070,7 +7070,7 @@ exports[`neon init --agent: every step, against every project shape > node-app >
   "status": "installed",
   "results": [
     {
-      "id": "neonctl",
+      "id": "neon",
       "description": "Neon CLI is up to date (v2.45.0)",
       "status": "success"
     },
@@ -7093,8 +7093,8 @@ exports[`neon init --agent: every step, against every project shape > node-app >
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -7109,7 +7109,7 @@ exports[`neon init --agent: every step, against every project shape > node-app >
   "status": "installed",
   "results": [
     {
-      "id": "neonctl",
+      "id": "neon",
       "description": "Neon CLI is up to date (v2.45.0)",
       "status": "success"
     },
@@ -7132,8 +7132,8 @@ exports[`neon init --agent: every step, against every project shape > node-app >
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -7950,7 +7950,7 @@ exports[`neon init --agent: every step, against every project shape > other-data
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -8103,7 +8103,7 @@ exports[`neon init --agent: every step, against every project shape > other-data
   "status": "installed",
   "results": [
     {
-      "id": "neonctl",
+      "id": "neon",
       "description": "Neon CLI is up to date (v2.45.0)",
       "status": "success"
     },
@@ -8126,8 +8126,8 @@ exports[`neon init --agent: every step, against every project shape > other-data
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -8142,7 +8142,7 @@ exports[`neon init --agent: every step, against every project shape > other-data
   "status": "installed",
   "results": [
     {
-      "id": "neonctl",
+      "id": "neon",
       "description": "Neon CLI is up to date (v2.45.0)",
       "status": "success"
     },
@@ -8165,8 +8165,8 @@ exports[`neon init --agent: every step, against every project shape > other-data
 --- stderr ---
 
 --- subprocesses ---
-<stub>/neonctl --version
-<stub>/npm view neonctl version
+<stub>/neon --version
+<stub>/npm view neon version
 <stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
@@ -8477,7 +8477,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > connected �
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -8639,7 +8639,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > connected �
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -8801,7 +8801,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > connected �
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -8963,7 +8963,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > drizzle — 
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -9125,7 +9125,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > drizzle — 
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -9287,7 +9287,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > drizzle — 
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -9449,7 +9449,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > fully-config
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: configured (project). Agent skills: partially installed (project-partial) — missing skills will be auto-installed to the same scope. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -9570,7 +9570,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > fully-config
 --- stderr ---
 
 --- subprocesses ---
-<stub>/npx -y neonctl orgs list --output json"
+<stub>/npx -y neon orgs list --output json"
 `;
 
 exports[`neon init --agent: the orchestrator picks the next phase > fully-configured — no --data 1`] = `
@@ -9602,7 +9602,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > fully-config
 --- stderr ---
 
 --- subprocesses ---
-<stub>/npx -y neonctl orgs list --output json
+<stub>/npx -y neon orgs list --output json
 <stub>/skills --version"
 `;
 
@@ -9623,7 +9623,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > greenfield �
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nNo application was detected in this directory. Ask the user if they'd like to scaffold a new project from a template (the \`template\` preference). Present ALL template options and the 'No thanks' option — do NOT auto-select even if there is only one template. If the user selects a template, the scaffolded template includes agent skills so skills installation will be skipped. If the user chooses 'none', continue with the remaining setup preferences normally. Then perform the agent checks and present the remaining preferences ONE AT A TIME.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -9788,7 +9788,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > greenfield �
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -9950,7 +9950,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > greenfield �
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -10112,7 +10112,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > next-prisma 
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -10274,7 +10274,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > next-prisma 
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -10436,7 +10436,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > next-prisma 
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -10598,7 +10598,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > next-prisma-
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -10760,7 +10760,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > next-prisma-
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -10922,7 +10922,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > next-prisma-
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -11084,7 +11084,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > node-app —
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -11246,7 +11246,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > node-app —
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -11408,7 +11408,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > node-app —
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -11570,7 +11570,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > other-databa
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -11732,7 +11732,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > other-databa
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -11894,7 +11894,7 @@ exports[`neon init --agent: the orchestrator picks the next phase > other-databa
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -12165,7 +12165,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cla
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\n<ide-detection-instruction>\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -12319,7 +12319,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cla
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\n<ide-detection-instruction>\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -12660,7 +12660,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cod
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\n<ide-detection-instruction>\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -12814,7 +12814,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cod
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\n<ide-detection-instruction>\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -13155,7 +13155,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cur
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -13317,7 +13317,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cur
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -13664,7 +13664,7 @@ exports[`neon init --agent: the response depends on which agent is driving > non
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\n<ide-detection-instruction>\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -13818,7 +13818,7 @@ exports[`neon init --agent: the response depends on which agent is driving > non
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\n<ide-detection-instruction>\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
@@ -14376,7 +14376,7 @@ exports[`neon init: failure output > --data without a step falls through to the 
     "instructions": "IMPORTANT: Do NOT summarize this response or ask the user for consent/confirmation before starting. Proceed IMMEDIATELY with the first userPreference question.\\n\\nPerform the agent checks listed above (MCP server status and your agent identity), then present each userPreference question to the user ONE AT A TIME, in order. Wait for the user's answer before showing the next question. Respect the \`condition\` field — only show a question if its condition is met.\\n\\nThe CLI has pre-detected the following from the filesystem: MCP server: not configured. Agent skills: not installed. Report these findings to the user before asking preferences. Only ask about scope/options for components that are NOT already configured. Do NOT ask about skills scope if skills are partially installed — they will be completed automatically.\\n\\nIMPORTANT (Cursor users): Cursor disables project-level MCP servers by default as a security measure. If the user is in Cursor and chooses project-level MCP scope, warn them that they will need to manually enable the Neon server in Cursor Settings > MCP after installation. Recommend global scope for Cursor to avoid this extra step.\\n\\nGROUPING: Preferences that share the same \`group\` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a \`group\` must be asked individually.\\n\\nThe CLI has detected the IDE as: cursor. Include this as the \\"ide\\" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.\\n\\nAfter all questions are answered, call reportBack with a single --data JSON containing: agent, ide, mcpConfigured, and all preference answers. The CLI will inspect the project and merge results automatically.",
     "checks": [
       {
-        "id": "neonctl",
+        "id": "neon",
         "description": "The Neon CLI will be installed or updated automatically (no action needed from the agent)",
         "lookFor": []
       },
