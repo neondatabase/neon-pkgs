@@ -36,8 +36,7 @@ export const keyringAccount = (configDir: string, profile: string): string =>
 
 export class KeyringUnavailableError extends Error {
 	constructor(profile?: string, kind: "read" | "write" = "read") {
-		const loaded =
-			"This CLI cannot use the OS keyring. The standalone binary never can; use the npm-installed neon.";
+		const loaded = "This CLI cannot use the OS keyring.";
 		super(
 			profile === undefined
 				? `${loaded} Drop \`--keyring\` to keep the credential in a file.`

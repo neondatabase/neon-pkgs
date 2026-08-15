@@ -94,8 +94,11 @@ export const builder = (yargs: yargs.Argv) =>
 		})
 		.check((argv) => {
 			if (argv.keyring === false) {
+				const name = selectProfileName(
+					typeof argv.profile === "string" ? argv.profile : undefined,
+				);
 				throw new Error(
-					"--no-keyring is not a valid way to skip --keyring. Omit the flag entirely.",
+					`--no-keyring does not move a profile to a file. To leave the keyring: \`neon profile remove ${name} --yes\`.`,
 				);
 			}
 			return true;

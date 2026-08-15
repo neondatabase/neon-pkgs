@@ -24,7 +24,10 @@ import {
 	type StoredCredentials,
 	scopeOf,
 } from "@neon-internals/cli-core/credentials";
-import { isOwnedCredentialPath } from "@neon-internals/cli-core/paths";
+import {
+	credentialsPath,
+	isOwnedCredentialPath,
+} from "@neon-internals/cli-core/paths";
 import {
 	assertProfilesUsable,
 	assertValidProfileName,
@@ -158,8 +161,12 @@ export const builder = (argv: yargs.Argv) =>
 					.check((argv) => {
 						noPassthrough("profile create")(argv);
 						if (argv.keyring === false) {
+							const name =
+								typeof argv.name === "string"
+									? argv.name
+									: "NAME";
 							throw new Error(
-								"--no-keyring is not a valid way to skip --keyring. Omit the flag entirely.",
+								`--no-keyring does not move a profile to a file. To leave the keyring: \`neon profile remove ${name} --yes\`.`,
 							);
 						}
 						return true;
@@ -1453,6 +1460,24 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 		// Removing the last profiles.json can change the directory used in the account hash.
 		const account = keyringAccount(props.configDir, name);
 		dropPointer();
+		if (name === DEFAULT_PROFILE) {
+			// Dropping the keyring pointer would otherwise revive this file as DEFAULT.
+			const leftover = credentialsPath(props.configDir);
+			if (
+				isOwnedCredentialPath(props.configDir, leftover) &&
+				existsSync(leftover)
+			) {
+				storeFor(props.configDir).delete(
+					{
+						profile: name,
+						storage: CRED_STORAGE_FILE,
+						path: leftover,
+					},
+					{ required: false },
+				);
+				log.info("Deleted %s", leftover);
+			}
+		}
 		if (listing.reason?.includes("cannot use the OS keyring")) {
 			log.warning(
 				'This CLI cannot delete the OS keyring item for profile "%s". It remains in the OS store (service %s, account %s) until a CLI with the keyring addon removes it, or you delete it there.',
