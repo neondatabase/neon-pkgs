@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import {
 	credentialInputs,
 	displacedProfileWarning,
@@ -62,19 +63,23 @@ type AuthProps = {
  *
  * `--keyring` or an existing `"keyring"` pointer selects the OS keyring. Otherwise the
  * declared file path, the implicit DEFAULT file, or `credentials.<name>.json` for a
- * new named profile.
+ * new named profile. `--no-keyring` on a keyring pointer is refused: that is not a move.
  */
 export const locationForAuth = (
 	configDir: string,
 	name: string,
-	keyring = false,
+	keyring?: boolean,
 	options: { create?: boolean } = {},
 ): CredentialLocation => {
 	const declared = readProfiles(configDir, log.warning)?.profiles[name];
-	if (
-		keyring ||
-		(declared !== undefined && isKeyringPointer(declared.credentials))
-	) {
+	const pointer =
+		declared !== undefined && isKeyringPointer(declared.credentials);
+	if (keyring === false && pointer) {
+		throw new Error(
+			`Profile "${name}" stores its credential in the OS keyring. --no-keyring does not move it to a file. Remove it first: \`neon profile remove ${name} --yes\`.`,
+		);
+	}
+	if (keyring === true || pointer) {
 		return { profile: name, storage: "keyring" };
 	}
 	if (declared !== undefined || name === DEFAULT_PROFILE) {
@@ -95,9 +100,9 @@ export const builder = (yargs: yargs.Argv) =>
 			hidden: true,
 		})
 		.option("keyring", {
-			describe: "Store the credential in the OS keyring",
+			describe:
+				"Store the credential in the OS keyring. Per profile; later auth without the flag stays there. See `neon profile list`.",
 			type: "boolean",
-			default: false,
 		});
 export const handler = async (args: AuthProps) => {
 	await authFlow(args);
@@ -201,20 +206,24 @@ export const authFlow = async ({
 		if (
 			at.storage === "keyring" &&
 			previousFile !== undefined &&
-			isOwnedCredentialPath(configDir, previousFile) &&
 			profilesUsingPath(configDir, previousFile, profileName).length === 0
 		) {
-			try {
-				storeFor(configDir).delete({
-					profile: profileName,
-					storage: "file",
-					path: previousFile,
-				});
-			} catch {
-				log.warning(
-					"Saved the keyring item but could not delete %s",
-					previousFile,
-				);
+			if (isOwnedCredentialPath(configDir, previousFile)) {
+				try {
+					storeFor(configDir).delete({
+						profile: profileName,
+						storage: "file",
+						path: previousFile,
+					});
+					log.info("Deleted %s", previousFile);
+				} catch {
+					log.warning(
+						"Saved the keyring item but could not delete %s",
+						previousFile,
+					);
+				}
+			} else if (existsSync(previousFile)) {
+				log.info("Left %s on disk — not created by neon", previousFile);
 			}
 		}
 		log.info(

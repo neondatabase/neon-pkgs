@@ -31,6 +31,7 @@ import {
 	canDropProfilesFile,
 	credentialsDisplay,
 	DEFAULT_PROFILE,
+	isKeyringPointer,
 	KEYRING_CREDENTIALS,
 	listProfiles,
 	locationForName,
@@ -145,9 +146,9 @@ export const builder = (argv: yargs.Argv) =>
 							default: false,
 						},
 						keyring: {
-							describe: "Store the credential in the OS keyring",
+							describe:
+								"Store the credential in the OS keyring. Per profile; later create without the flag stays there. See `neon profile list`.",
 							type: "boolean",
-							default: false,
 						},
 					})
 					// A project-scoped key is already an organization key, and its org is
@@ -434,6 +435,13 @@ const readOutgoingCredential = (
 	};
 
 	if (listing.reason !== undefined && listing.credentials === null) {
+		if (at.storage === "keyring") {
+			log.warning(
+				'Could not read the OS keyring item for profile "%s"; nothing in it could be revoked.',
+				at.profile,
+			);
+			return null;
+		}
 		return unusable(listing.reason);
 	}
 	if (listing.credentials === null) return null;
@@ -468,15 +476,25 @@ const readOutgoingCredential = (
 const locationForCreate = (
 	configDir: string,
 	name: string,
-	keyring = false,
+	keyring?: boolean,
 ): CredentialLocation => {
 	// Metadata we cannot read makes this a guess: `credentials.<name>.json` is a convention,
 	// and the entry that would say whether it is this account's file is exactly what is
 	// unreadable. Guessing here is what let a replacement overwrite a file and revoke its key
 	// before `upsertProfile` refused the same metadata.
 	assertProfilesUsable(configDir, name);
-	if (keyring) return { profile: name, storage: CRED_STORAGE_KEYRING };
-	if (readProfiles(configDir)?.profiles[name] || name === DEFAULT_PROFILE) {
+	const declared = readProfiles(configDir)?.profiles[name];
+	const pointer =
+		declared !== undefined && isKeyringPointer(declared.credentials);
+	if (keyring === false && pointer) {
+		throw new Error(
+			`Profile "${name}" stores its credential in the OS keyring. --no-keyring does not move it to a file. Remove it first: \`neon profile remove ${name} --yes\`.`,
+		);
+	}
+	if (keyring === true || pointer) {
+		return { profile: name, storage: CRED_STORAGE_KEYRING };
+	}
+	if (declared !== undefined || name === DEFAULT_PROFILE) {
 		return locationForName(configDir, name);
 	}
 	return newProfileLocation(configDir, name, CRED_STORAGE_FILE);
@@ -544,7 +562,7 @@ const assertReplaceable = (props: CreateProps): void => {
 	const declared = readProfiles(configDir)?.profiles[name];
 	const at =
 		existingLocation(configDir, name) ??
-		locationForCreate(configDir, name, props.keyring === true);
+		locationForCreate(configDir, name, props.keyring);
 	const listing = storeFor(configDir).inspect(at);
 	const present = listing.credentials !== null || listing.file !== "missing";
 	if (!declared && !(name === DEFAULT_PROFILE && present)) return;
@@ -686,6 +704,11 @@ const create = async (props: CreateProps) => {
 	assertValidProfileName(name);
 	// Before the key is read from stdin, verified against the API, or minted in a browser.
 	assertProfilesUsable(props.configDir, name);
+	// `--no-keyring` on a keyring pointer is not a move. Say so before a network
+	// or "already exists" error hides it.
+	if (props.keyring === false) {
+		locationForCreate(props.configDir, name, false);
+	}
 	assertReplaceable(props);
 
 	const suppliedKey = credentialInputs().apiKeyFlag.trim() !== "";
@@ -719,11 +742,7 @@ const create = async (props: CreateProps) => {
 				`\`neon profile create ${name}\` with no key signs in through the browser, which cannot happen in CI. Pass a key instead: \`neon profile create ${name} --api-key "$KEY"\`, or pipe it with \`echo "$KEY" | neon profile create ${name} --api-key -\`.`,
 			);
 		}
-		const at = locationForCreate(
-			props.configDir,
-			name,
-			props.keyring === true,
-		);
+		const at = locationForCreate(props.configDir, name, props.keyring);
 		const previous = readOutgoingCredential(
 			props.configDir,
 			existingLocation(props.configDir, name) ?? at,
@@ -735,7 +754,7 @@ const create = async (props: CreateProps) => {
 				...props,
 				_: ["auth"],
 				profile: name,
-				keyring: props.keyring === true,
+				keyring: props.keyring,
 			})) === ""
 		) {
 			throw new Error(
@@ -760,7 +779,7 @@ const create = async (props: CreateProps) => {
 
 	const apiKey = resolveKeyToStore(props);
 	const identity = await verifyKey(props, apiKey);
-	const at = locationForCreate(props.configDir, name, props.keyring === true);
+	const at = locationForCreate(props.configDir, name, props.keyring);
 	const existing = existingLocation(props.configDir, name);
 	if (at.storage === "keyring") {
 		storeFor(props.configDir).assertKeyringWritable(
@@ -920,11 +939,7 @@ const createByMinting = async (props: CreateProps) => {
 		);
 	}
 
-	const atMint = locationForCreate(
-		props.configDir,
-		name,
-		props.keyring === true,
-	);
+	const atMint = locationForCreate(props.configDir, name, props.keyring);
 	if (atMint.storage === "keyring") {
 		storeFor(props.configDir).assertKeyringWritable(
 			existingLocation(props.configDir, name)?.storage === "keyring"
@@ -963,11 +978,7 @@ const createByMinting = async (props: CreateProps) => {
 		mintedScope = scope;
 		minted = await mintKey(session, name, scope);
 		const identity = await verifyKey(props, minted.key, "minted");
-		const at = locationForCreate(
-			props.configDir,
-			name,
-			props.keyring === true,
-		);
+		const at = locationForCreate(props.configDir, name, props.keyring);
 		const existing = existingLocation(props.configDir, name);
 		const previous = readOutgoingCredential(
 			props.configDir,
@@ -1362,13 +1373,20 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 	try {
 		stored = readOutgoingCredential(props.configDir, at);
 	} catch (err) {
-		log.warning(
-			"%s. Nothing in it could be revoked.",
-			(err instanceof Error ? err.message : String(err)).replace(
-				/\.$/,
-				"",
-			),
-		);
+		if (at.storage === "keyring") {
+			log.warning(
+				'Could not read the OS keyring item for profile "%s"; nothing in it could be revoked.',
+				name,
+			);
+		} else {
+			log.warning(
+				"%s. Nothing in it could be revoked.",
+				(err instanceof Error ? err.message : String(err)).replace(
+					/\.$/,
+					"",
+				),
+			);
+		}
 	}
 
 	if (stored?.kind === API_KEY) {

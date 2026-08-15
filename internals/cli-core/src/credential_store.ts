@@ -56,12 +56,10 @@ export const keyringAccount = (configDir: string, profile: string): string =>
 
 export class KeyringUnavailableError extends Error {
 	constructor(profile?: string) {
-		const recovery =
-			profile !== undefined
-				? `or remove the profile with \`neon profile remove ${profile} --yes\``
-				: "or drop `--keyring` to keep the credential in a file";
 		super(
-			`This CLI cannot use the OS keyring (the optional \`@napi-rs/keyring\` addon is not loaded). Use --api-key or NEON_API_KEY, ${recovery}.`,
+			profile !== undefined
+				? `This CLI cannot use the OS keyring (the optional \`@napi-rs/keyring\` addon is not loaded). Use --api-key or NEON_API_KEY, or remove the profile with \`neon profile remove ${profile} --yes\`.`
+				: "This CLI cannot use the OS keyring (the optional `@napi-rs/keyring` addon is not loaded). Drop `--keyring` to keep the credential in a file.",
 		);
 		this.name = "KeyringUnavailableError";
 	}
@@ -75,7 +73,7 @@ export class KeyringUnreadableError extends Error {
 	constructor(profile: string) {
 		const replace = `\`neon auth --profile ${profile}\``;
 		super(
-			`Could not read the OS keyring item for profile "${profile}". Unlock the keyring and retry, or run ${replace}.`,
+			`Could not read the OS keyring item for profile "${profile}". Unlock the keyring and retry, or run ${replace}. To drop the pointer: \`neon profile remove ${profile} --yes\`.`,
 		);
 		this.name = "KeyringUnreadableError";
 	}

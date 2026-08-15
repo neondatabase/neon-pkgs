@@ -199,6 +199,9 @@ describe("createCredentialStore — keyring", () => {
 		expect(() => store.read(keyringAt())).toThrow(
 			"`neon auth --profile DEFAULT`",
 		);
+		expect(() => store.read(keyringAt())).toThrow(
+			"`neon profile remove DEFAULT --yes`",
+		);
 		expect(() => store.read(keyringAt())).not.toThrow(/null/);
 	});
 
@@ -213,8 +216,9 @@ describe("createCredentialStore — keyring", () => {
 			KeyringUnavailableError,
 		);
 		expect(() => store.assertKeyringWritable()).toThrow(
-			"drop `--keyring` to keep the credential in a file",
+			"Drop `--keyring` to keep the credential in a file",
 		);
+		expect(() => store.assertKeyringWritable()).not.toThrow(/--api-key/);
 		expect(() => store.assertKeyringWritable("DEFAULT")).toThrow(
 			"`neon profile remove DEFAULT --yes`",
 		);

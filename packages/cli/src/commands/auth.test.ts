@@ -32,7 +32,12 @@ import * as credentialIo from "../credential_io.js";
 import { log } from "../log.js";
 import { test } from "../test_utils/fixtures";
 import { startOauthServer } from "../test_utils/oauth_server";
-import { authFlow, deleteCredentialsAt, ensureAuth } from "./auth";
+import {
+	authFlow,
+	deleteCredentialsAt,
+	ensureAuth,
+	locationForAuth,
+} from "./auth";
 
 vi.mock("open", () => ({ default: vi.fn((url: string) => fetch(url)) }));
 vi.mock("../pkg.ts", () => ({ default: { version: "0.0.0" } }));
@@ -146,6 +151,86 @@ describe("auth", () => {
 			authSpy.mockRestore();
 			storeSpy.mockRestore();
 			rmSync(join(configDir, "profiles.json"), { force: true });
+		}
+	});
+
+	test("locationForAuth refuses --no-keyring on a keyring pointer", () => {
+		writeFileSync(
+			join(configDir, "profiles.json"),
+			JSON.stringify({
+				version: 1,
+				profiles: { work: { credentials: "keyring" } },
+			}),
+		);
+		try {
+			expect(() => locationForAuth(configDir, "work", false)).toThrow(
+				"--no-keyring does not move",
+			);
+			expect(() => locationForAuth(configDir, "work", false)).toThrow(
+				"`neon profile remove work --yes`",
+			);
+			expect(locationForAuth(configDir, "work").storage).toBe("keyring");
+			expect(locationForAuth(configDir, "work", true).storage).toBe(
+				"keyring",
+			);
+		} finally {
+			rmSync(join(configDir, "profiles.json"), { force: true });
+		}
+	});
+
+	test("auth --keyring deletes the owned credentials file and says so", async ({
+		runMockServer,
+	}) => {
+		const server = await runMockServer("main");
+		writeFileSync(
+			join(configDir, "credentials.json"),
+			JSON.stringify({
+				type: "oauth",
+				access_token: "old",
+				refresh_token: "old-r",
+				user_id: "u1",
+			}),
+		);
+		const items = new Map<string, string>();
+		const id = (service: string, account: string) =>
+			`${service}\0${account}`;
+		const keyring: KeyringBackend = {
+			get: (service, account) => items.get(id(service, account)) ?? null,
+			set: (service, account, password) => {
+				items.set(id(service, account), password);
+			},
+			delete: (service, account) => items.delete(id(service, account)),
+		};
+		const storeSpy = vi
+			.spyOn(credentialIo, "storeFor")
+			.mockImplementation((dir: string) =>
+				createCredentialStore(dir, { keyring }),
+			);
+		const infoSpy = vi.spyOn(log, "info");
+		try {
+			await authFlow({
+				_: ["auth"],
+				apiHost: `http://localhost:${(server.address() as AddressInfo).port}`,
+				clientId: "test-client-id",
+				configDir,
+				forceAuth: true,
+				oauthHost: `http://localhost:${oauthServer.address().port}`,
+				allowUnsafeTls: true,
+				keyring: true,
+			});
+			expect(existsSync(join(configDir, "credentials.json"))).toBe(false);
+			expect(
+				infoSpy.mock.calls.some(
+					(call) =>
+						typeof call[0] === "string" &&
+						call[0].startsWith("Deleted"),
+				),
+			).toBe(true);
+		} finally {
+			infoSpy.mockRestore();
+			storeSpy.mockRestore();
+			rmSync(join(configDir, "profiles.json"), { force: true });
+			rmSync(join(configDir, "credentials.json"), { force: true });
 		}
 	});
 

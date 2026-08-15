@@ -535,6 +535,27 @@ describe("profile create", () => {
 		expect(existsSync(resolve(dir, "credentials.work.json"))).toBe(true);
 	});
 
+	test("create --no-keyring on a keyring pointer names remove", async () => {
+		const dir = makeConfigDir({
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { work: { credentials: "keyring" } },
+			}),
+		});
+		const { code, stderr } = await runCli([
+			"profile",
+			"create",
+			"work",
+			"--no-keyring",
+			"--config-dir",
+			dir,
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("--no-keyring does not move");
+		expect(stderr).toContain("neon profile remove work --yes");
+	});
+
 	// The no-flag form is what an agent tries first, and `authFlow` answered it with a bare
 	// "Cannot run interactive auth in CI" — true, and with no way forward from it.
 	test("a keyring pointer is an existing profile even when the item is unread", async () => {
@@ -1498,6 +1519,7 @@ describe("profile remove", () => {
 			/leftover may still be in the OS store|cannot delete the OS keyring item/i,
 		);
 		expect(stderr).toContain("com.neon.neon-cli");
+		expect(stderr).not.toContain("neon auth --profile work");
 		expect(existsSync(resolve(dir, "profiles.json"))).toBe(false);
 	});
 });
