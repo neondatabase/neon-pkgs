@@ -512,6 +512,15 @@ describe("profile create", () => {
 		expect(stderr).toContain("signed out as part of the replacement");
 	});
 
+	test("create --keyring on a new profile does not warn about an unread item", async () => {
+		const dir = makeConfigDir({});
+		const { stderr } = await runCli(
+			["profile", "create", "fresh", "--keyring", "--config-dir", dir],
+			{ CI: "true" },
+		);
+		expect(stderr).not.toContain("Could not read the OS keyring");
+	});
+
 	test("create --keyring on a file OAuth profile names auth --keyring", async () => {
 		const dir = makeConfigDir({
 			"credentials.work.json": OAUTH_FILE,

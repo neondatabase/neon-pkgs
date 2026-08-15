@@ -222,6 +222,10 @@ describe("createCredentialStore — keyring", () => {
 		expect(() => store.assertKeyringWritable("DEFAULT")).toThrow(
 			"`neon profile remove DEFAULT --yes`",
 		);
+		expect(() => store.assertKeyringWritable("DEFAULT")).not.toThrow(
+			/--api-key/,
+		);
+		expect(() => store.read(keyringAt())).toThrow(/--api-key/);
 		expect(() => store.assertKeyringWritable()).not.toThrow(/mv DEFAULT/);
 	});
 

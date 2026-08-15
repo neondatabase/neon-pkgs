@@ -55,13 +55,16 @@ export const keyringAccount = (configDir: string, profile: string): string =>
 		.digest("hex")}:${profile}`;
 
 export class KeyringUnavailableError extends Error {
-	constructor(profile?: string) {
+	constructor(profile?: string, kind: "read" | "write" = "read") {
 		// Assembled so a static scan of the bundle cannot see the specifier.
 		const addon = ["@napi-rs", "keyring"].join("/");
+		const loaded = `This CLI cannot use the OS keyring (the optional \`${addon}\` addon is not loaded).`;
 		super(
-			profile !== undefined
-				? `This CLI cannot use the OS keyring (the optional \`${addon}\` addon is not loaded). Use --api-key or NEON_API_KEY, or remove the profile with \`neon profile remove ${profile} --yes\`.`
-				: `This CLI cannot use the OS keyring (the optional \`${addon}\` addon is not loaded). Drop \`--keyring\` to keep the credential in a file.`,
+			profile === undefined
+				? `${loaded} Drop \`--keyring\` to keep the credential in a file.`
+				: kind === "write"
+					? `${loaded} Remove the profile with \`neon profile remove ${profile} --yes\`.`
+					: `${loaded} Use --api-key or NEON_API_KEY, or remove the profile with \`neon profile remove ${profile} --yes\`.`,
 		);
 		this.name = "KeyringUnavailableError";
 	}
@@ -164,7 +167,8 @@ export const createCredentialStore = (
 		keyringAccount(dir, profile);
 
 	const assertKeyringWritable = (profile?: string): void => {
-		if (keyring === null) throw new KeyringUnavailableError(profile);
+		if (keyring === null)
+			throw new KeyringUnavailableError(profile, "write");
 	};
 
 	const setKeyringOrRollback = (
@@ -173,7 +177,7 @@ export const createCredentialStore = (
 	): void => {
 		assertKeyringWritable(profile);
 		const kr = keyring;
-		if (kr === null) throw new KeyringUnavailableError(profile);
+		if (kr === null) throw new KeyringUnavailableError(profile, "write");
 		const account = accountFor(profile);
 		const label = `profile "${profile}"`;
 		let previous: string | null = null;
@@ -227,7 +231,7 @@ export const createCredentialStore = (
 		required: boolean,
 	): "cleared" | "unconfirmed" | "left" => {
 		if (keyring === null) {
-			if (required) throw new KeyringUnavailableError(profile);
+			if (required) throw new KeyringUnavailableError(profile, "write");
 			return "unconfirmed";
 		}
 		let raw: string | null;

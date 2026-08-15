@@ -709,6 +709,13 @@ const create = async (props: CreateProps) => {
 	if (props.keyring === false) {
 		locationForCreate(props.configDir, name, false);
 	}
+	if (props.keyring === true) {
+		storeFor(props.configDir).assertKeyringWritable(
+			existingLocation(props.configDir, name)?.storage === "keyring"
+				? name
+				: undefined,
+		);
+	}
 	assertReplaceable(props);
 
 	const suppliedKey = credentialInputs().apiKeyFlag.trim() !== "";
@@ -743,10 +750,11 @@ const create = async (props: CreateProps) => {
 			);
 		}
 		const at = locationForCreate(props.configDir, name, props.keyring);
-		const previous = readOutgoingCredential(
-			props.configDir,
-			existingLocation(props.configDir, name) ?? at,
-		);
+		const existing = existingLocation(props.configDir, name);
+		const previous =
+			existing === null
+				? null
+				: readOutgoingCredential(props.configDir, existing);
 		// `authFlow` throws on a failed save. An empty token is still a failed
 		// sign-in — the IdP returned nothing to store.
 		if (
@@ -786,7 +794,10 @@ const create = async (props: CreateProps) => {
 			existing?.storage === "keyring" ? name : undefined,
 		);
 	}
-	const previous = readOutgoingCredential(props.configDir, existing ?? at);
+	const previous =
+		existing === null
+			? null
+			: readOutgoingCredential(props.configDir, existing);
 
 	storeFor(props.configDir).write(
 		at,
@@ -980,10 +991,10 @@ const createByMinting = async (props: CreateProps) => {
 		const identity = await verifyKey(props, minted.key, "minted");
 		const at = locationForCreate(props.configDir, name, props.keyring);
 		const existing = existingLocation(props.configDir, name);
-		const previous = readOutgoingCredential(
-			props.configDir,
-			existing ?? at,
-		);
+		const previous =
+			existing === null
+				? null
+				: readOutgoingCredential(props.configDir, existing);
 
 		storeFor(props.configDir).write(
 			at,
