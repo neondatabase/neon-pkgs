@@ -836,7 +836,6 @@ credentials file path, or the sentinel `"keyring"` when the secret is in the OS 
 neon profile create work              # a browser sign-in, or an API key — see below
 neon profile create work --keyring    # same, stored in the OS keyring
 neon profile list
-neon profile mv --keyring             # move DEFAULT into the OS keyring
 neon profile remove work
 ```
 
@@ -880,12 +879,11 @@ key you supplied is the exception and stays live, because nothing records its id
 says so. It asks for confirmation first, which `--yes` skips; without a terminal on stdin, in
 CI or behind a pipe, it refuses rather than prompting into the void. It deletes the credentials
 file only when the CLI created it: an adopted path like the one above is unlinked and left on
-disk, and the command says so. A keyring profile's OS item is deleted; if the OS store cannot
-confirm it is gone, remove refuses. Recovery is
-`neon profile mv work --file ~/.config/neon/credentials.work.json --force`, then remove. Removing the last
-named profile deletes `profiles.json` unless DEFAULT itself is keyring — that entry is the
-only record that the secret is not in `credentials.json`. `neon profile remove DEFAULT`
-signs you out.
+disk, and the command says so. A keyring profile's OS item is deleted when the store confirms
+it is gone. If it cannot, remove still drops the pointer and warns that a leftover may remain
+in the OS store; it is unused once the profile is gone. Removing the last named profile
+deletes `profiles.json` unless DEFAULT itself is keyring — that entry is the only record that
+the secret is not in `credentials.json`. `neon profile remove DEFAULT` signs you out.
 
 ### Where the secret is stored
 
@@ -896,18 +894,14 @@ That is per profile. Reads never migrate.
 ```bash
 neon auth --keyring                         # sign DEFAULT into the OS keyring
 neon profile create work --keyring          # create a named profile in the keyring
-neon profile mv --keyring                   # move DEFAULT into the OS keyring
-neon profile mv work --keyring              # move a named profile
-neon profile mv work --file ~/.config/neon/credentials.work.json
-neon profile mv work --file ~/.config/neon/credentials.work.json --force
-# rewrite the pointer when the keyring item cannot be read (no secret is written)
+neon profile create work --keyring --force  # replace a file profile; revokes the old credential
+neon profile remove work --yes              # drop a keyring profile, then create it again as a file
 ```
 
-`mv` takes the profile as a positional argument. Omission is the literal profile `DEFAULT`
-when `NEON_PROFILE` is unset. If `NEON_PROFILE` is set, omission is refused — pass the name.
-`--profile` is refused. `--force` only applies to `--file`: it rewrites the pointer, does not
-write a secret file, and does not delete the keyring item. `--file` is relative to the current
-directory; recovery suggestions use the config directory.
+There is no move command. Changing storage is remove, then create or auth again. That
+revokes the old credential where the CLI can. `create` and `auth` without `--keyring`
+follow an existing `"keyring"` pointer, so a keyring profile cannot leave the OS store
+until `remove` succeeds.
 
 `--api-key` and `NEON_API_KEY` skip both stores. This CLI's packaged binary recognizes a
 `"keyring"` pointer and refuses: it cannot load the OS keyring addon. Use the npm-installed
@@ -1078,7 +1072,7 @@ API keys in org-7
 | Command                                                                    | Subcommands                                                                                                  | Description                        |
 | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------- |
 | [auth](https://neon.com/docs/reference/cli-auth)                           |                                                                                                              | Authenticate                       |
-| profile                                                                    | `list`, `create`, `rotate-key`, `mv`, `remove`                                                               | Manage named sets of credentials   |
+| profile                                                                    | `list`, `create`, `rotate-key`, `remove`                                                                     | Manage named sets of credentials   |
 | api-keys                                                                   | `list`, `create`, `revoke`                                                                                   | Manage API keys                    |
 | [projects](https://neon.com/docs/reference/cli-projects)                   | `list`, `create`, `update`, `delete`, `get`                                                                  | Manage projects                    |
 | [ip-allow](https://neon.com/docs/reference/cli-ip-allow)                   | `list`, `add`, `remove`, `reset`                                                                             | Manage IP Allow                    |

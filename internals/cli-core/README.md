@@ -52,9 +52,8 @@ In `packages/cli` the `.js` form passes `tsc --noEmit` — its `paths` mapping p
   `@napi-rs/keyring@1.3.0` collapses locked and denied access the same way. When
   the pointer is `"keyring"` and `get` returns null, `read()` throws
   `KeyringUnreadableError` rather than returning null — that is not "never signed
-  in", and it must not start OAuth. `profile remove` refuses rather than drop the
-  profile. `profile mv --file --force` rewrites the pointer when the item cannot
-  be read.
+  in", and it must not start OAuth. `profile remove` still drops the pointer
+  when the item cannot be confirmed gone, and warns that a leftover may remain.
 - **No logger, no yargs, no API client.** Take a callback or a value instead; the imperative
   shell belongs in the consumer.
 - Unit tests live in `packages/cli`, so the code is covered once rather than three times.

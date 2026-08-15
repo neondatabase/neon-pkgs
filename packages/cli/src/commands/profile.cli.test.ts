@@ -1451,6 +1451,27 @@ describe("profile remove", () => {
 		expect(stderr).toContain("Pass --yes");
 		expect(existsSync(resolve(dir, "credentials.work.json"))).toBe(true);
 	});
+
+	test("an unread keyring profile is removed and warns about a leftover", async () => {
+		const dir = makeConfigDir({
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { work: { credentials: "keyring" } },
+			}),
+		});
+		const { code, stderr } = await runCli([
+			"profile",
+			"remove",
+			"work",
+			"--yes",
+			"--config-dir",
+			dir,
+		]);
+
+		expect(code).toBe(0);
+		expect(stderr).toMatch(/leftover may still be in the OS store/i);
+		expect(existsSync(resolve(dir, "profiles.json"))).toBe(false);
+	});
 });
 
 describe("profile rotate-key", () => {
@@ -1475,7 +1496,7 @@ describe("profile rotate-key", () => {
 	});
 });
 
-describe("profile mv", () => {
+describe("profile commands that do not exist", () => {
 	test("profile storage is not a command", async () => {
 		const dir = makeConfigDir({
 			"credentials.json": API_KEY_FILE,
@@ -1491,7 +1512,7 @@ describe("profile mv", () => {
 		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
 	});
 
-	test("refuses without --keyring or --file", async () => {
+	test("profile mv is not a command", async () => {
 		const dir = makeConfigDir({
 			"credentials.json": API_KEY_FILE,
 		});
@@ -1502,383 +1523,8 @@ describe("profile mv", () => {
 			dir,
 		]);
 		expect(code).toBe(1);
-		expect(stderr).toContain("Say where to move the credential");
-		expect(stderr).toContain("`neon profile mv DEFAULT --keyring`");
-		expect(stderr).not.toContain("--file");
+		expect(stderr).toMatch(/Unknown (argument|command)/i);
 		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
-	});
-
-	test("a keyring profile with no destination is told to move to a file", async () => {
-		const dir = makeConfigDir({
-			"profiles.json": JSON.stringify({
-				version: 1,
-				profiles: { DEFAULT: { credentials: "keyring" } },
-			}),
-		});
-		const { code, stderr } = await runCli([
-			"profile",
-			"mv",
-			"--config-dir",
-			dir,
-		]);
-		expect(code).toBe(1);
-		expect(stderr).toContain("Say where to move the credential");
-		expect(stderr).toContain(
-			`\`neon profile mv DEFAULT --file ${resolve(dir, "credentials.json")}\``,
-		);
-		expect(stderr).not.toContain("--keyring");
-	});
-
-	test("NEON_PROFILE without a name or destination names both profiles", async () => {
-		const dir = makeConfigDir({
-			"credentials.json": API_KEY_FILE,
-			"credentials.work.json": API_KEY_FILE,
-			"profiles.json": JSON.stringify({
-				version: 1,
-				profiles: {
-					DEFAULT: { credentials: "credentials.json" },
-					work: { credentials: "credentials.work.json" },
-				},
-			}),
-		});
-		const { code, stderr } = await runCli(
-			["profile", "mv", "--config-dir", dir],
-			{ NEON_PROFILE: "work" },
-		);
-		expect(code).toBe(1);
-		expect(stderr).toContain("NEON_PROFILE=work does not apply");
-		expect(stderr).toContain("`neon profile mv work --keyring`");
-		expect(stderr).toContain("`neon profile mv DEFAULT --keyring`");
-		expect(stderr).not.toContain("--file");
-		expect(stderr).not.toContain("Say where to move the credential");
-		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
-		expect(existsSync(resolve(dir, "credentials.work.json"))).toBe(true);
-	});
-
-	test("both destinations is refused", async () => {
-		const dir = makeConfigDir({
-			"credentials.work.json": API_KEY_FILE,
-			"profiles.json": JSON.stringify({
-				version: 1,
-				profiles: { work: { credentials: "credentials.work.json" } },
-			}),
-		});
-		const { code, stderr } = await runCli([
-			"profile",
-			"mv",
-			"work",
-			"--keyring",
-			"--file",
-			resolve(dir, "out.json"),
-			"--config-dir",
-			dir,
-		]);
-		expect(code).toBe(1);
-		expect(stderr).toContain("Pass only one destination");
-		expect(stderr).toContain("`neon profile mv work --keyring`");
-		expect(existsSync(resolve(dir, "credentials.work.json"))).toBe(true);
-	});
-
-	test("--force is refused on --keyring", async () => {
-		const dir = makeConfigDir({
-			"credentials.json": API_KEY_FILE,
-		});
-		const { code, stderr } = await runCli([
-			"profile",
-			"mv",
-			"--keyring",
-			"--force",
-			"--config-dir",
-			dir,
-		]);
-		expect(code).toBe(1);
-		expect(stderr).toContain(
-			"`--force` only applies to `neon profile mv DEFAULT --file`",
-		);
-		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
-	});
-
-	test("NEON_PROFILE without a name is refused and does not move DEFAULT", async () => {
-		const dir = makeConfigDir({
-			"credentials.json": API_KEY_FILE,
-			"credentials.work.json": API_KEY_FILE,
-			"profiles.json": JSON.stringify({
-				version: 1,
-				profiles: {
-					DEFAULT: { credentials: "credentials.json" },
-					work: { credentials: "credentials.work.json" },
-				},
-			}),
-		});
-		const dest = resolve(dir, "moved.json");
-		const { code, stderr } = await runCli(
-			["profile", "mv", "--file", dest, "--config-dir", dir],
-			{ NEON_PROFILE: "work" },
-		);
-		expect(code).toBe(1);
-		expect(stderr).toContain("NEON_PROFILE=work does not apply");
-		expect(stderr).toContain(`\`neon profile mv work --file ${dest}\``);
-		expect(stderr).toContain(`\`neon profile mv DEFAULT --file ${dest}\``);
-		expect(stderr).not.toContain('Moving "DEFAULT"');
-		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
-		expect(existsSync(resolve(dir, "credentials.work.json"))).toBe(true);
-		expect(existsSync(dest)).toBe(false);
-	});
-
-	test("an explicit name is moved even when NEON_PROFILE names another", async () => {
-		const dir = makeConfigDir({
-			"credentials.json": API_KEY_FILE,
-			"credentials.work.json": API_KEY_FILE,
-			"profiles.json": JSON.stringify({
-				version: 1,
-				profiles: {
-					DEFAULT: { credentials: "credentials.json" },
-					work: { credentials: "credentials.work.json" },
-				},
-			}),
-		});
-		const dest = resolve(dir, "work-out.json");
-		const { code, stdout } = await runCli(
-			[
-				"profile",
-				"mv",
-				"work",
-				"--file",
-				dest,
-				"--config-dir",
-				dir,
-				"--output",
-				"json",
-			],
-			{ NEON_PROFILE: "DEFAULT" },
-		);
-		expect(code).toBe(0);
-		expect(JSON.parse(stdout)).toEqual({
-			name: "work",
-			storage: "file",
-			credentials: dest,
-		});
-		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
-		expect(existsSync(resolve(dir, "credentials.work.json"))).toBe(false);
-	});
-
-	test("--profile is refused", async () => {
-		const dir = makeConfigDir({
-			"credentials.json": API_KEY_FILE,
-			"credentials.work.json": API_KEY_FILE,
-			"profiles.json": JSON.stringify({
-				version: 1,
-				profiles: {
-					DEFAULT: { credentials: "credentials.json" },
-					work: { credentials: "credentials.work.json" },
-				},
-			}),
-		});
-		const { code, stderr } = await runCli([
-			"profile",
-			"mv",
-			"work",
-			"--keyring",
-			"--profile",
-			"DEFAULT",
-			"--config-dir",
-			dir,
-		]);
-		expect(code).toBe(1);
-		expect(stderr).toContain("does not apply to `profile mv`");
-		expect(stderr).toContain("`neon profile mv work --keyring`");
-		expect(stderr).not.toContain("Drop --profile");
-		expect(existsSync(resolve(dir, "credentials.work.json"))).toBe(true);
-	});
-
-	test("--api-key is refused", async () => {
-		const dir = makeConfigDir({
-			"credentials.json": API_KEY_FILE,
-		});
-		const { code, stderr } = await runCli([
-			"profile",
-			"mv",
-			"--keyring",
-			"--config-dir",
-			dir,
-			"--api-key",
-			"napi_flag_only",
-		]);
-		expect(code).toBe(1);
-		expect(stderr).toContain("the credential the profile already holds");
-	});
-
-	test("already on the keyring is refused", async () => {
-		const dir = makeConfigDir({
-			"profiles.json": JSON.stringify({
-				version: 1,
-				profiles: { DEFAULT: { credentials: "keyring" } },
-			}),
-		});
-		const { code, stderr } = await runCli([
-			"profile",
-			"mv",
-			"--keyring",
-			"--config-dir",
-			dir,
-		]);
-		expect(code).toBe(1);
-		expect(stderr).toContain(
-			"already stores its credential in the OS keyring",
-		);
-	});
-
-	test("a missing file credential cannot be moved", async () => {
-		const dir = makeConfigDir({});
-		const dest = resolve(dir, "moved.json");
-		const { code, stderr } = await runCli([
-			"profile",
-			"mv",
-			"--file",
-			dest,
-			"--config-dir",
-			dir,
-		]);
-		expect(code).toBe(1);
-		expect(stderr).toContain("no stored credential to move");
-		expect(existsSync(dest)).toBe(false);
-	});
-
-	test("refuses to overwrite an existing dest file", async () => {
-		const dir = makeConfigDir({
-			"credentials.json": API_KEY_FILE,
-			"already.json": API_KEY_FILE,
-		});
-		const dest = resolve(dir, "already.json");
-		const { code, stderr } = await runCli([
-			"profile",
-			"mv",
-			"--file",
-			dest,
-			"--config-dir",
-			dir,
-		]);
-		expect(code).toBe(1);
-		expect(stderr).toContain("Refusing to overwrite");
-		expect(JSON.parse(readFileSync(dest, "utf8"))).toEqual(
-			JSON.parse(API_KEY_FILE),
-		);
-	});
-
-	test("refuses a dest another profile already uses", async () => {
-		const dir = makeConfigDir({
-			"credentials.json": API_KEY_FILE,
-			"credentials.work.json": API_KEY_FILE,
-			"profiles.json": JSON.stringify({
-				version: 1,
-				profiles: {
-					DEFAULT: { credentials: "credentials.json" },
-					work: { credentials: "credentials.work.json" },
-				},
-			}),
-		});
-		const dest = resolve(dir, "credentials.work.json");
-		rmSync(dest);
-		const { code, stderr } = await runCli([
-			"profile",
-			"mv",
-			"--file",
-			dest,
-			"--config-dir",
-			dir,
-		]);
-		expect(code).toBe(1);
-		expect(stderr).toContain(
-			'already the credentials file for profile "work"',
-		);
-		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
-	});
-
-	test("--force rewrites a keyring pointer without writing a secret", async () => {
-		const dir = makeConfigDir({
-			"profiles.json": JSON.stringify({
-				version: 1,
-				profiles: { DEFAULT: { credentials: "keyring" } },
-			}),
-		});
-		const dest = resolve(dir, "moved.json");
-		const { code, stdout, stderr } = await runCli([
-			"profile",
-			"mv",
-			"--file",
-			dest,
-			"--force",
-			"--config-dir",
-			dir,
-			"--output",
-			"json",
-		]);
-		expect(code).toBe(0);
-		expect(JSON.parse(stdout)).toEqual({
-			name: "DEFAULT",
-			storage: "file",
-			credentials: dest,
-		});
-		expect(stderr).toMatch(/leftover may still be in the OS store/i);
-		expect(existsSync(dest)).toBe(false);
-		expect(
-			JSON.parse(readFileSync(resolve(dir, "profiles.json"), "utf8"))
-				.profiles.DEFAULT.credentials,
-		).toBe("moved.json");
-	});
-
-	test("a dest file named keyring is stored as ./keyring", async () => {
-		const dir = makeConfigDir({
-			"profiles.json": JSON.stringify({
-				version: 1,
-				profiles: { DEFAULT: { credentials: "keyring" } },
-			}),
-		});
-		const dest = resolve(dir, "keyring");
-		const { code, stdout } = await runCli([
-			"profile",
-			"mv",
-			"--file",
-			dest,
-			"--force",
-			"--config-dir",
-			dir,
-			"--output",
-			"json",
-		]);
-		expect(code).toBe(0);
-		expect(JSON.parse(stdout)).toEqual({
-			name: "DEFAULT",
-			storage: "file",
-			credentials: dest,
-		});
-		expect(
-			JSON.parse(readFileSync(resolve(dir, "profiles.json"), "utf8"))
-				.profiles.DEFAULT.credentials,
-		).toBe("./keyring");
-	});
-
-	test("omitted name is DEFAULT", async () => {
-		const dir = makeConfigDir({
-			"profiles.json": JSON.stringify({
-				version: 1,
-				profiles: { DEFAULT: { credentials: "keyring" } },
-			}),
-		});
-		const dest = resolve(dir, "default-out.json");
-		const { code, stdout } = await runCli([
-			"profile",
-			"mv",
-			"--file",
-			dest,
-			"--force",
-			"--config-dir",
-			dir,
-			"--output",
-			"json",
-		]);
-		expect(code).toBe(0);
-		expect(JSON.parse(stdout).name).toBe("DEFAULT");
 	});
 });
 

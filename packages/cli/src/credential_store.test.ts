@@ -204,7 +204,7 @@ describe("createCredentialStore — keyring", () => {
 		const store = createCredentialStore(dir, { keyring: null });
 		expect(() => store.read(keyringAt())).toThrow(KeyringUnavailableError);
 		expect(() => store.read(keyringAt())).toThrow(
-			`\`neon profile mv DEFAULT --file ${resolve(dir, "credentials.json")}\``,
+			"`neon profile remove DEFAULT --yes`",
 		);
 		expect(() => store.assertKeyringWritable()).toThrow(
 			KeyringUnavailableError,
@@ -245,13 +245,46 @@ describe("createCredentialStore — keyring", () => {
 			/Could not confirm the OS keyring item/,
 		);
 		expect(() => store.delete(keyringAt())).toThrow(
-			`\`neon profile mv DEFAULT --file ${resolve(dir, "credentials.json")} --force\``,
+			"`neon profile remove DEFAULT --yes`",
 		);
 	});
 
 	test("delete required:false does not throw when get() is null", () => {
 		const dir = makeDir();
 		const store = createCredentialStore(dir, { keyring: memoryKeyring() });
+		expect(store.delete(keyringAt(), { required: false })).toBe(
+			"unconfirmed",
+		);
+	});
+
+	test("inspect does not throw when get() throws", () => {
+		const dir = makeDir();
+		const keyring: KeyringBackend = {
+			get: () => {
+				throw new Error("denied");
+			},
+			set: () => undefined,
+			delete: () => false,
+		};
+		const store = createCredentialStore(dir, { keyring });
+		expect(store.inspect(keyringAt())).toEqual({
+			file: "unreadable",
+			storage: CRED_STORAGE_KEYRING,
+			credentials: null,
+			reason: 'Could not read the OS keyring item for profile "DEFAULT".',
+		});
+	});
+
+	test("delete required:false returns unconfirmed when get() throws", () => {
+		const dir = makeDir();
+		const keyring: KeyringBackend = {
+			get: () => {
+				throw new Error("denied");
+			},
+			set: () => undefined,
+			delete: () => false,
+		};
+		const store = createCredentialStore(dir, { keyring });
 		expect(store.delete(keyringAt(), { required: false })).toBe(
 			"unconfirmed",
 		);

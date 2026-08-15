@@ -1,10 +1,9 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
-import { basename, isAbsolute, resolve } from "node:path";
+import { basename } from "node:path";
 import { credentialInputs } from "@neon-internals/cli-core/auth_selection";
 import {
 	CRED_STORAGE_FILE,
 	CRED_STORAGE_KEYRING,
-	type CredStorage,
 } from "@neon-internals/cli-core/cli_config";
 import type { CredentialDeleteResult } from "@neon-internals/cli-core/credential_store";
 import {
@@ -28,7 +27,6 @@ import {
 	canDropProfilesFile,
 	credentialsDisplay,
 	DEFAULT_PROFILE,
-	defaultCredentialsFileName,
 	KEYRING_CREDENTIALS,
 	listProfiles,
 	locationForName,
@@ -39,7 +37,6 @@ import {
 	readProfiles,
 	resolveProfile,
 	selectProfileName,
-	setProfilePointer,
 	upsertProfile,
 } from "@neon-internals/cli-core/profiles";
 import { writeSecretFile } from "@neon-internals/cli-core/secure_file";
@@ -79,13 +76,6 @@ type CreateProps = ProfileProps & {
 	projectId?: string;
 	force: boolean;
 	keyring?: boolean;
-};
-
-type MoveProps = ProfileProps & {
-	name?: string;
-	keyring?: boolean;
-	file?: string;
-	force: boolean;
 };
 
 export const command = "profile";
@@ -199,38 +189,6 @@ export const builder = (argv: yargs.Argv) =>
 				await rotateKey(
 					args as unknown as ProfileProps & { name: string },
 				),
-		)
-		.command(
-			"mv [name]",
-			"Move a profile's credential between a file and the OS keyring",
-			(y) =>
-				y
-					.positional("name", {
-						describe: "Profile to move. Defaults to DEFAULT",
-						type: "string",
-					})
-					.option("keyring", {
-						describe: "Move the credential into the OS keyring",
-						type: "boolean",
-						default: false,
-					})
-					.option("file", {
-						describe: "Move the credential to this file path",
-						type: "string",
-					})
-					.option("force", {
-						describe:
-							"With --file, rewrite the pointer when the keyring item cannot be read",
-						type: "boolean",
-						default: false,
-					})
-					.option("profile", {
-						describe:
-							"Does not apply. Pass the profile name as an argument.",
-					})
-					.strict()
-					.check(noPassthrough("profile mv")),
-			async (args) => await move(args as unknown as MoveProps),
 		)
 		.command(
 			"remove <name>",
@@ -434,249 +392,6 @@ const list = async (props: ProfileProps) => {
 			"storage",
 			"credentials",
 		],
-	});
-};
-
-const resolveMoveFilePath = (filePath: string): string =>
-	isAbsolute(filePath) ? filePath : resolve(process.cwd(), filePath);
-
-const mvDestHelp = (
-	name: string,
-	configDir: string,
-	storage?: CredStorage,
-): string => {
-	const toKeyring = `\`neon profile mv ${name} --keyring\``;
-	const toFile = `\`neon profile mv ${name} --file ${resolve(configDir, defaultCredentialsFileName(name))}\``;
-	if (storage === CRED_STORAGE_KEYRING) return toFile;
-	if (storage === CRED_STORAGE_FILE) return toKeyring;
-	return `${toKeyring} or ${toFile}`;
-};
-
-const move = async (props: MoveProps) => {
-	rejectApiKeyFlag("mv");
-	const named = props.profile?.trim();
-	if (named) {
-		const intended = props.name?.trim() || named;
-		throw new Error(
-			`--profile does not apply to \`profile mv\`, which takes the profile name as an argument. Use ${mvDestHelp(intended, props.configDir)}.`,
-		);
-	}
-	const omittedName = !props.name?.trim();
-	const name = props.name?.trim() || DEFAULT_PROFILE;
-	assertValidProfileName(name);
-	assertProfilesUsable(props.configDir, name);
-
-	const toKeyring = props.keyring === true;
-	const fileFlag = props.file?.trim();
-	const hasFile = fileFlag !== undefined && fileFlag !== "";
-	const storageOf = (profile: string): CredStorage | undefined => {
-		try {
-			return locationForName(props.configDir, profile).storage;
-		} catch {
-			return undefined;
-		}
-	};
-	const envProfile = process.env.NEON_PROFILE?.trim();
-	if (envProfile && omittedName) {
-		const dest =
-			toKeyring && !hasFile
-				? "--keyring"
-				: hasFile && !toKeyring
-					? `--file ${fileFlag}`
-					: undefined;
-		throw new Error(
-			dest === undefined
-				? `NEON_PROFILE=${envProfile} does not apply to \`profile mv\`, which takes the profile name as an argument. Use ${mvDestHelp(envProfile, props.configDir, storageOf(envProfile))} or ${mvDestHelp(DEFAULT_PROFILE, props.configDir, storageOf(DEFAULT_PROFILE))}.`
-				: `NEON_PROFILE=${envProfile} does not apply to \`profile mv\`, which takes the profile name as an argument. Use \`neon profile mv ${envProfile} ${dest}\` or \`neon profile mv ${DEFAULT_PROFILE} ${dest}\`.`,
-		);
-	}
-	if (toKeyring && hasFile) {
-		throw new Error(
-			`Pass only one destination: ${mvDestHelp(name, props.configDir)}.`,
-		);
-	}
-	if (!toKeyring && !hasFile) {
-		throw new Error(
-			`Say where to move the credential: ${mvDestHelp(name, props.configDir, storageOf(name))}.`,
-		);
-	}
-	if (props.force === true && toKeyring) {
-		throw new Error(
-			`\`--force\` only applies to \`neon profile mv ${name} --file\`.`,
-		);
-	}
-
-	const source = locationForName(props.configDir, name);
-	const store = storeFor(props.configDir);
-
-	if (toKeyring) {
-		if (source.storage === CRED_STORAGE_KEYRING) {
-			throw new Error(
-				`Profile "${name}" already stores its credential in the OS keyring.`,
-			);
-		}
-		store.assertKeyringWritable();
-		const loaded = store.read(source);
-		if (loaded === null) {
-			throw new Error(
-				name === DEFAULT_PROFILE
-					? `Profile "DEFAULT" has no stored credential to move. Sign in first with \`neon auth --keyring\`.`
-					: `Profile "${name}" has no stored credential to move. Sign in first, or create it with \`neon profile create ${name} --keyring\`.`,
-			);
-		}
-		const dest: CredentialLocation = {
-			profile: name,
-			storage: CRED_STORAGE_KEYRING,
-		};
-		store.write(dest, loaded.credentials);
-		try {
-			setProfilePointer(props.configDir, name, KEYRING_CREDENTIALS);
-		} catch (err) {
-			warnIfKeyringRollbackUnconfirmed(
-				store.delete(dest, { required: false }),
-				name,
-			);
-			throw err instanceof Error ? err : new Error(String(err));
-		}
-		if (
-			isOwnedCredentialPath(props.configDir, source.path) &&
-			profilesUsingPath(props.configDir, source.path, name).length === 0
-		) {
-			try {
-				store.delete(source);
-			} catch {
-				log.warning(
-					"Moved the credential to the OS keyring but could not delete %s",
-					source.path,
-				);
-			}
-		}
-		const out = writer(props);
-		const record = {
-			name,
-			storage: CRED_STORAGE_KEYRING,
-			credentials: KEYRING_CREDENTIALS,
-		};
-		if (props.output === "table") {
-			log.info('Moved profile "%s" to the OS keyring.', name);
-			return;
-		}
-		out.end(record as never, {
-			fields: ["name", "storage", "credentials"] as never,
-			title: "Profile",
-		});
-		return;
-	}
-
-	if (fileFlag === undefined || fileFlag === "") {
-		throw new Error("Pass --file <path>.");
-	}
-	const destPath = resolveMoveFilePath(fileFlag);
-	if (existsSync(destPath)) {
-		throw new Error(
-			`Refusing to overwrite ${destPath}. Choose another path, or remove that file first.`,
-		);
-	}
-	const using = profilesUsingPath(props.configDir, destPath, name);
-	if (using.length > 0) {
-		throw new Error(
-			`${destPath} is already the credentials file for profile "${using[0]}".`,
-		);
-	}
-
-	if (source.storage === CRED_STORAGE_FILE && source.path === destPath) {
-		throw new Error(
-			`Profile "${name}" already stores its credential at ${destPath}.`,
-		);
-	}
-
-	if (props.force === true) {
-		if (source.storage !== CRED_STORAGE_KEYRING) {
-			throw new Error(
-				"`--force` only rewrites a keyring pointer to a file. It does not move a file.",
-			);
-		}
-		setProfilePointer(props.configDir, name, destPath);
-		log.warning(
-			"The OS keyring item was not read or cleared. A leftover may still be in the OS store; it is not used once the pointer is a file.",
-		);
-		const out = writer(props);
-		const record = {
-			name,
-			storage: CRED_STORAGE_FILE,
-			credentials: destPath,
-		};
-		if (props.output === "table") {
-			log.info(
-				'Pointed profile "%s" at %s without moving a credential.',
-				name,
-				destPath,
-			);
-			return;
-		}
-		out.end(record as never, {
-			fields: ["name", "storage", "credentials"] as never,
-			title: "Profile",
-		});
-		return;
-	}
-
-	const loaded = store.read(source);
-	if (loaded === null) {
-		throw new Error(`Profile "${name}" has no stored credential to move.`);
-	}
-	const dest: CredentialLocation = {
-		profile: name,
-		storage: CRED_STORAGE_FILE,
-		path: destPath,
-	};
-	store.write(dest, loaded.credentials);
-	try {
-		setProfilePointer(props.configDir, name, destPath);
-	} catch (err) {
-		try {
-			rmSync(destPath);
-		} catch {
-			// The pointer was not updated; leave the failed dest if unlink also fails.
-		}
-		throw err instanceof Error ? err : new Error(String(err));
-	}
-	if (source.storage === CRED_STORAGE_KEYRING) {
-		const cleared = store.delete(source, { required: false });
-		if (cleared !== "cleared") {
-			log.warning(
-				"Moved the credential to %s but could not confirm the OS keyring item is gone.",
-				destPath,
-			);
-		}
-	} else if (
-		isOwnedCredentialPath(props.configDir, source.path) &&
-		profilesUsingPath(props.configDir, source.path, name).length === 0
-	) {
-		try {
-			store.delete(source);
-		} catch {
-			log.warning(
-				"Moved the credential to %s but could not delete %s",
-				destPath,
-				source.path,
-			);
-		}
-	}
-
-	const out = writer(props);
-	const record = {
-		name,
-		storage: CRED_STORAGE_FILE,
-		credentials: destPath,
-	};
-	if (props.output === "table") {
-		log.info('Moved profile "%s" to %s.', name, destPath);
-		return;
-	}
-	out.end(record as never, {
-		fields: ["name", "storage", "credentials"] as never,
-		title: "Profile",
 	});
 };
 
@@ -1629,7 +1344,18 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 	//    unreachable by us. Best-effort: a profile is often removed precisely because its
 	//    access already broke.
 	const at = locationOf(profile);
-	const stored = readOutgoingCredential(props.configDir, at);
+	let stored: OutgoingCredential | null = null;
+	try {
+		stored = readOutgoingCredential(props.configDir, at);
+	} catch (err) {
+		log.warning(
+			"%s. Nothing in it could be revoked, so it is only being replaced locally.",
+			(err instanceof Error ? err.message : String(err)).replace(
+				/\.$/,
+				"",
+			),
+		);
+	}
 
 	if (stored?.kind === API_KEY) {
 		const { keyId, scope } = stored;
@@ -1665,8 +1391,22 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 	//    secret is still on disk and silence would imply otherwise.
 	const listing = storeFor(props.configDir).inspect(at);
 	if (at.storage === "keyring") {
-		storeFor(props.configDir).delete(at);
-		log.info('Deleted the OS keyring item for profile "%s"', name);
+		let cleared: CredentialDeleteResult = "unconfirmed";
+		try {
+			cleared = storeFor(props.configDir).delete(at, {
+				required: false,
+			});
+		} catch {
+			cleared = "unconfirmed";
+		}
+		if (cleared === "cleared") {
+			log.info('Deleted the OS keyring item for profile "%s"', name);
+		} else {
+			log.warning(
+				'Could not confirm the OS keyring item for profile "%s" is gone. A leftover may still be in the OS store; it is not used once the profile is removed.',
+				name,
+			);
+		}
 	} else if (isOwnedCredentialPath(props.configDir, at.path)) {
 		storeFor(props.configDir).delete(at);
 		if (listing.credentials !== null || listing.file !== "missing") {
