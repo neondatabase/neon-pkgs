@@ -5,6 +5,7 @@ import {
 	CRED_STORAGE_FILE,
 	CRED_STORAGE_KEYRING,
 } from "@neon-internals/cli-core/cli_config";
+import type { CredentialDeleteResult } from "@neon-internals/cli-core/credential_store";
 import {
 	API_KEY,
 	apiKeyCredentials,
@@ -480,7 +481,10 @@ const move = async (props: MoveProps) => {
 		try {
 			setProfilePointer(props.configDir, name, KEYRING_CREDENTIALS);
 		} catch (err) {
-			store.delete(dest, { required: false });
+			warnIfKeyringRollbackUnconfirmed(
+				store.delete(dest, { required: false }),
+				name,
+			);
 			throw err instanceof Error ? err : new Error(String(err));
 		}
 		if (
@@ -724,6 +728,17 @@ const existingLocation = (
 		return null;
 	}
 	return null;
+};
+
+const warnIfKeyringRollbackUnconfirmed = (
+	cleared: CredentialDeleteResult,
+	profile: string,
+): void => {
+	if (cleared === "cleared") return;
+	log.warning(
+		'Could not confirm the new OS keyring item for profile "%s" was removed after a failed save.',
+		profile,
+	);
 };
 
 const deleteLeftoverOwnedFile = (
@@ -999,7 +1014,10 @@ const create = async (props: CreateProps) => {
 		recordProfile(props, name, at, identity);
 	} catch (err) {
 		if (at.storage === "keyring" && existing?.storage !== "keyring") {
-			storeFor(props.configDir).delete(at, { required: false });
+			warnIfKeyringRollbackUnconfirmed(
+				storeFor(props.configDir).delete(at, { required: false }),
+				name,
+			);
 		}
 		throw err instanceof Error ? err : new Error(String(err));
 	}
@@ -1193,7 +1211,10 @@ const createByMinting = async (props: CreateProps) => {
 			recordProfile(props, name, at, identity);
 		} catch (err) {
 			if (at.storage === "keyring" && existing?.storage !== "keyring") {
-				storeFor(props.configDir).delete(at, { required: false });
+				warnIfKeyringRollbackUnconfirmed(
+					storeFor(props.configDir).delete(at, { required: false }),
+					name,
+				);
 			} else {
 				keyIsReachable = true;
 			}

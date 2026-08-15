@@ -165,9 +165,9 @@ export const authFlow = async ({
 			}),
 			configDir,
 		);
-	} catch {
+	} catch (err) {
 		log.error("Failed to save credentials");
-		throw new Error("Failed to save credentials");
+		throw err instanceof Error ? err : new Error(String(err));
 	}
 
 	if (at.storage === "keyring" || isNamed) {
@@ -180,7 +180,15 @@ export const authFlow = async ({
 			});
 		} catch (err) {
 			if (at.storage === "keyring" && !previousWasKeyring) {
-				storeFor(configDir).delete(at, { required: false });
+				const cleared = storeFor(configDir).delete(at, {
+					required: false,
+				});
+				if (cleared !== "cleared") {
+					log.warning(
+						'Could not confirm the new OS keyring item for profile "%s" was removed after a failed save.',
+						profileName,
+					);
+				}
 			}
 			log.error("Failed to save credentials");
 			throw err instanceof Error ? err : new Error(String(err));

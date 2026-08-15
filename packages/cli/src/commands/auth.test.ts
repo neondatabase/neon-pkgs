@@ -29,6 +29,7 @@ import {
 import type { NeonApiClient } from "../api.js";
 import * as authModule from "../auth";
 import * as credentialIo from "../credential_io.js";
+import { log } from "../log.js";
 import { test } from "../test_utils/fixtures";
 import { startOauthServer } from "../test_utils/oauth_server";
 import { authFlow, deleteCredentialsAt, ensureAuth } from "./auth";
@@ -137,7 +138,7 @@ describe("auth", () => {
 					oauthHost: `http://localhost:${oauthServer.address().port}`,
 					allowUnsafeTls: true,
 				}),
-			).rejects.toThrow(/Failed to save credentials/);
+			).rejects.toThrow(/disk full/);
 		} finally {
 			storeSpy.mockRestore();
 		}
@@ -254,6 +255,59 @@ describe("auth", () => {
 			).rejects.toThrow(/profiles.json unwritable/);
 			expect(keyring.size()).toBe(0);
 		} finally {
+			upsertSpy.mockRestore();
+			storeSpy.mockRestore();
+		}
+	});
+
+	test("warns when rollback cannot confirm the new keyring item is gone", async ({
+		runMockServer,
+	}) => {
+		const server = await runMockServer("main");
+		rmSync(join(configDir, "profiles.json"), { force: true });
+		rmSync(join(configDir, "credentials.json"), { force: true });
+		const items = new Map<string, string>();
+		const id = (service: string, account: string) =>
+			`${service}\0${account}`;
+		const keyring: KeyringBackend & { size(): number } = {
+			get: (service, account) => items.get(id(service, account)) ?? null,
+			set: (service, account, password) => {
+				items.set(id(service, account), password);
+			},
+			delete: () => false,
+			size: () => items.size,
+		};
+		const storeSpy = vi
+			.spyOn(credentialIo, "storeFor")
+			.mockImplementation((dir: string) =>
+				createCredentialStore(dir, { keyring }),
+			);
+		const upsertSpy = vi
+			.spyOn(profilesCore, "upsertProfile")
+			.mockImplementation(() => {
+				throw new Error("profiles.json unwritable");
+			});
+		const warnSpy = vi.spyOn(log, "warning");
+		try {
+			await expect(
+				authFlow({
+					_: ["auth"],
+					apiHost: `http://localhost:${(server.address() as AddressInfo).port}`,
+					clientId: "test-client-id",
+					configDir,
+					forceAuth: true,
+					oauthHost: `http://localhost:${oauthServer.address().port}`,
+					allowUnsafeTls: true,
+					keyring: true,
+				}),
+			).rejects.toThrow(/profiles.json unwritable/);
+			expect(keyring.size()).toBe(1);
+			expect(warnSpy).toHaveBeenCalledWith(
+				'Could not confirm the new OS keyring item for profile "%s" was removed after a failed save.',
+				"DEFAULT",
+			);
+		} finally {
+			warnSpy.mockRestore();
 			upsertSpy.mockRestore();
 			storeSpy.mockRestore();
 		}
