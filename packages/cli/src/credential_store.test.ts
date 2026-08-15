@@ -72,7 +72,7 @@ const keyringAt = (profile = "DEFAULT"): CredentialLocation => ({
 });
 
 describe("keyringAccount", () => {
-	test("namespaces by resolved config directory and profile", () => {
+	test("namespaces by the profiles.json directory and profile", () => {
 		expect(keyringAccount("/tmp/a", "DEFAULT")).toBe(
 			`cli:${createHash("sha256").update(resolve("/tmp/a")).digest("hex")}:DEFAULT`,
 		);

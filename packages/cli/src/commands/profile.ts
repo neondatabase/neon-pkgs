@@ -1396,6 +1396,7 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 	// before the OS item is deleted: a failed write after a successful delete
 	// would leave the pointer targeting a gone item (unreadable, not signed-out).
 	const dropPointer = (): void => {
+		assertProfilesUsable(props.configDir, name);
 		const path = profilesFilePath(props.configDir);
 		const file = readProfiles(props.configDir, log.warning);
 		if (file?.profiles[name]) {

@@ -8,7 +8,7 @@
 
 import { createHash } from "node:crypto";
 import { existsSync, rmSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname } from "node:path";
 import {
 	CRED_STORAGE_FILE,
 	CRED_STORAGE_KEYRING,
@@ -25,6 +25,7 @@ import {
 	writeCredentials,
 } from "./credentials.js";
 import { isOwnedCredentialPath } from "./paths.js";
+import { profilesFilePath } from "./profiles.js";
 
 export const KEYRING_SERVICE = "com.neon.neon-cli";
 
@@ -42,12 +43,16 @@ export type KeyringBackend = {
 /**
  * OS account for one profile in one config directory.
  *
- * Namespaced by the resolved config directory so two `--config-dir` roots
- * cannot share a `DEFAULT` slot. The profile name is not hashed so a Keychain
- * listing still names the profile.
+ * Namespaced by the directory that actually holds `profiles.json`, so a
+ * default-dir install that still reads the legacy `neonctl/` file and an
+ * explicit `--config-dir` pointed at that same file share a slot. Two
+ * different `--config-dir` roots do not. The profile name is not hashed so a
+ * Keychain listing still names the profile.
  */
 export const keyringAccount = (configDir: string, profile: string): string =>
-	`cli:${createHash("sha256").update(resolve(configDir)).digest("hex")}:${profile}`;
+	`cli:${createHash("sha256")
+		.update(dirname(profilesFilePath(configDir)))
+		.digest("hex")}:${profile}`;
 
 export class KeyringUnavailableError extends Error {
 	constructor(profile?: string) {
