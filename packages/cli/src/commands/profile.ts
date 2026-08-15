@@ -222,6 +222,10 @@ export const builder = (argv: yargs.Argv) =>
 						type: "boolean",
 						default: false,
 					})
+					.option("profile", {
+						describe:
+							"Does not apply. Pass the profile name as an argument.",
+					})
 					.strict()
 					.check(noPassthrough("profile mv")),
 			async (args) => await move(args as unknown as MoveProps),
@@ -434,27 +438,43 @@ const list = async (props: ProfileProps) => {
 const resolveMoveFilePath = (filePath: string): string =>
 	isAbsolute(filePath) ? filePath : resolve(process.cwd(), filePath);
 
+const mvDestHelp = (name: string): string =>
+	`\`neon profile mv ${name} --keyring\` or \`neon profile mv ${name} --file <path>\``;
+
 const move = async (props: MoveProps) => {
 	rejectApiKeyFlag("mv");
 	const named = props.profile?.trim();
 	if (named) {
+		const intended = props.name?.trim() || named;
 		throw new Error(
-			`--profile does not apply to \`profile mv\`, which takes the profile name as an argument. Drop --profile.`,
+			`--profile does not apply to \`profile mv\`, which takes the profile name as an argument. Use ${mvDestHelp(intended)}.`,
 		);
 	}
 	const name = props.name?.trim() || DEFAULT_PROFILE;
+	const envProfile = process.env.NEON_PROFILE?.trim();
+	if (envProfile && !props.name?.trim()) {
+		log.warning(
+			`NEON_PROFILE=${envProfile} does not apply to \`profile mv\`. Moving "${name}". Pass the name as an argument to move a different profile.`,
+		);
+	}
 	assertValidProfileName(name);
 	assertProfilesUsable(props.configDir, name);
 
 	const toKeyring = props.keyring === true;
 	const fileFlag = props.file?.trim();
-	if (toKeyring === (fileFlag !== undefined && fileFlag !== "")) {
+	const hasFile = fileFlag !== undefined && fileFlag !== "";
+	if (toKeyring && hasFile) {
+		throw new Error(`Pass only one destination: ${mvDestHelp(name)}.`);
+	}
+	if (!toKeyring && !hasFile) {
 		throw new Error(
-			"Say where to move the credential: `neon profile mv --keyring` or `neon profile mv --file <path>`.",
+			`Say where to move the credential: ${mvDestHelp(name)}.`,
 		);
 	}
 	if (props.force === true && toKeyring) {
-		throw new Error("`--force` only applies to `neon profile mv --file`.");
+		throw new Error(
+			`\`--force\` only applies to \`neon profile mv ${name} --file\`.`,
+		);
 	}
 
 	const source = locationForName(props.configDir, name);
@@ -470,7 +490,9 @@ const move = async (props: MoveProps) => {
 		const loaded = store.read(source);
 		if (loaded === null) {
 			throw new Error(
-				`Profile "${name}" has no stored credential to move. Sign in first, or create it with \`neon profile create ${name} --keyring\`.`,
+				name === DEFAULT_PROFILE
+					? `Profile "DEFAULT" has no stored credential to move. Sign in first with \`neon auth --keyring\`.`
+					: `Profile "${name}" has no stored credential to move. Sign in first, or create it with \`neon profile create ${name} --keyring\`.`,
 			);
 		}
 		const dest: CredentialLocation = {
@@ -776,9 +798,7 @@ const assertReplaceable = (props: CreateProps): void => {
 		existingLocation(configDir, name) ??
 		locationForCreate(configDir, name, props.keyring === true);
 	const listing = storeFor(configDir).inspect(at);
-	const present =
-		listing.credentials !== null ||
-		(listing.file !== "missing" && listing.file !== "-");
+	const present = listing.credentials !== null || listing.file !== "missing";
 	if (!declared && !(name === DEFAULT_PROFILE && present)) return;
 
 	const stored = listing.credentials;

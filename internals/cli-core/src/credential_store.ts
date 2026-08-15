@@ -51,7 +51,7 @@ export const keyringAccount = (configDir: string, profile: string): string =>
 
 export class KeyringUnavailableError extends Error {
 	constructor(
-		message = "This CLI cannot use the OS keyring. Use the npm-installed neon CLI.",
+		message = "This CLI cannot use the OS keyring. Use a neon CLI build that includes the keyring addon, or move the profile to a file with `neon profile mv <name> --file <path>`.",
 	) {
 		super(message);
 		this.name = "KeyringUnavailableError";
@@ -94,7 +94,7 @@ export type LoadedCredential = {
 };
 
 export type CredentialListing = {
-	file: "ok" | "missing" | "invalid" | "-";
+	file: "ok" | "missing" | "invalid" | "unreadable";
 	storage: CredStorage;
 	credentials: StoredCredentials | null;
 	reason?: string;
@@ -241,7 +241,7 @@ export const createCredentialStore = (
 		if (at.storage === CRED_STORAGE_KEYRING) {
 			if (keyring === null) {
 				return {
-					file: "-",
+					file: "unreadable",
 					storage: CRED_STORAGE_KEYRING,
 					credentials: null,
 					reason: "This CLI cannot use the OS keyring.",
@@ -254,21 +254,21 @@ export const createCredentialStore = (
 			);
 			if (keyringRead.kind === "ok") {
 				return {
-					file: "-",
+					file: "ok",
 					storage: CRED_STORAGE_KEYRING,
 					credentials: keyringRead.credentials,
 				};
 			}
 			if (keyringRead.kind === "unusable") {
 				return {
-					file: "-",
+					file: "unreadable",
 					storage: CRED_STORAGE_KEYRING,
 					credentials: null,
 					reason: keyringRead.reason,
 				};
 			}
 			return {
-				file: "-",
+				file: "unreadable",
 				storage: CRED_STORAGE_KEYRING,
 				credentials: null,
 				reason: `Could not read the OS keyring item for profile "${at.profile}".`,

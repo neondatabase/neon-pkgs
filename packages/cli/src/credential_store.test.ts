@@ -208,11 +208,11 @@ describe("createCredentialStore — keyring", () => {
 		);
 	});
 
-	test("inspect uses file=- and does not throw when get() is null", () => {
+	test("inspect uses file=unreadable and does not throw when get() is null", () => {
 		const dir = makeDir();
 		const store = createCredentialStore(dir, { keyring: memoryKeyring() });
 		expect(store.inspect(keyringAt())).toEqual({
-			file: "-",
+			file: "unreadable",
 			storage: CRED_STORAGE_KEYRING,
 			credentials: null,
 			reason: 'Could not read the OS keyring item for profile "DEFAULT".',
@@ -223,7 +223,7 @@ describe("createCredentialStore — keyring", () => {
 		const dir = makeDir();
 		const store = createCredentialStore(dir, { keyring: null });
 		expect(store.inspect(keyringAt())).toEqual({
-			file: "-",
+			file: "unreadable",
 			storage: CRED_STORAGE_KEYRING,
 			credentials: null,
 			reason: "This CLI cannot use the OS keyring.",

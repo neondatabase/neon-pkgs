@@ -275,7 +275,7 @@ describe("profile list", () => {
 		}
 	});
 
-	test("a keyring pointer lists storage as keyring and file as -", async () => {
+	test("a keyring pointer lists storage as keyring and file as unreadable", async () => {
 		const dir = makeConfigDir({
 			"profiles.json": JSON.stringify({
 				version: 1,
@@ -297,7 +297,7 @@ describe("profile list", () => {
 				expect.objectContaining({
 					name: "DEFAULT",
 					auth: "-",
-					file: "-",
+					file: "unreadable",
 					storage: "keyring",
 					credentials: "keyring",
 				}),
@@ -1503,7 +1503,32 @@ describe("profile mv", () => {
 		]);
 		expect(code).toBe(1);
 		expect(stderr).toContain("Say where to move the credential");
+		expect(stderr).toContain("`neon profile mv DEFAULT --keyring`");
 		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
+	});
+
+	test("both destinations is refused", async () => {
+		const dir = makeConfigDir({
+			"credentials.work.json": API_KEY_FILE,
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { work: { credentials: "credentials.work.json" } },
+			}),
+		});
+		const { code, stderr } = await runCli([
+			"profile",
+			"mv",
+			"work",
+			"--keyring",
+			"--file",
+			resolve(dir, "out.json"),
+			"--config-dir",
+			dir,
+		]);
+		expect(code).toBe(1);
+		expect(stderr).toContain("Pass only one destination");
+		expect(stderr).toContain("`neon profile mv work --keyring`");
+		expect(existsSync(resolve(dir, "credentials.work.json"))).toBe(true);
 	});
 
 	test("--force is refused on --keyring", async () => {
@@ -1520,9 +1545,31 @@ describe("profile mv", () => {
 		]);
 		expect(code).toBe(1);
 		expect(stderr).toContain(
-			"`--force` only applies to `neon profile mv --file`",
+			"`--force` only applies to `neon profile mv DEFAULT --file`",
 		);
 		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
+	});
+
+	test("NEON_PROFILE does not select the profile to move", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": API_KEY_FILE,
+			"credentials.work.json": API_KEY_FILE,
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: {
+					DEFAULT: { credentials: "credentials.json" },
+					work: { credentials: "credentials.work.json" },
+				},
+			}),
+		});
+		const { code, stderr } = await runCli(
+			["profile", "mv", "--keyring", "--config-dir", dir],
+			{ NEON_PROFILE: "work" },
+		);
+		expect(code).toBe(1);
+		expect(stderr).toContain("NEON_PROFILE=work does not apply");
+		expect(stderr).toContain('Moving "DEFAULT"');
+		expect(existsSync(resolve(dir, "credentials.work.json"))).toBe(true);
 	});
 
 	test("--profile is refused", async () => {
@@ -1549,7 +1596,8 @@ describe("profile mv", () => {
 		]);
 		expect(code).toBe(1);
 		expect(stderr).toContain("does not apply to `profile mv`");
-		expect(stderr).toContain("Drop --profile");
+		expect(stderr).toContain("`neon profile mv work --keyring`");
+		expect(stderr).not.toContain("Drop --profile");
 		expect(existsSync(resolve(dir, "credentials.work.json"))).toBe(true);
 	});
 

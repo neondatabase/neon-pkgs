@@ -848,17 +848,17 @@ Profiles
 ├────────┼─────────┼───────────────────────┼─────────┼────────────────┼──────┼─────────┼────────────────────────┤
 │ *      │ DEFAULT │ me@example.com        │ oauth   │ -              │ ok   │ file    │ credentials.json       │
 ├────────┼─────────┼───────────────────────┼─────────┼────────────────┼──────┼─────────┼────────────────────────┤
-│        │ work    │ me@example.com        │ api key │ account        │ -    │ keyring │ keyring                │
+│        │ work    │ me@example.com        │ api key │ account        │ ok   │ keyring │ keyring                │
 ├────────┼─────────┼───────────────────────┼─────────┼────────────────┼──────┼─────────┼────────────────────────┤
 │        │ ci      │ org-abc-123           │ api key │ project proj-1 │ ok   │ file    │ credentials.ci.json    │
 └────────┴─────────┴───────────────────────┴─────────┴────────────────┴──────┴─────────┴────────────────────────┘
 ```
 
 `Scope` is what a key can reach; an OAuth session has none of its own, so it shows `-`. `File`
-says whether the credentials file can be read and understood — `ok`, `invalid` or `missing`.
-A keyring profile shows `-` there: there is no file. `Storage` is `file` or `keyring`, from
-the profile's pointer. The table shows the file name or `keyring`; `--output json` keeps the
-full path.
+says whether the stored credential can be read — `ok`, `invalid` or `missing` for a file,
+`ok` or `unreadable` for a keyring item. A keyring get of null is `unreadable`, not missing:
+the addon cannot tell those apart. `Storage` is `file` or `keyring`, from the profile's
+pointer. The table shows the file name or `keyring`; `--output json` keeps the full path.
 
 Select one per invocation with `--profile`, or per shell with `NEON_PROFILE`. There is no `profile use` command and nothing is stored about which profile is "current", so what you type is always what runs.
 
@@ -901,9 +901,9 @@ neon profile mv [name] --file <path> --force
 # rewrite the pointer when the keyring item cannot be read (no secret is written)
 ```
 
-`mv [name]` is positional, like `remove`. Omission is the literal profile `DEFAULT`, not
-`NEON_PROFILE`. `--profile` is refused. `--force` only applies to `--file`: it rewrites the
-pointer, does not write a secret file, and does not delete the keyring item.
+`mv [name]` takes the profile as a positional argument. Omission is the literal profile
+`DEFAULT`, not `NEON_PROFILE`. `--profile` is refused. `--force` only applies to `--file`: it
+rewrites the pointer, does not write a secret file, and does not delete the keyring item.
 
 `--api-key` and `NEON_API_KEY` skip both stores. This CLI's packaged binary recognizes a
 `"keyring"` pointer and refuses: it cannot load the OS keyring addon. Use the npm-installed
@@ -1074,7 +1074,7 @@ API keys in org-7
 | Command                                                                    | Subcommands                                                                                                  | Description                        |
 | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------- |
 | [auth](https://neon.com/docs/reference/cli-auth)                           |                                                                                                              | Authenticate                       |
-| profile                                                                    | `list`, `create`, `rotate-key`, `storage`, `remove`                                                          | Manage named sets of credentials   |
+| profile                                                                    | `list`, `create`, `rotate-key`, `mv`, `remove`                                                               | Manage named sets of credentials   |
 | api-keys                                                                   | `list`, `create`, `revoke`                                                                                   | Manage API keys                    |
 | [projects](https://neon.com/docs/reference/cli-projects)                   | `list`, `create`, `update`, `delete`, `get`                                                                  | Manage projects                    |
 | [ip-allow](https://neon.com/docs/reference/cli-ip-allow)                   | `list`, `add`, `remove`, `reset`                                                                             | Manage IP Allow                    |
