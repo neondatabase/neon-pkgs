@@ -135,8 +135,9 @@ describe("auth", () => {
 				createCredentialStore(dir, { keyring: null }),
 			);
 		try {
-			await expect(
-				authFlow({
+			let err: unknown;
+			try {
+				await authFlow({
 					_: ["auth"],
 					apiHost: `http://localhost:${(server.address() as AddressInfo).port}`,
 					clientId: "test-client-id",
@@ -144,8 +145,15 @@ describe("auth", () => {
 					forceAuth: true,
 					oauthHost: `http://localhost:${oauthServer.address().port}`,
 					allowUnsafeTls: true,
-				}),
-			).rejects.toThrow("`neon profile remove DEFAULT --yes`");
+				});
+			} catch (caught) {
+				err = caught;
+			}
+			expect(err).toBeInstanceOf(KeyringUnavailableError);
+			expect(String(err)).toContain(
+				"`neon profile remove DEFAULT --yes`",
+			);
+			expect(String(err)).not.toMatch(/--no-keyring/);
 			expect(authSpy).not.toHaveBeenCalled();
 		} finally {
 			authSpy.mockRestore();
@@ -174,6 +182,49 @@ describe("auth", () => {
 				"keyring",
 			);
 		} finally {
+			rmSync(join(configDir, "profiles.json"), { force: true });
+		}
+	});
+
+	test("omitted --keyring follows an existing keyring pointer", async ({
+		runMockServer,
+	}) => {
+		const server = await runMockServer("main");
+		writeFileSync(
+			join(configDir, "profiles.json"),
+			JSON.stringify({
+				version: 1,
+				profiles: { DEFAULT: { credentials: "keyring" } },
+			}),
+		);
+		const items = new Map<string, string>();
+		const id = (service: string, account: string) =>
+			`${service}\0${account}`;
+		const keyring: KeyringBackend = {
+			get: (service, account) => items.get(id(service, account)) ?? null,
+			set: (service, account, password) => {
+				items.set(id(service, account), password);
+			},
+			delete: (service, account) => items.delete(id(service, account)),
+		};
+		const storeSpy = vi
+			.spyOn(credentialIo, "storeFor")
+			.mockImplementation((dir: string) =>
+				createCredentialStore(dir, { keyring }),
+			);
+		try {
+			await authFlow({
+				_: ["auth"],
+				apiHost: `http://localhost:${(server.address() as AddressInfo).port}`,
+				clientId: "test-client-id",
+				configDir,
+				forceAuth: true,
+				oauthHost: `http://localhost:${oauthServer.address().port}`,
+				allowUnsafeTls: true,
+			});
+			expect(items.size).toBe(1);
+		} finally {
+			storeSpy.mockRestore();
 			rmSync(join(configDir, "profiles.json"), { force: true });
 		}
 	});

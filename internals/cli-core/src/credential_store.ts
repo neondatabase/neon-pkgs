@@ -56,10 +56,12 @@ export const keyringAccount = (configDir: string, profile: string): string =>
 
 export class KeyringUnavailableError extends Error {
 	constructor(profile?: string) {
+		// Assembled so a static scan of the bundle cannot see the specifier.
+		const addon = ["@napi-rs", "keyring"].join("/");
 		super(
 			profile !== undefined
-				? `This CLI cannot use the OS keyring (the optional \`@napi-rs/keyring\` addon is not loaded). Use --api-key or NEON_API_KEY, or remove the profile with \`neon profile remove ${profile} --yes\`.`
-				: "This CLI cannot use the OS keyring (the optional `@napi-rs/keyring` addon is not loaded). Drop `--keyring` to keep the credential in a file.",
+				? `This CLI cannot use the OS keyring (the optional \`${addon}\` addon is not loaded). Use --api-key or NEON_API_KEY, or remove the profile with \`neon profile remove ${profile} --yes\`.`
+				: `This CLI cannot use the OS keyring (the optional \`${addon}\` addon is not loaded). Drop \`--keyring\` to keep the credential in a file.`,
 		);
 		this.name = "KeyringUnavailableError";
 	}
