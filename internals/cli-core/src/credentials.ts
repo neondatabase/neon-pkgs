@@ -123,7 +123,6 @@ export const credentialKind = (
 	);
 };
 
-/** Sharing one hint keeps unreadable credentials on the same recovery path. */
 export const credentialsRepairHint = (
 	at: CredentialLocation,
 	store: "file" | "keyring" = "file",

@@ -1452,8 +1452,9 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 	// Adopted files stay on disk because the CLI does not own them.
 	const listing = storeFor(props.configDir).inspect(at);
 	if (at.storage === "keyring") {
-		dropPointer();
+		// The account hash follows the directory that currently holds profiles.json.
 		const account = keyringAccount(props.configDir, name);
+		dropPointer();
 		if (listing.reason?.includes("cannot use the OS keyring")) {
 			log.warning(
 				'This CLI cannot delete the OS keyring item for profile "%s". It remains in the OS store (service %s, account %s) until a CLI with the keyring addon removes it, or you delete it there.',

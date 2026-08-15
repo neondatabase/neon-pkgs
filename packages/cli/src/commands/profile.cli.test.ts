@@ -12,8 +12,10 @@
  */
 
 import { fork } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
 	existsSync,
+	mkdirSync,
 	mkdtempSync,
 	readFileSync,
 	rmSync,
@@ -1530,6 +1532,35 @@ describe("profile remove", () => {
 		expect(stderr).toContain("com.neon.neon-cli");
 		expect(stderr).not.toContain("neon auth --profile work");
 		expect(existsSync(resolve(dir, "profiles.json"))).toBe(false);
+	});
+
+	test("remove names the leftover keyring account from the legacy profiles directory", async () => {
+		const xdg = mkdtempSync(join(tmpdir(), "neon-xdg-"));
+		cleanups.push(() => rmSync(xdg, { recursive: true, force: true }));
+		const legacyDir = join(xdg, "neonctl");
+		mkdirSync(legacyDir, { recursive: true });
+		writeFileSync(
+			join(legacyDir, "profiles.json"),
+			JSON.stringify({
+				version: 1,
+				profiles: { work: { credentials: "keyring" } },
+			}),
+			{ mode: 0o600 },
+		);
+		const { code, stderr } = await runCli(
+			["profile", "remove", "work", "--yes"],
+			{ XDG_CONFIG_HOME: xdg },
+		);
+
+		expect(code).toBe(0);
+		expect(stderr).toContain(
+			`cli:${createHash("sha256").update(resolve(legacyDir)).digest("hex")}:work`,
+		);
+		expect(stderr).not.toContain(
+			`cli:${createHash("sha256")
+				.update(resolve(join(xdg, "neon")))
+				.digest("hex")}:work`,
+		);
 	});
 });
 
