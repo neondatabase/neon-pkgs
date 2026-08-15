@@ -25,6 +25,7 @@ import {
 	writeCredentials,
 } from "./credentials.js";
 import { isOwnedCredentialPath } from "./paths.js";
+import { DEFAULT_PROFILE, defaultCredentialsFileName } from "./profiles.js";
 
 export const KEYRING_SERVICE = "com.neon.neon-cli";
 
@@ -51,7 +52,7 @@ export const keyringAccount = (configDir: string, profile: string): string =>
 
 export class KeyringUnavailableError extends Error {
 	constructor(
-		message = "This CLI cannot use the OS keyring. Use a neon CLI build that includes the keyring addon, or move the profile to a file with `neon profile mv <name> --file <path>`.",
+		message = `This CLI cannot use the OS keyring. Use a neon CLI build that includes the keyring addon, or move the profile to a file with \`neon profile mv ${DEFAULT_PROFILE} --file ${defaultCredentialsFileName(DEFAULT_PROFILE)}\`.`,
 	) {
 		super(message);
 		this.name = "KeyringUnavailableError";
@@ -77,10 +78,11 @@ export class KeyringUnreadableError extends Error {
 
 export class KeyringClearError extends Error {
 	constructor(profile: string, kind: "unconfirmed" | "visible" = "visible") {
+		const recovery = `\`neon profile mv ${profile} --file ${defaultCredentialsFileName(profile)} --force\``;
 		super(
 			kind === "unconfirmed"
-				? `Could not confirm the OS keyring item for profile "${profile}" is gone. The OS store does not distinguish a missing item from denied access. Unlock the OS keyring and retry, or run \`neon profile mv ${profile} --file <path> --force\` to stop using the keyring.`
-				: `Could not clear the OS keyring item for profile "${profile}". Unlock the OS keyring and retry, or run \`neon profile mv ${profile} --file <path> --force\` (may leave a leftover; it is not used once the pointer is a file).`,
+				? `Could not confirm the OS keyring item for profile "${profile}" is gone. The OS store does not distinguish a missing item from denied access. Unlock the OS keyring and retry, or run ${recovery} to stop using the keyring.`
+				: `Could not clear the OS keyring item for profile "${profile}". Unlock the OS keyring and retry, or run ${recovery} (may leave a leftover; it is not used once the pointer is a file).`,
 		);
 		this.name = "KeyringClearError";
 	}

@@ -881,10 +881,11 @@ says so. It asks for confirmation first, which `--yes` skips; without a terminal
 CI or behind a pipe, it refuses rather than prompting into the void. It deletes the credentials
 file only when the CLI created it: an adopted path like the one above is unlinked and left on
 disk, and the command says so. A keyring profile's OS item is deleted; if the OS store cannot
-confirm it is gone, remove refuses. Recovery is `neon profile mv <name> --file <path> --force`,
-then remove. Removing the last named profile deletes `profiles.json` unless DEFAULT itself is
-keyring — that entry is the only record that the secret is not in `credentials.json`.
-`neon profile remove DEFAULT` signs you out.
+confirm it is gone, remove refuses. Recovery is
+`neon profile mv work --file credentials.work.json --force`, then remove. Removing the last
+named profile deletes `profiles.json` unless DEFAULT itself is keyring — that entry is the
+only record that the secret is not in `credentials.json`. `neon profile remove DEFAULT`
+signs you out.
 
 ### Where the secret is stored
 
@@ -895,15 +896,17 @@ That is per profile. Reads never migrate.
 ```bash
 neon auth --keyring                         # sign DEFAULT into the OS keyring
 neon profile create work --keyring          # create a named profile in the keyring
-neon profile mv [name] --keyring            # move an existing profile into the keyring
-neon profile mv [name] --file <path>        # move it to a file
-neon profile mv [name] --file <path> --force
+neon profile mv --keyring                   # move DEFAULT into the OS keyring
+neon profile mv work --keyring              # move a named profile
+neon profile mv work --file credentials.work.json
+neon profile mv work --file credentials.work.json --force
 # rewrite the pointer when the keyring item cannot be read (no secret is written)
 ```
 
-`mv [name]` takes the profile as a positional argument. Omission is the literal profile
-`DEFAULT`, not `NEON_PROFILE`. `--profile` is refused. `--force` only applies to `--file`: it
-rewrites the pointer, does not write a secret file, and does not delete the keyring item.
+`mv` takes the profile as a positional argument. Omission is the literal profile `DEFAULT`
+when `NEON_PROFILE` is unset. If `NEON_PROFILE` is set, omission is refused — pass the name.
+`--profile` is refused. `--force` only applies to `--file`: it rewrites the pointer, does not
+write a secret file, and does not delete the keyring item.
 
 `--api-key` and `NEON_API_KEY` skip both stores. This CLI's packaged binary recognizes a
 `"keyring"` pointer and refuses: it cannot load the OS keyring addon. Use the npm-installed

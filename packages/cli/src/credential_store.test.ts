@@ -203,6 +203,9 @@ describe("createCredentialStore — keyring", () => {
 		const dir = makeDir();
 		const store = createCredentialStore(dir, { keyring: null });
 		expect(() => store.read(keyringAt())).toThrow(KeyringUnavailableError);
+		expect(() => store.read(keyringAt())).toThrow(
+			"`neon profile mv DEFAULT --file credentials.json`",
+		);
 		expect(() => store.assertKeyringWritable()).toThrow(
 			KeyringUnavailableError,
 		);
@@ -236,6 +239,9 @@ describe("createCredentialStore — keyring", () => {
 		expect(() => store.delete(keyringAt())).toThrow(KeyringClearError);
 		expect(() => store.delete(keyringAt())).toThrow(
 			/Could not confirm the OS keyring item/,
+		);
+		expect(() => store.delete(keyringAt())).toThrow(
+			"`neon profile mv DEFAULT --file credentials.json --force`",
 		);
 	});
 

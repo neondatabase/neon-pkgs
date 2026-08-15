@@ -27,6 +27,7 @@ import {
 	canDropProfilesFile,
 	credentialsDisplay,
 	DEFAULT_PROFILE,
+	defaultCredentialsFileName,
 	KEYRING_CREDENTIALS,
 	listProfiles,
 	locationForName,
@@ -439,7 +440,7 @@ const resolveMoveFilePath = (filePath: string): string =>
 	isAbsolute(filePath) ? filePath : resolve(process.cwd(), filePath);
 
 const mvDestHelp = (name: string): string =>
-	`\`neon profile mv ${name} --keyring\` or \`neon profile mv ${name} --file <path>\``;
+	`\`neon profile mv ${name} --keyring\` or \`neon profile mv ${name} --file ${defaultCredentialsFileName(name)}\``;
 
 const move = async (props: MoveProps) => {
 	rejectApiKeyFlag("mv");
@@ -450,13 +451,8 @@ const move = async (props: MoveProps) => {
 			`--profile does not apply to \`profile mv\`, which takes the profile name as an argument. Use ${mvDestHelp(intended)}.`,
 		);
 	}
+	const omittedName = !props.name?.trim();
 	const name = props.name?.trim() || DEFAULT_PROFILE;
-	const envProfile = process.env.NEON_PROFILE?.trim();
-	if (envProfile && !props.name?.trim()) {
-		log.warning(
-			`NEON_PROFILE=${envProfile} does not apply to \`profile mv\`. Moving "${name}". Pass the name as an argument to move a different profile.`,
-		);
-	}
 	assertValidProfileName(name);
 	assertProfilesUsable(props.configDir, name);
 
@@ -474,6 +470,13 @@ const move = async (props: MoveProps) => {
 	if (props.force === true && toKeyring) {
 		throw new Error(
 			`\`--force\` only applies to \`neon profile mv ${name} --file\`.`,
+		);
+	}
+	const envProfile = process.env.NEON_PROFILE?.trim();
+	if (envProfile && omittedName) {
+		const dest = toKeyring ? "--keyring" : `--file ${fileFlag}`;
+		throw new Error(
+			`NEON_PROFILE=${envProfile} does not apply to \`profile mv\`, which takes the profile name as an argument. Use \`neon profile mv ${envProfile} ${dest}\` or \`neon profile mv ${DEFAULT_PROFILE} ${dest}\`.`,
 		);
 	}
 

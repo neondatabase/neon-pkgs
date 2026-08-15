@@ -64,6 +64,10 @@ export const isKeyringPointer = (credentials: string): boolean =>
 /** The implicit profile. Backed by plain `credentials.json`, with or without a profiles file. */
 export const DEFAULT_PROFILE = "DEFAULT";
 
+/** Conventional credentials filename this CLI writes for a profile it created. */
+export const defaultCredentialsFileName = (name: string): string =>
+	name === DEFAULT_PROFILE ? "credentials.json" : `credentials.${name}.json`;
+
 /** Profile names become part of a filename, so keep them boring. */
 const NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 

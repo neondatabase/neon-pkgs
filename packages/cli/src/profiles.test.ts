@@ -11,6 +11,7 @@ import {
 	assertProfilesUsable,
 	canDropProfilesFile,
 	DEFAULT_PROFILE,
+	defaultCredentialsFileName,
 	KEYRING_CREDENTIALS,
 	listProfiles,
 	locationOf,
@@ -56,6 +57,17 @@ describe("selectProfileName", () => {
 	test("whitespace-only values are treated as unset", () => {
 		expect(selectProfileName("  ", { NEON_PROFILE: "  " })).toBe(
 			DEFAULT_PROFILE,
+		);
+	});
+});
+
+describe("defaultCredentialsFileName", () => {
+	test("DEFAULT is credentials.json; a named profile is credentials.<name>.json", () => {
+		expect(defaultCredentialsFileName(DEFAULT_PROFILE)).toBe(
+			"credentials.json",
+		);
+		expect(defaultCredentialsFileName("work")).toBe(
+			"credentials.work.json",
 		);
 	});
 });

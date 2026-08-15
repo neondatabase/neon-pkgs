@@ -1550,7 +1550,7 @@ describe("profile mv", () => {
 		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
 	});
 
-	test("NEON_PROFILE does not select the profile to move", async () => {
+	test("NEON_PROFILE without a name is refused and does not move DEFAULT", async () => {
 		const dir = makeConfigDir({
 			"credentials.json": API_KEY_FILE,
 			"credentials.work.json": API_KEY_FILE,
@@ -1562,14 +1562,56 @@ describe("profile mv", () => {
 				},
 			}),
 		});
+		const dest = resolve(dir, "moved.json");
 		const { code, stderr } = await runCli(
-			["profile", "mv", "--keyring", "--config-dir", dir],
+			["profile", "mv", "--file", dest, "--config-dir", dir],
 			{ NEON_PROFILE: "work" },
 		);
 		expect(code).toBe(1);
 		expect(stderr).toContain("NEON_PROFILE=work does not apply");
-		expect(stderr).toContain('Moving "DEFAULT"');
+		expect(stderr).toContain(`\`neon profile mv work --file ${dest}\``);
+		expect(stderr).toContain(`\`neon profile mv DEFAULT --file ${dest}\``);
+		expect(stderr).not.toContain('Moving "DEFAULT"');
+		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
 		expect(existsSync(resolve(dir, "credentials.work.json"))).toBe(true);
+		expect(existsSync(dest)).toBe(false);
+	});
+
+	test("an explicit name is moved even when NEON_PROFILE names another", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": API_KEY_FILE,
+			"credentials.work.json": API_KEY_FILE,
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: {
+					DEFAULT: { credentials: "credentials.json" },
+					work: { credentials: "credentials.work.json" },
+				},
+			}),
+		});
+		const dest = resolve(dir, "work-out.json");
+		const { code, stdout } = await runCli(
+			[
+				"profile",
+				"mv",
+				"work",
+				"--file",
+				dest,
+				"--config-dir",
+				dir,
+				"--output",
+				"json",
+			],
+			{ NEON_PROFILE: "DEFAULT" },
+		);
+		expect(code).toBe(0);
+		expect(JSON.parse(stdout)).toEqual({
+			name: "work",
+			storage: "file",
+			credentials: dest,
+		});
+		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
+		expect(existsSync(resolve(dir, "credentials.work.json"))).toBe(false);
 	});
 
 	test("--profile is refused", async () => {
