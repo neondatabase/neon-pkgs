@@ -36,9 +36,8 @@ export const keyringAccount = (configDir: string, profile: string): string =>
 
 export class KeyringUnavailableError extends Error {
 	constructor(profile?: string, kind: "read" | "write" = "read") {
-		// A literal specifier makes the standalone bundle require an unavailable native addon.
-		const addon = ["@napi-rs", "keyring"].join("/");
-		const loaded = `This CLI cannot use the OS keyring (the optional \`${addon}\` addon is not loaded).`;
+		const loaded =
+			"This CLI cannot use the OS keyring. The standalone binary never can; use the npm-installed neon.";
 		super(
 			profile === undefined
 				? `${loaded} Drop \`--keyring\` to keep the credential in a file.`
@@ -106,7 +105,7 @@ export type CredentialStore = {
 	): LoadedCredential;
 	delete(
 		at: CredentialLocation,
-		options?: { required?: boolean },
+		options?: { required?: boolean; account?: string },
 	): CredentialDeleteResult;
 	assertKeyringWritable(profile?: string): void;
 };
@@ -181,23 +180,8 @@ export const createCredentialStore = (
 				if (restored === null) {
 					throw new KeyringClearError(profile, "visible");
 				}
-			} else {
-				try {
-					const deleted = kr.delete(KEYRING_SERVICE, account);
-					let still: string | null = null;
-					try {
-						still = kr.get(KEYRING_SERVICE, account);
-					} catch {
-						still = null;
-					}
-					if (!deleted || still !== null) {
-						throw new KeyringClearError(profile, "visible");
-					}
-				} catch (clearErr) {
-					if (clearErr instanceof KeyringClearError) throw clearErr;
-					throw new KeyringClearError(profile, "unconfirmed");
-				}
 			}
+			// A null read may mean the keyring is locked, so deleting could destroy an unreadable secret.
 			throw err instanceof Error ? err : new Error(String(err));
 		}
 	};
@@ -205,6 +189,7 @@ export const createCredentialStore = (
 	const removeKeyringItem = (
 		profile: string,
 		required: boolean,
+		account = accountFor(profile),
 	): "cleared" | "unconfirmed" | "left" => {
 		if (keyring === null) {
 			if (required) throw new KeyringUnavailableError(profile, "write");
@@ -212,7 +197,7 @@ export const createCredentialStore = (
 		}
 		let raw: string | null;
 		try {
-			raw = keyring.get(KEYRING_SERVICE, accountFor(profile));
+			raw = keyring.get(KEYRING_SERVICE, account);
 		} catch (err) {
 			if (!required) return "unconfirmed";
 			throw err instanceof Error ? err : new Error(String(err));
@@ -223,14 +208,14 @@ export const createCredentialStore = (
 		}
 		let deleted: boolean;
 		try {
-			deleted = keyring.delete(KEYRING_SERVICE, accountFor(profile));
+			deleted = keyring.delete(KEYRING_SERVICE, account);
 		} catch (err) {
 			if (!required) return "unconfirmed";
 			throw err instanceof Error ? err : new Error(String(err));
 		}
 		let still: string | null;
 		try {
-			still = keyring.get(KEYRING_SERVICE, accountFor(profile));
+			still = keyring.get(KEYRING_SERVICE, account);
 		} catch (err) {
 			if (!required) return "unconfirmed";
 			throw err instanceof Error ? err : new Error(String(err));
@@ -354,11 +339,15 @@ export const createCredentialStore = (
 
 	const del = (
 		at: CredentialLocation,
-		deleteOptions?: { required?: boolean },
+		deleteOptions?: { required?: boolean; account?: string },
 	): CredentialDeleteResult => {
 		const required = deleteOptions?.required !== false;
 		if (at.storage === CRED_STORAGE_KEYRING) {
-			return removeKeyringItem(at.profile, required);
+			return removeKeyringItem(
+				at.profile,
+				required,
+				deleteOptions?.account,
+			);
 		}
 		if (!isOwnedCredentialPath(dir, at.path)) return "skipped";
 		return deleteFileIfPresent(at.path) ? "cleared" : "absent";

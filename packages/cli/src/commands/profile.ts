@@ -155,7 +155,15 @@ export const builder = (argv: yargs.Argv) =>
 					// derived from the project rather than chosen — same rule as `api-keys`.
 					.conflicts("org-id", "project-id")
 					.strict()
-					.check(noPassthrough("profile create"))
+					.check((argv) => {
+						noPassthrough("profile create")(argv);
+						if (argv.keyring === false) {
+							throw new Error(
+								"--no-keyring is not a valid way to skip --keyring. Omit the flag entirely.",
+							);
+						}
+						return true;
+					})
 					.example(
 						"$0 profile create work",
 						"Sign in with the browser, like `neon auth --profile work`",
@@ -1442,7 +1450,7 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 	// Adopted files stay on disk because the CLI does not own them.
 	const listing = storeFor(props.configDir).inspect(at);
 	if (at.storage === "keyring") {
-		// The account hash follows the directory that currently holds profiles.json.
+		// Removing the last profiles.json can change the directory used in the account hash.
 		const account = keyringAccount(props.configDir, name);
 		dropPointer();
 		if (listing.reason?.includes("cannot use the OS keyring")) {
@@ -1458,6 +1466,7 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 		try {
 			cleared = storeFor(props.configDir).delete(at, {
 				required: false,
+				account,
 			});
 		} catch {
 			cleared = "unconfirmed";

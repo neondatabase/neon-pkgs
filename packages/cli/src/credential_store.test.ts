@@ -361,23 +361,48 @@ describe("createCredentialStore — keyring", () => {
 		expect(() => store.write(keyringAt(), key)).toThrow(
 			/could not read them back/,
 		);
-		expect(items.size).toBe(0);
+		expect(items.size).toBe(1);
 	});
 
-	test("write rollback treats a throwing delete as KeyringClearError", () => {
+	test("write rollback does not delete when the previous item was unread", () => {
 		const dir = makeDir();
+		let deleted = false;
 		const keyring: KeyringBackend = {
 			get: () => null,
 			set: () => undefined,
 			delete: () => {
-				throw new Error("denied");
+				deleted = true;
+				return true;
 			},
 		};
 		const store = createCredentialStore(dir, { keyring });
-		expect(() => store.write(keyringAt(), key)).toThrow(KeyringClearError);
 		expect(() => store.write(keyringAt(), key)).toThrow(
-			"`neon profile remove DEFAULT --yes`",
+			/could not read them back/,
 		);
+		expect(deleted).toBe(false);
+	});
+
+	test("delete uses a caller-supplied account instead of recomputing it", () => {
+		const dir = makeDir();
+		const keyring = memoryKeyring();
+		const store = createCredentialStore(dir, { keyring });
+		store.write(keyringAt("work"), key);
+		const real = keyringAccount(dir, "work");
+		const other = keyringAccount("/tmp/other-config", "work");
+		expect(
+			store.delete(keyringAt("work"), {
+				required: false,
+				account: other,
+			}),
+		).toBe("unconfirmed");
+		expect(keyring.get(KEYRING_SERVICE, real)).not.toBeNull();
+		expect(
+			store.delete(keyringAt("work"), {
+				required: false,
+				account: real,
+			}),
+		).toBe("cleared");
+		expect(keyring.get(KEYRING_SERVICE, real)).toBeNull();
 	});
 
 	test("an unusable keyring payload does not quote the secret", () => {

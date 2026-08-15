@@ -91,6 +91,14 @@ export const builder = (yargs: yargs.Argv) =>
 			describe:
 				"Store the credential in the OS keyring. Per profile; later auth without the flag stays there. See `neon profile list`.",
 			type: "boolean",
+		})
+		.check((argv) => {
+			if (argv.keyring === false) {
+				throw new Error(
+					"--no-keyring is not a valid way to skip --keyring. Omit the flag entirely.",
+				);
+			}
+			return true;
 		});
 export const handler = async (args: AuthProps) => {
 	await authFlow(args);
