@@ -1476,7 +1476,7 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 				);
 				if (existsSync(leftover)) {
 					throw new Error(
-						`Could not delete ${leftover}. Refusing to drop the keyring pointer for DEFAULT — that file would become the profile.`,
+						`Could not delete ${leftover}. Refusing to reset DEFAULT — that file would become the profile.`,
 					);
 				}
 				log.info("Deleted %s", leftover);

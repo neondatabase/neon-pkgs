@@ -880,7 +880,7 @@ says so. It asks for confirmation first, which `--yes` skips; without a terminal
 CI or behind a pipe, it refuses rather than prompting into the void. It deletes the credentials
 file only when the CLI created it: an adopted path like the one above is unlinked and left on
 disk, and the command says so. A keyring profile's OS item is deleted when the store confirms
-it is gone. If it cannot, remove still drops the pointer and warns that a leftover may remain
+it is gone. If it cannot, remove still resets the profile and warns that a leftover may remain
 in the OS store; it is unused once the profile is gone. Removing the last named profile
 deletes `profiles.json` unless DEFAULT itself is keyring — that entry is the only record that
 the secret is not in `credentials.json`. `neon profile remove DEFAULT` signs you out.
@@ -911,7 +911,8 @@ the OS store until `remove` succeeds.
 
 A `"keyring"` pointer whose OS item cannot be read is not treated as signed-out. Commands that
 would otherwise open a browser fail: could not read the OS keyring item. Unlock it and
-retry, or run `neon auth --profile DEFAULT`. A missing `credentials.json` with no `profiles.json` is still
+retry, or run `neon auth --profile DEFAULT`. To reset the profile: `neon profile remove DEFAULT --yes`.
+A missing `credentials.json` with no `profiles.json` is still
 signed-out, and those commands start OAuth.
 
 ### A profile holds either a sign-in or an API key

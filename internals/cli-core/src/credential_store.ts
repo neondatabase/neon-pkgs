@@ -52,7 +52,7 @@ export class KeyringUnreadableError extends Error {
 	constructor(profile: string) {
 		const replace = `\`neon auth --profile ${profile}\``;
 		super(
-			`Could not read the OS keyring item for profile "${profile}". Unlock the keyring and retry, or run ${replace}. To drop the pointer: \`neon profile remove ${profile} --yes\`.`,
+			`Could not read the OS keyring item for profile "${profile}". Unlock the keyring and retry, or run ${replace}. To reset the profile: \`neon profile remove ${profile} --yes\`.`,
 		);
 		this.name = "KeyringUnreadableError";
 	}
@@ -63,8 +63,8 @@ export class KeyringClearError extends Error {
 		const recovery = `\`neon profile remove ${profile} --yes\``;
 		super(
 			kind === "unconfirmed"
-				? `Could not confirm the OS keyring item for profile "${profile}" is gone. The OS store does not distinguish a missing item from denied access. Unlock the OS keyring and retry. If a profile still points at the keyring, ${recovery} drops the pointer (a leftover may remain; it is unused once the profile is gone).`
-				: `Could not clear the OS keyring item for profile "${profile}". Unlock the OS keyring and retry. If a profile still points at the keyring, ${recovery} drops the pointer (a leftover may remain; it is unused once the profile is gone).`,
+				? `Could not confirm the OS keyring item for profile "${profile}" is gone. The OS store does not distinguish a missing item from denied access. Unlock the OS keyring and retry, or reset the profile with ${recovery} (a leftover may remain; it is unused once the profile is gone).`
+				: `Could not clear the OS keyring item for profile "${profile}". Unlock the OS keyring and retry, or reset the profile with ${recovery} (a leftover may remain; it is unused once the profile is gone).`,
 		);
 		this.name = "KeyringClearError";
 	}
