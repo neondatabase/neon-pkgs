@@ -1599,8 +1599,7 @@ describe("--api-key skips stored credential config", () => {
 			"--api-key",
 			"napi_flag_only",
 		]);
-		// The host is unreachable, so the command fails after auth — not while
-		// parsing config.json. The leaked fragment must not appear.
+		// The unreachable host proves config parsing completed without exposing the secret.
 		expect(stderr).not.toContain("napi_LEAKED");
 		expect(stderr).not.toContain("not valid JSON");
 		expect(code).not.toBe(0);

@@ -58,13 +58,7 @@ type AuthProps = {
 	keyring?: boolean;
 };
 
-/**
- * Where this invocation should read or write a profile's credential.
- *
- * `--keyring` or an existing `"keyring"` pointer selects the OS keyring. Otherwise the
- * declared file path, the implicit DEFAULT file, or `credentials.<name>.json` for a
- * new named profile. `--no-keyring` on a keyring pointer is refused: that is not a move.
- */
+/** Changing storage requires an explicit remove, so `--no-keyring` cannot override a pointer. */
 export const locationForAuth = (
 	configDir: string,
 	name: string,
@@ -125,10 +119,7 @@ export const authFlow = async ({
 	const profileName = selectProfileName(profile);
 	const isNamed = profileName !== DEFAULT_PROFILE;
 	if (isNamed) assertValidProfileName(profileName);
-	// Both checks belong before the browser opens. Signing in and then refusing costs a real
-	// sign-in, and worse, the write in between lands on a path chosen from metadata this
-	// refuses to trust. They also belong before the CI guard: a broken `profiles.json` is
-	// the thing to fix, whether or not a browser could open.
+	// Browser, network, or CI errors must not hide a metadata mismatch that changes the write target.
 	assertProfilesUsable(configDir, profileName);
 	const at = locationForAuth(configDir, profileName, keyring, {
 		create: true,

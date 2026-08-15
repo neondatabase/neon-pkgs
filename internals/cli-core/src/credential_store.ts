@@ -1,11 +1,3 @@
-/**
- * Where a profile's credential is stored — a file, or the OS keyring.
- *
- * The profile pointer in `profiles.json` is the only answer. `credentials` is a
- * file path, or the sentinel `"keyring"`. Reads never migrate. Changing storage
- * is remove, then create or auth again.
- */
-
 import { createHash } from "node:crypto";
 import { existsSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
@@ -29,26 +21,14 @@ import { profilesFilePath } from "./profiles.js";
 
 export const KEYRING_SERVICE = "com.neon.neon-cli";
 
-/**
- * `@napi-rs/keyring@1.3.0` maps every OS error to `null` (get) or `false`
- * (delete), including locked or denied access. Do not treat those as absence
- * or success when a keyring copy may exist.
- */
+/** The addon collapses missing, locked, and denied states, so callers cannot assume absence. */
 export type KeyringBackend = {
 	get(service: string, account: string): string | null;
 	set(service: string, account: string, password: string): void;
 	delete(service: string, account: string): boolean;
 };
 
-/**
- * OS account for one profile in one config directory.
- *
- * Namespaced by the directory that actually holds `profiles.json`, so a
- * default-dir install that still reads the legacy `neonctl/` file and an
- * explicit `--config-dir` pointed at that same file share a slot. Two
- * different `--config-dir` roots do not. The profile name is not hashed so a
- * Keychain listing still names the profile.
- */
+/** Hashing the resolved profiles directory isolates config roots while keeping profile names visible. */
 export const keyringAccount = (configDir: string, profile: string): string =>
 	`cli:${createHash("sha256")
 		.update(dirname(profilesFilePath(configDir)))
@@ -56,7 +36,7 @@ export const keyringAccount = (configDir: string, profile: string): string =>
 
 export class KeyringUnavailableError extends Error {
 	constructor(profile?: string, kind: "read" | "write" = "read") {
-		// Assembled so a static scan of the bundle cannot see the specifier.
+		// A literal specifier makes the standalone bundle require an unavailable native addon.
 		const addon = ["@napi-rs", "keyring"].join("/");
 		const loaded = `This CLI cannot use the OS keyring (the optional \`${addon}\` addon is not loaded).`;
 		super(
@@ -70,10 +50,7 @@ export class KeyringUnavailableError extends Error {
 	}
 }
 
-/**
- * The profile pointer says keyring, and `get` returned null. The addon maps
- * locked, denied, and missing to the same null, so this is not "never signed in".
- */
+/** Null may mean locked or denied, so a keyring pointer cannot treat it as signed out. */
 export class KeyringUnreadableError extends Error {
 	constructor(profile: string) {
 		const replace = `\`neon auth --profile ${profile}\``;

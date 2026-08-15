@@ -72,12 +72,8 @@ export type StoredCredentials = {
 };
 
 /**
- * Where a credential lives, and which profile points at it.
- *
- * `storage` is the profile's pointer: a file path, or the OS keyring. The profile name is
- * what every recovery command takes as its argument. Carrying only a path is what produced
- * errors telling the user to run `neon profile create <name> --force` with the placeholder
- * intact — a command an agent will run verbatim and be told `Invalid profile name "<name>"`.
+ * Recovery commands need the profile name; a storage path alone produced
+ * unusable commands with a literal `<name>` placeholder.
  */
 export type FileCredentialLocation = {
 	profile: string;
@@ -127,12 +123,7 @@ export const credentialKind = (
 	);
 };
 
-/**
- * The way out of a credential that cannot be read.
- *
- * One sentence, shared by every such error, because they all have the same two answers: write
- * a new credential over it, or remove the broken one and start again.
- */
+/** Sharing one hint keeps unreadable credentials on the same recovery path. */
 export const credentialsRepairHint = (
 	at: CredentialLocation,
 	store: "file" | "keyring" = "file",
@@ -190,12 +181,7 @@ export type CredentialsRead =
  * we cannot see, and treating that as absent would send the user to a browser login that
  * overwrites it.
  */
-/**
- * Classify a credentials JSON string without quoting its contents.
- *
- * Shared by the file reader and the keyring reader. V8's JSON parser quotes a
- * window of the input around a syntax error, and that window is secret material.
- */
+/** Discard parser details because V8 may quote secret material near a syntax error. */
 export const parseCredentialsJson = (
 	contents: string,
 	label: string,

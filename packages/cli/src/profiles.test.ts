@@ -157,8 +157,7 @@ describe("resolveProfile", () => {
 		expect(p.credentialsPath).toBe(resolve(dir, "credentials.json"));
 	});
 
-	// A broken file may be the only record that DEFAULT is `"keyring"`. Treating
-	// that as an implicit file starts OAuth over a secret still in the OS store.
+	// A malformed file may be DEFAULT's only keyring pointer, so OAuth cannot replace it.
 	test("a malformed profiles.json blocks DEFAULT", () => {
 		const dir = makeDir({
 			"credentials.json": creds("me"),

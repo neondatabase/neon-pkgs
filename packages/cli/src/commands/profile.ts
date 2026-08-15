@@ -500,7 +500,6 @@ const locationForCreate = (
 	return newProfileLocation(configDir, name, CRED_STORAGE_FILE);
 };
 
-/** The location a profile already uses, or null when it has no entry yet. */
 const existingLocation = (
 	configDir: string,
 	name: string,
@@ -704,8 +703,7 @@ const create = async (props: CreateProps) => {
 	assertValidProfileName(name);
 	// Before the key is read from stdin, verified against the API, or minted in a browser.
 	assertProfilesUsable(props.configDir, name);
-	// `--no-keyring` on a keyring pointer is not a move. Say so before a network
-	// or "already exists" error hides it.
+	// A network or "already exists" error would hide an invalid storage change.
 	if (props.keyring === false) {
 		locationForCreate(props.configDir, name, false);
 	}
@@ -755,8 +753,7 @@ const create = async (props: CreateProps) => {
 			existing === null
 				? null
 				: readOutgoingCredential(props.configDir, existing);
-		// `authFlow` throws on a failed save. An empty token is still a failed
-		// sign-in — the IdP returned nothing to store.
+		// An empty IdP token is still a failed sign-in.
 		if (
 			(await authFlow({
 				...props,
@@ -1429,9 +1426,7 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 		);
 	}
 
-	// Drop the profiles.json pointer. For a keyring profile this must happen
-	// before the OS item is deleted: a failed write after a successful delete
-	// would leave the pointer targeting a gone item (unreadable, not signed-out).
+	// Deleting the keyring item first could strand its pointer if the write fails.
 	const dropPointer = (): void => {
 		assertProfilesUsable(props.configDir, name);
 		const path = profilesFilePath(props.configDir);
@@ -1454,9 +1449,7 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 		}
 	};
 
-	// Delete the credential only if we created it. A profile pointing outside the
-	// config directory was adopted from elsewhere; unlink it and say so, because the
-	// secret is still on disk and silence would imply otherwise.
+	// Adopted files stay on disk because the CLI does not own them.
 	const listing = storeFor(props.configDir).inspect(at);
 	if (at.storage === "keyring") {
 		dropPointer();

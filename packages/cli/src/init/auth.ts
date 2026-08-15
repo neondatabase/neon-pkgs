@@ -58,18 +58,8 @@ export async function isAuthenticated(): Promise<boolean> {
 }
 
 /**
- * The credential the Neon CLI has stored, or `null` when there is none.
- *
- * Shares the reader with `neon` and `@neon/env` rather than keeping a copy — the inline path
- * resolution this replaced was the third implementation of "where is the config directory", and
- * it also looked only for `access_token`, so an account signed in with an API key read as not
- * authenticated and got sent to a browser. See `internals/cli-core/README.md`.
- *
- * `null` means *absent*, and only absent. A file that exists and cannot be read throws, and
- * so does a `"keyring"` pointer whose OS item `get`s as null: this value decides whether to
- * start a browser sign-in, and a sign-in overwrites the credential it could not read — as a
- * different account, if a different one is chosen. Catching every error here made a damaged
- * credential indistinguishable from a fresh machine.
+ * Sharing the reader keeps init aligned with CLI path and API-key handling.
+ * Unreadable credentials throw so browser sign-in cannot overwrite them.
  */
 async function getNeonctlAccessToken(): Promise<string | null> {
 	const at = locationForName(configDir(), DEFAULT_PROFILE);

@@ -20,11 +20,8 @@ const isMissingItem = (err: unknown): boolean => {
 };
 
 /**
- * Load the OS keyring, or `null` when this binary cannot use one.
- *
- * The package name is assembled at runtime so a static scan of the bundle
- * cannot see it. Packaged binaries (`process.pkg`) have no way to load the
- * native addon, and a literal `require` would still be detected.
+ * A literal addon specifier makes the standalone bundle require a native module
+ * that packaged binaries cannot load.
  */
 export const tryLoadKeyring = (): KeyringBackend | null => {
 	if (isPackaged()) return null;

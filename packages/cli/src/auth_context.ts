@@ -2,18 +2,8 @@ import type { CredentialLocation } from "@neon-internals/cli-core/credentials";
 import { isOwnedCredentialPath } from "./config.js";
 
 /**
- * How the current invocation authenticated, recorded by `ensureAuth` so the top-level 401
- * handler can react to the credential that actually failed.
- *
- * - `api-key`: an explicit `--api-key` flag or `NEON_API_KEY`.
- * - `profile-api-key`: an API key read from the selected profile.
- * - `stored-credentials`: an OAuth token set from the selected profile.
- *
- * The context carries the resolved profile and its pointer, not just the config directory.
- * The 401 handler runs outside yargs and has no parsed arguments, so without them it could
- * neither name the profile in the error nor tell which credential to clear — it cleared
- * whatever `DEFAULT` pointed at, which for a `--profile`-selected command was the wrong
- * account's.
+ * The 401 handler runs outside yargs, so it needs the exact authentication source
+ * to avoid clearing DEFAULT after a named-profile failure.
  */
 export type AuthSource = "api-key" | "profile-api-key" | "stored-credentials";
 
@@ -23,7 +13,6 @@ export type AuthContext = {
 	/** The selected profile, when one was resolved. */
 	profile?: string;
 	storage?: "file" | "keyring";
-	/** The exact credentials file the invocation read, when it read a file. */
 	credentialsPath?: string;
 };
 
@@ -56,22 +45,8 @@ export const clearAuthContext = (): void => {
 };
 
 /**
- * The credentials file a 401 should delete, or `null` to leave everything on disk.
- *
- * Only an expired OAuth token set in a file the CLI created is worth clearing: deleting
- * that file makes the next command log in again. A keyring pointer must stay: deleting
- * the OS item leaves the pointer, and the retry then fails as unreadable instead of
- * signing in. Recovery is `neon auth`. Neither key-shaped source is cleared.
- *
- * A key passed on the command line was never ours to store, so a 401 on it says nothing about
- * any stored credential — clearing one would sign the user out of an account the failed
- * request never used.
- *
- * A key read from a profile must survive for a sharper reason: unlike an OAuth token there is
- * nothing to refresh and no automatic way back, so deleting it would destroy the only copy of
- * a credential the user has to paste or mint again. It is also the expected state during
- * rotation, where the whole point is that the old key is dead and the file must still be there
- * to be replaced.
+ * Only owned OAuth files are safe to clear. Explicit keys and adopted files are
+ * not ours, while keyring deletion would strand its profile pointer.
  */
 export const credentialsToClearOn401 = (
 	context: AuthContext | null,

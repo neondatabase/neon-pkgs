@@ -101,9 +101,7 @@ function readStoredCredential(
 		// either way — it cannot be reported as "not signed in".
 		throw err instanceof Error ? err : new Error(String(err));
 	}
-	// Implicit DEFAULT still finds `credentials.json` in the legacy `neonctl`
-	// directory. `locationForName` resolves against the config root, which is
-	// `neon/` even when the only file on disk is the pre-rename one.
+	// The new config root would miss DEFAULT credentials left in legacy `neonctl/` installs.
 	if (
 		at.storage === "file" &&
 		profile === DEFAULT_PROFILE &&

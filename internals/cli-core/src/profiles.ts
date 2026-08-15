@@ -1,45 +1,6 @@
 /**
- * # Profiles — several Neon accounts in one config directory
- *
- * A profile is **a pointer**: a credentials file path, or the sentinel `"keyring"`. That
- * constraint is what keeps the feature small: there is no mirror, no per-profile directory
- * tree, no persistent "active profile" state to fall out of sync, and no migration.
- *
- * ```
- * ~/.config/neon/
- * ├── credentials.json          # this IS the DEFAULT profile, not a copy of it
- * ├── credentials.work.json     # created by `neon auth --profile work`
- * └── profiles.json             # created once a second profile exists, or DEFAULT is keyring
- * ```
- *
- * `profiles.json` maps a name to a pointer: a credentials file path, or the sentinel
- * `"keyring"`. The path may point anywhere — which is what makes adopting an existing
- * directory a one-line edit rather than an import command:
- *
- * ```json
- * {
- *   "version": 1,
- *   "profiles": {
- *     "DEFAULT": { "credentials": "keyring" },
- *     "work": {
- *       "credentials": "../neonctl-databricks/credentials.json",
- *       "label": "someone@example.com"
- *     }
- *   }
- * }
- * ```
- *
- * ## Selection
- *
- * `--profile` → `NEON_PROFILE` → `DEFAULT`. Per invocation, like `AWS_PROFILE`; there is no
- * `profile use` command, so nothing persists that could disagree with what you typed.
- *
- * ## Compatibility
- *
- * An install with no `profiles.json` is already a valid `DEFAULT`-only state: `DEFAULT`
- * resolves to `credentials.json` in the config directory (including an existing one in the
- * legacy `neonctl` directory — see `./paths.ts`). Nothing is created until a second
- * profile is, and nothing is ever moved.
+ * Pointer-only profiles avoid mirrored credentials and persistent active-profile
+ * state while preserving existing single-account and legacy-directory installs.
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -55,7 +16,6 @@ import { writeSecretFile } from "./secure_file.js";
 
 export const PROFILES_FILE = "profiles.json";
 
-/** Sentinel stored in `profiles.json` `credentials` when the secret is in the OS keyring. */
 export const KEYRING_CREDENTIALS = "keyring";
 
 export const isKeyringPointer = (credentials: string): boolean =>
@@ -68,7 +28,6 @@ export const DEFAULT_PROFILE = "DEFAULT";
 const NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 export type ProfileEntry = {
-	/** Path to the credentials file, or `"keyring"`. */
 	credentials: string;
 	/** Account email, captured at login. Display only. */
 	label?: string;
@@ -218,7 +177,7 @@ export const readProfiles = (
 };
 
 /**
- * Refuse to act on a profile when the file that defines it cannot be read.
+ * Storage cannot be trusted when the profiles file cannot be read.
  *
  * Call this **before** anything that writes a credential, opens a browser, or spends an API
  * call. {@link upsertProfile} refuses too, but it runs last: by then `create` has already
@@ -227,9 +186,8 @@ export const readProfiles = (
  * exists to prevent. The path resolution itself is the unsound part, since with the metadata
  * unreadable the conventional filename is a guess about which account that file belongs to.
  *
- * DEFAULT is not exempt. A broken file may be the only record that DEFAULT is
- * `"keyring"`, and treating that as an implicit file starts OAuth over a secret
- * that is still in the OS store.
+ * DEFAULT follows the same rule because the broken file may be its only
+ * keyring pointer.
  */
 export const assertProfilesUsable = (dir: string, name: string): void => {
 	const read = inspectProfiles(dir);
@@ -356,13 +314,7 @@ export const removeProfileEntry = (dir: string, name: string): boolean => {
 	return true;
 };
 
-/**
- * True when only `DEFAULT` is left, so `profiles.json` no longer earns its place. Mirrors
- * lazy creation: a single-account install has no profiles file, before or after.
- *
- * A keyring DEFAULT still needs the file — that entry is the only record that the
- * secret is not in `credentials.json`.
- */
+/** File-backed DEFAULT needs no profiles file, but keyring DEFAULT needs its pointer. */
 export const onlyDefaultRemains = (file: ProfilesFile): boolean => {
 	const names = Object.keys(file.profiles);
 	return (
@@ -395,7 +347,6 @@ export const newProfileLocation = (
 				path: newProfileCredentialsPath(dir, name),
 			};
 
-/** Other declared profiles whose pointer resolves to this file. */
 export const profilesUsingPath = (
 	dir: string,
 	path: string,
@@ -440,10 +391,7 @@ const resolveEntryPath = (dir: string, entry: string): string =>
 const profilesDir = (dir: string): string =>
 	resolve(profilesFilePath(dir), "..");
 
-/**
- * Persist a pointer. A file whose relative name is exactly `keyring` is stored
- * as `./keyring` so it cannot be read back as the sentinel.
- */
+/** A relative file named `keyring` would otherwise collide with the storage sentinel. */
 const storedPointer = (profilesPath: string, credentials: string): string => {
 	if (isKeyringPointer(credentials)) return KEYRING_CREDENTIALS;
 	const base = resolve(profilesPath, "..");
