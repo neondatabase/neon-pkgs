@@ -1504,10 +1504,29 @@ describe("profile mv", () => {
 		expect(code).toBe(1);
 		expect(stderr).toContain("Say where to move the credential");
 		expect(stderr).toContain("`neon profile mv DEFAULT --keyring`");
+		expect(stderr).not.toContain("--file");
+		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
+	});
+
+	test("a keyring profile with no destination is told to move to a file", async () => {
+		const dir = makeConfigDir({
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { DEFAULT: { credentials: "keyring" } },
+			}),
+		});
+		const { code, stderr } = await runCli([
+			"profile",
+			"mv",
+			"--config-dir",
+			dir,
+		]);
+		expect(code).toBe(1);
+		expect(stderr).toContain("Say where to move the credential");
 		expect(stderr).toContain(
 			`\`neon profile mv DEFAULT --file ${resolve(dir, "credentials.json")}\``,
 		);
-		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
+		expect(stderr).not.toContain("--keyring");
 	});
 
 	test("NEON_PROFILE without a name or destination names both profiles", async () => {
@@ -1530,6 +1549,7 @@ describe("profile mv", () => {
 		expect(stderr).toContain("NEON_PROFILE=work does not apply");
 		expect(stderr).toContain("`neon profile mv work --keyring`");
 		expect(stderr).toContain("`neon profile mv DEFAULT --keyring`");
+		expect(stderr).not.toContain("--file");
 		expect(stderr).not.toContain("Say where to move the credential");
 		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
 		expect(existsSync(resolve(dir, "credentials.work.json"))).toBe(true);

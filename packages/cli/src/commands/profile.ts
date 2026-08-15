@@ -4,6 +4,7 @@ import { credentialInputs } from "@neon-internals/cli-core/auth_selection";
 import {
 	CRED_STORAGE_FILE,
 	CRED_STORAGE_KEYRING,
+	type CredStorage,
 } from "@neon-internals/cli-core/cli_config";
 import type { CredentialDeleteResult } from "@neon-internals/cli-core/credential_store";
 import {
@@ -439,8 +440,17 @@ const list = async (props: ProfileProps) => {
 const resolveMoveFilePath = (filePath: string): string =>
 	isAbsolute(filePath) ? filePath : resolve(process.cwd(), filePath);
 
-const mvDestHelp = (name: string, configDir: string): string =>
-	`\`neon profile mv ${name} --keyring\` or \`neon profile mv ${name} --file ${resolve(configDir, defaultCredentialsFileName(name))}\``;
+const mvDestHelp = (
+	name: string,
+	configDir: string,
+	storage?: CredStorage,
+): string => {
+	const toKeyring = `\`neon profile mv ${name} --keyring\``;
+	const toFile = `\`neon profile mv ${name} --file ${resolve(configDir, defaultCredentialsFileName(name))}\``;
+	if (storage === CRED_STORAGE_KEYRING) return toFile;
+	if (storage === CRED_STORAGE_FILE) return toKeyring;
+	return `${toKeyring} or ${toFile}`;
+};
 
 const move = async (props: MoveProps) => {
 	rejectApiKeyFlag("mv");
@@ -459,6 +469,13 @@ const move = async (props: MoveProps) => {
 	const toKeyring = props.keyring === true;
 	const fileFlag = props.file?.trim();
 	const hasFile = fileFlag !== undefined && fileFlag !== "";
+	const storageOf = (profile: string): CredStorage | undefined => {
+		try {
+			return locationForName(props.configDir, profile).storage;
+		} catch {
+			return undefined;
+		}
+	};
 	const envProfile = process.env.NEON_PROFILE?.trim();
 	if (envProfile && omittedName) {
 		const dest =
@@ -469,7 +486,7 @@ const move = async (props: MoveProps) => {
 					: undefined;
 		throw new Error(
 			dest === undefined
-				? `NEON_PROFILE=${envProfile} does not apply to \`profile mv\`, which takes the profile name as an argument. Use ${mvDestHelp(envProfile, props.configDir)} or ${mvDestHelp(DEFAULT_PROFILE, props.configDir)}.`
+				? `NEON_PROFILE=${envProfile} does not apply to \`profile mv\`, which takes the profile name as an argument. Use ${mvDestHelp(envProfile, props.configDir, storageOf(envProfile))} or ${mvDestHelp(DEFAULT_PROFILE, props.configDir, storageOf(DEFAULT_PROFILE))}.`
 				: `NEON_PROFILE=${envProfile} does not apply to \`profile mv\`, which takes the profile name as an argument. Use \`neon profile mv ${envProfile} ${dest}\` or \`neon profile mv ${DEFAULT_PROFILE} ${dest}\`.`,
 		);
 	}
@@ -480,7 +497,7 @@ const move = async (props: MoveProps) => {
 	}
 	if (!toKeyring && !hasFile) {
 		throw new Error(
-			`Say where to move the credential: ${mvDestHelp(name, props.configDir)}.`,
+			`Say where to move the credential: ${mvDestHelp(name, props.configDir, storageOf(name))}.`,
 		);
 	}
 	if (props.force === true && toKeyring) {

@@ -210,7 +210,7 @@ describe("createCredentialStore — keyring", () => {
 			KeyringUnavailableError,
 		);
 		expect(() => store.assertKeyringWritable()).toThrow(
-			"pointing at a path in the config directory",
+			"drop `--keyring` to keep the credential in a file",
 		);
 		expect(() => store.assertKeyringWritable()).not.toThrow(/mv DEFAULT/);
 	});

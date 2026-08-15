@@ -58,7 +58,7 @@ export class KeyringUnavailableError extends Error {
 		const recovery =
 			profile !== undefined && configDir !== undefined
 				? `or move the profile to a file with \`${keyringFileRecovery(configDir, profile)}\``
-				: "or move the profile to a file with `neon profile mv` and `--file` pointing at a path in the config directory";
+				: "or drop `--keyring` to keep the credential in a file";
 		super(
 			`This CLI cannot use the OS keyring. Use a neon CLI build that includes the keyring addon, ${recovery}.`,
 		);
