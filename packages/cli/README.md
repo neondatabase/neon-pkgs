@@ -899,11 +899,11 @@ neon profile create work --keyring --force  # replace a file profile; revokes th
 neon profile remove work --yes              # drop a keyring profile, then create it again as a file
 ```
 
-File to keyring is `neon auth --keyring` or `neon profile create … --keyring --force`.
-That revokes the old credential where the CLI can. Keyring to file is `remove`, then
-create or auth again. `create` and `auth` without `--keyring` follow an existing
-`"keyring"` pointer, so a keyring profile cannot leave the OS store until `remove`
-succeeds.
+File to keyring is `neon auth --keyring` (new sign-in; deletes the owned file, does
+not revoke) or `neon profile create … --keyring --force` (revokes the old credential).
+Keyring to file is `remove`, then create or auth again. `create` and `auth` without
+`--keyring` follow an existing `"keyring"` pointer, so a keyring profile cannot leave
+the OS store until `remove` succeeds.
 
 `--api-key` and `NEON_API_KEY` skip both stores. This CLI's packaged binary recognizes a
 `"keyring"` pointer and refuses: it cannot load the OS keyring addon. Use the npm-installed

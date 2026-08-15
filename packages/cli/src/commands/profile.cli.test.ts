@@ -560,6 +560,7 @@ describe("profile create", () => {
 			"--no-keyring does not move a profile to a file",
 		);
 		expect(stderr).toContain("neon profile remove DEFAULT --yes");
+		expect(stderr).toContain("revokes the credential");
 	});
 
 	test("create --no-keyring is refused", async () => {
@@ -583,6 +584,7 @@ describe("profile create", () => {
 			"--no-keyring does not move a profile to a file",
 		);
 		expect(stderr).toContain("neon profile remove work --yes");
+		expect(stderr).toContain("revokes the credential");
 		expect(stderr).not.toContain("already exists");
 	});
 
@@ -1573,6 +1575,31 @@ describe("profile remove", () => {
 		expect(code).toBe(0);
 		expect(existsSync(resolve(dir, "credentials.json"))).toBe(false);
 		expect(existsSync(resolve(dir, "profiles.json"))).toBe(false);
+	});
+
+	test("remove of keyring DEFAULT leaves a credentials.json another profile uses", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": OAUTH_FILE,
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: {
+					DEFAULT: { credentials: "keyring" },
+					work: { credentials: "credentials.json" },
+				},
+			}),
+		});
+		const { code } = await runCli([
+			"profile",
+			"remove",
+			"DEFAULT",
+			"--yes",
+			"--config-dir",
+			dir,
+		]);
+
+		expect(code).toBe(0);
+		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
+		expect(existsSync(resolve(dir, "profiles.json"))).toBe(true);
 	});
 
 	test("remove names the leftover keyring account from the legacy profiles directory", async () => {

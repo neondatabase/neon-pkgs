@@ -98,7 +98,7 @@ export const builder = (yargs: yargs.Argv) =>
 					typeof argv.profile === "string" ? argv.profile : undefined,
 				);
 				throw new Error(
-					`--no-keyring does not move a profile to a file. To leave the keyring: \`neon profile remove ${name} --yes\`.`,
+					`--no-keyring does not move a profile to a file. To leave the keyring: \`neon profile remove ${name} --yes\`. That revokes the credential where the CLI can.`,
 				);
 			}
 			return true;

@@ -166,7 +166,7 @@ export const builder = (argv: yargs.Argv) =>
 									? argv.name
 									: "NAME";
 							throw new Error(
-								`--no-keyring does not move a profile to a file. To leave the keyring: \`neon profile remove ${name} --yes\`.`,
+								`--no-keyring does not move a profile to a file. To leave the keyring: \`neon profile remove ${name} --yes\`. That revokes the credential where the CLI can.`,
 							);
 						}
 						return true;
@@ -1459,13 +1459,12 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 	if (at.storage === "keyring") {
 		// Removing the last profiles.json can change the directory used in the account hash.
 		const account = keyringAccount(props.configDir, name);
-		dropPointer();
 		if (name === DEFAULT_PROFILE) {
-			// Dropping the keyring pointer would otherwise revive this file as DEFAULT.
 			const leftover = credentialsPath(props.configDir);
 			if (
 				isOwnedCredentialPath(props.configDir, leftover) &&
-				existsSync(leftover)
+				existsSync(leftover) &&
+				profilesUsingPath(props.configDir, leftover, name).length === 0
 			) {
 				storeFor(props.configDir).delete(
 					{
@@ -1475,9 +1474,15 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 					},
 					{ required: false },
 				);
+				if (existsSync(leftover)) {
+					throw new Error(
+						`Could not delete ${leftover}. Refusing to drop the keyring pointer for DEFAULT — that file would become the profile.`,
+					);
+				}
 				log.info("Deleted %s", leftover);
 			}
 		}
+		dropPointer();
 		if (listing.reason?.includes("cannot use the OS keyring")) {
 			log.warning(
 				'This CLI cannot delete the OS keyring item for profile "%s". It remains in the OS store (service %s, account %s) until a CLI with the keyring addon removes it, or you delete it there.',
