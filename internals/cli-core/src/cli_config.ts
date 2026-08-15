@@ -12,6 +12,3 @@ export const CRED_STORAGE_KEYRING = "keyring";
 export type CredStorage =
 	| typeof CRED_STORAGE_FILE
 	| typeof CRED_STORAGE_KEYRING;
-
-export const isCredStorage = (value: unknown): value is CredStorage =>
-	value === CRED_STORAGE_FILE || value === CRED_STORAGE_KEYRING;

@@ -11,7 +11,6 @@ import {
 	assertProfilesUsable,
 	canDropProfilesFile,
 	DEFAULT_PROFILE,
-	defaultCredentialsFileName,
 	KEYRING_CREDENTIALS,
 	listProfiles,
 	locationOf,
@@ -21,7 +20,6 @@ import {
 	removeProfileEntry,
 	resolveProfile,
 	selectProfileName,
-	setProfilePointer,
 	upsertProfile,
 } from "@neon-internals/cli-core/profiles";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -57,17 +55,6 @@ describe("selectProfileName", () => {
 	test("whitespace-only values are treated as unset", () => {
 		expect(selectProfileName("  ", { NEON_PROFILE: "  " })).toBe(
 			DEFAULT_PROFILE,
-		);
-	});
-});
-
-describe("defaultCredentialsFileName", () => {
-	test("DEFAULT is credentials.json; a named profile is credentials.<name>.json", () => {
-		expect(defaultCredentialsFileName(DEFAULT_PROFILE)).toBe(
-			"credentials.json",
-		);
-		expect(defaultCredentialsFileName("work")).toBe(
-			"credentials.work.json",
 		);
 	});
 });
@@ -336,24 +323,6 @@ describe("upsertProfile", () => {
 		expect(locationOf(p)).toEqual({
 			profile: DEFAULT_PROFILE,
 			storage: "keyring",
-		});
-	});
-
-	test("setProfilePointer keeps label and userId", () => {
-		const dir = makeDir({ "credentials.json": creds("me") });
-		upsertProfile(dir, "work", {
-			credentials: newProfileCredentialsPath(dir, "work"),
-			label: "work@example.com",
-			userId: "u-1",
-		});
-		setProfilePointer(dir, "work", KEYRING_CREDENTIALS);
-		const file = JSON.parse(
-			readFileSync(resolve(dir, "profiles.json"), "utf8"),
-		);
-		expect(file.profiles.work).toEqual({
-			credentials: KEYRING_CREDENTIALS,
-			label: "work@example.com",
-			userId: "u-1",
 		});
 	});
 });

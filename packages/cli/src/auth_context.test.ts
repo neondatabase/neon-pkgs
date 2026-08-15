@@ -92,7 +92,7 @@ describe("credentialsToClearOn401", () => {
 		).toBeNull();
 	});
 
-	test("clears a keyring OAuth session", () => {
+	test("does not clear a keyring OAuth session", () => {
 		expect(
 			credentialsToClearOn401({
 				source: "stored-credentials",
@@ -100,7 +100,7 @@ describe("credentialsToClearOn401", () => {
 				profile: "work",
 				storage: "keyring",
 			}),
-		).toEqual({ profile: "work", storage: "keyring" });
+		).toBeNull();
 	});
 
 	test("never clears anything for a key the user supplied", () => {
@@ -133,6 +133,19 @@ describe("authFailureMessage", () => {
 	});
 
 	// "Check --api-key" would be nonsense for a session we declined to delete.
+	test("a keyring session says to sign in again and does not mention a file", () => {
+		const message = authFailureMessage({
+			source: "stored-credentials",
+			configDir: "/c",
+			profile: "work",
+			storage: "keyring",
+		});
+		expect(message).toContain("OS keyring");
+		expect(message).toContain("neon auth --profile work");
+		expect(message).not.toContain("file was not created");
+		expect(message).not.toContain("--api-key");
+	});
+
 	test("an adopted session says to sign in again, not to check a flag", () => {
 		const message = authFailureMessage({
 			source: "stored-credentials",

@@ -212,6 +212,9 @@ describe("createCredentialStore — keyring", () => {
 		expect(() => store.assertKeyringWritable()).toThrow(
 			"drop `--keyring` to keep the credential in a file",
 		);
+		expect(() => store.assertKeyringWritable("DEFAULT")).toThrow(
+			"`neon profile remove DEFAULT --yes`",
+		);
 		expect(() => store.assertKeyringWritable()).not.toThrow(/mv DEFAULT/);
 	});
 
@@ -332,6 +335,22 @@ describe("createCredentialStore — keyring", () => {
 			/could not read them back/,
 		);
 		expect(items.size).toBe(0);
+	});
+
+	test("write rollback treats a throwing delete as KeyringClearError", () => {
+		const dir = makeDir();
+		const keyring: KeyringBackend = {
+			get: () => null,
+			set: () => undefined,
+			delete: () => {
+				throw new Error("denied");
+			},
+		};
+		const store = createCredentialStore(dir, { keyring });
+		expect(() => store.write(keyringAt(), key)).toThrow(KeyringClearError);
+		expect(() => store.write(keyringAt(), key)).toThrow(
+			"`neon profile remove DEFAULT --yes`",
+		);
 	});
 
 	test("an unusable keyring payload does not quote the secret", () => {

@@ -64,10 +64,6 @@ export const isKeyringPointer = (credentials: string): boolean =>
 /** The implicit profile. Backed by plain `credentials.json`, with or without a profiles file. */
 export const DEFAULT_PROFILE = "DEFAULT";
 
-/** Conventional credentials filename this CLI writes for a profile it created. */
-export const defaultCredentialsFileName = (name: string): string =>
-	name === DEFAULT_PROFILE ? "credentials.json" : `credentials.${name}.json`;
-
 /** Profile names become part of a filename, so keep them boring. */
 const NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
@@ -348,21 +344,6 @@ export const upsertProfile = (
 	};
 
 	writeProfiles(path, file);
-};
-
-/** Update the pointer, keeping any label / userId already recorded. */
-export const setProfilePointer = (
-	dir: string,
-	name: string,
-	credentials: string,
-): void => {
-	const read = inspectProfiles(dir);
-	const prev = read.kind === "ok" ? read.file.profiles[name] : undefined;
-	upsertProfile(dir, name, {
-		credentials,
-		...(prev?.label ? { label: prev.label } : {}),
-		...(prev?.userId ? { userId: prev.userId } : {}),
-	});
 };
 
 /** Remove an entry. Returns false when it wasn't there. */

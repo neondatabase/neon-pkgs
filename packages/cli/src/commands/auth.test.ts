@@ -112,6 +112,43 @@ describe("auth", () => {
 		}
 	});
 
+	test("an existing keyring pointer without the addon says to remove, not to drop --keyring", async ({
+		runMockServer,
+	}) => {
+		const server = await runMockServer("main");
+		writeFileSync(
+			join(configDir, "profiles.json"),
+			JSON.stringify({
+				version: 1,
+				profiles: { DEFAULT: { credentials: "keyring" } },
+			}),
+		);
+		const authSpy = vi.spyOn(authModule, "auth");
+		const storeSpy = vi
+			.spyOn(credentialIo, "storeFor")
+			.mockImplementation((dir: string) =>
+				createCredentialStore(dir, { keyring: null }),
+			);
+		try {
+			await expect(
+				authFlow({
+					_: ["auth"],
+					apiHost: `http://localhost:${(server.address() as AddressInfo).port}`,
+					clientId: "test-client-id",
+					configDir,
+					forceAuth: true,
+					oauthHost: `http://localhost:${oauthServer.address().port}`,
+					allowUnsafeTls: true,
+				}),
+			).rejects.toThrow("`neon profile remove DEFAULT --yes`");
+			expect(authSpy).not.toHaveBeenCalled();
+		} finally {
+			authSpy.mockRestore();
+			storeSpy.mockRestore();
+			rmSync(join(configDir, "profiles.json"), { force: true });
+		}
+	});
+
 	test("throws when credentials cannot be saved", async ({
 		runMockServer,
 	}) => {

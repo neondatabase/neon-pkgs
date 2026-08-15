@@ -129,7 +129,12 @@ export const authFlow = async ({
 		create: true,
 	});
 	if (at.storage === "keyring") {
-		storeFor(configDir).assertKeyringWritable();
+		const declared = readProfiles(configDir)?.profiles[profileName];
+		storeFor(configDir).assertKeyringWritable(
+			declared !== undefined && isKeyringPointer(declared.credentials)
+				? profileName
+				: undefined,
+		);
 	}
 
 	const allowInteractiveAuth = forceAuth ?? forceAuthKebab;

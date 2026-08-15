@@ -753,10 +753,12 @@ const create = async (props: CreateProps) => {
 	const apiKey = resolveKeyToStore(props);
 	const identity = await verifyKey(props, apiKey);
 	const at = locationForCreate(props.configDir, name, props.keyring === true);
-	if (at.storage === "keyring") {
-		storeFor(props.configDir).assertKeyringWritable();
-	}
 	const existing = existingLocation(props.configDir, name);
+	if (at.storage === "keyring") {
+		storeFor(props.configDir).assertKeyringWritable(
+			existing?.storage === "keyring" ? name : undefined,
+		);
+	}
 	const previous = readOutgoingCredential(props.configDir, existing ?? at);
 
 	storeFor(props.configDir).write(
@@ -916,7 +918,11 @@ const createByMinting = async (props: CreateProps) => {
 		props.keyring === true,
 	);
 	if (atMint.storage === "keyring") {
-		storeFor(props.configDir).assertKeyringWritable();
+		storeFor(props.configDir).assertKeyringWritable(
+			existingLocation(props.configDir, name)?.storage === "keyring"
+				? name
+				: undefined,
+		);
 	}
 
 	const oauthProps = {

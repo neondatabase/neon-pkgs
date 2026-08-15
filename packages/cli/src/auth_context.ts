@@ -58,8 +58,10 @@ export const clearAuthContext = (): void => {
 /**
  * The credentials file a 401 should delete, or `null` to leave everything on disk.
  *
- * Only an expired OAuth token set is worth clearing: deleting it makes the next command log
- * in again, which is the recovery. Neither key-shaped source is.
+ * Only an expired OAuth token set in a file the CLI created is worth clearing: deleting
+ * that file makes the next command log in again. A keyring pointer must stay: deleting
+ * the OS item leaves the pointer, and the retry then fails as unreadable instead of
+ * signing in. Recovery is `neon auth`. Neither key-shaped source is cleared.
  *
  * A key passed on the command line was never ours to store, so a 401 on it says nothing about
  * any stored credential — clearing one would sign the user out of an account the failed
@@ -77,7 +79,7 @@ export const credentialsToClearOn401 = (
 	if (context?.source !== "stored-credentials") return null;
 	const at = locationFromContext(context);
 	if (at === null) return null;
-	if (at.storage === "keyring") return at;
+	if (at.storage === "keyring") return null;
 
 	// Only a file the CLI created. A profile entry may point anywhere, and a credentials file
 	// we merely adopted is not ours to delete — `neon profile remove` already refuses to touch
@@ -110,6 +112,13 @@ export const authFailureMessage = (context: AuthContext | null): string => {
 	// Reached only when the session was not ours to clear, i.e. an adopted credentials file.
 	// Saying "check --api-key" there would be nonsense; the fix is to sign in again.
 	if (context?.source === "stored-credentials") {
+		if (context.storage === "keyring") {
+			const auth =
+				context.profile !== undefined && context.profile !== "DEFAULT"
+					? `\`neon auth --profile ${context.profile}\``
+					: "`neon auth`";
+			return `Authentication failed: the Neon API rejected profile "${profile}"'s stored session (OS keyring). Sign in again with ${auth}.`;
+		}
 		return `Authentication failed: the Neon API rejected profile "${profile}"'s stored session${where}. That file was not created by neon, so it was left alone — sign in again with \`neon auth --profile ${profile}\`.`;
 	}
 
