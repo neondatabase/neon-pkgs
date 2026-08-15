@@ -58,7 +58,6 @@ type AuthProps = {
 	keyring?: boolean;
 };
 
-/** Changing storage requires an explicit remove, so `--no-keyring` cannot override a pointer. */
 export const locationForAuth = (
 	configDir: string,
 	name: string,
@@ -68,11 +67,6 @@ export const locationForAuth = (
 	const declared = readProfiles(configDir, log.warning)?.profiles[name];
 	const pointer =
 		declared !== undefined && isKeyringPointer(declared.credentials);
-	if (keyring === false && pointer) {
-		throw new Error(
-			`Profile "${name}" stores its credential in the OS keyring. --no-keyring does not move it to a file. Remove it first: \`neon profile remove ${name} --yes\`.`,
-		);
-	}
 	if (keyring === true || pointer) {
 		return { profile: name, storage: "keyring" };
 	}
@@ -119,7 +113,7 @@ export const authFlow = async ({
 	const profileName = selectProfileName(profile);
 	const isNamed = profileName !== DEFAULT_PROFILE;
 	if (isNamed) assertValidProfileName(profileName);
-	// Browser, network, or CI errors must not hide a metadata mismatch that changes the write target.
+	// Validate profiles first so later errors do not hide a wrong write target.
 	assertProfilesUsable(configDir, profileName);
 	const at = locationForAuth(configDir, profileName, keyring, {
 		create: true,

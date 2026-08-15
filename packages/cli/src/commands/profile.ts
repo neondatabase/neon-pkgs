@@ -486,11 +486,6 @@ const locationForCreate = (
 	const declared = readProfiles(configDir)?.profiles[name];
 	const pointer =
 		declared !== undefined && isKeyringPointer(declared.credentials);
-	if (keyring === false && pointer) {
-		throw new Error(
-			`Profile "${name}" stores its credential in the OS keyring. --no-keyring does not move it to a file. Remove it first: \`neon profile remove ${name} --yes\`.`,
-		);
-	}
 	if (keyring === true || pointer) {
 		return { profile: name, storage: CRED_STORAGE_KEYRING };
 	}
@@ -703,10 +698,6 @@ const create = async (props: CreateProps) => {
 	assertValidProfileName(name);
 	// Before the key is read from stdin, verified against the API, or minted in a browser.
 	assertProfilesUsable(props.configDir, name);
-	// A network or "already exists" error would hide an invalid storage change.
-	if (props.keyring === false) {
-		locationForCreate(props.configDir, name, false);
-	}
 	if (props.keyring === true) {
 		storeFor(props.configDir).assertKeyringWritable(
 			existingLocation(props.configDir, name)?.storage === "keyring"
@@ -753,7 +744,6 @@ const create = async (props: CreateProps) => {
 			existing === null
 				? null
 				: readOutgoingCredential(props.configDir, existing);
-		// An empty IdP token is still a failed sign-in.
 		if (
 			(await authFlow({
 				...props,

@@ -44,10 +44,6 @@ export const clearAuthContext = (): void => {
 	current = null;
 };
 
-/**
- * Only owned OAuth files are safe to clear. Explicit keys and adopted files are
- * not ours, while keyring deletion would strand its profile pointer.
- */
 export const credentialsToClearOn401 = (
 	context: AuthContext | null,
 ): CredentialLocation | null => {

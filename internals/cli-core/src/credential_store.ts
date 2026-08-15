@@ -50,7 +50,6 @@ export class KeyringUnavailableError extends Error {
 	}
 }
 
-/** Null may mean locked or denied, so a keyring pointer cannot treat it as signed out. */
 export class KeyringUnreadableError extends Error {
 	constructor(profile: string) {
 		const replace = `\`neon auth --profile ${profile}\``;

@@ -546,7 +546,7 @@ describe("profile create", () => {
 		expect(existsSync(resolve(dir, "credentials.work.json"))).toBe(true);
 	});
 
-	test("create --no-keyring on a keyring pointer names remove", async () => {
+	test("create --no-keyring on a keyring pointer is the same as omitting --keyring", async () => {
 		const dir = makeConfigDir({
 			"profiles.json": JSON.stringify({
 				version: 1,
@@ -563,8 +563,9 @@ describe("profile create", () => {
 		]);
 
 		expect(code).toBe(1);
-		expect(stderr).toContain("--no-keyring does not move");
-		expect(stderr).toContain("neon profile remove work --yes");
+		expect(stderr).toContain("already exists");
+		expect(stderr).toContain("--force");
+		expect(stderr).not.toContain("--no-keyring");
 	});
 
 	// The no-flag form is what an agent tries first, and `authFlow` answered it with a bare

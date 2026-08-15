@@ -314,7 +314,6 @@ export const removeProfileEntry = (dir: string, name: string): boolean => {
 	return true;
 };
 
-/** File-backed DEFAULT needs no profiles file, but keyring DEFAULT needs its pointer. */
 export const onlyDefaultRemains = (file: ProfilesFile): boolean => {
 	const names = Object.keys(file.profiles);
 	return (

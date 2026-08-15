@@ -162,7 +162,7 @@ describe("auth", () => {
 		}
 	});
 
-	test("locationForAuth refuses --no-keyring on a keyring pointer", () => {
+	test("locationForAuth follows a keyring pointer when --keyring is omitted or false", () => {
 		writeFileSync(
 			join(configDir, "profiles.json"),
 			JSON.stringify({
@@ -171,13 +171,10 @@ describe("auth", () => {
 			}),
 		);
 		try {
-			expect(() => locationForAuth(configDir, "work", false)).toThrow(
-				"--no-keyring does not move",
-			);
-			expect(() => locationForAuth(configDir, "work", false)).toThrow(
-				"`neon profile remove work --yes`",
-			);
 			expect(locationForAuth(configDir, "work").storage).toBe("keyring");
+			expect(locationForAuth(configDir, "work", false).storage).toBe(
+				"keyring",
+			);
 			expect(locationForAuth(configDir, "work", true).storage).toBe(
 				"keyring",
 			);
