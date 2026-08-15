@@ -3,11 +3,16 @@ import {
 	selectCredential,
 } from "@neon-internals/cli-core/auth_selection";
 import { createCredentialStore } from "@neon-internals/cli-core/credential_store";
-import { interpretCredentials } from "@neon-internals/cli-core/credentials";
+import {
+	type CredentialLocation,
+	credentialLabel,
+	interpretCredentials,
+} from "@neon-internals/cli-core/credentials";
 import { configDir, resolveConfigFile } from "@neon-internals/cli-core/paths";
 import {
 	DEFAULT_PROFILE,
-	resolveProfile,
+	locationForName,
+	readProfiles,
 } from "@neon-internals/cli-core/profiles";
 import { tryLoadKeyring } from "./keyring.js";
 
@@ -87,32 +92,36 @@ function readStoredCredential(
 		return undefined;
 	};
 
-	let path: string;
+	const dir = configDir({ env });
+	let at: CredentialLocation;
 	try {
-		path =
-			profile === DEFAULT_PROFILE
-				? // Per *file*, so an install predating the rename still finds its
-					// `credentials.json` in the legacy `neonctl` directory, in place.
-					resolveConfigFile("credentials.json", { env }).path
-				: // From the config root, not from wherever `credentials.json` happens to live:
-					// that file can still be in `neonctl/` while `profiles.json` is in `neon/`,
-					// and deriving one from the other loses every named profile.
-					resolveProfile(configDir({ env }), profile).credentialsPath;
+		at = locationForName(dir, profile);
 	} catch (err) {
 		// An unknown profile name is a naming error whoever typed it can fix, so it is fatal
 		// either way — it cannot be reported as "not signed in".
 		throw err instanceof Error ? err : new Error(String(err));
 	}
+	// Implicit DEFAULT still finds `credentials.json` in the legacy `neonctl`
+	// directory. `locationForName` resolves against the config root, which is
+	// `neon/` even when the only file on disk is the pre-rename one.
+	if (
+		at.storage === "file" &&
+		profile === DEFAULT_PROFILE &&
+		readProfiles(dir)?.profiles[DEFAULT_PROFILE] === undefined
+	) {
+		at = {
+			...at,
+			path: resolveConfigFile("credentials.json", { env }).path,
+		};
+	}
 
 	const store = createCredentialStore(configDir({ env }), {
-		env,
 		keyring: tryLoadKeyring(),
 	});
-	const at = { path, profile };
 	const loaded = store.read(at);
 	if (loaded === null) {
 		return absent(
-			`Profile "${profile}" has no stored credential at ${path}. Sign in with \`neon profile create ${profile}\`.`,
+			`Profile "${profile}" has no stored credential at ${credentialLabel(at)}. Sign in with \`neon profile create ${profile}\`.`,
 		);
 	}
 
@@ -125,7 +134,7 @@ function readStoredCredential(
 	const token = loaded.credentials.access_token;
 	if (typeof token === "string" && token.trim() !== "") return token.trim();
 	throw new Error(
-		`Profile "${profile}" holds a browser sign-in with no usable token at ${path}. Sign in again with \`neon auth --profile ${profile}\`.`,
+		`Profile "${profile}" holds a browser sign-in with no usable token at ${credentialLabel(at)}. Sign in again with \`neon auth --profile ${profile}\`.`,
 	);
 }
 

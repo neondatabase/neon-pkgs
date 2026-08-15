@@ -45,17 +45,16 @@ In `packages/cli` the `.js` form passes `tsc --noEmit` — its `paths` mapping p
   anything it imports becomes a runtime dependency of all of them. The OS keyring adapter
   (`@napi-rs/keyring`) lives in each consumer, not here; this package takes a
   `KeyringBackend` and never loads a native addon.
-- **`config.json` is not a secret.** It records `credStorage: "file" | "keyring"`. The
-  secret stays in the credentials file or the keyring. `NEON_CRED_STORAGE` overrides
-  that preference for one invocation and does not migrate.
+- **Storage is the profile pointer.** `profiles.json` `credentials` is a file path
+  or the sentinel `"keyring"`. There is no directory-wide preference and no
+  `config.json` / `NEON_CRED_STORAGE`.
 - **A keyring get of `null` or delete of `false` is not proof the item is gone.**
   `@napi-rs/keyring@1.3.0` collapses locked and denied access the same way. When
-  keyring is preferred and no leftover file remains, `read()` throws
+  the pointer is `"keyring"` and `get` returns null, `read()` throws
   `KeyringUnreadableError` rather than returning null — that is not "never signed
   in", and it must not start OAuth. `profile remove` refuses rather than drop the
-  profile. `profile storage file` persists when nothing is stored and warns that a
-  denied leftover would stay unused. `--force` persists when a leftover cannot be
-  read. File preference does not select a leftover keyring item.
+  profile. `profile mv --file --force` rewrites the pointer when the item cannot
+  be read.
 - **No logger, no yargs, no API client.** Take a callback or a value instead; the imperative
   shell belongs in the consumer.
 - Unit tests live in `packages/cli`, so the code is covered once rather than three times.

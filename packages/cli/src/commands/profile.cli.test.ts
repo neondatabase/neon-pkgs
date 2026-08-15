@@ -275,9 +275,12 @@ describe("profile list", () => {
 		}
 	});
 
-	test("keyring mode with a missing file lists storage as keyring, not signed-out", async () => {
+	test("a keyring pointer lists storage as keyring and file as -", async () => {
 		const dir = makeConfigDir({
-			"config.json": JSON.stringify({ credStorage: "keyring" }),
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { DEFAULT: { credentials: "keyring" } },
+			}),
 		});
 		const { code, stdout, stderr } = await runCli([
 			"profile",
@@ -294,17 +297,21 @@ describe("profile list", () => {
 				expect.objectContaining({
 					name: "DEFAULT",
 					auth: "-",
-					file: "missing",
+					file: "-",
 					storage: "keyring",
+					credentials: "keyring",
 				}),
 			]),
 		);
 		expect(stderr).toMatch(/OS keyring/);
 	});
 
-	test("projects list does not start OAuth when keyring is preferred and unread", async () => {
+	test("projects list does not start OAuth when a keyring pointer is unread", async () => {
 		const dir = makeConfigDir({
-			"config.json": JSON.stringify({ credStorage: "keyring" }),
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { DEFAULT: { credentials: "keyring" } },
+			}),
 		});
 		const { code, stderr } = await runCli(
 			["projects", "list", "--config-dir", dir],
@@ -341,7 +348,7 @@ describe("profile list", () => {
 					name: "gone",
 					auth: "-",
 					file: "missing",
-					storage: "-",
+					storage: "file",
 				}),
 			]),
 		);
@@ -505,9 +512,12 @@ describe("profile create", () => {
 
 	// The no-flag form is what an agent tries first, and `authFlow` answered it with a bare
 	// "Cannot run interactive auth in CI" — true, and with no way forward from it.
-	test("keyring mode with no readable item does not look like an existing profile", async () => {
+	test("a keyring pointer is an existing profile even when the item is unread", async () => {
 		const dir = makeConfigDir({
-			"config.json": JSON.stringify({ credStorage: "keyring" }),
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { DEFAULT: { credentials: "keyring" } },
+			}),
 		});
 		const { code, stderr } = await runCli(
 			["profile", "create", "DEFAULT", "--config-dir", dir],
@@ -515,8 +525,9 @@ describe("profile create", () => {
 		);
 
 		expect(code).toBe(1);
-		expect(stderr).not.toContain("already exists");
-		expect(stderr).toContain("cannot happen in CI");
+		expect(stderr).toContain("already exists");
+		expect(stderr).toContain("--force");
+		expect(stderr).not.toContain("cannot happen in CI");
 	});
 
 	test("with no key in CI, says how to pass one instead", async () => {
@@ -1300,7 +1311,7 @@ describe("a malformed profiles.json", () => {
 		]);
 
 		expect(code).toBe(1);
-		expect(stderr).toContain('profile "work" has no `credentials` path');
+		expect(stderr).toContain('profile "work" has no `credentials` pointer');
 	});
 });
 
@@ -1466,148 +1477,8 @@ describe("profile rotate-key", () => {
 	});
 });
 
-describe("profile storage", () => {
-	test("shows file as the default", async () => {
-		const dir = makeConfigDir({
-			"credentials.json": API_KEY_FILE,
-		});
-		const { code, stdout } = await runCli([
-			"profile",
-			"storage",
-			"--config-dir",
-			dir,
-			"--output",
-			"json",
-		]);
-		expect(code).toBe(0);
-		expect(JSON.parse(stdout)).toEqual({
-			credStorage: "file",
-			source: "default",
-		});
-	});
-
-	test("NEON_CRED_STORAGE overrides config.json without migrating", async () => {
-		const dir = makeConfigDir({
-			"credentials.json": API_KEY_FILE,
-			"config.json": JSON.stringify({ credStorage: "keyring" }),
-		});
-		const { code, stdout } = await runCli(
-			["profile", "storage", "--config-dir", dir, "--output", "json"],
-			{ NEON_CRED_STORAGE: "file" },
-		);
-		expect(code).toBe(0);
-		expect(JSON.parse(stdout)).toEqual({
-			credStorage: "file",
-			source: "NEON_CRED_STORAGE",
-		});
-		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
-	});
-
-	test("setting file writes config.json and leaves the credentials file", async () => {
-		const dir = makeConfigDir({
-			"credentials.json": API_KEY_FILE,
-		});
-		const { code, stdout } = await runCli([
-			"profile",
-			"storage",
-			"file",
-			"--config-dir",
-			dir,
-			"--output",
-			"json",
-		]);
-		expect(code).toBe(0);
-		expect(JSON.parse(stdout)).toEqual({
-			credStorage: "file",
-			source: "config.json",
-			migrated: 1,
-			adopted: 0,
-			skipped: 0,
-		});
-		expect(
-			JSON.parse(readFileSync(resolve(dir, "config.json"), "utf8")),
-		).toEqual({
-			credStorage: "file",
-		});
-		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
-	});
-
-	test("storage file persists when a file exists and the keyring cannot be confirmed", async () => {
-		const dir = makeConfigDir({
-			"config.json": JSON.stringify({ credStorage: "keyring" }),
-			"credentials.json": API_KEY_FILE,
-		});
-		const { code, stdout, stderr } = await runCli([
-			"profile",
-			"storage",
-			"file",
-			"--config-dir",
-			dir,
-			"--output",
-			"json",
-		]);
-		expect(code).toBe(0);
-		expect(JSON.parse(stdout)).toEqual({
-			credStorage: "file",
-			source: "config.json",
-			migrated: 1,
-			adopted: 0,
-			skipped: 0,
-		});
-		expect(stderr).toContain(
-			"Could not confirm the OS keyring item for profile",
-		);
-		expect(stderr).not.toContain("run `neon profile storage file`");
-		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
-	});
-
-	test("storage file persists when keyring is preferred and nothing is stored", async () => {
-		const dir = makeConfigDir({
-			"config.json": JSON.stringify({ credStorage: "keyring" }),
-		});
-		const { code, stdout, stderr } = await runCli([
-			"profile",
-			"storage",
-			"file",
-			"--config-dir",
-			dir,
-			"--output",
-			"json",
-		]);
-		expect(code).toBe(0);
-		expect(JSON.parse(stdout)).toEqual({
-			credStorage: "file",
-			source: "config.json",
-			migrated: 0,
-			adopted: 0,
-			skipped: 1,
-		});
-		expect(stderr).toContain("No credential was readable for profile");
-		expect(stderr).toContain("not used while storage is file");
-		expect(
-			JSON.parse(readFileSync(resolve(dir, "config.json"), "utf8")),
-		).toEqual({ credStorage: "file" });
-	});
-
-	test("setting storage refuses when NEON_CRED_STORAGE names a different mode", async () => {
-		const dir = makeConfigDir({
-			"credentials.json": API_KEY_FILE,
-		});
-		const { code, stderr } = await runCli(
-			["profile", "storage", "keyring", "--config-dir", dir],
-			{ NEON_CRED_STORAGE: "file" },
-		);
-		expect(code).toBe(1);
-		expect(stderr).toContain("NEON_CRED_STORAGE=file");
-		expect(stderr).toContain("Unset NEON_CRED_STORAGE");
-		expect(stderr).not.toMatch(
-			/NEON_CRED_STORAGE is set and overrides config.json for this invocation/,
-		);
-		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
-		expect(existsSync(resolve(dir, "config.json"))).toBe(false);
-	});
-
-	test("--api-key is refused because storage does not use a command-line key", async () => {
+describe("profile mv", () => {
+	test("profile storage is not a command", async () => {
 		const dir = makeConfigDir({
 			"credentials.json": API_KEY_FILE,
 		});
@@ -1616,84 +1487,47 @@ describe("profile storage", () => {
 			"storage",
 			"--config-dir",
 			dir,
-			"--api-key",
-			"napi_flag_only",
 		]);
 		expect(code).toBe(1);
-		expect(stderr).toContain("moves stored credentials between backends");
-		expect(stderr).not.toContain(
-			"the credential the profile already holds",
-		);
+		expect(stderr).not.toContain("credStorage");
+		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
 	});
 
-	test("storage file --force persists file mode when the keyring cannot be read", async () => {
-		const dir = makeConfigDir({
-			"config.json": JSON.stringify({ credStorage: "keyring" }),
-		});
-		const { code, stdout, stderr } = await runCli([
-			"profile",
-			"storage",
-			"file",
-			"--force",
-			"--config-dir",
-			dir,
-			"--output",
-			"json",
-		]);
-		expect(code).toBe(0);
-		expect(JSON.parse(stdout)).toEqual({
-			credStorage: "file",
-			source: "config.json",
-			migrated: 0,
-			adopted: 0,
-			skipped: 1,
-		});
-		expect(stderr).toContain("No credential was readable for profile");
-		expect(stderr).not.toContain(
-			"A keyring item that could not be read may still be in the OS store.",
-		);
-		expect(
-			JSON.parse(readFileSync(resolve(dir, "config.json"), "utf8")),
-		).toEqual({ credStorage: "file" });
-	});
-
-	test("--force is refused on the show form", async () => {
+	test("refuses without --keyring or --file", async () => {
 		const dir = makeConfigDir({
 			"credentials.json": API_KEY_FILE,
 		});
 		const { code, stderr } = await runCli([
 			"profile",
-			"storage",
+			"mv",
+			"--config-dir",
+			dir,
+		]);
+		expect(code).toBe(1);
+		expect(stderr).toContain("Say where to move the credential");
+		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
+	});
+
+	test("--force is refused on --keyring", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": API_KEY_FILE,
+		});
+		const { code, stderr } = await runCli([
+			"profile",
+			"mv",
+			"--keyring",
 			"--force",
 			"--config-dir",
 			dir,
 		]);
 		expect(code).toBe(1);
 		expect(stderr).toContain(
-			"`--force` only applies to `neon profile storage file`.",
+			"`--force` only applies to `neon profile mv --file`",
 		);
+		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
 	});
 
-	test("--force is refused on storage keyring", async () => {
-		const dir = makeConfigDir({
-			"credentials.json": API_KEY_FILE,
-		});
-		const { code, stderr } = await runCli([
-			"profile",
-			"storage",
-			"keyring",
-			"--force",
-			"--config-dir",
-			dir,
-		]);
-		expect(code).toBe(1);
-		expect(stderr).toContain(
-			"`--force` only applies to `neon profile storage file`.",
-		);
-		expect(existsSync(resolve(dir, "config.json"))).toBe(false);
-	});
-
-	test("--profile is refused because storage is global", async () => {
+	test("--profile is refused", async () => {
 		const dir = makeConfigDir({
 			"credentials.json": API_KEY_FILE,
 			"credentials.work.json": API_KEY_FILE,
@@ -1707,36 +1541,177 @@ describe("profile storage", () => {
 		});
 		const { code, stderr } = await runCli([
 			"profile",
-			"storage",
-			"keyring",
-			"--profile",
+			"mv",
 			"work",
+			"--keyring",
+			"--profile",
+			"DEFAULT",
 			"--config-dir",
 			dir,
 		]);
 		expect(code).toBe(1);
-		expect(stderr).toContain("sets storage for every profile");
+		expect(stderr).toContain("does not apply to `profile mv`");
 		expect(stderr).toContain("Drop --profile");
-		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
 		expect(existsSync(resolve(dir, "credentials.work.json"))).toBe(true);
-		expect(existsSync(resolve(dir, "config.json"))).toBe(false);
 	});
 
-	test("an unknown mode is refused and deletes nothing", async () => {
+	test("--api-key is refused", async () => {
 		const dir = makeConfigDir({
 			"credentials.json": API_KEY_FILE,
 		});
 		const { code, stderr } = await runCli([
 			"profile",
-			"storage",
-			"auto",
+			"mv",
+			"--keyring",
+			"--config-dir",
+			dir,
+			"--api-key",
+			"napi_flag_only",
+		]);
+		expect(code).toBe(1);
+		expect(stderr).toContain("the credential the profile already holds");
+	});
+
+	test("already on the keyring is refused", async () => {
+		const dir = makeConfigDir({
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { DEFAULT: { credentials: "keyring" } },
+			}),
+		});
+		const { code, stderr } = await runCli([
+			"profile",
+			"mv",
+			"--keyring",
 			"--config-dir",
 			dir,
 		]);
 		expect(code).toBe(1);
-		expect(stderr).toContain('Expected "file" or "keyring"');
+		expect(stderr).toContain(
+			"already stores its credential in the OS keyring",
+		);
+	});
+
+	test("a missing file credential cannot be moved", async () => {
+		const dir = makeConfigDir({});
+		const dest = resolve(dir, "moved.json");
+		const { code, stderr } = await runCli([
+			"profile",
+			"mv",
+			"--file",
+			dest,
+			"--config-dir",
+			dir,
+		]);
+		expect(code).toBe(1);
+		expect(stderr).toContain("no stored credential to move");
+		expect(existsSync(dest)).toBe(false);
+	});
+
+	test("refuses to overwrite an existing dest file", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": API_KEY_FILE,
+			"already.json": API_KEY_FILE,
+		});
+		const dest = resolve(dir, "already.json");
+		const { code, stderr } = await runCli([
+			"profile",
+			"mv",
+			"--file",
+			dest,
+			"--config-dir",
+			dir,
+		]);
+		expect(code).toBe(1);
+		expect(stderr).toContain("Refusing to overwrite");
+		expect(JSON.parse(readFileSync(dest, "utf8"))).toEqual(
+			JSON.parse(API_KEY_FILE),
+		);
+	});
+
+	test("refuses a dest another profile already uses", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": API_KEY_FILE,
+			"credentials.work.json": API_KEY_FILE,
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: {
+					DEFAULT: { credentials: "credentials.json" },
+					work: { credentials: "credentials.work.json" },
+				},
+			}),
+		});
+		const dest = resolve(dir, "credentials.work.json");
+		rmSync(dest);
+		const { code, stderr } = await runCli([
+			"profile",
+			"mv",
+			"--file",
+			dest,
+			"--config-dir",
+			dir,
+		]);
+		expect(code).toBe(1);
+		expect(stderr).toContain(
+			'already the credentials file for profile "work"',
+		);
 		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
-		expect(existsSync(resolve(dir, "config.json"))).toBe(false);
+	});
+
+	test("--force rewrites a keyring pointer without writing a secret", async () => {
+		const dir = makeConfigDir({
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { DEFAULT: { credentials: "keyring" } },
+			}),
+		});
+		const dest = resolve(dir, "moved.json");
+		const { code, stdout, stderr } = await runCli([
+			"profile",
+			"mv",
+			"--file",
+			dest,
+			"--force",
+			"--config-dir",
+			dir,
+			"--output",
+			"json",
+		]);
+		expect(code).toBe(0);
+		expect(JSON.parse(stdout)).toEqual({
+			name: "DEFAULT",
+			storage: "file",
+			credentials: dest,
+		});
+		expect(stderr).toMatch(/leftover may still be in the OS store/i);
+		expect(existsSync(dest)).toBe(false);
+		expect(
+			JSON.parse(readFileSync(resolve(dir, "profiles.json"), "utf8"))
+				.profiles.DEFAULT.credentials,
+		).toBe("moved.json");
+	});
+
+	test("omitted name is DEFAULT", async () => {
+		const dir = makeConfigDir({
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { DEFAULT: { credentials: "keyring" } },
+			}),
+		});
+		const dest = resolve(dir, "default-out.json");
+		const { code, stdout } = await runCli([
+			"profile",
+			"mv",
+			"--file",
+			dest,
+			"--force",
+			"--config-dir",
+			dir,
+			"--output",
+			"json",
+		]);
+		expect(code).toBe(0);
+		expect(JSON.parse(stdout).name).toBe("DEFAULT");
 	});
 });
 

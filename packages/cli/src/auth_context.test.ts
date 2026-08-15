@@ -29,7 +29,11 @@ describe("credentialsToClearOn401", () => {
 			profile: "work",
 			credentialsPath: path,
 		};
-		expect(credentialsToClearOn401(context)).toBe(path);
+		expect(credentialsToClearOn401(context)).toEqual({
+			profile: "work",
+			storage: "file",
+			path,
+		});
 	});
 
 	// The bug this exists for: the handler had only the config directory, so a rejected token
@@ -86,6 +90,17 @@ describe("credentialsToClearOn401", () => {
 				credentialsPath: resolve(dir, "credentials.work.json"),
 			}),
 		).toBeNull();
+	});
+
+	test("clears a keyring OAuth session", () => {
+		expect(
+			credentialsToClearOn401({
+				source: "stored-credentials",
+				configDir: "/c",
+				profile: "work",
+				storage: "keyring",
+			}),
+		).toEqual({ profile: "work", storage: "keyring" });
 	});
 
 	test("never clears anything for a key the user supplied", () => {

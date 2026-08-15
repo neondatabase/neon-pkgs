@@ -189,8 +189,9 @@ export const analyticsMiddleware = async (args: {
 		// Telemetry must never turn a damaged or unreadable credentials file into a failed command.
 		try {
 			const listing = storeFor(args.configDir).inspect({
+				profile: getAuthContext()?.profile ?? "DEFAULT",
+				storage: "file",
 				path: fileToRead,
-				profile: "DEFAULT",
 			});
 			if (typeof listing.credentials?.user_id === "string") {
 				userId = listing.credentials.user_id;
@@ -199,6 +200,18 @@ export const analyticsMiddleware = async (args: {
 			}
 		} catch (err) {
 			log.debug("Could not read %s: %s", fileToRead, err);
+		}
+	} else if (getAuthContext()?.storage === "keyring") {
+		try {
+			const listing = storeFor(args.configDir).inspect({
+				profile: getAuthContext()?.profile ?? "DEFAULT",
+				storage: "keyring",
+			});
+			if (typeof listing.credentials?.user_id === "string") {
+				userId = listing.credentials.user_id;
+			}
+		} catch (err) {
+			log.debug("Could not read the OS keyring item: %s", err);
 		}
 	}
 

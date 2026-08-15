@@ -1,7 +1,10 @@
 import { log } from "@clack/prompts";
 import { interpretCredentials } from "@neon-internals/cli-core/credentials";
-import { configDir, resolveConfigFile } from "@neon-internals/cli-core/paths";
-import { DEFAULT_PROFILE } from "@neon-internals/cli-core/profiles";
+import { configDir } from "@neon-internals/cli-core/paths";
+import {
+	DEFAULT_PROFILE,
+	locationForName,
+} from "@neon-internals/cli-core/profiles";
 import { execa } from "execa";
 import { storeFor } from "../credential_io.js";
 
@@ -62,14 +65,14 @@ export async function isAuthenticated(): Promise<boolean> {
  * it also looked only for `access_token`, so an account signed in with an API key read as not
  * authenticated and got sent to a browser. See `internals/cli-core/README.md`.
  *
- * `null` means *absent*, and only absent. A file that exists and cannot be read throws: this
- * value decides whether to start a browser sign-in, and a sign-in overwrites the file it could
- * not read — as a different account, if a different one is chosen. Catching every error here
- * made a damaged credential indistinguishable from a fresh machine.
+ * `null` means *absent*, and only absent. A file that exists and cannot be read throws, and
+ * so does a `"keyring"` pointer whose OS item `get`s as null: this value decides whether to
+ * start a browser sign-in, and a sign-in overwrites the credential it could not read — as a
+ * different account, if a different one is chosen. Catching every error here made a damaged
+ * credential indistinguishable from a fresh machine.
  */
 async function getNeonctlAccessToken(): Promise<string | null> {
-	const { path } = resolveConfigFile("credentials.json");
-	const at = { path, profile: DEFAULT_PROFILE };
+	const at = locationForName(configDir(), DEFAULT_PROFILE);
 	const loaded = storeFor(configDir()).read(at);
 	if (loaded === null) return null;
 	// `neon init` has no profile selection — it reads the default credential and refuses

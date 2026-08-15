@@ -1,25 +1,26 @@
 /**
  * # Profiles — several Neon accounts in one config directory
  *
- * A profile is **a pointer to a credentials file**. Nothing more. That constraint is what
- * keeps the feature small: there is no mirror, no per-profile directory tree, no persistent
- * "active profile" state to fall out of sync, and no migration.
+ * A profile is **a pointer**: a credentials file path, or the sentinel `"keyring"`. That
+ * constraint is what keeps the feature small: there is no mirror, no per-profile directory
+ * tree, no persistent "active profile" state to fall out of sync, and no migration.
  *
  * ```
  * ~/.config/neon/
  * ├── credentials.json          # this IS the DEFAULT profile, not a copy of it
  * ├── credentials.work.json     # created by `neon auth --profile work`
- * └── profiles.json             # created only once a second profile exists
+ * └── profiles.json             # created once a second profile exists, or DEFAULT is keyring
  * ```
  *
- * `profiles.json` maps a name to a path, and the path may point anywhere — which is what
- * makes adopting an existing directory a one-line edit rather than an import command:
+ * `profiles.json` maps a name to a pointer: a credentials file path, or the sentinel
+ * `"keyring"`. The path may point anywhere — which is what makes adopting an existing
+ * directory a one-line edit rather than an import command:
  *
  * ```json
  * {
  *   "version": 1,
  *   "profiles": {
- *     "DEFAULT": { "credentials": "credentials.json" },
+ *     "DEFAULT": { "credentials": "keyring" },
  *     "work": {
  *       "credentials": "../neonctl-databricks/credentials.json",
  *       "label": "someone@example.com"
@@ -43,10 +44,22 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
+import {
+	CRED_STORAGE_FILE,
+	CRED_STORAGE_KEYRING,
+	type CredStorage,
+} from "./cli_config.js";
+import type { CredentialLocation } from "./credentials.js";
 import { credentialsPath, defaultDir, resolveConfigFile } from "./paths.js";
 import { writeSecretFile } from "./secure_file.js";
 
 export const PROFILES_FILE = "profiles.json";
+
+/** Sentinel stored in `profiles.json` `credentials` when the secret is in the OS keyring. */
+export const KEYRING_CREDENTIALS = "keyring";
+
+export const isKeyringPointer = (credentials: string): boolean =>
+	credentials === KEYRING_CREDENTIALS;
 
 /** The implicit profile. Backed by plain `credentials.json`, with or without a profiles file. */
 export const DEFAULT_PROFILE = "DEFAULT";
@@ -55,7 +68,7 @@ export const DEFAULT_PROFILE = "DEFAULT";
 const NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 export type ProfileEntry = {
-	/** Path to the credentials file, relative to `profiles.json` or absolute. */
+	/** Path to the credentials file, or `"keyring"`. */
 	credentials: string;
 	/** Account email, captured at login. Display only. */
 	label?: string;
@@ -68,8 +81,9 @@ export type ProfilesFile = {
 	profiles: Record<string, ProfileEntry>;
 };
 
-export type ResolvedProfile = {
+export type ResolvedFileProfile = {
 	name: string;
+	storage: typeof CRED_STORAGE_FILE;
 	/** Absolute path to this profile's credentials file. */
 	credentialsPath: string;
 	label?: string;
@@ -77,6 +91,30 @@ export type ResolvedProfile = {
 	/** True when the profile comes from `profiles.json` rather than the implicit default. */
 	declared: boolean;
 };
+
+export type ResolvedKeyringProfile = {
+	name: string;
+	storage: typeof CRED_STORAGE_KEYRING;
+	label?: string;
+	userId?: string;
+	declared: boolean;
+};
+
+export type ResolvedProfile = ResolvedFileProfile | ResolvedKeyringProfile;
+
+export const locationOf = (profile: ResolvedProfile): CredentialLocation =>
+	profile.storage === CRED_STORAGE_KEYRING
+		? { profile: profile.name, storage: CRED_STORAGE_KEYRING }
+		: {
+				profile: profile.name,
+				storage: CRED_STORAGE_FILE,
+				path: profile.credentialsPath,
+			};
+
+export const credentialsDisplay = (profile: ResolvedProfile): string =>
+	profile.storage === CRED_STORAGE_KEYRING
+		? KEYRING_CREDENTIALS
+		: profile.credentialsPath;
 
 /** Which profile this invocation should use: `--profile` → `NEON_PROFILE` → `DEFAULT`. */
 export const selectProfileName = (
@@ -154,7 +192,7 @@ export const inspectProfiles = (dir: string): ProfilesRead => {
 			typeof entry.credentials !== "string" ||
 			entry.credentials.trim() === ""
 		) {
-			return broken(`profile "${name}" has no \`credentials\` path`);
+			return broken(`profile "${name}" has no \`credentials\` pointer`);
 		}
 	}
 	return { kind: "ok", file: { version: 1, profiles } };
@@ -216,8 +254,18 @@ export const resolveProfile = (dir: string, name: string): ResolvedProfile => {
 	const entry = file?.profiles[name];
 
 	if (entry) {
+		if (isKeyringPointer(entry.credentials)) {
+			return {
+				name,
+				storage: CRED_STORAGE_KEYRING,
+				...(entry.label ? { label: entry.label } : {}),
+				...(entry.userId ? { userId: entry.userId } : {}),
+				declared: true,
+			};
+		}
 		return {
 			name,
+			storage: CRED_STORAGE_FILE,
 			credentialsPath: resolveEntryPath(dir, entry.credentials),
 			...(entry.label ? { label: entry.label } : {}),
 			...(entry.userId ? { userId: entry.userId } : {}),
@@ -230,6 +278,7 @@ export const resolveProfile = (dir: string, name: string): ResolvedProfile => {
 	if (name === DEFAULT_PROFILE) {
 		return {
 			name,
+			storage: CRED_STORAGE_FILE,
 			credentialsPath: credentialsPath(dir),
 			declared: false,
 		};
@@ -289,12 +338,29 @@ export const upsertProfile = (
 				};
 
 	file.profiles[name] = {
-		credentials: relativeToProfiles(path, entry.credentials),
+		credentials: isKeyringPointer(entry.credentials)
+			? KEYRING_CREDENTIALS
+			: relativeToProfiles(path, entry.credentials),
 		...(entry.label ? { label: entry.label } : {}),
 		...(entry.userId ? { userId: entry.userId } : {}),
 	};
 
 	writeProfiles(path, file);
+};
+
+/** Update the pointer, keeping any label / userId already recorded. */
+export const setProfilePointer = (
+	dir: string,
+	name: string,
+	credentials: string,
+): void => {
+	const read = inspectProfiles(dir);
+	const prev = read.kind === "ok" ? read.file.profiles[name] : undefined;
+	upsertProfile(dir, name, {
+		credentials,
+		...(prev?.label ? { label: prev.label } : {}),
+		...(prev?.userId ? { userId: prev.userId } : {}),
+	});
 };
 
 /** Remove an entry. Returns false when it wasn't there. */
@@ -310,6 +376,9 @@ export const removeProfileEntry = (dir: string, name: string): boolean => {
 /**
  * True when only `DEFAULT` is left, so `profiles.json` no longer earns its place. Mirrors
  * lazy creation: a single-account install has no profiles file, before or after.
+ *
+ * A keyring DEFAULT still needs the file — that entry is the only record that the
+ * secret is not in `credentials.json`.
  */
 export const onlyDefaultRemains = (file: ProfilesFile): boolean => {
 	const names = Object.keys(file.profiles);
@@ -317,6 +386,47 @@ export const onlyDefaultRemains = (file: ProfilesFile): boolean => {
 		names.length === 0 ||
 		(names.length === 1 && names[0] === DEFAULT_PROFILE)
 	);
+};
+
+export const canDropProfilesFile = (file: ProfilesFile): boolean => {
+	if (!onlyDefaultRemains(file)) return false;
+	const remaining = file.profiles[DEFAULT_PROFILE];
+	return remaining === undefined || !isKeyringPointer(remaining.credentials);
+};
+
+export const locationForName = (
+	dir: string,
+	name: string,
+): CredentialLocation => locationOf(resolveProfile(dir, name));
+
+export const newProfileLocation = (
+	dir: string,
+	name: string,
+	storage: CredStorage,
+): CredentialLocation =>
+	storage === CRED_STORAGE_KEYRING
+		? { profile: name, storage: CRED_STORAGE_KEYRING }
+		: {
+				profile: name,
+				storage: CRED_STORAGE_FILE,
+				path: newProfileCredentialsPath(dir, name),
+			};
+
+/** Other declared profiles whose pointer resolves to this file. */
+export const profilesUsingPath = (
+	dir: string,
+	path: string,
+	except?: string,
+): string[] => {
+	const resolved = resolve(path);
+	return listProfiles(dir)
+		.filter(
+			(profile) =>
+				profile.name !== except &&
+				profile.storage === CRED_STORAGE_FILE &&
+				resolve(profile.credentialsPath) === resolved,
+		)
+		.map((profile) => profile.name);
 };
 
 export const listProfiles = (dir: string): ResolvedProfile[] => {

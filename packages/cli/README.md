@@ -822,19 +822,21 @@ Two combinations are rejected before the request: `--since` with `--start-time`,
 
 ## Profiles
 
-The CLI holds one Neon account by default. A profile adds another, and is nothing more than a pointer to a credentials file:
+The CLI holds one Neon account by default. A profile adds another, and is a pointer: a
+credentials file path, or the sentinel `"keyring"` when the secret is in the OS keyring.
 
 ```
 ~/.config/neon/
 ├── credentials.json          # this IS the DEFAULT profile
 ├── credentials.work.json     # created by `neon profile create work`
-└── profiles.json             # created only once a second profile exists
+└── profiles.json             # created once a second profile exists, or DEFAULT is keyring
 ```
 
 ```bash
-neon profile create work     # a browser sign-in, or an API key — see below
+neon profile create work              # a browser sign-in, or an API key — see below
+neon profile create work --keyring    # same, stored in the OS keyring
 neon profile list
-neon profile storage         # file (default), or keyring after you opt in
+neon profile mv --keyring             # move DEFAULT into the OS keyring
 neon profile remove work
 ```
 
@@ -846,30 +848,27 @@ Profiles
 ├────────┼─────────┼───────────────────────┼─────────┼────────────────┼──────┼─────────┼────────────────────────┤
 │ *      │ DEFAULT │ me@example.com        │ oauth   │ -              │ ok   │ file    │ credentials.json       │
 ├────────┼─────────┼───────────────────────┼─────────┼────────────────┼──────┼─────────┼────────────────────────┤
-│        │ work    │ me@example.com        │ api key │ account        │ ok   │ file    │ credentials.work.json  │
+│        │ work    │ me@example.com        │ api key │ account        │ -    │ keyring │ keyring                │
 ├────────┼─────────┼───────────────────────┼─────────┼────────────────┼──────┼─────────┼────────────────────────┤
-│        │ ci      │ org-old-flower-827148 │ api key │ project proj-1 │ ok   │ file    │ credentials.ci.json    │
+│        │ ci      │ org-abc-123           │ api key │ project proj-1 │ ok   │ file    │ credentials.ci.json    │
 └────────┴─────────┴───────────────────────┴─────────┴────────────────┴──────┴─────────┴────────────────────────┘
 ```
 
 `Scope` is what a key can reach; an OAuth session has none of its own, so it shows `-`. `File`
-says whether the credentials file can be read and understood — `ok`, `invalid` or `missing` —
-which is not the same as the credential still working; only using it shows that. `Storage` is
-which store this profile uses — `file`, `keyring`, or `-` when file mode is in effect and
-neither store has a readable secret. In keyring mode a missing file still shows `keyring`:
-the secret is not on disk, and a keyring that returns nothing is unreadable, not signed-out.
-After a migrate to the OS keyring the file column is `missing` and storage is `keyring`. The
-table shows the file name, `--output json` the full path.
+says whether the credentials file can be read and understood — `ok`, `invalid` or `missing`.
+A keyring profile shows `-` there: there is no file. `Storage` is `file` or `keyring`, from
+the profile's pointer. The table shows the file name or `keyring`; `--output json` keeps the
+full path.
 
 Select one per invocation with `--profile`, or per shell with `NEON_PROFILE`. There is no `profile use` command and nothing is stored about which profile is "current", so what you type is always what runs.
 
-Entries in `profiles.json` are paths, and a path may point anywhere — which is how you adopt a directory you already have, without moving or re-authenticating anything:
+Entries in `profiles.json` are pointers — a path, or the exact string `"keyring"` — and a path may point anywhere, which is how you adopt a directory you already have without moving or re-authenticating anything:
 
 ```json
 {
   "version": 1,
   "profiles": {
-    "DEFAULT": { "credentials": "credentials.json" },
+    "DEFAULT": { "credentials": "keyring" },
     "work": { "credentials": "../neonctl-work/credentials.json" }
   }
 }
@@ -881,49 +880,39 @@ key you supplied is the exception and stays live, because nothing records its id
 says so. It asks for confirmation first, which `--yes` skips; without a terminal on stdin, in
 CI or behind a pipe, it refuses rather than prompting into the void. It deletes the credentials
 file only when the CLI created it: an adopted path like the one above is unlinked and left on
-disk, and the command says so. Removing the last named profile deletes `profiles.json`,
-returning you to the single-account layout. `neon profile remove DEFAULT` signs you out.
+disk, and the command says so. A keyring profile's OS item is deleted; if the OS store cannot
+confirm it is gone, remove refuses. Recovery is `neon profile mv <name> --file <path> --force`,
+then remove. Removing the last named profile deletes `profiles.json` unless DEFAULT itself is
+keyring — that entry is the only record that the secret is not in `credentials.json`.
+`neon profile remove DEFAULT` signs you out.
 
 ### Where the secret is stored
 
-The default is a credentials file. `neon profile storage keyring` moves every **owned**
-profile into the OS keyring (macOS Keychain, Windows Credential Manager, Linux Secret
-Service) and records the preference in `config.json`. `neon profile storage file` moves
-them back. Reads never migrate; only this command does.
+The default is a credentials file. A profile uses the OS keyring (macOS Keychain, Windows
+Credential Manager, Linux Secret Service) only when its `profiles.json` pointer is `"keyring"`.
+That is per profile. Reads never migrate.
 
 ```bash
-neon profile storage           # file (default)
-neon profile storage keyring   # write config.json, migrate owned profiles, delete those files
-neon profile storage file      # migrate back to files, clear the keyring items
-neon profile storage file --force
-# persist file mode when a leftover cannot be read (item may still be in the OS store; unused)
+neon auth --keyring                         # sign DEFAULT into the OS keyring
+neon profile create work --keyring          # create a named profile in the keyring
+neon profile mv [name] --keyring            # move an existing profile into the keyring
+neon profile mv [name] --file <path>        # move it to a file
+neon profile mv [name] --file <path> --force
+# rewrite the pointer when the keyring item cannot be read (no secret is written)
 ```
 
-`NEON_CRED_STORAGE=file|keyring` overrides `config.json` for one invocation and does not
-migrate. `--api-key` and `NEON_API_KEY` skip both stores. `--profile` does not apply —
-storage mode is per config directory, not per profile. Setting a mode that disagrees
-with `NEON_CRED_STORAGE` is refused. `profile storage file` persists when nothing is
-stored. `profile remove` refuses when the OS store cannot confirm a keyring item is
-gone; `--force` on `storage file` persists file mode when a leftover cannot be
-read and may leave that leftover unused. File mode does not read a leftover
-keyring item.
+`mv [name]` is positional, like `remove`. Omission is the literal profile `DEFAULT`, not
+`NEON_PROFILE`. `--profile` is refused. `--force` only applies to `--file`: it rewrites the
+pointer, does not write a secret file, and does not delete the keyring item.
 
-When this CLI cannot use the OS keyring (packaged binary, or the native addon is missing),
-`neon profile storage file --force` still persists file mode. The same hatch with an
-override works from any other command that refuses:
+`--api-key` and `NEON_API_KEY` skip both stores. Packaged binaries and older CLI releases
+cannot read a keyring profile — they treat the sentinel `"keyring"` as a relative path.
+Keyring storage needs a compatible npm-installed `neon` or `@neon/env`.
 
-```bash
-NEON_CRED_STORAGE=file neon profile storage file --force
-```
-
-A path a profile adopted from outside the config directory stays on disk. Packaged
-binaries and older CLI releases cannot read a keyring profile — after a migrate they
-see the file as missing. Keyring storage needs a compatible npm-installed `neon` or
-`@neon/env`.
-
-A missing credentials file in keyring mode is not treated as signed-out. Commands that
+A `"keyring"` pointer whose OS item cannot be read is not treated as signed-out. Commands that
 would otherwise open a browser fail: could not read the OS keyring item. Unlock it and
-retry, or run `neon auth`.
+retry, or run `neon auth`. A missing `credentials.json` with no `profiles.json` is still
+signed-out, and those commands start OAuth.
 
 ### A profile holds either a sign-in or an API key
 
@@ -931,6 +920,7 @@ retry, or run `neon auth`.
 
 ```bash
 neon profile create work                            # sign in with the browser, like `neon auth`
+neon profile create work --keyring                  # same, stored in the OS keyring
 neon profile create work --api-key "$KEY"           # store a key you already have
 echo "$KEY" | neon profile create work --api-key -  # or pipe it, keeping it out of argv
 neon profile create ci --mint                       # sign in once, keep only a minted key

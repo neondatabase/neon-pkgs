@@ -4,11 +4,11 @@ import {
 	displacedProfileWarning,
 	selectCredential,
 } from "@neon-internals/cli-core/auth_selection";
-import type { CredStorage } from "@neon-internals/cli-core/cli_config";
 import {
 	API_KEY,
 	type CredentialKind,
 	type CredentialLocation,
+	credentialLabel,
 	interpretCredentials,
 	OAUTH,
 	type StoredCredentials,
@@ -18,7 +18,11 @@ import {
 	assertProfilesUsable,
 	assertValidProfileName,
 	DEFAULT_PROFILE,
-	newProfileCredentialsPath,
+	isKeyringPointer,
+	KEYRING_CREDENTIALS,
+	locationForName,
+	newProfileLocation,
+	profilesUsingPath,
 	readProfiles,
 	resolveProfile,
 	selectProfileName,
@@ -29,7 +33,6 @@ import type { NeonApiClient } from "../api.js";
 import { getApiClient } from "../api.js";
 import { auth, refreshToken } from "../auth.js";
 import { setAuthContext } from "../auth_context.js";
-import { credentialsPath as defaultCredentialsPath } from "../config.js";
 import {
 	isConfigInit,
 	isCurrentBranchProbe,
@@ -51,38 +54,51 @@ type AuthProps = {
 	"force-auth"?: boolean;
 	allowUnsafeTls?: boolean;
 	profile?: string;
+	keyring?: boolean;
 };
 
 /**
- * The credentials file a named profile resolves to, falling back to plain `credentials.json`
- * when the name is `DEFAULT` and nothing is declared. An unknown profile name is a hard error
- * rather than a silent write to the default file — a typo must not authenticate the wrong
- * account.
+ * Where this invocation should read or write a profile's credential.
+ *
+ * `--keyring` or an existing `"keyring"` pointer selects the OS keyring. Otherwise the
+ * declared file path, the implicit DEFAULT file, or `credentials.<name>.json` for a
+ * new named profile.
  */
-export const credentialsPathForName = (
+export const locationForAuth = (
 	configDir: string,
 	name: string,
-): string => {
-	if (name === DEFAULT_PROFILE && !readProfiles(configDir, log.warning))
-		return defaultCredentialsPath(configDir);
-	return resolveProfile(configDir, name).credentialsPath;
+	keyring = false,
+	options: { create?: boolean } = {},
+): CredentialLocation => {
+	const declared = readProfiles(configDir, log.warning)?.profiles[name];
+	if (
+		keyring ||
+		(declared !== undefined && isKeyringPointer(declared.credentials))
+	) {
+		return { profile: name, storage: "keyring" };
+	}
+	if (declared !== undefined || name === DEFAULT_PROFILE) {
+		return locationForName(configDir, name);
+	}
+	if (options.create === true) {
+		return newProfileLocation(configDir, name, "file");
+	}
+	return locationForName(configDir, name);
 };
-
-const credentialsPathFor = ({
-	configDir,
-	profile,
-}: {
-	configDir: string;
-	profile?: string;
-}): string => credentialsPathForName(configDir, selectProfileName(profile));
 
 export const command = "auth";
 export const aliases = ["login"];
 export const describe = "Authenticate";
 export const builder = (yargs: yargs.Argv) =>
-	yargs.option("context-file", {
-		hidden: true,
-	});
+	yargs
+		.option("context-file", {
+			hidden: true,
+		})
+		.option("keyring", {
+			describe: "Store the credential in the OS keyring",
+			type: "boolean",
+			default: false,
+		});
 export const handler = async (args: AuthProps) => {
 	await authFlow(args);
 };
@@ -96,6 +112,7 @@ export const authFlow = async ({
 	"force-auth": forceAuthKebab,
 	allowUnsafeTls,
 	profile,
+	keyring = false,
 }: AuthProps) => {
 	const allowInteractiveAuth = forceAuth ?? forceAuthKebab;
 	if (!allowInteractiveAuth && isCi()) {
@@ -112,15 +129,20 @@ export const authFlow = async ({
 	// sign-in, and worse, the write in between lands on a path chosen from metadata this
 	// refuses to trust.
 	assertProfilesUsable(configDir, profileName);
-	const credentialsPath =
-		isNamed && !readProfiles(configDir, log.warning)?.profiles[profileName]
-			? newProfileCredentialsPath(configDir, profileName)
-			: credentialsPathFor({ configDir, profile });
-	// Packaged binaries cannot load the native addon. Opening a browser and then
-	// failing to save is a used-up sign-in; refuse before the browser opens.
-	// Adopted paths stay file-backed and do not need the addon.
-	if (isOwnedCredentialPath(configDir, credentialsPath)) {
-		storeFor(configDir).assertPreferredWritable();
+	const at = locationForAuth(configDir, profileName, keyring, {
+		create: true,
+	});
+	if (at.storage === "keyring") {
+		storeFor(configDir).assertKeyringWritable();
+	}
+
+	let previousFile: string | undefined;
+	try {
+		const previous = resolveProfile(configDir, profileName);
+		if (previous.storage === "file")
+			previousFile = previous.credentialsPath;
+	} catch {
+		previousFile = undefined;
 	}
 
 	const tokenSet = await auth({
@@ -132,7 +154,7 @@ export const authFlow = async ({
 	let identity: { id?: string; email?: string } = {};
 	try {
 		identity = await preserveCredentials(
-			{ path: credentialsPath, profile: profileName },
+			at,
 			tokenSet,
 			getApiClient({
 				apiKey: tokenSet.access_token || "",
@@ -145,13 +167,45 @@ export const authFlow = async ({
 		return "";
 	}
 
-	if (isNamed) {
-		upsertProfile(configDir, profileName, {
-			credentials: credentialsPath,
-			...(identity.email ? { label: identity.email } : {}),
-			...(identity.id ? { userId: identity.id } : {}),
-		});
-		log.info('Saved profile "%s" (%s)', profileName, credentialsPath);
+	if (at.storage === "keyring" || isNamed) {
+		try {
+			upsertProfile(configDir, profileName, {
+				credentials:
+					at.storage === "keyring" ? KEYRING_CREDENTIALS : at.path,
+				...(identity.email ? { label: identity.email } : {}),
+				...(identity.id ? { userId: identity.id } : {}),
+			});
+		} catch (err) {
+			if (at.storage === "keyring") {
+				storeFor(configDir).delete(at, { required: false });
+			}
+			log.error("Failed to save credentials");
+			throw err instanceof Error ? err : new Error(String(err));
+		}
+		if (
+			at.storage === "keyring" &&
+			previousFile !== undefined &&
+			isOwnedCredentialPath(configDir, previousFile) &&
+			profilesUsingPath(configDir, previousFile, profileName).length === 0
+		) {
+			try {
+				storeFor(configDir).delete({
+					profile: profileName,
+					storage: "file",
+					path: previousFile,
+				});
+			} catch {
+				log.warning(
+					"Saved the keyring item but could not delete %s",
+					previousFile,
+				);
+			}
+		}
+		log.info(
+			'Saved profile "%s" (%s)',
+			profileName,
+			at.storage === "keyring" ? KEYRING_CREDENTIALS : at.path,
+		);
 	}
 	log.info("Auth complete");
 	return tokenSet.access_token || "";
@@ -167,7 +221,6 @@ const preserveCredentials = async (
 	credentials: ExtendedTokenSet,
 	apiClient: NeonApiClient,
 	configDir: string,
-	backend?: CredStorage,
 ): Promise<{ id?: string; email?: string }> => {
 	const {
 		data: { id, email },
@@ -181,12 +234,8 @@ const preserveCredentials = async (
 		type: OAUTH,
 		...(id !== undefined ? { user_id: id } : {}),
 	};
-	storeFor(configDir).write(
-		at,
-		stored,
-		backend !== undefined ? { backend } : undefined,
-	);
-	log.debug("Saved credentials to %s", at.path);
+	storeFor(configDir).write(at, stored);
+	log.debug("Saved credentials to %s", credentialLabel(at));
 	log.debug("Credentials MD5 hash: %s", md5hash(JSON.stringify(stored)));
 	return { ...(id ? { id } : {}), ...(email ? { email } : {}) };
 };
@@ -203,7 +252,6 @@ const handleExistingToken = async (
 	tokenSet: ExtendedTokenSet,
 	props: CredentialProps & { configDir: string },
 	at: CredentialLocation,
-	backend: CredStorage,
 ): Promise<{ apiKey: string; apiClient: NeonApiClient } | null> => {
 	// Use existing access_token, if present and valid
 	if (tokenSet.access_token && tokenSet.expires_at > Date.now()) {
@@ -258,7 +306,6 @@ const handleExistingToken = async (
 		refreshedTokenSet,
 		apiClient,
 		props.configDir,
-		backend,
 	);
 	log.debug("Token refresh successful");
 
@@ -296,13 +343,12 @@ export const usableCredential = async (
 			loaded.credentials as ExtendedTokenSet,
 			props,
 			at,
-			loaded.backend,
 		);
 		return result ? { apiKey: result.apiKey, kind: OAUTH } : null;
 	} catch (err) {
 		log.debug(
 			"Could not use the stored OAuth session at %s: %s",
-			at.path,
+			credentialLabel(at),
 			err instanceof Error ? err.message : "unknown error",
 		);
 		return null;
@@ -402,15 +448,11 @@ export const ensureAuth = async (
 	// runtime, a re-exec — authenticates with a key this invocation decided against.
 	props.apiKey = "";
 
-	const credentialsPath = credentialsPathForName(
-		props.configDir,
-		selection.profile,
-	);
-	const at = { path: credentialsPath, profile: selection.profile };
+	const at = locationForAuth(props.configDir, selection.profile);
 	const loaded = storeFor(props.configDir).read(at);
 
 	if (loaded !== null) {
-		log.debug("Trying to read credentials from %s", credentialsPath);
+		log.debug("Trying to read credentials from %s", credentialLabel(at));
 		// Throws on a file whose declared kind is unusable. That is deliberate: falling
 		// through to a browser login would replace the credential the user is fixing.
 		const credential = interpretCredentials(
@@ -429,7 +471,8 @@ export const ensureAuth = async (
 				source: "profile-api-key",
 				configDir: props.configDir,
 				profile: selection.profile,
-				credentialsPath,
+				storage: at.storage,
+				...(at.storage === "file" ? { credentialsPath: at.path } : {}),
 			});
 			props.apiClient = getApiClient({
 				apiKey: credential.apiKey,
@@ -443,7 +486,6 @@ export const ensureAuth = async (
 				loaded.credentials as ExtendedTokenSet,
 				props,
 				at,
-				loaded.backend,
 			);
 			if (result) {
 				props.apiKey = result.apiKey;
@@ -452,7 +494,10 @@ export const ensureAuth = async (
 					source: "stored-credentials",
 					configDir: props.configDir,
 					profile: selection.profile,
-					credentialsPath,
+					storage: at.storage,
+					...(at.storage === "file"
+						? { credentialsPath: at.path }
+						: {}),
 				});
 				return;
 			}
@@ -468,7 +513,7 @@ export const ensureAuth = async (
 	} else {
 		log.debug(
 			"No usable credentials at %s, starting authentication",
-			credentialsPath,
+			credentialLabel(at),
 		);
 	}
 
@@ -503,7 +548,8 @@ export const ensureAuth = async (
 		source: "stored-credentials",
 		configDir: props.configDir,
 		profile: selection.profile,
-		credentialsPath,
+		storage: at.storage,
+		...(at.storage === "file" ? { credentialsPath: at.path } : {}),
 	});
 };
 
@@ -518,18 +564,17 @@ export const ensureAuth = async (
  * of an account whose credentials the failed request had never touched.
  */
 export const deleteCredentialsAt = (
-	credentialsPath: string,
+	at: CredentialLocation,
 	configDir: string,
 ): void => {
 	try {
 		const store = storeFor(configDir);
-		const at = { path: credentialsPath, profile: "DEFAULT" };
 		const before = store.inspect(at);
 		store.delete(at);
-		if (before.credentials !== null || before.file !== "missing") {
-			log.info("Deleted credentials from %s", credentialsPath);
+		if (before.credentials !== null || before.file === "ok") {
+			log.info("Deleted credentials from %s", credentialLabel(at));
 		} else {
-			log.debug("Credentials file %s does not exist", credentialsPath);
+			log.debug("No stored credential at %s", credentialLabel(at));
 		}
 	} catch (err) {
 		const typedErr =

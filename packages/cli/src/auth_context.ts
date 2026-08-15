@@ -1,3 +1,4 @@
+import type { CredentialLocation } from "@neon-internals/cli-core/credentials";
 import { isOwnedCredentialPath } from "./config.js";
 
 /**
@@ -5,14 +6,14 @@ import { isOwnedCredentialPath } from "./config.js";
  * handler can react to the credential that actually failed.
  *
  * - `api-key`: an explicit `--api-key` flag or `NEON_API_KEY`.
- * - `profile-api-key`: an API key read from the selected profile's credentials file.
- * - `stored-credentials`: an OAuth token set from the selected profile's credentials file.
+ * - `profile-api-key`: an API key read from the selected profile.
+ * - `stored-credentials`: an OAuth token set from the selected profile.
  *
- * The context carries the resolved profile name and the exact file, not just the config
- * directory. The 401 handler runs outside yargs and has no parsed arguments, so without them
- * it could neither name the profile in the error nor tell which of several credentials files
- * to clear — it cleared whatever `DEFAULT` pointed at, which for a `--profile`-selected
- * command was the wrong account's.
+ * The context carries the resolved profile and its pointer, not just the config directory.
+ * The 401 handler runs outside yargs and has no parsed arguments, so without them it could
+ * neither name the profile in the error nor tell which credential to clear — it cleared
+ * whatever `DEFAULT` pointed at, which for a `--profile`-selected command was the wrong
+ * account's.
  */
 export type AuthSource = "api-key" | "profile-api-key" | "stored-credentials";
 
@@ -21,8 +22,24 @@ export type AuthContext = {
 	configDir: string;
 	/** The selected profile, when one was resolved. */
 	profile?: string;
-	/** The exact credentials file the invocation read, when it read one. */
+	storage?: "file" | "keyring";
+	/** The exact credentials file the invocation read, when it read a file. */
 	credentialsPath?: string;
+};
+
+export const locationFromContext = (
+	context: AuthContext,
+): CredentialLocation | null => {
+	if (context.profile === undefined) return null;
+	if (context.storage === "keyring") {
+		return { profile: context.profile, storage: "keyring" };
+	}
+	if (context.credentialsPath === undefined) return null;
+	return {
+		profile: context.profile,
+		storage: "file",
+		path: context.credentialsPath,
+	};
 };
 
 let current: AuthContext | null = null;
@@ -56,10 +73,11 @@ export const clearAuthContext = (): void => {
  */
 export const credentialsToClearOn401 = (
 	context: AuthContext | null,
-): string | null => {
+): CredentialLocation | null => {
 	if (context?.source !== "stored-credentials") return null;
-	const path = context.credentialsPath;
-	if (path === undefined) return null;
+	const at = locationFromContext(context);
+	if (at === null) return null;
+	if (at.storage === "keyring") return at;
 
 	// Only a file the CLI created. A profile entry may point anywhere, and a credentials file
 	// we merely adopted is not ours to delete — `neon profile remove` already refuses to touch
@@ -68,7 +86,7 @@ export const credentialsToClearOn401 = (
 	// The legacy `neonctl` directory counts as ours: default resolution deliberately still
 	// reads it in place, so an install predating the rename would otherwise have its own
 	// credentials called "adopted" and never cleared.
-	return isOwnedCredentialPath(context.configDir, path) ? path : null;
+	return isOwnedCredentialPath(context.configDir, at.path) ? at : null;
 };
 
 /**
@@ -78,9 +96,11 @@ export const credentialsToClearOn401 = (
 export const authFailureMessage = (context: AuthContext | null): string => {
 	const profile = context?.profile ?? "the selected profile";
 	const where =
-		context?.credentialsPath !== undefined
-			? ` (${context.credentialsPath})`
-			: "";
+		context?.storage === "keyring"
+			? " (OS keyring)"
+			: context?.credentialsPath !== undefined
+				? ` (${context.credentialsPath})`
+				: "";
 
 	if (context?.source === "profile-api-key") {
 		// Not `rotate-key`: a rejected key cannot authenticate to mint its own replacement.

@@ -154,11 +154,14 @@ describe("resolveApiKey — nothing stored", () => {
 		expect(resolveApiKey({ env: {} })).toBeUndefined();
 	});
 
-	test("keyring mode with no readable item is not signed-out", () => {
+	test("a keyring pointer with no readable item is not signed-out", () => {
 		const home = makeHome(null, "neon");
 		writeFileSync(
-			resolve(home, ".config", "neon", "config.json"),
-			JSON.stringify({ credStorage: "keyring" }),
+			resolve(home, ".config", "neon", "profiles.json"),
+			JSON.stringify({
+				version: 1,
+				profiles: { DEFAULT: { credentials: "keyring" } },
+			}),
 		);
 		const spy = vi.spyOn(keyring, "tryLoadKeyring").mockReturnValue({
 			get: () => null,

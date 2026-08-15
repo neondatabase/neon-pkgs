@@ -29,7 +29,11 @@ import { afterEach, describe, expect, test } from "vitest";
  * Both halves travel together because every error these functions raise ends in a recovery
  * command, and that command takes the profile name.
  */
-const at = (path: string, profile = "work") => ({ path, profile });
+const at = (path: string, profile = "work") => ({
+	path,
+	profile,
+	storage: "file" as const,
+});
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {

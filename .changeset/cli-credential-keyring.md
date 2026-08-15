@@ -3,4 +3,4 @@
 "@neon/env": minor
 ---
 
-Opt-in OS keyring storage for CLI credentials via `neon profile storage` and `NEON_CRED_STORAGE`.
+Opt-in OS keyring storage for a CLI profile via a `"keyring"` pointer in `profiles.json`.

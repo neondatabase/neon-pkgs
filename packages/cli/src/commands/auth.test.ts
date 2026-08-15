@@ -77,19 +77,15 @@ describe("auth", () => {
 		expect(credentials.user_id).toEqual(expect.any(String));
 	});
 
-	test("refuses to open a browser when keyring is preferred and unavailable", async ({
+	test("refuses to open a browser when --keyring is set and unavailable", async ({
 		runMockServer,
 	}) => {
 		const server = await runMockServer("main");
-		writeFileSync(
-			join(configDir, "config.json"),
-			JSON.stringify({ credStorage: "keyring" }),
-		);
 		const authSpy = vi.spyOn(authModule, "auth");
 		const storeSpy = vi
 			.spyOn(credentialIo, "storeFor")
 			.mockImplementation((dir: string) =>
-				createCredentialStore(dir, { env: {}, keyring: null }),
+				createCredentialStore(dir, { keyring: null }),
 			);
 		try {
 			await expect(
@@ -101,13 +97,13 @@ describe("auth", () => {
 					forceAuth: true,
 					oauthHost: `http://localhost:${oauthServer.address().port}`,
 					allowUnsafeTls: true,
+					keyring: true,
 				}),
 			).rejects.toBeInstanceOf(KeyringUnavailableError);
 			expect(authSpy).not.toHaveBeenCalled();
 		} finally {
 			authSpy.mockRestore();
 			storeSpy.mockRestore();
-			rmSync(join(configDir, "config.json"), { force: true });
 		}
 	});
 });
@@ -187,20 +183,22 @@ describe("ensureAuth", () => {
 		expect(props.apiKey).toBe("new-auth-token");
 	});
 
-	test("does not start OAuth when keyring is preferred and get returns null", async ({
+	test("does not start OAuth when a keyring pointer's get returns null", async ({
 		runMockServer,
 	}) => {
 		const server = await runMockServer("main");
 		writeFileSync(
-			join(configDir, "config.json"),
-			JSON.stringify({ credStorage: "keyring" }),
+			join(configDir, "profiles.json"),
+			JSON.stringify({
+				version: 1,
+				profiles: { DEFAULT: { credentials: "keyring" } },
+			}),
 		);
 		rmSync(join(configDir, "credentials.json"), { force: true });
 		const storeSpy = vi
 			.spyOn(credentialIo, "storeFor")
 			.mockImplementation((dir: string) =>
 				createCredentialStore(dir, {
-					env: {},
 					keyring: {
 						get: () => null,
 						set: () => undefined,
@@ -215,7 +213,7 @@ describe("ensureAuth", () => {
 			expect(authSpy).not.toHaveBeenCalled();
 		} finally {
 			storeSpy.mockRestore();
-			rmSync(join(configDir, "config.json"), { force: true });
+			rmSync(join(configDir, "profiles.json"), { force: true });
 		}
 	});
 
@@ -243,7 +241,6 @@ describe("ensureAuth", () => {
 			.spyOn(credentialIo, "storeFor")
 			.mockImplementation((dir: string) => {
 				const store = createCredentialStore(dir, {
-					env: {},
 					keyring: null,
 				});
 				return {
@@ -421,7 +418,14 @@ describe("deleteCredentialsAt", () => {
 
 		expect(existsSync(credentialsPath)).toBe(true);
 
-		deleteCredentialsAt(credentialsPath, configDir);
+		deleteCredentialsAt(
+			{
+				profile: "DEFAULT",
+				storage: "file",
+				path: credentialsPath,
+			},
+			configDir,
+		);
 
 		expect(existsSync(credentialsPath)).toBe(false);
 	});
@@ -439,7 +443,14 @@ describe("deleteCredentialsAt", () => {
 
 		// Should not throw an error
 		expect(() => {
-			deleteCredentialsAt(credentialsPath, nonExistentDir);
+			deleteCredentialsAt(
+				{
+					profile: "DEFAULT",
+					storage: "file",
+					path: credentialsPath,
+				},
+				nonExistentDir,
+			);
 		}).not.toThrow();
 
 		rmSync(nonExistentDir, { recursive: true });

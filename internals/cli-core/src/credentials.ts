@@ -74,16 +74,30 @@ export type StoredCredentials = {
 /**
  * Where a credential lives, and which profile points at it.
  *
- * Both halves are needed to report a broken file: the path says which file to open, and the
- * profile is what every recovery command takes as its argument. Carrying only the path is what
- * produced errors telling the user to run `neon profile create <name> --force` with the
- * placeholder intact — a command an agent will run verbatim and be told `Invalid profile name
- * "<name>"`.
+ * `storage` is the profile's pointer: a file path, or the OS keyring. The profile name is
+ * what every recovery command takes as its argument. Carrying only a path is what produced
+ * errors telling the user to run `neon profile create <name> --force` with the placeholder
+ * intact — a command an agent will run verbatim and be told `Invalid profile name "<name>"`.
  */
-export type CredentialLocation = {
-	path: string;
+export type FileCredentialLocation = {
 	profile: string;
+	storage: "file";
+	path: string;
 };
+
+export type KeyringCredentialLocation = {
+	profile: string;
+	storage: "keyring";
+};
+
+export type CredentialLocation =
+	| FileCredentialLocation
+	| KeyringCredentialLocation;
+
+export const credentialLabel = (at: CredentialLocation): string =>
+	at.storage === "keyring"
+		? `the OS keyring item for profile "${at.profile}"`
+		: at.path;
 
 /**
  * Which credential in this file authenticates, by declaration alone.
@@ -109,7 +123,7 @@ export const credentialKind = (
 	// corrupted or hand-edited file can put a key anywhere in it — including here. Naming the
 	// file is enough to act on, and it cannot leak what the file holds.
 	throw new Error(
-		`${at.path} declares a "type" this version does not understand. Expected "${OAUTH}" or "${API_KEY}". ${credentialsRepairHint(at, store)}`,
+		`${credentialLabel(at)} declares a "type" this version does not understand. Expected "${OAUTH}" or "${API_KEY}". ${credentialsRepairHint(at, store)}`,
 	);
 };
 
@@ -149,7 +163,7 @@ export const interpretCredentials = (
 	const apiKey = nonEmpty(credentials.api_key);
 	if (apiKey === undefined) {
 		throw new Error(
-			`${at.path} declares "type": "${API_KEY}" but has no "api_key" value. ${credentialsRepairHint(at, store)}`,
+			`${credentialLabel(at)} declares "type": "${API_KEY}" but has no "api_key" value. ${credentialsRepairHint(at, store)}`,
 		);
 	}
 	return { kind: API_KEY, apiKey };
@@ -233,7 +247,7 @@ export const inspectCredentials = (path: string): CredentialsRead => {
  * broken credential is not the same as using one.
  */
 export const readCredentials = (
-	at: CredentialLocation,
+	at: FileCredentialLocation,
 ): StoredCredentials | null => {
 	const read = inspectCredentials(at.path);
 	if (read.kind === "unusable") {

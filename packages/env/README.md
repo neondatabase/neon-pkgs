@@ -89,11 +89,10 @@ For example, [varlock](https://varlock.dev) can bulk-load Neon's branch env via 
 Flags (both commands): `--config <path>`, `--project-id`, `--branch`, `--api-key`, `--profile`, `--debug`. `export` also takes `--format dotenv|json`.
 
 `--api-key` and `NEON_API_KEY` skip stored credentials. Otherwise `neon-env` reads the same
-Neon CLI profile the `neon` CLI does, including a secret stored in the OS keyring after
-`neon profile storage keyring`. `NEON_CRED_STORAGE` overrides `config.json` for one
-invocation. Keyring storage needs a compatible npm-installed `@neon/env`; packaged
-binaries cannot load it. A keyring-mode profile whose item cannot be read is an error,
-not "not signed in".
+Neon CLI profile the `neon` CLI does, including a secret stored in the OS keyring when that
+profile's `profiles.json` pointer is `"keyring"`. Keyring storage needs a compatible
+npm-installed `@neon/env`; packaged binaries cannot load it. A keyring pointer whose item
+cannot be read is an error, not "not signed in".
 
 ## Env vars produced
 
