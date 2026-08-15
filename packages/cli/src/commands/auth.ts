@@ -114,11 +114,6 @@ export const authFlow = async ({
 	profile,
 	keyring = false,
 }: AuthProps) => {
-	const allowInteractiveAuth = forceAuth ?? forceAuthKebab;
-	if (!allowInteractiveAuth && isCi()) {
-		throw new Error("Cannot run interactive auth in CI");
-	}
-
 	// A named profile that doesn't exist yet is created here rather than erroring: `neon
 	// auth --profile work` is how you make one, so it must work before there is anything
 	// to look up.
@@ -127,7 +122,8 @@ export const authFlow = async ({
 	if (isNamed) assertValidProfileName(profileName);
 	// Both checks belong before the browser opens. Signing in and then refusing costs a real
 	// sign-in, and worse, the write in between lands on a path chosen from metadata this
-	// refuses to trust.
+	// refuses to trust. They also belong before the CI guard: a broken `profiles.json` is
+	// the thing to fix, whether or not a browser could open.
 	assertProfilesUsable(configDir, profileName);
 	const at = locationForAuth(configDir, profileName, keyring, {
 		create: true,
@@ -136,9 +132,16 @@ export const authFlow = async ({
 		storeFor(configDir).assertKeyringWritable();
 	}
 
+	const allowInteractiveAuth = forceAuth ?? forceAuthKebab;
+	if (!allowInteractiveAuth && isCi()) {
+		throw new Error("Cannot run interactive auth in CI");
+	}
+
 	let previousFile: string | undefined;
+	let previousWasKeyring = false;
 	try {
 		const previous = resolveProfile(configDir, profileName);
+		previousWasKeyring = previous.storage === "keyring";
 		if (previous.storage === "file")
 			previousFile = previous.credentialsPath;
 	} catch {
@@ -164,7 +167,7 @@ export const authFlow = async ({
 		);
 	} catch {
 		log.error("Failed to save credentials");
-		return "";
+		throw new Error("Failed to save credentials");
 	}
 
 	if (at.storage === "keyring" || isNamed) {
@@ -176,7 +179,7 @@ export const authFlow = async ({
 				...(identity.id ? { userId: identity.id } : {}),
 			});
 		} catch (err) {
-			if (at.storage === "keyring") {
+			if (at.storage === "keyring" && !previousWasKeyring) {
 				storeFor(configDir).delete(at, { required: false });
 			}
 			log.error("Failed to save credentials");

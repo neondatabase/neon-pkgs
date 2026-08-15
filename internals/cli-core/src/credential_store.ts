@@ -104,6 +104,13 @@ export type CreateCredentialStoreOptions = {
 	keyring?: KeyringBackend | null;
 };
 
+export type CredentialDeleteResult =
+	| "cleared"
+	| "unconfirmed"
+	| "left"
+	| "skipped"
+	| "absent";
+
 export type CredentialStore = {
 	inspect(at: CredentialLocation): CredentialListing;
 	read(at: CredentialLocation): LoadedCredential | null;
@@ -111,7 +118,10 @@ export type CredentialStore = {
 		at: CredentialLocation,
 		credentials: StoredCredentials,
 	): LoadedCredential;
-	delete(at: CredentialLocation, options?: { required?: boolean }): void;
+	delete(
+		at: CredentialLocation,
+		options?: { required?: boolean },
+	): CredentialDeleteResult;
 	assertKeyringWritable(): void;
 };
 
@@ -340,14 +350,13 @@ export const createCredentialStore = (
 	const del = (
 		at: CredentialLocation,
 		deleteOptions?: { required?: boolean },
-	): void => {
+	): CredentialDeleteResult => {
 		const required = deleteOptions?.required !== false;
 		if (at.storage === CRED_STORAGE_KEYRING) {
-			removeKeyringItem(at.profile, required);
-			return;
+			return removeKeyringItem(at.profile, required);
 		}
-		if (!isOwnedCredentialPath(dir, at.path)) return;
-		deleteFileIfPresent(at.path);
+		if (!isOwnedCredentialPath(dir, at.path)) return "skipped";
+		return deleteFileIfPresent(at.path) ? "cleared" : "absent";
 	};
 
 	return {

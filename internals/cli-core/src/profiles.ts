@@ -218,7 +218,7 @@ export const readProfiles = (
 };
 
 /**
- * Refuse to act on a named profile when the file that defines it cannot be read.
+ * Refuse to act on a profile when the file that defines it cannot be read.
  *
  * Call this **before** anything that writes a credential, opens a browser, or spends an API
  * call. {@link upsertProfile} refuses too, but it runs last: by then `create` has already
@@ -227,11 +227,11 @@ export const readProfiles = (
  * exists to prevent. The path resolution itself is the unsound part, since with the metadata
  * unreadable the conventional filename is a guess about which account that file belongs to.
  *
- * `DEFAULT` is exempt: it is defined by the absence of metadata rather than by an entry, so
- * signing in normally must keep working while a broken `profiles.json` is repaired.
+ * DEFAULT is not exempt. A broken file may be the only record that DEFAULT is
+ * `"keyring"`, and treating that as an implicit file starts OAuth over a secret
+ * that is still in the OS store.
  */
 export const assertProfilesUsable = (dir: string, name: string): void => {
-	if (name === DEFAULT_PROFILE) return;
 	const read = inspectProfiles(dir);
 	if (read.kind === "unusable") {
 		throw new Error(
@@ -245,9 +245,9 @@ export const resolveProfile = (dir: string, name: string): ResolvedProfile => {
 	const read = inspectProfiles(dir);
 	// A broken file must not be reported as `Unknown profile "work"`. That names the wrong
 	// problem, and the user goes looking for a profile they can see in the file in front of them.
-	if (read.kind === "unusable" && name !== DEFAULT_PROFILE) {
+	if (read.kind === "unusable") {
 		throw new Error(
-			`${read.reason}. Fix or delete the file — every named profile is defined in it.`,
+			`${read.reason}. Fix or delete the file — every profile is defined in it.`,
 		);
 	}
 	const file = read.kind === "ok" ? read.file : null;
@@ -329,7 +329,7 @@ export const upsertProfile = (
 					version: 1 as const,
 					profiles: {
 						[DEFAULT_PROFILE]: {
-							credentials: relativeToProfiles(
+							credentials: storedPointer(
 								path,
 								credentialsPath(dir),
 							),
@@ -338,9 +338,7 @@ export const upsertProfile = (
 				};
 
 	file.profiles[name] = {
-		credentials: isKeyringPointer(entry.credentials)
-			? KEYRING_CREDENTIALS
-			: relativeToProfiles(path, entry.credentials),
+		credentials: storedPointer(path, entry.credentials),
 		...(entry.label ? { label: entry.label } : {}),
 		...(entry.userId ? { userId: entry.userId } : {}),
 	};
@@ -457,10 +455,19 @@ const resolveEntryPath = (dir: string, entry: string): string =>
 const profilesDir = (dir: string): string =>
 	resolve(profilesFilePath(dir), "..");
 
-/** Keep entries relative when they sit near `profiles.json`; absolute paths stay absolute. */
-const relativeToProfiles = (profilesPath: string, target: string): string => {
-	const rel = relative(resolve(profilesPath, ".."), target);
-	return rel && !isAbsolute(rel) ? rel : target;
+/**
+ * Persist a pointer. A file whose relative name is exactly `keyring` is stored
+ * as `./keyring` so it cannot be read back as the sentinel.
+ */
+const storedPointer = (profilesPath: string, credentials: string): string => {
+	if (isKeyringPointer(credentials)) return KEYRING_CREDENTIALS;
+	const base = resolve(profilesPath, "..");
+	const abs = isAbsolute(credentials)
+		? credentials
+		: resolve(base, credentials);
+	const rel = relative(base, abs);
+	const stored = rel && !isAbsolute(rel) ? rel : abs;
+	return stored === KEYRING_CREDENTIALS ? `./${KEYRING_CREDENTIALS}` : stored;
 };
 
 function nonEmpty(value: string | undefined): string | undefined {

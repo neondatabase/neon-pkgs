@@ -242,9 +242,29 @@ describe("createCredentialStore — keyring", () => {
 	test("delete required:false does not throw when get() is null", () => {
 		const dir = makeDir();
 		const store = createCredentialStore(dir, { keyring: memoryKeyring() });
-		expect(() =>
-			store.delete(keyringAt(), { required: false }),
-		).not.toThrow();
+		expect(store.delete(keyringAt(), { required: false })).toBe(
+			"unconfirmed",
+		);
+	});
+
+	test("delete reports left when the OS item is still readable", () => {
+		const dir = makeDir();
+		const keyring: KeyringBackend = {
+			get: () => JSON.stringify(key),
+			set: () => undefined,
+			delete: () => false,
+		};
+		const store = createCredentialStore(dir, { keyring });
+		expect(store.delete(keyringAt(), { required: false })).toBe("left");
+	});
+
+	test("delete of an owned file reports cleared or absent", () => {
+		const dir = makeDir({
+			"credentials.json": JSON.stringify(key),
+		});
+		const store = createCredentialStore(dir, { keyring: null });
+		expect(store.delete(fileAt(dir))).toBe("cleared");
+		expect(store.delete(fileAt(dir), { required: false })).toBe("absent");
 	});
 
 	test("write rolls back a new item when it cannot be read back", () => {

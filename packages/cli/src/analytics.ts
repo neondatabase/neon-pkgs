@@ -97,6 +97,9 @@ export const telemetryCredential = (
 	if (authContext.source === "api-key") {
 		return { apiKey };
 	}
+	if (authContext.storage === "keyring") {
+		return { apiKey };
+	}
 	return {
 		apiKey,
 		credentialsPath: authContext.credentialsPath ?? defaultCredentialsPath,

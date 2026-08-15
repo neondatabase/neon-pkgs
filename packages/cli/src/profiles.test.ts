@@ -8,6 +8,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
+	assertProfilesUsable,
 	canDropProfilesFile,
 	DEFAULT_PROFILE,
 	KEYRING_CREDENTIALS,
@@ -157,18 +158,20 @@ describe("resolveProfile", () => {
 		expect(p.credentialsPath).toBe(resolve(dir, "credentials.json"));
 	});
 
-	// A broken profiles.json must not lock the user out of `neon auth`, which is a `DEFAULT`
-	// operation and needs no named profile to work.
-	test("a malformed profiles.json does not block DEFAULT", () => {
+	// A broken file may be the only record that DEFAULT is `"keyring"`. Treating
+	// that as an implicit file starts OAuth over a secret still in the OS store.
+	test("a malformed profiles.json blocks DEFAULT", () => {
 		const dir = makeDir({
 			"credentials.json": creds("me"),
 			"profiles.json": "not json",
 		});
 		expect(readProfiles(dir)).toBeNull();
-		const p = resolveProfile(dir, DEFAULT_PROFILE);
-		expect(p.storage).toBe("file");
-		if (p.storage !== "file") throw new Error("expected file profile");
-		expect(p.credentialsPath).toBe(resolve(dir, "credentials.json"));
+		expect(() => resolveProfile(dir, DEFAULT_PROFILE)).toThrow(
+			/could not be read as a profiles file/,
+		);
+		expect(() => assertProfilesUsable(dir, DEFAULT_PROFILE)).toThrow(
+			/could not be read as a profiles file/,
+		);
 	});
 
 	// But a *named* profile is defined only in that file, so "not found" is the wrong answer:
@@ -291,6 +294,20 @@ describe("upsertProfile", () => {
 				credentials: "credentials.other.json",
 			}),
 		).toThrow(/has no `credentials` pointer/);
+	});
+
+	test("a file named keyring is stored as ./keyring, not the sentinel", () => {
+		const dir = makeDir({ "credentials.json": creds("me") });
+		const path = resolve(dir, "keyring");
+		upsertProfile(dir, "work", { credentials: path });
+		const file = JSON.parse(
+			readFileSync(resolve(dir, "profiles.json"), "utf8"),
+		);
+		expect(file.profiles.work.credentials).toBe("./keyring");
+		const p = resolveProfile(dir, "work");
+		expect(p.storage).toBe("file");
+		if (p.storage !== "file") throw new Error("expected file profile");
+		expect(p.credentialsPath).toBe(path);
 	});
 
 	test("writes the keyring sentinel without resolving it as a path", () => {

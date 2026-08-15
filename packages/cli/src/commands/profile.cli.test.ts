@@ -1199,18 +1199,16 @@ describe("a malformed profiles.json", () => {
 		).toBe(sentinel);
 	});
 
-	// DEFAULT is defined by the absence of metadata, so a broken file must not lock out the
-	// ordinary sign-in that repairs the situation.
-	test("does not block a DEFAULT sign-in", async () => {
+	test("blocks a DEFAULT sign-in", async () => {
 		const dir = makeConfigDir({ "profiles.json": BROKEN });
-		const { stderr } = await runCli(["auth", "--config-dir", dir], {
+		const { code, stderr } = await runCli(["auth", "--config-dir", dir], {
 			CI: "true",
 		});
 
-		// Reaches the CI guard, which is as far as a browser sign-in can get here — the point
-		// is that it is not the profiles-file refusal.
-		expect(stderr).toContain("Cannot run interactive auth in CI");
-		expect(stderr).not.toContain("could not be read as a profiles file");
+		expect(code).toBe(1);
+		expect(stderr).toContain("could not be read as a profiles file");
+		expect(stderr).not.toContain("Cannot run interactive auth in CI");
+		expect(stderr).not.toContain("Awaiting authentication");
 	});
 
 	// It is the only record of where each account's credentials live, and `create` used to
@@ -1689,6 +1687,37 @@ describe("profile mv", () => {
 			JSON.parse(readFileSync(resolve(dir, "profiles.json"), "utf8"))
 				.profiles.DEFAULT.credentials,
 		).toBe("moved.json");
+	});
+
+	test("a dest file named keyring is stored as ./keyring", async () => {
+		const dir = makeConfigDir({
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { DEFAULT: { credentials: "keyring" } },
+			}),
+		});
+		const dest = resolve(dir, "keyring");
+		const { code, stdout } = await runCli([
+			"profile",
+			"mv",
+			"--file",
+			dest,
+			"--force",
+			"--config-dir",
+			dir,
+			"--output",
+			"json",
+		]);
+		expect(code).toBe(0);
+		expect(JSON.parse(stdout)).toEqual({
+			name: "DEFAULT",
+			storage: "file",
+			credentials: dest,
+		});
+		expect(
+			JSON.parse(readFileSync(resolve(dir, "profiles.json"), "utf8"))
+				.profiles.DEFAULT.credentials,
+		).toBe("./keyring");
 	});
 
 	test("omitted name is DEFAULT", async () => {

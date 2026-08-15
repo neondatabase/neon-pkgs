@@ -587,15 +587,8 @@ const move = async (props: MoveProps) => {
 		throw err instanceof Error ? err : new Error(String(err));
 	}
 	if (source.storage === CRED_STORAGE_KEYRING) {
-		const cleared = (() => {
-			try {
-				store.delete(source, { required: false });
-				return true;
-			} catch {
-				return false;
-			}
-		})();
-		if (!cleared) {
+		const cleared = store.delete(source, { required: false });
+		if (cleared !== "cleared") {
 			log.warning(
 				"Moved the credential to %s but could not confirm the OS keyring item is gone.",
 				destPath,
@@ -948,8 +941,8 @@ const create = async (props: CreateProps) => {
 			props.configDir,
 			existingLocation(props.configDir, name) ?? at,
 		);
-		// `authFlow` reports its own failure and returns an empty token rather than throwing,
-		// so claiming success here would leave the user with no profile and no error.
+		// `authFlow` throws on a failed save. An empty token is still a failed
+		// sign-in — the IdP returned nothing to store.
 		if (
 			(await authFlow({
 				...props,
@@ -984,8 +977,8 @@ const create = async (props: CreateProps) => {
 	if (at.storage === "keyring") {
 		storeFor(props.configDir).assertKeyringWritable();
 	}
-	const previousAt = existingLocation(props.configDir, name) ?? at;
-	const previous = readOutgoingCredential(props.configDir, previousAt);
+	const existing = existingLocation(props.configDir, name);
+	const previous = readOutgoingCredential(props.configDir, existing ?? at);
 
 	storeFor(props.configDir).write(
 		at,
@@ -1002,17 +995,17 @@ const create = async (props: CreateProps) => {
 				: {}),
 		}),
 	);
-	await retirePreviousCredential(props, name, previous, apiKey);
 	try {
 		recordProfile(props, name, at, identity);
 	} catch (err) {
-		if (at.storage === "keyring") {
+		if (at.storage === "keyring" && existing?.storage !== "keyring") {
 			storeFor(props.configDir).delete(at, { required: false });
 		}
 		throw err instanceof Error ? err : new Error(String(err));
 	}
-	if (at.storage === "keyring" && previousAt.storage === "file") {
-		deleteLeftoverOwnedFile(props.configDir, previousAt.path, name);
+	await retirePreviousCredential(props, name, previous, apiKey);
+	if (at.storage === "keyring" && existing?.storage === "file") {
+		deleteLeftoverOwnedFile(props.configDir, existing.path, name);
 	}
 
 	report(props, {
@@ -1179,8 +1172,11 @@ const createByMinting = async (props: CreateProps) => {
 			name,
 			props.keyring === true,
 		);
-		const previousAt = existingLocation(props.configDir, name) ?? at;
-		const previous = readOutgoingCredential(props.configDir, previousAt);
+		const existing = existingLocation(props.configDir, name);
+		const previous = readOutgoingCredential(
+			props.configDir,
+			existing ?? at,
+		);
 
 		storeFor(props.configDir).write(
 			at,
@@ -1193,19 +1189,19 @@ const createByMinting = async (props: CreateProps) => {
 				scope,
 			}),
 		);
-		await retirePreviousCredential(props, name, previous, minted.key);
 		try {
 			recordProfile(props, name, at, identity);
 		} catch (err) {
-			if (at.storage === "keyring") {
+			if (at.storage === "keyring" && existing?.storage !== "keyring") {
 				storeFor(props.configDir).delete(at, { required: false });
 			} else {
 				keyIsReachable = true;
 			}
 			throw err instanceof Error ? err : new Error(String(err));
 		}
-		if (at.storage === "keyring" && previousAt.storage === "file") {
-			deleteLeftoverOwnedFile(props.configDir, previousAt.path, name);
+		await retirePreviousCredential(props, name, previous, minted.key);
+		if (at.storage === "keyring" && existing?.storage === "file") {
+			deleteLeftoverOwnedFile(props.configDir, existing.path, name);
 		}
 		keyIsReachable = true;
 

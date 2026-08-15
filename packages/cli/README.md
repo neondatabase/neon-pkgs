@@ -905,9 +905,9 @@ neon profile mv [name] --file <path> --force
 `NEON_PROFILE`. `--profile` is refused. `--force` only applies to `--file`: it rewrites the
 pointer, does not write a secret file, and does not delete the keyring item.
 
-`--api-key` and `NEON_API_KEY` skip both stores. Packaged binaries and older CLI releases
-cannot read a keyring profile — they treat the sentinel `"keyring"` as a relative path.
-Keyring storage needs a compatible npm-installed `neon` or `@neon/env`.
+`--api-key` and `NEON_API_KEY` skip both stores. This CLI's packaged binary recognizes a
+`"keyring"` pointer and refuses: it cannot load the OS keyring addon. Use the npm-installed
+`neon` or `@neon/env`. Older releases treat the sentinel as a relative path.
 
 A `"keyring"` pointer whose OS item cannot be read is not treated as signed-out. Commands that
 would otherwise open a browser fail: could not read the OS keyring item. Unlock it and
@@ -1125,7 +1125,7 @@ Global options are supported with any Neon CLI command.
 
 - <a id="config-dir"></a>`--config-dir`
 
-  Specifies the path to the `neon` configuration directory, which holds the `credentials.json` written by `neon auth` (or `config.json` when you opt into keyring storage). The default is `$XDG_CONFIG_HOME/neon`, or `~/.config/neon`; run `neon --help` to see the resolved path. This option is only necessary if you keep your configuration somewhere else.
+  Specifies the path to the `neon` configuration directory, which holds the `credentials.json` written by `neon auth` and, when a second profile exists or DEFAULT is keyring, `profiles.json`. The default is `$XDG_CONFIG_HOME/neon`, or `~/.config/neon`; run `neon --help` to see the resolved path. This option is only necessary if you keep your configuration somewhere else.
 
   The directory was called `neonctl` before the CLI was renamed. An existing one is still read, and is used **in place** — nothing is moved or copied, so there is never a second credentials file to go stale. A directory you pass explicitly is used exactly as given and never falls back to the legacy name, so pointing a CI run at a scratch directory cannot pick up local credentials.
 
