@@ -303,7 +303,9 @@ describe("profile list", () => {
 				}),
 			]),
 		);
-		expect(stderr).toMatch(/OS keyring/);
+		expect(stderr).toMatch(
+			/neon auth --profile DEFAULT|neon profile remove DEFAULT --yes/,
+		);
 	});
 
 	test("projects list does not start OAuth when a keyring pointer is unread", async () => {
@@ -508,6 +510,29 @@ describe("profile create", () => {
 		expect(code).toBe(1);
 		expect(stderr).toContain("holds a browser sign-in");
 		expect(stderr).toContain("signed out as part of the replacement");
+	});
+
+	test("create --keyring on a file OAuth profile names auth --keyring", async () => {
+		const dir = makeConfigDir({
+			"credentials.work.json": OAUTH_FILE,
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { work: { credentials: "credentials.work.json" } },
+			}),
+		});
+		const { code, stderr } = await runCli([
+			"profile",
+			"create",
+			"work",
+			"--keyring",
+			"--config-dir",
+			dir,
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("holds a browser sign-in");
+		expect(stderr).toContain("neon auth --keyring --profile work");
+		expect(existsSync(resolve(dir, "credentials.work.json"))).toBe(true);
 	});
 
 	// The no-flag form is what an agent tries first, and `authFlow` answered it with a bare
@@ -1469,7 +1494,10 @@ describe("profile remove", () => {
 		]);
 
 		expect(code).toBe(0);
-		expect(stderr).toMatch(/leftover may still be in the OS store/i);
+		expect(stderr).toMatch(
+			/leftover may still be in the OS store|cannot delete the OS keyring item/i,
+		);
+		expect(stderr).toContain("com.neon.neon-cli");
 		expect(existsSync(resolve(dir, "profiles.json"))).toBe(false);
 	});
 });

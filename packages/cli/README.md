@@ -893,6 +893,7 @@ That is per profile. Reads never migrate.
 
 ```bash
 neon auth --keyring                         # sign DEFAULT into the OS keyring
+neon auth --keyring --profile work          # sign work into the OS keyring
 neon profile create work --keyring          # create a named profile in the keyring
 neon profile create work --keyring --force  # replace a file profile; revokes the old credential
 neon profile remove work --yes              # drop a keyring profile, then create it again as a file

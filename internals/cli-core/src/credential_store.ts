@@ -61,7 +61,7 @@ export class KeyringUnavailableError extends Error {
 				? `or remove the profile with \`neon profile remove ${profile} --yes\``
 				: "or drop `--keyring` to keep the credential in a file";
 		super(
-			`This CLI cannot use the OS keyring. Use a neon CLI build that includes the keyring addon, ${recovery}.`,
+			`This CLI cannot use the OS keyring (the optional \`@napi-rs/keyring\` addon is not loaded). Use --api-key or NEON_API_KEY, ${recovery}.`,
 		);
 		this.name = "KeyringUnavailableError";
 	}
@@ -269,7 +269,7 @@ export const createCredentialStore = (
 					file: "unreadable",
 					storage: CRED_STORAGE_KEYRING,
 					credentials: null,
-					reason: "This CLI cannot use the OS keyring.",
+					reason: new KeyringUnavailableError(at.profile).message,
 				};
 			}
 			const keyringRead = inspectKeyringItem(
@@ -296,7 +296,7 @@ export const createCredentialStore = (
 				file: "unreadable",
 				storage: CRED_STORAGE_KEYRING,
 				credentials: null,
-				reason: `Could not read the OS keyring item for profile "${at.profile}".`,
+				reason: new KeyringUnreadableError(at.profile).message,
 			};
 		}
 

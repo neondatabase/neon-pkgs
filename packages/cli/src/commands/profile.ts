@@ -5,7 +5,11 @@ import {
 	CRED_STORAGE_FILE,
 	CRED_STORAGE_KEYRING,
 } from "@neon-internals/cli-core/cli_config";
-import type { CredentialDeleteResult } from "@neon-internals/cli-core/credential_store";
+import {
+	type CredentialDeleteResult,
+	KEYRING_SERVICE,
+	keyringAccount,
+} from "@neon-internals/cli-core/credential_store";
 import {
 	API_KEY,
 	apiKeyCredentials,
@@ -423,7 +427,7 @@ const readOutgoingCredential = (
 		// `reason` comes from several sources, some of which end in a period. Trim it so the
 		// sentence does not run "…cannot be read.. Nothing in it…".
 		log.warning(
-			"%s. Nothing in it could be revoked, so it is only being replaced locally.",
+			"%s. Nothing in it could be revoked.",
 			reason.replace(/\.$/, ""),
 		);
 		return null;
@@ -566,8 +570,12 @@ const assertReplaceable = (props: CreateProps): void => {
 			`Profile "${name}" already exists. Pass --force to replace it.`,
 		);
 	}
+	const keepSession =
+		props.keyring === true && at.storage === CRED_STORAGE_FILE
+			? ` To sign in again and store the new session in the OS keyring instead: \`neon auth --keyring --profile ${name}\`.`
+			: "";
 	throw new Error(
-		`Profile "${name}" already exists and holds a browser sign-in. Pass --force to replace it — the session is signed out as part of the replacement.`,
+		`Profile "${name}" already exists and holds a browser sign-in. Pass --force to replace it — the session is signed out as part of the replacement.${keepSession}`,
 	);
 };
 
@@ -1355,7 +1363,7 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 		stored = readOutgoingCredential(props.configDir, at);
 	} catch (err) {
 		log.warning(
-			"%s. Nothing in it could be revoked, so it is only being replaced locally.",
+			"%s. Nothing in it could be revoked.",
 			(err instanceof Error ? err.message : String(err)).replace(
 				/\.$/,
 				"",
@@ -1423,6 +1431,16 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 	const listing = storeFor(props.configDir).inspect(at);
 	if (at.storage === "keyring") {
 		dropPointer();
+		const account = keyringAccount(props.configDir, name);
+		if (listing.reason?.includes("cannot use the OS keyring")) {
+			log.warning(
+				'This CLI cannot delete the OS keyring item for profile "%s". It remains in the OS store (service %s, account %s) until a CLI with the keyring addon removes it, or you delete it there.',
+				name,
+				KEYRING_SERVICE,
+				account,
+			);
+			return;
+		}
 		let cleared: CredentialDeleteResult = "unconfirmed";
 		try {
 			cleared = storeFor(props.configDir).delete(at, {
@@ -1435,8 +1453,10 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 			log.info('Deleted the OS keyring item for profile "%s"', name);
 		} else {
 			log.warning(
-				'Could not confirm the OS keyring item for profile "%s" is gone. A leftover may still be in the OS store; it is not used once the profile is removed.',
+				'Could not confirm the OS keyring item for profile "%s" is gone. A leftover may still be in the OS store (service %s, account %s); it is not used once the profile is gone.',
 				name,
+				KEYRING_SERVICE,
+				account,
 			);
 		}
 		return;

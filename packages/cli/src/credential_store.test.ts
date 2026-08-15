@@ -228,7 +228,7 @@ describe("createCredentialStore — keyring", () => {
 			file: "unreadable",
 			storage: CRED_STORAGE_KEYRING,
 			credentials: null,
-			reason: 'Could not read the OS keyring item for profile "DEFAULT".',
+			reason: new KeyringUnreadableError("DEFAULT").message,
 		});
 	});
 
@@ -239,7 +239,7 @@ describe("createCredentialStore — keyring", () => {
 			file: "unreadable",
 			storage: CRED_STORAGE_KEYRING,
 			credentials: null,
-			reason: "This CLI cannot use the OS keyring.",
+			reason: new KeyringUnavailableError("DEFAULT").message,
 		});
 	});
 
@@ -293,7 +293,7 @@ describe("createCredentialStore — keyring", () => {
 			file: "unreadable",
 			storage: CRED_STORAGE_KEYRING,
 			credentials: null,
-			reason: 'Could not read the OS keyring item for profile "DEFAULT".',
+			reason: new KeyringUnreadableError("DEFAULT").message,
 		});
 	});
 
