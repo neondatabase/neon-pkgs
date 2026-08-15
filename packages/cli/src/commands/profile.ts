@@ -1392,11 +1392,36 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 		);
 	}
 
-	// 2. Delete the credential only if we created it. A profile pointing outside the
-	//    config directory was adopted from elsewhere; unlink it and say so, because the
-	//    secret is still on disk and silence would imply otherwise.
+	// Drop the profiles.json pointer. For a keyring profile this must happen
+	// before the OS item is deleted: a failed write after a successful delete
+	// would leave the pointer targeting a gone item (unreadable, not signed-out).
+	const dropPointer = (): void => {
+		const path = profilesFilePath(props.configDir);
+		const file = readProfiles(props.configDir, log.warning);
+		if (file?.profiles[name]) {
+			delete file.profiles[name];
+			if (canDropProfilesFile(file)) {
+				rmSync(path);
+				log.info(
+					'Removed "%s" — no profiles left, deleted %s',
+					name,
+					path,
+				);
+			} else {
+				writeSecretFile(path, `${JSON.stringify(file, null, 2)}\n`);
+				log.info('Removed "%s" from %s', name, path);
+			}
+		} else if (name === DEFAULT_PROFILE) {
+			log.info("Signed out of DEFAULT");
+		}
+	};
+
+	// Delete the credential only if we created it. A profile pointing outside the
+	// config directory was adopted from elsewhere; unlink it and say so, because the
+	// secret is still on disk and silence would imply otherwise.
 	const listing = storeFor(props.configDir).inspect(at);
 	if (at.storage === "keyring") {
+		dropPointer();
 		let cleared: CredentialDeleteResult = "unconfirmed";
 		try {
 			cleared = storeFor(props.configDir).delete(at, {
@@ -1413,7 +1438,10 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 				name,
 			);
 		}
-	} else if (isOwnedCredentialPath(props.configDir, at.path)) {
+		return;
+	}
+
+	if (isOwnedCredentialPath(props.configDir, at.path)) {
 		storeFor(props.configDir).delete(at);
 		if (listing.credentials !== null || listing.file !== "missing") {
 			log.info("Deleted %s", at.path);
@@ -1421,23 +1449,7 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 	} else if (existsSync(at.path)) {
 		log.info("Left %s on disk — not created by neon", at.path);
 	}
-
-	// 3. Drop the entry, and the file once nothing but DEFAULT is left — the mirror image
-	//    of creating it lazily, so a single-account install ends up with no profiles.json.
-	const path = profilesFilePath(props.configDir);
-	const file = readProfiles(props.configDir, log.warning);
-	if (file?.profiles[name]) {
-		delete file.profiles[name];
-		if (canDropProfilesFile(file)) {
-			rmSync(path);
-			log.info('Removed "%s" — no profiles left, deleted %s', name, path);
-		} else {
-			writeSecretFile(path, `${JSON.stringify(file, null, 2)}\n`);
-			log.info('Removed "%s" from %s', name, path);
-		}
-	} else if (name === DEFAULT_PROFILE) {
-		log.info("Signed out of DEFAULT");
-	}
+	dropPointer();
 };
 
 /** Revoke the OAuth refresh token in a credential we already have in hand. */

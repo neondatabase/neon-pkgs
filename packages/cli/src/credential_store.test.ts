@@ -196,6 +196,9 @@ describe("createCredentialStore — keyring", () => {
 		expect(() => store.read(keyringAt())).toThrow(
 			/Unlock the keyring and retry/,
 		);
+		expect(() => store.read(keyringAt())).toThrow(
+			"`neon auth --profile DEFAULT`",
+		);
 		expect(() => store.read(keyringAt())).not.toThrow(/null/);
 	});
 
@@ -257,6 +260,22 @@ describe("createCredentialStore — keyring", () => {
 		const store = createCredentialStore(dir, { keyring: memoryKeyring() });
 		expect(store.delete(keyringAt(), { required: false })).toBe(
 			"unconfirmed",
+		);
+	});
+
+	test("read of a throwing get is KeyringUnreadableError", () => {
+		const dir = makeDir();
+		const keyring: KeyringBackend = {
+			get: () => {
+				throw new Error("denied");
+			},
+			set: () => undefined,
+			delete: () => false,
+		};
+		const store = createCredentialStore(dir, { keyring });
+		expect(() => store.read(keyringAt())).toThrow(KeyringUnreadableError);
+		expect(() => store.read(keyringAt())).toThrow(
+			"`neon auth --profile DEFAULT`",
 		);
 	});
 

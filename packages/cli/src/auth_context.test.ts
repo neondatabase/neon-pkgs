@@ -146,6 +146,16 @@ describe("authFailureMessage", () => {
 		expect(message).not.toContain("--api-key");
 	});
 
+	test("a keyring DEFAULT session pins --profile DEFAULT", () => {
+		const message = authFailureMessage({
+			source: "stored-credentials",
+			configDir: "/c",
+			profile: "DEFAULT",
+			storage: "keyring",
+		});
+		expect(message).toContain("neon auth --profile DEFAULT");
+	});
+
 	test("an adopted session says to sign in again, not to check a flag", () => {
 		const message = authFailureMessage({
 			source: "stored-credentials",

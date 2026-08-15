@@ -909,7 +909,7 @@ until `remove` succeeds.
 
 A `"keyring"` pointer whose OS item cannot be read is not treated as signed-out. Commands that
 would otherwise open a browser fail: could not read the OS keyring item. Unlock it and
-retry, or run `neon auth`. A missing `credentials.json` with no `profiles.json` is still
+retry, or run `neon auth --profile DEFAULT`. A missing `credentials.json` with no `profiles.json` is still
 signed-out, and those commands start OAuth.
 
 ### A profile holds either a sign-in or an API key

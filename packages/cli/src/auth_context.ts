@@ -113,11 +113,7 @@ export const authFailureMessage = (context: AuthContext | null): string => {
 	// Saying "check --api-key" there would be nonsense; the fix is to sign in again.
 	if (context?.source === "stored-credentials") {
 		if (context.storage === "keyring") {
-			const auth =
-				context.profile !== undefined && context.profile !== "DEFAULT"
-					? `\`neon auth --profile ${context.profile}\``
-					: "`neon auth`";
-			return `Authentication failed: the Neon API rejected profile "${profile}"'s stored session (OS keyring). Sign in again with ${auth}.`;
+			return `Authentication failed: the Neon API rejected profile "${profile}"'s stored session (OS keyring). Sign in again with \`neon auth --profile ${profile}\`.`;
 		}
 		return `Authentication failed: the Neon API rejected profile "${profile}"'s stored session${where}. That file was not created by neon, so it was left alone — sign in again with \`neon auth --profile ${profile}\`.`;
 	}

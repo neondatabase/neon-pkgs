@@ -68,10 +68,7 @@ export class KeyringUnavailableError extends Error {
  */
 export class KeyringUnreadableError extends Error {
 	constructor(profile: string) {
-		const replace =
-			profile === "DEFAULT"
-				? "`neon auth`"
-				: `\`neon auth --profile ${profile}\``;
+		const replace = `\`neon auth --profile ${profile}\``;
 		super(
 			`Could not read the OS keyring item for profile "${profile}". Unlock the keyring and retry, or run ${replace}.`,
 		);
@@ -321,8 +318,8 @@ export const createCredentialStore = (
 			let raw: string | null;
 			try {
 				raw = keyring.get(KEYRING_SERVICE, accountFor(at.profile));
-			} catch (err) {
-				throw err instanceof Error ? err : new Error(String(err));
+			} catch {
+				throw new KeyringUnreadableError(at.profile);
 			}
 			if (raw === null) throw new KeyringUnreadableError(at.profile);
 			const parsed = parseCredentialsJson(raw, credentialLabel(at));
