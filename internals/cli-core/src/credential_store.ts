@@ -25,7 +25,7 @@ import {
 	writeCredentials,
 } from "./credentials.js";
 import { isOwnedCredentialPath } from "./paths.js";
-import { DEFAULT_PROFILE, defaultCredentialsFileName } from "./profiles.js";
+import { defaultCredentialsFileName } from "./profiles.js";
 
 export const KEYRING_SERVICE = "com.neon.neon-cli";
 
@@ -50,11 +50,18 @@ export type KeyringBackend = {
 export const keyringAccount = (configDir: string, profile: string): string =>
 	`cli:${createHash("sha256").update(resolve(configDir)).digest("hex")}:${profile}`;
 
+const keyringFileRecovery = (configDir: string, profile: string): string =>
+	`neon profile mv ${profile} --file ${resolve(configDir, defaultCredentialsFileName(profile))}`;
+
 export class KeyringUnavailableError extends Error {
-	constructor(
-		message = `This CLI cannot use the OS keyring. Use a neon CLI build that includes the keyring addon, or move the profile to a file with \`neon profile mv ${DEFAULT_PROFILE} --file ${defaultCredentialsFileName(DEFAULT_PROFILE)}\`.`,
-	) {
-		super(message);
+	constructor(profile?: string, configDir?: string) {
+		const recovery =
+			profile !== undefined && configDir !== undefined
+				? `or move the profile to a file with \`${keyringFileRecovery(configDir, profile)}\``
+				: "or move the profile to a file with `neon profile mv` and `--file` pointing at a path in the config directory";
+		super(
+			`This CLI cannot use the OS keyring. Use a neon CLI build that includes the keyring addon, ${recovery}.`,
+		);
 		this.name = "KeyringUnavailableError";
 	}
 }
@@ -77,8 +84,12 @@ export class KeyringUnreadableError extends Error {
 }
 
 export class KeyringClearError extends Error {
-	constructor(profile: string, kind: "unconfirmed" | "visible" = "visible") {
-		const recovery = `\`neon profile mv ${profile} --file ${defaultCredentialsFileName(profile)} --force\``;
+	constructor(
+		profile: string,
+		configDir: string,
+		kind: "unconfirmed" | "visible" = "visible",
+	) {
+		const recovery = `\`${keyringFileRecovery(configDir, profile)} --force\``;
 		super(
 			kind === "unconfirmed"
 				? `Could not confirm the OS keyring item for profile "${profile}" is gone. The OS store does not distinguish a missing item from denied access. Unlock the OS keyring and retry, or run ${recovery} to stop using the keyring.`
@@ -163,7 +174,7 @@ export const createCredentialStore = (
 	): void => {
 		assertKeyringWritable();
 		const kr = keyring;
-		if (kr === null) throw new KeyringUnavailableError();
+		if (kr === null) throw new KeyringUnavailableError(profile, dir);
 		const account = accountFor(profile);
 		const label = `profile "${profile}"`;
 		let previous: string | null = null;
@@ -189,7 +200,7 @@ export const createCredentialStore = (
 					restored = null;
 				}
 				if (restored === null) {
-					throw new KeyringClearError(profile, "visible");
+					throw new KeyringClearError(profile, dir, "visible");
 				}
 			} else {
 				const deleted = kr.delete(KEYRING_SERVICE, account);
@@ -200,7 +211,7 @@ export const createCredentialStore = (
 					still = null;
 				}
 				if (!deleted || still !== null) {
-					throw new KeyringClearError(profile, "visible");
+					throw new KeyringClearError(profile, dir, "visible");
 				}
 			}
 			throw err instanceof Error ? err : new Error(String(err));
@@ -212,7 +223,7 @@ export const createCredentialStore = (
 		required: boolean,
 	): "cleared" | "unconfirmed" | "left" => {
 		if (keyring === null) {
-			if (required) throw new KeyringUnavailableError();
+			if (required) throw new KeyringUnavailableError(profile, dir);
 			return "unconfirmed";
 		}
 		let raw: string | null;
@@ -222,7 +233,8 @@ export const createCredentialStore = (
 			throw err instanceof Error ? err : new Error(String(err));
 		}
 		if (raw === null) {
-			if (required) throw new KeyringClearError(profile, "unconfirmed");
+			if (required)
+				throw new KeyringClearError(profile, dir, "unconfirmed");
 			return "unconfirmed";
 		}
 		const deleted = keyring.delete(KEYRING_SERVICE, accountFor(profile));
@@ -233,7 +245,7 @@ export const createCredentialStore = (
 			throw err instanceof Error ? err : new Error(String(err));
 		}
 		if (!deleted || still !== null) {
-			if (required) throw new KeyringClearError(profile, "visible");
+			if (required) throw new KeyringClearError(profile, dir, "visible");
 			return "left";
 		}
 		return "cleared";
@@ -296,7 +308,8 @@ export const createCredentialStore = (
 
 	const read = (at: CredentialLocation): LoadedCredential | null => {
 		if (at.storage === CRED_STORAGE_KEYRING) {
-			if (keyring === null) throw new KeyringUnavailableError();
+			if (keyring === null)
+				throw new KeyringUnavailableError(at.profile, dir);
 			let raw: string | null;
 			try {
 				raw = keyring.get(KEYRING_SERVICE, accountFor(at.profile));

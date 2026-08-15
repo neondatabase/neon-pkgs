@@ -204,11 +204,15 @@ describe("createCredentialStore — keyring", () => {
 		const store = createCredentialStore(dir, { keyring: null });
 		expect(() => store.read(keyringAt())).toThrow(KeyringUnavailableError);
 		expect(() => store.read(keyringAt())).toThrow(
-			"`neon profile mv DEFAULT --file credentials.json`",
+			`\`neon profile mv DEFAULT --file ${resolve(dir, "credentials.json")}\``,
 		);
 		expect(() => store.assertKeyringWritable()).toThrow(
 			KeyringUnavailableError,
 		);
+		expect(() => store.assertKeyringWritable()).toThrow(
+			"pointing at a path in the config directory",
+		);
+		expect(() => store.assertKeyringWritable()).not.toThrow(/mv DEFAULT/);
 	});
 
 	test("inspect uses file=unreadable and does not throw when get() is null", () => {
@@ -241,7 +245,7 @@ describe("createCredentialStore — keyring", () => {
 			/Could not confirm the OS keyring item/,
 		);
 		expect(() => store.delete(keyringAt())).toThrow(
-			"`neon profile mv DEFAULT --file credentials.json --force`",
+			`\`neon profile mv DEFAULT --file ${resolve(dir, "credentials.json")} --force\``,
 		);
 	});
 

@@ -439,8 +439,8 @@ const list = async (props: ProfileProps) => {
 const resolveMoveFilePath = (filePath: string): string =>
 	isAbsolute(filePath) ? filePath : resolve(process.cwd(), filePath);
 
-const mvDestHelp = (name: string): string =>
-	`\`neon profile mv ${name} --keyring\` or \`neon profile mv ${name} --file ${defaultCredentialsFileName(name)}\``;
+const mvDestHelp = (name: string, configDir: string): string =>
+	`\`neon profile mv ${name} --keyring\` or \`neon profile mv ${name} --file ${resolve(configDir, defaultCredentialsFileName(name))}\``;
 
 const move = async (props: MoveProps) => {
 	rejectApiKeyFlag("mv");
@@ -448,7 +448,7 @@ const move = async (props: MoveProps) => {
 	if (named) {
 		const intended = props.name?.trim() || named;
 		throw new Error(
-			`--profile does not apply to \`profile mv\`, which takes the profile name as an argument. Use ${mvDestHelp(intended)}.`,
+			`--profile does not apply to \`profile mv\`, which takes the profile name as an argument. Use ${mvDestHelp(intended, props.configDir)}.`,
 		);
 	}
 	const omittedName = !props.name?.trim();
@@ -459,24 +459,33 @@ const move = async (props: MoveProps) => {
 	const toKeyring = props.keyring === true;
 	const fileFlag = props.file?.trim();
 	const hasFile = fileFlag !== undefined && fileFlag !== "";
+	const envProfile = process.env.NEON_PROFILE?.trim();
+	if (envProfile && omittedName) {
+		const dest =
+			toKeyring && !hasFile
+				? "--keyring"
+				: hasFile && !toKeyring
+					? `--file ${fileFlag}`
+					: undefined;
+		throw new Error(
+			dest === undefined
+				? `NEON_PROFILE=${envProfile} does not apply to \`profile mv\`, which takes the profile name as an argument. Use ${mvDestHelp(envProfile, props.configDir)} or ${mvDestHelp(DEFAULT_PROFILE, props.configDir)}.`
+				: `NEON_PROFILE=${envProfile} does not apply to \`profile mv\`, which takes the profile name as an argument. Use \`neon profile mv ${envProfile} ${dest}\` or \`neon profile mv ${DEFAULT_PROFILE} ${dest}\`.`,
+		);
+	}
 	if (toKeyring && hasFile) {
-		throw new Error(`Pass only one destination: ${mvDestHelp(name)}.`);
+		throw new Error(
+			`Pass only one destination: ${mvDestHelp(name, props.configDir)}.`,
+		);
 	}
 	if (!toKeyring && !hasFile) {
 		throw new Error(
-			`Say where to move the credential: ${mvDestHelp(name)}.`,
+			`Say where to move the credential: ${mvDestHelp(name, props.configDir)}.`,
 		);
 	}
 	if (props.force === true && toKeyring) {
 		throw new Error(
 			`\`--force\` only applies to \`neon profile mv ${name} --file\`.`,
-		);
-	}
-	const envProfile = process.env.NEON_PROFILE?.trim();
-	if (envProfile && omittedName) {
-		const dest = toKeyring ? "--keyring" : `--file ${fileFlag}`;
-		throw new Error(
-			`NEON_PROFILE=${envProfile} does not apply to \`profile mv\`, which takes the profile name as an argument. Use \`neon profile mv ${envProfile} ${dest}\` or \`neon profile mv ${DEFAULT_PROFILE} ${dest}\`.`,
 		);
 	}
 
