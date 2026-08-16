@@ -104,7 +104,8 @@ export async function orchestrate(
 		requestedAgent && !supportsSkills(requestedAgent)
 			? true
 			: requestedAgent
-				? skillsInstalledForAgent(requestedAgent, cwd)
+				? skillsInstalledForAgent(requestedAgent, cwd) &&
+					(!options.preview || skillsInstalled === true)
 				: skillsInstalled === true;
 	const toolingInstalled = mcpForThisAgent && skillsReady;
 	const hasNeonConnection = inspection.connectionString === true;

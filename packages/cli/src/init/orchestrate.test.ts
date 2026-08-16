@@ -205,6 +205,23 @@ describe("v2 orchestrator", () => {
 		expect(result.phase).toBe("migrations");
 	});
 
+	test("enters setup on --preview when base skills exist but preview skills do not", async () => {
+		mockIsAuthenticated.mockResolvedValue(true);
+		mockToolingInstalled({
+			".cursor/skills/neon/SKILL.md": "",
+			".claude/skills/neon/SKILL.md": "",
+			".env": "DATABASE_URL=postgres://user:pass@ep-foo.us-east-2.aws.neon.tech/neondb",
+			".neon": '{"projectId":"proj-123"}',
+		});
+
+		const result = await orchestrate({ agent: "cursor", preview: true });
+
+		expect(result.phase).toBe("setup");
+		expect(result.status).toBe("pending");
+		expect(result.skillsInstalled).toBe(false);
+		expect(result.skillsScope).toBe("project-partial");
+	});
+
 	test("skips neon_auth when features are empty", async () => {
 		mockIsAuthenticated.mockResolvedValue(true);
 		mockToolingInstalled({
