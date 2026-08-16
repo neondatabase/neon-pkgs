@@ -206,6 +206,32 @@ describe("v2 orchestrator", () => {
 		expect(result.phase).toBe("migrations");
 	});
 
+	test("enters setup on --preview when another agent has preview skills but this one does not", async () => {
+		mockIsAuthenticated.mockResolvedValue(true);
+		mockAppExists({
+			".grok/config.toml":
+				'[mcp_servers.Neon]\nurl = "https://mcp.neon.tech/mcp"\n',
+			".grok/skills/neon/SKILL.md": "",
+			".grok/skills/neon-postgres/SKILL.md": "",
+			".cursor/skills/neon/SKILL.md": "",
+			".cursor/skills/neon-postgres/SKILL.md": "",
+			".cursor/skills/neon-object-storage/SKILL.md": "",
+			".cursor/skills/neon-functions/SKILL.md": "",
+			".cursor/skills/neon-ai-gateway/SKILL.md": "",
+			".env": "DATABASE_URL=postgres://user:pass@ep-foo.us-east-2.aws.neon.tech/neondb",
+			".neon": '{"projectId":"proj-123"}',
+		});
+
+		const result = await orchestrate({
+			agent: "grok-build",
+			preview: true,
+		});
+
+		expect(result.phase).toBe("setup");
+		expect(result.status).toBe("pending");
+		expect(result.skillsInstalled).toBe(false);
+	});
+
 	test("enters setup on --preview when base skills exist but preview skills do not", async () => {
 		mockIsAuthenticated.mockResolvedValue(true);
 		mockToolingInstalled({

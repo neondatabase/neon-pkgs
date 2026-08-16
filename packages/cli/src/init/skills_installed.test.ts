@@ -38,6 +38,15 @@ describe("skillsInstalledForAgent", () => {
 		expect(skillsInstalledForAgent("grok-build", cwd)).toBe(true);
 	});
 
+	test("does not treat preview as installed when only base skills exist", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-skills-"));
+		dirs.push(cwd);
+		writeSkills(cwd, ".cursor/skills", ["neon", "neon-postgres"]);
+
+		expect(skillsInstalledForAgent("cursor", cwd, true)).toBe(false);
+		expect(skillsInstalledForAgent("cursor", cwd)).toBe(true);
+	});
+
 	test("does not treat a single base skill as installed", () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-skills-"));
 		dirs.push(cwd);

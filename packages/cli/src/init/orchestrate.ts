@@ -9,7 +9,11 @@ import { handleMigrationsPhase } from "./phases/migrations.js";
 import { handleNeonAuthPhase } from "./phases/neon_auth.js";
 import { handleSetupPhase } from "./phases/setup.js";
 import { resolveNeonContext } from "./resolve_context.js";
-import { skillsInstalledForAgent } from "./skills.js";
+import {
+	getSkillList,
+	missingSkillsForAgent,
+	skillsInstalledForAgent,
+} from "./skills.js";
 import type { PhaseResponse } from "./types.js";
 
 export type OrchestratorOptions = {
@@ -60,10 +64,31 @@ export async function orchestrate(
 	// Only detect empty projects when --preview is enabled
 	const hasApp = options.preview ? inspection.hasApp === true : true;
 
+	const requestedAgent = options.agent
+		? tryResolveAddMcpAgentId(options.agent)
+		: undefined;
+
 	// When preview is enabled, check that all preview skills are installed too
 	let skillsInstalled = inspection.skillsInstalled;
-	if (options.preview && skillsInstalled && inspection.skillsScope) {
-		const { getSkillList } = await import("./skills.js");
+	if (options.preview && requestedAgent && supportsSkills(requestedAgent)) {
+		const missing = missingSkillsForAgent(requestedAgent, {
+			cwd,
+			preview: true,
+		});
+		const required = getSkillList(true);
+		if (missing.length > 0) {
+			skillsInstalled = false;
+			if (missing.length < required.length) {
+				const baseScope =
+					inspection.skillsScope &&
+					!String(inspection.skillsScope).includes("partial")
+						? inspection.skillsScope
+						: "project";
+				inspection.skillsScope =
+					`${baseScope}-partial` as typeof inspection.skillsScope;
+			}
+		}
+	} else if (options.preview && skillsInstalled && inspection.skillsScope) {
 		const previewSkills = getSkillList(true);
 		const { existsSync: exists } = await import("node:fs");
 		const { resolve: resolvePath } = await import("node:path");
@@ -92,9 +117,6 @@ export async function orchestrate(
 		}
 	}
 
-	const requestedAgent = options.agent
-		? tryResolveAddMcpAgentId(options.agent)
-		: undefined;
 	const mcpForThisAgent = requestedAgent
 		? (inspection.mcpAgents ?? []).some(
 				(hit) => hit.agent === requestedAgent,
@@ -104,8 +126,7 @@ export async function orchestrate(
 		requestedAgent && !supportsSkills(requestedAgent)
 			? true
 			: requestedAgent
-				? skillsInstalledForAgent(requestedAgent, cwd) &&
-					(!options.preview || skillsInstalled === true)
+				? skillsInstalledForAgent(requestedAgent, cwd, options.preview)
 				: skillsInstalled === true;
 	const toolingInstalled = mcpForThisAgent && skillsReady;
 	const hasNeonConnection = inspection.connectionString === true;

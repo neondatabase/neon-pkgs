@@ -234,11 +234,14 @@ export function missingSkillsForAgent(
 export function skillsInstalledForAgent(
 	agent: AgentType,
 	cwd = process.cwd(),
+	preview = false,
 ): boolean {
 	if (!getSkillsAgentNameFromId(agent)) return true;
 	return (
-		missingSkillsForAgent(agent, { cwd, scope: "project" }).length === 0 ||
-		missingSkillsForAgent(agent, { cwd, scope: "global" }).length === 0
+		missingSkillsForAgent(agent, { cwd, scope: "project", preview })
+			.length === 0 ||
+		missingSkillsForAgent(agent, { cwd, scope: "global", preview })
+			.length === 0
 	);
 }
 

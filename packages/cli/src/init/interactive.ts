@@ -347,7 +347,11 @@ async function interactiveInitInner(
 	const skillsAlready =
 		selectedTemplate !== null ||
 		(detectedAgent
-			? skillsInstalledForAgent(detectedAgent)
+			? skillsInstalledForAgent(
+					detectedAgent,
+					process.cwd(),
+					options.preview,
+				)
 			: inspection.skillsInstalled === true);
 	const hasNeonConnection = inspection.connectionString === true;
 	const needsMcp = !mcpAlready;
@@ -524,7 +528,11 @@ async function interactiveInitInner(
 				selectedAgents.some(
 					(agent) =>
 						getSkillsAgentName(agent) &&
-						!skillsInstalledForAgent(agent),
+						!skillsInstalledForAgent(
+							agent,
+							process.cwd(),
+							options.preview,
+						),
 				)
 			) {
 				hintParts.push("agent skills (project)");
@@ -615,7 +623,11 @@ async function interactiveInitInner(
 				selectedAgents.some(
 					(agent) =>
 						getSkillsAgentName(agent) &&
-						!skillsInstalledForAgent(agent),
+						!skillsInstalledForAgent(
+							agent,
+							process.cwd(),
+							options.preview,
+						),
 				)
 			) {
 				const skillsScopeResult = await select({
@@ -741,7 +753,7 @@ async function interactiveInitInner(
 			if (
 				selectedTemplate === null &&
 				getSkillsAgentName(agent) &&
-				!skillsInstalledForAgent(agent)
+				!skillsInstalledForAgent(agent, process.cwd(), options.preview)
 			) {
 				await installAgentSkills([agent], {
 					scope: skillsScope,

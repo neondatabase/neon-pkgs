@@ -971,7 +971,7 @@ exports[`neon init --agent: every step, against every project shape > connected 
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -1040,7 +1040,7 @@ exports[`neon init --agent: every step, against every project shape > connected 
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -1969,7 +1969,7 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -2038,7 +2038,7 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -2947,7 +2947,7 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -3016,7 +3016,7 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -3934,7 +3934,7 @@ exports[`neon init --agent: every step, against every project shape > greenfield
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -4003,7 +4003,7 @@ exports[`neon init --agent: every step, against every project shape > greenfield
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -4937,7 +4937,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -5006,7 +5006,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -5940,7 +5940,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -6009,7 +6009,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -6938,7 +6938,7 @@ exports[`neon init --agent: every step, against every project shape > node-app >
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -7007,7 +7007,7 @@ exports[`neon init --agent: every step, against every project shape > node-app >
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -7941,7 +7941,7 @@ exports[`neon init --agent: every step, against every project shape > other-data
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -8010,7 +8010,7 @@ exports[`neon init --agent: every step, against every project shape > other-data
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
