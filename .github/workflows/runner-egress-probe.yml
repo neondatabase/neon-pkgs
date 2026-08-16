@@ -1,0 +1,195 @@
+# Temporary probe: which neondatabase runner labels can reach the public
+# npm registry. Not a product workflow. Delete the branch after the run.
+name: Runner egress probe
+
+on:
+    workflow_dispatch: ~
+    push:
+        branches:
+            - probe-runner-egress
+
+permissions:
+    contents: read
+
+jobs:
+    protected-hardened:
+        name: protected / linux-ubuntu-latest
+        timeout-minutes: 10
+        runs-on:
+            group: neondatabase-protected-runner-group
+            labels: linux-ubuntu-latest
+        steps:
+            - name: Probe public npm
+              run: |
+                  set -u
+                  echo "=== runner ==="
+                  echo "name=${RUNNER_NAME:-}"
+                  echo "os=${RUNNER_OS:-}"
+                  uname -a
+                  command -v node && node -v || echo "node: missing"
+                  command -v npm && npm -v || echo "npm: missing"
+                  command -v curl && curl --version | head -1 || echo "curl: missing"
+
+                  fail=0
+                  probe() {
+                    local url="$1"
+                    echo "=== GET $url ==="
+                    if curl -sS -o /tmp/probe-body -w "http_code=%{http_code} time=%{time_total} err=%{errormsg}\n" --max-time 20 "$url"; then
+                      head -c 200 /tmp/probe-body
+                      echo
+                    else
+                      echo "curl failed exit=$?"
+                      fail=1
+                    fi
+                  }
+
+                  probe https://registry.npmjs.org/left-pad
+                  probe https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz
+
+                  if command -v npm >/dev/null; then
+                    echo "=== npm view left-pad ==="
+                    npm view left-pad version --registry https://registry.npmjs.org || fail=1
+                    echo "=== npm pack left-pad ==="
+                    mkdir -p /tmp/npm-probe
+                    (cd /tmp/npm-probe && npm pack left-pad --registry https://registry.npmjs.org) || fail=1
+                  else
+                    echo "npm not installed on image"
+                  fi
+
+                  exit "$fail"
+
+    optout-not-hardened:
+        name: optout / linux-ubuntu-latest-not-hardened
+        timeout-minutes: 10
+        runs-on:
+            group: neondatabase-protected-runner-group-optout
+            labels: linux-ubuntu-latest-not-hardened
+        steps:
+            - name: Probe public npm
+              run: |
+                  set -u
+                  echo "=== runner ==="
+                  echo "name=${RUNNER_NAME:-}"
+                  echo "os=${RUNNER_OS:-}"
+                  uname -a
+                  command -v node && node -v || echo "node: missing"
+                  command -v npm && npm -v || echo "npm: missing"
+                  command -v curl && curl --version | head -1 || echo "curl: missing"
+
+                  fail=0
+                  probe() {
+                    local url="$1"
+                    echo "=== GET $url ==="
+                    if curl -sS -o /tmp/probe-body -w "http_code=%{http_code} time=%{time_total} err=%{errormsg}\n" --max-time 20 "$url"; then
+                      head -c 200 /tmp/probe-body
+                      echo
+                    else
+                      echo "curl failed exit=$?"
+                      fail=1
+                    fi
+                  }
+
+                  probe https://registry.npmjs.org/left-pad
+                  probe https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz
+
+                  if command -v npm >/dev/null; then
+                    echo "=== npm view left-pad ==="
+                    npm view left-pad version --registry https://registry.npmjs.org || fail=1
+                    echo "=== npm pack left-pad ==="
+                    mkdir -p /tmp/npm-probe
+                    (cd /tmp/npm-probe && npm pack left-pad --registry https://registry.npmjs.org) || fail=1
+                  else
+                    echo "npm not installed on image"
+                  fi
+
+                  exit "$fail"
+
+    default-crowdstrike:
+        name: Default / linux-x64-crowdstrike-image
+        timeout-minutes: 10
+        runs-on:
+            group: Default
+            labels: linux-x64-crowdstrike-image
+        steps:
+            - name: Probe public npm
+              run: |
+                  set -u
+                  echo "=== runner ==="
+                  echo "name=${RUNNER_NAME:-}"
+                  echo "os=${RUNNER_OS:-}"
+                  uname -a
+                  command -v node && node -v || echo "node: missing"
+                  command -v npm && npm -v || echo "npm: missing"
+                  command -v curl && curl --version | head -1 || echo "curl: missing"
+
+                  fail=0
+                  probe() {
+                    local url="$1"
+                    echo "=== GET $url ==="
+                    if curl -sS -o /tmp/probe-body -w "http_code=%{http_code} time=%{time_total} err=%{errormsg}\n" --max-time 20 "$url"; then
+                      head -c 200 /tmp/probe-body
+                      echo
+                    else
+                      echo "curl failed exit=$?"
+                      fail=1
+                    fi
+                  }
+
+                  probe https://registry.npmjs.org/left-pad
+                  probe https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz
+
+                  if command -v npm >/dev/null; then
+                    echo "=== npm view left-pad ==="
+                    npm view left-pad version --registry https://registry.npmjs.org || fail=1
+                    echo "=== npm pack left-pad ==="
+                    mkdir -p /tmp/npm-probe
+                    (cd /tmp/npm-probe && npm pack left-pad --registry https://registry.npmjs.org) || fail=1
+                  else
+                    echo "npm not installed on image"
+                  fi
+
+                  exit "$fail"
+
+    github-hosted-control:
+        name: ubuntu-latest control
+        timeout-minutes: 10
+        runs-on: ubuntu-latest
+        steps:
+            - name: Probe public npm
+              run: |
+                  set -u
+                  echo "=== runner ==="
+                  echo "name=${RUNNER_NAME:-}"
+                  echo "os=${RUNNER_OS:-}"
+                  uname -a
+                  command -v node && node -v || echo "node: missing"
+                  command -v npm && npm -v || echo "npm: missing"
+                  command -v curl && curl --version | head -1 || echo "curl: missing"
+
+                  fail=0
+                  probe() {
+                    local url="$1"
+                    echo "=== GET $url ==="
+                    if curl -sS -o /tmp/probe-body -w "http_code=%{http_code} time=%{time_total} err=%{errormsg}\n" --max-time 20 "$url"; then
+                      head -c 200 /tmp/probe-body
+                      echo
+                    else
+                      echo "curl failed exit=$?"
+                      fail=1
+                    fi
+                  }
+
+                  probe https://registry.npmjs.org/left-pad
+                  probe https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz
+
+                  if command -v npm >/dev/null; then
+                    echo "=== npm view left-pad ==="
+                    npm view left-pad version --registry https://registry.npmjs.org || fail=1
+                    echo "=== npm pack left-pad ==="
+                    mkdir -p /tmp/npm-probe
+                    (cd /tmp/npm-probe && npm pack left-pad --registry https://registry.npmjs.org) || fail=1
+                  else
+                    echo "npm not installed on image"
+                  fi
+
+                  exit "$fail"
