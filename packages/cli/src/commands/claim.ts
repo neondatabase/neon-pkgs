@@ -428,7 +428,7 @@ const create = async (props: CreateProps): Promise<void> => {
 						row.denied_capabilities
 							.map(
 								(decision) =>
-									`${decision.capability} (${decision.reason})`,
+									`${decision.capability}: ${decision.message}`,
 							)
 							.join("\n"),
 				},

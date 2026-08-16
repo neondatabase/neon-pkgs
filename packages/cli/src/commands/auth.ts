@@ -545,6 +545,12 @@ export const ensureAuth = async (
 		return;
 	}
 
+	if (localContext.claimable !== undefined) {
+		log.warning(
+			"This directory is linked to a claimable project, but NEON_API_KEY or NEON_PROFILE is set. This command will use that account credential instead of the unclaimed project. Unset them to keep using the unclaimed project.",
+		);
+	}
+
 	// Throws when `--api-key` and `--profile` are both passed.
 	const selection = selectCredential({
 		...inputs,

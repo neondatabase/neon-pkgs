@@ -54,9 +54,9 @@ export function wrapNeonError(
 		return new PlatformError(
 			ErrorCode.FeatureUnavailable,
 			[
-				`${context.op} failed: ${httpInfo.neonMessage ?? "This capability requires a claimed project."}`,
-				"Run `npx neon claim accept` before enabling this service.",
+				`${context.op} failed: this capability requires a claimed project.`,
 				apiSummaryWithRequestId,
+				"Run `npx neon claim accept`, complete the sign-in, then `npx neon auth` or `npx neon link` and re-run.",
 			].join(" "),
 			{ cause: err, details: httpDetails(context, httpInfo) },
 		);

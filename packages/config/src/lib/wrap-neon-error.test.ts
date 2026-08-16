@@ -66,8 +66,12 @@ describe("wrapNeonError — HTTP status mapping", () => {
 		);
 		const p = err as PlatformError;
 		expect(p.code).toBe(ErrorCode.FeatureUnavailable);
+		expect(p.message).toContain(
+			"this capability requires a claimed project",
+		);
 		expect(p.message).toContain("functions requires a claimed project");
 		expect(p.message).toContain("npx neon claim accept");
+		expect(p.message).toContain("npx neon auth");
 		expect(p.message).toContain("req-claimable");
 		expect(p.message).not.toContain("API key");
 		expect(p.details.requestId).toBe("req-claimable");
