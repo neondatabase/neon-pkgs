@@ -1,3 +1,4 @@
+import { NeonApiError } from "@neon/sdk";
 import { describe, expect, test } from "vitest";
 import { ErrorCode, PlatformError } from "./errors.js";
 import { wrapNeonError } from "./wrap-neon-error.js";
@@ -70,6 +71,53 @@ describe("wrapNeonError — HTTP status mapping", () => {
 		expect(p.message).not.toContain("API key");
 		expect(p.details.requestId).toBe("req-claimable");
 		expect(p.details.neonCode).toBe("capability_requires_claim");
+	});
+
+	test("maps a generated-SDK NeonApiError whose nested envelope is in body", () => {
+		const sdkError = new NeonApiError(
+			"Neon API request failed with status 403.",
+			{
+				status: 403,
+				body: {
+					error: {
+						code: "capability_requires_claim",
+						message: "functions requires a claimed project",
+						request_id: "req-sdk",
+					},
+				},
+			},
+		);
+		const err = wrapNeonError(sdkError, CTX);
+		const p = err as PlatformError;
+		expect(p.code).toBe(ErrorCode.FeatureUnavailable);
+		expect(p.message).toContain("functions requires a claimed project");
+		expect(p.message).not.toContain("API key");
+		expect(p.details.requestId).toBe("req-sdk");
+		expect(p.details.neonCode).toBe("capability_requires_claim");
+	});
+
+	test("maps an unwrap-shaped NeonApiError stuffed into response.data", () => {
+		const sdkError = new NeonApiError(
+			"Neon API request failed with status 403.",
+			{
+				status: 403,
+				body: {
+					error: {
+						code: "capability_requires_claim",
+						message: "functions requires a claimed project",
+						request_id: "req-unwrap",
+					},
+				},
+			},
+		);
+		const err = wrapNeonError(
+			{ response: { status: 403, data: sdkError } },
+			CTX,
+		);
+		const p = err as PlatformError;
+		expect(p.code).toBe(ErrorCode.FeatureUnavailable);
+		expect(p.message).not.toContain("API key");
+		expect(p.details.requestId).toBe("req-unwrap");
 	});
 
 	test("404 → NotFound + verifies project id when present", () => {

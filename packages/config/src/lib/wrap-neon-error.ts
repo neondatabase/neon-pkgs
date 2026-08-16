@@ -1,3 +1,4 @@
+import { NeonApiError } from "@neon/sdk";
 import { ErrorCode, PlatformError } from "./errors.js";
 
 /**
@@ -152,31 +153,45 @@ interface HttpInfo {
 	requestId?: string;
 }
 
+function takeErrorFields(payload: unknown, out: HttpInfo): void {
+	if (payload === null || typeof payload !== "object") return;
+	const dataObj = payload as Record<string, unknown>;
+	const nested = dataObj.error;
+	const errorObj =
+		nested !== null && typeof nested === "object"
+			? (nested as Record<string, unknown>)
+			: dataObj;
+	if (typeof errorObj.message === "string" && errorObj.message !== "")
+		out.neonMessage = errorObj.message;
+	if (typeof errorObj.code === "string" && errorObj.code !== "")
+		out.neonCode = errorObj.code;
+	if (typeof errorObj.request_id === "string" && errorObj.request_id !== "")
+		out.requestId = errorObj.request_id;
+}
+
+function fromNeonApiError(err: NeonApiError): HttpInfo {
+	const out: HttpInfo = { status: err.status };
+	takeErrorFields(err.body, out);
+	if (out.neonCode === undefined && err.code !== undefined)
+		out.neonCode = err.code;
+	if (out.neonMessage === undefined && err.message !== "")
+		out.neonMessage = err.message;
+	if (out.requestId === undefined && err.requestId !== undefined)
+		out.requestId = err.requestId;
+	return out;
+}
+
 function extractHttpInfo(err: unknown): HttpInfo | null {
+	if (err instanceof NeonApiError) return fromNeonApiError(err);
 	if (err === null || typeof err !== "object") return null;
 	const response = (err as { response?: unknown }).response;
 	if (response === null || typeof response !== "object") return null;
 	const status = (response as { status?: unknown }).status;
 	if (typeof status !== "number") return null;
 	const data = (response as { data?: unknown }).data;
+	if (data instanceof NeonApiError) return fromNeonApiError(data);
 	const out: HttpInfo = { status };
-	if (data !== null && typeof data === "object") {
-		const dataObj = data as Record<string, unknown>;
-		const nested = dataObj.error;
-		const errorObj =
-			nested !== null && typeof nested === "object"
-				? (nested as Record<string, unknown>)
-				: dataObj;
-		if (typeof errorObj.message === "string" && errorObj.message !== "")
-			out.neonMessage = errorObj.message;
-		if (typeof errorObj.code === "string" && errorObj.code !== "")
-			out.neonCode = errorObj.code;
-		if (
-			typeof errorObj.request_id === "string" &&
-			errorObj.request_id !== ""
-		)
-			out.requestId = errorObj.request_id;
-	}
+	takeErrorFields(data, out);
 	return out;
 }
 
