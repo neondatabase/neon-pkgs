@@ -1,4 +1,5 @@
 import {
+	agentSupportsHttpMcp,
 	agentSupportsProjectMcp,
 	getAgentDisplayName,
 	getSkillsAgentName,
@@ -92,7 +93,8 @@ export async function handleMcpPhase(
 			if (installed.unsupported) {
 				if (
 					scope === "project" &&
-					!agentSupportsProjectMcp(mcpAgentId)
+					!agentSupportsProjectMcp(mcpAgentId) &&
+					agentSupportsHttpMcp(mcpAgentId)
 				) {
 					return {
 						phase: "tooling",

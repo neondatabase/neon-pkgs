@@ -114,6 +114,27 @@ describe("handleMcpPhase", () => {
 		}
 	});
 
+	test("--install with project scope does not offer global when HTTP is also unsupported", async () => {
+		mockIsAuthenticated.mockResolvedValue(true);
+		mockInstallMcp.mockReturnValue({
+			ok: false,
+			unsupported: true,
+			error: "Claude Desktop only supports local (stdio) servers via its config file. Add remote servers through Settings → Connectors in the app instead.",
+		});
+
+		const result = await handleMcpPhase({
+			agent: "claude-desktop",
+			install: true,
+			scope: "project",
+		});
+
+		expect(result.status).toBe("unsupported");
+		expect(result.nextAction.type).toBe("run_neon_init");
+		if (result.nextAction.type === "run_neon_init") {
+			expect(result.nextAction.args).toContain("skills");
+		}
+	});
+
 	test("--install writes MCP in-process and chains to skills", async () => {
 		mockIsAuthenticated.mockResolvedValue(true);
 
