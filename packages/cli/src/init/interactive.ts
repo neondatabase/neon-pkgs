@@ -341,10 +341,14 @@ async function interactiveInitInner(
 	const detectedHasMcp = detectedAgent
 		? mcpHits.some((hit) => hit.agent === detectedAgent)
 		: false;
-	const mcpAlready = detectedAgent ? detectedHasMcp : false;
+	const mcpAlready = detectedAgent
+		? detectedHasMcp
+		: inspection.mcpConfigured === true;
 	const skillsAlready =
 		selectedTemplate !== null ||
-		(detectedAgent ? skillsInstalledForAgent(detectedAgent) : false);
+		(detectedAgent
+			? skillsInstalledForAgent(detectedAgent)
+			: inspection.skillsInstalled === true);
 	const hasNeonConnection = inspection.connectionString === true;
 	const needsMcp = !mcpAlready;
 	const needsSkills = !skillsAlready;

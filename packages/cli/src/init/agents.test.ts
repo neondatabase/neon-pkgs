@@ -29,6 +29,7 @@ describe("add-mcp agent ids", () => {
 		expect(getSkillsAgentName("claude")).toBe("claude-code");
 		expect(getSkillsAgentName("claude-desktop")).toBe("claude-code");
 		expect(getSkillsAgentName("github-copilot-cli")).toBe("github-copilot");
+		expect(getSkillsAgentName("opencode")).toBe("opencode");
 		expect(getSkillsAgentName("grok-build")).toBeUndefined();
 		expect(getSkillsAgentName("grok")).toBeUndefined();
 		expect(supportsSkills("grok-build")).toBe(false);

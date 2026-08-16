@@ -194,11 +194,17 @@ export function skillsInstalledForAgent(
 ): boolean {
 	const skillsId = getSkillsAgentNameFromId(agent);
 	if (!skillsId) return true;
-	const projectDirs = (PROJECT_SKILLS_DIRS[skillsId] ?? []).map((dir) =>
-		resolve(cwd, dir),
-	);
-	if (dirsHaveNeonSkill(projectDirs)) return true;
-	return dirsHaveNeonSkill(GLOBAL_SKILLS_DIRS[skillsId] ?? []);
+	const home = process.env.HOME || process.env.USERPROFILE || "";
+	const projectDirs = [
+		...(PROJECT_SKILLS_DIRS[skillsId] ?? []),
+		".agents/skills",
+	].map((dir) => resolve(cwd, dir));
+	if (dirsHaveNeonSkill([...new Set(projectDirs)])) return true;
+	const globalDirs = [
+		...(GLOBAL_SKILLS_DIRS[skillsId] ?? []),
+		resolve(home, ".agents", "skills"),
+	];
+	return dirsHaveNeonSkill([...new Set(globalDirs)]);
 }
 
 /**

@@ -87,6 +87,9 @@ export function resolveAddMcpAgentId(rawAgent: string): AgentType {
 }
 
 export function getSkillsAgentName(agent: string): string | undefined {
+	if (Object.hasOwn(SKILLS_AGENT_BY_TYPE, agent)) {
+		return SKILLS_AGENT_BY_TYPE[agent as AgentType];
+	}
 	const id = tryResolveAddMcpAgentId(agent);
 	if (!id) return undefined;
 	return SKILLS_AGENT_BY_TYPE[id];
@@ -101,7 +104,10 @@ export function agentPickerHint(id: AgentType): string {
 		return "Neon Local Connect extension";
 	}
 	if (id === "claude-desktop") {
-		return "Connectors in the app — remote MCP is not writable via config";
+		return supportsSkills(id)
+			? "Connectors in the app, skills"
+			: (agents[id].unsupportedTransportMessage ??
+					"Add remote servers through Connectors in the app");
 	}
 	if (supportsSkills(id)) return "MCP server, skills";
 	return "MCP server";
