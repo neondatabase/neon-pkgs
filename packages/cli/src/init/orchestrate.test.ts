@@ -97,6 +97,7 @@ function mockToolingInstalled(extraFiles: Record<string, string> = {}) {
 			'{"mcpServers":{"Neon":{"url":"https://mcp.neon.tech/mcp"}}}',
 		// skills directory exists and contains neon-postgres skill with SKILL.md
 		".cursor/skills/neon-postgres/SKILL.md": "",
+		".claude/skills/neon-postgres/SKILL.md": "",
 		...extraFiles,
 	};
 	mockFs(files);
@@ -283,6 +284,20 @@ describe("v2 orchestrator", () => {
 		const result = await orchestrate({ agent: "claude" });
 
 		expect(result.phase).toBe("neon_auth");
+	});
+
+	test("enters setup when the requested agent has no skills even if another agent does", async () => {
+		mockIsAuthenticated.mockResolvedValue(true);
+		mockAppExists({
+			".mcp.json":
+				'{"mcpServers":{"Neon":{"url":"https://mcp.neon.tech/mcp"}}}',
+			".cursor/skills/neon-postgres/SKILL.md": "",
+		});
+
+		const result = await orchestrate({ agent: "claude" });
+
+		expect(result.phase).toBe("setup");
+		expect(result.status).toBe("pending");
 	});
 
 	test("enters setup when the requested agent has no MCP even if another agent does", async () => {

@@ -9,6 +9,7 @@ import { handleMigrationsPhase } from "./phases/migrations.js";
 import { handleNeonAuthPhase } from "./phases/neon_auth.js";
 import { handleSetupPhase } from "./phases/setup.js";
 import { resolveNeonContext } from "./resolve_context.js";
+import { skillsInstalledForAgent } from "./skills.js";
 import type { PhaseResponse } from "./types.js";
 
 export type OrchestratorOptions = {
@@ -102,7 +103,9 @@ export async function orchestrate(
 	const skillsReady =
 		requestedAgent && !supportsSkills(requestedAgent)
 			? true
-			: skillsInstalled === true;
+			: requestedAgent
+				? skillsInstalledForAgent(requestedAgent, cwd)
+				: skillsInstalled === true;
 	const toolingInstalled = mcpForThisAgent && skillsReady;
 	const hasNeonConnection = inspection.connectionString === true;
 

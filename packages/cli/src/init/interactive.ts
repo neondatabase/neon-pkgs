@@ -39,7 +39,11 @@ import { installExtension, isExtensionInstalled } from "./extension.js";
 import { inspectProject } from "./inspect.js";
 import { installNeonMcpServer } from "./install_mcp.js";
 import { ensureNeonctl } from "./neonctl.js";
-import { ensureSkillsUpToDate, installAgentSkills } from "./skills.js";
+import {
+	ensureSkillsUpToDate,
+	installAgentSkills,
+	skillsInstalledForAgent,
+} from "./skills.js";
 import type { Editor } from "./types.js";
 
 function wordWrap(text: string, width: number): string {
@@ -337,12 +341,10 @@ async function interactiveInitInner(
 	const detectedHasMcp = detectedAgent
 		? mcpHits.some((hit) => hit.agent === detectedAgent)
 		: false;
-	const mcpAlready = detectedAgent
-		? detectedHasMcp
-		: inspection.mcpConfigured === true;
-	// If we bootstrapped, skills come from the template
+	const mcpAlready = detectedAgent ? detectedHasMcp : false;
 	const skillsAlready =
-		inspection.skillsInstalled === true || selectedTemplate !== null;
+		selectedTemplate !== null ||
+		(detectedAgent ? skillsInstalledForAgent(detectedAgent) : false);
 	const hasNeonConnection = inspection.connectionString === true;
 	const needsMcp = !mcpAlready;
 	const needsSkills = !skillsAlready;
@@ -514,8 +516,12 @@ async function interactiveInitInner(
 				hintParts.push("MCP server (global)");
 			}
 			if (
-				needsSkills &&
-				selectedAgents.some((agent) => getSkillsAgentName(agent))
+				selectedTemplate === null &&
+				selectedAgents.some(
+					(agent) =>
+						getSkillsAgentName(agent) &&
+						!skillsInstalledForAgent(agent),
+				)
 			) {
 				hintParts.push("agent skills (project)");
 			}
@@ -579,7 +585,7 @@ async function interactiveInitInner(
 							value: "global",
 							label: "Global (available in all projects)",
 						},
-						...(selectedAgents.some(agentSupportsProjectMcp)
+						...(selectedAgents.every(agentSupportsProjectMcp)
 							? [
 									{
 										value: "project",
@@ -601,8 +607,12 @@ async function interactiveInitInner(
 			}
 
 			if (
-				needsSkills &&
-				selectedAgents.some((agent) => getSkillsAgentName(agent))
+				selectedTemplate === null &&
+				selectedAgents.some(
+					(agent) =>
+						getSkillsAgentName(agent) &&
+						!skillsInstalledForAgent(agent),
+				)
 			) {
 				const skillsScopeResult = await select({
 					message: "Where should Neon agent skills be installed?",
@@ -714,7 +724,11 @@ async function interactiveInitInner(
 				}
 			}
 
-			if (needsSkills && getSkillsAgentName(agent)) {
+			if (
+				selectedTemplate === null &&
+				getSkillsAgentName(agent) &&
+				!skillsInstalledForAgent(agent)
+			) {
 				await installAgentSkills([agent], {
 					scope: skillsScope,
 					preview: options.preview,

@@ -174,6 +174,33 @@ const GLOBAL_SKILLS_DIRS: Record<string, string[]> = (() => {
 	};
 })();
 
+const PROJECT_SKILLS_DIRS: Record<string, string[]> = {
+	cursor: [".cursor/skills", ".agents/skills"],
+	"claude-code": [".claude/skills", ".agents/skills"],
+	"github-copilot": [".vscode/skills", ".agents/skills"],
+	codex: [".codex/skills", ".agents/skills"],
+	cline: [".cline/skills", ".agents/skills"],
+};
+
+function dirsHaveNeonSkill(dirs: string[]): boolean {
+	return BASE_SKILLS.some((skill) =>
+		dirs.some((dir) => existsSync(resolve(dir, skill, "SKILL.md"))),
+	);
+}
+
+export function skillsInstalledForAgent(
+	agent: AgentType,
+	cwd = process.cwd(),
+): boolean {
+	const skillsId = getSkillsAgentNameFromId(agent);
+	if (!skillsId) return true;
+	const projectDirs = (PROJECT_SKILLS_DIRS[skillsId] ?? []).map((dir) =>
+		resolve(cwd, dir),
+	);
+	if (dirsHaveNeonSkill(projectDirs)) return true;
+	return dirsHaveNeonSkill(GLOBAL_SKILLS_DIRS[skillsId] ?? []);
+}
+
 /**
  * Checks whether skills were recently updated (within the freshness window).
  * Checks both project-level (skills-lock.json mtime) and global (skills dir mtime).
