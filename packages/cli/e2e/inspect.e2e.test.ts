@@ -174,6 +174,10 @@ describe.sequential("e2e — neon inspect db against the real API", () => {
 				await otherSession.query(
 					`LOCK TABLE ${OTHER_TABLE} IN ACCESS EXCLUSIVE MODE`,
 				);
+				const otherBackendPid = await otherSession.query(
+					"SELECT pg_backend_pid()",
+				);
+				const otherPid = String(otherBackendPid.rows[0]?.[0]);
 
 				await withSession(defaultUri, async (defaultSession) => {
 					await defaultSession.query("BEGIN");
@@ -207,6 +211,12 @@ describe.sequential("e2e — neon inspect db against the real API", () => {
 					expect(relnames(fromDefault)).not.toContain(OTHER_TABLE);
 					expect(relnames(fromOther)).toContain(OTHER_TABLE);
 					expect(relnames(fromOther)).not.toContain(DEFAULT_TABLE);
+					expect(
+						fromDefault.every((row) => row.pid !== otherPid),
+					).toBe(true);
+					expect(
+						fromOther.every((row) => row.pid !== defaultPid),
+					).toBe(true);
 
 					for (const rows of [fromDefault, fromOther]) {
 						for (const row of rows.filter(
@@ -227,24 +237,20 @@ describe.sequential("e2e — neon inspect db against the real API", () => {
 					expect(
 						fromDefault.every((row) => row.database === undefined),
 					).toBe(true);
-					expect(
-						fromAll
-							.filter(
-								(row) =>
-									row.locktype === "relation" &&
-									row.relname === DEFAULT_TABLE,
-							)
-							.every((row) => row.database === "neondb"),
-					).toBe(true);
-					expect(
-						fromAll
-							.filter(
-								(row) =>
-									row.locktype === "relation" &&
-									row.relname === OTHER_TABLE,
-							)
-							.every((row) => row.database === OTHER_DATABASE),
-					).toBe(true);
+					expect(fromAll).toEqual(
+						expect.arrayContaining([
+							expect.objectContaining({
+								locktype: "relation",
+								relname: DEFAULT_TABLE,
+								database: "neondb",
+							}),
+							expect.objectContaining({
+								locktype: "relation",
+								relname: OTHER_TABLE,
+								database: OTHER_DATABASE,
+							}),
+						]),
+					);
 					for (const row of fromAll.filter(
 						(candidate) => candidate.locktype === "relation",
 					)) {

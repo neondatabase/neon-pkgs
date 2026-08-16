@@ -103,10 +103,10 @@ const listBranchDatabases = async (
 	const parsedPIT = props.branch
 		? parsePITBranch(props.branch)
 		: ({ tag: "head", branch: "" } as const);
-	if (props.branch) {
-		props.branch = parsedPIT.branch;
-	}
-	const branchId = await branchIdFromProps(props);
+	const branchId = await branchIdFromProps({
+		...props,
+		...(props.branch ? { branch: parsedPIT.branch } : {}),
+	});
 	const {
 		data: { databases },
 	} = await props.apiClient.listProjectBranchDatabases(projectId, branchId);
