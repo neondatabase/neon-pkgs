@@ -854,8 +854,8 @@ Profiles
 ```
 
 `Scope` is what a key can reach; an OAuth session has none of its own, so it shows `-`. `File`
-says whether the stored credential can be read — `ok`, `invalid` or `missing` for a file,
-`ok` or `unreadable` for a keyring item. A keyring get of null is `unreadable`, not missing:
+says whether the stored credential can be read — `ok`, `invalid` or `missing` for a file;
+`ok`, `invalid` or `unreadable` for a keyring item. A keyring get of null is `unreadable`, not missing:
 the addon cannot tell those apart. `Storage` is `file` or `keyring`, from the profile's
 pointer. The table shows the file name or `keyring`; `--output json` keeps the full path.
 

@@ -177,8 +177,21 @@ export const builder = (argv: yargs.Argv) =>
 								typeof argv.name === "string"
 									? argv.name
 									: "NAME";
+							const dir =
+								typeof argv.configDir === "string"
+									? argv.configDir
+									: "";
+							const declared =
+								dir !== ""
+									? readProfiles(dir)?.profiles[name]
+									: undefined;
+							const inKeyring =
+								declared !== undefined &&
+								isKeyringPointer(declared.credentials);
 							throw new Error(
-								`--no-keyring does not move a profile to a file. To leave the keyring: \`neon profile remove ${name} --yes\`. That revokes the credential where the CLI can.`,
+								inKeyring
+									? `--no-keyring does not move a profile to a file. To leave the keyring: \`neon profile remove ${name} --yes\`. That revokes the credential where the CLI can.`
+									: `--no-keyring does not move a profile to a file. File is already the default.`,
 							);
 						}
 						return true;

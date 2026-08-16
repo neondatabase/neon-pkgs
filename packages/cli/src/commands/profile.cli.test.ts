@@ -495,6 +495,25 @@ describe("profile create", () => {
 		expect(stderr).toContain(
 			"--no-keyring does not move a profile to a file",
 		);
+		expect(stderr).toContain("File is already the default");
+		expect(stderr).not.toContain("neon profile remove");
+	});
+
+	test("auth --no-keyring on a keyring profile names remove", async () => {
+		const dir = makeConfigDir({
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { DEFAULT: { credentials: "keyring" } },
+			}),
+		});
+		const { code, stderr } = await runCli([
+			"auth",
+			"--no-keyring",
+			"--config-dir",
+			dir,
+		]);
+
+		expect(code).toBe(1);
 		expect(stderr).toContain("neon profile remove DEFAULT --yes");
 		expect(stderr).toContain("revokes the credential");
 	});
