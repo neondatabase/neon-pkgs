@@ -153,7 +153,6 @@ describe("auth", () => {
 			expect(String(err)).toContain(
 				"`neon profile remove DEFAULT --yes`",
 			);
-			expect(String(err)).not.toMatch(/--no-keyring/);
 			expect(authSpy).not.toHaveBeenCalled();
 		} finally {
 			authSpy.mockRestore();

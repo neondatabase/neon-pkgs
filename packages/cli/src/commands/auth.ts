@@ -97,26 +97,6 @@ export const builder = (yargs: yargs.Argv) =>
 			describe:
 				"Store the credential in the OS keyring. Per profile; later auth without the flag stays there. See `neon profile list`.",
 			type: "boolean",
-		})
-		.check((argv) => {
-			if (argv.keyring === false) {
-				const name = selectProfileName(
-					typeof argv.profile === "string" ? argv.profile : undefined,
-				);
-				const dir =
-					typeof argv.configDir === "string" ? argv.configDir : "";
-				const declared =
-					dir !== "" ? readProfiles(dir)?.profiles[name] : undefined;
-				const inKeyring =
-					declared !== undefined &&
-					isKeyringPointer(declared.credentials);
-				throw new Error(
-					inKeyring
-						? `--no-keyring does not move a profile to a file. To leave the keyring: \`neon profile remove ${name} --yes\`. That revokes the credential where the CLI can.`
-						: `--no-keyring does not move a profile to a file. File is already the default.`,
-				);
-			}
-			return true;
 		});
 export const handler = async (args: AuthProps) => {
 	await authFlow(args);

@@ -172,28 +172,6 @@ export const builder = (argv: yargs.Argv) =>
 								`--force is no longer a flag. \`neon profile create ${name}\` always replaces an existing profile and revokes the credential it held. Drop --force.`,
 							);
 						}
-						if (argv.keyring === false) {
-							const name =
-								typeof argv.name === "string"
-									? argv.name
-									: "NAME";
-							const dir =
-								typeof argv.configDir === "string"
-									? argv.configDir
-									: "";
-							const declared =
-								dir !== ""
-									? readProfiles(dir)?.profiles[name]
-									: undefined;
-							const inKeyring =
-								declared !== undefined &&
-								isKeyringPointer(declared.credentials);
-							throw new Error(
-								inKeyring
-									? `--no-keyring does not move a profile to a file. To leave the keyring: \`neon profile remove ${name} --yes\`. That revokes the credential where the CLI can.`
-									: `--no-keyring does not move a profile to a file. File is already the default.`,
-							);
-						}
 						return true;
 					})
 					.example(

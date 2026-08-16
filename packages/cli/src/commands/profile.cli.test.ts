@@ -482,67 +482,6 @@ describe("profile create", () => {
 		expect(existsSync(resolve(dir, "credentials.work.json"))).toBe(true);
 	});
 
-	test("auth --no-keyring is refused", async () => {
-		const dir = makeConfigDir({});
-		const { code, stderr } = await runCli([
-			"auth",
-			"--no-keyring",
-			"--config-dir",
-			dir,
-		]);
-
-		expect(code).toBe(1);
-		expect(stderr).toContain(
-			"--no-keyring does not move a profile to a file",
-		);
-		expect(stderr).toContain("File is already the default");
-		expect(stderr).not.toContain("neon profile remove");
-	});
-
-	test("auth --no-keyring on a keyring profile names remove", async () => {
-		const dir = makeConfigDir({
-			"profiles.json": JSON.stringify({
-				version: 1,
-				profiles: { DEFAULT: { credentials: "keyring" } },
-			}),
-		});
-		const { code, stderr } = await runCli([
-			"auth",
-			"--no-keyring",
-			"--config-dir",
-			dir,
-		]);
-
-		expect(code).toBe(1);
-		expect(stderr).toContain("neon profile remove DEFAULT --yes");
-		expect(stderr).toContain("revokes the credential");
-	});
-
-	test("create --no-keyring is refused", async () => {
-		const dir = makeConfigDir({
-			"profiles.json": JSON.stringify({
-				version: 1,
-				profiles: { work: { credentials: "keyring" } },
-			}),
-		});
-		const { code, stderr } = await runCli([
-			"profile",
-			"create",
-			"work",
-			"--no-keyring",
-			"--config-dir",
-			dir,
-		]);
-
-		expect(code).toBe(1);
-		expect(stderr).toContain(
-			"--no-keyring does not move a profile to a file",
-		);
-		expect(stderr).toContain("neon profile remove work --yes");
-		expect(stderr).toContain("revokes the credential");
-		expect(stderr).not.toContain("already exists");
-	});
-
 	// The no-flag form is what an agent tries first, and `authFlow` answered it with a bare
 	// "Cannot run interactive auth in CI" — true, and with no way forward from it.
 	test("a keyring pointer is an existing profile even when the item is unread", async () => {
