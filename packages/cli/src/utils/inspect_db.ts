@@ -71,7 +71,9 @@ export const selectInspectTargets = (
 	}
 	if (input.databaseName !== undefined) {
 		if (input.databaseName === "") {
-			throw new Error("--database-name cannot be empty");
+			throw new Error(
+				"--database-name cannot be empty. Omit the flag to cover every database.",
+			);
 		}
 		return {
 			databases: [input.databaseName],
@@ -88,7 +90,7 @@ export const selectInspectTargets = (
 		};
 	}
 	const sorted = [...input.branchDatabases].sort((a, b) =>
-		a.localeCompare(b),
+		a.localeCompare(b, "en"),
 	);
 	return { databases: sorted, includeDatabaseColumn: true };
 };
@@ -99,6 +101,7 @@ export type FormatInspectQueryErrorInput = {
 	dbUrl?: string;
 	databaseName?: string;
 	offerDatabaseNameHint: boolean;
+	scope: InspectQueryScope;
 };
 
 export const formatInspectQueryError = (
@@ -107,9 +110,11 @@ export const formatInspectQueryError = (
 	if (input.dbUrl !== undefined || input.databaseName !== undefined) {
 		return undefined;
 	}
-	const hint = input.offerDatabaseNameHint
-		? ". Pass --database-name to inspect one database."
-		: "";
+	const hint = !input.offerDatabaseNameHint
+		? ""
+		: input.scope === "compute"
+			? ". Pass --database-name to connect through a different database."
+			: ". Pass --database-name to inspect one database.";
 	return `${input.reason} (database ${input.database})${hint}`;
 };
 
@@ -314,7 +319,9 @@ export const resolveInspectTargets = async (
 
 	if (props.databaseName !== undefined) {
 		if (props.databaseName === "") {
-			throw new Error("--database-name cannot be empty");
+			throw new Error(
+				"--database-name cannot be empty. Omit the flag to cover every database.",
+			);
 		}
 		const resolved = await resolveConnectionUri(props);
 		return {

@@ -77,7 +77,9 @@ describe("selectInspectTargets", () => {
 				branchDatabases: ["neondb", "other_db"],
 				scope: "database",
 			}),
-		).toThrow("--database-name cannot be empty");
+		).toThrow(
+			"--database-name cannot be empty. Omit the flag to cover every database.",
+		);
 	});
 
 	it("throws when the branch has no databases", () => {
@@ -98,6 +100,7 @@ describe("formatInspectQueryError", () => {
 				database: "postgres",
 				dbUrl: "postgresql://localhost/postgres",
 				offerDatabaseNameHint: false,
+				scope: "database",
 			}),
 		).toBeUndefined();
 		expect(
@@ -106,6 +109,7 @@ describe("formatInspectQueryError", () => {
 				database: "neondb",
 				databaseName: "neondb",
 				offerDatabaseNameHint: true,
+				scope: "database",
 			}),
 		).toBeUndefined();
 	});
@@ -116,19 +120,34 @@ describe("formatInspectQueryError", () => {
 				reason: "missing neon",
 				database: "other_db",
 				offerDatabaseNameHint: false,
+				scope: "compute",
 			}),
 		).toBe("missing neon (database other_db)");
 	});
 
-	it("points at --database-name when the branch has more than one database", () => {
+	it("points at --database-name when a database-scoped fan-out fails", () => {
 		expect(
 			formatInspectQueryError({
 				reason: "missing neon",
 				database: "analytics",
 				offerDatabaseNameHint: true,
+				scope: "database",
 			}),
 		).toBe(
 			"missing neon (database analytics). Pass --database-name to inspect one database.",
+		);
+	});
+
+	it("tells compute-wide omit to connect through a different database", () => {
+		expect(
+			formatInspectQueryError({
+				reason: "missing neon",
+				database: "analytics",
+				offerDatabaseNameHint: true,
+				scope: "compute",
+			}),
+		).toBe(
+			"missing neon (database analytics). Pass --database-name to connect through a different database.",
 		);
 	});
 });

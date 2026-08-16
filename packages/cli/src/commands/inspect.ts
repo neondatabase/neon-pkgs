@@ -57,6 +57,7 @@ const runSubcommand = async (name: InspectSubcommand, props: InspectProps) => {
 				dbUrl: props.dbUrl,
 				databaseName: props.databaseName,
 				offerDatabaseNameHint: branchDatabaseCount > 1,
+				scope: query.scope,
 			});
 			if (wrapped === undefined) {
 				throw err instanceof Error ? err : new Error(reason);
