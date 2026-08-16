@@ -43,6 +43,16 @@ const credentials = {
 } as const;
 
 describe("claimable credentials", () => {
+	it("creates the config directory when it does not exist", () => {
+		const configDir = join(temporaryDirectory(), "missing", "neon");
+
+		writeClaimableCredentials(configDir, credentials);
+
+		expect(
+			readClaimableCredentials(configDir, credentials.projectId),
+		).toEqual(credentials);
+	});
+
 	it("writes an owner-only secret file and reads it back", () => {
 		const configDir = temporaryDirectory();
 

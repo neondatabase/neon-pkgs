@@ -1,4 +1,10 @@
-import { existsSync, readdirSync, readFileSync, unlinkSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	readdirSync,
+	readFileSync,
+	unlinkSync,
+} from "node:fs";
 import { join } from "node:path";
 import type { CredentialInputs } from "@neon-internals/cli-core/auth_selection";
 import { writeSecretFile } from "@neon-internals/cli-core/secure_file";
@@ -87,6 +93,7 @@ export const writeClaimableCredentials = (
 	configDir: string,
 	credentials: StoredClaimableCredentials,
 ): void => {
+	mkdirSync(configDir, { recursive: true });
 	const path = claimableCredentialsPath(configDir, credentials.projectId);
 	writeSecretFile(path, JSON.stringify(credentials));
 };
