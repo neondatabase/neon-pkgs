@@ -1,4 +1,9 @@
-import { getSkillsAgentName, resolveAddMcpAgentId } from "../agents.js";
+import {
+	agentSupportsProjectMcp,
+	getSkillsAgentName,
+	resolveAddMcpAgentId,
+	tryResolveAddMcpAgentId,
+} from "../agents.js";
 import { isAuthenticated } from "../auth.js";
 import { installNeonMcpServer } from "../install_mcp.js";
 import type { PhaseResponse } from "../types.js";
@@ -182,10 +187,20 @@ export async function handleMcpPhase(
 						value: "defaults",
 						label: "Yes, install with default settings",
 					},
-					{
-						value: "project_scope",
-						label: "Yes, install for this project only",
-					},
+					...(() => {
+						const known = options.agent
+							? tryResolveAddMcpAgentId(options.agent)
+							: undefined;
+						if (known && !agentSupportsProjectMcp(known)) {
+							return [];
+						}
+						return [
+							{
+								value: "project_scope",
+								label: "Yes, install for this project only",
+							},
+						];
+					})(),
 					{ value: "skip", label: "Skip for now" },
 				],
 				context:

@@ -208,20 +208,22 @@ export function skillsInstalledForAgent(
 function skillsAreFresh(agent: string, requiredSkills: string[]): boolean {
 	const now = Date.now();
 	const cwd = process.cwd();
-	const projectSkillDirs = [".agents", ".cursor", ".claude"];
+	const skillsId = getSkillsAgentNameFromId(agent);
+	const projectDirs =
+		(skillsId ? PROJECT_SKILLS_DIRS[skillsId] : undefined)?.map((dir) =>
+			resolve(cwd, dir),
+		) ?? [];
 
 	// Check project-level: ALL required skills must exist on disk
 	// and skills-lock.json must be recent
 	const lockPath = resolve(cwd, "skills-lock.json");
-	if (existsSync(lockPath)) {
+	if (existsSync(lockPath) && projectDirs.length > 0) {
 		try {
 			const mtime = statSync(lockPath).mtimeMs;
 			if (now - mtime < SKILLS_FRESHNESS_MS) {
 				const allExist = requiredSkills.every((skill) =>
-					projectSkillDirs.some((dir) =>
-						existsSync(
-							resolve(cwd, dir, "skills", skill, "SKILL.md"),
-						),
+					projectDirs.some((dir) =>
+						existsSync(resolve(dir, skill, "SKILL.md")),
 					),
 				);
 				if (allExist) return true;

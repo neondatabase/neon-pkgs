@@ -54,6 +54,22 @@ describe("handleMcpPhase", () => {
 		}
 	});
 
+	test("omits project scope when the agent has no project MCP path", async () => {
+		const result = await handleMcpPhase({
+			agent: "windsurf",
+			mcpConfigured: false,
+		});
+
+		expect(result.nextAction.type).toBe("ask_user");
+		if (result.nextAction.type === "ask_user") {
+			const values = result.nextAction.options.map((option) =>
+				typeof option === "string" ? option : option.value,
+			);
+			expect(values).toContain("defaults");
+			expect(values).not.toContain("project_scope");
+		}
+	});
+
 	test("asks user to install when mcp-configured is false", async () => {
 		const result = await handleMcpPhase({
 			agent: "claude",
