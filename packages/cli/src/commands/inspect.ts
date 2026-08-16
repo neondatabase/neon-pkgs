@@ -1,7 +1,11 @@
 import type yargs from "yargs";
 import type { BranchScopeProps, CommonProps } from "../types.js";
 import { fillSingleProject } from "../utils/enrichers.js";
-import { resolveInspectTargets, runInspectQuery } from "../utils/inspect_db.js";
+import {
+	formatInspectQueryError,
+	resolveInspectTargets,
+	runInspectQuery,
+} from "../utils/inspect_db.js";
 import {
 	INSPECT_QUERIES,
 	type InspectQuery,
@@ -49,12 +53,17 @@ const runSubcommand = async (name: InspectSubcommand, props: InspectProps) => {
 			});
 		} catch (err) {
 			const reason = err instanceof Error ? err.message : String(err);
-			if (targets.length === 1) {
+			const wrapped = formatInspectQueryError({
+				reason,
+				database: target.database,
+				dbUrl: props.dbUrl,
+				databaseName: props.databaseName,
+				targetCount: targets.length,
+			});
+			if (wrapped === undefined) {
 				throw err instanceof Error ? err : new Error(reason);
 			}
-			throw new Error(
-				`${reason} (database ${target.database}). Pass --database-name to inspect one database.`,
-			);
+			throw new Error(wrapped);
 		}
 		if (includeDatabaseColumn) {
 			rows.push(
@@ -93,7 +102,7 @@ const dbBuilder = (argv: yargs.Argv) => {
 			},
 			"database-name": {
 				describe:
-					"Database to inspect. Omit to cover every database on the branch (compute-wide checks run once). Ignored with --db-url.",
+					"Database to inspect. Omit to cover every database on the branch. Ranking and row limits stay per database. Compute-wide checks run once against the first listed database. Ignored with --db-url.",
 				type: "string",
 			},
 			"role-name": {

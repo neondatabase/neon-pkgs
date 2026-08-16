@@ -93,6 +93,31 @@ export const selectInspectTargets = (
 	return { databases: sorted, includeDatabaseColumn: true };
 };
 
+export type FormatInspectQueryErrorInput = {
+	reason: string;
+	database: string;
+	dbUrl?: string;
+	databaseName?: string;
+	targetCount: number;
+};
+
+/**
+ * Name the database we chose when the user did not. `--db-url` and
+ * `--database-name` already identify it.
+ */
+export const formatInspectQueryError = (
+	input: FormatInspectQueryErrorInput,
+): string | undefined => {
+	if (input.dbUrl !== undefined || input.databaseName !== undefined) {
+		return undefined;
+	}
+	const hint =
+		input.targetCount > 1
+			? ". Pass --database-name to inspect one database."
+			: "";
+	return `${input.reason} (database ${input.database})${hint}`;
+};
+
 const connectionUriForDatabase = (
 	connectionUri: string,
 	database: string,

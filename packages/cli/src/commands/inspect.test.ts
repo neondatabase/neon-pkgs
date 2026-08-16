@@ -54,7 +54,9 @@ describe("inspect db", () => {
 	}) => {
 		await testCliCommand(["inspect", "db", "--help"], {
 			mockDir: "single_org",
-			stderr: expect.stringContaining("compute-wide checks run once"),
+			stderr: expect.stringMatching(
+				/Ranking and row limits stay per database[\s\S]*first listed database/,
+			),
 		});
 	});
 
@@ -63,7 +65,9 @@ describe("inspect db", () => {
 	}) => {
 		await testCliCommand(["inspect", "db", "--help"], {
 			mockDir: "single_org",
-			stderr: expect.stringContaining("compute-wide"),
+			stderr: expect.stringContaining(
+				"Local File Cache hit rate (compute-wide",
+			),
 		});
 	});
 

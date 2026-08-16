@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	formatInspectQueryError,
 	type ResolveInspectTargetsProps,
 	resolveInspectTargets,
 	selectInspectTargets,
@@ -86,6 +87,49 @@ describe("selectInspectTargets", () => {
 				scope: "database",
 			}),
 		).toThrow("No databases found for the branch");
+	});
+});
+
+describe("formatInspectQueryError", () => {
+	it("leaves --db-url and --database-name errors unchanged", () => {
+		expect(
+			formatInspectQueryError({
+				reason: "missing neon",
+				database: "postgres",
+				dbUrl: "postgresql://localhost/postgres",
+				targetCount: 1,
+			}),
+		).toBeUndefined();
+		expect(
+			formatInspectQueryError({
+				reason: "missing neon",
+				database: "neondb",
+				databaseName: "neondb",
+				targetCount: 1,
+			}),
+		).toBeUndefined();
+	});
+
+	it("names the database the CLI chose when the flag is omitted", () => {
+		expect(
+			formatInspectQueryError({
+				reason: "missing neon",
+				database: "other_db",
+				targetCount: 1,
+			}),
+		).toBe("missing neon (database other_db)");
+	});
+
+	it("points at --database-name when a fan-out target fails", () => {
+		expect(
+			formatInspectQueryError({
+				reason: "missing neon",
+				database: "analytics",
+				targetCount: 3,
+			}),
+		).toBe(
+			"missing neon (database analytics). Pass --database-name to inspect one database.",
+		);
 	});
 });
 
