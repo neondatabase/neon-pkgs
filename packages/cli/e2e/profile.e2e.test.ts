@@ -157,14 +157,11 @@ describe("API-key profiles against the live API", () => {
 				);
 				chmodSync(readOnlyDir, 0o500);
 
-				const result = await runCli(
-					["profile", "create", "locked", "--force"],
-					{
-						configDir: readOnlyDir,
-						apiKey: requireApiKey(),
-						json: false,
-					},
-				);
+				const result = await runCli(["profile", "create", "locked"], {
+					configDir: readOnlyDir,
+					apiKey: requireApiKey(),
+					json: false,
+				});
 
 				// `profiles.json` could not be rewritten, so the command fails …
 				expect(result.code).toBe(1);

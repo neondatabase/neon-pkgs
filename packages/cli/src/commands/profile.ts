@@ -14,13 +14,10 @@ import {
 	API_KEY,
 	apiKeyCredentials,
 	type CredentialLocation,
-	credentialKind,
 	credentialLabel,
 	describeScope,
 	interpretCredentials,
-	isSameCredential,
 	type KeyScope,
-	OAUTH,
 	type StoredCredentials,
 	scopeOf,
 } from "@neon-internals/cli-core/credentials";
@@ -62,7 +59,14 @@ import {
 	mintedKeyName,
 	notAnApiKeyMessage,
 } from "../profile_keys.js";
-import type { CommonProps, ExtendedTokenSet } from "../types.js";
+import {
+	type OutgoingCredential,
+	readOutgoingCredential,
+	retirePreviousCredential,
+	revokeTokenSet,
+	withdrawKey,
+} from "../retire_credential.js";
+import type { CommonProps } from "../types.js";
 import { noPassthrough, single } from "../utils/flags.js";
 import { writer } from "../writer.js";
 import { orgIdForProject } from "./api_keys.js";
@@ -82,7 +86,6 @@ type CreateProps = ProfileProps & {
 	mint?: boolean;
 	orgId?: string;
 	projectId?: string;
-	force: boolean;
 	keyring?: boolean;
 };
 
@@ -141,12 +144,6 @@ export const builder = (argv: yargs.Argv) =>
 								"With --mint, mint a key that can access only this project",
 							type: "string",
 							coerce: single("project-id"),
-						},
-						force: {
-							describe:
-								"Replace an existing profile, revoking the credential it holds now",
-							type: "boolean",
-							default: false,
 						},
 						keyring: {
 							describe:
@@ -415,79 +412,6 @@ const list = async (props: ProfileProps) => {
 	});
 };
 
-/**
- * The credential a profile currently holds, resolved far enough to act on.
- *
- * A key carries what revoking it needs — the secret to authenticate the revocation, the id
- * naming what to revoke, and the scope choosing the endpoint. Reading those off an untyped
- * record at each use site is what produced `stored.api_key as string`.
- */
-type OutgoingCredential =
-	| { kind: typeof API_KEY; apiKey: string; keyId?: number; scope: KeyScope }
-	| { kind: typeof OAUTH; tokens: StoredCredentials };
-
-/**
- * The credential a command is about to replace or delete.
- *
- * Deliberately tolerant where {@link readCredentials} is fatal. Using a damaged credential must
- * fail loudly, but *replacing* one must not: `readCredentials` throwing here made the repair its
- * own error message recommends impossible, and left a malformed file unremovable through the
- * CLI. There is nothing to revoke in a file we cannot parse, so this says so and moves on.
- */
-const readOutgoingCredential = (
-	configDir: string,
-	at: CredentialLocation,
-): OutgoingCredential | null => {
-	const listing = storeFor(configDir).inspect(at);
-	const unusable = (reason: string): null => {
-		// `reason` comes from several sources, some of which end in a period. Trim it so the
-		// sentence does not run "…cannot be read.. Nothing in it…".
-		log.warning(
-			"%s. Nothing in it could be revoked.",
-			reason.replace(/\.$/, ""),
-		);
-		return null;
-	};
-
-	if (listing.reason !== undefined && listing.credentials === null) {
-		if (at.storage === "keyring") {
-			log.warning(
-				'Could not read the OS keyring item for profile "%s"; nothing in it could be revoked.',
-				at.profile,
-			);
-			return null;
-		}
-		return unusable(listing.reason);
-	}
-	if (listing.credentials === null) return null;
-
-	// Interpreted, not merely classified. A file declaring `api_key` with no key satisfies
-	// `credentialKind` and would then reach `getApiClient` with `undefined` behind a cast — a
-	// revoke request authenticated by nothing, reported as a failed revocation. There is
-	// genuinely nothing to revoke here, which is what `unusable` says; and saying it rather
-	// than throwing is what keeps the file removable.
-	try {
-		const credential = interpretCredentials(
-			listing.credentials,
-			at,
-			hintStore(listing.storage),
-		);
-		if (credential.kind === OAUTH) {
-			return { kind: OAUTH, tokens: listing.credentials };
-		}
-		return {
-			kind: API_KEY,
-			apiKey: credential.apiKey,
-			...(typeof listing.credentials.key_id === "number"
-				? { keyId: listing.credentials.key_id }
-				: {}),
-			scope: scopeOf(listing.credentials),
-		};
-	} catch (err) {
-		return unusable(err instanceof Error ? err.message : String(err));
-	}
-};
-
 const locationForCreate = (
 	configDir: string,
 	name: string,
@@ -554,56 +478,6 @@ const deleteLeftoverOwnedFile = (
 	} catch {
 		log.warning("Saved the keyring item but could not delete %s", path);
 	}
-};
-
-/**
- * Refuse to overwrite an existing profile unless asked to, and say what `--force` destroys.
- *
- * Naming the consequence is the point. `--force` does not merely point the profile somewhere
- * else: {@link retirePreviousCredential} revokes the credential being replaced, so a key this
- * CLI minted dies upstream — including the copy the user pasted into CI or another machine,
- * which is not recoverable, only re-mintable. A message promising "replace its credential"
- * described a local edit and made the irreversible half a surprise.
- */
-const assertReplaceable = (props: CreateProps): void => {
-	const { name, configDir, force } = props;
-	if (force) return;
-	const declared = readProfiles(configDir)?.profiles[name];
-	const at =
-		existingLocation(configDir, name) ??
-		locationForCreate(configDir, name, props.keyring);
-	const listing = storeFor(configDir).inspect(at);
-	const present = listing.credentials !== null || listing.file !== "missing";
-	if (!declared && !(name === DEFAULT_PROFILE && present)) return;
-
-	const stored = listing.credentials;
-	// Only offer `rotate-key` when it would actually work: it refuses anything that is not
-	// already an API-key profile, and `DEFAULT` is an OAuth profile on nearly every install.
-	const holdsKey =
-		stored !== null &&
-		credentialKind(stored, at, hintStore(listing.storage)) === API_KEY;
-	const keyId =
-		typeof stored?.key_id === "number" ? stored.key_id : undefined;
-
-	if (holdsKey) {
-		throw new Error(
-			keyId !== undefined
-				? `Profile "${name}" already exists and holds an API key minted here (id ${keyId}). Pass --force to replace it — the key is revoked, wherever else it is in use. To keep the profile and swap the key instead: \`neon profile rotate-key ${name}\`.`
-				: `Profile "${name}" already exists and holds an API key you supplied, which stays live on the account either way — only keys minted here record an id to revoke. Pass --force to replace it locally, or \`neon profile rotate-key ${name}\` to mint one at the same scope.`,
-		);
-	}
-	if (stored === null) {
-		throw new Error(
-			`Profile "${name}" already exists. Pass --force to replace it.`,
-		);
-	}
-	const keepSession =
-		props.keyring === true && at.storage === CRED_STORAGE_FILE
-			? ` To sign in again and store the new session in the OS keyring instead: \`neon auth --keyring --profile ${name}\`.`
-			: "";
-	throw new Error(
-		`Profile "${name}" already exists and holds a browser sign-in. Pass --force to replace it — the session is signed out as part of the replacement.${keepSession}`,
-	);
 };
 
 /** `--api-key -` means "read it from stdin", the usual convention for a piped value. */
@@ -720,7 +594,6 @@ const create = async (props: CreateProps) => {
 				: undefined,
 		);
 	}
-	assertReplaceable(props);
 
 	const suppliedKey = credentialInputs().apiKeyFlag.trim() !== "";
 
@@ -771,7 +644,10 @@ const create = async (props: CreateProps) => {
 				`Could not save credentials for profile "${name}".`,
 			);
 		}
-		await retirePreviousCredential(props, name, previous);
+		// authFlow retires keyring replacements; repeating it here would revoke the session twice.
+		if (at.storage !== "keyring") {
+			await retirePreviousCredential(props, name, previous);
+		}
 		const signedIn = readProfiles(props.configDir, log.warning)?.profiles[
 			name
 		];
@@ -1081,60 +957,6 @@ const resolveMintScope = async (
 };
 
 /**
- * Revoke a credential a profile has just stopped using.
- *
- * Called with the credential read *before* the overwrite, and only *after* the replacement is
- * durable. Both halves matter. Reading it first is the only chance: a minted key's `key_id` and
- * an OAuth refresh token are gone the moment the file is rewritten, so nothing could revoke
- * them afterwards. Revoking last is what stops a cancelled sign-in or a failed write from
- * leaving the profile holding a credential that has already been killed.
- */
-const retirePreviousCredential = async (
-	props: ProfileProps,
-	name: string,
-	existing: OutgoingCredential | null,
-	/** The key now stored. Retiring this would kill the credential we just committed to. */
-	replacementKey?: string,
-): Promise<void> => {
-	if (existing === null) return;
-
-	if (existing.kind === API_KEY) {
-		// Re-storing the key a profile already holds is a no-op, not a replacement. Revoking
-		// here would leave the profile pointing at a credential this command just committed to.
-		if (isSameCredential(existing.apiKey, replacementKey)) {
-			log.debug(
-				"The replacement is the credential already stored; nothing to retire.",
-			);
-			return;
-		}
-		if (existing.keyId === undefined) {
-			log.warning(
-				'Profile "%s" held an API key that was supplied rather than minted here, so it stays live on the account — find it with `neon api-keys list`.',
-				name,
-			);
-			return;
-		}
-		const client = getApiClient({
-			apiKey: existing.apiKey,
-			apiHost: props.apiHost,
-		});
-		log.info(
-			(await withdrawKey(client, existing.scope, existing.keyId))
-				? `Revoked the key it replaces (id ${existing.keyId})`
-				: `Could not revoke the key it replaces (id ${existing.keyId}); it may still be live. Remove it with: neon api-keys revoke ${existing.keyId}`,
-		);
-		return;
-	}
-
-	const revoked = await revokeTokenSet(existing.tokens, props);
-	log.info(
-		revoked
-			? "Signed out the session it replaced"
-			: "Could not sign out the session it replaced; it will expire on its own",
-	);
-};
-
-/**
  * Mint a key at the given scope and refuse anything that came back different.
  *
  * A 2xx is not enough. A response with no `key` leaves a live credential the user can never
@@ -1183,36 +1005,12 @@ const mintKey = async (
 	);
 };
 
-/** Best-effort withdrawal of a key we are refusing to store. Never throws. */
-const withdrawKey = async (
-	client: NeonApiClient,
-	scope: KeyScope,
-	keyId: number | undefined,
-): Promise<boolean> => {
-	if (!Number.isSafeInteger(keyId) || (keyId as number) <= 0) return false;
-	try {
-		const { data } = scope.orgId
-			? await client.revokeOrgApiKey(scope.orgId, keyId as number)
-			: await client.revokeApiKey(keyId as number);
-		// Check which key the response names: a `revoked: true` for some other id is not
-		// evidence that the one we issued is gone.
-		return data.revoked === true && data.id === keyId;
-	} catch (err) {
-		log.error(
-			"Failed to revoke API key %d: %s",
-			keyId,
-			err instanceof Error ? err.message : String(err),
-		);
-		return false;
-	}
-};
-
 const rotateKey = async (props: ProfileProps & { name: string }) => {
 	const { name } = props;
 	rejectProfileFlag(props, "rotate-key");
 	rejectApiKeyFlag(
 		"rotate-key",
-		`To store a key you already have, use \`neon profile create ${name} --api-key - --force\`.`,
+		`To store a key you already have, use \`neon profile create ${name} --api-key -\`.`,
 	);
 	// Resolve first: an unknown profile must fail having minted nothing.
 	const profile = resolveProfile(props.configDir, name);
@@ -1221,14 +1019,14 @@ const rotateKey = async (props: ProfileProps & { name: string }) => {
 	const credential = await usableCredential(props, at);
 	if (credential === null) {
 		throw new Error(
-			`Profile "${name}" has no usable credential to mint with. Replace it with \`neon profile create ${name} --mint --force\`.`,
+			`Profile "${name}" has no usable credential to mint with. Replace it with \`neon profile create ${name} --mint\`.`,
 		);
 	}
 	// Rotating a *key* is what this command is for. An OAuth profile would otherwise be
 	// converted into a key profile as a side effect, discarding a session it never revoked.
 	if (credential.kind !== API_KEY) {
 		throw new Error(
-			`Profile "${name}" holds a browser sign-in, not an API key, so there is no key to rotate. Turn it into a key profile with \`neon profile create ${name} --mint --force\`.`,
+			`Profile "${name}" holds a browser sign-in, not an API key, so there is no key to rotate. Turn it into a key profile with \`neon profile create ${name} --mint\`.`,
 		);
 	}
 
@@ -1264,10 +1062,10 @@ const rotateKey = async (props: ProfileProps & { name: string }) => {
 		// the profile more reach than it had.
 		const advice =
 			scope.projectId !== undefined
-				? `\`neon profile create ${name} --mint --project-id ${scope.projectId} --force\``
+				? `\`neon profile create ${name} --mint --project-id ${scope.projectId}\``
 				: scope.orgId !== undefined && previousKeyId !== undefined
-					? `\`neon profile create ${name} --mint --org-id ${scope.orgId} --force\``
-					: `\`neon profile create ${name} --mint --org-id ${details.account_id} --force\` — but check \`neon api-keys list --org-id ${details.account_id}\` first, because a key you supplied may have been narrowed to a single project and an organization key would reach more`;
+					? `\`neon profile create ${name} --mint --org-id ${scope.orgId}\``
+					: `\`neon profile create ${name} --mint --org-id ${details.account_id}\` — but check \`neon api-keys list --org-id ${details.account_id}\` first, because a key you supplied may have been narrowed to a single project and an organization key would reach more`;
 		throw new Error(
 			`Profile "${name}" holds an organization key, and only a personal credential can mint organization keys — so it cannot mint its own replacement. Sign in and mint one with ${advice}.`,
 		);
@@ -1523,22 +1321,4 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 		log.info("Left %s on disk — not created by neon", at.path);
 	}
 	dropPointer();
-};
-
-/** Revoke the OAuth refresh token in a credential we already have in hand. */
-const revokeTokenSet = async (
-	credentials: StoredCredentials,
-	props: ProfileProps,
-): Promise<boolean> => {
-	const tokenSet = credentials as unknown as ExtendedTokenSet;
-	return await revokeToken(
-		{
-			oauthHost: props.oauthHost,
-			clientId: props.clientId,
-			...(props.allowUnsafeTls
-				? { allowUnsafeTls: props.allowUnsafeTls }
-				: {}),
-		},
-		tokenSet,
-	);
 };

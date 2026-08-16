@@ -200,7 +200,7 @@ describe("resolveApiKey — a damaged credentials file fails loudly", () => {
 			/not valid JSON/,
 		);
 		expect(() => resolveApiKey({ env: { HOME: home } })).toThrow(
-			/neon profile create DEFAULT --force/,
+			/neon profile create DEFAULT/,
 		);
 	});
 

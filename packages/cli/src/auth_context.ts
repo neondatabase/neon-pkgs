@@ -77,7 +77,7 @@ export const authFailureMessage = (context: AuthContext | null): string => {
 
 	if (context?.source === "profile-api-key") {
 		// Not `rotate-key`: a rejected key cannot authenticate to mint its own replacement.
-		return `Authentication failed: the Neon API rejected profile "${profile}"'s API key${where}. Replace it with \`neon profile create ${profile} --mint --force\`, or store another with \`neon profile create ${profile} --api-key - --force\`.`;
+		return `Authentication failed: the Neon API rejected profile "${profile}"'s API key${where}. Replace it with \`neon profile create ${profile} --mint\`, or store another with \`neon profile create ${profile} --api-key -\`.`;
 	}
 
 	// Reached only when the session was not ours to clear, i.e. an adopted credentials file.

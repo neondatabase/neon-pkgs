@@ -226,7 +226,7 @@ describe("auth", () => {
 		}
 	});
 
-	test("auth --keyring deletes the owned credentials file and says so", async ({
+	test("auth --keyring deletes the owned credentials file and revokes the old session once", async ({
 		runMockServer,
 	}) => {
 		const server = await runMockServer("main");
@@ -254,6 +254,9 @@ describe("auth", () => {
 			.mockImplementation((dir: string) =>
 				createCredentialStore(dir, { keyring }),
 			);
+		const revokeSpy = vi
+			.spyOn(authModule, "revokeToken")
+			.mockResolvedValue(true);
 		const infoSpy = vi.spyOn(log, "info");
 		try {
 			await authFlow({
@@ -267,6 +270,10 @@ describe("auth", () => {
 				keyring: true,
 			});
 			expect(existsSync(join(configDir, "credentials.json"))).toBe(false);
+			expect(revokeSpy).toHaveBeenCalledTimes(1);
+			expect(revokeSpy.mock.calls[0]?.[1]).toMatchObject({
+				refresh_token: "old-r",
+			});
 			expect(
 				infoSpy.mock.calls.some(
 					(call) =>
@@ -274,10 +281,50 @@ describe("auth", () => {
 						call[0].startsWith("Deleted"),
 				),
 			).toBe(true);
+			expect(
+				infoSpy.mock.calls.some(
+					(call) => call[0] === "Signed out the session it replaced",
+				),
+			).toBe(true);
 		} finally {
+			revokeSpy.mockRestore();
 			infoSpy.mockRestore();
 			storeSpy.mockRestore();
 			rmSync(join(configDir, "profiles.json"), { force: true });
+			rmSync(join(configDir, "credentials.json"), { force: true });
+		}
+	});
+
+	test("auth without --keyring overwrites a file and does not revoke", async ({
+		runMockServer,
+	}) => {
+		const server = await runMockServer("main");
+		writeFileSync(
+			join(configDir, "credentials.json"),
+			JSON.stringify({
+				type: "oauth",
+				access_token: "old",
+				refresh_token: "old-r",
+				user_id: "u1",
+			}),
+		);
+		const revokeSpy = vi
+			.spyOn(authModule, "revokeToken")
+			.mockResolvedValue(true);
+		try {
+			await authFlow({
+				_: ["auth"],
+				apiHost: `http://localhost:${(server.address() as AddressInfo).port}`,
+				clientId: "test-client-id",
+				configDir,
+				forceAuth: true,
+				oauthHost: `http://localhost:${oauthServer.address().port}`,
+				allowUnsafeTls: true,
+			});
+			expect(existsSync(join(configDir, "credentials.json"))).toBe(true);
+			expect(revokeSpy).not.toHaveBeenCalled();
+		} finally {
+			revokeSpy.mockRestore();
 			rmSync(join(configDir, "credentials.json"), { force: true });
 		}
 	});
@@ -311,6 +358,65 @@ describe("auth", () => {
 			).rejects.toThrow(/disk full/);
 		} finally {
 			storeSpy.mockRestore();
+		}
+	});
+
+	test("a failed keyring save does not revoke the file it would replace", async ({
+		runMockServer,
+	}) => {
+		const server = await runMockServer("main");
+		writeFileSync(
+			join(configDir, "credentials.json"),
+			JSON.stringify({
+				type: "oauth",
+				access_token: "old",
+				refresh_token: "old-r",
+				user_id: "u1",
+			}),
+		);
+		const items = new Map<string, string>();
+		const id = (service: string, account: string) =>
+			`${service}\0${account}`;
+		const keyring: KeyringBackend = {
+			get: (service, account) => items.get(id(service, account)) ?? null,
+			set: (service, account, password) => {
+				items.set(id(service, account), password);
+			},
+			delete: (service, account) => items.delete(id(service, account)),
+		};
+		const storeSpy = vi
+			.spyOn(credentialIo, "storeFor")
+			.mockImplementation((dir: string) => {
+				const store = createCredentialStore(dir, { keyring });
+				return {
+					...store,
+					write: () => {
+						throw new Error("disk full");
+					},
+				};
+			});
+		const revokeSpy = vi
+			.spyOn(authModule, "revokeToken")
+			.mockResolvedValue(true);
+		try {
+			await expect(
+				authFlow({
+					_: ["auth"],
+					apiHost: `http://localhost:${(server.address() as AddressInfo).port}`,
+					clientId: "test-client-id",
+					configDir,
+					forceAuth: true,
+					oauthHost: `http://localhost:${oauthServer.address().port}`,
+					allowUnsafeTls: true,
+					keyring: true,
+				}),
+			).rejects.toThrow(/disk full/);
+			expect(revokeSpy).not.toHaveBeenCalled();
+			expect(existsSync(join(configDir, "credentials.json"))).toBe(true);
+		} finally {
+			revokeSpy.mockRestore();
+			storeSpy.mockRestore();
+			rmSync(join(configDir, "credentials.json"), { force: true });
 		}
 	});
 

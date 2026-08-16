@@ -895,12 +895,11 @@ That is per profile. Reads never migrate.
 neon auth --keyring                         # sign DEFAULT into the OS keyring
 neon auth --keyring --profile work          # sign work into the OS keyring
 neon profile create work --keyring          # create a named profile in the keyring
-neon profile create work --keyring --force  # replace a file profile; revokes the old credential
 neon profile remove work --yes              # drop a keyring profile, then create it again as a file
 ```
 
-File to keyring is `neon auth --keyring` (new sign-in; deletes the owned file, does
-not revoke) or `neon profile create … --keyring --force` (revokes the old credential).
+File to keyring is `neon auth --keyring` or `neon profile create … --keyring`: a new
+sign-in, then the previous credential is revoked and the owned file is deleted.
 Keyring to file is `remove`, then create or auth again. `create` and `auth` without
 `--keyring` follow an existing `"keyring"` pointer, so a keyring profile cannot leave
 the OS store until `remove` succeeds.
@@ -920,21 +919,19 @@ signed-out, and those commands start OAuth.
 `neon profile create` makes a profile, and how you call it decides which kind of credential it holds. A key-backed profile is what you want for an agent, a shared machine, or anything that must never be interrupted by a browser:
 
 ```bash
-neon profile create work                            # sign in with the browser, like `neon auth`
+neon profile create work                            # sign in; replaces work if it already exists
 neon profile create work --keyring                  # same, stored in the OS keyring
 neon profile create work --api-key "$KEY"           # store a key you already have
 echo "$KEY" | neon profile create work --api-key -  # or pipe it, keeping it out of argv
 neon profile create ci --mint                       # sign in once, keep only a minted key
 neon profile create ci --mint --org-id org-abc-123  # minted for an organization
 neon profile create ci --mint --project-id proj-1   # minted for one project only
-neon profile create work --force                    # replace it, revoking what it holds now
 neon profile rotate-key work                        # mint a replacement, revoke the old one
 ```
 
-`--force` is not only a local edit: replacing a profile revokes the credential it held, so a key
-this CLI minted stops working everywhere it was pasted, and an OAuth session is signed out.
-Without `--force`, `create` refuses and names what would be revoked. To keep a working profile
-and swap only its key, use `rotate-key`.
+Replacing a profile revokes the credential it held, so a key this CLI minted stops working
+everywhere it was pasted, and an OAuth session is signed out. To keep a working profile and
+swap only its key, use `rotate-key`.
 
 `create` and `rotate-key` print the profile they wrote, so an agent needn't follow up with
 `list`. Under `--output json` that is a record, and it never carries the secret:
@@ -971,11 +968,11 @@ Every key is verified against the API before it is stored, and the account it be
 
 `rotate-key` mints at the scope the profile already has — replacing an org key with an account key would quietly widen everything it reaches — and stores the new key before revoking the old one, so a failed write leaves the old key working.
 
-One thing it cannot do: **an organization key cannot mint its own replacement.** Neon only accepts a personal credential when creating organization keys, so rotating an org- or project-scoped profile means signing in again — `neon profile create ci --mint --org-id org-abc-123 --force`. `rotate-key` checks this before minting and says so, rather than letting the API answer with a rule you had no reason to expect.
+One thing it cannot do: **an organization key cannot mint its own replacement.** Neon only accepts a personal credential when creating organization keys, so rotating an org- or project-scoped profile means signing in again — `neon profile create ci --mint --org-id org-abc-123`. `rotate-key` checks this before minting and says so, rather than letting the API answer with a rule you had no reason to expect.
 
 Two things the CLI cannot do for a key you supplied rather than minted. It cannot revoke it, because `GET /api_keys` exposes no prefix and a stored secret cannot be matched to a listing entry, so both `rotate-key` and `profile remove` say the old key is still live and point you at `neon api-keys list`. For a key you supplied it records the organization the API reports, but cannot know whether that key was narrowed to a single project — so `rotate-key` will not suggest an organization-wide replacement without telling you to check `neon api-keys list` first.
 
-If a stored key stops working there is nothing to refresh, so recovery is one browser sign-in: `neon profile create work --mint --force`.
+If a stored key stops working there is nothing to refresh, so recovery is one browser sign-in: `neon profile create work --mint`.
 
 ### Which credential an invocation uses
 

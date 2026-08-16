@@ -22,6 +22,7 @@ import {
 	isKeyringPointer,
 	KEYRING_CREDENTIALS,
 	locationForName,
+	locationOf,
 	newProfileLocation,
 	profilesUsingPath,
 	readProfiles,
@@ -42,6 +43,11 @@ import {
 import { storeFor } from "../credential_io.js";
 import { isCi } from "../env.js";
 import { log } from "../log.js";
+import {
+	type OutgoingCredential,
+	readOutgoingCredential,
+	retirePreviousCredential,
+} from "../retire_credential.js";
 import type { ExtendedTokenSet } from "../types.js";
 import { extendTokenSet } from "../utils/auth.js";
 
@@ -145,11 +151,16 @@ export const authFlow = async ({
 
 	let previousFile: string | undefined;
 	let previousWasKeyring = false;
+	let previousOutgoing: OutgoingCredential | null = null;
 	try {
 		const previous = resolveProfile(configDir, profileName);
 		previousWasKeyring = previous.storage === "keyring";
 		if (previous.storage === "file")
 			previousFile = previous.credentialsPath;
+		previousOutgoing = readOutgoingCredential(
+			configDir,
+			locationOf(previous),
+		);
 	} catch {
 		previousFile = undefined;
 	}
@@ -198,6 +209,18 @@ export const authFlow = async ({
 			}
 			log.error("Failed to save credentials");
 			throw err instanceof Error ? err : new Error(String(err));
+		}
+		if (at.storage === "keyring") {
+			await retirePreviousCredential(
+				{
+					apiHost,
+					oauthHost,
+					clientId,
+					...(allowUnsafeTls ? { allowUnsafeTls } : {}),
+				},
+				profileName,
+				previousOutgoing,
+			);
 		}
 		if (
 			at.storage === "keyring" &&

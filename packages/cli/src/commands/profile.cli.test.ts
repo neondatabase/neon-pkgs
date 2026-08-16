@@ -402,14 +402,14 @@ describe("profile list", () => {
 		);
 		// The one credential error that used to be a dead end: it throws before the reader
 		// that appends a repair, so it had to grow its own.
-		expect(stderr).toContain("`neon profile create odd --force`");
+		expect(stderr).toContain("`neon profile create odd`");
 	});
 });
 
 describe("profile create", () => {
-	// Guarding before anything else matters here: without it, `create` on an existing profile
-	// would fall through to the browser sign-in and clobber a credential.
-	test("refuses to replace an existing profile without --force", async () => {
+	// Replacing is the default. In CI the browser path still cannot run, so the old
+	// credential survives a create that never reached a write.
+	test("create on an existing profile in CI does not revoke before it can replace", async () => {
 		const dir = makeConfigDir({
 			"credentials.json": OAUTH_FILE,
 			"credentials.work.json": API_KEY_FILE,
@@ -421,97 +421,36 @@ describe("profile create", () => {
 				},
 			}),
 		});
+		const before = readFileSync(
+			resolve(dir, "credentials.work.json"),
+			"utf8",
+		);
+		const { code, stderr } = await runCli(
+			["profile", "create", "work", "--config-dir", dir],
+			{ CI: "true" },
+		);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("cannot happen in CI");
+		expect(stderr).not.toContain("--force");
+		expect(
+			readFileSync(resolve(dir, "credentials.work.json"), "utf8"),
+		).toBe(before);
+	});
+
+	test("create --force is not a flag", async () => {
+		const dir = makeConfigDir({});
 		const { code, stderr } = await runCli([
 			"profile",
 			"create",
 			"work",
+			"--force",
 			"--config-dir",
 			dir,
 		]);
 
 		expect(code).toBe(1);
-		expect(stderr).toContain("already exists");
-		expect(stderr).toContain("--force");
-	});
-
-	// What `--force` costs, before it is paid. Replacing a profile revokes the credential it
-	// holds, so a key this CLI minted dies wherever else it was pasted — and the message that
-	// said "replace its credential" described a local edit, which is the half a user would
-	// have agreed to.
-	test("says the key --force revokes, and names it", async () => {
-		const dir = makeConfigDir({
-			"credentials.work.json": JSON.stringify({
-				type: "api_key",
-				api_key: "napi_minted_here",
-				key_id: 4242,
-			}),
-			"profiles.json": JSON.stringify({
-				version: 1,
-				profiles: { work: { credentials: "credentials.work.json" } },
-			}),
-		});
-		const { code, stderr } = await runCli([
-			"profile",
-			"create",
-			"work",
-			"--config-dir",
-			dir,
-			"--api-key",
-			"napi_replacement",
-		]);
-
-		expect(code).toBe(1);
-		expect(stderr).toContain("id 4242");
-		expect(stderr).toContain("the key is revoked");
-		// The non-destructive alternative, since the user's goal is usually a working key.
-		expect(stderr).toContain("neon profile rotate-key work");
-	});
-
-	// A key we did not mint records no id, so it survives the replacement. Claiming otherwise
-	// in either direction is the problem: this one is warned about at `remove` too.
-	test("says a supplied key stays live either way", async () => {
-		const dir = makeConfigDir({
-			"credentials.work.json": API_KEY_FILE,
-			"profiles.json": JSON.stringify({
-				version: 1,
-				profiles: { work: { credentials: "credentials.work.json" } },
-			}),
-		});
-		const { code, stderr } = await runCli([
-			"profile",
-			"create",
-			"work",
-			"--config-dir",
-			dir,
-			"--api-key",
-			"napi_replacement",
-		]);
-
-		expect(code).toBe(1);
-		expect(stderr).toContain("stays live on the account either way");
-	});
-
-	test("says the session --force replaces is signed out", async () => {
-		const dir = makeConfigDir({
-			"credentials.json": OAUTH_FILE,
-			"profiles.json": JSON.stringify({
-				version: 1,
-				profiles: { DEFAULT: { credentials: "credentials.json" } },
-			}),
-		});
-		const { code, stderr } = await runCli([
-			"profile",
-			"create",
-			"DEFAULT",
-			"--config-dir",
-			dir,
-			"--api-key",
-			"napi_replacement",
-		]);
-
-		expect(code).toBe(1);
-		expect(stderr).toContain("holds a browser sign-in");
-		expect(stderr).toContain("signed out as part of the replacement");
+		expect(stderr).toMatch(/Unknown argument: force/i);
 	});
 
 	test("create --keyring on a new profile does not warn about an unread item", async () => {
@@ -523,7 +462,7 @@ describe("profile create", () => {
 		expect(stderr).not.toContain("Could not read the OS keyring");
 	});
 
-	test("create --keyring on a file OAuth profile names auth --keyring", async () => {
+	test("create --keyring on a file OAuth profile in CI leaves the file", async () => {
 		const dir = makeConfigDir({
 			"credentials.work.json": OAUTH_FILE,
 			"profiles.json": JSON.stringify({
@@ -531,18 +470,13 @@ describe("profile create", () => {
 				profiles: { work: { credentials: "credentials.work.json" } },
 			}),
 		});
-		const { code, stderr } = await runCli([
-			"profile",
-			"create",
-			"work",
-			"--keyring",
-			"--config-dir",
-			dir,
-		]);
+		const { code, stderr } = await runCli(
+			["profile", "create", "work", "--keyring", "--config-dir", dir],
+			{ CI: "true" },
+		);
 
 		expect(code).toBe(1);
-		expect(stderr).toContain("holds a browser sign-in");
-		expect(stderr).toContain("neon auth --keyring --profile work");
+		expect(stderr).toContain("cannot happen in CI");
 		expect(existsSync(resolve(dir, "credentials.work.json"))).toBe(true);
 	});
 
@@ -603,9 +537,8 @@ describe("profile create", () => {
 		);
 
 		expect(code).toBe(1);
-		expect(stderr).toContain("already exists");
-		expect(stderr).toContain("--force");
-		expect(stderr).not.toContain("cannot happen in CI");
+		expect(stderr).toContain("cannot happen in CI");
+		expect(stderr).not.toContain("--force");
 	});
 
 	test("with no key in CI, says how to pass one instead", async () => {
@@ -927,7 +860,6 @@ describe("replacing a profile is atomic", () => {
 			"work",
 			"--config-dir",
 			dir,
-			"--force",
 			"--api-key",
 			"napi_replacement",
 		]);
@@ -954,7 +886,7 @@ describe("replacing a profile is atomic", () => {
 		);
 
 		const { code, stderr } = await runCli(
-			["profile", "create", "work", "--config-dir", dir, "--force"],
+			["profile", "create", "work", "--config-dir", dir],
 			{ CI: "true" },
 		);
 
@@ -987,7 +919,8 @@ describe("profile rotate-key — what it refuses", () => {
 
 		expect(code).toBe(1);
 		expect(stderr).toContain("holds a browser sign-in");
-		expect(stderr).toContain("--mint --force");
+		expect(stderr).toContain("--mint");
+		expect(stderr).not.toContain("--force");
 	});
 });
 
@@ -1033,12 +966,12 @@ describe("a damaged credentials file", () => {
 		]);
 
 		expect(code).toBe(1);
-		expect(stderr).toContain("`neon profile create work --force`");
+		expect(stderr).toContain("`neon profile create work`");
 		expect(stderr).not.toContain("<name>");
 	});
 
 	// The repair the error recommends has to actually run. Reading the outgoing credential
-	// fatally made `create --force` throw on the same file it was replacing, and left a
+	// fatally made `create` throw on the same file it was replacing, and left a
 	// malformed file unremovable through the CLI.
 	test("can still be removed, which the fatal read used to prevent", async () => {
 		const dir = makeConfigDir({
@@ -1235,7 +1168,6 @@ describe("a malformed profiles.json", () => {
 			"profile",
 			"create",
 			"work",
-			"--force",
 			"--config-dir",
 			dir,
 			"--api-key",
@@ -1650,7 +1582,8 @@ describe("profile rotate-key", () => {
 
 		expect(code).toBe(1);
 		expect(stderr).toContain("no usable credential");
-		expect(stderr).toContain("neon profile create work --mint --force");
+		expect(stderr).toContain("neon profile create work --mint");
+		expect(stderr).not.toContain("--force");
 	});
 });
 

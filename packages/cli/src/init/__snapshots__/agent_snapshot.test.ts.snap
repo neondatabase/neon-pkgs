@@ -14038,7 +14038,7 @@ exports[`neon init --agent: the signed-out auth branches > a damaged credentials
 --- stdout ---
 
 --- stderr ---
-ERROR: <config>/credentials.json is not valid JSON, so the credential in it cannot be read. Replace it deliberately with \`neon profile create DEFAULT --force\`, or delete the file.
+ERROR: <config>/credentials.json is not valid JSON, so the credential in it cannot be read. Replace it deliberately with \`neon profile create DEFAULT\`, or delete the file.
 --- subprocesses ---
 "
 `;

@@ -32,7 +32,7 @@
  *    becomes a different person.
  *
  * Recovery from a dead key is therefore one browser login — `neon profile create <name>
- * --mint --force` — which is what the retained session was supposed to save and never did.
+ * --mint` — which is what the retained session was supposed to save and never did.
  *
  * ## Older releases
  *
@@ -128,8 +128,8 @@ export const credentialsRepairHint = (
 	store: "file" | "keyring" = "file",
 ): string =>
 	store === "keyring"
-		? `Replace it deliberately with \`neon profile create ${at.profile} --force\`, or remove the profile with \`neon profile remove ${at.profile}\`.`
-		: `Replace it deliberately with \`neon profile create ${at.profile} --force\`, or delete the file.`;
+		? `Replace it deliberately with \`neon profile create ${at.profile}\`, or remove the profile with \`neon profile remove ${at.profile}\`.`
+		: `Replace it deliberately with \`neon profile create ${at.profile}\`, or delete the file.`;
 
 /** A credentials file resolved far enough to authenticate with. */
 export type InterpretedCredentials =

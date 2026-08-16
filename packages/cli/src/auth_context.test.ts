@@ -128,7 +128,8 @@ describe("authFailureMessage", () => {
 		expect(message).toContain('profile "dbx"');
 		expect(message).toContain("/c/credentials.dbx.json");
 		// Not `rotate-key`: a rejected key cannot authenticate to mint its own replacement.
-		expect(message).toContain("neon profile create dbx --mint --force");
+		expect(message).toContain("neon profile create dbx --mint");
+		expect(message).not.toContain("--force");
 		expect(message).not.toContain("rotate-key");
 	});
 
