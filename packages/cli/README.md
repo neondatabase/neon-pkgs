@@ -910,9 +910,9 @@ when it writes to the keyring, including a re-login that follows an existing poi
 auth again. `create` and `auth` without `--keyring` follow an existing `"keyring"`
 pointer, so a keyring profile cannot leave the OS store until `remove` succeeds.
 
-`--api-key` and `NEON_API_KEY` skip both stores. This CLI's packaged binary recognizes a
-`"keyring"` pointer and refuses: it cannot load the OS keyring addon. Use the npm-installed
-`neon` or `@neon/env`. Older releases treat the sentinel as a relative path.
+`--api-key` and `NEON_API_KEY` skip both stores. A GitHub-release `neon-<platform>`
+binary recognizes a `"keyring"` pointer and refuses: it cannot load the OS keyring addon.
+Use the npm-installed `neon`. Older releases treat the sentinel as a relative path.
 
 A `"keyring"` pointer whose OS item cannot be read is not treated as signed-out. Commands that
 would otherwise open a browser fail: could not read the OS keyring item. Unlock it and

@@ -226,7 +226,7 @@ describe("createCredentialStore — keyring", () => {
 			/--api-key/,
 		);
 		expect(() => store.read(keyringAt())).toThrow(/--api-key/);
-		expect(() => store.read(keyringAt())).toThrow(/npm-installed neon/);
+		expect(() => store.read(keyringAt())).toThrow(/standalone neon binary/);
 		expect(() => store.assertKeyringWritable()).not.toThrow(/mv DEFAULT/);
 	});
 

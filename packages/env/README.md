@@ -90,10 +90,10 @@ Flags (both commands): `--config <path>`, `--project-id`, `--branch`, `--api-key
 
 `--api-key` and `NEON_API_KEY` skip stored credentials. Otherwise `neon-env` reads the same
 Neon CLI profile the `neon` CLI does, including a secret stored in the OS keyring when that
-profile's `profiles.json` pointer is `"keyring"`. This package's packaged binary recognizes
-a `"keyring"` pointer and refuses: it cannot load the OS keyring addon. Use the npm-installed
-`@neon/env`. Older releases treat the sentinel as a relative path. A keyring pointer whose
-item cannot be read is an error, not "not signed in".
+profile's `profiles.json` pointer is `"keyring"`. `@neon/env` has no standalone binary; it
+loads the OS keyring addon from npm. If that optional dependency is missing, a `"keyring"`
+pointer is an error. Older releases treat the sentinel as a relative path. A keyring pointer
+whose item cannot be read is an error, not "not signed in".
 
 ## Env vars produced
 

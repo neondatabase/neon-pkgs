@@ -42,7 +42,7 @@ export class KeyringUnavailableError extends Error {
 				? `${loaded} Drop \`--keyring\` to keep the credential in a file.`
 				: kind === "write"
 					? `${loaded} Remove the profile with \`neon profile remove ${profile} --yes\`.`
-					: `${loaded} Use the npm-installed neon, or --api-key or NEON_API_KEY. To reset the profile: \`neon profile remove ${profile} --yes\`.`,
+					: `${loaded} Use --api-key or NEON_API_KEY. If this is a standalone neon binary, use the npm-installed neon instead. To reset the profile: \`neon profile remove ${profile} --yes\`.`,
 		);
 		this.name = "KeyringUnavailableError";
 	}
