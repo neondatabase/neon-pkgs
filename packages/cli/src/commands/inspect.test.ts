@@ -37,14 +37,14 @@ describe("inspect db", () => {
 		);
 	});
 
-	test("locks --db-url names the database in the connection error", async ({
+	test("locks --db-url does not suffix a database the URL already named", async ({
 		testCliCommand,
 	}) => {
 		await testCliCommand(
 			["inspect", "db", "locks", "--db-url", UNREACHABLE_DB_URL],
 			{
 				code: 1,
-				stderr: expect.stringContaining("(database postgres)"),
+				stderr: expect.not.stringContaining("(database postgres)"),
 			},
 		);
 	});
@@ -55,6 +55,15 @@ describe("inspect db", () => {
 		await testCliCommand(["inspect", "db", "--help"], {
 			mockDir: "single_org",
 			stderr: expect.stringContaining("compute-wide checks run once"),
+		});
+	});
+
+	test("inspect db --help marks compute-wide subcommands", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["inspect", "db", "--help"], {
+			mockDir: "single_org",
+			stderr: expect.stringContaining("compute-wide"),
 		});
 	});
 

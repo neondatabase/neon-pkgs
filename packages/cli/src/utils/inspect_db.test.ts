@@ -57,16 +57,26 @@ describe("selectInspectTargets", () => {
 		});
 	});
 
-	it("omitting the flag on a compute-scoped check picks one database by sorted name", () => {
+	it("omitting the flag on a compute-scoped check picks the first listed database", () => {
 		expect(
 			selectInspectTargets({
 				branchDatabases: ["other_db", "neondb"],
 				scope: "compute",
 			}),
 		).toEqual({
-			databases: ["neondb"],
+			databases: ["other_db"],
 			includeDatabaseColumn: false,
 		});
+	});
+
+	it("rejects an empty --database-name", () => {
+		expect(() =>
+			selectInspectTargets({
+				databaseName: "",
+				branchDatabases: ["neondb", "other_db"],
+				scope: "database",
+			}),
+		).toThrow("--database-name cannot be empty");
 	});
 
 	it("throws when the branch has no databases", () => {

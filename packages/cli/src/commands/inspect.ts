@@ -49,7 +49,12 @@ const runSubcommand = async (name: InspectSubcommand, props: InspectProps) => {
 			});
 		} catch (err) {
 			const reason = err instanceof Error ? err.message : String(err);
-			throw new Error(`${reason} (database ${target.database})`);
+			if (targets.length === 1) {
+				throw err instanceof Error ? err : new Error(reason);
+			}
+			throw new Error(
+				`${reason} (database ${target.database}). Pass --database-name to inspect one database.`,
+			);
 		}
 		if (includeDatabaseColumn) {
 			rows.push(

@@ -209,7 +209,8 @@ export const INSPECT_QUERIES = {
 		`,
 	},
 	"lfc-hit-rate": {
-		describe: "Local File Cache hit rate (needs neon extension)",
+		describe:
+			"Local File Cache hit rate (compute-wide, needs neon extension)",
 		scope: "compute",
 		fields: ["name", "ratio"],
 		emptyMessage: "No LFC stats available.",
@@ -235,7 +236,8 @@ export const INSPECT_QUERIES = {
 		`,
 	},
 	"working-set": {
-		describe: "Estimated working set vs LFC size (needs neon extension)",
+		describe:
+			"Estimated working set vs LFC size (compute-wide, needs neon extension)",
 		scope: "compute",
 		fields: ["window", "working_set", "lfc_size", "exceeds_lfc"],
 		emptyMessage: "No working-set estimate available.",
@@ -356,7 +358,7 @@ export const INSPECT_QUERIES = {
 	},
 	"replication-slots": {
 		describe:
-			"Replication slots: kind, status, client, restart/confirmed-flush LSNs, and lag (pg_replication_slots + pg_stat_replication)",
+			"Replication slots (compute-wide): kind, status, client, restart/confirmed-flush LSNs, and lag (pg_replication_slots + pg_stat_replication)",
 		scope: "compute",
 		fields: [
 			"slot_name",

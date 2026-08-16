@@ -70,6 +70,9 @@ export const selectInspectTargets = (
 		};
 	}
 	if (input.databaseName !== undefined) {
+		if (input.databaseName === "") {
+			throw new Error("--database-name cannot be empty");
+		}
 		return {
 			databases: [input.databaseName],
 			includeDatabaseColumn: false,
@@ -78,12 +81,15 @@ export const selectInspectTargets = (
 	if (input.branchDatabases.length === 0) {
 		throw new Error("No databases found for the branch");
 	}
+	if (input.scope === "compute") {
+		return {
+			databases: [input.branchDatabases[0]],
+			includeDatabaseColumn: false,
+		};
+	}
 	const sorted = [...input.branchDatabases].sort((a, b) =>
 		a.localeCompare(b),
 	);
-	if (input.scope === "compute") {
-		return { databases: [sorted[0]], includeDatabaseColumn: false };
-	}
 	return { databases: sorted, includeDatabaseColumn: true };
 };
 
@@ -285,6 +291,9 @@ export const resolveInspectTargets = async (
 	}
 
 	if (props.databaseName !== undefined) {
+		if (props.databaseName === "") {
+			throw new Error("--database-name cannot be empty");
+		}
 		const resolved = await resolveConnectionUri(props);
 		return {
 			targets: [
