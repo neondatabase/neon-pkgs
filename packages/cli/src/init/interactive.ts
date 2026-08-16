@@ -668,7 +668,13 @@ async function interactiveInitInner(
 		// Ensure the Neon CLI is installed and up to date
 		const nctlS = spinner();
 		nctlS.start("Checking Neon CLI...");
-		const nctlResult = await ensureNeonctl();
+		const nctlResult = await ensureNeonctl((phase) => {
+			nctlS.message(
+				phase === "installing"
+					? "Installing Neon CLI..."
+					: "Updating Neon CLI...",
+			);
+		});
 		switch (nctlResult.status) {
 			case "already_current":
 				nctlS.stop(

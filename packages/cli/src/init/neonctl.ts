@@ -148,7 +148,9 @@ function isLocalDevSymlink(): boolean {
  * Ensures neonctl is globally installed and up to date.
  * Uses the same package manager that invoked the init command.
  */
-export async function ensureNeonctl(): Promise<EnsureNeonctlResult> {
+export async function ensureNeonctl(
+	onProgress?: (phase: "installing" | "updating") => void,
+): Promise<EnsureNeonctlResult> {
 	// Skip install for local dev symlinks to avoid permission errors
 	if (isLocalDevSymlink()) {
 		const version = await getNeonCliVersion();
@@ -181,6 +183,7 @@ export async function ensureNeonctl(): Promise<EnsureNeonctlResult> {
 		};
 	}
 	const { command, args } = install;
+	onProgress?.(check.installed ? "updating" : "installing");
 
 	try {
 		await execa(command, args, { stdio: "pipe", timeout: 60000 });
