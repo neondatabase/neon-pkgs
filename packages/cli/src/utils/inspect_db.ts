@@ -118,12 +118,12 @@ export const formatInspectQueryError = (
 	return `${input.reason} (database ${input.database})${hint}`;
 };
 
-const connectionUriForDatabase = (
+export const connectionUriForDatabase = (
 	connectionUri: string,
 	database: string,
 ): string => {
 	const url = new URL(connectionUri);
-	url.pathname = database;
+	url.pathname = `/${encodeURIComponent(database)}`;
 	return url.toString();
 };
 

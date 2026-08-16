@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	connectionUriForDatabase,
 	formatInspectQueryError,
 	type ResolveInspectTargetsProps,
 	resolveInspectTargets,
@@ -148,6 +149,19 @@ describe("formatInspectQueryError", () => {
 			}),
 		).toBe(
 			"missing neon (database analytics). Pass --database-name to connect through a different database.",
+		);
+	});
+});
+
+describe("connectionUriForDatabase", () => {
+	it("encodes a literal percent in the database name", () => {
+		expect(
+			connectionUriForDatabase(
+				"postgresql://user:pass@ep-1.neon.tech/neondb?sslmode=require",
+				"sales%2026",
+			),
+		).toBe(
+			"postgresql://user:pass@ep-1.neon.tech/sales%252026?sslmode=require",
 		);
 	});
 });
