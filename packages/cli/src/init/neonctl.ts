@@ -180,7 +180,7 @@ export async function ensureNeonctl(
 			status: "failed",
 			action,
 			error:
-				"Could not install the Neon CLI: this machine has no package manager that can perform a global install. " +
+				`Could not ${action === "updating" ? "update" : "install"} the Neon CLI: this machine has no package manager that can perform a global install. ` +
 				"npm, pnpm and bun are not on PATH (yarn Berry has no global install). " +
 				"Install npm, pnpm or bun, then run this again.",
 		};
