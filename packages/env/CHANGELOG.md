@@ -1,5 +1,11 @@
 # @neondatabase/env
 
+## 1.1.0
+
+### Minor Changes
+
+- 0b37ad5: Opt-in OS keyring storage for a CLI profile via a `"keyring"` pointer in `profiles.json`. `neon profile create` no longer takes `--force`: creating an existing name replaces it and revokes the credential it held.
+
 ## 1.0.1
 
 ### Patch Changes
