@@ -261,7 +261,7 @@ export const builder = (argv: yargs.Argv) =>
 		.demandCommand(1, "Run `neon claim --help` to see the subcommands.");
 
 export const handler = (_args: yargs.Arguments) => {
-	/* subcommands only */
+	/* Yargs requires a handler for command groups. */
 };
 
 const rejectExplicitAccountCredential = (props: ClaimProps): void => {
@@ -342,8 +342,7 @@ const create = async (props: CreateProps): Promise<void> => {
 	let envWriteAttempted = false;
 	let accessToken: string | undefined;
 	try {
-		// Persist the durable assertion before any later network call. If cleanup itself fails,
-		// the user still has enough state to retry `neon claim delete`.
+		// Save the assertion first so failed cleanup can still be retried.
 		writeClaimableCredentials(props.configDir, stored);
 		localStateWritten = true;
 		applyContext(props.contextFile, {

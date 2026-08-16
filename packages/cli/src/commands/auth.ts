@@ -447,8 +447,7 @@ export const ensureAuth = async (
 		return;
 	}
 
-	// `claim` owns its assertion exchange and can create the project before a context exists.
-	// Account auth here would open a browser before the command ever reaches Claimable Neon.
+	// Claim commands exchange their own assertion, so account auth must not open first.
 	if (isClaimCommand(props)) {
 		return;
 	}

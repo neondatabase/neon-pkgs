@@ -27,9 +27,8 @@ export type Context = {
 	 */
 	branchId?: string;
 	/**
-	 * Present while this project is owned by Claimable Neon. The durable identity assertion
-	 * stays in the owner-only CLI config directory; `.neon` carries only the public issuer
-	 * needed to find it.
+	 * The assertion stays outside `.neon` so repository context never contains the owner
+	 * credential.
 	 */
 	claimable?: ClaimableContext;
 };
@@ -95,10 +94,6 @@ export const isConfigInit = (args: {
 export const isProfileCommand = (args: { _: (string | number)[] }): boolean =>
 	args._[0] === "profile" || args._[0] === "profiles";
 
-/**
- * `claim` / `claimable` talks to the Claimable Neon authorization service and manages its
- * own durable assertion. It must never trigger account authentication first.
- */
 export const isClaimCommand = (args: { _: (string | number)[] }): boolean =>
 	args._[0] === "claim" || args._[0] === "claimable";
 
@@ -246,8 +241,7 @@ export const enrichFromContext = (
 	if (isSkillsCommand(args)) {
 		return;
 	}
-	// Claim commands resolve their own project and assertion. Letting `.neon` populate their
-	// arguments would make `claim list` accidentally target whichever directory it runs from.
+	// Claim commands bypass enrichment so `claim list` never targets the current directory.
 	if (isClaimCommand(args)) {
 		return;
 	}

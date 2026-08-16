@@ -1,10 +1,6 @@
 import type { Config } from "@neon/config-runtime";
 import type { NeonService } from "./neon_services.js";
 
-/**
- * A static service toggle is on unless explicitly disabled: `true`, `{}`, and
- * `{ enabled: true }` enable it; `false`, `{ enabled: false }`, and absence leave it off.
- */
 const isToggleEnabled = (
 	toggle: boolean | { enabled?: boolean } | undefined,
 ): boolean => {
@@ -13,12 +9,7 @@ const isToggleEnabled = (
 	return toggle.enabled !== false;
 };
 
-/**
- * Static services declared by a neon.ts policy.
- *
- * Postgres is omitted because every Neon project has it. Callers that construct a
- * Claimable Neon capability request add Postgres unconditionally.
- */
+/** Postgres is omitted because every project includes it. */
 export const declaredNeonServices = (config: Config): NeonService[] => {
 	const services: NeonService[] = [];
 	if (isToggleEnabled(config.auth)) services.push("auth");
