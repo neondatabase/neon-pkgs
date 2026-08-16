@@ -31,7 +31,6 @@ export type Registration = {
 		expiresAt: string;
 	};
 	capabilities: CapabilityDecision[];
-	claimStartUrl: string;
 };
 
 export type ClaimableAccessToken = {
@@ -195,7 +194,6 @@ export const parseRegistrationResponse = (value: unknown): Registration => {
 	const action = "registering an anonymous identity";
 	const response = record(value, action);
 	const project = record(response.project, action);
-	const claim = record(response.claim, action);
 	const capabilities = response.capabilities;
 	if (!Array.isArray(capabilities)) throw invalidResponse(action);
 	return {
@@ -211,7 +209,6 @@ export const parseRegistrationResponse = (value: unknown): Registration => {
 		capabilities: capabilities.map((item) =>
 			parseCapabilityDecision(item, action),
 		),
-		claimStartUrl: stringField(claim, "start_url", action),
 	};
 };
 

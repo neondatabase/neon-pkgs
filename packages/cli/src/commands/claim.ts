@@ -405,7 +405,6 @@ const create = async (props: CreateProps): Promise<void> => {
 				expires_at: registration.project.expiresAt,
 				granted_capabilities: granted,
 				denied_capabilities: denied,
-				claim_url: registration.claimStartUrl,
 				...(envFile ? { env_file: envFile } : {}),
 			},
 			{
@@ -416,7 +415,6 @@ const create = async (props: CreateProps): Promise<void> => {
 					"expires_at",
 					"granted_capabilities",
 					"denied_capabilities",
-					"claim_url",
 					"env_file",
 				],
 			},

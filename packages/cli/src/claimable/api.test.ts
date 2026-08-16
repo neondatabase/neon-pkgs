@@ -32,10 +32,6 @@ describe("Claimable Neon response validation", () => {
 					{ capability: "postgres", granted: true },
 					{ capability: "data_api", granted: true },
 				],
-				claim: {
-					start_url:
-						"https://claimable.neon.tech/claim?registration_id=reg-test",
-				},
 				ignored_by_cli: "not projected",
 			}),
 		).toEqual({
@@ -52,8 +48,6 @@ describe("Claimable Neon response validation", () => {
 				{ capability: "postgres", granted: true },
 				{ capability: "data_api", granted: true },
 			],
-			claimStartUrl:
-				"https://claimable.neon.tech/claim?registration_id=reg-test",
 		});
 	});
 
