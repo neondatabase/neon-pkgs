@@ -462,6 +462,51 @@ describe("setup phase", () => {
 		);
 	});
 
+	test("omits project MCP scope when the agent has no project config", async () => {
+		const result = await handleSetupPhase({ agent: "windsurf" });
+
+		expect(result.nextAction.type).toBe("agent_check");
+		if (result.nextAction.type === "agent_check") {
+			const mcpScopePref = result.nextAction.userPreferences?.find(
+				(p) => p.id === "mcpScope",
+			);
+			const values = (mcpScopePref?.options ?? []).map((option) =>
+				typeof option === "string" ? option : option.value,
+			);
+			expect(values).toContain("global");
+			expect(values).not.toContain("project");
+		}
+	});
+
+	test("project-scope MCP for an agent without project config is not success", async () => {
+		mockInstallMcp.mockReturnValue({
+			ok: false,
+			unsupported: true,
+			error: "Windsurf does not support project-level MCP config.",
+		});
+
+		const result = await handleSetupPhase({
+			agent: "windsurf",
+			mcpConfigured: false,
+			connectionString: false,
+			framework: "none",
+			orm: "none",
+			isVscodeIde: false,
+			mode: "customize",
+			mcpScope: "project",
+		});
+
+		expect(result.status).toBe("partial");
+		const results = result.results as {
+			id: string;
+			status: string;
+			error?: string;
+		}[];
+		expect(results.find((r) => r.id === "install_mcp")?.status).toBe(
+			"failed",
+		);
+	});
+
 	test("reports partial status when some installs fail", async () => {
 		mockExeca.mockResolvedValueOnce({ stdout: "", stderr: "" }); // MCP succeeds
 		// Skills fails

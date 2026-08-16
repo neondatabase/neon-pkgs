@@ -195,7 +195,9 @@ export async function orchestrate(
 		nextAction: {
 			type: "complete",
 			message:
-				"Neon setup is complete. Your database is configured and your agent has the Neon MCP server and skills available.",
+				requestedAgent && !supportsSkills(requestedAgent)
+					? "Neon setup is complete. Your database is configured and your agent has the Neon MCP server available."
+					: "Neon setup is complete. Your database is configured and your agent has the Neon MCP server and skills available.",
 		},
 	};
 }

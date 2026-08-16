@@ -233,6 +233,28 @@ describe("v2 orchestrator", () => {
 		expect(result.nextAction.type).toBe("complete");
 		if (result.nextAction.type === "complete") {
 			expect(result.nextAction.message).toContain("complete");
+			expect(result.nextAction.message).toContain("skills");
+		}
+	});
+
+	test("complete message for grok-build does not claim skills", async () => {
+		mockIsAuthenticated.mockResolvedValue(true);
+		mockAppExists({
+			".grok/config.toml":
+				'[mcp_servers.Neon]\nurl = "https://mcp.neon.tech/mcp"\n',
+			".env": "DATABASE_URL=postgres://user:pass@ep-foo.us-east-2.aws.neon.tech/neondb\nNEON_AUTH_TOKEN=abc",
+			".neon": '{"projectId":"proj-123"}',
+		});
+
+		const result = await orchestrate({
+			agent: "grok-build",
+			skipMigrations: true,
+		});
+
+		expect(result.nextAction.type).toBe("complete");
+		if (result.nextAction.type === "complete") {
+			expect(result.nextAction.message).toContain("MCP server");
+			expect(result.nextAction.message).not.toContain("skills");
 		}
 	});
 

@@ -2,7 +2,6 @@ import {
 	type AgentType,
 	agents,
 	detectGlobalAgents,
-	detectProjectAgents,
 	getAgentTypes,
 } from "add-mcp";
 
@@ -108,14 +107,8 @@ export function agentPickerHint(id: AgentType): string {
 	return "MCP server";
 }
 
-export async function detectInstalledAgents(
-	cwd = process.cwd(),
-): Promise<AgentType[]> {
-	const [globalAgents, projectAgents] = await Promise.all([
-		detectGlobalAgents(),
-		Promise.resolve(detectProjectAgents(cwd)),
-	]);
-	return [...new Set([...globalAgents, ...projectAgents])];
+export async function detectInstalledAgents(): Promise<AgentType[]> {
+	return detectGlobalAgents();
 }
 
 export function mcpPickerOptions(): {

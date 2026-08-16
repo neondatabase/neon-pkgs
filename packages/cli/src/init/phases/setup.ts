@@ -3,9 +3,12 @@ import { unlink } from "node:fs/promises";
 import { resolve } from "node:path";
 import { execa } from "execa";
 import {
+	agentSupportsProjectMcp,
 	getSkillsAgentName,
 	listMcpAgentIds,
 	resolveAddMcpAgentId,
+	supportsSkills,
+	tryResolveAddMcpAgentId,
 } from "../agents.js";
 import {
 	FALLBACK_TEMPLATES,
@@ -296,7 +299,9 @@ async function buildBulkInspection(
 					).includes("partial");
 					const needsMcpChoice = !options.mcpConfigured;
 					const needsSkillsChoice =
-						!options.skillsInstalled && !isPartialSkills;
+						!options.skillsInstalled &&
+						!isPartialSkills &&
+						!(options.agent && !supportsSkills(options.agent));
 					const hasCustomizableOptions =
 						needsMcpChoice || needsSkillsChoice;
 					if (!hasCustomizableOptions) return [];
@@ -332,10 +337,20 @@ async function buildBulkInspection(
 							value: "global",
 							label: "Global (available in all projects)",
 						},
-						{
-							value: "project",
-							label: "Project-level (scoped to this project only)",
-						},
+						...(() => {
+							const known = options.agent
+								? tryResolveAddMcpAgentId(options.agent)
+								: undefined;
+							if (known && !agentSupportsProjectMcp(known)) {
+								return [];
+							}
+							return [
+								{
+									value: "project",
+									label: "Project-level (scoped to this project only)",
+								},
+							];
+						})(),
 						{
 							value: "none",
 							label: "Skip — do not install the MCP server",
@@ -348,7 +363,8 @@ async function buildBulkInspection(
 				// Show skills scope when skills aren't detected and no partial install exists.
 				// Partial installations are auto-completed to the same scope silently.
 				...(!options.skillsInstalled &&
-				!String(options.skillsScope ?? "").includes("partial")
+				!String(options.skillsScope ?? "").includes("partial") &&
+				!(options.agent && !supportsSkills(options.agent))
 					? [
 							{
 								id: "skillsScope",
@@ -589,11 +605,15 @@ async function executeBatchedInstallation(
 				});
 			}
 		} else if (installed.unsupported) {
+			const projectUnsupported =
+				mcpScope === "project" && !agentSupportsProjectMcp(mcpAgentId);
 			results.push({
 				id: "install_mcp",
 				description: installed.error,
-				status: "success",
-				manualAction: true,
+				status: projectUnsupported ? "failed" : "success",
+				...(projectUnsupported
+					? { error: installed.error }
+					: { manualAction: true }),
 			});
 		} else {
 			results.push({

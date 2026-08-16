@@ -1,3 +1,4 @@
+import { supportsSkills, tryResolveAddMcpAgentId } from "../agents.js";
 import { isAuthenticated } from "../auth.js";
 import { inspectProject } from "../inspect.js";
 import type { StatusResponse } from "../types.js";
@@ -7,7 +8,7 @@ export type StatusOptions = {
 };
 
 export async function handleStatusPhase(
-	_options: StatusOptions,
+	options: StatusOptions,
 ): Promise<StatusResponse> {
 	const authed = await isAuthenticated();
 
@@ -45,7 +46,10 @@ export async function handleStatusPhase(
 		});
 	}
 
-	if (!skillsInstalled) {
+	const statusAgent = options.agent
+		? tryResolveAddMcpAgentId(options.agent)
+		: undefined;
+	if (!skillsInstalled && (!statusAgent || supportsSkills(statusAgent))) {
 		recommendations.push({
 			priority: "medium",
 			message: "Neon agent skills not detected in this project",

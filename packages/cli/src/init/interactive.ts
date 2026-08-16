@@ -19,11 +19,11 @@ import which from "which";
 import { bold, dim, gray, italic } from "yoctocolors";
 import {
 	type AgentType,
+	agentSupportsProjectMcp,
 	detectInstalledAgents,
 	getAgentDisplayName,
 	getSkillsAgentName,
 	mcpPickerOptions,
-	skillsPickerOptions,
 	tryResolveAddMcpAgentId,
 } from "./agents.js";
 import { ensureNeonctlAuth, isAuthenticated } from "./auth.js";
@@ -344,7 +344,7 @@ async function interactiveInitInner(
 	const skillsAlready =
 		inspection.skillsInstalled === true || selectedTemplate !== null;
 	const hasNeonConnection = inspection.connectionString === true;
-	let needsMcp = !mcpAlready;
+	const needsMcp = !mcpAlready;
 	const needsSkills = !skillsAlready;
 	const needsInstall = needsMcp || needsSkills;
 
@@ -476,7 +476,7 @@ async function interactiveInitInner(
 		if (detectedAgent) {
 			selectedAgents = [detectedAgent];
 		} else {
-			const picked = await pickAgents(needsMcp);
+			const picked = await pickAgents();
 			if (!picked) {
 				outro("Setup cancelled.");
 				return;
@@ -499,17 +499,26 @@ async function interactiveInitInner(
 			vscodeEditors.length > 0 && !extensionAlreadyInstalled;
 		let doInstallExtension = false;
 
-		// Build hint showing only what needs installing
-		const hintParts: string[] = [];
-		if (needsMcp) hintParts.push("MCP server (global)");
-		if (needsSkills) hintParts.push("agent skills (project)");
-
 		// Installation preferences
 		let mcpScope: "global" | "project" | "none" = "global";
 		let skillsScope: "global" | "project" = "project";
 
 		let modeResult: string;
 		while (true) {
+			const hintParts: string[] = [];
+			if (
+				selectedAgents.some(
+					(agent) => !mcpHits.some((hit) => hit.agent === agent),
+				)
+			) {
+				hintParts.push("MCP server (global)");
+			}
+			if (
+				needsSkills &&
+				selectedAgents.some((agent) => getSkillsAgentName(agent))
+			) {
+				hintParts.push("agent skills (project)");
+			}
 			const agentNames = selectedAgents
 				.map((id) => getAgentDisplayName(id))
 				.join(", ");
@@ -542,7 +551,7 @@ async function interactiveInitInner(
 			}
 
 			if (result === "change_editor") {
-				const picked = await pickAgents(needsMcp);
+				const picked = await pickAgents();
 				if (!picked) {
 					outro("Setup cancelled.");
 					return;
@@ -559,7 +568,10 @@ async function interactiveInitInner(
 		}
 
 		if (modeResult === "customize") {
-			if (needsMcp) {
+			const selectedNeedMcp = selectedAgents.some(
+				(agent) => !mcpHits.some((hit) => hit.agent === agent),
+			);
+			if (selectedNeedMcp) {
 				const scopeResult = await select({
 					message: "Where should the Neon MCP server be configured?",
 					options: [
@@ -567,10 +579,14 @@ async function interactiveInitInner(
 							value: "global",
 							label: "Global (available in all projects)",
 						},
-						{
-							value: "project",
-							label: "Project-level (this project only)",
-						},
+						...(selectedAgents.some(agentSupportsProjectMcp)
+							? [
+									{
+										value: "project",
+										label: "Project-level (this project only)",
+									},
+								]
+							: []),
 						{
 							value: "none",
 							label: "Skip — do not install the MCP server",
@@ -582,10 +598,12 @@ async function interactiveInitInner(
 					return;
 				}
 				mcpScope = scopeResult as "global" | "project" | "none";
-				if (mcpScope === "none") needsMcp = false;
 			}
 
-			if (needsSkills) {
+			if (
+				needsSkills &&
+				selectedAgents.some((agent) => getSkillsAgentName(agent))
+			) {
 				const skillsScopeResult = await select({
 					message: "Where should Neon agent skills be installed?",
 					options: [
@@ -670,7 +688,10 @@ async function interactiveInitInner(
 
 		for (const agent of selectedAgents) {
 			const label = getAgentDisplayName(agent);
-			if (needsMcp && !mcpHits.some((hit) => hit.agent === agent)) {
+			if (
+				mcpScope !== "none" &&
+				!mcpHits.some((hit) => hit.agent === agent)
+			) {
 				const mcpS = spinner();
 				mcpS.start(`Installing Neon MCP server for ${label}...`);
 				const installed = installNeonMcpServer({
@@ -795,8 +816,8 @@ function extensionEditorsFor(selected: AgentType[]): Editor[] {
 	return out;
 }
 
-async function pickAgents(needsMcp: boolean): Promise<AgentType[] | null> {
-	const options = needsMcp ? mcpPickerOptions() : skillsPickerOptions();
+async function pickAgents(): Promise<AgentType[] | null> {
+	const options = mcpPickerOptions();
 	const installed = await detectInstalledAgents();
 	const response = await multiselect({
 		message: "Which agent(s) would you like to configure?",
