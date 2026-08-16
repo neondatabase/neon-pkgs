@@ -87,7 +87,7 @@ export function resolveAddMcpAgentId(rawAgent: string): AgentType {
 }
 
 export function getSkillsAgentName(agent: string): string | undefined {
-	if (Object.hasOwn(SKILLS_AGENT_BY_TYPE, agent)) {
+	if (Object.prototype.hasOwnProperty.call(SKILLS_AGENT_BY_TYPE, agent)) {
 		return SKILLS_AGENT_BY_TYPE[agent as AgentType];
 	}
 	const id = tryResolveAddMcpAgentId(agent);
