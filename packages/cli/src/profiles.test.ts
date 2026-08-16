@@ -8,8 +8,12 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
+	assertProfilesUsable,
+	canDropProfilesFile,
 	DEFAULT_PROFILE,
+	KEYRING_CREDENTIALS,
 	listProfiles,
+	locationOf,
 	newProfileCredentialsPath,
 	onlyDefaultRemains,
 	readProfiles,
@@ -60,6 +64,8 @@ describe("resolveProfile", () => {
 	test("DEFAULT resolves to credentials.json with no profiles file", () => {
 		const dir = makeDir({ "credentials.json": creds("me") });
 		const p = resolveProfile(dir, DEFAULT_PROFILE);
+		expect(p.storage).toBe("file");
+		if (p.storage !== "file") throw new Error("expected file profile");
 		expect(p.credentialsPath).toBe(resolve(dir, "credentials.json"));
 		expect(p.declared).toBe(false);
 	});
@@ -80,6 +86,8 @@ describe("resolveProfile", () => {
 			}),
 		});
 		const p = resolveProfile(dir, "work");
+		expect(p.storage).toBe("file");
+		if (p.storage !== "file") throw new Error("expected file profile");
 		expect(p.credentialsPath).toBe(resolve(dir, "credentials.work.json"));
 		expect(p.label).toBe("work@example.com");
 		expect(p.declared).toBe(true);
@@ -96,7 +104,11 @@ describe("resolveProfile", () => {
 				},
 			}),
 		});
-		expect(resolveProfile(dir, "other").credentialsPath).toBe(
+		const adopted = resolveProfile(dir, "other");
+		expect(adopted.storage).toBe("file");
+		if (adopted.storage !== "file")
+			throw new Error("expected file profile");
+		expect(adopted.credentialsPath).toBe(
 			resolve(outside, "credentials.json"),
 		);
 	});
@@ -114,6 +126,23 @@ describe("resolveProfile", () => {
 		expect(() => resolveProfile(dir, "nope")).toThrow(/DEFAULT/);
 	});
 
+	test("the keyring sentinel is not resolved as a relative path", () => {
+		const dir = makeDir({
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: {
+					DEFAULT: { credentials: KEYRING_CREDENTIALS },
+				},
+			}),
+		});
+		const p = resolveProfile(dir, DEFAULT_PROFILE);
+		expect(p).toEqual({
+			name: DEFAULT_PROFILE,
+			storage: "keyring",
+			declared: true,
+		});
+	});
+
 	test("DEFAULT still works when profiles.json omits it", () => {
 		const dir = makeDir({
 			"credentials.json": creds("me"),
@@ -122,21 +151,24 @@ describe("resolveProfile", () => {
 				profiles: { work: { credentials: "credentials.work.json" } },
 			}),
 		});
-		expect(resolveProfile(dir, DEFAULT_PROFILE).credentialsPath).toBe(
-			resolve(dir, "credentials.json"),
-		);
+		const p = resolveProfile(dir, DEFAULT_PROFILE);
+		expect(p.storage).toBe("file");
+		if (p.storage !== "file") throw new Error("expected file profile");
+		expect(p.credentialsPath).toBe(resolve(dir, "credentials.json"));
 	});
 
-	// A broken profiles.json must not lock the user out of `neon auth`, which is a `DEFAULT`
-	// operation and needs no named profile to work.
-	test("a malformed profiles.json does not block DEFAULT", () => {
+	// A malformed file may be DEFAULT's only keyring pointer, so OAuth cannot replace it.
+	test("a malformed profiles.json blocks DEFAULT", () => {
 		const dir = makeDir({
 			"credentials.json": creds("me"),
 			"profiles.json": "not json",
 		});
 		expect(readProfiles(dir)).toBeNull();
-		expect(resolveProfile(dir, DEFAULT_PROFILE).credentialsPath).toBe(
-			resolve(dir, "credentials.json"),
+		expect(() => resolveProfile(dir, DEFAULT_PROFILE)).toThrow(
+			/could not be read as a profiles file/,
+		);
+		expect(() => assertProfilesUsable(dir, DEFAULT_PROFILE)).toThrow(
+			/could not be read as a profiles file/,
 		);
 	});
 
@@ -164,9 +196,9 @@ describe("resolveProfile", () => {
 			/"bad name" is not a valid profile name/,
 		],
 		[
-			"an entry with no path",
+			"an entry with no pointer",
 			'{"version":1,"profiles":{"work":{"label":"me"}}}',
-			/profile "work" has no `credentials` path/,
+			/profile "work" has no `credentials` pointer/,
 		],
 	])("%s is refused with the reason", (_label, contents, expected) => {
 		const dir = makeDir({
@@ -203,7 +235,11 @@ describe("upsertProfile", () => {
 			readFileSync(resolve(dir, "profiles.json"), "utf8"),
 		);
 		// Relative is fine as long as it resolves back to the same file.
-		expect(resolveProfile(dir, "other").credentialsPath).toBe(
+		const relocated = resolveProfile(dir, "other");
+		expect(relocated.storage).toBe("file");
+		if (relocated.storage !== "file")
+			throw new Error("expected file profile");
+		expect(relocated.credentialsPath).toBe(
 			resolve(outside, "credentials.json"),
 		);
 		expect(file.profiles.other.credentials).toBeTruthy();
@@ -255,7 +291,38 @@ describe("upsertProfile", () => {
 			upsertProfile(dir, "other", {
 				credentials: "credentials.other.json",
 			}),
-		).toThrow(/has no `credentials` path/);
+		).toThrow(/has no `credentials` pointer/);
+	});
+
+	test("a file named keyring is stored as ./keyring, not the sentinel", () => {
+		const dir = makeDir({ "credentials.json": creds("me") });
+		const path = resolve(dir, "keyring");
+		upsertProfile(dir, "work", { credentials: path });
+		const file = JSON.parse(
+			readFileSync(resolve(dir, "profiles.json"), "utf8"),
+		);
+		expect(file.profiles.work.credentials).toBe("./keyring");
+		const p = resolveProfile(dir, "work");
+		expect(p.storage).toBe("file");
+		if (p.storage !== "file") throw new Error("expected file profile");
+		expect(p.credentialsPath).toBe(path);
+	});
+
+	test("writes the keyring sentinel without resolving it as a path", () => {
+		const dir = makeDir({ "credentials.json": creds("me") });
+		upsertProfile(dir, DEFAULT_PROFILE, {
+			credentials: KEYRING_CREDENTIALS,
+		});
+		const file = JSON.parse(
+			readFileSync(resolve(dir, "profiles.json"), "utf8"),
+		);
+		expect(file.profiles.DEFAULT.credentials).toBe(KEYRING_CREDENTIALS);
+		const p = resolveProfile(dir, DEFAULT_PROFILE);
+		expect(p.storage).toBe("keyring");
+		expect(locationOf(p)).toEqual({
+			profile: DEFAULT_PROFILE,
+			storage: "keyring",
+		});
 	});
 });
 
@@ -268,6 +335,20 @@ describe("removeProfileEntry / onlyDefaultRemains", () => {
 		const file = readProfiles(dir);
 		expect(file).not.toBeNull();
 		expect(onlyDefaultRemains(file!)).toBe(true);
+		expect(canDropProfilesFile(file!)).toBe(true);
+	});
+
+	test("does not drop profiles.json when DEFAULT is keyring", () => {
+		const dir = makeDir({});
+		upsertProfile(dir, DEFAULT_PROFILE, {
+			credentials: KEYRING_CREDENTIALS,
+		});
+		upsertProfile(dir, "work", { credentials: "credentials.work.json" });
+		expect(removeProfileEntry(dir, "work")).toBe(true);
+		const file = readProfiles(dir);
+		expect(file).not.toBeNull();
+		expect(onlyDefaultRemains(file!)).toBe(true);
+		expect(canDropProfilesFile(file!)).toBe(false);
 	});
 
 	test("returns false for an entry that isn't there", () => {

@@ -161,6 +161,32 @@ describe("fetchEnvReusingSecrets", () => {
 		expect(live[0]?.tokenId).toBe(widened.vars.AWS_ACCESS_KEY_ID);
 	});
 
+	test("revokes the credential it replaces when the branch switches features", async () => {
+		const { api, projectId } = seededFake();
+		const storageOnly = await fetchEnvReusingSecrets(storagePolicy, {
+			api,
+			projectId,
+			branch: "main",
+		});
+
+		const gatewayOnly = await fetchEnvReusingSecrets(gatewayPolicy, {
+			api,
+			projectId,
+			branch: "main",
+			env: { ...process.env, ...storageOnly.vars },
+		});
+
+		expect(gatewayOnly.credential).toEqual({
+			issued: true,
+			keys: ["NEON_AI_GATEWAY_TOKEN"],
+			revoked: [storageOnly.vars.AWS_ACCESS_KEY_ID],
+			superseded: [],
+		});
+		const live = await api.listCredentials(projectId, "br-main");
+		expect(live).toHaveLength(1);
+		expect(live[0]?.scopes).toEqual(["ai_gateway:invoke"]);
+	});
+
 	test("keeps the superseded credential live when the caller resolves only part of the branch", async () => {
 		// `revokeSuperseded: false` is for a caller resolving a subset — `neon env pull
 		// --service`. Here the branch has both features on one credential, but the resolve
@@ -280,6 +306,117 @@ describe("fetchEnvReusingSecrets", () => {
 		});
 		expect(vars.DATABASE_URL).toContain("postgresql://");
 		expect(vars.NEON_BRANCH).toBe("main");
+	});
+
+	test("mints and reuses only the selected gateway secret", async () => {
+		const { api, projectId } = seededFake();
+		const first = await fetchEnvReusingSecrets(bothPolicy, {
+			api,
+			projectId,
+			branch: "main",
+			keys: ["NEON_AI_GATEWAY_TOKEN"],
+		});
+
+		expect(Object.keys(first.vars)).toEqual(["NEON_AI_GATEWAY_TOKEN"]);
+		expect(first.vars.NEON_AI_GATEWAY_TOKEN).toMatch(/^nt_live_/);
+		const create = api.history.find(
+			(entry) => entry.method === "createCredential",
+		);
+		expect(create?.args[2]).toMatchObject({
+			scopes: ["ai_gateway:invoke"],
+		});
+
+		const second = await fetchEnvReusingSecrets(bothPolicy, {
+			api,
+			projectId,
+			branch: "main",
+			keys: ["NEON_AI_GATEWAY_TOKEN"],
+			env: { ...process.env, ...first.vars },
+		});
+
+		expect(callsTo(api, "createCredential")).toBe(1);
+		expect(second.vars).toEqual(first.vars);
+		expect(second.credential).toEqual({
+			issued: false,
+			keys: ["NEON_AI_GATEWAY_TOKEN"],
+			revoked: [],
+			superseded: [],
+		});
+	});
+
+	test("reports but does not revoke a credential replaced by an exact secret pull", async () => {
+		const { api, projectId } = seededFake();
+		const storageOnly = await api.createCredential(projectId, "br-main", {
+			scopes: ["storage:read", "storage:write"],
+			principalType: "user",
+			name: "neon-env main",
+		});
+
+		const result = await fetchEnvReusingSecrets(bothPolicy, {
+			api,
+			projectId,
+			branch: "main",
+			keys: ["NEON_AI_GATEWAY_TOKEN"],
+			env: { NEON_AI_GATEWAY_TOKEN: storageOnly.apiToken },
+			revokeSuperseded: false,
+		});
+
+		expect(result.credential).toEqual({
+			issued: true,
+			keys: ["NEON_AI_GATEWAY_TOKEN"],
+			revoked: [],
+			superseded: [storageOnly.tokenId],
+		});
+		expect(callsTo(api, "revokeCredential")).toBe(0);
+	});
+
+	test("does not mint a credential when only a non-secret gateway variable is selected", async () => {
+		const { api, projectId } = seededFake();
+
+		const { vars, credential } = await fetchEnvReusingSecrets(
+			gatewayPolicy,
+			{
+				api,
+				projectId,
+				branch: "main",
+				keys: ["NEON_AI_GATEWAY_BASE_URL"],
+			},
+		);
+
+		expect(vars).toEqual({
+			NEON_AI_GATEWAY_BASE_URL:
+				"https://br-main-api.ai.aws-us-east-1.fake.neon.tech",
+		});
+		expect(callsTo(api, "listCredentials")).toBe(0);
+		expect(callsTo(api, "createCredential")).toBe(0);
+		expect(credential).toEqual({
+			issued: false,
+			keys: [],
+			revoked: [],
+			superseded: [],
+		});
+	});
+
+	test("does not widen a credential for a selected non-secret variable", async () => {
+		const { api, projectId } = seededFake();
+
+		await fetchEnvReusingSecrets(bothPolicy, {
+			api,
+			projectId,
+			branch: "main",
+			keys: [
+				"AWS_ACCESS_KEY_ID",
+				"AWS_SECRET_ACCESS_KEY",
+				"NEON_AI_GATEWAY_BASE_URL",
+			],
+		});
+
+		const create = api.history.find(
+			(entry) => entry.method === "createCredential",
+		);
+		expect(create?.args[2]).toMatchObject({
+			scopes: ["storage:read", "storage:write"],
+		});
 	});
 
 	test("does not look up credentials when nothing is persisted to verify", async () => {

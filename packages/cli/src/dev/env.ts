@@ -1,6 +1,8 @@
 import {
 	type Config,
 	createNeonApiFromOptions,
+	ErrorCode,
+	isPlatformError,
 	loadConfigFromFile,
 	type NeonApi,
 	type NeonBucketSnapshot,
@@ -13,6 +15,13 @@ import {
 	fetchEnvReusingSecrets,
 	type ReusedBranchEnv,
 } from "@neon-internals/env-core/reuse-secrets";
+import {
+	ENV_PULL_SERVICES,
+	type EnvPullKey,
+	envKeysForSelection,
+	serviceForEnvKey,
+	servicesForEnvKeys,
+} from "../env_services.js";
 import { log } from "../log.js";
 import type { NeonService } from "../neon_services.js";
 import { getCliName } from "../utils/cli_name.js";
@@ -47,11 +56,17 @@ export type DevEnvContext = {
 	 */
 	services?: readonly NeonService[];
 	/**
+	 * Resolve exactly these OS-level env vars. Like {@link DevEnvContext.services}, this is
+	 * an explicit selection that ignores `neon.ts`; when both are present their output is
+	 * the union of complete service bundles and these individual keys.
+	 */
+	envKeys?: readonly EnvPullKey[];
+	/**
 	 * Add the AI Gateway to the **no-`neon.ts`** resolution. `pullConfig` cannot detect the
-	 * gateway — it has no branch-level enabled state, only a credential — so a caller that
-	 * wants it in the "everything this branch has" set has to ask. `neon env pull` does;
-	 * `neon dev` and the pull bundled into `link` / `checkout` / `apply` do not. Ignored when
-	 * {@link DevEnvContext.services} is set, since that selection already says.
+	 * gateway — it has no branch-level enabled state, only branch-credential capability — so
+	 * a caller that wants it in the "everything this branch has" set has to ask. `neon env
+	 * pull` does; `neon dev` and the pull bundled into `link` / `checkout` / `apply` do not.
+	 * Ignored when {@link DevEnvContext.services} is set, since that selection already says.
 	 */
 	implyAiGateway?: boolean;
 };
@@ -85,7 +100,7 @@ export class MissingBranchContextError extends Error {
 }
 
 /**
- * Thrown when an explicit `--service` selection names a service the branch does not have.
+ * Thrown when an explicit `--service` / `--env` selection needs a service the branch lacks.
  * Unlike the policy path — where the same situation is a {@link DevEnvMismatchError} pointing
  * at `deploy` — the user named the service on the command line, so the fix is to provision it
  * or drop it from the selection.
@@ -112,8 +127,9 @@ export type ResolvedNeonEnvVars = ReusedBranchEnv & {
  *
  * Tiered:
  *
- *   0. {@link DevEnvContext.services} is set -> that selection *is* the policy, and any
- *      `neon.ts` is ignored. See {@link resolveSelectedServices}.
+ *   0. {@link DevEnvContext.services} or {@link DevEnvContext.envKeys} is set -> that
+ *      selection *is* the policy, and any `neon.ts` is ignored. See
+ *      {@link resolveSelectedServices}.
  *   1. a `neon.ts` policy is found -> the policy is the source of truth. We first
  *      check it against the branch's live state (`plan`); if it declares a resource
  *      the branch is missing, we stop with a {@link DevEnvMismatchError} pointing at
@@ -132,8 +148,12 @@ export type ResolvedNeonEnvVars = ReusedBranchEnv & {
 export const resolveNeonEnvVars = async (
 	ctx: DevEnvContext,
 ): Promise<ResolvedNeonEnvVars> => {
-	if (ctx.services) {
-		return await resolveSelectedServices(ctx, ctx.services);
+	if (ctx.services !== undefined || ctx.envKeys !== undefined) {
+		return await resolveSelectedServices(
+			ctx,
+			ctx.services ?? [],
+			ctx.envKeys ?? [],
+		);
 	}
 
 	const config = await loadNeonConfig(ctx.cwd);
@@ -267,25 +287,32 @@ const apiFor = (ctx: DevEnvContext): NeonApi =>
 	});
 
 /**
- * Tier-0: resolve exactly the services `--service` named, with `neon.ts` out of the picture.
+ * Tier-0: resolve exactly what `--service` / `--env` selected, with `neon.ts` ignored.
  *
- * The selection is checked against the branch's live state so a service that is named but not
- * provisioned fails by name, instead of quietly contributing no vars. `postgres` and the AI
- * Gateway are not checked: every branch has Postgres, and the gateway has no branch-level
- * state to check (an unavailable one surfaces when its credential is minted).
+ * The selection is checked against live project and branch state so a service that is named
+ * but not provisioned fails by name, instead of quietly contributing dead vars. `postgres`
+ * needs no check because every branch has it.
  */
 const resolveSelectedServices = async (
 	ctx: DevEnvContext,
-	services: readonly NeonService[],
+	directServices: readonly NeonService[],
+	envKeys: readonly EnvPullKey[],
 ): Promise<ResolvedNeonEnvVars> => {
 	const { projectId, branchId } = ctx;
 	if (!projectId || !branchId) {
 		throw new MissingBranchContextError(
-			"--service needs a project and branch to read from. " +
+			"An explicit env selection needs a project and branch to read from. " +
 				`Run \`${getCliName()} link\` and \`${getCliName()} checkout <branch>\`, or pass ` +
 				"--project-id / --branch.",
 		);
 	}
+	const impliedServices = servicesForEnvKeys(envKeys);
+	const services = ENV_PULL_SERVICES.filter(
+		(service) =>
+			directServices.includes(service) ||
+			impliedServices.includes(service),
+	);
+	const selectedKeys = envKeysForSelection(directServices, envKeys);
 
 	// Read only the services that were named, rather than going through `pullConfig`. That
 	// keeps a selection independent of everything else on the branch — `pullConfig` also
@@ -293,24 +320,45 @@ const resolveSelectedServices = async (
 	// keeps an "object storage isn't available for this project" error intact, which
 	// `pullConfig` degrades to an empty bucket list and would report as "no buckets".
 	const api = apiFor(ctx);
-	const has = (service: NeonService): boolean => services.includes(service);
-	const [auth, dataApiEnabled, buckets] = await Promise.all([
-		has("auth") ? api.getNeonAuth(projectId, branchId) : null,
-		has("data-api") ? readDataApiEnabled(api, projectId, branchId) : null,
-		has("object-storage")
-			? api.listBranchBuckets(projectId, branchId)
-			: null,
-	]);
+	const has = (service: (typeof ENV_PULL_SERVICES)[number]): boolean =>
+		services.includes(service);
+	const checkAiGateway =
+		has("ai-gateway") &&
+		!selectedKeys.includes(NEON_ENV_VAR_KEYS.aiGateway.apiKey);
+	const [auth, dataApiEnabled, buckets, aiGatewayAvailable] =
+		await Promise.all([
+			has("auth") ? api.getNeonAuth(projectId, branchId) : null,
+			has("data-api")
+				? readDataApiEnabled(api, projectId, branchId)
+				: null,
+			has("object-storage")
+				? api.listBranchBuckets(projectId, branchId)
+				: null,
+			checkAiGateway
+				? readAiGatewayAvailable(api, projectId, branchId)
+				: null,
+		]);
 
-	const config = configForServices(services, branchId, {
-		authEnabled: auth !== null,
-		dataApiEnabled,
-		buckets: buckets ?? [],
-	});
+	const config = configForServices(
+		services,
+		branchId,
+		{
+			authEnabled: auth !== null,
+			dataApiEnabled,
+			buckets: buckets ?? [],
+			// A token selection validates availability while minting. The read-only check is
+			// needed only when the base URL was selected on its own.
+			aiGatewayAvailable: aiGatewayAvailable ?? true,
+		},
+		{ directServices, envKeys },
+	);
 	// A selection resolves part of the branch, so it must not revoke: the credential its
 	// persisted secrets name may also back a service it is not resolving. See
 	// `fetchEnvReusingSecrets`'s `revokeSuperseded`.
-	return await fetchAndProject(config, ctx, { revokeSuperseded: false });
+	return await fetchAndProject(config, ctx, {
+		keys: selectedKeys,
+		revokeSuperseded: false,
+	});
 };
 
 /**
@@ -341,11 +389,31 @@ const readDataApiEnabled = async (
 	return dataApi !== null;
 };
 
+const readAiGatewayAvailable = async (
+	api: NeonApi,
+	projectId: string,
+	branchId: string,
+): Promise<boolean> => {
+	try {
+		await api.listCredentials(projectId, branchId);
+		return true;
+	} catch (error) {
+		if (
+			isPlatformError(error) &&
+			error.code === ErrorCode.FeatureUnavailable &&
+			(error.details.status === 404 || error.details.status === 501)
+		) {
+			return false;
+		}
+		throw error;
+	}
+};
+
 /** Neon's default database, and the one `fetchEnv` prefers when a branch has several. */
 const NEON_DEFAULT_DATABASE = "neondb";
 
 /**
- * Build the `Config` an explicit `--service` selection stands for, raising
+ * Build the `Config` an explicit `--service` / `--env` selection stands for, raising
  * {@link ServiceNotOnBranchError} for anything the branch does not have. Naming a service
  * that isn't there has to fail rather than contribute no vars, or a scoped pull would report
  * "no Neon env variables to pull" — which reads as a statement about the branch rather than
@@ -359,6 +427,11 @@ const configForServices = (
 		/** `null` when the read could not decide — see {@link readDataApiEnabled}. */
 		dataApiEnabled: boolean | null;
 		buckets: NeonBucketSnapshot[];
+		aiGatewayAvailable: boolean;
+	},
+	selection: {
+		directServices: readonly NeonService[];
+		envKeys: readonly EnvPullKey[];
 	},
 ): Config => {
 	// The command that provisions each one, for a user who may well have no `neon.ts` — in
@@ -369,10 +442,37 @@ const configForServices = (
 		"object-storage": `${getCliName()} buckets create <name>`,
 	};
 	const notOnBranch = (service: NeonService, what: string): never => {
+		if (!selection.directServices.includes(service)) {
+			const keys = selection.envKeys.filter(
+				(key) => serviceForEnvKey(key) === service,
+			);
+			const names = keys.join(", ");
+			throw new ServiceNotOnBranchError(
+				`--env ${names}: branch ${branchId} has no ${what}, so ${names} cannot be pulled. ` +
+					`Provision it first (\`${provisionWith[service]}\`, or in the Neon Console), ` +
+					`or drop ${names} from --env.`,
+			);
+		}
 		throw new ServiceNotOnBranchError(
 			`--service ${service}: branch ${branchId} has no ${what}, so there are no ` +
 				`${service} env vars to pull. Provision it first (\`${provisionWith[service]}\`, ` +
 				`or in the Neon Console), or drop ${service} from --service.`,
+		);
+	};
+	const aiGatewayUnavailable = (): never => {
+		const reason =
+			"AI Gateway is not available for this Neon project because branch credentials are unavailable";
+		if (selection.directServices.includes("ai-gateway")) {
+			throw new ServiceNotOnBranchError(
+				`--service ai-gateway: ${reason}. Use another project, or drop ai-gateway from --service.`,
+			);
+		}
+		const names = selection.envKeys
+			.filter((key) => serviceForEnvKey(key) === "ai-gateway")
+			.join(", ");
+		throw new ServiceNotOnBranchError(
+			`--env ${names}: ${reason}, so ${names} cannot be pulled. ` +
+				`Use another project, or drop ${names} from --env.`,
 		);
 	};
 
@@ -401,7 +501,10 @@ const configForServices = (
 			]),
 		);
 	}
-	if (services.includes("ai-gateway")) preview.aiGateway = true;
+	if (services.includes("ai-gateway")) {
+		if (!branch.aiGatewayAvailable) aiGatewayUnavailable();
+		preview.aiGateway = true;
+	}
 	if (Object.keys(preview).length > 0) config.preview = preview;
 
 	return config;
@@ -530,13 +633,14 @@ const isMissingResource = (change: AppliedChange): boolean =>
 const fetchAndProject = async (
 	config: Config,
 	ctx: DevEnvContext,
-	opts: { revokeSuperseded?: boolean } = {},
+	opts: { keys?: readonly string[]; revokeSuperseded?: boolean } = {},
 ): Promise<ReusedBranchEnv> =>
 	fetchEnvReusingSecrets(config, {
 		projectId: ctx.projectId as string,
 		branch: ctx.branchId as string,
 		...apiOptions(ctx),
 		...(ctx.env ? { env: ctx.env } : {}),
+		...(opts.keys ? { keys: opts.keys } : {}),
 		...(opts.revokeSuperseded === false ? { revokeSuperseded: false } : {}),
 	});
 

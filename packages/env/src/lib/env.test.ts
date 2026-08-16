@@ -159,6 +159,60 @@ describe("fetchEnv", () => {
 		expect(toEntries(env).NEON_BRANCH).toBe("main");
 	});
 
+	test("a branch-only key filter skips unrelated Postgres reads", async () => {
+		const { api, projectId } = seededFake();
+		const env = await fetchEnv(defineConfig({}), {
+			api,
+			projectId,
+			branchId: "br-main",
+			keys: ["NEON_BRANCH"],
+		});
+
+		expect(toEntries(env)).toEqual({ NEON_BRANCH: "main" });
+		const methods = api.history.map((entry) => entry.method);
+		expect(methods).not.toContain("listBranchRoles");
+		expect(methods).not.toContain("listBranchDatabases");
+		expect(methods).not.toContain("getConnectionUri");
+	});
+
+	test("a pooled-URL key filter fetches no direct connection URI", async () => {
+		const { api, projectId } = seededFake();
+		const env = await fetchEnv(defineConfig({}), {
+			api,
+			projectId,
+			branchId: "br-main",
+			keys: ["DATABASE_URL"],
+		});
+
+		expect(toEntries(env)).toEqual({
+			DATABASE_URL: expect.stringContaining("postgresql://"),
+		});
+		const connectionCalls = api.history.filter(
+			(entry) => entry.method === "getConnectionUri",
+		);
+		expect(connectionCalls).toHaveLength(1);
+		expect(connectionCalls[0]?.args[1]).toMatchObject({ pooled: true });
+	});
+
+	test("rejects an incomplete storage credential selection before API reads", async () => {
+		const { api, projectId } = seededFake();
+		const keys: Array<"AWS_ACCESS_KEY_ID" | "AWS_SECRET_ACCESS_KEY"> = [
+			"AWS_ACCESS_KEY_ID",
+		];
+
+		await expect(
+			fetchEnv(defineConfig({ preview: { buckets: { uploads: {} } } }), {
+				api,
+				projectId,
+				branchId: "br-main",
+				keys,
+			}),
+		).rejects.toThrow(
+			"fetchEnv: AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be selected together. Pass both in `keys`, or omit both.",
+		);
+		expect(api.history).toHaveLength(0);
+	});
+
 	test("requires auth integration when policy enables auth", async () => {
 		const { api, projectId } = seededFake();
 		const config = defineConfig({ auth: true });

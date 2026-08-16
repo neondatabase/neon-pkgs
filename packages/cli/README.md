@@ -352,6 +352,19 @@ How today's `set-context` uses map onto `link`:
 
 The key difference: `link` resolves and **verifies** before writing (so you never get a half-written or stale `.neon`), whereas `set-context` writes whatever you give it verbatim. The closest like-for-like replacement for the old raw write is `link --no-checks`.
 
+### open
+
+`open` launches the linked project's page in the Neon Console. It reads the closest `.neon` file without authenticating or calling the Neon API, so it works from any sub-directory of a linked project.
+
+```bash
+neon open
+
+# Open a project without changing the linked context
+neon open --project-id polished-snowflake-12345678
+```
+
+A branch pinned in `.neon` does not change the destination. `.neon` stores the branch as a name, while the Console route requires its ID; resolving it would turn this local command into an authenticated API call.
+
 ### checkout
 
 `checkout [id|name]` pins a branch in the local context so subsequent commands target it — it's the focused companion to `link` for the common "switch the branch I'm working on" case (`link` resolves org + project; `checkout` pins the branch). It resolves the branch (by name or id) against the project, then **heals** the `.neon` file: it always (re)writes `projectId`, `branch`, and `orgId` (when the project has one), so a `.neon` that was missing fields or drifted ends up complete and consistent. The branch is stored as its **name** when known (matching `link`). When `orgId` isn't already known (from `--org-id` or the existing `.neon`), it's looked up from the project itself.
@@ -421,9 +434,9 @@ The human-readable summary line goes to stderr and the diff body to stdout, so `
 
 **What gets pulled**, in precedence order:
 
-1. **`--service`**, when you pass it — exactly those services, whatever else is on the branch and whatever a `neon.ts` says.
+1. **`--service` and/or `--env`**, when you pass either — their union is the complete selection, ignoring `neon.ts` and unselected branch variables. `--service` adds a service's complete variable bundle; `--env` adds only the individual variables you name.
 2. **`neon.ts`**, when the working directory has one — the policy is the source of truth, same as `neon dev` and `neon deploy`.
-3. **Everything the branch has** otherwise — Postgres, Neon Auth, the Data API, and object storage read back from the branch, plus the AI Gateway. The gateway has no branch-level state to read back (it is credential-gated, not provisioned), so a bare `env pull` asks for it rather than detecting it, which mints a branch credential. To leave it out, name the services you do want with `--service`.
+3. **Everything the branch has** otherwise — Postgres, Neon Auth, the Data API, and object storage read back from the branch, plus the AI Gateway. The gateway has no branch-level state to read back, so a bare `env pull` asks for it rather than detecting it and may mint a branch credential. To leave it out, name only what you do want with `--service` and/or `--env`.
 
 If the gateway can't be resolved, it is dropped with a warning and the rest of the pull still lands. Gateway variables already in your file for *this* branch are left alone — a pull that couldn't reach the gateway is no evidence the branch has stopped having one — while ones left over from a different branch are pruned like any other stale value.
 
@@ -440,6 +453,13 @@ neon env pull --service ai-gateway
 # Repeat the flag or comma-separate; -s, --service and --services are all accepted
 neon env pull -s postgres -s data-api
 neon env pull -s postgres,auth
+
+# Pull one exact variable; repeat -e or comma-separate for more
+neon env pull -e DATABASE_URL
+neon env pull -e DATABASE_URL,NEON_AUTH_BASE_URL
+
+# The selectors compose as a union: all Auth vars plus DATABASE_URL
+neon env pull -s auth -e DATABASE_URL
 ```
 
 Every services flag in the CLI takes those three spellings, the same value syntax, and the same service names — see [`config init --services`](#getting-a-neonts-config-init).
@@ -452,11 +472,15 @@ Every services flag in the CLI takes those three spellings, the same value synta
 | `object-storage` | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_URL_S3`, `AWS_REGION` |
 | `ai-gateway` | `NEON_AI_GATEWAY_TOKEN`, `NEON_AI_GATEWAY_BASE_URL` |
 
-`NEON_BRANCH` is written by every pull — it is branch identity, not a service.
+`-e, --env` accepts any variable in the table plus `NEON_BRANCH`. It is case-sensitive and rejects unknown names rather than silently widening the pull. `NEON_BRANCH` is written by unscoped and service-scoped pulls because it is branch identity, not a service; an env-only pull writes it only when you select it.
 
-**A scoped pull is scoped in both directions.** An unscoped `env pull` owns the Neon-named variables: pointing a directory at a branch without Neon Auth prunes the stale `NEON_AUTH_*` lines. `--service` narrows that to the services you named, so `env pull -s ai-gateway` never touches your `DATABASE_URL`. (`AWS_*` is never pruned by any pull: those names collide with credentials you may set yourself, so `env pull` only ever writes them.)
+`--env` never narrows `--service`: `neon env pull -s postgres -e DATABASE_URL` still pulls the complete Postgres bundle (`DATABASE_URL`, `DATABASE_URL_UNPOOLED`, and `NEON_BRANCH`). The two selectors always form a union.
 
-**A scoped pull also never revokes a credential.** Where an unscoped pull revokes the credential it replaces, a scoped one leaves the old one live — it can't tell which other services still use it. It says so when it happens; revoke it in the Neon Console if nothing does.
+**A scoped pull is scoped in both directions.** An unscoped `env pull` owns the Neon-named variables: pointing a directory at a branch without Neon Auth prunes the stale `NEON_AUTH_*` lines. `--service` narrows that to the services you named, while `--env` narrows it to the exact keys you named, so `env pull -e DATABASE_URL` never touches `DATABASE_URL_UNPOOLED`. (`AWS_*` is never pruned by any pull: those names collide with credentials you may set yourself, so `env pull` only ever writes them.)
+
+**A scoped pull also never revokes a credential.** Where an unscoped pull revokes the credential it replaces, a scoped one leaves the old one live — it can't tell which other variables still use it. It says so when it happens; revoke it in the Neon Console if nothing does.
+
+`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` must be selected together. Neon issues them as one object-storage credential; pulling only one would pair a fresh half with whatever old half remains in the file.
 
 Naming a service the branch does not have is an error, not an empty pull:
 
@@ -649,7 +673,7 @@ $ neon init
 
 Run in a terminal it prompts you through those steps. This is what the retired `neon-init` package used to do; `npx neon init` replaces it.
 
-Two side effects worth knowing before you run it. It **installs or upgrades `neonctl` globally**, with whichever package manager invoked it — the flow drives Neon by shelling out to the CLI rather than calling the API in-process. And it **writes `.neon`** in the project directory, the same context file `neon link` and `neon checkout` use.
+Two side effects worth knowing before you run it. It **installs or upgrades `neon` globally**, with whichever package manager invoked it — the flow drives Neon by shelling out to the CLI rather than calling the API in-process. And it **writes `.neon`** in the project directory, the same context file `neon link` and `neon checkout` use.
 
 ### Agent mode
 
@@ -688,7 +712,7 @@ $ echo $?
 
 That message reports where parsing stopped and nothing more. `--data` carries whatever you put in it, and the JSON parser's own message quotes a window of the input, so echoing either would put a connection string or an API key on stdout.
 
-**One exception to "JSON on stdout".** Credentials are resolved before any command runs, so a failure in that step — an unknown `--profile` or `NEON_PROFILE`, `--api-key` and `--profile` together, or a `credentials.json` that cannot be read — prints `ERROR: …` on stderr, leaves stdout empty, and exits 1. Treat a non-zero exit with empty stdout as a credential problem and read stderr.
+**One exception to "JSON on stdout".** Credentials are resolved before any command runs, so a failure in that step — an unknown `--profile` or `NEON_PROFILE`, `--api-key` and `--profile` together, a `credentials.json` that cannot be read, or an OS keyring item that cannot be read — prints `ERROR: …` on stderr, leaves stdout empty, and exits 1. Treat a non-zero exit with empty stdout as a credential problem and read stderr.
 
 | Option | |
 | --- | --- |
@@ -798,17 +822,19 @@ Two combinations are rejected before the request: `--since` with `--start-time`,
 
 ## Profiles
 
-The CLI holds one Neon account by default. A profile adds another, and is nothing more than a pointer to a credentials file:
+The CLI holds one Neon account by default. A profile adds another, and is a pointer: a
+credentials file path, or the sentinel `"keyring"` when the secret is in the OS keyring.
 
 ```
 ~/.config/neon/
 ├── credentials.json          # this IS the DEFAULT profile
 ├── credentials.work.json     # created by `neon profile create work`
-└── profiles.json             # created only once a second profile exists
+└── profiles.json             # created once a second profile exists, or DEFAULT is keyring
 ```
 
 ```bash
-neon profile create work     # a browser sign-in, or an API key — see below
+neon profile create work              # a browser sign-in, or an API key — see below
+neon profile create work --keyring    # same, stored in the OS keyring
 neon profile list
 neon profile remove work
 ```
@@ -816,35 +842,40 @@ neon profile remove work
 ```console
 $ neon profile list
 Profiles
-┌────────┬─────────┬───────────────────────┬─────────┬────────────────┬──────┬────────────────────────┐
-│ Active │ Name    │ Account               │ Auth    │ Scope          │ File │ Credentials            │
-├────────┼─────────┼───────────────────────┼─────────┼────────────────┼──────┼────────────────────────┤
-│ *      │ DEFAULT │ me@example.com        │ oauth   │ -              │ ok   │ credentials.json       │
-├────────┼─────────┼───────────────────────┼─────────┼────────────────┼──────┼────────────────────────┤
-│        │ work    │ me@example.com        │ api key │ account        │ ok   │ credentials.work.json  │
-├────────┼─────────┼───────────────────────┼─────────┼────────────────┼──────┼────────────────────────┤
-│        │ ci      │ org-old-flower-827148 │ api key │ project proj-1 │ ok   │ credentials.ci.json    │
-└────────┴─────────┴───────────────────────┴─────────┴────────────────┴──────┴────────────────────────┘
+┌────────┬─────────┬───────────────────────┬─────────┬────────────────┬──────┬─────────┬────────────────────────┐
+│ Active │ Name    │ Account               │ Auth    │ Scope          │ File │ Storage │ Credentials            │
+├────────┼─────────┼───────────────────────┼─────────┼────────────────┼──────┼─────────┼────────────────────────┤
+│ *      │ DEFAULT │ me@example.com        │ oauth   │ -              │ ok   │ file    │ credentials.json       │
+├────────┼─────────┼───────────────────────┼─────────┼────────────────┼──────┼─────────┼────────────────────────┤
+│        │ work    │ me@example.com        │ api key │ account        │ ok   │ keyring │ keyring                │
+├────────┼─────────┼───────────────────────┼─────────┼────────────────┼──────┼─────────┼────────────────────────┤
+│        │ ci      │ org-abc-123           │ api key │ project proj-1 │ ok   │ file    │ credentials.ci.json    │
+└────────┴─────────┴───────────────────────┴─────────┴────────────────┴──────┴─────────┴────────────────────────┘
 ```
 
 `Scope` is what a key can reach; an OAuth session has none of its own, so it shows `-`. `File`
-says whether the credentials file can be read and understood — `ok`, `invalid` or `missing` —
-which is not the same as the credential still working; only using it shows that. The table shows
-the file name, `--output json` the full path.
+says whether the stored credential can be read — `ok`, `invalid` or `missing` for a file;
+`ok`, `invalid` or `unreadable` for a keyring item. A keyring get of null is `unreadable`, not missing:
+the addon cannot tell those apart. `Storage` is `file` or `keyring`, from the profile's
+pointer. The table shows the file name or `keyring`; `--output json` keeps the full path.
 
 Select one per invocation with `--profile`, or per shell with `NEON_PROFILE`. There is no `profile use` command and nothing is stored about which profile is "current", so what you type is always what runs.
 
-Entries in `profiles.json` are paths, and a path may point anywhere — which is how you adopt a directory you already have, without moving or re-authenticating anything:
+Entries in `profiles.json` are pointers — a path, or the exact string `"keyring"` — and a path may point anywhere, which is how you adopt a directory you already have without moving or re-authenticating anything:
 
 ```json
 {
   "version": 1,
   "profiles": {
-    "DEFAULT": { "credentials": "credentials.json" },
+    "DEFAULT": { "credentials": "keyring" },
     "work": { "credentials": "../neonctl-work/credentials.json" }
   }
 }
 ```
+
+An unreadable `profiles.json` fails every command that needs a profile, including a
+file-only DEFAULT. That file is the only record of where each account's credentials live,
+so the CLI will not guess past it. Fix or delete it.
 
 `neon profile remove` revokes what the profile holds — an OAuth refresh token at the
 authorization server, or an API key this CLI minted — rather than only forgetting it locally. A
@@ -852,28 +883,61 @@ key you supplied is the exception and stays live, because nothing records its id
 says so. It asks for confirmation first, which `--yes` skips; without a terminal on stdin, in
 CI or behind a pipe, it refuses rather than prompting into the void. It deletes the credentials
 file only when the CLI created it: an adopted path like the one above is unlinked and left on
-disk, and the command says so. Removing the last named profile deletes `profiles.json`,
-returning you to the single-account layout. `neon profile remove DEFAULT` signs you out.
+disk, and the command says so. A keyring profile's OS item is deleted when the store confirms
+it is gone. If it cannot, remove still resets the profile and warns that a leftover may remain
+in the OS store; it is unused once the profile is gone. Removing the last named profile
+deletes `profiles.json` unless DEFAULT itself is keyring — that entry is the only record that
+the secret is not in `credentials.json`. `neon profile remove DEFAULT` signs you out.
+
+### Where the secret is stored
+
+The default is a credentials file. A profile uses the OS keyring (macOS Keychain, Windows
+Credential Manager, Linux Secret Service) only when its `profiles.json` pointer is `"keyring"`.
+That is per profile. Reads never migrate.
+
+```bash
+neon auth --keyring                         # sign DEFAULT into the OS keyring
+neon auth --keyring --profile work          # sign work into the OS keyring
+neon profile create work --keyring          # create a named profile in the keyring
+neon profile remove work --yes              # drop a keyring profile, then create it again as a file
+```
+
+File to keyring is `neon auth --keyring` or `neon profile create … --keyring`: a new
+sign-in, then the previous credential is revoked and the owned file is deleted.
+`create` on an existing name always revokes after a successful write. `auth` revokes
+when it writes to the keyring, including a re-login that follows an existing pointer.
+`auth` that overwrites a file does not. Keyring to file is `remove`, then create or
+auth again. `create` and `auth` without `--keyring` follow an existing `"keyring"`
+pointer, so a keyring profile cannot leave the OS store until `remove` succeeds.
+
+`--api-key` and `NEON_API_KEY` skip both stores. A GitHub-release `neon-<platform>`
+binary recognizes a `"keyring"` pointer and refuses: it cannot load the OS keyring addon.
+Use the npm-installed `neon`. Older releases treat the sentinel as a relative path.
+
+A `"keyring"` pointer whose OS item cannot be read is not treated as signed-out. Commands that
+would otherwise open a browser fail: could not read the OS keyring item. Unlock it and
+retry, or run `neon auth --profile DEFAULT`. To reset the profile: `neon profile remove DEFAULT --yes`.
+A missing `credentials.json` with no `profiles.json` is still
+signed-out, and those commands start OAuth.
 
 ### A profile holds either a sign-in or an API key
 
 `neon profile create` makes a profile, and how you call it decides which kind of credential it holds. A key-backed profile is what you want for an agent, a shared machine, or anything that must never be interrupted by a browser:
 
 ```bash
-neon profile create work                            # sign in with the browser, like `neon auth`
+neon profile create work                            # sign in; replaces work if it already exists
+neon profile create work --keyring                  # same, stored in the OS keyring
 neon profile create work --api-key "$KEY"           # store a key you already have
 echo "$KEY" | neon profile create work --api-key -  # or pipe it, keeping it out of argv
 neon profile create ci --mint                       # sign in once, keep only a minted key
 neon profile create ci --mint --org-id org-abc-123  # minted for an organization
 neon profile create ci --mint --project-id proj-1   # minted for one project only
-neon profile create work --force                    # replace it, revoking what it holds now
 neon profile rotate-key work                        # mint a replacement, revoke the old one
 ```
 
-`--force` is not only a local edit: replacing a profile revokes the credential it held, so a key
-this CLI minted stops working everywhere it was pasted, and an OAuth session is signed out.
-Without `--force`, `create` refuses and names what would be revoked. To keep a working profile
-and swap only its key, use `rotate-key`.
+Replacing a profile revokes the credential it held, so a key this CLI minted stops working
+everywhere it was pasted, and an OAuth session is signed out. To keep a working profile and
+swap only its key, use `rotate-key`.
 
 `create` and `rotate-key` print the profile they wrote, so an agent needn't follow up with
 `list`. Under `--output json` that is a record, and it never carries the secret:
@@ -902,7 +966,7 @@ the key never leaves the CLI.
 { "type": "api_key", "api_key": "napi_…", "key_id": 123, "org_id": "org-…" }
 ```
 
-Nothing is carried over when a profile is replaced, so one profile can never hold two credentials — or two different accounts. The secret stays in that file and never goes into `profiles.json`, so listing profiles cannot leak one. Both files are written owner-only through a temporary file and a rename, which also repairs the permissions of a file created too permissively.
+Nothing is carried over when a profile is replaced, so one profile can never hold two credentials — or two different accounts. The secret stays in the credentials file or the OS keyring and never goes into `profiles.json`, so listing profiles cannot leak one. Files are written owner-only through a temporary file and a rename, which also repairs the permissions of a file created too permissively.
 
 `--mint` is the one to reach for. It signs you in through the browser once, mints a key with that session, stores only the key, and signs the session back out — so afterwards nothing about the profile can open a browser, and no half-forgotten login is left behind. `--org-id` and `--project-id` narrow what the minted key can reach, exactly as they do on [`neon api-keys create`](#api-keys); a project-scoped key cannot create projects, mint keys, or read any other project.
 
@@ -910,11 +974,11 @@ Every key is verified against the API before it is stored, and the account it be
 
 `rotate-key` mints at the scope the profile already has — replacing an org key with an account key would quietly widen everything it reaches — and stores the new key before revoking the old one, so a failed write leaves the old key working.
 
-One thing it cannot do: **an organization key cannot mint its own replacement.** Neon only accepts a personal credential when creating organization keys, so rotating an org- or project-scoped profile means signing in again — `neon profile create ci --mint --org-id org-abc-123 --force`. `rotate-key` checks this before minting and says so, rather than letting the API answer with a rule you had no reason to expect.
+One thing it cannot do: **an organization key cannot mint its own replacement.** Neon only accepts a personal credential when creating organization keys, so rotating an org- or project-scoped profile means signing in again — `neon profile create ci --mint --org-id org-abc-123`. `rotate-key` checks this before minting and says so, rather than letting the API answer with a rule you had no reason to expect.
 
 Two things the CLI cannot do for a key you supplied rather than minted. It cannot revoke it, because `GET /api_keys` exposes no prefix and a stored secret cannot be matched to a listing entry, so both `rotate-key` and `profile remove` say the old key is still live and point you at `neon api-keys list`. For a key you supplied it records the organization the API reports, but cannot know whether that key was narrowed to a single project — so `rotate-key` will not suggest an organization-wide replacement without telling you to check `neon api-keys list` first.
 
-If a stored key stops working there is nothing to refresh, so recovery is one browser sign-in: `neon profile create work --mint --force`.
+If a stored key stops working there is nothing to refresh, so recovery is one browser sign-in: `neon profile create work --mint`.
 
 ### Which credential an invocation uses
 
@@ -1033,6 +1097,7 @@ API keys in org-7
 | checkout                                                                   |                                                                                                              | Pin a branch in `.neon`            |
 | diff                                                                       |                                                                                                              | Git-style schema diff vs a branch  |
 | [link](https://neon.com/docs/reference/cli-link)                           |                                                                                                              | Link a directory to a project      |
+| open                                                                       |                                                                                                              | Open the linked project in Console |
 | config                                                                     | `init`, `status`, `plan`, `apply`                                                                            | Drive a branch from `neon.ts`      |
 | deploy                                                                     |                                                                                                              | Alias for `config apply`           |
 | bootstrap                                                                  |                                                                                                              | Scaffold a project from a template |
@@ -1064,7 +1129,7 @@ Global options are supported with any Neon CLI command.
 
 - <a id="config-dir"></a>`--config-dir`
 
-  Specifies the path to the `neon` configuration directory, which holds the `credentials.json` written by `neon auth`. The default is `$XDG_CONFIG_HOME/neon`, or `~/.config/neon`; run `neon --help` to see the resolved path. This option is only necessary if you keep your configuration somewhere else.
+  Specifies the path to the `neon` configuration directory, which holds the `credentials.json` written by `neon auth` and, when a second profile exists or DEFAULT is keyring, `profiles.json`. The default is `$XDG_CONFIG_HOME/neon`, or `~/.config/neon`; run `neon --help` to see the resolved path. This option is only necessary if you keep your configuration somewhere else.
 
   The directory was called `neonctl` before the CLI was renamed. An existing one is still read, and is used **in place** — nothing is moved or copied, so there is never a second credentials file to go stale. A directory you pass explicitly is used exactly as given and never falls back to the legacy name, so pointing a CI run at a scratch directory cannot pick up local credentials.
 

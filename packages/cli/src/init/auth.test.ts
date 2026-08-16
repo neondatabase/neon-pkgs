@@ -63,7 +63,7 @@ describe("isAuthenticated", () => {
 		makeConfigDir("{ not json");
 		await expect(isAuthenticated()).rejects.toThrow(/not valid JSON/);
 		await expect(isAuthenticated()).rejects.toThrow(
-			/neon profile create DEFAULT --force/,
+			/neon profile create DEFAULT/,
 		);
 	});
 
@@ -206,7 +206,7 @@ describe("`neon init` failure output", () => {
 		expect(status).toBe(1);
 		expect(stdout).toBe("");
 		expect(stderr).toMatch(/not valid JSON/);
-		expect(stderr).toMatch(/neon profile create DEFAULT --force/);
+		expect(stderr).toMatch(/neon profile create DEFAULT/);
 		expect(stderr).not.toContain("Show help");
 		expect(stderr).not.toMatch(/^\s*at /m);
 	});

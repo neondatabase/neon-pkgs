@@ -1,9 +1,35 @@
 import { credentialInputs } from "@neon-internals/cli-core/auth_selection";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { resolveApiKeyFromEnv } from "./middlewares.js";
+import yargs from "yargs/yargs";
+import { fillInArgs, resolveApiKeyFromEnv } from "./middlewares.js";
 
 afterEach(() => {
 	vi.unstubAllEnvs();
+});
+
+describe("fillInArgs", () => {
+	test("leaves array-valued options intact under strict validation", async () => {
+		const parsed = await yargs(["-e", "DATABASE_URL", "-s", "postgres"])
+			.exitProcess(false)
+			.option("env", {
+				alias: "e",
+				type: "array",
+				string: true,
+			})
+			.option("service", {
+				alias: ["s", "services"],
+				type: "array",
+				string: true,
+			})
+			.middleware((args) => {
+				fillInArgs(args);
+			}, true)
+			.strict()
+			.parse();
+
+		expect(parsed.env).toEqual(["DATABASE_URL"]);
+		expect(parsed.service).toEqual(["postgres"]);
+	});
 });
 
 /**

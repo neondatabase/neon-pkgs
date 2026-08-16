@@ -221,7 +221,7 @@ async function buildBulkInspection(
 			].join("\n"),
 			checks: [
 				{
-					id: "neonctl",
+					id: "neon",
 					description:
 						"The Neon CLI will be installed or updated automatically (no action needed from the agent)",
 					lookFor: [],
@@ -502,28 +502,28 @@ async function executeBatchedInstallation(
 	switch (neonctlResult.status) {
 		case "already_current":
 			results.push({
-				id: "neonctl",
+				id: "neon",
 				description: `Neon CLI is up to date (v${neonctlResult.version})`,
 				status: "success",
 			});
 			break;
 		case "installed":
 			results.push({
-				id: "neonctl",
+				id: "neon",
 				description: `Installed Neon CLI (v${neonctlResult.version})`,
 				status: "success",
 			});
 			break;
 		case "updated":
 			results.push({
-				id: "neonctl",
+				id: "neon",
 				description: `Updated Neon CLI to v${neonctlResult.version}`,
 				status: "success",
 			});
 			break;
 		case "failed":
 			results.push({
-				id: "neonctl",
+				id: "neon",
 				description: "Failed to install Neon CLI",
 				status: "failed",
 				error: neonctlResult.error,

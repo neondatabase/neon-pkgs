@@ -43,6 +43,9 @@ export const fillInArgs = (
 		if (k === "_" || k === "--") {
 			return;
 		}
+		if (Array.isArray(v)) {
+			return;
+		}
 		// check if the value is an Object
 		if (typeof v === "object" && v !== null) {
 			fillInArgs(args, v as any, [...acc, k]);

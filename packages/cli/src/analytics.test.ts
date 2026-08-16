@@ -99,6 +99,21 @@ describe("telemetryCredential", () => {
 			credentialsPath: DEFAULT_PATH,
 		});
 	});
+
+	it("does not invent a file path for a keyring session", () => {
+		expect(
+			telemetryCredential(
+				{
+					source: "stored-credentials",
+					configDir: "/config",
+					profile: "DEFAULT",
+					storage: "keyring",
+				},
+				"access_token",
+				DEFAULT_PATH,
+			),
+		).toEqual({ apiKey: "access_token" });
+	});
 });
 
 describe("getErrorAnalyticsEventProperties", () => {

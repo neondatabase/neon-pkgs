@@ -1,6 +1,6 @@
 {
 	"name": "@neon/env",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Resolve and inject Neon connection strings for the branch selected by your neon.ts policy. fetchEnv / parseEnv plus a `neon-env` CLI with `run` and `export`.",
 	"keywords": [
 		"neon",
@@ -63,6 +63,9 @@
 		"@neon/config": "workspace:*",
 		"zod": "^4.4.3",
 		"yargs": "^18.0.0"
+	},
+	"optionalDependencies": {
+		"@napi-rs/keyring": "1.3.0"
 	},
 	"engines": {
 		"node": ">=20.19.0"

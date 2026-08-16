@@ -2,15 +2,19 @@ import {
 	displacedProfileWarning,
 	selectCredential,
 } from "@neon-internals/cli-core/auth_selection";
+import { createCredentialStore } from "@neon-internals/cli-core/credential_store";
 import {
-	inspectCredentials,
+	type CredentialLocation,
+	credentialLabel,
 	interpretCredentials,
 } from "@neon-internals/cli-core/credentials";
 import { configDir, resolveConfigFile } from "@neon-internals/cli-core/paths";
 import {
 	DEFAULT_PROFILE,
-	resolveProfile,
+	locationForName,
+	readProfiles,
 } from "@neon-internals/cli-core/profiles";
+import { tryLoadKeyring } from "./keyring.js";
 
 /**
  * Resolve the Neon API key for a `neon-env` CLI invocation.
@@ -88,49 +92,47 @@ function readStoredCredential(
 		return undefined;
 	};
 
-	let path: string;
+	const dir = configDir({ env });
+	let at: CredentialLocation;
 	try {
-		path =
-			profile === DEFAULT_PROFILE
-				? // Per *file*, so an install predating the rename still finds its
-					// `credentials.json` in the legacy `neonctl` directory, in place.
-					resolveConfigFile("credentials.json", { env }).path
-				: // From the config root, not from wherever `credentials.json` happens to live:
-					// that file can still be in `neonctl/` while `profiles.json` is in `neon/`,
-					// and deriving one from the other loses every named profile.
-					resolveProfile(configDir({ env }), profile).credentialsPath;
+		at = locationForName(dir, profile);
 	} catch (err) {
 		// An unknown profile name is a naming error whoever typed it can fix, so it is fatal
 		// either way — it cannot be reported as "not signed in".
 		throw err instanceof Error ? err : new Error(String(err));
 	}
-
-	const read = inspectCredentials(path);
-	if (read.kind === "absent") {
-		return absent(
-			`Profile "${profile}" has no stored credential at ${path}. Sign in with \`neon profile create ${profile}\`.`,
-		);
+	// The new config root would miss DEFAULT credentials left in legacy `neonctl/` installs.
+	if (
+		at.storage === "file" &&
+		profile === DEFAULT_PROFILE &&
+		readProfiles(dir)?.profiles[DEFAULT_PROFILE] === undefined
+	) {
+		at = {
+			...at,
+			path: resolveConfigFile("credentials.json", { env }).path,
+		};
 	}
 
-	// A file that exists but cannot be read is never an absence, named or not. Returning
-	// `undefined` here reported "no API key" for a credential that is present and broken,
-	// which sends the reader looking for a missing login instead of at the damaged file — and
-	// under `neon` the same file is a hard error, so the two CLIs disagreed about it.
-	if (read.kind === "unusable") {
-		throw new Error(
-			`${read.reason}. Replace it deliberately with \`neon profile create ${profile} --force\`, or delete the file.`,
-		);
-	}
-
-	const credential = interpretCredentials(read.credentials, {
-		path,
-		profile,
+	const store = createCredentialStore(configDir({ env }), {
+		keyring: tryLoadKeyring(),
 	});
+	const loaded = store.read(at);
+	if (loaded === null) {
+		return absent(
+			`Profile "${profile}" has no stored credential at ${credentialLabel(at)}. Sign in with \`neon profile create ${profile}\`.`,
+		);
+	}
+
+	const credential = interpretCredentials(
+		loaded.credentials,
+		at,
+		loaded.backend,
+	);
 	if (credential.kind === "api_key") return credential.apiKey;
-	const token = read.credentials.access_token;
+	const token = loaded.credentials.access_token;
 	if (typeof token === "string" && token.trim() !== "") return token.trim();
 	throw new Error(
-		`Profile "${profile}" holds a browser sign-in with no usable token at ${path}. Sign in again with \`neon auth --profile ${profile}\`.`,
+		`Profile "${profile}" holds a browser sign-in with no usable token at ${credentialLabel(at)}. Sign in again with \`neon auth --profile ${profile}\`.`,
 	);
 }
 

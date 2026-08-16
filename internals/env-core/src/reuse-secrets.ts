@@ -103,6 +103,11 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 		 */
 		env?: NodeJS.ProcessEnv;
 		/**
+		 * Resolve only these OS-level env vars. Omit for every key the policy enables.
+		 * Credential verification and minting are scoped to this same selection.
+		 */
+		keys?: readonly string[];
+		/**
 		 * Revoke the credential a freshly-minted one supersedes. Defaults to `true`.
 		 *
 		 * Pass `false` when this resolve covers only *part* of what the branch has. Object
@@ -110,31 +115,49 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 		 * whether the credential its persisted secrets name also backs a service it is not
 		 * resolving — and revoking it would kill that service while its vars, which this call
 		 * is not rewriting, stay on disk and stop working. The cost is an orphaned credential,
-		 * which is the safer of the two failures. `neon env pull --service` is the caller that
-		 * needs this.
+		 * which is the safer of the two failures. An explicitly scoped `neon env pull`
+		 * (`--service` or `--env`) is the caller that needs this.
 		 */
 		revokeSuperseded?: boolean;
 	},
 ): Promise<ReusedBranchEnv> {
 	const {
 		env: source = process.env,
+		keys: requestedKeys,
 		revokeSuperseded = true,
 		...fetchOptions
 	} = options;
 	const api = options.api ?? createApiFromOptions(options);
 	const { branch, desired } = await resolveBranchPolicy(config, options, api);
 
-	const storageEnabled = (desired.preview?.buckets.length ?? 0) > 0;
-	const gatewayEnabled = desired.preview?.aiGatewayEnabled ?? false;
+	const allPolicyKeys = policyEnvKeys(desired);
+	const requested = requestedKeys ? new Set(requestedKeys) : null;
+	const selectedPolicyKeys =
+		requested === null
+			? allPolicyKeys
+			: allPolicyKeys.filter((key) => requested.has(key));
+	const selected = new Set(selectedPolicyKeys);
+	const K = NEON_ENV_VAR_KEYS;
+	const storageCredentialSelected =
+		(desired.preview?.buckets.length ?? 0) > 0 &&
+		(selected.has(K.storage.accessKeyId) ||
+			selected.has(K.storage.secretAccessKey));
+	const gatewayCredentialSelected =
+		(desired.preview?.aiGatewayEnabled ?? false) &&
+		selected.has(K.aiGateway.apiKey);
 	const secretKeys = credentialEnvKeys({
-		storage: storageEnabled,
-		aiGateway: gatewayEnabled,
-	});
+		storage: storageCredentialSelected,
+		aiGateway: gatewayCredentialSelected,
+	}).filter((key) => selected.has(key));
 
-	// Nothing credential-backed on this branch, so there is nothing to preserve and no
-	// credential to spend: fetch everything and skip the credentials endpoint entirely.
+	// Nothing credential-backed was selected, so there is nothing to preserve and no
+	// credential to spend: fetch the selected values and skip the credentials endpoint.
 	if (secretKeys.length === 0) {
-		const fetched = await fetchEnvKeys(config, fetchOptions, null);
+		const fetched = await fetchEnvKeys(
+			config,
+			fetchOptions,
+			requested === null ? null : selectedPolicyKeys,
+		);
 		return {
 			vars: preferPersisted(toEntries(fetched), source),
 			credential: {
@@ -147,17 +170,21 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 	}
 
 	const persisted = readPersistedSecrets(source);
+	const storageCredentialManaged =
+		requested === null || storageCredentialSelected;
+	const gatewayCredentialManaged =
+		requested === null || gatewayCredentialSelected;
 	const complete =
-		(!storageEnabled ||
+		(!storageCredentialSelected ||
 			Boolean(persisted.accessKeyId && persisted.secretAccessKey)) &&
-		(!gatewayEnabled || Boolean(persisted.apiToken));
+		(!gatewayCredentialSelected || Boolean(persisted.apiToken));
 
-	// Look the persisted secrets up whenever there are any — not only when they're complete.
-	// An incomplete set still names the credential a newly-enabled feature is about to
-	// supersede (a storage-only credential on a branch that just gained the AI Gateway), and
-	// that one should be revoked rather than left live.
+	// An unscoped pull replaces the branch's complete env, so persisted secrets from a feature
+	// the policy just disabled still name a credential the replacement supersedes. An explicit
+	// key selection manages only the selected credential halves.
 	const named =
-		persisted.accessKeyId !== "" || persisted.apiToken !== ""
+		(storageCredentialManaged && persisted.accessKeyId !== "") ||
+		(gatewayCredentialManaged && persisted.apiToken !== "")
 			? namedCredentials(
 					await api.listCredentials(options.projectId, branch.id),
 					persisted,
@@ -165,18 +192,23 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 			: { storage: null, gateway: null };
 
 	const reusable = complete
-		? reusableCredential(named, { storageEnabled, gatewayEnabled })
+		? reusableCredential(named, {
+				storageEnabled: storageCredentialSelected,
+				gatewayEnabled: gatewayCredentialSelected,
+			})
 		: null;
-	const scopes = previewCredentialScopes(desired.preview);
+	const scopes = previewCredentialScopes(desired.preview, {
+		storage: storageCredentialSelected,
+		aiGateway: gatewayCredentialSelected,
+	});
 	const keep =
 		reusable !== null && credentialScopesSatisfied(reusable.scopes, scopes);
 
-	// Ask for everything the policy produces, minus the secrets we're keeping — which is what
+	// Ask for the selected policy values, minus the secrets we're keeping — which is what
 	// stops `fetchEnv` from minting a credential it doesn't need.
-	const allKeys = policyEnvKeys(desired);
 	const fetchKeys = keep
-		? allKeys.filter((key) => !secretKeys.includes(key))
-		: allKeys;
+		? selectedPolicyKeys.filter((key) => !secretKeys.includes(key))
+		: selectedPolicyKeys;
 	const fetched = await fetchEnvKeys(
 		config,
 		// Pass the resolved id so `fetchEnv` targets the same branch this call verified against,
@@ -211,7 +243,10 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 	//
 	// Revoked *after* the fetch, so a failed fetch leaves the caller's existing secrets working.
 	const ours = new Set<string>();
-	for (const meta of [named.storage, named.gateway]) {
+	for (const meta of [
+		storageCredentialManaged ? named.storage : null,
+		gatewayCredentialManaged ? named.gateway : null,
+	]) {
 		if (
 			meta !== null &&
 			meta.principalType === "user" &&

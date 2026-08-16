@@ -86,7 +86,14 @@ For example, [varlock](https://varlock.dev) can bulk-load Neon's branch env via 
 # @setValuesBulk(exec(`neon-env export --format json`), format=json)
 ```
 
-Flags (both commands): `--config <path>`, `--project-id`, `--branch`, `--api-key`, `--debug`. `export` also takes `--format dotenv|json`.
+Flags (both commands): `--config <path>`, `--project-id`, `--branch`, `--api-key`, `--profile`, `--debug`. `export` also takes `--format dotenv|json`.
+
+`--api-key` and `NEON_API_KEY` skip stored credentials. Otherwise `neon-env` reads the same
+Neon CLI profile the `neon` CLI does, including a secret stored in the OS keyring when that
+profile's `profiles.json` pointer is `"keyring"`. `@neon/env` has no standalone binary; it
+loads the OS keyring addon from npm. If that optional dependency is missing, a `"keyring"`
+pointer is an error. Older releases treat the sentinel as a relative path. A keyring pointer
+whose item cannot be read is an error, not "not signed in".
 
 ## Env vars produced
 
@@ -151,6 +158,19 @@ const { storage } = await fetchEnv(config, {
 });
 storage.endpoint; // string — `accessKeyId` is absent, and never fetched
 ```
+
+Inline key arrays autocomplete from the services enabled in `config`, reject unknown or disabled keys, and narrow the result exactly without `as const`. A runtime-built array returns the same selected values with optional namespaces and properties, because the array may contain any subset of its declared key union:
+
+```ts
+const keys: Array<"DATABASE_URL" | "NEON_BRANCH"> =
+    process.env.INCLUDE_BRANCH ? ["DATABASE_URL", "NEON_BRANCH"] : ["DATABASE_URL"];
+const selected = await fetchEnv(config, { projectId, branch: "main", keys });
+
+selected.postgres?.databaseUrl; // string | undefined
+selected.branch?.name; // string | undefined
+```
+
+`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` are one credential and must be selected together. Literal lists that contain only one half are a type error; a runtime-built list that resolves to one half throws before any API request or credential issuance.
 
 Work is skipped, not just the result narrowed. Leave out `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `NEON_AI_GATEWAY_TOKEN` and **no credential is minted at all** — which is exactly how `fetchEnvReusingSecrets` refreshes everything else while keeping secrets you already have. The non-secret vars of those features (`AWS_ENDPOINT_URL_S3`, `AWS_REGION`, `NEON_AI_GATEWAY_BASE_URL`) are branch metadata and stay available on their own.
 

@@ -29,7 +29,11 @@ import { afterEach, describe, expect, test } from "vitest";
  * Both halves travel together because every error these functions raise ends in a recovery
  * command, and that command takes the profile name.
  */
-const at = (path: string, profile = "work") => ({ path, profile });
+const at = (path: string, profile = "work") => ({
+	path,
+	profile,
+	storage: "file" as const,
+});
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -76,7 +80,7 @@ describe("credentialKind", () => {
 	test("an unrecognised type says how to recover, naming the profile", () => {
 		expect(() =>
 			credentialKind({ type: "keychain" }, at("/c.json", "work")),
-		).toThrow(/`neon profile create work --force`/);
+		).toThrow(/`neon profile create work`/);
 	});
 });
 
@@ -119,7 +123,7 @@ describe("interpretCredentials", () => {
 	test("the recovery command names the profile rather than a placeholder", () => {
 		expect(() =>
 			interpretCredentials({ type: "api_key" }, at("/c.json", "dbx")),
-		).toThrow(/`neon profile create dbx --force`/);
+		).toThrow(/`neon profile create dbx`/);
 		expect(() =>
 			interpretCredentials({ type: "api_key" }, at("/c.json", "dbx")),
 		).not.toThrow(/<name>/);
@@ -156,7 +160,7 @@ describe("readCredentials", () => {
 		// which would overwrite it and possibly as a different account.
 		expect(() => readCredentials(at(path))).toThrow(/not valid JSON/);
 		expect(() => readCredentials(at(path, "dbx"))).toThrow(
-			/Replace it deliberately with `neon profile create dbx --force`/,
+			/Replace it deliberately with `neon profile create dbx`/,
 		);
 	});
 
@@ -205,7 +209,7 @@ describe("readCredentials", () => {
 		}
 		expect(thrown).toContain("does not understand");
 		expect(thrown).toContain("/c.json");
-		expect(thrown).toContain("`neon profile create work --force`");
+		expect(thrown).toContain("`neon profile create work`");
 		expect(thrown).not.toContain("napi_");
 	});
 

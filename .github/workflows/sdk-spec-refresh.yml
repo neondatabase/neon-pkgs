@@ -1,14 +1,15 @@
 name: SDK Spec Drift
 
-# Maintainer signal: pull the live Neon OpenAPI spec, regenerate @neon/sdk, and
-# FAIL when the vendored spec or generated client drifts from what's committed.
+# Maintainer signal: pull the live Neon OpenAPI spec, regenerate @neon/sdk and
+# @neon/tools, and FAIL when the spec or generated files drift from the commit.
 # This job intentionally does NOT open a PR (the org IP allow list blocks the
 # GitHub-hosted runner from pushing a branch). A red run is the signal to run
 # the refresh locally and open the PR by hand:
 #
 #   pnpm --filter @neon/sdk spec:pull
 #   pnpm --filter @neon/sdk generate
-#   pnpm --filter @neon/sdk build
+#   pnpm --filter @neon/tools generate
+#   pnpm --filter @neon/sdk --filter @neon/tools build
 #   # review + update packages/sdk/src/neon/coverage.ts, add a changeset, open a PR
 #
 # Runs on a GitHub-hosted runner because it must reach neon.com; the protected
@@ -44,20 +45,24 @@ jobs:
             - name: Regenerate client
               run: pnpm --filter @neon/sdk generate
 
-            - name: Build (typecheck + bundle)
-              run: pnpm --filter @neon/sdk build
+            - name: Regenerate tools
+              run: pnpm --filter @neon/tools generate
 
-            - name: Fail when spec or generated client drifted
+            - name: Build generated packages (typecheck + bundle)
+              run: pnpm --filter @neon/sdk --filter @neon/tools build
+
+            - name: Fail when spec or generated packages drifted
               run: |
                   # Stage so the diff also catches newly added / removed generated files.
-                  git add -A -- packages/sdk/spec packages/sdk/src/client
-                  if ! git diff --cached --exit-code -- packages/sdk/spec packages/sdk/src/client; then
-                      echo "::error::@neon/sdk is stale — the live Neon OpenAPI spec drifted from the committed spec/generated client."
+                  git add -A -- packages/sdk/spec packages/sdk/src/client packages/tools/src/generated packages/tools/src/operations.gen.ts packages/tools/src/schemas.ts
+                  if ! git diff --cached --exit-code -- packages/sdk/spec packages/sdk/src/client packages/tools/src/generated packages/tools/src/operations.gen.ts packages/tools/src/schemas.ts; then
+                      echo "::error::@neon/sdk or @neon/tools is stale — the live Neon OpenAPI spec drifted from the committed generated packages."
                       echo "Refresh it locally and open a PR:"
                       echo "  pnpm --filter @neon/sdk spec:pull"
                       echo "  pnpm --filter @neon/sdk generate"
-                      echo "  pnpm --filter @neon/sdk build"
+                      echo "  pnpm --filter @neon/tools generate"
+                      echo "  pnpm --filter @neon/sdk --filter @neon/tools build"
                       echo "Then review packages/sdk/src/neon/coverage.ts (EXPECTED_OPERATIONS / WRAPPED), add a changeset, and open the PR."
                       exit 1
                   fi
-                  echo "@neon/sdk is up to date with the live Neon OpenAPI spec."
+                  echo "@neon/sdk and @neon/tools are up to date with the live Neon OpenAPI spec."

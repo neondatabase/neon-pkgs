@@ -115,7 +115,7 @@ describe("setup phase", () => {
 
 			// Only agent-specific checks — filesystem checks are done CLI-side
 			const checkIds = result.nextAction.checks.map((c) => c.id);
-			expect(checkIds).toContain("neonctl");
+			expect(checkIds).toContain("neon");
 			expect(checkIds).toContain("mcp_server");
 			expect(checkIds).toContain("agent_type");
 			expect(checkIds).not.toContain("connection_string");
@@ -209,7 +209,7 @@ describe("setup phase", () => {
 
 		const results = result.results as { id: string; status: string }[];
 		const resultIds = results.map((r) => r.id);
-		expect(resultIds).toContain("neonctl");
+		expect(resultIds).toContain("neon");
 		expect(resultIds).toContain("install_mcp");
 		expect(resultIds).toContain("install_skills");
 		expect(resultIds).not.toContain("install_extension");
@@ -220,7 +220,7 @@ describe("setup phase", () => {
 		const args = (result.nextAction as { args: string[] }).args;
 		expect(args[0]).toBe("getting-started");
 
-		// Should have called execa for MCP only (neonctl mocked, skills via ensureSkillsUpToDate)
+		// Should have called execa for MCP only (neon CLI mocked, skills via ensureSkillsUpToDate)
 		expect(mockExeca).toHaveBeenCalledTimes(1);
 		expect(mockEnsureSkills).toHaveBeenCalled();
 

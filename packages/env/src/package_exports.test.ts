@@ -52,6 +52,12 @@ describe("the built package", () => {
 		expect(declaresIt).not.toEqual([]);
 	});
 
+	it("does not load the keyring adapter from the root export", () => {
+		const root = readFileSync(join(distDir, "index.js"), "utf8");
+		expect(root).not.toContain("keyring");
+		expect(root).not.toContain("@napi-rs");
+	});
+
 	it("keeps the published type surface on one `Config`", () => {
 		// The declaration bundler will inline a copy of `@neon/config`'s types if the internals
 		// stop marking it external, and then the exported generics are parameterized over the

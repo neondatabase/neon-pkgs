@@ -2,29 +2,43 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { basename } from "node:path";
 import { credentialInputs } from "@neon-internals/cli-core/auth_selection";
 import {
+	CRED_STORAGE_FILE,
+	CRED_STORAGE_KEYRING,
+} from "@neon-internals/cli-core/cli_config";
+import {
+	type CredentialDeleteResult,
+	KEYRING_SERVICE,
+	keyringAccount,
+} from "@neon-internals/cli-core/credential_store";
+import {
 	API_KEY,
 	apiKeyCredentials,
 	type CredentialLocation,
-	credentialKind,
+	credentialLabel,
 	describeScope,
-	inspectCredentials,
 	interpretCredentials,
-	isSameCredential,
 	type KeyScope,
-	OAUTH,
-	readCredentials,
 	type StoredCredentials,
 	scopeOf,
-	writeCredentials,
 } from "@neon-internals/cli-core/credentials";
+import {
+	credentialsPath,
+	isOwnedCredentialPath,
+} from "@neon-internals/cli-core/paths";
 import {
 	assertProfilesUsable,
 	assertValidProfileName,
+	canDropProfilesFile,
+	credentialsDisplay,
 	DEFAULT_PROFILE,
+	isKeyringPointer,
+	KEYRING_CREDENTIALS,
 	listProfiles,
-	newProfileCredentialsPath,
-	onlyDefaultRemains,
+	locationForName,
+	locationOf,
+	newProfileLocation,
 	profilesFilePath,
+	profilesUsingPath,
 	readProfiles,
 	resolveProfile,
 	selectProfileName,
@@ -36,7 +50,7 @@ import type yargs from "yargs";
 import { getApiClient, isNeonApiError, type NeonApiClient } from "../api.js";
 import { auth, revokeToken } from "../auth.js";
 import { setAuthContext } from "../auth_context.js";
-import { isInsideConfigDir } from "../config.js";
+import { storeFor } from "../credential_io.js";
 import { isCi } from "../env.js";
 import { log } from "../log.js";
 import {
@@ -45,11 +59,18 @@ import {
 	mintedKeyName,
 	notAnApiKeyMessage,
 } from "../profile_keys.js";
-import type { CommonProps, ExtendedTokenSet } from "../types.js";
+import {
+	type OutgoingCredential,
+	readOutgoingCredential,
+	retirePreviousCredential,
+	revokeTokenSet,
+	withdrawKey,
+} from "../retire_credential.js";
+import type { CommonProps } from "../types.js";
 import { noPassthrough, single } from "../utils/flags.js";
 import { writer } from "../writer.js";
 import { orgIdForProject } from "./api_keys.js";
-import { authFlow, credentialsPathForName, usableCredential } from "./auth.js";
+import { authFlow, usableCredential } from "./auth.js";
 
 type ProfileProps = CommonProps & {
 	configDir: string;
@@ -65,7 +86,7 @@ type CreateProps = ProfileProps & {
 	mint?: boolean;
 	orgId?: string;
 	projectId?: string;
-	force: boolean;
+	keyring?: boolean;
 };
 
 export const command = "profile";
@@ -124,18 +145,35 @@ export const builder = (argv: yargs.Argv) =>
 							type: "string",
 							coerce: single("project-id"),
 						},
-						force: {
+						keyring: {
 							describe:
-								"Replace an existing profile, revoking the credential it holds now",
+								"Store the credential in the OS keyring. Per profile; later create without the flag stays there. See `neon profile list`.",
 							type: "boolean",
-							default: false,
+						},
+						// Shipped on create. The meaning is now the default, so the flag is
+						// refused with a recovery line rather than "Unknown argument".
+						force: {
+							hidden: true,
+							type: "boolean",
 						},
 					})
 					// A project-scoped key is already an organization key, and its org is
 					// derived from the project rather than chosen — same rule as `api-keys`.
 					.conflicts("org-id", "project-id")
 					.strict()
-					.check(noPassthrough("profile create"))
+					.check((argv) => {
+						noPassthrough("profile create")(argv);
+						if (argv.force === true) {
+							const name =
+								typeof argv.name === "string"
+									? argv.name
+									: "NAME";
+							throw new Error(
+								`--force is no longer a flag. \`neon profile create ${name}\` always replaces an existing profile and revokes the credential it held. Drop --force.`,
+							);
+						}
+						return true;
+					})
 					.example(
 						"$0 profile create work",
 						"Sign in with the browser, like `neon auth --profile work`",
@@ -151,6 +189,10 @@ export const builder = (argv: yargs.Argv) =>
 					.example(
 						"$0 profile create ci --mint --org-id org-abc-123",
 						"One browser sign-in, then an org-scoped key and no session left behind",
+					)
+					.example(
+						"$0 profile create work --keyring",
+						"Store the credential in the OS keyring instead of a file",
 					),
 			async (args) => await create(args as unknown as CreateProps),
 		)
@@ -251,16 +293,20 @@ const rejectApiKeyFlag = (sub: string, instead?: string): void => {
  * rather than throwing: one broken profile must not hide every other row, and the whole point
  * of `list` is to show the state of things including the broken parts.
  */
+const hintStore = (storage: string): "file" | "keyring" =>
+	storage === "keyring" ? "keyring" : "file";
+
 const describeAuth = (
 	stored: StoredCredentials | null,
 	at: CredentialLocation,
+	store: "file" | "keyring" = "file",
 ): string => {
 	if (stored === null) return "-";
 	try {
 		// `interpretCredentials`, not `credentialKind`: the kind is a declaration, and a file
 		// declaring `api_key` with no key satisfies it. Reporting that as a working API-key
 		// profile is the wrong answer for the one command run to find out what is broken.
-		return interpretCredentials(stored, at).kind === API_KEY
+		return interpretCredentials(stored, at, store).kind === API_KEY
 			? "api key"
 			: "oauth";
 	} catch (err) {
@@ -281,20 +327,34 @@ const describeAuth = (
  * the broken profile pointed at a different row than the one that was broken.
  */
 const inspectForListing = (
+	configDir: string,
 	at: CredentialLocation,
-): { stored: StoredCredentials | null; auth: string; file: string } => {
-	const read = inspectCredentials(at.path);
-	if (read.kind === "unusable") {
-		log.warning(read.reason);
-		return { stored: null, auth: "-", file: "invalid" };
+): {
+	stored: StoredCredentials | null;
+	auth: string;
+	file: string;
+	storage: string;
+} => {
+	const listing = storeFor(configDir).inspect(at);
+	if (listing.reason !== undefined) log.warning(listing.reason);
+	if (listing.credentials === null) {
+		return {
+			stored: null,
+			auth: "-",
+			file: listing.file,
+			storage: listing.storage,
+		};
 	}
-	if (read.kind === "absent")
-		return { stored: null, auth: "-", file: "missing" };
-	const auth = describeAuth(read.credentials, at);
+	const auth = describeAuth(
+		listing.credentials,
+		at,
+		hintStore(listing.storage),
+	);
 	return {
-		stored: read.credentials,
+		stored: listing.credentials,
 		auth,
-		file: auth === "invalid" ? "invalid" : "ok",
+		file: auth === "invalid" ? "invalid" : listing.file,
+		storage: listing.storage,
 	};
 };
 
@@ -308,10 +368,10 @@ const list = async (props: ProfileProps) => {
 		resolveProfile(props.configDir, active);
 	}
 	const rows = listProfiles(props.configDir).map((p) => {
-		const { stored, auth, file } = inspectForListing({
-			path: p.credentialsPath,
-			profile: p.name,
-		});
+		const { stored, auth, file, storage } = inspectForListing(
+			props.configDir,
+			locationOf(p),
+		);
 		const storedUserId =
 			typeof stored?.user_id === "string" ? stored.user_id : undefined;
 		return {
@@ -328,12 +388,18 @@ const list = async (props: ProfileProps) => {
 			// which claims the credential is ready to use — a thing reading a file cannot show,
 			// and the wrong answer for the dead key someone runs this to diagnose.
 			file,
+			storage,
 			// The basename in the table, because `cli-table` neither wraps nor truncates and a
 			// real path pushes the row past most terminals. Structured output keeps the path,
 			// which is what a script actually wants.
 			...(props.output === "table"
-				? { credentials: basename(p.credentialsPath) }
-				: { credentials: p.credentialsPath }),
+				? {
+						credentials:
+							p.storage === "keyring"
+								? KEYRING_CREDENTIALS
+								: basename(p.credentialsPath),
+					}
+				: { credentials: credentialsDisplay(p) }),
 		};
 	});
 
@@ -346,118 +412,78 @@ const list = async (props: ProfileProps) => {
 			"auth",
 			"scope",
 			"file",
+			"storage",
 			"credentials",
 		],
 	});
 };
 
-/**
- * The credential a profile currently holds, resolved far enough to act on.
- *
- * A key carries what revoking it needs — the secret to authenticate the revocation, the id
- * naming what to revoke, and the scope choosing the endpoint. Reading those off an untyped
- * record at each use site is what produced `stored.api_key as string`.
- */
-type OutgoingCredential =
-	| { kind: typeof API_KEY; apiKey: string; keyId?: number; scope: KeyScope }
-	| { kind: typeof OAUTH; tokens: StoredCredentials };
-
-/**
- * The credential a command is about to replace or delete.
- *
- * Deliberately tolerant where {@link readCredentials} is fatal. Using a damaged credential must
- * fail loudly, but *replacing* one must not: `readCredentials` throwing here made the repair its
- * own error message recommends impossible, and left a malformed file unremovable through the
- * CLI. There is nothing to revoke in a file we cannot parse, so this says so and moves on.
- */
-const readOutgoingCredential = (
-	at: CredentialLocation,
-): OutgoingCredential | null => {
-	const read = inspectCredentials(at.path);
-	const unusable = (reason: string): null => {
-		// `reason` comes from several sources, some of which end in a period. Trim it so the
-		// sentence does not run "…cannot be read.. Nothing in it…".
-		log.warning(
-			"%s. Nothing in it could be revoked, so it is only being replaced locally.",
-			reason.replace(/\.$/, ""),
-		);
-		return null;
-	};
-
-	if (read.kind === "unusable") return unusable(read.reason);
-	if (read.kind === "absent") return null;
-
-	// Interpreted, not merely classified. A file declaring `api_key` with no key satisfies
-	// `credentialKind` and would then reach `getApiClient` with `undefined` behind a cast — a
-	// revoke request authenticated by nothing, reported as a failed revocation. There is
-	// genuinely nothing to revoke here, which is what `unusable` says; and saying it rather
-	// than throwing is what keeps the file removable.
-	try {
-		const credential = interpretCredentials(read.credentials, at);
-		if (credential.kind === OAUTH) {
-			return { kind: OAUTH, tokens: read.credentials };
-		}
-		return {
-			kind: API_KEY,
-			apiKey: credential.apiKey,
-			...(typeof read.credentials.key_id === "number"
-				? { keyId: read.credentials.key_id }
-				: {}),
-			scope: scopeOf(read.credentials),
-		};
-	} catch (err) {
-		return unusable(err instanceof Error ? err.message : String(err));
-	}
-};
-
-const credentialsPathFor = (configDir: string, name: string): string => {
+const locationForCreate = (
+	configDir: string,
+	name: string,
+	keyring?: boolean,
+): CredentialLocation => {
 	// Metadata we cannot read makes this a guess: `credentials.<name>.json` is a convention,
 	// and the entry that would say whether it is this account's file is exactly what is
 	// unreadable. Guessing here is what let a replacement overwrite a file and revoke its key
 	// before `upsertProfile` refused the same metadata.
 	assertProfilesUsable(configDir, name);
-	if (readProfiles(configDir)?.profiles[name] || name === DEFAULT_PROFILE) {
-		return credentialsPathForName(configDir, name);
+	const declared = readProfiles(configDir)?.profiles[name];
+	const pointer =
+		declared !== undefined && isKeyringPointer(declared.credentials);
+	if (keyring === true || pointer) {
+		return { profile: name, storage: CRED_STORAGE_KEYRING };
 	}
-	return newProfileCredentialsPath(configDir, name);
+	if (declared !== undefined || name === DEFAULT_PROFILE) {
+		return locationForName(configDir, name);
+	}
+	return newProfileLocation(configDir, name, CRED_STORAGE_FILE);
 };
 
-/**
- * Refuse to overwrite an existing profile unless asked to, and say what `--force` destroys.
- *
- * Naming the consequence is the point. `--force` does not merely point the profile somewhere
- * else: {@link retirePreviousCredential} revokes the credential being replaced, so a key this
- * CLI minted dies upstream — including the copy the user pasted into CI or another machine,
- * which is not recoverable, only re-mintable. A message promising "replace its credential"
- * described a local edit and made the irreversible half a surprise.
- */
-const assertReplaceable = (props: CreateProps): void => {
-	const { name, configDir, force } = props;
-	if (force) return;
-	const declared = readProfiles(configDir)?.profiles[name];
-	const path = credentialsPathFor(configDir, name);
-	if (!declared && !(name === DEFAULT_PROFILE && existsSync(path))) return;
-
-	const existing = inspectCredentials(path);
-	const stored = existing.kind === "ok" ? existing.credentials : null;
-	// Only offer `rotate-key` when it would actually work: it refuses anything that is not
-	// already an API-key profile, and `DEFAULT` is an OAuth profile on nearly every install.
-	const holdsKey =
-		stored !== null &&
-		credentialKind(stored, { path, profile: name }) === API_KEY;
-	const keyId =
-		typeof stored?.key_id === "number" ? stored.key_id : undefined;
-
-	if (holdsKey) {
-		throw new Error(
-			keyId !== undefined
-				? `Profile "${name}" already exists and holds an API key minted here (id ${keyId}). Pass --force to replace it — the key is revoked, wherever else it is in use. To keep the profile and swap the key instead: \`neon profile rotate-key ${name}\`.`
-				: `Profile "${name}" already exists and holds an API key you supplied, which stays live on the account either way — only keys minted here record an id to revoke. Pass --force to replace it locally, or \`neon profile rotate-key ${name}\` to mint one at the same scope.`,
-		);
+const existingLocation = (
+	configDir: string,
+	name: string,
+): CredentialLocation | null => {
+	try {
+		if (
+			readProfiles(configDir)?.profiles[name] !== undefined ||
+			name === DEFAULT_PROFILE
+		) {
+			return locationForName(configDir, name);
+		}
+	} catch {
+		return null;
 	}
-	throw new Error(
-		`Profile "${name}" already exists and holds a browser sign-in. Pass --force to replace it — the session is signed out as part of the replacement.`,
+	return null;
+};
+
+const warnIfKeyringRollbackUnconfirmed = (
+	cleared: CredentialDeleteResult,
+	profile: string,
+): void => {
+	if (cleared === "cleared") return;
+	log.warning(
+		'Could not confirm the new OS keyring item for profile "%s" was removed after a failed save.',
+		profile,
 	);
+};
+
+const deleteLeftoverOwnedFile = (
+	configDir: string,
+	path: string,
+	except: string,
+): void => {
+	if (!isOwnedCredentialPath(configDir, path)) return;
+	if (profilesUsingPath(configDir, path, except).length > 0) return;
+	try {
+		storeFor(configDir).delete({
+			profile: except,
+			storage: CRED_STORAGE_FILE,
+			path,
+		});
+	} catch {
+		log.warning("Saved the keyring item but could not delete %s", path);
+	}
 };
 
 /** `--api-key -` means "read it from stdin", the usual convention for a piped value. */
@@ -567,7 +593,13 @@ const create = async (props: CreateProps) => {
 	assertValidProfileName(name);
 	// Before the key is read from stdin, verified against the API, or minted in a browser.
 	assertProfilesUsable(props.configDir, name);
-	assertReplaceable(props);
+	if (props.keyring === true) {
+		storeFor(props.configDir).assertKeyringWritable(
+			existingLocation(props.configDir, name)?.storage === "keyring"
+				? name
+				: undefined,
+		);
+	}
 
 	const suppliedKey = credentialInputs().apiKeyFlag.trim() !== "";
 
@@ -600,19 +632,28 @@ const create = async (props: CreateProps) => {
 				`\`neon profile create ${name}\` with no key signs in through the browser, which cannot happen in CI. Pass a key instead: \`neon profile create ${name} --api-key "$KEY"\`, or pipe it with \`echo "$KEY" | neon profile create ${name} --api-key -\`.`,
 			);
 		}
-		const credentialsPath = credentialsPathFor(props.configDir, name);
-		const previous = readOutgoingCredential({
-			path: credentialsPath,
-			profile: name,
-		});
-		// `authFlow` reports its own failure and returns an empty token rather than throwing,
-		// so claiming success here would leave the user with no profile and no error.
-		if ((await authFlow({ ...props, _: ["auth"], profile: name })) === "") {
+		const at = locationForCreate(props.configDir, name, props.keyring);
+		const existing = existingLocation(props.configDir, name);
+		const previous =
+			existing === null
+				? null
+				: readOutgoingCredential(props.configDir, existing);
+		if (
+			(await authFlow({
+				...props,
+				_: ["auth"],
+				profile: name,
+				keyring: props.keyring,
+			})) === ""
+		) {
 			throw new Error(
 				`Could not save credentials for profile "${name}".`,
 			);
 		}
-		await retirePreviousCredential(props, name, previous);
+		// authFlow retires keyring replacements; repeating it here would revoke the session twice.
+		if (at.storage !== "keyring") {
+			await retirePreviousCredential(props, name, previous);
+		}
 		const signedIn = readProfiles(props.configDir, log.warning)?.profiles[
 			name
 		];
@@ -621,21 +662,29 @@ const create = async (props: CreateProps) => {
 			account: signedIn?.label ?? signedIn?.userId ?? "unknown account",
 			auth: "oauth",
 			scope: "-",
-			credentials: credentialsPath,
+			credentials:
+				at.storage === "keyring" ? KEYRING_CREDENTIALS : at.path,
+			storage: at.storage,
 		});
 		return;
 	}
 
 	const apiKey = resolveKeyToStore(props);
 	const identity = await verifyKey(props, apiKey);
-	const credentialsPath = credentialsPathFor(props.configDir, name);
-	const previous = readOutgoingCredential({
-		path: credentialsPath,
-		profile: name,
-	});
+	const at = locationForCreate(props.configDir, name, props.keyring);
+	const existing = existingLocation(props.configDir, name);
+	if (at.storage === "keyring") {
+		storeFor(props.configDir).assertKeyringWritable(
+			existing?.storage === "keyring" ? name : undefined,
+		);
+	}
+	const previous =
+		existing === null
+			? null
+			: readOutgoingCredential(props.configDir, existing);
 
-	writeCredentials(
-		credentialsPath,
+	storeFor(props.configDir).write(
+		at,
 		apiKeyCredentials({
 			apiKey,
 			...(identity.userId !== undefined
@@ -649,8 +698,21 @@ const create = async (props: CreateProps) => {
 				: {}),
 		}),
 	);
+	try {
+		recordProfile(props, name, at, identity);
+	} catch (err) {
+		if (at.storage === "keyring" && existing?.storage !== "keyring") {
+			warnIfKeyringRollbackUnconfirmed(
+				storeFor(props.configDir).delete(at, { required: false }),
+				name,
+			);
+		}
+		throw err instanceof Error ? err : new Error(String(err));
+	}
 	await retirePreviousCredential(props, name, previous, apiKey);
-	recordProfile(props, name, credentialsPath, identity);
+	if (at.storage === "keyring" && existing?.storage === "file") {
+		deleteLeftoverOwnedFile(props.configDir, existing.path, name);
+	}
 
 	report(props, {
 		name,
@@ -659,7 +721,8 @@ const create = async (props: CreateProps) => {
 		scope: describeScope(
 			identity.orgId !== undefined ? { orgId: identity.orgId } : {},
 		),
-		credentials: credentialsPath,
+		credentials: at.storage === "keyring" ? KEYRING_CREDENTIALS : at.path,
+		storage: at.storage,
 	});
 	// A key we did not mint has no discoverable id: `GET /api_keys` exposes no prefix, so a
 	// stored secret cannot be matched back to a listing entry. A warning rather than a note,
@@ -710,6 +773,7 @@ const report = (
 		scope: string;
 		keyId?: number;
 		credentials: string;
+		storage?: string;
 	},
 ): void => {
 	const out = writer(props);
@@ -732,6 +796,7 @@ const report = (
 			"scope",
 			...(record.keyId !== undefined ? ["keyId"] : []),
 			"credentials",
+			...(record.storage !== undefined ? ["storage"] : []),
 		] as never,
 		title: "Profile",
 	});
@@ -740,11 +805,11 @@ const report = (
 const recordProfile = (
 	props: CreateProps,
 	name: string,
-	credentialsPath: string,
+	at: CredentialLocation,
 	identity: { label?: string; userId?: string },
 ): void => {
 	upsertProfile(props.configDir, name, {
-		credentials: credentialsPath,
+		credentials: at.storage === "keyring" ? KEYRING_CREDENTIALS : at.path,
 		...(identity.label ? { label: identity.label } : {}),
 		...(identity.userId ? { userId: identity.userId } : {}),
 	});
@@ -766,6 +831,15 @@ const createByMinting = async (props: CreateProps) => {
 	if (isCi() && props.forceAuth !== true) {
 		throw new Error(
 			`--mint needs a browser sign-in, which cannot happen in CI. Mint the key with \`neon api-keys create --name ${name}\` and pipe it in: echo "$KEY" | neon profile create ${name} --api-key -`,
+		);
+	}
+
+	const atMint = locationForCreate(props.configDir, name, props.keyring);
+	if (atMint.storage === "keyring") {
+		storeFor(props.configDir).assertKeyringWritable(
+			existingLocation(props.configDir, name)?.storage === "keyring"
+				? name
+				: undefined,
 		);
 	}
 
@@ -799,14 +873,15 @@ const createByMinting = async (props: CreateProps) => {
 		mintedScope = scope;
 		minted = await mintKey(session, name, scope);
 		const identity = await verifyKey(props, minted.key, "minted");
-		const credentialsPath = credentialsPathFor(props.configDir, name);
-		const previous = readOutgoingCredential({
-			path: credentialsPath,
-			profile: name,
-		});
+		const at = locationForCreate(props.configDir, name, props.keyring);
+		const existing = existingLocation(props.configDir, name);
+		const previous =
+			existing === null
+				? null
+				: readOutgoingCredential(props.configDir, existing);
 
-		writeCredentials(
-			credentialsPath,
+		storeFor(props.configDir).write(
+			at,
 			apiKeyCredentials({
 				apiKey: minted.key,
 				keyId: minted.id,
@@ -816,12 +891,24 @@ const createByMinting = async (props: CreateProps) => {
 				scope,
 			}),
 		);
-		// From here the key is on disk and usable, so cleanup must not take it away — a
-		// failure writing `profiles.json` costs a profile entry, not the credential.
-		keyIsReachable = true;
-
+		try {
+			recordProfile(props, name, at, identity);
+		} catch (err) {
+			if (at.storage === "keyring" && existing?.storage !== "keyring") {
+				warnIfKeyringRollbackUnconfirmed(
+					storeFor(props.configDir).delete(at, { required: false }),
+					name,
+				);
+			} else {
+				keyIsReachable = true;
+			}
+			throw err instanceof Error ? err : new Error(String(err));
+		}
 		await retirePreviousCredential(props, name, previous, minted.key);
-		recordProfile(props, name, credentialsPath, identity);
+		if (at.storage === "keyring" && existing?.storage === "file") {
+			deleteLeftoverOwnedFile(props.configDir, existing.path, name);
+		}
+		keyIsReachable = true;
 
 		report(props, {
 			name,
@@ -829,7 +916,9 @@ const createByMinting = async (props: CreateProps) => {
 			auth: "api key",
 			scope: describeScope(scope),
 			keyId: minted.id,
-			credentials: credentialsPath,
+			credentials:
+				at.storage === "keyring" ? KEYRING_CREDENTIALS : at.path,
+			storage: at.storage,
 		});
 		warnAboutReach(scope);
 	} finally {
@@ -871,60 +960,6 @@ const resolveMintScope = async (
 		orgId: await orgIdForProject(client, props.projectId),
 		projectId: props.projectId,
 	};
-};
-
-/**
- * Revoke a credential a profile has just stopped using.
- *
- * Called with the credential read *before* the overwrite, and only *after* the replacement is
- * durable. Both halves matter. Reading it first is the only chance: a minted key's `key_id` and
- * an OAuth refresh token are gone the moment the file is rewritten, so nothing could revoke
- * them afterwards. Revoking last is what stops a cancelled sign-in or a failed write from
- * leaving the profile holding a credential that has already been killed.
- */
-const retirePreviousCredential = async (
-	props: ProfileProps,
-	name: string,
-	existing: OutgoingCredential | null,
-	/** The key now stored. Retiring this would kill the credential we just committed to. */
-	replacementKey?: string,
-): Promise<void> => {
-	if (existing === null) return;
-
-	if (existing.kind === API_KEY) {
-		// Re-storing the key a profile already holds is a no-op, not a replacement. Revoking
-		// here would leave the profile pointing at a credential this command just committed to.
-		if (isSameCredential(existing.apiKey, replacementKey)) {
-			log.debug(
-				"The replacement is the credential already stored; nothing to retire.",
-			);
-			return;
-		}
-		if (existing.keyId === undefined) {
-			log.warning(
-				'Profile "%s" held an API key that was supplied rather than minted here, so it stays live on the account — find it with `neon api-keys list`.',
-				name,
-			);
-			return;
-		}
-		const client = getApiClient({
-			apiKey: existing.apiKey,
-			apiHost: props.apiHost,
-		});
-		log.info(
-			(await withdrawKey(client, existing.scope, existing.keyId))
-				? `Revoked the key it replaces (id ${existing.keyId})`
-				: `Could not revoke the key it replaces (id ${existing.keyId}); it may still be live. Remove it with: neon api-keys revoke ${existing.keyId}`,
-		);
-		return;
-	}
-
-	const revoked = await revokeTokenSet(existing.tokens, props);
-	log.info(
-		revoked
-			? "Signed out the session it replaced"
-			: "Could not sign out the session it replaced; it will expire on its own",
-	);
 };
 
 /**
@@ -976,56 +1011,32 @@ const mintKey = async (
 	);
 };
 
-/** Best-effort withdrawal of a key we are refusing to store. Never throws. */
-const withdrawKey = async (
-	client: NeonApiClient,
-	scope: KeyScope,
-	keyId: number | undefined,
-): Promise<boolean> => {
-	if (!Number.isSafeInteger(keyId) || (keyId as number) <= 0) return false;
-	try {
-		const { data } = scope.orgId
-			? await client.revokeOrgApiKey(scope.orgId, keyId as number)
-			: await client.revokeApiKey(keyId as number);
-		// Check which key the response names: a `revoked: true` for some other id is not
-		// evidence that the one we issued is gone.
-		return data.revoked === true && data.id === keyId;
-	} catch (err) {
-		log.error(
-			"Failed to revoke API key %d: %s",
-			keyId,
-			err instanceof Error ? err.message : String(err),
-		);
-		return false;
-	}
-};
-
 const rotateKey = async (props: ProfileProps & { name: string }) => {
 	const { name } = props;
 	rejectProfileFlag(props, "rotate-key");
 	rejectApiKeyFlag(
 		"rotate-key",
-		`To store a key you already have, use \`neon profile create ${name} --api-key - --force\`.`,
+		`To store a key you already have, use \`neon profile create ${name} --api-key -\`.`,
 	);
 	// Resolve first: an unknown profile must fail having minted nothing.
 	const profile = resolveProfile(props.configDir, name);
 
-	const at = { path: profile.credentialsPath, profile: name };
+	const at = locationOf(profile);
 	const credential = await usableCredential(props, at);
 	if (credential === null) {
 		throw new Error(
-			`Profile "${name}" has no usable credential to mint with. Replace it with \`neon profile create ${name} --mint --force\`.`,
+			`Profile "${name}" has no usable credential to mint with. Replace it with \`neon profile create ${name} --mint\`.`,
 		);
 	}
 	// Rotating a *key* is what this command is for. An OAuth profile would otherwise be
 	// converted into a key profile as a side effect, discarding a session it never revoked.
 	if (credential.kind !== API_KEY) {
 		throw new Error(
-			`Profile "${name}" holds a browser sign-in, not an API key, so there is no key to rotate. Turn it into a key profile with \`neon profile create ${name} --mint --force\`.`,
+			`Profile "${name}" holds a browser sign-in, not an API key, so there is no key to rotate. Turn it into a key profile with \`neon profile create ${name} --mint\`.`,
 		);
 	}
 
-	const stored = readCredentials(at);
+	const stored = storeFor(props.configDir).read(at)?.credentials ?? null;
 	const scope = stored !== null ? scopeOf(stored) : {};
 	const previousKeyId =
 		typeof stored?.key_id === "number" ? stored.key_id : undefined;
@@ -1041,7 +1052,8 @@ const rotateKey = async (props: ProfileProps & { name: string }) => {
 		source: "profile-api-key",
 		configDir: props.configDir,
 		profile: name,
-		credentialsPath: profile.credentialsPath,
+		storage: at.storage,
+		...(at.storage === "file" ? { credentialsPath: at.path } : {}),
 	});
 
 	// Neon only lets a *personal* credential mint organization keys, so an organization key
@@ -1056,10 +1068,10 @@ const rotateKey = async (props: ProfileProps & { name: string }) => {
 		// the profile more reach than it had.
 		const advice =
 			scope.projectId !== undefined
-				? `\`neon profile create ${name} --mint --project-id ${scope.projectId} --force\``
+				? `\`neon profile create ${name} --mint --project-id ${scope.projectId}\``
 				: scope.orgId !== undefined && previousKeyId !== undefined
-					? `\`neon profile create ${name} --mint --org-id ${scope.orgId} --force\``
-					: `\`neon profile create ${name} --mint --org-id ${details.account_id} --force\` — but check \`neon api-keys list --org-id ${details.account_id}\` first, because a key you supplied may have been narrowed to a single project and an organization key would reach more`;
+					? `\`neon profile create ${name} --mint --org-id ${scope.orgId}\``
+					: `\`neon profile create ${name} --mint --org-id ${details.account_id}\` — but check \`neon api-keys list --org-id ${details.account_id}\` first, because a key you supplied may have been narrowed to a single project and an organization key would reach more`;
 		throw new Error(
 			`Profile "${name}" holds an organization key, and only a personal credential can mint organization keys — so it cannot mint its own replacement. Sign in and mint one with ${advice}.`,
 		);
@@ -1079,8 +1091,8 @@ const rotateKey = async (props: ProfileProps & { name: string }) => {
 	// keeps working — and the new key is named in the error rather than silently orphaned on
 	// the account with no way to find it again.
 	try {
-		writeCredentials(
-			profile.credentialsPath,
+		storeFor(props.configDir).write(
+			at,
 			apiKeyCredentials({
 				apiKey: created.key,
 				keyId: created.id,
@@ -1094,7 +1106,7 @@ const rotateKey = async (props: ProfileProps & { name: string }) => {
 		log.error(
 			"Minted key %d but could not write %s. Revoke it with: neon api-keys revoke %d%s",
 			created.id,
-			profile.credentialsPath,
+			credentialLabel(at),
 			created.id,
 			scope.orgId ? ` --org-id ${scope.orgId}` : "",
 		);
@@ -1106,7 +1118,8 @@ const rotateKey = async (props: ProfileProps & { name: string }) => {
 		auth: "api key",
 		scope: describeScope(scope),
 		keyId: created.id,
-		credentials: profile.credentialsPath,
+		credentials: credentialsDisplay(profile),
+		storage: at.storage,
 	});
 
 	if (previousKeyId === undefined) {
@@ -1172,8 +1185,26 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 	// 1. Revoke upstream where we can, so the credential dies rather than merely becoming
 	//    unreachable by us. Best-effort: a profile is often removed precisely because its
 	//    access already broke.
-	const at = { path: profile.credentialsPath, profile: name };
-	const stored = readOutgoingCredential(at);
+	const at = locationOf(profile);
+	let stored: OutgoingCredential | null = null;
+	try {
+		stored = readOutgoingCredential(props.configDir, at);
+	} catch (err) {
+		if (at.storage === "keyring") {
+			log.warning(
+				'Could not read the OS keyring item for profile "%s"; nothing in it could be revoked.',
+				name,
+			);
+		} else {
+			log.warning(
+				"%s. Nothing in it could be revoked.",
+				(err instanceof Error ? err.message : String(err)).replace(
+					/\.$/,
+					"",
+				),
+			);
+		}
+	}
 
 	if (stored?.kind === API_KEY) {
 		const { keyId, scope } = stored;
@@ -1204,53 +1235,96 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 		);
 	}
 
-	// 2. Delete the credentials file only if we created it. A profile pointing outside the
-	//    config directory was adopted from elsewhere; unlink it and say so, because the
-	//    secret is still on disk and silence would imply otherwise.
-	if (existsSync(profile.credentialsPath)) {
-		if (isInsideConfigDir(props.configDir, profile.credentialsPath)) {
-			rmSync(profile.credentialsPath);
-			log.info("Deleted %s", profile.credentialsPath);
+	// Deleting the keyring item first could strand its pointer if the write fails.
+	const dropPointer = (): void => {
+		assertProfilesUsable(props.configDir, name);
+		const path = profilesFilePath(props.configDir);
+		const file = readProfiles(props.configDir, log.warning);
+		if (file?.profiles[name]) {
+			delete file.profiles[name];
+			if (canDropProfilesFile(file)) {
+				rmSync(path);
+				log.info(
+					'Removed "%s" — no profiles left, deleted %s',
+					name,
+					path,
+				);
+			} else {
+				writeSecretFile(path, `${JSON.stringify(file, null, 2)}\n`);
+				log.info('Removed "%s" from %s', name, path);
+			}
+		} else if (name === DEFAULT_PROFILE) {
+			log.info("Signed out of DEFAULT");
+		}
+	};
+
+	// Adopted files stay on disk because the CLI does not own them.
+	const listing = storeFor(props.configDir).inspect(at);
+	if (at.storage === "keyring") {
+		// Removing the last profiles.json can change the directory used in the account hash.
+		const account = keyringAccount(props.configDir, name);
+		if (name === DEFAULT_PROFILE) {
+			const leftover = credentialsPath(props.configDir);
+			if (
+				isOwnedCredentialPath(props.configDir, leftover) &&
+				existsSync(leftover) &&
+				profilesUsingPath(props.configDir, leftover, name).length === 0
+			) {
+				storeFor(props.configDir).delete(
+					{
+						profile: name,
+						storage: CRED_STORAGE_FILE,
+						path: leftover,
+					},
+					{ required: false },
+				);
+				if (existsSync(leftover)) {
+					throw new Error(
+						`Could not delete ${leftover}. Refusing to reset DEFAULT — that file would become the profile.`,
+					);
+				}
+				log.info("Deleted %s", leftover);
+			}
+		}
+		dropPointer();
+		if (listing.reason?.includes("cannot use the OS keyring")) {
+			log.warning(
+				'This CLI cannot delete the OS keyring item for profile "%s". It remains in the OS store (service %s, account %s) until a CLI with the keyring addon removes it, or you delete it there.',
+				name,
+				KEYRING_SERVICE,
+				account,
+			);
+			return;
+		}
+		let cleared: CredentialDeleteResult = "unconfirmed";
+		try {
+			cleared = storeFor(props.configDir).delete(at, {
+				required: false,
+				account,
+			});
+		} catch {
+			cleared = "unconfirmed";
+		}
+		if (cleared === "cleared") {
+			log.info('Deleted the OS keyring item for profile "%s"', name);
 		} else {
-			log.info(
-				"Left %s on disk — not created by neon",
-				profile.credentialsPath,
+			log.warning(
+				'Could not confirm the OS keyring item for profile "%s" is gone. A leftover may still be in the OS store (service %s, account %s); it is not used once the profile is gone.',
+				name,
+				KEYRING_SERVICE,
+				account,
 			);
 		}
+		return;
 	}
 
-	// 3. Drop the entry, and the file once nothing but DEFAULT is left — the mirror image
-	//    of creating it lazily, so a single-account install ends up with no profiles.json.
-	const path = profilesFilePath(props.configDir);
-	const file = readProfiles(props.configDir, log.warning);
-	if (file?.profiles[name]) {
-		delete file.profiles[name];
-		if (onlyDefaultRemains(file)) {
-			rmSync(path);
-			log.info('Removed "%s" — no profiles left, deleted %s', name, path);
-		} else {
-			writeSecretFile(path, `${JSON.stringify(file, null, 2)}\n`);
-			log.info('Removed "%s" from %s', name, path);
+	if (isOwnedCredentialPath(props.configDir, at.path)) {
+		storeFor(props.configDir).delete(at);
+		if (listing.credentials !== null || listing.file !== "missing") {
+			log.info("Deleted %s", at.path);
 		}
-	} else if (name === DEFAULT_PROFILE) {
-		log.info("Signed out of DEFAULT");
+	} else if (existsSync(at.path)) {
+		log.info("Left %s on disk — not created by neon", at.path);
 	}
-};
-
-/** Revoke the OAuth refresh token in a credential we already have in hand. */
-const revokeTokenSet = async (
-	credentials: StoredCredentials,
-	props: ProfileProps,
-): Promise<boolean> => {
-	const tokenSet = credentials as unknown as ExtendedTokenSet;
-	return await revokeToken(
-		{
-			oauthHost: props.oauthHost,
-			clientId: props.clientId,
-			...(props.allowUnsafeTls
-				? { allowUnsafeTls: props.allowUnsafeTls }
-				: {}),
-		},
-		tokenSet,
-	);
+	dropPointer();
 };

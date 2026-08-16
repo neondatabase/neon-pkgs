@@ -366,6 +366,121 @@ export type FilteredNeonEnv<K extends string> = {
 	};
 };
 
+/**
+ * A filtered result when the exact runtime contents of a key array are unknown. Both the
+ * namespace and its selected properties are optional because the array may omit any member of
+ * its element union, or be empty.
+ */
+type OptionalFilteredNeonEnv<K extends string> = {
+	[N in keyof EnvKeysByNamespace as [
+		Extract<K, EnvKeysByNamespace[N]>,
+	] extends [never]
+		? never
+		: N]?: {
+		[P in Extract<K, EnvKeysByNamespace[N]> as EnvKeyToProp[P &
+			keyof EnvKeyToProp]]?: NamespaceEnv[N][EnvKeyToProp[P &
+			keyof EnvKeyToProp] &
+			keyof NamespaceEnv[N]];
+	};
+};
+
+/** Whether `T` is a union rather than one concrete type. */
+type IsUnion<T, Whole = T> = T extends Whole
+	? [Whole] extends [T]
+		? false
+		: true
+	: never;
+
+/** Whether any fixed tuple position can hold more than one key at runtime. */
+type TupleHasUnion<T extends readonly unknown[]> = T extends readonly []
+	? false
+	: T extends readonly [infer Head, ...infer Tail extends readonly unknown[]]
+		? true extends IsUnion<Head>
+			? true
+			: TupleHasUnion<Tail>
+		: true;
+
+/**
+ * The sound result of selecting an array of OS-level env-var keys.
+ *
+ * Inline literal tuples remain exact. Widened arrays, rest tuples, and tuple positions whose
+ * value is a union are conservative because their runtime contents may be any subset of the
+ * element type. The leading conditional distributes unions of whole literal tuples, preserving
+ * each exact alternative.
+ */
+export type SelectedNeonEnv<Keys extends readonly string[]> =
+	Keys extends readonly string[]
+		? number extends Keys["length"]
+			? OptionalFilteredNeonEnv<Keys[number]>
+			: TupleHasUnion<Keys> extends true
+				? OptionalFilteredNeonEnv<Keys[number]>
+				: FilteredNeonEnv<Keys[number]>
+		: never;
+
+type StorageCredentialEnvKey = "AWS_ACCESS_KEY_ID" | "AWS_SECRET_ACCESS_KEY";
+
+type StorageKeyPairError = {
+	readonly "fetchEnv keys must include AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY together": never;
+};
+
+type TupleDefinitelyContains<
+	Keys extends readonly string[],
+	Key extends string,
+> = Keys extends readonly [
+	infer Head extends string,
+	...infer Tail extends readonly string[],
+]
+	? [Head] extends [Key]
+		? true
+		: TupleDefinitelyContains<Tail, Key>
+	: false;
+
+type TupleDefinitelyContainsStoragePair<Keys extends readonly string[]> =
+	TupleDefinitelyContains<Keys, "AWS_ACCESS_KEY_ID"> extends true
+		? TupleDefinitelyContains<Keys, "AWS_SECRET_ACCESS_KEY"> extends true
+			? true
+			: false
+		: false;
+
+/**
+ * Reject a fixed key tuple that contains only one half of the storage credential. Dynamic
+ * arrays are checked at runtime because their contents are not known to TypeScript.
+ */
+type InvalidStorageKeyTuple<Keys extends readonly string[]> =
+	Keys extends unknown
+		? number extends Keys["length"]
+			? never
+			: [Extract<Keys[number], StorageCredentialEnvKey>] extends [never]
+				? never
+				: TupleDefinitelyContainsStoragePair<Keys> extends true
+					? never
+					: Keys
+		: never;
+
+type StorageKeyPairConstraint<Keys extends readonly string[]> = [
+	InvalidStorageKeyTuple<Keys>,
+] extends [never]
+	? unknown
+	: StorageKeyPairError;
+
+type FetchEnvKeysFromArgs<Args extends readonly unknown[]> = Args[0] extends {
+	keys: infer Keys extends readonly string[];
+}
+	? Keys
+	: never;
+
+type StorageKeyPairArgsConstraint<Args extends readonly unknown[]> =
+	StorageKeyPairConstraint<FetchEnvKeysFromArgs<Args>>;
+
+/** Preserve the same pair rule for callers that explicitly provide the legacy `K` generic. */
+type StorageKeyUnionConstraint<K extends string> = [
+	Extract<K, StorageCredentialEnvKey>,
+] extends [never]
+	? unknown
+	: StorageCredentialEnvKey extends K
+		? unknown
+		: StorageKeyPairError;
+
 export interface FetchEnvOptions {
 	/**
 	 * Neon project id. **Required** — the management API addresses branches through their
@@ -449,37 +564,80 @@ export interface FetchEnvOptions {
  */
 export async function fetchEnv<
 	const C extends Config,
-	const K extends SelectableEnvKey<C>,
+	const Args extends readonly [
+		options: FetchEnvOptions & {
+			/**
+			 * Fetch only these OS-level env vars, instead of everything the policy enables. The
+			 * keys autocomplete from the policy ({@link SelectableEnvKey}), and the result is
+			 * narrowed to match ({@link SelectedNeonEnv}). Inline literal arrays produce an exact
+			 * result; runtime-built arrays make their possible namespaces and properties optional.
+			 * `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` must be selected together.
+			 *
+			 * The point is not just a smaller result: **work is skipped too.** Leave out
+			 * `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `NEON_AI_GATEWAY_TOKEN` and no branch
+			 * credential is minted at all, so a caller that already holds valid secrets can refresh
+			 * everything else without issuing a new one. The non-secret vars of the same features
+			 * (`AWS_ENDPOINT_URL_S3`, `AWS_REGION`, `NEON_AI_GATEWAY_BASE_URL`) are not
+			 * credential-backed and stay available on their own.
+			 *
+			 * The selection **intersects** with the policy rather than overriding it: naming a var
+			 * the branch policy does not enable is not an error, it simply yields nothing.
+			 */
+			keys: readonly SelectableEnvKey<C>[];
+		},
+	],
 >(
 	config: C,
-	options: FetchEnvOptions & {
-		/**
-		 * Fetch only these OS-level env vars, instead of everything the policy enables. The
-		 * keys autocomplete from the policy ({@link SelectableEnvKey}), and the result is
-		 * narrowed to match ({@link FilteredNeonEnv}).
-		 *
-		 * The point is not just a smaller result: **work is skipped too.** Leave out
-		 * `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `NEON_AI_GATEWAY_TOKEN` and no branch
-		 * credential is minted at all, so a caller that already holds valid secrets can refresh
-		 * everything else without issuing a new one. The non-secret vars of the same features
-		 * (`AWS_ENDPOINT_URL_S3`, `AWS_REGION`, `NEON_AI_GATEWAY_BASE_URL`) are not
-		 * credential-backed and stay available on their own.
-		 *
-		 * The selection **intersects** with the policy rather than overriding it: naming a var
-		 * the branch policy does not enable is not an error, it simply yields nothing.
-		 */
-		keys: readonly K[];
-	},
-): Promise<FilteredNeonEnv<K>>;
+	...args: Args & StorageKeyPairArgsConstraint<NoInfer<Args>>
+): Promise<SelectedNeonEnv<FetchEnvKeysFromArgs<NoInfer<Args>>>>;
+export async function fetchEnv<
+	const C extends Config,
+	const K extends SelectableEnvKey<C> = never,
+>(
+	config: C,
+	options: [NoInfer<K>] extends [never]
+		? never
+		: FetchEnvOptions & {
+				keys: readonly NoInfer<K>[];
+			} & StorageKeyUnionConstraint<NoInfer<K>>,
+): Promise<FilteredNeonEnv<NoInfer<K>>>;
 export async function fetchEnv<const C extends Config>(
 	config: C,
-	options: FetchEnvOptions,
+	options: FetchEnvOptions & { keys?: never },
 ): Promise<NeonEnv<C>>;
+/** Diagnostic-only fallback: valid keyed calls resolve through the exact overload above. */
+export async function fetchEnv<
+	const C extends Config,
+	const Keys extends readonly SelectableEnvKey<C>[],
+>(
+	config: C,
+	options: FetchEnvOptions & { keys: Keys } & StorageKeyPairError,
+): Promise<never>;
 export async function fetchEnv(
 	config: Config,
 	options: FetchEnvOptions & { keys?: readonly string[] },
 ): Promise<unknown> {
+	if (options.keys) assertStorageCredentialKeyPair(options.keys);
 	return fetchEnvKeys(config, options, options.keys ?? null);
+}
+
+function assertStorageCredentialKeyPair(keys: readonly string[]): void {
+	const hasAccessKey = keys.includes(NEON_ENV_VAR_KEYS.storage.accessKeyId);
+	const hasSecretKey = keys.includes(
+		NEON_ENV_VAR_KEYS.storage.secretAccessKey,
+	);
+	if (hasAccessKey === hasSecretKey) return;
+	throw new TypeError(
+		"fetchEnv: AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be selected together. Pass both in `keys`, or omit both.",
+	);
+}
+
+/** Fail loudly when selected-key dependency planning and execution disagree. */
+function requiredValue<T>(value: T | null, description: string): T {
+	if (value === null) {
+		throw new Error(`fetchEnv: missing ${description}.`);
+	}
+	return value;
 }
 
 /**
@@ -505,55 +663,86 @@ export async function fetchEnvKeys(
 		selection === null || selection.has(key);
 
 	const result: ResolvedNeonEnv = {};
-	const [roles, databases] = await Promise.all([
-		api.listBranchRoles(projectId, branch.id),
-		api.listBranchDatabases(projectId, branch.id),
-	]);
-
-	const roleName = pickRoleName(roles, branch, options.roleName);
-	const databaseName = pickDatabaseName(
-		databases,
-		branch,
-		options.databaseName,
-	);
-
-	// Fan out: always fetch both Postgres URIs — the direct one also derives the AI Gateway
-	// host, so a selection that drops `DATABASE_URL_UNPOOLED` still needs it. Conditionally
-	// fetch auth + dataApi based on the branch policy and the selection. Auth key fields are
-	// only returned at integration creation time; for Better Auth they may legitimately be
-	// empty, so they can come back as empty strings.
 	const K = NEON_ENV_VAR_KEYS;
+	const wantsPooled = wants(K.postgres.databaseUrl);
+	const wantsUnpooled = wants(K.postgres.databaseUrlUnpooled);
 	const wantsAuth =
 		desired.authEnabled && (wants(K.auth.baseUrl) || wants(K.auth.jwksUrl));
 	const wantsDataApi = desired.dataApiEnabled && wants(K.dataApi.url);
+	const gatewayEnabled = desired.preview?.aiGatewayEnabled ?? false;
+	const needsUnpooled =
+		wantsUnpooled || (gatewayEnabled && wants(K.aiGateway.baseUrl));
+	const needsConnectionTarget = wantsPooled || needsUnpooled;
+	const needsDatabase = needsConnectionTarget || wantsDataApi;
+	const [roles, databases] = await Promise.all([
+		needsConnectionTarget
+			? api.listBranchRoles(projectId, branch.id)
+			: Promise.resolve([]),
+		needsDatabase
+			? api.listBranchDatabases(projectId, branch.id)
+			: Promise.resolve([]),
+	]);
 
+	const databaseName = needsDatabase
+		? pickDatabaseName(databases, branch, options.databaseName)
+		: null;
+	const connectionTarget = needsConnectionTarget
+		? {
+				roleName: pickRoleName(roles, branch, options.roleName),
+				databaseName: requiredValue(
+					databaseName,
+					"database for a selected connection URI",
+				),
+			}
+		: null;
+	const getConnectionUri = (pooled: boolean) => {
+		const target = requiredValue(
+			connectionTarget,
+			"role and database for a selected connection URI",
+		);
+		return api.getConnectionUri(projectId, {
+			branchId: branch.id,
+			...target,
+			pooled,
+		});
+	};
+
+	// Fetch only what the selected keys depend on. The direct Postgres URI also derives the
+	// AI Gateway host, while Auth, storage, branch identity, and gateway tokens need no
+	// Postgres metadata. Auth key fields are only returned at integration creation time; for
+	// Better Auth they may legitimately be empty, so they can come back as empty strings.
 	const [pooled, unpooled, authSnapshot, dataApiSnapshot] = await Promise.all(
 		[
-			api.getConnectionUri(projectId, {
-				branchId: branch.id,
-				databaseName,
-				roleName,
-				pooled: true,
-			}),
-			api.getConnectionUri(projectId, {
-				branchId: branch.id,
-				databaseName,
-				roleName,
-				pooled: false,
-			}),
+			wantsPooled ? getConnectionUri(true) : Promise.resolve(null),
+			needsUnpooled ? getConnectionUri(false) : Promise.resolve(null),
 			wantsAuth
 				? api.getNeonAuth(projectId, branch.id)
 				: Promise.resolve(null),
 			wantsDataApi
-				? api.getNeonDataApi(projectId, branch.id, databaseName)
+				? api.getNeonDataApi(
+						projectId,
+						branch.id,
+						requiredValue(
+							databaseName,
+							"database for the selected Data API URL",
+						),
+					)
 				: Promise.resolve(null),
 		],
 	);
 
 	const postgres: Partial<NeonPostgresEnv> = {};
-	if (wants(K.postgres.databaseUrl)) postgres.databaseUrl = pooled.uri;
-	if (wants(K.postgres.databaseUrlUnpooled)) {
-		postgres.databaseUrlUnpooled = unpooled.uri;
+	if (wantsPooled) {
+		postgres.databaseUrl = requiredValue(
+			pooled,
+			"pooled connection URI response",
+		).uri;
+	}
+	if (wantsUnpooled) {
+		postgres.databaseUrlUnpooled = requiredValue(
+			unpooled,
+			"direct connection URI response",
+		).uri;
 	}
 	if (Object.keys(postgres).length > 0) result.postgres = postgres;
 
@@ -585,17 +774,21 @@ export async function fetchEnvKeys(
 
 	if (wantsDataApi) {
 		if (!dataApiSnapshot) {
+			const selectedDatabase = requiredValue(
+				databaseName,
+				"database for the selected Data API URL",
+			);
 			throw new PlatformError(
 				ErrorCode.NotFound,
 				[
-					`fetchEnv: branch policy enables dataApi but no Data API integration is enabled on branch ${branch.name} (${branch.id}) database ${databaseName}.`,
+					`fetchEnv: branch policy enables dataApi but no Data API integration is enabled on branch ${branch.name} (${branch.id}) database ${selectedDatabase}.`,
 					"Enable it via `apply(config, { projectId, branchId })` or in the Neon Console — then re-run fetchEnv. Or return dataApi.enabled=false.",
 				].join(" "),
 				{
 					details: {
 						projectId,
 						branchId: branch.id,
-						databaseName,
+						databaseName: selectedDatabase,
 					},
 				},
 			);
@@ -609,7 +802,6 @@ export async function fetchEnvKeys(
 	// never touches the credentials/storage endpoints (and keeps working on production, where
 	// they may not exist yet).
 	const storageEnabled = (desired.preview?.buckets.length ?? 0) > 0;
-	const gatewayEnabled = desired.preview?.aiGatewayEnabled ?? false;
 	const wantsStorage =
 		storageEnabled &&
 		(wants(K.storage.accessKeyId) ||
@@ -622,11 +814,11 @@ export async function fetchEnvKeys(
 	// A credential is minted only for its *secrets*. The endpoint, region and gateway host
 	// are plain branch metadata, so selecting only those touches no credential at all — which
 	// is how a caller holding valid secrets refreshes the rest without issuing a new one.
-	const wantsCredential =
-		(storageEnabled &&
-			(wants(K.storage.accessKeyId) ||
-				wants(K.storage.secretAccessKey))) ||
-		(gatewayEnabled && wants(K.aiGateway.apiKey));
+	const wantsStorageCredential =
+		storageEnabled &&
+		(wants(K.storage.accessKeyId) || wants(K.storage.secretAccessKey));
+	const wantsGatewayCredential = gatewayEnabled && wants(K.aiGateway.apiKey);
+	const wantsCredential = wantsStorageCredential || wantsGatewayCredential;
 
 	if (wantsStorage || wantsGateway) {
 		// Read the branch's storage settings *before* minting: a policy that declares buckets
@@ -653,7 +845,10 @@ export async function fetchEnvKeys(
 					projectId,
 					branchId: branch.id,
 					branchName: branch.name,
-					scopes: previewCredentialScopes(desired.preview),
+					scopes: previewCredentialScopes(desired.preview, {
+						storage: wantsStorageCredential,
+						aiGateway: wantsGatewayCredential,
+					}),
 				})
 			: null;
 
@@ -680,7 +875,13 @@ export async function fetchEnvKeys(
 				// Bare branch-scoped gateway host derived from the branch's connection URI —
 				// not the control-plane API origin (which doesn't serve the gateway). Clients
 				// append the dialect route (/v1, /openai/v1, /anthropic/v1) themselves.
-				gateway.baseUrl = aiGatewayBaseUrl(branch.id, unpooled.uri);
+				gateway.baseUrl = aiGatewayBaseUrl(
+					branch.id,
+					requiredValue(
+						unpooled,
+						"direct connection URI for the selected AI Gateway base URL",
+					).uri,
+				);
 			}
 			result.aiGateway = gateway;
 		}
@@ -740,18 +941,17 @@ export async function resolveBranchPolicy(
 }
 
 /**
- * Scopes the branch credential should carry for a resolved branch policy. Only object storage
- * and the AI Gateway *require* a credential; functions never force one (they have no credential
- * of their own), but `functions:invoke` is added to the scope set when a credential is already
- * being minted for storage / the AI Gateway, so the one credential can invoke the branch's
- * functions too. Returns `[]` only when nothing credential-bearing is enabled.
+ * Scopes the branch credential should carry for a resolved branch policy and optional key
+ * selection. Only object storage and the AI Gateway *require* a credential; functions never
+ * force one, but `functions:invoke` rides along when another selected feature mints one.
  */
 export function previewCredentialScopes(
 	preview: ResolvedPreviewConfig | undefined,
+	selected?: { storage: boolean; aiGateway: boolean },
 ): CredentialScope[] {
 	if (!preview) return [];
-	const storage = preview.buckets.length > 0;
-	const aiGateway = preview.aiGatewayEnabled;
+	const storage = preview.buckets.length > 0 && (selected?.storage ?? true);
+	const aiGateway = preview.aiGatewayEnabled && (selected?.aiGateway ?? true);
 	if (!storage && !aiGateway) return [];
 	return deriveCredentialScopes({
 		storage,
