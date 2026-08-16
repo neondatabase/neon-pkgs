@@ -111,9 +111,12 @@ export const formatInspectQueryError = (
 	if (input.dbUrl !== undefined || input.databaseName !== undefined) {
 		return undefined;
 	}
+	const missingExtension =
+		input.requiresExtension !== undefined &&
+		input.reason.includes(`"${input.requiresExtension}"`);
 	const hint = !input.offerDatabaseNameHint
 		? ""
-		: input.requiresExtension !== undefined
+		: missingExtension
 			? `. Pass --database-name to try a database that already has the "${input.requiresExtension}" extension.`
 			: input.scope === "compute"
 				? ". Pass --database-name to connect through a different database."

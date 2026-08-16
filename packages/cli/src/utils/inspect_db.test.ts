@@ -142,14 +142,28 @@ describe("formatInspectQueryError", () => {
 	it("tells an extension failure to try a database that already has it", () => {
 		expect(
 			formatInspectQueryError({
-				reason: 'needs the "neon" extension',
+				reason: 'This query needs the "neon" extension, which is not installed.',
 				database: "analytics",
 				offerDatabaseNameHint: true,
 				scope: "compute",
 				requiresExtension: "neon",
 			}),
 		).toBe(
-			'needs the "neon" extension (database analytics). Pass --database-name to try a database that already has the "neon" extension.',
+			'This query needs the "neon" extension, which is not installed. (database analytics). Pass --database-name to try a database that already has the "neon" extension.',
+		);
+	});
+
+	it("does not attach the extension hint to a connection error", () => {
+		expect(
+			formatInspectQueryError({
+				reason: "Could not connect to Postgres",
+				database: "analytics",
+				offerDatabaseNameHint: true,
+				scope: "compute",
+				requiresExtension: "neon",
+			}),
+		).toBe(
+			"Could not connect to Postgres (database analytics). Pass --database-name to connect through a different database.",
 		);
 	});
 
