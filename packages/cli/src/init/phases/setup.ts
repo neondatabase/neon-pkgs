@@ -2,7 +2,11 @@ import { writeFileSync } from "node:fs";
 import { unlink } from "node:fs/promises";
 import { resolve } from "node:path";
 import { execa } from "execa";
-import { resolveAddMcpAgentId } from "../agents.js";
+import {
+	getSkillsAgentName,
+	listMcpAgentIds,
+	resolveAddMcpAgentId,
+} from "../agents.js";
 import {
 	FALLBACK_TEMPLATES,
 	fetchTemplates,
@@ -17,6 +21,7 @@ import {
 } from "../detect_agent.js";
 import { findEditorCommand } from "../extension.js";
 import { inspectProject } from "../inspect.js";
+import { installNeonMcpServer } from "../install_mcp.js";
 import { ensureNeonctl } from "../neonctl.js";
 import { ensureSkillsUpToDate } from "../skills.js";
 import type { Editor, PhaseResponse } from "../types.js";
@@ -212,7 +217,7 @@ async function buildBulkInspection(
 				"GROUPING: Preferences that share the same `group` field should be presented together in a single message (e.g. list all customize options at once and let the user answer them together). Preferences without a `group` must be asked individually.",
 				"",
 				detectedIde
-					? `The CLI has detected the IDE as: ${detectedIde.toLowerCase()}. Include this as the "ide" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor/VS Code/Windsurf, the extension IS applicable even if you are Claude Code.`
+					? `The CLI has detected the IDE as: ${detectedIde.toLowerCase()}. Include this as the "ide" field in your reportBack data. IMPORTANT: The IDE and the agent are different — you may be Claude Code (agent) running inside Cursor (IDE). The extension installs into the IDE, so if the IDE is Cursor or VS Code, the extension IS applicable even if you are Claude Code.`
 					: installedEditors.length > 0
 						? `No IDE detected, but the following editors are installed: ${installedEditors.join(", ")}. The "installedEditors" field in this response lists them. If the user wants the extension installed, ask which editor to install it for and include that as the "ide" field in your reportBack data. If not, set "ide" to "none".`
 						: `No IDE or supported editors detected. Set "ide" to "none" in your reportBack data.`,
@@ -239,7 +244,7 @@ async function buildBulkInspection(
 					description:
 						"Identify which coding agent is running this command",
 					lookFor: [
-						"Determine which agent you are: cursor, claude-code, copilot, vscode, windsurf, codex, cline, gemini-cli, goose, opencode, or antigravity",
+						`Determine which agent you are: ${listMcpAgentIds().join(", ")}`,
 						"Report your own agent identifier — this is used to configure the MCP server for the correct tool",
 					],
 				},
@@ -382,7 +387,7 @@ async function buildBulkInspection(
 					],
 					default: "true",
 					context:
-						"The extension installs into the IDE, NOT the agent. If the CLI detected the IDE (see detectedIde field), use that — e.g. Claude Code running inside Cursor means the IDE is Cursor and the extension IS applicable. Only applicable for VS Code-based IDEs (VS Code, Cursor, Windsurf). SKIP this question if the user is NOT in a VS Code-based IDE, or if the extension_installed check found it is already installed. Set installExtension to false in reportBack if skipped.",
+						"The extension installs into the IDE, NOT the agent. If the CLI detected the IDE (see detectedIde field), use that — e.g. Claude Code running inside Cursor means the IDE is Cursor and the extension IS applicable. Only applicable for VS Code and Cursor. SKIP this question if the user is NOT in VS Code or Cursor, or if the extension_installed check found it is already installed. Set installExtension to false in reportBack if skipped.",
 					condition: { preferenceId: "mode", equals: "customize" },
 					group: "customize",
 				},
@@ -550,28 +555,18 @@ async function executeBatchedInstallation(
 			status: "success",
 		});
 	} else {
-		const mcpArgs = [
-			"-y",
-			"add-mcp",
-			"https://mcp.neon.tech/mcp",
-			...(mcpScope === "global" ? ["-g"] : []),
-			"-n",
-			"Neon",
-			"-y",
-			"-a",
-			mcpAgentId,
-		];
-		try {
-			await execa("npx", mcpArgs, { stdio: "pipe", timeout: 60000 });
+		const installed = installNeonMcpServer({
+			agent: mcpAgentId,
+			scope: mcpScope === "project" ? "project" : "global",
+			cwd: process.cwd(),
+		});
+		if (installed.ok) {
 			results.push({
 				id: "install_mcp",
 				description: `Installed Neon MCP server (${mcpScope} scope)`,
 				status: "success",
 			});
 
-			// Some editors disable newly added MCP servers by default.
-			// Cursor: project-level servers are always disabled initially.
-			// Claude Code: newly added servers require user approval.
 			const isClaudeCode =
 				mcpAgentId === "claude-code" ||
 				options.agent?.toLowerCase() === "claude-code";
@@ -593,21 +588,35 @@ async function executeBatchedInstallation(
 					manualAction: true,
 				});
 			}
-		} catch (err) {
+		} else if (installed.unsupported) {
+			results.push({
+				id: "install_mcp",
+				description: installed.error,
+				status: "success",
+				manualAction: true,
+			});
+		} else {
 			results.push({
 				id: "install_mcp",
 				description: "Failed to install Neon MCP server",
 				status: "failed",
-				error: err instanceof Error ? err.message : "Unknown error",
+				error: installed.error,
 			});
 		}
 	}
 
 	// Step 3: Install/update skills (skip when bootstrapping — templates bundle skills)
+	const skillsAgent = getSkillsAgentName(agentId);
 	if (isBootstrap) {
 		results.push({
 			id: "install_skills",
 			description: "Neon agent skills included in template",
+			status: "success",
+		});
+	} else if (!skillsAgent) {
+		results.push({
+			id: "skip_skills",
+			description: "No Neon agent skills target for this agent",
 			status: "success",
 		});
 	} else {
@@ -626,13 +635,11 @@ async function executeBatchedInstallation(
 				status: "success",
 			});
 		} else {
-			// Build the install commands for the agent to run directly
-			// (sandboxed environments may block child process writes)
 			const { getSkillList } = await import("../skills.js");
 			const skillList = getSkillList(options.preview);
 			const cmds = skillList.map(
 				(s) =>
-					`skills add neondatabase/agent-skills --skill ${s} --agent ${agentId}${skillsScope === "global" ? " -g" : ""} -y`,
+					`skills add neondatabase/agent-skills --skill ${s} --agent ${skillsAgent}${skillsScope === "global" ? " -g" : ""} -y`,
 			);
 			results.push({
 				id: "install_skills",
@@ -750,12 +757,7 @@ async function mergeCliInspection(
 function isVscodeBasedIde(options: SetupPhaseOptions): boolean {
 	if (options.ide) {
 		const ide = options.ide.toLowerCase();
-		return (
-			ide === "cursor" ||
-			ide === "vscode" ||
-			ide === "vs-code" ||
-			ide === "windsurf"
-		);
+		return ide === "cursor" || ide === "vscode" || ide === "vs-code";
 	}
 	return options.isVscodeIde === true;
 }

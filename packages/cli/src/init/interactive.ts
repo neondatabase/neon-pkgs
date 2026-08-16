@@ -15,10 +15,17 @@ import {
 	select,
 	spinner,
 } from "@clack/prompts";
-import { execa } from "execa";
 import which from "which";
 import { bold, dim, gray, italic } from "yoctocolors";
-import { ALL_CONFIGURABLE_AGENTS, getAddMcpAgentId } from "./agents.js";
+import {
+	type AgentType,
+	detectInstalledAgents,
+	getAgentDisplayName,
+	getSkillsAgentName,
+	mcpPickerOptions,
+	skillsPickerOptions,
+	tryResolveAddMcpAgentId,
+} from "./agents.js";
 import { ensureNeonctlAuth, isAuthenticated } from "./auth.js";
 import {
 	type BootstrapTemplate,
@@ -28,13 +35,9 @@ import {
 	scaffoldTemplate,
 } from "./bootstrap.js";
 import { detectAgent, detectIde } from "./detect_agent.js";
-import { detectAvailableEditors } from "./editors.js";
-import {
-	installExtension,
-	isExtensionInstalled,
-	usesExtension,
-} from "./extension.js";
+import { installExtension, isExtensionInstalled } from "./extension.js";
 import { inspectProject } from "./inspect.js";
+import { installNeonMcpServer } from "./install_mcp.js";
 import { ensureNeonctl } from "./neonctl.js";
 import { ensureSkillsUpToDate, installAgentSkills } from "./skills.js";
 import type { Editor } from "./types.js";
@@ -223,10 +226,10 @@ async function interactiveInitInner(
 		)}\n`,
 	);
 
-	const detectedAgentId = detectAgent();
-	const detectedEditor = detectedAgentId
-		? agentIdToEditor(detectedAgentId)
-		: null;
+	const detectedAgent = (() => {
+		const raw = detectAgent();
+		return raw ? tryResolveAddMcpAgentId(raw) : undefined;
+	})();
 
 	// -----------------------------------------------------------------------
 	// Step 1: Inspect what's already in place
@@ -330,7 +333,13 @@ async function interactiveInitInner(
 		writeFileSync(neonPath, `${JSON.stringify(existing, null, 2)}\n`);
 	}
 
-	const mcpAlready = inspection.mcpConfigured === true;
+	const mcpHits = inspection.mcpAgents ?? [];
+	const detectedHasMcp = detectedAgent
+		? mcpHits.some((hit) => hit.agent === detectedAgent)
+		: false;
+	const mcpAlready = detectedAgent
+		? detectedHasMcp
+		: inspection.mcpConfigured === true;
 	// If we bootstrapped, skills come from the template
 	const skillsAlready =
 		inspection.skillsInstalled === true || selectedTemplate !== null;
@@ -368,10 +377,10 @@ async function interactiveInitInner(
 		return false;
 	})();
 
-	// Check if extension is installed for the detected editor
 	let extensionAlready = false;
-	if (detectedEditor && usesExtension(detectedEditor)) {
-		extensionAlready = await isExtensionInstalled(detectedEditor);
+	const detectedIdeEditor = extensionEditorForAgent(detectedAgent);
+	if (detectedIdeEditor) {
+		extensionAlready = await isExtensionInstalled(detectedIdeEditor);
 	}
 
 	// If tooling + database are configured, check if there's anything left to do
@@ -463,35 +472,19 @@ async function interactiveInitInner(
 			return;
 		}
 
-		let selectedEditors: Editor[];
-		if (detectedEditor) {
-			selectedEditors = [detectedEditor];
+		let selectedAgents: AgentType[];
+		if (detectedAgent) {
+			selectedAgents = [detectedAgent];
 		} else {
-			const availableEditors = await detectAvailableEditors(homeDir);
-			const editorResponse = await multiselect({
-				message: "Which editor(s) would you like to configure?",
-				options: ALL_CONFIGURABLE_AGENTS.map((agent) => ({
-					value: agent.editor,
-					label: agent.editor,
-					hint: agent.hint,
-				})),
-				initialValues: availableEditors,
-				required: true,
-			});
-			if (isCancel(editorResponse)) {
+			const picked = await pickAgents(needsMcp);
+			if (!picked) {
 				outro("Setup cancelled.");
 				return;
 			}
-			selectedEditors = editorResponse as Editor[];
-			if (selectedEditors.length === 0) {
-				log.warn("No editors selected.");
-				outro("Setup cancelled.");
-				return;
-			}
+			selectedAgents = picked;
 		}
 
-		// Check extension status
-		const vscodeEditors = selectedEditors.filter(usesExtension);
+		let vscodeEditors = extensionEditorsFor(selectedAgents);
 		let extensionAlreadyInstalled = false;
 		if (vscodeEditors.length > 0) {
 			const checks = await Promise.all(
@@ -502,7 +495,7 @@ async function interactiveInitInner(
 				log.step(dim("Neon editor extension already installed ✓"));
 			}
 		}
-		const canInstallExtension =
+		let canInstallExtension =
 			vscodeEditors.length > 0 && !extensionAlreadyInstalled;
 		let doInstallExtension = false;
 
@@ -517,9 +510,11 @@ async function interactiveInitInner(
 
 		let modeResult: string;
 		while (true) {
-			const editorName = selectedEditors.join(", ");
+			const agentNames = selectedAgents
+				.map((id) => getAgentDisplayName(id))
+				.join(", ");
 			const result = await select({
-				message: `Configure ${editorName} for Neon:`,
+				message: `Configure ${agentNames} for Neon:`,
 				options: [
 					{
 						value: "defaults",
@@ -535,7 +530,7 @@ async function interactiveInitInner(
 					},
 					{
 						value: "change_editor",
-						label: "Configure a different editor",
+						label: "Configure a different agent",
 					},
 				],
 				initialValue: "defaults",
@@ -547,26 +542,15 @@ async function interactiveInitInner(
 			}
 
 			if (result === "change_editor") {
-				const availableEditors = await detectAvailableEditors(homeDir);
-				const editorResponse = await multiselect({
-					message: "Which editor(s) would you like to configure?",
-					options: ALL_CONFIGURABLE_AGENTS.map((agent) => ({
-						value: agent.editor,
-						label: agent.editor,
-						hint: agent.hint,
-					})),
-					initialValues: availableEditors,
-					required: true,
-				});
-				if (isCancel(editorResponse)) {
+				const picked = await pickAgents(needsMcp);
+				if (!picked) {
 					outro("Setup cancelled.");
 					return;
 				}
-				selectedEditors = editorResponse as Editor[];
-				if (selectedEditors.length === 0) {
-					outro("Setup cancelled.");
-					return;
-				}
+				selectedAgents = picked;
+				vscodeEditors = extensionEditorsFor(selectedAgents);
+				canInstallExtension =
+					vscodeEditors.length > 0 && !extensionAlreadyInstalled;
 				continue;
 			}
 
@@ -684,50 +668,41 @@ async function interactiveInitInner(
 				break;
 		}
 
-		// Install only what's missing
-		for (const editor of selectedEditors) {
-			if (needsMcp) {
-				const mcpAgentId = getAddMcpAgentId(editor);
-				const mcpArgs = [
-					"-y",
-					"add-mcp",
-					"https://mcp.neon.tech/mcp",
-					"-n",
-					"Neon",
-					"-y",
-					"-a",
-					mcpAgentId,
-				];
-				if (mcpScope === "global") mcpArgs.splice(5, 0, "-g");
-
+		for (const agent of selectedAgents) {
+			const label = getAgentDisplayName(agent);
+			if (needsMcp && !mcpHits.some((hit) => hit.agent === agent)) {
 				const mcpS = spinner();
-				mcpS.start(`Installing Neon MCP server for ${editor}...`);
-				try {
-					await execa("npx", mcpArgs, {
-						stdio: "pipe",
-						timeout: 60000,
-					});
+				mcpS.start(`Installing Neon MCP server for ${label}...`);
+				const installed = installNeonMcpServer({
+					agent,
+					scope: mcpScope === "project" ? "project" : "global",
+					cwd: process.cwd(),
+				});
+				if (installed.ok) {
 					mcpS.stop(
 						dim(
-							`Neon MCP server configured for ${editor} (${mcpScope}) ✓`,
+							`Neon MCP server configured for ${label} (${mcpScope}) ✓`,
 						),
 					);
-				} catch (err) {
-					const msg =
-						err instanceof Error ? err.message : "Unknown error";
-					mcpS.stop(`Failed to configure MCP server for ${editor}`);
-					log.error(msg);
+				} else if (installed.unsupported) {
+					mcpS.stop(`Could not write MCP config for ${label}`);
+					log.warn(installed.error);
+				} else {
+					mcpS.stop(`Failed to configure MCP server for ${label}`);
+					log.error(installed.error);
 				}
 			}
 
-			if (needsSkills) {
-				await installAgentSkills([editor], {
+			if (needsSkills && getSkillsAgentName(agent)) {
+				await installAgentSkills([agent], {
 					scope: skillsScope,
 					preview: options.preview,
 				});
 			}
+		}
 
-			if (doInstallExtension && usesExtension(editor)) {
+		if (doInstallExtension) {
+			for (const editor of vscodeEditors) {
 				const extS = spinner();
 				extS.start(`Installing Neon extension for ${editor}...`);
 				const extOk = await installExtension(editor);
@@ -801,22 +776,41 @@ async function interactiveInitInner(
 	outro(dim("Have feedback? Email us at feedback@neon.tech"));
 }
 
-function agentIdToEditor(agentId: string): Editor | null {
-	switch (agentId) {
-		case "cursor":
-			return "Cursor";
-		case "vscode":
-			return "VS Code";
-		case "claude-code":
-			return "Claude CLI";
-		case "windsurf":
-			// Windsurf not in Editor type yet — fall back to prompt
-			return null;
-		case "codex":
-			return "Codex";
-		case "cline":
-			return "Cline";
-		default:
-			return null;
+function extensionEditorForAgent(agent: AgentType | undefined): Editor | null {
+	if (agent === "cursor") return "Cursor";
+	if (agent === "vscode") return "VS Code";
+	const ide = detectIde();
+	if (ide === "Cursor" || ide === "VS Code") return ide;
+	return null;
+}
+
+function extensionEditorsFor(selected: AgentType[]): Editor[] {
+	const out: Editor[] = [];
+	if (selected.includes("cursor")) out.push("Cursor");
+	if (selected.includes("vscode")) out.push("VS Code");
+	const ide = detectIde();
+	if ((ide === "Cursor" || ide === "VS Code") && !out.includes(ide)) {
+		out.push(ide);
 	}
+	return out;
+}
+
+async function pickAgents(needsMcp: boolean): Promise<AgentType[] | null> {
+	const options = needsMcp ? mcpPickerOptions() : skillsPickerOptions();
+	const installed = await detectInstalledAgents();
+	const response = await multiselect({
+		message: "Which agent(s) would you like to configure?",
+		options,
+		initialValues: installed.filter((id) =>
+			options.some((option) => option.value === id),
+		),
+		required: true,
+	});
+	if (isCancel(response)) return null;
+	const selected = response as AgentType[];
+	if (selected.length === 0) {
+		log.warn("No agents selected.");
+		return null;
+	}
+	return selected;
 }

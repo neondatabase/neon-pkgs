@@ -7,8 +7,10 @@ import {
 	globalInstallCommand,
 	resolveInvokingPackageManager,
 } from "../utils/package_manager.js";
-import { getSkillsAgentName as getSkillsAgentNameFromId } from "./agents.js";
-import type { Editor } from "./types.js";
+import {
+	type AgentType,
+	getSkillsAgentName as getSkillsAgentNameFromId,
+} from "./agents.js";
 
 /**
  * Ensures the `skills` CLI is globally installed so npx doesn't need
@@ -68,42 +70,6 @@ export const SKILL_REFERENCE_URLS: Record<string, string> = {
 	neonJs: `${SKILL_BASE_URL}/neon-js.md`,
 };
 
-/**
- * Maps Editor display names to the skills CLI agent name.
- */
-function editorToSkillsAgent(editor: Editor): string {
-	switch (editor) {
-		case "Cursor":
-			return "cursor";
-		case "VS Code":
-		case "GitHub Copilot CLI":
-			return "github-copilot";
-		case "Claude CLI":
-			return "claude-code";
-		case "Codex":
-			return "codex";
-		case "OpenCode":
-			return "opencode";
-		case "Antigravity":
-			return "antigravity";
-		case "Cline":
-		case "Cline CLI":
-			return "cline";
-		case "Gemini CLI":
-			return "gemini-cli";
-		case "Goose":
-			return "goose";
-		case "Claude Desktop":
-			return "claude-code";
-		case "MCPorter":
-			return "mcporter";
-		case "Zed":
-			return "zed";
-		default:
-			return "";
-	}
-}
-
 export type InstallSkillsOptions = {
 	json?: boolean;
 	scope?: "global" | "project";
@@ -114,16 +80,16 @@ export type InstallSkillsOptions = {
  * Installs Neon agent skills using Vercel's skills CLI.
  */
 export async function installAgentSkills(
-	selectedEditors: Editor[],
+	selectedAgents: AgentType[],
 	options?: InstallSkillsOptions,
 ): Promise<boolean> {
 	const quiet = options?.json === true;
 
-	const editorsWithSkills = selectedEditors.filter(
-		(e) => editorToSkillsAgent(e) !== "",
+	const agentsWithSkills = selectedAgents.filter(
+		(id) => getSkillsAgentNameFromId(id) !== undefined,
 	);
 
-	if (editorsWithSkills.length === 0) {
+	if (agentsWithSkills.length === 0) {
 		return true;
 	}
 
@@ -135,8 +101,9 @@ export async function installAgentSkills(
 	await ensureSkillsCli();
 	const skills = getSkillList(options?.preview);
 
-	for (const editor of editorsWithSkills) {
-		const agentName = editorToSkillsAgent(editor);
+	for (const agent of agentsWithSkills) {
+		const agentName = getSkillsAgentNameFromId(agent);
+		if (!agentName) continue;
 
 		// Install one skill at a time — the skills CLI has a bug with multiple
 		// --skill flags where it creates directories but doesn't copy all SKILL.md files.
@@ -162,7 +129,7 @@ export async function installAgentSkills(
 			} catch (error) {
 				if (!quiet)
 					log.error(
-						`Failed to install skill ${skill} for ${editor}: ${error instanceof Error ? error.message : "Unknown error"}`,
+						`Failed to install skill ${skill} for ${agent}: ${error instanceof Error ? error.message : "Unknown error"}`,
 					);
 				anyFailed = true;
 			}
@@ -237,6 +204,7 @@ function skillsAreFresh(agent: string, requiredSkills: string[]): boolean {
 
 	// Check global: ALL required skills must exist in agent-specific dirs
 	const agentName = getSkillsAgentNameFromId(agent);
+	if (!agentName) return false;
 	const globalDirs = GLOBAL_SKILLS_DIRS[agentName] ?? [];
 	for (const dir of globalDirs) {
 		const allExist = requiredSkills.every((skill) =>
@@ -269,11 +237,13 @@ export async function ensureSkillsUpToDate(
 	preview?: boolean,
 ): Promise<boolean> {
 	const resolvedAgent = agent || "cursor";
+	const agentName = getSkillsAgentNameFromId(resolvedAgent);
+	if (!agentName) return true;
+
 	const skills = getSkillList(preview);
 	if (skillsAreFresh(resolvedAgent, skills)) return true;
 
 	await ensureSkillsCli();
-	const agentName = getSkillsAgentNameFromId(resolvedAgent);
 	let allOk = true;
 
 	// Only install skills that don't already have SKILL.md on disk.

@@ -4,6 +4,14 @@ vi.mock("../auth.js", () => ({
 	isAuthenticated: vi.fn(),
 }));
 
+const mockInstallMcp = vi.fn().mockReturnValue({
+	ok: true,
+	path: "/tmp/mcp.json",
+});
+vi.mock("../install_mcp.js", () => ({
+	installNeonMcpServer: (...args: unknown[]) => mockInstallMcp(...args),
+}));
+
 import { isAuthenticated } from "../auth.js";
 import { handleMcpPhase } from "./mcp.js";
 
@@ -12,6 +20,10 @@ const mockIsAuthenticated = vi.mocked(isAuthenticated);
 describe("handleMcpPhase", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		mockInstallMcp.mockReturnValue({
+			ok: true,
+			path: "/tmp/mcp.json",
+		});
 	});
 
 	test("asks agent to detect MCP by default", async () => {
@@ -58,7 +70,7 @@ describe("handleMcpPhase", () => {
 		}
 	});
 
-	test("--install returns run_command when authenticated", async () => {
+	test("--install writes MCP in-process and chains to skills", async () => {
 		mockIsAuthenticated.mockResolvedValue(true);
 
 		const result = await handleMcpPhase({
@@ -66,14 +78,32 @@ describe("handleMcpPhase", () => {
 			install: true,
 		});
 
-		expect(result.status).toBe("installing");
-		expect(result.nextAction.type).toBe("run_command");
-		if (result.nextAction.type === "run_command") {
-			expect(result.nextAction.command).toContain("add-mcp");
-			expect(result.nextAction.command).toContain("mcp.neon.tech");
-			// After install, should chain to skills, not loop back to MCP
-			expect(result.nextAction.onSuccess.args).toContain("skills");
-			expect(result.nextAction.onSuccess.args).toContain("--install");
+		expect(result.status).toBe("installed");
+		expect(mockInstallMcp).toHaveBeenCalledWith(
+			expect.objectContaining({
+				agent: "claude-code",
+				scope: "global",
+			}),
+		);
+		expect(result.nextAction.type).toBe("run_neon_init");
+		if (result.nextAction.type === "run_neon_init") {
+			expect(result.nextAction.args).toContain("skills");
+			expect(result.nextAction.args).toContain("--install");
+		}
+	});
+
+	test("--install skips skills when the agent has no skills target", async () => {
+		mockIsAuthenticated.mockResolvedValue(true);
+
+		const result = await handleMcpPhase({
+			agent: "grok-build",
+			install: true,
+		});
+
+		expect(result.status).toBe("installed");
+		expect(result.nextAction.type).toBe("run_neon_init");
+		if (result.nextAction.type === "run_neon_init") {
+			expect(result.nextAction.args).not.toContain("skills");
 		}
 	});
 

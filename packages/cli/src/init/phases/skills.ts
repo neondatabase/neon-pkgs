@@ -1,10 +1,10 @@
 import { getSkillsAgentName } from "../agents.js";
 import { SKILL_REFERENCE_URLS } from "../skills.js";
-import type { Editor, PhaseResponse } from "../types.js";
+import type { PhaseResponse } from "../types.js";
 
 export type SkillsPhaseOptions = {
 	agent?: string;
-	editor?: Editor;
+	editor?: string;
 	status?: boolean;
 	install?: boolean;
 	update?: boolean;
@@ -19,6 +19,17 @@ export async function handleSkillsPhase(
 	const skillsAgent = options.agent
 		? getSkillsAgentName(options.agent)
 		: "claude-code";
+
+	if (options.agent && !skillsAgent) {
+		return {
+			phase: "tooling",
+			status: "skipped",
+			nextAction: {
+				type: "run_neon_init",
+				args: agentArgs,
+			},
+		};
+	}
 
 	// --status: ask agent to check
 	if (options.status) {
@@ -53,7 +64,7 @@ export async function handleSkillsPhase(
 
 	// --install or --update: run the skills CLI
 	if (options.install || options.update) {
-		const installCmd = `npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent ${skillsAgent} -y`;
+		const installCmd = `npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent ${skillsAgent ?? "claude-code"} -y`;
 		return {
 			phase: "tooling",
 			status: "installing_skills",

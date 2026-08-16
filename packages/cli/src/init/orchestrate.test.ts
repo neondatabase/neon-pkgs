@@ -93,6 +93,8 @@ function mockToolingInstalled(extraFiles: Record<string, string> = {}) {
 		"package.json": APP_PKG_JSON,
 		".cursor/mcp.json":
 			'{"mcpServers":{"Neon":{"url":"https://mcp.neon.tech/mcp"}}}',
+		".mcp.json":
+			'{"mcpServers":{"Neon":{"url":"https://mcp.neon.tech/mcp"}}}',
 		// skills directory exists and contains neon-postgres skill with SKILL.md
 		".cursor/skills/neon-postgres/SKILL.md": "",
 		...extraFiles,
@@ -259,6 +261,29 @@ describe("v2 orchestrator", () => {
 		const result = await orchestrate({ agent: "claude" });
 
 		expect(result.phase).toBe("neon_auth");
+	});
+
+	test("enters setup when the requested agent has no MCP even if another agent does", async () => {
+		mockIsAuthenticated.mockResolvedValue(true);
+		mockToolingInstalled();
+
+		const result = await orchestrate({ agent: "grok-build" });
+
+		expect(result.phase).toBe("setup");
+		expect(result.status).toBe("pending");
+	});
+
+	test("skips skills for grok-build once that agent has MCP", async () => {
+		mockIsAuthenticated.mockResolvedValue(true);
+		mockAppExists({
+			".grok/config.toml":
+				'[mcp_servers.Neon]\nurl = "https://mcp.neon.tech/mcp"\n',
+		});
+
+		const result = await orchestrate({ agent: "grok-build" });
+
+		expect(result.phase).toBe("setup");
+		expect(result.status).toBe("getting_started");
 	});
 
 	test("enters setup even with DATABASE_URL if MCP not configured", async () => {

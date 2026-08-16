@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { supportsSkills, tryResolveAddMcpAgentId } from "./agents.js";
 import { isAuthenticated } from "./auth.js";
 import { inspectProject } from "./inspect.js";
 import { handleAuthPhase } from "./phases/auth.js";
@@ -90,7 +91,19 @@ export async function orchestrate(
 		}
 	}
 
-	const toolingInstalled = inspection.mcpConfigured && skillsInstalled;
+	const requestedAgent = options.agent
+		? tryResolveAddMcpAgentId(options.agent)
+		: undefined;
+	const mcpForThisAgent = requestedAgent
+		? (inspection.mcpAgents ?? []).some(
+				(hit) => hit.agent === requestedAgent,
+			)
+		: inspection.mcpConfigured === true;
+	const skillsReady =
+		requestedAgent && !supportsSkills(requestedAgent)
+			? true
+			: skillsInstalled === true;
+	const toolingInstalled = mcpForThisAgent && skillsReady;
 	const hasNeonConnection = inspection.connectionString === true;
 
 	// Phase 3a: No app or tooling not installed → setup flow
@@ -102,7 +115,9 @@ export async function orchestrate(
 			agent: options.agent,
 			preview: options.preview,
 			hasApp,
-			mcpConfigured: inspection.mcpConfigured ?? null,
+			mcpConfigured: requestedAgent
+				? mcpForThisAgent
+				: (inspection.mcpConfigured ?? null),
 			mcpScope: inspection.mcpScope || undefined,
 			skillsInstalled: skillsInstalled ?? null,
 			skillsScope: inspection.skillsScope || undefined,

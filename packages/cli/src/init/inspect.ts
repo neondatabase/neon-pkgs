@@ -4,7 +4,9 @@
  * we examine the filesystem directly.
  */
 import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { homedir } from "node:os";
+import { resolve, sep } from "node:path";
+import { type AgentType, agents, getAgentTypes } from "add-mcp";
 import type { AgentCheck } from "./types.js";
 
 export type DetectedScope =
@@ -14,10 +16,16 @@ export type DetectedScope =
 	| "project-partial"
 	| false;
 
+export type McpAgentHit = {
+	agent: AgentType;
+	scope: "global" | "project";
+};
+
 export type InspectionResults = {
 	[key: string]: unknown;
 	mcpConfigured?: boolean;
 	mcpScope?: DetectedScope;
+	mcpAgents?: McpAgentHit[];
 	skillsInstalled?: boolean;
 	skillsScope?: DetectedScope;
 	/** True if a Neon-specific connection string (DATABASE_URL with "neon" or PGHOST with "neon") is found */
@@ -47,9 +55,10 @@ export async function inspectProject(
 	for (const check of checks) {
 		switch (check.id) {
 			case "mcp_server": {
-				const mcpScope = checkMcpServer(cwd);
-				results.mcpConfigured = mcpScope !== false;
-				results.mcpScope = mcpScope;
+				const hits = findNeonMcpAgents(cwd);
+				results.mcpAgents = hits;
+				results.mcpConfigured = hits.length > 0;
+				results.mcpScope = mcpScopeFromHits(hits);
 				break;
 			}
 			case "connection_string":
@@ -95,50 +104,80 @@ export async function inspectProject(
 // Individual check implementations
 // ---------------------------------------------------------------------------
 
-function checkMcpServer(cwd: string): DetectedScope {
-	const home = process.env.HOME || process.env.USERPROFILE || "";
-
-	// Check project-level configs first
-	const projectConfigs = [
-		resolve(cwd, ".cursor", "mcp.json"),
-		resolve(cwd, ".vscode", "settings.json"),
-	];
-	for (const configPath of projectConfigs) {
-		if (existsSync(configPath)) {
-			try {
-				const content = readFileSync(configPath, "utf-8");
-				if (
-					content.includes("neon") ||
-					content.includes("mcp.neon.tech")
-				) {
-					return "project";
-				}
-			} catch {}
-		}
-	}
-
-	// Check global configs
-	const globalConfigs = [
-		resolve(home, ".cursor", "mcp.json"),
-		// Claude Code config (add-mcp writes to settings.local.json)
-		resolve(home, ".claude", "settings.local.json"),
-		resolve(home, ".claude", "settings.json"),
-	];
-	for (const configPath of globalConfigs) {
-		if (existsSync(configPath)) {
-			try {
-				const content = readFileSync(configPath, "utf-8");
-				if (
-					content.includes("neon") ||
-					content.includes("mcp.neon.tech")
-				) {
-					return "global";
-				}
-			} catch {}
-		}
-	}
-
+function mcpScopeFromHits(hits: McpAgentHit[]): DetectedScope {
+	if (hits.some((hit) => hit.scope === "project")) return "project";
+	if (hits.some((hit) => hit.scope === "global")) return "global";
 	return false;
+}
+
+// add-mcp resolves home paths at import time, before tests replace HOME.
+function addMcpBakedHome(): string {
+	const cursorPath = agents.cursor.configPath;
+	const suffix = `${sep}.cursor${sep}mcp.json`;
+	if (cursorPath.endsWith(suffix)) {
+		return cursorPath.slice(0, -suffix.length);
+	}
+	return homedir();
+}
+
+function rebaseAddMcpHome(configPath: string): string {
+	const currentHome =
+		process.env.HOME || process.env.USERPROFILE || homedir();
+	const baked = addMcpBakedHome();
+	if (configPath.startsWith(baked)) {
+		return currentHome + configPath.slice(baked.length);
+	}
+	return configPath;
+}
+
+function agentProjectPath(id: AgentType, cwd: string): string | undefined {
+	const agent = agents[id];
+	if (agent.resolveConfigPath && agent.localConfigPath) {
+		return agent.resolveConfigPath(agent, { local: true, cwd });
+	}
+	if (agent.localConfigPath) {
+		return resolve(cwd, agent.localConfigPath);
+	}
+	return undefined;
+}
+
+function agentGlobalPath(id: AgentType, cwd: string): string {
+	const agent = agents[id];
+	if (agent.resolveConfigPath) {
+		return rebaseAddMcpHome(
+			agent.resolveConfigPath(agent, { local: false, cwd }),
+		);
+	}
+	return rebaseAddMcpHome(agent.configPath);
+}
+
+function fileHasNeonMcp(configPath: string): boolean {
+	if (!existsSync(configPath)) return false;
+	try {
+		const content = readFileSync(configPath, "utf-8");
+		if (content.toLowerCase().includes("mcp.neon.tech")) return true;
+		if (/"neon"\s*:/i.test(content)) return true;
+		if (/\[mcp_servers\.neon\]/i.test(content)) return true;
+		if (/^neon\s*=/im.test(content)) return true;
+		return false;
+	} catch {
+		return false;
+	}
+}
+
+function findNeonMcpAgents(cwd: string): McpAgentHit[] {
+	const hits: McpAgentHit[] = [];
+	for (const id of getAgentTypes()) {
+		const projectPath = agentProjectPath(id, cwd);
+		if (projectPath && fileHasNeonMcp(projectPath)) {
+			hits.push({ agent: id, scope: "project" });
+			continue;
+		}
+		if (fileHasNeonMcp(agentGlobalPath(id, cwd))) {
+			hits.push({ agent: id, scope: "global" });
+		}
+	}
+	return hits;
 }
 
 function checkConnectionString(cwd: string): boolean {
