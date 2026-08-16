@@ -37,6 +37,27 @@ describe("inspect db", () => {
 		);
 	});
 
+	test("locks --db-url names the database in the connection error", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			["inspect", "db", "locks", "--db-url", UNREACHABLE_DB_URL],
+			{
+				code: 1,
+				stderr: expect.stringContaining("(database postgres)"),
+			},
+		);
+	});
+
+	test("inspect db --help says omit --database-name covers every database", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["inspect", "db", "--help"], {
+			mockDir: "single_org",
+			stderr: expect.stringContaining("compute-wide checks run once"),
+		});
+	});
+
 	// Phase-2 subcommands. The extension-gated ones (`outliers`, `calls`) still
 	// fail at the connection step here — the `pg_stat_statements` guard only runs
 	// after a successful connect — so they share the same wiring assertion.

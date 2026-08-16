@@ -1,5 +1,5 @@
 ---
-"neon": patch
+"neon": minor
 ---
 
-`neon inspect db locks` and `neon inspect db long-running-queries` now report only the database you are inspecting. They previously listed sessions from every database on the branch, and `locks` printed an empty or wrong relation name for those foreign rows. Expect fewer rows than before: to cover a whole branch, run the check once per database.
+`neon inspect db` without `--database-name` now runs the check against every database on the branch. `locks` and `long-running-queries` also report only the database you name with the flag; they previously listed sessions from every database, and `locks` printed an empty or wrong relation name for those foreign rows.

@@ -36,6 +36,86 @@ export type ResolvedConnection = {
 	options: string;
 };
 
+export type InspectQueryScope = "database" | "compute";
+
+export type InspectTarget = {
+	database: string;
+	connectionUri: string;
+};
+
+export type InspectTargetSelection = {
+	databases: string[];
+	includeDatabaseColumn: boolean;
+};
+
+export type SelectInspectTargetsInput = {
+	databaseName?: string;
+	dbUrlDatabase?: string;
+	branchDatabases: readonly string[];
+	scope: InspectQueryScope;
+};
+
+/**
+ * Keep the database column on one-database branches so adding another database
+ * does not change the output schema. Compute-wide views run once because every
+ * database returns the same rows.
+ */
+export const selectInspectTargets = (
+	input: SelectInspectTargetsInput,
+): InspectTargetSelection => {
+	if (input.dbUrlDatabase !== undefined) {
+		return {
+			databases: [input.dbUrlDatabase],
+			includeDatabaseColumn: false,
+		};
+	}
+	if (input.databaseName !== undefined) {
+		return {
+			databases: [input.databaseName],
+			includeDatabaseColumn: false,
+		};
+	}
+	if (input.branchDatabases.length === 0) {
+		throw new Error("No databases found for the branch");
+	}
+	const sorted = [...input.branchDatabases].sort((a, b) =>
+		a.localeCompare(b),
+	);
+	if (input.scope === "compute") {
+		return { databases: [sorted[0]], includeDatabaseColumn: false };
+	}
+	return { databases: sorted, includeDatabaseColumn: true };
+};
+
+const connectionUriForDatabase = (
+	connectionUri: string,
+	database: string,
+): string => {
+	const url = new URL(connectionUri);
+	url.pathname = database;
+	return url.toString();
+};
+
+const listBranchDatabases = async (
+	props: ResolveConnectionProps,
+): Promise<{ branchId: string; names: string[] }> => {
+	const projectId = props.projectId;
+	const parsedPIT = props.branch
+		? parsePITBranch(props.branch)
+		: ({ tag: "head", branch: "" } as const);
+	if (props.branch) {
+		props.branch = parsedPIT.branch;
+	}
+	const branchId = await branchIdFromProps(props);
+	const {
+		data: { databases },
+	} = await props.apiClient.listProjectBranchDatabases(projectId, branchId);
+	return {
+		branchId,
+		names: databases.map((d: Database) => d.name),
+	};
+};
+
 /**
  * Resolve a branch's live Postgres connection details via the Neon API
  * (endpoint → role → password → database → URL, honoring point-in-time,
@@ -170,6 +250,74 @@ export const resolveConnectionUri = async (
 		password,
 		database,
 		options: connectionString.searchParams.toString(),
+	};
+};
+
+export type ResolveInspectTargetsProps = ResolveConnectionProps & {
+	dbUrl?: string;
+};
+
+export type ResolvedInspectTargets = {
+	targets: InspectTarget[];
+	includeDatabaseColumn: boolean;
+};
+
+export const resolveInspectTargets = async (
+	props: ResolveInspectTargetsProps,
+	scope: InspectQueryScope,
+): Promise<ResolvedInspectTargets> => {
+	if (props.dbUrl) {
+		const parsed = parseConnectionUri(props.dbUrl);
+		const selection = selectInspectTargets({
+			dbUrlDatabase: parsed.database,
+			branchDatabases: [],
+			scope,
+		});
+		return {
+			targets: [
+				{
+					database: selection.databases[0],
+					connectionUri: props.dbUrl,
+				},
+			],
+			includeDatabaseColumn: selection.includeDatabaseColumn,
+		};
+	}
+
+	if (props.databaseName !== undefined) {
+		const resolved = await resolveConnectionUri(props);
+		return {
+			targets: [
+				{
+					database: resolved.database,
+					connectionUri: resolved.connectionUri,
+				},
+			],
+			includeDatabaseColumn: false,
+		};
+	}
+
+	const { branchId, names } = await listBranchDatabases(props);
+	if (names.length === 0) {
+		throw new Error(`No databases found for the branch: ${branchId}`);
+	}
+	const selection = selectInspectTargets({
+		branchDatabases: names,
+		scope,
+	});
+	const first = await resolveConnectionUri({
+		...props,
+		databaseName: selection.databases[0],
+	});
+	return {
+		targets: selection.databases.map((database) => ({
+			database,
+			connectionUri: connectionUriForDatabase(
+				first.connectionUri,
+				database,
+			),
+		})),
+		includeDatabaseColumn: selection.includeDatabaseColumn,
 	};
 };
 

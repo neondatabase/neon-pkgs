@@ -10,6 +10,7 @@ import {
 } from "./helpers.js";
 
 type LockRow = {
+	database?: string;
 	pid: string;
 	relname: string | null;
 	mode: string;
@@ -17,6 +18,13 @@ type LockRow = {
 	granted: string;
 	age: string;
 	query: string;
+};
+
+type TableSizeRow = {
+	database?: string;
+	schema: string;
+	name: string;
+	size: string;
 };
 
 const OTHER_DATABASE = "other_db";
@@ -58,12 +66,9 @@ async function withSession<T>(
 }
 
 /**
- * `pg_locks` and `pg_stat_activity` are compute-wide, not database-scoped, so a
- * two-database branch is the only way to catch `inspect db` reporting another
- * database's rows. It is also the only way to catch the consequence that made
- * this worth fixing: `pg_locks.relation` is an OID that means nothing outside
- * `pg_locks.database`, so resolving a foreign one against the local `pg_class`
- * produced a null name, or another relation that happened to share the OID.
+ * `pg_locks` and `pg_stat_activity` span the compute, while relation OIDs are
+ * database-local. A second database makes foreign rows and misresolved OIDs
+ * observable.
  */
 describe.sequential("e2e — neon inspect db against the real API", () => {
 	e2eTest(
@@ -96,6 +101,62 @@ describe.sequential("e2e — neon inspect db against the real API", () => {
 				session.query(`CREATE TABLE ${OTHER_TABLE} (id int)`),
 			);
 
+			const allSizes = await runCliJson<TableSizeRow[]>([
+				"inspect",
+				"db",
+				"table-sizes",
+				"--project-id",
+				projectId,
+			]);
+			expect(
+				allSizes.some(
+					(row) =>
+						row.database === "neondb" && row.name === DEFAULT_TABLE,
+				),
+			).toBe(true);
+			expect(
+				allSizes.some(
+					(row) =>
+						row.database === OTHER_DATABASE &&
+						row.name === OTHER_TABLE,
+				),
+			).toBe(true);
+			expect(
+				allSizes
+					.filter((row) => row.name === DEFAULT_TABLE)
+					.every((row) => row.database === "neondb"),
+			).toBe(true);
+			expect(
+				allSizes
+					.filter((row) => row.name === OTHER_TABLE)
+					.every((row) => row.database === OTHER_DATABASE),
+			).toBe(true);
+
+			const namedSizes = await runCliJson<TableSizeRow[]>([
+				"inspect",
+				"db",
+				"table-sizes",
+				"--project-id",
+				projectId,
+				"--database-name",
+				"neondb",
+			]);
+			expect(namedSizes.some((row) => row.name === DEFAULT_TABLE)).toBe(
+				true,
+			);
+			expect(namedSizes.every((row) => row.database === undefined)).toBe(
+				true,
+			);
+
+			const slots = await runCliJson<unknown[]>([
+				"inspect",
+				"db",
+				"replication-slots",
+				"--project-id",
+				projectId,
+			]);
+			expect(Array.isArray(slots)).toBe(true);
+
 			const inspectLocks = (databaseName: string) =>
 				runCliJson<LockRow[]>([
 					"inspect",
@@ -107,8 +168,7 @@ describe.sequential("e2e — neon inspect db against the real API", () => {
 					databaseName,
 				]);
 
-			// Hold an ACCESS EXCLUSIVE lock in each database at the same time, so
-			// each inspect call has a foreign lock available to wrongly report.
+			// Keep both locks active so each inspection can expose a foreign lock.
 			await withSession(otherUri, async (otherSession) => {
 				await otherSession.query("BEGIN");
 				await otherSession.query(
@@ -120,10 +180,8 @@ describe.sequential("e2e — neon inspect db against the real API", () => {
 					await defaultSession.query(
 						`LOCK TABLE ${DEFAULT_TABLE} IN ACCESS EXCLUSIVE MODE`,
 					);
-					// Taking a table lock does not assign a transaction id — Postgres
-					// only does that when something needs one. Force it, so the
-					// database-less-lock assertion below is about this session rather
-					// than whatever else happens to be running on the compute.
+					// `LOCK TABLE` does not assign a transaction ID, so force one to
+					// test a database-less lock from this session.
 					await defaultSession.query("SELECT pg_current_xact_id()");
 					const backendPid = await defaultSession.query(
 						"SELECT pg_backend_pid()",
@@ -132,6 +190,13 @@ describe.sequential("e2e — neon inspect db against the real API", () => {
 
 					const fromDefault = await inspectLocks("neondb");
 					const fromOther = await inspectLocks(OTHER_DATABASE);
+					const fromAll = await runCliJson<LockRow[]>([
+						"inspect",
+						"db",
+						"locks",
+						"--project-id",
+						projectId,
+					]);
 
 					const relnames = (rows: LockRow[]) =>
 						rows
@@ -143,8 +208,6 @@ describe.sequential("e2e — neon inspect db against the real API", () => {
 					expect(relnames(fromOther)).toContain(OTHER_TABLE);
 					expect(relnames(fromOther)).not.toContain(DEFAULT_TABLE);
 
-					// The regression itself: a relation lock from another database
-					// resolved to a null name here, which reads as a non-relation lock.
 					for (const rows of [fromDefault, fromOther]) {
 						for (const row of rows.filter(
 							(candidate) => candidate.locktype === "relation",
@@ -153,14 +216,40 @@ describe.sequential("e2e — neon inspect db against the real API", () => {
 						}
 					}
 
-					// Locks that have no relation must survive the database filter —
-					// they carry no `pg_locks.database`, so filtering on the lock rather
-					// than on the holding session would have dropped them.
+					// `transactionid` locks have no database, so filtering on
+					// `pg_locks.database` would drop them.
 					expect(
 						fromDefault
 							.filter((row) => row.pid === defaultPid)
 							.map((row) => row.locktype),
 					).toContain("transactionid");
+
+					expect(
+						fromDefault.every((row) => row.database === undefined),
+					).toBe(true);
+					expect(
+						fromAll
+							.filter(
+								(row) =>
+									row.locktype === "relation" &&
+									row.relname === DEFAULT_TABLE,
+							)
+							.every((row) => row.database === "neondb"),
+					).toBe(true);
+					expect(
+						fromAll
+							.filter(
+								(row) =>
+									row.locktype === "relation" &&
+									row.relname === OTHER_TABLE,
+							)
+							.every((row) => row.database === OTHER_DATABASE),
+					).toBe(true);
+					for (const row of fromAll.filter(
+						(candidate) => candidate.locktype === "relation",
+					)) {
+						expect(row.relname).not.toBeNull();
+					}
 
 					await defaultSession.query("ROLLBACK");
 				});
