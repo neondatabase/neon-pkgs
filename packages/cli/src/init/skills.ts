@@ -184,9 +184,50 @@ const PROJECT_SKILLS_DIRS: Record<string, string[]> = {
 	grok: [".grok/skills", ".agents/skills"],
 };
 
-function dirsHaveNeonSkill(dirs: string[]): boolean {
-	return BASE_SKILLS.some((skill) =>
-		dirs.some((dir) => existsSync(resolve(dir, skill, "SKILL.md"))),
+function skillDirsForAgent(
+	skillsId: string,
+	scope: "global" | "project",
+	cwd: string,
+	home: string,
+): string[] {
+	if (scope === "global") {
+		return [
+			...new Set([
+				...(GLOBAL_SKILLS_DIRS[skillsId] ?? []),
+				resolve(home, ".agents", "skills"),
+			]),
+		];
+	}
+	return [
+		...new Set(
+			[...(PROJECT_SKILLS_DIRS[skillsId] ?? []), ".agents/skills"].map(
+				(dir) => resolve(cwd, dir),
+			),
+		),
+	];
+}
+
+export function missingSkillsForAgent(
+	agent: string,
+	options: {
+		cwd?: string;
+		scope?: "global" | "project";
+		preview?: boolean;
+	} = {},
+): string[] {
+	const skillsId = getSkillsAgentNameFromId(agent);
+	if (!skillsId) return [];
+	const cwd = options.cwd ?? process.cwd();
+	const home = process.env.HOME || process.env.USERPROFILE || "";
+	const dirs = skillDirsForAgent(
+		skillsId,
+		options.scope ?? "project",
+		cwd,
+		home,
+	);
+	return getSkillList(options.preview).filter(
+		(skill) =>
+			!dirs.some((dir) => existsSync(resolve(dir, skill, "SKILL.md"))),
 	);
 }
 
@@ -194,19 +235,11 @@ export function skillsInstalledForAgent(
 	agent: AgentType,
 	cwd = process.cwd(),
 ): boolean {
-	const skillsId = getSkillsAgentNameFromId(agent);
-	if (!skillsId) return true;
-	const home = process.env.HOME || process.env.USERPROFILE || "";
-	const projectDirs = [
-		...(PROJECT_SKILLS_DIRS[skillsId] ?? []),
-		".agents/skills",
-	].map((dir) => resolve(cwd, dir));
-	if (dirsHaveNeonSkill([...new Set(projectDirs)])) return true;
-	const globalDirs = [
-		...(GLOBAL_SKILLS_DIRS[skillsId] ?? []),
-		resolve(home, ".agents", "skills"),
-	];
-	return dirsHaveNeonSkill([...new Set(globalDirs)]);
+	if (!getSkillsAgentNameFromId(agent)) return true;
+	return (
+		missingSkillsForAgent(agent, { cwd, scope: "project" }).length === 0 ||
+		missingSkillsForAgent(agent, { cwd, scope: "global" }).length === 0
+	);
 }
 
 /**
@@ -285,27 +318,10 @@ export async function ensureSkillsUpToDate(
 
 	// Only install skills that don't already have SKILL.md on disk.
 	// Re-installing existing skills can trigger sandbox permission prompts.
-	const home = process.env.HOME || process.env.USERPROFILE || "";
-	const cwd = process.cwd();
-	const checkDirs =
-		scope === "global"
-			? [
-					resolve(home, ".cursor", "skills"),
-					resolve(home, ".claude", "skills"),
-					resolve(home, ".agents", "skills"),
-				]
-			: [
-					resolve(cwd, ".cursor", "skills"),
-					resolve(cwd, ".claude", "skills"),
-					resolve(cwd, ".agents", "skills"),
-				];
-
-	const missingSkills = skills.filter(
-		(skill) =>
-			!checkDirs.some((dir) =>
-				existsSync(resolve(dir, skill, "SKILL.md")),
-			),
-	);
+	const missingSkills = missingSkillsForAgent(resolvedAgent, {
+		scope: scope ?? "project",
+		preview,
+	});
 
 	if (missingSkills.length === 0) return true;
 

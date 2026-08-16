@@ -95,8 +95,9 @@ function mockToolingInstalled(extraFiles: Record<string, string> = {}) {
 			'{"mcpServers":{"Neon":{"url":"https://mcp.neon.tech/mcp"}}}',
 		".mcp.json":
 			'{"mcpServers":{"Neon":{"url":"https://mcp.neon.tech/mcp"}}}',
-		// skills directory exists and contains neon-postgres skill with SKILL.md
+		".cursor/skills/neon/SKILL.md": "",
 		".cursor/skills/neon-postgres/SKILL.md": "",
+		".claude/skills/neon/SKILL.md": "",
 		".claude/skills/neon-postgres/SKILL.md": "",
 		...extraFiles,
 	};
@@ -260,6 +261,7 @@ describe("v2 orchestrator", () => {
 		mockAppExists({
 			".grok/config.toml":
 				'[mcp_servers.Neon]\nurl = "https://mcp.neon.tech/mcp"\n',
+			".grok/skills/neon/SKILL.md": "",
 			".grok/skills/neon-postgres/SKILL.md": "",
 			".env": "DATABASE_URL=postgres://user:pass@ep-foo.us-east-2.aws.neon.tech/neondb\nNEON_AUTH_TOKEN=abc",
 			".neon": '{"projectId":"proj-123"}',
