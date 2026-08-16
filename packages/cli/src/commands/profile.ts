@@ -150,6 +150,12 @@ export const builder = (argv: yargs.Argv) =>
 								"Store the credential in the OS keyring. Per profile; later create without the flag stays there. See `neon profile list`.",
 							type: "boolean",
 						},
+						// Shipped on create. The meaning is now the default, so the flag is
+						// refused with a recovery line rather than "Unknown argument".
+						force: {
+							hidden: true,
+							type: "boolean",
+						},
 					})
 					// A project-scoped key is already an organization key, and its org is
 					// derived from the project rather than chosen — same rule as `api-keys`.
@@ -157,6 +163,15 @@ export const builder = (argv: yargs.Argv) =>
 					.strict()
 					.check((argv) => {
 						noPassthrough("profile create")(argv);
+						if (argv.force === true) {
+							const name =
+								typeof argv.name === "string"
+									? argv.name
+									: "NAME";
+							throw new Error(
+								`--force is no longer a flag. \`neon profile create ${name}\` always replaces an existing profile and revokes the credential it held. Drop --force.`,
+							);
+						}
 						if (argv.keyring === false) {
 							const name =
 								typeof argv.name === "string"

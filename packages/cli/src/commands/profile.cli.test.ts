@@ -438,7 +438,7 @@ describe("profile create", () => {
 		).toBe(before);
 	});
 
-	test("create --force is not a flag", async () => {
+	test("create --force says to drop it", async () => {
 		const dir = makeConfigDir({});
 		const { code, stderr } = await runCli([
 			"profile",
@@ -450,7 +450,9 @@ describe("profile create", () => {
 		]);
 
 		expect(code).toBe(1);
-		expect(stderr).toMatch(/Unknown argument: force/i);
+		expect(stderr).toContain("--force is no longer a flag");
+		expect(stderr).toContain("neon profile create work");
+		expect(stderr).toContain("Drop --force");
 	});
 
 	test("create --keyring on a new profile does not warn about an unread item", async () => {

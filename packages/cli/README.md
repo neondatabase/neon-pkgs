@@ -873,6 +873,10 @@ Entries in `profiles.json` are pointers — a path, or the exact string `"keyrin
 }
 ```
 
+An unreadable `profiles.json` fails every command that needs a profile, including a
+file-only DEFAULT. That file is the only record of where each account's credentials live,
+so the CLI will not guess past it. Fix or delete it.
+
 `neon profile remove` revokes what the profile holds — an OAuth refresh token at the
 authorization server, or an API key this CLI minted — rather than only forgetting it locally. A
 key you supplied is the exception and stays live, because nothing records its id; the command
@@ -900,9 +904,11 @@ neon profile remove work --yes              # drop a keyring profile, then creat
 
 File to keyring is `neon auth --keyring` or `neon profile create … --keyring`: a new
 sign-in, then the previous credential is revoked and the owned file is deleted.
-Keyring to file is `remove`, then create or auth again. `create` and `auth` without
-`--keyring` follow an existing `"keyring"` pointer, so a keyring profile cannot leave
-the OS store until `remove` succeeds.
+`create` on an existing name always revokes after a successful write. `auth` revokes
+when it writes to the keyring, including a re-login that follows an existing pointer.
+`auth` that overwrites a file does not. Keyring to file is `remove`, then create or
+auth again. `create` and `auth` without `--keyring` follow an existing `"keyring"`
+pointer, so a keyring profile cannot leave the OS store until `remove` succeeds.
 
 `--api-key` and `NEON_API_KEY` skip both stores. This CLI's packaged binary recognizes a
 `"keyring"` pointer and refuses: it cannot load the OS keyring addon. Use the npm-installed
