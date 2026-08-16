@@ -8,6 +8,8 @@ exports[`inspect db > inspect db --help marks compute-wide subcommands 1`] = `""
 
 exports[`inspect db > inspect db --help says omit --database-name covers every database 1`] = `""`;
 
+exports[`inspect db > inspect db --help says one failing database fails the run 1`] = `""`;
+
 exports[`inspect db > lfc-hit-rate --db-url bypasses the API and reports a Postgres connection error 1`] = `""`;
 
 exports[`inspect db > locks --db-url bypasses the API and reports a Postgres connection error 1`] = `""`;

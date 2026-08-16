@@ -39,10 +39,8 @@ const fillSingleProjectUnlessDbUrl = async (
 
 const runSubcommand = async (name: InspectSubcommand, props: InspectProps) => {
 	const query: InspectQuery = INSPECT_QUERIES[name];
-	const { targets, includeDatabaseColumn } = await resolveInspectTargets(
-		props,
-		query.scope,
-	);
+	const { targets, includeDatabaseColumn, branchDatabaseCount } =
+		await resolveInspectTargets(props, query.scope);
 
 	const rows: Record<string, unknown>[] = [];
 	for (const target of targets) {
@@ -58,7 +56,7 @@ const runSubcommand = async (name: InspectSubcommand, props: InspectProps) => {
 				database: target.database,
 				dbUrl: props.dbUrl,
 				databaseName: props.databaseName,
-				targetCount: targets.length,
+				offerDatabaseNameHint: branchDatabaseCount > 1,
 			});
 			if (wrapped === undefined) {
 				throw err instanceof Error ? err : new Error(reason);
@@ -102,7 +100,7 @@ const dbBuilder = (argv: yargs.Argv) => {
 			},
 			"database-name": {
 				describe:
-					"Database to inspect. Omit to cover every database on the branch. Ranking and row limits stay per database. Compute-wide checks run once against the first listed database. Ignored with --db-url.",
+					"Database to inspect. Omit to cover every database on the branch. Ranking and row limits stay per database. One failing database fails the whole run. Compute-wide checks run once against the first listed database. Ignored with --db-url.",
 				type: "string",
 			},
 			"role-name": {

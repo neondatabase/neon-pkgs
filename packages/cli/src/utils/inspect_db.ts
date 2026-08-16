@@ -98,7 +98,7 @@ export type FormatInspectQueryErrorInput = {
 	database: string;
 	dbUrl?: string;
 	databaseName?: string;
-	targetCount: number;
+	offerDatabaseNameHint: boolean;
 };
 
 export const formatInspectQueryError = (
@@ -107,10 +107,9 @@ export const formatInspectQueryError = (
 	if (input.dbUrl !== undefined || input.databaseName !== undefined) {
 		return undefined;
 	}
-	const hint =
-		input.targetCount > 1
-			? ". Pass --database-name to inspect one database."
-			: "";
+	const hint = input.offerDatabaseNameHint
+		? ". Pass --database-name to inspect one database."
+		: "";
 	return `${input.reason} (database ${input.database})${hint}`;
 };
 
@@ -287,6 +286,7 @@ export type ResolveInspectTargetsProps = ResolveConnectionProps & {
 export type ResolvedInspectTargets = {
 	targets: InspectTarget[];
 	includeDatabaseColumn: boolean;
+	branchDatabaseCount: number;
 };
 
 export const resolveInspectTargets = async (
@@ -308,6 +308,7 @@ export const resolveInspectTargets = async (
 				},
 			],
 			includeDatabaseColumn: selection.includeDatabaseColumn,
+			branchDatabaseCount: 1,
 		};
 	}
 
@@ -324,6 +325,7 @@ export const resolveInspectTargets = async (
 				},
 			],
 			includeDatabaseColumn: false,
+			branchDatabaseCount: 1,
 		};
 	}
 
@@ -348,6 +350,7 @@ export const resolveInspectTargets = async (
 			),
 		})),
 		includeDatabaseColumn: selection.includeDatabaseColumn,
+		branchDatabaseCount: names.length,
 	};
 };
 

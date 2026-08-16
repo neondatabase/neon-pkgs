@@ -97,7 +97,7 @@ describe("formatInspectQueryError", () => {
 				reason: "missing neon",
 				database: "postgres",
 				dbUrl: "postgresql://localhost/postgres",
-				targetCount: 1,
+				offerDatabaseNameHint: false,
 			}),
 		).toBeUndefined();
 		expect(
@@ -105,7 +105,7 @@ describe("formatInspectQueryError", () => {
 				reason: "missing neon",
 				database: "neondb",
 				databaseName: "neondb",
-				targetCount: 1,
+				offerDatabaseNameHint: true,
 			}),
 		).toBeUndefined();
 	});
@@ -115,17 +115,17 @@ describe("formatInspectQueryError", () => {
 			formatInspectQueryError({
 				reason: "missing neon",
 				database: "other_db",
-				targetCount: 1,
+				offerDatabaseNameHint: false,
 			}),
 		).toBe("missing neon (database other_db)");
 	});
 
-	it("points at --database-name when a fan-out target fails", () => {
+	it("points at --database-name when the branch has more than one database", () => {
 		expect(
 			formatInspectQueryError({
 				reason: "missing neon",
 				database: "analytics",
-				targetCount: 3,
+				offerDatabaseNameHint: true,
 			}),
 		).toBe(
 			"missing neon (database analytics). Pass --database-name to inspect one database.",
@@ -170,6 +170,7 @@ describe("resolveInspectTargets", () => {
 
 		const resolved = await resolveInspectTargets(props, "database");
 
+		expect(resolved.branchDatabaseCount).toBe(2);
 		expect(resolved.targets).toHaveLength(2);
 		for (const target of resolved.targets) {
 			expect(decodeURIComponent(target.connectionUri)).toContain(

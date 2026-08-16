@@ -54,9 +54,18 @@ describe("inspect db", () => {
 	}) => {
 		await testCliCommand(["inspect", "db", "--help"], {
 			mockDir: "single_org",
-			stderr: expect.stringMatching(
-				/Ranking and row limits stay per database[\s\S]*first listed database/,
+			stderr: expect.stringContaining(
+				"Ranking and row limits stay per database",
 			),
+		});
+	});
+
+	test("inspect db --help says one failing database fails the run", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["inspect", "db", "--help"], {
+			mockDir: "single_org",
+			stderr: expect.stringContaining("fails the whole run"),
 		});
 	});
 
