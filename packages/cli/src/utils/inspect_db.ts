@@ -101,10 +101,6 @@ export type FormatInspectQueryErrorInput = {
 	targetCount: number;
 };
 
-/**
- * Name the database we chose when the user did not. `--db-url` and
- * `--database-name` already identify it.
- */
 export const formatInspectQueryError = (
 	input: FormatInspectQueryErrorInput,
 ): string | undefined => {
