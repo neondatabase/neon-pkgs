@@ -23,16 +23,18 @@ describe("add-mcp agent ids", () => {
 		expect(tryResolveAddMcpAgentId("not-an-agent")).toBeUndefined();
 	});
 
-	test("skills map is hardcoded and omits grok-build", () => {
+	test("skills map is hardcoded and maps grok-build to grok", () => {
 		expect(getSkillsAgentName("cursor")).toBe("cursor");
 		expect(getSkillsAgentName("vscode")).toBe("github-copilot");
 		expect(getSkillsAgentName("claude")).toBe("claude-code");
 		expect(getSkillsAgentName("claude-desktop")).toBe("claude-code");
 		expect(getSkillsAgentName("github-copilot-cli")).toBe("github-copilot");
 		expect(getSkillsAgentName("opencode")).toBe("opencode");
-		expect(getSkillsAgentName("grok-build")).toBeUndefined();
-		expect(getSkillsAgentName("grok")).toBeUndefined();
-		expect(supportsSkills("grok-build")).toBe(false);
+		expect(getSkillsAgentName("grok-build")).toBe("grok");
+		expect(getSkillsAgentName("grok")).toBe("grok");
+		expect(supportsSkills("grok-build")).toBe(true);
+		expect(getSkillsAgentName("mcporter")).toBeUndefined();
+		expect(supportsSkills("mcporter")).toBe(false);
 		expect(supportsSkills("cursor")).toBe(true);
 	});
 });

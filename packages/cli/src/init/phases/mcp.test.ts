@@ -108,11 +108,27 @@ describe("handleMcpPhase", () => {
 		}
 	});
 
-	test("--install skips skills when the agent has no skills target", async () => {
+	test("--install chains grok-build to skills", async () => {
 		mockIsAuthenticated.mockResolvedValue(true);
 
 		const result = await handleMcpPhase({
 			agent: "grok-build",
+			install: true,
+		});
+
+		expect(result.status).toBe("installed");
+		expect(result.nextAction.type).toBe("run_neon_init");
+		if (result.nextAction.type === "run_neon_init") {
+			expect(result.nextAction.args).toContain("skills");
+			expect(result.nextAction.args).toContain("--install");
+		}
+	});
+
+	test("--install skips skills when the agent has no skills target", async () => {
+		mockIsAuthenticated.mockResolvedValue(true);
+
+		const result = await handleMcpPhase({
+			agent: "mcporter",
 			install: true,
 		});
 

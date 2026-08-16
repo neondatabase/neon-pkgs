@@ -28,4 +28,18 @@ describe("skillsInstalledForAgent", () => {
 		expect(skillsInstalledForAgent("windsurf", cwd)).toBe(true);
 		expect(skillsInstalledForAgent("zed", cwd)).toBe(true);
 	});
+
+	test("treats .grok/skills as installed for grok-build", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-skills-"));
+		dirs.push(cwd);
+		mkdirSync(join(cwd, ".grok", "skills", "neon-postgres"), {
+			recursive: true,
+		});
+		writeFileSync(
+			join(cwd, ".grok", "skills", "neon-postgres", "SKILL.md"),
+			"",
+		);
+
+		expect(skillsInstalledForAgent("grok-build", cwd)).toBe(true);
+	});
 });

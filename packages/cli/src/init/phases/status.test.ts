@@ -36,8 +36,8 @@ describe("handleStatusPhase", () => {
 		).toBe(true);
 	});
 
-	test("does not recommend skills for grok-build", async () => {
-		const result = await handleStatusPhase({ agent: "grok-build" });
+	test("does not recommend skills for mcporter", async () => {
+		const result = await handleStatusPhase({ agent: "mcporter" });
 		expect(
 			result.recommendations.some((r) =>
 				r.message.includes("agent skills"),

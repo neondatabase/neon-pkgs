@@ -51,7 +51,7 @@ const SKILLS_AGENT_BY_TYPE: { [K in AgentType]?: string } = {
 	"github-copilot-cli": "github-copilot",
 	windsurf: "windsurf",
 	zed: "zed",
-	mcporter: "mcporter",
+	"grok-build": "grok",
 };
 
 export function listMcpAgentIds(): AgentType[] {

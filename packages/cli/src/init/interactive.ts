@@ -690,7 +690,11 @@ async function interactiveInitInner(
 				nctlS.stop(dim(`Updated Neon CLI to v${nctlResult.version} ✓`));
 				break;
 			case "failed":
-				nctlS.stop("Failed to install Neon CLI");
+				nctlS.stop(
+					nctlResult.action === "updating"
+						? "Failed to update Neon CLI"
+						: "Failed to install Neon CLI",
+				);
 				log.warn(
 					nctlResult.error ??
 						"The Neon CLI could not be installed automatically.",

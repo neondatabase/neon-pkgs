@@ -171,6 +171,7 @@ const GLOBAL_SKILLS_DIRS: Record<string, string[]> = (() => {
 		"github-copilot": [resolve(home, ".vscode", "skills"), agentsDir],
 		codex: [resolve(home, ".codex", "skills"), agentsDir],
 		cline: [resolve(home, ".cline", "skills"), agentsDir],
+		grok: [resolve(home, ".grok", "skills"), agentsDir],
 	};
 })();
 
@@ -180,6 +181,7 @@ const PROJECT_SKILLS_DIRS: Record<string, string[]> = {
 	"github-copilot": [".vscode/skills", ".agents/skills"],
 	codex: [".codex/skills", ".agents/skills"],
 	cline: [".cline/skills", ".agents/skills"],
+	grok: [".grok/skills", ".agents/skills"],
 };
 
 function dirsHaveNeonSkill(dirs: string[]): boolean {

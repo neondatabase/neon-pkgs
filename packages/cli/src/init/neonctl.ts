@@ -112,6 +112,7 @@ export type EnsureNeonctlResult = {
 	status: "already_current" | "installed" | "updated" | "failed";
 	version?: string;
 	error?: string;
+	action?: "installing" | "updating";
 };
 
 /**
@@ -171,11 +172,13 @@ export async function ensureNeonctl(
 
 	const pm = resolveInvokingPackageManager();
 	const install = globalInstallCommand(pm, "neon");
+	const action = check.installed ? "updating" : "installing";
 	if (!install) {
 		// The next step is installing a package manager, not falling back to
 		// npx: npx ships with npm, so it is missing in exactly this case.
 		return {
 			status: "failed",
+			action,
 			error:
 				"Could not install the Neon CLI: this machine has no package manager that can perform a global install. " +
 				"npm, pnpm and bun are not on PATH (yarn Berry has no global install). " +
@@ -183,7 +186,7 @@ export async function ensureNeonctl(
 		};
 	}
 	const { command, args } = install;
-	onProgress?.(check.installed ? "updating" : "installing");
+	onProgress?.(action);
 
 	try {
 		await execa(command, args, { stdio: "pipe", timeout: 60000 });
@@ -197,6 +200,7 @@ export async function ensureNeonctl(
 	} catch (err) {
 		return {
 			status: "failed",
+			action,
 			error: err instanceof Error ? err.message : "Unknown error",
 		};
 	}
