@@ -86,6 +86,34 @@ describe("handleMcpPhase", () => {
 		}
 	});
 
+	test("--install with project scope offers global when the agent cannot write it", async () => {
+		mockIsAuthenticated.mockResolvedValue(true);
+		mockInstallMcp.mockReturnValue({
+			ok: false,
+			unsupported: true,
+			error: "Windsurf does not support project-level MCP config.",
+		});
+
+		const result = await handleMcpPhase({
+			agent: "windsurf",
+			install: true,
+			scope: "project",
+		});
+
+		expect(result.status).toBe("unsupported");
+		expect(result.nextAction.type).toBe("ask_user");
+		if (result.nextAction.type === "ask_user") {
+			expect(result.nextAction.question).toContain("globally");
+			expect(result.nextAction.responseMapping).toHaveProperty("global");
+			expect(result.nextAction.responseMapping).toHaveProperty("skip");
+			const global = result.nextAction.responseMapping.global;
+			if ("args" in global) {
+				expect(global.args).toContain("--install");
+				expect(global.args).not.toContain("project");
+			}
+		}
+	});
+
 	test("--install writes MCP in-process and chains to skills", async () => {
 		mockIsAuthenticated.mockResolvedValue(true);
 

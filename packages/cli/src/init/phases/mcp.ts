@@ -1,5 +1,6 @@
 import {
 	agentSupportsProjectMcp,
+	getAgentDisplayName,
 	getSkillsAgentName,
 	resolveAddMcpAgentId,
 	tryResolveAddMcpAgentId,
@@ -89,6 +90,45 @@ export async function handleMcpPhase(
 
 		if (!installed.ok) {
 			if (installed.unsupported) {
+				if (
+					scope === "project" &&
+					!agentSupportsProjectMcp(mcpAgentId)
+				) {
+					return {
+						phase: "tooling",
+						status: "unsupported",
+						error: installed.error,
+						nextAction: {
+							type: "ask_user",
+							question: `${getAgentDisplayName(mcpAgentId)} does not support project-level MCP. Install the Neon MCP server globally instead?`,
+							options: [
+								{
+									value: "global",
+									label: "Install globally",
+								},
+								{
+									value: "skip",
+									label: "Skip MCP install",
+								},
+							],
+							responseMapping: {
+								global: {
+									args: [
+										"mcp",
+										"--json",
+										...(options.agent
+											? ["--agent", options.agent]
+											: []),
+										"--install",
+									],
+								},
+								skip: {
+									args: skillsFollowUp(options.agent),
+								},
+							},
+						},
+					};
+				}
 				return {
 					phase: "tooling",
 					status: "unsupported",

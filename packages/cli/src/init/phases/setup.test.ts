@@ -112,6 +112,19 @@ describe("setup phase", () => {
 			body: "mock-stream",
 		});
 	});
+	test("reportBack omits project mcpScope when the agent cannot write it", async () => {
+		const result = await handleSetupPhase({ agent: "windsurf" });
+
+		expect(result.nextAction.type).toBe("agent_check");
+		if (result.nextAction.type === "agent_check") {
+			const dataPlaceholder = result.nextAction.reportBack.args.find(
+				(a: string) => a.includes("json:"),
+			);
+			expect(dataPlaceholder).toContain("mcpScope?: 'global'|'none'");
+			expect(dataPlaceholder).not.toContain("'project'");
+		}
+	});
+
 	test("returns inspection checks with phased userPreferences and instructions", async () => {
 		const result = await handleSetupPhase({ agent: "claude" });
 

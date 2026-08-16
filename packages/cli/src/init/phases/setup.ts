@@ -432,8 +432,15 @@ async function buildBulkInspection(
 						const modeField = hasModeQuestion
 							? ", mode: string"
 							: "";
+						const knownAgent = options.agent
+							? tryResolveAddMcpAgentId(options.agent)
+							: undefined;
+						const mcpScopeUnion =
+							knownAgent && !agentSupportsProjectMcp(knownAgent)
+								? "'global'|'none'"
+								: "'global'|'project'|'none'";
 						const mcpField = hasModeQuestion
-							? ", mcpScope?: 'global'|'project'|'none'"
+							? `, mcpScope?: ${mcpScopeUnion}`
 							: "";
 						const skillsField = needsSkillsChoice
 							? ", skillsScope?: string"
