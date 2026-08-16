@@ -298,6 +298,7 @@ describe("v2 orchestrator", () => {
 
 		expect(result.phase).toBe("setup");
 		expect(result.status).toBe("pending");
+		expect(result.skillsInstalled).toBe(false);
 	});
 
 	test("enters setup when the requested agent has no MCP even if another agent does", async () => {

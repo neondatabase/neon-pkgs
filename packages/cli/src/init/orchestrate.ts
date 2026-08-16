@@ -122,7 +122,9 @@ export async function orchestrate(
 				? mcpForThisAgent
 				: (inspection.mcpConfigured ?? null),
 			mcpScope: inspection.mcpScope || undefined,
-			skillsInstalled: skillsInstalled ?? null,
+			skillsInstalled: requestedAgent
+				? skillsReady
+				: (skillsInstalled ?? null),
 			skillsScope: inspection.skillsScope || undefined,
 		});
 	}
