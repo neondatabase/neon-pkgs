@@ -226,6 +226,7 @@ describe("createCredentialStore — keyring", () => {
 			/--api-key/,
 		);
 		expect(() => store.read(keyringAt())).toThrow(/--api-key/);
+		expect(() => store.read(keyringAt())).toThrow(/npm-installed neon/);
 		expect(() => store.assertKeyringWritable()).not.toThrow(/mv DEFAULT/);
 	});
 
@@ -338,6 +339,27 @@ describe("createCredentialStore — keyring", () => {
 		const store = createCredentialStore(dir, { keyring: null });
 		expect(store.delete(fileAt(dir))).toBe("cleared");
 		expect(store.delete(fileAt(dir), { required: false })).toBe("absent");
+	});
+
+	test("write does not leak a throwing set", () => {
+		const dir = makeDir();
+		const keyring: KeyringBackend = {
+			get: () => null,
+			set: () => {
+				throw new Error(
+					"Value of 'service' is invalid: cannot be empty",
+				);
+			},
+			delete: () => false,
+		};
+		const store = createCredentialStore(dir, { keyring });
+		expect(() => store.write(keyringAt(), key)).toThrow(
+			KeyringUnavailableError,
+		);
+		expect(() => store.write(keyringAt(), key)).toThrow(
+			"Drop `--keyring` to keep the credential in a file",
+		);
+		expect(() => store.write(keyringAt(), key)).not.toThrow(/service/);
 	});
 
 	test("write rolls back a new item when it cannot be read back", () => {

@@ -42,7 +42,7 @@ export class KeyringUnavailableError extends Error {
 				? `${loaded} Drop \`--keyring\` to keep the credential in a file.`
 				: kind === "write"
 					? `${loaded} Remove the profile with \`neon profile remove ${profile} --yes\`.`
-					: `${loaded} Use --api-key or NEON_API_KEY, or remove the profile with \`neon profile remove ${profile} --yes\`.`,
+					: `${loaded} Use the npm-installed neon, or --api-key or NEON_API_KEY. To reset the profile: \`neon profile remove ${profile} --yes\`.`,
 		);
 		this.name = "KeyringUnavailableError";
 	}
@@ -160,7 +160,11 @@ export const createCredentialStore = (
 		} catch {
 			previous = null;
 		}
-		kr.set(KEYRING_SERVICE, account, JSON.stringify(credentials));
+		try {
+			kr.set(KEYRING_SERVICE, account, JSON.stringify(credentials));
+		} catch {
+			throw new KeyringUnavailableError();
+		}
 		try {
 			if (kr.get(KEYRING_SERVICE, account) === null) {
 				throw new Error(
@@ -169,7 +173,11 @@ export const createCredentialStore = (
 			}
 		} catch (err) {
 			if (previous !== null) {
-				kr.set(KEYRING_SERVICE, account, previous);
+				try {
+					kr.set(KEYRING_SERVICE, account, previous);
+				} catch {
+					throw new KeyringClearError(profile, "visible");
+				}
 				let restored: string | null = null;
 				try {
 					restored = kr.get(KEYRING_SERVICE, account);
