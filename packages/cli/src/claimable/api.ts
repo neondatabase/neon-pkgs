@@ -400,7 +400,7 @@ export class ClaimableClient {
 	): Promise<ClaimableCredentials> {
 		return parseCredentialsResponse(
 			await this.request(
-				`/v1/databases/${encodeURIComponent(projectId)}/credentials`,
+				`/v1/projects/${encodeURIComponent(projectId)}/credentials`,
 				{ accessToken },
 			),
 		);
@@ -412,7 +412,7 @@ export class ClaimableClient {
 	): Promise<ClaimCode> {
 		return parseClaimCodeResponse(
 			await this.request(
-				`/v1/databases/${encodeURIComponent(projectId)}/claim`,
+				`/v1/projects/${encodeURIComponent(projectId)}/claim`,
 				{ method: "POST", accessToken },
 			),
 		);
@@ -424,14 +424,14 @@ export class ClaimableClient {
 	): Promise<ClaimStatus> {
 		return parseClaimStatusResponse(
 			await this.request(
-				`/v1/databases/${encodeURIComponent(projectId)}/claim`,
+				`/v1/projects/${encodeURIComponent(projectId)}/claim`,
 				{ accessToken },
 			),
 		);
 	}
 
 	async deleteProject(projectId: string, accessToken: string): Promise<void> {
-		await this.request(`/v1/databases/${encodeURIComponent(projectId)}`, {
+		await this.request(`/v1/projects/${encodeURIComponent(projectId)}`, {
 			method: "DELETE",
 			accessToken,
 		});

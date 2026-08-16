@@ -42,7 +42,6 @@ import {
 	resolveClaimableContext,
 	shouldUseClaimableCredentials,
 } from "../claimable/state.js";
-import { credentialsPath as defaultCredentialsPath } from "../config.js";
 import {
 	currentContextFile,
 	isClaimCommand,

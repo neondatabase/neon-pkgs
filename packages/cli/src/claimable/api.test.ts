@@ -1,6 +1,12 @@
-import { describe, expect, it } from "vitest";
+import {
+	createServer,
+	type IncomingMessage,
+	type ServerResponse,
+} from "node:http";
+import { afterEach, describe, expect, it } from "vitest";
 import { codeFromBody, messageFromBody } from "../api.js";
 import {
+	ClaimableClient,
 	ClaimableServiceError,
 	parseClaimCodeResponse,
 	parseClaimStatusResponse,
@@ -188,5 +194,107 @@ describe("proxied Neon API errors", () => {
 		expect(messageFromBody(body)).toBe(
 			"Claim this project before deploying functions.",
 		);
+	});
+});
+
+const listen = async (
+	handler: (req: IncomingMessage, res: ServerResponse) => void,
+) => {
+	const server = createServer(handler);
+	await new Promise<void>((resolve) => {
+		server.listen(0, "localhost", resolve);
+	});
+	const address = server.address();
+	if (address === null || typeof address === "string") {
+		throw new Error("test server did not bind a port");
+	}
+	return {
+		origin: `http://localhost:${address.port}`,
+		close: () =>
+			new Promise<void>((resolve, reject) => {
+				server.close((error) => (error ? reject(error) : resolve()));
+			}),
+	};
+};
+
+describe("ClaimableClient resource paths", () => {
+	const seen: { method?: string; url?: string }[] = [];
+	let close: (() => Promise<void>) | undefined;
+
+	afterEach(async () => {
+		seen.length = 0;
+		await close?.();
+		close = undefined;
+	});
+
+	it("calls /v1/projects/{id} for credentials, claim, and delete", async () => {
+		const projectId = "quiet-fog-12345678";
+		const server = await listen((req, res) => {
+			seen.push({ method: req.method, url: req.url });
+			if (req.url === `/v1/projects/${projectId}/credentials`) {
+				res.writeHead(200, { "content-type": "application/json" });
+				res.end(
+					JSON.stringify({
+						project_id: projectId,
+						branch_id: "br-test",
+						database_url:
+							"postgresql://user:secret@example.test/neondb",
+						services: {},
+						expires_at: "2026-08-14T12:00:00.000Z",
+					}),
+				);
+				return;
+			}
+			if (req.url === `/v1/projects/${projectId}/claim`) {
+				res.writeHead(200, { "content-type": "application/json" });
+				res.end(
+					JSON.stringify(
+						req.method === "POST"
+							? {
+									user_code: "ABCD-2345",
+									verification_uri: "http://127.0.0.1/claim",
+									verification_uri_complete:
+										"http://127.0.0.1/claim?user_code=ABCD-2345",
+									expires_in: 900,
+									interval: 5,
+								}
+							: {
+									state: "pending",
+									expires_at: "2026-08-14T12:00:00.000Z",
+									reconciled: false,
+								},
+					),
+				);
+				return;
+			}
+			if (
+				req.method === "DELETE" &&
+				req.url === `/v1/projects/${projectId}`
+			) {
+				res.writeHead(204);
+				res.end();
+				return;
+			}
+			res.writeHead(404, { "content-type": "application/json" });
+			res.end(
+				JSON.stringify({
+					error: { code: "not_found", message: req.url },
+				}),
+			);
+		});
+		close = server.close;
+		const client = new ClaimableClient(server.origin);
+
+		await client.credentials(projectId, "access-token");
+		await client.createClaim(projectId, "access-token");
+		await client.claimStatus(projectId, "access-token");
+		await client.deleteProject(projectId, "access-token");
+
+		expect(seen).toEqual([
+			{ method: "GET", url: `/v1/projects/${projectId}/credentials` },
+			{ method: "POST", url: `/v1/projects/${projectId}/claim` },
+			{ method: "GET", url: `/v1/projects/${projectId}/claim` },
+			{ method: "DELETE", url: `/v1/projects/${projectId}` },
+		]);
 	});
 });
