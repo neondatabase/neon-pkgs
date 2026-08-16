@@ -139,6 +139,20 @@ describe("formatInspectQueryError", () => {
 		);
 	});
 
+	it("tells an extension failure to try a database that already has it", () => {
+		expect(
+			formatInspectQueryError({
+				reason: 'needs the "neon" extension',
+				database: "analytics",
+				offerDatabaseNameHint: true,
+				scope: "compute",
+				requiresExtension: "neon",
+			}),
+		).toBe(
+			'needs the "neon" extension (database analytics). Pass --database-name to try a database that already has the "neon" extension.',
+		);
+	});
+
 	it("tells compute-wide omit to connect through a different database", () => {
 		expect(
 			formatInspectQueryError({
@@ -210,5 +224,45 @@ describe("resolveInspectTargets", () => {
 				"neon_lsn:0/234235",
 			);
 		}
+	});
+
+	it("encodes a percent in --database-name", async () => {
+		const resolved = await resolveInspectTargets(
+			{
+				projectId: "proj-1",
+				branch: "br-main-branch-123456",
+				databaseName: "sales%2026",
+				roleName: "neondb_owner",
+				apiKey: "test-key",
+				apiHost: "https://console.neon.tech/api/v2",
+				output: "json",
+				contextFile: "/dev/null",
+				apiClient: {
+					listProjectBranchDatabases: async () => ({
+						data: {
+							databases: [{ name: "sales%2026" }],
+						},
+					}),
+					listProjectBranchEndpoints: async () => ({
+						data: {
+							endpoints: [
+								{
+									type: "read_write",
+									host: "ep-1.neon.tech",
+									id: "ep-1",
+									branch_id: "br-main-branch-123456",
+								},
+							],
+						},
+					}),
+					getProjectBranchRolePassword: async () => ({
+						data: { password: "secret" },
+					}),
+				} as never,
+			},
+			"database",
+		);
+
+		expect(resolved.targets[0]?.connectionUri).toContain("sales%252026");
 	});
 });

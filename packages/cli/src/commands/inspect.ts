@@ -58,6 +58,7 @@ const runSubcommand = async (name: InspectSubcommand, props: InspectProps) => {
 				databaseName: props.databaseName,
 				offerDatabaseNameHint: branchDatabaseCount > 1,
 				scope: query.scope,
+				requiresExtension: query.requiresExtension,
 			});
 			if (wrapped === undefined) {
 				throw err instanceof Error ? err : new Error(reason);
@@ -101,7 +102,7 @@ const dbBuilder = (argv: yargs.Argv) => {
 			},
 			"database-name": {
 				describe:
-					"Database to inspect. Omit to cover every database on the branch. Ranking and row limits stay per database. One failing database fails the whole run. Compute-wide checks run once against the first listed database. Ignored with --db-url.",
+					"Database to inspect. Omit to cover every database the API lists for the branch. Ranking and row limits stay per database. One failing database fails the whole run. Compute-wide checks run once against the first listed database. Ignored with --db-url.",
 				type: "string",
 			},
 			"role-name": {

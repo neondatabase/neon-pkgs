@@ -102,6 +102,7 @@ export type FormatInspectQueryErrorInput = {
 	databaseName?: string;
 	offerDatabaseNameHint: boolean;
 	scope: InspectQueryScope;
+	requiresExtension?: string;
 };
 
 export const formatInspectQueryError = (
@@ -112,9 +113,11 @@ export const formatInspectQueryError = (
 	}
 	const hint = !input.offerDatabaseNameHint
 		? ""
-		: input.scope === "compute"
-			? ". Pass --database-name to connect through a different database."
-			: ". Pass --database-name to inspect one database.";
+		: input.requiresExtension !== undefined
+			? `. Pass --database-name to try a database that already has the "${input.requiresExtension}" extension.`
+			: input.scope === "compute"
+				? ". Pass --database-name to connect through a different database."
+				: ". Pass --database-name to inspect one database.";
 	return `${input.reason} (database ${input.database})${hint}`;
 };
 
@@ -244,7 +247,7 @@ export const resolveConnectionUri = async (
 		host = endpoint.host.replace(endpoint.id, endpoint.branch_id);
 	}
 	const connectionString = new URL(`postgresql://${host}`);
-	connectionString.pathname = database;
+	connectionString.pathname = `/${encodeURIComponent(database)}`;
 	connectionString.username = role;
 	connectionString.password = password;
 
@@ -318,11 +321,11 @@ export const resolveInspectTargets = async (
 	}
 
 	if (props.databaseName !== undefined) {
-		if (props.databaseName === "") {
-			throw new Error(
-				"--database-name cannot be empty. Omit the flag to cover every database.",
-			);
-		}
+		selectInspectTargets({
+			databaseName: props.databaseName,
+			branchDatabases: [],
+			scope,
+		});
 		const resolved = await resolveConnectionUri(props);
 		return {
 			targets: [
