@@ -1,5 +1,12 @@
 # neonctl
 
+## 3.4.0
+
+### Patch Changes
+
+- Updated dependencies [5abe208]
+  - neon@3.4.0
+
 ## 3.3.0
 
 ### Patch Changes
