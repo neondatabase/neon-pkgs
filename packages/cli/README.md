@@ -86,12 +86,12 @@ The command writes:
 
 - a `.neon` context that identifies the project and Claimable Neon service;
 - an owner-only identity assertion under the CLI config directory;
-- `DATABASE_URL` and any granted Auth or Data API variables to `.env` or `.env.local
+- `DATABASE_URL` and any granted Auth or Data API variables to `.env` or `.env.local`
   (disable this with `--no-env-pull`).
 
 Subsequent project commands automatically exchange the assertion for a short-lived agent
-token. The allowlisted pre-claim surface includes project inspection, `connection-string`,
-`psql`, `env pull`, and `neon.ts` status, plan, and apply operations for granted services.
+token and send API calls to Claimable Neon. The service decides which operations are
+allowed before claim.
 
 ```bash
 neon claim status                 # lifecycle and transfer status
@@ -100,7 +100,7 @@ neon psql -- -c "select now()"
 neon config plan
 neon env pull --service postgres --service auth --service data-api
 
-neon claim accept                 # open the human transfer ceremony
+neon claim accept                 # create a claim code and open the transfer URL
 neon claim delete --yes           # permanently delete an unclaimed project
 neon claim list                   # projects whose assertions are saved locally
 ```

@@ -159,7 +159,7 @@ export const resolveClaimableContext = (
 	if (marker === undefined) return null;
 	if (!isRecord(marker)) {
 		throw new Error(
-			'The linked .neon file has an invalid "claimable" marker. Run `neon link` to replace it.',
+			'The linked .neon file has an invalid "claimable" marker. Delete the claimable field from .neon, or delete .neon.',
 		);
 	}
 	if (marker.version !== 1) {
@@ -169,7 +169,7 @@ export const resolveClaimableContext = (
 	}
 	if (!nonEmptyString(marker.origin) || !nonEmptyString(context.projectId)) {
 		throw new Error(
-			'The linked .neon file has an incomplete "claimable" marker. Run `neon link` to replace it.',
+			'The linked .neon file has an incomplete "claimable" marker. Delete the claimable field from .neon, or delete .neon.',
 		);
 	}
 	assertProjectId(context.projectId);

@@ -225,7 +225,7 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.command(
 			"accept",
-			"Start the browser ceremony that transfers the project to your Neon account",
+			"Create a claim code and open the URL where a human signs in and takes the project",
 			(y) =>
 				y
 					.option("open", {
@@ -301,7 +301,7 @@ const linkedCredentials = (
 	const client = new ClaimableClient(credentials.origin);
 	if (client.origin !== new ClaimableClient(linked.origin).origin) {
 		throw new Error(
-			"The .neon context and saved identity assertion name different Claimable Neon services. Run `neon link` to replace the local context.",
+			"The .neon context and saved identity assertion name different Claimable Neon services. Delete .neon or the assertion file and run `neon claim create` in a new directory.",
 		);
 	}
 	return { context, linked, credentials, client };
@@ -561,7 +561,12 @@ const accept = async (props: AcceptProps): Promise<void> => {
 	);
 
 	if (props.open && !isCi()) {
-		await open(claim.verificationUriComplete);
+		open(claim.verificationUriComplete).catch(() => {
+			log.info(
+				"Could not open a browser. Open %s",
+				claim.verificationUriComplete,
+			);
+		});
 	} else if (props.open) {
 		log.info(
 			"Browser opening is disabled in CI. Open %s",
@@ -623,4 +628,7 @@ const finishClaimedContext = (props: ClaimProps): void => {
 		projectId: context.projectId,
 		...(contextBranch(context) ? { branch: contextBranch(context) } : {}),
 	});
+	log.info(
+		"Dropped the local identity assertion. The next command needs `neon auth` or `neon link`.",
+	);
 };

@@ -35,7 +35,7 @@ import type { NeonApiClient } from "../api.js";
 import { getApiClient } from "../api.js";
 import { auth, refreshToken } from "../auth.js";
 import { setAuthContext } from "../auth_context.js";
-import { ClaimableClient } from "../claimable/api.js";
+import { ClaimableClient, ClaimableServiceError } from "../claimable/api.js";
 import {
 	claimableCredentialsPath,
 	readClaimableCredentials,
@@ -511,10 +511,23 @@ export const ensureAuth = async (
 		const client = new ClaimableClient(stored.origin);
 		if (client.origin !== new ClaimableClient(linked.origin).origin) {
 			throw new Error(
-				`The linked .neon file and ${path} name different Claimable Neon services. Run \`neon link\` to replace the local context.`,
+				`The linked .neon file and ${path} name different Claimable Neon services. Delete .neon or the assertion file and run \`neon claim create\` in a new directory.`,
 			);
 		}
-		const token = await client.exchange(stored.identityAssertion);
+		let token;
+		try {
+			token = await client.exchange(stored.identityAssertion);
+		} catch (error) {
+			if (
+				error instanceof ClaimableServiceError &&
+				error.code === "project_claimed"
+			) {
+				throw new Error(
+					"This project was claimed. Run `neon claim status` to drop the local assertion, then `neon auth` or `neon link`.",
+				);
+			}
+			throw error;
+		}
 		props.apiKey = token.accessToken;
 		props.apiHost = `${client.origin}/v1`;
 		props.apiClient = getApiClient({

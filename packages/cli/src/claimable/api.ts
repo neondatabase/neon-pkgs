@@ -261,7 +261,7 @@ export const parseCredentialsResponse = (
 };
 
 export const parseClaimCodeResponse = (value: unknown): ClaimCode => {
-	const action = "starting the claim ceremony";
+	const action = "creating a claim code";
 	const response = record(value, action);
 	return {
 		userCode: stringField(response, "user_code", action),
