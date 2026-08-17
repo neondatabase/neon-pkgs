@@ -29,7 +29,7 @@ import {
  * org, project and env commands are emitted.
  */
 
-/** The exact prefix the protocol emits. Substituted for the binary under test — and asserted, because a silent change here would make every substitution below a no-op. */
+/** The exact prefix the protocol emits, before `--profile` / `--config-dir`. Substituted for the binary under test — and asserted, because a silent change here would make every substitution below a no-op. */
 const EMITTED_PREFIX = "CI= npx -y neon ";
 
 /**
@@ -159,8 +159,17 @@ describe.sequential("e2e — neon init emits commands that work", () => {
 				continue;
 			}
 
-			const args = step.command
-				.slice(EMITTED_PREFIX.length)
+			const afterPrefix = step.command.slice(EMITTED_PREFIX.length);
+			// `runCli` always supplies `--config-dir`. Passing it again makes yargs
+			// give the option an array, which is the `path` TypeError this used to
+			// hit. The e2e config path has no quotes, so one quoted token is the value.
+			expect(afterPrefix, step.command).toMatch(/^--config-dir '/);
+			const withoutConfigDir = afterPrefix.replace(
+				/^--config-dir '[^']+' /,
+				"",
+			);
+
+			const args = withoutConfigDir
 				.replace("<org-id>", orgId)
 				.replace("<project-name>", uniqueProjectName("init-emitted"))
 				.split(/\s+/);
