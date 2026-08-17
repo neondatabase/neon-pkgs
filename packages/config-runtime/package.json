@@ -1,6 +1,6 @@
 {
 	"name": "@neon/config-runtime",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Imperative runtime for @neon/config: inspect/plan/apply a neon.ts policy against the Neon API and bundle + deploy Neon Functions. Pulls in esbuild; import this from CLIs and CI, not from neon.ts.",
 	"keywords": [
 		"neon",
