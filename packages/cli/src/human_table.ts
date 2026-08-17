@@ -14,6 +14,7 @@ export type HumanTableChunk = {
 	renderColumns?: object;
 	width?: number;
 	colorTitle: boolean;
+	leadingBlank?: boolean;
 };
 
 export function resolveOutputWidth(
@@ -81,12 +82,15 @@ export function displayWidth(s: string): number {
 export function formatHumanChunk(chunk: HumanTableChunk): string {
 	const arrayData = Array.isArray(chunk.data) ? chunk.data : [chunk.data];
 	const isList = Array.isArray(chunk.data);
-	let out = "";
-	if (chunk.title) {
-		out += formatTitle(chunk.title, chunk.colorTitle) + "\n";
-	}
 	if (!arrayData.length && chunk.emptyMessage) {
 		return `\n${chunk.emptyMessage}\n`;
+	}
+	let out = "";
+	if (chunk.title) {
+		if (chunk.leadingBlank) {
+			out += "\n";
+		}
+		out += formatTitle(chunk.title, chunk.colorTitle) + "\n";
 	}
 	if (!arrayData.length) {
 		return out;
@@ -145,9 +149,9 @@ function formatList(
 		if (fitted === undefined) {
 			continue;
 		}
-		const onlyLastShrunk =
-			n === 2 ||
-			natural.slice(0, n - 1).every((col, i) => fitted[i] === col);
+		const onlyLastShrunk = natural
+			.slice(0, n - 1)
+			.every((col, i) => fitted[i] === col);
 		if (!onlyLastShrunk) {
 			continue;
 		}

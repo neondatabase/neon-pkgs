@@ -59,7 +59,7 @@ const writeTable = (
 	out: NodeJS.WritableStream,
 	width: number | undefined,
 ) => {
-	for (const { data, config } of chunks) {
+	chunks.forEach(({ data, config }, i) => {
 		out.write(
 			formatHumanChunk({
 				data,
@@ -69,9 +69,10 @@ const writeTable = (
 				renderColumns: config.renderColumns,
 				width,
 				colorTitle: !isCi(),
+				leadingBlank: i > 0 && Boolean(config.title),
 			}),
 		);
-	}
+	});
 };
 
 /**

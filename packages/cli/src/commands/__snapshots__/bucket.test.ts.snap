@@ -228,6 +228,7 @@ exports[`bucket > object list with table output 1`] = `
 Name
 images/
 logs/
+
 objects
 Key        Size  Last Modified             Etag
 hello.txt  12    2021-01-01T00:00:00.000Z  "abc123"

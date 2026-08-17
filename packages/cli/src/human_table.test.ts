@@ -194,6 +194,21 @@ describe("formatHumanChunk", () => {
 		}
 	});
 
+	it("stacks two columns rather than shrinking the first", () => {
+		const name = "test_branch_with_autoscaling_extra";
+		const id = "br-protected-branch-123456";
+		const out = formatHumanChunk({
+			data: [{ name, id }],
+			fields: ["name", "id"],
+			width: 30,
+			colorTitle: false,
+		});
+		expect(plain(out)).toContain(name);
+		expect(plain(out)).toContain(id);
+		expect(plain(out)).not.toContain("...");
+		expect(plain(out).trim().split("\n")[0]).toMatch(/^Name/);
+	});
+
 	it("stacks a list and restores every field when two columns will not fit", () => {
 		const out = formatHumanChunk({
 			data: [
@@ -229,6 +244,25 @@ describe("formatHumanChunk", () => {
 		expect(plain(out)).toContain(host);
 		expect(plain(out)).toContain("npg_1AbCdEfGhIjKlMnO");
 		expect(plain(out)).not.toContain("...");
+	});
+
+	it("puts a blank line before a later title", () => {
+		const first = formatHumanChunk({
+			data: [{ name: "images/" }],
+			fields: ["name"],
+			title: "folders",
+			colorTitle: false,
+		});
+		const second = formatHumanChunk({
+			data: [{ key: "hello.txt", size: "12" }],
+			fields: ["key", "size"],
+			title: "objects",
+			colorTitle: false,
+			leadingBlank: true,
+		});
+		expect(plain(first + second)).toBe(
+			"folders\nName\nimages/\n\nobjects\nKey        Size\nhello.txt  12\n",
+		);
 	});
 
 	it("prints a one-column list without stacking", () => {

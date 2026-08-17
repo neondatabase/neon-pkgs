@@ -29,8 +29,8 @@ writing to stdout):
 2. If that row is too wide, shrink only the last column with `...`.
 3. If it still does not fit, drop the last field and go back to step 1. Keep at
    least two columns. Field order is important-first on purpose.
-4. If two columns still do not fit, stack the chunk. Stacking shows every field
-   again.
+4. If two columns still overflow after shrinking the last column, stack the
+   chunk. The first column is not truncated. Stacking shows every field again.
 
 With no width (piped stdout, a test `PassThrough`), print every field at full
 length. Do not guess `process.stdout.columns` for a different stream.

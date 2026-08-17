@@ -99,7 +99,7 @@ describe("writer", () => {
 					{ fields: ["baz"], title: "T2" },
 				)
 				.end();
-			expect(stripAnsi(getData())).toBe("T1\nFoo  bar\nT2\nBaz  xyz\n");
+			expect(stripAnsi(getData())).toBe("T1\nFoo  bar\n\nT2\nBaz  xyz\n");
 		});
 
 		it("outputs table with custom renderer", () => {

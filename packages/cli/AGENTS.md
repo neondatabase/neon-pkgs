@@ -10,7 +10,7 @@ Implemented in `src/writer.ts` and `src/human_table.ts`. Every list and get goes
 - A list (array) is space-padded columns with a two-space gutter and a Title Case header.
 - A single object is stacked `Label  value` lines, one field per line.
 - A one-column list stays one column. Do not truncate those values, or stacked `Label  value` values (connection URIs and `--extended` host/password have to stay copyable).
-- When a TTY width is known, a list row must not exceed it. Try every field at full width. If that overflows, shrink only the last column with `...`. If that still overflows, drop the last field and try again (keep at least two columns). If two columns still do not fit, stack that chunk and show every field.
+- When a TTY width is known, a list row must not exceed it. Try every field at full width. If that overflows, shrink only the last column with `...`. If that still overflows, drop the last field and try again (keep at least two columns). If two columns still overflow after shrinking the last column, stack that chunk and show every field. The first column is not truncated.
 - Unknown width (a pipe, a test stream, no `columns`): full values, no truncate, no drop.
 - Width, in order: the `columns` argument on `writer` (tests), then `out.columns` when that stream has one, then `COLUMNS` and only when `out` is `process.stdout`. Never read `process.stdout.columns` for a different stream.
 - Flatten every cell to one line before layout, including `renderColumns` output. Arrays join with `, `; objects are compact JSON.
