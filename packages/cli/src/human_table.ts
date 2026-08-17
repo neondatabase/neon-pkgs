@@ -129,7 +129,6 @@ function formatList(
 		return formatOneColumn(
 			headers[0] ?? "",
 			rows.map((row) => row[0] ?? ""),
-			width,
 		);
 	}
 	if (width === undefined) {
@@ -138,24 +137,29 @@ function formatList(
 	for (let n = headers.length; n >= 2; n--) {
 		const subsetHeaders = headers.slice(0, n);
 		const subsetRows = rows.map((row) => row.slice(0, n));
-		const widths = naturalWidths(subsetHeaders, subsetRows);
-		if (rowWidth(widths) <= width) {
-			return formatColumns(subsetHeaders, subsetRows, widths);
+		const natural = naturalWidths(subsetHeaders, subsetRows);
+		if (rowWidth(natural) <= width) {
+			return formatColumns(subsetHeaders, subsetRows, natural);
 		}
+		const fitted = tryFit(subsetHeaders, subsetRows, width);
+		if (fitted === undefined) {
+			continue;
+		}
+		const onlyLastShrunk =
+			n === 2 ||
+			natural.slice(0, n - 1).every((col, i) => fitted[i] === col);
+		if (!onlyLastShrunk) {
+			continue;
+		}
+		return formatColumns(
+			subsetHeaders.map((cell, i) => truncateTo(cell, fitted[i] ?? 0)),
+			subsetRows.map((row) =>
+				row.map((cell, i) => truncateTo(cell, fitted[i] ?? 0)),
+			),
+			fitted,
+		);
 	}
-	const twoHeaders = headers.slice(0, 2);
-	const twoRows = rows.map((row) => row.slice(0, 2));
-	const fitted = tryFit(twoHeaders, twoRows, width);
-	if (fitted === undefined) {
-		return formatStacked(headers, rows, width);
-	}
-	return formatColumns(
-		twoHeaders.map((cell, i) => truncateTo(cell, fitted[i] ?? 0)),
-		twoRows.map((row) =>
-			row.map((cell, i) => truncateTo(cell, fitted[i] ?? 0)),
-		),
-		fitted,
-	);
+	return formatStacked(headers, rows, width);
 }
 
 function rowWidth(widths: number[]): number {
@@ -167,16 +171,10 @@ function rowWidth(widths: number[]): number {
 	);
 }
 
-function formatOneColumn(
-	header: string,
-	values: string[],
-	width: number | undefined,
-): string {
-	const clippedHeader =
-		width === undefined ? header : truncateTo(header, width);
-	const lines = [chalk.green(clippedHeader)];
+function formatOneColumn(header: string, values: string[]): string {
+	const lines = [chalk.green(header)];
 	for (const value of values) {
-		lines.push(width === undefined ? value : truncateTo(value, width));
+		lines.push(value);
 	}
 	return lines.join("\n");
 }

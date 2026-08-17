@@ -225,14 +225,39 @@ describe("formatHumanChunk", () => {
 		expect(plain(out)).toBe("values\nValue\napi\npostgres\n");
 	});
 
-	it("truncates a one-column list to the width", () => {
+	it("does not truncate a one-column list, so a URI stays copyable", () => {
 		const out = formatHumanChunk({
 			data: [{ value: "postgresql://very-long.example" }],
 			fields: ["value"],
 			width: 12,
 			colorTitle: false,
 		});
-		expect(plain(out)).toBe("Value\npostgresq...\n");
+		expect(plain(out)).toBe("Value\npostgresql://very-long.example\n");
+	});
+
+	it("truncates the last column before dropping it", () => {
+		const message =
+			'ERROR: relation "orders" does not exist at character 15';
+		const out = formatHumanChunk({
+			data: [
+				{
+					timestamp: "2026-08-17T15:04:05.123Z",
+					source: "postgres",
+					severity: "ERROR",
+					message,
+				},
+			],
+			fields: ["timestamp", "source", "severity", "message"],
+			width: 80,
+			colorTitle: false,
+		});
+		const text = plain(out);
+		expect(text).toMatch(/Message/);
+		expect(text).toContain("...");
+		expect(text).not.toContain(message);
+		for (const line of out.trimEnd().split("\n")) {
+			expect(displayWidth(line)).toBeLessThanOrEqual(80);
+		}
 	});
 
 	it("flattens arrays, objects, and newlines, including renderColumns", () => {

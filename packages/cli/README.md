@@ -841,10 +841,10 @@ neon profile remove work
 ```console
 $ neon profile list
 Profiles
-Active  Name     Account         Auth     Scope          File  Storage  Credentials
-*       DEFAULT  me@example.com  oauth    -              ok    file     credentials.json
-        work     me@example.com  api key  account        ok    keyring  keyring
-        ci       org-abc-123     api key  project proj-1 ok    file     credentials.ci.json
+Active  Name     Account         Auth     Scope           File  Storage  Credentials
+*       DEFAULT  me@example.com  oauth    -               ok    file     credentials.json
+        work     me@example.com  api key  account         ok    keyring  keyring
+        ci       org-abc-123     api key  project proj-1  ok    file     credentials.ci.json
 ```
 
 `Scope` is what a key can reach; an OAuth session has none of its own, so it shows `-`. `File`

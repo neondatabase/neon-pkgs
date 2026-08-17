@@ -20,17 +20,17 @@ layout there, not in a command.
 | --- | --- |
 | An array (a list) | Space-padded columns, two-space gutter, Title Case header |
 | A single object | Stacked `Label  value` |
-| A one-column list | The header, then one value per line |
+| A one-column list | The header, then one value per line. Values are not truncated. |
 
 When the process knows the TTY width (`stdout.columns`, or `COLUMNS` when
 writing to stdout):
 
-1. Try every field as columns.
-2. If that row is too wide, drop fields from the right and try again. Keep at
+1. Try every field as columns at full width.
+2. If that row is too wide, shrink only the last column with `...`.
+3. If it still does not fit, drop the last field and go back to step 1. Keep at
    least two columns. Field order is important-first on purpose.
-3. Shrink overflowing cells from the right with `...` so the row fits.
 4. If two columns still do not fit, stack the chunk. Stacking shows every field
-   again — dropping was only for the column layout.
+   again.
 
 With no width (piped stdout, a test `PassThrough`), print every field at full
 length. Do not guess `process.stdout.columns` for a different stream.
@@ -40,8 +40,8 @@ compact JSON. `renderColumns` goes through the same flattening.
 
 ```
 Projects
-Id                        Name                         Region Id      Created At
-wandering-haze-25754674   claimable-neon-local-state   aws-us-east-2  2026-08-11T16:42:59Z
+Id                       Name                        Region Id      Created At
+wandering-haze-25754674  claimable-neon-local-state  aws-us-east-2  2026-08-11T16:42:59Z
 ```
 
 ```
