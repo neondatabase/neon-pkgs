@@ -15,14 +15,14 @@ const UNEXPECTED_POOL_ERROR =
 	"attachDatabasePool: unexpected database pool error";
 const REPORTER_THREW = "attachDatabasePool: onUnexpectedError threw";
 const ALREADY_ATTACHED =
-	"attachDatabasePool() was already called for this pool; the first onUnexpectedError stays attached and this one is ignored.";
+	"attachDatabasePool() was already called for this pool; this onUnexpectedError is ignored. Pass it on the first call.";
 
 export type DatabasePool = {
 	on(event: "error", listener: (err: Error) => void): unknown;
 };
 
 export type AttachDatabasePoolOptions = {
-	onUnexpectedError?: (err: Error) => void | Promise<void>;
+	onUnexpectedError?: (err: Error) => unknown;
 };
 
 function isDatabasePool(value: unknown): value is DatabasePool {

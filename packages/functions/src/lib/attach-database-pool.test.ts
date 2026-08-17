@@ -65,6 +65,13 @@ describe("attachDatabasePool", () => {
 		);
 	});
 
+	it("accepts a reporter that returns a value", () => {
+		const pool = new EventEmitter();
+		const onUnexpectedError = (err: Error) => err.message;
+		attachDatabasePool(pool, { onUnexpectedError });
+		expect(pool.listenerCount("error")).toBe(1);
+	});
+
 	it("reports unexpected errors through onUnexpectedError instead of console.error", () => {
 		const error = vi.spyOn(console, "error").mockImplementation(() => {});
 		const onUnexpectedError = vi.fn();
