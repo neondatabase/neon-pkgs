@@ -1,9 +1,8 @@
-import chalk from "chalk";
-import Table from "cli-table";
 import YAML from "yaml";
 import { isCi } from "./env.js";
+import { formatHumanChunk, resolveOutputWidth } from "./human_table.js";
 import type { CommonProps } from "./types.js";
-import { isObject, toSnakeCase } from "./utils/string.js";
+import { toSnakeCase } from "./utils/string.js";
 
 type ExtractFromArray<T> = T extends (infer R)[] ? R : T;
 type OnlyStrings<T> = T extends string ? T : never;
@@ -58,57 +57,21 @@ const writeJson = (chunks: Chunk[]) => {
 const writeTable = (
 	chunks: { data: any; config: WriteOutConfig<any> }[],
 	out: NodeJS.WritableStream,
+	width: number | undefined,
 ) => {
-	chunks.forEach(
-		({
-			data,
-			config: { emptyMessage, fields, title, renderColumns = {} },
-		}) => {
-			const arrayData = Array.isArray(data) ? data : [data];
-			if (!arrayData.length && emptyMessage) {
-				out.write("\n" + emptyMessage + "\n");
-				return;
-			}
-
-			const fieldsFiltered = fields.filter((field) =>
-				arrayData.some(
-					(item) => item[field] !== undefined && item[field] !== "",
-				),
-			);
-			const table = new Table({
-				style: {
-					head: ["green"],
-				},
-				head: fieldsFiltered.map((field: string) =>
-					field
-						.split("_")
-						.map((word) => word[0].toUpperCase() + word.slice(1))
-						.join(" "),
-				),
-			});
-			arrayData.forEach((item) => {
-				table.push(
-					fieldsFiltered.map((field: string | number) => {
-						const value = item[field];
-						if (renderColumns[field]) {
-							return renderColumns[field]?.(item);
-						}
-						return Array.isArray(value)
-							? value.join("\n")
-							: isObject(value)
-								? JSON.stringify(value, null, 2)
-								: (value ?? "");
-					}),
-				);
-			});
-
-			if (title) {
-				out.write((isCi() ? title : chalk.bold(title)) + "\n");
-			}
-			out.write(table.toString());
-			out.write("\n");
-		},
-	);
+	for (const { data, config } of chunks) {
+		out.write(
+			formatHumanChunk({
+				data,
+				fields: config.fields,
+				title: config.title,
+				emptyMessage: config.emptyMessage,
+				renderColumns: config.renderColumns,
+				width,
+				colorTitle: !isCi(),
+			}),
+		);
+	}
 };
 
 /**
@@ -126,9 +89,16 @@ const writeTable = (
  *   .end()
  */
 export const writer = (
-	props: Pick<CommonProps, "output"> & { out?: NodeJS.WritableStream },
+	props: Pick<CommonProps, "output"> & {
+		out?: NodeJS.WritableStream;
+		columns?: number | null;
+	},
 ) => {
 	const out = props.out ?? process.stdout;
+	const width = resolveOutputWidth(out, props.columns, {
+		stdout: process.stdout,
+		envColumns: process.env.COLUMNS,
+	});
 	const chunks: { data: any; config: WriteOutConfig<any> }[] = [];
 
 	return {
@@ -152,7 +122,7 @@ export const writer = (
 				return out.write(writeJson(chunks));
 			}
 
-			writeTable(chunks, out);
+			writeTable(chunks, out, width);
 		},
 	};
 };

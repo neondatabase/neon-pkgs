@@ -389,9 +389,7 @@ const list = async (props: ProfileProps) => {
 			// and the wrong answer for the dead key someone runs this to diagnose.
 			file,
 			storage,
-			// The basename in the table, because `cli-table` neither wraps nor truncates and a
-			// real path pushes the row past most terminals. Structured output keeps the path,
-			// which is what a script actually wants.
+			// JSON/YAML preserve the full path; the terminal value leaves room for other fields.
 			...(props.output === "table"
 				? {
 						credentials:

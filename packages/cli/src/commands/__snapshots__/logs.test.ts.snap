@@ -14,13 +14,9 @@ exports[`logs > a truncated field-values run keeps json output clean and stderr 
 
 exports[`logs > a truncated field-values run says how to narrow the lookup 1`] = `
 "values
-┌──────────┐
-│ Value    │
-├──────────┤
-│ api      │
-├──────────┤
-│ postgres │
-└──────────┘
+Value
+api
+postgres
 "
 `;
 
@@ -45,11 +41,8 @@ exports[`logs > a truncated query keeps json output clean and stderr empty 1`] =
 
 exports[`logs > a truncated query points at the next cursor in table output 1`] = `
 "logs
-┌──────────────────────────┬──────────┬──────────────┬───────────────┬──────────────────────┐
-│ Timestamp                │ Source   │ Service Name │ Severity Text │ Message              │
-├──────────────────────────┼──────────┼──────────────┼───────────────┼──────────────────────┤
-│ 2025-01-01T00:00:03.000Z │ function │ api          │ INFO          │ PUT /api/todos/1 204 │
-└──────────────────────────┴──────────┴──────────────┴───────────────┴──────────────────────┘
+Timestamp                 Source    Service Name  Severity Text  Message
+2025-01-01T00:00:03.000Z  function  api           INFO           PUT /api/todos/1 204
 "
 `;
 
@@ -79,25 +72,17 @@ is_truncated: false
 
 exports[`logs > field-values neutralizes controls in truncation guidance 1`] = `
 "values
-┌──────────┐
-│ Value    │
-├──────────┤
-│ api      │
-├──────────┤
-│ postgres │
-└──────────┘
+Value
+api
+postgres
 "
 `;
 
 exports[`logs > field-values neutralizes terminal controls in table output 1`] = `
 "values
-┌───────────────────────────────────┐
-│ Value                             │
-├───────────────────────────────────┤
-│ api                               │
-├───────────────────────────────────┤
-│ \\u001b]52;c;ZXZpbA==\\u0007service │
-└───────────────────────────────────┘
+Value
+api
+\\u001b]52;c;ZXZpbA==\\u0007service
 "
 `;
 
@@ -117,15 +102,10 @@ exports[`logs > field-values surfaces the API's rejection of an unknown field 1`
 
 exports[`logs > field-values with table output 1`] = `
 "values
-┌──────────┐
-│ Value    │
-├──────────┤
-│ api      │
-├──────────┤
-│ postgres │
-├──────────┤
-│ worker   │
-└──────────┘
+Value
+api
+postgres
+worker
 "
 `;
 
@@ -140,13 +120,9 @@ exports[`logs > fields (yaml) 1`] = `
 
 exports[`logs > fields neutralizes terminal controls in table output 1`] = `
 "fields
-┌─────────────────────────────────┐
-│ Field                           │
-├─────────────────────────────────┤
-│ service_name                    │
-├─────────────────────────────────┤
-│ \\u001b]52;c;ZXZpbA==\\u0007field │
-└─────────────────────────────────┘
+Field
+service_name
+\\u001b]52;c;ZXZpbA==\\u0007field
 "
 `;
 
@@ -160,17 +136,11 @@ exports[`logs > fields rejects a malformed successful response 1`] = `""`;
 
 exports[`logs > fields with table output 1`] = `
 "fields
-┌───────────────┐
-│ Field         │
-├───────────────┤
-│ source        │
-├───────────────┤
-│ service_name  │
-├───────────────┤
-│ scope_name    │
-├───────────────┤
-│ severity_text │
-└───────────────┘
+Field
+source
+service_name
+scope_name
+severity_text
 "
 `;
 
@@ -319,11 +289,8 @@ is_truncated: false
 
 exports[`logs > query neutralizes terminal controls in table output 1`] = `
 "logs
-┌──────────────────────────┬──────────┬──────────────┬───────────────┬────────────────────────────────────────────────┐
-│ Timestamp                │ Source   │ Service Name │ Severity Text │ Message                                        │
-├──────────────────────────┼──────────┼──────────────┼───────────────┼────────────────────────────────────────────────┤
-│ 2025-01-01T00:00:03.000Z │ function │ api          │ ERROR         │ \\u001b]52;c;ZXZpbA==\\u0007request failed\\u000d │
-└──────────────────────────┴──────────┴──────────────┴───────────────┴────────────────────────────────────────────────┘
+Timestamp                 Source    Service Name  Severity Text  Message
+2025-01-01T00:00:03.000Z  function  api           ERROR          \\u001b]52;c;ZXZpbA==\\u0007request failed\\u000d
 "
 `;
 
@@ -490,13 +457,9 @@ is_truncated: false
 
 exports[`logs > query with table output 1`] = `
 "logs
-┌──────────────────────────┬─────────────┬──────────────┬───────────────┬───────────────────────────────┐
-│ Timestamp                │ Source      │ Service Name │ Severity Text │ Message                       │
-├──────────────────────────┼─────────────┼──────────────┼───────────────┼───────────────────────────────┤
-│ 2025-01-01T00:00:02.000Z │ function    │ api          │ INFO          │ GET /api/todos 200            │
-├──────────────────────────┼─────────────┼──────────────┼───────────────┼───────────────────────────────┤
-│ 2025-01-01T00:00:01.000Z │ pg_endpoint │ postgres     │ ERROR         │ connection to database failed │
-└──────────────────────────┴─────────────┴──────────────┴───────────────┴───────────────────────────────┘
+Timestamp                 Source       Service Name  Severity Text  Message
+2025-01-01T00:00:02.000Z  function     api           INFO           GET /api/todos 200
+2025-01-01T00:00:01.000Z  pg_endpoint  postgres      ERROR          connection to database failed
 "
 `;
 

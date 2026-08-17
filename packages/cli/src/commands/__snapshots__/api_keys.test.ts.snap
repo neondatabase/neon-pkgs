@@ -46,11 +46,9 @@ exports[`api-keys create > refuses scope flags after a -- terminator 1`] = `""`;
 
 exports[`api-keys create > table output puts the secret on its own line 1`] = `
 "API key
-┌─────┬───────┬─────────────┐
-│ Id  │ Name  │ Project     │
-├─────┼───────┼─────────────┤
-│ 303 │ agent │ proj-in-org │
-└─────┴───────┴─────────────┘
+Id       303
+Name     agent
+Project  proj-in-org
 
 napi_org_secret
 "
@@ -132,13 +130,9 @@ exports[`api-keys list > org keys carry the project each is scoped to 1`] = `
 
 exports[`api-keys list > table output names the unscoped rows 1`] = `
 "API keys in org-7
-┌─────┬──────────┬────────────────┬──────────────────────┬──────────────────────┬─────────────────────┐
-│ Id  │ Name     │ Project        │ Created At           │ Last Used At         │ Last Used From Addr │
-├─────┼──────────┼────────────────┼──────────────────────┼──────────────────────┼─────────────────────┤
-│ 301 │ scoped   │ proj-in-org    │ 2026-01-02T00:00:00Z │                      │                     │
-├─────┼──────────┼────────────────┼──────────────────────┼──────────────────────┼─────────────────────┤
-│ 302 │ org-wide │ (all projects) │ 2026-01-03T00:00:00Z │ 2026-02-03T00:00:00Z │ 203.0.113.9         │
-└─────┴──────────┴────────────────┴──────────────────────┴──────────────────────┴─────────────────────┘
+Id   Name      Project         Created At            Last Used At          Last Used From Addr
+301  scoped    proj-in-org     2026-01-02T00:00:00Z                        
+302  org-wide  (all projects)  2026-01-03T00:00:00Z  2026-02-03T00:00:00Z  203.0.113.9
 "
 `;
 
@@ -155,8 +149,6 @@ last_used_from_addr: 203.0.113.1
 
 exports[`api-keys revoke > and a 404 on the org path suggests dropping it 1`] = `""`;
 
-exports[`api-keys revoke > names the id the user typed, not NaN 1`] = `""`;
-
 exports[`api-keys revoke > org key 1`] = `
 "id: 888
 name: org-wide
@@ -167,8 +159,6 @@ last_used_from_addr: 203.0.113.9
 `;
 
 exports[`api-keys revoke > refuses a hex or exponent id 1`] = `""`;
-
-exports[`api-keys revoke > refuses a non-numeric id instead of sending NaN 1`] = `""`;
 
 exports[`api-keys revoke > refuses a non-numeric id, naming what was typed 1`] = `""`;
 

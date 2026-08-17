@@ -841,22 +841,17 @@ neon profile remove work
 ```console
 $ neon profile list
 Profiles
-┌────────┬─────────┬───────────────────────┬─────────┬────────────────┬──────┬─────────┬────────────────────────┐
-│ Active │ Name    │ Account               │ Auth    │ Scope          │ File │ Storage │ Credentials            │
-├────────┼─────────┼───────────────────────┼─────────┼────────────────┼──────┼─────────┼────────────────────────┤
-│ *      │ DEFAULT │ me@example.com        │ oauth   │ -              │ ok   │ file    │ credentials.json       │
-├────────┼─────────┼───────────────────────┼─────────┼────────────────┼──────┼─────────┼────────────────────────┤
-│        │ work    │ me@example.com        │ api key │ account        │ ok   │ keyring │ keyring                │
-├────────┼─────────┼───────────────────────┼─────────┼────────────────┼──────┼─────────┼────────────────────────┤
-│        │ ci      │ org-abc-123           │ api key │ project proj-1 │ ok   │ file    │ credentials.ci.json    │
-└────────┴─────────┴───────────────────────┴─────────┴────────────────┴──────┴─────────┴────────────────────────┘
+Active  Name     Account         Auth     Scope          File  Storage  Credentials
+*       DEFAULT  me@example.com  oauth    -              ok    file     credentials.json
+        work     me@example.com  api key  account        ok    keyring  keyring
+        ci       org-abc-123     api key  project proj-1 ok    file     credentials.ci.json
 ```
 
 `Scope` is what a key can reach; an OAuth session has none of its own, so it shows `-`. `File`
 says whether the stored credential can be read — `ok`, `invalid` or `missing` for a file;
 `ok`, `invalid` or `unreadable` for a keyring item. A keyring get of null is `unreadable`, not missing:
 the addon cannot tell those apart. `Storage` is `file` or `keyring`, from the profile's
-pointer. The table shows the file name or `keyring`; `--output json` keeps the full path.
+pointer. The listing shows the file name or `keyring`; `--output json` keeps the full path.
 
 Select one per invocation with `--profile`, or per shell with `NEON_PROFILE`. There is no `profile use` command and nothing is stored about which profile is "current", so what you type is always what runs.
 
@@ -1013,16 +1008,14 @@ neon api-keys create --name agent --project-id frosty-…   # can access only th
 neon api-keys revoke <id> [--org-id org-…]
 ```
 
-The key is returned once, on create, and cannot be retrieved again. It prints on its own line below the table, so it can be selected in one gesture regardless of terminal width — and `… | tail -1` on stdout yields exactly the key, since both notices go to stderr.
+The key is returned once, on create, and cannot be retrieved again. It prints on its own line below the metadata, so it can be selected in one gesture regardless of terminal width — and `… | tail -1` on stdout yields exactly the key, since both notices go to stderr.
 
 ```console
 $ neon api-keys create --name agent --project-id proj-in-org
 API key
-┌─────┬───────┬─────────────┐
-│ Id  │ Name  │ Project     │
-├─────┼───────┼─────────────┤
-│ 303 │ agent │ proj-in-org │
-└─────┴───────┴─────────────┘
+Id       303
+Name     agent
+Project  proj-in-org
 
 napi_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 WARNING: Store this key now: it is not shown again.
@@ -1061,13 +1054,9 @@ NEON_API_KEY=napi_… neon deploy       # then the agent, reaching only that pro
 ```console
 $ neon api-keys list --org-id org-7
 API keys in org-7
-┌─────┬──────────┬────────────────┬──────────────────────┬──────────────────────┬─────────────────────┐
-│ Id  │ Name     │ Project        │ Created At           │ Last Used At         │ Last Used From Addr │
-├─────┼──────────┼────────────────┼──────────────────────┼──────────────────────┼─────────────────────┤
-│ 301 │ scoped   │ proj-in-org    │ 2026-01-02T00:00:00Z │                      │                     │
-├─────┼──────────┼────────────────┼──────────────────────┼──────────────────────┼─────────────────────┤
-│ 302 │ org-wide │ (all projects) │ 2026-01-03T00:00:00Z │ 2026-02-03T00:00:00Z │ 203.0.113.9         │
-└─────┴──────────┴────────────────┴──────────────────────┴──────────────────────┴─────────────────────┘
+Id   Name      Project         Created At            Last Used At          Last Used From Addr
+301  scoped    proj-in-org     2026-01-02T00:00:00Z
+302  org-wide  (all projects)  2026-01-03T00:00:00Z  2026-02-03T00:00:00Z  203.0.113.9
 ```
 
 `last_used_at` and `last_used_from_addr` are how you spot a key worth revoking.
