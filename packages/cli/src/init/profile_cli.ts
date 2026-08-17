@@ -14,9 +14,8 @@ export function selectedProfileName(): string {
 }
 
 /**
- * `--config-dir` is on argv, not in the environment. `configDir()` without it reads
- * `NEON_CONFIG_DIR` or the home path, so a named profile that exists only in the
- * flagged directory would be reported as unknown.
+ * Preserve an explicit config directory so profile lookup cannot fall back to
+ * `NEON_CONFIG_DIR` or the home path.
  */
 export function selectedConfigDir(): string {
 	const recorded = credentialInputs().configDir;

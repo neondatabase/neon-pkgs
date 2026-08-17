@@ -82,11 +82,8 @@ export const handler = async (argv: {
 	// always detect (the user asked for agent mode). Otherwise, require
 	// non-TTY stdin to distinguish agent from human in terminal.
 	//
-	// Resolved before anything can fail, so that every failure this handler sees
-	// is reported in the shape the caller can read. Failures raised by `ensureAuth`
-	// are not among them: it resolves credentials above its own `init` skip, so an
-	// unknown profile, a contradictory `--api-key`/`--profile` pair, and a damaged
-	// credentials file all report on stderr before this runs.
+	// Resolve agent mode first so this handler's failures use the caller's output
+	// format. `ensureAuth` runs before this handler and reports directly to stderr.
 	const agent =
 		(argv.agent || !process.stdin.isTTY ? detectAgent() : null) ||
 		undefined;

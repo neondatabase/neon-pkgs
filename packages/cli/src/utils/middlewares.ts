@@ -1,6 +1,20 @@
 import { recordCredentialInputs } from "@neon-internals/cli-core/auth_selection";
 
 /**
+ * Yargs supplies a default config directory, so preserve it only when the flag was
+ * explicit; subprocesses already inherit ambient directory configuration.
+ */
+function configDirFromArgv(parsed: unknown): string {
+	const passed = process.argv.some(
+		(arg) => arg === "--config-dir" || arg.startsWith("--config-dir="),
+	);
+	if (!passed || typeof parsed !== "string") {
+		return "";
+	}
+	return parsed;
+}
+
+/**
  * Resolves `--api-key` from `NEON_API_KEY` when the flag is absent, leaving it an
  * empty string when neither is set.
  *
@@ -22,7 +36,7 @@ export const resolveApiKeyFromEnv = (args: Record<string, unknown>) => {
 		apiKeyEnv: fromEnv,
 		profileEnv: process.env.NEON_PROFILE ?? "",
 		profileFlag: typeof args.profile === "string" ? args.profile : "",
-		configDir: typeof args.configDir === "string" ? args.configDir : "",
+		configDir: configDirFromArgv(args.configDir),
 	});
 	if (fromFlag !== "") {
 		return;
