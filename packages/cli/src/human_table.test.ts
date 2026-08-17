@@ -92,6 +92,10 @@ describe("displayWidth", () => {
 	it("counts CJK Extension B as two cells", () => {
 		expect(displayWidth("𠀀𠀀𠀀𠀀𠀀")).toBe(10);
 	});
+
+	it("counts wide emoji outside U+1F300 as two cells", () => {
+		expect(displayWidth("🀄🀄🀄")).toBe(6);
+	});
 });
 
 describe("formatHumanChunk", () => {
