@@ -196,7 +196,8 @@ function formatColumns(
 					? truncateTo(cell, width)
 					: padEndWidth(cell, width);
 			})
-			.join(" ".repeat(GUTTER));
+			.join(" ".repeat(GUTTER))
+			.trimEnd();
 	const lines = [chalk.green(joinRow(headers))];
 	for (const row of rows) {
 		lines.push(joinRow(row));
@@ -397,7 +398,9 @@ const WIDE_RANGES: readonly [number, number][] = [
 	[0x2b55, 0x2b55],
 	[0x2e80, 0x303e],
 	[0x3040, 0xa4cf],
+	[0xa960, 0xa97f],
 	[0xac00, 0xd7a3],
+	[0xd7b0, 0xd7ff],
 	[0xf900, 0xfaff],
 	[0xfe10, 0xfe19],
 	[0xfe30, 0xfe6f],

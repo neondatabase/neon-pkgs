@@ -96,6 +96,36 @@ describe("displayWidth", () => {
 	it("counts wide emoji outside U+1F300 as two cells", () => {
 		expect(displayWidth("🀄🀄🀄")).toBe(6);
 	});
+
+	it("counts Hangul Jamo Extended-A as two cells", () => {
+		expect(displayWidth("\ua960\ua960\ua960")).toBe(6);
+	});
+
+	it("does not emit a column row wider than the TTY for Hangul Jamo Extended-A", () => {
+		const out = formatHumanChunk({
+			data: [{ id: "x", name: "\ua960\ua960\ua960\ua960\ua960" }],
+			fields: ["id", "name"],
+			width: 10,
+			colorTitle: false,
+		});
+		for (const line of out.trimEnd().split("\n")) {
+			expect(displayWidth(line)).toBeLessThanOrEqual(10);
+		}
+	});
+
+	it("does not pad empty trailing cells", () => {
+		const out = formatHumanChunk({
+			data: [
+				{ id: "301", name: "scoped", used: "" },
+				{ id: "302", name: "org-wide", used: "2026-02-03T00:00:00Z" },
+			],
+			fields: ["id", "name", "used"],
+			colorTitle: false,
+		});
+		for (const line of plain(out).split("\n")) {
+			expect(line).toBe(line.trimEnd());
+		}
+	});
 });
 
 describe("formatHumanChunk", () => {

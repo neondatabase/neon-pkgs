@@ -131,7 +131,7 @@ exports[`api-keys list > org keys carry the project each is scoped to 1`] = `
 exports[`api-keys list > table output names the unscoped rows 1`] = `
 "API keys in org-7
 Id   Name      Project         Created At            Last Used At          Last Used From Addr
-301  scoped    proj-in-org     2026-01-02T00:00:00Z                        
+301  scoped    proj-in-org     2026-01-02T00:00:00Z
 302  org-wide  (all projects)  2026-01-03T00:00:00Z  2026-02-03T00:00:00Z  203.0.113.9
 "
 `;
