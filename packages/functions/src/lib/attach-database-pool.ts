@@ -22,7 +22,7 @@ export type DatabasePool = {
 };
 
 export type AttachDatabasePoolOptions = {
-	onUnexpectedError?: (err: Error) => void;
+	onUnexpectedError?: (err: Error) => void | Promise<void>;
 };
 
 function isDatabasePool(value: unknown): value is DatabasePool {
@@ -50,6 +50,15 @@ function describeValue(value: unknown): string {
 	return typeof value;
 }
 
+function isPromise(value: unknown): value is Promise<unknown> {
+	return (
+		typeof value === "object" &&
+		value !== null &&
+		"then" in value &&
+		typeof value.then === "function"
+	);
+}
+
 function requireDatabasePool(pool: unknown): DatabasePool {
 	if (isDatabasePool(pool)) {
 		return pool;
@@ -66,7 +75,7 @@ function requireDatabasePool(pool: unknown): DatabasePool {
 
 function resolveOnUnexpectedError(
 	options: unknown,
-): ((err: Error) => void) | undefined {
+): ((err: Error) => unknown) | undefined {
 	if (options === undefined) {
 		return undefined;
 	}
@@ -87,21 +96,25 @@ function resolveOnUnexpectedError(
 			`attachDatabasePool() onUnexpectedError must be a function, got ${typeof handler}`,
 		);
 	}
-	return (err: Error) => {
-		handler(err);
-	};
+	return (err: Error) => handler(err);
 }
 
 function reportUnexpectedError(
 	err: Error,
-	onUnexpectedError: ((err: Error) => void) | undefined,
+	onUnexpectedError: ((err: Error) => unknown) | undefined,
 ): void {
 	if (!onUnexpectedError) {
 		console.error(UNEXPECTED_POOL_ERROR, err);
 		return;
 	}
 	try {
-		onUnexpectedError(err);
+		const result = onUnexpectedError(err);
+		if (isPromise(result)) {
+			result.catch((reporterError: unknown) => {
+				console.error(UNEXPECTED_POOL_ERROR, err);
+				console.error(REPORTER_THREW, reporterError);
+			});
+		}
 	} catch (reporterError) {
 		console.error(UNEXPECTED_POOL_ERROR, err);
 		console.error(REPORTER_THREW, reporterError);

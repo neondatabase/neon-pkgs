@@ -121,6 +121,30 @@ describe("attachDatabasePool", () => {
 		expect(pool.listenerCount("error")).toBe(1);
 	});
 
+	it("logs and does not throw when onUnexpectedError returns a rejected promise", async () => {
+		const error = vi.spyOn(console, "error").mockImplementation(() => {});
+		const reporterError = new Error("sentry down");
+		const pool = new EventEmitter();
+		attachDatabasePool(pool, {
+			onUnexpectedError: async () => {
+				throw reporterError;
+			},
+		});
+		const err = new Error("unexpected");
+
+		expect(() => pool.emit("error", err)).not.toThrow();
+		await vi.waitFor(() => {
+			expect(error).toHaveBeenCalledWith(
+				"attachDatabasePool: unexpected database pool error",
+				err,
+			);
+			expect(error).toHaveBeenCalledWith(
+				"attachDatabasePool: onUnexpectedError threw",
+				reporterError,
+			);
+		});
+	});
+
 	it("logs and does not throw when onUnexpectedError throws", () => {
 		const error = vi.spyOn(console, "error").mockImplementation(() => {});
 		const reporterError = new Error("sentry down");
