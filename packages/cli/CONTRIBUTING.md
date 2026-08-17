@@ -19,7 +19,7 @@ layout there, not in a command.
 | Input | Format |
 | --- | --- |
 | An array (a list) | Space-padded columns, two-space gutter, Title Case header |
-| A single object | Stacked `Label  value` |
+| A single object | Stacked `Label  value`. The value is not truncated. |
 | A one-column list | The header, then one value per line. Values are not truncated. |
 
 When the process knows the TTY width (`stdout.columns`, or `COLUMNS` when

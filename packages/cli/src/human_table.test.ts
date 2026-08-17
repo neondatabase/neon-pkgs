@@ -210,9 +210,25 @@ describe("formatHumanChunk", () => {
 		expect(lines[0]).toMatch(/^Id/);
 		expect(lines.length).toBe(2);
 		expect(lines[1]).not.toMatch(/^Id/);
-		for (const line of out.trimEnd().split("\n")) {
-			expect(displayWidth(line)).toBeLessThanOrEqual(7);
-		}
+		expect(plain(out)).toContain("wandering-haze-25754674");
+		expect(plain(out)).toContain("claimable-neon-local-state");
+	});
+
+	it("does not truncate a stacked host or password", () => {
+		const host = "ep-shy-frost-a5abc123-pooler.us-east-2.aws.neon.tech";
+		const out = formatHumanChunk({
+			data: {
+				host,
+				role: "neondb_owner",
+				password: "npg_1AbCdEfGhIjKlMnO",
+			},
+			fields: ["host", "role", "password"],
+			width: 40,
+			colorTitle: false,
+		});
+		expect(plain(out)).toContain(host);
+		expect(plain(out)).toContain("npg_1AbCdEfGhIjKlMnO");
+		expect(plain(out)).not.toContain("...");
 	});
 
 	it("prints a one-column list without stacking", () => {

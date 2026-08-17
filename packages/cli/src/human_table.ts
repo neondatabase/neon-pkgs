@@ -222,7 +222,7 @@ function formatStacked(
 		.map((row) =>
 			headers
 				.map((header, i) =>
-					stackedLine(header, row[i] ?? "", labelWidth, width),
+					stackedLine(header, row[i] ?? "", labelWidth),
 				)
 				.join("\n"),
 		)
@@ -233,17 +233,8 @@ function stackedLine(
 	header: string,
 	value: string,
 	labelWidth: number,
-	width: number | undefined,
 ): string {
-	const head = padEndWidth(header, labelWidth);
-	if (width === undefined) {
-		return `${head}${" ".repeat(GUTTER)}${value}`;
-	}
-	const valueBudget = width - displayWidth(head) - GUTTER;
-	if (valueBudget > 0) {
-		return `${head}${" ".repeat(GUTTER)}${truncateTo(value, valueBudget)}`;
-	}
-	return truncateTo(head, width);
+	return `${padEndWidth(header, labelWidth)}${" ".repeat(GUTTER)}${value}`;
 }
 
 function tryFit(
