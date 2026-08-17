@@ -83,7 +83,7 @@ export function formatHumanChunk(chunk: HumanTableChunk): string {
 	const isList = Array.isArray(chunk.data);
 	let out = "";
 	if (chunk.title) {
-		out += formatTitle(chunk.title, chunk.colorTitle, chunk.width) + "\n";
+		out += formatTitle(chunk.title, chunk.colorTitle) + "\n";
 	}
 	if (!arrayData.length && chunk.emptyMessage) {
 		return `\n${chunk.emptyMessage}\n`;
@@ -116,13 +116,8 @@ export function formatHumanChunk(chunk: HumanTableChunk): string {
 	return out;
 }
 
-function formatTitle(
-	title: string,
-	colorTitle: boolean,
-	width: number | undefined,
-): string {
-	const text = width === undefined ? title : truncateTo(title, width);
-	return colorTitle ? chalk.bold(text) : text;
+function formatTitle(title: string, colorTitle: boolean): string {
+	return colorTitle ? chalk.bold(title) : title;
 }
 
 function formatList(
@@ -377,14 +372,18 @@ function charWidth(code: number): number {
 	}
 	if (
 		(code >= 0x1100 && code <= 0x115f) ||
-		(code >= 0x2e80 && code <= 0xa4cf) ||
+		code === 0x2329 ||
+		code === 0x232a ||
+		(code >= 0x2e80 && code <= 0xa4cf && code !== 0x303f) ||
 		(code >= 0xac00 && code <= 0xd7a3) ||
 		(code >= 0xf900 && code <= 0xfaff) ||
 		(code >= 0xfe10 && code <= 0xfe19) ||
 		(code >= 0xfe30 && code <= 0xfe6f) ||
 		(code >= 0xff00 && code <= 0xff60) ||
 		(code >= 0xffe0 && code <= 0xffe6) ||
-		(code >= 0x1f300 && code <= 0x1faff)
+		(code >= 0x1f300 && code <= 0x1faff) ||
+		(code >= 0x20000 && code <= 0x2fffd) ||
+		(code >= 0x30000 && code <= 0x3fffd)
 	) {
 		return 2;
 	}

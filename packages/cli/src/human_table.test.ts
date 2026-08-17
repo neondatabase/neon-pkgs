@@ -88,6 +88,10 @@ describe("displayWidth", () => {
 	it("counts CJK as two cells", () => {
 		expect(displayWidth("東京")).toBe(4);
 	});
+
+	it("counts CJK Extension B as two cells", () => {
+		expect(displayWidth("𠀀𠀀𠀀𠀀𠀀")).toBe(10);
+	});
 });
 
 describe("formatHumanChunk", () => {
@@ -256,6 +260,17 @@ describe("formatHumanChunk", () => {
 		expect(out).toContain('{"k":1}');
 		expect(out).toContain("line1 line2");
 		expect(out).not.toMatch(/\nline2/);
+	});
+
+	it("does not truncate a title that names a scope", () => {
+		const out = formatHumanChunk({
+			data: [{ id: "1" }],
+			fields: ["id"],
+			title: "API keys in org-7",
+			width: 10,
+			colorTitle: false,
+		});
+		expect(plain(out).split("\n")[0]).toBe("API keys in org-7");
 	});
 
 	it("writes emptyMessage without a title, matching the previous writer", () => {
