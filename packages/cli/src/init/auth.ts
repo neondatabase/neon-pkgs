@@ -1,10 +1,13 @@
 import { log } from "@clack/prompts";
 import { interpretCredentials } from "@neon-internals/cli-core/credentials";
-import { configDir } from "@neon-internals/cli-core/paths";
 import { locationForName } from "@neon-internals/cli-core/profiles";
 import { execa } from "execa";
 import { storeFor } from "../credential_io.js";
-import { npxNeonArgs, selectedProfileName } from "./profile_cli.js";
+import {
+	npxNeonArgs,
+	selectedConfigDir,
+	selectedProfileName,
+} from "./profile_cli.js";
 
 export type AuthOptions = {
 	json?: boolean;
@@ -60,8 +63,9 @@ export async function isAuthenticated(): Promise<boolean> {
  * Unreadable credentials throw so browser sign-in cannot overwrite them.
  */
 async function getNeonctlAccessToken(): Promise<string | null> {
-	const at = locationForName(configDir(), selectedProfileName());
-	const loaded = storeFor(configDir()).read(at);
+	const dir = selectedConfigDir();
+	const at = locationForName(dir, selectedProfileName());
+	const loaded = storeFor(dir).read(at);
 	if (loaded === null) return null;
 	const credential = interpretCredentials(
 		loaded.credentials,

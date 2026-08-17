@@ -54,6 +54,7 @@ describe("resolveApiKeyFromEnv", () => {
 			apiKeyEnv: "napi_ambient",
 			profileEnv: "work",
 			profileFlag: "",
+			configDir: "",
 		});
 	});
 
@@ -92,6 +93,7 @@ describe("resolveApiKeyFromEnv", () => {
 			apiKeyEnv: "",
 			profileEnv: "",
 			profileFlag: "",
+			configDir: "",
 		});
 	});
 
@@ -133,6 +135,7 @@ describe("resolveApiKeyFromEnv", () => {
 			apiKeyEnv: "napi_second",
 			profileEnv: "",
 			profileFlag: "",
+			configDir: "",
 		});
 	});
 
@@ -142,5 +145,11 @@ describe("resolveApiKeyFromEnv", () => {
 
 		expect(credentialInputs().profileFlag).toBe("flag");
 		expect(credentialInputs().profileEnv).toBe("env");
+	});
+
+	test("records --config-dir", () => {
+		resolveApiKeyFromEnv({ apiKey: "", configDir: "/tmp/neon-cfg" });
+
+		expect(credentialInputs().configDir).toBe("/tmp/neon-cfg");
 	});
 });

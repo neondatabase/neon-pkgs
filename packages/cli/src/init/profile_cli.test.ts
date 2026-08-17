@@ -9,6 +9,7 @@ import {
 	explicitProfileArgs,
 	neonInitAgentCmd,
 	npxNeonArgs,
+	selectedConfigDir,
 	selectedProfileName,
 } from "./profile_cli.js";
 
@@ -17,6 +18,7 @@ const EMPTY: CredentialInputs = {
 	apiKeyEnv: "",
 	profileEnv: "",
 	profileFlag: "",
+	configDir: "",
 };
 
 afterEach(() => {
@@ -90,5 +92,10 @@ describe("init profile CLI flags", () => {
 			type: "run_shell_command",
 			command: `neon init --agent --profile work --data '{"step":"auth","verify":true}'`,
 		});
+	});
+
+	test("a recorded --config-dir wins over NEON_CONFIG_DIR", () => {
+		recordCredentialInputs({ ...EMPTY, configDir: "/tmp/flagged-cfg" });
+		expect(selectedConfigDir()).toBe("/tmp/flagged-cfg");
 	});
 });

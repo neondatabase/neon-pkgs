@@ -60,6 +60,9 @@ export type SelectionInput = {
 /**
  * Profile sources remain separate because callers without argv, including init's
  * credential reader and agent command emitters, must match `ensureAuth`'s selection.
+ * `configDir` is the `--config-dir` value from the same snapshot: `configDir()` without
+ * it reads `NEON_CONFIG_DIR` / the home path, so a named profile in the flagged
+ * directory would look unknown.
  *
  * Two reasons this is module state rather than fields on the parsed arguments, the same two
  * that put `auth_context` here: an extra key on `args` is rejected by every command calling
@@ -76,6 +79,7 @@ export type CredentialInputs = {
 	apiKeyEnv: string;
 	profileEnv: string;
 	profileFlag: string;
+	configDir: string;
 };
 
 const NO_INPUTS: CredentialInputs = {
@@ -83,6 +87,7 @@ const NO_INPUTS: CredentialInputs = {
 	apiKeyEnv: "",
 	profileEnv: "",
 	profileFlag: "",
+	configDir: "",
 };
 
 let inputs: CredentialInputs = NO_INPUTS;

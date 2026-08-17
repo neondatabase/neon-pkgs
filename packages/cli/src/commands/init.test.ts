@@ -184,6 +184,7 @@ describe("init", () => {
 			apiKeyEnv: "",
 			profileEnv: "work",
 			profileFlag: "",
+			configDir: "",
 		});
 		const { handler } = await import("./init.js");
 		const { interactiveInit } = await import("../init/interactive.js");
@@ -197,6 +198,7 @@ describe("init", () => {
 				apiKeyEnv: "",
 				profileEnv: "",
 				profileFlag: "",
+				configDir: "",
 			});
 		}
 	});

@@ -1361,6 +1361,29 @@ describe("neon init and profile selection", () => {
 			"--profile DEFAULT",
 		);
 	});
+
+	test("--profile work --config-dir uses that directory, not the default", async () => {
+		const dir = makeConfigDir(WORK_PROFILES);
+		const { code, stdout, stderr } = await runCli([
+			"init",
+			"--agent",
+			"--data",
+			JSON.stringify({ step: "status" }),
+			"--profile",
+			"work",
+			"--config-dir",
+			dir,
+		]);
+
+		expect(code).toBe(0);
+		expect(stderr).not.toContain("Unknown profile");
+		const parsed = JSON.parse(stdout) as {
+			auth: { authenticated: boolean };
+			recommendations: { command: string }[];
+		};
+		expect(parsed.auth.authenticated).toBe(true);
+		expect(parsed.recommendations[0]?.command).toContain("--profile work");
+	});
 });
 
 describe("profile remove", () => {

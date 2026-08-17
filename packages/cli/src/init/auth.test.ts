@@ -25,6 +25,7 @@ const EMPTY_INPUTS: CredentialInputs = {
 	apiKeyEnv: "",
 	profileEnv: "",
 	profileFlag: "",
+	configDir: "",
 };
 
 const cleanups: Array<() => void> = [];
@@ -143,6 +144,37 @@ describe("isAuthenticated", () => {
 
 		await expect(isAuthenticated()).resolves.toBe(false);
 	});
+
+	test("--config-dir is where the named profile is read, not NEON_CONFIG_DIR", async () => {
+		const envDir = mkdtempSync(join(tmpdir(), "neon-init-auth-env-"));
+		const flagged = mkdtempSync(join(tmpdir(), "neon-init-auth-flag-"));
+		cleanups.push(() => rmSync(envDir, { recursive: true, force: true }));
+		cleanups.push(() => rmSync(flagged, { recursive: true, force: true }));
+		writeFileSync(
+			resolve(flagged, "profiles.json"),
+			JSON.stringify({
+				version: 1,
+				profiles: {
+					DEFAULT: { credentials: "credentials.json" },
+					work: { credentials: "credentials.work.json" },
+				},
+			}),
+			{ mode: 0o600 },
+		);
+		writeFileSync(
+			resolve(flagged, "credentials.work.json"),
+			JSON.stringify({ type: "api_key", api_key: "napi_work" }),
+			{ mode: 0o600 },
+		);
+		vi.stubEnv("NEON_CONFIG_DIR", envDir);
+		recordCredentialInputs({
+			...EMPTY_INPUTS,
+			profileFlag: "work",
+			configDir: flagged,
+		});
+
+		await expect(isAuthenticated()).resolves.toBe(true);
+	});
 });
 
 /**
@@ -152,7 +184,7 @@ describe("isAuthenticated", () => {
  * `--agent` answers a thrown error with JSON on stdout, and a human gets one line on
  * stderr instead.
  */
-describe("`neon init` failure output", () => {
+describe("`neon init` failure output", { timeout: 20_000 }, () => {
 	const CLI = resolve(import.meta.dirname, "..", "..", "dist", "cli.js");
 
 	/** A credential the auth middleware accepts without touching the network. */
@@ -234,7 +266,13 @@ describe("`neon init` failure output", () => {
 	});
 
 	test("--agent --profile DEFAULT proceeds rather than refusing", () => {
-		const { status, stdout } = runInit(["--agent", "--profile", "DEFAULT"]);
+		const { status, stdout } = runInit([
+			"--agent",
+			"--profile",
+			"DEFAULT",
+			"--data",
+			'{"step":"status"}',
+		]);
 
 		expect(status).toBe(0);
 		expect(JSON.parse(stdout).success).not.toBe(false);

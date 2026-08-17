@@ -720,7 +720,7 @@ That message reports where parsing stopped and nothing more. `--data` carries wh
 | `--data <json>` | Route to one phase, with that phase's options |
 | `--skip-migrations` | Leave the migrations phase out of the flow |
 | `--preview` | Enable preview features (scaffolding a project from a template) |
-| `--profile <name>` | Same as every other command: run as that stored account. Agent-emitted follow-up commands include the flag when you passed it (or set `NEON_PROFILE`), so a later step cannot fall through to `DEFAULT`. |
+| `--profile <name>` | Run as that stored account. See [Which credential an invocation uses](#which-credential-an-invocation-uses). |
 
 ## Snapshots (`snapshots`)
 
@@ -998,7 +998,7 @@ When both are only environment variables the key wins, which keeps a CI pipeline
 
 `neon auth` and the `profile` subcommands are outside all of this, because they read the same flags to mean something else: `neon auth --profile work` names where to write a credential, and `neon profile create work --api-key …` names one to store.
 
-`neon init` follows the same profile selection: `--profile` and `NEON_PROFILE` pick the stored account, and every command it tells an agent to run (`npx neon …`, `neon init --agent …`) includes `--profile` when that selection was explicit. `--api-key` / `NEON_API_KEY` are still not carried on those emitted commands — putting a key in agent JSON would print it — so a flag-only key does not reach the subprocesses. An ambient `NEON_API_KEY` is inherited by them.
+`neon init` follows the same profile selection: `--profile` and `NEON_PROFILE` pick the stored account, and every command it tells an agent to run (`npx neon …`, `neon init --agent …`) includes `--profile` when that selection was explicit. It still ignores `--api-key` and `NEON_API_KEY` for its own credential read and runs as that stored profile (`DEFAULT` when a key was named with no profile). Those keys are also not written onto the emitted commands — putting a key in agent JSON would print it. An ambient `NEON_API_KEY` is inherited by the subprocesses.
 
 ## API keys (`api-keys`)
 
