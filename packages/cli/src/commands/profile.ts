@@ -397,7 +397,7 @@ const list = async (props: ProfileProps) => {
 
 	writer(props).end(rows, {
 		title: "Profiles",
-		fields: ["active", "name", "account", "auth", "scope", "credentials"],
+		fields: ["active", "name", "account", "auth", "credentials", "scope"],
 	});
 };
 
@@ -407,7 +407,8 @@ const credentialsListValue = (
 ): string => {
 	if (profile.storage === "keyring") return KEYRING_CREDENTIALS;
 	const rel = relative(configDir, profile.credentialsPath);
-	return isAbsolute(rel) ? profile.credentialsPath : rel;
+	if (rel.startsWith("..") || isAbsolute(rel)) return profile.credentialsPath;
+	return rel;
 };
 
 const locationForCreate = (
