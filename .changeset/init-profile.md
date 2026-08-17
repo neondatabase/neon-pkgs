@@ -2,5 +2,5 @@
 "neon": minor
 ---
 
-`neon init` honors `--profile` and `NEON_PROFILE`. Agent-emitted `npx neon` and `neon init --agent` commands include the flag when the selection was explicit, so later steps stay on that account.
+`neon init` honors `--profile` and `NEON_PROFILE`. `npx neon` subprocesses and agent-emitted `neon init --agent` commands include `--profile <name>` when a profile was named by `--profile` or `NEON_PROFILE`; nothing is added when neither is set.
 

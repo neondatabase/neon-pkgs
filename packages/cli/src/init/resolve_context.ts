@@ -6,6 +6,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { execa } from "execa";
+import { npxNeonArgs } from "./profile_cli.js";
 
 type NeonContext = {
 	orgId: string;
@@ -58,7 +59,7 @@ export async function resolveNeonContext(
 	try {
 		const result = await execa(
 			"npx",
-			["-y", "neon", "orgs", "list", "--output", "json"],
+			npxNeonArgs(["orgs", "list", "--output", "json"]),
 			{
 				stdio: "pipe",
 				timeout: 30000,
@@ -78,16 +79,14 @@ export async function resolveNeonContext(
 		try {
 			const result = await execa(
 				"npx",
-				[
-					"-y",
-					"neon",
+				npxNeonArgs([
 					"projects",
 					"list",
 					"--org-id",
 					org.id,
 					"--output",
 					"json",
-				],
+				]),
 				{
 					stdio: "pipe",
 					timeout: 30000,
@@ -103,13 +102,11 @@ export async function resolveNeonContext(
 			try {
 				const result = await execa(
 					"npx",
-					[
-						"-y",
-						"neon",
+					npxNeonArgs([
 						"connection-string",
 						"--project-id",
 						project.id,
-					],
+					]),
 					{
 						stdio: "pipe",
 						timeout: 15000,

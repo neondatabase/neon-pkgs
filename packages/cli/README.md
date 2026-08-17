@@ -998,7 +998,7 @@ When both are only environment variables the key wins, which keeps a CI pipeline
 
 `neon auth` and the `profile` subcommands are outside all of this, because they read the same flags to mean something else: `neon auth --profile work` names where to write a credential, and `neon profile create work --api-key …` names one to store.
 
-`neon init` follows the same profile selection: `--profile` and `NEON_PROFILE` pick the stored account, and every command it tells an agent to run (`npx neon …`, `neon init --agent …`) includes `--profile` when that selection was explicit. It still ignores `--api-key` and `NEON_API_KEY` for its own credential read and runs as that stored profile (`DEFAULT` when a key was named with no profile). Those keys are also not written onto the emitted commands — putting a key in agent JSON would print it. An ambient `NEON_API_KEY` is inherited by the subprocesses.
+`neon init` follows the same profile selection: `--profile` and `NEON_PROFILE` pick the stored account. Every `npx neon` it runs, and every command it tells an agent to run (`npx neon …`, `neon init --agent …`), includes `--profile <name>` when a profile was named by `--profile` or `NEON_PROFILE`; nothing is added when neither is set. It still ignores `--api-key` and `NEON_API_KEY` for its own credential read and runs as that stored profile (`DEFAULT` when a key was named with no profile). Those keys are also not written onto the emitted commands — putting a key in agent JSON would print it. An ambient `NEON_API_KEY` is inherited by the subprocesses.
 
 ## API keys (`api-keys`)
 
