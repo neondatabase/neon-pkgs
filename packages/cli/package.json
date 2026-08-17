@@ -104,7 +104,7 @@
 		"@vitest/coverage-v8": "catalog:",
 		"@yao-pkg/pkg": "6.10.0",
 		"emocks": "3.0.4",
-		"express": "4.19.2",
+		"express": "4.22.0",
 		"node-pty": "1.1.0",
 		"oauth2-mock-server": "8.1.0",
 		"openapi-types": "12.1.3",
