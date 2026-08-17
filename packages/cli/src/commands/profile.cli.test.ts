@@ -257,15 +257,19 @@ describe("profile list", () => {
 			expect.objectContaining({
 				name: "DEFAULT",
 				auth: "oauth",
+				scope: "account",
 				file: "ok",
 				storage: "file",
+				credentials: resolve(dir, "credentials.json"),
 			}),
 			expect.objectContaining({
 				name: "work",
 				auth: "api key",
 				account: "work@example.com",
+				scope: "account",
 				file: "ok",
 				storage: "file",
+				credentials: resolve(dir, "credentials.work.json"),
 			}),
 		]);
 
@@ -308,6 +312,43 @@ describe("profile list", () => {
 		expect(stderr).toMatch(
 			/neon auth --profile DEFAULT|neon profile remove DEFAULT --yes/,
 		);
+	});
+
+	test("table shows oauth scope as account and one credentials column", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": OAUTH_FILE,
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: {
+					DEFAULT: { credentials: "credentials.json" },
+					work: { credentials: "keyring" },
+				},
+			}),
+		});
+		const { code, stdout } = await runCli([
+			"profile",
+			"list",
+			"--config-dir",
+			dir,
+		]);
+
+		expect(code).toBe(0);
+		const lines = stdout.split("\n").filter((line) => line.length > 0);
+		expect(lines[0]).toBe("Profiles");
+		expect(lines[1]?.trim().split(/\s+/)).toEqual([
+			"Active",
+			"Name",
+			"Account",
+			"Auth",
+			"Scope",
+			"Credentials",
+		]);
+		expect(stdout).not.toMatch(/\bFile\b/);
+		expect(stdout).not.toMatch(/\bStorage\b/);
+		expect(stdout).toContain(resolve(dir, "credentials.json"));
+		expect(stdout).toContain("keyring");
+		const defaultRow = lines.find((line) => line.includes("DEFAULT"));
+		expect(defaultRow).toMatch(/oauth\s+account\s+/);
 	});
 
 	test("projects list does not start OAuth when a keyring pointer is unread", async () => {

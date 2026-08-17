@@ -1,5 +1,4 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
-import { basename } from "node:path";
 import { credentialInputs } from "@neon-internals/cli-core/auth_selection";
 import {
 	CRED_STORAGE_FILE,
@@ -379,40 +378,21 @@ const list = async (props: ProfileProps) => {
 			name: p.name,
 			account: p.label ?? p.userId ?? storedUserId ?? "-",
 			auth,
-			// Only a key carries a scope. An OAuth session reaches whatever its account does.
 			scope:
-				stored !== null && auth === "api key"
-					? describeScope(scopeOf(stored))
-					: "-",
-			// Names what was actually checked. The column this replaced was called "available",
-			// which claims the credential is ready to use — a thing reading a file cannot show,
-			// and the wrong answer for the dead key someone runs this to diagnose.
+				auth === "oauth"
+					? describeScope({})
+					: stored !== null && auth === "api key"
+						? describeScope(scopeOf(stored))
+						: "-",
 			file,
 			storage,
-			// JSON/YAML preserve the full path; the terminal value leaves room for other fields.
-			...(props.output === "table"
-				? {
-						credentials:
-							p.storage === "keyring"
-								? KEYRING_CREDENTIALS
-								: basename(p.credentialsPath),
-					}
-				: { credentials: credentialsDisplay(p) }),
+			credentials: credentialsDisplay(p),
 		};
 	});
 
 	writer(props).end(rows, {
 		title: "Profiles",
-		fields: [
-			"active",
-			"name",
-			"account",
-			"auth",
-			"scope",
-			"file",
-			"storage",
-			"credentials",
-		],
+		fields: ["active", "name", "account", "auth", "scope", "credentials"],
 	});
 };
 

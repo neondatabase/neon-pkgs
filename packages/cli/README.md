@@ -841,17 +841,17 @@ neon profile remove work
 ```console
 $ neon profile list
 Profiles
-Active  Name     Account         Auth     Scope           File  Storage  Credentials
-*       DEFAULT  me@example.com  oauth    -               ok    file     credentials.json
-        work     me@example.com  api key  account         ok    keyring  keyring
-        ci       org-abc-123     api key  project proj-1  ok    file     credentials.ci.json
+Active  Name     Account         Auth     Scope           Credentials
+*       DEFAULT  me@example.com  oauth    account         /home/me/.config/neonctl/credentials.json
+        work     me@example.com  api key  account         keyring
+        ci       org-abc-123     api key  project proj-1  /home/me/.config/neonctl/credentials.ci.json
 ```
 
-`Scope` is what a key can reach; an OAuth session has none of its own, so it shows `-`. `File`
-says whether the stored credential can be read — `ok`, `invalid` or `missing` for a file;
-`ok`, `invalid` or `unreadable` for a keyring item. A keyring get of null is `unreadable`, not missing:
-the addon cannot tell those apart. `Storage` is `file` or `keyring`, from the profile's
-pointer. The listing shows the file name or `keyring`; `--output json` keeps the full path.
+`Scope` is what the credential can reach. An OAuth session and an unscoped user API key both
+show `account`. A project or org key names that project or org. `Credentials` is the file path
+or `keyring`. `--output json` also includes `file` (`ok`, `invalid`, `missing`, or `unreadable`)
+and `storage` (`file` or `keyring`). A keyring get of null is `unreadable`, not missing: the
+addon cannot tell those apart.
 
 Select one per invocation with `--profile`, or per shell with `NEON_PROFILE`. There is no `profile use` command and nothing is stored about which profile is "current", so what you type is always what runs.
 
