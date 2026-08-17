@@ -98,4 +98,27 @@ describe("init profile CLI flags", () => {
 		recordCredentialInputs({ ...EMPTY, configDir: "/tmp/flagged-cfg" });
 		expect(selectedConfigDir()).toBe("/tmp/flagged-cfg");
 	});
+
+	test("npxNeonArgs passes --config-dir; emitted commands do not", () => {
+		recordCredentialInputs({
+			...EMPTY,
+			profileFlag: "work",
+			configDir: "/tmp/flagged-cfg",
+		});
+
+		expect(npxNeonArgs(["orgs", "list"])).toEqual([
+			"-y",
+			"neon",
+			"--profile",
+			"work",
+			"--config-dir",
+			"/tmp/flagged-cfg",
+			"orgs",
+			"list",
+		]);
+		expect(neonctlCmd()).toBe("CI= npx -y neon --profile work");
+		expect(neonInitAgentCmd({ step: "status" })).toBe(
+			`neon init --agent --profile work --data '{"step":"status"}'`,
+		);
+	});
 });

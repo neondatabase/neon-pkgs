@@ -40,8 +40,19 @@ export function explicitProfileCli(): string {
 	return args.length === 0 ? "" : ` ${args.join(" ")}`;
 }
 
+function explicitConfigDirArgs(): string[] {
+	const dir = credentialInputs().configDir;
+	return dir !== "" ? ["--config-dir", dir] : [];
+}
+
 export function npxNeonArgs(command: string[]): string[] {
-	return ["-y", "neon", ...explicitProfileArgs(), ...command];
+	return [
+		"-y",
+		"neon",
+		...explicitProfileArgs(),
+		...explicitConfigDirArgs(),
+		...command,
+	];
 }
 
 export function neonInitAgentCmd(data: Record<string, unknown>): string {
