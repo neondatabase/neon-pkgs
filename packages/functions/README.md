@@ -115,23 +115,33 @@ the next checkout opens a new connection.
 import { attachDatabasePool } from "@neon/functions";
 import { Pool } from "pg";
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 attachDatabasePool(pool);
 ```
+
+This helper does not need a Neon Functions runtime. The same call works in plain Node
+and under `neon dev`.
 
 Expected idle disconnects (`ECONNRESET`, `EPIPE`, `ETIMEDOUT`, Postgres `57P01`, and
 node-postgres's `Connection terminated unexpectedly`) are silent. Anything else is
 logged with `console.error`.
 
-To send unexpected errors to your own reporter instead of `console.error`:
+To send unexpected errors to your own reporter instead of `console.error`, pass it on
+the first call, next to `new Pool`:
 
 ```ts
+import * as Sentry from "@sentry/node";
+import { attachDatabasePool } from "@neon/functions";
+import { Pool } from "pg";
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 attachDatabasePool(pool, {
 	onUnexpectedError: (err) => Sentry.captureException(err),
 });
 ```
 
-The first call wins. A second `attachDatabasePool` on the same pool is a no-op.
+The first call wins. A second `attachDatabasePool(pool)` is a no-op. A second call that
+passes `onUnexpectedError` is also a no-op and logs a warning.
 
 This does not close the pool. Isolate teardown tears the connections down with the process.
 

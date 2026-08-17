@@ -11,6 +11,12 @@ const IDLE_DISCONNECT_CODES = new Set([
 
 const attached = new WeakSet<object>();
 
+const UNEXPECTED_POOL_ERROR =
+	"attachDatabasePool: unexpected database pool error";
+const REPORTER_THREW = "attachDatabasePool: onUnexpectedError threw";
+const ALREADY_ATTACHED =
+	"attachDatabasePool() was already called for this pool; the first onUnexpectedError stays attached and this one is ignored.";
+
 export type DatabasePool = {
 	on(event: "error", listener: (err: Error) => void): unknown;
 };
@@ -44,6 +50,20 @@ function describeValue(value: unknown): string {
 	return typeof value;
 }
 
+function requireDatabasePool(pool: unknown): DatabasePool {
+	if (isDatabasePool(pool)) {
+		return pool;
+	}
+	if (typeof pool === "object" && pool !== null) {
+		throw new TypeError(
+			"attachDatabasePool() requires a node-postgres Pool with an on() method, got an object without one",
+		);
+	}
+	throw new TypeError(
+		`attachDatabasePool() requires a node-postgres Pool, got ${describeValue(pool)}`,
+	);
+}
+
 function resolveOnUnexpectedError(
 	options: unknown,
 ): ((err: Error) => void) | undefined {
@@ -72,28 +92,39 @@ function resolveOnUnexpectedError(
 	};
 }
 
+function reportUnexpectedError(
+	err: Error,
+	onUnexpectedError: ((err: Error) => void) | undefined,
+): void {
+	if (!onUnexpectedError) {
+		console.error(UNEXPECTED_POOL_ERROR, err);
+		return;
+	}
+	try {
+		onUnexpectedError(err);
+	} catch (reporterError) {
+		console.error(UNEXPECTED_POOL_ERROR, err);
+		console.error(REPORTER_THREW, reporterError);
+	}
+}
+
 export function attachDatabasePool(
 	pool: DatabasePool,
 	options?: AttachDatabasePoolOptions,
 ): void {
-	if (!isDatabasePool(pool)) {
-		throw new TypeError(
-			`attachDatabasePool() requires a node-postgres Pool, got ${describeValue(pool)}`,
-		);
-	}
-	if (attached.has(pool)) {
+	const databasePool = requireDatabasePool(pool);
+	const onUnexpectedError = resolveOnUnexpectedError(options);
+	if (attached.has(databasePool)) {
+		if (onUnexpectedError) {
+			console.warn(ALREADY_ATTACHED);
+		}
 		return;
 	}
-	const onUnexpectedError = resolveOnUnexpectedError(options);
-	pool.on("error", (err) => {
+	databasePool.on("error", (err) => {
 		if (isIdleDisconnect(err)) {
 			return;
 		}
-		if (onUnexpectedError) {
-			onUnexpectedError(err);
-			return;
-		}
-		console.error(err);
+		reportUnexpectedError(err, onUnexpectedError);
 	});
-	attached.add(pool);
+	attached.add(databasePool);
 }

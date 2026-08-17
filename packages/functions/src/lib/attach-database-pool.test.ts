@@ -59,7 +59,10 @@ describe("attachDatabasePool", () => {
 		pool.emit("error", err);
 
 		expect(error).toHaveBeenCalledTimes(1);
-		expect(error).toHaveBeenCalledWith(err);
+		expect(error).toHaveBeenCalledWith(
+			"attachDatabasePool: unexpected database pool error",
+			err,
+		);
 	});
 
 	it("reports unexpected errors through onUnexpectedError instead of console.error", () => {
@@ -93,6 +96,7 @@ describe("attachDatabasePool", () => {
 	});
 
 	it("keeps the first attachment when called twice", () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 		const first = vi.fn();
 		const second = vi.fn();
 		const pool = new EventEmitter();
@@ -104,26 +108,39 @@ describe("attachDatabasePool", () => {
 		expect(pool.listenerCount("error")).toBe(1);
 		expect(first).toHaveBeenCalledTimes(1);
 		expect(second).not.toHaveBeenCalled();
+		expect(warn).toHaveBeenCalledTimes(1);
 	});
 
-	it("does not record the pool if on() throws", () => {
-		let calls = 0;
-		const pool = {
-			on: () => {
-				calls += 1;
-				if (calls === 1) {
-					throw new Error("subscribe failed");
-				}
+	it("does not warn when a second call passes no reporter", () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const pool = new EventEmitter();
+		attachDatabasePool(pool);
+		attachDatabasePool(pool);
+
+		expect(warn).not.toHaveBeenCalled();
+		expect(pool.listenerCount("error")).toBe(1);
+	});
+
+	it("logs and does not throw when onUnexpectedError throws", () => {
+		const error = vi.spyOn(console, "error").mockImplementation(() => {});
+		const reporterError = new Error("sentry down");
+		const pool = new EventEmitter();
+		attachDatabasePool(pool, {
+			onUnexpectedError: () => {
+				throw reporterError;
 			},
-		};
+		});
+		const err = new Error("unexpected");
 
-		expect(() => attachDatabasePool(pool)).toThrow("subscribe failed");
-		expect(() => attachDatabasePool(pool)).not.toThrow();
-		expect(calls).toBe(2);
-	});
-
-	it("returns undefined", () => {
-		expect(attachDatabasePool(new EventEmitter())).toBeUndefined();
+		expect(() => pool.emit("error", err)).not.toThrow();
+		expect(error).toHaveBeenCalledWith(
+			"attachDatabasePool: unexpected database pool error",
+			err,
+		);
+		expect(error).toHaveBeenCalledWith(
+			"attachDatabasePool: onUnexpectedError threw",
+			reporterError,
+		);
 	});
 
 	it("throws a TypeError when the argument is not a pool", () => {
@@ -132,7 +149,9 @@ describe("attachDatabasePool", () => {
 		// @ts-expect-error Invalid inputs are possible from JavaScript.
 		expect(() => attachDatabasePool(42)).toThrow(TypeError);
 		// @ts-expect-error Invalid inputs are possible from JavaScript.
-		expect(() => attachDatabasePool({})).toThrow(TypeError);
+		expect(() => attachDatabasePool({})).toThrow(
+			/requires a node-postgres Pool with an on\(\) method/,
+		);
 	});
 
 	it("throws a TypeError when onUnexpectedError is not a function", () => {
