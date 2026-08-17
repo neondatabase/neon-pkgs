@@ -1284,58 +1284,81 @@ describe("a malformed profiles.json", () => {
 });
 
 describe("neon init and profile selection", () => {
-	// Checking only the flag left the case that is easier to hit by accident: a profile
-	// exported once into a shell, then disregarded by every `neon init` run in it.
-	test("NEON_PROFILE is refused, not silently ignored", async () => {
-		const dir = makeConfigDir({
-			"credentials.json": OAUTH_FILE,
-			"credentials.work.json": API_KEY_FILE,
-			"profiles.json": JSON.stringify({
-				version: 1,
-				profiles: {
-					DEFAULT: { credentials: "credentials.json" },
-					work: { credentials: "credentials.work.json" },
-				},
-			}),
-		});
-		const { code, stderr } = await runCli(["init", "--config-dir", dir], {
-			NEON_PROFILE: "work",
-		});
+	const WORK_PROFILES = {
+		"credentials.json": OAUTH_FILE,
+		"credentials.work.json": API_KEY_FILE,
+		"profiles.json": JSON.stringify({
+			version: 1,
+			profiles: {
+				DEFAULT: { credentials: "credentials.json" },
+				work: { credentials: "credentials.work.json" },
+			},
+		}),
+	};
 
-		expect(code).toBe(1);
-		expect(stderr).toContain("NEON_PROFILE");
-		expect(stderr).toContain("work");
+	test("--profile work authenticates as that profile", async () => {
+		const dir = makeConfigDir(WORK_PROFILES);
+		const { code, stdout, stderr } = await runCli(
+			[
+				"init",
+				"--agent",
+				"--data",
+				JSON.stringify({ step: "status" }),
+				"--profile",
+				"work",
+			],
+			{ NEON_CONFIG_DIR: dir },
+		);
+
+		expect(code).toBe(0);
+		expect(stderr).not.toContain("does not support profile selection");
+		const parsed = JSON.parse(stdout) as {
+			auth: { authenticated: boolean };
+			recommendations: { command: string }[];
+		};
+		expect(parsed.auth.authenticated).toBe(true);
+		expect(parsed.recommendations.length).toBeGreaterThan(0);
+		for (const rec of parsed.recommendations) {
+			expect(rec.command).toContain("--profile work");
+		}
 	});
 
-	// The profile has to exist, or credential selection rejects the name first and `init`'s own
-	// refusal is never reached — which is what this case was accidentally asserting before.
-	test("--profile is refused too", async () => {
-		const dir = makeConfigDir({
-			"credentials.json": OAUTH_FILE,
-			"credentials.work.json": API_KEY_FILE,
-			"profiles.json": JSON.stringify({
-				version: 1,
-				profiles: {
-					DEFAULT: { credentials: "credentials.json" },
-					work: { credentials: "credentials.work.json" },
-				},
-			}),
-		});
-		const { code, stderr } = await runCli([
-			"init",
-			"--config-dir",
-			dir,
-			"--profile",
-			"work",
-		]);
+	test("NEON_PROFILE=work is the same as the flag", async () => {
+		const dir = makeConfigDir(WORK_PROFILES);
+		const { code, stdout } = await runCli(
+			["init", "--agent", "--data", JSON.stringify({ step: "status" })],
+			{ NEON_CONFIG_DIR: dir, NEON_PROFILE: "work" },
+		);
 
-		expect(code).toBe(1);
-		expect(stderr).toContain("does not support profile selection yet");
-		// Both spellings of "how this profile got selected" have to read as English. The
-		// flag branch was a bare "--profile", so the sentence started with no verb:
-		// "--profile `neon init` would run as the default account instead of …".
-		expect(stderr).toContain(
-			"--profile was passed, so `neon init` would run",
+		expect(code).toBe(0);
+		const parsed = JSON.parse(stdout) as {
+			auth: { authenticated: boolean };
+			recommendations: { command: string }[];
+		};
+		expect(parsed.auth.authenticated).toBe(true);
+		expect(parsed.recommendations[0]?.command).toContain("--profile work");
+	});
+
+	test("explicit --profile DEFAULT is on the commands an agent is told to run", async () => {
+		const dir = makeConfigDir(WORK_PROFILES);
+		const { code, stdout } = await runCli(
+			[
+				"init",
+				"--agent",
+				"--data",
+				JSON.stringify({ step: "status" }),
+				"--profile",
+				"DEFAULT",
+			],
+			{ NEON_CONFIG_DIR: dir },
+		);
+
+		expect(code).toBe(0);
+		const parsed = JSON.parse(stdout) as {
+			recommendations: { command: string }[];
+		};
+		expect(parsed.recommendations[0]?.command).toContain(
+			"--profile DEFAULT",
 		);
 	});
 });

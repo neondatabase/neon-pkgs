@@ -21,6 +21,7 @@ export const resolveApiKeyFromEnv = (args: Record<string, unknown>) => {
 		apiKeyFlag: fromFlag,
 		apiKeyEnv: fromEnv,
 		profileEnv: process.env.NEON_PROFILE ?? "",
+		profileFlag: typeof args.profile === "string" ? args.profile : "",
 	});
 	if (fromFlag !== "") {
 		return;

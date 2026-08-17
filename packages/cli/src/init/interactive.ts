@@ -39,6 +39,7 @@ import { installExtension, isExtensionInstalled } from "./extension.js";
 import { inspectProject } from "./inspect.js";
 import { installNeonMcpServer } from "./install_mcp.js";
 import { ensureNeonctl } from "./neonctl.js";
+import { neonInitAgentCmd } from "./profile_cli.js";
 import {
 	ensureSkillsUpToDate,
 	installAgentSkills,
@@ -433,7 +434,7 @@ async function interactiveInitInner(
 		if (isCancel(authResult) || authResult === "no") {
 			outro(
 				dim(
-					`Your project is configured with Neon. You can set up Neon Auth later by having your agent run: neon init --agent --data '{"step":"neon-auth"}'`,
+					`Your project is configured with Neon. You can set up Neon Auth later by having your agent run: ${neonInitAgentCmd({ step: "neon-auth" })}`,
 				),
 			);
 			return;
@@ -821,7 +822,10 @@ async function interactiveInitInner(
 	if (options.preview) gettingStartedData.preview = true;
 
 	// Build a prompt for the user to paste into their agent chat
-	const cmd = `neon init --agent --data '${JSON.stringify({ step: "getting-started", ...gettingStartedData })}'`;
+	const cmd = neonInitAgentCmd({
+		step: "getting-started",
+		...gettingStartedData,
+	});
 	// Account for clack's "│  " prefix (3 chars) when wrapping
 	const cols = (process.stdout.columns || 80) - 3;
 	const promptText = `To finish setting up Neon using Neon's agent-guided onboarding experience, have your agent run this shell command: ${cmd}`;

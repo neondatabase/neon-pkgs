@@ -1,6 +1,7 @@
 import { supportsSkills, tryResolveAddMcpAgentId } from "../agents.js";
 import { isAuthenticated } from "../auth.js";
 import { inspectProject } from "../inspect.js";
+import { neonInitAgentCmd } from "../profile_cli.js";
 import type { StatusResponse } from "../types.js";
 
 export type StatusOptions = {
@@ -34,7 +35,7 @@ export async function handleStatusPhase(
 		recommendations.push({
 			priority: "high",
 			message: "Not authenticated with Neon",
-			command: `neon init --agent --data '{"step":"auth"}'`,
+			command: neonInitAgentCmd({ step: "auth" }),
 		});
 	}
 
@@ -42,7 +43,7 @@ export async function handleStatusPhase(
 		recommendations.push({
 			priority: "high",
 			message: "No DATABASE_URL found in .env",
-			command: `neon init --agent --data '{"step":"db"}'`,
+			command: neonInitAgentCmd({ step: "db" }),
 		});
 	}
 
@@ -53,7 +54,7 @@ export async function handleStatusPhase(
 		recommendations.push({
 			priority: "medium",
 			message: "Neon agent skills not detected in this project",
-			command: `neon init --agent --data '{"step":"skills","install":true}'`,
+			command: neonInitAgentCmd({ step: "skills", install: true }),
 		});
 	}
 
@@ -61,7 +62,7 @@ export async function handleStatusPhase(
 		recommendations.push({
 			priority: "medium",
 			message: `${migrationTool} detected but no migrations found`,
-			command: `neon init --agent --data '{"step":"migrations"}'`,
+			command: neonInitAgentCmd({ step: "migrations" }),
 		});
 	}
 

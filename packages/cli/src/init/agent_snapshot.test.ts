@@ -762,41 +762,24 @@ describe("neon init: failure output", () => {
 		expect(snapshotOf(result)).toMatchSnapshot();
 	});
 
-	test("--profile is refused, as JSON", async () => {
-		expect(
-			snapshotOf(
-				await runInit("next-prisma", [
-					"--agent",
-					"--profile",
-					"DEFAULT",
-				]),
-			),
-		).toMatchSnapshot();
+	test("--profile DEFAULT proceeds in agent mode", async () => {
+		const result = await runInit("next-prisma", [
+			"--agent",
+			"--profile",
+			"DEFAULT",
+		]);
+		expect(result.status).toBe(0);
+		expect(result.stdout).not.toMatch(/does not support profile selection/);
+		expect(result.stdout).not.toMatch(/"success": false/);
 	});
 
-	// No agent in the environment and no `--agent`, so this is the human path:
-	// one line on stderr and nothing on stdout. `--profile` is the refusal that
-	// fails before any prompting, so it gets there without needing a TTY.
-	test("--profile is refused in plain text when no agent is detected", async () => {
-		expect(
-			snapshotOf(
-				await runInit("next-prisma", ["--profile", "DEFAULT"], {
-					agent: "none",
-				}),
-			),
-		).toMatchSnapshot();
-	});
-
-	// The same invocation with an agent in the environment is agent mode, even
-	// though `--agent` was never passed — stdin is not a TTY and detection wins.
-	test("an autodetected agent gets the JSON refusal without passing --agent", async () => {
-		expect(
-			snapshotOf(
-				await runInit("next-prisma", ["--profile", "DEFAULT"], {
-					agent: "cursor",
-				}),
-			),
-		).toMatchSnapshot();
+	test("an autodetected agent with --profile DEFAULT gets JSON, not a refusal", async () => {
+		const result = await runInit("next-prisma", ["--profile", "DEFAULT"], {
+			agent: "cursor",
+		});
+		expect(result.status).toBe(0);
+		expect(result.stdout).not.toMatch(/does not support profile selection/);
+		expect(result.stdout).not.toMatch(/"success": false/);
 	});
 
 	test("an unknown profile is refused before the command runs", async () => {

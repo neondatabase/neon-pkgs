@@ -2,6 +2,10 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import {
+	type CredentialInputs,
+	recordCredentialInputs,
+} from "@neon-internals/cli-core/auth_selection";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { isAuthenticated } from "./auth.js";
 
@@ -16,10 +20,18 @@ import { isAuthenticated } from "./auth.js";
  * identical to a fresh machine.
  */
 
+const EMPTY_INPUTS: CredentialInputs = {
+	apiKeyFlag: "",
+	apiKeyEnv: "",
+	profileEnv: "",
+	profileFlag: "",
+};
+
 const cleanups: Array<() => void> = [];
 afterEach(() => {
 	while (cleanups.length > 0) cleanups.shift()?.();
 	vi.unstubAllEnvs();
+	recordCredentialInputs(EMPTY_INPUTS);
 });
 
 /** A config directory pointed at by `NEON_CONFIG_DIR`, optionally holding credentials. */
@@ -80,6 +92,56 @@ describe("isAuthenticated", () => {
 	test("a file declaring a key it does not have is an error", async () => {
 		makeConfigDir(JSON.stringify({ type: "api_key" }));
 		await expect(isAuthenticated()).rejects.toThrow(/no "api_key" value/);
+	});
+
+	test("a named profile is what counts, not DEFAULT", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "neon-init-auth-"));
+		cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
+		writeFileSync(
+			resolve(dir, "profiles.json"),
+			JSON.stringify({
+				version: 1,
+				profiles: {
+					DEFAULT: { credentials: "credentials.json" },
+					work: { credentials: "credentials.work.json" },
+				},
+			}),
+			{ mode: 0o600 },
+		);
+		writeFileSync(
+			resolve(dir, "credentials.work.json"),
+			JSON.stringify({ type: "api_key", api_key: "napi_work" }),
+			{ mode: 0o600 },
+		);
+		vi.stubEnv("NEON_CONFIG_DIR", dir);
+		recordCredentialInputs({ ...EMPTY_INPUTS, profileFlag: "work" });
+
+		await expect(isAuthenticated()).resolves.toBe(true);
+	});
+
+	test("DEFAULT being signed in does not count as the named profile", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "neon-init-auth-"));
+		cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
+		writeFileSync(
+			resolve(dir, "profiles.json"),
+			JSON.stringify({
+				version: 1,
+				profiles: {
+					DEFAULT: { credentials: "credentials.json" },
+					work: { credentials: "credentials.work.json" },
+				},
+			}),
+			{ mode: 0o600 },
+		);
+		writeFileSync(
+			resolve(dir, "credentials.json"),
+			JSON.stringify({ type: "api_key", api_key: "napi_default" }),
+			{ mode: 0o600 },
+		);
+		vi.stubEnv("NEON_CONFIG_DIR", dir);
+		recordCredentialInputs({ ...EMPTY_INPUTS, profileFlag: "work" });
+
+		await expect(isAuthenticated()).resolves.toBe(false);
 	});
 });
 
@@ -171,25 +233,21 @@ describe("`neon init` failure output", () => {
 		expect(JSON.parse(stdout).error).toMatch(/Invalid JSON in --data flag/);
 	});
 
-	test("--agent answers the profile refusal with JSON on stdout", () => {
+	test("--agent --profile DEFAULT proceeds rather than refusing", () => {
 		const { status, stdout } = runInit(["--agent", "--profile", "DEFAULT"]);
 
-		expect(status).toBe(1);
-		const parsed = JSON.parse(stdout);
-		expect(parsed.success).toBe(false);
-		expect(parsed.error).toMatch(/does not support profile selection/);
+		expect(status).toBe(0);
+		expect(JSON.parse(stdout).success).not.toBe(false);
+		expect(stdout).not.toMatch(/does not support profile selection/);
 	});
 
-	// The human half of the same failure: one line on stderr, nothing on stdout, and no
-	// help screen. `--profile` is the refusal that fails before any prompting, so this
-	// exercises the non-agent path without needing a TTY.
-	test("without --agent it is one stderr line, not a help dump", () => {
-		const { status, stdout, stderr } = runInit(["--profile", "DEFAULT"]);
+	test("without --agent an unknown profile is one stderr line, not a help dump", () => {
+		const { status, stdout, stderr } = runInit(["--profile", "ghost"]);
 
 		expect(status).toBe(1);
 		expect(stdout).toBe("");
 		expect(stderr).toContain("ERROR: ");
-		expect(stderr).toMatch(/does not support profile selection/);
+		expect(stderr).toMatch(/Unknown profile "ghost"/);
 		expect(stderr).not.toContain("Show help");
 		expect(stderr).not.toMatch(/^\s*at /m);
 	});

@@ -1,12 +1,10 @@
 import { log } from "@clack/prompts";
 import { interpretCredentials } from "@neon-internals/cli-core/credentials";
 import { configDir } from "@neon-internals/cli-core/paths";
-import {
-	DEFAULT_PROFILE,
-	locationForName,
-} from "@neon-internals/cli-core/profiles";
+import { locationForName } from "@neon-internals/cli-core/profiles";
 import { execa } from "execa";
 import { storeFor } from "../credential_io.js";
+import { npxNeonArgs, selectedProfileName } from "./profile_cli.js";
 
 export type AuthOptions = {
 	json?: boolean;
@@ -27,7 +25,7 @@ export async function ensureNeonctlAuth(
 
 	try {
 		// Run `neon me`, which triggers the OAuth flow when not signed in.
-		await execa("npx", ["-y", "neon", "me"], {
+		await execa("npx", npxNeonArgs(["me"]), {
 			// Shows OAuth URL and prompts to the user
 			stdio: "inherit",
 			// Unset CI so the CLI doesn't refuse to open the browser (e.g. when run from agent chat)
@@ -62,11 +60,9 @@ export async function isAuthenticated(): Promise<boolean> {
  * Unreadable credentials throw so browser sign-in cannot overwrite them.
  */
 async function getNeonctlAccessToken(): Promise<string | null> {
-	const at = locationForName(configDir(), DEFAULT_PROFILE);
+	const at = locationForName(configDir(), selectedProfileName());
 	const loaded = storeFor(configDir()).read(at);
 	if (loaded === null) return null;
-	// `neon init` has no profile selection — it reads the default credential and refuses
-	// when one is named, so `DEFAULT` is the only profile this can ever be about.
 	const credential = interpretCredentials(
 		loaded.credentials,
 		at,

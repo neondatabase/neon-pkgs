@@ -14328,42 +14328,6 @@ Options:
 "
 `;
 
-exports[`neon init: failure output > --profile is refused in plain text when no agent is detected 1`] = `
-"exit: 1
---- stdout ---
-
---- stderr ---
-ERROR: --profile was passed, so \`neon init\` would run as the default account instead of "DEFAULT", and it does not support profile selection yet. Run it without one, or set the project up with \`neon --profile DEFAULT link\`.
---- subprocesses ---
-"
-`;
-
-exports[`neon init: failure output > --profile is refused, as JSON 1`] = `
-"exit: 1
---- stdout ---
-{
-  "success": false,
-  "error": "--profile was passed, so \`neon init\` would run as the default account instead of \\"DEFAULT\\", and it does not support profile selection yet. Run it without one, or set the project up with \`neon --profile DEFAULT link\`."
-}
---- stderr ---
-
---- subprocesses ---
-"
-`;
-
-exports[`neon init: failure output > an autodetected agent gets the JSON refusal without passing --agent 1`] = `
-"exit: 1
---- stdout ---
-{
-  "success": false,
-  "error": "--profile was passed, so \`neon init\` would run as the default account instead of \\"DEFAULT\\", and it does not support profile selection yet. Run it without one, or set the project up with \`neon --profile DEFAULT link\`."
-}
---- stderr ---
-
---- subprocesses ---
-"
-`;
-
 exports[`neon init: failure output > an unknown profile is refused before the command runs 1`] = `
 "exit: 1
 --- stdout ---

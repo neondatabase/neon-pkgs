@@ -1,3 +1,5 @@
+import { neonInitAgentCmd } from "./profile_cli.js";
+
 /**
  * Converts a phase's `args` (e.g. ["neon-auth", "--json", "--setup"]) into the
  * `neon init --agent --data` invocation that reaches the same handler.
@@ -18,11 +20,15 @@ function argsToCommand(args: string[]): string {
 			const key = arg
 				.slice(2)
 				.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
+			const next = args[i + 1];
 			if (key === "json") {
 				i += 1;
 				continue;
 			}
-			const next = args[i + 1];
+			if (key === "profile") {
+				i += next !== undefined && !next.startsWith("-") ? 2 : 1;
+				continue;
+			}
 			if (next !== undefined && !next.startsWith("-")) {
 				data[key] = next;
 				i += 2;
@@ -35,7 +41,7 @@ function argsToCommand(args: string[]): string {
 		}
 	}
 
-	return `neon init --agent --data '${JSON.stringify(data)}'`;
+	return neonInitAgentCmd(data);
 }
 
 /**

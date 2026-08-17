@@ -53,6 +53,7 @@ describe("resolveApiKeyFromEnv", () => {
 			apiKeyFlag: "napi_flag",
 			apiKeyEnv: "napi_ambient",
 			profileEnv: "work",
+			profileFlag: "",
 		});
 	});
 
@@ -90,6 +91,7 @@ describe("resolveApiKeyFromEnv", () => {
 			apiKeyFlag: "",
 			apiKeyEnv: "",
 			profileEnv: "",
+			profileFlag: "",
 		});
 	});
 
@@ -130,6 +132,15 @@ describe("resolveApiKeyFromEnv", () => {
 			apiKeyFlag: "",
 			apiKeyEnv: "napi_second",
 			profileEnv: "",
+			profileFlag: "",
 		});
+	});
+
+	test("records --profile separately from NEON_PROFILE", () => {
+		vi.stubEnv("NEON_PROFILE", "env");
+		resolveApiKeyFromEnv({ apiKey: "", profile: "flag" });
+
+		expect(credentialInputs().profileFlag).toBe("flag");
+		expect(credentialInputs().profileEnv).toBe("env");
 	});
 });
