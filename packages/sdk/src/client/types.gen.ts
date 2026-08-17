@@ -3292,7 +3292,7 @@ export type NeonAuthPluginConfigs = {
     organization?: NeonAuthOrganizationConfig;
     magic_link?: NeonAuthMagicLinkConfig;
     phone_number?: NeonAuthPhoneNumberConfig;
-    email_provider?: NeonAuthEmailServerConfig;
+    email_provider?: NeonAuthEmailServerConfigResponse;
     email_and_password?: NeonAuthEmailAndPasswordConfig;
     /**
      * OAuth provider configurations enabled for this auth setup.
@@ -3386,6 +3386,72 @@ export type StandardEmailServer = {
     /**
      * Hostname of the email server.
      */
+    host?: string;
+    /**
+     * TCP port of the SMTP server. Common values: 25 (SMTP), 465 (SMTPS), 587 (submission).
+     */
+    port?: number;
+    /**
+     * Username for authenticating with the SMTP server.
+     */
+    username?: string;
+    /**
+     * Password for authenticating with the SMTP server.
+     */
+    password?: string;
+    /**
+     * Email address used as the From address on outgoing auth emails.
+     */
+    sender_email?: string;
+    /**
+     * Display name shown as the sender in outgoing emails.
+     */
+    sender_name?: string;
+};
+
+export type StandardEmailServerResponse = {
+    /**
+     * Hostname of the email server.
+     */
+    host: string;
+    /**
+     * TCP port of the SMTP server. Common values: 25 (SMTP), 465 (SMTPS), 587 (submission).
+     */
+    port: number;
+    /**
+     * Username for authenticating with the SMTP server.
+     */
+    username: string;
+    /**
+     * On GET, returned redacted (empty) for ordinary callers, while callers with project-credential read permission receive the stored password — do not assume this field is empty. Update (PATCH) responses always return it redacted (empty) regardless of permission. Provide a value on update to set or rotate the password.
+     */
+    password: string;
+    /**
+     * Email address used as the From address on outgoing auth emails.
+     */
+    sender_email: string;
+    /**
+     * Display name shown as the sender in outgoing emails.
+     */
+    sender_name: string;
+};
+
+export type NeonAuthEmailServerConfig = ({
+    type: 'standard';
+} & StandardEmailServer) | ({
+    type: 'shared';
+} & SharedEmailServer);
+
+export type NeonAuthEmailServerConfigResponse = ({
+    type: 'standard';
+} & StandardEmailServerResponse) | ({
+    type: 'shared';
+} & SharedEmailServer);
+
+export type SendNeonAuthTestEmailRequest = {
+    /**
+     * Hostname of the email server.
+     */
     host: string;
     /**
      * TCP port of the SMTP server. Common values: 25 (SMTP), 465 (SMTPS), 587 (submission).
@@ -3407,15 +3473,6 @@ export type StandardEmailServer = {
      * Display name shown as the sender in outgoing emails.
      */
     sender_name: string;
-};
-
-export type NeonAuthEmailServerConfig = ({
-    type: 'standard';
-} & StandardEmailServer) | ({
-    type: 'shared';
-} & SharedEmailServer);
-
-export type SendNeonAuthTestEmailRequest = StandardEmailServer & {
     /**
      * The email address to send the test email to.
      */
@@ -7162,7 +7219,7 @@ export type GetNeonAuthEmailServerResponses = {
     /**
      * Returns the email server configuration for the Neon Auth
      */
-    200: NeonAuthEmailServerConfig;
+    200: NeonAuthEmailServerConfigResponse;
 };
 
 export type GetNeonAuthEmailServerResponse = GetNeonAuthEmailServerResponses[keyof GetNeonAuthEmailServerResponses];
@@ -7206,7 +7263,7 @@ export type UpdateNeonAuthEmailServerResponses = {
     /**
      * The OAuth provider has been added to the project
      */
-    200: NeonAuthEmailServerConfig;
+    200: NeonAuthEmailServerConfigResponse;
 };
 
 export type UpdateNeonAuthEmailServerResponse = UpdateNeonAuthEmailServerResponses[keyof UpdateNeonAuthEmailServerResponses];
@@ -7398,7 +7455,7 @@ export type GetNeonAuthEmailProviderResponses = {
     /**
      * Returns the email provider configuration for the Neon Auth
      */
-    200: NeonAuthEmailServerConfig;
+    200: NeonAuthEmailServerConfigResponse;
 };
 
 export type GetNeonAuthEmailProviderResponse = GetNeonAuthEmailProviderResponses[keyof GetNeonAuthEmailProviderResponses];
@@ -7446,7 +7503,7 @@ export type UpdateNeonAuthEmailProviderResponses = {
     /**
      * The email provider configuration has been updated
      */
-    200: NeonAuthEmailServerConfig;
+    200: NeonAuthEmailServerConfigResponse;
 };
 
 export type UpdateNeonAuthEmailProviderResponse = UpdateNeonAuthEmailProviderResponses[keyof UpdateNeonAuthEmailProviderResponses];

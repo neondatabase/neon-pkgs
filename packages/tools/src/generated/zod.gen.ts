@@ -2643,6 +2643,58 @@ export const zSharedEmailServer = z.strictObject({
 export const zStandardEmailServer = z.strictObject({
     host: z.string().register(z.globalRegistry, {
         description: 'Hostname of the email server.'
+    }).optional(),
+    port: z.int().register(z.globalRegistry, {
+        description: 'TCP port of the SMTP server. Common values: 25 (SMTP), 465 (SMTPS), 587 (submission).'
+    }).optional(),
+    username: z.string().register(z.globalRegistry, {
+        description: 'Username for authenticating with the SMTP server.'
+    }).optional(),
+    password: z.string().register(z.globalRegistry, {
+        description: 'Password for authenticating with the SMTP server.'
+    }).optional(),
+    sender_email: z.string().register(z.globalRegistry, {
+        description: 'Email address used as the From address on outgoing auth emails.'
+    }).optional(),
+    sender_name: z.string().register(z.globalRegistry, {
+        description: 'Display name shown as the sender in outgoing emails.'
+    }).optional()
+});
+
+export const zStandardEmailServerResponse = z.strictObject({
+    host: z.string().register(z.globalRegistry, {
+        description: 'Hostname of the email server.'
+    }),
+    port: z.int().register(z.globalRegistry, {
+        description: 'TCP port of the SMTP server. Common values: 25 (SMTP), 465 (SMTPS), 587 (submission).'
+    }),
+    username: z.string().register(z.globalRegistry, {
+        description: 'Username for authenticating with the SMTP server.'
+    }),
+    password: z.string().register(z.globalRegistry, {
+        description: 'On GET, returned redacted (empty) for ordinary callers, while callers with project-credential read permission receive the stored password — do not assume this field is empty. Update (PATCH) responses always return it redacted (empty) regardless of permission. Provide a value on update to set or rotate the password.'
+    }),
+    sender_email: z.string().register(z.globalRegistry, {
+        description: 'Email address used as the From address on outgoing auth emails.'
+    }),
+    sender_name: z.string().register(z.globalRegistry, {
+        description: 'Display name shown as the sender in outgoing emails.'
+    })
+});
+
+export const zNeonAuthEmailServerConfig = z.discriminatedUnion('type', [
+    zStandardEmailServer.extend({ type: z.literal('standard') }),
+    zSharedEmailServer.extend({ type: z.literal('shared') })
+]);
+
+export const zNeonAuthEmailServerConfigResponse = z.discriminatedUnion('type', [
+    zStandardEmailServerResponse.extend({ type: z.literal('standard') }),
+    zSharedEmailServer.extend({ type: z.literal('shared') })
+]);
+
+export const zSendNeonAuthTestEmailRequest = z.strictObject({
+    host: z.string().register(z.globalRegistry, {
+        description: 'Hostname of the email server.'
     }),
     port: z.int().register(z.globalRegistry, {
         description: 'TCP port of the SMTP server. Common values: 25 (SMTP), 465 (SMTPS), 587 (submission).'
@@ -2658,19 +2710,11 @@ export const zStandardEmailServer = z.strictObject({
     }),
     sender_name: z.string().register(z.globalRegistry, {
         description: 'Display name shown as the sender in outgoing emails.'
-    })
-});
-
-export const zNeonAuthEmailServerConfig = z.discriminatedUnion('type', [
-    zStandardEmailServer.extend({ type: z.literal('standard') }),
-    zSharedEmailServer.extend({ type: z.literal('shared') })
-]);
-
-export const zSendNeonAuthTestEmailRequest = zStandardEmailServer.merge(z.strictObject({
+    }),
     recipient_email: z.email().min(1).max(256).register(z.globalRegistry, {
         description: 'The email address to send the test email to.'
     })
-}));
+});
 
 export const zSendNeonAuthTestEmailResponse = z.strictObject({
     success: z.boolean().register(z.globalRegistry, {
@@ -2720,7 +2764,7 @@ export const zNeonAuthPluginConfigs = z.strictObject({
     organization: zNeonAuthOrganizationConfig.optional(),
     magic_link: zNeonAuthMagicLinkConfig.optional(),
     phone_number: zNeonAuthPhoneNumberConfig.optional(),
-    email_provider: zNeonAuthEmailServerConfig.optional(),
+    email_provider: zNeonAuthEmailServerConfigResponse.optional(),
     email_and_password: zNeonAuthEmailAndPasswordConfig.optional(),
     oauth_providers: z.array(zNeonAuthOauthProvider).register(z.globalRegistry, {
         description: 'OAuth provider configurations enabled for this auth setup.'

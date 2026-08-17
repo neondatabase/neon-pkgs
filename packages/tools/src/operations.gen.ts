@@ -4662,7 +4662,7 @@ export const operationFactories = {
 				operationId: "updateNeonAuthEmailProvider",
 				id: "update_neon_auth_email_provider",
 				title: "Update email provider configuration",
-				description: "Updates the email provider configuration for the specified branch's Neon Auth integration.\nThe email provider handles transactional messages such as verification emails and password reset links.\n",
+				description: "Updates the email provider configuration for the specified branch's Neon Auth integration.\nThe email provider handles transactional messages such as verification emails and password reset links.\n\nPartial `standard` updates — omitting fields to keep their stored values — are supported only for\nBetter Auth integrations, which merge omitted fields server-side. Legacy Stack Auth integrations do\nnot merge and require all six `standard` fields (`host`, `port`, `username`, `password`,\n`sender_email`, `sender_name`) on every update; a partial `standard` body is rejected with 400.\n",
 				inputSchema: z.strictObject({
 	body: zod.zUpdateNeonAuthEmailProviderBody,
 	path: zod.zUpdateNeonAuthEmailProviderPath,
