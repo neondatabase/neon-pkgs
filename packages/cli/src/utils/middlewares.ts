@@ -1,8 +1,7 @@
 import { recordCredentialInputs } from "@neon-internals/cli-core/auth_selection";
 
 /**
- * Yargs supplies a default config directory, so preserve it only when the flag was
- * explicit; subprocesses already inherit ambient directory configuration.
+ * Forwarding Yargs's default would turn ambient configuration into an explicit child override.
  */
 function configDirFromArgv(parsed: unknown): string {
 	const passed = process.argv.some(

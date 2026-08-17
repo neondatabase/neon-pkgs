@@ -14,8 +14,7 @@ export function selectedProfileName(): string {
 }
 
 /**
- * Preserve an explicit config directory so profile lookup cannot fall back to
- * `NEON_CONFIG_DIR` or the home path.
+ * An explicit `--config-dir` must override `NEON_CONFIG_DIR` and the home path.
  */
 export function selectedConfigDir(): string {
 	const recorded = credentialInputs().configDir;
@@ -23,8 +22,8 @@ export function selectedConfigDir(): string {
 }
 
 /**
- * Implicit DEFAULT is omitted to preserve existing command strings. Explicit DEFAULT remains
- * because an ambient `NEON_PROFILE` would otherwise override it in subprocesses.
+ * Omitting implicit DEFAULT preserves command compatibility; retaining explicit DEFAULT
+ * prevents ambient `NEON_PROFILE` from overriding it in subprocesses.
  */
 export function explicitProfileArgs(): string[] {
 	const selection = selectCredential(credentialInputs());
@@ -44,6 +43,15 @@ function explicitConfigDirArgs(): string[] {
 	return dir !== "" ? ["--config-dir", dir] : [];
 }
 
+function posixSingleQuote(value: string): string {
+	return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+export function explicitConfigDirCli(): string {
+	const dir = credentialInputs().configDir;
+	return dir === "" ? "" : ` --config-dir ${posixSingleQuote(dir)}`;
+}
+
 export function npxNeonArgs(command: string[]): string[] {
 	return [
 		"-y",
@@ -55,5 +63,5 @@ export function npxNeonArgs(command: string[]): string[] {
 }
 
 export function neonInitAgentCmd(data: Record<string, unknown>): string {
-	return `neon init --agent${explicitProfileCli()} --data '${JSON.stringify(data)}'`;
+	return `neon init --agent${explicitProfileCli()}${explicitConfigDirCli()} --data '${JSON.stringify(data)}'`;
 }

@@ -82,8 +82,8 @@ export const handler = async (argv: {
 	// always detect (the user asked for agent mode). Otherwise, require
 	// non-TTY stdin to distinguish agent from human in terminal.
 	//
-	// Resolve agent mode first so this handler's failures use the caller's output
-	// format. `ensureAuth` runs before this handler and reports directly to stderr.
+	// Handler failures need the caller's output format; `ensureAuth` runs earlier
+	// and reports directly to stderr.
 	const agent =
 		(argv.agent || !process.stdin.isTTY ? detectAgent() : null) ||
 		undefined;

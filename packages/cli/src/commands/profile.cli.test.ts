@@ -1383,6 +1383,9 @@ describe("neon init and profile selection", () => {
 		};
 		expect(parsed.auth.authenticated).toBe(true);
 		expect(parsed.recommendations[0]?.command).toContain("--profile work");
+		expect(parsed.recommendations[0]?.command).toContain(
+			`--config-dir '${dir}'`,
+		);
 	});
 });
 

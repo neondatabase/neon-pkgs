@@ -25,7 +25,7 @@ function argsToCommand(args: string[]): string {
 				i += 1;
 				continue;
 			}
-			if (key === "profile") {
+			if (key === "profile" || key === "configDir") {
 				i += next !== undefined && !next.startsWith("-") ? 2 : 1;
 				continue;
 			}

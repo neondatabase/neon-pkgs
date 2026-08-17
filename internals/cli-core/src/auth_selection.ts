@@ -58,9 +58,6 @@ export type SelectionInput = {
 };
 
 /**
- * Profile sources and the explicit config directory stay separate so init and its
- * subprocesses use the same credential selection as `ensureAuth`.
- *
  * Two reasons this is module state rather than fields on the parsed arguments, the same two
  * that put `auth_context` here: an extra key on `args` is rejected by every command calling
  * `.strict()`, and a hidden option to carry it would be a second undocumented way to pass a

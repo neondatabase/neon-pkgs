@@ -80,17 +80,21 @@ describe("init profile CLI flags", () => {
 		]);
 	});
 
-	test("enrichResponse puts --profile on the command, not inside --data", () => {
-		recordCredentialInputs({ ...EMPTY, profileFlag: "work" });
+	test("enrichResponse puts --profile and --config-dir on the command, not inside --data", () => {
+		recordCredentialInputs({
+			...EMPTY,
+			profileFlag: "work",
+			configDir: "/tmp/flagged-cfg",
+		});
 
 		const enriched = enrichResponse({
 			type: "run_neon_init",
-			args: ["auth", "--json", "--verify"],
+			args: ["auth", "--json", "--verify", "--config-dir", "/ignored"],
 		});
 
 		expect(enriched).toEqual({
 			type: "run_shell_command",
-			command: `neon init --agent --profile work --data '{"step":"auth","verify":true}'`,
+			command: `neon init --agent --profile work --config-dir '/tmp/flagged-cfg' --data '{"step":"auth","verify":true}'`,
 		});
 	});
 
@@ -99,7 +103,7 @@ describe("init profile CLI flags", () => {
 		expect(selectedConfigDir()).toBe("/tmp/flagged-cfg");
 	});
 
-	test("npxNeonArgs passes --config-dir; emitted commands do not", () => {
+	test("a recorded --config-dir is on npx neon and on printed commands", () => {
 		recordCredentialInputs({
 			...EMPTY,
 			profileFlag: "work",
@@ -116,9 +120,21 @@ describe("init profile CLI flags", () => {
 			"orgs",
 			"list",
 		]);
-		expect(neonctlCmd()).toBe("CI= npx -y neon --profile work");
+		expect(neonctlCmd()).toBe(
+			"CI= npx -y neon --profile work --config-dir '/tmp/flagged-cfg'",
+		);
 		expect(neonInitAgentCmd({ step: "status" })).toBe(
-			`neon init --agent --profile work --data '{"step":"status"}'`,
+			`neon init --agent --profile work --config-dir '/tmp/flagged-cfg' --data '{"step":"status"}'`,
+		);
+	});
+
+	test("a path with a single quote is still a valid shell token", () => {
+		recordCredentialInputs({
+			...EMPTY,
+			configDir: "/tmp/cfg's",
+		});
+		expect(neonctlCmd()).toBe(
+			"CI= npx -y neon --config-dir '/tmp/cfg'\\''s'",
 		);
 	});
 });

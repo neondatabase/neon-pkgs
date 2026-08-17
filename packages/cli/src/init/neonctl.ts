@@ -4,14 +4,14 @@ import {
 	globalInstallCommand,
 	resolveInvokingPackageManager,
 } from "../utils/package_manager.js";
-import { explicitProfileCli } from "./profile_cli.js";
+import { explicitConfigDirCli, explicitProfileCli } from "./profile_cli.js";
 
 /**
  * `npx -y neon` avoids global-install assumptions, and `CI=` keeps emitted calls
  * non-interactive. API and OAuth hosts stay ambient because the CLI reads them directly.
  */
 export function neonctlCmd(): string {
-	return `CI= npx -y neon${explicitProfileCli()}`;
+	return `CI= npx -y neon${explicitProfileCli()}${explicitConfigDirCli()}`;
 }
 
 type NeonctlStatus = {
