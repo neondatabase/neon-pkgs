@@ -309,12 +309,6 @@ const linkedCredentials = (
 
 const create = async (props: CreateProps): Promise<void> => {
 	rejectExplicitAccountCredential(props);
-	const ambient = credentialInputs();
-	if (ambient.apiKeyEnv.trim() !== "" || ambient.profileEnv.trim() !== "") {
-		log.warning(
-			"NEON_API_KEY or NEON_PROFILE is set. Later commands will use that account credential instead of this claimable project. Unset them to keep using the unclaimed project.",
-		);
-	}
 	const existing = readContextFile(props.contextFile);
 	if (existing.projectId || existing.orgId || existing.claimable) {
 		throw new Error(
