@@ -144,7 +144,7 @@ The first call wins. A second `attachDatabasePool(pool)` is a no-op. A second ca
 passes `onUnexpectedError` is also a no-op and logs a warning.
 
 If `onUnexpectedError` throws, or returns a promise that rejects, both the pool error and
-the reporter error are logged. Neither reaches the pool's `error` path, so the isolate stays up.
+the reporter error are logged. Neither is rethrown from the listener, so the isolate stays up.
 
 This does not close the pool. Isolate teardown tears the connections down with the process.
 
