@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
+import { isAbsolute, relative } from "node:path";
 import { credentialInputs } from "@neon-internals/cli-core/auth_selection";
 import {
 	CRED_STORAGE_FILE,
@@ -38,6 +39,7 @@ import {
 	newProfileLocation,
 	profilesFilePath,
 	profilesUsingPath,
+	type ResolvedProfile,
 	readProfiles,
 	resolveProfile,
 	selectProfileName,
@@ -386,7 +388,10 @@ const list = async (props: ProfileProps) => {
 						: "-",
 			file,
 			storage,
-			credentials: credentialsDisplay(p),
+			credentials:
+				props.output === "table"
+					? credentialsListValue(p, props.configDir)
+					: credentialsDisplay(p),
 		};
 	});
 
@@ -394,6 +399,15 @@ const list = async (props: ProfileProps) => {
 		title: "Profiles",
 		fields: ["active", "name", "account", "auth", "scope", "credentials"],
 	});
+};
+
+const credentialsListValue = (
+	profile: ResolvedProfile,
+	configDir: string,
+): string => {
+	if (profile.storage === "keyring") return KEYRING_CREDENTIALS;
+	const rel = relative(configDir, profile.credentialsPath);
+	return isAbsolute(rel) ? profile.credentialsPath : rel;
 };
 
 const locationForCreate = (

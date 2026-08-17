@@ -345,7 +345,8 @@ describe("profile list", () => {
 		]);
 		expect(stdout).not.toMatch(/\bFile\b/);
 		expect(stdout).not.toMatch(/\bStorage\b/);
-		expect(stdout).toContain(resolve(dir, "credentials.json"));
+		expect(stdout).toContain("credentials.json");
+		expect(stdout).not.toContain(resolve(dir, "credentials.json"));
 		expect(stdout).toContain("keyring");
 		const defaultRow = lines.find((line) => line.includes("DEFAULT"));
 		expect(defaultRow).toMatch(/oauth\s+account\s+/);
