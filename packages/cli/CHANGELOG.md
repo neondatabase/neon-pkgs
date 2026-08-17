@@ -1,5 +1,12 @@
 # neon
 
+## 3.6.0
+
+### Minor Changes
+
+- 23740cd: `neon` list and get commands no longer draw box-drawing tables. Default output is space-padded columns that drop and truncate to the terminal width, or stacked `Label  value` lines for a single object. `--output json` and `--output yaml` keep the same fields; `neon profile list` reports OAuth scope as `account` in every format.
+- e78f193: `neon init` honors `--profile` and `NEON_PROFILE`. `npx neon` subprocesses and agent-emitted commands include `--profile <name>` when a profile was named, and `--config-dir` when you passed it.
+
 ## 3.5.1
 
 ### Patch Changes
