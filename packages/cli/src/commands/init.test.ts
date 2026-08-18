@@ -33,6 +33,14 @@ vi.mock("../utils/write_sync.js", () => ({
 	writeAllSync: vi.fn(),
 }));
 
+// `enrich_output` stays real, so the emitted command runs through `neonBin()`, which
+// prefers an installed `neon` on PATH and falls back to `npx -y neon`. Pin it to the
+// fallback so the asserted command is the same whether or not the test machine has
+// `neon` installed globally.
+vi.mock("which", () => ({
+	default: { sync: () => null },
+}));
+
 // `enrich_output` is a pure transform and stays real, so the stdout assertions below
 // exercise the payload an agent actually receives rather than a stand-in for it.
 
@@ -102,7 +110,7 @@ describe("init", () => {
 			nextAction: {
 				type: "run_shell_command",
 				command:
-					'neon init --agent --data \'{"step":"auth","verify":true}\'',
+					'npx -y neon init --agent --data \'{"step":"auth","verify":true}\'',
 			},
 		});
 	});
