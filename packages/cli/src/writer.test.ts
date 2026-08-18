@@ -1,4 +1,5 @@
 import { PassThrough } from "node:stream";
+import stripAnsi from "strip-ansi";
 import { describe, expect, it } from "vitest";
 import { writer } from "./writer.js";
 
@@ -73,7 +74,7 @@ describe("writer", () => {
 			const { stream, getData } = getMockWritable();
 			const out = writer({ output: "table", out: stream });
 			out.end({ foo: "bar", extra: "extra" }, { fields: ["foo"] });
-			expect(getData()).toMatchSnapshot();
+			expect(stripAnsi(getData())).toBe("Foo  bar\n");
 		});
 
 		it("outputs single data with title", () => {
@@ -83,7 +84,7 @@ describe("writer", () => {
 				{ foo: "bar", extra: "extra" },
 				{ fields: ["foo"], title: "baz" },
 			);
-			expect(getData()).toMatchSnapshot();
+			expect(stripAnsi(getData())).toBe("baz\nFoo  bar\n");
 		});
 
 		it("outputs multiple data", () => {
@@ -98,7 +99,7 @@ describe("writer", () => {
 					{ fields: ["baz"], title: "T2" },
 				)
 				.end();
-			expect(getData()).toMatchSnapshot();
+			expect(stripAnsi(getData())).toBe("T1\nFoo  bar\n\nT2\nBaz  xyz\n");
 		});
 
 		it("outputs table with custom renderer", () => {
@@ -117,7 +118,7 @@ describe("writer", () => {
 					},
 				},
 			).end();
-			expect(getData()).toMatchSnapshot();
+			expect(stripAnsi(getData())).toBe("T1\nFoo  Here is: bar\n");
 		});
 	});
 });

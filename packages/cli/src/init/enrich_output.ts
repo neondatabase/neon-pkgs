@@ -1,10 +1,8 @@
-import { neonBin } from "./neon_bin.js";
+import { neonInitAgentCmd } from "./profile_cli.js";
 
 /**
- * Converts a phase's `args` (e.g. ["setup", "--json", "--data", …]) into the
- * `neon init --agent --data` invocation that reaches the same handler. Uses the
- * installed `neon` binary when present, else `npx -y neon` (see {@link neonBin}),
- * so the chaining commands work even on a first run started with `npx neon init`.
+ * Converts a phase's `args` (e.g. ["neon-auth", "--json", "--setup"]) into the
+ * `neon init --agent --data` invocation that reaches the same handler.
  */
 function argsToCommand(args: string[]): string {
 	const data: Record<string, unknown> = {};
@@ -22,11 +20,15 @@ function argsToCommand(args: string[]): string {
 			const key = arg
 				.slice(2)
 				.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
+			const next = args[i + 1];
 			if (key === "json") {
 				i += 1;
 				continue;
 			}
-			const next = args[i + 1];
+			if (key === "profile" || key === "configDir") {
+				i += next !== undefined && !next.startsWith("-") ? 2 : 1;
+				continue;
+			}
 			if (next !== undefined && !next.startsWith("-")) {
 				data[key] = next;
 				i += 2;
@@ -39,14 +41,13 @@ function argsToCommand(args: string[]): string {
 		}
 	}
 
-	return `${neonBin()} init --agent --data '${JSON.stringify(data)}'`;
+	return neonInitAgentCmd(data);
 }
 
 /**
  * Walks a phase response object and:
  * 1. Replaces `args` arrays with `command` strings (neon init --data format)
  * 2. Renames `run_neon_init` → `run_shell_command`
- * 3. Adds a description to finalize steps
  */
 export function enrichResponse(obj: unknown): unknown {
 	if (obj === null || typeof obj !== "object") return obj;

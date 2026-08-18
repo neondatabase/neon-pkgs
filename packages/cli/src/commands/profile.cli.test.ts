@@ -12,8 +12,10 @@
  */
 
 import { fork } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
 	existsSync,
+	mkdirSync,
 	mkdtempSync,
 	readFileSync,
 	rmSync,
@@ -255,13 +257,19 @@ describe("profile list", () => {
 			expect.objectContaining({
 				name: "DEFAULT",
 				auth: "oauth",
+				scope: "account",
 				file: "ok",
+				storage: "file",
+				credentials: resolve(dir, "credentials.json"),
 			}),
 			expect.objectContaining({
 				name: "work",
 				auth: "api key",
 				account: "work@example.com",
+				scope: "account",
 				file: "ok",
+				storage: "file",
+				credentials: resolve(dir, "credentials.work.json"),
 			}),
 		]);
 
@@ -271,6 +279,121 @@ describe("profile list", () => {
 			expect(stream).not.toContain("oauth-access-token-secret");
 			expect(stream).not.toContain("oauth-refresh-token-secret");
 		}
+	});
+
+	test("a keyring pointer lists storage as keyring and file as unreadable", async () => {
+		const dir = makeConfigDir({
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { DEFAULT: { credentials: "keyring" } },
+			}),
+		});
+		const { code, stdout, stderr } = await runCli([
+			"profile",
+			"list",
+			"--config-dir",
+			dir,
+			"--output",
+			"json",
+		]);
+
+		expect(code).toBe(0);
+		expect(JSON.parse(stdout)).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					name: "DEFAULT",
+					auth: "-",
+					file: "unreadable",
+					storage: "keyring",
+					credentials: "keyring",
+				}),
+			]),
+		);
+		expect(stderr).toMatch(
+			/neon auth --profile DEFAULT|neon profile remove DEFAULT --yes/,
+		);
+	});
+
+	test("table shows oauth scope as account and one credentials column", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": OAUTH_FILE,
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: {
+					DEFAULT: { credentials: "credentials.json" },
+					work: { credentials: "keyring" },
+				},
+			}),
+		});
+		const { code, stdout } = await runCli([
+			"profile",
+			"list",
+			"--config-dir",
+			dir,
+		]);
+
+		expect(code).toBe(0);
+		const lines = stdout.split("\n").filter((line) => line.length > 0);
+		expect(lines[0]).toBe("Profiles");
+		expect(lines[1]?.trim().split(/\s+/)).toEqual([
+			"Active",
+			"Name",
+			"Account",
+			"Auth",
+			"Credentials",
+			"Scope",
+		]);
+		expect(stdout).not.toMatch(/\bFile\b/);
+		expect(stdout).not.toMatch(/\bStorage\b/);
+		expect(stdout).toContain("credentials.json");
+		expect(stdout).not.toContain(resolve(dir, "credentials.json"));
+		expect(stdout).toContain("keyring");
+		const defaultRow = lines.find((line) => line.includes("DEFAULT"));
+		expect(defaultRow).toMatch(/oauth\s+credentials\.json\s+account/);
+	});
+
+	test("table shows an adopted credentials path as absolute", async () => {
+		const dir = makeConfigDir({ "credentials.json": OAUTH_FILE });
+		const outside = resolve(dir, "..", `neon-adopted-${process.pid}.json`);
+		writeFileSync(outside, API_KEY_FILE, { mode: 0o600 });
+		cleanups.push(() => rmSync(outside, { force: true }));
+		writeFileSync(
+			resolve(dir, "profiles.json"),
+			JSON.stringify({
+				version: 1,
+				profiles: {
+					DEFAULT: { credentials: "credentials.json" },
+					ci: { credentials: outside },
+				},
+			}),
+		);
+		const { code, stdout } = await runCli([
+			"profile",
+			"list",
+			"--config-dir",
+			dir,
+		]);
+
+		expect(code).toBe(0);
+		expect(stdout).toContain(outside);
+		expect(stdout).not.toMatch(/\.\.[/\\]/);
+	});
+
+	test("projects list does not start OAuth when a keyring pointer is unread", async () => {
+		const dir = makeConfigDir({
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { DEFAULT: { credentials: "keyring" } },
+			}),
+		});
+		const { code, stderr } = await runCli(
+			["projects", "list", "--config-dir", dir],
+			{ CI: "true" },
+		);
+
+		expect(code).toBe(1);
+		expect(stderr).toMatch(/OS keyring/);
+		expect(stderr).not.toContain("Cannot run interactive auth in CI");
 	});
 
 	test("a profile whose file is missing is listed as unavailable", async () => {
@@ -298,6 +421,7 @@ describe("profile list", () => {
 					name: "gone",
 					auth: "-",
 					file: "missing",
+					storage: "file",
 				}),
 			]),
 		);
@@ -347,14 +471,14 @@ describe("profile list", () => {
 		);
 		// The one credential error that used to be a dead end: it throws before the reader
 		// that appends a repair, so it had to grow its own.
-		expect(stderr).toContain("`neon profile create odd --force`");
+		expect(stderr).toContain("`neon profile create odd`");
 	});
 });
 
 describe("profile create", () => {
-	// Guarding before anything else matters here: without it, `create` on an existing profile
-	// would fall through to the browser sign-in and clobber a credential.
-	test("refuses to replace an existing profile without --force", async () => {
+	// Replacing is the default. In CI the browser path still cannot run, so the old
+	// credential survives a create that never reached a write.
+	test("create on an existing profile in CI does not revoke before it can replace", async () => {
 		const dir = makeConfigDir({
 			"credentials.json": OAUTH_FILE,
 			"credentials.work.json": API_KEY_FILE,
@@ -366,101 +490,86 @@ describe("profile create", () => {
 				},
 			}),
 		});
+		const before = readFileSync(
+			resolve(dir, "credentials.work.json"),
+			"utf8",
+		);
+		const { code, stderr } = await runCli(
+			["profile", "create", "work", "--config-dir", dir],
+			{ CI: "true" },
+		);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("cannot happen in CI");
+		expect(stderr).not.toContain("--force");
+		expect(
+			readFileSync(resolve(dir, "credentials.work.json"), "utf8"),
+		).toBe(before);
+	});
+
+	test("create --force says to drop it", async () => {
+		const dir = makeConfigDir({});
 		const { code, stderr } = await runCli([
 			"profile",
 			"create",
 			"work",
+			"--force",
 			"--config-dir",
 			dir,
 		]);
 
 		expect(code).toBe(1);
-		expect(stderr).toContain("already exists");
-		expect(stderr).toContain("--force");
+		expect(stderr).toContain("--force is no longer a flag");
+		expect(stderr).toContain("neon profile create work");
+		expect(stderr).toContain("Drop --force");
 	});
 
-	// What `--force` costs, before it is paid. Replacing a profile revokes the credential it
-	// holds, so a key this CLI minted dies wherever else it was pasted — and the message that
-	// said "replace its credential" described a local edit, which is the half a user would
-	// have agreed to.
-	test("says the key --force revokes, and names it", async () => {
+	test("create --keyring on a new profile does not warn about an unread item", async () => {
+		const dir = makeConfigDir({});
+		const { stderr } = await runCli(
+			["profile", "create", "fresh", "--keyring", "--config-dir", dir],
+			{ CI: "true" },
+		);
+		expect(stderr).not.toContain("Could not read the OS keyring");
+	});
+
+	test("create --keyring on a file OAuth profile in CI leaves the file", async () => {
 		const dir = makeConfigDir({
-			"credentials.work.json": JSON.stringify({
-				type: "api_key",
-				api_key: "napi_minted_here",
-				key_id: 4242,
-			}),
+			"credentials.work.json": OAUTH_FILE,
 			"profiles.json": JSON.stringify({
 				version: 1,
 				profiles: { work: { credentials: "credentials.work.json" } },
 			}),
 		});
-		const { code, stderr } = await runCli([
-			"profile",
-			"create",
-			"work",
-			"--config-dir",
-			dir,
-			"--api-key",
-			"napi_replacement",
-		]);
+		const { code, stderr } = await runCli(
+			["profile", "create", "work", "--keyring", "--config-dir", dir],
+			{ CI: "true" },
+		);
 
 		expect(code).toBe(1);
-		expect(stderr).toContain("id 4242");
-		expect(stderr).toContain("the key is revoked");
-		// The non-destructive alternative, since the user's goal is usually a working key.
-		expect(stderr).toContain("neon profile rotate-key work");
-	});
-
-	// A key we did not mint records no id, so it survives the replacement. Claiming otherwise
-	// in either direction is the problem: this one is warned about at `remove` too.
-	test("says a supplied key stays live either way", async () => {
-		const dir = makeConfigDir({
-			"credentials.work.json": API_KEY_FILE,
-			"profiles.json": JSON.stringify({
-				version: 1,
-				profiles: { work: { credentials: "credentials.work.json" } },
-			}),
-		});
-		const { code, stderr } = await runCli([
-			"profile",
-			"create",
-			"work",
-			"--config-dir",
-			dir,
-			"--api-key",
-			"napi_replacement",
-		]);
-
-		expect(code).toBe(1);
-		expect(stderr).toContain("stays live on the account either way");
-	});
-
-	test("says the session --force replaces is signed out", async () => {
-		const dir = makeConfigDir({
-			"credentials.json": OAUTH_FILE,
-			"profiles.json": JSON.stringify({
-				version: 1,
-				profiles: { DEFAULT: { credentials: "credentials.json" } },
-			}),
-		});
-		const { code, stderr } = await runCli([
-			"profile",
-			"create",
-			"DEFAULT",
-			"--config-dir",
-			dir,
-			"--api-key",
-			"napi_replacement",
-		]);
-
-		expect(code).toBe(1);
-		expect(stderr).toContain("holds a browser sign-in");
-		expect(stderr).toContain("signed out as part of the replacement");
+		expect(stderr).toContain("cannot happen in CI");
+		expect(existsSync(resolve(dir, "credentials.work.json"))).toBe(true);
 	});
 
 	// The no-flag form is what an agent tries first, and `authFlow` answered it with a bare
 	// "Cannot run interactive auth in CI" — true, and with no way forward from it.
+	test("a keyring pointer is an existing profile even when the item is unread", async () => {
+		const dir = makeConfigDir({
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { DEFAULT: { credentials: "keyring" } },
+			}),
+		});
+		const { code, stderr } = await runCli(
+			["profile", "create", "DEFAULT", "--config-dir", dir],
+			{ CI: "true" },
+		);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("cannot happen in CI");
+		expect(stderr).not.toContain("--force");
+	});
+
 	test("with no key in CI, says how to pass one instead", async () => {
 		const dir = makeConfigDir({});
 		const { code, stderr } = await runCli(
@@ -780,7 +889,6 @@ describe("replacing a profile is atomic", () => {
 			"work",
 			"--config-dir",
 			dir,
-			"--force",
 			"--api-key",
 			"napi_replacement",
 		]);
@@ -807,7 +915,7 @@ describe("replacing a profile is atomic", () => {
 		);
 
 		const { code, stderr } = await runCli(
-			["profile", "create", "work", "--config-dir", dir, "--force"],
+			["profile", "create", "work", "--config-dir", dir],
 			{ CI: "true" },
 		);
 
@@ -840,7 +948,8 @@ describe("profile rotate-key — what it refuses", () => {
 
 		expect(code).toBe(1);
 		expect(stderr).toContain("holds a browser sign-in");
-		expect(stderr).toContain("--mint --force");
+		expect(stderr).toContain("--mint");
+		expect(stderr).not.toContain("--force");
 	});
 });
 
@@ -886,12 +995,12 @@ describe("a damaged credentials file", () => {
 		]);
 
 		expect(code).toBe(1);
-		expect(stderr).toContain("`neon profile create work --force`");
+		expect(stderr).toContain("`neon profile create work`");
 		expect(stderr).not.toContain("<name>");
 	});
 
 	// The repair the error recommends has to actually run. Reading the outgoing credential
-	// fatally made `create --force` throw on the same file it was replacing, and left a
+	// fatally made `create` throw on the same file it was replacing, and left a
 	// malformed file unremovable through the CLI.
 	test("can still be removed, which the fatal read used to prevent", async () => {
 		const dir = makeConfigDir({
@@ -1088,7 +1197,6 @@ describe("a malformed profiles.json", () => {
 			"profile",
 			"create",
 			"work",
-			"--force",
 			"--config-dir",
 			dir,
 			"--api-key",
@@ -1130,18 +1238,16 @@ describe("a malformed profiles.json", () => {
 		).toBe(sentinel);
 	});
 
-	// DEFAULT is defined by the absence of metadata, so a broken file must not lock out the
-	// ordinary sign-in that repairs the situation.
-	test("does not block a DEFAULT sign-in", async () => {
+	test("blocks a DEFAULT sign-in", async () => {
 		const dir = makeConfigDir({ "profiles.json": BROKEN });
-		const { stderr } = await runCli(["auth", "--config-dir", dir], {
+		const { code, stderr } = await runCli(["auth", "--config-dir", dir], {
 			CI: "true",
 		});
 
-		// Reaches the CI guard, which is as far as a browser sign-in can get here — the point
-		// is that it is not the profiles-file refusal.
-		expect(stderr).toContain("Cannot run interactive auth in CI");
-		expect(stderr).not.toContain("could not be read as a profiles file");
+		expect(code).toBe(1);
+		expect(stderr).toContain("could not be read as a profiles file");
+		expect(stderr).not.toContain("Cannot run interactive auth in CI");
+		expect(stderr).not.toContain("Awaiting authentication");
 	});
 
 	// It is the only record of where each account's credentials live, and `create` used to
@@ -1242,64 +1348,100 @@ describe("a malformed profiles.json", () => {
 		]);
 
 		expect(code).toBe(1);
-		expect(stderr).toContain('profile "work" has no `credentials` path');
+		expect(stderr).toContain('profile "work" has no `credentials` pointer');
 	});
 });
 
 describe("neon init and profile selection", () => {
-	// Checking only the flag left the case that is easier to hit by accident: a profile
-	// exported once into a shell, then disregarded by every `neon init` run in it.
-	test("NEON_PROFILE is refused, not silently ignored", async () => {
-		const dir = makeConfigDir({
-			"credentials.json": OAUTH_FILE,
-			"credentials.work.json": API_KEY_FILE,
-			"profiles.json": JSON.stringify({
-				version: 1,
-				profiles: {
-					DEFAULT: { credentials: "credentials.json" },
-					work: { credentials: "credentials.work.json" },
-				},
-			}),
-		});
-		const { code, stderr } = await runCli(["init", "--config-dir", dir], {
-			NEON_PROFILE: "work",
-		});
+	const WORK_PROFILES = {
+		"credentials.json": OAUTH_FILE,
+		"credentials.work.json": API_KEY_FILE,
+		"profiles.json": JSON.stringify({
+			version: 1,
+			profiles: {
+				DEFAULT: { credentials: "credentials.json" },
+				work: { credentials: "credentials.work.json" },
+			},
+		}),
+	};
 
-		expect(code).toBe(1);
-		expect(stderr).toContain("NEON_PROFILE");
-		expect(stderr).toContain("work");
+	// The `setup` step returns an `agent_check` whose `reportBack.command` is the
+	// next `neon init --agent` invocation. That command is where profile/config-dir
+	// flags must be threaded, so the agent stays on the selected profile as the flow
+	// chains back into the CLI.
+	const reportBackCommand = (stdout: string): string => {
+		const parsed = JSON.parse(stdout) as {
+			nextAction: { reportBack: { command: string } };
+		};
+		return parsed.nextAction.reportBack.command;
+	};
+
+	test("--profile work is threaded onto the chained command", async () => {
+		const dir = makeConfigDir(WORK_PROFILES);
+		const { code, stdout, stderr } = await runCli(
+			[
+				"init",
+				"--agent",
+				"--data",
+				JSON.stringify({ step: "setup" }),
+				"--profile",
+				"work",
+			],
+			{ NEON_CONFIG_DIR: dir },
+		);
+
+		expect(code).toBe(0);
+		expect(stderr).not.toContain("does not support profile selection");
+		expect(reportBackCommand(stdout)).toContain("--profile work");
 	});
 
-	// The profile has to exist, or credential selection rejects the name first and `init`'s own
-	// refusal is never reached — which is what this case was accidentally asserting before.
-	test("--profile is refused too", async () => {
-		const dir = makeConfigDir({
-			"credentials.json": OAUTH_FILE,
-			"credentials.work.json": API_KEY_FILE,
-			"profiles.json": JSON.stringify({
-				version: 1,
-				profiles: {
-					DEFAULT: { credentials: "credentials.json" },
-					work: { credentials: "credentials.work.json" },
-				},
-			}),
-		});
-		const { code, stderr } = await runCli([
+	test("NEON_PROFILE=work is the same as the flag", async () => {
+		const dir = makeConfigDir(WORK_PROFILES);
+		const { code, stdout } = await runCli(
+			["init", "--agent", "--data", JSON.stringify({ step: "setup" })],
+			{ NEON_CONFIG_DIR: dir, NEON_PROFILE: "work" },
+		);
+
+		expect(code).toBe(0);
+		expect(reportBackCommand(stdout)).toContain("--profile work");
+	});
+
+	test("explicit --profile DEFAULT is on the commands an agent is told to run", async () => {
+		const dir = makeConfigDir(WORK_PROFILES);
+		const { code, stdout } = await runCli(
+			[
+				"init",
+				"--agent",
+				"--data",
+				JSON.stringify({ step: "setup" }),
+				"--profile",
+				"DEFAULT",
+			],
+			{ NEON_CONFIG_DIR: dir },
+		);
+
+		expect(code).toBe(0);
+		expect(reportBackCommand(stdout)).toContain("--profile DEFAULT");
+	});
+
+	test("--profile work --config-dir uses that directory, not the default", async () => {
+		const dir = makeConfigDir(WORK_PROFILES);
+		const { code, stdout, stderr } = await runCli([
 			"init",
-			"--config-dir",
-			dir,
+			"--agent",
+			"--data",
+			JSON.stringify({ step: "setup" }),
 			"--profile",
 			"work",
+			"--config-dir",
+			dir,
 		]);
 
-		expect(code).toBe(1);
-		expect(stderr).toContain("does not support profile selection yet");
-		// Both spellings of "how this profile got selected" have to read as English. The
-		// flag branch was a bare "--profile", so the sentence started with no verb:
-		// "--profile `neon init` would run as the default account instead of …".
-		expect(stderr).toContain(
-			"--profile was passed, so `neon init` would run",
-		);
+		expect(code).toBe(0);
+		expect(stderr).not.toContain("Unknown profile");
+		const command = reportBackCommand(stdout);
+		expect(command).toContain("--profile work");
+		expect(command).toContain(`--config-dir '${dir}'`);
 	});
 });
 
@@ -1384,6 +1526,107 @@ describe("profile remove", () => {
 		expect(stderr).toContain("Pass --yes");
 		expect(existsSync(resolve(dir, "credentials.work.json"))).toBe(true);
 	});
+
+	test("an unread keyring profile is removed and warns about a leftover", async () => {
+		const dir = makeConfigDir({
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { work: { credentials: "keyring" } },
+			}),
+		});
+		const { code, stderr } = await runCli([
+			"profile",
+			"remove",
+			"work",
+			"--yes",
+			"--config-dir",
+			dir,
+		]);
+
+		expect(code).toBe(0);
+		expect(stderr).toMatch(
+			/leftover may still be in the OS store|cannot delete the OS keyring item/i,
+		);
+		expect(stderr).toContain("com.neon.neon-cli");
+		expect(stderr).not.toContain("neon auth --profile work");
+		expect(existsSync(resolve(dir, "profiles.json"))).toBe(false);
+	});
+
+	test("remove of keyring DEFAULT deletes an ignored credentials.json", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": OAUTH_FILE,
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: { DEFAULT: { credentials: "keyring" } },
+			}),
+		});
+		const { code } = await runCli([
+			"profile",
+			"remove",
+			"DEFAULT",
+			"--yes",
+			"--config-dir",
+			dir,
+		]);
+
+		expect(code).toBe(0);
+		expect(existsSync(resolve(dir, "credentials.json"))).toBe(false);
+		expect(existsSync(resolve(dir, "profiles.json"))).toBe(false);
+	});
+
+	test("remove of keyring DEFAULT leaves a credentials.json another profile uses", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": OAUTH_FILE,
+			"profiles.json": JSON.stringify({
+				version: 1,
+				profiles: {
+					DEFAULT: { credentials: "keyring" },
+					work: { credentials: "credentials.json" },
+				},
+			}),
+		});
+		const { code } = await runCli([
+			"profile",
+			"remove",
+			"DEFAULT",
+			"--yes",
+			"--config-dir",
+			dir,
+		]);
+
+		expect(code).toBe(0);
+		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
+		expect(existsSync(resolve(dir, "profiles.json"))).toBe(true);
+	});
+
+	test("remove names the leftover keyring account from the legacy profiles directory", async () => {
+		const xdg = mkdtempSync(join(tmpdir(), "neon-xdg-"));
+		cleanups.push(() => rmSync(xdg, { recursive: true, force: true }));
+		const legacyDir = join(xdg, "neonctl");
+		mkdirSync(legacyDir, { recursive: true });
+		writeFileSync(
+			join(legacyDir, "profiles.json"),
+			JSON.stringify({
+				version: 1,
+				profiles: { work: { credentials: "keyring" } },
+			}),
+			{ mode: 0o600 },
+		);
+		const { code, stderr } = await runCli(
+			["profile", "remove", "work", "--yes"],
+			{ XDG_CONFIG_HOME: xdg },
+		);
+
+		expect(code).toBe(0);
+		expect(stderr).toContain(
+			`cli:${createHash("sha256").update(resolve(legacyDir)).digest("hex")}:work`,
+		);
+		expect(stderr).not.toContain(
+			`cli:${createHash("sha256")
+				.update(resolve(join(xdg, "neon")))
+				.digest("hex")}:work`,
+		);
+	});
 });
 
 describe("profile rotate-key", () => {
@@ -1404,7 +1647,59 @@ describe("profile rotate-key", () => {
 
 		expect(code).toBe(1);
 		expect(stderr).toContain("no usable credential");
-		expect(stderr).toContain("neon profile create work --mint --force");
+		expect(stderr).toContain("neon profile create work --mint");
+		expect(stderr).not.toContain("--force");
+	});
+});
+
+describe("profile commands that do not exist", () => {
+	test("profile storage is not a command", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": API_KEY_FILE,
+		});
+		const { code, stderr } = await runCli([
+			"profile",
+			"storage",
+			"--config-dir",
+			dir,
+		]);
+		expect(code).toBe(1);
+		expect(stderr).not.toContain("credStorage");
+		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
+	});
+
+	test("profile mv is not a command", async () => {
+		const dir = makeConfigDir({
+			"credentials.json": API_KEY_FILE,
+		});
+		const { code, stderr } = await runCli([
+			"profile",
+			"mv",
+			"--config-dir",
+			dir,
+		]);
+		expect(code).toBe(1);
+		expect(stderr).toMatch(/Unknown (argument|command)/i);
+		expect(existsSync(resolve(dir, "credentials.json"))).toBe(true);
+	});
+});
+
+describe("--api-key skips stored credential config", () => {
+	test("an invalid config.json does not break --api-key", async () => {
+		const dir = makeConfigDir({
+			"config.json": '{"credStorage":napi_LEAKED',
+		});
+		const { code, stderr } = await runCli([
+			"me",
+			"--config-dir",
+			dir,
+			"--api-key",
+			"napi_flag_only",
+		]);
+		// The unreachable host proves config parsing completed without exposing the secret.
+		expect(stderr).not.toContain("napi_LEAKED");
+		expect(stderr).not.toContain("not valid JSON");
+		expect(code).not.toBe(0);
 	});
 });
 

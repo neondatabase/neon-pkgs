@@ -66,6 +66,7 @@ package's file before changing it:
 | Package | Notes |
 | --- | --- |
 | [`@neon/env`](./packages/env/CONTRIBUTING.md) | Why the credential-reuse half lives in `internals/env-core` rather than on the published surface, and the branch-credential rules |
+| [`neon` CLI](./packages/cli/CONTRIBUTING.md) | Human `-o table` output: no boxes, TTY-aware columns |
 
 ## Testing
 

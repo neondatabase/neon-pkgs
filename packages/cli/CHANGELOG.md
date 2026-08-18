@@ -1,5 +1,57 @@
 # neon
 
+## 3.6.0
+
+### Minor Changes
+
+- 23740cd: `neon` list and get commands no longer draw box-drawing tables. Default output is space-padded columns that drop and truncate to the terminal width, or stacked `Label  value` lines for a single object. `--output json` and `--output yaml` keep the same fields; `neon profile list` reports OAuth scope as `account` in every format.
+- e78f193: `neon init` honors `--profile` and `NEON_PROFILE`. `npx neon` subprocesses and agent-emitted commands include `--profile <name>` when a profile was named, and `--config-dir` when you passed it.
+
+## 3.5.1
+
+### Patch Changes
+
+- Updated dependencies [5c57d00]
+  - @neon/sdk@2.1.0
+  - @neon/config@1.0.1
+  - @neon/config-runtime@1.0.1
+
+## 3.5.0
+
+### Minor Changes
+
+- 745c267: `neon init` installs the Neon MCP server through add-mcp's library and offers every agent add-mcp supports. Skills still use a fixed map from those agent ids; agents with no skills CLI id are skipped instead of falling back to Cursor.
+
+## 3.4.0
+
+### Minor Changes
+
+- 5abe208: `neon inspect db` without `--database-name` now runs each database-scoped check against every database the API lists for the branch and adds a `database` column, including on a branch that has only one database. That column is new on the default invocation. Compute-wide checks still run once and keep their previous columns. Pass `--database-name` to keep the previous columns on a database-scoped check. `locks` and `long-running-queries` also report only the database you name with the flag; they previously listed sessions from every database, and `locks` printed an empty or wrong relation name for those foreign rows.
+
+## 3.3.0
+
+### Minor Changes
+
+- 0b37ad5: Opt-in OS keyring storage for a CLI profile via a `"keyring"` pointer in `profiles.json`. `neon profile create` no longer takes `--force`: creating an existing name replaces it and revokes the credential it held.
+
+## 3.2.2
+
+### Patch Changes
+
+- e8715cd: `neon init --agent` labels the CLI install step `neon`, and the README says init installs `neon` globally. `npm i -g neon` only puts `neon` on PATH.
+
+## 3.2.1
+
+### Patch Changes
+
+- ad7cf9a: `neon init` now detects and installs the `neon` CLI instead of the retired `neonctl` alias. Version probing checks `neon` first (falling back to `neonctl` so an existing global install still counts as installed), the update check reads `npm view neon`, and auth/context lookups shell out to `neon`.
+
+## 3.2.0
+
+### Minor Changes
+
+- 998728b: Add `neon open` to open the project linked in `.neon` in the Neon Console.
+
 ## 3.1.1
 
 ### Patch Changes

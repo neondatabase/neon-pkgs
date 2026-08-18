@@ -191,7 +191,7 @@ export const handler = async (
 		host = endpoint.host.replace(endpoint.id, endpoint.branch_id);
 	}
 	const connectionString = new URL(`postgresql://${host}`);
-	connectionString.pathname = database;
+	connectionString.pathname = `/${encodeURIComponent(database)}`;
 	connectionString.username = role;
 	connectionString.password = password;
 

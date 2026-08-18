@@ -277,13 +277,8 @@ const create = async (props: CreateProps) => {
 };
 
 /**
- * Print the issued key.
- *
- * In a terminal the secret goes on its own line rather than into a table cell: `cli-table`
- * neither wraps nor truncates, so a 50-odd character key makes the row wider than most
- * terminals and the wrapped remainder ends up beside box-drawing characters. Since this is
- * the only time the key is ever shown, it has to be selectable in one gesture. Structured
- * output keeps the key in the object, where a script expects it.
+ * The key is shown only once, so human output keeps it on a selectable line.
+ * Structured output keeps it in the object for scripts.
  */
 const report = (
 	props: CommonProps,
@@ -305,8 +300,7 @@ const report = (
 			title: "API key",
 		});
 		out.end();
-		// Blank line so the key is visually detached from the table border, and so
-		// `| tail -1` on stdout yields exactly the key (both notices go to stderr).
+		// The key stays last on stdout for `tail -1`; notices use stderr.
 		out.text(`\n${data.key}\n`);
 	} else {
 		out.write(data as never, { fields: fields as never, title: "API key" });

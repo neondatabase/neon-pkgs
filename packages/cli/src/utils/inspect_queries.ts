@@ -18,18 +18,25 @@ export type InspectQuery = {
 	fields: readonly string[];
 	/** Friendly message when the result set is empty (table output only). */
 	emptyMessage?: string;
+	emptyMessageAll?: string;
 	/**
 	 * Postgres extension the query needs (e.g. `pg_stat_statements`). When set,
 	 * the runner verifies the extension is installed first and fails with an
 	 * actionable "enable it with CREATE EXTENSION …" message if it isn't.
 	 */
 	requiresExtension?: string;
+	/**
+	 * Database catalogs differ, while compute-wide views return the same rows
+	 * from every database.
+	 */
+	scope: "database" | "compute";
 };
 
 export const INSPECT_QUERIES = {
 	"table-sizes": {
 		describe:
 			"Size of each table (including TOAST), largest first (pg_table_size)",
+		scope: "database",
 		fields: ["schema", "name", "size"],
 		emptyMessage: "No user tables found.",
 		sql: /* sql */ `
@@ -47,6 +54,7 @@ export const INSPECT_QUERIES = {
 	},
 	"index-sizes": {
 		describe: "Size of each index, largest first (pg_relation_size)",
+		scope: "database",
 		fields: ["schema", "name", "size"],
 		emptyMessage: "No indexes found.",
 		sql: /* sql */ `
@@ -65,6 +73,7 @@ export const INSPECT_QUERIES = {
 	"unused-indexes": {
 		describe:
 			"Non-unique indexes with few scans — candidates for removal (pg_stat_user_indexes)",
+		scope: "database",
 		fields: ["table", "index", "index_size", "index_scans"],
 		emptyMessage: "No unused indexes detected.",
 		sql: /* sql */ `
@@ -84,6 +93,7 @@ export const INSPECT_QUERIES = {
 	"seq-scans": {
 		describe:
 			"Number of sequential scans recorded against each table (pg_stat_user_tables)",
+		scope: "database",
 		fields: ["schema", "name", "count"],
 		emptyMessage: "No user tables found.",
 		sql: /* sql */ `
@@ -97,8 +107,12 @@ export const INSPECT_QUERIES = {
 	},
 	"long-running-queries": {
 		describe: "Queries running longer than 5 minutes (pg_stat_activity)",
+		scope: "database",
 		fields: ["pid", "duration", "state", "query"],
-		emptyMessage: "No long-running queries.",
+		emptyMessage: "No long-running queries in this database.",
+		emptyMessageAll: "No long-running queries in any database.",
+		// `pg_stat_activity` spans the compute, so unfiltered rows may belong to
+		// another database.
 		sql: /* sql */ `
 			SELECT
 				pid,
@@ -106,7 +120,8 @@ export const INSPECT_QUERIES = {
 				state,
 				query
 			FROM pg_stat_activity
-			WHERE state <> 'idle'
+			WHERE datname = current_database()
+				AND state <> 'idle'
 				AND query NOT ILIKE '%pg_stat_activity%'
 				AND now() - query_start > interval '5 minutes'
 			ORDER BY now() - query_start DESC;
@@ -115,6 +130,7 @@ export const INSPECT_QUERIES = {
 	locks: {
 		describe:
 			"Locks held with the acquiring query and its age (pg_locks + pg_stat_activity)",
+		scope: "database",
 		fields: [
 			"pid",
 			"relname",
@@ -124,7 +140,11 @@ export const INSPECT_QUERIES = {
 			"age",
 			"query",
 		],
-		emptyMessage: "No locks held.",
+		emptyMessage: "No locks held in this database.",
+		emptyMessageAll: "No locks held in any database.",
+		// Filter by the holding session: relation OIDs are database-local, while
+		// filtering on `l.database` would drop database-less `transactionid` and
+		// `virtualxid` locks.
 		sql: /* sql */ `
 			SELECT
 				a.pid,
@@ -137,7 +157,8 @@ export const INSPECT_QUERIES = {
 			FROM pg_locks l
 			JOIN pg_stat_activity a ON a.pid = l.pid
 			LEFT JOIN pg_class c ON c.oid = l.relation
-			WHERE a.query <> '<insufficient privilege>'
+			WHERE a.datname = current_database()
+				AND a.query <> '<insufficient privilege>'
 				AND l.pid <> pg_backend_pid()
 			ORDER BY a.query_start;
 		`,
@@ -145,6 +166,7 @@ export const INSPECT_QUERIES = {
 	outliers: {
 		describe:
 			"Queries taking the most cumulative execution time (needs pg_stat_statements)",
+		scope: "database",
 		fields: ["total_exec_time", "prop_exec_time", "ncalls", "query"],
 		emptyMessage: "No statements recorded yet.",
 		requiresExtension: "pg_stat_statements",
@@ -166,6 +188,7 @@ export const INSPECT_QUERIES = {
 	},
 	calls: {
 		describe: "Most frequently called queries (needs pg_stat_statements)",
+		scope: "database",
 		fields: ["ncalls", "total_exec_time", "prop_exec_time", "query"],
 		emptyMessage: "No statements recorded yet.",
 		requiresExtension: "pg_stat_statements",
@@ -186,7 +209,9 @@ export const INSPECT_QUERIES = {
 		`,
 	},
 	"lfc-hit-rate": {
-		describe: "Local File Cache hit rate (needs neon extension)",
+		describe:
+			"Local File Cache hit rate (compute-wide, needs neon extension)",
+		scope: "compute",
 		fields: ["name", "ratio"],
 		emptyMessage: "No LFC stats available.",
 		requiresExtension: "neon",
@@ -211,7 +236,9 @@ export const INSPECT_QUERIES = {
 		`,
 	},
 	"working-set": {
-		describe: "Estimated working set vs LFC size (needs neon extension)",
+		describe:
+			"Estimated working set vs LFC size (compute-wide, needs neon extension)",
+		scope: "compute",
 		fields: ["window", "working_set", "lfc_size", "exceeds_lfc"],
 		emptyMessage: "No working-set estimate available.",
 		requiresExtension: "neon",
@@ -239,6 +266,7 @@ export const INSPECT_QUERIES = {
 	"vacuum-stats": {
 		describe:
 			"Autovacuum status per table: last (auto)vacuum, dead tuples, threshold",
+		scope: "database",
 		fields: [
 			"schema",
 			"table",
@@ -274,6 +302,7 @@ export const INSPECT_QUERIES = {
 	bloat: {
 		describe:
 			"Estimated table/index bloat (statistical estimate, no extension needed)",
+		scope: "database",
 		fields: ["type", "schema", "object_name", "bloat", "waste"],
 		emptyMessage: "No bloat estimate available.",
 		sql: /* sql */ `
@@ -329,7 +358,8 @@ export const INSPECT_QUERIES = {
 	},
 	"replication-slots": {
 		describe:
-			"Replication slots: kind, status, client, restart/confirmed-flush LSNs, and lag (pg_replication_slots + pg_stat_replication)",
+			"Replication slots (compute-wide): kind, status, client, restart/confirmed-flush LSNs, and lag (pg_replication_slots + pg_stat_replication)",
+		scope: "compute",
 		fields: [
 			"slot_name",
 			"slot_type",
@@ -376,8 +406,10 @@ export const INSPECT_QUERIES = {
 	subscriptions: {
 		describe:
 			"Per-table logical replication progress on this subscriber (pg_subscription_rel)",
+		scope: "database",
 		fields: ["subscription", "table_name", "status", "lsn"],
 		emptyMessage: "No subscriptions found on this database.",
+		emptyMessageAll: "No subscriptions found on any database.",
 		sql: /* sql */ `
 			SELECT
 				sub.subname AS subscription,

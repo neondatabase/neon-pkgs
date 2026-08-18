@@ -4,6 +4,14 @@ vi.mock("../auth.js", () => ({
 	isAuthenticated: vi.fn(),
 }));
 
+const mockInstallMcp = vi.fn().mockReturnValue({
+	ok: true,
+	path: "/tmp/mcp.json",
+});
+vi.mock("../install_mcp.js", () => ({
+	installNeonMcpServer: (...args: unknown[]) => mockInstallMcp(...args),
+}));
+
 import { isAuthenticated } from "../auth.js";
 import { handleMcpPhase } from "./mcp.js";
 
@@ -12,6 +20,10 @@ const mockIsAuthenticated = vi.mocked(isAuthenticated);
 describe("handleMcpPhase", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		mockInstallMcp.mockReturnValue({
+			ok: true,
+			path: "/tmp/mcp.json",
+		});
 	});
 
 	test("asks agent to detect MCP by default", async () => {
@@ -42,6 +54,22 @@ describe("handleMcpPhase", () => {
 		}
 	});
 
+	test("omits project scope when the agent has no project MCP path", async () => {
+		const result = await handleMcpPhase({
+			agent: "windsurf",
+			mcpConfigured: false,
+		});
+
+		expect(result.nextAction.type).toBe("ask_user");
+		if (result.nextAction.type === "ask_user") {
+			const values = result.nextAction.options.map((option) =>
+				typeof option === "string" ? option : option.value,
+			);
+			expect(values).toContain("defaults");
+			expect(values).not.toContain("project_scope");
+		}
+	});
+
 	test("asks user to install when mcp-configured is false", async () => {
 		const result = await handleMcpPhase({
 			agent: "claude",
@@ -58,7 +86,56 @@ describe("handleMcpPhase", () => {
 		}
 	});
 
-	test("--install returns run_command when authenticated", async () => {
+	test("--install with project scope offers global when the agent cannot write it", async () => {
+		mockIsAuthenticated.mockResolvedValue(true);
+		mockInstallMcp.mockReturnValue({
+			ok: false,
+			unsupported: true,
+			error: "Windsurf does not support project-level MCP config.",
+		});
+
+		const result = await handleMcpPhase({
+			agent: "windsurf",
+			install: true,
+			scope: "project",
+		});
+
+		expect(result.status).toBe("unsupported");
+		expect(result.nextAction.type).toBe("ask_user");
+		if (result.nextAction.type === "ask_user") {
+			expect(result.nextAction.question).toContain("globally");
+			expect(result.nextAction.responseMapping).toHaveProperty("global");
+			expect(result.nextAction.responseMapping).toHaveProperty("skip");
+			const global = result.nextAction.responseMapping.global;
+			if ("args" in global) {
+				expect(global.args).toContain("--install");
+				expect(global.args).not.toContain("project");
+			}
+		}
+	});
+
+	test("--install with project scope does not offer global when HTTP is also unsupported", async () => {
+		mockIsAuthenticated.mockResolvedValue(true);
+		mockInstallMcp.mockReturnValue({
+			ok: false,
+			unsupported: true,
+			error: "Claude Desktop only supports local (stdio) servers via its config file. Add remote servers through Settings → Connectors in the app instead.",
+		});
+
+		const result = await handleMcpPhase({
+			agent: "claude-desktop",
+			install: true,
+			scope: "project",
+		});
+
+		expect(result.status).toBe("unsupported");
+		expect(result.nextAction.type).toBe("run_neon_init");
+		if (result.nextAction.type === "run_neon_init") {
+			expect(result.nextAction.args).toContain("skills");
+		}
+	});
+
+	test("--install writes MCP in-process and chains to skills", async () => {
 		mockIsAuthenticated.mockResolvedValue(true);
 
 		const result = await handleMcpPhase({
@@ -66,14 +143,48 @@ describe("handleMcpPhase", () => {
 			install: true,
 		});
 
-		expect(result.status).toBe("installing");
-		expect(result.nextAction.type).toBe("run_command");
-		if (result.nextAction.type === "run_command") {
-			expect(result.nextAction.command).toContain("add-mcp");
-			expect(result.nextAction.command).toContain("mcp.neon.tech");
-			// After install, should chain to skills, not loop back to MCP
-			expect(result.nextAction.onSuccess.args).toContain("skills");
-			expect(result.nextAction.onSuccess.args).toContain("--install");
+		expect(result.status).toBe("installed");
+		expect(mockInstallMcp).toHaveBeenCalledWith(
+			expect.objectContaining({
+				agent: "claude-code",
+				scope: "global",
+			}),
+		);
+		expect(result.nextAction.type).toBe("run_neon_init");
+		if (result.nextAction.type === "run_neon_init") {
+			expect(result.nextAction.args).toContain("skills");
+			expect(result.nextAction.args).toContain("--install");
+		}
+	});
+
+	test("--install chains grok-build to skills", async () => {
+		mockIsAuthenticated.mockResolvedValue(true);
+
+		const result = await handleMcpPhase({
+			agent: "grok-build",
+			install: true,
+		});
+
+		expect(result.status).toBe("installed");
+		expect(result.nextAction.type).toBe("run_neon_init");
+		if (result.nextAction.type === "run_neon_init") {
+			expect(result.nextAction.args).toContain("skills");
+			expect(result.nextAction.args).toContain("--install");
+		}
+	});
+
+	test("--install skips skills when the agent has no skills target", async () => {
+		mockIsAuthenticated.mockResolvedValue(true);
+
+		const result = await handleMcpPhase({
+			agent: "mcporter",
+			install: true,
+		});
+
+		expect(result.status).toBe("installed");
+		expect(result.nextAction.type).toBe("run_neon_init");
+		if (result.nextAction.type === "run_neon_init") {
+			expect(result.nextAction.args).not.toContain("skills");
 		}
 	});
 

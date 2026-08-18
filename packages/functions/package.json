@@ -1,7 +1,7 @@
 {
 	"name": "@neon/functions",
-	"version": "0.7.0",
-	"description": "Runtime helpers for Neon Functions: `waitUntil` for deferring async work past a response, and `upgradeWebSocket` for serving WebSockets from a fetch handler.",
+	"version": "0.8.0",
+	"description": "Runtime helpers for Neon Functions: `waitUntil` for deferring async work past a response, `upgradeWebSocket` for serving WebSockets from a fetch handler, and `attachDatabasePool` for node-postgres idle-client errors.",
 	"keywords": [
 		"neon",
 		"database",

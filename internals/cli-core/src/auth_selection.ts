@@ -58,9 +58,6 @@ export type SelectionInput = {
 };
 
 /**
- * What the four credential inputs were for this invocation, captured by
- * `resolveApiKeyFromEnv` — which is the one place that reads the environment.
- *
  * Two reasons this is module state rather than fields on the parsed arguments, the same two
  * that put `auth_context` here: an extra key on `args` is rejected by every command calling
  * `.strict()`, and a hidden option to carry it would be a second undocumented way to pass a
@@ -75,12 +72,16 @@ export type CredentialInputs = {
 	apiKeyFlag: string;
 	apiKeyEnv: string;
 	profileEnv: string;
+	profileFlag: string;
+	configDir: string;
 };
 
 const NO_INPUTS: CredentialInputs = {
 	apiKeyFlag: "",
 	apiKeyEnv: "",
 	profileEnv: "",
+	profileFlag: "",
+	configDir: "",
 };
 
 let inputs: CredentialInputs = NO_INPUTS;

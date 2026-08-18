@@ -35,17 +35,15 @@ invocation_url: https://srcfile.functions.neon.tech
 `;
 
 exports[`functions > deploy --wait exits 1 when the deployment fails 1`] = `
-"┌────┬────────┬──────────────────────────────────────┬──────────┬────────────┬──────────────────────┐
-│ Id │ Status │ Invocation Url                       │ Runtime  │ Memory Mib │ Created At           │
-├────┼────────┼──────────────────────────────────────┼──────────┼────────────┼──────────────────────┤
-│ 1  │ failed │ https://failfunc.functions.neon.tech │ nodejs24 │ 256        │ 2026-06-03T00:00:00Z │
-└────┴────────┴──────────────────────────────────────┴──────────┴────────────┴──────────────────────┘
+"Id              1
+Status          failed
+Invocation Url  https://failfunc.functions.neon.tech
+Runtime         nodejs24
+Memory Mib      256
+Created At      2026-06-03T00:00:00Z
+
 deployment error
-┌──────────────────────────────────────────────┐
-│ Reason                                       │
-├──────────────────────────────────────────────┤
-│ Build failed: cannot resolve module left-pad │
-└──────────────────────────────────────────────┘
+Reason  Build failed: cannot resolve module left-pad
 "
 `;
 
@@ -143,77 +141,75 @@ exports[`functions > deploy requires at least one option 1`] = `""`;
 
 exports[`functions > get (table) 1`] = `
 "function
-┌─────────┬─────────┬─────────────────────────────────────┬──────────────────────┐
-│ Slug    │ Name    │ Invocation Url                      │ Created At           │
-├─────────┼─────────┼─────────────────────────────────────┼──────────────────────┤
-│ my-func │ My Func │ https://my-func.functions.neon.tech │ 2026-06-03T00:00:00Z │
-└─────────┴─────────┴─────────────────────────────────────┴──────────────────────┘
+Slug            my-func
+Name            My Func
+Invocation Url  https://my-func.functions.neon.tech
+Created At      2026-06-03T00:00:00Z
+
 deployment (current, active)
-┌────┬───────────┬──────────┬────────────┬──────────────────────┐
-│ Id │ Status    │ Runtime  │ Memory Mib │ Created At           │
-├────┼───────────┼──────────┼────────────┼──────────────────────┤
-│ 1  │ completed │ nodejs24 │ 256        │ 2026-06-03T00:00:00Z │
-└────┴───────────┴──────────┴────────────┴──────────────────────┘
+Id          1
+Status      completed
+Runtime     nodejs24
+Memory Mib  256
+Created At  2026-06-03T00:00:00Z
 "
 `;
 
 exports[`functions > get (table) shows plain failed status when there is no error 1`] = `
 "function
-┌─────────────┬─────────────┬─────────────────────────────────────────┬──────────────────────┐
-│ Slug        │ Name        │ Invocation Url                          │ Created At           │
-├─────────────┼─────────────┼─────────────────────────────────────────┼──────────────────────┤
-│ failednoerr │ Failednoerr │ https://failednoerr.functions.neon.tech │ 2026-06-03T00:00:00Z │
-└─────────────┴─────────────┴─────────────────────────────────────────┴──────────────────────┘
+Slug            failednoerr
+Name            Failednoerr
+Invocation Url  https://failednoerr.functions.neon.tech
+Created At      2026-06-03T00:00:00Z
+
 current deployment
-┌────┬────────┬──────────┬────────────┬──────────────────────┐
-│ Id │ Status │ Runtime  │ Memory Mib │ Created At           │
-├────┼────────┼──────────┼────────────┼──────────────────────┤
-│ 2  │ failed │ nodejs24 │ 256        │ 2026-06-03T00:00:00Z │
-└────┴────────┴──────────┴────────────┴──────────────────────┘
+Id          2
+Status      failed
+Runtime     nodejs24
+Memory Mib  256
+Created At  2026-06-03T00:00:00Z
 "
 `;
 
 exports[`functions > get (table) shows the build failure reason 1`] = `
 "function
-┌────────────┬────────────┬────────────────────────────────────────┬──────────────────────┐
-│ Slug       │ Name       │ Invocation Url                         │ Created At           │
-├────────────┼────────────┼────────────────────────────────────────┼──────────────────────┤
-│ brokenfunc │ Brokenfunc │ https://brokenfunc.functions.neon.tech │ 2026-06-03T00:00:00Z │
-└────────────┴────────────┴────────────────────────────────────────┴──────────────────────┘
+Slug            brokenfunc
+Name            Brokenfunc
+Invocation Url  https://brokenfunc.functions.neon.tech
+Created At      2026-06-03T00:00:00Z
+
 current deployment
-┌────┬────────┬──────────┬────────────┬──────────────────────┐
-│ Id │ Status │ Runtime  │ Memory Mib │ Created At           │
-├────┼────────┼──────────┼────────────┼──────────────────────┤
-│ 3  │ failed │ nodejs24 │ 256        │ 2026-06-03T00:00:00Z │
-└────┴────────┴──────────┴────────────┴──────────────────────┘
+Id          3
+Status      failed
+Runtime     nodejs24
+Memory Mib  256
+Created At  2026-06-03T00:00:00Z
+
 deployment error
-┌──────────────────────────────────────────────┐
-│ Reason                                       │
-├──────────────────────────────────────────────┤
-│ Build failed: cannot resolve module left-pad │
-└──────────────────────────────────────────────┘
+Reason  Build failed: cannot resolve module left-pad
+
 active deployment
-┌────┬───────────┬──────────┬────────────┬──────────────────────┐
-│ Id │ Status    │ Runtime  │ Memory Mib │ Created At           │
-├────┼───────────┼──────────┼────────────┼──────────────────────┤
-│ 2  │ completed │ nodejs24 │ 256        │ 2026-06-02T00:00:00Z │
-└────┴───────────┴──────────┴────────────┴──────────────────────┘
+Id          2
+Status      completed
+Runtime     nodejs24
+Memory Mib  256
+Created At  2026-06-02T00:00:00Z
 "
 `;
 
 exports[`functions > get (table) with only an active deployment (old server) 1`] = `
 "function
-┌────────────┬────────────┬────────────────────────────────────────┬──────────────────────┐
-│ Slug       │ Name       │ Invocation Url                         │ Created At           │
-├────────────┼────────────┼────────────────────────────────────────┼──────────────────────┤
-│ activeonly │ Activeonly │ https://activeonly.functions.neon.tech │ 2026-06-03T00:00:00Z │
-└────────────┴────────────┴────────────────────────────────────────┴──────────────────────┘
+Slug            activeonly
+Name            Activeonly
+Invocation Url  https://activeonly.functions.neon.tech
+Created At      2026-06-03T00:00:00Z
+
 active deployment
-┌────┬───────────┬──────────┬────────────┬──────────────────────┐
-│ Id │ Status    │ Runtime  │ Memory Mib │ Created At           │
-├────┼───────────┼──────────┼────────────┼──────────────────────┤
-│ 1  │ completed │ nodejs24 │ 256        │ 2026-06-03T00:00:00Z │
-└────┴───────────┴──────────┴────────────┴──────────────────────┘
+Id          1
+Status      completed
+Runtime     nodejs24
+Memory Mib  256
+Created At  2026-06-03T00:00:00Z
 "
 `;
 
@@ -316,35 +312,31 @@ active_deployment:
 
 exports[`functions > get --list-env-variables lists env variable names 1`] = `
 "function
-┌──────────┬──────────┬──────────────────────────────────────┬──────────────────────┐
-│ Slug     │ Name     │ Invocation Url                       │ Created At           │
-├──────────┼──────────┼──────────────────────────────────────┼──────────────────────┤
-│ envnames │ Envnames │ https://envnames.functions.neon.tech │ 2026-06-03T00:00:00Z │
-└──────────┴──────────┴──────────────────────────────────────┴──────────────────────┘
+Slug            envnames
+Name            Envnames
+Invocation Url  https://envnames.functions.neon.tech
+Created At      2026-06-03T00:00:00Z
+
 deployment (current, active)
-┌────┬───────────┬──────────┬────────────┬──────────────────────┐
-│ Id │ Status    │ Runtime  │ Memory Mib │ Created At           │
-├────┼───────────┼──────────┼────────────┼──────────────────────┤
-│ 1  │ completed │ nodejs24 │ 256        │ 2026-06-03T00:00:00Z │
-└────┴───────────┴──────────┴────────────┴──────────────────────┘
+Id          1
+Status      completed
+Runtime     nodejs24
+Memory Mib  256
+Created At  2026-06-03T00:00:00Z
+
 environment
-┌──────────────┐
-│ Name         │
-├──────────────┤
-│ DATABASE_URL │
-├──────────────┤
-│ LOG_LEVEL    │
-└──────────────┘
+Name
+DATABASE_URL
+LOG_LEVEL
 "
 `;
 
 exports[`functions > get --list-env-variables with no active deployment prints an empty message 1`] = `
 "function
-┌────────────┬────────────┬────────────────────────────────────────┬──────────────────────┐
-│ Slug       │ Name       │ Invocation Url                         │ Created At           │
-├────────────┼────────────┼────────────────────────────────────────┼──────────────────────┤
-│ other-func │ Other Func │ https://other-func.functions.neon.tech │ 2026-06-02T00:00:00Z │
-└────────────┴────────────┴────────────────────────────────────────┴──────────────────────┘
+Slug            other-func
+Name            Other Func
+Invocation Url  https://other-func.functions.neon.tech
+Created At      2026-06-02T00:00:00Z
 
 No environment variables on the active deployment.
 "
@@ -352,17 +344,17 @@ No environment variables on the active deployment.
 
 exports[`functions > get -E with no env variables prints an empty message 1`] = `
 "function
-┌─────────┬─────────┬─────────────────────────────────────┬──────────────────────┐
-│ Slug    │ Name    │ Invocation Url                      │ Created At           │
-├─────────┼─────────┼─────────────────────────────────────┼──────────────────────┤
-│ my-func │ My Func │ https://my-func.functions.neon.tech │ 2026-06-03T00:00:00Z │
-└─────────┴─────────┴─────────────────────────────────────┴──────────────────────┘
+Slug            my-func
+Name            My Func
+Invocation Url  https://my-func.functions.neon.tech
+Created At      2026-06-03T00:00:00Z
+
 deployment (current, active)
-┌────┬───────────┬──────────┬────────────┬──────────────────────┐
-│ Id │ Status    │ Runtime  │ Memory Mib │ Created At           │
-├────┼───────────┼──────────┼────────────┼──────────────────────┤
-│ 1  │ completed │ nodejs24 │ 256        │ 2026-06-03T00:00:00Z │
-└────┴───────────┴──────────┴────────────┴──────────────────────┘
+Id          1
+Status      completed
+Runtime     nodejs24
+Memory Mib  256
+Created At  2026-06-03T00:00:00Z
 
 No environment variables on the active deployment.
 "
@@ -370,22 +362,17 @@ No environment variables on the active deployment.
 
 exports[`functions > get with no active deployment 1`] = `
 "function
-┌────────────┬────────────┬────────────────────────────────────────┬──────────────────────┐
-│ Slug       │ Name       │ Invocation Url                         │ Created At           │
-├────────────┼────────────┼────────────────────────────────────────┼──────────────────────┤
-│ other-func │ Other Func │ https://other-func.functions.neon.tech │ 2026-06-02T00:00:00Z │
-└────────────┴────────────┴────────────────────────────────────────┴──────────────────────┘
+Slug            other-func
+Name            Other Func
+Invocation Url  https://other-func.functions.neon.tech
+Created At      2026-06-02T00:00:00Z
 "
 `;
 
 exports[`functions > list (table) 1`] = `
-"┌────────────┬────────────┬───────────┬────────────────────────────────────────┬──────────────────────┐
-│ Slug       │ Name       │ Status    │ Invocation Url                         │ Created At           │
-├────────────┼────────────┼───────────┼────────────────────────────────────────┼──────────────────────┤
-│ my-func    │ My Func    │ completed │ https://my-func.functions.neon.tech    │ 2026-06-03T00:00:00Z │
-├────────────┼────────────┼───────────┼────────────────────────────────────────┼──────────────────────┤
-│ other-func │ Other Func │           │ https://other-func.functions.neon.tech │ 2026-06-02T00:00:00Z │
-└────────────┴────────────┴───────────┴────────────────────────────────────────┴──────────────────────┘
+"Slug        Name        Status     Invocation Url                          Created At
+my-func     My Func     completed  https://my-func.functions.neon.tech     2026-06-03T00:00:00Z
+other-func  Other Func             https://other-func.functions.neon.tech  2026-06-02T00:00:00Z
 "
 `;
 

@@ -1,5 +1,65 @@
 # neonctl
 
+## 3.6.0
+
+### Minor Changes
+
+- 23740cd: `neon` list and get commands no longer draw box-drawing tables. Default output is space-padded columns that drop and truncate to the terminal width, or stacked `Label  value` lines for a single object. `--output json` and `--output yaml` keep the same fields; `neon profile list` reports OAuth scope as `account` in every format.
+
+### Patch Changes
+
+- Updated dependencies [23740cd]
+- Updated dependencies [e78f193]
+  - neon@3.6.0
+
+## 3.5.1
+
+### Patch Changes
+
+- neon@3.5.1
+
+## 3.5.0
+
+### Patch Changes
+
+- Updated dependencies [745c267]
+  - neon@3.5.0
+
+## 3.4.0
+
+### Patch Changes
+
+- Updated dependencies [5abe208]
+  - neon@3.4.0
+
+## 3.3.0
+
+### Patch Changes
+
+- Updated dependencies [0b37ad5]
+  - neon@3.3.0
+
+## 3.2.2
+
+### Patch Changes
+
+- Updated dependencies [e8715cd]
+  - neon@3.2.2
+
+## 3.2.1
+
+### Patch Changes
+
+- Updated dependencies [ad7cf9a]
+  - neon@3.2.1
+
+## 3.2.0
+
+### Patch Changes
+
+- Updated dependencies [998728b]
+  - neon@3.2.0
+
 ## 3.1.1
 
 ### Patch Changes

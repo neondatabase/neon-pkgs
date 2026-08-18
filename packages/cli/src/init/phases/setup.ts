@@ -1,6 +1,6 @@
 import { unlink } from "node:fs/promises";
 import { execa } from "execa";
-import { resolveAddMcpAgentId } from "../agents.js";
+import { agentSupportsProjectMcp, resolveAddMcpAgentId } from "../agents.js";
 import {
 	detectIde,
 	isCursorInstalled,
@@ -9,6 +9,7 @@ import {
 import { findEditorCommand } from "../extension.js";
 import { handoffAction } from "../handoff.js";
 import { inspectProject } from "../inspect.js";
+import { installNeonMcpServer } from "../install_mcp.js";
 import { ensureNeonctl } from "../neonctl.js";
 import { ensureSkillsUpToDate } from "../skills.js";
 import type { Editor, PhaseResponse } from "../types.js";
@@ -370,19 +371,12 @@ async function executeBatchedInstallation(
 			status: "success",
 		});
 	} else {
-		const mcpArgs = [
-			"-y",
-			"add-mcp",
-			"https://mcp.neon.tech/mcp",
-			...(mcpScope === "global" ? ["-g"] : []),
-			"-n",
-			"Neon",
-			"-y",
-			"-a",
-			mcpAgentId,
-		];
-		try {
-			await execa("npx", mcpArgs, { stdio: "pipe", timeout: 60000 });
+		const installed = installNeonMcpServer({
+			agent: mcpAgentId,
+			scope: mcpScope === "project" ? "project" : "global",
+			cwd: process.cwd(),
+		});
+		if (installed.ok) {
 			results.push({
 				id: "install_mcp",
 				description: `Installed Neon MCP server (${mcpScope} scope)`,
@@ -413,12 +407,23 @@ async function executeBatchedInstallation(
 					manualAction: true,
 				});
 			}
-		} catch (err) {
+		} else if (installed.unsupported) {
+			const projectUnsupported =
+				mcpScope === "project" && !agentSupportsProjectMcp(mcpAgentId);
+			results.push({
+				id: "install_mcp",
+				description: installed.error,
+				status: projectUnsupported ? "failed" : "success",
+				...(projectUnsupported
+					? { error: installed.error }
+					: { manualAction: true }),
+			});
+		} else {
 			results.push({
 				id: "install_mcp",
 				description: "Failed to install Neon MCP server",
 				status: "failed",
-				error: err instanceof Error ? err.message : "Unknown error",
+				error: installed.error,
 			});
 		}
 	}

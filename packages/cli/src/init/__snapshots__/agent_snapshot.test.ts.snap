@@ -189,41 +189,13 @@ exports[`neon init --agent: every step, against every project shape > connected 
 --- stdout ---
 {
   "phase": "tooling",
-  "status": "installing",
+  "status": "installed",
+  "path": "<home>/.cursor/mcp.json",
   "nextAction": {
-    "type": "run_command",
-    "command": "npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor",
-    "description": "Installing Neon MCP server (global scope) for cursor.",
-    "timeout": 60000,
-    "onSuccess": {
-      "type": "run_shell_command",
-      "command": "neon init --agent --data '{\\"step\\":\\"skills\\",\\"agent\\":\\"cursor\\",\\"install\\":true}'"
-    },
-    "onFailure": {
-      "other": {
-        "type": "ask_user",
-        "question": "Failed to install the Neon MCP server automatically. Would you like to try again or configure it manually?",
-        "options": [
-          {
-            "value": "retry",
-            "label": "Try again"
-          },
-          {
-            "value": "manual",
-            "label": "I'll configure it manually"
-          }
-        ],
-        "responseMapping": {
-          "retry": {
-            "command": "neon init --agent --data '{\\"step\\":\\"mcp\\",\\"agent\\":\\"cursor\\",\\"install\\":true}'"
-          },
-          "manual": {
-            "command": "neon init --agent --data '{\\"agent\\":\\"cursor\\"}'"
-          }
-        }
-      }
-    }
-  }
+    "type": "run_shell_command",
+    "command": "neon init --agent --data '{\\"step\\":\\"skills\\",\\"agent\\":\\"cursor\\",\\"install\\":true}'"
+  },
+  "message": "Installed Neon MCP server (global scope) for cursor."
 }
 --- stderr ---
 
@@ -438,7 +410,6 @@ exports[`neon init --agent: every step, against every project shape > connected 
 --- subprocesses ---
 <stub>/neon --version
 <stub>/npm view neon version
-<stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
 <stub>/skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y"
@@ -477,7 +448,6 @@ exports[`neon init --agent: every step, against every project shape > connected 
 --- subprocesses ---
 <stub>/neon --version
 <stub>/npm view neon version
-<stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
 <stub>/skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y"
@@ -491,7 +461,7 @@ exports[`neon init --agent: every step, against every project shape > connected 
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -560,7 +530,7 @@ exports[`neon init --agent: every step, against every project shape > connected 
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -664,41 +634,13 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
 --- stdout ---
 {
   "phase": "tooling",
-  "status": "installing",
+  "status": "installed",
+  "path": "<home>/.cursor/mcp.json",
   "nextAction": {
-    "type": "run_command",
-    "command": "npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor",
-    "description": "Installing Neon MCP server (global scope) for cursor.",
-    "timeout": 60000,
-    "onSuccess": {
-      "type": "run_shell_command",
-      "command": "neon init --agent --data '{\\"step\\":\\"skills\\",\\"agent\\":\\"cursor\\",\\"install\\":true}'"
-    },
-    "onFailure": {
-      "other": {
-        "type": "ask_user",
-        "question": "Failed to install the Neon MCP server automatically. Would you like to try again or configure it manually?",
-        "options": [
-          {
-            "value": "retry",
-            "label": "Try again"
-          },
-          {
-            "value": "manual",
-            "label": "I'll configure it manually"
-          }
-        ],
-        "responseMapping": {
-          "retry": {
-            "command": "neon init --agent --data '{\\"step\\":\\"mcp\\",\\"agent\\":\\"cursor\\",\\"install\\":true}'"
-          },
-          "manual": {
-            "command": "neon init --agent --data '{\\"agent\\":\\"cursor\\"}'"
-          }
-        }
-      }
-    }
-  }
+    "type": "run_shell_command",
+    "command": "neon init --agent --data '{\\"step\\":\\"skills\\",\\"agent\\":\\"cursor\\",\\"install\\":true}'"
+  },
+  "message": "Installed Neon MCP server (global scope) for cursor."
 }
 --- stderr ---
 
@@ -913,7 +855,6 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
 --- subprocesses ---
 <stub>/neon --version
 <stub>/npm view neon version
-<stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
 <stub>/skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y"
@@ -952,7 +893,6 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
 --- subprocesses ---
 <stub>/neon --version
 <stub>/npm view neon version
-<stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
 <stub>/skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y"
@@ -966,7 +906,7 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -1035,7 +975,7 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -1139,41 +1079,13 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
 --- stdout ---
 {
   "phase": "tooling",
-  "status": "installing",
+  "status": "installed",
+  "path": "<home>/.cursor/mcp.json",
   "nextAction": {
-    "type": "run_command",
-    "command": "npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor",
-    "description": "Installing Neon MCP server (global scope) for cursor.",
-    "timeout": 60000,
-    "onSuccess": {
-      "type": "run_shell_command",
-      "command": "neon init --agent --data '{\\"step\\":\\"skills\\",\\"agent\\":\\"cursor\\",\\"install\\":true}'"
-    },
-    "onFailure": {
-      "other": {
-        "type": "ask_user",
-        "question": "Failed to install the Neon MCP server automatically. Would you like to try again or configure it manually?",
-        "options": [
-          {
-            "value": "retry",
-            "label": "Try again"
-          },
-          {
-            "value": "manual",
-            "label": "I'll configure it manually"
-          }
-        ],
-        "responseMapping": {
-          "retry": {
-            "command": "neon init --agent --data '{\\"step\\":\\"mcp\\",\\"agent\\":\\"cursor\\",\\"install\\":true}'"
-          },
-          "manual": {
-            "command": "neon init --agent --data '{\\"agent\\":\\"cursor\\"}'"
-          }
-        }
-      }
-    }
-  }
+    "type": "run_shell_command",
+    "command": "neon init --agent --data '{\\"step\\":\\"skills\\",\\"agent\\":\\"cursor\\",\\"install\\":true}'"
+  },
+  "message": "Installed Neon MCP server (global scope) for cursor."
 }
 --- stderr ---
 
@@ -1388,7 +1300,6 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
 --- subprocesses ---
 <stub>/neon --version
 <stub>/npm view neon version
-<stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version"
 `;
 
@@ -1425,7 +1336,6 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
 --- subprocesses ---
 <stub>/neon --version
 <stub>/npm view neon version
-<stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version"
 `;
 
@@ -1437,7 +1347,7 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -1506,7 +1416,7 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -1610,41 +1520,13 @@ exports[`neon init --agent: every step, against every project shape > greenfield
 --- stdout ---
 {
   "phase": "tooling",
-  "status": "installing",
+  "status": "installed",
+  "path": "<home>/.cursor/mcp.json",
   "nextAction": {
-    "type": "run_command",
-    "command": "npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor",
-    "description": "Installing Neon MCP server (global scope) for cursor.",
-    "timeout": 60000,
-    "onSuccess": {
-      "type": "run_shell_command",
-      "command": "neon init --agent --data '{\\"step\\":\\"skills\\",\\"agent\\":\\"cursor\\",\\"install\\":true}'"
-    },
-    "onFailure": {
-      "other": {
-        "type": "ask_user",
-        "question": "Failed to install the Neon MCP server automatically. Would you like to try again or configure it manually?",
-        "options": [
-          {
-            "value": "retry",
-            "label": "Try again"
-          },
-          {
-            "value": "manual",
-            "label": "I'll configure it manually"
-          }
-        ],
-        "responseMapping": {
-          "retry": {
-            "command": "neon init --agent --data '{\\"step\\":\\"mcp\\",\\"agent\\":\\"cursor\\",\\"install\\":true}'"
-          },
-          "manual": {
-            "command": "neon init --agent --data '{\\"agent\\":\\"cursor\\"}'"
-          }
-        }
-      }
-    }
-  }
+    "type": "run_shell_command",
+    "command": "neon init --agent --data '{\\"step\\":\\"skills\\",\\"agent\\":\\"cursor\\",\\"install\\":true}'"
+  },
+  "message": "Installed Neon MCP server (global scope) for cursor."
 }
 --- stderr ---
 
@@ -1859,7 +1741,6 @@ exports[`neon init --agent: every step, against every project shape > greenfield
 --- subprocesses ---
 <stub>/neon --version
 <stub>/npm view neon version
-<stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
 <stub>/skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y"
@@ -1898,7 +1779,6 @@ exports[`neon init --agent: every step, against every project shape > greenfield
 --- subprocesses ---
 <stub>/neon --version
 <stub>/npm view neon version
-<stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
 <stub>/skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y"
@@ -1912,7 +1792,7 @@ exports[`neon init --agent: every step, against every project shape > greenfield
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -1981,7 +1861,7 @@ exports[`neon init --agent: every step, against every project shape > greenfield
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -2085,41 +1965,13 @@ exports[`neon init --agent: every step, against every project shape > next-prism
 --- stdout ---
 {
   "phase": "tooling",
-  "status": "installing",
+  "status": "installed",
+  "path": "<home>/.cursor/mcp.json",
   "nextAction": {
-    "type": "run_command",
-    "command": "npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor",
-    "description": "Installing Neon MCP server (global scope) for cursor.",
-    "timeout": 60000,
-    "onSuccess": {
-      "type": "run_shell_command",
-      "command": "neon init --agent --data '{\\"step\\":\\"skills\\",\\"agent\\":\\"cursor\\",\\"install\\":true}'"
-    },
-    "onFailure": {
-      "other": {
-        "type": "ask_user",
-        "question": "Failed to install the Neon MCP server automatically. Would you like to try again or configure it manually?",
-        "options": [
-          {
-            "value": "retry",
-            "label": "Try again"
-          },
-          {
-            "value": "manual",
-            "label": "I'll configure it manually"
-          }
-        ],
-        "responseMapping": {
-          "retry": {
-            "command": "neon init --agent --data '{\\"step\\":\\"mcp\\",\\"agent\\":\\"cursor\\",\\"install\\":true}'"
-          },
-          "manual": {
-            "command": "neon init --agent --data '{\\"agent\\":\\"cursor\\"}'"
-          }
-        }
-      }
-    }
-  }
+    "type": "run_shell_command",
+    "command": "neon init --agent --data '{\\"step\\":\\"skills\\",\\"agent\\":\\"cursor\\",\\"install\\":true}'"
+  },
+  "message": "Installed Neon MCP server (global scope) for cursor."
 }
 --- stderr ---
 
@@ -2334,7 +2186,6 @@ exports[`neon init --agent: every step, against every project shape > next-prism
 --- subprocesses ---
 <stub>/neon --version
 <stub>/npm view neon version
-<stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
 <stub>/skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y"
@@ -2373,7 +2224,6 @@ exports[`neon init --agent: every step, against every project shape > next-prism
 --- subprocesses ---
 <stub>/neon --version
 <stub>/npm view neon version
-<stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
 <stub>/skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y"
@@ -2387,7 +2237,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -2456,7 +2306,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -2560,41 +2410,13 @@ exports[`neon init --agent: every step, against every project shape > next-prism
 --- stdout ---
 {
   "phase": "tooling",
-  "status": "installing",
+  "status": "installed",
+  "path": "<home>/.cursor/mcp.json",
   "nextAction": {
-    "type": "run_command",
-    "command": "npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor",
-    "description": "Installing Neon MCP server (global scope) for cursor.",
-    "timeout": 60000,
-    "onSuccess": {
-      "type": "run_shell_command",
-      "command": "neon init --agent --data '{\\"step\\":\\"skills\\",\\"agent\\":\\"cursor\\",\\"install\\":true}'"
-    },
-    "onFailure": {
-      "other": {
-        "type": "ask_user",
-        "question": "Failed to install the Neon MCP server automatically. Would you like to try again or configure it manually?",
-        "options": [
-          {
-            "value": "retry",
-            "label": "Try again"
-          },
-          {
-            "value": "manual",
-            "label": "I'll configure it manually"
-          }
-        ],
-        "responseMapping": {
-          "retry": {
-            "command": "neon init --agent --data '{\\"step\\":\\"mcp\\",\\"agent\\":\\"cursor\\",\\"install\\":true}'"
-          },
-          "manual": {
-            "command": "neon init --agent --data '{\\"agent\\":\\"cursor\\"}'"
-          }
-        }
-      }
-    }
-  }
+    "type": "run_shell_command",
+    "command": "neon init --agent --data '{\\"step\\":\\"skills\\",\\"agent\\":\\"cursor\\",\\"install\\":true}'"
+  },
+  "message": "Installed Neon MCP server (global scope) for cursor."
 }
 --- stderr ---
 
@@ -2809,7 +2631,6 @@ exports[`neon init --agent: every step, against every project shape > next-prism
 --- subprocesses ---
 <stub>/neon --version
 <stub>/npm view neon version
-<stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
 <stub>/skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y"
@@ -2848,7 +2669,6 @@ exports[`neon init --agent: every step, against every project shape > next-prism
 --- subprocesses ---
 <stub>/neon --version
 <stub>/npm view neon version
-<stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
 <stub>/skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y"
@@ -2862,7 +2682,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -2931,7 +2751,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -3035,41 +2855,13 @@ exports[`neon init --agent: every step, against every project shape > node-app >
 --- stdout ---
 {
   "phase": "tooling",
-  "status": "installing",
+  "status": "installed",
+  "path": "<home>/.cursor/mcp.json",
   "nextAction": {
-    "type": "run_command",
-    "command": "npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor",
-    "description": "Installing Neon MCP server (global scope) for cursor.",
-    "timeout": 60000,
-    "onSuccess": {
-      "type": "run_shell_command",
-      "command": "neon init --agent --data '{\\"step\\":\\"skills\\",\\"agent\\":\\"cursor\\",\\"install\\":true}'"
-    },
-    "onFailure": {
-      "other": {
-        "type": "ask_user",
-        "question": "Failed to install the Neon MCP server automatically. Would you like to try again or configure it manually?",
-        "options": [
-          {
-            "value": "retry",
-            "label": "Try again"
-          },
-          {
-            "value": "manual",
-            "label": "I'll configure it manually"
-          }
-        ],
-        "responseMapping": {
-          "retry": {
-            "command": "neon init --agent --data '{\\"step\\":\\"mcp\\",\\"agent\\":\\"cursor\\",\\"install\\":true}'"
-          },
-          "manual": {
-            "command": "neon init --agent --data '{\\"agent\\":\\"cursor\\"}'"
-          }
-        }
-      }
-    }
-  }
+    "type": "run_shell_command",
+    "command": "neon init --agent --data '{\\"step\\":\\"skills\\",\\"agent\\":\\"cursor\\",\\"install\\":true}'"
+  },
+  "message": "Installed Neon MCP server (global scope) for cursor."
 }
 --- stderr ---
 
@@ -3284,7 +3076,6 @@ exports[`neon init --agent: every step, against every project shape > node-app >
 --- subprocesses ---
 <stub>/neon --version
 <stub>/npm view neon version
-<stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
 <stub>/skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y"
@@ -3323,7 +3114,6 @@ exports[`neon init --agent: every step, against every project shape > node-app >
 --- subprocesses ---
 <stub>/neon --version
 <stub>/npm view neon version
-<stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
 <stub>/skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y"
@@ -3337,7 +3127,7 @@ exports[`neon init --agent: every step, against every project shape > node-app >
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -3406,7 +3196,7 @@ exports[`neon init --agent: every step, against every project shape > node-app >
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -3510,41 +3300,13 @@ exports[`neon init --agent: every step, against every project shape > other-data
 --- stdout ---
 {
   "phase": "tooling",
-  "status": "installing",
+  "status": "installed",
+  "path": "<home>/.cursor/mcp.json",
   "nextAction": {
-    "type": "run_command",
-    "command": "npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor",
-    "description": "Installing Neon MCP server (global scope) for cursor.",
-    "timeout": 60000,
-    "onSuccess": {
-      "type": "run_shell_command",
-      "command": "neon init --agent --data '{\\"step\\":\\"skills\\",\\"agent\\":\\"cursor\\",\\"install\\":true}'"
-    },
-    "onFailure": {
-      "other": {
-        "type": "ask_user",
-        "question": "Failed to install the Neon MCP server automatically. Would you like to try again or configure it manually?",
-        "options": [
-          {
-            "value": "retry",
-            "label": "Try again"
-          },
-          {
-            "value": "manual",
-            "label": "I'll configure it manually"
-          }
-        ],
-        "responseMapping": {
-          "retry": {
-            "command": "neon init --agent --data '{\\"step\\":\\"mcp\\",\\"agent\\":\\"cursor\\",\\"install\\":true}'"
-          },
-          "manual": {
-            "command": "neon init --agent --data '{\\"agent\\":\\"cursor\\"}'"
-          }
-        }
-      }
-    }
-  }
+    "type": "run_shell_command",
+    "command": "neon init --agent --data '{\\"step\\":\\"skills\\",\\"agent\\":\\"cursor\\",\\"install\\":true}'"
+  },
+  "message": "Installed Neon MCP server (global scope) for cursor."
 }
 --- stderr ---
 
@@ -3759,7 +3521,6 @@ exports[`neon init --agent: every step, against every project shape > other-data
 --- subprocesses ---
 <stub>/neon --version
 <stub>/npm view neon version
-<stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
 <stub>/skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y"
@@ -3798,7 +3559,6 @@ exports[`neon init --agent: every step, against every project shape > other-data
 --- subprocesses ---
 <stub>/neon --version
 <stub>/npm view neon version
-<stub>/npx -y add-mcp https://mcp.neon.tech/mcp -g -n Neon -y -a cursor
 <stub>/skills --version
 <stub>/skills add neondatabase/agent-skills --skill neon --agent cursor -y
 <stub>/skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y"
@@ -3812,7 +3572,7 @@ exports[`neon init --agent: every step, against every project shape > other-data
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -3881,7 +3641,7 @@ exports[`neon init --agent: every step, against every project shape > other-data
   "status": "installing_skills",
   "nextAction": {
     "type": "run_command",
-    "command": "npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
+    "command": "npx -y skills add neondatabase/agent-skills --skill neon --agent cursor -y && npx -y skills add neondatabase/agent-skills --skill neon-postgres --agent cursor -y",
     "description": "Installing Neon agent skills for cursor.",
     "timeout": 30000,
     "onSuccess": {
@@ -6425,7 +6185,7 @@ exports[`neon init --agent: the signed-out auth branches > a damaged credentials
 --- stdout ---
 
 --- stderr ---
-ERROR: <config>/credentials.json is not valid JSON, so the credential in it cannot be read. Replace it deliberately with \`neon profile create DEFAULT --force\`, or delete the file.
+ERROR: <config>/credentials.json is not valid JSON, so the credential in it cannot be read. Replace it deliberately with \`neon profile create DEFAULT\`, or delete the file.
 --- subprocesses ---
 "
 `;
@@ -6876,42 +6636,6 @@ Options:
 --data
 └────────────────>  JSON object with a "step" field to route to a specific phase
                      and phase-specific options. [string]
---- subprocesses ---
-"
-`;
-
-exports[`neon init: failure output > --profile is refused in plain text when no agent is detected 1`] = `
-"exit: 1
---- stdout ---
-
---- stderr ---
-ERROR: --profile was passed, so \`neon init\` would run as the default account instead of "DEFAULT", and it does not support profile selection yet. Run it without one, or set the project up with \`neon --profile DEFAULT link\`.
---- subprocesses ---
-"
-`;
-
-exports[`neon init: failure output > --profile is refused, as JSON 1`] = `
-"exit: 1
---- stdout ---
-{
-  "success": false,
-  "error": "--profile was passed, so \`neon init\` would run as the default account instead of \\"DEFAULT\\", and it does not support profile selection yet. Run it without one, or set the project up with \`neon --profile DEFAULT link\`."
-}
---- stderr ---
-
---- subprocesses ---
-"
-`;
-
-exports[`neon init: failure output > an autodetected agent gets the JSON refusal without passing --agent 1`] = `
-"exit: 1
---- stdout ---
-{
-  "success": false,
-  "error": "--profile was passed, so \`neon init\` would run as the default account instead of \\"DEFAULT\\", and it does not support profile selection yet. Run it without one, or set the project up with \`neon --profile DEFAULT link\`."
-}
---- stderr ---
-
 --- subprocesses ---
 "
 `;

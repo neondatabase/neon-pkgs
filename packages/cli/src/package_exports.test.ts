@@ -142,4 +142,32 @@ describe("the published manifests", () => {
 			).toEqual([]);
 		}
 	});
+
+	it.each([
+		"../package.json",
+		"../../env/package.json",
+	])("%s lists @napi-rs/keyring as optional, not required", (relative) => {
+		const manifest: unknown = JSON.parse(
+			readFileSync(new URL(relative, import.meta.url), "utf8"),
+		);
+		if (!isRecord(manifest))
+			throw new Error(`${relative} is not an object.`);
+		const optional = manifest.optionalDependencies;
+		const required = manifest.dependencies;
+		expect(
+			isRecord(optional) ? optional["@napi-rs/keyring"] : undefined,
+		).toEqual(expect.any(String));
+		expect(
+			isRecord(required) ? required["@napi-rs/keyring"] : undefined,
+		).toBeUndefined();
+	});
+});
+
+describe("the keyring adapter stays a runtime load", () => {
+	it("does not emit a literal @napi-rs/keyring specifier", () => {
+		const literal = emittedFiles().filter((path) =>
+			readFileSync(path, "utf8").includes("@napi-rs/keyring"),
+		);
+		expect(literal).toEqual([]);
+	});
 });

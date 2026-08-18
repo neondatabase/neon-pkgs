@@ -29,7 +29,11 @@ describe("credentialsToClearOn401", () => {
 			profile: "work",
 			credentialsPath: path,
 		};
-		expect(credentialsToClearOn401(context)).toBe(path);
+		expect(credentialsToClearOn401(context)).toEqual({
+			profile: "work",
+			storage: "file",
+			path,
+		});
 	});
 
 	// The bug this exists for: the handler had only the config directory, so a rejected token
@@ -88,6 +92,17 @@ describe("credentialsToClearOn401", () => {
 		).toBeNull();
 	});
 
+	test("does not clear a keyring OAuth session", () => {
+		expect(
+			credentialsToClearOn401({
+				source: "stored-credentials",
+				configDir: "/c",
+				profile: "work",
+				storage: "keyring",
+			}),
+		).toBeNull();
+	});
+
 	test("never clears anything for a key the user supplied", () => {
 		expect(
 			credentialsToClearOn401({
@@ -113,11 +128,35 @@ describe("authFailureMessage", () => {
 		expect(message).toContain('profile "dbx"');
 		expect(message).toContain("/c/credentials.dbx.json");
 		// Not `rotate-key`: a rejected key cannot authenticate to mint its own replacement.
-		expect(message).toContain("neon profile create dbx --mint --force");
+		expect(message).toContain("neon profile create dbx --mint");
+		expect(message).not.toContain("--force");
 		expect(message).not.toContain("rotate-key");
 	});
 
 	// "Check --api-key" would be nonsense for a session we declined to delete.
+	test("a keyring session says to sign in again and does not mention a file", () => {
+		const message = authFailureMessage({
+			source: "stored-credentials",
+			configDir: "/c",
+			profile: "work",
+			storage: "keyring",
+		});
+		expect(message).toContain("OS keyring");
+		expect(message).toContain("neon auth --profile work");
+		expect(message).not.toContain("file was not created");
+		expect(message).not.toContain("--api-key");
+	});
+
+	test("a keyring DEFAULT session pins --profile DEFAULT", () => {
+		const message = authFailureMessage({
+			source: "stored-credentials",
+			configDir: "/c",
+			profile: "DEFAULT",
+			storage: "keyring",
+		});
+		expect(message).toContain("neon auth --profile DEFAULT");
+	});
+
 	test("an adopted session says to sign in again, not to check a flag", () => {
 		const message = authFailureMessage({
 			source: "stored-credentials",

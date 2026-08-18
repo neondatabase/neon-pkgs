@@ -5,7 +5,7 @@ import {
 } from "ai-v7";
 import { beforeAll, describe, expect, it } from "vitest";
 import { neon } from "../src/index.js";
-import { assertGatewayEnv } from "./helpers.js";
+import { assertGatewayEnv, withRateLimitRetry } from "./helpers.js";
 
 const PROMPT = "Reply with exactly the single word pong.";
 const CONCURRENCY = 4;
@@ -19,22 +19,26 @@ const SDK_RUNNERS = [
 	{
 		version: "6",
 		async generate(modelId) {
-			const result = await generateTextV6({
-				model: neon(modelId),
-				prompt: PROMPT,
-				maxOutputTokens: 2048,
-			});
+			const result = await withRateLimitRetry(() =>
+				generateTextV6({
+					model: neon(modelId),
+					prompt: PROMPT,
+					maxOutputTokens: 2048,
+				}),
+			);
 			return result.text;
 		},
 	},
 	{
 		version: "7",
 		async generate(modelId) {
-			const result = await generateTextV7({
-				model: neon(modelId),
-				prompt: PROMPT,
-				maxOutputTokens: 2048,
-			});
+			const result = await withRateLimitRetry(() =>
+				generateTextV7({
+					model: neon(modelId),
+					prompt: PROMPT,
+					maxOutputTokens: 2048,
+				}),
+			);
 			return result.text;
 		},
 	},
@@ -130,34 +134,37 @@ describe("e2e — every currently enabled model on AI SDK 6 and 7", () => {
 	}
 
 	it("uses the Neon image-generation tool with AI SDK 7", async () => {
-		const result = streamTextV7({
-			model: neon("gpt-5-mini"),
-			prompt: "Generate a simple red circle on a white background.",
-			tools: {
-				image_generation: neon.tools.imageGeneration({
-					outputFormat: "jpeg",
-					quality: "low",
-					outputCompression: 30,
-					size: "1024x1024",
-				}),
-			},
-			maxOutputTokens: 2048,
-		});
+		const gotImage = await withRateLimitRetry(async () => {
+			const result = streamTextV7({
+				model: neon("gpt-5-mini"),
+				prompt: "Generate a simple red circle on a white background.",
+				tools: {
+					image_generation: neon.tools.imageGeneration({
+						outputFormat: "jpeg",
+						quality: "low",
+						outputCompression: 30,
+						size: "1024x1024",
+					}),
+				},
+				maxOutputTokens: 2048,
+			});
 
-		let gotImage = false;
-		for await (const part of result.fullStream) {
-			if (
-				part.type === "tool-result" &&
-				part.toolName === "image_generation" &&
-				typeof part.output === "object" &&
-				part.output !== null &&
-				"result" in part.output &&
-				typeof part.output.result === "string" &&
-				part.output.result.length > 1000
-			) {
-				gotImage = true;
+			let found = false;
+			for await (const part of result.fullStream) {
+				if (
+					part.type === "tool-result" &&
+					part.toolName === "image_generation" &&
+					typeof part.output === "object" &&
+					part.output !== null &&
+					"result" in part.output &&
+					typeof part.output.result === "string" &&
+					part.output.result.length > 1000
+				) {
+					found = true;
+				}
 			}
-		}
+			return found;
+		});
 		expect(gotImage).toBe(true);
-	}, 120_000);
+	}, 180_000);
 });

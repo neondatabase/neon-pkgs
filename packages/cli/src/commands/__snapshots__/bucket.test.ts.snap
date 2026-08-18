@@ -26,13 +26,9 @@ exports[`bucket > list (yaml) 1`] = `
 
 exports[`bucket > list with table output 1`] = `
 "buckets
-┌───────────────┬──────────────┐
-│ Name          │ Access Level │
-├───────────────┼──────────────┤
-│ my-bucket     │ private      │
-├───────────────┼──────────────┤
-│ public-bucket │ public_read  │
-└───────────────┴──────────────┘
+Name           Access Level
+my-bucket      private
+public-bucket  public_read
 "
 `;
 
@@ -229,21 +225,14 @@ is_truncated: false
 
 exports[`bucket > object list with table output 1`] = `
 "folders
-┌─────────┐
-│ Name    │
-├─────────┤
-│ images/ │
-├─────────┤
-│ logs/   │
-└─────────┘
+Name
+images/
+logs/
+
 objects
-┌───────────┬──────┬──────────────────────────┬──────────┐
-│ Key       │ Size │ Last Modified            │ Etag     │
-├───────────┼──────┼──────────────────────────┼──────────┤
-│ hello.txt │ 12   │ 2021-01-01T00:00:00.000Z │ "abc123" │
-├───────────┼──────┼──────────────────────────┼──────────┤
-│ readme.md │ 2048 │ 2021-02-02T00:00:00.000Z │ "def456" │
-└───────────┴──────┴──────────────────────────┴──────────┘
+Key        Size  Last Modified             Etag
+hello.txt  12    2021-01-01T00:00:00.000Z  "abc123"
+readme.md  2048  2021-02-02T00:00:00.000Z  "def456"
 "
 `;
 

@@ -2739,7 +2739,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/NeonAuthEmailServerConfig"
+                                    "$ref": "#/components/schemas/NeonAuthEmailServerConfigResponse"
                                 }
                             }
                         }
@@ -2774,7 +2774,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/NeonAuthEmailServerConfig"
+                                    "$ref": "#/components/schemas/NeonAuthEmailServerConfigResponse"
                                 }
                             }
                         }
@@ -2959,7 +2959,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/NeonAuthEmailServerConfig"
+                                    "$ref": "#/components/schemas/NeonAuthEmailServerConfigResponse"
                                 }
                             }
                         }
@@ -2971,7 +2971,7 @@
             },
             "patch": {
                 "summary": "Update email provider configuration",
-                "description": "Updates the email provider configuration for the specified branch's Neon Auth integration.\nThe email provider handles transactional messages such as verification emails and password reset links.\n",
+                "description": "Updates the email provider configuration for the specified branch's Neon Auth integration.\nThe email provider handles transactional messages such as verification emails and password reset links.\n\nPartial `standard` updates \u2014 omitting fields to keep their stored values \u2014 are supported only for\nBetter Auth integrations, which merge omitted fields server-side. Legacy Stack Auth integrations do\nnot merge and require all six `standard` fields (`host`, `port`, `username`, `password`,\n`sender_email`, `sender_name`) on every update; a partial `standard` body is rejected with 400.\n",
                 "tags": [
                     "Auth"
                 ],
@@ -2992,7 +2992,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/NeonAuthEmailServerConfig"
+                                    "$ref": "#/components/schemas/NeonAuthEmailServerConfigResponse"
                                 }
                             }
                         }
@@ -15144,7 +15144,7 @@
                         "description": "Configuration for the phone number authentication plugin."
                     },
                     "email_provider": {
-                        "$ref": "#/components/schemas/NeonAuthEmailServerConfig",
+                        "$ref": "#/components/schemas/NeonAuthEmailServerConfigResponse",
                         "description": "Email server configuration used to send authentication emails."
                     },
                     "email_and_password": {
@@ -15309,14 +15309,6 @@
             },
             "StandardEmailServer": {
                 "type": "object",
-                "required": [
-                    "host",
-                    "port",
-                    "username",
-                    "password",
-                    "sender_email",
-                    "sender_name"
-                ],
                 "x-sensitive": [
                     "host",
                     "password",
@@ -15349,6 +15341,48 @@
                     }
                 }
             },
+            "StandardEmailServerResponse": {
+                "type": "object",
+                "required": [
+                    "host",
+                    "port",
+                    "username",
+                    "password",
+                    "sender_email",
+                    "sender_name"
+                ],
+                "x-sensitive": [
+                    "host",
+                    "password",
+                    "username"
+                ],
+                "properties": {
+                    "host": {
+                        "type": "string",
+                        "description": "Hostname of the email server."
+                    },
+                    "port": {
+                        "type": "integer",
+                        "description": "TCP port of the SMTP server. Common values: 25 (SMTP), 465 (SMTPS), 587 (submission)."
+                    },
+                    "username": {
+                        "type": "string",
+                        "description": "Username for authenticating with the SMTP server."
+                    },
+                    "password": {
+                        "type": "string",
+                        "description": "On GET, returned redacted (empty) for ordinary callers, while callers with project-credential read permission receive the stored password \u2014 do not assume this field is empty. Update (PATCH) responses always return it redacted (empty) regardless of permission. Provide a value on update to set or rotate the password."
+                    },
+                    "sender_email": {
+                        "type": "string",
+                        "description": "Email address used as the From address on outgoing auth emails."
+                    },
+                    "sender_name": {
+                        "type": "string",
+                        "description": "Display name shown as the sender in outgoing emails."
+                    }
+                }
+            },
             "NeonAuthEmailServerConfig": {
                 "type": "object",
                 "discriminator": {
@@ -15367,28 +15401,73 @@
                     }
                 ]
             },
-            "SendNeonAuthTestEmailRequest": {
+            "NeonAuthEmailServerConfigResponse": {
                 "type": "object",
-                "allOf": [
+                "discriminator": {
+                    "propertyName": "type",
+                    "mapping": {
+                        "standard": "#/components/schemas/StandardEmailServerResponse",
+                        "shared": "#/components/schemas/SharedEmailServer"
+                    }
+                },
+                "oneOf": [
                     {
-                        "$ref": "#/components/schemas/StandardEmailServer"
+                        "$ref": "#/components/schemas/StandardEmailServerResponse"
                     },
                     {
-                        "type": "object",
-                        "required": [
-                            "recipient_email"
-                        ],
-                        "properties": {
-                            "recipient_email": {
-                                "description": "The email address to send the test email to.",
-                                "type": "string",
-                                "format": "email",
-                                "minLength": 1,
-                                "maxLength": 256
-                            }
-                        }
+                        "$ref": "#/components/schemas/SharedEmailServer"
                     }
                 ]
+            },
+            "SendNeonAuthTestEmailRequest": {
+                "type": "object",
+                "required": [
+                    "host",
+                    "port",
+                    "username",
+                    "password",
+                    "sender_email",
+                    "sender_name",
+                    "recipient_email"
+                ],
+                "x-sensitive": [
+                    "host",
+                    "password",
+                    "username"
+                ],
+                "properties": {
+                    "host": {
+                        "type": "string",
+                        "description": "Hostname of the email server."
+                    },
+                    "port": {
+                        "type": "integer",
+                        "description": "TCP port of the SMTP server. Common values: 25 (SMTP), 465 (SMTPS), 587 (submission)."
+                    },
+                    "username": {
+                        "type": "string",
+                        "description": "Username for authenticating with the SMTP server."
+                    },
+                    "password": {
+                        "type": "string",
+                        "description": "Password for authenticating with the SMTP server."
+                    },
+                    "sender_email": {
+                        "type": "string",
+                        "description": "Email address used as the From address on outgoing auth emails."
+                    },
+                    "sender_name": {
+                        "type": "string",
+                        "description": "Display name shown as the sender in outgoing emails."
+                    },
+                    "recipient_email": {
+                        "description": "The email address to send the test email to.",
+                        "type": "string",
+                        "format": "email",
+                        "minLength": 1,
+                        "maxLength": 256
+                    }
+                }
             },
             "SendNeonAuthTestEmailResponse": {
                 "type": "object",

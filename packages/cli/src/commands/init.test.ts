@@ -120,20 +120,16 @@ describe("init", () => {
 		expect(sendError).not.toHaveBeenCalled();
 	});
 
-	test("refuses a named profile instead of silently running as the default account", async () => {
+	test("a named profile does not stop the handler", async () => {
 		const { handler } = await import("./init.js");
 		const { interactiveInit } = await import("../init/interactive.js");
 
-		await expect(handler({ profile: "work" })).rejects.toThrow(
-			/--profile was passed.*"work".*does not support profile selection/s,
-		);
-		expect(interactiveInit).not.toHaveBeenCalled();
+		await handler({ profile: "work" });
+
+		expect(interactiveInit).toHaveBeenCalledTimes(1);
 	});
 
-	// `NEON_PROFILE` reaches the handler through the credential inputs the
-	// `resolveApiKeyFromEnv` middleware records, not through `process.env` directly, so
-	// that is the seam the test has to set. See `@neon-internals/cli-core/auth_selection`.
-	test("refuses NEON_PROFILE just as firmly as the flag", async () => {
+	test("NEON_PROFILE does not stop the handler either", async () => {
 		const { recordCredentialInputs } = await import(
 			"@neon-internals/cli-core/auth_selection"
 		);
@@ -141,20 +137,22 @@ describe("init", () => {
 			apiKeyFlag: "",
 			apiKeyEnv: "",
 			profileEnv: "work",
+			profileFlag: "",
+			configDir: "",
 		});
 		const { handler } = await import("./init.js");
 		const { interactiveInit } = await import("../init/interactive.js");
 
 		try {
-			await expect(handler({})).rejects.toThrow(
-				/NEON_PROFILE is set.*"work"/s,
-			);
-			expect(interactiveInit).not.toHaveBeenCalled();
+			await handler({});
+			expect(interactiveInit).toHaveBeenCalledTimes(1);
 		} finally {
 			recordCredentialInputs({
 				apiKeyFlag: "",
 				apiKeyEnv: "",
 				profileEnv: "",
+				profileFlag: "",
+				configDir: "",
 			});
 		}
 	});

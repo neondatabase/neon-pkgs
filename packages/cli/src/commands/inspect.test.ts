@@ -37,6 +37,49 @@ describe("inspect db", () => {
 		);
 	});
 
+	test("locks --db-url does not suffix a database the URL already named", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			["inspect", "db", "locks", "--db-url", UNREACHABLE_DB_URL],
+			{
+				code: 1,
+				stderr: expect.not.stringContaining("(database postgres)"),
+			},
+		);
+	});
+
+	test("inspect db --help says omit --database-name covers every database", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["inspect", "db", "--help"], {
+			mockDir: "single_org",
+			stderr: expect.stringContaining(
+				"Ranking and row limits stay per database",
+			),
+		});
+	});
+
+	test("inspect db --help says one failing database fails the run", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["inspect", "db", "--help"], {
+			mockDir: "single_org",
+			stderr: expect.stringContaining("fails the whole run"),
+		});
+	});
+
+	test("inspect db --help marks compute-wide subcommands", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["inspect", "db", "--help"], {
+			mockDir: "single_org",
+			stderr: expect.stringContaining(
+				"Local File Cache hit rate (compute-wide",
+			),
+		});
+	});
+
 	// Phase-2 subcommands. The extension-gated ones (`outliers`, `calls`) still
 	// fail at the connection step here — the `pg_stat_statements` guard only runs
 	// after a successful connect — so they share the same wiring assertion.

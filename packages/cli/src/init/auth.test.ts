@@ -2,6 +2,10 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import {
+	type CredentialInputs,
+	recordCredentialInputs,
+} from "@neon-internals/cli-core/auth_selection";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { isAuthenticated } from "./auth.js";
 
@@ -16,10 +20,19 @@ import { isAuthenticated } from "./auth.js";
  * identical to a fresh machine.
  */
 
+const EMPTY_INPUTS: CredentialInputs = {
+	apiKeyFlag: "",
+	apiKeyEnv: "",
+	profileEnv: "",
+	profileFlag: "",
+	configDir: "",
+};
+
 const cleanups: Array<() => void> = [];
 afterEach(() => {
 	while (cleanups.length > 0) cleanups.shift()?.();
 	vi.unstubAllEnvs();
+	recordCredentialInputs(EMPTY_INPUTS);
 });
 
 /** A config directory pointed at by `NEON_CONFIG_DIR`, optionally holding credentials. */
@@ -63,7 +76,7 @@ describe("isAuthenticated", () => {
 		makeConfigDir("{ not json");
 		await expect(isAuthenticated()).rejects.toThrow(/not valid JSON/);
 		await expect(isAuthenticated()).rejects.toThrow(
-			/neon profile create DEFAULT --force/,
+			/neon profile create DEFAULT/,
 		);
 	});
 
@@ -81,6 +94,87 @@ describe("isAuthenticated", () => {
 		makeConfigDir(JSON.stringify({ type: "api_key" }));
 		await expect(isAuthenticated()).rejects.toThrow(/no "api_key" value/);
 	});
+
+	test("a named profile is what counts, not DEFAULT", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "neon-init-auth-"));
+		cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
+		writeFileSync(
+			resolve(dir, "profiles.json"),
+			JSON.stringify({
+				version: 1,
+				profiles: {
+					DEFAULT: { credentials: "credentials.json" },
+					work: { credentials: "credentials.work.json" },
+				},
+			}),
+			{ mode: 0o600 },
+		);
+		writeFileSync(
+			resolve(dir, "credentials.work.json"),
+			JSON.stringify({ type: "api_key", api_key: "napi_work" }),
+			{ mode: 0o600 },
+		);
+		vi.stubEnv("NEON_CONFIG_DIR", dir);
+		recordCredentialInputs({ ...EMPTY_INPUTS, profileFlag: "work" });
+
+		await expect(isAuthenticated()).resolves.toBe(true);
+	});
+
+	test("DEFAULT being signed in does not count as the named profile", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "neon-init-auth-"));
+		cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
+		writeFileSync(
+			resolve(dir, "profiles.json"),
+			JSON.stringify({
+				version: 1,
+				profiles: {
+					DEFAULT: { credentials: "credentials.json" },
+					work: { credentials: "credentials.work.json" },
+				},
+			}),
+			{ mode: 0o600 },
+		);
+		writeFileSync(
+			resolve(dir, "credentials.json"),
+			JSON.stringify({ type: "api_key", api_key: "napi_default" }),
+			{ mode: 0o600 },
+		);
+		vi.stubEnv("NEON_CONFIG_DIR", dir);
+		recordCredentialInputs({ ...EMPTY_INPUTS, profileFlag: "work" });
+
+		await expect(isAuthenticated()).resolves.toBe(false);
+	});
+
+	test("--config-dir is where the named profile is read, not NEON_CONFIG_DIR", async () => {
+		const envDir = mkdtempSync(join(tmpdir(), "neon-init-auth-env-"));
+		const flagged = mkdtempSync(join(tmpdir(), "neon-init-auth-flag-"));
+		cleanups.push(() => rmSync(envDir, { recursive: true, force: true }));
+		cleanups.push(() => rmSync(flagged, { recursive: true, force: true }));
+		writeFileSync(
+			resolve(flagged, "profiles.json"),
+			JSON.stringify({
+				version: 1,
+				profiles: {
+					DEFAULT: { credentials: "credentials.json" },
+					work: { credentials: "credentials.work.json" },
+				},
+			}),
+			{ mode: 0o600 },
+		);
+		writeFileSync(
+			resolve(flagged, "credentials.work.json"),
+			JSON.stringify({ type: "api_key", api_key: "napi_work" }),
+			{ mode: 0o600 },
+		);
+		vi.stubEnv("NEON_CONFIG_DIR", envDir);
+		recordCredentialInputs({
+			...EMPTY_INPUTS,
+			profileFlag: "work",
+			configDir: flagged,
+		});
+
+		await expect(isAuthenticated()).resolves.toBe(true);
+	});
 });
 
 /**
@@ -90,7 +184,7 @@ describe("isAuthenticated", () => {
  * `--agent` answers a thrown error with JSON on stdout, and a human gets one line on
  * stderr instead.
  */
-describe("`neon init` failure output", () => {
+describe("`neon init` failure output", { timeout: 20_000 }, () => {
 	const CLI = resolve(import.meta.dirname, "..", "..", "dist", "cli.js");
 
 	/** A credential the auth middleware accepts without touching the network. */
@@ -171,25 +265,27 @@ describe("`neon init` failure output", () => {
 		expect(JSON.parse(stdout).error).toMatch(/Invalid JSON in --data flag/);
 	});
 
-	test("--agent answers the profile refusal with JSON on stdout", () => {
-		const { status, stdout } = runInit(["--agent", "--profile", "DEFAULT"]);
+	test("--agent --profile DEFAULT proceeds rather than refusing", () => {
+		const { status, stdout } = runInit([
+			"--agent",
+			"--profile",
+			"DEFAULT",
+			"--data",
+			'{"step":"setup"}',
+		]);
 
-		expect(status).toBe(1);
-		const parsed = JSON.parse(stdout);
-		expect(parsed.success).toBe(false);
-		expect(parsed.error).toMatch(/does not support profile selection/);
+		expect(status).toBe(0);
+		expect(JSON.parse(stdout).success).not.toBe(false);
+		expect(stdout).not.toMatch(/does not support profile selection/);
 	});
 
-	// The human half of the same failure: one line on stderr, nothing on stdout, and no
-	// help screen. `--profile` is the refusal that fails before any prompting, so this
-	// exercises the non-agent path without needing a TTY.
-	test("without --agent it is one stderr line, not a help dump", () => {
-		const { status, stdout, stderr } = runInit(["--profile", "DEFAULT"]);
+	test("without --agent an unknown profile is one stderr line, not a help dump", () => {
+		const { status, stdout, stderr } = runInit(["--profile", "ghost"]);
 
 		expect(status).toBe(1);
 		expect(stdout).toBe("");
 		expect(stderr).toContain("ERROR: ");
-		expect(stderr).toMatch(/does not support profile selection/);
+		expect(stderr).toMatch(/Unknown profile "ghost"/);
 		expect(stderr).not.toContain("Show help");
 		expect(stderr).not.toMatch(/^\s*at /m);
 	});
@@ -199,21 +295,21 @@ describe("`neon init` failure output", () => {
 	// takes the JSON path, even under `--agent`. It must still fail loudly and say why.
 	test("a damaged credential is reported before the handler runs, and says what to do", () => {
 		const { status, stdout, stderr } = runInit(
-			["--agent", "--data", '{"step":"status"}'],
+			["--agent", "--data", '{"step":"setup"}'],
 			"{ not json",
 		);
 
 		expect(status).toBe(1);
 		expect(stdout).toBe("");
 		expect(stderr).toMatch(/not valid JSON/);
-		expect(stderr).toMatch(/neon profile create DEFAULT --force/);
+		expect(stderr).toMatch(/neon profile create DEFAULT/);
 		expect(stderr).not.toContain("Show help");
 		expect(stderr).not.toMatch(/^\s*at /m);
 	});
 
 	test("and the report never quotes the credential file's contents", () => {
 		const { stdout, stderr } = runInit(
-			["--agent", "--data", '{"step":"status"}'],
+			["--agent", "--data", '{"step":"setup"}'],
 			'{"api_key":napi_SENTINELSECRET}',
 		);
 

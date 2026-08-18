@@ -16,6 +16,7 @@ import {
 	type MatrixFamily,
 	maxTokensFor,
 	REASONING_EFFORT_FAMILIES,
+	withRateLimitRetry,
 } from "./helpers.js";
 
 const PROMPT = "Reply with exactly three words.";
@@ -101,65 +102,89 @@ describe("e2e — Neon AI Gateway capability matrix", () => {
 	)("%s (%s)", (family, modelId) => {
 		const servesModel = served.has(modelId);
 
-		it.skipIf(!servesModel)("generateText", async () => {
-			const result = await generateText({
-				model: neon(modelId),
-				prompt: PROMPT,
-				...modelOptions(family),
-			});
-			expect(result.text.trim().length).toBeGreaterThan(0);
-			expectNoHardFailureWarnings(result.warnings);
-		});
+		it.skipIf(!servesModel)(
+			"generateText",
+			async () => {
+				const result = await withRateLimitRetry(() =>
+					generateText({
+						model: neon(modelId),
+						prompt: PROMPT,
+						...modelOptions(family),
+					}),
+				);
+				expect(result.text.trim().length).toBeGreaterThan(0);
+				expectNoHardFailureWarnings(result.warnings);
+			},
+			180_000,
+		);
 
-		it.skipIf(!servesModel)("generateText with system prompt", async () => {
-			const result = await generateText({
-				model: neon(modelId),
-				system: SYSTEM,
-				prompt: "Say hello.",
-				...modelOptions(family),
-			});
-			expect(result.text.trim().length).toBeGreaterThan(0);
-			expectNoHardFailureWarnings(result.warnings);
-		});
+		it.skipIf(!servesModel)(
+			"generateText with system prompt",
+			async () => {
+				const result = await withRateLimitRetry(() =>
+					generateText({
+						model: neon(modelId),
+						system: SYSTEM,
+						prompt: "Say hello.",
+						...modelOptions(family),
+					}),
+				);
+				expect(result.text.trim().length).toBeGreaterThan(0);
+				expectNoHardFailureWarnings(result.warnings);
+			},
+			180_000,
+		);
 
-		it.skipIf(!servesModel)("streamText", async () => {
-			const result = streamText({
-				model: neon(modelId),
-				prompt: PROMPT,
-				...modelOptions(family),
-			});
-			let text = "";
-			for await (const part of result.textStream) {
-				text += part;
-			}
-			expect(text.trim().length).toBeGreaterThan(0);
-		});
+		it.skipIf(!servesModel)(
+			"streamText",
+			async () => {
+				const text = await withRateLimitRetry(async () => {
+					const result = streamText({
+						model: neon(modelId),
+						prompt: PROMPT,
+						...modelOptions(family),
+					});
+					let collected = "";
+					for await (const part of result.textStream) {
+						collected += part;
+					}
+					return collected;
+				});
+				expect(text.trim().length).toBeGreaterThan(0);
+			},
+			180_000,
+		);
 
 		it.skipIf(!servesModel || !STRUCTURED_FAMILIES.has(family))(
 			"generateObject",
 			async () => {
-				const result = await generateObject({
-					model: neon(modelId),
-					schema: summarySchema,
-					prompt: 'Summarize "serverless postgres" in the schema.',
-					...modelOptions(family),
-				});
+				const result = await withRateLimitRetry(() =>
+					generateObject({
+						model: neon(modelId),
+						schema: summarySchema,
+						prompt: 'Summarize "serverless postgres" in the schema.',
+						...modelOptions(family),
+					}),
+				);
 				expect(result.object.topic.length).toBeGreaterThan(0);
 				expect(result.object.wordCount).toBeGreaterThan(0);
 				expectNoHardFailureWarnings(result.warnings);
 			},
+			180_000,
 		);
 
 		it.skipIf(!servesModel || !TOOL_FAMILIES.has(family))(
 			"tool calling (generateText + stepCountIs)",
 			async () => {
-				const result = await generateText({
-					model: neon(modelId),
-					prompt: "What is the temperature in Paris? Use the weather tool.",
-					tools: { weather: weatherTool },
-					stopWhen: stepCountIs(5),
-					...modelOptions(family),
-				});
+				const result = await withRateLimitRetry(() =>
+					generateText({
+						model: neon(modelId),
+						prompt: "What is the temperature in Paris? Use the weather tool.",
+						tools: { weather: weatherTool },
+						stopWhen: stepCountIs(5),
+						...modelOptions(family),
+					}),
+				);
 				expect(result.text.trim().length).toBeGreaterThan(0);
 				// A tool call plus a follow-up step, not one step that happened
 				// to answer. The follow-up is the leg that carries prior
@@ -170,6 +195,7 @@ describe("e2e — Neon AI Gateway capability matrix", () => {
 				).toBeGreaterThanOrEqual(1);
 				expect(result.steps.length).toBeGreaterThanOrEqual(2);
 			},
+			180_000,
 		);
 	});
 
@@ -180,58 +206,65 @@ describe("e2e — Neon AI Gateway capability matrix", () => {
 		it.skipIf(!served.has(MATRIX_MODELS.openai))(
 			"gets past the step that carries reasoning back",
 			async () => {
-				const result = streamText({
-					model: neon(MATRIX_MODELS.openai),
-					prompt: "What is the temperature in Paris? Use the weather tool.",
-					tools: { weather: weatherTool },
-					stopWhen: stepCountIs(5),
-					...modelOptions("openai"),
+				const { steps, text } = await withRateLimitRetry(async () => {
+					const result = streamText({
+						model: neon(MATRIX_MODELS.openai),
+						prompt: "What is the temperature in Paris? Use the weather tool.",
+						tools: { weather: weatherTool },
+						stopWhen: stepCountIs(5),
+						...modelOptions("openai"),
+					});
+					await result.consumeStream();
+					return {
+						steps: await result.steps,
+						text: await result.text,
+					};
 				});
-				await result.consumeStream();
-
-				const steps = await result.steps;
 				expect(
 					steps.flatMap((step) => step.toolCalls).length,
 				).toBeGreaterThanOrEqual(1);
 				expect(steps.length).toBeGreaterThanOrEqual(2);
-				await expect(result.text).resolves.not.toBe("");
+				expect(text).not.toBe("");
 			},
-			120_000,
+			180_000,
 		);
 	});
 
 	describe("OpenAI Responses — imageGeneration tool", () => {
 		it("streamText with neon.tools.imageGeneration returns JPEG", async () => {
-			const result = streamText({
-				model: neon(MATRIX_MODELS.openai),
-				prompt: "Generate a simple red circle on a white background.",
-				tools: {
-					image_generation: neon.tools.imageGeneration({
-						outputFormat: "jpeg",
-						quality: "low",
-						outputCompression: 30,
-						size: "1024x1024",
-					}),
-				},
-				...modelOptions("openai"),
-			});
+			const gotImage = await withRateLimitRetry(async () => {
+				const result = streamText({
+					model: neon(MATRIX_MODELS.openai),
+					prompt: "Generate a simple red circle on a white background.",
+					tools: {
+						image_generation: neon.tools.imageGeneration({
+							outputFormat: "jpeg",
+							quality: "low",
+							outputCompression: 30,
+							size: "1024x1024",
+						}),
+					},
+					...modelOptions("openai"),
+				});
 
-			let gotImage = false;
-			for await (const part of result.fullStream) {
-				if (
-					part.type === "tool-result" &&
-					part.toolName === "image_generation" &&
-					typeof part.output === "object" &&
-					part.output !== null &&
-					"result" in part.output &&
-					typeof part.output.result === "string" &&
-					part.output.result.length > 1000
-				) {
-					gotImage = true;
+				let found = false;
+				for await (const part of result.fullStream) {
+					if (
+						part.type === "tool-result" &&
+						part.toolName === "image_generation" &&
+						typeof part.output === "object" &&
+						part.output !== null &&
+						"result" in part.output &&
+						typeof part.output.result === "string" &&
+						part.output.result.length > 1000
+					) {
+						found = true;
+					}
 				}
-			}
+				return found;
+			});
 			expect(gotImage).toBe(true);
-		}, 120_000);
+		}, 180_000);
 	});
 
 	// Every one of these returns 400 if the provider forwards the parameter,
@@ -261,37 +294,41 @@ describe("e2e — Neon AI Gateway capability matrix", () => {
 			model,
 			dropped,
 		}) => {
-			const result = await generateText({
-				model: neon(model),
-				prompt: "Reply with exactly three words.",
-				maxOutputTokens: 512,
-				temperature: 0.2,
-				topP: 0.9,
-				frequencyPenalty: 0.5,
-				presencePenalty: 0.5,
-			});
+			const result = await withRateLimitRetry(() =>
+				generateText({
+					model: neon(model),
+					prompt: "Reply with exactly three words.",
+					maxOutputTokens: 512,
+					temperature: 0.2,
+					topP: 0.9,
+					frequencyPenalty: 0.5,
+					presencePenalty: 0.5,
+				}),
+			);
 
 			expect(result.text.trim().length).toBeGreaterThan(0);
 			const reported = (result.warnings ?? [])
 				.map((w) => ("feature" in w ? w.feature : undefined))
 				.filter(Boolean);
 			expect(new Set(reported)).toEqual(new Set(dropped));
-		}, 120_000);
+		}, 180_000);
 
 		// The older Gemini models still take penalties. If this starts
 		// failing, the restriction has spread and the id list needs widening
 		// rather than the assertion loosening.
 		it("still sends penalties to the Gemini models that accept them", async () => {
-			const result = await generateText({
-				model: neon("gemini-3-flash"),
-				prompt: "Reply with exactly three words.",
-				maxOutputTokens: 512,
-				frequencyPenalty: 0.5,
-			});
+			const result = await withRateLimitRetry(() =>
+				generateText({
+					model: neon("gemini-3-flash"),
+					prompt: "Reply with exactly three words.",
+					maxOutputTokens: 512,
+					frequencyPenalty: 0.5,
+				}),
+			);
 
 			expect(result.text.trim().length).toBeGreaterThan(0);
 			expect(result.warnings ?? []).toEqual([]);
-		}, 120_000);
+		}, 180_000);
 	});
 
 	// The provider used to drop reasoningEffort on Gemini and tell the caller
@@ -301,12 +338,14 @@ describe("e2e — Neon AI Gateway capability matrix", () => {
 	describe("reasoningEffort on Gemini", () => {
 		it("changes how much the model reasons", async () => {
 			const reason = async (effort: "minimal" | "high") => {
-				const result = await generateText({
-					model: neon("gemini-3-6-flash"),
-					prompt: "A farmer has 17 sheep. All but 9 run away. How many remain? Think it through.",
-					maxOutputTokens: 900,
-					providerOptions: { neon: { reasoningEffort: effort } },
-				});
+				const result = await withRateLimitRetry(() =>
+					generateText({
+						model: neon("gemini-3-6-flash"),
+						prompt: "A farmer has 17 sheep. All but 9 run away. How many remain? Think it through.",
+						maxOutputTokens: 900,
+						providerOptions: { neon: { reasoningEffort: effort } },
+					}),
+				);
 				expect(result.warnings ?? []).toEqual([]);
 				const usage = (
 					result as {
@@ -324,7 +363,7 @@ describe("e2e — Neon AI Gateway capability matrix", () => {
 			];
 			expect(minimal).toBe(0);
 			expect(high).toBeGreaterThan(0);
-		}, 180_000);
+		}, 240_000);
 	});
 
 	describe("gpt-oss harmony normalization (#308)", () => {
@@ -332,25 +371,30 @@ describe("e2e — Neon AI Gateway capability matrix", () => {
 		// array; the provider normalizes it to the OpenAI Chat Completions
 		// contract. Verify text comes through for both generate and stream.
 		it("generateText works and does not throw on the harmony shape", async () => {
-			const result = await generateText({
-				model: neon("gpt-oss-120b"),
-				prompt: "Reply with exactly three words.",
-				maxOutputTokens: 512,
-			});
+			const result = await withRateLimitRetry(() =>
+				generateText({
+					model: neon("gpt-oss-120b"),
+					prompt: "Reply with exactly three words.",
+					maxOutputTokens: 512,
+				}),
+			);
 			expect(result.text.trim().length).toBeGreaterThan(0);
-		});
+		}, 180_000);
 
 		it("streamText works without an invalid-JSON error flood", async () => {
-			const result = streamText({
-				model: neon("gpt-oss-120b"),
-				prompt: "Reply with exactly three words.",
-				maxOutputTokens: 512,
+			const text = await withRateLimitRetry(async () => {
+				const result = streamText({
+					model: neon("gpt-oss-120b"),
+					prompt: "Reply with exactly three words.",
+					maxOutputTokens: 512,
+				});
+				let collected = "";
+				for await (const part of result.textStream) {
+					collected += part;
+				}
+				return collected;
 			});
-			let text = "";
-			for await (const part of result.textStream) {
-				text += part;
-			}
 			expect(text.trim().length).toBeGreaterThan(0);
-		});
+		}, 180_000);
 	});
 });

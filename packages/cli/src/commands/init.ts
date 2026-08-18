@@ -1,4 +1,3 @@
-import { credentialInputs } from "@neon-internals/cli-core/auth_selection";
 import type yargs from "yargs";
 import { closeAnalytics, sendError } from "../analytics.js";
 import { detectAgent } from "../init/detect_agent.js";
@@ -70,38 +69,14 @@ export const handler = async (argv: {
 	// always detect (the user asked for agent mode). Otherwise, require
 	// non-TTY stdin to distinguish agent from human in terminal.
 	//
-	// Resolved before anything can fail, so that every failure this handler sees —
-	// including the profile refusal — is reported in the shape the caller can read.
-	// Failures raised by `ensureAuth` are not among them: it resolves credentials
-	// above its own `init` skip, so an unknown profile, a contradictory
-	// `--api-key`/`--profile` pair, and a damaged credentials file all report on
-	// stderr before this runs.
+	// Handler failures need the caller's output format; `ensureAuth` runs earlier
+	// and reports directly to stderr.
 	const agent =
 		(argv.agent || !process.stdin.isTTY ? detectAgent() : null) ||
 		undefined;
 	const isAgentMode = argv.agent || agent !== undefined;
 
 	try {
-		// The init flow reads the default credentials directly and re-invokes the CLI as a
-		// subprocess. It has no way to be told which profile to use, so honouring a selection
-		// here is not possible yet — and silently running as the default account would be
-		// worse than refusing, because naming an account is the entire job of the thing being
-		// ignored.
-		//
-		// `NEON_PROFILE` counts just as much as the flag. Checking only the flag left the case
-		// that is easier to hit by accident: a profile exported once into a shell then
-		// silently disregarded by every `neon init` run in it.
-		const selectedProfile =
-			argv.profile?.trim() || credentialInputs().profileEnv.trim();
-		if (selectedProfile) {
-			const how = argv.profile?.trim()
-				? "--profile was passed, so"
-				: "NEON_PROFILE is set, so";
-			throw new Error(
-				`${how} \`neon init\` would run as the default account instead of "${selectedProfile}", and it does not support profile selection yet. Run it without one, or set the project up with \`neon --profile ${selectedProfile} link\`.`,
-			);
-		}
-
 		// --data with a "step" field routes to the appropriate phase
 		if (argv.data && isAgentMode) {
 			let data: Record<string, unknown>;

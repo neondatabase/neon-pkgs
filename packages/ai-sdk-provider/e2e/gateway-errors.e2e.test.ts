@@ -1,7 +1,7 @@
 import { generateText } from "ai";
 import { describe, expect, it } from "vitest";
 import { neon } from "../src/index.js";
-import { MATRIX_MODELS } from "./helpers.js";
+import { MATRIX_MODELS, withRateLimitRetry } from "./helpers.js";
 
 /**
  * The Responses route answers with three different error envelopes, and only
@@ -17,11 +17,13 @@ const model = MATRIX_MODELS.openai;
 
 async function messageFor(options: Record<string, unknown>): Promise<string> {
 	try {
-		await generateText({
-			model: neon(model),
-			prompt: "Reply with exactly three words.",
-			...options,
-		} as never);
+		await withRateLimitRetry(async () => {
+			await generateText({
+				model: neon(model),
+				prompt: "Reply with exactly three words.",
+				...options,
+			} as never);
+		});
 	} catch (error) {
 		return (error as { message: string }).message;
 	}
@@ -53,11 +55,13 @@ describe(`e2e — Responses error surfacing (${model})`, () => {
 
 	it("leaves an already OpenAI-shaped error intact", async () => {
 		try {
-			await generateText({
-				model: neon("gpt-5-9-does-not-exist"),
-				prompt: "hi",
-				maxOutputTokens: 512,
-			});
+			await withRateLimitRetry(() =>
+				generateText({
+					model: neon("gpt-5-9-does-not-exist"),
+					prompt: "hi",
+					maxOutputTokens: 512,
+				}),
+			);
 			throw new Error("expected the gateway to reject this request");
 		} catch (error) {
 			expect((error as { message: string }).message).toContain(
@@ -75,12 +79,14 @@ describe(`e2e — chat-completions error surfacing (${MATRIX_MODELS.meta})`, () 
 	it("surfaces a flat Databricks rejection", async () => {
 		let message = "";
 		try {
-			await generateText({
-				model: neon(MATRIX_MODELS.meta),
-				prompt: "Reply with exactly three words.",
-				maxOutputTokens: 512,
-				temperature: 9.5,
-			});
+			await withRateLimitRetry(() =>
+				generateText({
+					model: neon(MATRIX_MODELS.meta),
+					prompt: "Reply with exactly three words.",
+					maxOutputTokens: 512,
+					temperature: 9.5,
+				}),
+			);
 		} catch (error) {
 			message = (error as { message: string }).message;
 		}

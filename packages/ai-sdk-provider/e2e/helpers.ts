@@ -112,3 +112,31 @@ export function expectNoHardFailureWarnings(
 		expect(warning.type).not.toBe("other");
 	}
 }
+
+/**
+ * FMAPI enforces TPM over a one-minute window, so the AI SDK's immediate 429
+ * retries cannot succeed. Wait for the next window before retrying once.
+ */
+const REQUEST_LIMIT_RETRY_WAIT_MS = 60_000;
+
+function isRequestLimitExceeded(error: unknown): boolean {
+	const message = error instanceof Error ? error.message : String(error);
+	return message.includes("REQUEST_LIMIT_EXCEEDED");
+}
+
+export async function withRateLimitRetry<T>(run: () => Promise<T>): Promise<T> {
+	try {
+		return await run();
+	} catch (error) {
+		if (!isRequestLimitExceeded(error)) {
+			throw error;
+		}
+		console.warn(
+			`REQUEST_LIMIT_EXCEEDED; waiting ${REQUEST_LIMIT_RETRY_WAIT_MS / 1000}s for the TPM window before one retry`,
+		);
+		await new Promise<void>((resolve) => {
+			setTimeout(resolve, REQUEST_LIMIT_RETRY_WAIT_MS);
+		});
+		return await run();
+	}
+}

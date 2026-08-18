@@ -32,7 +32,7 @@
  *    becomes a different person.
  *
  * Recovery from a dead key is therefore one browser login — `neon profile create <name>
- * --mint --force` — which is what the retained session was supposed to save and never did.
+ * --mint` — which is what the retained session was supposed to save and never did.
  *
  * ## Older releases
  *
@@ -72,18 +72,28 @@ export type StoredCredentials = {
 };
 
 /**
- * Where a credential lives, and which profile points at it.
- *
- * Both halves are needed to report a broken file: the path says which file to open, and the
- * profile is what every recovery command takes as its argument. Carrying only the path is what
- * produced errors telling the user to run `neon profile create <name> --force` with the
- * placeholder intact — a command an agent will run verbatim and be told `Invalid profile name
- * "<name>"`.
+ * Recovery commands need the profile name; a storage path alone produced
+ * unusable commands with a literal `<name>` placeholder.
  */
-export type CredentialLocation = {
-	path: string;
+export type FileCredentialLocation = {
 	profile: string;
+	storage: "file";
+	path: string;
 };
+
+export type KeyringCredentialLocation = {
+	profile: string;
+	storage: "keyring";
+};
+
+export type CredentialLocation =
+	| FileCredentialLocation
+	| KeyringCredentialLocation;
+
+export const credentialLabel = (at: CredentialLocation): string =>
+	at.storage === "keyring"
+		? `the OS keyring item for profile "${at.profile}"`
+		: at.path;
 
 /**
  * Which credential in this file authenticates, by declaration alone.
@@ -100,6 +110,7 @@ export type CredentialLocation = {
 export const credentialKind = (
 	credentials: StoredCredentials,
 	at: CredentialLocation,
+	store: "file" | "keyring" = "file",
 ): CredentialKind => {
 	const declared = credentials.type;
 	if (declared === undefined || declared === OAUTH) return OAUTH;
@@ -108,18 +119,17 @@ export const credentialKind = (
 	// corrupted or hand-edited file can put a key anywhere in it — including here. Naming the
 	// file is enough to act on, and it cannot leak what the file holds.
 	throw new Error(
-		`${at.path} declares a "type" this version does not understand. Expected "${OAUTH}" or "${API_KEY}". ${repair(at)}`,
+		`${credentialLabel(at)} declares a "type" this version does not understand. Expected "${OAUTH}" or "${API_KEY}". ${credentialsRepairHint(at, store)}`,
 	);
 };
 
-/**
- * The way out of a credentials file that cannot be read.
- *
- * One sentence, shared by every such error, because they all have the same two answers: write
- * a new credential over it, or delete it and start again.
- */
-const repair = (at: CredentialLocation): string =>
-	`Replace it deliberately with \`neon profile create ${at.profile} --force\`, or delete the file.`;
+export const credentialsRepairHint = (
+	at: CredentialLocation,
+	store: "file" | "keyring" = "file",
+): string =>
+	store === "keyring"
+		? `Replace it deliberately with \`neon profile create ${at.profile}\`, or remove the profile with \`neon profile remove ${at.profile}\`.`
+		: `Replace it deliberately with \`neon profile create ${at.profile}\`, or delete the file.`;
 
 /** A credentials file resolved far enough to authenticate with. */
 export type InterpretedCredentials =
@@ -136,12 +146,14 @@ export type InterpretedCredentials =
 export const interpretCredentials = (
 	credentials: StoredCredentials,
 	at: CredentialLocation,
+	store: "file" | "keyring" = "file",
 ): InterpretedCredentials => {
-	if (credentialKind(credentials, at) === OAUTH) return { kind: OAUTH };
+	if (credentialKind(credentials, at, store) === OAUTH)
+		return { kind: OAUTH };
 	const apiKey = nonEmpty(credentials.api_key);
 	if (apiKey === undefined) {
 		throw new Error(
-			`${at.path} declares "type": "${API_KEY}" but has no "api_key" value. ${repair(at)}`,
+			`${credentialLabel(at)} declares "type": "${API_KEY}" but has no "api_key" value. ${credentialsRepairHint(at, store)}`,
 		);
 	}
 	return { kind: API_KEY, apiKey };
@@ -168,28 +180,18 @@ export type CredentialsRead =
  * we cannot see, and treating that as absent would send the user to a browser login that
  * overwrites it.
  */
-export const inspectCredentials = (path: string): CredentialsRead => {
-	let contents: string;
-	try {
-		contents = readFileSync(path, "utf8");
-	} catch (err) {
-		if ((err as NodeJS.ErrnoException).code === "ENOENT")
-			return { kind: "absent" };
-		throw err;
-	}
-
+/** Discard parser details because V8 may quote secret material near a syntax error. */
+export const parseCredentialsJson = (
+	contents: string,
+	label: string,
+): CredentialsRead => {
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(contents);
 	} catch {
-		// The parser's message is deliberately discarded. V8 quotes a window of the input
-		// around the syntax error — on Node 24 a truncated credentials file produced
-		// `Unexpected token 'a', ..."api_key":napi_SUPERS"... is not valid JSON` — and this
-		// reason is printed by `profile list` and by every failed authentication. A malformed
-		// secret file is exactly when a diagnostic must say less, not more.
 		return {
 			kind: "unusable",
-			reason: `${path} is not valid JSON, so the credential in it cannot be read`,
+			reason: `${label} is not valid JSON, so the credential in it cannot be read`,
 		};
 	}
 	if (
@@ -199,10 +201,22 @@ export const inspectCredentials = (path: string): CredentialsRead => {
 	) {
 		return {
 			kind: "unusable",
-			reason: `${path} does not contain a credentials object`,
+			reason: `${label} does not contain a credentials object`,
 		};
 	}
 	return { kind: "ok", credentials: parsed as StoredCredentials };
+};
+
+export const inspectCredentials = (path: string): CredentialsRead => {
+	let contents: string;
+	try {
+		contents = readFileSync(path, "utf8");
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code === "ENOENT")
+			return { kind: "absent" };
+		throw err;
+	}
+	return parseCredentialsJson(contents, path);
 };
 
 /**
@@ -218,11 +232,11 @@ export const inspectCredentials = (path: string): CredentialsRead => {
  * broken credential is not the same as using one.
  */
 export const readCredentials = (
-	at: CredentialLocation,
+	at: FileCredentialLocation,
 ): StoredCredentials | null => {
 	const read = inspectCredentials(at.path);
 	if (read.kind === "unusable") {
-		throw new Error(`${read.reason}. ${repair(at)}`);
+		throw new Error(`${read.reason}. ${credentialsRepairHint(at)}`);
 	}
 	return read.kind === "ok" ? read.credentials : null;
 };

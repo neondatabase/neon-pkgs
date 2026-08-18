@@ -128,6 +128,30 @@ describe("inspectProject", () => {
 
 		const result = await inspectProject([makeCheck("mcp_server")]);
 		expect(result.mcpConfigured).toBe(true);
+		expect(result.mcpAgents).toEqual(
+			expect.arrayContaining([{ agent: "cursor", scope: "project" }]),
+		);
+
+		process.cwd = originalCwd;
+	});
+
+	test("detects MCP server in a non-Cursor project config", async () => {
+		const originalCwd = process.cwd;
+		process.cwd = () => testDir;
+
+		mkdirSync(join(testDir, ".vscode"), { recursive: true });
+		writeFileSync(
+			join(testDir, ".vscode", "mcp.json"),
+			JSON.stringify({
+				servers: { Neon: { url: "https://mcp.neon.tech/mcp" } },
+			}),
+		);
+
+		const result = await inspectProject([makeCheck("mcp_server")]);
+		expect(result.mcpConfigured).toBe(true);
+		expect(result.mcpAgents).toEqual(
+			expect.arrayContaining([{ agent: "vscode", scope: "project" }]),
+		);
 
 		process.cwd = originalCwd;
 	});

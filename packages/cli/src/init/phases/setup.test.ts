@@ -30,6 +30,11 @@ vi.mock("../neonctl.js", () => ({
 	ensureNeonctl: (...args: unknown[]) => mockEnsureNeonctl(...args),
 }));
 
+const mockInstallMcp = vi.fn();
+vi.mock("../install_mcp.js", () => ({
+	installNeonMcpServer: (...args: unknown[]) => mockInstallMcp(...args),
+}));
+
 const mockEnsureSkills = vi.fn().mockResolvedValue(true);
 vi.mock("../skills.js", async (importOriginal) => {
 	const actual = (await importOriginal()) as Record<string, unknown>;
@@ -56,6 +61,10 @@ describe("setup phase", () => {
 			version: "2.23.1",
 		});
 		mockExeca.mockReset().mockResolvedValue({ stdout: "", stderr: "" });
+		mockInstallMcp.mockReset().mockReturnValue({
+			ok: true,
+			path: "/tmp/mcp.json",
+		});
 		mockEnsureSkills.mockReset().mockResolvedValue(true);
 		mockFindEditorCommand.mockReset().mockResolvedValue("/usr/bin/cursor");
 		mockFetch.mockReset().mockResolvedValue({
@@ -160,15 +169,16 @@ describe("setup phase", () => {
 			expect(result.nextAction.message).toContain("tooling is installed");
 		}
 
-		// Should have called execa for MCP only (neonctl mocked, skills via ensureSkillsUpToDate)
-		expect(mockExeca).toHaveBeenCalledTimes(1);
+		// MCP is installed via the add-mcp library (not execa); skills via ensureSkillsUpToDate.
+		// No extension in defaults mode, so execa is never called.
+		expect(mockExeca).not.toHaveBeenCalled();
 		expect(mockEnsureSkills).toHaveBeenCalled();
 
-		// MCP call should use -g for global scope
-		const mcpCall = mockExeca.mock.calls[0];
-		expect(mcpCall[0]).toBe("npx");
-		expect(mcpCall[1]).toContain("-g");
-		expect(mcpCall[1]).toContain("add-mcp");
+		// MCP should be installed at global scope
+		expect(mockInstallMcp).toHaveBeenCalledTimes(1);
+		expect(mockInstallMcp.mock.calls[0][0]).toMatchObject({
+			scope: "global",
+		});
 	});
 
 	test("defaults mode skips MCP when already configured", async () => {
@@ -273,11 +283,10 @@ describe("setup phase", () => {
 		// Extension should NOT be installed since installExtension=false
 		expect(resultIds).not.toContain("install_extension");
 
-		// MCP should be project scope (no -g flag)
-		const mcpCall = mockExeca.mock.calls.find((call) =>
-			call[1]?.includes("add-mcp"),
+		// MCP should be installed at project scope
+		expect(mockInstallMcp).toHaveBeenCalledWith(
+			expect.objectContaining({ scope: "project" }),
 		);
-		expect(mcpCall?.[1]).not.toContain("-g");
 	});
 
 	test("execute flag triggers installation directly", async () => {
@@ -293,16 +302,14 @@ describe("setup phase", () => {
 		expect(result.phase).toBe("setup");
 		expect(result.status).toBe("installed");
 
-		// MCP call should not include -g for project scope
-		const mcpCall = mockExeca.mock.calls.find((call) =>
-			call[1]?.includes("add-mcp"),
+		// MCP should be installed at project scope
+		expect(mockInstallMcp).toHaveBeenCalledWith(
+			expect.objectContaining({ scope: "project" }),
 		);
-		expect(mcpCall?.[1]).not.toContain("-g");
 	});
 
 	test("reports partial status when some installs fail", async () => {
-		mockExeca.mockResolvedValueOnce({ stdout: "", stderr: "" }); // MCP succeeds
-		// Skills fails
+		// MCP succeeds (default mock), skills fails
 		mockEnsureSkills.mockResolvedValueOnce(false);
 
 		const result = await handleSetupPhase({

@@ -1,0 +1,103 @@
+{
+	"name": "@neon/tools",
+	"version": "0.2.0",
+	"description": "Generated agent tools for every Neon Management API operation, compatible with MCP, Eve, and Mastra.",
+	"keywords": [
+		"neon",
+		"database",
+		"postgres",
+		"tools",
+		"agents",
+		"mcp",
+		"eve",
+		"mastra"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/neondatabase/neon-pkgs.git",
+		"directory": "packages/tools"
+	},
+	"homepage": "https://github.com/neondatabase/neon-pkgs/tree/main/packages/tools#readme",
+	"bugs": {
+		"url": "https://github.com/neondatabase/neon-pkgs/issues"
+	},
+	"license": "Apache-2.0",
+	"author": {
+		"name": "Neon",
+		"url": "https://neon.com"
+	},
+	"type": "module",
+	"sideEffects": false,
+	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		},
+		"./mcp": {
+			"types": "./dist/mcp.d.ts",
+			"import": "./dist/mcp.js",
+			"default": "./dist/mcp.js"
+		},
+		"./mcp-v1": {
+			"types": "./dist/mcp-v1.d.ts",
+			"import": "./dist/mcp-v1.js",
+			"default": "./dist/mcp-v1.js"
+		},
+		"./schemas": {
+			"types": "./dist/schemas.d.ts",
+			"import": "./dist/schemas.js",
+			"default": "./dist/schemas.js"
+		},
+		"./eve": {
+			"types": "./dist/eve.d.ts",
+			"import": "./dist/eve.js",
+			"default": "./dist/eve.js"
+		},
+		"./mastra": {
+			"types": "./dist/mastra.d.ts",
+			"import": "./dist/mastra.js",
+			"default": "./dist/mastra.js"
+		}
+	},
+	"files": [
+		"README.md",
+		"dist/",
+		"package.json"
+	],
+	"scripts": {
+		"build": "tsc --noEmit && tsdown && tsc -p tsconfig.build.json",
+		"generate": "openapi-ts && node scripts/generate-tools.mjs",
+		"generate:check": "pnpm generate && git diff --exit-code -- src/generated src/operations.gen.ts src/schemas.ts",
+		"prepare": "npm run build",
+		"test": "vitest --passWithNoTests",
+		"test:ci": "pnpm generate:check && vitest run --passWithNoTests",
+		"tsc": "tsc"
+	},
+	"dependencies": {
+		"@neon/sdk": "workspace:*",
+		"zod": "^4.4.3"
+	},
+	"devDependencies": {
+		"@hey-api/openapi-ts": "0.98.2",
+		"@mastra/core": "1.56.0-alpha.5",
+		"@modelcontextprotocol/client": "2.0.0",
+		"@modelcontextprotocol/server": "2.0.0",
+		"@modelcontextprotocol/sdk-v1": "npm:@modelcontextprotocol/sdk@1.30.0",
+		"@types/node": "catalog:",
+		"@vitest/coverage-v8": "catalog:",
+		"console-fail-test": "catalog:",
+		"eve": "0.29.5",
+		"tsdown": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	},
+	"engines": {
+		"node": ">=20.19.0"
+	},
+	"publishConfig": {
+		"provenance": false
+	}
+}

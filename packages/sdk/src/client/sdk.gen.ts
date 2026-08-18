@@ -1720,6 +1720,11 @@ export const getNeonAuthEmailProvider = <ThrowOnError extends boolean = false>(o
  * Updates the email provider configuration for the specified branch's Neon Auth integration.
  * The email provider handles transactional messages such as verification emails and password reset links.
  *
+ * Partial `standard` updates — omitting fields to keep their stored values — are supported only for
+ * Better Auth integrations, which merge omitted fields server-side. Legacy Stack Auth integrations do
+ * not merge and require all six `standard` fields (`host`, `port`, `username`, `password`,
+ * `sender_email`, `sender_name`) on every update; a partial `standard` body is rejected with 400.
+ *
  */
 export const updateNeonAuthEmailProvider = <ThrowOnError extends boolean = false>(options: Options<UpdateNeonAuthEmailProviderData, ThrowOnError>): RequestResult<UpdateNeonAuthEmailProviderResponses, UpdateNeonAuthEmailProviderErrors, ThrowOnError> => (options.client ?? client).patch<UpdateNeonAuthEmailProviderResponses, UpdateNeonAuthEmailProviderErrors, ThrowOnError>({
     security: [

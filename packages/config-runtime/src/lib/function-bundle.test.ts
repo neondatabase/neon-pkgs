@@ -544,6 +544,7 @@ describe("buildFunctionBundle staging external package files", () => {
 		expect(names.filter((n) => n.includes("musl"))).toEqual([]);
 	});
 
+	// Under coverage, this 11 MiB ZIP has exceeded Vitest's 5s default in CI.
 	test("fails when the archive exceeds the compressed size limit, naming the largest files", async () => {
 		const source = join(dir, "uses-native.ts");
 		// A real aarch64 header, so the architecture check passes and the size limit is what
@@ -568,5 +569,5 @@ describe("buildFunctionBundle staging external package files", () => {
 
 		expect(message).toMatch(/archive is 1[01]\.\d MiB compressed/);
 		expect(message).toContain("node_modules/fake-addon/lib/huge.so.1");
-	});
+	}, 30_000);
 });

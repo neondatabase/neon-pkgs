@@ -1,15 +1,35 @@
-import { resolveAddMcpAgentId } from "../agents.js";
+import {
+	agentSupportsHttpMcp,
+	agentSupportsProjectMcp,
+	getAgentDisplayName,
+	getSkillsAgentName,
+	resolveAddMcpAgentId,
+	tryResolveAddMcpAgentId,
+} from "../agents.js";
 import { isAuthenticated } from "../auth.js";
-import type { Editor, PhaseResponse } from "../types.js";
+import { installNeonMcpServer } from "../install_mcp.js";
+import type { PhaseResponse } from "../types.js";
 
 export type McpPhaseOptions = {
 	agent?: string;
-	editor?: Editor;
+	editor?: string;
 	status?: boolean;
 	install?: boolean;
 	scope?: "global" | "project";
 	mcpConfigured?: boolean | null;
 };
+
+function skillsFollowUp(agent: string | undefined): string[] {
+	if (agent && !getSkillsAgentName(agent)) {
+		return agent ? ["--agent", agent, "--json"] : ["--json"];
+	}
+	return [
+		"skills",
+		"--json",
+		...(agent ? ["--agent", agent] : []),
+		"--install",
+	];
+}
 
 export async function handleMcpPhase(
 	options: McpPhaseOptions,
@@ -18,7 +38,6 @@ export async function handleMcpPhase(
 		? ["--agent", options.agent, "--json"]
 		: ["--json"];
 
-	// --status: just report what we know
 	if (options.status) {
 		return {
 			phase: "tooling",
@@ -49,7 +68,6 @@ export async function handleMcpPhase(
 		};
 	}
 
-	// --install: proceed with installation
 	if (options.install) {
 		const authed = await isAuthenticated();
 		if (!authed) {
@@ -63,99 +81,137 @@ export async function handleMcpPhase(
 			};
 		}
 
-		// Build the add-mcp command
 		const scope = options.scope ?? "global";
 		const mcpAgentId = resolveAddMcpAgentId(options.agent ?? "claude-code");
+		const installed = installNeonMcpServer({
+			agent: mcpAgentId,
+			scope,
+			cwd: process.cwd(),
+		});
+
+		if (!installed.ok) {
+			if (installed.unsupported) {
+				if (
+					scope === "project" &&
+					!agentSupportsProjectMcp(mcpAgentId) &&
+					agentSupportsHttpMcp(mcpAgentId)
+				) {
+					return {
+						phase: "tooling",
+						status: "unsupported",
+						error: installed.error,
+						nextAction: {
+							type: "ask_user",
+							question: `${getAgentDisplayName(mcpAgentId)} does not support project-level MCP. Install the Neon MCP server globally instead?`,
+							options: [
+								{
+									value: "global",
+									label: "Install globally",
+								},
+								{
+									value: "skip",
+									label: "Skip MCP install",
+								},
+							],
+							responseMapping: {
+								global: {
+									args: [
+										"mcp",
+										"--json",
+										...(options.agent
+											? ["--agent", options.agent]
+											: []),
+										"--install",
+									],
+								},
+								skip: {
+									args: skillsFollowUp(options.agent),
+								},
+							},
+						},
+					};
+				}
+				return {
+					phase: "tooling",
+					status: "unsupported",
+					error: installed.error,
+					nextAction: {
+						type: "run_neon_init",
+						args: skillsFollowUp(options.agent),
+					},
+				};
+			}
+			return {
+				phase: "tooling",
+				status: "failed",
+				error: installed.error,
+				nextAction: {
+					type: "ask_user",
+					question:
+						"Failed to install the Neon MCP server automatically. Would you like to try again or configure it manually?",
+					options: [
+						{ value: "retry", label: "Try again" },
+						{
+							value: "manual",
+							label: "I'll configure it manually",
+						},
+					],
+					responseMapping: {
+						retry: {
+							args: [
+								"mcp",
+								"--json",
+								...(options.agent
+									? ["--agent", options.agent]
+									: []),
+								"--install",
+								...(scope === "project"
+									? ["--scope", "project"]
+									: []),
+							],
+						},
+						manual: {
+							args: agentArgs,
+						},
+					},
+				},
+			};
+		}
+
 		const isCursor =
 			mcpAgentId === "cursor" ||
 			options.agent?.toLowerCase() === "cursor";
 		const isClaudeCode =
 			mcpAgentId === "claude-code" ||
 			options.agent?.toLowerCase() === "claude-code";
-		const installCmd = [
-			"npx -y add-mcp https://mcp.neon.tech/mcp",
-			scope === "global" ? "-g" : "",
-			"-n Neon",
-			"-y",
-			`-a ${mcpAgentId}`,
-		]
-			.filter(Boolean)
-			.join(" ");
-
 		let enableNote = "";
 		if (isCursor && scope === "project") {
 			enableNote =
-				' Note: Cursor disables project-level MCP servers by default — after installation, open Cursor Settings > MCP and toggle the "Neon" server on.';
+				' Cursor disables project-level MCP servers by default — open Cursor Settings > MCP and toggle the "Neon" server on.';
 		} else if (isClaudeCode) {
 			enableNote =
-				' Note: Claude Code requires approval for newly added MCP servers. When prompted, approve the "Neon" server to enable it.';
+				' Claude Code requires approval for newly added MCP servers. When prompted, approve the "Neon" server to enable it.';
 		}
 
 		return {
 			phase: "tooling",
-			status: "installing",
+			status: "installed",
+			path: installed.path,
 			nextAction: {
-				type: "run_command",
-				command: installCmd,
-				description: `Installing Neon MCP server (${scope} scope) for ${mcpAgentId}.${enableNote}`,
-				timeout: 60000,
-				onSuccess: {
-					type: "run_neon_init",
-					args: [
-						"skills",
-						"--json",
-						...(options.agent ? ["--agent", options.agent] : []),
-						"--install",
-					],
-				},
-				onFailure: {
-					other: {
-						type: "ask_user",
-						question:
-							"Failed to install the Neon MCP server automatically. Would you like to try again or configure it manually?",
-						options: [
-							{ value: "retry", label: "Try again" },
-							{
-								value: "manual",
-								label: "I'll configure it manually",
-							},
-						],
-						responseMapping: {
-							retry: {
-								args: [
-									"mcp",
-									"--json",
-									...(options.agent
-										? ["--agent", options.agent]
-										: []),
-									"--install",
-								],
-							},
-							manual: {
-								args: agentArgs,
-							},
-						},
-					},
-				},
+				type: "run_neon_init",
+				args: skillsFollowUp(options.agent),
 			},
+			message: `Installed Neon MCP server (${scope} scope) for ${mcpAgentId}.${enableNote}`,
 		};
 	}
 
-	// Agent reported detection result via --mcp-configured
 	if (options.mcpConfigured === true) {
-		// MCP is done — chain to skills installation (not back to orchestrator,
-		// which would re-check MCP and loop since skills aren't installed yet).
 		return {
 			phase: "tooling",
 			status: "mcp_configured",
 			nextAction: {
 				type: "run_neon_init",
-				args: [
-					"skills",
-					"--json",
-					...(options.agent ? ["--agent", options.agent] : []),
-					"--install",
-				],
+				args: skillsFollowUp(options.agent),
 			},
 		};
 	}
@@ -173,10 +229,20 @@ export async function handleMcpPhase(
 						value: "defaults",
 						label: "Yes, install with default settings",
 					},
-					{
-						value: "project_scope",
-						label: "Yes, install for this project only",
-					},
+					...(() => {
+						const known = options.agent
+							? tryResolveAddMcpAgentId(options.agent)
+							: undefined;
+						if (known && !agentSupportsProjectMcp(known)) {
+							return [];
+						}
+						return [
+							{
+								value: "project_scope",
+								label: "Yes, install for this project only",
+							},
+						];
+					})(),
 					{ value: "skip", label: "Skip for now" },
 				],
 				context:
@@ -209,21 +275,13 @@ export async function handleMcpPhase(
 						],
 					},
 					skip: {
-						args: [
-							"skills",
-							"--json",
-							...(options.agent
-								? ["--agent", options.agent]
-								: []),
-							"--install",
-						],
+						args: skillsFollowUp(options.agent),
 					},
 				},
 			},
 		};
 	}
 
-	// Default: ask the agent to check
 	return {
 		phase: "tooling",
 		status: "detection_needed",

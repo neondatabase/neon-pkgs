@@ -7,8 +7,10 @@ import {
 	globalInstallCommand,
 	resolveInvokingPackageManager,
 } from "../utils/package_manager.js";
-import { getSkillsAgentName as getSkillsAgentNameFromId } from "./agents.js";
-import type { Editor } from "./types.js";
+import {
+	type AgentType,
+	getSkillsAgentName as getSkillsAgentNameFromId,
+} from "./agents.js";
 
 /**
  * Ensures the `skills` CLI is globally installed so npx doesn't need
@@ -39,12 +41,19 @@ async function ensureSkillsCli(): Promise<void> {
 	}
 }
 
-/** Skills installed by `neon init`. */
+/** Base skills installed for all invocations */
 const BASE_SKILLS = ["neon", "neon-postgres"];
 
-/** Returns the list of Neon agent skills to install. */
-export function getSkillList(): string[] {
-	return BASE_SKILLS;
+/** Additional skills installed for preview (non-bootstrap) invocations */
+const PREVIEW_SKILLS = [
+	"neon-object-storage",
+	"neon-functions",
+	"neon-ai-gateway",
+];
+
+/** Returns the skill list based on whether preview mode is active */
+export function getSkillList(preview?: boolean): string[] {
+	return preview ? [...BASE_SKILLS, ...PREVIEW_SKILLS] : BASE_SKILLS;
 }
 
 const SKILL_BASE_URL =
@@ -61,61 +70,26 @@ export const SKILL_REFERENCE_URLS: Record<string, string> = {
 	neonJs: `${SKILL_BASE_URL}/neon-js.md`,
 };
 
-/**
- * Maps Editor display names to the skills CLI agent name.
- */
-function editorToSkillsAgent(editor: Editor): string {
-	switch (editor) {
-		case "Cursor":
-			return "cursor";
-		case "VS Code":
-		case "GitHub Copilot CLI":
-			return "github-copilot";
-		case "Claude CLI":
-			return "claude-code";
-		case "Codex":
-			return "codex";
-		case "OpenCode":
-			return "opencode";
-		case "Antigravity":
-			return "antigravity";
-		case "Cline":
-		case "Cline CLI":
-			return "cline";
-		case "Gemini CLI":
-			return "gemini-cli";
-		case "Goose":
-			return "goose";
-		case "Claude Desktop":
-			return "claude-code";
-		case "MCPorter":
-			return "mcporter";
-		case "Zed":
-			return "zed";
-		default:
-			return "";
-	}
-}
-
 export type InstallSkillsOptions = {
 	json?: boolean;
 	scope?: "global" | "project";
+	preview?: boolean;
 };
 
 /**
  * Installs Neon agent skills using Vercel's skills CLI.
  */
 export async function installAgentSkills(
-	selectedEditors: Editor[],
+	selectedAgents: AgentType[],
 	options?: InstallSkillsOptions,
 ): Promise<boolean> {
 	const quiet = options?.json === true;
 
-	const editorsWithSkills = selectedEditors.filter(
-		(e) => editorToSkillsAgent(e) !== "",
+	const agentsWithSkills = selectedAgents.filter(
+		(id) => getSkillsAgentNameFromId(id) !== undefined,
 	);
 
-	if (editorsWithSkills.length === 0) {
+	if (agentsWithSkills.length === 0) {
 		return true;
 	}
 
@@ -125,10 +99,11 @@ export async function installAgentSkills(
 	let anyFailed = false;
 
 	await ensureSkillsCli();
-	const skills = getSkillList();
+	const skills = getSkillList(options?.preview);
 
-	for (const editor of editorsWithSkills) {
-		const agentName = editorToSkillsAgent(editor);
+	for (const agent of agentsWithSkills) {
+		const agentName = getSkillsAgentNameFromId(agent);
+		if (!agentName) continue;
 
 		// Install one skill at a time — the skills CLI has a bug with multiple
 		// --skill flags where it creates directories but doesn't copy all SKILL.md files.
@@ -154,7 +129,7 @@ export async function installAgentSkills(
 			} catch (error) {
 				if (!quiet)
 					log.error(
-						`Failed to install skill ${skill} for ${editor}: ${error instanceof Error ? error.message : "Unknown error"}`,
+						`Failed to install skill ${skill} for ${agent}: ${error instanceof Error ? error.message : "Unknown error"}`,
 					);
 				anyFailed = true;
 			}
@@ -196,8 +171,79 @@ const GLOBAL_SKILLS_DIRS: Record<string, string[]> = (() => {
 		"github-copilot": [resolve(home, ".vscode", "skills"), agentsDir],
 		codex: [resolve(home, ".codex", "skills"), agentsDir],
 		cline: [resolve(home, ".cline", "skills"), agentsDir],
+		grok: [resolve(home, ".grok", "skills"), agentsDir],
 	};
 })();
+
+const PROJECT_SKILLS_DIRS: Record<string, string[]> = {
+	cursor: [".cursor/skills", ".agents/skills"],
+	"claude-code": [".claude/skills", ".agents/skills"],
+	"github-copilot": [".vscode/skills", ".agents/skills"],
+	codex: [".codex/skills", ".agents/skills"],
+	cline: [".cline/skills", ".agents/skills"],
+	grok: [".grok/skills", ".agents/skills"],
+};
+
+function skillDirsForAgent(
+	skillsId: string,
+	scope: "global" | "project",
+	cwd: string,
+	home: string,
+): string[] {
+	if (scope === "global") {
+		return [
+			...new Set([
+				...(GLOBAL_SKILLS_DIRS[skillsId] ?? []),
+				resolve(home, ".agents", "skills"),
+			]),
+		];
+	}
+	return [
+		...new Set(
+			[...(PROJECT_SKILLS_DIRS[skillsId] ?? []), ".agents/skills"].map(
+				(dir) => resolve(cwd, dir),
+			),
+		),
+	];
+}
+
+export function missingSkillsForAgent(
+	agent: string,
+	options: {
+		cwd?: string;
+		scope?: "global" | "project";
+		preview?: boolean;
+	} = {},
+): string[] {
+	const skillsId = getSkillsAgentNameFromId(agent);
+	if (!skillsId) return [];
+	const cwd = options.cwd ?? process.cwd();
+	const home = process.env.HOME || process.env.USERPROFILE || "";
+	const dirs = skillDirsForAgent(
+		skillsId,
+		options.scope ?? "project",
+		cwd,
+		home,
+	);
+	return getSkillList(options.preview).filter(
+		(skill) =>
+			!dirs.some((dir) => existsSync(resolve(dir, skill, "SKILL.md"))),
+	);
+}
+
+export function skillsInstalledForAgent(
+	agent: AgentType,
+	cwd = process.cwd(),
+	preview = false,
+): boolean {
+	if (!getSkillsAgentNameFromId(agent)) return true;
+	return (
+		missingSkillsForAgent(agent, { cwd, scope: "project", preview })
+			.length === 0 ||
+		missingSkillsForAgent(agent, { cwd, scope: "global", preview })
+			.length === 0
+	);
+}
 
 /**
  * Checks whether skills were recently updated (within the freshness window).
@@ -206,20 +252,22 @@ const GLOBAL_SKILLS_DIRS: Record<string, string[]> = (() => {
 function skillsAreFresh(agent: string, requiredSkills: string[]): boolean {
 	const now = Date.now();
 	const cwd = process.cwd();
-	const projectSkillDirs = [".agents", ".cursor", ".claude"];
+	const skillsId = getSkillsAgentNameFromId(agent);
+	const projectDirs =
+		(skillsId ? PROJECT_SKILLS_DIRS[skillsId] : undefined)?.map((dir) =>
+			resolve(cwd, dir),
+		) ?? [];
 
 	// Check project-level: ALL required skills must exist on disk
 	// and skills-lock.json must be recent
 	const lockPath = resolve(cwd, "skills-lock.json");
-	if (existsSync(lockPath)) {
+	if (existsSync(lockPath) && projectDirs.length > 0) {
 		try {
 			const mtime = statSync(lockPath).mtimeMs;
 			if (now - mtime < SKILLS_FRESHNESS_MS) {
 				const allExist = requiredSkills.every((skill) =>
-					projectSkillDirs.some((dir) =>
-						existsSync(
-							resolve(cwd, dir, "skills", skill, "SKILL.md"),
-						),
+					projectDirs.some((dir) =>
+						existsSync(resolve(dir, skill, "SKILL.md")),
 					),
 				);
 				if (allExist) return true;
@@ -229,6 +277,7 @@ function skillsAreFresh(agent: string, requiredSkills: string[]): boolean {
 
 	// Check global: ALL required skills must exist in agent-specific dirs
 	const agentName = getSkillsAgentNameFromId(agent);
+	if (!agentName) return false;
 	const globalDirs = GLOBAL_SKILLS_DIRS[agentName] ?? [];
 	for (const dir of globalDirs) {
 		const allExist = requiredSkills.every((skill) =>
@@ -258,38 +307,24 @@ function skillsAreFresh(agent: string, requiredSkills: string[]): boolean {
 export async function ensureSkillsUpToDate(
 	agent: string | undefined,
 	scope?: "global" | "project",
+	preview?: boolean,
 ): Promise<boolean> {
 	const resolvedAgent = agent || "cursor";
-	const skills = getSkillList();
+	const agentName = getSkillsAgentNameFromId(resolvedAgent);
+	if (!agentName) return true;
+
+	const skills = getSkillList(preview);
 	if (skillsAreFresh(resolvedAgent, skills)) return true;
 
 	await ensureSkillsCli();
-	const agentName = getSkillsAgentNameFromId(resolvedAgent);
 	let allOk = true;
 
 	// Only install skills that don't already have SKILL.md on disk.
 	// Re-installing existing skills can trigger sandbox permission prompts.
-	const home = process.env.HOME || process.env.USERPROFILE || "";
-	const cwd = process.cwd();
-	const checkDirs =
-		scope === "global"
-			? [
-					resolve(home, ".cursor", "skills"),
-					resolve(home, ".claude", "skills"),
-					resolve(home, ".agents", "skills"),
-				]
-			: [
-					resolve(cwd, ".cursor", "skills"),
-					resolve(cwd, ".claude", "skills"),
-					resolve(cwd, ".agents", "skills"),
-				];
-
-	const missingSkills = skills.filter(
-		(skill) =>
-			!checkDirs.some((dir) =>
-				existsSync(resolve(dir, skill, "SKILL.md")),
-			),
-	);
+	const missingSkills = missingSkillsForAgent(resolvedAgent, {
+		scope: scope ?? "project",
+		preview,
+	});
 
 	if (missingSkills.length === 0) return true;
 
