@@ -1,6 +1,10 @@
 import { unlink } from "node:fs/promises";
 import { execa } from "execa";
-import { agentSupportsProjectMcp, resolveAddMcpAgentId } from "../agents.js";
+import {
+	agentSupportsProjectMcp,
+	getSkillsAgentName,
+	resolveAddMcpAgentId,
+} from "../agents.js";
 import {
 	detectIde,
 	isCursorInstalled,
@@ -441,12 +445,15 @@ async function executeBatchedInstallation(
 		});
 	} else {
 		// Build the install commands for the agent to run directly
-		// (sandboxed environments may block child process writes)
+		// (sandboxed environments may block child process writes). Use the
+		// skills-CLI agent name (e.g. vscode → github-copilot), which is what
+		// `skills add --agent` expects — not the raw agent id.
 		const { getSkillList } = await import("../skills.js");
 		const skillList = getSkillList();
+		const skillsAgentName = getSkillsAgentName(agentId) ?? agentId;
 		const cmds = skillList.map(
 			(s) =>
-				`skills add neondatabase/agent-skills --skill ${s} --agent ${agentId}${skillsScope === "global" ? " -g" : ""} -y`,
+				`skills add neondatabase/agent-skills --skill ${s} --agent ${skillsAgentName}${skillsScope === "global" ? " -g" : ""} -y`,
 		);
 		results.push({
 			id: "install_skills",

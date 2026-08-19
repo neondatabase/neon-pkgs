@@ -275,6 +275,15 @@ async function interactiveInitInner(): Promise<void> {
 			}
 			selectedAgents = picked;
 			vscodeEditors = extensionEditorsFor(selectedAgents);
+			// Re-check extension status for the newly chosen editors — otherwise
+			// `canInstallExtension` would reflect the previously selected set.
+			extensionAlreadyInstalled =
+				vscodeEditors.length > 0 &&
+				(
+					await Promise.all(
+						vscodeEditors.map((e) => isExtensionInstalled(e)),
+					)
+				).every(Boolean);
 			canInstallExtension =
 				vscodeEditors.length > 0 && !extensionAlreadyInstalled;
 			continue;
