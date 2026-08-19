@@ -186,13 +186,6 @@ async function interactiveInitInner(): Promise<void> {
 	// -----------------------------------------------------------------------
 	// Step 2: Install what's missing
 	// -----------------------------------------------------------------------
-	const homeDir = process.env.HOME || process.env.USERPROFILE;
-	if (!homeDir) {
-		log.error("Could not determine home directory.");
-		outro("Setup failed.");
-		return;
-	}
-
 	let selectedAgents: AgentType[];
 	if (detectedAgent) {
 		selectedAgents = [detectedAgent];

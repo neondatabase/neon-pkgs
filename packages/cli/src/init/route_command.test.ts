@@ -1,7 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 import { routeDataStep } from "./route_command.js";
 
-// Mock execa for setup phase (it runs add-mcp, skills install, etc.)
+// Mock execa so phase handlers never shell out (skills install, extension install, etc.)
 vi.mock("execa", () => ({
 	execa: vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 }),
 }));
