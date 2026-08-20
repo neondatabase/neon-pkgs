@@ -155,6 +155,7 @@ export const INSPECT_QUERIES = {
 				SELECT *
 				FROM pg_stat_activity
 				WHERE state = 'active'
+					AND backend_type IN ('client backend', 'parallel worker')
 					AND pid <> pg_backend_pid()
 			),
 			stalled_groups AS (

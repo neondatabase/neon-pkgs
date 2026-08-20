@@ -84,6 +84,9 @@ describe("inspect db", () => {
 	test("stalled-queries is compute-wide and preserves its diagnostic fields", () => {
 		expect(INSPECT_QUERIES["stalled-queries"]).toMatchObject({
 			scope: "compute",
+			sql: expect.stringContaining(
+				"backend_type IN ('client backend', 'parallel worker')",
+			),
 			fields: [
 				"observed_at",
 				"query_start",
