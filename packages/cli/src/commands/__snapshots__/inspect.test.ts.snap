@@ -22,6 +22,8 @@ exports[`inspect db > replication-slots --db-url bypasses the API and reports a 
 
 exports[`inspect db > seq-scans --db-url bypasses the API and reports a Postgres connection error 1`] = `""`;
 
+exports[`inspect db > stalled-queries --db-url bypasses the API and reports a Postgres connection error 1`] = `""`;
+
 exports[`inspect db > subscriptions --db-url bypasses the API and reports a Postgres connection error 1`] = `""`;
 
 exports[`inspect db > table-sizes --db-url bypasses the API and reports a Postgres connection error 1`] = `""`;

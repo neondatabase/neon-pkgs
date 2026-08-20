@@ -1,5 +1,6 @@
 import { describe, expect } from "vitest";
 import { test } from "../test_utils/fixtures";
+import { INSPECT_QUERIES } from "../utils/inspect_queries.js";
 
 // `inspect db` opens a real Postgres connection with the embedded wire client,
 // so these tests drive the hermetic `--db-url` path: point at a port nothing is
@@ -80,10 +81,35 @@ describe("inspect db", () => {
 		});
 	});
 
+	test("stalled-queries is compute-wide and preserves its diagnostic fields", () => {
+		expect(INSPECT_QUERIES["stalled-queries"]).toMatchObject({
+			scope: "compute",
+			fields: [
+				"observed_at",
+				"query_start",
+				"query_group",
+				"pid",
+				"leader_pid",
+				"role",
+				"backend_type",
+				"database",
+				"application_name",
+				"query_id",
+				"state",
+				"wait_event_type",
+				"wait_event",
+				"blocking_pids",
+				"duration",
+				"query",
+			],
+		});
+	});
+
 	// Phase-2 subcommands. The extension-gated ones (`outliers`, `calls`) still
 	// fail at the connection step here — the `pg_stat_statements` guard only runs
 	// after a successful connect — so they share the same wiring assertion.
 	for (const sub of [
+		"stalled-queries",
 		"seq-scans",
 		"vacuum-stats",
 		"bloat",
