@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import * as z from "zod";
 import {
 	createNeonTool,
 	createNeonTools,
@@ -86,7 +87,9 @@ describe("createNeonTools workflows", () => {
 	test("rejects a call with neither operations nor workflows", () => {
 		expect(() =>
 			Reflect.apply(createNeonTools, undefined, [{ apiKey: "test-key" }]),
-		).toThrow("createNeonTools requires operations or workflows");
+		).toThrow(
+			"createNeonTools requires at least one operation or workflow",
+		);
 	});
 
 	test("rejects duplicate workflow selections", () => {
@@ -191,6 +194,17 @@ describe("createWithCompute", () => {
 				{ signal: controller.signal },
 			),
 		).rejects.toThrow();
+	});
+
+	test("describes pooled on the published schema", () => {
+		const { tools } = createBranchTools();
+		const schema = z.toJSONSchema(tools.createWithCompute.inputSchema);
+		const pooled = schema.properties?.pooled;
+
+		expect(pooled).toMatchObject({
+			type: "boolean",
+			description: expect.stringContaining("Default true"),
+		});
 	});
 
 	test("rejects unknown input fields", () => {

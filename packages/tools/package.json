@@ -1,7 +1,7 @@
 {
 	"name": "@neon/tools",
 	"version": "0.3.0",
-	"description": "Generated agent tools for every Neon Management API operation, compatible with MCP, Eve, and Mastra.",
+	"description": "Agent tools for the Neon Management API and SDK workflows, compatible with MCP, Eve, and Mastra.",
 	"keywords": [
 		"neon",
 		"database",

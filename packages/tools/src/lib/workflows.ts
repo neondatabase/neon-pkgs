@@ -1,4 +1,4 @@
-import { createNeonClient, type NeonClient } from "@neon/sdk";
+import { createNeonClient, type NeonClient, type NeonConfig } from "@neon/sdk";
 import * as z from "zod";
 import * as zod from "../generated/zod.gen.js";
 import {
@@ -17,6 +17,7 @@ export interface WorkflowClientOptions {
 	apiKey?: NeonBearerCredential;
 	baseUrl?: string;
 	fetch?: typeof fetch;
+	wait?: NeonConfig["wait"];
 }
 
 const branchCreateFields = zod.zBranchCreateRequest.shape.branch.unwrap().shape;
@@ -28,7 +29,12 @@ const writeAnnotations = {
 	openWorldHint: true,
 } as const;
 
-const pooledField = z.boolean().optional();
+const pooledField = z
+	.boolean()
+	.describe(
+		"Return a pooled connection string. Default true. Set false for a direct connection.",
+	)
+	.optional();
 
 export const createWithComputeInputSchema = z.strictObject({
 	project_id: zod.zCreateProjectBranchPath.shape.project_id,
@@ -79,6 +85,7 @@ const workflowClient = (
 		throwOnError: true,
 		...(options.baseUrl === undefined ? {} : { baseUrl: options.baseUrl }),
 		...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+		...(options.wait === undefined ? {} : { wait: options.wait }),
 	});
 
 const bindWorkflow = <
@@ -114,7 +121,7 @@ const createWithComputeTool = (options: WorkflowClientOptions) =>
 			id: "create_with_compute",
 			title: "Create branch with compute",
 			description:
-				"Create a branch with a read-write endpoint and return a ready-to-use connection string. One API call (Neon creates the endpoint inline) plus readiness polling.",
+				"Create a branch with a read-write endpoint and return its connection string. Use this instead of create_project_branch whenever the branch will be connected to. create_project_branch creates no compute and returns no connection string. The call waits until the compute is ready, up to five minutes by default.",
 			inputSchema: createWithComputeInputSchema,
 			annotations: writeAnnotations,
 			requiresApproval: true,
@@ -159,7 +166,7 @@ const createAndConnectTool = (options: WorkflowClientOptions) =>
 			id: "create_and_connect",
 			title: "Create project and connect",
 			description:
-				"Create a project and return a ready-to-use connection string to its default branch. One API call plus readiness polling.",
+				"Create a project and return a connection string to its default branch. Use this instead of create_project when the next step needs to connect. The call waits until the default compute is ready, up to five minutes by default.",
 			inputSchema: createAndConnectInputSchema,
 			annotations: writeAnnotations,
 			requiresApproval: true,

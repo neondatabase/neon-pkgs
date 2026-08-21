@@ -86,7 +86,7 @@ type WithPublishedId<Tool> = Tool extends { id: string }
 	: Tool;
 
 export interface NeonToolsClientOptions
-	extends Pick<NeonConfig, "baseUrl" | "fetch">,
+	extends Pick<NeonConfig, "baseUrl" | "fetch" | "wait">,
 		Omit<NeonToolCustomizeOptions, "name" | "names"> {
 	apiKey?: NeonBearerCredential;
 }
@@ -116,6 +116,7 @@ const createRawClient = (options: NeonToolsClientOptions) =>
 				: requireBearerCredential(options.apiKey),
 		...(options.baseUrl === undefined ? {} : { baseUrl: options.baseUrl }),
 		...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+		...(options.wait === undefined ? {} : { wait: options.wait }),
 	}).client;
 
 const operationFactoryFor = (operationId: NeonOperationId) => {
@@ -182,7 +183,9 @@ const bindTools = <
 	const operations = options.operations ?? [];
 	const workflows = options.workflows ?? [];
 	if (operations.length === 0 && workflows.length === 0) {
-		throw new TypeError("createNeonTools requires operations or workflows");
+		throw new TypeError(
+			"createNeonTools requires at least one operation or workflow",
+		);
 	}
 
 	const selectedOperations = new Set<NeonOperationId>();
