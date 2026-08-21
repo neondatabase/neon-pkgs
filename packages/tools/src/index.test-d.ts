@@ -190,3 +190,45 @@ const unnamedBag: CreateNeonToolsOptions<["listProjects"]> = {
 	name: (id: string) => `neon_${id}`,
 };
 void unnamedBag;
+
+const workflowOnly = createNeonTools({
+	apiKey: "test-key",
+	workflows: ["createWithCompute"] as const,
+});
+expectTypeOf(workflowOnly).toHaveProperty("createWithCompute");
+// @ts-expect-error operations are absent when only workflows are selected
+workflowOnly.listProjects;
+workflowOnly.createWithCompute.execute({ project_id: "project-id" });
+// @ts-expect-error project_id is required without inject
+workflowOnly.createWithCompute.execute({});
+workflowOnly.createWithCompute
+	.execute({ project_id: "project-id" })
+	.then((result) => {
+		expectTypeOf(result.data.connectionString).toEqualTypeOf<string>();
+		expectTypeOf(result.data.branch.id).toEqualTypeOf<string>();
+	});
+
+const combined = createNeonTools({
+	apiKey: "test-key",
+	operations: ["listProjects"] as const,
+	workflows: ["createWithCompute"] as const,
+});
+expectTypeOf(combined).toHaveProperty("listProjects");
+expectTypeOf(combined).toHaveProperty("createWithCompute");
+
+const createWithCompute = createNeonTool("createWithCompute", {
+	apiKey: "test-key",
+});
+createWithCompute.execute({ project_id: "project-id", name: "feature-x" });
+// @ts-expect-error parentId is not the tool field name
+createWithCompute.execute({ project_id: "project-id", parentId: "br-id" });
+
+const omittedWorkflow = createNeonTools({
+	apiKey: "test-key",
+	workflows: ["createWithCompute"] as const,
+	inject: { projectId: "granted-project", omitFromSchema: true },
+});
+omittedWorkflow.createWithCompute.execute({ name: "feature-x" });
+
+// @ts-expect-error at least one of operations or workflows is required
+createNeonTools({ apiKey: "test-key" });
