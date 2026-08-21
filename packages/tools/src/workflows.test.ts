@@ -44,7 +44,7 @@ const createBranchTools = (options: NeonToolsClientOptions = {}) => {
 	const tools = createNeonTools({
 		apiKey: "test-key",
 		...options,
-		workflows: ["createWithCompute"] as const,
+		workflows: ["createBranchWithCompute"] as const,
 		fetch: async (input, init) => {
 			requests.push(new Request(input, init));
 			return jsonResponse(branchWithComputeBody);
@@ -57,14 +57,18 @@ describe("createNeonTools workflows", () => {
 	test("creates only the selected workflow", () => {
 		const tools = createNeonTools({
 			apiKey: "test-key",
-			workflows: ["createWithCompute"] as const,
+			workflows: ["createBranchWithCompute"] as const,
 		});
 
-		expect(Object.keys(tools)).toEqual(["createWithCompute"]);
-		expect(tools.createWithCompute.id).toBe("create_with_compute");
-		expect(tools.createWithCompute.operationId).toBe("createWithCompute");
-		expect(tools.createWithCompute.requiresApproval).toBe(true);
-		expect(tools.createWithCompute.annotations).toEqual({
+		expect(Object.keys(tools)).toEqual(["createBranchWithCompute"]);
+		expect(tools.createBranchWithCompute.id).toBe(
+			"create_branch_with_compute",
+		);
+		expect(tools.createBranchWithCompute.operationId).toBe(
+			"createBranchWithCompute",
+		);
+		expect(tools.createBranchWithCompute.requiresApproval).toBe(true);
+		expect(tools.createBranchWithCompute.annotations).toEqual({
 			readOnlyHint: false,
 			destructiveHint: true,
 			openWorldHint: true,
@@ -75,12 +79,12 @@ describe("createNeonTools workflows", () => {
 		const tools = createNeonTools({
 			apiKey: "test-key",
 			operations: ["listProjects"] as const,
-			workflows: ["createWithCompute"] as const,
+			workflows: ["createBranchWithCompute"] as const,
 		});
 
 		expect(Object.keys(tools)).toEqual([
 			"listProjects",
-			"createWithCompute",
+			"createBranchWithCompute",
 		]);
 	});
 
@@ -96,9 +100,12 @@ describe("createNeonTools workflows", () => {
 		expect(() =>
 			createNeonTools({
 				apiKey: "test-key",
-				workflows: ["createWithCompute", "createWithCompute"],
+				workflows: [
+					"createBranchWithCompute",
+					"createBranchWithCompute",
+				],
 			}),
-		).toThrow('Duplicate Neon workflow "createWithCompute"');
+		).toThrow('Duplicate Neon workflow "createBranchWithCompute"');
 	});
 
 	test("reports unknown runtime workflow ids", () => {
@@ -120,20 +127,20 @@ describe("createNeonTools workflows", () => {
 			createNeonTools({
 				apiKey: "test-key",
 				operations: ["createProject"] as const,
-				workflows: ["createAndConnect"] as const,
-				names: { createAndConnect: "create_project" },
+				workflows: ["createProjectAndConnect"] as const,
+				names: { createProjectAndConnect: "create_project" },
 			}),
 		).toThrow(
-			'Duplicate Neon tool id "create_project" for createProject, createAndConnect',
+			'Duplicate Neon tool id "create_project" for createProject, createProjectAndConnect',
 		);
 	});
 });
 
-describe("createWithCompute", () => {
+describe("createBranchWithCompute", () => {
 	test("posts a read-write endpoint and returns the SDK workflow result", async () => {
 		const { requests, tools } = createBranchTools();
 
-		const result = await tools.createWithCompute.execute({
+		const result = await tools.createBranchWithCompute.execute({
 			project_id: "project-id",
 			name: "feature-x",
 			parent_id: "br-parent",
@@ -173,7 +180,7 @@ describe("createWithCompute", () => {
 	test("forwards pooled: false to the SDK connection-string picker", async () => {
 		const { tools } = createBranchTools();
 
-		const result = await tools.createWithCompute.execute({
+		const result = await tools.createBranchWithCompute.execute({
 			project_id: "project-id",
 			pooled: false,
 		});
@@ -189,7 +196,7 @@ describe("createWithCompute", () => {
 		const { tools } = createBranchTools();
 
 		await expect(
-			tools.createWithCompute.execute(
+			tools.createBranchWithCompute.execute(
 				{ project_id: "project-id" },
 				{ signal: controller.signal },
 			),
@@ -198,7 +205,9 @@ describe("createWithCompute", () => {
 
 	test("describes pooled on the published schema", () => {
 		const { tools } = createBranchTools();
-		const schema = z.toJSONSchema(tools.createWithCompute.inputSchema);
+		const schema = z.toJSONSchema(
+			tools.createBranchWithCompute.inputSchema,
+		);
 		const pooled = schema.properties?.pooled;
 
 		expect(pooled).toMatchObject({
@@ -211,7 +220,7 @@ describe("createWithCompute", () => {
 		const { tools } = createBranchTools();
 
 		expect(
-			tools.createWithCompute.inputSchema.safeParse({
+			tools.createBranchWithCompute.inputSchema.safeParse({
 				project_id: "project-id",
 				parentId: "br-parent",
 			}).success,
@@ -223,7 +232,7 @@ describe("createWithCompute", () => {
 			inject: { projectId: "granted-project", omitFromSchema: true },
 		});
 
-		await tools.createWithCompute.execute({ name: "feature-x" });
+		await tools.createBranchWithCompute.execute({ name: "feature-x" });
 
 		expect(requests[0].url).toBe(
 			"https://console.neon.tech/api/v2/projects/granted-project/branches",
@@ -233,11 +242,11 @@ describe("createWithCompute", () => {
 	test("renames the published id", () => {
 		const tools = createNeonTools({
 			apiKey: "test-key",
-			workflows: ["createWithCompute"] as const,
-			names: { createWithCompute: "create_branch" },
+			workflows: ["createBranchWithCompute"] as const,
+			names: { createBranchWithCompute: "create_branch" },
 		});
 
-		expect(tools.createWithCompute.id).toBe("create_branch");
+		expect(tools.createBranchWithCompute.id).toBe("create_branch");
 	});
 
 	test("uses an execute-time credential instead of the constructor credential", async () => {
@@ -245,7 +254,7 @@ describe("createWithCompute", () => {
 			apiKey: "constructor-key",
 		});
 
-		await tools.createWithCompute.execute(
+		await tools.createBranchWithCompute.execute(
 			{ project_id: "project-id" },
 			{ apiKey: "oauth-access-token" },
 		);
@@ -261,7 +270,7 @@ describe("createWithCompute", () => {
 		});
 
 		await expect(
-			tools.createWithCompute.execute(
+			tools.createBranchWithCompute.execute(
 				{ project_id: "project-id" },
 				{ apiKey: "" },
 			),
@@ -275,7 +284,7 @@ describe("createWithCompute", () => {
 		});
 
 		await expect(
-			tools.createWithCompute.execute(
+			tools.createBranchWithCompute.execute(
 				{ project_id: "project-id" },
 				{ apiKey: () => "" },
 			),
@@ -284,19 +293,19 @@ describe("createWithCompute", () => {
 	});
 });
 
-describe("createAndConnect", () => {
+describe("createProjectAndConnect", () => {
 	test("posts the project body and returns the SDK workflow result", async () => {
 		const requests: Request[] = [];
 		const tools = createNeonTools({
 			apiKey: "test-key",
-			workflows: ["createAndConnect"] as const,
+			workflows: ["createProjectAndConnect"] as const,
 			fetch: async (input, init) => {
 				requests.push(new Request(input, init));
 				return jsonResponse(projectWithUriBody);
 			},
 		});
 
-		const result = await tools.createAndConnect.execute({
+		const result = await tools.createProjectAndConnect.execute({
 			name: "tool-created",
 			region_id: "aws-us-east-1",
 		});
@@ -323,11 +332,11 @@ describe("createAndConnect", () => {
 	test("forwards pooled: false", async () => {
 		const tools = createNeonTools({
 			apiKey: "test-key",
-			workflows: ["createAndConnect"] as const,
+			workflows: ["createProjectAndConnect"] as const,
 			fetch: async () => jsonResponse(projectWithUriBody),
 		});
 
-		const result = await tools.createAndConnect.execute({
+		const result = await tools.createProjectAndConnect.execute({
 			name: "tool-created",
 			pooled: false,
 		});
@@ -341,7 +350,7 @@ describe("createAndConnect", () => {
 describe("createNeonTool workflow", () => {
 	test("creates a single workflow tool", async () => {
 		const requests: Request[] = [];
-		const tool = createNeonTool("createWithCompute", {
+		const tool = createNeonTool("createBranchWithCompute", {
 			apiKey: "test-key",
 			fetch: async (input, init) => {
 				requests.push(new Request(input, init));
@@ -351,7 +360,7 @@ describe("createNeonTool workflow", () => {
 
 		await tool.execute({ project_id: "project-id", name: "feature-x" });
 
-		expect(tool.id).toBe("create_with_compute");
+		expect(tool.id).toBe("create_branch_with_compute");
 		expect(requests[0].url).toBe(
 			"https://console.neon.tech/api/v2/projects/project-id/branches",
 		);

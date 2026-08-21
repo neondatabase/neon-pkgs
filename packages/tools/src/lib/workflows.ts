@@ -36,7 +36,7 @@ const pooledField = z
 	)
 	.optional();
 
-export const createWithComputeInputSchema = z.strictObject({
+export const createBranchWithComputeInputSchema = z.strictObject({
 	project_id: zod.zCreateProjectBranchPath.shape.project_id,
 	name: branchCreateFields.name,
 	parent_id: branchCreateFields.parent_id,
@@ -50,12 +50,15 @@ export const createWithComputeInputSchema = z.strictObject({
 	pooled: pooledField,
 });
 
-export const createAndConnectInputSchema = z.strictObject({
+export const createProjectAndConnectInputSchema = z.strictObject({
 	...projectCreateFields,
 	pooled: pooledField,
 });
 
-export const workflowIds = ["createWithCompute", "createAndConnect"] as const;
+export const workflowIds = [
+	"createBranchWithCompute",
+	"createProjectAndConnect",
+] as const;
 
 export type NeonWorkflowId = (typeof workflowIds)[number];
 
@@ -113,16 +116,16 @@ const bindWorkflow = <
 	},
 });
 
-const createWithComputeTool = (options: WorkflowClientOptions) =>
+const createBranchWithComputeTool = (options: WorkflowClientOptions) =>
 	bindWorkflow(
 		options,
 		{
-			operationId: "createWithCompute",
-			id: "create_with_compute",
+			operationId: "createBranchWithCompute",
+			id: "create_branch_with_compute",
 			title: "Create branch with compute",
 			description:
 				"Create a branch with a read-write endpoint and return its connection string. Use this instead of create_project_branch when the next step needs to connect: create_project_branch omits compute unless you pass endpoints, and it does not wait or return a connection string. The call waits until the compute is ready, up to five minutes by default.",
-			inputSchema: createWithComputeInputSchema,
+			inputSchema: createBranchWithComputeInputSchema,
 			annotations: writeAnnotations,
 			requiresApproval: true,
 			metadata: {
@@ -158,16 +161,16 @@ const createWithComputeTool = (options: WorkflowClientOptions) =>
 			),
 	);
 
-const createAndConnectTool = (options: WorkflowClientOptions) =>
+const createProjectAndConnectTool = (options: WorkflowClientOptions) =>
 	bindWorkflow(
 		options,
 		{
-			operationId: "createAndConnect",
-			id: "create_and_connect",
+			operationId: "createProjectAndConnect",
+			id: "create_project_and_connect",
 			title: "Create project and connect",
 			description:
 				"Create a project and return a connection string to its default branch. Use this instead of create_project when the next step needs to connect. The call waits until the default compute is ready, up to five minutes by default.",
-			inputSchema: createAndConnectInputSchema,
+			inputSchema: createProjectAndConnectInputSchema,
 			annotations: writeAnnotations,
 			requiresApproval: true,
 			metadata: {
@@ -188,8 +191,8 @@ const createAndConnectTool = (options: WorkflowClientOptions) =>
 	);
 
 export const workflowFactories = {
-	createWithCompute: createWithComputeTool,
-	createAndConnect: createAndConnectTool,
+	createBranchWithCompute: createBranchWithComputeTool,
+	createProjectAndConnect: createProjectAndConnectTool,
 };
 
 export type WorkflowFactories = typeof workflowFactories;

@@ -56,21 +56,21 @@ The returned record is keyed by OpenAPI operation ID or SDK workflow method name
 
 `workflows` selects methods from the `@neon/sdk` ergonomic client. These are not OpenAPI operations: they attach a default compute, wait until the resource is ready, and return a connection string. `operations` is the generated Management API. At least one of the two arrays is required.
 
-Both workflow tools poll until the resource is ready. The default deadline is five minutes (`wait.timeoutMs`). Pass `wait: { timeoutMs: 30_000 }` on `createNeonTools` or `createNeonTool` to bound that. Set it below the host's own tool-call timeout, otherwise the host gives up first. An abort `signal` on `execute` or a wait timeout stops the poll, not the create: the branch or project may already exist, and the error does not include its id. List before retrying. `metadata.method` and `metadata.path` name the first request; extra readiness GETs are not listed there. `inject.projectId` still works on `createWithCompute` because its path is `/projects/{project_id}/branches`.
+Both workflow tools poll until the resource is ready. The default deadline is five minutes (`wait.timeoutMs`). Pass `wait: { timeoutMs: 30_000 }` on `createNeonTools` or `createNeonTool` to bound that. Set it below the host's own tool-call timeout, otherwise the host gives up first. An abort `signal` on `execute` or a wait timeout stops the poll, not the create: the branch or project may already exist, and the error does not include its id. List before retrying. `metadata.method` and `metadata.path` name the first request; extra readiness GETs are not listed there. `inject.projectId` still works on `createBranchWithCompute` because its path is `/projects/{project_id}/branches`.
 
 ```ts
 const tools = createNeonTools({
 	apiKey,
 	operations: ["listProjects"],
-	workflows: ["createWithCompute", "createAndConnect"],
+	workflows: ["createBranchWithCompute", "createProjectAndConnect"],
 });
 
-const { data } = await tools.createWithCompute.execute({
+const { data } = await tools.createBranchWithCompute.execute({
 	project_id: "project-id",
 	name: "feature-x",
 });
 
-await tools.createAndConnect.execute({
+await tools.createProjectAndConnect.execute({
 	name: "agent-project",
 	region_id: "aws-us-east-1",
 });
@@ -79,22 +79,22 @@ await tools.createAndConnect.execute({
 `createNeonTool` accepts the same workflow ids:
 
 ```ts
-const createBranch = createNeonTool("createWithCompute", { apiKey });
+const createBranch = createNeonTool("createBranchWithCompute", { apiKey });
 ```
 
-`workflowIds` lists the selectors. Record keys match the SDK method names (`createWithCompute`, `createAndConnect`). Published ids are `create_with_compute` and `create_and_connect`. Input fields are snake_case, same as generated tools. `names` can rename a workflow the same way it renames an operation:
+`workflowIds` lists the selectors. Record keys name the entity (`createBranchWithCompute`, `createProjectAndConnect`) and call `neon.branches.createWithCompute` and `neon.projects.createAndConnect`. Published ids are `create_branch_with_compute` and `create_project_and_connect`. Input fields are snake_case, same as generated tools. `names` can rename a workflow the same way it renames an operation:
 
 ```ts
 const tools = createNeonTools({
 	apiKey,
-	workflows: ["createWithCompute"],
-	names: { createWithCompute: "create_branch" },
+	workflows: ["createBranchWithCompute"],
+	names: { createBranchWithCompute: "create_branch" },
 });
 
-tools.createWithCompute.id; // "create_branch"
+tools.createBranchWithCompute.id; // "create_branch"
 ```
 
-`create_project_branch` still creates a branch with no compute when `endpoints` is omitted. It can attach compute if you pass `endpoints`; it does not wait or return a connection string. Use `createWithCompute` when the next step needs to connect.
+`create_project_branch` still creates a branch with no compute when `endpoints` is omitted. It can attach compute if you pass `endpoints`; it does not wait or return a connection string. Use `createBranchWithCompute` when the next step needs to connect.
 
 ## Optional host add-ons
 
@@ -160,7 +160,7 @@ The record is still keyed by operation ID (`tools.createProjectBranch`). MCP and
 
 ### Project and branch injection
 
-Tools take path parameters as `project_id` and `branch_id`. A host that already knows those values can inject them, including on `createWithCompute`. Without `omitFromSchema`, the published field becomes optional and a caller-supplied value wins. With `omitFromSchema: true`, the field is removed from the published schema and the injector is the only source:
+Tools take path parameters as `project_id` and `branch_id`. A host that already knows those values can inject them, including on `createBranchWithCompute`. Without `omitFromSchema`, the published field becomes optional and a caller-supplied value wins. With `omitFromSchema: true`, the field is removed from the published schema and the injector is the only source:
 
 ```ts
 const tools = createNeonTools({
