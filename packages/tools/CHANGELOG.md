@@ -1,5 +1,11 @@
 # @neon/tools
 
+## 0.4.0
+
+### Minor Changes
+
+- 6a31d50: `createNeonTools` accepts a `workflows` array that exposes `@neon/sdk` methods as `createBranchWithCompute` and `createProjectAndConnect`. Those tools attach compute, wait for readiness, and return a connection string. `CreateNeonToolsOptions` is a type alias, so an `interface` cannot extend it; `createNeonTools`'s first type argument is the options object.
+
 ## 0.3.0
 
 ### Minor Changes
