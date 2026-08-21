@@ -48,7 +48,7 @@ await tools.listProjects.execute(
 );
 ```
 
-The returned record is keyed by OpenAPI operation ID. Each tool includes its generated Zod 4 `inputSchema`, snake-case `id`, title, description, safety annotations, stability metadata, and an `execute()` function. Inputs are flat: path, query, header, and body fields sit on one object. A body that is a single object wrapper is lifted, so `create_project` takes `{ name, region_id, org_id, ... }` rather than `{ project: { name } }`. Two email-provider updates keep a `body` field because the API request is a discriminated union.
+The returned record is keyed by OpenAPI operation ID. Each tool includes its generated Zod 4 `inputSchema`, snake-case `id`, title, description, safety annotations, stability metadata, and an `execute()` function. Inputs are flat: path, query, header, and body fields sit on one object. A body that is a single object wrapper is lifted, so `create_project` takes `{ name, region_id, org_id, ... }` rather than `{ project: { name } }`. A body with several properties keeps those properties, so `create_project_branch` takes `{ project_id, branch, endpoints, annotation_value }` and `branch` is still an object. Two email-provider updates keep a `body` field because the API request is a discriminated union.
 
 `operationIds` exports every valid selector. `execute()` strictly validates the input, rejects unknown fields instead of dropping them, and returns typed, JSON-safe `{ data }`. Neon SDK errors remain typed and are thrown to the caller.
 
@@ -112,7 +112,7 @@ tools.createProjectBranch.id; // "neon_create_branch"
 tools.listProjects.id; // "neon_list_projects"
 ```
 
-The record is still keyed by operation ID (`tools.createProjectBranch`). MCP and Mastra publish `tool.id`. Eve uses the filename as the model-facing name, so name the file after the published `id`. Duplicate or non-snake-case ids throw.
+The record is still keyed by operation ID (`tools.createProjectBranch`). MCP and Mastra publish `tool.id`. Eve uses the filename as the model-facing name, so name the file after the published `id`. Duplicate or non-snake-case ids throw, and a `names` key that matches no selected tool throws.
 
 ### Project and branch injection
 
@@ -152,7 +152,9 @@ await grant.run({ projectId: "project-id" }, () => tools.getProject.execute({}))
 
 Injectors only apply to tools that have that path key. `listProjects` is unchanged. Empty inject values fail closed. Invalid ids still fail the original path schema before fetch.
 
-These add-ons do not add host-only behavior such as returning a connection string from `createProject`. Grant filtering, read-only filtering, and access-control notices stay in the host. `branchId` injection fills path `branch_id` only — query/body branch selectors such as `getConnectionURI`'s `branch_id` are unchanged.
+These add-ons do not add host-only behavior such as returning a connection string from `createProject`. Grant filtering, read-only filtering, and access-control notices stay in the host.
+
+Injection reads the URL template, so it fills path `project_id` and `branch_id` only. Query and body fields with those names stay caller-supplied, including `getConnectionURI.branch_id`, `createOrgApiKey.project_id`, `createNeonAuthIntegration.project_id` / `branch_id`, `createNeonAuthNewUser.project_id`, `createNeonAuthProviderSDKKeys.project_id`, `transferNeonAuthProviderProject.project_id`, `addProjectJWKS.branch_id`, `createProjectEndpoint.branch_id`, `updateProjectEndpoint.branch_id`, and `getProjectAdvisorSecurityIssues.branch_id`. `omitFromSchema: true` does not hide those fields.
 
 ## Request schemas
 
@@ -169,6 +171,8 @@ const body = zCreateProjectBody.parse({
 	project: { name: "agent-project" },
 });
 ```
+
+These are the raw OpenAPI request shapes, not the flat tool input. `zCreateProjectBody` still wraps fields in `project`. The tool `create_project` does not.
 
 These schemas are strict. If a newly added API field is not recognized, upgrade `@neon/tools`; use `@neon/sdk` directly until a matching tools release is available.
 

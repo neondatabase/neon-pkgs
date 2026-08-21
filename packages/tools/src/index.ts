@@ -98,6 +98,22 @@ const operationFactoryFor = (operationId: NeonOperationId) => {
 	return operationFactories[knownOperationId];
 };
 
+const assertKnownNameKeys = (
+	names: NeonToolNameOverrides | undefined,
+	tools: ReadonlyArray<{ operationId: string; id: string }>,
+): void => {
+	if (names === undefined || typeof names === "function") {
+		return;
+	}
+	const known = new Set(tools.flatMap((tool) => [tool.operationId, tool.id]));
+	const unknown = Object.keys(names).filter((key) => !known.has(key));
+	if (unknown.length > 0) {
+		throw new TypeError(
+			`Unknown Neon tool name override: ${unknown.join(", ")}`,
+		);
+	}
+};
+
 function assertNeonTools<Operations extends readonly NeonOperationId[]>(
 	value: unknown,
 	operations: Operations,
@@ -115,7 +131,10 @@ function assertNeonTools<Operations extends readonly NeonOperationId[]>(
 }
 
 const bindTools = <Operations extends readonly NeonOperationId[]>(
-	options: CreateNeonToolsOptions<Operations>,
+	options: CreateNeonToolsOptions<Operations> & {
+		name?: (id: string) => string;
+		names?: NeonToolNameOverrides;
+	},
 ): NeonTools<Operations> => {
 	assertToolCustomizeOptions(options);
 	const selected = new Set<NeonOperationId>();
@@ -127,8 +146,15 @@ const bindTools = <Operations extends readonly NeonOperationId[]>(
 		return [operationId, operationFactoryFor(operationId)] as const;
 	});
 	const client = createRawClient(options);
-	const entries = selectedFactories.map(([operationId, factory]) => {
+	const rawEntries = selectedFactories.map(([operationId, factory]) => {
 		const tool = factory(client);
+		return [operationId, tool] as const;
+	});
+	assertKnownNameKeys(
+		options.names,
+		rawEntries.map(([, tool]) => tool),
+	);
+	const entries = rawEntries.map(([operationId, tool]) => {
 		return [
 			operationId,
 			hasToolCustomization(options)
@@ -225,13 +251,18 @@ export function createNeonTool<
 	const Inject extends NeonToolInjectOptions | undefined = undefined,
 >(
 	operationId: Operation,
-	options: NeonToolsClientOptions & { inject?: Inject },
+	options: NeonToolsClientOptions & {
+		inject?: Inject;
+		name?: (id: string) => string;
+		names?: NeonToolNameOverrides;
+	},
 ):
 	| NamedNeonTool<Operation, Inject>
 	| InjectedNeonTool<ReturnType<OperationFactories[Operation]>, Inject>
 	| ReturnType<OperationFactories[Operation]> {
 	assertToolCustomizeOptions(options);
 	const tool = operationFactoryFor(operationId)(createRawClient(options));
+	assertKnownNameKeys(options.names, [tool]);
 	const customized = hasToolCustomization(options)
 		? applyToolCustomization(tool, options)
 		: tool;

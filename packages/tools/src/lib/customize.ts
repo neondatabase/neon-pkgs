@@ -187,6 +187,11 @@ function publishedId(
 				operationId: tool.operationId,
 				id: tool.id,
 			});
+			if (typeof id !== "string") {
+				throw new TypeError(
+					`Neon tool name overrides must return a string for ${tool.operationId}`,
+				);
+			}
 		} else {
 			const override =
 				options.names[tool.operationId] ?? options.names[tool.id];
@@ -200,7 +205,7 @@ function publishedId(
 	}
 	if (typeof id !== "string" || !PUBLISHED_ID.test(id)) {
 		throw new TypeError(
-			`Neon tool id must match ${PUBLISHED_ID}: received ${JSON.stringify(id)}`,
+			`Neon tool id must match ${PUBLISHED_ID} for ${tool.operationId}: received ${JSON.stringify(id)}`,
 		);
 	}
 	return id;

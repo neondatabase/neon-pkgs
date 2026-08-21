@@ -972,7 +972,28 @@ describe("tool names", () => {
 				operations: ["listProjects"] as const,
 				name: () => "Neon Project",
 			}),
-		).toThrow(/Neon tool id must match/);
+		).toThrow(/Neon tool id must match.*listProjects/);
+	});
+
+	test("rejects an unknown names key", () => {
+		expect(() =>
+			createNeonTools({
+				apiKey: "test-key",
+				operations: ["createProjectBranch"] as const,
+				names: { createProjectBrunch: "create_branch" },
+			}),
+		).toThrow("Unknown Neon tool name override: createProjectBrunch");
+	});
+
+	test("rejects a names function that does not return a string", () => {
+		expect(() =>
+			createNeonTool("listProjects", {
+				apiKey: "test-key",
+				names: () => undefined as unknown as string,
+			}),
+		).toThrow(
+			"Neon tool name overrides must return a string for listProjects",
+		);
 	});
 
 	test("exposes the published id to onExecute", async () => {
