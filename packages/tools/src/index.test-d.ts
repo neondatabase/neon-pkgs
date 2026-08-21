@@ -264,6 +264,15 @@ const combined = createNeonTools({
 expectTypeOf(combined).toHaveProperty("listProjects");
 expectTypeOf(combined).toHaveProperty("createWithCompute");
 
+declare const unionOpts:
+	| { apiKey: "test-key"; operations: ["listProjects"] }
+	| { apiKey: "test-key"; workflows: ["createWithCompute"] };
+const unionTools = createNeonTools(unionOpts);
+// @ts-expect-error union options do not share listProjects
+unionTools.listProjects;
+// @ts-expect-error union options do not share createWithCompute
+unionTools.createWithCompute;
+
 const createWithCompute = createNeonTool("createWithCompute", {
 	apiKey: "test-key",
 });

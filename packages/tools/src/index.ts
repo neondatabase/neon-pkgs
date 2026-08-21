@@ -125,6 +125,12 @@ type SelectedWorkflows<T> = T extends {
 	? W
 	: [];
 
+type NeonToolsFor<T, Inject> = T extends CreateNeonToolsInput
+	? Inject extends NeonToolInjectOptions
+		? InjectedNeonTools<SelectedOperations<T>, Inject, SelectedWorkflows<T>>
+		: NeonTools<SelectedOperations<T>, SelectedWorkflows<T>>
+	: never;
+
 type NeonToolId = NeonOperationId | NeonWorkflowId;
 
 type ToolForId<Id extends NeonToolId> = Id extends NeonWorkflowId
@@ -288,6 +294,10 @@ type NamedNeonTool<Id extends NeonToolId, Inject> = WithPublishedId<
 		: ToolForId<Id>
 >;
 
+type NamedNeonToolsFor<T, Inject> = T extends CreateNeonToolsInput
+	? NamedNeonTools<SelectedOperations<T>, SelectedWorkflows<T>, Inject>
+	: never;
+
 export function createNeonTools<
 	const T extends CreateNeonToolsInput,
 	const Inject extends NeonToolInjectOptions | undefined = undefined,
@@ -296,28 +306,20 @@ export function createNeonTools<
 			| { name: (id: string) => string; names?: NeonToolNameOverrides }
 			| { names: NeonToolNameOverrides; name?: (id: string) => string }
 		),
-): NamedNeonTools<SelectedOperations<T>, SelectedWorkflows<T>, Inject>;
+): NamedNeonToolsFor<T, Inject>;
+export function createNeonTools<
+	const T extends CreateNeonToolsInput,
+	const Inject extends NeonToolInjectOptions | undefined = undefined,
+>(options: T & { inject?: Inject }): NeonToolsFor<T, Inject>;
 export function createNeonTools<
 	const T extends CreateNeonToolsInput,
 	const Inject extends NeonToolInjectOptions | undefined = undefined,
 >(
 	options: T & { inject?: Inject },
-): Inject extends NeonToolInjectOptions
-	? InjectedNeonTools<SelectedOperations<T>, Inject, SelectedWorkflows<T>>
-	: NeonTools<SelectedOperations<T>, SelectedWorkflows<T>>;
-export function createNeonTools<
-	const T extends CreateNeonToolsInput,
-	const Inject extends NeonToolInjectOptions | undefined = undefined,
->(
-	options: T & { inject?: Inject },
-):
-	| NamedNeonTools<SelectedOperations<T>, SelectedWorkflows<T>, Inject>
-	| InjectedNeonTools<SelectedOperations<T>, Inject, SelectedWorkflows<T>>
-	| NeonTools<SelectedOperations<T>, SelectedWorkflows<T>> {
+): NamedNeonToolsFor<T, Inject> | NeonToolsFor<T, Inject> {
 	return bindTools(options as BindableToolsInput<T>) as
-		| NamedNeonTools<SelectedOperations<T>, SelectedWorkflows<T>, Inject>
-		| InjectedNeonTools<SelectedOperations<T>, Inject, SelectedWorkflows<T>>
-		| NeonTools<SelectedOperations<T>, SelectedWorkflows<T>>;
+		| NamedNeonToolsFor<T, Inject>
+		| NeonToolsFor<T, Inject>;
 }
 
 export function createNeonTool<
