@@ -94,9 +94,9 @@ exports[`snapshots > get not found errors 1`] = `""`;
 
 exports[`snapshots > list/table output 1`] = `
 "snapshots
-Id                           Name           Source Branch Id       Created At                Expires At
-snap-first-snapshot-123456   nightly        br-main-branch-123456  2021-01-01T00:00:00.000Z  2022-01-01T00:00:00.000Z
-snap-second-snapshot-123456  pre-migration  br-main-branch-123456  2021-02-01T00:00:00.000Z  never
+Id                           Name           Source Branch Id       Expires At                Created At
+snap-first-snapshot-123456   nightly        br-main-branch-123456  2022-01-01T00:00:00.000Z  2021-01-01T00:00:00.000Z
+snap-second-snapshot-123456  pre-migration  br-main-branch-123456  never                     2021-02-01T00:00:00.000Z
 "
 `;
 
