@@ -109,7 +109,7 @@ describe("createNeonTools workflows", () => {
 				"createWithComput",
 				{ apiKey: "test-key" },
 			]),
-		).toThrow('Unknown Neon operation "createWithComput"');
+		).toThrow('Unknown Neon operation or workflow "createWithComput"');
 	});
 
 	test("rejects a published-id collision between an operation and a workflow", () => {

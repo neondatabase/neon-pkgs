@@ -157,7 +157,7 @@ describe("createNeonTools", () => {
 				"listProjcts",
 				{ apiKey: "test-key" },
 			]),
-		).toThrow('Unknown Neon operation "listProjcts"');
+		).toThrow('Unknown Neon operation or workflow "listProjcts"');
 	});
 });
 

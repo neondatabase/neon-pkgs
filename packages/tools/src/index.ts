@@ -13,6 +13,7 @@ import {
 	type NeonToolInjectOptions,
 	type NeonToolNameOverrides,
 } from "./lib/customize.js";
+import type { NeonTool } from "./lib/operation.js";
 import {
 	isNeonWorkflowId,
 	type NeonWorkflowId,
@@ -337,9 +338,18 @@ export function createNeonTool<
 	| InjectedNeonTool<ToolForId<Id>, Inject>
 	| ToolForId<Id> {
 	assertToolCustomizeOptions(options);
-	const tool = isNeonWorkflowId(id)
-		? workflowFactoryFor(id)(options)
-		: operationFactoryFor(id)(createRawClient(options));
+	let tool: NeonTool;
+	if (isNeonWorkflowId(id)) {
+		tool = workflowFactoryFor(id)(options);
+	} else {
+		const knownOperationId = operationIds.find(
+			(candidate) => candidate === id,
+		);
+		if (knownOperationId === undefined) {
+			throw new TypeError(`Unknown Neon operation or workflow "${id}".`);
+		}
+		tool = operationFactories[knownOperationId](createRawClient(options));
+	}
 	assertKnownNameKeys(options.names, [tool]);
 	const customized = hasToolCustomization(options)
 		? applyToolCustomization(tool, options)
