@@ -29,7 +29,7 @@ writing to stdout):
 2. If that row is too wide, shrink only the last column with `...`.
 3. If it still does not fit, drop the last field and go back to step 1. Keep at
    least two columns. Field order is important-first on purpose. Record a new
-   list's fields in `src/list_tables.test.ts` — that file is the 80- and
+   list's fields in `src/list_tables.test.ts`. That file is the 80- and
    120-column column contract.
 4. If two columns still overflow after shrinking the last column, stack the
    chunk. The first column is not truncated. Stacking shows every field again.
