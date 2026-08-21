@@ -201,7 +201,7 @@ expectTypeOf(createNeonTools(annotatedOperations)).toHaveProperty(
 const annotatedWithWorkflow: CreateNeonToolsOptions<["listProjects"]> = {
 	apiKey: "test-key",
 	operations: ["listProjects"],
-	// @ts-expect-error operations-only annotation does not accept a workflow
+	// @ts-expect-error operations-only type excludes workflows
 	workflows: ["createWithCompute"],
 };
 void annotatedWithWorkflow;
@@ -219,7 +219,7 @@ expectTypeOf(createNeonTools(bothAnnotated)).toHaveProperty(
 	"createWithCompute",
 );
 
-// @ts-expect-error both generics specified requires operations
+// @ts-expect-error both generic arguments require operations
 const omittedAnnotatedOps: CreateNeonToolsOptions<
 	["listProjects"],
 	["createWithCompute"]
@@ -229,7 +229,7 @@ const omittedAnnotatedOps: CreateNeonToolsOptions<
 };
 void omittedAnnotatedOps;
 
-// @ts-expect-error both generics specified requires workflows
+// @ts-expect-error both generic arguments require workflows
 const omittedAnnotatedWorkflows: CreateNeonToolsOptions<
 	["listProjects"],
 	["createWithCompute"]
@@ -244,7 +244,7 @@ const workflowOnly = createNeonTools({
 	workflows: ["createWithCompute"] as const,
 });
 expectTypeOf(workflowOnly).toHaveProperty("createWithCompute");
-// @ts-expect-error operations are absent when only workflows are selected
+// @ts-expect-error workflow-only selection excludes operations
 workflowOnly.listProjects;
 workflowOnly.createWithCompute.execute({ project_id: "project-id" });
 // @ts-expect-error project_id is required without inject

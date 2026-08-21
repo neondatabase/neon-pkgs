@@ -85,7 +85,7 @@ const tools = createNeonTools({
 	names: { createWithCompute: "create_branch" },
 });
 
-tools.createWithCompute.id; // "create_branch"
+tools.createWithCompute.id;
 ```
 
 `create_project_branch` still creates a branch with no compute when `endpoints` is omitted. It can attach compute if you pass `endpoints`; it does not wait or return a connection string. Use `createWithCompute` when the next step needs to connect.
