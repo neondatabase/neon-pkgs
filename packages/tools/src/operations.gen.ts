@@ -5401,7 +5401,7 @@ export const operationFactories = {
 				invoke: (client, input, signal) =>
 					raw.updateProjectBranchDataApi({
 			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"], "database_name": input["database_name"] }, true),
-			body: optionalGroup({ "settings": optionalGroup({ "db_aggregates_enabled": input["db_aggregates_enabled"], "db_anon_role": input["db_anon_role"], "db_extra_search_path": input["db_extra_search_path"], "db_max_rows": input["db_max_rows"], "db_schemas": input["db_schemas"], "jwt_role_claim_key": input["jwt_role_claim_key"], "jwt_cache_max_lifetime": input["jwt_cache_max_lifetime"], "openapi_mode": input["openapi_mode"], "server_cors_allowed_origins": input["server_cors_allowed_origins"], "server_timing_enabled": input["server_timing_enabled"] }, true) }, false),
+			body: optionalGroup({ "settings": optionalGroup({ "db_aggregates_enabled": input["db_aggregates_enabled"], "db_anon_role": input["db_anon_role"], "db_extra_search_path": input["db_extra_search_path"], "db_max_rows": input["db_max_rows"], "db_schemas": input["db_schemas"], "jwt_role_claim_key": input["jwt_role_claim_key"], "jwt_cache_max_lifetime": input["jwt_cache_max_lifetime"], "openapi_mode": input["openapi_mode"], "server_cors_allowed_origins": input["server_cors_allowed_origins"], "server_timing_enabled": input["server_timing_enabled"] }, false) }, false),
 			client,
 			signal,
 			throwOnError: true,

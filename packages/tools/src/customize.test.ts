@@ -962,7 +962,9 @@ describe("tool names", () => {
 					getProject: "same_tool",
 				},
 			}),
-		).toThrow('Duplicate Neon tool id "same_tool"');
+		).toThrow(
+			'Duplicate Neon tool id "same_tool" for listProjects, getProject',
+		);
 	});
 
 	test("rejects a published id that is not snake-case", () => {

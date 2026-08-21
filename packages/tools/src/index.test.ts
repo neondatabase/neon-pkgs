@@ -92,6 +92,27 @@ describe("createNeonTools", () => {
 		expect(tools.createProject.annotations.destructiveHint).toBe(true);
 	});
 
+	test("omits an empty optional lifted body", async () => {
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			operations: ["updateProjectBranchDataAPI"] as const,
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse({});
+			},
+		});
+
+		await tools.updateProjectBranchDataAPI.execute({
+			project_id: "project-id",
+			branch_id: "branch-id",
+			database_name: "neondb",
+		});
+
+		expect(requests[0].headers.get("content-type")).toBeNull();
+		expect(await requests[0].text()).toBe("");
+	});
+
 	test("sends restoreSnapshot name in the body only", async () => {
 		const requests: Request[] = [];
 		const tools = createNeonTools({

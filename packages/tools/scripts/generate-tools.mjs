@@ -475,7 +475,7 @@ const invocationFor = (record) => {
 		const inner = groupExpr(record.bodyNames, record.bodyRequired);
 		if (record.liftBodyKey) {
 			options.push(
-				`body: optionalGroup({ ${JSON.stringify(record.liftBodyKey)}: ${groupExpr(record.bodyNames, true)} }, ${record.bodyRequired})`,
+				`body: optionalGroup({ ${JSON.stringify(record.liftBodyKey)}: ${groupExpr(record.bodyNames, !record.liftBodyOptional)} }, ${record.bodyRequired})`,
 			);
 		} else if (record.binaryPaths.length > 0) {
 			const binaryNames = record.binaryPaths.map((binary) => binary.path[0]);

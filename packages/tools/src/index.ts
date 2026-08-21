@@ -162,12 +162,15 @@ const bindTools = <Operations extends readonly NeonOperationId[]>(
 				: tool,
 		] as const;
 	});
-	const publishedIds = new Set<string>();
-	for (const [, tool] of entries) {
-		if (publishedIds.has(tool.id)) {
-			throw new Error(`Duplicate Neon tool id "${tool.id}"`);
+	const publishedIds = new Map<string, string>();
+	for (const [operationId, tool] of entries) {
+		const previous = publishedIds.get(tool.id);
+		if (previous !== undefined) {
+			throw new Error(
+				`Duplicate Neon tool id "${tool.id}" for ${previous}, ${operationId}`,
+			);
 		}
-		publishedIds.add(tool.id);
+		publishedIds.set(tool.id, operationId);
 	}
 	const tools: unknown = Object.fromEntries(entries);
 	assertNeonTools(tools, options.operations);
