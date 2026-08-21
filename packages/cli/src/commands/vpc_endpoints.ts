@@ -11,7 +11,7 @@ import { fillSingleOrg, fillSingleProject } from "../utils/enrichers.js";
 import { writer } from "../writer.js";
 import { REGIONS } from "./projects.js";
 
-const VPC_ENDPOINT_FIELDS = ["vpc_endpoint_id", "label"] as const;
+export const VPC_ENDPOINT_FIELDS = ["vpc_endpoint_id", "label"] as const;
 
 const VPC_ENDPOINT_DETAILS_FIELDS = [
 	"vpc_endpoint_id",

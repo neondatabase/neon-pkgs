@@ -21,8 +21,8 @@ import type { BranchScopeProps } from "../types.js";
 import { branchIdFromProps, fillSingleProject } from "../utils/enrichers.js";
 import { writer } from "../writer.js";
 
-const OBJECT_FIELDS = ["key", "size", "last_modified", "etag"] as const;
-const BUCKET_FIELDS = ["name", "access_level"] as const;
+export const OBJECT_FIELDS = ["key", "size", "last_modified", "etag"] as const;
+export const BUCKET_FIELDS = ["name", "access_level"] as const;
 const ACCESS_LEVELS = ["private", "public_read"] as const;
 
 // Single-PUT upload cap. Objects larger than this must use multipart upload,

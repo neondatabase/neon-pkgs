@@ -25,7 +25,7 @@ export const SNAPSHOT_FIELDS: readonly (keyof Snapshot)[] = [
 	"expires_at",
 ];
 
-const SCHEDULE_FIELDS: readonly (keyof BackupScheduleItem)[] = [
+export const SCHEDULE_FIELDS: readonly (keyof BackupScheduleItem)[] = [
 	"frequency",
 	"hour",
 	"day",
@@ -33,7 +33,7 @@ const SCHEDULE_FIELDS: readonly (keyof BackupScheduleItem)[] = [
 	"retention_seconds",
 ];
 
-const OPERATION_FIELDS: readonly (keyof Operation)[] = [
+export const OPERATION_FIELDS: readonly (keyof Operation)[] = [
 	"id",
 	"action",
 	"status",

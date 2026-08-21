@@ -3,7 +3,12 @@ import type { ProjectScopeProps } from "../types.js";
 import { fillSingleProject } from "../utils/enrichers.js";
 import { writer } from "../writer.js";
 
-const OPERATIONS_FIELDS = ["id", "action", "status", "created_at"] as const;
+export const OPERATIONS_FIELDS = [
+	"id",
+	"action",
+	"status",
+	"created_at",
+] as const;
 
 export const command = "operations";
 export const describe = "Manage operations";

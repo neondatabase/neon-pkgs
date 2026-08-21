@@ -27,6 +27,15 @@ export const PROJECT_FIELDS = [
 	"created_at",
 ] as const;
 
+export const RECOVERABLE_PROJECT_FIELDS = [
+	"id",
+	"name",
+	"recoverable_until",
+	"deleted_at",
+	"region_id",
+	"created_at",
+] as const;
+
 export const REGIONS = [
 	"aws-us-west-2",
 	"aws-ap-southeast-1",
@@ -276,7 +285,7 @@ const list = async (
 
 	out.write(ownedProjects, {
 		fields: props.recoverableOnly
-			? ([...PROJECT_FIELDS, "deleted_at", "recoverable_until"] as const)
+			? RECOVERABLE_PROJECT_FIELDS
 			: PROJECT_FIELDS,
 		title: "Projects",
 		emptyMessage: props.recoverableOnly

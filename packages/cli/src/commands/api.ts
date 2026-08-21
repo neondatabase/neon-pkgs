@@ -12,6 +12,8 @@ import { writer } from "../writer.js";
 const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
 type HttpMethod = (typeof HTTP_METHODS)[number];
 
+export const API_ENDPOINT_FIELDS = ["method", "path", "summary"] as const;
+
 // ── Pure helpers (unit-tested) ───────────────────────────────────────────────
 
 /**
@@ -180,8 +182,9 @@ async function listEndpoints(args: ApiArgs): Promise<void> {
 		path: endpoint.path,
 		summary: endpoint.summary ?? "",
 	}));
+
 	writer(args).end(endpoints, {
-		fields: ["method", "path", "summary"],
+		fields: API_ENDPOINT_FIELDS,
 		title: `Neon API endpoints (${endpoints.length})`,
 		emptyMessage: "No endpoints found in the spec.",
 	});

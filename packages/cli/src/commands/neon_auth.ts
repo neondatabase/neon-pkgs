@@ -49,7 +49,7 @@ const INTEGRATION_STATUS_FIELDS = [
 	"jwks_url",
 ] as const;
 
-const OAUTH_PROVIDER_FIELDS = ["id", "type", "client_id"] as const;
+export const OAUTH_PROVIDER_FIELDS = ["id", "type", "client_id"] as const;
 
 const ALLOW_LOCALHOST_FIELDS = ["allow_localhost"] as const;
 
@@ -59,7 +59,7 @@ const SUPPORTED_OAUTH_PROVIDERS = [
 	NeonAuthOauthProviderId.Vercel,
 ] as const;
 
-const DOMAIN_FIELDS = ["domain"] as const;
+export const DOMAIN_FIELDS = ["domain"] as const;
 
 const EMAIL_PASSWORD_FIELDS = [
 	"enabled",

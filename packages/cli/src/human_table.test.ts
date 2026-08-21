@@ -5,6 +5,7 @@ import {
 	displayWidth,
 	formatHumanChunk,
 	parseColumns,
+	planListLayout,
 	resolveOutputWidth,
 } from "./human_table.js";
 
@@ -313,6 +314,30 @@ describe("formatHumanChunk", () => {
 			colorTitle: false,
 		});
 		expect(plain(out)).toBe("Value\npostgresql://very-long.example\n");
+	});
+
+	it("plans a shrink-last list without dropping the last field", () => {
+		const plan = planListLayout({
+			data: [
+				{
+					timestamp: "2026-08-17T15:04:05.123Z",
+					source: "postgres",
+					severity: "ERROR",
+					message:
+						'ERROR: relation "orders" does not exist at character 15',
+				},
+			],
+			fields: ["timestamp", "source", "severity", "message"],
+			width: 80,
+		});
+		expect(plan?.mode).toBe("shrink-last");
+		expect(plan?.fields).toEqual([
+			"timestamp",
+			"source",
+			"severity",
+			"message",
+		]);
+		expect(plan?.dropped).toEqual([]);
 	});
 
 	it("truncates the last column before dropping it", () => {

@@ -17,3 +17,5 @@ Implemented in `src/writer.ts` and `src/human_table.ts`. Every list and get goes
 - Title and `emptyMessage` are not rows. The API-key secret is `writer.text`, not a cell — it stays one selectable line, even if that line is longer than the TTY.
 
 `src/psql/print` emulates psql. `src/help.ts` is the yargs help renderer. Leave both alone.
+
+A new list command's `fields` belong in `src/list_tables.test.ts`. That file records which columns an 80- and 120-column terminal shows.

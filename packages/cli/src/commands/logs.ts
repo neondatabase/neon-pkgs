@@ -40,7 +40,7 @@ const LOG_SEVERITIES = [
 	"fatal",
 ] as const satisfies readonly ProjectBranchLogSeverity[];
 
-const LOG_FIELDS = [
+export const LOG_FIELDS = [
 	"timestamp",
 	"source",
 	"service_name",

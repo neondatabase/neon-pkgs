@@ -90,6 +90,15 @@ type CreateProps = ProfileProps & {
 	keyring?: boolean;
 };
 
+export const PROFILE_LIST_FIELDS = [
+	"active",
+	"name",
+	"account",
+	"auth",
+	"credentials",
+	"scope",
+] as const;
+
 export const command = "profile";
 export const aliases = ["profiles"];
 export const describe = "Manage named sets of Neon credentials";
@@ -397,7 +406,7 @@ const list = async (props: ProfileProps) => {
 
 	writer(props).end(rows, {
 		title: "Profiles",
-		fields: ["active", "name", "account", "auth", "credentials", "scope"],
+		fields: PROFILE_LIST_FIELDS,
 	});
 };
 

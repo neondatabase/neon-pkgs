@@ -6,7 +6,7 @@ import type { CommonProps } from "../types.js";
 import { noPassthrough, single } from "../utils/flags.js";
 import { writer } from "../writer.js";
 
-const ACCOUNT_FIELDS = [
+export const ACCOUNT_FIELDS = [
 	"id",
 	"name",
 	"created_at",
@@ -18,7 +18,7 @@ const ACCOUNT_FIELDS = [
  * Table view of an org listing. `project` is the rendered column; the raw `project_id` is
  * what structured output keeps. See {@link list} for why the two differ.
  */
-const ORG_TABLE_FIELDS = [
+export const ORG_TABLE_FIELDS = [
 	"id",
 	"name",
 	"project",
