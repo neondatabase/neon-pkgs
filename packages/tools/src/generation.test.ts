@@ -6,6 +6,7 @@ import {
 	zCreateProjectBody,
 	zCreateProjectBranchBody,
 	zListProjectsQuery,
+	zRestoreSnapshotQuery,
 	zSetOrganizationSpendingLimitBody,
 } from "./schemas.js";
 
@@ -49,7 +50,33 @@ describe("generated operation coverage", () => {
 			expect(toolIds.has(tool.id)).toBe(false);
 			toolIds.add(tool.id);
 			expect(z.toJSONSchema(tool.inputSchema).type).toBe("object");
+			const keys = Object.keys(
+				z.toJSONSchema(tool.inputSchema).properties ?? {},
+			);
+			expect(keys).not.toContain("path");
+			expect(keys).not.toContain("query");
+			expect(keys).not.toContain("headers");
+			if (
+				operationId === "updateNeonAuthEmailProvider" ||
+				operationId === "updateNeonAuthEmailServer"
+			) {
+				expect(keys).toContain("body");
+			} else {
+				expect(keys).not.toContain("body");
+			}
 		}
+
+		const createProject = createNeonTool("createProject", {
+			apiKey: "test-key",
+		});
+		expect(
+			createProject.inputSchema.safeParse({ name: "demo" }).success,
+		).toBe(true);
+		expect(
+			createProject.inputSchema.safeParse({
+				project: { name: "demo" },
+			}).success,
+		).toBe(false);
 	});
 
 	test("requires approval for mutations and reads that return secrets", () => {
@@ -124,5 +151,8 @@ describe("generated operation coverage", () => {
 			}).success,
 		).toBe(false);
 		expect(generatedSchemaSource).not.toContain(".default(");
+		expect(zRestoreSnapshotQuery.parse({ name: "restored" })).toEqual({
+			name: "restored",
+		});
 	});
 });

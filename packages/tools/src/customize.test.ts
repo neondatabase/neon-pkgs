@@ -111,7 +111,7 @@ describe("onExecute", () => {
 		});
 
 		const result = await tools.getProject.execute({
-			path: { project_id: "project-id" },
+			project_id: "project-id",
 		});
 
 		expect(events).toEqual(["start:getProject:get_project", "success"]);
@@ -149,9 +149,8 @@ describe("onExecute", () => {
 				omitFromSchema: true,
 			},
 			onExecute: async ({ input, execute }) => {
-				(input as { path?: { project_id: string } }).path = {
-					project_id: "attacker-project",
-				};
+				(input as { project_id?: string }).project_id =
+					"attacker-project";
 				return execute();
 			},
 		});
@@ -177,7 +176,7 @@ describe("onExecute", () => {
 		});
 
 		await tools.getProject.execute(
-			{ path: { project_id: "project-id" } },
+			{ project_id: "project-id" },
 			{ apiKey: "oauth-access-token", signal: controller.signal },
 		);
 
@@ -204,22 +203,10 @@ describe("path injection", () => {
 		expect(schema).toMatchObject({
 			type: "object",
 			properties: {
-				path: {
-					type: "object",
-					properties: {
-						project_id: { type: "string" },
-					},
-				},
+				project_id: { type: "string" },
 			},
 		});
 		expect(schema.required).toBeUndefined();
-		expect(
-			(
-				schema.properties as {
-					path: { required?: string[] };
-				}
-			).path.required,
-		).toBeUndefined();
 	});
 
 	test("lets a caller-supplied project_id win when the field stays on the schema", async () => {
@@ -234,7 +221,7 @@ describe("path injection", () => {
 		});
 
 		await tools.getProject.execute({
-			path: { project_id: "caller-project" },
+			project_id: "caller-project",
 		});
 
 		expect(getterCalls).toBe(0);
@@ -252,7 +239,7 @@ describe("path injection", () => {
 		});
 
 		await tools.getProject.execute({
-			path: { project_id: "caller-project" },
+			project_id: "caller-project",
 		});
 
 		expect(requests[0].url).toBe(
@@ -279,24 +266,18 @@ describe("path injection", () => {
 		});
 
 		await tools.deleteProjectBranch.execute({
-			path: { branch_id: "br-id" },
+			branch_id: "br-id",
 		});
 
 		expect(requests[0].url).toBe(
 			"https://console.neon.tech/api/v2/projects/granted-project/branches/br-id",
 		);
 		const schema = z.toJSONSchema(tools.deleteProjectBranch.inputSchema);
-		const pathSchema = (
-			schema.properties as {
-				path: {
-					properties: Record<string, unknown>;
-					required?: string[];
-				};
-			}
-		).path;
-		expect(Object.keys(pathSchema.properties)).toEqual(["branch_id"]);
-		expect(pathSchema.required).toEqual(["branch_id"]);
-		expect(schema.required).toEqual(["path"]);
+		expect(Object.keys(schema.properties ?? {})).toEqual([
+			"branch_id",
+			"hard_delete",
+		]);
+		expect(schema.required).toEqual(["branch_id"]);
 	});
 
 	test("injects both path ids when both injectors are configured", async () => {
@@ -340,7 +321,7 @@ describe("path injection", () => {
 			},
 		});
 
-		await tools.listProjects.execute({ query: { limit: 1 } });
+		await tools.listProjects.execute({ limit: 1 });
 
 		expect(getterCalls).toBe(0);
 		expect(requests[0].url).toBe(
@@ -513,7 +494,7 @@ describe("onExecute failure and isolation", () => {
 		});
 
 		await expect(
-			tools.getProject.execute({ path: { project_id: "project-id" } }),
+			tools.getProject.execute({ project_id: "project-id" }),
 		).rejects.toThrow("tracker down");
 		expect(requests).toHaveLength(0);
 	});
@@ -527,7 +508,7 @@ describe("onExecute failure and isolation", () => {
 		});
 
 		await expect(
-			tools.getProject.execute({ path: { project_id: "project-id" } }),
+			tools.getProject.execute({ project_id: "project-id" }),
 		).rejects.toThrow("span flush failed");
 		expect(requests).toHaveLength(1);
 	});
@@ -550,7 +531,7 @@ describe("onExecute failure and isolation", () => {
 		});
 
 		await expect(
-			tools.getProject.execute({ path: { project_id: "project-id" } }),
+			tools.getProject.execute({ project_id: "project-id" }),
 		).rejects.toThrow(/Authentication failed/);
 		expect(seen[0]).toEqual(
 			expect.stringContaining("Authentication failed"),
@@ -576,14 +557,14 @@ describe("onExecute failure and isolation", () => {
 		const { requests, tools } = getProjectTools({
 			inject: { projectId: "granted-project" },
 			onExecute: async ({ input, execute }) => {
-				(input as { path: { project_id: string } }).path.project_id =
+				(input as { project_id: string }).project_id =
 					"mutated-project";
 				return execute();
 			},
 		});
 
 		await tools.getProject.execute({
-			path: { project_id: "caller-project" },
+			project_id: "caller-project",
 		});
 
 		expect(requests[0].url).toBe(
@@ -606,7 +587,7 @@ describe("onExecute failure and isolation", () => {
 			},
 		});
 
-		await tool.execute({ path: { project_id: "project-id" } });
+		await tool.execute({ project_id: "project-id" });
 
 		expect(events).toEqual(["get_project"]);
 		expect(requests).toHaveLength(1);
@@ -622,7 +603,7 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 		await expect(tools.getProject.execute({})).rejects.toThrow();
 		expect(requests).toHaveLength(0);
 		expect(z.toJSONSchema(tools.getProject.inputSchema).required).toEqual([
-			"path",
+			"project_id",
 		]);
 	});
 
@@ -700,7 +681,7 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 			inject: { projectId: "granted-project" },
 		});
 
-		await tools.getProject.execute({ path: {} });
+		await tools.getProject.execute({});
 
 		expect(requests[0].url).toBe(
 			"https://console.neon.tech/api/v2/projects/granted-project",
@@ -744,11 +725,11 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 		});
 
 		await tools.deleteProjectBranch.execute({
-			path: { branch_id: "br-id" },
-			query: { hard_delete: true },
+			branch_id: "br-id",
+			hard_delete: true,
 		});
 		await tools.createProjectBranch.execute({
-			body: { branch: { name: "feature" } },
+			branch: { name: "feature" },
 		});
 
 		expect(requests[0].url).toBe(
@@ -784,11 +765,9 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 		});
 
 		await tools.getConnectionURI.execute({
-			query: {
-				database_name: "neondb",
-				role_name: "neondb_owner",
-				branch_id: "caller-branch",
-			},
+			database_name: "neondb",
+			role_name: "neondb_owner",
+			branch_id: "caller-branch",
 		});
 
 		expect(branchGetterCalls).toBe(0);
@@ -815,23 +794,18 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 		});
 
 		await tools.deleteProjectBranch.execute({
-			path: { project_id: "caller-project" },
+			project_id: "caller-project",
 		});
 
 		expect(requests[0].url).toBe(
 			"https://console.neon.tech/api/v2/projects/caller-project/branches/granted-branch",
 		);
 		const schema = z.toJSONSchema(tools.deleteProjectBranch.inputSchema);
-		const pathSchema = (
-			schema.properties as {
-				path: {
-					properties: Record<string, unknown>;
-					required?: string[];
-				};
-			}
-		).path;
-		expect(Object.keys(pathSchema.properties)).toEqual(["project_id"]);
-		expect(pathSchema.required).toEqual(["project_id"]);
+		expect(Object.keys(schema.properties ?? {})).toEqual([
+			"project_id",
+			"hard_delete",
+		]);
+		expect(schema.required).toEqual(["project_id"]);
 	});
 
 	test("in fill mode, still calls the remaining getter when the caller supplied one id", async () => {
@@ -854,7 +828,7 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 		});
 
 		await tools.deleteProjectBranch.execute({
-			path: { project_id: "caller-project" },
+			project_id: "caller-project",
 		});
 
 		expect(branchGetterCalls).toBe(1);
@@ -871,7 +845,7 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 		expect(tools.getProject.inputSchema.safeParse({}).success).toBe(true);
 		expect(
 			tools.getProject.inputSchema.safeParse({
-				path: { project_id: "caller-project" },
+				project_id: "caller-project",
 			}).success,
 		).toBe(false);
 	});
@@ -884,12 +858,12 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 		expect(tools.getProject.inputSchema.safeParse({}).success).toBe(true);
 		expect(
 			tools.getProject.inputSchema.safeParse({
-				path: { project_id: "caller-project" },
+				project_id: "caller-project",
 			}).success,
 		).toBe(true);
 		expect(
 			tools.getProject.inputSchema.safeParse({
-				path: { project_id: "NOT VALID" },
+				project_id: "NOT VALID",
 			}).success,
 		).toBe(false);
 	});
@@ -915,8 +889,8 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 		});
 
 		const schema = z.toJSONSchema(tools.createProjectBranch.inputSchema);
-		expect(schema.properties).not.toHaveProperty("path");
-		expect(schema.properties).toHaveProperty("body");
+		expect(schema.properties).not.toHaveProperty("project_id");
+		expect(schema.properties).toHaveProperty("branch");
 		expect(
 			tools.createProjectBranch.inputSchema.safeParse({}).success,
 		).toBe(true);
@@ -952,5 +926,92 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 			"https://console.neon.tech/api/v2/projects/project-a",
 			"https://console.neon.tech/api/v2/projects/project-b",
 		]);
+	});
+});
+
+describe("tool names", () => {
+	test("renames one tool and then applies a global prefix", () => {
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			operations: ["createProjectBranch", "listProjects"] as const,
+			names: { createProjectBranch: "create_branch" },
+			name: (id) => `neon_${id}`,
+		});
+
+		expect(tools.createProjectBranch.id).toBe("neon_create_branch");
+		expect(tools.listProjects.id).toBe("neon_list_projects");
+	});
+
+	test("lets a function rename from the generated id", () => {
+		const tool = createNeonTool("createProjectBranch", {
+			apiKey: "test-key",
+			names: ({ id }) =>
+				id === "create_project_branch" ? "create_branch" : id,
+		});
+
+		expect(tool.id).toBe("create_branch");
+	});
+
+	test("rejects a colliding published id", () => {
+		expect(() =>
+			createNeonTools({
+				apiKey: "test-key",
+				operations: ["listProjects", "getProject"] as const,
+				names: {
+					listProjects: "same_tool",
+					getProject: "same_tool",
+				},
+			}),
+		).toThrow(
+			'Duplicate Neon tool id "same_tool" for listProjects, getProject',
+		);
+	});
+
+	test("rejects a published id that is not snake-case", () => {
+		expect(() =>
+			createNeonTools({
+				apiKey: "test-key",
+				operations: ["listProjects"] as const,
+				name: () => "Neon Project",
+			}),
+		).toThrow(/Neon tool id must match.*listProjects/);
+	});
+
+	test("rejects an unknown names key", () => {
+		expect(() =>
+			createNeonTools({
+				apiKey: "test-key",
+				operations: ["createProjectBranch"] as const,
+				names: { createProjectBrunch: "create_branch" },
+			}),
+		).toThrow("Unknown Neon tool name override: createProjectBrunch");
+	});
+
+	test("rejects a names function that does not return a string", () => {
+		expect(() =>
+			createNeonTool("listProjects", {
+				apiKey: "test-key",
+				names: () => undefined as unknown as string,
+			}),
+		).toThrow(
+			"Neon tool name overrides must return a string for listProjects",
+		);
+	});
+
+	test("exposes the published id to onExecute", async () => {
+		const seen: string[] = [];
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			operations: ["getProject"] as const,
+			names: { getProject: "describe_project" },
+			onExecute: async ({ id, execute }) => {
+				seen.push(id);
+				return execute();
+			},
+			fetch: async () => jsonResponse({ project: { id: "project-id" } }),
+		});
+
+		await tools.getProject.execute({ project_id: "project-id" });
+		expect(seen).toEqual(["describe_project"]);
 	});
 });

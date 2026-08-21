@@ -35,7 +35,8 @@ describe("createNeonTools", () => {
 		});
 
 		const result = await tools.listProjects.execute({
-			query: { limit: 1, search: "demo" },
+			limit: 1,
+			search: "demo",
 		});
 
 		expect(result).toEqual({
@@ -52,12 +53,12 @@ describe("createNeonTools", () => {
 
 		expect(
 			tools.listProjects.inputSchema.safeParse({
-				query: { limit: "one" },
+				limit: "one",
 			}).success,
 		).toBe(false);
 		expect(
 			tools.listProjects.inputSchema.safeParse({
-				query: { serch: "demo" },
+				serch: "demo",
 			}).success,
 		).toBe(false);
 	});
@@ -74,7 +75,7 @@ describe("createNeonTools", () => {
 		});
 
 		await tools.createProject.execute({
-			body: { project: { name: "tool-created" } },
+			name: "tool-created",
 		});
 
 		expect(requests[0].method).toBe("POST");
@@ -83,12 +84,57 @@ describe("createNeonTools", () => {
 		});
 		expect(
 			tools.createProject.inputSchema.safeParse({
-				body: { project: { nmae: "tool-created" } },
+				nmae: "tool-created",
 			}).success,
 		).toBe(false);
 		expect(tools.createProject.requiresApproval).toBe(true);
 		expect(tools.createProject.annotations.readOnlyHint).toBe(false);
 		expect(tools.createProject.annotations.destructiveHint).toBe(true);
+	});
+
+	test("omits an empty optional lifted body", async () => {
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			operations: ["updateProjectBranchDataAPI"] as const,
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse({});
+			},
+		});
+
+		await tools.updateProjectBranchDataAPI.execute({
+			project_id: "project-id",
+			branch_id: "branch-id",
+			database_name: "neondb",
+		});
+
+		expect(requests[0].headers.get("content-type")).toBeNull();
+		expect(await requests[0].text()).toBe("");
+	});
+
+	test("sends restoreSnapshot name in the body only", async () => {
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			operations: ["restoreSnapshot"] as const,
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse({ branch: { id: "br-id" } });
+			},
+		});
+
+		await tools.restoreSnapshot.execute({
+			project_id: "project-id",
+			snapshot_id: "snapshot-id",
+			name: "restored",
+		});
+
+		expect(requests[0].url).toBe(
+			"https://console.neon.tech/api/v2/projects/project-id/snapshots/snapshot-id/restore",
+		);
+		expect(requests[0].url).not.toContain("name=");
+		expect(await requests[0].json()).toEqual({ name: "restored" });
 	});
 
 	test("rejects duplicate operation selections", () => {
