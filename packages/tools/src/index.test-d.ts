@@ -1,6 +1,10 @@
 import { expectTypeOf } from "vitest";
 import { toEveTool } from "./eve.js";
-import { createNeonTool, createNeonTools } from "./index.js";
+import {
+	type CreateNeonToolsOptions,
+	createNeonTool,
+	createNeonTools,
+} from "./index.js";
 import { toMastraTools } from "./mastra.js";
 
 const tools = createNeonTools({
@@ -171,3 +175,18 @@ const renamedOne = createNeonTool("createProjectBranch", {
 	names: { createProjectBranch: "create_branch" },
 });
 expectTypeOf(renamedOne.id).toEqualTypeOf<string>();
+
+const namedBag = {
+	apiKey: "test-key",
+	operations: ["listProjects"] as const,
+	name: (id: string) => `neon_${id}`,
+};
+expectTypeOf(createNeonTools(namedBag).listProjects.id).toEqualTypeOf<string>();
+
+const unnamedBag: CreateNeonToolsOptions<["listProjects"]> = {
+	apiKey: "test-key",
+	operations: ["listProjects"],
+	// @ts-expect-error name is only on the rename overloads
+	name: (id: string) => `neon_${id}`,
+};
+void unnamedBag;

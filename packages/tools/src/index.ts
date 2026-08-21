@@ -68,7 +68,7 @@ type WithPublishedId<Tool> = Tool extends { id: string }
 
 export interface NeonToolsClientOptions
 	extends Pick<NeonConfig, "baseUrl" | "fetch">,
-		NeonToolCustomizeOptions {
+		Omit<NeonToolCustomizeOptions, "name" | "names"> {
 	apiKey?: NeonBearerCredential;
 }
 
@@ -171,17 +171,10 @@ export function createNeonTools<
 >(
 	options: CreateNeonToolsOptions<Operations> & {
 		inject?: Inject;
-		name: (id: string) => string;
-	},
-): NamedNeonTools<Operations, Inject>;
-export function createNeonTools<
-	const Operations extends readonly NeonOperationId[],
-	const Inject extends NeonToolInjectOptions | undefined = undefined,
->(
-	options: CreateNeonToolsOptions<Operations> & {
-		inject?: Inject;
-		names: NeonToolNameOverrides;
-	},
+	} & (
+			| { name: (id: string) => string; names?: NeonToolNameOverrides }
+			| { names: NeonToolNameOverrides; name?: (id: string) => string }
+		),
 ): NamedNeonTools<Operations, Inject>;
 export function createNeonTools<
 	const Operations extends readonly NeonOperationId[],
@@ -213,18 +206,10 @@ export function createNeonTool<
 	operationId: Operation,
 	options: NeonToolsClientOptions & {
 		inject?: Inject;
-		name: (id: string) => string;
-	},
-): NamedNeonTool<Operation, Inject>;
-export function createNeonTool<
-	const Operation extends NeonOperationId,
-	const Inject extends NeonToolInjectOptions | undefined = undefined,
->(
-	operationId: Operation,
-	options: NeonToolsClientOptions & {
-		inject?: Inject;
-		names: NeonToolNameOverrides;
-	},
+	} & (
+			| { name: (id: string) => string; names?: NeonToolNameOverrides }
+			| { names: NeonToolNameOverrides; name?: (id: string) => string }
+		),
 ): NamedNeonTool<Operation, Inject>;
 export function createNeonTool<
 	const Operation extends NeonOperationId,
