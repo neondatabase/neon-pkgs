@@ -11,6 +11,7 @@ import {
 	type InjectedNeonTool,
 	type NeonToolCustomizeOptions,
 	type NeonToolInjectOptions,
+	type NeonToolNameOverrides,
 } from "./lib/customize.js";
 import {
 	type NeonOperationId,
@@ -60,6 +61,10 @@ export type InjectedNeonTools<
 		Inject
 	>;
 };
+
+type WithPublishedId<Tool> = Tool extends { id: string }
+	? Omit<Tool, "id"> & { id: string }
+	: Tool;
 
 export interface NeonToolsClientOptions
 	extends Pick<NeonConfig, "baseUrl" | "fetch">,
@@ -143,18 +148,84 @@ const bindTools = <Operations extends readonly NeonOperationId[]>(
 	return tools;
 };
 
-export const createNeonTools = <
+type NamedNeonTools<Operations extends readonly NeonOperationId[], Inject> = {
+	[Operation in Operations[number]]: WithPublishedId<
+		Inject extends NeonToolInjectOptions
+			? InjectedNeonTool<
+					ReturnType<OperationFactories[Operation]>,
+					Inject
+				>
+			: ReturnType<OperationFactories[Operation]>
+	>;
+};
+
+type NamedNeonTool<Operation extends NeonOperationId, Inject> = WithPublishedId<
+	Inject extends NeonToolInjectOptions
+		? InjectedNeonTool<ReturnType<OperationFactories[Operation]>, Inject>
+		: ReturnType<OperationFactories[Operation]>
+>;
+
+export function createNeonTools<
+	const Operations extends readonly NeonOperationId[],
+	const Inject extends NeonToolInjectOptions | undefined = undefined,
+>(
+	options: CreateNeonToolsOptions<Operations> & {
+		inject?: Inject;
+		name: (id: string) => string;
+	},
+): NamedNeonTools<Operations, Inject>;
+export function createNeonTools<
+	const Operations extends readonly NeonOperationId[],
+	const Inject extends NeonToolInjectOptions | undefined = undefined,
+>(
+	options: CreateNeonToolsOptions<Operations> & {
+		inject?: Inject;
+		names: NeonToolNameOverrides;
+	},
+): NamedNeonTools<Operations, Inject>;
+export function createNeonTools<
 	const Operations extends readonly NeonOperationId[],
 	const Inject extends NeonToolInjectOptions | undefined = undefined,
 >(
 	options: CreateNeonToolsOptions<Operations> & { inject?: Inject },
 ): Inject extends NeonToolInjectOptions
 	? InjectedNeonTools<Operations, Inject>
-	: NeonTools<Operations> =>
-	bindTools(options) as Inject extends NeonToolInjectOptions
-		? InjectedNeonTools<Operations, Inject>
-		: NeonTools<Operations>;
+	: NeonTools<Operations>;
+export function createNeonTools<
+	const Operations extends readonly NeonOperationId[],
+	const Inject extends NeonToolInjectOptions | undefined = undefined,
+>(
+	options: CreateNeonToolsOptions<Operations> & { inject?: Inject },
+):
+	| NamedNeonTools<Operations, Inject>
+	| InjectedNeonTools<Operations, Inject>
+	| NeonTools<Operations> {
+	return bindTools(options) as
+		| NamedNeonTools<Operations, Inject>
+		| InjectedNeonTools<Operations, Inject>
+		| NeonTools<Operations>;
+}
 
+export function createNeonTool<
+	const Operation extends NeonOperationId,
+	const Inject extends NeonToolInjectOptions | undefined = undefined,
+>(
+	operationId: Operation,
+	options: NeonToolsClientOptions & {
+		inject?: Inject;
+		name: (id: string) => string;
+	},
+): NamedNeonTool<Operation, Inject>;
+export function createNeonTool<
+	const Operation extends NeonOperationId,
+	const Inject extends NeonToolInjectOptions | undefined = undefined,
+>(
+	operationId: Operation,
+	options: NeonToolsClientOptions & {
+		inject?: Inject;
+		names: NeonToolNameOverrides;
+	},
+): NamedNeonTool<Operation, Inject>;
 export function createNeonTool<
 	const Operation extends NeonOperationId,
 	const Inject extends NeonToolInjectOptions | undefined = undefined,
@@ -163,13 +234,24 @@ export function createNeonTool<
 	options: NeonToolsClientOptions & { inject?: Inject },
 ): Inject extends NeonToolInjectOptions
 	? InjectedNeonTool<ReturnType<OperationFactories[Operation]>, Inject>
-	: ReturnType<OperationFactories[Operation]> {
+	: ReturnType<OperationFactories[Operation]>;
+export function createNeonTool<
+	const Operation extends NeonOperationId,
+	const Inject extends NeonToolInjectOptions | undefined = undefined,
+>(
+	operationId: Operation,
+	options: NeonToolsClientOptions & { inject?: Inject },
+):
+	| NamedNeonTool<Operation, Inject>
+	| InjectedNeonTool<ReturnType<OperationFactories[Operation]>, Inject>
+	| ReturnType<OperationFactories[Operation]> {
 	assertToolCustomizeOptions(options);
 	const tool = operationFactoryFor(operationId)(createRawClient(options));
 	const customized = hasToolCustomization(options)
 		? applyToolCustomization(tool, options)
 		: tool;
-	return customized as Inject extends NeonToolInjectOptions
-		? InjectedNeonTool<ReturnType<OperationFactories[Operation]>, Inject>
-		: ReturnType<OperationFactories[Operation]>;
+	return customized as
+		| NamedNeonTool<Operation, Inject>
+		| InjectedNeonTool<ReturnType<OperationFactories[Operation]>, Inject>
+		| ReturnType<OperationFactories[Operation]>;
 }

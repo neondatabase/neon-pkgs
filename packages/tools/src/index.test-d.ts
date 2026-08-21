@@ -151,3 +151,23 @@ describedOnly.getProject.execute({});
 const uninjectedProject = createNeonTool("getProject", { apiKey: "test-key" });
 // @ts-expect-error project_id is required without inject
 uninjectedProject.execute({});
+
+const renamed = createNeonTools({
+	apiKey: "test-key",
+	operations: ["listProjects", "createProjectBranch"] as const,
+	names: { createProjectBranch: "create_branch" },
+	name: (id) => `neon_${id}`,
+});
+expectTypeOf(renamed.listProjects.id).toEqualTypeOf<string>();
+expectTypeOf(renamed.createProjectBranch.id).toEqualTypeOf<string>();
+expectTypeOf(tools.listProjects.id).toEqualTypeOf<"list_projects">();
+
+const mastraRenamed = toMastraTools(renamed);
+expectTypeOf(mastraRenamed.neon_create_branch.id).toEqualTypeOf<string>();
+expectTypeOf(mastraRenamed.neon_list_projects.id).toEqualTypeOf<string>();
+
+const renamedOne = createNeonTool("createProjectBranch", {
+	apiKey: "test-key",
+	names: { createProjectBranch: "create_branch" },
+});
+expectTypeOf(renamedOne.id).toEqualTypeOf<string>();
