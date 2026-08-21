@@ -191,6 +191,21 @@ const unnamedBag: CreateNeonToolsOptions<["listProjects"]> = {
 };
 void unnamedBag;
 
+const annotatedOperations: CreateNeonToolsOptions<["listProjects"]> = {
+	apiKey: "test-key",
+	operations: ["listProjects"],
+};
+expectTypeOf(createNeonTools(annotatedOperations)).toHaveProperty(
+	"listProjects",
+);
+const annotatedWithWorkflow: CreateNeonToolsOptions<["listProjects"]> = {
+	apiKey: "test-key",
+	operations: ["listProjects"],
+	// @ts-expect-error operations-only annotation does not accept a workflow
+	workflows: ["createWithCompute"],
+};
+void annotatedWithWorkflow;
+
 const workflowOnly = createNeonTools({
 	apiKey: "test-key",
 	workflows: ["createWithCompute"] as const,

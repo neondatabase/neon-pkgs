@@ -93,7 +93,7 @@ export interface NeonToolsClientOptions
 
 export type CreateNeonToolsOptions<
 	Operations extends readonly NeonOperationId[] = readonly NeonOperationId[],
-	Workflows extends readonly NeonWorkflowId[] = readonly NeonWorkflowId[],
+	Workflows extends readonly NeonWorkflowId[] = readonly [],
 > = NeonToolsClientOptions &
 	(
 		| { operations: Operations; workflows?: Workflows }
