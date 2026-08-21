@@ -48,7 +48,7 @@ await tools.listProjects.execute(
 );
 ```
 
-The returned record is keyed by OpenAPI operation ID or SDK workflow method name. Each tool includes its Zod 4 `inputSchema`, snake-case `id`, title, description, safety annotations, stability metadata, and an `execute()` function. Inputs are flat: path, query, header, and body fields sit on one object. A body that is a single object wrapper is lifted, so `create_project` takes `{ name, region_id, org_id, ... }` rather than `{ project: { name } }`. A body with several properties keeps those properties, so `create_project_branch` takes `{ project_id, branch, endpoints, annotation_value }` and `branch` is still an object. Two email-provider updates keep a `body` field because the API request is a discriminated union.
+The returned record is keyed by OpenAPI operation ID or workflow id. Each tool includes its Zod 4 `inputSchema`, snake-case `id`, title, description, safety annotations, stability metadata, and an `execute()` function. Inputs are flat: path, query, header, and body fields sit on one object. A body that is a single object wrapper is lifted, so `create_project` takes `{ name, region_id, org_id, ... }` rather than `{ project: { name } }`. A body with several properties keeps those properties, so `create_project_branch` takes `{ project_id, branch, endpoints, annotation_value }` and `branch` is still an object. Two email-provider updates keep a `body` field because the API request is a discriminated union.
 
 `operationIds` exports every valid operation selector. `execute()` strictly validates the input, rejects unknown fields instead of dropping them, and returns typed, JSON-safe `{ data }`. Neon SDK errors remain typed and are thrown to the caller.
 
