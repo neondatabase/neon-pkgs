@@ -121,7 +121,7 @@ const createWithComputeTool = (options: WorkflowClientOptions) =>
 			id: "create_with_compute",
 			title: "Create branch with compute",
 			description:
-				"Create a branch with a read-write endpoint and return its connection string. Use this instead of create_project_branch whenever the branch will be connected to. create_project_branch creates no compute and returns no connection string. The call waits until the compute is ready, up to five minutes by default.",
+				"Create a branch with a read-write endpoint and return its connection string. Use this instead of create_project_branch when the next step needs to connect: create_project_branch omits compute unless you pass endpoints, and it does not wait or return a connection string. The call waits until the compute is ready, up to five minutes by default.",
 			inputSchema: createWithComputeInputSchema,
 			annotations: writeAnnotations,
 			requiresApproval: true,

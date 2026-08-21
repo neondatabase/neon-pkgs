@@ -56,7 +56,7 @@ The returned record is keyed by OpenAPI operation ID or SDK workflow method name
 
 `workflows` selects methods from the `@neon/sdk` ergonomic client. These are not OpenAPI operations: they attach a default compute, wait until the resource is ready, and return a connection string. `operations` is the generated Management API. At least one of the two arrays is required.
 
-Both workflow tools poll until the resource is ready. The default deadline is five minutes (`wait.timeoutMs`). Pass `wait: { timeoutMs: 30_000 }` on `createNeonTools` to bound that, or pass `signal` on `execute` to cancel. `metadata.method` and `metadata.path` name the first request; extra readiness GETs are not listed there. `inject.projectId` still works on `createWithCompute` because its path is `/projects/{project_id}/branches`.
+Both workflow tools poll until the resource is ready. The default deadline is five minutes (`wait.timeoutMs`). Pass `wait: { timeoutMs: 30_000 }` on `createNeonTools` or `createNeonTool` to bound that. Set it below the host's own tool-call timeout, otherwise the host gives up first. An abort `signal` on `execute` or a wait timeout stops the poll, not the create: the branch or project may already exist, and the error does not include its id. List before retrying. `metadata.method` and `metadata.path` name the first request; extra readiness GETs are not listed there. `inject.projectId` still works on `createWithCompute` because its path is `/projects/{project_id}/branches`.
 
 ```ts
 const tools = createNeonTools({
@@ -88,7 +88,7 @@ const tools = createNeonTools({
 tools.createWithCompute.id; // "create_branch"
 ```
 
-`create_project_branch` still creates a branch with no compute when `endpoints` is omitted. Use `createWithCompute` when the next step needs a connection string.
+`create_project_branch` still creates a branch with no compute when `endpoints` is omitted. It can attach compute if you pass `endpoints`; it does not wait or return a connection string. Use `createWithCompute` when the next step needs to connect.
 
 ## Optional host add-ons
 
