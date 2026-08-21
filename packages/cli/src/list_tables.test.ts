@@ -41,7 +41,10 @@ const SHRINKABLE_LAST = new Set([
 	"summary",
 	"scope",
 	"replication_lag",
-	"recoverable_until",
+	"created_at",
+	"expires_at",
+	"dead_rowcount",
+	"confirmed_flush_lsn",
 ]);
 
 const TIMESTAMP = "2021-01-01T00:00:00.000Z";
@@ -363,8 +366,14 @@ const COMMAND_CASES: ListCase[] = [
 				id: BRANCH_ID,
 				current_state: "ready",
 				created_at: TIMESTAMP,
-				expires_at: null,
 				default: true,
+			},
+			{
+				name: "test_branch",
+				id: "br-sunny-branch-123456",
+				current_state: "ready",
+				created_at: TIMESTAMP,
+				expires_at: "2022-01-01T00:00:00.000Z",
 			},
 		],
 		renderColumns: {
@@ -372,7 +381,7 @@ const COMMAND_CASES: ListCase[] = [
 			name: branchName,
 		},
 		mustKeepAt80: ["name", "id", "current_state", "expires_at"],
-		keptAt80: ["name", "id", "current_state", "expires_at", "created_at"],
+		keptAt80: ["name", "id", "current_state", "expires_at"],
 	},
 	{
 		command: "databases list",
@@ -675,6 +684,10 @@ describe("list table columns", () => {
 		expect([...plan.fields]).toEqual([...listCase.keptAt80]);
 		for (const field of listCase.mustKeepAt80) {
 			expect(plan.fields).toContain(field);
+		}
+		if (plan.mode === "shrink-last") {
+			const last = plan.fields[plan.fields.length - 1];
+			expect(SHRINKABLE_LAST.has(last ?? "")).toBe(true);
 		}
 	});
 
