@@ -206,6 +206,39 @@ const annotatedWithWorkflow: CreateNeonToolsOptions<["listProjects"]> = {
 };
 void annotatedWithWorkflow;
 
+const bothAnnotated: CreateNeonToolsOptions<
+	["listProjects"],
+	["createWithCompute"]
+> = {
+	apiKey: "test-key",
+	operations: ["listProjects"],
+	workflows: ["createWithCompute"],
+};
+expectTypeOf(createNeonTools(bothAnnotated)).toHaveProperty("listProjects");
+expectTypeOf(createNeonTools(bothAnnotated)).toHaveProperty(
+	"createWithCompute",
+);
+
+// @ts-expect-error both generics specified requires operations
+const omittedAnnotatedOps: CreateNeonToolsOptions<
+	["listProjects"],
+	["createWithCompute"]
+> = {
+	apiKey: "test-key",
+	workflows: ["createWithCompute"],
+};
+void omittedAnnotatedOps;
+
+// @ts-expect-error both generics specified requires workflows
+const omittedAnnotatedWorkflows: CreateNeonToolsOptions<
+	["listProjects"],
+	["createWithCompute"]
+> = {
+	apiKey: "test-key",
+	operations: ["listProjects"],
+};
+void omittedAnnotatedWorkflows;
+
 const workflowOnly = createNeonTools({
 	apiKey: "test-key",
 	workflows: ["createWithCompute"] as const,
