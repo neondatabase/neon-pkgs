@@ -76,6 +76,12 @@ await tools.createAndConnect.execute({
 });
 ```
 
+`createNeonTool` accepts the same workflow ids:
+
+```ts
+const createBranch = createNeonTool("createWithCompute", { apiKey });
+```
+
 `workflowIds` lists the selectors. Record keys match the SDK method names (`createWithCompute`, `createAndConnect`). Published ids are `create_with_compute` and `create_and_connect`. Input fields are snake_case, same as generated tools. `names` can rename a workflow the same way it renames an operation:
 
 ```ts
@@ -85,7 +91,7 @@ const tools = createNeonTools({
 	names: { createWithCompute: "create_branch" },
 });
 
-tools.createWithCompute.id;
+tools.createWithCompute.id; // "create_branch"
 ```
 
 `create_project_branch` still creates a branch with no compute when `endpoints` is omitted. It can attach compute if you pass `endpoints`; it does not wait or return a connection string. Use `createWithCompute` when the next step needs to connect.

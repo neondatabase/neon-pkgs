@@ -91,17 +91,18 @@ export interface NeonToolsClientOptions
 	apiKey?: NeonBearerCredential;
 }
 
+interface OperationSelection {
+	operations: readonly NeonOperationId[];
+	workflows?: readonly NeonWorkflowId[];
+}
+
+interface WorkflowSelection {
+	workflows: readonly NeonWorkflowId[];
+	operations?: readonly NeonOperationId[];
+}
+
 type CreateNeonToolsInput = NeonToolsClientOptions &
-	(
-		| {
-				operations: readonly NeonOperationId[];
-				workflows?: readonly NeonWorkflowId[];
-		  }
-		| {
-				workflows: readonly NeonWorkflowId[];
-				operations?: readonly NeonOperationId[];
-		  }
-	);
+	(OperationSelection | WorkflowSelection);
 
 export type CreateNeonToolsOptions<
 	Operations extends readonly NeonOperationId[] = readonly NeonOperationId[],
