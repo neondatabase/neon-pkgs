@@ -67,7 +67,7 @@ describe("MCP v2 compatibility", () => {
 
 		const invalid = await client.callTool({
 			name: "list_projects",
-			arguments: { query: { limit: "one" } },
+			arguments: { limit: "one" },
 		});
 		expect(invalid.isError).toBe(true);
 	});
@@ -339,10 +339,7 @@ describe("MCP path injection", () => {
 		expect(listed.tools[0].inputSchema).toMatchObject({
 			type: "object",
 			properties: {
-				path: {
-					type: "object",
-					properties: { project_id: { type: "string" } },
-				},
+				project_id: { type: "string" },
 			},
 		});
 

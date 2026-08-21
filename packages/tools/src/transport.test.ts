@@ -20,12 +20,10 @@ describe("JSON-safe transport", () => {
 		});
 
 		await tools.createProjectBranchFunctionDeployment.execute({
-			path: {
-				project_id: "project-id",
-				branch_id: "branch-id",
-				slug: "demo",
-			},
-			body: { zip: "UEsDBA==" },
+			project_id: "project-id",
+			branch_id: "branch-id",
+			slug: "demo",
+			zip: "UEsDBA==",
 		});
 
 		const zip = uploaded?.get("zip");
@@ -49,12 +47,10 @@ describe("JSON-safe transport", () => {
 		});
 
 		const result = await tools.getProjectBranchBucketObject.execute({
-			path: {
-				project_id: "project-id",
-				branch_id: "branch-id",
-				bucket_name: "assets",
-				object_key: "hello.txt",
-			},
+			project_id: "project-id",
+			branch_id: "branch-id",
+			bucket_name: "assets",
+			object_key: "hello.txt",
 		});
 
 		expect(result).toEqual({
@@ -75,11 +71,9 @@ describe("JSON-safe transport", () => {
 
 		await expect(
 			tools.revokeCredential.execute({
-				path: {
-					project_id: "project-id",
-					branch_id: "branch-id",
-					token_id: "nak_live_test",
-				},
+				project_id: "project-id",
+				branch_id: "branch-id",
+				token_id: "nak_live_test",
 			}),
 		).resolves.toEqual({ data: null });
 	});

@@ -26,6 +26,8 @@ export type {
 	NeonToolDescriptionSource,
 	NeonToolInjectOptions,
 	NeonToolInjectValue,
+	NeonToolNameOverrides,
+	NeonToolNameSource,
 	NeonToolOnExecute,
 	NeonToolOnExecuteEvent,
 } from "./lib/customize.js";
@@ -129,6 +131,13 @@ const bindTools = <Operations extends readonly NeonOperationId[]>(
 				: tool,
 		] as const;
 	});
+	const publishedIds = new Set<string>();
+	for (const [, tool] of entries) {
+		if (publishedIds.has(tool.id)) {
+			throw new Error(`Duplicate Neon tool id "${tool.id}"`);
+		}
+		publishedIds.add(tool.id);
+	}
 	const tools: unknown = Object.fromEntries(entries);
 	assertNeonTools(tools, options.operations);
 	return tools;

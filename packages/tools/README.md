@@ -24,7 +24,7 @@ const tools = createNeonTools({
 });
 
 const result = await tools.listProjects.execute({
-	query: { limit: 10 },
+	limit: 10,
 });
 ```
 
@@ -43,12 +43,12 @@ Or supply the token per call:
 const tools = createNeonTools({ operations });
 
 await tools.listProjects.execute(
-	{ query: { limit: 10 } },
+	{ limit: 10 },
 	{ apiKey: oauthAccessToken },
 );
 ```
 
-The returned record is keyed by OpenAPI operation ID. Each tool includes its generated Zod 4 `inputSchema`, snake-case `id`, title, description, safety annotations, stability metadata, and an `execute()` function. Inputs group API parameters under `path`, `query`, `headers`, and `body`.
+The returned record is keyed by OpenAPI operation ID. Each tool includes its generated Zod 4 `inputSchema`, snake-case `id`, title, description, safety annotations, stability metadata, and an `execute()` function. Inputs are flat: path, query, header, and body fields sit on one object. A body that is a single object wrapper is lifted, so `create_project` takes `{ name, region_id, org_id, ... }` rather than `{ project: { name } }`. Two email-provider updates keep a `body` field because the API request is a discriminated union.
 
 `operationIds` exports every valid selector. `execute()` strictly validates the input, rejects unknown fields instead of dropping them, and returns typed, JSON-safe `{ data }`. Neon SDK errors remain typed and are thrown to the caller.
 
@@ -96,9 +96,27 @@ const tools = createNeonTools({
 
 This package does not send analytics. Mutating `event.input` does not change a grant-locked project or branch id.
 
+### Names
+
+`name` rewrites every published tool `id`. `names` overrides one tool first, keyed by OpenAPI operation ID or the generated snake-case `id`:
+
+```ts
+const tools = createNeonTools({
+	apiKey,
+	operations: ["createProjectBranch", "listProjects"] as const,
+	names: { createProjectBranch: "create_branch" },
+	name: (id) => `neon_${id}`,
+});
+
+tools.createProjectBranch.id; // "neon_create_branch"
+tools.listProjects.id; // "neon_list_projects"
+```
+
+The record is still keyed by operation ID (`tools.createProjectBranch`). MCP and Mastra publish `tool.id`. Eve uses the filename as the model-facing name, so name the file after the published `id`. Duplicate or non-snake-case ids throw.
+
 ### Project and branch injection
 
-Generated tools take OpenAPI path parameters (`path.project_id`, `path.branch_id`). A host that already knows those values can inject them. Without `omitFromSchema`, the published field becomes optional and a caller-supplied value wins. With `omitFromSchema: true`, the field is removed from the published schema and the injector is the only source:
+Generated tools take path parameters as `project_id` and `branch_id`. A host that already knows those values can inject them. Without `omitFromSchema`, the published field becomes optional and a caller-supplied value wins. With `omitFromSchema: true`, the field is removed from the published schema and the injector is the only source:
 
 ```ts
 const tools = createNeonTools({
@@ -111,7 +129,7 @@ const tools = createNeonTools({
 });
 
 await tools.getProject.execute({});
-await tools.deleteProjectBranch.execute({ path: { branch_id: "br-id" } });
+await tools.deleteProjectBranch.execute({ branch_id: "br-id" });
 ```
 
 Use a getter when the value is request-scoped. The getter can read the host's own `AsyncLocalStorage` (this package does not export one):
@@ -134,7 +152,7 @@ await grant.run({ projectId: "project-id" }, () => tools.getProject.execute({}))
 
 Injectors only apply to tools that have that path key. `listProjects` is unchanged. Empty inject values fail closed. Invalid ids still fail the original path schema before fetch.
 
-These add-ons do not flatten `{ path, query, body }` into camelCase `projectId`, do not rename tools (`get_project` is not `describe_project`), and do not add host-only behavior such as returning a connection string from `createProject`. Grant filtering, read-only filtering, and access-control notices stay in the host. `branchId` injection fills `path.branch_id` only — query/body branch selectors such as `getConnectionURI`'s `query.branch_id` are unchanged.
+These add-ons do not add host-only behavior such as returning a connection string from `createProject`. Grant filtering, read-only filtering, and access-control notices stay in the host. `branchId` injection fills path `branch_id` only — query/body branch selectors such as `getConnectionURI`'s `branch_id` are unchanged.
 
 ## Request schemas
 
@@ -262,12 +280,10 @@ const deployFunction = createNeonTool(
 );
 
 await deployFunction.execute({
-	path: {
-		project_id: "project-id",
-		branch_id: "branch-id",
-		slug: "hello",
-	},
-	body: { zip: "UEsDBA==" },
+	project_id: "project-id",
+	branch_id: "branch-id",
+	slug: "hello",
+	zip: "UEsDBA==",
 });
 ```
 

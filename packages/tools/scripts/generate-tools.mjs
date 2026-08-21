@@ -176,6 +176,19 @@ const collectBinaryPaths = (schema, path = [], references = new Set()) => {
 const resolveParameters = (parameters = []) =>
 	parameters.map((parameter) => dereference(parameter));
 
+// query `name` duplicates body `name` on restore; the body field is the
+// documented name of the restored branch.
+const droppedQueryByOperation = {
+	restoreSnapshot: new Set(["name"]),
+};
+
+const isObjectSchema = (schema) =>
+	Boolean(
+		schema &&
+			typeof schema === "object" &&
+			(schema.type === "object" || schema.properties || schema.allOf),
+	);
+
 const operationRecords = [];
 const operationIds = new Set();
 const toolIds = new Set();
@@ -229,6 +242,98 @@ for (const [path, pathItemValue] of Object.entries(document.paths ?? {})) {
 			}
 		}
 
+		const pathNames = (byLocation.get("path") ?? []).map(
+			(parameter) => parameter.name,
+		);
+		const droppedQuery = droppedQueryByOperation[operation.operationId];
+		const queryNames = (byLocation.get("query") ?? [])
+			.map((parameter) => parameter.name)
+			.filter((name) => !droppedQuery?.has(name));
+		const headerNames = (byLocation.get("header") ?? []).map(
+			(parameter) => parameter.name,
+		);
+		const resolvedBody = bodySchema ? dereference(bodySchema) : undefined;
+		const bodyPropertyNames = [...allOfPropertyNames(bodySchema)];
+		for (const binary of binaryPaths) {
+			if (!bodyPropertyNames.includes(binary.path[0])) {
+				bodyPropertyNames.push(binary.path[0]);
+			}
+		}
+		const bodyPassthrough =
+			bodySchema !== undefined &&
+			bodyPropertyNames.length === 0 &&
+			Boolean(resolvedBody?.oneOf || resolvedBody?.anyOf);
+
+		const findProperty = (schema, name, references = new Set()) => {
+			if (!schema || typeof schema !== "object") return undefined;
+			if (schema.$ref) {
+				if (references.has(schema.$ref)) return undefined;
+				const next = new Set(references);
+				next.add(schema.$ref);
+				return findProperty(resolveReference(schema.$ref), name, next);
+			}
+			if (schema.properties?.[name]) {
+				return dereference(schema.properties[name]);
+			}
+			for (const child of schema.allOf ?? []) {
+				const found = findProperty(child, name, references);
+				if (found) return found;
+			}
+			return undefined;
+		};
+
+		const isRequiredProperty = (schema, name, references = new Set()) => {
+			if (!schema || typeof schema !== "object") return false;
+			if (schema.$ref) {
+				if (references.has(schema.$ref)) return false;
+				const next = new Set(references);
+				next.add(schema.$ref);
+				return isRequiredProperty(
+					resolveReference(schema.$ref),
+					name,
+					next,
+				);
+			}
+			if ((schema.required ?? []).includes(name)) return true;
+			return (schema.allOf ?? []).some((child) =>
+				isRequiredProperty(child, name, references),
+			);
+		};
+
+		let liftBodyKey;
+		let liftBodyOptional = false;
+		let publishedBodyNames = bodyPropertyNames;
+		if (bodyPropertyNames.length === 1) {
+			const wrapperName = bodyPropertyNames[0];
+			const wrapperSchema = findProperty(bodySchema, wrapperName);
+			if (isObjectSchema(wrapperSchema)) {
+				liftBodyKey = wrapperName;
+				liftBodyOptional = !isRequiredProperty(bodySchema, wrapperName);
+				publishedBodyNames = [...allOfPropertyNames(wrapperSchema)];
+			}
+		}
+
+		const publishedNames = [
+			...pathNames,
+			...queryNames,
+			...headerNames,
+			...(bodyPassthrough ? ["body"] : publishedBodyNames),
+		];
+		const seenPublished = new Set();
+		for (const name of publishedNames) {
+			if (seenPublished.has(name)) {
+				throw new Error(
+					`Cannot flatten overlapping parameter "${name}" on ${operation.operationId}.`,
+				);
+			}
+			seenPublished.add(name);
+		}
+
+		const queryRequired = (byLocation.get("query") ?? []).some(
+			(parameter) =>
+				parameter.required && !droppedQuery?.has(parameter.name),
+		);
+
 		operationRecords.push({
 			operationId: operation.operationId,
 			clientName: camelCase(operation.operationId),
@@ -246,14 +351,22 @@ for (const [path, pathItemValue] of Object.entries(document.paths ?? {})) {
 			tags: operation.tags ?? [],
 			hasBody: bodySchema !== undefined,
 			bodyRequired: body?.required === true,
+			bodyNames: publishedBodyNames,
+			bodyPassthrough,
+			liftBodyKey,
+			liftBodyOptional,
 			binaryPaths,
 			hasHeaders: byLocation.has("header"),
+			headerNames,
 			headersRequired:
-				byLocation.get("header")?.some((parameter) => parameter.required) ?? false,
+				byLocation.get("header")?.some((parameter) => parameter.required) ??
+				false,
 			hasPath: byLocation.has("path"),
-			hasQuery: byLocation.has("query"),
-			queryRequired:
-				byLocation.get("query")?.some((parameter) => parameter.required) ?? false,
+			pathNames,
+			hasQuerySchema: byLocation.has("query"),
+			hasQuery: queryNames.length > 0,
+			queryNames,
+			queryRequired,
 		});
 	}
 }
@@ -262,62 +375,124 @@ operationRecords.sort((left, right) =>
 	left.operationId.localeCompare(right.operationId),
 );
 
+const shapeRef = (schemaExpr, name) =>
+	`${schemaExpr}.shape[${JSON.stringify(name)}]`;
+
+const schemaField = (name, expr, optionalize) =>
+	`\t${JSON.stringify(name)}: ${optionalize ? `${expr}.optional()` : expr},`;
+
 const schemaFor = (record) => {
 	const fields = [];
-	if (record.hasBody) {
-		let schema = `zod.z${record.pascalName}Body`;
-		if (record.binaryPaths.length > 0) {
-			const binaryFields = record.binaryPaths
-				.map(({ path: [name], required }) => {
-					const optional = required ? "" : ".optional()";
-					return `${JSON.stringify(name)}: z.base64().describe("Base64-encoded binary file contents.")${optional}`;
-				})
-				.join(", ");
-			schema = `${schema}.safeExtend({ ${binaryFields} })`;
+	const binaryByName = new Map(
+		record.binaryPaths.map((binary) => [binary.path[0], binary]),
+	);
+
+	const addFields = (schemaExpr, names, optionalizeGroup) => {
+		for (const name of names) {
+			const binary = binaryByName.get(name);
+			if (binary) {
+				const optional = optionalizeGroup || !binary.required;
+				fields.push(
+					`\t${JSON.stringify(name)}: z.base64().describe("Base64-encoded binary file contents.")${optional ? ".optional()" : ""},`,
+				);
+				continue;
+			}
+			fields.push(
+				schemaField(
+					name,
+					shapeRef(schemaExpr, name),
+					optionalizeGroup,
+				),
+			);
 		}
-		fields.push(
-			`\tbody: ${schema}${record.bodyRequired ? "" : ".optional()"},`,
+	};
+
+	if (record.hasPath) {
+		addFields(`zod.z${record.pascalName}Path`, record.pathNames, false);
+	}
+	if (record.hasQuery) {
+		addFields(
+			`zod.z${record.pascalName}Query`,
+			record.queryNames,
+			!record.queryRequired,
 		);
 	}
 	if (record.hasHeaders) {
-		fields.push(
-			`\theaders: zod.z${record.pascalName}Headers${record.headersRequired ? "" : ".optional()"},`,
+		addFields(
+			`zod.z${record.pascalName}Headers`,
+			record.headerNames,
+			!record.headersRequired,
 		);
 	}
-	if (record.hasPath) {
-		fields.push(`\tpath: zod.z${record.pascalName}Path,`);
-	}
-	if (record.hasQuery) {
+	if (record.bodyPassthrough) {
 		fields.push(
-			`\tquery: zod.z${record.pascalName}Query${record.queryRequired ? "" : ".optional()"},`,
+			schemaField(
+				"body",
+				`zod.z${record.pascalName}Body`,
+				!record.bodyRequired,
+			),
 		);
+	} else if (record.hasBody && record.bodyNames.length > 0) {
+		const bodyExpr = record.liftBodyKey
+			? `${shapeRef(`zod.z${record.pascalName}Body`, record.liftBodyKey)}${
+					record.liftBodyOptional ? ".unwrap()" : ""
+				}`
+			: `zod.z${record.pascalName}Body`;
+		addFields(bodyExpr, record.bodyNames, !record.bodyRequired);
 	}
 	return `z.strictObject({\n${fields.join("\n")}\n})`;
 };
 
 const invocationFor = (record) => {
-	const options = ["\t\t\t...input,"];
-	let prelude = "";
-	if (record.binaryPaths.length > 0) {
-		const bindings = record.binaryPaths
+	const pickFields = (names) =>
+		names
 			.map(
-				({ path: [name] }, index) =>
-					`[${JSON.stringify(name)}]: binary${index}`,
+				(name) =>
+					`${JSON.stringify(name)}: input[${JSON.stringify(name)}]`,
 			)
 			.join(", ");
-		prelude = `\n\t\tconst { ${bindings}, ...body } = input.body;\n\t\treturn `;
-		const fields = record.binaryPaths
-			.map(({ path: [name] }, index) => {
-				const key = JSON.stringify(name);
-				return `\t\t\t\t...(binary${index} === undefined ? {} : { ${key}: decodeBase64(binary${index}) }),`;
-			})
-			.join("\n");
-		options.push(`\t\t\tbody: {\n\t\t\t\t...input.body,\n${fields}\n\t\t\t},`);
-		options[1] = `\t\t\tbody: {\n\t\t\t\t...body,\n${fields}\n\t\t\t},`;
+	const groupExpr = (names, required) =>
+		`optionalGroup({ ${pickFields(names)} }, ${required})`;
+	const options = [];
+	if (record.hasPath) {
+		options.push(
+			`path: ${groupExpr(record.pathNames, true)}`,
+		);
 	}
-	options.push("\t\t\tclient,", "\t\t\tsignal,", "\t\t\tthrowOnError: true,");
-	const call = `raw.${record.clientName}({\n${options.join("\n")}\n\t\t})`;
-	return prelude ? `{${prelude}${call};\n\t}` : call;
+	if (record.hasQuery) {
+		options.push(
+			`query: ${groupExpr(record.queryNames, record.queryRequired)}`,
+		);
+	}
+	if (record.hasHeaders) {
+		options.push(
+			`headers: ${groupExpr(record.headerNames, record.headersRequired)}`,
+		);
+	}
+	if (record.bodyPassthrough) {
+		options.push("body: input.body");
+	} else if (record.hasBody) {
+		const inner = groupExpr(record.bodyNames, record.bodyRequired);
+		if (record.liftBodyKey) {
+			options.push(
+				`body: optionalGroup({ ${JSON.stringify(record.liftBodyKey)}: ${groupExpr(record.bodyNames, true)} }, ${record.bodyRequired})`,
+			);
+		} else if (record.binaryPaths.length > 0) {
+			const binaryNames = record.binaryPaths.map((binary) => binary.path[0]);
+			options.push(
+				`body: decodeBinaryFields(${inner}, ${JSON.stringify(binaryNames)}, decodeBase64)`,
+			);
+		} else {
+			options.push(`body: ${inner}`);
+		}
+	}
+	const fields = [
+		...options,
+		"client",
+		"signal",
+		"throwOnError: true",
+	];
+	return `raw.${record.clientName}({\n\t\t\t${fields.join(",\n\t\t\t")},\n\t\t})`;
 };
 
 const operationsSource = operationRecords
@@ -360,7 +535,7 @@ const requestSchemaNames = operationRecords
 		...(record.hasBody ? [`z${record.pascalName}Body`] : []),
 		...(record.hasHeaders ? [`z${record.pascalName}Headers`] : []),
 		...(record.hasPath ? [`z${record.pascalName}Path`] : []),
-		...(record.hasQuery ? [`z${record.pascalName}Query`] : []),
+		...(record.hasQuerySchema ? [`z${record.pascalName}Query`] : []),
 	])
 	.sort((left, right) => left.localeCompare(right));
 
@@ -371,6 +546,7 @@ import * as raw from "@neon/sdk/raw";
 import * as z from "zod";
 import * as zod from "./generated/zod.gen.js";
 import { decodeBase64 } from "./lib/binary.js";
+import { decodeBinaryFields, optionalGroup } from "./lib/envelope.js";
 import { bindOperation, defineOperation } from "./lib/operation.js";
 
 export const operationIds = ${JSON.stringify(

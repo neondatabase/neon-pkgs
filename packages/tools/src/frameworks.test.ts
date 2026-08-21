@@ -29,7 +29,7 @@ describe("Eve compatibility", () => {
 		expect(tool.description).toBe(tools.createProject.description);
 		expect(typeof tool.approval).toBe("function");
 		await config.execute(
-			{ body: { project: { name: "from-eve" } } },
+			{ name: "from-eve" },
 			{ abortSignal: controller.signal },
 		);
 		controller.abort();
