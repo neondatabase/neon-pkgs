@@ -307,6 +307,7 @@ export const toolFactories = {
 					input.project_id,
 					{
 						branch_id: input.branch_id,
+						region_id: input.region_id,
 						type: input.type,
 						settings: input.settings,
 						autoscaling_limit_min_cu:

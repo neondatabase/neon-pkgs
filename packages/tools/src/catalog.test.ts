@@ -216,6 +216,37 @@ describe("special mappings", () => {
 		).rejects.toThrow("truncated without a next cursor");
 	});
 
+	test("forwards region_id on endpoint create", async () => {
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["postgres.endpoints.create"] as const,
+			fetch: async (input, init) => {
+				requests.push(
+					input instanceof Request ? input : new Request(input, init),
+				);
+				return jsonResponse({
+					endpoint: { id: "ep-id", type: "read_write" },
+				});
+			},
+		});
+
+		await tools["postgres.endpoints.create"].execute({
+			project_id: "project-id",
+			branch_id: "br-id",
+			type: "read_write",
+			region_id: "aws-us-west-2",
+		});
+
+		expect(await requests[0].json()).toEqual({
+			endpoint: {
+				branch_id: "br-id",
+				type: "read_write",
+				region_id: "aws-us-west-2",
+			},
+		});
+	});
+
 	test("regions.list takes no org_id", () => {
 		const tool = createNeonTool("regions.list", { apiKey: "test-key" });
 		expect(tool.inputSchema.safeParse({ org_id: "org-1" }).success).toBe(

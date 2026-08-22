@@ -84,8 +84,22 @@ describe("createNeonTools", () => {
 		const tools = createNeonTools({
 			apiKey: "test-key",
 			tools: ["projects.update"] as const,
+			wait: { pollIntervalMs: 1, timeoutMs: 5_000 },
 			fetch: async (input, init) => {
-				requests.push(new Request(input, init));
+				const request =
+					input instanceof Request ? input : new Request(input, init);
+				requests.push(request);
+				const url = new URL(request.url);
+				if (url.pathname.endsWith("/operations/op-1")) {
+					return jsonResponse({
+						operation: {
+							id: "op-1",
+							project_id: "project-id",
+							action: "update_project",
+							status: "finished",
+						},
+					});
+				}
 				return jsonResponse({
 					project: { id: "project-id", name: "renamed" },
 					operations: [
@@ -93,7 +107,7 @@ describe("createNeonTools", () => {
 							id: "op-1",
 							project_id: "project-id",
 							action: "update_project",
-							status: "finished",
+							status: "running",
 						},
 					],
 				});
@@ -108,7 +122,12 @@ describe("createNeonTools", () => {
 		expect(result).toEqual({
 			data: { id: "project-id", name: "renamed" },
 		});
+		expect(requests).toHaveLength(2);
 		expect(requests[0].method).toBe("PATCH");
+		expect(requests[1].method).toBe("GET");
+		expect(requests[1].url).toContain(
+			"/projects/project-id/operations/op-1",
+		);
 		expect(await requests[0].json()).toEqual({
 			project: { name: "renamed" },
 		});
