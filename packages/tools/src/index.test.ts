@@ -51,19 +51,27 @@ describe("createNeonTools", () => {
 			},
 		});
 
-		const result = await tools["projects.list"].execute({
-			limit: 1,
+		const uncapped = await tools["projects.list"].execute({
 			search: "demo",
 		});
-
-		expect(result).toEqual({
+		expect(uncapped).toEqual({
 			data: [{ id: "project-1" }, { id: "project-2" }],
 		});
 		expect(requests).toHaveLength(2);
-		expect(requests[0].url).toContain("limit=1");
 		expect(requests[0].url).toContain("search=demo");
 		expect(requests[0].url).not.toContain("cursor=");
 		expect(requests[1].url).toContain("cursor=page-2");
+
+		requests.length = 0;
+		const capped = await tools["projects.list"].execute({
+			limit: 1,
+			search: "demo",
+		});
+		expect(capped).toEqual({
+			data: [{ id: "project-1" }],
+		});
+		expect(requests).toHaveLength(1);
+		expect(requests[0].url).toContain("limit=1");
 		expect(requests[0].headers.get("authorization")).toBe(
 			"Bearer test-key",
 		);

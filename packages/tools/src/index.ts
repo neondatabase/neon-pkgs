@@ -15,6 +15,7 @@ import {
 	type ToolFactory,
 	toolFactories,
 	toolIds,
+	unpublishedToolError,
 } from "./lib/ergonomic/index.js";
 
 export type { NeonBearerCredential } from "./lib/auth.js";
@@ -123,7 +124,7 @@ function assertNeonTools<Tools extends readonly NeonToolId[]>(
 const factoryFor = (id: NeonToolId): ToolFactory => {
 	const known = toolIds.find((candidate) => candidate === id);
 	if (known === undefined) {
-		throw new TypeError(`Unknown Neon tool "${id}".`);
+		throw unpublishedToolError(id);
 	}
 	return toolFactories[known];
 };
@@ -251,7 +252,7 @@ export function createNeonTool<
 	| InjectedNeonTool<ToolForId<Id>, Inject>
 	| ToolForId<Id> {
 	if (!isNeonToolId(id)) {
-		throw new TypeError(`Unknown Neon tool "${id}".`);
+		throw unpublishedToolError(id);
 	}
 	assertToolCustomizeOptions(options);
 	const tool = factoryFor(id)(options);

@@ -43,8 +43,14 @@ describe("ergonomic catalog coverage", () => {
 					id,
 					{ apiKey: "test-key" },
 				]),
-			).toThrow(`Unknown Neon tool "${id}"`);
+			).toThrow(`Neon tool "${id}" is not published`);
 		}
+		expect(() =>
+			Reflect.apply(createNeonTool, undefined, [
+				"projects.create",
+				{ apiKey: "test-key" },
+			]),
+		).toThrow("projects.createAndConnect");
 	});
 });
 

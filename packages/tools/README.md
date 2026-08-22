@@ -32,6 +32,8 @@ const created = await tools["projects.createAndConnect"].execute({
 });
 ```
 
+`limit` on a list tool caps how many items come back. MCP and Mastra publish `tool.id` (`projects_list`), not the record key.
+
 `apiKey` is a Bearer credential: a Neon API key or a Neon OAuth access token. A function is called on every request, which is how short-lived OAuth tokens get refreshed. A credential is required when a tool executes — at construction, on `execute()`, or from MCP `authInfo` — and an empty value is rejected rather than ignored.
 
 ```ts

@@ -113,3 +113,23 @@ export type NeonToolId = (typeof toolIds)[number];
 
 export const isNeonToolId = (id: string): id is NeonToolId =>
 	(toolIds as readonly string[]).includes(id);
+
+const hiddenToolHint: Record<HiddenToolId, string> = {
+	"projects.create":
+		'Use "projects.createAndConnect", which attaches compute and returns a connection string.',
+	"branches.create":
+		'Use "branches.createWithCompute", which attaches compute and returns a connection string.',
+	"operations.waitFor":
+		"Write tools wait for readiness. operations.waitFor is not a tool.",
+	"postgres.roles.password": "Role passwords are not published as a tool.",
+	"storage.objects.get": "Object bytes are not published as a tool.",
+};
+
+export const unpublishedToolError = (id: string): TypeError => {
+	if ((hiddenToolIds as readonly string[]).includes(id)) {
+		return new TypeError(
+			`Neon tool "${id}" is not published. ${hiddenToolHint[id as HiddenToolId]}`,
+		);
+	}
+	return new TypeError(`Unknown Neon tool "${id}".`);
+};

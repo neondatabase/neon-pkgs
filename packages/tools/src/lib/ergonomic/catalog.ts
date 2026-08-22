@@ -45,6 +45,7 @@ export const toolFactories = {
 						},
 						{ signal },
 					),
+					input.limit,
 				),
 		}),
 	"projects.get": (options) =>
@@ -154,6 +155,7 @@ export const toolFactories = {
 						{ limit: input.limit },
 						{ signal },
 					),
+					input.limit,
 				),
 		}),
 	"projects.members.setRole": (options) =>
@@ -208,6 +210,7 @@ export const toolFactories = {
 						},
 						{ signal },
 					),
+					input.limit,
 				),
 		}),
 	"branches.get": (options) =>
@@ -705,6 +708,7 @@ export const toolFactories = {
 						{ limit: input.limit },
 						{ signal },
 					),
+					input.limit,
 				),
 		}),
 	"functions.get": (options) =>
@@ -840,6 +844,7 @@ export const toolFactories = {
 						},
 						{ signal },
 					),
+					input.limit,
 				),
 		}),
 	"logs.fields": (options) =>
@@ -931,11 +936,12 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "operations.list",
 			generated: "listProjectOperations",
-			omit: ["cursor", "limit"],
+			omit: ["cursor"],
 			list: true,
 			run: (neon, input, signal) =>
 				collectPages(
 					neon.operations.list(input.project_id, { signal }),
+					input.limit,
 				),
 		}),
 	"operations.get": (options) =>
@@ -1153,6 +1159,7 @@ export const toolFactories = {
 						},
 						{ signal },
 					),
+					input.limit,
 				),
 		}),
 	"consumption.perProjectV2": (options) =>
@@ -1175,6 +1182,7 @@ export const toolFactories = {
 						},
 						{ signal },
 					),
+					input.limit,
 				),
 		}),
 	"consumption.perBranchV2": (options) =>
@@ -1198,6 +1206,7 @@ export const toolFactories = {
 						},
 						{ signal },
 					),
+					input.limit,
 				),
 		}),
 	"apiKeys.list": (options) =>

@@ -32,7 +32,8 @@ export interface ToolClientOptions {
 	wait?: NeonConfig["wait"];
 }
 
-const ALL_PAGES = " This tool returns every page. Do not pass a cursor.";
+const ALL_PAGES =
+	" This tool returns every page. Pass limit to cap how many items come back. Do not pass a cursor.";
 
 const inertClient = createNeonClient({
 	apiKey: "unused",
@@ -146,9 +147,31 @@ export const collectObjectList = async (
 				{ signal },
 			),
 		);
-		folders.push(...page.folders);
-		objects.push(...page.objects);
+		for (const folder of page.folders) {
+			if (
+				input.limit !== undefined &&
+				folders.length + objects.length >= input.limit
+			) {
+				break;
+			}
+			folders.push(folder);
+		}
+		for (const object of page.objects) {
+			if (
+				input.limit !== undefined &&
+				folders.length + objects.length >= input.limit
+			) {
+				break;
+			}
+			objects.push(object);
+		}
 		prefix = page.prefix;
+		if (
+			input.limit !== undefined &&
+			folders.length + objects.length >= input.limit
+		) {
+			break;
+		}
 		if (page.next_cursor) {
 			cursor = page.next_cursor;
 			continue;
@@ -164,15 +187,41 @@ export const collectObjectList = async (
 	return { folders, objects, prefix };
 };
 
-export const collectPages = async <T>(list: Paginated<T>): Promise<T[]> => {
-	const result = await list.all();
-	if (result.error) {
-		throw result.error;
+export const collectPages = async <T>(
+	list: Paginated<T>,
+	maxItems?: number,
+): Promise<T[]> => {
+	if (maxItems === undefined) {
+		const result = await list.all();
+		if (result.error) {
+			throw result.error;
+		}
+		if (result.data === undefined) {
+			throw new NeonError("List returned no data.", "client");
+		}
+		return result.data;
 	}
-	if (result.data === undefined) {
-		throw new NeonError("List returned no data.", "client");
+
+	const items: T[] = [];
+	let cursor: string | undefined;
+	for (;;) {
+		const result = await list.page(cursor);
+		if (result.error) {
+			throw result.error;
+		}
+		if (result.data === undefined) {
+			throw new NeonError("List returned no data.", "client");
+		}
+		items.push(...result.data.items);
+		if (items.length >= maxItems) {
+			return items.slice(0, maxItems);
+		}
+		if (!result.data.cursor || result.data.items.length === 0) {
+			break;
+		}
+		cursor = result.data.cursor;
 	}
-	return result.data;
+	return items;
 };
 
 export const bindTool = <

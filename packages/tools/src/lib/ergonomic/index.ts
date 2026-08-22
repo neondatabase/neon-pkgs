@@ -10,4 +10,5 @@ export {
 	isNeonToolId,
 	type NeonToolId,
 	toolIds,
+	unpublishedToolError,
 } from "./ids.js";
