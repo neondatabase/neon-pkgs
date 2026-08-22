@@ -1,6 +1,6 @@
 # `@neon/tools`
 
-Agent tools for the Neon Management API and for the `@neon/sdk` workflows that attach compute and return a connection string. Select only the operations and workflows an agent needs, then use the canonical descriptors directly or adapt them for MCP, Eve, and Mastra.
+Agent tools for the `@neon/sdk` ergonomic client. Select the methods an agent needs, then use the descriptors directly or adapt them for MCP, Eve, and Mastra.
 
 ```bash
 npm install @neon/tools
@@ -8,7 +8,7 @@ npm install @neon/tools
 
 ## Create tools
 
-`apiKey` is a Bearer credential: a Neon API key or a Neon OAuth access token. A function is called on every request, which is how short-lived OAuth tokens get refreshed. A credential is required when a tool executes — at construction, on `execute()`, or from MCP `authInfo` — and an empty value is rejected rather than ignored.
+Selectors are SDK paths. The returned record is keyed by those paths. Each tool's published `id` is the path in snake_case (`projects.list` → `projects_list`). `toolIds` lists every published selector.
 
 ```ts
 import { createNeonTools } from "@neon/tools";
@@ -16,110 +16,72 @@ import { createNeonTools } from "@neon/tools";
 const apiKey = process.env.NEON_API_KEY;
 if (!apiKey) throw new Error("NEON_API_KEY is required");
 
-const operations = ["listProjects", "createProject"] as const;
-
 const tools = createNeonTools({
 	apiKey,
-	operations,
+	tools: [
+		"projects.list",
+		"projects.createAndConnect",
+		"branches.createWithCompute",
+	],
 });
 
-const result = await tools.listProjects.execute({
-	limit: 10,
-});
-```
-
-OAuth access tokens use the same option. Pass a getter when the token can change:
-
-```ts
-const tools = createNeonTools({
-	apiKey: () => oauth.getAccessToken(),
-	operations,
-});
-```
-
-Or supply the token per call:
-
-```ts
-const tools = createNeonTools({ operations });
-
-await tools.listProjects.execute(
-	{ limit: 10 },
-	{ apiKey: oauthAccessToken },
-);
-```
-
-The returned record is keyed by OpenAPI operation ID or workflow id. Each tool includes its Zod 4 `inputSchema`, snake-case `id`, title, description, safety annotations, stability metadata, and an `execute()` function. Inputs are flat: path, query, header, and body fields sit on one object. A body that is a single object wrapper is lifted, so `create_project` takes `{ name, region_id, org_id, ... }` rather than `{ project: { name } }`. A body with several properties keeps those properties, so `create_project_branch` takes `{ project_id, branch, endpoints, annotation_value }` and `branch` is still an object. Two email-provider updates keep a `body` field because the API request is a discriminated union.
-
-`operationIds` exports every valid operation selector. `execute()` strictly validates the input, rejects unknown fields instead of dropping them, and returns typed, JSON-safe `{ data }`. Neon SDK errors remain typed and are thrown to the caller.
-
-## Workflows
-
-`workflows` selects methods from the `@neon/sdk` ergonomic client. These are not OpenAPI operations: they attach a default compute, wait until the resource is ready, and return a connection string. `operations` is the generated Management API. At least one of the two arrays is required.
-
-Both workflow tools poll until the resource is ready. The default deadline is five minutes (`wait.timeoutMs`). Pass `wait: { timeoutMs: 30_000 }` on `createNeonTools` or `createNeonTool` to bound that. Set it below the host's own tool-call timeout, otherwise the host gives up first. An abort `signal` on `execute` or a wait timeout stops the poll, not the create: the branch or project may already exist, and the error does not include its id. List before retrying. `metadata.method` and `metadata.path` name the first request; extra readiness GETs are not listed there. `inject.projectId` still works on `createBranchWithCompute` because its path is `/projects/{project_id}/branches`.
-
-```ts
-const tools = createNeonTools({
-	apiKey,
-	operations: ["listProjects"],
-	workflows: ["createBranchWithCompute", "createProjectAndConnect"],
-});
-
-const { data } = await tools.createBranchWithCompute.execute({
-	project_id: "project-id",
-	name: "feature-x",
-});
-
-await tools.createProjectAndConnect.execute({
+const listed = await tools["projects.list"].execute({ limit: 10 });
+const created = await tools["projects.createAndConnect"].execute({
 	name: "agent-project",
 	region_id: "aws-us-east-1",
 });
 ```
 
-`createNeonTool` accepts the same workflow ids:
-
-```ts
-const createBranch = createNeonTool("createBranchWithCompute", { apiKey });
-```
-
-`workflowIds` lists the selectors. Record keys name the entity (`createBranchWithCompute`, `createProjectAndConnect`) and call `neon.branches.createWithCompute` and `neon.projects.createAndConnect`. Published ids are `create_branch_with_compute` and `create_project_and_connect`. Input fields are snake_case, same as generated tools. `names` can rename a workflow the same way it renames an operation:
+`apiKey` is a Bearer credential: a Neon API key or a Neon OAuth access token. A function is called on every request, which is how short-lived OAuth tokens get refreshed. A credential is required when a tool executes — at construction, on `execute()`, or from MCP `authInfo` — and an empty value is rejected rather than ignored.
 
 ```ts
 const tools = createNeonTools({
-	apiKey,
-	workflows: ["createBranchWithCompute"],
-	names: { createBranchWithCompute: "create_branch" },
+	apiKey: () => oauth.getAccessToken(),
+	tools: ["projects.list"],
 });
 
-tools.createBranchWithCompute.id; // "create_branch"
+await tools["projects.list"].execute(
+	{ limit: 10 },
+	{ apiKey: oauthAccessToken },
+);
 ```
 
-`create_project_branch` still creates a branch with no compute when `endpoints` is omitted. It can attach compute if you pass `endpoints`; it does not wait or return a connection string. Use `createBranchWithCompute` when the next step needs to connect.
+Each tool includes its Zod 4 `inputSchema`, published `id`, title, description, safety annotations, stability metadata, and `execute()`. Inputs are snake_case at the tool boundary. `execute()` strictly validates the input, rejects unknown fields, and returns typed, JSON-safe `{ data }`. Neon SDK errors remain typed and are thrown to the caller.
+
+Paginated lists call `.all()` and return the item array. Do not pass a cursor; those fields are omitted from the input schema.
+
+```ts
+const createBranch = createNeonTool("branches.createWithCompute", { apiKey });
+```
+
+## Writes and waiting
+
+Tools run with `waitForReadiness: true`. When a mutation response includes an `operations` array, the call waits until those operations finish. The default deadline is five minutes (`wait.timeoutMs`). Pass `wait: { timeoutMs: 30_000 }` on `createNeonTools` or `createNeonTool` to bound that. Set it below the host's own tool-call timeout, otherwise the host gives up first.
+
+An abort `signal` on `execute` or a wait timeout stops the poll, not the create: the branch or project may already exist, and the error does not include its id. List before retrying.
+
+`functions.deploy` can still return `pending`. Its response has no `operations` array, so the tool does not poll.
+
+`metadata.method` and `metadata.path` name the first request; extra readiness GETs are not listed there.
+
+`projects.create` and `branches.create` are not tools. Use `projects.createAndConnect` and `branches.createWithCompute`, which attach compute and return a connection string. `operations.waitFor` is not a tool.
 
 ## Optional host add-ons
 
-None of these change the default `createNeonTools({ apiKey, operations })` path. They exist so a host can replace hand-written Management API tools without losing descriptions, call tracking, or a grant-scoped project/branch.
-
 ### Descriptions
 
-Pass a map keyed by OpenAPI operation ID or snake-case tool `id`, or a function that can append to the generated text:
+Pass a map keyed by SDK path or published `id`, or a function that can append to the generated text:
 
 ```ts
 const tools = createNeonTools({
 	apiKey,
-	operations,
+	tools: ["projects.list", "projects.delete"],
 	descriptions: {
-		listProjects:
+		"projects.list":
 			"List Neon projects in your account. Do not use for projects shared with you.",
-		delete_project:
+		projects_delete:
 			"Delete a Neon project and all its data. NEVER run autonomously; always ask the user first.",
 	},
-});
-
-const noticed = createNeonTools({
-	apiKey,
-	operations,
-	descriptions: (tool) => `${tool.description}\nNotice: scoped to one project.`,
 });
 ```
 
@@ -130,9 +92,8 @@ const noticed = createNeonTools({
 ```ts
 const tools = createNeonTools({
 	apiKey,
-	operations,
+	tools: ["projects.list"],
 	onExecute: async ({ id, execute }) => {
-		// record `id`, wrap in a span, then:
 		return execute();
 	},
 });
@@ -142,38 +103,35 @@ This package does not send analytics. Mutating `event.input` does not change a g
 
 ### Names
 
-`name` rewrites every published tool `id`. `names` overrides one tool first, keyed by OpenAPI operation ID or the generated snake-case `id`:
+`name` rewrites every published tool `id`. `names` overrides one tool first, keyed by SDK path or the generated snake-case `id`:
 
 ```ts
 const tools = createNeonTools({
 	apiKey,
-	operations: ["createProjectBranch", "listProjects"] as const,
-	names: { createProjectBranch: "create_branch" },
+	tools: ["branches.createWithCompute", "projects.list"] as const,
+	names: { "branches.createWithCompute": "create_branch" },
 	name: (id) => `neon_${id}`,
 });
-
-tools.createProjectBranch.id; // "neon_create_branch"
-tools.listProjects.id; // "neon_list_projects"
 ```
 
-The record is still keyed by operation ID (`tools.createProjectBranch`). MCP and Mastra publish `tool.id`. Eve uses the filename as the model-facing name, so name the file after the published `id`. Duplicate or non-snake-case ids throw, and a `names` key that matches no selected tool throws.
+Those tools publish as `neon_create_branch` and `neon_projects_list`. The record is still keyed by SDK path (`tools["branches.createWithCompute"]`). MCP and Mastra publish `tool.id`. Eve uses the filename as the model-facing name, so name the file after the published `id`. Duplicate or non-snake-case ids throw, and a `names` key that matches no selected tool throws.
 
 ### Project and branch injection
 
-Tools take path parameters as `project_id` and `branch_id`. A host that already knows those values can inject them, including on `createBranchWithCompute`. Without `omitFromSchema`, the published field becomes optional and a caller-supplied value wins. With `omitFromSchema: true`, the field is removed from the published schema and the injector is the only source:
+Tools take path parameters as `project_id` and `branch_id`. A host that already knows those values can inject them, including on `branches.createWithCompute`. Without `omitFromSchema`, the published field becomes optional and a caller-supplied value wins. With `omitFromSchema: true`, the field is removed from the published schema and the injector is the only source:
 
 ```ts
 const tools = createNeonTools({
 	apiKey,
-	operations: ["getProject", "deleteProjectBranch"] as const,
+	tools: ["projects.get", "branches.delete"] as const,
 	inject: {
 		projectId: "project-id",
 		omitFromSchema: true,
 	},
 });
 
-await tools.getProject.execute({});
-await tools.deleteProjectBranch.execute({ branch_id: "br-id" });
+await tools["projects.get"].execute({});
+await tools["branches.delete"].execute({ branch_id: "br-id" });
 ```
 
 Use a getter when the value is request-scoped. The getter can read the host's own `AsyncLocalStorage` (this package does not export one):
@@ -184,21 +142,21 @@ import { AsyncLocalStorage } from "node:async_hooks";
 const grant = new AsyncLocalStorage<{ projectId: string }>();
 
 const tools = createNeonTools({
-	operations: ["getProject"] as const,
+	tools: ["projects.get"] as const,
 	inject: {
 		projectId: () => grant.getStore()?.projectId,
 		omitFromSchema: true,
 	},
 });
 
-await grant.run({ projectId: "project-id" }, () => tools.getProject.execute({}));
+await grant.run({ projectId: "project-id" }, () =>
+	tools["projects.get"].execute({}),
+);
 ```
 
-Injectors only apply to tools that have that path key. `listProjects` is unchanged. Empty inject values fail closed. Invalid ids still fail the original path schema before fetch.
+Injectors only apply to tools that have that path key. `projects.list` is unchanged. Empty inject values fail closed. Invalid ids still fail the original path schema before fetch.
 
-`onExecute` and `inject` apply to workflow tools the same way they apply to generated tools. Grant filtering, read-only filtering, and access-control notices stay in the host.
-
-Injection reads the URL template, so it fills path `project_id` and `branch_id` only. Query and body fields with those names stay caller-supplied, including `getConnectionURI.branch_id`, `createOrgApiKey.project_id`, `createNeonAuthIntegration.project_id` / `branch_id`, `createNeonAuthNewUser.project_id`, `createNeonAuthProviderSDKKeys.project_id`, `transferNeonAuthProviderProject.project_id`, `addProjectJWKS.branch_id`, `createProjectEndpoint.branch_id`, `updateProjectEndpoint.branch_id`, and `getProjectAdvisorSecurityIssues.branch_id`. `omitFromSchema: true` does not hide those fields.
+Injection reads the URL template, so it fills path `project_id` and `branch_id` only. Query and body fields with those names stay caller-supplied, including `postgres.connectionString`'s `branch_id`. `omitFromSchema: true` does not hide those fields.
 
 ## Request schemas
 
@@ -216,7 +174,7 @@ const body = zCreateProjectBody.parse({
 });
 ```
 
-These are the raw OpenAPI request shapes, not the flat tool input. `zCreateProjectBody` still wraps fields in `project`. The tool `create_project` does not.
+These are the raw OpenAPI request shapes, not the tool input. `zCreateProjectBody` still wraps fields in `project`. `projects.createAndConnect` does not.
 
 These schemas are strict. If a newly added API field is not recognized, upgrade `@neon/tools`; use `@neon/sdk` directly until a matching tools release is available.
 
@@ -235,7 +193,7 @@ if (!apiKey) throw new Error("NEON_API_KEY is required");
 const server = new McpServer({ name: "neon", version: "1.0.0" });
 const tools = createNeonTools({
 	apiKey,
-	operations: ["listProjects", "createProject"] as const,
+	tools: ["projects.list", "projects.createAndConnect"] as const,
 });
 
 registerNeonTools(server, tools);
@@ -245,7 +203,7 @@ For a remote MCP server that already authenticated the client, omit `apiKey` at 
 
 ```ts
 const tools = createNeonTools({
-	operations: ["listProjects", "createProject"] as const,
+	tools: ["projects.list", "projects.createAndConnect"] as const,
 });
 registerNeonTools(server, tools);
 ```
@@ -267,7 +225,6 @@ MCP annotations are advisory; the protocol does not enforce approval. Tools expo
 Eve requires Node.js 24 or later.
 
 ```ts
-// agent/tools/create_project.ts
 import { defineTool } from "eve/tools";
 import { createNeonTool } from "@neon/tools";
 import { toEveTool } from "@neon/tools/eve";
@@ -277,7 +234,7 @@ if (!apiKey) throw new Error("NEON_API_KEY is required");
 
 export default defineTool(
 	toEveTool(
-		createNeonTool("createProject", {
+		createNeonTool("projects.createAndConnect", {
 			apiKey,
 		}),
 	),
@@ -300,19 +257,19 @@ if (!apiKey) throw new Error("NEON_API_KEY is required");
 
 const neonTools = createNeonTools({
 	apiKey,
-	operations: ["listProjects", "createProject"] as const,
+	tools: ["projects.list", "projects.createAndConnect"] as const,
 });
 const configs = toMastraTools(neonTools);
 
-const listProjects = createTool(configs.list_projects);
-const createProject = createTool(configs.create_project);
+const listProjects = createTool(configs.projects_list);
+const createProject = createTool(configs.projects_create_and_connect);
 ```
 
 The adapter maps approval requirements to Mastra's `requireApproval` field and forwards its abort signal.
 
 ## Safety and binary data
 
-Every non-read operation is conservatively marked as potentially destructive and requires approval. Reads that return connection credentials, role passwords, or Neon Auth provider secrets also require approval.
+Every non-read operation is conservatively marked as potentially destructive and requires approval. Reads that return connection credentials also require approval.
 
 Binary request fields accept base64 strings:
 
@@ -322,10 +279,7 @@ import { createNeonTool } from "@neon/tools";
 const apiKey = process.env.NEON_API_KEY;
 if (!apiKey) throw new Error("NEON_API_KEY is required");
 
-const deployFunction = createNeonTool(
-	"createProjectBranchFunctionDeployment",
-	{ apiKey },
-);
+const deployFunction = createNeonTool("functions.deploy", { apiKey });
 
 await deployFunction.execute({
 	project_id: "project-id",

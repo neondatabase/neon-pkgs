@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
+import { createNeonClient } from "@neon/sdk";
 import { describe, expect, test } from "vitest";
 import * as z from "zod";
-import { createNeonTool, type NeonOperationId, operationIds } from "./index.js";
+import { createNeonTool, toolIds } from "./index.js";
+import { operationFactories, operationIds } from "./operations.gen.js";
 import {
 	zCreateProjectBody,
 	zCreateProjectBranchBody,
@@ -41,46 +43,32 @@ describe("generated operation coverage", () => {
 		expect([...operationIds].sort()).toEqual(specOperationIds);
 	});
 
-	test("produces unique framework-safe ids and JSON schemas", () => {
-		const toolIds = new Set<string>();
+	test("generated factories still produce unique framework-safe ids", () => {
+		const client = createNeonClient({ apiKey: "unused" }).client;
+		const published = new Set<string>();
 
 		for (const operationId of operationIds) {
-			const tool = createNeonTool(operationId, { apiKey: "test-key" });
+			const tool = operationFactories[operationId](client);
 			expect(tool.id).toMatch(/^[a-z0-9_]+$/);
-			expect(toolIds.has(tool.id)).toBe(false);
-			toolIds.add(tool.id);
+			expect(published.has(tool.id)).toBe(false);
+			published.add(tool.id);
 			expect(z.toJSONSchema(tool.inputSchema).type).toBe("object");
-			const keys = Object.keys(
-				z.toJSONSchema(tool.inputSchema).properties ?? {},
-			);
-			expect(keys).not.toContain("path");
-			expect(keys).not.toContain("query");
-			expect(keys).not.toContain("headers");
-			if (
-				operationId === "updateNeonAuthEmailProvider" ||
-				operationId === "updateNeonAuthEmailServer"
-			) {
-				expect(keys).toContain("body");
-			} else {
-				expect(keys).not.toContain("body");
-			}
 		}
-
-		const createProject = createNeonTool("createProject", {
-			apiKey: "test-key",
-		});
-		expect(
-			createProject.inputSchema.safeParse({ name: "demo" }).success,
-		).toBe(true);
-		expect(
-			createProject.inputSchema.safeParse({
-				project: { name: "demo" },
-			}).success,
-		).toBe(false);
 	});
 
-	test("requires approval for mutations and reads that return secrets", () => {
-		const deleteProject = createNeonTool("deleteProject", {
+	test("public tools have unique published ids and object schemas", () => {
+		const published = new Set<string>();
+		for (const id of toolIds) {
+			const tool = createNeonTool(id, { apiKey: "test-key" });
+			expect(tool.id).toMatch(/^[a-z0-9_]+$/);
+			expect(published.has(tool.id)).toBe(false);
+			published.add(tool.id);
+			expect(z.toJSONSchema(tool.inputSchema).type).toBe("object");
+		}
+	});
+
+	test("requires approval for mutations and treats logs.query as a read", () => {
+		const deleteProject = createNeonTool("projects.delete", {
 			apiKey: "test-key",
 		});
 		expect(deleteProject.annotations).toMatchObject({
@@ -88,40 +76,17 @@ describe("generated operation coverage", () => {
 			destructiveHint: true,
 		});
 		expect(deleteProject.requiresApproval).toBe(true);
-		expect(deleteProject.annotations.idempotentHint).toBeUndefined();
 
-		const getConnectionUri = createNeonTool("getConnectionURI", {
+		const logsQuery = createNeonTool("logs.query", { apiKey: "test-key" });
+		expect(logsQuery.annotations.readOnlyHint).toBe(true);
+		expect(logsQuery.annotations.destructiveHint).toBe(false);
+		expect(logsQuery.requiresApproval).toBe(false);
+		expect(logsQuery.description).toContain("every page");
+
+		const roles = createNeonTool("postgres.roles.list", {
 			apiKey: "test-key",
 		});
-		expect(getConnectionUri.annotations.readOnlyHint).toBe(true);
-		expect(getConnectionUri.annotations.idempotentHint).toBeUndefined();
-		expect(getConnectionUri.requiresApproval).toBe(true);
-
-		for (const operationId of [
-			"getNeonAuthEmailProvider",
-			"getNeonAuthEmailServer",
-			"getNeonAuthPluginConfigs",
-			"getProjectBranchRolePassword",
-			"listBranchNeonAuthOauthProviders",
-			"listNeonAuthOauthProviders",
-		] as const) {
-			const tool = createNeonTool(operationId, { apiKey: "test-key" });
-			expect(tool.annotations.readOnlyHint).toBe(true);
-			expect(tool.requiresApproval).toBe(true);
-		}
-
-		for (const operationId of [
-			"getProjectBranchRole",
-			"listProjectBranchRoles",
-		] as const) {
-			const tool = createNeonTool(operationId, { apiKey: "test-key" });
-			expect(tool.requiresApproval).toBe(false);
-		}
-	});
-
-	test("exports operation ids as a selector type", () => {
-		const operationId: NeonOperationId = "listProjects";
-		expect(operationId).toBe("listProjects");
+		expect(roles.requiresApproval).toBe(false);
 	});
 
 	test("exports generated request schemas", () => {

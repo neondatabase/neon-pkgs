@@ -1,7 +1,7 @@
 {
 	"name": "@neon/tools",
 	"version": "0.5.0",
-	"description": "Agent tools for the Neon Management API and SDK workflows, compatible with MCP, Eve, and Mastra.",
+	"description": "Agent tools for the Neon SDK ergonomic client, compatible with MCP, Eve, and Mastra.",
 	"keywords": [
 		"neon",
 		"database",
