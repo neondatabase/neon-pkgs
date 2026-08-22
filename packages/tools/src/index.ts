@@ -16,7 +16,6 @@ import {
 	toolFactories,
 	toolIds,
 } from "./lib/ergonomic/index.js";
-import type { NeonTool } from "./lib/operation.js";
 
 export type { NeonBearerCredential } from "./lib/auth.js";
 export type {
