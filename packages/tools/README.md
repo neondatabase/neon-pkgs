@@ -64,7 +64,7 @@ An abort `signal` on `execute` or a wait timeout stops the poll, not the create:
 
 `metadata.method` and `metadata.path` name the first request; extra readiness GETs are not listed there.
 
-`projects.create` and `branches.create` are not tools. Use `projects.createAndConnect` and `branches.createWithCompute`, which attach compute and return a connection string. `operations.waitFor` is not a tool.
+These public client methods are not tools: `projects.create`, `branches.create`, `operations.waitFor`, `postgres.roles.password`, and `storage.objects.get`. Use `projects.createAndConnect` and `branches.createWithCompute` for creates that attach compute and return a connection string. Waiting is what the write tools already do.
 
 ## Optional host add-ons
 
@@ -287,18 +287,6 @@ await deployFunction.execute({
 	slug: "hello",
 	zip: "UEsDBA==",
 });
-```
-
-Binary responses are JSON-safe:
-
-```ts
-{
-	data: {
-		base64: "aGVsbG8=",
-		contentType: "application/octet-stream",
-		size: 5,
-	},
-}
 ```
 
 `@neon/tools` supports Node.js 20.19 or later. Framework integrations also require the Node.js version supported by that framework.
