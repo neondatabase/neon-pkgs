@@ -440,42 +440,12 @@ export const builder = (argv: yargs.Argv) => {
 							)
 							.command(
 								"test",
-								"Send a test email",
+								"Send a test message through the custom SMTP provider saved on the branch (email_provider type=standard). Requires `neon neon-auth config email-provider update --type standard` first. A shared provider, a missing configuration, or a non-Better-Auth integration is rejected by the API.",
 								(yargs) =>
-									yargs.options({
+									yargs.strict().options({
 										"recipient-email": {
 											describe:
-												"Email address to send test email to",
-											type: "string",
-											demandOption: true,
-										},
-										host: {
-											describe: "SMTP host",
-											type: "string",
-											demandOption: true,
-										},
-										port: {
-											describe: "SMTP port",
-											type: "number",
-											demandOption: true,
-										},
-										username: {
-											describe: "SMTP username",
-											type: "string",
-											demandOption: true,
-										},
-										password: {
-											describe: "SMTP password",
-											type: "string",
-											demandOption: true,
-										},
-										"sender-email": {
-											describe: "Sender email address",
-											type: "string",
-											demandOption: true,
-										},
-										"sender-name": {
-											describe: "Sender display name",
+												"Email address to deliver the test message to",
 											type: "string",
 											demandOption: true,
 										},
@@ -1268,37 +1238,46 @@ const emailProviderUpdate = async (
 const emailProviderTest = async (
 	props: AuthBranchProps & {
 		recipientEmail: string;
-		host: string;
-		port: number;
-		username: string;
-		password: string;
-		senderEmail: string;
-		senderName: string;
 	},
 ) => {
 	const branchId = await resolveBranch(props);
-	const { data } = await props.apiClient.sendNeonAuthTestEmail(
+	const { data } = await props.apiClient.sendNeonAuthEmailProviderTest(
 		props.projectId,
 		branchId,
-		{
-			recipient_email: props.recipientEmail,
-			host: props.host,
-			port: props.port,
-			username: props.username,
-			password: props.password,
-			sender_email: props.senderEmail,
-			sender_name: props.senderName,
-		},
+		{ recipient_email: props.recipientEmail },
 	);
 	if (props.output === "json" || props.output === "yaml") {
 		writer(props).end(data, { fields: TEST_EMAIL_FIELDS });
-	} else if (data.success) {
-		printMessage("Test email sent successfully");
-	} else {
-		process.stdout.write(
-			`\n${chalk.red("Test email failed")}\n  ${data.error_message ?? "Unknown error"}\n\n`,
-		);
+		if (!data.success) {
+			throw new Error(
+				emailProviderTestFailureMessage(
+					props.recipientEmail,
+					data.error_message,
+				),
+			);
+		}
+		return;
 	}
+	if (data.success) {
+		printMessage(
+			`Test email dispatched to ${props.recipientEmail} using the SMTP provider saved on this branch.`,
+		);
+		return;
+	}
+	throw new Error(
+		emailProviderTestFailureMessage(
+			props.recipientEmail,
+			data.error_message,
+		),
+	);
+};
+
+const emailProviderTestFailureMessage = (
+	recipientEmail: string,
+	errorMessage: string | undefined,
+) => {
+	const header = `Test email could NOT be sent to ${recipientEmail} using the SMTP provider saved on this branch.`;
+	return errorMessage ? `${header}\nUpstream error: ${errorMessage}` : header;
 };
 
 // --- Organization plugin ---

@@ -1,4 +1,4 @@
-import { describe } from "vitest";
+import { describe, expect } from "vitest";
 import { test } from "../test_utils/fixtures";
 
 describe("neon-auth", () => {
@@ -250,19 +250,73 @@ describe("neon-auth", () => {
 			"test_branch",
 			"--recipient-email",
 			"user@test.com",
-			"--host",
-			"smtp.test.com",
-			"--port",
-			"587",
-			"--username",
-			"smtp-user",
-			"--password",
-			"smtp-pass",
-			"--sender-email",
-			"noreply@test.com",
-			"--sender-name",
-			"Test App",
 		]);
+	});
+
+	test("email-provider test human output", async ({ testCliCommand }) => {
+		await testCliCommand(
+			[
+				"neon-auth",
+				"config",
+				"email-provider",
+				"test",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+				"--recipient-email",
+				"user@test.com",
+			],
+			{ output: "table" },
+		);
+	});
+
+	test("email-provider test rejected smtp flags", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"neon-auth",
+				"config",
+				"email-provider",
+				"test",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+				"--recipient-email",
+				"user@test.com",
+				"--host",
+				"smtp.test.com",
+			],
+			{
+				code: 1,
+				stderr: expect.stringContaining("Unknown argument: host"),
+			},
+		);
+	});
+
+	test("email-provider test relay refusal", async ({ testCliCommand }) => {
+		await testCliCommand(
+			[
+				"neon-auth",
+				"config",
+				"email-provider",
+				"test",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+				"--recipient-email",
+				"fail@test.com",
+			],
+			{
+				code: 1,
+				stderr: expect.stringContaining(
+					"Test email could NOT be sent to fail@test.com using the SMTP provider saved on this branch.",
+				),
+			},
+		);
 	});
 
 	// --- Allow localhost ---
