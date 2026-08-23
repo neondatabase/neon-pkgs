@@ -1,5 +1,16 @@
 # @neon/tools
 
+## 0.5.0
+
+### Minor Changes
+
+- 93b93dc: `sendNeonAuthEmailProviderTest` is now on the generated raw client and in `@neon/tools`. It tests a branch's saved email provider without re-supplying the SMTP password. `sendNeonAuthTestEmail` is deprecated but still available for unsaved full SMTP configs.
+
+### Patch Changes
+
+- Updated dependencies [93b93dc]
+  - @neon/sdk@2.2.0
+
 ## 0.4.0
 
 ### Minor Changes
