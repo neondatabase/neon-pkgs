@@ -271,6 +271,34 @@ describe("neon-auth", () => {
 		);
 	});
 
+	test("email-provider test rejects flags after --", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"neon-auth",
+				"config",
+				"email-provider",
+				"test",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+				"--recipient-email",
+				"user@test.com",
+				"--",
+				"--host",
+				"smtp.test.com",
+			],
+			{
+				code: 1,
+				stderr: expect.stringContaining(
+					"takes no arguments after `--`",
+				),
+			},
+		);
+	});
+
 	test("email-provider test rejected smtp flags", async ({
 		testCliCommand,
 	}) => {

@@ -13,6 +13,7 @@ import {
 	NeonAuthSupportedAuthProvider,
 } from "../utils/api_enums.js";
 import { branchIdFromProps, fillSingleProject } from "../utils/enrichers.js";
+import { noPassthrough, single } from "../utils/flags.js";
 import { writer } from "../writer.js";
 
 // Shared styled output helpers
@@ -440,16 +441,30 @@ export const builder = (argv: yargs.Argv) => {
 							)
 							.command(
 								"test",
-								"Send a test message through the custom SMTP provider saved on the branch (email_provider type=standard). Requires `neon neon-auth config email-provider update --type standard` first. A shared provider, a missing configuration, or a non-Better-Auth integration is rejected by the API.",
+								"Send a test message through the saved custom SMTP provider",
 								(yargs) =>
-									yargs.strict().options({
-										"recipient-email": {
-											describe:
-												"Email address to deliver the test message to",
-											type: "string",
-											demandOption: true,
-										},
-									}),
+									yargs
+										.options({
+											"recipient-email": {
+												describe:
+													"Email address to deliver the test message to",
+												type: "string",
+												demandOption: true,
+												coerce: single(
+													"recipient-email",
+													{ required: true },
+												),
+											},
+										})
+										.strict()
+										.check(
+											noPassthrough(
+												"neon-auth config email-provider test",
+											),
+										)
+										.epilogue(
+											"Save the provider first with `neon neon-auth config email-provider update --type standard`. A shared provider, a missing configuration, or a non-Better-Auth integration is rejected by the API.",
+										),
 								async (args) => {
 									await emailProviderTest(args as any);
 								},

@@ -96,6 +96,8 @@ Test email dispatched to user@test.com using the SMTP provider saved on this bra
 
 exports[`neon-auth > email-provider test rejected smtp flags 1`] = `""`;
 
+exports[`neon-auth > email-provider test rejects flags after -- 1`] = `""`;
+
 exports[`neon-auth > email-provider test relay refusal 1`] = `
 "success: false
 error_message: "auth failed: 535"
