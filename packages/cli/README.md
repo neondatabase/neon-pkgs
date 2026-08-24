@@ -768,7 +768,7 @@ All sub-commands honor the [global options](#global-options), including `--outpu
 
 ## Database diagnostics (`inspect`)
 
-`neon inspect db stalled-queries` takes a read-only snapshot of active queries that have run for more than 30 seconds. It groups parallel workers with their leader and reports timestamps, waits, blockers, query IDs, and query text. Use `--output json` to save an incident for later investigation.
+`neon inspect db stalled-queries` takes a read-only snapshot of active queries that have run for more than 30 seconds and groups parallel workers with their leader. Table output shows duration, wait event, blocking pids, role, query group, and query. `--output json` adds timestamps, query IDs, pids, database, and the rest of the row. A blocking pid can belong to an idle-in-transaction backend this command does not list; `neon inspect db locks` shows lock holders.
 
 ```bash
 neon inspect db stalled-queries

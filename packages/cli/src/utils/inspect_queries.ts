@@ -170,7 +170,7 @@ export const INSPECT_QUERIES = {
 				a.state,
 				a.wait_event_type,
 				a.wait_event,
-				pg_blocking_pids(a.pid)::text AS blocking_pids,
+				array_to_string(pg_blocking_pids(a.pid), ',') AS blocking_pids,
 				(statement_timestamp() - a.query_start)::text AS duration,
 				a.query
 			FROM activity a

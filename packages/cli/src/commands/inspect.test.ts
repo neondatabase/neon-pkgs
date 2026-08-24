@@ -27,16 +27,25 @@ const STALLED_QUERY_ROW = {
 	state: "active",
 	wait_event_type: "IO",
 	wait_event: "DataFileRead",
-	blocking_pids: "{}",
+	blocking_pids: "",
 	duration: "00:00:41.923425",
 	query: "SELECT customer_id FROM checkout_events WHERE account_id = $1 ORDER BY created_at DESC",
 };
 
-const captureWriter = (output: "table" | "json", columns?: number) => {
+const BLOCKED_STALLED_QUERY_ROW = {
+	...STALLED_QUERY_ROW,
+	blocking_pids: "771",
+};
+
+const captureWriter = (
+	output: "table" | "json",
+	columns?: number,
+	rows: Record<string, string>[] = [STALLED_QUERY_ROW],
+) => {
 	const chunks: string[] = [];
 	const out = new PassThrough();
 	out.on("data", (chunk) => chunks.push(chunk.toString()));
-	writer({ output, out, columns }).end([STALLED_QUERY_ROW], {
+	writer({ output, out, columns }).end(rows, {
 		fields: INSPECT_QUERIES["stalled-queries"].fields,
 	});
 	return chunks.join("");
@@ -115,6 +124,9 @@ describe("inspect db", () => {
 	});
 
 	test("stalled-queries is compute-wide and preserves its diagnostic fields", () => {
+		expect(INSPECT_QUERIES["stalled-queries"].sql).toContain(
+			"array_to_string(pg_blocking_pids(a.pid), ',')",
+		);
 		expect(INSPECT_QUERIES["stalled-queries"]).toMatchObject({
 			scope: "compute",
 			sql: expect.stringContaining(
@@ -136,15 +148,28 @@ describe("inspect db", () => {
 
 		expect(output).toContain("Duration");
 		expect(output).toContain("Wait Event");
-		expect(output).toContain("Blocking Pids");
+		expect(output).not.toContain("Blocking Pids");
 		expect(output).toContain("Role");
 		expect(output).toContain("Query Group");
 		expect(output).toContain("Query");
+		expect(output).toContain("SELECT customer_id");
 		expect(output).toContain("...");
 		expect(output).not.toContain(STALLED_QUERY_ROW.query);
 		expect(output).not.toMatch(
 			/Observed At|Query Start|Leader Pid|Backend Type|Database|Application Name|Query Id|Wait Event Type/,
 		);
+		for (const line of output.trimEnd().split("\n")) {
+			expect(displayWidth(line)).toBeLessThanOrEqual(80);
+		}
+	});
+
+	test("stalled-queries shows blocking pids when a backend is waiting", () => {
+		const output = stripAnsi(
+			captureWriter("table", 80, [BLOCKED_STALLED_QUERY_ROW]),
+		);
+
+		expect(output).toContain("Blocking Pids");
+		expect(output).toContain("771");
 		for (const line of output.trimEnd().split("\n")) {
 			expect(displayWidth(line)).toBeLessThanOrEqual(80);
 		}
