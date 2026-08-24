@@ -65,7 +65,7 @@ pnpm test:e2e:live
 | **Workflow** | `.github/workflows/e2e-live.yml` — every PR, every push to `main`, plus `workflow_dispatch` |
 | **Org** | `org-autumn-tree-56376911` ("neon-pkgs Integration Test Org"), Launch plan |
 | **Skipped for** | Fork and Dependabot PRs — GitHub does not expose repository secrets to untrusted PR code |
-| **Runner** | Protected runner group. Unlike `neon.com` and `models.dev`, the Neon **API** is reachable from it |
+| **Runner** | Protected runner group. The Neon API is reachable from it. |
 
 The org needs the **Launch plan or above**: `lifecycle.e2e.test.ts` protects a branch
 through `pushConfig`, and the free plan allows zero protected branches.
@@ -480,7 +480,7 @@ vendored copy on `main`. A scheduled workflow keeps maintainers aware:
 | **When** | Daily at 09:00 UTC; also `workflow_dispatch` |
 | **What** | `spec:pull` → `generate` → `build` on `@neon/sdk` |
 | **Output** | Opens or updates a PR on branch `bot/sdk-spec-refresh` titled `chore(@neon/sdk): refresh OpenAPI spec` — **only when something changed** |
-| **Runner** | `ubuntu-latest` (public egress to `neon.com`). CI uses the protected runner group + JFrog mirror and **cannot** reach the public spec URL — same constraint as `catalog-drift.yml` |
+| **Runner** | Protected runner group + JFrog. The spec is pulled from neon.com. |
 
 **The bot PR is a starting point, not merge-ready.** The workflow deliberately does
 not run `test:ci`. CI will fail on `packages/sdk/src/neon/coverage.test.ts` until
