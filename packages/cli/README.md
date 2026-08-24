@@ -1,6 +1,6 @@
 # Neon CLI
 
-The `neon` package is a command-line interface that lets you manage [Neon](https://neon.tech/) — Lakebase Postgres, Object Storage, Functions, Managed Better Auth, and the AI Gateway — directly from the terminal. For the complete documentation, see [Neon CLI](https://neon.tech/docs/reference/neon-cli).
+The `neon` package is a command-line interface that lets you manage [Neon](https://neon.com/) — Lakebase Postgres, Object Storage, Functions, Managed Better Auth, and the AI Gateway — directly from the terminal. For the complete documentation, see [Neon CLI](https://neon.com/docs/cli).
 
 The legacy `neonctl` package is a lightweight compatibility package that depends
 on this package and invokes the same CLI entry point. The implementation and
@@ -54,7 +54,7 @@ Run the following command to authenticate a connection to Neon:
 neon auth
 ```
 
-The `auth` command launches a browser window where you can authorize the Neon CLI to access your Neon account. Running a Neon CLI command without authenticating with [neon auth](https://neon.tech/docs/reference/cli-auth) automatically launches the browser authentication process.
+The `auth` command launches a browser window where you can authorize the Neon CLI to access your Neon account. Running a Neon CLI command without authenticating with [neon auth](https://neon.com/docs/cli/auth) automatically launches the browser authentication process.
 
 Alternatively, you can authenticate a connection with a Neon API key using the `--api-key` option when running a Neon CLI command. For example, an API key is used with the following `neon projects list` command:
 
@@ -165,7 +165,7 @@ neon projects update <project-id> --enable-logical-replication --yes
 
 ### The `psql` command
 
-`neon psql [branch]` opens a psql session against a branch. It builds the connection string for the branch and launches psql — a shortcut for `neon connection-string --psql`. See [Neon CLI commands — psql](https://neon.com/docs/reference/cli-psql) for the full reference.
+`neon psql [branch]` opens a psql session against a branch. It builds the connection string for the branch and launches psql — a shortcut for `neon connection-string --psql`. See [Neon CLI commands — psql](https://neon.com/docs/cli/psql) for the full reference.
 
 ```bash
 neon psql                                    # default branch
@@ -259,7 +259,7 @@ regression + TAP tests.
 
 ## Configure autocompletion
 
-The Neon CLI supports autocompletion, which you can configure in a few easy steps. See [Neon CLI commands — completion](https://neon.tech/docs/reference/cli-completion) for instructions.
+The Neon CLI supports autocompletion, which you can configure in a few easy steps. See [Neon CLI commands — completion](https://neon.com/docs/cli/completion) for instructions.
 
 ## Linking a project
 
