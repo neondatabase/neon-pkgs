@@ -62,7 +62,7 @@ Alternatively, you can authenticate a connection with a Neon API key using the `
 neon projects list --api-key <neon_api_key>
 ```
 
-For information about obtaining an Neon API key, see [Authentication](https://api-docs.neon.tech/reference/authentication), in the _Neon API Reference_.
+For information about obtaining an Neon API key, see [Authentication](https://neon.com/docs/reference/api/get-started), in the _Neon API Reference_.
 
 ## Project and branch creation
 
@@ -1141,7 +1141,7 @@ Global options are supported with any Neon CLI command.
 
 - <a id="api-key"></a>`--api-key`
 
-  Specifies your Neon API key. You can authenticate using a Neon API key when running a Neon CLI command instead of using `neon auth`. For information about obtaining an Neon API key, see [Authentication](https://api-docs.neon.tech/reference/authentication), in the _Neon API Reference_.
+  Specifies your Neon API key. You can authenticate using a Neon API key when running a Neon CLI command instead of using `neon auth`. For information about obtaining an Neon API key, see [Authentication](https://neon.com/docs/reference/api/get-started), in the _Neon API Reference_.
 
   ```bash
   neon <command> --api-key <neon_api_key>

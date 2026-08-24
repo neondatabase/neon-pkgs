@@ -1,6 +1,6 @@
 # @neon/sdk
 
-The official TypeScript SDK for the [Neon API](https://api-docs.neon.tech/reference) — a modern, **Fetch-based**, **zero-dependency**, ESM-only client generated from Neon's [OpenAPI specification](https://neon.com/api_spec/release/v2.json). Successor to [`@neondatabase/api-client`](https://www.npmjs.com/package/@neondatabase/api-client).
+The official TypeScript SDK for the [Neon API](https://neon.com/docs/reference/api) — a modern, **Fetch-based**, **zero-dependency**, ESM-only client generated from Neon's [OpenAPI specification](https://neon.com/api_spec/release/v2.json). Successor to [`@neondatabase/api-client`](https://www.npmjs.com/package/@neondatabase/api-client).
 
 Two layers, one package:
 
