@@ -1,5 +1,11 @@
 # neon
 
+## 4.2.0
+
+### Minor Changes
+
+- 55f4bf2: Add `neon mcp` to install the Neon MCP server into coding agents. A TTY asks config location (global default), agents, API key vs OAuth, then confirms. Linked project-folder installs also ask whether to pin tools to that project. `-y` is global, detected agents, minted write API key. `--project` is config location only. `--read-only`, `--project-id` and `--category` set MCP URL query params. The minted key is always account-wide.
+
 ## 4.1.0
 
 ### Minor Changes
