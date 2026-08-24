@@ -463,7 +463,12 @@ export const builder = (argv: yargs.Argv) => {
 											),
 										)
 										.epilogue(
-											"Save the provider first with `neon neon-auth config email-provider update --type standard`. A shared provider, a missing configuration, or a non-Better-Auth integration is rejected by the API.",
+											[
+												"Save the provider first with",
+												"`neon neon-auth config email-provider update --type standard`.",
+												"A shared provider, a missing configuration, or a",
+												"non-Better-Auth integration is rejected by the API.",
+											].join("\n"),
 										),
 								async (args) => {
 									await emailProviderTest(args as any);
