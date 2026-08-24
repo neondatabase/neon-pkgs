@@ -254,6 +254,29 @@ http_headers = { Authorization = "Bearer napi_toml" }
 		).toBe("napi_toml");
 	});
 
+	test("reuses a Bearer from a project Copilot CLI servers key", () => {
+		const cwd = tmpProject();
+		mkdirSync(join(cwd, ".vscode"), { recursive: true });
+		writeFileSync(
+			join(cwd, ".vscode", "mcp.json"),
+			JSON.stringify({
+				servers: {
+					Neon: {
+						url: NEON_MCP_URL,
+						headers: { Authorization: "Bearer napi_copilot" },
+					},
+				},
+			}),
+		);
+		expect(
+			existingNeonApiKey({
+				agents: ["github-copilot-cli"],
+				scope: "project",
+				cwd,
+			}),
+		).toBe("napi_copilot");
+	});
+
 	test("skips a config path that is a directory", () => {
 		const cwd = tmpProject();
 		mkdirSync(join(cwd, ".cursor", "mcp.json"), { recursive: true });

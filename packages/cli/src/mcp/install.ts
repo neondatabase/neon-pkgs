@@ -108,6 +108,14 @@ function configPathFor(
 	return spec.configPath;
 }
 
+function configKeyFor(agent: AgentType, scope: McpInstallScope): string {
+	const spec = agents[agent];
+	if (scope === "project" && spec.localConfigKey) {
+		return spec.localConfigKey;
+	}
+	return spec.configKey;
+}
+
 export function existingNeonApiKey(options: {
 	agents: AgentType[];
 	scope: McpInstallScope;
@@ -118,7 +126,10 @@ export function existingNeonApiKey(options: {
 		if (!path) {
 			continue;
 		}
-		const key = neonApiKeyFromFile(path, agents[agent].configKey);
+		const key = neonApiKeyFromFile(
+			path,
+			configKeyFor(agent, options.scope),
+		);
 		if (key) {
 			return key;
 		}
