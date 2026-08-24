@@ -145,7 +145,7 @@ export const confirmMcpInstall = async (options: {
 	if (!canPickAgentsInteractively()) {
 		return true;
 	}
-	process.stdout.write(`${mcpInstallSummary(options)}\n\n`);
+	process.stdout.write(`\n${mcpInstallSummary(options)}\n\n`);
 	const { ok } = await prompts({
 		onState: restoreCursorOnAbort,
 		type: "confirm",
