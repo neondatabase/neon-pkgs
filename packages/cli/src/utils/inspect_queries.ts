@@ -149,9 +149,12 @@ export const INSPECT_QUERIES = {
 					AND pid <> pg_backend_pid()
 			),
 			stalled_groups AS (
-				SELECT DISTINCT COALESCE(leader_pid, pid) AS query_group
+				SELECT
+					COALESCE(leader_pid, pid) AS query_group,
+					min(query_start) AS group_start
 				FROM activity
 				WHERE query_start <= statement_timestamp() - interval '30 seconds'
+				GROUP BY COALESCE(leader_pid, pid)
 			)
 			SELECT
 				statement_timestamp() AS observed_at,
@@ -176,7 +179,7 @@ export const INSPECT_QUERIES = {
 			FROM activity a
 			JOIN stalled_groups g
 				ON g.query_group = COALESCE(a.leader_pid, a.pid)
-			ORDER BY g.query_group, a.leader_pid NULLS FIRST, a.pid;
+			ORDER BY g.group_start, g.query_group, a.leader_pid NULLS FIRST, a.pid;
 		`,
 	},
 	locks: {
