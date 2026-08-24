@@ -109,6 +109,20 @@ describe("neon mcp", () => {
 		assertNoSecret(stdout, stderr);
 	});
 
+	test("unauthenticated mint path names --oauth", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		const { stderr } = await testCliCommand(["mcp", "--agent", "cursor"], {
+			...runOptions(home, cwd),
+			apiKey: false,
+			code: 1,
+		});
+		expect(stderr).toMatch(/Authentication required/);
+		expect(stderr).toMatch(/--oauth/);
+		expect(stderr).not.toMatch(/Minted API key/);
+	});
+
 	test("replaces a key-backed entry when switching to --oauth", async ({
 		testCliCommand,
 	}) => {

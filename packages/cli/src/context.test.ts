@@ -88,8 +88,10 @@ describe("isMcpOauth", () => {
 		expect(isMcpOauth({ _: ["mcp"] })).toBe(true);
 	});
 
-	test("is false for --oauth=false", () => {
+	test("is false for --oauth=false and `--oauth false`", () => {
 		process.argv = ["node", "neon", "mcp", "--oauth=false"];
+		expect(isMcpOauth({ _: ["mcp"] })).toBe(false);
+		process.argv = ["node", "neon", "mcp", "--oauth", "false"];
 		expect(isMcpOauth({ _: ["mcp"] })).toBe(false);
 	});
 });
