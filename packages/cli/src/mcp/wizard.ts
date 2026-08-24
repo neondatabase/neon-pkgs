@@ -80,7 +80,7 @@ export const pickMcpAuth = async (): Promise<McpAuthKind> => {
 };
 
 export const pickMcpProjectPin = async (
-	linkedProjectId: string | undefined,
+	linkedProjectId: string,
 ): Promise<boolean> => {
 	if (!canPickAgentsInteractively()) {
 		return false;
@@ -89,10 +89,8 @@ export const pickMcpProjectPin = async (
 		onState: restoreCursorOnAbort,
 		type: "confirm",
 		name: "pin",
-		message: linkedProjectId
-			? `Scope MCP tools to the linked project ${linkedProjectId}?`
-			: "Scope MCP tools to a single Neon project?",
-		initial: linkedProjectId !== undefined,
+		message: `Scope MCP tools to the linked project ${linkedProjectId}?`,
+		initial: true,
 	});
 	return pin === true;
 };

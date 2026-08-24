@@ -4,7 +4,6 @@ import {
 	pickAgentsInteractively,
 	resolveAgentSelection,
 } from "../utils/agent_picker.js";
-import { getCliName } from "../utils/cli_name.js";
 import { type AgentType, tryResolveAddMcpAgentId } from "./agents.js";
 import type { McpInstallScope, NeonMcpCategory } from "./install.js";
 import { detectMcpAgents, mcpInstallableAgents } from "./targets.js";
@@ -40,7 +39,7 @@ export type ResolveMcpPlanOptions = {
 	pickScope?: () => Promise<McpInstallScope>;
 	pickAgents?: (options: PickAgentsOptions) => Promise<AgentType[]>;
 	pickAuth?: () => Promise<McpAuthKind>;
-	pickProjectPin?: (linkedProjectId: string | undefined) => Promise<boolean>;
+	pickProjectPin?: (linkedProjectId: string) => Promise<boolean>;
 };
 
 export async function resolveMcpPlan(
@@ -87,16 +86,16 @@ export async function resolveMcpPlan(
 			: "api-key";
 
 	let urlProjectId = options.projectId;
-	if (urlProjectId === undefined && prompt && scope === "project") {
+	if (
+		urlProjectId === undefined &&
+		prompt &&
+		scope === "project" &&
+		options.linkedProjectId
+	) {
 		const pin = await (options.pickProjectPin ?? pickMcpProjectPin)(
 			options.linkedProjectId,
 		);
 		if (pin) {
-			if (!options.linkedProjectId) {
-				throw new Error(
-					`No Neon project linked. Run \`${getCliName()} link\` to link this directory to a project, or pass --project-id.`,
-				);
-			}
 			urlProjectId = options.linkedProjectId;
 		}
 	}

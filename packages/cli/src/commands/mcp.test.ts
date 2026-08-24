@@ -499,7 +499,7 @@ describe("neon mcp", () => {
 		testCliCommand,
 	}) => {
 		const { home, cwd } = scratch();
-		await testCliCommand(
+		const { stderr } = await testCliCommand(
 			["mcp", "--oauth", "--read-only", "--agent", "cursor"],
 			{ ...runOptions(home, cwd), apiKey: false },
 		);
@@ -510,6 +510,7 @@ describe("neon mcp", () => {
 			neonMcpUrl({ readOnly: true }),
 		);
 		expect(written.mcpServers.Neon.headers).toBeUndefined();
+		expect(stderr).toMatch(/\?readonly=true/);
 	});
 
 	test("--project-id writes ?projectId= with an account key", async ({
@@ -528,6 +529,7 @@ describe("neon mcp", () => {
 		);
 		expect(stderr).toMatch(/account/);
 		expect(stderr).toMatch(/Minted API key/);
+		expect(stderr).toMatch(/\?projectId=proj-flag/);
 	});
 
 	test("--category accepts repeated flags and CSV", async ({

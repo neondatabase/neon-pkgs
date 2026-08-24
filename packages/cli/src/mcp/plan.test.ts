@@ -200,17 +200,18 @@ describe("resolveMcpPlan", () => {
 		expect(plan.urlProjectId).toBeUndefined();
 	});
 
-	test("pin yes without a linked project fails", async () => {
+	test("pin yes without a linked project is not asked", async () => {
 		const cwd = tmpDir();
-		await expect(
-			resolveMcpPlan(
-				planOptions(cwd, {
-					project: true,
-					oauth: true,
-					pickProjectPin: async () => true,
-				}),
-			),
-		).rejects.toThrow(/pass --project-id/);
+		const plan = await resolveMcpPlan(
+			planOptions(cwd, {
+				project: true,
+				oauth: true,
+				pickProjectPin: async () => {
+					throw new Error("pin prompt");
+				},
+			}),
+		);
+		expect(plan.urlProjectId).toBeUndefined();
 	});
 
 	test("pin no omits projectId", async () => {

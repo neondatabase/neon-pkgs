@@ -318,6 +318,8 @@ export const handler = async (props: McpProps) => {
 		throw new Error("Failed to write Neon MCP config to any agent.");
 	}
 
+	log.info("URL: %s", url);
+
 	const out = writer(props);
 	out.write(rows, {
 		fields: ["agent", "status", "error"],
