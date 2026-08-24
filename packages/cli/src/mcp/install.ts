@@ -1,9 +1,7 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { type AgentType, agents, upsertServer } from "add-mcp";
-
-import { ensureGitignored } from "../context.js";
 
 export const NEON_MCP_URL = "https://mcp.neon.tech/mcp";
 export const NEON_MCP_NAME = "Neon";
@@ -84,7 +82,11 @@ function neonApiKeyFromFile(
 		const neonBlock = raw.match(
 			/\[mcp_servers\.Neon\][\s\S]*?(?=\n\[|$)/,
 		)?.[0];
-		if (!neonBlock?.includes(NEON_MCP_URL)) {
+		if (!neonBlock) {
+			return undefined;
+		}
+		const url = neonBlock.match(/^url\s*=\s*"([^"]*)"/m)?.[1];
+		if (url !== NEON_MCP_URL) {
 			return undefined;
 		}
 		return BEARER_RE.exec(neonBlock)?.[1];
@@ -170,6 +172,33 @@ export function mcpUnsupportedReason(
 	return undefined;
 }
 
+function gitignoreProjectConfig(path: string): string | undefined {
+	const dir = dirname(path);
+	const entry = basename(path);
+	const gitignorePath = join(dir, ".gitignore");
+	try {
+		if (!existsSync(gitignorePath)) {
+			writeFileSync(gitignorePath, `${entry}\n`);
+			return undefined;
+		}
+		const current = readFileSync(gitignorePath, "utf8");
+		if (current.split(/\r?\n/).some((line) => line.trim() === entry)) {
+			return undefined;
+		}
+		const needsLeadingNewline =
+			current.length > 0 && !current.endsWith("\n");
+		writeFileSync(
+			gitignorePath,
+			`${current}${needsLeadingNewline ? "\n" : ""}${entry}\n`,
+		);
+		return undefined;
+	} catch (err) {
+		return `Could not gitignore ${path}: ${
+			err instanceof Error ? err.message : String(err)
+		}`;
+	}
+}
+
 function protectWrittenConfig(
 	path: string,
 	scope: McpInstallScope,
@@ -182,7 +211,7 @@ function protectWrittenConfig(
 		}`;
 	}
 	if (scope === "project") {
-		ensureGitignored(path);
+		return gitignoreProjectConfig(path);
 	}
 	return undefined;
 }

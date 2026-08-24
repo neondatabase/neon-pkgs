@@ -213,6 +213,27 @@ http_headers = { Authorization = "Bearer napi_other" }
 		).toBeUndefined();
 	});
 
+	test("does not reuse a TOML Bearer when the Neon url is not mcp.neon.tech", () => {
+		const cwd = tmpProject();
+		mkdirSync(join(cwd, ".grok"), { recursive: true });
+		writeFileSync(
+			join(cwd, ".grok", "config.toml"),
+			`[mcp_servers.Neon]
+url = "https://example.com/mcp"
+notes = "${NEON_MCP_URL}"
+http_headers = { Authorization = "Bearer napi_wrong" }
+`,
+		);
+
+		expect(
+			existingNeonApiKey({
+				agents: ["grok-build"],
+				scope: "project",
+				cwd,
+			}),
+		).toBeUndefined();
+	});
+
 	test("reuses a Bearer from a Neon TOML block that points at mcp.neon.tech", () => {
 		const cwd = tmpProject();
 		mkdirSync(join(cwd, ".grok"), { recursive: true });
@@ -263,5 +284,25 @@ describe("installNeonMcpServer write failures", () => {
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
 		expect(result.unsupported).toBe(false);
+	});
+
+	test("fails when the project gitignore cannot be updated", () => {
+		const cwd = tmpProject();
+		mkdirSync(join(cwd, ".cursor"), { recursive: true });
+		writeFileSync(join(cwd, ".cursor", ".gitignore"), "other\n");
+		chmodSync(join(cwd, ".cursor", ".gitignore"), 0o444);
+
+		const result = installNeonMcpServer({
+			agent: "cursor",
+			scope: "project",
+			cwd,
+			auth: { kind: "api-key", apiKey: "napi_test_secret" },
+		});
+
+		chmodSync(join(cwd, ".cursor", ".gitignore"), 0o644);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.unsupported).toBe(false);
+		expect(result.error).toMatch(/gitignore/i);
 	});
 });
