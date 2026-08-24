@@ -216,6 +216,12 @@ function protectWrittenConfig(
 	return undefined;
 }
 
+function redactSecrets(text: string): string {
+	return text
+		.replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
+		.replace(/napi_[A-Za-z0-9_]+/gi, "napi_[redacted]");
+}
+
 export function installNeonMcpServer(options: {
 	agent: AgentType;
 	scope: McpInstallScope;
@@ -262,6 +268,8 @@ export function installNeonMcpServer(options: {
 	return {
 		ok: false,
 		unsupported: false,
-		error: result.error ?? "Failed to write Neon MCP server config",
+		error: redactSecrets(
+			result.error ?? "Failed to write Neon MCP server config",
+		),
 	};
 }

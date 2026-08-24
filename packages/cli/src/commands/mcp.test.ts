@@ -284,6 +284,33 @@ describe("neon mcp", () => {
 		expect(stderr).toMatch(/has been revoked/);
 	});
 
+	test("does not print a YAML parse excerpt that contains a secret", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		mkdirSync(join(home, ".config", "goose"), { recursive: true });
+		writeFileSync(
+			join(home, ".config", "goose", "config.yaml"),
+			`extensions:
+  neon:
+    uri: ${NEON_MCP_URL}
+    headers:
+      Authorization: Bearer napi_secret_yaml
+    bad: [unterminated
+`,
+		);
+		const { stdout, stderr } = await testCliCommand(
+			["mcp", "--oauth", "--agent", "cursor", "--agent", "goose"],
+			{ ...runOptions(home, cwd), apiKey: false, code: 1 },
+		);
+		assertNoSecret(stdout, stderr);
+		expect(`${stdout}${stderr}`).not.toContain("napi_secret_yaml");
+		expect(stdout).toContain("cursor");
+		expect(stdout).toContain("installed");
+		expect(stdout).toContain("goose");
+		expect(stdout).toContain("failed");
+	});
+
 	test("an organization CLI key cannot mint", async ({ testCliCommand }) => {
 		const { home, cwd } = scratch();
 		const { stderr } = await testCliCommand(["mcp", "--agent", "cursor"], {
