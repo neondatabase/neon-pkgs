@@ -736,7 +736,7 @@ $ neon mcp -y
 # OAuth: no API key minted. The agent prompts for Neon sign-in on first use.
 $ neon mcp --oauth
 
-# Project-level config. A minted key is limited to the linked `.neon` project.
+# Project-level config. A minted key is still account-wide.
 $ neon mcp --project
 
 $ neon mcp --agent cursor --agent claude-code
@@ -744,7 +744,7 @@ $ neon mcp --agent cursor --agent claude-code
 # Hide write tools. Does not change the minted key.
 $ neon mcp --read-only
 
-# Pin MCP tools to one project. The minted key stays account-wide unless --project is also passed.
+# Pin MCP tools to one project. Does not change the minted key.
 $ neon mcp --project-id <project-id>
 
 # Limit which tool categories are visible.

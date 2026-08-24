@@ -54,7 +54,7 @@ export const builder = (argv: yargs.Argv) =>
 				type: "boolean",
 				default: false,
 				describe:
-					"Write project-level MCP config. Skips the scope question. A minted key is limited to the linked .neon project",
+					"Write project-level MCP config. Skips the scope question. Does not change the minted key",
 			},
 			yes: {
 				alias: "y",
@@ -97,7 +97,7 @@ export const builder = (argv: yargs.Argv) =>
 			"project-id": {
 				type: "string",
 				describe:
-					"Pin MCP tools to one Neon project (?projectId=). Interactive asks only for a linked project-folder install",
+					"Pin MCP tools to one Neon project (?projectId=). Does not change the minted key. Interactive asks only for a linked project-folder install",
 				coerce: single("project-id"),
 			},
 			category: {
@@ -183,24 +183,6 @@ export const handler = async (props: McpProps) => {
 		categories: plan.categories,
 	});
 
-	const mintProjectId =
-		plan.scope === "project" && plan.auth === "api-key"
-			? linkedProjectId
-			: undefined;
-	if (plan.scope === "project" && plan.auth === "api-key" && !mintProjectId) {
-		throw new Error(
-			`No Neon project linked. Run \`${getCliName()} link\` to link this directory to a project.`,
-		);
-	}
-	if (
-		mintProjectId &&
-		plan.urlProjectId &&
-		mintProjectId !== plan.urlProjectId
-	) {
-		throw new Error(
-			`--project-id ${plan.urlProjectId} is not the linked project ${mintProjectId}.`,
-		);
-	}
 	if (plan.scope === "project" && plan.auth === "api-key") {
 		const tracked = trackedProjectMcpConfig({ agents: install, cwd });
 		if (tracked) {
@@ -262,14 +244,11 @@ export const handler = async (props: McpProps) => {
 	} else {
 		minted = await mintMcpApiKey({
 			apiClient: props.apiClient,
-			projectId: mintProjectId,
 		});
 		auth = { kind: "api-key", apiKey: minted.key };
-		if (!minted.projectId) {
-			log.warning(
-				"This key reaches everything your account can, in every organization.",
-			);
-		}
+		log.warning(
+			"This key reaches everything your account can, in every organization.",
+		);
 	}
 
 	const rows: McpInstallRow[] = [];
@@ -312,7 +291,7 @@ export const handler = async (props: McpProps) => {
 			throw new Error(
 				withdrawn
 					? "Failed to write Neon MCP config to any agent. The minted API key has been revoked."
-					: `Failed to write Neon MCP config to any agent. The minted API key could NOT be revoked. Remove it with \`${getCliName()} api-keys revoke ${minted.id}${minted.orgId ? ` --org-id ${minted.orgId}` : ""}\`.`,
+					: `Failed to write Neon MCP config to any agent. The minted API key could NOT be revoked. Remove it with \`${getCliName()} api-keys revoke ${minted.id}\`.`,
 			);
 		}
 		throw new Error("Failed to write Neon MCP config to any agent.");
@@ -328,15 +307,11 @@ export const handler = async (props: McpProps) => {
 	out.end();
 
 	if (minted) {
-		const revoke = minted.orgId
-			? `${getCliName()} api-keys revoke ${minted.id} --org-id ${minted.orgId}`
-			: `${getCliName()} api-keys revoke ${minted.id}`;
 		log.info(
-			"Minted API key %s (id %d%s). Revoke with: %s",
+			"Minted API key %s (id %d, account). Revoke with: %s",
 			minted.name,
 			minted.id,
-			minted.projectId ? `, project ${minted.projectId}` : ", account",
-			revoke,
+			`${getCliName()} api-keys revoke ${minted.id}`,
 		);
 	}
 

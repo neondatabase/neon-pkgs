@@ -142,7 +142,7 @@ describe("neon mcp", () => {
 		expect(written.mcpServers.Neon.headers).toBeUndefined();
 	});
 
-	test("--project mints a project-scoped key into the project config", async ({
+	test("--project mints an account key into the project config", async ({
 		testCliCommand,
 	}) => {
 		const { home, cwd } = scratch();
@@ -161,27 +161,37 @@ describe("neon mcp", () => {
 		const configPath = join(cwd, ".cursor", "mcp.json");
 		const written = JSON.parse(readFileSync(configPath, "utf8"));
 		expect(written.mcpServers.Neon.headers.Authorization).toBe(
-			`Bearer napi_org_secret`,
+			`Bearer ${SECRET}`,
 		);
+		expect(written.mcpServers.Neon.url).toBe(NEON_MCP_URL);
 		expect(statSync(configPath).mode & 0o777).toBe(0o600);
 		expect(readFileSync(join(cwd, ".cursor", ".gitignore"), "utf8")).toBe(
 			"mcp.json\n",
 		);
-		expect(stderr).toMatch(/project proj-in-org/);
-		expect(stderr).toMatch(/--org-id org-7/);
-		expect(stderr).not.toContain("napi_org_secret");
+		expect(stderr).toMatch(/, account/);
+		expect(stderr).toMatch(/everything your account can/);
+		expect(stderr).not.toMatch(/--org-id/);
+		assertNoSecret("", stderr);
 	});
 
-	test("--project without a linked project fails before minting", async ({
+	test("--project without a linked project still mints an account key", async ({
 		testCliCommand,
 	}) => {
 		const { home, cwd } = scratch();
-		const { stderr } = await testCliCommand(
+		const { stdout, stderr } = await testCliCommand(
 			["mcp", "--project", "--agent", "cursor"],
-			{ ...runOptions(home, cwd), code: 1 },
+			runOptions(home, cwd),
 		);
-		expect(stderr).toMatch(/No Neon project linked/);
-		expect(stderr).not.toMatch(/Minted API key/);
+		const written = JSON.parse(
+			readFileSync(join(cwd, ".cursor", "mcp.json"), "utf8"),
+		);
+		expect(written.mcpServers.Neon.headers.Authorization).toBe(
+			`Bearer ${SECRET}`,
+		);
+		expect(stdout).toContain("installed");
+		expect(stderr).toMatch(/Minted API key/);
+		expect(stderr).not.toMatch(/No Neon project linked/);
+		assertNoSecret(stdout, stderr);
 	});
 
 	test("bare mcp in CI without -y refuses to mint into detected agents", async ({
@@ -290,7 +300,7 @@ describe("neon mcp", () => {
 		assertNoSecret(stdout, stderr);
 	});
 
-	test("--project --agent not-an-agent fails before complaining about .neon", async ({
+	test("--project --agent not-an-agent fails without minting", async ({
 		testCliCommand,
 	}) => {
 		const { home, cwd } = scratch();
@@ -299,7 +309,6 @@ describe("neon mcp", () => {
 			{ ...runOptions(home, cwd), code: 1 },
 		);
 		expect(stderr).toMatch(/Unknown agent: "not-an-agent"/);
-		expect(stderr).not.toMatch(/No Neon project linked/);
 		expect(stderr).not.toMatch(/Minted API key/);
 	});
 
@@ -409,13 +418,6 @@ describe("neon mcp", () => {
 		testCliCommand,
 	}) => {
 		const { home, cwd } = scratch();
-		writeFileSync(
-			join(cwd, ".neon"),
-			JSON.stringify({
-				orgId: "org-7",
-				projectId: "proj-in-org",
-			}),
-		);
 		mkdirSync(join(cwd, ".cursor"), { recursive: true });
 		writeFileSync(join(cwd, ".cursor", "mcp.json"), "{}\n");
 		execFileSync("git", ["-C", cwd, "init"], { stdio: "ignore" });
@@ -603,7 +605,7 @@ describe("neon mcp", () => {
 		expect(written.mcpServers.Neon.url).toBe(NEON_MCP_URL);
 	});
 
-	test("--project-id that is not the linked project fails before minting", async ({
+	test("--project --project-id writes ?projectId= with an account key", async ({
 		testCliCommand,
 	}) => {
 		const { home, cwd } = scratch();
@@ -623,13 +625,47 @@ describe("neon mcp", () => {
 				"--agent",
 				"cursor",
 			],
-			{ ...runOptions(home, cwd), code: 1 },
+			runOptions(home, cwd),
 		);
-		expect(stderr).toMatch(
-			/--project-id proj-other is not the linked project proj-in-org/,
+		const written = JSON.parse(
+			readFileSync(join(cwd, ".cursor", "mcp.json"), "utf8"),
 		);
+		expect(written.mcpServers.Neon.url).toBe(
+			neonMcpUrl({ projectId: "proj-other" }),
+		);
+		expect(written.mcpServers.Neon.headers.Authorization).toBe(
+			`Bearer ${SECRET}`,
+		);
+		expect(stderr).toMatch(/Minted API key/);
+		expect(stderr).toMatch(/, account/);
+		expect(stderr).toMatch(/\?projectId=proj-other/);
+		assertNoSecret("", stderr);
+	});
+
+	test("--oauth --project-id writes ?projectId= and no header", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		const { stderr } = await testCliCommand(
+			[
+				"mcp",
+				"--oauth",
+				"--project-id",
+				"proj-flag",
+				"--agent",
+				"cursor",
+			],
+			{ ...runOptions(home, cwd), apiKey: false },
+		);
+		const written = JSON.parse(
+			readFileSync(join(home, ".cursor", "mcp.json"), "utf8"),
+		);
+		expect(written.mcpServers.Neon.url).toBe(
+			neonMcpUrl({ projectId: "proj-flag" }),
+		);
+		expect(written.mcpServers.Neon.headers).toBeUndefined();
 		expect(stderr).not.toMatch(/Minted API key/);
-		expect(existsSync(join(cwd, ".cursor", "mcp.json"))).toBe(false);
+		expect(stderr).toMatch(/\?projectId=proj-flag/);
 	});
 
 	test("reuses a Bearer then rewrites the URL query", async ({
@@ -641,16 +677,20 @@ describe("neon mcp", () => {
 			runOptions(home, cwd),
 		);
 		const { stderr } = await testCliCommand(
-			["mcp", "--read-only", "--agent", "cursor"],
+			["mcp", "--project-id", "proj-flag", "--agent", "cursor"],
 			runOptions(home, cwd),
 		);
 		const written = JSON.parse(
 			readFileSync(join(home, ".cursor", "mcp.json"), "utf8"),
 		);
 		expect(written.mcpServers.Neon.url).toBe(
-			neonMcpUrl({ readOnly: true }),
+			neonMcpUrl({ projectId: "proj-flag" }),
+		);
+		expect(written.mcpServers.Neon.headers.Authorization).toBe(
+			`Bearer ${SECRET}`,
 		);
 		expect(stderr).toMatch(/Reusing the API key/);
 		expect(stderr).not.toMatch(/Minted API key/);
+		expect(stderr).toMatch(/\?projectId=proj-flag/);
 	});
 });

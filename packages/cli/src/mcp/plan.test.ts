@@ -311,4 +311,19 @@ describe("mcpInstallSummary", () => {
 			}),
 		).toContain("OAuth (agent signs in on first use)");
 	});
+
+	test("project-scope mint is still an account-wide key", () => {
+		expect(
+			mcpInstallSummary({
+				scope: "project",
+				install: ["cursor"],
+				skipped: [],
+				auth: "api-key",
+				reuse: false,
+				url: neonMcpUrl(),
+			}),
+		).toContain(
+			"mint an account-wide API key that reaches every organization",
+		);
+	});
 });
