@@ -1,6 +1,10 @@
+import { PassThrough } from "node:stream";
+import stripAnsi from "strip-ansi";
 import { describe, expect } from "vitest";
+import { displayWidth } from "../human_table.js";
 import { test } from "../test_utils/fixtures";
 import { INSPECT_QUERIES } from "../utils/inspect_queries.js";
+import { writer } from "../writer.js";
 
 // `inspect db` opens a real Postgres connection with the embedded wire client,
 // so these tests drive the hermetic `--db-url` path: point at a port nothing is
@@ -8,6 +12,35 @@ import { INSPECT_QUERIES } from "../utils/inspect_queries.js";
 // (b) fails with a clear Postgres-connection error rather than the Neon-API
 // "Could not reach the Neon API" hint. `127.0.0.1:1` refuses immediately.
 const UNREACHABLE_DB_URL = "postgresql://user:pass@127.0.0.1:1/postgres";
+
+const STALLED_QUERY_ROW = {
+	observed_at: "2026-08-20 21:27:52.147991+00",
+	query_start: "2026-08-20 21:27:10.224566+00",
+	query_group: "952",
+	pid: "953",
+	leader_pid: "952",
+	role: "worker",
+	backend_type: "parallel worker",
+	database: "neondb",
+	application_name: "checkout-api",
+	query_id: "5457019535816659310",
+	state: "active",
+	wait_event_type: "IO",
+	wait_event: "DataFileRead",
+	blocking_pids: "{}",
+	duration: "00:00:41.923425",
+	query: "SELECT customer_id FROM checkout_events WHERE account_id = $1 ORDER BY created_at DESC",
+};
+
+const captureWriter = (output: "table" | "json", columns?: number) => {
+	const chunks: string[] = [];
+	const out = new PassThrough();
+	out.on("data", (chunk) => chunks.push(chunk.toString()));
+	writer({ output, out, columns }).end([STALLED_QUERY_ROW], {
+		fields: INSPECT_QUERIES["stalled-queries"].fields,
+	});
+	return chunks.join("");
+};
 
 describe("inspect db", () => {
 	test("table-sizes --db-url bypasses the API and reports a Postgres connection error", async ({
@@ -88,24 +121,37 @@ describe("inspect db", () => {
 				"backend_type IN ('client backend', 'parallel worker')",
 			),
 			fields: [
-				"observed_at",
-				"query_start",
-				"query_group",
-				"pid",
-				"leader_pid",
-				"role",
-				"backend_type",
-				"database",
-				"application_name",
-				"query_id",
-				"state",
-				"wait_event_type",
+				"duration",
 				"wait_event",
 				"blocking_pids",
-				"duration",
+				"role",
+				"query_group",
 				"query",
 			],
 		});
+	});
+
+	test("stalled-queries keeps diagnostic fields visible at 80 columns", () => {
+		const output = stripAnsi(captureWriter("table", 80));
+
+		expect(output).toContain("Duration");
+		expect(output).toContain("Wait Event");
+		expect(output).toContain("Blocking Pids");
+		expect(output).toContain("Role");
+		expect(output).toContain("Query Group");
+		expect(output).toContain("Query");
+		expect(output).toContain("...");
+		expect(output).not.toContain(STALLED_QUERY_ROW.query);
+		expect(output).not.toMatch(
+			/Observed At|Query Start|Leader Pid|Backend Type|Database|Application Name|Query Id|Wait Event Type/,
+		);
+		for (const line of output.trimEnd().split("\n")) {
+			expect(displayWidth(line)).toBeLessThanOrEqual(80);
+		}
+	});
+
+	test("stalled-queries JSON keeps every SQL field", () => {
+		expect(JSON.parse(captureWriter("json"))).toEqual([STALLED_QUERY_ROW]);
 	});
 
 	// Phase-2 subcommands. The extension-gated ones (`outliers`, `calls`) still
