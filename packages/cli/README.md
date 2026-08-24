@@ -753,7 +753,7 @@ $ neon mcp --category querying --category schema
 
 On a TTY the command asks for scope (global is the default), then agents, then API key vs OAuth, then a summary to confirm before it writes. Detected agents start selected: globally installed agents or project-folder markers such as `.cursor` when the scope is project.
 
-`-y` skips those questions. `--project`, `--oauth` and `--agent` skip the question they answer and still apply with `-y`. `--read-only` and `--category` are flags only and are never prompted. Project-folder installs ask whether to pin MCP tools to the linked `.neon` project (`?projectId=`); global installs never add that param unless you pass `--project-id`. Without a TTY, pass `-y` to mint into every detected agent, `--agent` to name the agents or `--oauth` to write the URL only.
+`-y` skips those questions. `--project`, `--oauth` and `--agent` skip the question they answer and still apply with `-y`. `--read-only` and `--category` are flags only and are never prompted. A linked project-folder install asks whether to pin MCP tools to that `.neon` project (`?projectId=`). An unlinked project folder does not ask. Global installs never add that param unless you pass `--project-id`. Without a TTY, pass `-y` to mint into every detected agent, `--agent` to name the agents or `--oauth` to write the URL only.
 
 `--agent` names: `antigravity`, `cline`, `cline-cli`, `claude-code`, `codex`, `cursor`, `gemini-cli`, `goose`, `github-copilot-cli`, `grok-build`, `mcporter`, `opencode`, `vscode`, `windsurf`, `zed`. Project scope drops `antigravity`, `cline`, `cline-cli`, `goose` and `windsurf`. `claude-desktop` is a known name that is then skipped.
 

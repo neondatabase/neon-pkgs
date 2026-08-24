@@ -97,7 +97,7 @@ export const builder = (argv: yargs.Argv) =>
 			"project-id": {
 				type: "string",
 				describe:
-					"Pin MCP tools to one Neon project (?projectId=). Interactive asks only for a project-folder install",
+					"Pin MCP tools to one Neon project (?projectId=). Interactive asks only for a linked project-folder install",
 				coerce: single("project-id"),
 			},
 			category: {
