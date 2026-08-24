@@ -30,7 +30,7 @@ export type ResolveAgentSelectionOptions = {
 };
 
 export const canPickAgentsInteractively = (): boolean =>
-	!isCi() && Boolean(process.stdout.isTTY);
+	!isCi() && Boolean(process.stdout.isTTY) && Boolean(process.stdin.isTTY);
 
 /** Shared with the planned `neon skills` command to keep agent selection consistent. */
 export const pickAgentsInteractively = async (

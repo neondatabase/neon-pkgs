@@ -1,9 +1,9 @@
+import { execFileSync } from "node:child_process";
 import { chmodSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type AgentType, agents, upsertServer } from "add-mcp";
 
 import { ensureGitignored } from "../context.js";
-import { log } from "../log.js";
 
 export const NEON_MCP_URL = "https://mcp.neon.tech/mcp";
 export const NEON_MCP_NAME = "Neon";
@@ -19,7 +19,7 @@ export type NeonMcpInstallResult =
 	| { ok: false; unsupported: true; error: string }
 	| { ok: false; unsupported: false; error: string };
 
-const BEARER_RE = /Bearer\s+(\S+)/i;
+const BEARER_RE = /Bearer\s+([^\s"]+)/i;
 
 function nestedValue(root: unknown, key: string): unknown {
 	let current = root;
@@ -32,18 +32,25 @@ function nestedValue(root: unknown, key: string): unknown {
 	return current;
 }
 
-function bearerFromServerConfig(config: unknown): string | undefined {
-	if (!config || typeof config !== "object" || Array.isArray(config)) {
+function recordOf(value: unknown): Record<string, unknown> | undefined {
+	if (!value || typeof value !== "object" || Array.isArray(value)) {
 		return undefined;
 	}
-	const record = config as Record<string, unknown>;
+	return value as Record<string, unknown>;
+}
+
+function bearerFromNeonMcpConfig(config: unknown): string | undefined {
+	const record = recordOf(config);
+	if (!record || record.url !== NEON_MCP_URL) {
+		return undefined;
+	}
 	const headers = record.headers ?? record.http_headers;
-	if (!headers || typeof headers !== "object" || Array.isArray(headers)) {
+	const headerRecord = recordOf(headers);
+	if (!headerRecord) {
 		return undefined;
 	}
 	const authorization =
-		(headers as Record<string, unknown>).Authorization ??
-		(headers as Record<string, unknown>).authorization;
+		headerRecord.Authorization ?? headerRecord.authorization;
 	if (typeof authorization !== "string") {
 		return undefined;
 	}
@@ -51,10 +58,10 @@ function bearerFromServerConfig(config: unknown): string | undefined {
 }
 
 function neonServers(value: unknown): unknown {
-	if (!value || typeof value !== "object" || Array.isArray(value)) {
+	const record = recordOf(value);
+	if (!record) {
 		return undefined;
 	}
-	const record = value as Record<string, unknown>;
 	return record[NEON_MCP_NAME] ?? record.neon;
 }
 
@@ -70,15 +77,17 @@ function neonApiKeyFromFile(
 	}
 	try {
 		const parsed: unknown = JSON.parse(raw);
-		return bearerFromServerConfig(
+		return bearerFromNeonMcpConfig(
 			neonServers(nestedValue(parsed, configKey)),
 		);
 	} catch {
 		const neonBlock = raw.match(
 			/\[mcp_servers\.Neon\][\s\S]*?(?=\n\[|$)/,
 		)?.[0];
-		const source = neonBlock ?? raw;
-		return BEARER_RE.exec(source)?.[1];
+		if (!neonBlock?.includes(NEON_MCP_URL)) {
+			return undefined;
+		}
+		return BEARER_RE.exec(neonBlock)?.[1];
 	}
 }
 
@@ -115,6 +124,35 @@ export function existingNeonApiKey(options: {
 	return undefined;
 }
 
+function isTrackedByGit(cwd: string, relativePath: string): boolean {
+	try {
+		execFileSync(
+			"git",
+			["-C", cwd, "ls-files", "--error-unmatch", "--", relativePath],
+			{ stdio: ["ignore", "pipe", "ignore"] },
+		);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+export function trackedProjectMcpConfig(options: {
+	agents: AgentType[];
+	cwd: string;
+}): string | undefined {
+	for (const agent of options.agents) {
+		const relativePath = agents[agent].localConfigPath;
+		if (!relativePath) {
+			continue;
+		}
+		if (isTrackedByGit(options.cwd, relativePath)) {
+			return relativePath;
+		}
+	}
+	return undefined;
+}
+
 export function mcpUnsupportedReason(
 	agent: AgentType,
 	scope: McpInstallScope,
@@ -132,19 +170,21 @@ export function mcpUnsupportedReason(
 	return undefined;
 }
 
-function protectWrittenConfig(path: string, scope: McpInstallScope): void {
+function protectWrittenConfig(
+	path: string,
+	scope: McpInstallScope,
+): string | undefined {
 	try {
 		chmodSync(path, 0o600);
 	} catch (err) {
-		log.debug(
-			"Could not restrict permissions on %s: %s",
-			path,
-			err instanceof Error ? err.message : String(err),
-		);
+		return `Could not restrict permissions on ${path}: ${
+			err instanceof Error ? err.message : String(err)
+		}`;
 	}
 	if (scope === "project") {
 		ensureGitignored(path);
 	}
+	return undefined;
 }
 
 export function installNeonMcpServer(options: {
@@ -179,9 +219,12 @@ export function installNeonMcpServer(options: {
 
 	if (result.success) {
 		if (auth.kind === "api-key") {
-			protectWrittenConfig(result.path, options.scope);
-			for (const extra of result.extraPaths ?? []) {
-				protectWrittenConfig(extra, options.scope);
+			const paths = [result.path, ...(result.extraPaths ?? [])];
+			for (const path of paths) {
+				const error = protectWrittenConfig(path, options.scope);
+				if (error) {
+					return { ok: false, unsupported: false, error };
+				}
 			}
 		}
 		return { ok: true, path: result.path };

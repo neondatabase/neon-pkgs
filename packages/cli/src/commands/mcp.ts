@@ -8,6 +8,7 @@ import {
 	installNeonMcpServer,
 	type McpInstallScope,
 	type NeonMcpAuth,
+	trackedProjectMcpConfig,
 } from "../mcp/install.js";
 import { mintMcpApiKey, withdrawMintedKey } from "../mcp/mint.js";
 import {
@@ -119,6 +120,14 @@ export const handler = async (props: McpProps) => {
 			`No Neon project linked. Run \`${getCliName()} link\` to link this directory to a project.`,
 		);
 	}
+	if (props.project && !oauth) {
+		const tracked = trackedProjectMcpConfig({ agents: install, cwd });
+		if (tracked) {
+			throw new Error(
+				`${tracked} is tracked by git. Untrack it before writing an API key, or pass --oauth.`,
+			);
+		}
+	}
 
 	let auth: NeonMcpAuth;
 	let minted: Awaited<ReturnType<typeof mintMcpApiKey>> | undefined;
@@ -151,6 +160,7 @@ export const handler = async (props: McpProps) => {
 
 	const rows: McpInstallRow[] = [];
 	let successes = 0;
+	const failedAgents: string[] = [];
 	for (const agent of install) {
 		const result = installNeonMcpServer({
 			agent,
@@ -168,6 +178,9 @@ export const handler = async (props: McpProps) => {
 				status: result.unsupported ? "skipped" : "failed",
 				error: result.error,
 			});
+			if (!result.unsupported) {
+				failedAgents.push(agent);
+			}
 			log.error("%s: %s", agent, result.error);
 		}
 	}
@@ -215,5 +228,11 @@ export const handler = async (props: McpProps) => {
 				"This key reaches everything your account can, in every organization.",
 			);
 		}
+	}
+
+	if (failedAgents.length > 0) {
+		throw new Error(
+			`Failed to write Neon MCP config for: ${failedAgents.join(", ")}.`,
+		);
 	}
 };

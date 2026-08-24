@@ -168,6 +168,71 @@ describe("existingNeonApiKey", () => {
 		).toBe("napi_existing");
 	});
 
+	test("does not reuse a Bearer from another server in the same file", () => {
+		const cwd = tmpProject();
+		mkdirSync(join(cwd, ".cursor"), { recursive: true });
+		writeFileSync(
+			join(cwd, ".cursor", "mcp.json"),
+			JSON.stringify({
+				mcpServers: {
+					other: {
+						url: "https://example.com/mcp",
+						headers: { Authorization: "Bearer napi_other" },
+					},
+					Neon: { url: "https://example.com/mcp" },
+				},
+			}),
+		);
+
+		expect(
+			existingNeonApiKey({
+				agents: ["cursor"],
+				scope: "project",
+				cwd,
+			}),
+		).toBeUndefined();
+	});
+
+	test("does not scan a TOML file outside the Neon block", () => {
+		const cwd = tmpProject();
+		mkdirSync(join(cwd, ".grok"), { recursive: true });
+		writeFileSync(
+			join(cwd, ".grok", "config.toml"),
+			`[mcp_servers.other]
+url = "https://example.com/mcp"
+http_headers = { Authorization = "Bearer napi_other" }
+`,
+		);
+
+		expect(
+			existingNeonApiKey({
+				agents: ["grok-build"],
+				scope: "project",
+				cwd,
+			}),
+		).toBeUndefined();
+	});
+
+	test("reuses a Bearer from a Neon TOML block that points at mcp.neon.tech", () => {
+		const cwd = tmpProject();
+		mkdirSync(join(cwd, ".grok"), { recursive: true });
+		writeFileSync(
+			join(cwd, ".grok", "config.toml"),
+			`[mcp_servers.Neon]
+url = "${NEON_MCP_URL}"
+http_headers = { Authorization = "Bearer napi_toml" }
+`,
+		);
+
+		expect(
+			existingNeonApiKey({
+				agents: ["grok-build"],
+				scope: "project",
+				cwd,
+			}),
+		).toBe("napi_toml");
+	});
+
 	test("skips a config path that is a directory", () => {
 		const cwd = tmpProject();
 		mkdirSync(join(cwd, ".cursor", "mcp.json"), { recursive: true });

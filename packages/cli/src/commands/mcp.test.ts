@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import {
 	mkdirSync,
 	mkdtempSync,
@@ -222,6 +223,51 @@ describe("neon mcp", () => {
 		expect(stdout).toContain("skipped");
 		expect(stderr).toMatch(/Minted API key/);
 		expect(stderr).not.toMatch(/has been revoked/);
+	});
+
+	test("exits non-zero when one write fails next to a success", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		mkdirSync(join(home, ".claude.json"));
+		const { stdout, stderr } = await testCliCommand(
+			["mcp", "--agent", "cursor", "--agent", "claude-code"],
+			{ ...runOptions(home, cwd), code: 1 },
+		);
+		expect(stdout).toContain("cursor");
+		expect(stdout).toContain("installed");
+		expect(stdout).toContain("claude-code");
+		expect(stdout).toContain("failed");
+		expect(stderr).toMatch(/Minted API key/);
+		expect(stderr).not.toMatch(/has been revoked/);
+		expect(stderr).toMatch(
+			/Failed to write Neon MCP config for: claude-code/,
+		);
+	});
+
+	test("--project refuses a tracked MCP config before minting", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		writeFileSync(
+			join(cwd, ".neon"),
+			JSON.stringify({
+				orgId: "org-7",
+				projectId: "proj-in-org",
+			}),
+		);
+		mkdirSync(join(cwd, ".cursor"), { recursive: true });
+		writeFileSync(join(cwd, ".cursor", "mcp.json"), "{}\n");
+		execFileSync("git", ["-C", cwd, "init"], { stdio: "ignore" });
+		execFileSync("git", ["-C", cwd, "add", "--", ".cursor/mcp.json"], {
+			stdio: "ignore",
+		});
+		const { stderr } = await testCliCommand(
+			["mcp", "--project", "--agent", "cursor"],
+			{ ...runOptions(home, cwd), code: 1 },
+		);
+		expect(stderr).toMatch(/tracked by git/);
+		expect(stderr).not.toMatch(/Minted API key/);
 	});
 
 	test("revokes the minted key when every write fails", async ({
