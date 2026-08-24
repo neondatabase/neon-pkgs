@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect } from "vitest";
 
-import { NEON_MCP_URL } from "../mcp/install.js";
+import { NEON_MCP_URL, neonMcpUrl } from "../mcp/install.js";
 import { test } from "../test_utils/fixtures";
 
 const dirs: string[] = [];
@@ -492,6 +492,163 @@ describe("neon mcp", () => {
 		});
 		expect(stderr).toMatch(/No coding agents detected/);
 		expect(stderr).not.toMatch(/claude-desktop/);
+		expect(stderr).not.toMatch(/Minted API key/);
+	});
+
+	test("--read-only writes ?readonly=true and does not mint on --oauth", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		await testCliCommand(
+			["mcp", "--oauth", "--read-only", "--agent", "cursor"],
+			{ ...runOptions(home, cwd), apiKey: false },
+		);
+		const written = JSON.parse(
+			readFileSync(join(home, ".cursor", "mcp.json"), "utf8"),
+		);
+		expect(written.mcpServers.Neon.url).toBe(
+			neonMcpUrl({ readOnly: true }),
+		);
+		expect(written.mcpServers.Neon.headers).toBeUndefined();
+	});
+
+	test("--project-id writes ?projectId= with an account key", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		const { stderr } = await testCliCommand(
+			["mcp", "--project-id", "proj-flag", "--agent", "cursor"],
+			runOptions(home, cwd),
+		);
+		const written = JSON.parse(
+			readFileSync(join(home, ".cursor", "mcp.json"), "utf8"),
+		);
+		expect(written.mcpServers.Neon.url).toBe(
+			neonMcpUrl({ projectId: "proj-flag" }),
+		);
+		expect(stderr).toMatch(/account/);
+		expect(stderr).toMatch(/Minted API key/);
+	});
+
+	test("--category accepts repeated flags and CSV", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		await testCliCommand(
+			[
+				"mcp",
+				"--oauth",
+				"--category",
+				"querying",
+				"--category",
+				"schema,docs",
+				"--agent",
+				"cursor",
+			],
+			{ ...runOptions(home, cwd), apiKey: false },
+		);
+		const written = JSON.parse(
+			readFileSync(join(home, ".cursor", "mcp.json"), "utf8"),
+		);
+		expect(written.mcpServers.Neon.url).toBe(
+			neonMcpUrl({ categories: ["querying", "schema", "docs"] }),
+		);
+	});
+
+	test("unknown --category fails without writing", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		const { stderr } = await testCliCommand(
+			["mcp", "--oauth", "--category", "nope", "--agent", "cursor"],
+			{ ...runOptions(home, cwd), apiKey: false, code: 1 },
+		);
+		expect(stderr).toMatch(/Unknown MCP category: "nope"/);
+		expect(existsSync(join(home, ".cursor", "mcp.json"))).toBe(false);
+	});
+
+	test("bare --category fails instead of installing", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		const { stderr } = await testCliCommand(
+			["mcp", "--oauth", "--category"],
+			{ ...runOptions(home, cwd), apiKey: false, code: 1 },
+		);
+		expect(stderr).toMatch(/--category needs a value/);
+		expect(existsSync(join(home, ".cursor", "mcp.json"))).toBe(false);
+	});
+
+	test("-y --project does not add ?projectId= from .neon", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		mkdirSync(join(cwd, ".cursor"));
+		writeFileSync(
+			join(cwd, ".neon"),
+			JSON.stringify({
+				orgId: "org-7",
+				projectId: "proj-in-org",
+			}),
+		);
+		await testCliCommand(
+			["mcp", "-y", "--project", "--oauth", "--agent", "cursor"],
+			{ ...runOptions(home, cwd), apiKey: false },
+		);
+		const written = JSON.parse(
+			readFileSync(join(cwd, ".cursor", "mcp.json"), "utf8"),
+		);
+		expect(written.mcpServers.Neon.url).toBe(NEON_MCP_URL);
+	});
+
+	test("--project-id that is not the linked project fails before minting", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		writeFileSync(
+			join(cwd, ".neon"),
+			JSON.stringify({
+				orgId: "org-7",
+				projectId: "proj-in-org",
+			}),
+		);
+		const { stderr } = await testCliCommand(
+			[
+				"mcp",
+				"--project",
+				"--project-id",
+				"proj-other",
+				"--agent",
+				"cursor",
+			],
+			{ ...runOptions(home, cwd), code: 1 },
+		);
+		expect(stderr).toMatch(
+			/--project-id proj-other is not the linked project proj-in-org/,
+		);
+		expect(stderr).not.toMatch(/Minted API key/);
+		expect(existsSync(join(cwd, ".cursor", "mcp.json"))).toBe(false);
+	});
+
+	test("reuses a Bearer then rewrites the URL query", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		await testCliCommand(
+			["mcp", "--agent", "cursor"],
+			runOptions(home, cwd),
+		);
+		const { stderr } = await testCliCommand(
+			["mcp", "--read-only", "--agent", "cursor"],
+			runOptions(home, cwd),
+		);
+		const written = JSON.parse(
+			readFileSync(join(home, ".cursor", "mcp.json"), "utf8"),
+		);
+		expect(written.mcpServers.Neon.url).toBe(
+			neonMcpUrl({ readOnly: true }),
+		);
+		expect(stderr).toMatch(/Reusing the API key/);
 		expect(stderr).not.toMatch(/Minted API key/);
 	});
 });

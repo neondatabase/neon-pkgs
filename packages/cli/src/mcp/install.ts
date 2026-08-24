@@ -6,7 +6,76 @@ import { type AgentType, agents, upsertServer } from "add-mcp";
 export const NEON_MCP_URL = "https://mcp.neon.tech/mcp";
 export const NEON_MCP_NAME = "Neon";
 
+export const NEON_MCP_CATEGORIES = [
+	"projects",
+	"branches",
+	"schema",
+	"querying",
+	"neon_auth",
+	"data_api",
+	"observability",
+	"docs",
+] as const;
+
+export type NeonMcpCategory = (typeof NEON_MCP_CATEGORIES)[number];
+
 export type McpInstallScope = "global" | "project";
+
+export type NeonMcpUrlOptions = {
+	readOnly?: boolean;
+	projectId?: string;
+	categories?: readonly string[];
+};
+
+export function isMcpCategory(value: string): value is NeonMcpCategory {
+	for (const category of NEON_MCP_CATEGORIES) {
+		if (category === value) {
+			return true;
+		}
+	}
+	return false;
+}
+
+export function parseMcpCategories(raw: readonly string[]): NeonMcpCategory[] {
+	const out: NeonMcpCategory[] = [];
+	for (const value of raw) {
+		if (!isMcpCategory(value)) {
+			throw new Error(
+				`Unknown MCP category: "${value}". Supported categories: ${NEON_MCP_CATEGORIES.join(", ")}`,
+			);
+		}
+		out.push(value);
+	}
+	return out;
+}
+
+export function isNeonMcpUrl(value: string): boolean {
+	try {
+		const url = new URL(value);
+		return (
+			url.protocol === "https:" &&
+			url.hostname === "mcp.neon.tech" &&
+			url.pathname === "/mcp"
+		);
+	} catch {
+		return false;
+	}
+}
+
+export function neonMcpUrl(options: NeonMcpUrlOptions = {}): string {
+	const url = new URL(NEON_MCP_URL);
+	if (options.readOnly === true) {
+		url.searchParams.set("readonly", "true");
+	}
+	for (const category of options.categories ?? []) {
+		url.searchParams.append("category", category);
+	}
+	const projectId = options.projectId?.trim();
+	if (projectId) {
+		url.searchParams.set("projectId", projectId);
+	}
+	return url.href;
+}
 
 export type NeonMcpAuth =
 	| { kind: "oauth" }
@@ -39,7 +108,11 @@ function recordOf(value: unknown): Record<string, unknown> | undefined {
 
 function bearerFromNeonMcpConfig(config: unknown): string | undefined {
 	const record = recordOf(config);
-	if (!record || record.url !== NEON_MCP_URL) {
+	if (
+		!record ||
+		typeof record.url !== "string" ||
+		!isNeonMcpUrl(record.url)
+	) {
 		return undefined;
 	}
 	const headers = record.headers ?? record.http_headers;
@@ -86,7 +159,7 @@ function neonApiKeyFromFile(
 			return undefined;
 		}
 		const url = neonBlock.match(/^url\s*=\s*"([^"]*)"/m)?.[1];
-		if (url !== NEON_MCP_URL) {
+		if (!url || !isNeonMcpUrl(url)) {
 			return undefined;
 		}
 		return BEARER_RE.exec(neonBlock)?.[1];
@@ -238,8 +311,10 @@ export function installNeonMcpServer(options: {
 	scope: McpInstallScope;
 	cwd?: string;
 	auth?: NeonMcpAuth;
+	url?: string;
 }): NeonMcpInstallResult {
 	const auth = options.auth ?? { kind: "oauth" };
+	const url = options.url ?? NEON_MCP_URL;
 
 	// add-mcp can write unusable HTTP entries; project installs cannot fall back to global config.
 	const unsupported = mcpUnsupportedReason(options.agent, options.scope);
@@ -251,12 +326,12 @@ export function installNeonMcpServer(options: {
 		auth.kind === "api-key"
 			? {
 					type: "http" as const,
-					url: NEON_MCP_URL,
+					url,
 					headers: {
 						Authorization: `Bearer ${auth.apiKey}`,
 					},
 				}
-			: { type: "http" as const, url: NEON_MCP_URL };
+			: { type: "http" as const, url };
 
 	const result = upsertServer(options.agent, NEON_MCP_NAME, server, {
 		local: options.scope === "project",

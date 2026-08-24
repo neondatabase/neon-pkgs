@@ -4,10 +4,16 @@ import {
 	pickAgentsInteractively,
 	resolveAgentSelection,
 } from "../utils/agent_picker.js";
+import { getCliName } from "../utils/cli_name.js";
 import { type AgentType, tryResolveAddMcpAgentId } from "./agents.js";
-import type { McpInstallScope } from "./install.js";
+import type { McpInstallScope, NeonMcpCategory } from "./install.js";
 import { detectMcpAgents, mcpInstallableAgents } from "./targets.js";
-import { type McpAuthKind, pickMcpAuth, pickMcpScope } from "./wizard.js";
+import {
+	type McpAuthKind,
+	pickMcpAuth,
+	pickMcpProjectPin,
+	pickMcpScope,
+} from "./wizard.js";
 
 export type { McpAuthKind };
 
@@ -15,6 +21,9 @@ export type McpPlan = {
 	scope: McpInstallScope;
 	agents: AgentType[];
 	auth: McpAuthKind;
+	readOnly: boolean;
+	urlProjectId: string | undefined;
+	categories: readonly NeonMcpCategory[];
 };
 
 export type ResolveMcpPlanOptions = {
@@ -24,9 +33,14 @@ export type ResolveMcpPlanOptions = {
 	yes: boolean;
 	cwd: string;
 	interactive: boolean;
+	readOnly: boolean;
+	projectId?: string;
+	categories: readonly NeonMcpCategory[];
+	linkedProjectId?: string;
 	pickScope?: () => Promise<McpInstallScope>;
 	pickAgents?: (options: PickAgentsOptions) => Promise<AgentType[]>;
 	pickAuth?: () => Promise<McpAuthKind>;
+	pickProjectPin?: (linkedProjectId: string | undefined) => Promise<boolean>;
 };
 
 export async function resolveMcpPlan(
@@ -72,5 +86,27 @@ export async function resolveMcpPlan(
 			? await (options.pickAuth ?? pickMcpAuth)()
 			: "api-key";
 
-	return { scope, agents, auth };
+	let urlProjectId = options.projectId;
+	if (urlProjectId === undefined && prompt && scope === "project") {
+		const pin = await (options.pickProjectPin ?? pickMcpProjectPin)(
+			options.linkedProjectId,
+		);
+		if (pin) {
+			if (!options.linkedProjectId) {
+				throw new Error(
+					`No Neon project linked. Run \`${getCliName()} link\` to link this directory to a project, or pass --project-id.`,
+				);
+			}
+			urlProjectId = options.linkedProjectId;
+		}
+	}
+
+	return {
+		scope,
+		agents,
+		auth,
+		readOnly: options.readOnly,
+		urlProjectId,
+		categories: options.categories,
+	};
 }

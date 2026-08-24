@@ -29,7 +29,7 @@ type Fixtures = {
 			 * a mock server in the loop.
 			 */
 			unreachableHost?: boolean;
-			/** `false` omits `--api-key` so the command runs with no CLI credential. */
+			/** Set to false to run without a CLI credential. */
 			apiKey?: string | false;
 			snapshot?: boolean;
 		},

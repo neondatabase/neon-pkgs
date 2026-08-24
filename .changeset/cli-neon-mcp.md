@@ -3,4 +3,4 @@
 "neonctl": minor
 ---
 
-Add `neon mcp` to install the Neon MCP server into coding agents. A TTY asks scope (global default), agents, API key vs OAuth, then confirms. `-y` is global, detected agents, minted API key.
+Add `neon mcp` to install the Neon MCP server into coding agents. A TTY asks scope (global default), agents, API key vs OAuth, then confirms. Project-folder installs also ask whether to pin tools to the linked project. `-y` is global, detected agents, minted write API key. `--read-only`, `--project-id` and `--category` set MCP URL query params.

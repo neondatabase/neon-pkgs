@@ -79,12 +79,31 @@ export const pickMcpAuth = async (): Promise<McpAuthKind> => {
 	return auth;
 };
 
+export const pickMcpProjectPin = async (
+	linkedProjectId: string | undefined,
+): Promise<boolean> => {
+	if (!canPickAgentsInteractively()) {
+		return false;
+	}
+	const { pin } = await prompts({
+		onState: restoreCursorOnAbort,
+		type: "confirm",
+		name: "pin",
+		message: linkedProjectId
+			? `Scope MCP tools to the linked project ${linkedProjectId}?`
+			: "Scope MCP tools to a single Neon project?",
+		initial: linkedProjectId !== undefined,
+	});
+	return pin === true;
+};
+
 export const mcpInstallSummary = (options: {
 	scope: McpInstallScope;
 	install: readonly AgentType[];
 	skipped: readonly SkippedMcpTarget[];
 	auth: McpAuthKind;
 	reuse: boolean;
+	url: string;
 }): string => {
 	const agents = options.install.map(getAgentDisplayName).join(", ");
 	const auth =
@@ -99,6 +118,7 @@ export const mcpInstallSummary = (options: {
 		`Scope: ${options.scope}`,
 		`Agents: ${agents}`,
 		`Auth: ${auth}`,
+		`URL: ${options.url}`,
 	];
 	if (options.skipped.length > 0) {
 		lines.push(
@@ -118,6 +138,7 @@ export const confirmMcpInstall = async (options: {
 	skipped: readonly SkippedMcpTarget[];
 	auth: McpAuthKind;
 	reuse: boolean;
+	url: string;
 }): Promise<boolean> => {
 	if (!canPickAgentsInteractively()) {
 		return true;

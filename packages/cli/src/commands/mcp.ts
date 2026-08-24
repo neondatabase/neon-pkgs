@@ -6,6 +6,9 @@ import {
 	existingNeonApiKey,
 	installNeonMcpServer,
 	type NeonMcpAuth,
+	type NeonMcpCategory,
+	neonMcpUrl,
+	parseMcpCategories,
 	trackedProjectMcpConfig,
 } from "../mcp/install.js";
 import { mintMcpApiKey, withdrawMintedKey } from "../mcp/mint.js";
@@ -15,7 +18,7 @@ import { confirmMcpInstall } from "../mcp/wizard.js";
 import type { CommonProps } from "../types.js";
 import { canPickAgentsInteractively } from "../utils/agent_picker.js";
 import { getCliName } from "../utils/cli_name.js";
-import { noPassthrough } from "../utils/flags.js";
+import { noPassthrough, single } from "../utils/flags.js";
 import { writer } from "../writer.js";
 
 type McpProps = CommonProps & {
@@ -23,6 +26,9 @@ type McpProps = CommonProps & {
 	project?: boolean;
 	yes?: boolean;
 	agent?: string[];
+	readOnly?: boolean;
+	projectId?: string;
+	category?: NeonMcpCategory[];
 };
 
 type McpInstallRow = {
@@ -55,7 +61,7 @@ export const builder = (argv: yargs.Argv) =>
 				type: "boolean",
 				default: false,
 				describe:
-					"Skip prompts. Defaults to global config, every detected agent and a minted account-wide API key. --project, --oauth and --agent still apply",
+					"Skip prompts. Defaults to global config, every detected agent and a minted account-wide API key. --project, --oauth, --agent, --read-only, --project-id and --category still apply",
 			},
 			agent: {
 				alias: "a",
@@ -81,6 +87,52 @@ export const builder = (argv: yargs.Argv) =>
 					});
 				},
 			},
+			"read-only": {
+				alias: "readonly",
+				type: "boolean",
+				default: false,
+				describe:
+					"Restrict MCP tools to read-only (?readonly=true). Not prompted. Does not change the minted key",
+			},
+			"project-id": {
+				type: "string",
+				describe:
+					"Pin MCP tools to one Neon project (?projectId=). Interactive asks only for a project-folder install",
+				coerce: single("project-id"),
+			},
+			category: {
+				type: "array",
+				string: true,
+				describe:
+					"MCP tool category (repeatable or comma-separated). Default: all",
+				coerce: (value: unknown): NeonMcpCategory[] => {
+					if (value === undefined) return [];
+					const list = Array.isArray(value) ? value : [value];
+					if (list.length === 0) {
+						throw new Error(
+							"--category needs a value. Pass one, or omit the flag entirely.",
+						);
+					}
+					const parts: string[] = [];
+					for (const item of list) {
+						if (typeof item !== "string" || item.trim() === "") {
+							throw new Error(
+								"--category needs a value. Pass one, or omit the flag entirely.",
+							);
+						}
+						for (const part of item.split(",")) {
+							const trimmed = part.trim();
+							if (trimmed === "") {
+								throw new Error(
+									"--category needs a value. Pass one, or omit the flag entirely.",
+								);
+							}
+							parts.push(trimmed);
+						}
+					}
+					return parseMcpCategories(parts);
+				},
+			},
 		})
 		.example("$0 mcp", "Interactive: scope, agents, auth, then confirm")
 		.example("$0 mcp -y", "Global config, detected agents, minted API key")
@@ -93,12 +145,22 @@ export const builder = (argv: yargs.Argv) =>
 			"$0 mcp --agent cursor --agent claude-code",
 			"Install into specific agents",
 		)
+		.example("$0 mcp --read-only", "Hide write tools via ?readonly=true")
+		.example(
+			"$0 mcp --project-id <id>",
+			"Pin tools to one project via ?projectId=",
+		)
+		.example(
+			"$0 mcp --category querying --category schema",
+			"Limit tools to those categories",
+		)
 		.strict()
 		.check(noPassthrough("mcp"));
 
 export const handler = async (props: McpProps) => {
 	const cwd = process.cwd();
 	const interactive = canPickAgentsInteractively() && props.yes !== true;
+	const linkedProjectId = readContextFile(props.contextFile).projectId;
 	const plan = await resolveMcpPlan({
 		project: props.project === true,
 		oauth: props.oauth === true,
@@ -106,19 +168,37 @@ export const handler = async (props: McpProps) => {
 		yes: props.yes === true,
 		cwd,
 		interactive,
+		readOnly: props.readOnly === true,
+		projectId: props.projectId,
+		categories: props.category ?? [],
+		linkedProjectId,
 	});
 	const { install, skipped } = resolveInstallTargets({
 		agents: plan.agents,
 		scope: plan.scope,
 	});
+	const url = neonMcpUrl({
+		readOnly: plan.readOnly,
+		projectId: plan.urlProjectId,
+		categories: plan.categories,
+	});
 
-	const projectId =
+	const mintProjectId =
 		plan.scope === "project" && plan.auth === "api-key"
-			? readContextFile(props.contextFile).projectId
+			? linkedProjectId
 			: undefined;
-	if (plan.scope === "project" && plan.auth === "api-key" && !projectId) {
+	if (plan.scope === "project" && plan.auth === "api-key" && !mintProjectId) {
 		throw new Error(
 			`No Neon project linked. Run \`${getCliName()} link\` to link this directory to a project.`,
+		);
+	}
+	if (
+		mintProjectId &&
+		plan.urlProjectId &&
+		mintProjectId !== plan.urlProjectId
+	) {
+		throw new Error(
+			`--project-id ${plan.urlProjectId} is not the linked project ${mintProjectId}.`,
 		);
 	}
 	if (plan.scope === "project" && plan.auth === "api-key") {
@@ -162,6 +242,7 @@ export const handler = async (props: McpProps) => {
 			skipped,
 			auth: plan.auth,
 			reuse: existing !== undefined,
+			url,
 		});
 		if (!ok) {
 			log.info("Aborted. Nothing was written.");
@@ -181,7 +262,7 @@ export const handler = async (props: McpProps) => {
 	} else {
 		minted = await mintMcpApiKey({
 			apiClient: props.apiClient,
-			projectId,
+			projectId: mintProjectId,
 		});
 		auth = { kind: "api-key", apiKey: minted.key };
 		if (!minted.projectId) {
@@ -200,6 +281,7 @@ export const handler = async (props: McpProps) => {
 			scope: plan.scope,
 			cwd,
 			auth,
+			url,
 		});
 		if (result.ok) {
 			successes += 1;

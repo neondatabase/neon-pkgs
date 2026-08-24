@@ -421,7 +421,6 @@ export const ensureAuth = async (
 		return;
 	}
 
-	// OAuth MCP installs need no Neon credential, so skip the login prompt.
 	if (isMcpOauth(props)) {
 		return;
 	}
@@ -447,7 +446,7 @@ export const ensureAuth = async (
 	// then triggers OAuth at the right time). Skip the global auth middleware.
 	const isInit = props._[0] === "init";
 
-	// Invalid MCP targets must fail without opening a browser login.
+	// The MCP handler validates targets before deciding whether authentication is required.
 	const isMcp = isMcpCommand(props);
 
 	// `auth` writes a credential rather than using one, and reads `--profile` as the

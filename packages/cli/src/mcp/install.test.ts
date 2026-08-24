@@ -14,7 +14,10 @@ import { afterEach, describe, expect, test } from "vitest";
 import {
 	existingNeonApiKey,
 	installNeonMcpServer,
+	isNeonMcpUrl,
 	NEON_MCP_URL,
+	neonMcpUrl,
+	parseMcpCategories,
 } from "./install.js";
 
 const dirs: string[] = [];
@@ -141,6 +144,66 @@ describe("installNeonMcpServer", () => {
 		expect(result.unsupported).toBe(true);
 		expect(result.error).toMatch(/project-level/i);
 	});
+
+	test("writes a custom Neon MCP URL into the config", () => {
+		const cwd = tmpProject();
+		const url = neonMcpUrl({ readOnly: true, projectId: "proj-1" });
+		const result = installNeonMcpServer({
+			agent: "cursor",
+			scope: "project",
+			cwd,
+			url,
+		});
+		expect(result.ok).toBe(true);
+		const written = JSON.parse(
+			readFileSync(join(cwd, ".cursor", "mcp.json"), "utf8"),
+		);
+		expect(written.mcpServers.Neon.url).toBe(url);
+	});
+});
+
+describe("neonMcpUrl", () => {
+	test("omits query params by default", () => {
+		expect(neonMcpUrl()).toBe(NEON_MCP_URL);
+		expect(neonMcpUrl({ readOnly: false, categories: [] })).toBe(
+			NEON_MCP_URL,
+		);
+	});
+
+	test("orders readonly, then categories, then projectId", () => {
+		expect(
+			neonMcpUrl({
+				readOnly: true,
+				projectId: "proj-1",
+				categories: ["querying", "schema"],
+			}),
+		).toBe(
+			"https://mcp.neon.tech/mcp?readonly=true&category=querying&category=schema&projectId=proj-1",
+		);
+	});
+
+	test("preserves duplicate categories", () => {
+		expect(neonMcpUrl({ categories: ["docs", "docs"] })).toBe(
+			"https://mcp.neon.tech/mcp?category=docs&category=docs",
+		);
+	});
+});
+
+describe("parseMcpCategories", () => {
+	test("rejects unknown names", () => {
+		expect(() => parseMcpCategories(["querying", "nope"])).toThrow(
+			/Unknown MCP category: "nope"/,
+		);
+	});
+});
+
+describe("isNeonMcpUrl", () => {
+	test("accepts the hosted path with query params", () => {
+		expect(isNeonMcpUrl(NEON_MCP_URL)).toBe(true);
+		expect(isNeonMcpUrl(`${NEON_MCP_URL}?readonly=true`)).toBe(true);
+		expect(isNeonMcpUrl("https://example.com/mcp")).toBe(false);
+		expect(isNeonMcpUrl("https://mcp.neon.tech/sse")).toBe(false);
+	});
 });
 
 describe("existingNeonApiKey", () => {
@@ -159,6 +222,29 @@ describe("existingNeonApiKey", () => {
 			}),
 		);
 
+		expect(
+			existingNeonApiKey({
+				agents: ["cursor"],
+				scope: "project",
+				cwd,
+			}),
+		).toBe("napi_existing");
+	});
+
+	test("reuses a Bearer when the Neon URL already has query params", () => {
+		const cwd = tmpProject();
+		mkdirSync(join(cwd, ".cursor"), { recursive: true });
+		writeFileSync(
+			join(cwd, ".cursor", "mcp.json"),
+			JSON.stringify({
+				mcpServers: {
+					Neon: {
+						url: neonMcpUrl({ readOnly: true }),
+						headers: { Authorization: "Bearer napi_existing" },
+					},
+				},
+			}),
+		);
 		expect(
 			existingNeonApiKey({
 				agents: ["cursor"],
