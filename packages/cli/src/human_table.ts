@@ -79,17 +79,6 @@ export function displayWidth(s: string): number {
 	return width;
 }
 
-export type ListLayoutMode = "one-column" | "full" | "shrink-last" | "stack";
-
-export type ListLayoutPlan = {
-	fields: readonly string[];
-	dropped: readonly string[];
-	mode: ListLayoutMode;
-	headers: string[];
-	rows: string[][];
-	widths: number[];
-};
-
 function presentFields(
 	data: readonly unknown[],
 	fields: readonly string[],
@@ -100,23 +89,6 @@ function presentFields(
 			return value !== undefined && value !== "";
 		}),
 	);
-}
-
-export function planListLayout(input: {
-	data: readonly unknown[];
-	fields: readonly string[];
-	width?: number;
-	renderColumns?: object;
-}): ListLayoutPlan | undefined {
-	const fields = presentFields(input.data, input.fields);
-	if (!fields.length) {
-		return undefined;
-	}
-	const headers = fields.map(titleCaseField);
-	const rows = input.data.map((item) =>
-		fields.map((field) => cellText(item, field, input.renderColumns)),
-	);
-	return planColumns(fields, headers, rows, input.width);
 }
 
 export function formatHumanChunk(chunk: HumanTableChunk): string {
@@ -137,14 +109,17 @@ export function formatHumanChunk(chunk: HumanTableChunk): string {
 	}
 
 	if (isList) {
-		const plan = planListLayout({
-			data: arrayData,
-			fields: chunk.fields,
-			width: chunk.width,
-			renderColumns: chunk.renderColumns,
-		});
-		if (plan) {
-			out += formatFromPlan(plan, chunk.width) + "\n";
+		const fields = presentFields(arrayData, chunk.fields);
+		if (fields.length) {
+			const headers = fields.map(titleCaseField);
+			const rows = arrayData.map((item) =>
+				fields.map((field) =>
+					cellText(item, field, chunk.renderColumns),
+				),
+			);
+			out +=
+				formatColumns(headers, rows, naturalWidths(headers, rows)) +
+				"\n";
 		}
 		return out;
 	}
@@ -169,120 +144,6 @@ function formatTitle(title: string, colorTitle: boolean): string {
 	return colorTitle ? chalk.bold(title) : title;
 }
 
-function planColumns(
-	fields: readonly string[],
-	headers: string[],
-	rows: string[][],
-	width: number | undefined,
-): ListLayoutPlan {
-	if (headers.length === 1) {
-		return {
-			fields,
-			dropped: [],
-			mode: "one-column",
-			headers,
-			rows,
-			widths: naturalWidths(headers, rows),
-		};
-	}
-	if (width === undefined) {
-		return {
-			fields,
-			dropped: [],
-			mode: "full",
-			headers,
-			rows,
-			widths: naturalWidths(headers, rows),
-		};
-	}
-	for (let n = headers.length; n >= 2; n--) {
-		const subsetFields = fields.slice(0, n);
-		const subsetHeaders = headers.slice(0, n);
-		const subsetRows = rows.map((row) => row.slice(0, n));
-		const natural = naturalWidths(subsetHeaders, subsetRows);
-		const dropped = fields.slice(n);
-		if (rowWidth(natural) <= width) {
-			return {
-				fields: subsetFields,
-				dropped,
-				mode: "full",
-				headers: subsetHeaders,
-				rows: subsetRows,
-				widths: natural,
-			};
-		}
-		const fitted = tryFit(subsetHeaders, subsetRows, width);
-		if (fitted === undefined) {
-			continue;
-		}
-		const onlyLastShrunk = natural
-			.slice(0, n - 1)
-			.every((col, i) => fitted[i] === col);
-		if (!onlyLastShrunk) {
-			continue;
-		}
-		return {
-			fields: subsetFields,
-			dropped,
-			mode: "shrink-last",
-			headers: subsetHeaders,
-			rows: subsetRows,
-			widths: fitted,
-		};
-	}
-	return {
-		fields,
-		dropped: [],
-		mode: "stack",
-		headers,
-		rows,
-		widths: [],
-	};
-}
-
-function formatFromPlan(
-	plan: ListLayoutPlan,
-	width: number | undefined,
-): string {
-	switch (plan.mode) {
-		case "one-column":
-			return formatOneColumn(
-				plan.headers[0] ?? "",
-				plan.rows.map((row) => row[0] ?? ""),
-			);
-		case "stack":
-			return formatStacked(plan.headers, plan.rows, width);
-		case "full":
-		case "shrink-last":
-			return formatColumns(
-				plan.headers.map((cell, i) =>
-					truncateTo(cell, plan.widths[i] ?? 0),
-				),
-				plan.rows.map((row) =>
-					row.map((cell, i) => truncateTo(cell, plan.widths[i] ?? 0)),
-				),
-				plan.widths,
-			);
-	}
-}
-
-function rowWidth(widths: number[]): number {
-	if (widths.length === 0) {
-		return 0;
-	}
-	return (
-		widths.reduce((sum, col) => sum + col, 0) + (widths.length - 1) * GUTTER
-	);
-}
-
-function formatOneColumn(header: string, values: string[]): string {
-	const lines = [chalk.green(header)];
-	for (const value of values) {
-		lines.push(value);
-	}
-	return lines.join("\n");
-}
-
 function formatColumns(
 	headers: string[],
 	rows: string[][],
@@ -292,9 +153,7 @@ function formatColumns(
 		cells
 			.map((cell, i) => {
 				const width = widths[i] ?? 0;
-				return i === cells.length - 1
-					? truncateTo(cell, width)
-					: padEndWidth(cell, width);
+				return i === cells.length - 1 ? cell : padEndWidth(cell, width);
 			})
 			.join(" ".repeat(GUTTER))
 			.trimEnd();
@@ -340,40 +199,6 @@ function stackedLine(
 	labelWidth: number,
 ): string {
 	return `${padEndWidth(header, labelWidth)}${" ".repeat(GUTTER)}${value}`;
-}
-
-function tryFit(
-	headers: string[],
-	rows: string[][],
-	width: number,
-): number[] | undefined {
-	const n = headers.length;
-	if (n === 0) {
-		return [];
-	}
-	const gutters = (n - 1) * GUTTER;
-	if (width <= gutters) {
-		return undefined;
-	}
-	const budget = width - gutters;
-	if (budget < n * MIN_COL) {
-		return undefined;
-	}
-	const widths = naturalWidths(headers, rows);
-	let overflow = widths.reduce((sum, col) => sum + col, 0) - budget;
-	if (overflow <= 0) {
-		return widths;
-	}
-	for (let i = n - 1; i >= 0 && overflow > 0; i--) {
-		const current = widths[i] ?? 0;
-		const take = Math.min(Math.max(current - MIN_COL, 0), overflow);
-		widths[i] = current - take;
-		overflow -= take;
-	}
-	if (overflow > 0) {
-		return undefined;
-	}
-	return widths;
 }
 
 function naturalWidths(headers: string[], rows: string[][]): number[] {

@@ -5,7 +5,6 @@ import {
 	displayWidth,
 	formatHumanChunk,
 	parseColumns,
-	planListLayout,
 	resolveOutputWidth,
 } from "./human_table.js";
 
@@ -102,16 +101,18 @@ describe("displayWidth", () => {
 		expect(displayWidth("\ua960\ua960\ua960")).toBe(6);
 	});
 
-	it("does not emit a column row wider than the TTY for Hangul Jamo Extended-A", () => {
+	it("keeps wide Hangul cells in full on one list row", () => {
+		const name = "\ua960\ua960\ua960\ua960\ua960";
 		const out = formatHumanChunk({
-			data: [{ id: "x", name: "\ua960\ua960\ua960\ua960\ua960" }],
+			data: [{ id: "x", name }],
 			fields: ["id", "name"],
 			width: 10,
 			colorTitle: false,
 		});
-		for (const line of out.trimEnd().split("\n")) {
-			expect(displayWidth(line)).toBeLessThanOrEqual(10);
-		}
+		const lines = out.trimEnd().split("\n");
+		expect(lines).toHaveLength(2);
+		expect(plain(out)).toContain(name);
+		expect(displayWidth(lines[1] ?? "")).toBeGreaterThan(10);
 	});
 
 	it("does not pad empty trailing cells", () => {
@@ -154,33 +155,32 @@ describe("formatHumanChunk", () => {
 		expect(out).not.toMatch(BOX);
 	});
 
-	it("drops trailing columns so a list fits", () => {
+	it("prints every list column at full width even when the TTY is narrower", () => {
+		const row = {
+			id: "wandering-haze-25754674",
+			name: "claimable-neon-local-state",
+			region: "aws-us-east-2",
+			created: "2026-08-11T16:42:59Z",
+		};
 		const out = formatHumanChunk({
-			data: [
-				{
-					id: "p1",
-					name: "demo",
-					region: "us-east",
-					created: "2026-08-11T16:42:59Z",
-				},
-			],
+			data: [row],
 			fields: ["id", "name", "region", "created"],
 			width: 17,
 			colorTitle: false,
 		});
 		expect(out).not.toMatch(BOX);
-		for (const line of out.trimEnd().split("\n")) {
-			expect(displayWidth(line)).toBeLessThanOrEqual(17);
-		}
-		expect(plain(out)).toMatch(/Id/);
-		expect(plain(out)).toMatch(/Name/);
-		expect(plain(out)).toMatch(/Region/);
-		expect(plain(out)).not.toContain("2026-08-11T16:42:59Z");
-		expect(plain(out)).not.toMatch(/Created/);
+		expect(plain(out)).toContain(row.id);
+		expect(plain(out)).toContain(row.name);
+		expect(plain(out)).toContain(row.region);
+		expect(plain(out)).toContain(row.created);
+		expect(plain(out)).not.toContain("...");
+		const lines = plain(out).trimEnd().split("\n");
+		expect(lines).toHaveLength(2);
+		expect(displayWidth(lines[1] ?? "")).toBeGreaterThan(17);
 	});
 
-	it("drops trailing columns before shrinking remaining cells to ...", () => {
-		const out = formatHumanChunk({
+	it("renders a list the same at every TTY width", () => {
+		const chunk = {
 			data: [
 				{
 					id: "wandering-haze-25754674",
@@ -190,74 +190,12 @@ describe("formatHumanChunk", () => {
 				},
 			],
 			fields: ["id", "name", "region", "created"],
-			width: 40,
 			colorTitle: false,
-		});
-		const text = plain(out);
-		expect(text).not.toMatch(/Region|Created|aws-us-east-2|2026-08-11/);
-		expect(text).toMatch(/Id/);
-		expect(text).toMatch(/Name/);
-		expect(
-			text
-				.split("\n")
-				.some((line) => /^\S+\s+\.\.\.\s+\.\.\./.test(line)),
-		).toBe(false);
-		for (const line of out.trimEnd().split("\n")) {
-			expect(displayWidth(line)).toBeLessThanOrEqual(40);
-		}
-	});
-
-	it("truncates a cell that still overflows after dropping", () => {
-		const out = formatHumanChunk({
-			data: [
-				{
-					id: "wandering-haze-25754674",
-					name: "claimable-neon-local-state",
-				},
-			],
-			fields: ["id", "name"],
-			width: 30,
-			colorTitle: false,
-		});
-		expect(out).toContain("...");
-		for (const line of out.trimEnd().split("\n")) {
-			expect(displayWidth(line)).toBeLessThanOrEqual(30);
-		}
-	});
-
-	it("stacks two columns rather than shrinking the first", () => {
-		const name = "test_branch_with_autoscaling_extra";
-		const id = "br-protected-branch-123456";
-		const out = formatHumanChunk({
-			data: [{ name, id }],
-			fields: ["name", "id"],
-			width: 30,
-			colorTitle: false,
-		});
-		expect(plain(out)).toContain(name);
-		expect(plain(out)).toContain(id);
-		expect(plain(out)).not.toContain("...");
-		expect(plain(out).trim().split("\n")[0]).toMatch(/^Name/);
-	});
-
-	it("stacks a list and restores every field when two columns will not fit", () => {
-		const out = formatHumanChunk({
-			data: [
-				{
-					id: "wandering-haze-25754674",
-					name: "claimable-neon-local-state",
-				},
-			],
-			fields: ["id", "name"],
-			width: 7,
-			colorTitle: false,
-		});
-		const lines = plain(out).trim().split("\n");
-		expect(lines[0]).toMatch(/^Id/);
-		expect(lines.length).toBe(2);
-		expect(lines[1]).not.toMatch(/^Id/);
-		expect(plain(out)).toContain("wandering-haze-25754674");
-		expect(plain(out)).toContain("claimable-neon-local-state");
+		};
+		const unbounded = formatHumanChunk(chunk);
+		expect(formatHumanChunk({ ...chunk, width: 40 })).toBe(unbounded);
+		expect(formatHumanChunk({ ...chunk, width: 80 })).toBe(unbounded);
+		expect(formatHumanChunk({ ...chunk, width: 120 })).toBe(unbounded);
 	});
 
 	it("does not truncate a stacked host or password", () => {
@@ -314,55 +252,6 @@ describe("formatHumanChunk", () => {
 			colorTitle: false,
 		});
 		expect(plain(out)).toBe("Value\npostgresql://very-long.example\n");
-	});
-
-	it("plans a shrink-last list without dropping the last field", () => {
-		const plan = planListLayout({
-			data: [
-				{
-					timestamp: "2026-08-17T15:04:05.123Z",
-					source: "postgres",
-					severity: "ERROR",
-					message:
-						'ERROR: relation "orders" does not exist at character 15',
-				},
-			],
-			fields: ["timestamp", "source", "severity", "message"],
-			width: 80,
-		});
-		expect(plan?.mode).toBe("shrink-last");
-		expect(plan?.fields).toEqual([
-			"timestamp",
-			"source",
-			"severity",
-			"message",
-		]);
-		expect(plan?.dropped).toEqual([]);
-	});
-
-	it("truncates the last column before dropping it", () => {
-		const message =
-			'ERROR: relation "orders" does not exist at character 15';
-		const out = formatHumanChunk({
-			data: [
-				{
-					timestamp: "2026-08-17T15:04:05.123Z",
-					source: "postgres",
-					severity: "ERROR",
-					message,
-				},
-			],
-			fields: ["timestamp", "source", "severity", "message"],
-			width: 80,
-			colorTitle: false,
-		});
-		const text = plain(out);
-		expect(text).toMatch(/Message/);
-		expect(text).toContain("...");
-		expect(text).not.toContain(message);
-		for (const line of out.trimEnd().split("\n")) {
-			expect(displayWidth(line)).toBeLessThanOrEqual(80);
-		}
 	});
 
 	it("flattens arrays, objects, and newlines, including renderColumns", () => {

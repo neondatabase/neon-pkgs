@@ -18,24 +18,15 @@ layout there, not in a command.
 
 | Input | Format |
 | --- | --- |
-| An array (a list) | Space-padded columns, two-space gutter, Title Case header |
+| An array (a list) | Space-padded columns, two-space gutter, Title Case header. Every present field, full width, one line per row. |
 | A single object | Stacked `Label  value`. The value is not truncated. |
 | A one-column list | The header, then one value per line. Values are not truncated. |
 
-When the process knows the TTY width (`stdout.columns`, or `COLUMNS` when
-writing to stdout):
-
-1. Try every field as columns at full width.
-2. If that row is too wide, shrink only the last column with `...`.
-3. If it still does not fit, drop the last field and go back to step 1. Keep at
-   least two columns. Field order is important-first on purpose. Record a new
-   list's fields in `src/list_tables.test.ts`. That file is the 80- and
-   120-column column contract.
-4. If two columns still overflow after shrinking the last column, stack the
-   chunk. The first column is not truncated. Stacking shows every field again.
-
-With no width (piped stdout, a test `PassThrough`), print every field at full
-length. Do not guess `process.stdout.columns` for a different stream.
+A list does not drop, shrink, or stack columns to fit the TTY. If a row is
+wider than the terminal, the terminal wraps that line; widening the terminal
+unwraps it. Width (`stdout.columns`, or `COLUMNS` when writing to stdout) is
+used only to shrink stacked labels. Do not guess `process.stdout.columns` for a
+different stream.
 
 Cells are one line. Newlines become spaces. Arrays join with `, `. Objects are
 compact JSON. `renderColumns` goes through the same flattening.
