@@ -2,7 +2,6 @@ import { detectProjectAgents } from "add-mcp";
 
 import {
 	type AgentType,
-	agentSupportsProjectMcp,
 	detectInstalledAgents,
 	listMcpAgentIds,
 	resolveAddMcpAgentId,
@@ -30,15 +29,11 @@ export async function detectMcpAgents(options: {
 	scope: McpInstallScope;
 	cwd: string;
 }): Promise<AgentType[]> {
-	const detected = await detectInstalledAgents();
-	const requested =
+	const detected =
 		options.scope === "project"
-			? uniqueAgentIds([
-					...detected.filter(agentSupportsProjectMcp),
-					...detectProjectAgents(options.cwd),
-				])
-			: detected;
-	return requested.filter(
+			? detectProjectAgents(options.cwd)
+			: await detectInstalledAgents();
+	return uniqueAgentIds(detected).filter(
 		(id) => mcpUnsupportedReason(id, options.scope) === undefined,
 	);
 }

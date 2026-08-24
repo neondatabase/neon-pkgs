@@ -727,22 +727,24 @@ That message reports where parsing stopped and nothing more. `--data` carries wh
 `neon mcp` writes the hosted Neon MCP server (`https://mcp.neon.tech/mcp`) into coding-agent config files.
 
 ```bash
-# Interactive picker on a TTY. Detected agents are pre-selected.
-# In CI, installs into every detected agent.
+# Interactive: global or project, then agents, then API key or OAuth, then confirm.
 $ neon mcp
+
+# Skip prompts. Global config, every globally detected agent, minted API key.
+$ neon mcp -y
 
 # OAuth: no API key minted. The agent prompts for Neon sign-in on first use.
 $ neon mcp --oauth
 
-# Project-level config and a project-scoped key, from the linked `.neon` project.
+# Project-level config. A minted key is limited to the linked `.neon` project.
 $ neon mcp --project
 
 $ neon mcp --agent cursor --agent claude-code
 ```
 
-The default mints an account-wide API key (or reuses the Bearer already configured for Neon at `https://mcp.neon.tech/mcp`) and writes it into each selected agent's config. That key reaches everything the account can, in every organization. Revoke it with `neon api-keys revoke <id>`. `--oauth` writes the URL with no `Authorization` header; the agent signs in on first use. `--project` writes into the project config (`.cursor/mcp.json` and similar) and mints a key limited to the linked project.
+On a TTY, the command asks for scope (global is the default), then agents (detected ones start selected: globally installed agents, or project-folder markers such as `.cursor` when the scope is project), then API key vs OAuth, then a summary to confirm before it writes. `-y` skips those questions. `--project`, `--oauth`, and `--agent` skip the question they answer and still apply with `-y`.
 
-`--agent` skips the picker.
+The default mints an account-wide API key (or reuses the Bearer already configured for Neon at `https://mcp.neon.tech/mcp`) and writes it into each selected agent's config. That key reaches everything the account can, in every organization. Revoke it with `neon api-keys revoke <id>`. `--oauth` writes the URL with no `Authorization` header; the agent signs in on first use. `--project` writes into the project config (`.cursor/mcp.json` and similar).
 
 ## Snapshots (`snapshots`)
 

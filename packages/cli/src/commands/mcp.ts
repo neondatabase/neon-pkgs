@@ -2,25 +2,18 @@ import type yargs from "yargs";
 
 import { readContextFile } from "../context.js";
 import { log } from "../log.js";
-import { tryResolveAddMcpAgentId } from "../mcp/agents.js";
 import {
 	existingNeonApiKey,
 	installNeonMcpServer,
-	type McpInstallScope,
 	type NeonMcpAuth,
 	trackedProjectMcpConfig,
 } from "../mcp/install.js";
 import { mintMcpApiKey, withdrawMintedKey } from "../mcp/mint.js";
-import {
-	detectMcpAgents,
-	mcpInstallableAgents,
-	resolveInstallTargets,
-} from "../mcp/targets.js";
+import { resolveMcpPlan } from "../mcp/plan.js";
+import { resolveInstallTargets } from "../mcp/targets.js";
+import { confirmMcpInstall } from "../mcp/wizard.js";
 import type { CommonProps } from "../types.js";
-import {
-	agentChoicesFrom,
-	resolveAgentSelection,
-} from "../utils/agent_picker.js";
+import { canPickAgentsInteractively } from "../utils/agent_picker.js";
 import { getCliName } from "../utils/cli_name.js";
 import { noPassthrough } from "../utils/flags.js";
 import { writer } from "../writer.js";
@@ -28,6 +21,7 @@ import { writer } from "../writer.js";
 type McpProps = CommonProps & {
 	oauth?: boolean;
 	project?: boolean;
+	yes?: boolean;
 	agent?: string[];
 };
 
@@ -48,20 +42,27 @@ export const builder = (argv: yargs.Argv) =>
 				type: "boolean",
 				default: false,
 				describe:
-					"Write the server URL only. The agent prompts for Neon sign-in on first use. No CLI login, no API key minted",
+					"Write the server URL only. The agent prompts for Neon sign-in on first use. No CLI login, no API key minted. Skips the auth question",
 			},
 			project: {
 				type: "boolean",
 				default: false,
 				describe:
-					"Write project-level MCP config and mint a project-scoped API key from the linked .neon project",
+					"Write project-level MCP config. Skips the scope question. A minted key is limited to the linked .neon project",
+			},
+			yes: {
+				alias: "y",
+				type: "boolean",
+				default: false,
+				describe:
+					"Skip prompts. Defaults to global config, every detected agent, and a minted API key. --project, --oauth, and --agent still apply",
 			},
 			agent: {
 				alias: "a",
 				type: "array",
 				string: true,
 				describe:
-					"Coding agent to install into (repeatable). Interactive picker when omitted; detected agents in CI",
+					"Coding agent to install into (repeatable). Skips the agent picker",
 				coerce: (value: unknown): string[] => {
 					if (value === undefined) return [];
 					const list = Array.isArray(value) ? value : [value];
@@ -76,18 +77,13 @@ export const builder = (argv: yargs.Argv) =>
 				},
 			},
 		})
-		.example(
-			"$0 mcp",
-			"Pick agents (or detected agents in CI), minting an API key",
-		)
+		.example("$0 mcp", "Interactive: scope, agents, auth, then confirm")
+		.example("$0 mcp -y", "Global config, detected agents, minted API key")
 		.example(
 			"$0 mcp --oauth",
 			"Install with OAuth; the agent signs in on first use",
 		)
-		.example(
-			"$0 mcp --project",
-			"Write project config and mint a project-scoped key",
-		)
+		.example("$0 mcp --project", "Write project-level config")
 		.example(
 			"$0 mcp --agent cursor --agent claude-code",
 			"Install into specific agents",
@@ -96,43 +92,31 @@ export const builder = (argv: yargs.Argv) =>
 		.check(noPassthrough("mcp"));
 
 export const handler = async (props: McpProps) => {
-	const scope: McpInstallScope = props.project ? "project" : "global";
 	const cwd = process.cwd();
-	const available = mcpInstallableAgents(scope);
-	const detected = await detectMcpAgents({ scope, cwd });
-	const selected = await resolveAgentSelection({
-		specified: props.agent ?? [],
-		choices: agentChoicesFrom(available, detected),
-		detected,
-		message:
-			"Which coding agents should get the Neon MCP server? (space to toggle, enter to confirm)",
-		nonInteractiveMessage: `No coding agents detected. Pass --agent <name>. Supported agents: ${available.join(", ")}`,
-		resolveSpecified: (raw) => {
-			const id = tryResolveAddMcpAgentId(raw);
-			if (!id) {
-				throw new Error(
-					`Unknown agent: "${raw}". Supported agents: ${available.join(", ")}`,
-				);
-			}
-			return id;
-		},
+	const interactive = canPickAgentsInteractively() && props.yes !== true;
+	const plan = await resolveMcpPlan({
+		project: props.project === true,
+		oauth: props.oauth === true,
+		agents: props.agent ?? [],
+		yes: props.yes === true,
+		cwd,
+		interactive,
 	});
 	const { install, skipped } = resolveInstallTargets({
-		agents: selected,
-		scope,
+		agents: plan.agents,
+		scope: plan.scope,
 	});
 
-	const oauth = props.oauth === true;
 	const projectId =
-		props.project && !oauth
+		plan.scope === "project" && plan.auth === "api-key"
 			? readContextFile(props.contextFile).projectId
 			: undefined;
-	if (props.project && !oauth && !projectId) {
+	if (plan.scope === "project" && plan.auth === "api-key" && !projectId) {
 		throw new Error(
 			`No Neon project linked. Run \`${getCliName()} link\` to link this directory to a project.`,
 		);
 	}
-	if (props.project && !oauth) {
+	if (plan.scope === "project" && plan.auth === "api-key") {
 		const tracked = trackedProjectMcpConfig({ agents: install, cwd });
 		if (tracked) {
 			throw new Error(
@@ -141,37 +125,54 @@ export const handler = async (props: McpProps) => {
 		}
 	}
 
+	const existing =
+		plan.auth === "api-key"
+			? existingNeonApiKey({
+					agents: install,
+					scope: plan.scope,
+					cwd,
+				})
+			: undefined;
+	if (plan.auth === "api-key" && !existing) {
+		if (!props.apiClient || !props.apiKey) {
+			throw new Error(
+				`Authentication required. Run \`${getCliName()} auth\`, pass --api-key, or use --oauth to install without a Neon credential.`,
+			);
+		}
+	}
+
+	if (interactive) {
+		const ok = await confirmMcpInstall({
+			scope: plan.scope,
+			install,
+			skipped,
+			auth: plan.auth,
+			reuse: existing !== undefined,
+		});
+		if (!ok) {
+			throw new Error("Aborted. Nothing was written.");
+		}
+	}
+
 	let auth: NeonMcpAuth;
 	let minted: Awaited<ReturnType<typeof mintMcpApiKey>> | undefined;
-	if (oauth) {
+	if (plan.auth === "oauth") {
 		auth = { kind: "oauth" };
+	} else if (existing) {
+		auth = { kind: "api-key", apiKey: existing };
+		log.info(
+			"Reusing the API key already configured for the Neon MCP server.",
+		);
 	} else {
-		const existing = existingNeonApiKey({
-			agents: install,
-			scope,
-			cwd,
+		minted = await mintMcpApiKey({
+			apiClient: props.apiClient,
+			projectId,
 		});
-		if (existing) {
-			auth = { kind: "api-key", apiKey: existing };
-			log.info(
-				"Reusing the API key already configured for the Neon MCP server.",
+		auth = { kind: "api-key", apiKey: minted.key };
+		if (!minted.projectId) {
+			log.warning(
+				"This key reaches everything your account can, in every organization.",
 			);
-		} else {
-			if (!props.apiClient || !props.apiKey) {
-				throw new Error(
-					`Authentication required. Run \`${getCliName()} auth\`, pass --api-key, or use --oauth to install without a Neon credential.`,
-				);
-			}
-			minted = await mintMcpApiKey({
-				apiClient: props.apiClient,
-				projectId,
-			});
-			auth = { kind: "api-key", apiKey: minted.key };
-			if (!minted.projectId) {
-				log.warning(
-					"This key reaches everything your account can, in every organization.",
-				);
-			}
 		}
 	}
 
@@ -181,7 +182,7 @@ export const handler = async (props: McpProps) => {
 	for (const agent of install) {
 		const result = installNeonMcpServer({
 			agent,
-			scope,
+			scope: plan.scope,
 			cwd,
 			auth,
 		});
@@ -240,7 +241,7 @@ export const handler = async (props: McpProps) => {
 		);
 	}
 
-	if (oauth) {
+	if (plan.auth === "oauth") {
 		log.info("The agent will prompt for Neon sign-in on first use.");
 	}
 

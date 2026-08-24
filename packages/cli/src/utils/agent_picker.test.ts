@@ -120,6 +120,18 @@ describe("resolveAgentSelection", () => {
 		expect(result).toEqual(["cursor", "claude-code"]);
 	});
 
+	test("interactive: false uses detected agents and skips an omitted picker", async () => {
+		const result = await resolveAgentSelection({
+			specified: [],
+			choices,
+			detected: ["cursor"],
+			message: "pick",
+			nonInteractiveMessage: "pass --agent",
+			interactive: false,
+		});
+		expect(result).toEqual(["cursor"]);
+	});
+
 	test("throws the caller message when nothing is detected and there is no TTY", async () => {
 		await expect(
 			resolveAgentSelection({

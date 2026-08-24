@@ -183,7 +183,57 @@ describe("neon mcp", () => {
 		expect(stderr).not.toMatch(/Minted API key/);
 	});
 
-	test("detects a globally installed agent for --project in a fresh directory", async ({
+	test("bare mcp in CI installs globally into detected agents", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		const { stdout } = await testCliCommand(["mcp"], runOptions(home, cwd));
+		expect(
+			readFileSync(join(home, ".cursor", "mcp.json"), "utf8"),
+		).toContain("mcp.neon.tech");
+		expect(stdout).toContain("installed");
+	});
+
+	test("-y installs globally into detected agents", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		const { stdout, stderr } = await testCliCommand(
+			["mcp", "-y"],
+			runOptions(home, cwd),
+		);
+		const written = JSON.parse(
+			readFileSync(join(home, ".cursor", "mcp.json"), "utf8"),
+		);
+		expect(written.mcpServers.Neon).toMatchObject({
+			url: NEON_MCP_URL,
+			headers: { Authorization: `Bearer ${SECRET}` },
+		});
+		expect(stdout).toContain("cursor");
+		expect(stdout).toContain("installed");
+		expect(stderr).toMatch(/Minted API key/);
+		assertNoSecret(stdout, stderr);
+	});
+
+	test("-y --project detects agents from the project folder", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		mkdirSync(join(cwd, ".cursor"));
+		writeFileSync(
+			join(cwd, ".neon"),
+			JSON.stringify({
+				orgId: "org-7",
+				projectId: "proj-in-org",
+			}),
+		);
+		await testCliCommand(["mcp", "-y", "--project"], runOptions(home, cwd));
+		expect(
+			readFileSync(join(cwd, ".cursor", "mcp.json"), "utf8"),
+		).toContain("mcp.neon.tech");
+	});
+
+	test("-y --project does not use a global install as project detection", async ({
 		testCliCommand,
 	}) => {
 		const { home, cwd } = scratch();
@@ -194,10 +244,43 @@ describe("neon mcp", () => {
 				projectId: "proj-in-org",
 			}),
 		);
-		await testCliCommand(["mcp", "--project"], runOptions(home, cwd));
-		expect(
+		const { stderr } = await testCliCommand(["mcp", "-y", "--project"], {
+			...runOptions(home, cwd),
+			code: 1,
+		});
+		expect(stderr).toMatch(/No coding agents detected in this project/);
+		expect(stderr).not.toMatch(/Minted API key/);
+	});
+
+	test("-y --project --oauth --agent cursor does not need a linked project", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		const { stdout, stderr } = await testCliCommand(
+			["mcp", "-y", "--project", "--oauth", "--agent", "cursor"],
+			{ ...runOptions(home, cwd), apiKey: false },
+		);
+		const written = JSON.parse(
 			readFileSync(join(cwd, ".cursor", "mcp.json"), "utf8"),
-		).toContain("mcp.neon.tech");
+		);
+		expect(written.mcpServers.Neon).toMatchObject({ url: NEON_MCP_URL });
+		expect(written.mcpServers.Neon.headers).toBeUndefined();
+		expect(stderr).not.toMatch(/Minted API key/);
+		expect(stdout).toContain("installed");
+		assertNoSecret(stdout, stderr);
+	});
+
+	test("--project --agent not-an-agent fails before complaining about .neon", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		const { stderr } = await testCliCommand(
+			["mcp", "--project", "--agent", "not-an-agent"],
+			{ ...runOptions(home, cwd), code: 1 },
+		);
+		expect(stderr).toMatch(/Unknown agent: "not-an-agent"/);
+		expect(stderr).not.toMatch(/No Neon project linked/);
+		expect(stderr).not.toMatch(/Minted API key/);
 	});
 
 	test("unknown --agent fails without minting", async ({

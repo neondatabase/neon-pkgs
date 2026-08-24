@@ -28,6 +28,7 @@ export type ResolveAgentSelectionOptions = {
 	nonInteractiveMessage: string;
 	resolveSpecified?: (raw: string) => AgentType;
 	pick?: (options: PickAgentsOptions) => Promise<AgentType[]>;
+	interactive?: boolean;
 };
 
 export const canPickAgentsInteractively = (): boolean =>
@@ -93,7 +94,9 @@ export const resolveAgentSelection = async (
 
 	const pick =
 		options.pick ??
-		(canPickAgentsInteractively() ? pickAgentsInteractively : undefined);
+		((options.interactive ?? canPickAgentsInteractively())
+			? pickAgentsInteractively
+			: undefined);
 	if (pick) {
 		const selected = await pick({
 			message: options.message,

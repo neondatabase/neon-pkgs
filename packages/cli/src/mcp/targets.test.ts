@@ -1,6 +1,9 @@
-import { describe, expect, test } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, test } from "vitest";
 
-import { resolveInstallTargets } from "./targets.js";
+import { detectMcpAgents, resolveInstallTargets } from "./targets.js";
 
 describe("resolveInstallTargets", () => {
 	test("dedupes aliases that resolve to the same client", () => {
@@ -46,5 +49,30 @@ describe("resolveInstallTargets", () => {
 			"claude-desktop",
 		]);
 		expect(result.skipped[0]?.error).toMatch(/Connectors/i);
+	});
+});
+
+describe("detectMcpAgents", () => {
+	const dirs: string[] = [];
+
+	afterEach(() => {
+		for (const dir of dirs.splice(0)) {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test("project scope detects from the project folder", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-mcp-detect-"));
+		dirs.push(cwd);
+		mkdirSync(join(cwd, ".cursor"));
+		expect(await detectMcpAgents({ scope: "project", cwd })).toContain(
+			"cursor",
+		);
+	});
+
+	test("project scope ignores a folder with no agent markers", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-mcp-detect-empty-"));
+		dirs.push(cwd);
+		expect(await detectMcpAgents({ scope: "project", cwd })).toEqual([]);
 	});
 });
