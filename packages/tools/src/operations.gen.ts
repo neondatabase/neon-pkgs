@@ -145,6 +145,7 @@ export const operationIds = [
 	"revokeCredential",
 	"revokeOrgApiKey",
 	"revokePermissionFromProject",
+	"sendNeonAuthEmailProviderTest",
 	"sendNeonAuthTestEmail",
 	"setDefaultProjectBranch",
 	"setOrganizationSpendingLimit",
@@ -4483,13 +4484,45 @@ export const operationFactories = {
 			}),
 			client,
 		),
+	"sendNeonAuthEmailProviderTest": (client: Client) =>
+		bindOperation(
+			defineOperation({
+				operationId: "sendNeonAuthEmailProviderTest",
+				id: "send_neon_auth_email_provider_test",
+				title: "Send test email using the saved email provider",
+				description: "Sends a test email using the branch's already-saved custom SMTP configuration. Only the\n`recipient_email` is provided — the stored SMTP settings and password are used server-side,\nso the caller does not need to re-supply (or be able to read) the password. This avoids the\nGET response's masked password being sent back, which would fail SMTP authentication.\n\nRequires a configured custom SMTP provider on a Better Auth integration. A shared provider,\na missing configuration, or a non-Better-Auth integration is rejected.\n",
+				inputSchema: z.strictObject({
+	"project_id": zod.zSendNeonAuthEmailProviderTestPath.shape["project_id"],
+	"branch_id": zod.zSendNeonAuthEmailProviderTestPath.shape["branch_id"],
+	"recipient_email": zod.zSendNeonAuthEmailProviderTestBody.shape["recipient_email"],
+}),
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				requiresApproval: true,
+				metadata: {
+					method: "POST",
+					path: "/projects/{project_id}/branches/{branch_id}/auth/email_provider/test",
+					stability: "beta",
+					deprecated: false,
+					tags: ["Auth"],
+				},
+				invoke: (client, input, signal) =>
+					raw.sendNeonAuthEmailProviderTest({
+			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"] }, true),
+			body: optionalGroup({ "recipient_email": input["recipient_email"] }, true),
+			client,
+			signal,
+			throwOnError: true,
+		}),
+			}),
+			client,
+		),
 	"sendNeonAuthTestEmail": (client: Client) =>
 		bindOperation(
 			defineOperation({
 				operationId: "sendNeonAuthTestEmail",
 				id: "send_neon_auth_test_email",
 				title: "Send test email",
-				description: "Sends a test email using the configured email server settings to verify SMTP connectivity and credentials.\nThe request body must include the SMTP server settings\n(`host`, `port`, `username`, `password`, `sender_email`, `sender_name`) and the `recipient_email` address.\n",
+				description: "Sends a test email using the SMTP server settings supplied in the request body to verify connectivity and credentials.\nThe request body must include the full SMTP server settings\n(`host`, `port`, `username`, `password`, `sender_email`, `sender_name`) and the `recipient_email` address.\n\nDeprecated: to test a branch's already-saved configuration, use `sendNeonAuthEmailProviderTest`, which\nreuses the stored SMTP password server-side so the caller never has to re-supply (or be able to read) it.\nThis endpoint remains available for testing an unsaved full configuration and for non-Better-Auth providers.\n",
 				inputSchema: z.strictObject({
 	"project_id": zod.zSendNeonAuthTestEmailPath.shape["project_id"],
 	"branch_id": zod.zSendNeonAuthTestEmailPath.shape["branch_id"],
@@ -4507,7 +4540,7 @@ export const operationFactories = {
 					method: "POST",
 					path: "/projects/{project_id}/branches/{branch_id}/auth/send_test_email",
 					stability: "beta",
-					deprecated: false,
+					deprecated: true,
 					tags: ["Auth"],
 				},
 				invoke: (client, input, signal) =>

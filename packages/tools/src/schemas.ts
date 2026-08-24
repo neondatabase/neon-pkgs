@@ -183,6 +183,8 @@ export {
 	zRevokeCredentialPath,
 	zRevokeOrgApiKeyPath,
 	zRevokePermissionFromProjectPath,
+	zSendNeonAuthEmailProviderTestBody,
+	zSendNeonAuthEmailProviderTestPath,
 	zSendNeonAuthTestEmailBody,
 	zSendNeonAuthTestEmailPath,
 	zSetDefaultProjectBranchPath,

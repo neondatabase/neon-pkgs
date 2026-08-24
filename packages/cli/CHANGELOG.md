@@ -1,5 +1,14 @@
 # neon
 
+## 3.6.1
+
+### Patch Changes
+
+- Updated dependencies [93b93dc]
+  - @neon/sdk@2.2.0
+  - @neon/config@1.0.2
+  - @neon/config-runtime@1.0.2
+
 ## 3.6.0
 
 ### Minor Changes

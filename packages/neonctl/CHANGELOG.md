@@ -1,5 +1,11 @@
 # neonctl
 
+## 3.6.1
+
+### Patch Changes
+
+- neon@3.6.1
+
 ## 3.6.0
 
 ### Minor Changes
