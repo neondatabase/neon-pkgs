@@ -1,5 +1,11 @@
 # @neon/tools
 
+## 0.6.0
+
+### Minor Changes
+
+- c41fae7: `createNeonTools` now selects `@neon/sdk` methods by path (`tools: ["projects.list"]`). Operation-backed writes wait for readiness. `operations` and `workflows` selectors are removed.
+
 ## 0.5.0
 
 ### Minor Changes
