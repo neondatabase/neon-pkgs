@@ -341,7 +341,7 @@ describe("neon-auth", () => {
 			{
 				code: 1,
 				stderr: expect.stringContaining(
-					"Test email could NOT be sent to fail@test.com using the SMTP provider saved on this branch.",
+					"Test email could NOT be sent to fail@test.com using the custom SMTP provider saved on this branch.",
 				),
 			},
 		);

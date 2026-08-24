@@ -1275,7 +1275,7 @@ const emailProviderTest = async (
 	}
 	if (data.success) {
 		printMessage(
-			`Test email dispatched to ${props.recipientEmail} using the SMTP provider saved on this branch.`,
+			`Test email dispatched to ${props.recipientEmail} using the custom SMTP provider saved on this branch.`,
 		);
 		return;
 	}
@@ -1291,7 +1291,7 @@ const emailProviderTestFailureMessage = (
 	recipientEmail: string,
 	errorMessage: string | undefined,
 ) => {
-	const header = `Test email could NOT be sent to ${recipientEmail} using the SMTP provider saved on this branch.`;
+	const header = `Test email could NOT be sent to ${recipientEmail} using the custom SMTP provider saved on this branch.`;
 	return errorMessage ? `${header}\nUpstream error: ${errorMessage}` : header;
 };
 

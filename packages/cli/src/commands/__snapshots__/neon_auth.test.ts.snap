@@ -89,7 +89,7 @@ exports[`neon-auth > email-provider test 1`] = `
 
 exports[`neon-auth > email-provider test human output 1`] = `
 "
-Test email dispatched to user@test.com using the SMTP provider saved on this branch.
+Test email dispatched to user@test.com using the custom SMTP provider saved on this branch.
 
 "
 `;
