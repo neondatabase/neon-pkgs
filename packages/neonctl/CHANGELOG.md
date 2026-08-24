@@ -1,5 +1,13 @@
 # neonctl
 
+## 4.2.1
+
+### Patch Changes
+
+- 9c5ecf5: List commands print every populated column at full width on one line per row. A narrow terminal wraps the line instead of dropping or truncating columns. `neon branches list` and `neon snapshots list` show Expires At before Created At, including on get and create. `neon projects list --recoverable-only` shows Recoverable Until before Deleted At.
+- Updated dependencies [9c5ecf5]
+  - neon@4.2.1
+
 ## 4.2.0
 
 ### Minor Changes
