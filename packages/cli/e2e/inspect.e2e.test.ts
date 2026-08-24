@@ -66,6 +66,19 @@ async function withSession<T>(
 	}
 }
 
+async function backendPid(session: PgConnection): Promise<number> {
+	const result = await session.query("SELECT pg_backend_pid()");
+	const value = result.rows[0]?.[0];
+	if (typeof value !== "string" && typeof value !== "number") {
+		throw new Error(`pg_backend_pid returned ${String(value)}`);
+	}
+	const pid = Number(value);
+	if (!Number.isFinite(pid) || pid <= 0) {
+		throw new Error(`pg_backend_pid returned ${String(value)}`);
+	}
+	return pid;
+}
+
 /**
  * `pg_locks` and `pg_stat_activity` span the compute, while relation OIDs are
  * database-local. A second database makes foreign rows and misresolved OIDs
@@ -284,9 +297,21 @@ describe.sequential("e2e — neon inspect db against the real API", () => {
 			expect(empty).toEqual([]);
 
 			const uri = await connectionUriFor(projectId, "neondb");
-			const older = await PgConnection.connect(parseConnectionUri(uri));
-			const newer = await PgConnection.connect(parseConnectionUri(uri));
+			const first = await PgConnection.connect(parseConnectionUri(uri));
+			const second = await PgConnection.connect(parseConnectionUri(uri));
 			try {
+				const firstPid = await backendPid(first);
+				const secondPid = await backendPid(second);
+				if (firstPid === secondPid) {
+					throw new Error(
+						`both inspect sessions reported pid ${firstPid}`,
+					);
+				}
+				// Older query on the higher pid, so pid-primary order would
+				// rank it after the newer one.
+				const older = firstPid > secondPid ? first : second;
+				const newer = older === first ? second : first;
+
 				const pendingOlder = older.query(
 					"SELECT pg_sleep(90) /* stall-older */",
 				);
@@ -319,6 +344,9 @@ describe.sequential("e2e — neon inspect db against the real API", () => {
 				expect(olderIdx).toBeGreaterThanOrEqual(0);
 				expect(newerIdx).toBeGreaterThanOrEqual(0);
 				expect(olderIdx).toBeLessThan(newerIdx);
+				expect(Number(stallRows[olderIdx]?.pid)).toBeGreaterThan(
+					Number(stallRows[newerIdx]?.pid),
+				);
 
 				const hit = stallRows[olderIdx];
 				expect(hit?.role).toBe("leader");
@@ -329,8 +357,8 @@ describe.sequential("e2e — neon inspect db against the real API", () => {
 				await older.cancel();
 				await newer.cancel();
 			} finally {
-				await older.close();
-				await newer.close();
+				await first.close();
+				await second.close();
 			}
 		},
 		240_000,
