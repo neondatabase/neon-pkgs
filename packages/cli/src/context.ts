@@ -90,6 +90,35 @@ export const isProfileCommand = (args: { _: (string | number)[] }): boolean =>
 export const isApiKeysCommand = (args: { _: (string | number)[] }): boolean =>
 	args._[0] === "api-keys" || args._[0] === "api-key";
 
+export const isMcpCommand = (args: { _: (string | number)[] }): boolean =>
+	args._[0] === "mcp";
+
+/** Raw argv is required because auth middleware runs before MCP flags are parsed. */
+export const isMcpOauth = (args: { _: (string | number)[] }): boolean =>
+	isMcpCommand(args) && argvEnablesMcpOauth(process.argv);
+
+const OAUTH_FALSE = new Set(["false", "0", "no"]);
+
+function argvEnablesMcpOauth(argv: readonly string[]): boolean {
+	for (let i = 0; i < argv.length; i++) {
+		const arg = argv[i];
+		if (arg === "--oauth=true" || arg === "--oauth=1") {
+			return true;
+		}
+		if (arg === "--oauth=false" || arg === "--oauth=0") {
+			continue;
+		}
+		if (arg === "--oauth") {
+			const next = argv[i + 1];
+			if (next !== undefined && OAUTH_FALSE.has(next.toLowerCase())) {
+				continue;
+			}
+			return true;
+		}
+	}
+	return false;
+}
+
 const CONTEXT_FILE = ".neon";
 const GITIGNORE_FILE = ".gitignore";
 
@@ -186,6 +215,10 @@ export const enrichFromContext = (
 	// produce a key scoped to that project rather than the account or organization asked for.
 	// No `profile` subcommand has any use for a project or branch.
 	if (isProfileCommand(args)) {
+		return;
+	}
+	// MCP reads the linked project separately; enriching here would silently pin global installs.
+	if (isMcpCommand(args)) {
 		return;
 	}
 	const context = readContextFile(args.contextFile);

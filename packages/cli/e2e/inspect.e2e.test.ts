@@ -1,3 +1,4 @@
+import { sleep } from "@neon/e2e-harness";
 import { describe, expect } from "vitest";
 import { parseConnectionUri } from "../src/psql/index.js";
 import { PgConnection } from "../src/psql/wire/connection.js";
@@ -263,5 +264,56 @@ describe.sequential("e2e — neon inspect db against the real API", () => {
 				await otherSession.query("ROLLBACK");
 			});
 		},
+	);
+
+	e2eTest(
+		"stalled-queries executes and reports a backend past 30 seconds",
+		async ({ track }) => {
+			const projectId = await createProject({
+				name: uniqueProjectName("cli-inspect-stall"),
+			});
+			track(projectId);
+
+			const empty = await runCliJson<Record<string, unknown>[]>([
+				"inspect",
+				"db",
+				"stalled-queries",
+				"--project-id",
+				projectId,
+			]);
+			expect(empty).toEqual([]);
+
+			const uri = await connectionUriFor(projectId, "neondb");
+			const session = await PgConnection.connect(parseConnectionUri(uri));
+			try {
+				const pending = session.query("SELECT pg_sleep(90)");
+				pending.catch(() => undefined);
+				await sleep(32_000);
+
+				const rows = await runCliJson<Record<string, unknown>[]>([
+					"inspect",
+					"db",
+					"stalled-queries",
+					"--project-id",
+					projectId,
+				]);
+				const hit = rows.find((row) =>
+					String(row.query).includes("pg_sleep"),
+				);
+				expect(hit).toBeDefined();
+				if (hit === undefined) {
+					return;
+				}
+				expect(hit.role).toBe("leader");
+				expect(String(hit.query_group)).toBe(String(hit.pid));
+				expect(hit.state).toBe("active");
+				expect(typeof hit.duration).toBe("string");
+
+				await session.cancel();
+			} finally {
+				await session.close();
+			}
+		},
+		240_000,
 	);
 });

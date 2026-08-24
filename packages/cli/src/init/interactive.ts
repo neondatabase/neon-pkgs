@@ -17,6 +17,7 @@ import {
 } from "@clack/prompts";
 import which from "which";
 import { bold, dim, gray, italic } from "yoctocolors";
+import { installNeonMcpServer } from "../mcp/install.js";
 import {
 	type AgentType,
 	agentSupportsProjectMcp,
@@ -37,7 +38,6 @@ import {
 import { detectAgent, detectIde } from "./detect_agent.js";
 import { installExtension, isExtensionInstalled } from "./extension.js";
 import { inspectProject } from "./inspect.js";
-import { installNeonMcpServer } from "./install_mcp.js";
 import { ensureNeonctl } from "./neonctl.js";
 import { neonInitAgentCmd } from "./profile_cli.js";
 import {

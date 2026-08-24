@@ -19,6 +19,7 @@ import * as inspect from "./inspect.js";
 import * as ipAllow from "./ip_allow.js";
 import * as link from "./link.js";
 import * as logs from "./logs.js";
+import * as mcp from "./mcp.js";
 import * as neonAuth from "./neon_auth.js";
 import * as open from "./open.js";
 import * as operations from "./operations.js";
@@ -58,6 +59,7 @@ export default [
 	link,
 	open,
 	init,
+	mcp,
 	dataApi,
 	functions,
 	dev,

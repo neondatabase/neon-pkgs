@@ -62,7 +62,7 @@ Alternatively, you can authenticate a connection with a Neon API key using the `
 neon projects list --api-key <neon_api_key>
 ```
 
-For information about obtaining an Neon API key, see [Authentication](https://api-docs.neon.tech/reference/authentication), in the _Neon API Reference_.
+For information about obtaining an Neon API key, see [Authentication](https://neon.com/docs/reference/api/get-started), in the _Neon API Reference_.
 
 ## Project and branch creation
 
@@ -722,6 +722,43 @@ That message reports where parsing stopped and nothing more. `--data` carries wh
 | `--preview` | Enable preview features (scaffolding a project from a template) |
 | `--profile <name>` | Run as that stored account. See [Which credential an invocation uses](#which-credential-an-invocation-uses). |
 
+## Install the Neon MCP server (`mcp`)
+
+`neon mcp` writes the hosted Neon MCP server (`https://mcp.neon.tech/mcp`) into coding-agent config files.
+
+```bash
+# Interactive: global or project, then agents, then API key or OAuth, then confirm.
+$ neon mcp
+
+# Skip prompts. Global config, every globally detected agent, minted API key.
+$ neon mcp -y
+
+# OAuth: no API key minted. The agent prompts for Neon sign-in on first use.
+$ neon mcp --oauth
+
+# Project-level config. A minted key is still account-wide.
+$ neon mcp --project
+
+$ neon mcp --agent cursor --agent claude-code
+
+# Hide write tools. Does not change the minted key.
+$ neon mcp --read-only
+
+# Pin MCP tools to one project. Does not change the minted key.
+$ neon mcp --project-id <project-id>
+
+# Limit which tool categories are visible.
+$ neon mcp --category querying --category schema
+```
+
+On a TTY the command asks for config location (global is the default), then agents, then API key vs OAuth, then a summary to confirm before it writes. Detected agents start selected: globally installed agents or project-folder markers such as `.cursor` when the install is project.
+
+`-y` skips those questions. `--project`, `--oauth` and `--agent` skip the question they answer and still apply with `-y`. `--read-only` and `--category` are flags only and are never prompted. A linked project-folder install asks whether to pin MCP tools to that `.neon` project (`?projectId=`). An unlinked project folder does not ask. Global installs never add that param unless you pass `--project-id`. Without a TTY, pass `-y` to mint into every detected agent, `--agent` to name the agents or `--oauth` to write the URL only.
+
+`--agent` names: `antigravity`, `cline`, `cline-cli`, `claude-code`, `codex`, `cursor`, `gemini-cli`, `goose`, `github-copilot-cli`, `grok-build`, `mcporter`, `opencode`, `vscode`, `windsurf`, `zed`. Project installs drop `antigravity`, `cline`, `cline-cli`, `goose` and `windsurf`. `claude-desktop` is a known name that is then skipped.
+
+The default mints an account-wide API key (or reuses the Bearer already configured for Neon at `https://mcp.neon.tech/mcp`) and writes it into each selected agent's config. That key reaches everything the account can, in every organization. Revoke it with `neon api-keys revoke <id>`. `--oauth` writes the URL with no `Authorization` header; the agent signs in on first use. `--project` writes into the project config (`.cursor/mcp.json` and similar). `--read-only` adds `?readonly=true`. `--project-id` adds `?projectId=`. `--category` adds `?category=` (repeatable or comma-separated: `projects`, `branches`, `schema`, `querying`, `neon_auth`, `data_api`, `observability`, `docs`). Those query params restrict which MCP tools the server exposes; they do not change what the minted key can do.
+
 ## Snapshots (`snapshots`)
 
 `neon snapshots` (alias `neon snapshot`) manages **snapshots** — point-in-time backups of a branch that you can list, rename, expire, restore into a branch, or schedule automatically. Snapshots are a Beta Neon feature and were previously only available in the Console and REST API; this command group brings them to the CLI.
@@ -765,6 +802,15 @@ neon snapshots schedule set --branch main --schedule '[{"frequency":"weekly","da
 ```
 
 All sub-commands honor the [global options](#global-options), including `--output json|yaml|table`.
+
+## Database diagnostics (`inspect`)
+
+`neon inspect db stalled-queries` takes a read-only snapshot of active queries that have run for more than 30 seconds and groups parallel workers with their leader. Table output shows duration, wait event, blocking pids, role, query group, and query. `--output json` adds timestamps, query IDs, pids, database, and the rest of the row. A blocking pid can belong to an idle-in-transaction backend this command does not list; `neon inspect db locks` shows lock holders.
+
+```bash
+neon inspect db stalled-queries
+neon inspect db stalled-queries --output json
+```
 
 ## Logs (`logs`)
 
@@ -1078,6 +1124,7 @@ Id   Name      Project         Created At            Last Used At          Last 
 | [roles](https://neon.com/docs/reference/cli-roles)                         | `list`, `create`, `delete`                                                                                   | Manage roles                       |
 | [operations](https://neon.com/docs/reference/cli-operations)               | `list`                                                                                                       | Manage operations                  |
 | logs                                                                       | `query`, `fields`, `field-values`                                                                            | Query branch logs (Beta)           |
+| inspect                                                                    | `db stalled-queries`                                                                                         | Inspect Postgres diagnostics       |
 | snapshots                                                                  | `list`, `get`, `create`, `update`, `delete`, `restore`, `finalize`, `schedule get`, `schedule set`           | Manage snapshots                   |
 | [connection-string](https://neon.com/docs/reference/cli-connection-string) |                                                                                                              | Get connection string              |
 | [psql](https://neon.com/docs/reference/cli-psql)                           |                                                                                                              | Connect to a database via psql     |
@@ -1091,6 +1138,7 @@ Id   Name      Project         Created At            Last Used At          Last 
 | deploy                                                                     |                                                                                                              | Alias for `config apply`           |
 | bootstrap                                                                  |                                                                                                              | Scaffold a project from a template |
 | init                                                                       |                                                                                                              | Set up a project for a coding agent |
+| mcp                                                                        |                                                                                                              | Install the Neon MCP server         |
 | bucket                                                                     | `create`, `list`, `delete`, `object list`, `object get`, `object put`, `object delete` (incl. `--recursive`) | Manage buckets and their objects   |
 | [completion](https://neon.com/docs/reference/cli-completion)               |                                                                                                              | Generate a completion script       |
 
@@ -1141,7 +1189,7 @@ Global options are supported with any Neon CLI command.
 
 - <a id="api-key"></a>`--api-key`
 
-  Specifies your Neon API key. You can authenticate using a Neon API key when running a Neon CLI command instead of using `neon auth`. For information about obtaining an Neon API key, see [Authentication](https://api-docs.neon.tech/reference/authentication), in the _Neon API Reference_.
+  Specifies your Neon API key. You can authenticate using a Neon API key when running a Neon CLI command instead of using `neon auth`. For information about obtaining an Neon API key, see [Authentication](https://neon.com/docs/reference/api/get-started), in the _Neon API Reference_.
 
   ```bash
   neon <command> --api-key <neon_api_key>

@@ -2,6 +2,7 @@ import { writeFileSync } from "node:fs";
 import { unlink } from "node:fs/promises";
 import { resolve } from "node:path";
 import { execa } from "execa";
+import { installNeonMcpServer } from "../../mcp/install.js";
 import {
 	agentSupportsProjectMcp,
 	getSkillsAgentName,
@@ -24,7 +25,6 @@ import {
 } from "../detect_agent.js";
 import { findEditorCommand } from "../extension.js";
 import { inspectProject } from "../inspect.js";
-import { installNeonMcpServer } from "../install_mcp.js";
 import { ensureNeonctl } from "../neonctl.js";
 import { ensureSkillsUpToDate } from "../skills.js";
 import type { Editor, PhaseResponse } from "../types.js";

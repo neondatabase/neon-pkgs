@@ -1,0 +1,135 @@
+export const hiddenToolIds = [
+	"operations.waitFor",
+	"branches.create",
+	"projects.create",
+	"postgres.roles.password",
+	"storage.objects.get",
+] as const;
+
+export type HiddenToolId = (typeof hiddenToolIds)[number];
+
+export const toolIds = [
+	"projects.list",
+	"projects.get",
+	"projects.createAndConnect",
+	"projects.update",
+	"projects.delete",
+	"projects.recover",
+	"projects.transfer",
+	"projects.transferFromUser",
+	"projects.permissions.list",
+	"projects.permissions.grant",
+	"projects.permissions.revoke",
+	"projects.members.list",
+	"projects.members.setRole",
+	"projects.members.removeRole",
+	"branches.list",
+	"branches.get",
+	"branches.createWithCompute",
+	"branches.update",
+	"branches.delete",
+	"branches.getDefault",
+	"branches.setDefault",
+	"branches.finalizeRestore",
+	"postgres.connectionString",
+	"postgres.endpoints.list",
+	"postgres.endpoints.listByBranch",
+	"postgres.endpoints.get",
+	"postgres.endpoints.create",
+	"postgres.endpoints.update",
+	"postgres.endpoints.delete",
+	"postgres.endpoints.start",
+	"postgres.endpoints.suspend",
+	"postgres.endpoints.restart",
+	"postgres.roles.list",
+	"postgres.roles.get",
+	"postgres.roles.create",
+	"postgres.roles.delete",
+	"postgres.roles.resetPassword",
+	"postgres.databases.list",
+	"postgres.databases.get",
+	"postgres.databases.create",
+	"postgres.databases.update",
+	"postgres.databases.delete",
+	"postgres.dataApi.get",
+	"postgres.dataApi.create",
+	"postgres.dataApi.update",
+	"postgres.dataApi.delete",
+	"storage.get",
+	"storage.buckets.list",
+	"storage.buckets.create",
+	"storage.buckets.delete",
+	"storage.objects.list",
+	"storage.objects.delete",
+	"storage.objects.deleteByPrefix",
+	"storage.objects.presign",
+	"functions.list",
+	"functions.get",
+	"functions.update",
+	"functions.delete",
+	"functions.deploy",
+	"credentials.list",
+	"credentials.create",
+	"credentials.revoke",
+	"aiGateway.get",
+	"logs.query",
+	"logs.fields",
+	"logs.fieldValues",
+	"snapshots.list",
+	"snapshots.create",
+	"snapshots.update",
+	"snapshots.delete",
+	"snapshots.restore",
+	"snapshots.getSchedule",
+	"snapshots.setSchedule",
+	"operations.list",
+	"operations.get",
+	"auth.get",
+	"auth.create",
+	"auth.disable",
+	"auth.updateConfig",
+	"auth.oauthProviders.list",
+	"auth.oauthProviders.add",
+	"auth.oauthProviders.update",
+	"auth.oauthProviders.delete",
+	"auth.trustedDomains.list",
+	"auth.trustedDomains.add",
+	"auth.trustedDomains.delete",
+	"auth.users.create",
+	"auth.users.delete",
+	"auth.users.updateRole",
+	"consumption.perProject",
+	"consumption.perProjectV2",
+	"consumption.perBranchV2",
+	"apiKeys.list",
+	"apiKeys.create",
+	"apiKeys.revoke",
+	"regions.list",
+	"user.me",
+	"user.organizations",
+] as const;
+
+export type NeonToolId = (typeof toolIds)[number];
+
+export const isNeonToolId = (id: string): id is NeonToolId =>
+	(toolIds as readonly string[]).includes(id);
+
+const hiddenToolHint: Record<HiddenToolId, string> = {
+	"projects.create":
+		'Use "projects.createAndConnect", which attaches compute and returns a connection string.',
+	"branches.create":
+		'Use "branches.createWithCompute", which attaches compute and returns a connection string.',
+	"operations.waitFor":
+		"Write tools wait for readiness. operations.waitFor is not a tool.",
+	"postgres.roles.password": "Role passwords are not published as a tool.",
+	"storage.objects.get": "Object bytes are not published as a tool.",
+};
+
+export const unpublishedToolError = (id: string): TypeError => {
+	if ((hiddenToolIds as readonly string[]).includes(id)) {
+		return new TypeError(
+			`Neon tool "${id}" is not published. ${hiddenToolHint[id as HiddenToolId]}`,
+		);
+	}
+	return new TypeError(`Unknown Neon tool "${id}".`);
+};

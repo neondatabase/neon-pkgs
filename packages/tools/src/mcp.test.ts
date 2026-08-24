@@ -23,7 +23,7 @@ afterEach(async () => {
 const tools = () =>
 	createNeonTools({
 		apiKey: "test-key",
-		operations: ["listProjects"],
+		tools: ["projects.list"],
 		fetch: async () =>
 			new Response(
 				JSON.stringify({
@@ -52,21 +52,21 @@ describe("MCP v2 compatibility", () => {
 
 		const listed = await client.listTools();
 		expect(listed.tools.map((tool) => tool.name)).toEqual([
-			"list_projects",
+			"projects_list",
 		]);
 		expect(listed.tools[0].annotations?.readOnlyHint).toBe(true);
 		expect(listed.tools[0]._meta?.["neon/requiresApproval"]).toBe(false);
 
 		const called = await client.callTool({
-			name: "list_projects",
+			name: "projects_list",
 			arguments: {},
 		});
 		expect(called.structuredContent).toEqual({
-			data: { projects: [{ id: "project-id" }], pagination: {} },
+			data: [{ id: "project-id" }],
 		});
 
 		const invalid = await client.callTool({
-			name: "list_projects",
+			name: "projects_list",
 			arguments: { limit: "one" },
 		});
 		expect(invalid.isError).toBe(true);
@@ -89,7 +89,7 @@ describe("MCP v2 compatibility", () => {
 		};
 		const failingTools = createNeonTools({
 			apiKey: "bad-key",
-			operations: ["listProjects"],
+			tools: ["projects.list"],
 			fetch: async () =>
 				new Response(
 					JSON.stringify({ message: "Authentication failed" }),
@@ -146,7 +146,7 @@ const toolsWithCapturedAuth = () => {
 	const requests: Request[] = [];
 	const tools = createNeonTools({
 		apiKey: "constructor-key",
-		operations: ["listProjects"],
+		tools: ["projects.list"],
 		fetch: async (input, init) => {
 			requests.push(new Request(input, init));
 			return new Response(
@@ -242,11 +242,11 @@ describe("MCP v1 compatibility", () => {
 		closeables.push(client, server);
 
 		const called = await client.callTool({
-			name: "list_projects",
+			name: "projects_list",
 			arguments: {},
 		});
 		expect(called.structuredContent).toEqual({
-			data: { projects: [{ id: "project-id" }], pagination: {} },
+			data: [{ id: "project-id" }],
 		});
 	});
 });
@@ -256,7 +256,7 @@ describe("MCP path injection", () => {
 		const requests: Request[] = [];
 		const scoped = createNeonTools({
 			apiKey: "test-key",
-			operations: ["getProject"],
+			tools: ["projects.get"],
 			inject: {
 				projectId: "granted-project",
 				omitFromSchema: true,
@@ -290,11 +290,11 @@ describe("MCP path injection", () => {
 		});
 
 		const called = await client.callTool({
-			name: "get_project",
+			name: "projects_get",
 			arguments: {},
 		});
 		expect(called.structuredContent).toEqual({
-			data: { project: { id: "granted-project" } },
+			data: { id: "granted-project" },
 		});
 		expect(requests[0].url).toBe(
 			"https://console.neon.tech/api/v2/projects/granted-project",
@@ -305,9 +305,9 @@ describe("MCP path injection", () => {
 		const requests: Request[] = [];
 		const scoped = createNeonTools({
 			apiKey: "test-key",
-			operations: ["getProject"],
+			tools: ["projects.get"],
 			descriptions: {
-				getProject: "Get details of the granted Neon project.",
+				"projects.get": "Get details of the granted Neon project.",
 			},
 			inject: { projectId: "granted-project" },
 			fetch: async (input, init) => {
@@ -344,7 +344,7 @@ describe("MCP path injection", () => {
 		});
 
 		const called = await client.callTool({
-			name: "get_project",
+			name: "projects_get",
 			arguments: {},
 		});
 		expect(called.isError).toBeFalsy();
@@ -357,7 +357,7 @@ describe("MCP path injection", () => {
 		const requests: Request[] = [];
 		const scoped = createNeonTools({
 			apiKey: "test-key",
-			operations: ["getProject"],
+			tools: ["projects.get"],
 			inject: {
 				projectId: "granted-project",
 				omitFromSchema: true,
@@ -385,11 +385,11 @@ describe("MCP path injection", () => {
 		closeables.push(client, server);
 
 		const called = await client.callTool({
-			name: "get_project",
+			name: "projects_get",
 			arguments: {},
 		});
 		expect(called.structuredContent).toEqual({
-			data: { project: { id: "granted-project" } },
+			data: { id: "granted-project" },
 		});
 		expect(requests[0].url).toBe(
 			"https://console.neon.tech/api/v2/projects/granted-project",

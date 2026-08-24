@@ -1,5 +1,28 @@
 # @neon/tools
 
+## 0.6.0
+
+### Minor Changes
+
+- c41fae7: `createNeonTools` now selects `@neon/sdk` methods by path (`tools: ["projects.list"]`). Operation-backed writes wait for readiness. `operations` and `workflows` selectors are removed.
+
+## 0.5.0
+
+### Minor Changes
+
+- 93b93dc: `sendNeonAuthEmailProviderTest` is now on the generated raw client and in `@neon/tools`. It tests a branch's saved email provider without re-supplying the SMTP password. `sendNeonAuthTestEmail` is deprecated but still available for unsaved full SMTP configs.
+
+### Patch Changes
+
+- Updated dependencies [93b93dc]
+  - @neon/sdk@2.2.0
+
+## 0.4.0
+
+### Minor Changes
+
+- 6a31d50: `createNeonTools` accepts a `workflows` array that exposes `@neon/sdk` methods as `createBranchWithCompute` and `createProjectAndConnect`. Those tools attach compute, wait for readiness, and return a connection string. `CreateNeonToolsOptions` is a type alias, so an `interface` cannot extend it; `createNeonTools`'s first type argument is the options object.
+
 ## 0.3.0
 
 ### Minor Changes

@@ -1,0 +1,98 @@
+import { isNeonApiError, type NeonApiClient } from "../api.js";
+import { log } from "../log.js";
+import { mintedKeyName } from "../profile_keys.js";
+import { getCliName } from "../utils/cli_name.js";
+
+export type MintedMcpKey = {
+	id: number;
+	name: string;
+	key: string;
+};
+
+const cannotMintMessage =
+	"This CLI credential cannot mint API keys. Organization and project-scoped keys cannot create other keys. Sign in with `neon auth` or pass a personal API key.";
+
+const withdraw = async (
+	client: NeonApiClient,
+	keyId: number | undefined,
+): Promise<boolean> => {
+	if (!Number.isSafeInteger(keyId) || keyId === undefined || keyId <= 0) {
+		return false;
+	}
+	try {
+		const { data } = await client.revokeApiKey(keyId);
+		return data.revoked === true && data.id === keyId;
+	} catch (err) {
+		log.error(
+			"Failed to revoke API key %d: %s",
+			keyId,
+			err instanceof Error ? err.message : String(err),
+		);
+		return false;
+	}
+};
+
+const assertUsable = async (
+	client: NeonApiClient,
+	data: { id?: number; key?: string; name?: string; project_id?: string },
+	fallbackName: string,
+): Promise<MintedMcpKey> => {
+	const problem =
+		typeof data.key !== "string" || data.key.trim() === ""
+			? "Neon returned no key."
+			: data.project_id !== undefined
+				? `Neon returned a key scoped to ${data.project_id} rather than the whole account.`
+				: !Number.isSafeInteger(data.id)
+					? "Neon returned no key id."
+					: null;
+	if (problem) {
+		const withdrawn = await withdraw(client, data.id);
+		throw new Error(
+			`${problem} ${
+				withdrawn
+					? "The key has been revoked; nothing was issued."
+					: `The key could NOT be revoked and may still be live${
+							data.id === undefined
+								? ""
+								: `. Remove it with \`${getCliName()} api-keys revoke ${data.id}\``
+						}.`
+			}`,
+		);
+	}
+
+	const id = data.id;
+	const key = data.key;
+	if (id === undefined || key === undefined) {
+		throw new Error("Neon returned no key.");
+	}
+
+	return {
+		id,
+		name: data.name ?? fallbackName,
+		key,
+	};
+};
+
+export async function mintMcpApiKey(options: {
+	apiClient: NeonApiClient;
+}): Promise<MintedMcpKey> {
+	const name = mintedKeyName("mcp");
+	try {
+		const { data } = await options.apiClient.createApiKey({
+			key_name: name,
+		});
+		return assertUsable(options.apiClient, data, name);
+	} catch (err) {
+		if (isNeonApiError(err) && (err.status === 403 || err.status === 404)) {
+			throw new Error(cannotMintMessage);
+		}
+		throw err;
+	}
+}
+
+export async function withdrawMintedKey(
+	apiClient: NeonApiClient,
+	key: MintedMcpKey,
+): Promise<boolean> {
+	return withdraw(apiClient, key.id);
+}

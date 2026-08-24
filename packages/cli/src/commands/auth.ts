@@ -38,6 +38,8 @@ import { setAuthContext } from "../auth_context.js";
 import {
 	isConfigInit,
 	isCurrentBranchProbe,
+	isMcpCommand,
+	isMcpOauth,
 	isProfileCommand,
 } from "../context.js";
 import { storeFor } from "../credential_io.js";
@@ -419,6 +421,10 @@ export const ensureAuth = async (
 		return;
 	}
 
+	if (isMcpOauth(props)) {
+		return;
+	}
+
 	// `open` only reads the linked project from `.neon` and launches its Console URL.
 	if (props._[0] === "open") {
 		return;
@@ -439,6 +445,9 @@ export const ensureAuth = async (
 	// `init` manages its own auth flow (asks the user if they have an account,
 	// then triggers OAuth at the right time). Skip the global auth middleware.
 	const isInit = props._[0] === "init";
+
+	// The MCP handler validates targets before deciding whether authentication is required.
+	const isMcp = isMcpCommand(props);
 
 	// `auth` writes a credential rather than using one, and reads `--profile` as the
 	// destination to write it to. Running selection here would reject the flag pair it
@@ -565,6 +574,13 @@ export const ensureAuth = async (
 
 	if (isInit) {
 		log.debug("init: skipping global auth; init manages its own auth flow");
+		return;
+	}
+
+	if (isMcp) {
+		log.debug(
+			"mcp: no usable credentials; minting requires auth or --oauth",
+		);
 		return;
 	}
 

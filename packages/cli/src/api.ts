@@ -1299,13 +1299,13 @@ export const getApiClient = ({
 					body: data,
 				}),
 			),
-		sendNeonAuthTestEmail: (
+		sendNeonAuthEmailProviderTest: (
 			projectId: string,
 			branchId: string,
-			data: NonNullable<raw.SendNeonAuthTestEmailData["body"]>,
+			data: NonNullable<raw.SendNeonAuthEmailProviderTestData["body"]>,
 		) =>
 			call(() =>
-				raw.sendNeonAuthTestEmail({
+				raw.sendNeonAuthEmailProviderTest({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
 					body: data,

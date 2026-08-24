@@ -1,5 +1,26 @@
 # neon
 
+## 4.1.0
+
+### Minor Changes
+
+- 6ff43d7: Add `neon inspect db stalled-queries`, a read-only snapshot of active queries running longer than 30 seconds. Table output shows duration, wait event, blocking pids, role, query group, and query. `--output json` includes the full row.
+
+## 4.0.0
+
+### Major Changes
+
+- d606a2e: `neon neon-auth config email-provider test` now sends through the custom SMTP provider saved on the branch. Only `--recipient-email` is accepted; `--host`, `--port`, `--username`, `--password`, `--sender-email`, and `--sender-name` are rejected. Save the provider first with `neon neon-auth config email-provider update --type standard`.
+
+## 3.6.1
+
+### Patch Changes
+
+- Updated dependencies [93b93dc]
+  - @neon/sdk@2.2.0
+  - @neon/config@1.0.2
+  - @neon/config-runtime@1.0.2
+
 ## 3.6.0
 
 ### Minor Changes

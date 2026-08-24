@@ -1,3 +1,4 @@
+import { installNeonMcpServer } from "../../mcp/install.js";
 import {
 	agentSupportsHttpMcp,
 	agentSupportsProjectMcp,
@@ -7,7 +8,6 @@ import {
 	tryResolveAddMcpAgentId,
 } from "../agents.js";
 import { isAuthenticated } from "../auth.js";
-import { installNeonMcpServer } from "../install_mcp.js";
 import type { PhaseResponse } from "../types.js";
 
 export type McpPhaseOptions = {

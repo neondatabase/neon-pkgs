@@ -277,6 +277,7 @@ export const EXPECTED_OPERATIONS: ReadonlySet<string> = new Set([
 	"revokeCredential",
 	"revokeOrgApiKey",
 	"revokePermissionFromProject",
+	"sendNeonAuthEmailProviderTest",
 	"sendNeonAuthTestEmail",
 	"setDefaultProjectBranch",
 	"setOrganizationSpendingLimit",
