@@ -55,7 +55,7 @@ export const builder = (argv: yargs.Argv) =>
 				type: "boolean",
 				default: false,
 				describe:
-					"Skip prompts. Defaults to global config, every detected agent, and a minted API key. --project, --oauth, and --agent still apply",
+					"Skip prompts. Defaults to global config, every detected agent, and a minted account-wide API key. --project, --oauth, and --agent still apply",
 			},
 			agent: {
 				alias: "a",
@@ -139,6 +139,15 @@ export const handler = async (props: McpProps) => {
 				`Authentication required. Run \`${getCliName()} auth\`, pass --api-key, or use --oauth to install without a Neon credential.`,
 			);
 		}
+		if (
+			!canPickAgentsInteractively() &&
+			props.yes !== true &&
+			(props.agent ?? []).length === 0
+		) {
+			throw new Error(
+				"No interactive terminal. Pass -y to mint an API key into detected agents, or --oauth to install without minting.",
+			);
+		}
 	}
 
 	if (interactive) {
@@ -150,7 +159,8 @@ export const handler = async (props: McpProps) => {
 			reuse: existing !== undefined,
 		});
 		if (!ok) {
-			throw new Error("Aborted. Nothing was written.");
+			log.info("Aborted. Nothing was written.");
+			return;
 		}
 	}
 

@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import {
+	existsSync,
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
@@ -183,15 +184,34 @@ describe("neon mcp", () => {
 		expect(stderr).not.toMatch(/Minted API key/);
 	});
 
-	test("bare mcp in CI installs globally into detected agents", async ({
+	test("bare mcp in CI without -y refuses to mint into detected agents", async ({
 		testCliCommand,
 	}) => {
 		const { home, cwd } = scratch();
-		const { stdout } = await testCliCommand(["mcp"], runOptions(home, cwd));
+		const { stderr } = await testCliCommand(["mcp"], {
+			...runOptions(home, cwd),
+			code: 1,
+		});
+		expect(stderr).toMatch(/Pass -y to mint an API key/);
+		expect(stderr).toMatch(/--oauth/);
+		expect(stderr).not.toMatch(/Minted API key/);
+		expect(existsSync(join(home, ".cursor", "mcp.json"))).toBe(false);
+	});
+
+	test("--oauth without -y still installs into detected agents", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		const { stdout, stderr } = await testCliCommand(["mcp", "--oauth"], {
+			...runOptions(home, cwd),
+			apiKey: false,
+		});
 		expect(
 			readFileSync(join(home, ".cursor", "mcp.json"), "utf8"),
 		).toContain("mcp.neon.tech");
+		expect(stderr).not.toMatch(/Minted API key/);
 		expect(stdout).toContain("installed");
+		assertNoSecret(stdout, stderr);
 	});
 
 	test("-y installs globally into detected agents", async ({

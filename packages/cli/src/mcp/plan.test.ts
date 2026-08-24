@@ -187,7 +187,7 @@ describe("mcpInstallSummary", () => {
 			[
 				"Scope: global",
 				"Agents: Cursor",
-				"Auth: mint an account-wide API key",
+				"Auth: mint an account-wide API key that reaches every organization",
 				"Skipped: Claude Desktop (Add remote servers through Connectors in the app)",
 			].join("\n"),
 		);
