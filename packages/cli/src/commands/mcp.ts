@@ -54,7 +54,7 @@ export const builder = (argv: yargs.Argv) =>
 				type: "boolean",
 				default: false,
 				describe:
-					"Write project-level MCP config. Skips the scope question. Does not change the minted key",
+					"Write project-level MCP config. Skips the config-location question. Does not change the minted key",
 			},
 			yes: {
 				alias: "y",
@@ -134,7 +134,10 @@ export const builder = (argv: yargs.Argv) =>
 				},
 			},
 		})
-		.example("$0 mcp", "Interactive: scope, agents, auth, then confirm")
+		.example(
+			"$0 mcp",
+			"Interactive: config location, agents, auth, then confirm",
+		)
 		.example("$0 mcp -y", "Global config, detected agents, minted API key")
 		.example(
 			"$0 mcp --oauth",
@@ -212,7 +215,7 @@ export const handler = async (props: McpProps) => {
 			(props.agent ?? []).length === 0
 		) {
 			throw new Error(
-				"No interactive terminal. Pass -y to mint an API key into detected agents, or --oauth to install without minting.",
+				"No interactive terminal. Pass -y to mint into every detected agent, --agent <name> to name them or --oauth to install without minting.",
 			);
 		}
 	}

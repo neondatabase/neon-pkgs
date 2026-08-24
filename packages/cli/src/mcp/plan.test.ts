@@ -280,7 +280,7 @@ describe("mcpInstallSummary", () => {
 			}),
 		).toBe(
 			[
-				"Scope: global",
+				"Config: global",
 				"Agents: Cursor",
 				"Auth: mint an account-wide API key that reaches every organization",
 				`URL: ${neonMcpUrl()}`,

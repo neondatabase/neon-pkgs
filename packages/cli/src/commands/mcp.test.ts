@@ -202,7 +202,8 @@ describe("neon mcp", () => {
 			...runOptions(home, cwd),
 			code: 1,
 		});
-		expect(stderr).toMatch(/Pass -y to mint an API key/);
+		expect(stderr).toMatch(/Pass -y to mint into every detected agent/);
+		expect(stderr).toMatch(/--agent <name>/);
 		expect(stderr).toMatch(/--oauth/);
 		expect(stderr).not.toMatch(/Minted API key/);
 		expect(existsSync(join(home, ".cursor", "mcp.json"))).toBe(false);

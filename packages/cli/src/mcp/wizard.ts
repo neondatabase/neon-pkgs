@@ -111,7 +111,7 @@ export const mcpInstallSummary = (options: {
 				? "reuse the API key already in agent config"
 				: "mint an account-wide API key that reaches every organization";
 	const lines = [
-		`Scope: ${options.scope}`,
+		`Config: ${options.scope}`,
 		`Agents: ${agents}`,
 		`Auth: ${auth}`,
 		`URL: ${options.url}`,
