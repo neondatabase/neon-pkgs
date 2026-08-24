@@ -96,7 +96,10 @@ export const isMcpCommand = (args: { _: (string | number)[] }): boolean =>
 /** Raw argv is required because auth middleware runs before MCP flags are parsed. */
 export const isMcpOauth = (args: { _: (string | number)[] }): boolean =>
 	isMcpCommand(args) &&
-	process.argv.some((arg) => arg === "--oauth" || arg.startsWith("--oauth="));
+	process.argv.some(
+		(arg) =>
+			arg === "--oauth" || arg === "--oauth=true" || arg === "--oauth=1",
+	);
 
 const CONTEXT_FILE = ".neon";
 const GITIGNORE_FILE = ".gitignore";
