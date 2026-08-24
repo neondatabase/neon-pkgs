@@ -141,7 +141,7 @@ export const handler = async (props: McpProps) => {
 	if (plan.auth === "api-key" && !existing) {
 		if (!props.apiClient || !props.apiKey) {
 			throw new Error(
-				`Authentication required. Run \`${getCliName()} auth\`, pass --api-key, or use --oauth to install without a Neon credential.`,
+				`Authentication required. Run \`${getCliName()} auth\`, pass --api-key or use --oauth to install without a Neon credential.`,
 			);
 		}
 		if (
