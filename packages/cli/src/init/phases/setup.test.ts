@@ -18,7 +18,7 @@ const mockInstallMcp = vi.fn().mockReturnValue({
 	ok: true,
 	path: "/tmp/mcp.json",
 });
-vi.mock("../install_mcp.js", () => ({
+vi.mock("../../mcp/install.js", () => ({
 	installNeonMcpServer: (...args: unknown[]) => mockInstallMcp(...args),
 }));
 

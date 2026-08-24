@@ -56,6 +56,8 @@ const NO_SUBCOMMANDS_VERBS = [
 
 	"init",
 
+	"mcp",
+
 	"dev",
 
 	"deploy",

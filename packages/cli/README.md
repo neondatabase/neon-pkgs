@@ -722,6 +722,28 @@ That message reports where parsing stopped and nothing more. `--data` carries wh
 | `--preview` | Enable preview features (scaffolding a project from a template) |
 | `--profile <name>` | Run as that stored account. See [Which credential an invocation uses](#which-credential-an-invocation-uses). |
 
+## Install the Neon MCP server (`mcp`)
+
+`neon mcp` writes the hosted Neon MCP server (`https://mcp.neon.tech/mcp`) into coding-agent config files.
+
+```bash
+# Interactive picker on a TTY. Detected agents are pre-selected.
+# In CI, installs into every detected agent.
+$ neon mcp
+
+# OAuth instead of minting an API key. Does not log into the Neon CLI.
+$ neon mcp --oauth
+
+# Project-level config and a project-scoped key, from the linked `.neon` project.
+$ neon mcp --project
+
+$ neon mcp --agent cursor --agent claude-code
+```
+
+The default mints an API key, or reuses the Bearer already configured for Neon. `--oauth` writes the URL with no `Authorization` header. `--project` writes into the project config (`.cursor/mcp.json` and similar) and mints a key limited to the linked project.
+
+`--agent` skips the picker.
+
 ## Snapshots (`snapshots`)
 
 `neon snapshots` (alias `neon snapshot`) manages **snapshots** — point-in-time backups of a branch that you can list, rename, expire, restore into a branch, or schedule automatically. Snapshots are a Beta Neon feature and were previously only available in the Console and REST API; this command group brings them to the CLI.
@@ -1091,6 +1113,7 @@ Id   Name      Project         Created At            Last Used At          Last 
 | deploy                                                                     |                                                                                                              | Alias for `config apply`           |
 | bootstrap                                                                  |                                                                                                              | Scaffold a project from a template |
 | init                                                                       |                                                                                                              | Set up a project for a coding agent |
+| mcp                                                                        |                                                                                                              | Install the Neon MCP server         |
 | bucket                                                                     | `create`, `list`, `delete`, `object list`, `object get`, `object put`, `object delete` (incl. `--recursive`) | Manage buckets and their objects   |
 | [completion](https://neon.com/docs/reference/cli-completion)               |                                                                                                              | Generate a completion script       |
 
