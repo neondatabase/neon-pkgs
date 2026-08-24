@@ -89,7 +89,7 @@ export const pickMcpProjectPin = async (
 		onState: restoreCursorOnAbort,
 		type: "confirm",
 		name: "pin",
-		message: `Scope MCP tools to the linked project ${linkedProjectId}?`,
+		message: `Pin MCP tools to the linked project ${linkedProjectId}?`,
 		initial: true,
 	});
 	return pin === true;
