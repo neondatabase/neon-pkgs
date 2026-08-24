@@ -2,7 +2,7 @@ import type yargs from "yargs";
 
 import { readContextFile } from "../context.js";
 import { log } from "../log.js";
-import { listMcpAgentIds } from "../mcp/agents.js";
+import { tryResolveAddMcpAgentId } from "../mcp/agents.js";
 import {
 	existingNeonApiKey,
 	installNeonMcpServer,
@@ -48,7 +48,7 @@ export const builder = (argv: yargs.Argv) =>
 				type: "boolean",
 				default: false,
 				describe:
-					"Install with OAuth instead of minting an API key (no Neon login)",
+					"Write the server URL only. The agent prompts for Neon sign-in on first use. No CLI login, no API key minted",
 			},
 			project: {
 				type: "boolean",
@@ -80,7 +80,10 @@ export const builder = (argv: yargs.Argv) =>
 			"$0 mcp",
 			"Pick agents (or detected agents in CI), minting an API key",
 		)
-		.example("$0 mcp --oauth", "Install with OAuth, without minting a key")
+		.example(
+			"$0 mcp --oauth",
+			"Install with OAuth; the agent signs in on first use",
+		)
 		.example(
 			"$0 mcp --project",
 			"Write project config and mint a project-scoped key",
@@ -103,7 +106,16 @@ export const handler = async (props: McpProps) => {
 		detected,
 		message:
 			"Which coding agents should get the Neon MCP server? (space to toggle, enter to confirm)",
-		nonInteractiveMessage: `No coding agents detected. Pass --agent <name>. Supported agents: ${listMcpAgentIds().join(", ")}`,
+		nonInteractiveMessage: `No coding agents detected. Pass --agent <name>. Supported agents: ${available.join(", ")}`,
+		resolveSpecified: (raw) => {
+			const id = tryResolveAddMcpAgentId(raw);
+			if (!id) {
+				throw new Error(
+					`Unknown agent: "${raw}". Supported agents: ${available.join(", ")}`,
+				);
+			}
+			return id;
+		},
 	});
 	const { install, skipped } = resolveInstallTargets({
 		agents: selected,
@@ -155,6 +167,11 @@ export const handler = async (props: McpProps) => {
 				projectId,
 			});
 			auth = { kind: "api-key", apiKey: minted.key };
+			if (!minted.projectId) {
+				log.warning(
+					"This key reaches everything your account can, in every organization.",
+				);
+			}
 		}
 	}
 
@@ -181,7 +198,6 @@ export const handler = async (props: McpProps) => {
 			if (!result.unsupported) {
 				failedAgents.push(agent);
 			}
-			log.error("%s: %s", agent, result.error);
 		}
 	}
 	for (const row of skipped) {
@@ -190,7 +206,6 @@ export const handler = async (props: McpProps) => {
 			status: "skipped",
 			error: row.error,
 		});
-		log.info("%s: %s", row.agent, row.error);
 	}
 
 	if (successes === 0) {
@@ -223,11 +238,10 @@ export const handler = async (props: McpProps) => {
 			minted.projectId ? `, project ${minted.projectId}` : ", account",
 			revoke,
 		);
-		if (!minted.projectId) {
-			log.warning(
-				"This key reaches everything your account can, in every organization.",
-			);
-		}
+	}
+
+	if (oauth) {
+		log.info("The agent will prompt for Neon sign-in on first use.");
 	}
 
 	if (failedAgents.length > 0) {

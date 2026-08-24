@@ -104,6 +104,7 @@ describe("neon mcp", () => {
 		expect(written.mcpServers.Neon).toMatchObject({ url: NEON_MCP_URL });
 		expect(stderr).not.toMatch(/Minted API key/);
 		expect(stderr).not.toMatch(/Cannot run interactive auth/);
+		expect(stderr).toMatch(/prompt for Neon sign-in/);
 		expect(stdout).toContain("installed");
 		assertNoSecret(stdout, stderr);
 	});
@@ -194,6 +195,7 @@ describe("neon mcp", () => {
 			{ ...runOptions(home, cwd), code: 1 },
 		);
 		expect(stderr).toMatch(/Unknown agent: "not-an-agent"/);
+		expect(stderr).not.toMatch(/claude-desktop/);
 		expect(stderr).not.toMatch(/Minted API key/);
 	});
 
@@ -290,6 +292,7 @@ describe("neon mcp", () => {
 			code: 1,
 		});
 		expect(stderr).toMatch(/cannot mint API keys/);
+		expect(stderr).not.toMatch(/everything your account can/);
 	});
 
 	test("no --agent and no detected agents fails without minting", async ({
@@ -303,6 +306,7 @@ describe("neon mcp", () => {
 			code: 1,
 		});
 		expect(stderr).toMatch(/No coding agents detected/);
+		expect(stderr).not.toMatch(/claude-desktop/);
 		expect(stderr).not.toMatch(/Minted API key/);
 	});
 });

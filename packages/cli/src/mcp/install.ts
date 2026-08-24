@@ -224,7 +224,7 @@ export function installNeonMcpServer(options: {
 }): NeonMcpInstallResult {
 	const auth = options.auth ?? { kind: "oauth" };
 
-	// Guard first because add-mcp can write unusable HTTP entries, and project installs must not change scope.
+	// add-mcp can write unusable HTTP entries; project installs cannot fall back to global config.
 	const unsupported = mcpUnsupportedReason(options.agent, options.scope);
 	if (unsupported) {
 		return { ok: false, unsupported: true, error: unsupported };

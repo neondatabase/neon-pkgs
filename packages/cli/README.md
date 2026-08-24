@@ -731,7 +731,7 @@ That message reports where parsing stopped and nothing more. `--data` carries wh
 # In CI, installs into every detected agent.
 $ neon mcp
 
-# OAuth instead of minting an API key. Does not log into the Neon CLI.
+# OAuth: no API key minted. The agent prompts for Neon sign-in on first use.
 $ neon mcp --oauth
 
 # Project-level config and a project-scoped key, from the linked `.neon` project.
@@ -740,7 +740,7 @@ $ neon mcp --project
 $ neon mcp --agent cursor --agent claude-code
 ```
 
-The default mints an API key, or reuses the Bearer already configured for Neon. `--oauth` writes the URL with no `Authorization` header. `--project` writes into the project config (`.cursor/mcp.json` and similar) and mints a key limited to the linked project.
+The default mints an account-wide API key (or reuses the Bearer already configured for Neon at `https://mcp.neon.tech/mcp`) and writes it into each selected agent's config. That key reaches everything the account can, in every organization. Revoke it with `neon api-keys revoke <id>`. `--oauth` writes the URL with no `Authorization` header; the agent signs in on first use. `--project` writes into the project config (`.cursor/mcp.json` and similar) and mints a key limited to the linked project.
 
 `--agent` skips the picker.
 

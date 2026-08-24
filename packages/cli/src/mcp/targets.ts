@@ -63,7 +63,7 @@ export function resolveInstallTargets(options: {
 		const details = skipped.map((row) => row.error).join(" ");
 		throw new Error(
 			details ||
-				`None of the selected agents can install the Neon MCP server. Supported agents: ${listMcpAgentIds().join(", ")}`,
+				`None of the selected agents can install the Neon MCP server. Supported agents: ${mcpInstallableAgents(options.scope).join(", ")}`,
 		);
 	}
 

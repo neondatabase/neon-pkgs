@@ -63,6 +63,23 @@ describe("resolveAgentSelection", () => {
 		).rejects.toThrow(/Unknown agent: "not-an-agent"/);
 	});
 
+	test("uses resolveSpecified for --agent values", async () => {
+		const result = await resolveAgentSelection({
+			specified: ["cursor-alias"],
+			choices,
+			detected: [],
+			message: "pick",
+			nonInteractiveMessage: "pass --agent",
+			resolveSpecified: (raw) => {
+				if (raw !== "cursor-alias") {
+					throw new Error(`unexpected: ${raw}`);
+				}
+				return "cursor";
+			},
+		});
+		expect(result).toEqual(["cursor"]);
+	});
+
 	test("uses an injected picker when nothing is specified", async () => {
 		const result = await resolveAgentSelection({
 			specified: [],

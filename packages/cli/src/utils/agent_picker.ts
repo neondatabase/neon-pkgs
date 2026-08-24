@@ -26,13 +26,13 @@ export type ResolveAgentSelectionOptions = {
 	detected: readonly AgentType[];
 	message: string;
 	nonInteractiveMessage: string;
+	resolveSpecified?: (raw: string) => AgentType;
 	pick?: (options: PickAgentsOptions) => Promise<AgentType[]>;
 };
 
 export const canPickAgentsInteractively = (): boolean =>
 	!isCi() && Boolean(process.stdout.isTTY) && Boolean(process.stdin.isTTY);
 
-/** Shared with the planned `neon skills` command to keep agent selection consistent. */
 export const pickAgentsInteractively = async (
 	options: PickAgentsOptions,
 ): Promise<AgentType[]> => {
@@ -49,8 +49,7 @@ export const pickAgentsInteractively = async (
 	const { agents } = await prompts({
 		onState: (state: { aborted: boolean }) => {
 			if (state.aborted) {
-				// Restore the cursor prompts hid, then exit — otherwise the terminal is
-				// left without one for the rest of the session.
+				// prompts leaves the cursor hidden when selection is aborted.
 				process.stdout.write("\x1B[?25h");
 				process.stdout.write("\n");
 				process.exit(1);
@@ -88,7 +87,8 @@ export const resolveAgentSelection = async (
 	options: ResolveAgentSelectionOptions,
 ): Promise<AgentType[]> => {
 	if (options.specified.length > 0) {
-		return uniqueAgentIds(options.specified.map(resolveAddMcpAgentId));
+		const resolve = options.resolveSpecified ?? resolveAddMcpAgentId;
+		return uniqueAgentIds(options.specified.map(resolve));
 	}
 
 	const pick =
