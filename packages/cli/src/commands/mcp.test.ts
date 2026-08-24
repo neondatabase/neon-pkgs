@@ -303,6 +303,47 @@ describe("neon mcp", () => {
 		expect(stderr).not.toMatch(/Minted API key/);
 	});
 
+	test("bare --agent fails instead of installing into every detected agent", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		const { stderr } = await testCliCommand(["mcp", "--oauth", "--agent"], {
+			...runOptions(home, cwd),
+			apiKey: false,
+			code: 1,
+		});
+		expect(stderr).toMatch(/--agent needs a value/);
+		expect(stderr).not.toMatch(/Minted API key/);
+		expect(existsSync(join(home, ".cursor", "mcp.json"))).toBe(false);
+	});
+
+	test("-y --agent with no value fails instead of minting into detected agents", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		const { stderr } = await testCliCommand(["mcp", "-y", "--agent"], {
+			...runOptions(home, cwd),
+			code: 1,
+		});
+		expect(stderr).toMatch(/--agent needs a value/);
+		expect(stderr).not.toMatch(/Minted API key/);
+		expect(existsSync(join(home, ".cursor", "mcp.json"))).toBe(false);
+	});
+
+	test("--agent followed by another flag fails instead of treating the flag as omitted", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		const { stderr } = await testCliCommand(["mcp", "--agent", "--oauth"], {
+			...runOptions(home, cwd),
+			apiKey: false,
+			code: 1,
+		});
+		expect(stderr).toMatch(/--agent needs a value/);
+		expect(stderr).not.toMatch(/Minted API key/);
+		expect(existsSync(join(home, ".cursor", "mcp.json"))).toBe(false);
+	});
+
 	test("unknown --agent fails without minting", async ({
 		testCliCommand,
 	}) => {

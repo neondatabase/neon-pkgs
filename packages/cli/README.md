@@ -744,7 +744,9 @@ $ neon mcp --agent cursor --agent claude-code
 
 On a TTY the command asks for scope (global is the default), then agents, then API key vs OAuth, then a summary to confirm before it writes. Detected agents start selected: globally installed agents, or project-folder markers such as `.cursor` when the scope is project.
 
-`-y` skips those questions. `--project`, `--oauth`, and `--agent` skip the question they answer and still apply with `-y`. Without a TTY, pass `-y` to mint into every detected agent, `--agent` to name the agents, or `--oauth` to write the URL only.
+`-y` skips those questions. `--project`, `--oauth` and `--agent` skip the question they answer and still apply with `-y`. Without a TTY, pass `-y` to mint into every detected agent, `--agent` to name the agents or `--oauth` to write the URL only.
+
+`--agent` names: `antigravity`, `cline`, `cline-cli`, `claude-code`, `codex`, `cursor`, `gemini-cli`, `goose`, `github-copilot-cli`, `grok-build`, `mcporter`, `opencode`, `vscode`, `windsurf`, `zed`. Project scope drops `antigravity`, `cline`, `cline-cli`, `goose` and `windsurf`. `claude-desktop` is a known name that is then skipped.
 
 The default mints an account-wide API key (or reuses the Bearer already configured for Neon at `https://mcp.neon.tech/mcp`) and writes it into each selected agent's config. That key reaches everything the account can, in every organization. Revoke it with `neon api-keys revoke <id>`. `--oauth` writes the URL with no `Authorization` header; the agent signs in on first use. `--project` writes into the project config (`.cursor/mcp.json` and similar).
 

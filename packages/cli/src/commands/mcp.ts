@@ -55,7 +55,7 @@ export const builder = (argv: yargs.Argv) =>
 				type: "boolean",
 				default: false,
 				describe:
-					"Skip prompts. Defaults to global config, every detected agent, and a minted account-wide API key. --project, --oauth, and --agent still apply",
+					"Skip prompts. Defaults to global config, every detected agent and a minted account-wide API key. --project, --oauth and --agent still apply",
 			},
 			agent: {
 				alias: "a",
@@ -66,6 +66,11 @@ export const builder = (argv: yargs.Argv) =>
 				coerce: (value: unknown): string[] => {
 					if (value === undefined) return [];
 					const list = Array.isArray(value) ? value : [value];
+					if (list.length === 0) {
+						throw new Error(
+							"--agent needs a value. Pass one, or omit the flag entirely.",
+						);
+					}
 					return list.map((item) => {
 						if (typeof item !== "string" || item.trim() === "") {
 							throw new Error(
