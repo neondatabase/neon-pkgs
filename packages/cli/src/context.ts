@@ -217,7 +217,7 @@ export const enrichFromContext = (
 	if (isProfileCommand(args)) {
 		return;
 	}
-	// Global MCP installs must not inherit project scope from `.neon`.
+	// MCP reads the linked project separately; enriching here would silently pin global installs.
 	if (isMcpCommand(args)) {
 		return;
 	}
