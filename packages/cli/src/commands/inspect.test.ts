@@ -137,6 +137,7 @@ describe("inspect db", () => {
 		);
 		expect(INSPECT_QUERIES["stalled-queries"]).toMatchObject({
 			scope: "compute",
+			describe: expect.stringContaining("Oldest groups first"),
 			sql: expect.stringContaining(
 				"backend_type IN ('client backend', 'parallel worker')",
 			),

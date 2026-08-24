@@ -267,7 +267,7 @@ describe.sequential("e2e — neon inspect db against the real API", () => {
 	);
 
 	e2eTest(
-		"stalled-queries executes and reports a backend past 30 seconds",
+		"stalled-queries reports backends past 30 seconds, oldest group first",
 		async ({ track }) => {
 			const projectId = await createProject({
 				name: uniqueProjectName("cli-inspect-stall"),
@@ -284,10 +284,18 @@ describe.sequential("e2e — neon inspect db against the real API", () => {
 			expect(empty).toEqual([]);
 
 			const uri = await connectionUriFor(projectId, "neondb");
-			const session = await PgConnection.connect(parseConnectionUri(uri));
+			const older = await PgConnection.connect(parseConnectionUri(uri));
+			const newer = await PgConnection.connect(parseConnectionUri(uri));
 			try {
-				const pending = session.query("SELECT pg_sleep(90)");
-				pending.catch(() => undefined);
+				const pendingOlder = older.query(
+					"SELECT pg_sleep(90) /* stall-older */",
+				);
+				pendingOlder.catch(() => undefined);
+				await sleep(5_000);
+				const pendingNewer = newer.query(
+					"SELECT pg_sleep(90) /* stall-newer */",
+				);
+				pendingNewer.catch(() => undefined);
 				await sleep(32_000);
 
 				const rows = await runCliJson<Record<string, unknown>[]>([
@@ -297,21 +305,32 @@ describe.sequential("e2e — neon inspect db against the real API", () => {
 					"--project-id",
 					projectId,
 				]);
-				const hit = rows.find((row) =>
+				const stallRows = rows.filter((row) =>
 					String(row.query).includes("pg_sleep"),
 				);
-				expect(hit).toBeDefined();
-				if (hit === undefined) {
-					return;
-				}
-				expect(hit.role).toBe("leader");
-				expect(String(hit.query_group)).toBe(String(hit.pid));
-				expect(hit.state).toBe("active");
-				expect(typeof hit.duration).toBe("string");
+				expect(stallRows.length).toBeGreaterThanOrEqual(2);
 
-				await session.cancel();
+				const olderIdx = stallRows.findIndex((row) =>
+					String(row.query).includes("stall-older"),
+				);
+				const newerIdx = stallRows.findIndex((row) =>
+					String(row.query).includes("stall-newer"),
+				);
+				expect(olderIdx).toBeGreaterThanOrEqual(0);
+				expect(newerIdx).toBeGreaterThanOrEqual(0);
+				expect(olderIdx).toBeLessThan(newerIdx);
+
+				const hit = stallRows[olderIdx];
+				expect(hit?.role).toBe("leader");
+				expect(String(hit?.query_group)).toBe(String(hit?.pid));
+				expect(hit?.state).toBe("active");
+				expect(typeof hit?.duration).toBe("string");
+
+				await older.cancel();
+				await newer.cancel();
 			} finally {
-				await session.close();
+				await older.close();
+				await newer.close();
 			}
 		},
 		240_000,

@@ -129,7 +129,7 @@ export const INSPECT_QUERIES = {
 	},
 	"stalled-queries": {
 		describe:
-			"Active queries running longer than 30 seconds with parallel workers, waits, and blockers (compute-wide)",
+			"Active queries running longer than 30 seconds with parallel workers, waits, and blockers. Oldest groups first (compute-wide)",
 		scope: "compute",
 		fields: [
 			"duration",
