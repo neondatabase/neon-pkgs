@@ -32,3 +32,9 @@ export type BranchScopeProps = ProjectScopeProps &
 export type ExtendedTokenSet = TokenEndpointResponse & {
 	expires_at: number;
 };
+
+/**
+ * A branch option in an `--agent` `needs_branch` response. Emitted by both `link`
+ * and `checkout`, so it lives here to keep the two commands' contract identical.
+ */
+export type AgentBranchOption = { id: string; name: string; default: boolean };

@@ -1,5 +1,160 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`checkout > --agent mode > --agent emits parseable JSON on stdout with the invoked binary name in the template 1`] = `
+"{
+  "status": "needs_branch",
+  "instruction": "Ask the user which branch to check out, then re-run the next_command_template with the chosen branch name.",
+  "options": [
+    {
+      "id": "br-main-branch-123456",
+      "name": "main",
+      "default": true
+    },
+    {
+      "id": "br-sunny-branch-123456",
+      "name": "test_branch",
+      "default": false
+    },
+    {
+      "id": "br-numbered-branch-123456",
+      "name": "123",
+      "default": false
+    },
+    {
+      "id": "br-numbered-branch-123456",
+      "name": "test_branch_with_fixed_cu",
+      "default": false
+    },
+    {
+      "id": "br-numbered-branch-123456",
+      "name": "test_branch_with_autoscaling",
+      "default": false
+    },
+    {
+      "id": "br-protected-branch-123456",
+      "name": "protected_branch",
+      "default": false
+    }
+  ],
+  "context": {
+    "projectId": "test"
+  },
+  "next_command_template": "neon checkout <branch> --agent --project-id test"
+}
+"
+`;
+
+exports[`checkout > --agent mode > a branch name pins it and emits checked_out JSON 1`] = `
+"{
+  "status": "checked_out",
+  "context_file": "<TMP>/agent_checked_out/.neon",
+  "context": {
+    "projectId": "test",
+    "branch": "main"
+  },
+  "env_pull": "skipped",
+  "message": "Checked out main. Env pull was skipped (--no-env-pull); no vars written."
+}
+"
+`;
+
+exports[`checkout > --agent mode > a nonexistent branch emits needs_branch (never silently creates) 1`] = `
+"{
+  "status": "needs_branch",
+  "instruction": "Branch \\"no-such-branch\\" was not found in this project. Ask the user which existing branch to check out, then re-run the next_command_template with it. This never creates a branch.",
+  "options": [
+    {
+      "id": "br-main-branch-123456",
+      "name": "main",
+      "default": true
+    },
+    {
+      "id": "br-sunny-branch-123456",
+      "name": "test_branch",
+      "default": false
+    },
+    {
+      "id": "br-numbered-branch-123456",
+      "name": "123",
+      "default": false
+    },
+    {
+      "id": "br-numbered-branch-123456",
+      "name": "test_branch_with_fixed_cu",
+      "default": false
+    },
+    {
+      "id": "br-numbered-branch-123456",
+      "name": "test_branch_with_autoscaling",
+      "default": false
+    },
+    {
+      "id": "br-protected-branch-123456",
+      "name": "protected_branch",
+      "default": false
+    }
+  ],
+  "context": {
+    "projectId": "test"
+  },
+  "next_command_template": "neon checkout <branch> --agent --project-id test"
+}
+"
+`;
+
+exports[`checkout > --agent mode > no branch arg on a multi-branch project emits needs_branch JSON 1`] = `
+"{
+  "status": "needs_branch",
+  "instruction": "Ask the user which branch to check out, then re-run the next_command_template with the chosen branch name.",
+  "options": [
+    {
+      "id": "br-main-branch-123456",
+      "name": "main",
+      "default": true
+    },
+    {
+      "id": "br-sunny-branch-123456",
+      "name": "test_branch",
+      "default": false
+    },
+    {
+      "id": "br-numbered-branch-123456",
+      "name": "123",
+      "default": false
+    },
+    {
+      "id": "br-numbered-branch-123456",
+      "name": "test_branch_with_fixed_cu",
+      "default": false
+    },
+    {
+      "id": "br-numbered-branch-123456",
+      "name": "test_branch_with_autoscaling",
+      "default": false
+    },
+    {
+      "id": "br-protected-branch-123456",
+      "name": "protected_branch",
+      "default": false
+    }
+  ],
+  "context": {
+    "projectId": "test"
+  },
+  "next_command_template": "neon checkout <branch> --agent --project-id test"
+}
+"
+`;
+
+exports[`checkout > --agent mode > with no resolvable project emits an error JSON, never a prompt 1`] = `
+"{
+  "status": "error",
+  "code": "INTERNAL_ERROR",
+  "message": "Could not determine which Neon project to check out a branch from. Provide one via the --project-id flag or a .neon file (created by \`neon link\` / \`neon set-context\`)."
+}
+"
+`;
+
 exports[`checkout > announces the branch currently pinned before switching to a new one 1`] = `""`;
 
 exports[`checkout > auto-detects the project when the API key maps to a single project 1`] = `""`;

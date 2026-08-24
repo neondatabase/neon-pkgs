@@ -7,7 +7,7 @@ import { isNeonApiError } from "../api.js";
 import { applyContext, contextBranch, readContextFile } from "../context.js";
 import { isCi } from "../env.js";
 import { log } from "../log.js";
-import type { CommonProps } from "../types.js";
+import type { AgentBranchOption, CommonProps } from "../types.js";
 import {
 	createBranch,
 	pickBranchInteractively,
@@ -27,6 +27,8 @@ type CheckoutProps = CommonProps & {
 	orgId?: string;
 	id?: string;
 	envPull: boolean;
+	/** Emit a JSON state-machine response for agents instead of prompting. */
+	agent?: boolean;
 	/** Global `--color` flag (default true); `--no-color` sets it false to force plain output. */
 	color?: boolean;
 };
@@ -58,6 +60,15 @@ export const builder = (argv: yargs.Argv) =>
 				type: "boolean",
 				default: true,
 			},
+			agent: {
+				describe:
+					"Emit a JSON state-machine response designed for AI agents instead of " +
+					"prompting. With no branch, returns a `needs_branch` response listing the " +
+					"branches to choose from; with a branch, pins it, pulls env, and returns " +
+					"`checked_out`.",
+				type: "boolean",
+				default: false,
+			},
 		})
 		.example([
 			[
@@ -75,6 +86,14 @@ export const builder = (argv: yargs.Argv) =>
 		]);
 
 export const handler = async (props: CheckoutProps) => {
+	// Agent mode: emit a JSON state-machine response instead of the human flow
+	// (prompts/log lines). Kept as an early return so the interactive path below
+	// is untouched.
+	if (props.agent) {
+		await runCheckoutAgent(props);
+		return;
+	}
+
 	// Show where the context is pinned *before* we switch it, so the user sees the move
 	// ("currently on X" → "checked out Y") and can catch a checkout they didn't mean to make.
 	// Read straight from `.neon` (a name, no API call); silent when nothing is pinned yet.
@@ -156,6 +175,171 @@ export const handler = async (props: CheckoutProps) => {
 				`Fix the cause above, then run \`${getCliName()} deploy --update-existing\` to apply the policy to it — or, if your policy only configures new branches (keyed on \`!branch.exists\`), delete the branch and check it out again: \`${getCliName()} branches delete ${branchName}\` then \`${getCliName()} checkout ${branchName}\`.`,
 			].join("\n"),
 		);
+	}
+};
+
+// ----------------------------------------------------------------------------
+// Agent mode (JSON state machine) — mirrors `link --agent`'s contract so an
+// agent walking the link → checkout flow sees one consistent shape.
+// ----------------------------------------------------------------------------
+
+type CheckoutAgentResponse =
+	| {
+			status: "needs_branch";
+			instruction: string;
+			options: AgentBranchOption[];
+			// Mirrors `link --agent`'s needs_branch shape so an agent sees one contract.
+			context: { orgId?: string; projectId: string };
+			next_command_template: string;
+	  }
+	| {
+			status: "checked_out";
+			context_file: string;
+			context: { orgId?: string; projectId: string; branch: string };
+			// The branch is pinned; `env_pull` reports whether env actually landed on
+			// disk. A "failed"/"empty" pull is NOT a clean success — the branch is
+			// checked out but DATABASE_URL may be absent, so an agent must check this.
+			env_pull: "written" | "empty" | "skipped" | "failed";
+			env_file?: string;
+			pulled?: string[];
+			message: string;
+	  }
+	| { status: "error"; code: string; message: string };
+
+const emitCheckoutAgent = (response: CheckoutAgentResponse) => {
+	process.stdout.write(`${JSON.stringify(response, null, 2)}\n`);
+};
+
+// Quote a value for a copy-pasteable `next_command_template`, matching how
+// `link` and `bootstrap` build theirs. Project ids are already shell-safe, but
+// keeping the same helper keeps the three commands' templates consistent.
+const shellArg = (value: string): string => {
+	if (/^[A-Za-z0-9._:/-]+$/.test(value)) {
+		return value;
+	}
+	return `'${value.replace(/'/g, `'\\''`)}'`;
+};
+
+/**
+ * Agent-mode checkout. Resolves the project, then:
+ *  - no branch arg + >1 branch  → `needs_branch` (list + next_command_template)
+ *  - no branch arg + 1 branch   → pin it, pull env, `checked_out`
+ *  - branch arg that exists     → pin it, pull env, `checked_out`
+ *  - branch arg not found       → `needs_branch` (never silently create; branch
+ *                                 creation is stateful and needs explicit confirmation)
+ * Never prompts. Errors are emitted as `{ status: "error" }` with exit 1.
+ */
+const runCheckoutAgent = async (props: CheckoutProps): Promise<void> => {
+	try {
+		const projectId = await resolveProjectId(props);
+		const branches = (
+			await props.apiClient.listProjectBranches({ projectId })
+		).data.branches;
+
+		// A project always has a default branch; an empty list means a transient
+		// API issue, so surface it as an error rather than an empty needs_branch.
+		if (branches.length === 0) {
+			emitCheckoutAgent({
+				status: "error",
+				code: "NO_BRANCHES",
+				message: `Project ${projectId} returned no branches.`,
+			});
+			process.exitCode = 1;
+			return;
+		}
+
+		const options: AgentBranchOption[] = branches.map((b: Branch) => ({
+			id: b.id,
+			name: b.name ?? b.id,
+			default: Boolean(b.default),
+		}));
+
+		// The next command an agent runs (checkout again with a branch). Thread the
+		// ids we already hold so it's self-contained; --org-id only when it was
+		// passed (checkout resolves the org from --project-id, so it's optional).
+		const nextTemplate =
+			`${getCliName()} checkout <branch> --agent --project-id ${shellArg(projectId)}` +
+			(props.orgId ? ` --org-id ${shellArg(props.orgId)}` : "");
+
+		// Resolve which branch to pin, or emit needs_branch and stop.
+		let target: Branch | undefined;
+		if (props.id) {
+			const ref = props.id;
+			target = looksLikeBranchId(ref)
+				? branches.find((b: Branch) => b.id === ref)
+				: branches.find((b: Branch) => b.name === ref);
+			if (!target) {
+				emitCheckoutAgent({
+					status: "needs_branch",
+					instruction: `Branch "${ref}" was not found in this project. Ask the user which existing branch to check out, then re-run the next_command_template with it. This never creates a branch.`,
+					options,
+					context: { projectId },
+					next_command_template: nextTemplate,
+				});
+				return;
+			}
+		} else if (branches.length === 1) {
+			target = branches[0];
+		} else {
+			emitCheckoutAgent({
+				status: "needs_branch",
+				instruction:
+					"Ask the user which branch to check out, then re-run the next_command_template with the chosen branch name.",
+				options,
+				context: { projectId },
+				next_command_template: nextTemplate,
+			});
+			return;
+		}
+
+		// `target` is set on every path that reaches here (the branches-empty and
+		// not-found/needs-branch cases returned above); this narrows the type.
+		if (!target) return;
+
+		const branchName = target.name ?? target.id;
+		const orgId = await resolveOrgId(props, projectId);
+
+		applyContext(props.contextFile, {
+			projectId,
+			...(orgId ? { orgId } : {}),
+			branch: branchName,
+		});
+
+		const pull = await autoPullEnvAfterPin({
+			...props,
+			projectId,
+			branch: target.id,
+			envPull: props.envPull,
+		});
+
+		emitCheckoutAgent({
+			status: "checked_out",
+			context_file: props.contextFile,
+			context: {
+				...(orgId ? { orgId } : {}),
+				projectId,
+				branch: branchName,
+			},
+			env_pull: pull.status,
+			...(pull.status === "written"
+				? { env_file: pull.file, pulled: pull.written }
+				: {}),
+			message:
+				pull.status === "written"
+					? `Checked out ${branchName} and pulled ${pull.written.length} Neon env var${pull.written.length === 1 ? "" : "s"} into ${pull.file}.`
+					: pull.status === "failed"
+						? `Checked out ${branchName}, but pulling env vars failed (${pull.message}). DATABASE_URL is not on disk; resolve the cause and run \`${getCliName()} env pull\`.`
+						: pull.status === "skipped"
+							? `Checked out ${branchName}. Env pull was skipped (--no-env-pull); no vars written.`
+							: `Checked out ${branchName}. No Neon env vars to pull for this branch yet.`,
+		});
+	} catch (err) {
+		emitCheckoutAgent({
+			status: "error",
+			code: isNeonApiError(err) ? "API_ERROR" : "INTERNAL_ERROR",
+			message: err instanceof Error ? err.message : String(err),
+		});
+		process.exitCode = 1;
 	}
 };
 
@@ -390,7 +574,10 @@ const resolveProjectId = async (props: CheckoutProps): Promise<string> => {
 		"Provide one via the --project-id flag " +
 		`or a .neon file (created by \`${getCliName()} link\` / \`${getCliName()} set-context\`).`;
 
-	if (isCi() || !process.stdout.isTTY) {
+	// Agent mode must never prompt: the caller reads JSON off stdout, so throw
+	// (the runCheckoutAgent catch turns it into a `{ status: "error" }` response)
+	// rather than blocking on a confirm it can't answer.
+	if (props.agent || isCi() || !process.stdout.isTTY) {
 		throw new Error(missingProjectMessage);
 	}
 
