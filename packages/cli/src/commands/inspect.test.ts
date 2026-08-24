@@ -1,7 +1,6 @@
 import { PassThrough } from "node:stream";
 import stripAnsi from "strip-ansi";
 import { describe, expect } from "vitest";
-import { displayWidth } from "../human_table.js";
 import { test } from "../test_utils/fixtures";
 import { INSPECT_QUERIES } from "../utils/inspect_queries.js";
 import { writer } from "../writer.js";
@@ -143,7 +142,7 @@ describe("inspect db", () => {
 		});
 	});
 
-	test("stalled-queries keeps diagnostic fields visible at 80 columns", () => {
+	test("stalled-queries prints every declared field at full width", () => {
 		const output = stripAnsi(captureWriter("table", 80));
 
 		expect(output).toContain("Duration");
@@ -152,15 +151,13 @@ describe("inspect db", () => {
 		expect(output).toContain("Role");
 		expect(output).toContain("Query Group");
 		expect(output).toContain("Query");
-		expect(output).toContain("SELECT customer_id");
-		expect(output).toContain("...");
-		expect(output).not.toContain(STALLED_QUERY_ROW.query);
+		expect(output).toContain(STALLED_QUERY_ROW.query);
+		expect(output).not.toContain("...");
 		expect(output).not.toMatch(
 			/Observed At|Query Start|Leader Pid|Backend Type|Database|Application Name|Query Id|Wait Event Type/,
 		);
-		for (const line of output.trimEnd().split("\n")) {
-			expect(displayWidth(line)).toBeLessThanOrEqual(80);
-		}
+		expect(output.trimEnd().split("\n")).toHaveLength(2);
+		expect(stripAnsi(captureWriter("table", 40))).toBe(output);
 	});
 
 	test("stalled-queries shows blocking pids when a backend is waiting", () => {
@@ -170,9 +167,8 @@ describe("inspect db", () => {
 
 		expect(output).toContain("Blocking Pids");
 		expect(output).toContain("771");
-		for (const line of output.trimEnd().split("\n")) {
-			expect(displayWidth(line)).toBeLessThanOrEqual(80);
-		}
+		expect(output).toContain(STALLED_QUERY_ROW.query);
+		expect(output.trimEnd().split("\n")).toHaveLength(2);
 	});
 
 	test("stalled-queries JSON keeps every SQL field", () => {

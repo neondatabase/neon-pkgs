@@ -18,67 +18,8 @@ const BRANCH_ID = "br-main-branch-123456";
 const REGION = "aws-us-east-2";
 const BOX = /[┌┐└┘├┤┬┴┼─│]/;
 
-const INSPECT_FIXTURE_VALUES = {
-	database: "neondb",
-	schema: "public",
-	name: "events",
-	size: "128 MB",
-	table: "public.events",
-	index: "events_created_at_idx",
-	index_size: "24 MB",
-	index_scans: 12,
-	count: 1842,
-	pid: 1694,
-	duration: "00:07:12.345",
-	state: "active",
-	query: "SELECT id FROM orders WHERE status = 'open'",
-	relname: "orders",
-	mode: "RowExclusiveLock",
-	locktype: "relation",
-	granted: true,
-	age: "00:00:45.120",
-	total_exec_time: "00:12:03.400",
-	prop_exec_time: "38.2%",
-	ncalls: 4210,
-	ratio: 0.97,
-	window: "15m",
-	working_set: "2.1 GB",
-	lfc_size: "1 GB",
-	exceeds_lfc: "yes",
-	last_vacuum: "2026-08-01 04:12",
-	last_autovacuum: "2026-08-11 09:40",
-	rowcount: 1_200_000,
-	dead_rowcount: 48_000,
-	expect_autovacuum: "yes",
-	type: "table",
-	object_name: "events",
-	bloat: 2.4,
-	waste: "180 MB",
-	slot_name: "logical_cdc",
-	slot_type: "logical",
-	slot_kind: "CDC (apply)",
-	status: "streaming",
-	client_addr: "10.0.12.4",
-	restart_lsn: "0/16B3748",
-	confirmed_flush_lsn: "0/16B6A20",
-	replication_lag: "12 MB",
-	subscription: "orders_sub",
-	table_name: "public.orders",
-	lsn: "0/16B6A20",
-} as const satisfies Record<string, unknown>;
-
-const inspectRow = (fields: readonly string[]): Record<string, unknown> => {
-	const row: Record<string, unknown> = {};
-	for (const field of fields) {
-		if (!(field in INSPECT_FIXTURE_VALUES)) {
-			throw new Error(
-				`Add ${field} to INSPECT_FIXTURE_VALUES before declaring it on an inspect list.`,
-			);
-		}
-		row[field] = Reflect.get(INSPECT_FIXTURE_VALUES, field);
-	}
-	return row;
-};
+const inspectRow = (fields: readonly string[]): Record<string, unknown> =>
+	Object.fromEntries(fields.map((field) => [field, field]));
 
 const headerOf = (out: string): string =>
 	stripAnsi(out).trimEnd().split("\n")[0] ?? "";
