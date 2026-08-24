@@ -1,6 +1,5 @@
 import prompts from "prompts";
 
-import { log } from "../log.js";
 import { canPickAgentsInteractively } from "../utils/agent_picker.js";
 import { type AgentType, getAgentDisplayName } from "./agents.js";
 import type { McpInstallScope } from "./install.js";
@@ -106,26 +105,33 @@ export const mcpInstallSummary = (options: {
 	const agents = options.install.map(getAgentDisplayName).join(", ");
 	const auth =
 		options.auth === "oauth"
-			? "OAuth (agent signs in on first use)"
+			? "OAuth, agent signs in on first use"
 			: options.reuse
 				? "reuse the API key already in agent config"
 				: "mint an account-wide API key that reaches every organization";
-	const lines = [
-		`Config: ${options.scope}`,
-		`Agents: ${agents}`,
-		`Auth: ${auth}`,
-		`URL: ${options.url}`,
+	const rows: [string, string][] = [
+		[
+			"Config",
+			options.scope === "project" ? "this directory" : "user-level",
+		],
+		["Agents", agents],
+		["Auth", auth],
+		["URL", options.url],
 	];
 	if (options.skipped.length > 0) {
-		lines.push(
-			`Skipped: ${options.skipped
+		rows.push([
+			"Skipped",
+			options.skipped
 				.map(
 					(row) => `${getAgentDisplayName(row.agent)} (${row.error})`,
 				)
-				.join("; ")}`,
-		);
+				.join("; "),
+		]);
 	}
-	return lines.join("\n");
+	const labelWidth = Math.max(...rows.map(([label]) => label.length));
+	return rows
+		.map(([label, value]) => `${label.padEnd(labelWidth)}  ${value}`)
+		.join("\n");
 };
 
 export const confirmMcpInstall = async (options: {
@@ -139,7 +145,7 @@ export const confirmMcpInstall = async (options: {
 	if (!canPickAgentsInteractively()) {
 		return true;
 	}
-	log.info(mcpInstallSummary(options));
+	process.stdout.write(`${mcpInstallSummary(options)}\n\n`);
 	const { ok } = await prompts({
 		onState: restoreCursorOnAbort,
 		type: "confirm",

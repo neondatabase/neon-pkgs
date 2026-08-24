@@ -280,11 +280,11 @@ describe("mcpInstallSummary", () => {
 			}),
 		).toBe(
 			[
-				"Config: global",
-				"Agents: Cursor",
-				"Auth: mint an account-wide API key that reaches every organization",
-				`URL: ${neonMcpUrl()}`,
-				"Skipped: Claude Desktop (Add remote servers through Connectors in the app)",
+				"Config   user-level",
+				"Agents   Cursor",
+				"Auth     mint an account-wide API key that reaches every organization",
+				`URL      ${neonMcpUrl()}`,
+				"Skipped  Claude Desktop (Add remote servers through Connectors in the app)",
 			].join("\n"),
 		);
 	});
@@ -309,21 +309,21 @@ describe("mcpInstallSummary", () => {
 				reuse: false,
 				url: neonMcpUrl({ readOnly: true }),
 			}),
-		).toContain("OAuth (agent signs in on first use)");
+		).toContain("OAuth, agent signs in on first use");
 	});
 
 	test("project-scope mint is still an account-wide key", () => {
-		expect(
-			mcpInstallSummary({
-				scope: "project",
-				install: ["cursor"],
-				skipped: [],
-				auth: "api-key",
-				reuse: false,
-				url: neonMcpUrl(),
-			}),
-		).toContain(
+		const summary = mcpInstallSummary({
+			scope: "project",
+			install: ["cursor"],
+			skipped: [],
+			auth: "api-key",
+			reuse: false,
+			url: neonMcpUrl(),
+		});
+		expect(summary).toContain(
 			"mint an account-wide API key that reaches every organization",
 		);
+		expect(summary).toContain("this directory");
 	});
 });
