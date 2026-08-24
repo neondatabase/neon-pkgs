@@ -199,11 +199,13 @@ describe("list field order", () => {
 });
 
 describe("inspect list columns", () => {
-	const inspectLists = (
+	const inspectLists: { command: string; fields: readonly string[] }[] = (
 		Object.keys(INSPECT_QUERIES) as InspectSubcommand[]
 	).flatMap((name) => {
 		const query = INSPECT_QUERIES[name];
-		const lists = [{ command: `inspect db ${name}`, fields: query.fields }];
+		const lists: { command: string; fields: readonly string[] }[] = [
+			{ command: `inspect db ${name}`, fields: query.fields },
+		];
 		if (query.scope === "database") {
 			lists.push({
 				command: `inspect db ${name} (all databases)`,

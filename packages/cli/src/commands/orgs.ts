@@ -3,7 +3,7 @@ import type yargs from "yargs";
 import type { CommonProps } from "../types.js";
 import { writer } from "../writer.js";
 
-export const ORG_FIELDS = ["id", "name"] as const;
+const ORG_FIELDS = ["id", "name"] as const;
 
 export const command = "orgs";
 export const describe = "Manage organizations";

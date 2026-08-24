@@ -4,7 +4,7 @@ import type { BranchScopeProps } from "../types.js";
 import { branchIdFromProps, fillSingleProject } from "../utils/enrichers.js";
 import { writer } from "../writer.js";
 
-export const ROLES_FIELDS = ["name", "created_at"] as const;
+const ROLES_FIELDS = ["name", "created_at"] as const;
 
 export const command = "roles";
 export const describe = "Manage roles";

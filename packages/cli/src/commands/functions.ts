@@ -33,7 +33,7 @@ const FUNCTIONS_LIST_LIMIT = 100;
 
 // Table columns for `functions list`. `status` is a derived field (the
 // table writer reads flat fields only): the current deployment's status.
-export const LIST_TABLE_FIELDS = [
+const LIST_TABLE_FIELDS = [
 	"slug",
 	"name",
 	"status",
