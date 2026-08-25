@@ -1,5 +1,17 @@
 # neonctl
 
+## 4.4.0
+
+### Minor Changes
+
+- bdb0db6: Add `neon plugins` to install the Neon agent plugin into coding agents. A TTY asks agents, then confirms. `-y` installs into detected agents at project scope. `--agent` names specific agents. `--global` is user scope.
+
+### Patch Changes
+
+- Updated dependencies [bdb0db6]
+- Updated dependencies
+  - neon@4.4.0
+
 ## 4.3.1
 
 ### Patch Changes
