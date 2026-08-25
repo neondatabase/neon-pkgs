@@ -2,6 +2,7 @@ import type yargs from "yargs";
 
 import { getAgentDisplayName } from "../init/agents.js";
 import { log } from "../log.js";
+import { skillsHelpValues } from "../skills/catalog.js";
 import { assertSkillsCanRun, resolveSkillsPlan } from "../skills/plan.js";
 import {
 	assertSkillsNode,
@@ -14,7 +15,10 @@ import {
 	skillsUpdateDetail,
 	skillsUpdateHadNothing,
 } from "../skills/run.js";
-import { mappedSkillsAgentNames } from "../skills/targets.js";
+import {
+	mappedSkillsAgentNames,
+	skillsInstallableAgents,
+} from "../skills/targets.js";
 import { confirmSkillsInstall, confirmSkillsUpdate } from "../skills/wizard.js";
 import type { CommonProps } from "../types.js";
 import { canPickAgentsInteractively } from "../utils/agent_picker.js";
@@ -153,7 +157,7 @@ export const builder = (argv: yargs.Argv) =>
 				type: "array",
 				string: true,
 				describe:
-					"Coding agent to install into (repeatable). Skips the agent picker",
+					"Coding agent to install into (repeatable). Skips the agent picker. Values listed below",
 				coerce: coerceAgents,
 			},
 			skill: {
@@ -161,7 +165,7 @@ export const builder = (argv: yargs.Argv) =>
 				type: "array",
 				string: true,
 				describe:
-					"Skill to install (repeatable). Skips the skill picker",
+					"Skill to install (repeatable). Skips the skill picker. Values listed below",
 				coerce: coerceSkills,
 			},
 		})
@@ -178,6 +182,9 @@ export const builder = (argv: yargs.Argv) =>
 			"Install named skills into specific agents",
 		)
 		.example("$0 skills --global", "Install user-level skills")
+		.epilogue(
+			`Supported agents: ${skillsInstallableAgents().join(", ")}\nSupported skills: ${skillsHelpValues()}`,
+		)
 		.strict()
 		.check(noPassthrough("skills"));
 

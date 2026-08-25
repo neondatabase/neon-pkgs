@@ -8,6 +8,8 @@ import {
 	NEON_SKILL_CATALOG,
 	PLATFORMS_SKILLS_SOURCE,
 	resolveSkillId,
+	skillHelpLabel,
+	skillsHelpValues,
 	yesInstallInvocations,
 } from "./catalog.js";
 
@@ -17,6 +19,13 @@ describe("NEON_SKILL_CATALOG", () => {
 	test("skill ids are unique", () => {
 		const ids = listSkillIds();
 		expect(new Set(ids).size).toBe(ids.length);
+	});
+
+	test("help labels pair each skill with its source", () => {
+		for (const row of NEON_SKILL_CATALOG) {
+			expect(skillHelpLabel(row)).toBe(`${row.skill} (${row.source})`);
+			expect(skillsHelpValues()).toContain(skillHelpLabel(row));
+		}
 	});
 });
 

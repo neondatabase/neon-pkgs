@@ -9,10 +9,16 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import strip from "strip-ansi";
 import { afterEach, describe, expect } from "vitest";
 
 import pkg from "../pkg.js";
-import { defaultSkillEntries } from "../skills/catalog.js";
+import {
+	defaultSkillEntries,
+	NEON_SKILL_CATALOG,
+	skillHelpLabel,
+} from "../skills/catalog.js";
+import { skillsInstallableAgents } from "../skills/targets.js";
 import { test } from "../test_utils/fixtures";
 
 const defaultSkillIds = defaultSkillEntries().map((entry) => entry.skill);
@@ -534,10 +540,16 @@ describe("neon skills", () => {
 		const { stdout, stderr } = await testCliCommand(["skills", "--help"], {
 			...runOptions(home, cwd, bin),
 		});
-		const text = `${stdout}\n${stderr}`;
-		expect(text).toMatch(/-s, --skill/);
-		expect(text).toMatch(/skills update/);
-		expect(text).not.toMatch(/neondatabase\/agent-skills/);
-		expect(text).not.toMatch(/-y, -y/);
+		const flat = strip(`${stdout}\n${stderr}`).replace(/\s+/g, " ");
+		const compact = flat.replace(/\s+/g, "");
+		expect(flat).toMatch(/-s, --skill/);
+		expect(flat).toMatch(/skills update/);
+		expect(flat).not.toMatch(/-y, -y/);
+		for (const agent of skillsInstallableAgents()) {
+			expect(compact).toContain(agent);
+		}
+		for (const row of NEON_SKILL_CATALOG) {
+			expect(compact).toContain(skillHelpLabel(row).replace(/\s+/g, ""));
+		}
 	});
 });

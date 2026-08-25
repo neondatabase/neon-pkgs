@@ -5,6 +5,7 @@ import { log } from "../log.js";
 import {
 	existingNeonApiKey,
 	installNeonMcpServer,
+	NEON_MCP_URL,
 	type NeonMcpAuth,
 	type NeonMcpCategory,
 	neonMcpUrl,
@@ -17,7 +18,7 @@ import {
 	withdrawMintedKey,
 } from "../mcp/mint.js";
 import { resolveMcpPlan } from "../mcp/plan.js";
-import { resolveInstallTargets } from "../mcp/targets.js";
+import { mcpInstallableAgents, resolveInstallTargets } from "../mcp/targets.js";
 import { confirmMcpInstall } from "../mcp/wizard.js";
 import type { CommonProps } from "../types.js";
 import { canPickAgentsInteractively } from "../utils/agent_picker.js";
@@ -44,6 +45,12 @@ type McpInstallRow = {
 export const command = "mcp";
 export const describe = "Install the Neon MCP server into coding agents";
 
+const mcpGlobalAgents = mcpInstallableAgents("global");
+const mcpProjectAgents = mcpInstallableAgents("project");
+const mcpProjectDroppedAgents = mcpGlobalAgents.filter(
+	(id) => !mcpProjectAgents.includes(id),
+);
+
 export const builder = (argv: yargs.Argv) =>
 	argv
 		.usage("$0 mcp [options]")
@@ -65,14 +72,14 @@ export const builder = (argv: yargs.Argv) =>
 				type: "boolean",
 				default: false,
 				describe:
-					"Skip prompts. Defaults to global config, every detected agent and a minted account-wide API key. --project, --oauth, --agent, --read-only, --project-id and --category still apply",
+					"Skip prompts. Defaults listed below. --project, --oauth, --agent, --read-only, --project-id and --category still apply",
 			},
 			agent: {
 				alias: "a",
 				type: "array",
 				string: true,
 				describe:
-					"Coding agent to install into (repeatable). Skips the agent picker",
+					"Coding agent to install into (repeatable). Skips the agent picker. Values listed below",
 				coerce: (value: unknown): string[] => {
 					if (value === undefined) return [];
 					const list = Array.isArray(value) ? value : [value];
@@ -160,6 +167,9 @@ export const builder = (argv: yargs.Argv) =>
 		.example(
 			"$0 mcp --category querying --category schema",
 			"Limit tools to those categories",
+		)
+		.epilogue(
+			`Installs ${NEON_MCP_URL}\nSupported agents: ${mcpGlobalAgents.join(", ")}\n--project does not support: ${mcpProjectDroppedAgents.join(", ")}\nneon mcp -y writes ${NEON_MCP_URL} into global config for every globally detected agent, reuses an existing Neon Bearer or mints an account-wide API key, leaves write tools enabled, exposes every tool category, and does not pin a project (including from .neon).`,
 		)
 		.strict()
 		.check(noPassthrough("mcp"));

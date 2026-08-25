@@ -10,9 +10,11 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import strip from "strip-ansi";
 import { afterEach, describe, expect } from "vitest";
 
 import { NEON_MCP_URL, neonMcpUrl } from "../mcp/install.js";
+import { mcpInstallableAgents } from "../mcp/targets.js";
 import { test } from "../test_utils/fixtures";
 
 const dirs: string[] = [];
@@ -805,5 +807,25 @@ describe("neon mcp", () => {
 		expect(stderr).toMatch(/could NOT be revoked/);
 		expect(stderr).toMatch(/api-keys revoke 500 --org-id org-7/);
 		assertNoSecret("", stderr);
+	});
+
+	test("help lists the server URL, -y defaults, and supported agents", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		const { stdout, stderr } = await testCliCommand(["mcp", "--help"], {
+			...runOptions(home, cwd),
+		});
+		const compact = strip(`${stdout}\n${stderr}`).replace(/\s+/g, "");
+		expect(stdout).toBe("");
+		expect(compact).toContain(NEON_MCP_URL);
+		expect(compact).toContain("globalconfig");
+		expect(compact).toContain("globallydetectedagent");
+		expect(compact).toContain("account-wideAPIkey");
+		expect(compact).toContain("doesnotpinaproject");
+		expect(compact).toContain("everytoolcategory");
+		for (const agent of mcpInstallableAgents("global")) {
+			expect(compact).toContain(agent);
+		}
 	});
 });

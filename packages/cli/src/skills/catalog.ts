@@ -67,6 +67,12 @@ const CATALOG_BY_SKILL = catalogBySkill();
 export const listSkillIds = (): string[] =>
 	NEON_SKILL_CATALOG.map((entry) => entry.skill);
 
+export const skillHelpLabel = (entry: SkillEntry): string =>
+	`${entry.skill} (${entry.source})`;
+
+export const skillsHelpValues = (): string =>
+	NEON_SKILL_CATALOG.map(skillHelpLabel).join(", ");
+
 export const defaultSkillEntries = (): SkillEntry[] =>
 	NEON_SKILL_CATALOG.filter((entry) => entry.defaultSelected);
 
