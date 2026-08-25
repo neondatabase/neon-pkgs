@@ -8,7 +8,7 @@ npm install @neon/tools
 
 ## Create tools
 
-Selectors are SDK paths. The returned record is keyed by those paths. Each tool's published `id` is the path in snake_case (`projects.list` → `projects_list`). `toolIds` lists every published selector.
+Selectors are SDK paths. The returned record is keyed by those paths. Each tool's published `id` is the last path segment, then the resource, in snake_case (`projects.list` → `list_projects`). `toolIds` lists every published selector.
 
 ```ts
 import { createNeonTools } from "@neon/tools";
@@ -34,7 +34,7 @@ const created = await tools["projects.createAndConnect"].execute({
 
 `limit` on a list tool caps how many items come back.
 
-MCP and Mastra publish `tool.id` (`projects_list`), not the record key.
+MCP and Mastra publish `tool.id` (`list_projects`), not the record key.
 
 `apiKey` is a Bearer credential: a Neon API key or a Neon OAuth access token. A function is called on every request, which is how short-lived OAuth tokens get refreshed. A credential is required when a tool executes — at construction, on `execute()`, or from MCP `authInfo` — and an empty value is rejected rather than ignored.
 
@@ -83,7 +83,7 @@ const tools = createNeonTools({
 	descriptions: {
 		"projects.list":
 			"List Neon projects in your account. Do not use for projects shared with you.",
-		projects_delete:
+		delete_projects:
 			"Delete a Neon project and all its data. NEVER run autonomously; always ask the user first.",
 	},
 });
@@ -118,7 +118,7 @@ const tools = createNeonTools({
 });
 ```
 
-Those tools publish as `neon_create_branch` and `neon_projects_list`. The record is still keyed by SDK path (`tools["branches.createWithCompute"]`). MCP and Mastra publish `tool.id`. Eve uses the filename as the model-facing name, so name the file after the published `id`. Duplicate or non-snake-case ids throw, and a `names` key that matches no selected tool throws.
+Those tools publish as `neon_create_branch` and `neon_list_projects`. The record is still keyed by SDK path (`tools["branches.createWithCompute"]`). MCP and Mastra publish `tool.id`. Eve uses the filename as the model-facing name, so name the file after the published `id`. Duplicate or non-snake-case ids throw, and a `names` key that matches no selected tool throws.
 
 ### Project and branch injection
 
@@ -265,8 +265,8 @@ const neonTools = createNeonTools({
 });
 const configs = toMastraTools(neonTools);
 
-const listProjects = createTool(configs.projects_list);
-const createProject = createTool(configs.projects_create_and_connect);
+const listProjects = createTool(configs.list_projects);
+const createProject = createTool(configs.create_and_connect_projects);
 ```
 
 The adapter maps approval requirements to Mastra's `requireApproval` field and forwards its abort signal.

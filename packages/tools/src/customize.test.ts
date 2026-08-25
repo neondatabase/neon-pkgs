@@ -66,7 +66,7 @@ describe("description overrides", () => {
 			apiKey: "test-key",
 			tools: ["projects.list"] as const,
 			descriptions: {
-				projects_list: "List Neon projects in your account.",
+				list_projects: "List Neon projects in your account.",
 			},
 		});
 
@@ -81,7 +81,7 @@ describe("description overrides", () => {
 			tools: ["projects.list"] as const,
 			descriptions: {
 				"projects.list": "from operationId",
-				projects_list: "from id",
+				list_projects: "from id",
 			},
 		});
 
@@ -128,7 +128,7 @@ describe("onExecute", () => {
 			project_id: "project-id",
 		});
 
-		expect(events).toEqual(["start:projects.get:projects_get", "success"]);
+		expect(events).toEqual(["start:projects.get:get_projects", "success"]);
 		expect(result).toEqual({ data: { id: "project-id" } });
 		expect(requests).toHaveLength(1);
 	});
@@ -470,7 +470,7 @@ describe("description overrides (createNeonTool and contracts)", () => {
 		expect(seen).toEqual([
 			{
 				operationId: "projects.delete",
-				id: "projects_delete",
+				id: "delete_projects",
 				title: generated.title,
 				description: generated.description,
 			},
@@ -607,7 +607,7 @@ describe("onExecute failure and isolation", () => {
 
 		await tool.execute({ project_id: "project-id" });
 
-		expect(events).toEqual(["projects_get"]);
+		expect(events).toEqual(["get_projects"]);
 		expect(requests).toHaveLength(1);
 	});
 });
@@ -970,14 +970,14 @@ describe("tool names", () => {
 		expect(tools["branches.createWithCompute"].id).toBe(
 			"neon_create_branch",
 		);
-		expect(tools["projects.list"].id).toBe("neon_projects_list");
+		expect(tools["projects.list"].id).toBe("neon_list_projects");
 	});
 
 	test("lets a function rename from the generated id", () => {
 		const tool = createNeonTool("branches.createWithCompute", {
 			apiKey: "test-key",
 			names: ({ id }) =>
-				id === "branches_create_with_compute" ? "create_branch" : id,
+				id === "create_with_compute_branches" ? "create_branch" : id,
 		});
 
 		expect(tool.id).toBe("create_branch");

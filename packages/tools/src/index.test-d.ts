@@ -5,7 +5,16 @@ import {
 	createNeonTool,
 	createNeonTools,
 } from "./index.js";
+import { publishedId } from "./lib/ergonomic/bind.js";
 import { toMastraTools } from "./mastra.js";
+
+expectTypeOf(publishedId("projects.list")).toEqualTypeOf<"list_projects">();
+expectTypeOf(
+	publishedId("projects.createAndConnect"),
+).toEqualTypeOf<"create_and_connect_projects">();
+expectTypeOf(
+	publishedId("postgres.roles.resetPassword"),
+).toEqualTypeOf<"reset_password_postgres_roles">();
 
 const tools = createNeonTools({
 	apiKey: "test-key",
@@ -40,14 +49,14 @@ oauthTools["projects.list"].execute(
 listProjects.execute({ name: "wrong-operation" });
 
 const mastraTools = toMastraTools(tools);
-expectTypeOf(mastraTools).toHaveProperty("projects_list");
-expectTypeOf(mastraTools).toHaveProperty("projects_create_and_connect");
+expectTypeOf(mastraTools).toHaveProperty("list_projects");
+expectTypeOf(mastraTools).toHaveProperty("create_and_connect_projects");
 
 // @ts-expect-error unselected tools are absent from the Mastra tool record
-mastraTools.projects_delete;
+mastraTools.delete_projects;
 
 // @ts-expect-error Mastra configs preserve tool-specific request types
-mastraTools.projects_list.execute({ limit: "one" }, {});
+mastraTools.list_projects.execute({ limit: "one" }, {});
 
 const eveListProjects = toEveTool(tools["projects.list"]);
 eveListProjects
@@ -104,7 +113,7 @@ eveOmitted
 	});
 
 const mastraOmitted = toMastraTools(omittedProject);
-mastraOmitted.projects_get.execute({}, {}).then((result) => {
+mastraOmitted.get_projects.execute({}, {}).then((result) => {
 	expectTypeOf(result.data.id).toEqualTypeOf<string>();
 });
 
@@ -147,11 +156,11 @@ const renamed = createNeonTools({
 });
 expectTypeOf(renamed["projects.list"].id).toEqualTypeOf<string>();
 expectTypeOf(renamed["branches.createWithCompute"].id).toEqualTypeOf<string>();
-expectTypeOf(tools["projects.list"].id).toEqualTypeOf<"projects_list">();
+expectTypeOf(tools["projects.list"].id).toEqualTypeOf<"list_projects">();
 
 const mastraRenamed = toMastraTools(renamed);
 expectTypeOf(mastraRenamed.neon_create_branch.id).toEqualTypeOf<string>();
-expectTypeOf(mastraRenamed.neon_projects_list.id).toEqualTypeOf<string>();
+expectTypeOf(mastraRenamed.neon_list_projects.id).toEqualTypeOf<string>();
 
 const renamedOne = createNeonTool("branches.createWithCompute", {
 	apiKey: "test-key",

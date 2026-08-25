@@ -5,6 +5,7 @@ import {
 	collectObjectList,
 	collectPages,
 	fromGenerated,
+	publishedId,
 	type ToolClientOptions,
 } from "./bind.js";
 import {
@@ -1234,7 +1235,7 @@ export const toolFactories = {
 			options,
 			{
 				operationId: "regions.list",
-				id: "regions_list",
+				id: publishedId("regions.list"),
 				title: "List regions",
 				description:
 					"Lists Neon regions available to the authenticated account.",

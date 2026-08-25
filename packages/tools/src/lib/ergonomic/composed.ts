@@ -1,6 +1,6 @@
 import * as z from "zod";
 import * as zod from "../../generated/zod.gen.js";
-import { bindTool, type ToolClientOptions } from "./bind.js";
+import { bindTool, publishedId, type ToolClientOptions } from "./bind.js";
 
 const writeAnnotations = {
 	readOnlyHint: false,
@@ -86,7 +86,7 @@ export const createBranchWithComputeTool = (options: ToolClientOptions) =>
 		options,
 		{
 			operationId: "branches.createWithCompute",
-			id: "branches_create_with_compute",
+			id: publishedId("branches.createWithCompute"),
 			title: "Create branch with compute",
 			description:
 				"Create a branch with a read-write endpoint and return its connection string. The call waits until operation-backed provisioning finishes, up to five minutes by default.",
@@ -131,7 +131,7 @@ export const createProjectAndConnectTool = (options: ToolClientOptions) =>
 		options,
 		{
 			operationId: "projects.createAndConnect",
-			id: "projects_create_and_connect",
+			id: publishedId("projects.createAndConnect"),
 			title: "Create project and connect",
 			description:
 				"Create a project and return a connection string to its default branch. The call waits until operation-backed provisioning finishes, up to five minutes by default.",
@@ -160,7 +160,7 @@ export const getDefaultTool = (options: ToolClientOptions) =>
 		options,
 		{
 			operationId: "branches.getDefault",
-			id: "branches_get_default",
+			id: publishedId("branches.getDefault"),
 			title: "Get default branch",
 			description:
 				"Resolve the project's default branch by the default flag, not by name.",
@@ -184,7 +184,7 @@ export const connectionStringTool = (options: ToolClientOptions) =>
 		options,
 		{
 			operationId: "postgres.connectionString",
-			id: "postgres_connection_string",
+			id: publishedId("postgres.connectionString"),
 			title: "Get connection string",
 			description:
 				"Resolve a Postgres connection string. Auto-selects the default branch and the sole role and database when those are omitted. Errors when the selection is ambiguous.",
@@ -228,7 +228,7 @@ export const restoreSnapshotTool = (options: ToolClientOptions) =>
 		options,
 		{
 			operationId: "snapshots.restore",
-			id: "snapshots_restore",
+			id: publishedId("snapshots.restore"),
 			title: "Restore snapshot",
 			description:
 				"Restore a snapshot onto a new or existing branch. The call waits until operation-backed provisioning finishes. Preview callbacks are not available on this tool.",
@@ -261,7 +261,7 @@ export const setScheduleTool = (options: ToolClientOptions) =>
 		options,
 		{
 			operationId: "snapshots.setSchedule",
-			id: "snapshots_set_schedule",
+			id: publishedId("snapshots.setSchedule"),
 			title: "Set snapshot schedule",
 			description:
 				"Replace a branch's automatic snapshot schedule. Frequency must be daily, weekly, or monthly.",

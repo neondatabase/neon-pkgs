@@ -62,7 +62,7 @@ describe("branches.createWithCompute", () => {
 
 		expect(Object.keys(tools)).toEqual(["branches.createWithCompute"]);
 		expect(tools["branches.createWithCompute"].id).toBe(
-			"branches_create_with_compute",
+			"create_with_compute_branches",
 		);
 		expect(tools["branches.createWithCompute"].operationId).toBe(
 			"branches.createWithCompute",
@@ -286,7 +286,7 @@ describe("createNeonTool", () => {
 
 		await tool.execute({ project_id: "project-id", name: "feature-x" });
 
-		expect(tool.id).toBe("branches_create_with_compute");
+		expect(tool.id).toBe("create_with_compute_branches");
 		expect(requests[0].url).toBe(
 			"https://console.neon.tech/api/v2/projects/project-id/branches",
 		);

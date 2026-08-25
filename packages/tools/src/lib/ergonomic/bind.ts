@@ -47,21 +47,37 @@ type Snake<S extends string> = S extends `${infer Head}${infer Rest}`
 		: `${Head}${Snake<Rest>}`
 	: S;
 
-export type PublishedId<Id extends string> =
-	Id extends `${infer Head}.${infer Rest}`
-		? `${Snake<Head>}_${PublishedId<Rest>}`
-		: Snake<Id>;
+type LastSegment<Id extends string> = Id extends `${string}.${infer Rest}`
+	? LastSegment<Rest>
+	: Id;
 
-export const publishedId = <Id extends string>(id: Id): PublishedId<Id> =>
-	id
-		.split(".")
-		.map((segment) =>
-			segment.replace(
-				/[A-Z]/g,
-				(character) => `_${character.toLowerCase()}`,
-			),
-		)
-		.join("_") as PublishedId<Id>;
+type ResourcePath<
+	Id extends string,
+	Acc extends string = "",
+> = Id extends `${infer Head}.${infer Rest}`
+	? ResourcePath<Rest, Acc extends "" ? Head : `${Acc}.${Head}`>
+	: Acc;
+
+type SnakeDots<Id extends string> = Id extends `${infer Head}.${infer Rest}`
+	? `${Snake<Head>}_${SnakeDots<Rest>}`
+	: Snake<Id>;
+
+export type PublishedId<Id extends string> = Id extends `${string}.${string}`
+	? `${Snake<LastSegment<Id>>}_${SnakeDots<ResourcePath<Id>>}`
+	: Snake<Id>;
+
+const snakeSegment = (segment: string) =>
+	segment.replace(/[A-Z]/g, (character) => `_${character.toLowerCase()}`);
+
+export const publishedId = <Id extends string>(id: Id): PublishedId<Id> => {
+	const dot = id.lastIndexOf(".");
+	if (dot === -1) {
+		return snakeSegment(id) as PublishedId<Id>;
+	}
+	const verb = snakeSegment(id.slice(dot + 1));
+	const resource = id.slice(0, dot).split(".").map(snakeSegment).join("_");
+	return `${verb}_${resource}` as PublishedId<Id>;
+};
 
 const resolveApiKey = (
 	options: ToolClientOptions,
