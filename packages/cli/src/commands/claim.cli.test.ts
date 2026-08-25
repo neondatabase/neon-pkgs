@@ -8,7 +8,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import strip from "strip-ansi";
 import { afterEach, beforeAll, describe, expect, test } from "vitest";
-import { writeClaimableCredentials } from "../claimable/state.js";
+import {
+	readClaimableCredentials,
+	writeClaimableCredentials,
+} from "../claimable/state.js";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -29,7 +32,12 @@ beforeAll(async () => {
 	});
 });
 
-type Run = { code: number | null; stdout: string; stderr: string };
+type Run = {
+	code: number | null;
+	stdout: string;
+	stderr: string;
+	configDir: string;
+};
 
 const makeWorkspace = (): { configDir: string; contextFile: string } => {
 	const dir = mkdtempSync(join(tmpdir(), "neon-claim-cli-"));
@@ -78,7 +86,12 @@ const runCli = (
 		});
 		cp.on("error", rej);
 		cp.on("close", (code) =>
-			res({ code, stdout: strip(stdout), stderr: strip(stderr) }),
+			res({
+				code,
+				stdout: strip(stdout),
+				stderr: strip(stderr),
+				configDir,
+			}),
 		);
 	});
 };
@@ -122,6 +135,86 @@ describe("claim create with explicit credential flags", () => {
 		expect(stderr).toContain(
 			"Claimable Neon does not use a Neon account credential. Remove --api-key or --profile.",
 		);
+		expect(reachedClaimableService(stderr)).toBe(false);
+	});
+});
+
+const expiredCredentials = {
+	version: 1 as const,
+	origin: "https://claimable.neon.tech",
+	registrationId: "reg_expired",
+	projectId: "quiet-fog-12345678",
+	branchId: "br-quiet-fog-12345678",
+	identityAssertion: "expired-assertion",
+	expiresAt: "2026-08-24T12:00:00.000Z",
+	assertionExpires: 1,
+};
+
+describe("claim status and delete after the assertion expires", () => {
+	test("status reports expired without contacting the service", async () => {
+		const { code, stdout, stderr } = await runCli(
+			[
+				"claim",
+				"status",
+				expiredCredentials.projectId,
+				"--output",
+				"json",
+			],
+			{},
+			({ configDir }) => {
+				writeClaimableCredentials(configDir, expiredCredentials);
+			},
+		);
+
+		expect(code).toBe(0);
+		expect(stderr).toBe("");
+		expect(JSON.parse(stdout)).toMatchObject({
+			project_id: expiredCredentials.projectId,
+			state: "expired",
+			reconciled: false,
+		});
+		expect(reachedClaimableService(stderr)).toBe(false);
+	});
+
+	test("delete drops a listed project that has no .neon", async () => {
+		const { code, stdout, stderr, configDir } = await runCli(
+			[
+				"claim",
+				"delete",
+				expiredCredentials.projectId,
+				"--yes",
+				"--output",
+				"json",
+			],
+			{},
+			({ configDir }) => {
+				writeClaimableCredentials(configDir, expiredCredentials);
+			},
+		);
+
+		expect(code).toBe(0);
+		expect(stderr).toBe("");
+		expect(JSON.parse(stdout)).toEqual({
+			project_id: expiredCredentials.projectId,
+			state: "cleared",
+		});
+		expect(reachedClaimableService(stderr)).toBe(false);
+		expect(
+			readClaimableCredentials(configDir, expiredCredentials.projectId),
+		).toBeNull();
+	});
+
+	test("accept refuses an expired assertion without contacting the service", async () => {
+		const { code, stderr } = await runCli(
+			["claim", "accept", expiredCredentials.projectId, "--no-open"],
+			{},
+			({ configDir }) => {
+				writeClaimableCredentials(configDir, expiredCredentials);
+			},
+		);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("has expired");
 		expect(reachedClaimableService(stderr)).toBe(false);
 	});
 });

@@ -22,6 +22,7 @@ export type StoredClaimableCredentials = {
 	branchId: string;
 	identityAssertion: string;
 	expiresAt: string;
+	assertionExpires?: number;
 };
 
 export type ResolvedClaimableContext = {
@@ -78,6 +79,7 @@ const parseStoredCredentials = (
 			`${path} belongs to a different Claimable Neon project. Delete it and run \`neon claim create\` again.`,
 		);
 	}
+	const assertionExpires = optionalUnixSeconds(value.assertionExpires, path);
 	return {
 		version: 1,
 		origin: value.origin,
@@ -86,8 +88,29 @@ const parseStoredCredentials = (
 		branchId: value.branchId,
 		identityAssertion: value.identityAssertion,
 		expiresAt: value.expiresAt,
+		...(assertionExpires === undefined ? {} : { assertionExpires }),
 	};
 };
+
+const optionalUnixSeconds = (
+	value: unknown,
+	path: string,
+): number | undefined => {
+	if (value === undefined) return undefined;
+	if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+		throw new Error(
+			`${path} does not contain a valid Claimable Neon credential. Delete it and run \`neon claim create\` again.`,
+		);
+	}
+	return value;
+};
+
+export const assertionHasExpired = (
+	credentials: StoredClaimableCredentials,
+	now = Date.now(),
+): boolean =>
+	credentials.assertionExpires !== undefined &&
+	credentials.assertionExpires * 1000 <= now;
 
 export const writeClaimableCredentials = (
 	configDir: string,

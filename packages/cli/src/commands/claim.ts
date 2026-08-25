@@ -13,6 +13,7 @@ import {
 	DEFAULT_CLAIMABLE_ORIGIN,
 } from "../claimable/api.js";
 import {
+	assertionHasExpired,
 	listClaimableCredentials,
 	readClaimableCredentials,
 	removeClaimableCredentials,
@@ -49,6 +50,7 @@ type ClaimProps = {
 	claimableHost: string;
 	profile?: string;
 	apiKey: string;
+	projectId?: string;
 };
 
 type CreateProps = ClaimProps & {
@@ -242,16 +244,29 @@ export const builder = (argv: yargs.Argv) =>
 			},
 		)
 		.command(
-			"status",
-			"Show the linked claimable project's lifecycle and claim status",
-			(y) => y.strict().check(noPassthrough("claim status")),
+			"status [project-id]",
+			"Show a claimable project's lifecycle and claim status",
+			(y) =>
+				y
+					.positional("project-id", {
+						describe:
+							"Project from `neon claim list`. Defaults to the project linked in this directory",
+						type: "string",
+					})
+					.strict()
+					.check(noPassthrough("claim status")),
 			async (args) => await status(args as unknown as ClaimProps),
 		)
 		.command(
-			"accept",
+			"accept [project-id]",
 			"Create a claim code and open the URL where a human signs in and takes the project",
 			(y) =>
 				y
+					.positional("project-id", {
+						describe:
+							"Project from `neon claim list`. Defaults to the project linked in this directory",
+						type: "string",
+					})
 					.option("open", {
 						describe: "Open the verification URL in a browser",
 						type: "boolean",
@@ -268,10 +283,15 @@ export const builder = (argv: yargs.Argv) =>
 			async (args) => list(args as unknown as ClaimProps),
 		)
 		.command(
-			"delete",
-			"Permanently delete the linked unclaimed project",
+			"delete [project-id]",
+			"Permanently delete an unclaimed project, or drop a local record that can no longer reach the service",
 			(y) =>
 				y
+					.positional("project-id", {
+						describe:
+							"Project from `neon claim list`. Defaults to the project linked in this directory",
+						type: "string",
+					})
 					.option("yes", {
 						alias: "y",
 						describe: "Skip the confirmation prompt",
@@ -297,38 +317,67 @@ const rejectExplicitAccountCredential = (props: ClaimProps): void => {
 	}
 };
 
-const linkedCredentials = (
+const resolveTarget = (
 	props: ClaimProps,
 ): {
-	context: ReturnType<typeof readContextFile>;
-	linked: NonNullable<ReturnType<typeof resolveClaimableContext>>;
+	projectId: string;
 	credentials: StoredClaimableCredentials;
 	client: ClaimableClient;
+	contextMatches: boolean;
 } => {
 	rejectExplicitAccountCredential(props);
+	const requested = props.projectId?.trim();
 	const context = readContextFile(props.contextFile);
 	const linked = resolveClaimableContext(context);
-	if (linked === null) {
+	const projectId = requested || linked?.projectId;
+	if (projectId === undefined) {
 		throw new Error(
-			"This directory is not linked to a claimable project. Run `neon claim create` first.",
+			"This directory is not linked to a claimable project. Pass a project id from `neon claim list`, or run `neon claim create` first.",
 		);
 	}
-	const credentials = readClaimableCredentials(
-		props.configDir,
-		linked.projectId,
-	);
+	const credentials = readClaimableCredentials(props.configDir, projectId);
 	if (credentials === null) {
 		throw new Error(
-			`The identity assertion for ${linked.projectId} is missing. The project cannot be managed from this machine; claim it through its existing verification URL or run \`neon link\` after it is claimed.`,
+			`The identity assertion for ${projectId} is missing. The project cannot be managed from this machine; claim it through its existing verification URL or run \`neon link\` after it is claimed.`,
 		);
 	}
 	const client = new ClaimableClient(credentials.origin);
-	if (client.origin !== new ClaimableClient(linked.origin).origin) {
+	const contextMatches = linked?.projectId === projectId;
+	if (
+		contextMatches &&
+		linked !== null &&
+		client.origin !== new ClaimableClient(linked.origin).origin
+	) {
 		throw new Error(
 			"The .neon context and saved identity assertion name different Claimable Neon services. Delete .neon or the assertion file and run `neon claim create` in a new directory.",
 		);
 	}
-	return { context, linked, credentials, client };
+	return { projectId, credentials, client, contextMatches };
+};
+
+const requireLiveIdentity = (credentials: StoredClaimableCredentials): void => {
+	if (assertionHasExpired(credentials)) {
+		throw new Error(
+			`The identity assertion for ${credentials.projectId} has expired. Run \`neon claim delete ${credentials.projectId} --yes\` to drop the local record.`,
+		);
+	}
+};
+
+const isUnusableIdentity = (error: unknown): error is ClaimableServiceError =>
+	error instanceof ClaimableServiceError &&
+	(error.code === "invalid_grant" ||
+		error.code === "project_expired" ||
+		error.code === "not_found");
+
+const clearLocalRecord = (
+	props: ClaimProps,
+	projectId: string,
+	contextMatches: boolean,
+): void => {
+	removeClaimableCredentials(props.configDir, projectId);
+	if (contextMatches && existsSync(props.contextFile)) {
+		applyContext(props.contextFile, {});
+	}
 };
 
 const create = async (props: CreateProps): Promise<void> => {
@@ -360,6 +409,7 @@ const create = async (props: CreateProps): Promise<void> => {
 		branchId: registration.project.branchId,
 		identityAssertion: registration.identityAssertion,
 		expiresAt: registration.project.expiresAt,
+		assertionExpires: registration.assertionExpires,
 	};
 	let localStateWritten = false;
 	let contextWritten = false;
@@ -500,7 +550,27 @@ const create = async (props: CreateProps): Promise<void> => {
 };
 
 const status = async (props: ClaimProps): Promise<void> => {
-	const { linked, credentials, client } = linkedCredentials(props);
+	const { projectId, credentials, client, contextMatches } =
+		resolveTarget(props);
+	if (assertionHasExpired(credentials)) {
+		writer(props).end(
+			{
+				project_id: projectId,
+				state: "expired",
+				reconciled: false,
+				project_expires_at: credentials.expiresAt,
+			},
+			{
+				fields: [
+					"project_id",
+					"state",
+					"reconciled",
+					"project_expires_at",
+				],
+			},
+		);
+		return;
+	}
 	try {
 		const token = await client.exchange(credentials.identityAssertion);
 		let claimState = "unclaimed";
@@ -508,7 +578,7 @@ const status = async (props: ClaimProps): Promise<void> => {
 		let claimExpiresAt: string | undefined;
 		try {
 			const claim = await client.claimStatus(
-				linked.projectId,
+				projectId,
 				token.accessToken,
 			);
 			claimState = claim.state;
@@ -523,11 +593,11 @@ const status = async (props: ClaimProps): Promise<void> => {
 			}
 		}
 		if (reconciled) {
-			finishClaimedContext(props);
+			finishClaimedContext(props, projectId, contextMatches);
 		}
 		writer(props).end(
 			{
-				project_id: linked.projectId,
+				project_id: projectId,
 				state: claimState,
 				reconciled,
 				project_expires_at: credentials.expiresAt,
@@ -548,14 +618,33 @@ const status = async (props: ClaimProps): Promise<void> => {
 			error instanceof ClaimableServiceError &&
 			error.code === "project_claimed"
 		) {
-			finishClaimedContext(props);
+			finishClaimedContext(props, projectId, contextMatches);
 			writer(props).end(
 				{
-					project_id: linked.projectId,
+					project_id: projectId,
 					state: "claimed",
 					reconciled: true,
 				},
 				{ fields: ["project_id", "state", "reconciled"] },
+			);
+			return;
+		}
+		if (isUnusableIdentity(error)) {
+			writer(props).end(
+				{
+					project_id: projectId,
+					state: "expired",
+					reconciled: false,
+					project_expires_at: credentials.expiresAt,
+				},
+				{
+					fields: [
+						"project_id",
+						"state",
+						"reconciled",
+						"project_expires_at",
+					],
+				},
 			);
 			return;
 		}
@@ -564,13 +653,14 @@ const status = async (props: ClaimProps): Promise<void> => {
 };
 
 const accept = async (props: AcceptProps): Promise<void> => {
-	const { linked, credentials, client } = linkedCredentials(props);
+	const { projectId, credentials, client } = resolveTarget(props);
+	requireLiveIdentity(credentials);
 	const token = await client.exchange(credentials.identityAssertion);
-	const claim = await client.createClaim(linked.projectId, token.accessToken);
+	const claim = await client.createClaim(projectId, token.accessToken);
 
 	writer(props).end(
 		{
-			project_id: linked.projectId,
+			project_id: projectId,
 			user_code: claim.userCode,
 			verification_url: claim.verificationUriComplete,
 			expires_in_seconds: claim.expiresIn,
@@ -615,7 +705,8 @@ const list = (props: ClaimProps): void => {
 };
 
 const deleteProject = async (props: DeleteProps): Promise<void> => {
-	const { linked, credentials, client } = linkedCredentials(props);
+	const { projectId, credentials, client, contextMatches } =
+		resolveTarget(props);
 	if (!props.yes) {
 		if (isCi() || !process.stdin.isTTY) {
 			throw new Error(
@@ -625,7 +716,7 @@ const deleteProject = async (props: DeleteProps): Promise<void> => {
 		const { proceed } = await prompts({
 			type: "confirm",
 			name: "proceed",
-			message: `Permanently delete ${linked.projectId}?`,
+			message: `Permanently delete ${projectId}?`,
 			initial: false,
 		});
 		if (!proceed) {
@@ -633,26 +724,50 @@ const deleteProject = async (props: DeleteProps): Promise<void> => {
 			return;
 		}
 	}
-	const token = await client.exchange(credentials.identityAssertion);
-	await client.deleteProject(linked.projectId, token.accessToken);
-	removeClaimableCredentials(props.configDir, linked.projectId);
-	if (existsSync(props.contextFile)) {
-		applyContext(props.contextFile, {});
+	if (assertionHasExpired(credentials)) {
+		clearLocalRecord(props, projectId, contextMatches);
+		writer(props).end(
+			{ project_id: projectId, state: "cleared" },
+			{ fields: ["project_id", "state"] },
+		);
+		return;
 	}
+	try {
+		const token = await client.exchange(credentials.identityAssertion);
+		await client.deleteProject(projectId, token.accessToken);
+	} catch (error) {
+		if (!isUnusableIdentity(error)) {
+			throw error;
+		}
+		clearLocalRecord(props, projectId, contextMatches);
+		writer(props).end(
+			{ project_id: projectId, state: "cleared" },
+			{ fields: ["project_id", "state"] },
+		);
+		return;
+	}
+	clearLocalRecord(props, projectId, contextMatches);
 	writer(props).end(
-		{ project_id: linked.projectId, state: "deleted" },
+		{ project_id: projectId, state: "deleted" },
 		{ fields: ["project_id", "state"] },
 	);
 };
 
-const finishClaimedContext = (props: ClaimProps): void => {
-	const context = readContextFile(props.contextFile);
-	if (!context.projectId) return;
-	removeClaimableCredentials(props.configDir, context.projectId);
-	applyContext(props.contextFile, {
-		projectId: context.projectId,
-		...(contextBranch(context) ? { branch: contextBranch(context) } : {}),
-	});
+const finishClaimedContext = (
+	props: ClaimProps,
+	projectId: string,
+	contextMatches: boolean,
+): void => {
+	removeClaimableCredentials(props.configDir, projectId);
+	if (contextMatches && existsSync(props.contextFile)) {
+		const context = readContextFile(props.contextFile);
+		applyContext(props.contextFile, {
+			projectId: context.projectId,
+			...(contextBranch(context)
+				? { branch: contextBranch(context) }
+				: {}),
+		});
+	}
 	log.info(
 		"Dropped the local identity assertion. The next command needs `neon auth` or `neon link`.",
 	);

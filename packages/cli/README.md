@@ -96,14 +96,19 @@ allowed before claim.
 ```bash
 neon claim status                 # lifecycle and transfer status
 neon projects get <project-id>    # regular CLI command, same agent token
-neon psql -- -c "select now()"
+neon psql --role-name neondb_owner -- -c "select now()"
 neon config plan
 neon env pull --service postgres --service auth --service data-api
 
 neon claim accept                 # create a claim code and open the transfer URL
 neon claim delete --yes           # permanently delete an unclaimed project
 neon claim list                   # projects whose assertions are saved locally
+neon claim delete <project-id> --yes
 ```
+
+`status`, `accept`, and `delete` take an optional project id from `claim list`, so a
+project stays manageable after its original directory is gone. `delete` also drops a
+local record whose identity assertion has expired or been revoked.
 
 `neon claimable` is an alias for `neon claim`. For local service development, set
 `CLAIMABLE_NEON_HOST=http://localhost:8787`; non-local origins must use HTTPS.

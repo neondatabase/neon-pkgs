@@ -4,11 +4,13 @@ import {
 	readFileSync,
 	rmSync,
 	statSync,
+	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+	assertionHasExpired,
 	claimableCredentialsPath,
 	listClaimableCredentials,
 	readClaimableCredentials,
@@ -100,6 +102,50 @@ describe("claimable credentials", () => {
 		expect(() =>
 			claimableCredentialsPath(configDir, "../credentials"),
 		).toThrow("Invalid Claimable Neon project ID");
+	});
+
+	it("reads credentials that omit assertionExpires", () => {
+		const configDir = temporaryDirectory();
+		writeClaimableCredentials(configDir, credentials);
+
+		expect(
+			assertionHasExpired(
+				readClaimableCredentials(configDir, credentials.projectId) ??
+					credentials,
+			),
+		).toBe(false);
+	});
+
+	it("treats a stored assertionExpires in the past as expired", () => {
+		expect(
+			assertionHasExpired(
+				{ ...credentials, assertionExpires: 1 },
+				1_700_000_000_000,
+			),
+		).toBe(true);
+		expect(
+			assertionHasExpired(
+				{ ...credentials, assertionExpires: 2_000_000_000 },
+				1_700_000_000_000,
+			),
+		).toBe(false);
+	});
+
+	it("rejects a stored assertionExpires that is not a unix timestamp", () => {
+		const configDir = temporaryDirectory();
+		writeClaimableCredentials(configDir, {
+			...credentials,
+			assertionExpires: 1_800_000_000,
+		});
+		const path = claimableCredentialsPath(configDir, credentials.projectId);
+		writeFileSync(
+			path,
+			JSON.stringify({ ...credentials, assertionExpires: 0 }),
+		);
+
+		expect(() =>
+			readClaimableCredentials(configDir, credentials.projectId),
+		).toThrow("valid Claimable Neon credential");
 	});
 });
 

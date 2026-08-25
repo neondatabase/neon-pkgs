@@ -37,6 +37,7 @@ import { auth, refreshToken } from "../auth.js";
 import { setAuthContext } from "../auth_context.js";
 import { ClaimableClient, ClaimableServiceError } from "../claimable/api.js";
 import {
+	assertionHasExpired,
 	claimableCredentialsPath,
 	readClaimableCredentials,
 	resolveClaimableContext,
@@ -506,6 +507,11 @@ export const ensureAuth = async (
 		if (stored === null) {
 			throw new Error(
 				`The linked project is claimable, but its identity assertion is missing from ${path}. Run \`neon claim create\` in a new directory, or \`neon link\` after claiming the project.`,
+			);
+		}
+		if (assertionHasExpired(stored)) {
+			throw new Error(
+				`The identity assertion for ${linked.projectId} has expired. Run \`neon claim delete ${linked.projectId} --yes\` to drop the local record.`,
 			);
 		}
 		const client = new ClaimableClient(stored.origin);
