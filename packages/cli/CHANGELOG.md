@@ -1,11 +1,5 @@
 # neon
 
-## 4.3.2
-
-### Patch Changes
-
-- Attribute CLI telemetry to Claude Code and Codex command trees.
-
 ## 4.3.1
 
 ### Patch Changes
