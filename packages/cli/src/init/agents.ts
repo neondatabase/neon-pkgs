@@ -9,6 +9,7 @@ import {
 	listMcpAgentIds,
 	resolveAddMcpAgentId,
 	tryResolveAddMcpAgentId,
+	uniqueAgentIds,
 } from "../mcp/agents.js";
 
 export type { AgentType };
@@ -20,6 +21,7 @@ export {
 	listMcpAgentIds,
 	resolveAddMcpAgentId,
 	tryResolveAddMcpAgentId,
+	uniqueAgentIds,
 };
 
 const SKILLS_AGENT_BY_TYPE: { [K in AgentType]?: string } = {

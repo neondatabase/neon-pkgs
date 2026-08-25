@@ -41,6 +41,7 @@ import {
 	isMcpCommand,
 	isMcpOauth,
 	isProfileCommand,
+	isSkillsCommand,
 } from "../context.js";
 import { storeFor } from "../credential_io.js";
 import { isCi } from "../env.js";
@@ -427,6 +428,11 @@ export const ensureAuth = async (
 
 	// `open` only reads the linked project from `.neon` and launches its Console URL.
 	if (props._[0] === "open") {
+		return;
+	}
+
+	// Neon authentication is unrelated to the child skills CLI.
+	if (isSkillsCommand(props)) {
 		return;
 	}
 
