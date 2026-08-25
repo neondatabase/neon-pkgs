@@ -22,7 +22,11 @@ export const skillsChildEnv = (
 	for (const key of TELEMETRY_BLOCKERS) {
 		delete env[key];
 	}
-	delete env.NEON_API_KEY;
+	for (const key of Object.keys(env)) {
+		if (key.toUpperCase() === "NEON_API_KEY") {
+			delete env[key];
+		}
+	}
 	return env;
 };
 

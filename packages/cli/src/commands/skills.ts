@@ -278,7 +278,7 @@ export const handler = async (props: SkillsProps) => {
 		throw new Error("Failed to install Neon agent skills.");
 	}
 	const retry = neonSkillsRetryCommand({
-		skills: first.skills,
+		skills: failed.flatMap((row) => row.skills),
 		agents: plan.agents,
 		global: plan.scope === "global",
 	});

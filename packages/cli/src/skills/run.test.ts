@@ -53,6 +53,7 @@ describe("skillsChildEnv", () => {
 			DISABLE_TELEMETRY: "1",
 			DO_NOT_TRACK: "1",
 			NEON_API_KEY: "secret",
+			NeOn_ApI_KeY: "also-secret",
 			CI: "true",
 		});
 		expect(env.PATH).toBe("/usr/bin");
@@ -61,6 +62,7 @@ describe("skillsChildEnv", () => {
 		expect(env).not.toHaveProperty("DISABLE_TELEMETRY");
 		expect(env).not.toHaveProperty("DO_NOT_TRACK");
 		expect(env).not.toHaveProperty("NEON_API_KEY");
+		expect(env).not.toHaveProperty("NeOn_ApI_KeY");
 	});
 });
 
