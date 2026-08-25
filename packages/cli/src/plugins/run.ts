@@ -1,9 +1,11 @@
+import { spawnSync } from "node:child_process";
 import { execa } from "execa";
 
 const TELEMETRY_BLOCKERS = ["DISABLE_TELEMETRY", "DO_NOT_TRACK"] as const;
 
 export const PLUGIN_SOURCE = "neondatabase/agent-skills";
 export const NEON_PLUGIN_NAME = "neon-postgres";
+export const PLUGINS_CLI_TIMEOUT_MS = 120_000;
 
 export type PluginsCliScope = "user" | "project";
 
@@ -72,16 +74,30 @@ export type PluginsRunResult = {
 export const runPluginsCli = async (options: {
 	args: readonly string[];
 	cwd: string;
+	env?: NodeJS.ProcessEnv;
+	timeoutMs?: number;
 }): Promise<PluginsRunResult> => {
+	const timeoutMs = options.timeoutMs ?? PLUGINS_CLI_TIMEOUT_MS;
+	const subprocess = execa("npx", options.args, {
+		cwd: options.cwd,
+		env: pluginsChildEnv(options.env ?? process.env),
+		// extendEnv would copy DISABLE_TELEMETRY / DO_NOT_TRACK back in.
+		extendEnv: false,
+		stdio: "pipe",
+		// npx leaves the plugins CLI as a grandchild. execa's timeout signals
+		// npx and then waits on the pipe, so a hang in the grandchild never
+		// settles. A process-group kill reaps both.
+		detached: true,
+	});
+	let timedOut = false;
+	const timer = setTimeout(() => {
+		timedOut = true;
+		if (subprocess.pid !== undefined) {
+			killProcessTree(subprocess.pid);
+		}
+	}, timeoutMs);
 	try {
-		const result = await execa("npx", options.args, {
-			cwd: options.cwd,
-			env: pluginsChildEnv(),
-			// extendEnv would copy DISABLE_TELEMETRY / DO_NOT_TRACK back in.
-			extendEnv: false,
-			stdio: "pipe",
-			timeout: 120_000,
-		});
+		const result = await subprocess;
 		return { stdout: result.stdout, stderr: result.stderr };
 	} catch (error) {
 		if (isCommandMissing(error)) {
@@ -90,9 +106,20 @@ export const runPluginsCli = async (options: {
 			);
 		}
 		if (isExecaFailure(error)) {
-			throw new Error(pluginsCliFailureMessage(error));
+			throw new Error(
+				pluginsCliFailureMessage({
+					stderr:
+						typeof error.stderr === "string" ? error.stderr : "",
+					stdout:
+						typeof error.stdout === "string" ? error.stdout : "",
+					timedOut,
+					timeoutMs,
+				}),
+			);
 		}
 		throw error;
+	} finally {
+		clearTimeout(timer);
 	}
 };
 
@@ -100,17 +127,44 @@ export const pluginsCliFailureMessage = (error: {
 	stderr: string;
 	stdout: string;
 	timedOut?: boolean;
+	timeoutMs?: number;
 }): string => {
 	const childOut = [error.stderr, error.stdout]
 		.filter((part) => typeof part === "string" && part.length > 0)
 		.join("\n");
+	if (error.timedOut === true) {
+		const seconds = Math.max(
+			1,
+			Math.ceil((error.timeoutMs ?? PLUGINS_CLI_TIMEOUT_MS) / 1000),
+		);
+		const unit = seconds === 1 ? "second" : "seconds";
+		const headline = `plugins CLI timed out after ${seconds} ${unit}`;
+		return childOut.length > 0
+			? `${headline}:\n${childOut}`
+			: `${headline}.`;
+	}
 	if (childOut.length > 0) {
 		return `plugins CLI failed:\n${childOut}`;
 	}
-	if (error.timedOut === true) {
-		return "plugins CLI timed out after 120 seconds.";
-	}
 	return "plugins CLI failed.";
+};
+
+const killProcessTree = (pid: number): void => {
+	if (process.platform === "win32") {
+		spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], {
+			stdio: "ignore",
+		});
+		return;
+	}
+	try {
+		process.kill(-pid, "SIGKILL");
+	} catch {
+		try {
+			process.kill(pid, "SIGKILL");
+		} catch {
+			return;
+		}
+	}
 };
 
 const isCommandMissing = (error: unknown): boolean =>
@@ -122,10 +176,9 @@ const isCommandMissing = (error: unknown): boolean =>
 const isExecaFailure = (
 	error: unknown,
 ): error is {
-	stderr: string;
-	stdout: string;
+	stderr: unknown;
+	stdout: unknown;
 	shortMessage: string;
-	timedOut?: boolean;
 } =>
 	typeof error === "object" &&
 	error !== null &&

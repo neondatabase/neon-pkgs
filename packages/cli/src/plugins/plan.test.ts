@@ -93,7 +93,7 @@ describe("resolvePluginsPlan", () => {
 			agents: ["cursor"],
 			skipped: [],
 			userScopeSkipped: [],
-			targets: [{ agent: "cursor", target: "cursor" }],
+			targets: [{ agents: ["cursor"], target: "cursor" }],
 		});
 	});
 
@@ -107,7 +107,9 @@ describe("resolvePluginsPlan", () => {
 			}),
 		);
 		expect(plan.agents).toEqual(["cursor"]);
-		expect(plan.targets).toEqual([{ agent: "cursor", target: "cursor" }]);
+		expect(plan.targets).toEqual([
+			{ agents: ["cursor"], target: "cursor" },
+		]);
 	});
 
 	test("non-TTY without -y or --agent fails", async () => {
@@ -193,7 +195,9 @@ describe("resolvePluginsPlan", () => {
 		);
 		expect(plan.agents).toEqual(["cursor"]);
 		expect(plan.userScopeSkipped).toEqual(["vscode"]);
-		expect(plan.targets).toEqual([{ agent: "cursor", target: "cursor" }]);
+		expect(plan.targets).toEqual([
+			{ agents: ["cursor"], target: "cursor" },
+		]);
 	});
 
 	test("fails when every selected agent is user-level-only at project scope", async () => {
@@ -220,7 +224,9 @@ describe("resolvePluginsPlan", () => {
 			}),
 		);
 		expect(plan.agents).toEqual(["vscode"]);
-		expect(plan.targets).toEqual([{ agent: "vscode", target: "vscode" }]);
+		expect(plan.targets).toEqual([
+			{ agents: ["vscode"], target: "vscode" },
+		]);
 	});
 
 	test("dedupes Claude Desktop onto claude-code", async () => {
@@ -234,7 +240,10 @@ describe("resolvePluginsPlan", () => {
 		);
 		expect(plan.agents).toEqual(["claude-code", "claude-desktop"]);
 		expect(plan.targets).toEqual([
-			{ agent: "claude-code", target: "claude-code" },
+			{
+				agents: ["claude-code", "claude-desktop"],
+				target: "claude-code",
+			},
 		]);
 	});
 

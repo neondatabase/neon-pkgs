@@ -10,7 +10,7 @@ describe("pluginsInstallSummary", () => {
 				agents: ["cursor"],
 			}),
 		).toBe(
-			["Config  project", "Agents  Cursor", "Plugin  neon-postgres"].join(
+			["Scope   project", "Agents  Cursor", "Plugin  neon-postgres"].join(
 				"\n",
 			),
 		);

@@ -11,7 +11,7 @@ import {
 export type PluginsInstallScope = "global" | "project";
 
 export type PluginsMappedTarget = {
-	agent: AgentType;
+	agents: AgentType[];
 	target: string;
 };
 
@@ -74,17 +74,25 @@ export const mappedPluginsTargets = (
 	scope: PluginsInstallScope,
 ): PluginsMappedTarget[] => {
 	const mapped: PluginsMappedTarget[] = [];
-	const seen = new Set<string>();
+	const byTarget = new Map<string, PluginsMappedTarget>();
 	for (const agent of agents) {
 		const target = getPluginsTargetName(agent);
-		if (target === undefined || seen.has(target)) {
+		if (target === undefined) {
 			continue;
 		}
 		if (scope === "project" && isUserScopeOnlyPluginsTarget(target)) {
 			continue;
 		}
-		seen.add(target);
-		mapped.push({ agent, target });
+		const existing = byTarget.get(target);
+		if (existing !== undefined) {
+			if (!existing.agents.includes(agent)) {
+				existing.agents.push(agent);
+			}
+			continue;
+		}
+		const row: PluginsMappedTarget = { agents: [agent], target };
+		byTarget.set(target, row);
+		mapped.push(row);
 	}
 	if (mapped.length === 0) {
 		throw new Error(

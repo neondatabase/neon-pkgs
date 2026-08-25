@@ -53,17 +53,20 @@ describe("mappedPluginsTargets", () => {
 				"project",
 			),
 		).toEqual([
-			{ agent: "claude-desktop", target: "claude-code" },
-			{ agent: "cursor", target: "cursor" },
+			{
+				agents: ["claude-desktop", "claude-code"],
+				target: "claude-code",
+			},
+			{ agents: ["cursor"], target: "cursor" },
 		]);
 	});
 
 	test("maps vscode to vscode, not github-copilot", () => {
 		expect(mappedPluginsTargets(["vscode"], "global")).toEqual([
-			{ agent: "vscode", target: "vscode" },
+			{ agents: ["vscode"], target: "vscode" },
 		]);
 		expect(mappedPluginsTargets(["github-copilot-cli"], "global")).toEqual([
-			{ agent: "github-copilot-cli", target: "github-copilot" },
+			{ agents: ["github-copilot-cli"], target: "github-copilot" },
 		]);
 	});
 

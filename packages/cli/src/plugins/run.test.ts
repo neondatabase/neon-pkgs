@@ -1,4 +1,7 @@
-import { describe, expect, test } from "vitest";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { delimiter, join } from "node:path";
+import { afterEach, describe, expect, test } from "vitest";
 
 import {
 	neonPluginsRetryCommand,
@@ -6,6 +9,7 @@ import {
 	pluginsAddArgs,
 	pluginsChildEnv,
 	pluginsCliFailureMessage,
+	runPluginsCli,
 } from "./run.js";
 
 describe("pluginsAddArgs", () => {
@@ -73,14 +77,14 @@ describe("pluginsChildEnv", () => {
 });
 
 describe("pluginsCliFailureMessage", () => {
-	test("prefers child output over a timeout flag", () => {
+	test("names a timeout before child output", () => {
 		expect(
 			pluginsCliFailureMessage({
 				stdout: "",
 				stderr: "boom",
 				timedOut: true,
 			}),
-		).toBe("plugins CLI failed:\nboom");
+		).toBe("plugins CLI timed out after 120 seconds:\nboom");
 	});
 
 	test("names a timeout when the child printed nothing", () => {
@@ -91,6 +95,17 @@ describe("pluginsCliFailureMessage", () => {
 				timedOut: true,
 			}),
 		).toBe("plugins CLI timed out after 120 seconds.");
+	});
+
+	test("uses the requested timeout length", () => {
+		expect(
+			pluginsCliFailureMessage({
+				stdout: "",
+				stderr: "",
+				timedOut: true,
+				timeoutMs: 400,
+			}),
+		).toBe("plugins CLI timed out after 1 second.");
 	});
 
 	test("does not use execa shortMessage", () => {
@@ -106,7 +121,7 @@ describe("pluginsCliFailureMessage", () => {
 		expect(
 			pluginsCliFailureMessage({
 				stdout: "",
-				stderr: "",
+				stderr: "banner",
 				timedOut: true,
 			}),
 		).not.toMatch(/neondatabase\//);
@@ -133,5 +148,55 @@ describe("neonPluginsRetryCommand", () => {
 		expect(
 			neonPluginsRetryCommand({ agents: ["cursor"], global: false }),
 		).not.toMatch(/neondatabase\//);
+	});
+});
+
+describe("runPluginsCli timeout", () => {
+	const dirs: string[] = [];
+
+	afterEach(() => {
+		for (const dir of dirs.splice(0)) {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test("kills npx and a grandchild that holds the pipe", async () => {
+		const bin = mkdtempSync(join(tmpdir(), "neon-plugins-npx-"));
+		dirs.push(bin);
+		writeFileSync(
+			join(bin, "npx"),
+			`#!/usr/bin/env node
+const { spawn } = require("node:child_process");
+process.stdout.write("plugins banner\\n");
+spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+  stdio: "ignore",
+});
+setInterval(() => {}, 1000);
+`,
+		);
+		chmodSync(join(bin, "npx"), 0o755);
+		const started = Date.now();
+		await expect(
+			runPluginsCli({
+				args: [
+					"-y",
+					"plugins",
+					"add",
+					"x",
+					"-t",
+					"cursor",
+					"-s",
+					"project",
+					"-y",
+				],
+				cwd: bin,
+				timeoutMs: 400,
+				env: {
+					...process.env,
+					PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`,
+				},
+			}),
+		).rejects.toThrow(/timed out after 1 second/);
+		expect(Date.now() - started).toBeLessThan(4000);
 	});
 });

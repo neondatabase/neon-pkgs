@@ -123,13 +123,14 @@ export const handler = async (props: PluginsProps) => {
 	}
 
 	const rows: PluginsInstallRow[] = [];
-	const failed: { agent: string; message: string }[] = [];
+	const failed: { agents: string[]; message: string }[] = [];
 	const scope = scopeLabel(plan.scope);
 	for (const mapped of plan.targets) {
 		const args = pluginsAddArgs({
 			target: mapped.target,
 			global: plan.scope === "global",
 		});
+		const agent = mapped.agents.join(", ");
 		try {
 			await runPluginsCli({
 				args,
@@ -138,7 +139,7 @@ export const handler = async (props: PluginsProps) => {
 			rows.push({
 				scope,
 				plugin: NEON_PLUGIN_NAME,
-				agent: mapped.agent,
+				agent,
 				status: "installed",
 			});
 		} catch (error) {
@@ -147,12 +148,12 @@ export const handler = async (props: PluginsProps) => {
 			rows.push({
 				scope,
 				plugin: NEON_PLUGIN_NAME,
-				agent: mapped.agent,
+				agent,
 				status: "failed",
 				error: "plugins CLI failed",
 			});
 			failed.push({
-				agent: mapped.agent,
+				agents: mapped.agents,
 				message,
 			});
 		}
@@ -178,7 +179,7 @@ export const handler = async (props: PluginsProps) => {
 		throw new Error("Failed to install the Neon plugin.");
 	}
 	const retry = neonPluginsRetryCommand({
-		agents: failed.map((row) => row.agent),
+		agents: failed.flatMap((row) => row.agents),
 		global: plan.scope === "global",
 	});
 	if (first.message.includes("needs npx (Node.js)")) {
@@ -189,6 +190,6 @@ export const handler = async (props: PluginsProps) => {
 		throw new Error(`${detail}\nRetry with: ${retry}`);
 	}
 	throw new Error(
-		`Failed to install the Neon plugin for: ${failed.map((row) => row.agent).join(", ")}.\n${detail}\nRetry with: ${retry}`,
+		`Failed to install the Neon plugin for: ${failed.flatMap((row) => row.agents).join(", ")}.\n${detail}\nRetry with: ${retry}`,
 	);
 };

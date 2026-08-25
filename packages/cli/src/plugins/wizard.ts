@@ -19,7 +19,7 @@ export const pluginsInstallSummary = (options: {
 	agents: readonly AgentType[];
 }): string => {
 	const rows: [string, string][] = [
-		["Config", options.scope === "project" ? "project" : "user"],
+		["Scope", options.scope === "project" ? "project" : "user"],
 		["Agents", options.agents.map(getAgentDisplayName).join(", ")],
 		["Plugin", NEON_PLUGIN_NAME],
 	];

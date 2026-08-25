@@ -189,7 +189,7 @@ describe("neon plugins", () => {
 			{
 				scope: "project",
 				plugin: "neon-postgres",
-				agent: "claude-code",
+				agent: "claude-code, claude-desktop",
 				status: "installed",
 			},
 		]);
