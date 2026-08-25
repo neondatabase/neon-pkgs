@@ -7,7 +7,7 @@ import { log } from "./log.js";
 
 export type ClaimableContext = {
 	version: 1;
-	/** Claimable Neon authorization-server origin, without the `/v1` API prefix. */
+	/** Omits the `/v1` API prefix. */
 	origin: string;
 };
 
@@ -26,10 +26,6 @@ export type Context = {
 	 * dropped the next time the context is written.
 	 */
 	branchId?: string;
-	/**
-	 * The assertion stays outside `.neon` so repository context never contains the owner
-	 * credential.
-	 */
 	claimable?: ClaimableContext;
 };
 

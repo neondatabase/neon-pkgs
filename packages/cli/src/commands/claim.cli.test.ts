@@ -1,7 +1,4 @@
-/**
- * These tests cannot use `testCliCommand` because it always passes `--api-key`,
- * which `claim` rejects.
- */
+/** `testCliCommand` always passes `--api-key`, which `claim` rejects. */
 
 import { fork } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
