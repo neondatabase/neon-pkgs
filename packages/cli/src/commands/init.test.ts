@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { recordCredentialInputs } from "@neon-internals/cli-core/auth_selection";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { test as cliTest } from "../test_utils/fixtures.js";
@@ -22,8 +23,18 @@ const baseProps = (overrides: Record<string, unknown> = {}) => ({
 	...overrides,
 });
 
+const clearCredentialInputs = () =>
+	recordCredentialInputs({
+		apiKeyFlag: "",
+		apiKeyEnv: "",
+		profileEnv: "",
+		profileFlag: "",
+		configDir: "",
+	});
+
 describe("init handler", () => {
 	afterEach(() => {
+		clearCredentialInputs();
 		vi.restoreAllMocks();
 		vi.resetModules();
 	});
@@ -176,6 +187,38 @@ describe("init handler", () => {
 			"--no-analytics",
 		]);
 		expect(run.mock.calls[0][1]).toBe(cwd);
+	});
+
+	test("passes NEON_API_KEY only to link and mcp", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-key-"));
+		const { recordCredentialInputs: record } = await import(
+			"@neon-internals/cli-core/auth_selection"
+		);
+		record({
+			apiKeyFlag: "napi_test",
+			apiKeyEnv: "",
+			profileEnv: "",
+			profileFlag: "",
+			configDir: "",
+		});
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				yes: true,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(run.mock.calls.map((call) => [call[0][0], call[2]])).toEqual([
+			["bootstrap", undefined],
+			["skills", undefined],
+			["link", { NEON_API_KEY: "napi_test" }],
+			["mcp", { NEON_API_KEY: "napi_test" }],
+		]);
 	});
 
 	test("parent .neon with a projectId skips link", async () => {

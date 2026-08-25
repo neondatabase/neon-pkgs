@@ -25,7 +25,9 @@ export type InitProps = CommonProps & {
 
 export const command = "init";
 export const describe =
-	"Set up Neon in this directory: agent skills, a project link, and the MCP server";
+	"Set up Neon in this directory: agent skills, a project link, and the MCP server. Skills needs Node.js 22.20 or newer.";
+
+const AUTH_CHILD = new Set(["link", "mcp"]);
 
 export const builder = (yargs: yargs.Argv) =>
 	yargs
@@ -38,7 +40,7 @@ export const builder = (yargs: yargs.Argv) =>
 			type: "boolean",
 			default: false,
 			describe:
-				"Skip prompts. Forwards -y to skills and mcp, --default --no-link to bootstrap, and --yes to link",
+				"Forward -y to skills and mcp, --default --no-link to bootstrap, and --yes to link. link --yes still asks for a project unless one is already linked",
 		})
 		.example(
 			"$0 init",
@@ -48,7 +50,7 @@ export const builder = (yargs: yargs.Argv) =>
 			"$0 init",
 			"Existing app: skills, then link if needed, then mcp",
 		)
-		.example("$0 init -y", "Same steps without prompts")
+		.example("$0 init -y", "Same steps; -y is forwarded to each command")
 		.strict();
 
 const isLinked = (contextFile: string): boolean => {
@@ -86,7 +88,12 @@ export const handler = async (props: InitProps) => {
 			contextFile: props.contextFile,
 			...(props.analytics === false ? { analytics: false } : {}),
 		});
-		const ok = await run(argv, cwd, env);
+		const command = step[0];
+		const ok = await run(
+			argv,
+			cwd,
+			command !== undefined && AUTH_CHILD.has(command) ? env : undefined,
+		);
 		if (!ok) {
 			throw new Error(`\`${getCliName()} ${step.join(" ")}\` failed.`);
 		}
