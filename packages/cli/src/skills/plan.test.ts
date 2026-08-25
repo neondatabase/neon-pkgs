@@ -157,6 +157,25 @@ describe("resolveSkillsPlan", () => {
 		]);
 	});
 
+	test("rejects unknown --skill before asking agents", async () => {
+		const cwd = tmpDir();
+		let asked = false;
+		await expect(
+			resolveSkillsPlan(
+				planOptions(cwd, {
+					skills: ["eve"],
+					yes: false,
+					interactive: true,
+					pickAgents: async () => {
+						asked = true;
+						return ["cursor"];
+					},
+				}),
+			),
+		).rejects.toThrow(/Unknown skill: "eve"/);
+		expect(asked).toBe(false);
+	});
+
 	test("rejects --skill * and unknown skill names", async () => {
 		const cwd = tmpDir();
 		await expect(

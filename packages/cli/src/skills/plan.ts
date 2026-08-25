@@ -70,6 +70,7 @@ export async function resolveSkillsPlan(
 		action: "install",
 		hasSkills: options.skills.length > 0,
 	});
+	const specified = uniqueSkillEntries(options.skills.map(resolveSkillId));
 	const prompt = options.interactive && !options.yes;
 	const scope: SkillsInstallScope = options.global ? "global" : "project";
 	const available = skillsInstallableAgents();
@@ -114,7 +115,6 @@ export async function resolveSkillsPlan(
 		);
 	}
 
-	const specified = uniqueSkillEntries(options.skills.map(resolveSkillId));
 	const invocations =
 		specified.length > 0
 			? invocationsForSelection(specified)
