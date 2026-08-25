@@ -53,7 +53,7 @@ export const skillsAddArgs = (options: {
 };
 
 export const quoteNpxArg = (part: string): string =>
-	/[\s"'\\]/.test(part) ? `'${part.replace(/'/g, `'\\''`)}'` : part;
+	/[\s"'\\*]/.test(part) ? `'${part.replace(/'/g, `'\\''`)}'` : part;
 
 export const npxCommand = (args: readonly string[]): string =>
 	`npx ${args.map(quoteNpxArg).join(" ")}`;

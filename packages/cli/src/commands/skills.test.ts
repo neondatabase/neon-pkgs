@@ -283,6 +283,7 @@ describe("neon skills", () => {
 		expect(row.error).toBe("skills CLI failed");
 		expect(row.error).not.toContain("syscall");
 		expect(stderr).toMatch(/Retry with: npx -y skills add/);
+		expect(stderr).toMatch(/--skill '\*'/);
 		expect(stderr.match(/syscall spawn sh/g)?.length).toBe(1);
 	});
 

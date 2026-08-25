@@ -22,6 +22,12 @@ describe("npxCommand", () => {
 			]),
 		).toBe(`npx -y skills add --metadata '{"origin":"neon-cli"}'`);
 	});
+
+	test("quotes * so a pasted retry does not glob", () => {
+		expect(npxCommand(["-y", "skills", "add", "--skill", "*"])).toBe(
+			"npx -y skills add --skill '*'",
+		);
+	});
 });
 
 describe("skillsMetadata", () => {
