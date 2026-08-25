@@ -15,6 +15,7 @@ import {
 	ensureGitignored,
 	isCurrentBranchProbe,
 	isMcpOauth,
+	isPluginsCommand,
 	isSkillsCommand,
 	walkContextFile,
 } from "./context.js";
@@ -84,6 +85,19 @@ describe("isSkillsCommand", () => {
 	test("false for other commands", () => {
 		expect(isSkillsCommand({ _: ["mcp"] })).toBe(false);
 		expect(isSkillsCommand({ _: ["init"] })).toBe(false);
+		expect(isSkillsCommand({ _: ["plugins"] })).toBe(false);
+	});
+});
+
+describe("isPluginsCommand", () => {
+	test("true for plugins", () => {
+		expect(isPluginsCommand({ _: ["plugins"] })).toBe(true);
+	});
+
+	test("false for other commands", () => {
+		expect(isPluginsCommand({ _: ["skills"] })).toBe(false);
+		expect(isPluginsCommand({ _: ["mcp"] })).toBe(false);
+		expect(isPluginsCommand({ _: ["init"] })).toBe(false);
 	});
 });
 
