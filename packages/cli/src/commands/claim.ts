@@ -100,7 +100,7 @@ const SERVICE_FOR_CAPABILITY: Readonly<
 };
 
 const isClaimableCapability = (value: string): value is ClaimableCapability =>
-	Object.hasOwn(SERVICE_FOR_CAPABILITY, value);
+	value in SERVICE_FOR_CAPABILITY;
 
 const cliServiceName = (capability: string): string =>
 	isClaimableCapability(capability)
