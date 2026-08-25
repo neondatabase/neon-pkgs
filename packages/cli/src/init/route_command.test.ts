@@ -1,14 +1,9 @@
 import { describe, expect, test, vi } from "vitest";
 import { routeDataStep } from "./route_command.js";
 
-// Mock execa so phase handlers never shell out (skills install, extension install, etc.)
+// Mock execa so phase handlers never shell out (skills install, etc.)
 vi.mock("execa", () => ({
 	execa: vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 }),
-}));
-
-// Mock extension helpers
-vi.mock("./extension.js", () => ({
-	findEditorCommand: vi.fn().mockResolvedValue(null),
 }));
 
 // Mock skills evergreen check

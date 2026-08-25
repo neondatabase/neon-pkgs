@@ -1,13 +1,12 @@
 /**
  * Interactive v2 CLI — purpose-built guided flow for humans.
  *
- * Installs the Neon tooling (MCP server, agent skills, IDE extension) and stops
- * there. Connecting a database and configuring features is left to the user's
+ * Installs the Neon tooling (MCP server, agent skills) and stops there.
+ * Connecting a database and configuring features is left to the user's
  * agent — which now has the Neon skill — or to a manual `neon link`.
  */
 
 import {
-	confirm,
 	isCancel,
 	log,
 	multiselect,
@@ -28,7 +27,6 @@ import {
 } from "./agents.js";
 import { ensureNeonctlAuth, isAuthenticated } from "./auth.js";
 import { detectAgent, detectIde } from "./detect_agent.js";
-import { installExtension, isExtensionInstalled } from "./extension.js";
 import { inspectProject } from "./inspect.js";
 import { installNeonMcpServer } from "./install_mcp.js";
 import { ensureNeonctl } from "./neonctl.js";
@@ -37,7 +35,6 @@ import {
 	installAgentSkills,
 	skillsInstalledForAgent,
 } from "./skills.js";
-import type { Editor } from "./types.js";
 
 function wordWrap(text: string, width: number): string {
 	return text
@@ -108,7 +105,7 @@ async function interactiveInitInner(): Promise<void> {
 	process.stdout.write(
 		`${dim(
 			wordWrap(
-				"\nLet's set up Neon for your AI coding assistant. We'll install the MCP server, agent skills, and IDE extension so your agent can take it from here.\n",
+				"\nLet's set up Neon for your AI coding assistant. We'll install the MCP server and agent skills so your agent can take it from here.\n",
 				process.stdout.columns || 80,
 			),
 		)}\n`,
@@ -145,12 +142,6 @@ async function interactiveInitInner(): Promise<void> {
 	const needsSkills = !skillsAlready;
 	const needsInstall = needsMcp || needsSkills;
 
-	let extensionAlready = false;
-	const detectedIdeEditor = extensionEditorForAgent(detectedAgent);
-	if (detectedIdeEditor) {
-		extensionAlready = await isExtensionInstalled(detectedIdeEditor);
-	}
-
 	// Everything already in place — nothing to install.
 	if (!needsInstall) {
 		log.step(
@@ -163,8 +154,6 @@ async function interactiveInitInner(): Promise<void> {
 				`Neon agent skills already installed (${inspection.skillsScope || "detected"}) ✓`,
 			),
 		);
-		if (extensionAlready)
-			log.step(dim("Neon editor extension installed ✓"));
 		printNextSteps();
 		return;
 	}
@@ -197,21 +186,6 @@ async function interactiveInitInner(): Promise<void> {
 		}
 		selectedAgents = picked;
 	}
-
-	let vscodeEditors = extensionEditorsFor(selectedAgents);
-	let extensionAlreadyInstalled = false;
-	if (vscodeEditors.length > 0) {
-		const checks = await Promise.all(
-			vscodeEditors.map((e) => isExtensionInstalled(e)),
-		);
-		extensionAlreadyInstalled = checks.every(Boolean);
-		if (extensionAlreadyInstalled) {
-			log.step(dim("Neon editor extension already installed ✓"));
-		}
-	}
-	let canInstallExtension =
-		vscodeEditors.length > 0 && !extensionAlreadyInstalled;
-	let doInstallExtension = false;
 
 	// Installation preferences
 	let mcpScope: "global" | "project" | "none" = "global";
@@ -250,9 +224,7 @@ async function interactiveInitInner(): Promise<void> {
 				{
 					value: "customize",
 					label: "Customize installation",
-					hint: canInstallExtension
-						? "choose scopes and optional editor extension"
-						: "choose scopes and options",
+					hint: "choose scopes and options",
 				},
 				{
 					value: "change_editor",
@@ -274,18 +246,6 @@ async function interactiveInitInner(): Promise<void> {
 				return;
 			}
 			selectedAgents = picked;
-			vscodeEditors = extensionEditorsFor(selectedAgents);
-			// Re-check extension status for the newly chosen editors — otherwise
-			// `canInstallExtension` would reflect the previously selected set.
-			extensionAlreadyInstalled =
-				vscodeEditors.length > 0 &&
-				(
-					await Promise.all(
-						vscodeEditors.map((e) => isExtensionInstalled(e)),
-					)
-				).every(Boolean);
-			canInstallExtension =
-				vscodeEditors.length > 0 && !extensionAlreadyInstalled;
 			continue;
 		}
 
@@ -352,17 +312,6 @@ async function interactiveInitInner(): Promise<void> {
 				return;
 			}
 			skillsScope = skillsScopeResult as "global" | "project";
-		}
-
-		if (canInstallExtension) {
-			const extResult = await confirm({
-				message: `Install the Neon extension for ${vscodeEditors.join(", ")}?`,
-			});
-			if (isCancel(extResult)) {
-				outro("Setup cancelled.");
-				return;
-			}
-			doInstallExtension = extResult;
 		}
 	}
 
@@ -460,21 +409,6 @@ async function interactiveInitInner(): Promise<void> {
 		}
 	}
 
-	if (doInstallExtension) {
-		for (const editor of vscodeEditors) {
-			const extS = spinner();
-			extS.start(`Installing Neon extension for ${editor}...`);
-			const extOk = await installExtension(editor);
-			if (extOk) {
-				extS.stop(dim(`Neon extension installed for ${editor} ✓`));
-			} else {
-				extS.stop(
-					`Extension install failed — install manually from the extensions panel.`,
-				);
-			}
-		}
-	}
-
 	// Ensure all required skills are present (fills in any missing ones).
 	// detectAgent() returns null in a human terminal (TTY), so fall back
 	// to IDE detection which works regardless of TTY.
@@ -515,25 +449,6 @@ function printNextSteps(): void {
 			.join("\n"),
 	);
 	outro(dim("Have feedback? Email us at feedback@neon.tech"));
-}
-
-function extensionEditorForAgent(agent: AgentType | undefined): Editor | null {
-	if (agent === "cursor") return "Cursor";
-	if (agent === "vscode") return "VS Code";
-	const ide = detectIde();
-	if (ide === "Cursor" || ide === "VS Code") return ide;
-	return null;
-}
-
-function extensionEditorsFor(selected: AgentType[]): Editor[] {
-	const out: Editor[] = [];
-	if (selected.includes("cursor")) out.push("Cursor");
-	if (selected.includes("vscode")) out.push("VS Code");
-	const ide = detectIde();
-	if ((ide === "Cursor" || ide === "VS Code") && !out.includes(ide)) {
-		out.push(ide);
-	}
-	return out;
 }
 
 async function pickAgents(): Promise<AgentType[] | null> {

@@ -439,7 +439,7 @@ function normalise(
 			// editing the guidance around it stops the match and shows up as a diff
 			// rather than being silently absorbed.
 			.replace(
-				/No IDE detected, but the following editors are installed: [^.]*\. The \\"installedEditors\\" field in this response lists them\. If the user wants the extension installed, ask which editor to install it for and include that as the \\"ide\\" field in your reportBack data\. If not, set \\"ide\\" to \\"none\\"\.|No IDE or supported editors detected\. Set \\"ide\\" to \\"none\\" in your reportBack data\./g,
+				/No IDE detected, but the following editors are installed: [^.]*\. The \\"installedEditors\\" field in this response lists them\. Set \\"ide\\" to the editor name or \\"none\\" in your reportBack data\.|No IDE or supported editors detected\. Set \\"ide\\" to \\"none\\" in your reportBack data\./g,
 				"<ide-detection-instruction>",
 			)
 			.split(paths.configDir)
@@ -493,8 +493,6 @@ const STEPS: { name: string; data: Record<string, unknown> }[] = [
 			step: "setup",
 			mode: "defaults",
 			mcpConfigured: false,
-			isVscodeIde: true,
-			installExtension: false,
 		},
 	},
 	{
@@ -504,7 +502,6 @@ const STEPS: { name: string; data: Record<string, unknown> }[] = [
 			mode: "customize",
 			mcpScope: "global",
 			skillsScope: "project",
-			installExtension: false,
 		},
 	},
 	{ name: "mcp-status", data: { step: "mcp", status: true } },

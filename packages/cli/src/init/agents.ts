@@ -100,9 +100,6 @@ export function supportsSkills(agent: string): boolean {
 }
 
 export function agentPickerHint(id: AgentType): string {
-	if (id === "cursor" || id === "vscode") {
-		return "Neon Local Connect extension";
-	}
 	if (id === "claude-desktop") {
 		return supportsSkills(id)
 			? "Connectors in the app, skills"
