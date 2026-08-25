@@ -169,7 +169,7 @@ describe("runPluginsCli timeout", () => {
 const { spawn } = require("node:child_process");
 process.stdout.write("plugins banner\\n");
 spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
-  stdio: "ignore",
+  stdio: "inherit",
 });
 setInterval(() => {}, 1000);
 `,
@@ -196,7 +196,7 @@ setInterval(() => {}, 1000);
 					PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`,
 				},
 			}),
-		).rejects.toThrow(/timed out after 1 second/);
+		).rejects.toThrow(/timed out after 1 second[\s\S]*plugins banner/);
 		expect(Date.now() - started).toBeLessThan(4000);
 	});
 });

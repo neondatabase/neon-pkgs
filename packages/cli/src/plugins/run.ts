@@ -86,15 +86,35 @@ export const runPluginsCli = async (options: {
 		stdio: "pipe",
 		// npx leaves the plugins CLI as a grandchild. execa's timeout signals
 		// npx and then waits on the pipe, so a hang in the grandchild never
-		// settles. A process-group kill reaps both.
+		// settles. A process-group kill reaps both. Detached disables execa's
+		// parent-exit cleanup, so SIGINT/SIGTERM have to kill the tree too.
 		detached: true,
 	});
 	let timedOut = false;
-	const timer = setTimeout(() => {
-		timedOut = true;
+	let stopped = false;
+	const stop = (): void => {
+		if (stopped) {
+			return;
+		}
+		stopped = true;
 		if (subprocess.pid !== undefined) {
 			killProcessTree(subprocess.pid);
 		}
+	};
+	const onSigint = (): void => {
+		stop();
+		process.exit(130);
+	};
+	const onSigterm = (): void => {
+		stop();
+		process.exit(143);
+	};
+	process.once("SIGINT", onSigint);
+	process.once("SIGTERM", onSigterm);
+	process.once("exit", stop);
+	const timer = setTimeout(() => {
+		timedOut = true;
+		stop();
 	}, timeoutMs);
 	try {
 		const result = await subprocess;
@@ -120,6 +140,9 @@ export const runPluginsCli = async (options: {
 		throw error;
 	} finally {
 		clearTimeout(timer);
+		process.removeListener("SIGINT", onSigint);
+		process.removeListener("SIGTERM", onSigterm);
+		process.removeListener("exit", stop);
 	}
 };
 
