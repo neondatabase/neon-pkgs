@@ -71,6 +71,7 @@ describe("wrapNeonError — HTTP status mapping", () => {
 		);
 		expect(p.message).toContain("functions requires a claimed project");
 		expect(p.message).toContain("npx neon claim accept");
+		expect(p.message).toContain("npx neon claim status");
 		expect(p.message).toContain("npx neon auth");
 		expect(p.message).toContain("req-claimable");
 		expect(p.message).not.toContain("API key");

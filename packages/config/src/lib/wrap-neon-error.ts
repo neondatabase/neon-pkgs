@@ -56,7 +56,7 @@ export function wrapNeonError(
 			[
 				`${context.op} failed: this capability requires a claimed project.`,
 				apiSummaryWithRequestId,
-				"Run `npx neon claim accept`, complete the sign-in, then `npx neon auth` or `npx neon link` and re-run.",
+				"Run `npx neon claim accept`, complete the sign-in, then `npx neon claim status` to drop the local assertion, then `npx neon auth` or `npx neon link` and re-run.",
 			].join(" "),
 			{ cause: err, details: httpDetails(context, httpInfo) },
 		);
