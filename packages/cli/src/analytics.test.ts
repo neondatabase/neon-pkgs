@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
 	analyticsUserId,
@@ -7,6 +7,10 @@ import {
 	storedCredentialAttribution,
 	telemetryCredential,
 } from "./analytics.js";
+
+afterEach(() => {
+	vi.unstubAllEnvs();
+});
 
 describe("analyticsUserId", () => {
 	it("reports a run nothing identified as anonymous, not as an empty identity", () => {
@@ -124,10 +128,12 @@ describe("getErrorAnalyticsEventProperties", () => {
 			{
 				version: "2.33.2",
 				ci: true,
+				agent: "codex",
 			},
 		);
 
 		expect(properties).toMatchObject({
+			agent: "codex",
 			ci: true,
 			errCode: "API_ERROR",
 			message: "branch already exists",
@@ -167,5 +173,15 @@ describe("getAnalyticsEventProperties", () => {
 				output: "secret-value",
 			}).flags.output,
 		).toBe("secret-value");
+	});
+
+	it("attributes commands run by a coding agent", () => {
+		vi.stubEnv("CLAUDE_CODE_CHILD_SESSION", "1");
+
+		expect(
+			getAnalyticsEventProperties({
+				_: ["branches", "list"],
+			}).agent,
+		).toBe("claude-code");
 	});
 });

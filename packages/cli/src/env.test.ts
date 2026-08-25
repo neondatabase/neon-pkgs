@@ -1,5 +1,45 @@
 import { describe, expect, it } from "vitest";
-import { getGithubEnvVars } from "./env";
+import { getCliAgent, getGithubEnvVars } from "./env";
+
+describe("getCliAgent", () => {
+	it("attributes a Claude Code child session", () => {
+		expect(getCliAgent({ CLAUDE_CODE_CHILD_SESSION: "1" })).toBe(
+			"claude-code",
+		);
+	});
+
+	it("attributes a Codex thread", () => {
+		expect(getCliAgent({ CODEX_THREAD_ID: "thread-123" })).toBe("codex");
+	});
+
+	it.each([
+		{ CODEX_SESSION_ID: "session-123" },
+		{ CODEX_CI: "1" },
+		{ CODEX_SANDBOX: "seatbelt" },
+		{ CODEX_SANDBOX_NETWORK_DISABLED: "1" },
+	])("attributes other Codex execution environments", (env) => {
+		expect(getCliAgent(env)).toBe("codex");
+	});
+
+	it("does not treat disabled boolean markers as agent execution", () => {
+		expect(
+			getCliAgent({
+				CLAUDE_CODE_CHILD_SESSION: "false",
+				CODEX_CI: "0",
+				CODEX_SANDBOX_NETWORK_DISABLED: "false",
+			}),
+		).toBeUndefined();
+	});
+
+	it("omits attribution when nested agent markers conflict", () => {
+		expect(
+			getCliAgent({
+				CLAUDE_CODE_CHILD_SESSION: "1",
+				CODEX_THREAD_ID: "thread-123",
+			}),
+		).toBeUndefined();
+	});
+});
 
 describe("getGithubEnvVars", () => {
 	it("success all keys", () => {

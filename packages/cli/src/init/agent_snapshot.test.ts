@@ -204,8 +204,8 @@ const FIXTURES: Record<string, Record<string, string>> = {
 /** The agent identities the flow branches on, and how each is detected. */
 const AGENTS: Record<string, Record<string, string>> = {
 	cursor: { CURSOR_TRACE_ID: "trace-1" },
-	"claude-code": { CLAUDECODE: "1" },
-	codex: { CODEX: "1" },
+	"claude-code": { CLAUDE_CODE_CHILD_SESSION: "1" },
+	codex: { CODEX_THREAD_ID: "thread-1" },
 	// No agent env at all: `detectAgent()` returns null and `--agent` still
 	// forces agent mode, so this covers the "explicitly asked, none detected" path.
 	none: {},
@@ -344,7 +344,8 @@ async function runInit(
 		});
 	}
 
-	const child = spawn(process.execPath, [CLI, "init", ...args], {
+	const cliArgs = [CLI, "--no-analytics", "init", ...args];
+	const child = spawn(process.execPath, cliArgs, {
 		cwd,
 		stdio: ["ignore", "pipe", "pipe"],
 		env: {
@@ -355,7 +356,6 @@ async function runInit(
 			NEON_CONFIG_DIR: configDir,
 			NEON_STUB_LOG: stubLog,
 			NEON_BOOTSTRAP_MANIFEST_URL: manifestUrl,
-			NEON_NO_ANALYTICS: "1",
 			CI: "true",
 			NO_COLOR: "1",
 			FORCE_COLOR: "0",

@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { getCliAgent } from "../env.js";
 
 /**
  * Detects the IDE/editor the terminal is running in, regardless of which
@@ -109,8 +110,10 @@ export function isVSCodeInstalled(): boolean {
  */
 export function detectAgent(): string | null {
 	const env = process.env;
+	const cliAgent = getCliAgent(env);
 
-	// Agent-specific env vars (checked first — these are unambiguous)
+	if (cliAgent) return cliAgent;
+
 	if (
 		env.CLAUDECODE === "1" ||
 		env.CLAUDE_CODE === "1" ||

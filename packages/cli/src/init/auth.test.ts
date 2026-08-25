@@ -204,7 +204,8 @@ describe("`neon init` failure output", { timeout: 20_000 }, () => {
 		writeFileSync(resolve(configDir, "credentials.json"), credentials, {
 			mode: 0o600,
 		});
-		const result = spawnSync(process.execPath, [CLI, "init", ...args], {
+		const cliArgs = [CLI, "--no-analytics", "init", ...args];
+		const result = spawnSync(process.execPath, cliArgs, {
 			cwd,
 			encoding: "utf8",
 			stdio: ["ignore", "pipe", "pipe"],
@@ -212,7 +213,6 @@ describe("`neon init` failure output", { timeout: 20_000 }, () => {
 				PATH: process.env.PATH ?? "",
 				HOME: process.env.HOME ?? "",
 				NEON_CONFIG_DIR: configDir,
-				NEON_NO_ANALYTICS: "1",
 			},
 		});
 		return { ...result, configDir };
