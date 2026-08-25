@@ -39,7 +39,10 @@ export type ResolveMcpPlanOptions = {
 	pickScope?: () => Promise<McpInstallScope>;
 	pickAgents?: (options: PickAgentsOptions) => Promise<AgentType[]>;
 	pickAuth?: () => Promise<McpAuthKind>;
-	pickProjectPin?: (linkedProjectId: string) => Promise<boolean>;
+	pickProjectPin?: (
+		linkedProjectId: string,
+		willMintKey: boolean,
+	) => Promise<boolean>;
 };
 
 export async function resolveMcpPlan(
@@ -94,6 +97,7 @@ export async function resolveMcpPlan(
 	) {
 		const pin = await (options.pickProjectPin ?? pickMcpProjectPin)(
 			options.linkedProjectId,
+			auth === "api-key",
 		);
 		if (pin) {
 			urlProjectId = options.linkedProjectId;

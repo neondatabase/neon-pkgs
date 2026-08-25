@@ -11,7 +11,11 @@ import {
 	parseMcpCategories,
 	trackedProjectMcpConfig,
 } from "../mcp/install.js";
-import { mintMcpApiKey, withdrawMintedKey } from "../mcp/mint.js";
+import {
+	mintedKeyRevokeCommand,
+	mintMcpApiKey,
+	withdrawMintedKey,
+} from "../mcp/mint.js";
 import { resolveMcpPlan } from "../mcp/plan.js";
 import { resolveInstallTargets } from "../mcp/targets.js";
 import { confirmMcpInstall } from "../mcp/wizard.js";
@@ -97,7 +101,7 @@ export const builder = (argv: yargs.Argv) =>
 			"project-id": {
 				type: "string",
 				describe:
-					"Pin MCP tools to one Neon project (?projectId=). Does not change the minted key. Interactive asks only for a linked project-folder install",
+					"Pin MCP tools to one Neon project (?projectId=). A newly minted API key is limited to that project. A linked project-folder install asks the same when you pick API-key auth",
 				coerce: single("project-id"),
 			},
 			category: {
@@ -228,6 +232,7 @@ export const handler = async (props: McpProps) => {
 			auth: plan.auth,
 			reuse: existing !== undefined,
 			url,
+			mintProjectId: plan.urlProjectId,
 		});
 		if (!ok) {
 			log.info("Aborted. Nothing was written.");
@@ -247,11 +252,19 @@ export const handler = async (props: McpProps) => {
 	} else {
 		minted = await mintMcpApiKey({
 			apiClient: props.apiClient,
+			projectId: plan.urlProjectId,
 		});
 		auth = { kind: "api-key", apiKey: minted.key };
-		log.warning(
-			"This key reaches everything your account can, in every organization.",
-		);
+		if (minted.projectId) {
+			log.info(
+				"Limited to %s: it cannot create projects, mint API keys, or read any other project. It can still change and delete everything inside that project.",
+				minted.projectId,
+			);
+		} else {
+			log.warning(
+				"This key reaches everything your account can, in every organization.",
+			);
+		}
 	}
 
 	const rows: McpInstallRow[] = [];
@@ -294,7 +307,7 @@ export const handler = async (props: McpProps) => {
 			throw new Error(
 				withdrawn
 					? "Failed to write Neon MCP config to any agent. The minted API key has been revoked."
-					: `Failed to write Neon MCP config to any agent. The minted API key could NOT be revoked. Remove it with \`${getCliName()} api-keys revoke ${minted.id}\`.`,
+					: `Failed to write Neon MCP config to any agent. The minted API key could NOT be revoked. Remove it with \`${mintedKeyRevokeCommand(minted)}\`.`,
 			);
 		}
 		throw new Error("Failed to write Neon MCP config to any agent.");
@@ -311,10 +324,11 @@ export const handler = async (props: McpProps) => {
 
 	if (minted) {
 		log.info(
-			"Minted API key %s (id %d, account). Revoke with: %s",
+			"Minted API key %s (id %d, %s). Revoke with: %s",
 			minted.name,
 			minted.id,
-			`${getCliName()} api-keys revoke ${minted.id}`,
+			minted.projectId ? "project" : "account",
+			mintedKeyRevokeCommand(minted),
 		);
 	}
 

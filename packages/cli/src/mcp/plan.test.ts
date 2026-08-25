@@ -89,9 +89,10 @@ describe("resolveMcpPlan", () => {
 					calls.push("auth");
 					return "oauth";
 				},
-				pickProjectPin: async (linked) => {
+				pickProjectPin: async (linked, willMintKey) => {
 					calls.push("pin");
 					expect(linked).toBe("proj-linked");
+					expect(willMintKey).toBe(false);
 					return true;
 				},
 			}),
@@ -167,6 +168,26 @@ describe("resolveMcpPlan", () => {
 		expect(plan.agents).toEqual(["claude-code"]);
 	});
 
+	test("pin yes with API-key auth sets urlProjectId", async () => {
+		const cwd = tmpDir();
+		mkdirSync(join(cwd, ".cursor"));
+		const plan = await resolveMcpPlan(
+			planOptions(cwd, {
+				project: true,
+				agents: ["cursor"],
+				linkedProjectId: "proj-linked",
+				pickAuth: async () => "api-key",
+				pickProjectPin: async (linked, willMintKey) => {
+					expect(linked).toBe("proj-linked");
+					expect(willMintKey).toBe(true);
+					return true;
+				},
+			}),
+		);
+		expect(plan.auth).toBe("api-key");
+		expect(plan.urlProjectId).toBe("proj-linked");
+	});
+
 	test("--project-id skips the pin prompt", async () => {
 		const cwd = tmpDir();
 		const plan = await resolveMcpPlan(
@@ -211,6 +232,23 @@ describe("resolveMcpPlan", () => {
 				},
 			}),
 		);
+		expect(plan.urlProjectId).toBeUndefined();
+	});
+
+	test("pin no with API-key auth leaves urlProjectId unset", async () => {
+		const cwd = tmpDir();
+		const plan = await resolveMcpPlan(
+			planOptions(cwd, {
+				project: true,
+				linkedProjectId: "proj-linked",
+				pickAuth: async () => "api-key",
+				pickProjectPin: async (_linked, willMintKey) => {
+					expect(willMintKey).toBe(true);
+					return false;
+				},
+			}),
+		);
+		expect(plan.auth).toBe("api-key");
 		expect(plan.urlProjectId).toBeUndefined();
 	});
 
@@ -325,5 +363,19 @@ describe("mcpInstallSummary", () => {
 			"mint an account-wide API key that reaches every organization",
 		);
 		expect(summary).toContain("this directory");
+	});
+
+	test("--project-id names a key limited to that project", () => {
+		expect(
+			mcpInstallSummary({
+				scope: "global",
+				install: ["cursor"],
+				skipped: [],
+				auth: "api-key",
+				reuse: false,
+				url: neonMcpUrl({ projectId: "proj-in-org" }),
+				mintProjectId: "proj-in-org",
+			}),
+		).toContain("mint an API key limited to proj-in-org");
 	});
 });

@@ -80,6 +80,7 @@ export const pickMcpAuth = async (): Promise<McpAuthKind> => {
 
 export const pickMcpProjectPin = async (
 	linkedProjectId: string,
+	willMintKey = false,
 ): Promise<boolean> => {
 	if (!canPickAgentsInteractively()) {
 		return false;
@@ -88,7 +89,9 @@ export const pickMcpProjectPin = async (
 		onState: restoreCursorOnAbort,
 		type: "confirm",
 		name: "pin",
-		message: `Pin MCP tools to the linked project ${linkedProjectId}?`,
+		message: willMintKey
+			? `Pin MCP tools and the minted API key to the linked project ${linkedProjectId}?`
+			: `Pin MCP tools to the linked project ${linkedProjectId}?`,
 		initial: true,
 	});
 	return pin === true;
@@ -101,6 +104,7 @@ export const mcpInstallSummary = (options: {
 	auth: McpAuthKind;
 	reuse: boolean;
 	url: string;
+	mintProjectId?: string;
 }): string => {
 	const agents = options.install.map(getAgentDisplayName).join(", ");
 	const auth =
@@ -108,7 +112,9 @@ export const mcpInstallSummary = (options: {
 			? "OAuth, agent signs in on first use"
 			: options.reuse
 				? "reuse the API key already in agent config"
-				: "mint an account-wide API key that reaches every organization";
+				: options.mintProjectId
+					? `mint an API key limited to ${options.mintProjectId}`
+					: "mint an account-wide API key that reaches every organization";
 	const rows: [string, string][] = [
 		[
 			"Config",
@@ -141,6 +147,7 @@ export const confirmMcpInstall = async (options: {
 	auth: McpAuthKind;
 	reuse: boolean;
 	url: string;
+	mintProjectId?: string;
 }): Promise<boolean> => {
 	if (!canPickAgentsInteractively()) {
 		return true;
