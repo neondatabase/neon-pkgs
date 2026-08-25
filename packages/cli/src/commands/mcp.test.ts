@@ -825,7 +825,7 @@ describe("neon mcp", () => {
 		expect(compact).toContain(NEON_MCP_URL);
 		expect(compact).toContain("globalconfig");
 		expect(compact).toContain("globallydetectedagent");
-		expect(compact).toContain("account-wideAPIkey");
+		expect(compact).toContain("account-widekey");
 		expect(compact).toContain("noprojectpin");
 		expect(compact).toContain("allcategories");
 		for (const agent of mcpInstallableAgents("global")) {

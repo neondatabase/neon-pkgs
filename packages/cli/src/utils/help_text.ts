@@ -24,3 +24,6 @@ export const helpCsv = (
 	lines.push(line);
 	return lines.join("\n");
 };
+
+export const helpEpilogue = (...blocks: string[]): string =>
+	["", ...blocks.filter((block) => block !== "")].join("\n");

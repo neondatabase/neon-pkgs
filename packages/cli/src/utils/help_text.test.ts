@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { helpCsv } from "./help_text.js";
+import { helpCsv, helpEpilogue } from "./help_text.js";
 
 describe("helpCsv", () => {
 	test("keeps a short list on one line", () => {
@@ -17,5 +17,13 @@ describe("helpCsv", () => {
 
 	test("omits an empty list", () => {
 		expect(helpCsv("Supported agents", [])).toBe("");
+	});
+});
+
+describe("helpEpilogue", () => {
+	test("starts with a blank line and drops empty blocks", () => {
+		expect(helpEpilogue("Installs https://mcp.neon.tech/mcp", "")).toBe(
+			"\nInstalls https://mcp.neon.tech/mcp",
+		);
 	});
 });
