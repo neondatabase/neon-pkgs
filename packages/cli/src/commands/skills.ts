@@ -4,12 +4,12 @@ import { getAgentDisplayName } from "../init/agents.js";
 import { log } from "../log.js";
 import { assertSkillsCanRun, resolveSkillsPlan } from "../skills/plan.js";
 import {
-	firstChildLine,
 	npxCommand,
 	runSkillsCli,
 	skillsAddArgs,
 	skillsMetadata,
 	skillsUpdateArgs,
+	skillsUpdateDetail,
 	skillsUpdateHadNothing,
 } from "../skills/run.js";
 import { mappedSkillsAgentNames } from "../skills/targets.js";
@@ -280,7 +280,7 @@ const updateHandler = async (props: SkillsProps) => {
 		rows.push({
 			scope: scopeLabel(scope),
 			status: skillsUpdateHadNothing(output) ? "none" : "updated",
-			detail: firstChildLine(output),
+			detail: skillsUpdateDetail(output),
 		});
 	} catch (error) {
 		failure = error instanceof Error ? error.message : String(error);

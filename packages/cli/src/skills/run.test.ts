@@ -7,6 +7,7 @@ import {
 	skillsChildEnv,
 	skillsMetadata,
 	skillsUpdateArgs,
+	skillsUpdateDetail,
 	skillsUpdateHadNothing,
 } from "./run.js";
 
@@ -121,6 +122,27 @@ describe("skillsUpdateHadNothing", () => {
 			true,
 		);
 		expect(skillsUpdateHadNothing("Updated 2 skills")).toBe(false);
+	});
+});
+
+describe("skillsUpdateDetail", () => {
+	test("skips the progress banner and strips ANSI", () => {
+		expect(
+			skillsUpdateDetail(
+				"\u001b[38;5;145mChecking for skill updates…\u001b[0m\nNo project skills to update.\n",
+			),
+		).toBe("No project skills to update.");
+		expect(
+			skillsUpdateDetail(
+				"Checking for skill updates…\nUpdated 2 skills\n",
+			),
+		).toBe("Updated 2 skills");
+	});
+
+	test("returns undefined when only the banner is present", () => {
+		expect(skillsUpdateDetail("Checking for skill updates…\n")).toBe(
+			undefined,
+		);
 	});
 });
 

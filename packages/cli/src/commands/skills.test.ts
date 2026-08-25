@@ -189,7 +189,8 @@ describe("neon skills", () => {
 		const { stdout } = await testCliCommand(
 			["skills", "update", "-y"],
 			runOptions(home, cwd, bin, {
-				SKILLS_CHILD_STDOUT: "No project skills to update.\n",
+				SKILLS_CHILD_STDOUT:
+					"\u001b[38;5;145mChecking for skill updates…\u001b[0m\nNo project skills to update.\n",
 			}),
 		);
 		expect(JSON.parse(stdout)).toEqual([
@@ -197,6 +198,26 @@ describe("neon skills", () => {
 				scope: "this directory",
 				status: "none",
 				detail: "No project skills to update.",
+			},
+		]);
+	});
+
+	test("update detail skips the progress banner", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin } = scratch();
+		const { stdout } = await testCliCommand(
+			["skills", "update", "-y"],
+			runOptions(home, cwd, bin, {
+				SKILLS_CHILD_STDOUT:
+					"Checking for skill updates…\nUpdated 2 skills\n",
+			}),
+		);
+		expect(JSON.parse(stdout)).toEqual([
+			{
+				scope: "this directory",
+				status: "updated",
+				detail: "Updated 2 skills",
 			},
 		]);
 	});
@@ -284,6 +305,8 @@ describe("neon skills", () => {
 		expect(row.error).not.toContain("syscall");
 		expect(stderr).toMatch(/Retry with: npx -y skills add/);
 		expect(stderr).toMatch(/--skill '\*'/);
+		expect(stderr.match(/Retry with:/g)?.length).toBe(1);
+		expect(stderr).not.toMatch(/Command failed with exit code/);
 		expect(stderr.match(/syscall spawn sh/g)?.length).toBe(1);
 	});
 

@@ -58,18 +58,30 @@ export const quoteNpxArg = (part: string): string =>
 export const npxCommand = (args: readonly string[]): string =>
 	`npx ${args.map(quoteNpxArg).join(" ")}`;
 
-export const firstChildLine = (output: string): string | undefined => {
-	for (const line of output.split("\n")) {
+const ANSI = /\u001b\[[0-9;]*m/g;
+const UPDATE_BANNER = /^Checking for skill updates/i;
+const UPDATE_NOTHING = /No (?:project|global) skills to update\.?/i;
+
+const stripAnsi = (text: string): string => text.replace(ANSI, "");
+
+export const skillsUpdateHadNothing = (output: string): boolean =>
+	UPDATE_NOTHING.test(stripAnsi(output));
+
+export const skillsUpdateDetail = (output: string): string | undefined => {
+	const text = stripAnsi(output);
+	const nothing = text.match(UPDATE_NOTHING);
+	if (nothing?.[0] !== undefined) {
+		return nothing[0];
+	}
+	for (const line of text.split("\n")) {
 		const trimmed = line.trim();
-		if (trimmed.length > 0) {
-			return trimmed;
+		if (trimmed.length === 0 || UPDATE_BANNER.test(trimmed)) {
+			continue;
 		}
+		return trimmed;
 	}
 	return undefined;
 };
-
-export const skillsUpdateHadNothing = (output: string): boolean =>
-	/No (?:project|global) skills to update/i.test(output);
 
 export const skillsUpdateArgs = (options: { global: boolean }): string[] => [
 	"-y",
@@ -105,9 +117,10 @@ export const runSkillsCli = async (options: {
 			);
 		}
 		if (isExecaFailure(error)) {
-			const detail = [error.stderr, error.stdout, error.shortMessage]
+			const childOut = [error.stderr, error.stdout]
 				.filter((part) => typeof part === "string" && part.length > 0)
 				.join("\n");
+			const detail = childOut.length > 0 ? childOut : error.shortMessage;
 			throw new Error(
 				detail.length > 0
 					? `skills CLI failed:\n${detail}`
