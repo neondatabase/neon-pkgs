@@ -4,8 +4,8 @@ import {
 	type CreateNeonToolsOptions,
 	createNeonTool,
 	createNeonTools,
+	publishedId,
 } from "./index.js";
-import { publishedId } from "./lib/ergonomic/bind.js";
 import { toMastraTools } from "./mastra.js";
 
 expectTypeOf(publishedId("projects.list")).toEqualTypeOf<"list_projects">();

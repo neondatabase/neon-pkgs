@@ -8,10 +8,12 @@ npm install @neon/tools
 
 ## Create tools
 
-Selectors are SDK paths. The returned record is keyed by those paths. Each tool's published `id` is the last path segment, then the resource, in snake_case (`projects.list` → `list_projects`). `toolIds` lists every published selector.
+Selectors are SDK paths. The returned record is keyed by those paths. Each tool's published `id` is the last path segment, then the resource, in snake_case (`projects.list` → `list_projects`, `postgres.connectionString` → `connection_string_postgres`). `publishedId` derives that string. `toolIds` lists every published selector.
 
 ```ts
-import { createNeonTools } from "@neon/tools";
+import { createNeonTools, publishedId } from "@neon/tools";
+
+publishedId("projects.list"); // "list_projects"
 
 const apiKey = process.env.NEON_API_KEY;
 if (!apiKey) throw new Error("NEON_API_KEY is required");
@@ -228,6 +230,8 @@ MCP annotations are advisory; the protocol does not enforce approval. Tools expo
 
 Eve requires Node.js 24 or later.
 
+`create_and_connect_projects.ts`:
+
 ```ts
 import { defineTool } from "eve/tools";
 import { createNeonTool } from "@neon/tools";
@@ -245,7 +249,7 @@ export default defineTool(
 );
 ```
 
-Eve uses the filename as the model-facing tool name, so name the file after the tool's snake-case `id`. The adapter maps approval requirements to Eve's `approval` hook and forwards its abort signal.
+Eve uses the filename as the model-facing tool name, so name the file after the published `id`. The adapter maps approval requirements to Eve's `approval` hook and forwards its abort signal.
 
 ## Mastra
 

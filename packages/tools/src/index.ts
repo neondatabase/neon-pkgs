@@ -11,6 +11,8 @@ import {
 import {
 	isNeonToolId,
 	type NeonToolId,
+	type PublishedId,
+	publishedId,
 	type ToolClientOptions,
 	type ToolFactory,
 	toolFactories,
@@ -40,8 +42,8 @@ export type {
 	NeonToolMetadata,
 	NeonToolResult,
 } from "./lib/operation.js";
-export type { NeonToolId };
-export { NeonError, toolIds };
+export type { NeonToolId, PublishedId };
+export { NeonError, publishedId, toolIds };
 
 type ToolFactories = typeof toolFactories;
 
