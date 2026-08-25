@@ -555,5 +555,6 @@ describe("neon skills", () => {
 		for (const row of NEON_SKILL_CATALOG) {
 			expect(compact).toContain(row.skill);
 		}
+		expect(compact).toContain("exceptneon-postgres-agent-platforms");
 	});
 });

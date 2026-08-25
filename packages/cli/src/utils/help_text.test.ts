@@ -9,15 +9,13 @@ describe("helpCsv", () => {
 		);
 	});
 
-	test("wraps before a token that would exceed the width", () => {
+	test("wraps with a trailing comma and a deeper indent", () => {
 		expect(helpCsv("Supported agents", ["aaaa", "bbbb", "cccc"], 24)).toBe(
-			"Supported agents: aaaa\n  bbbb, cccc",
+			"Supported agents: aaaa,\n    bbbb, cccc",
 		);
 	});
 
-	test("refuses an empty list", () => {
-		expect(() => helpCsv("Supported agents", [])).toThrow(
-			/Supported agents needs at least one value/,
-		);
+	test("omits an empty list", () => {
+		expect(helpCsv("Supported agents", [])).toBe("");
 	});
 });

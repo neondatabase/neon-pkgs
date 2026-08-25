@@ -9,6 +9,7 @@ import {
 	PLATFORMS_SKILLS_SOURCE,
 	resolveSkillId,
 	skillsHelpValues,
+	skillsYesHelp,
 	yesInstallInvocations,
 } from "./catalog.js";
 
@@ -31,6 +32,12 @@ describe("NEON_SKILL_CATALOG", () => {
 		for (const row of NEON_SKILL_CATALOG) {
 			expect(text).toContain(row.skill);
 		}
+	});
+
+	test("yes help names the skills -y leaves out", () => {
+		expect(skillsYesHelp()).toBe(
+			"neon skills -y installs every listed skill except neon-postgres-agent-platforms",
+		);
 	});
 });
 

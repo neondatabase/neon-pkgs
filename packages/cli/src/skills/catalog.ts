@@ -143,3 +143,13 @@ export const skillsHelpValues = (): string =>
 	invocationsForSelection(NEON_SKILL_CATALOG)
 		.map((group) => helpCsv(`  ${group.source}`, group.skills))
 		.join("\n");
+
+export const skillsYesHelp = (): string => {
+	const omitted = NEON_SKILL_CATALOG.filter(
+		(entry) => !entry.defaultSelected,
+	).map((entry) => entry.skill);
+	if (omitted.length === 0) {
+		return "neon skills -y installs every listed skill";
+	}
+	return `neon skills -y installs every listed skill except ${omitted.join(", ")}`;
+};

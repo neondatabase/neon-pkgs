@@ -1,4 +1,5 @@
 export const HELP_WRAP = 78;
+const WRAP_INDENT = "    ";
 
 export const helpCsv = (
 	label: string,
@@ -6,7 +7,7 @@ export const helpCsv = (
 	width = HELP_WRAP,
 ): string => {
 	if (items.length === 0) {
-		throw new Error(`${label} needs at least one value.`);
+		return "";
 	}
 	const prefix = `${label}:`;
 	const lines: string[] = [];
@@ -14,8 +15,8 @@ export const helpCsv = (
 	for (const item of items) {
 		const addition = line === prefix ? ` ${item}` : `, ${item}`;
 		if (line.length + addition.length > width && line !== prefix) {
-			lines.push(line);
-			line = `  ${item}`;
+			lines.push(`${line},`);
+			line = `${WRAP_INDENT}${item}`;
 		} else {
 			line += addition;
 		}

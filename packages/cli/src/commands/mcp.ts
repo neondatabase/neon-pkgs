@@ -5,6 +5,7 @@ import { log } from "../log.js";
 import {
 	existingNeonApiKey,
 	installNeonMcpServer,
+	NEON_MCP_CATEGORIES,
 	NEON_MCP_URL,
 	type NeonMcpAuth,
 	type NeonMcpCategory,
@@ -175,13 +176,16 @@ export const builder = (argv: yargs.Argv) =>
 				`Installs ${NEON_MCP_URL}`,
 				helpCsv("Supported agents", mcpGlobalAgents),
 				helpCsv("--project does not support", mcpProjectDroppedAgents),
+				helpCsv("Supported categories", NEON_MCP_CATEGORIES),
 				"neon mcp -y:",
 				"  global config",
 				"  every globally detected agent",
 				"  reuse existing Neon Bearer or mint an account-wide API key",
 				"  write tools on, all categories",
 				"  no project pin (including from .neon)",
-			].join("\n"),
+			]
+				.filter((block, index) => index === 0 || block !== "")
+				.join("\n"),
 		)
 		.strict()
 		.check(noPassthrough("mcp"));

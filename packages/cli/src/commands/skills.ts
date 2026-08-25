@@ -2,7 +2,7 @@ import type yargs from "yargs";
 
 import { getAgentDisplayName } from "../init/agents.js";
 import { log } from "../log.js";
-import { skillsHelpValues } from "../skills/catalog.js";
+import { skillsHelpValues, skillsYesHelp } from "../skills/catalog.js";
 import { assertSkillsCanRun, resolveSkillsPlan } from "../skills/plan.js";
 import {
 	assertSkillsNode,
@@ -189,6 +189,7 @@ export const builder = (argv: yargs.Argv) =>
 				helpCsv("Supported agents", skillsInstallableAgents()),
 				"Supported skills:",
 				skillsHelpValues(),
+				skillsYesHelp(),
 			].join("\n"),
 		)
 		.strict()

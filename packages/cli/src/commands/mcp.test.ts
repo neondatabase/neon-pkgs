@@ -13,7 +13,11 @@ import { join } from "node:path";
 import strip from "strip-ansi";
 import { afterEach, describe, expect } from "vitest";
 
-import { NEON_MCP_URL, neonMcpUrl } from "../mcp/install.js";
+import {
+	NEON_MCP_CATEGORIES,
+	NEON_MCP_URL,
+	neonMcpUrl,
+} from "../mcp/install.js";
 import { mcpInstallableAgents } from "../mcp/targets.js";
 import { test } from "../test_utils/fixtures";
 
@@ -826,6 +830,9 @@ describe("neon mcp", () => {
 		expect(compact).toContain("allcategories");
 		for (const agent of mcpInstallableAgents("global")) {
 			expect(compact).toContain(agent);
+		}
+		for (const category of NEON_MCP_CATEGORIES) {
+			expect(compact).toContain(category);
 		}
 	});
 });
