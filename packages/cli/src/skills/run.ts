@@ -27,20 +27,17 @@ export const skillsChildEnv = (
 
 export const skillsAddArgs = (options: {
 	source: string;
-	skills: "*" | readonly string[];
+	skills: readonly string[];
 	agents: readonly string[];
 	global: boolean;
 	metadata: string;
 }): string[] => {
-	const args = ["-y", "skills", "add", options.source];
-	if (options.skills === "*") {
-		args.push("--skill", "*");
-	} else if (options.skills.length === 0) {
+	if (options.skills.length === 0) {
 		throw new Error("skills add needs at least one --skill.");
-	} else {
-		for (const skill of options.skills) {
-			args.push("--skill", skill);
-		}
+	}
+	const args = ["-y", "skills", "add", options.source];
+	for (const skill of options.skills) {
+		args.push("--skill", skill);
 	}
 	for (const agent of options.agents) {
 		args.push("--agent", agent);
@@ -50,6 +47,25 @@ export const skillsAddArgs = (options: {
 	}
 	args.push("-y", "--metadata", options.metadata);
 	return args;
+};
+
+export const neonSkillsRetryCommand = (options: {
+	skills: readonly string[];
+	agents: readonly string[];
+	global: boolean;
+}): string => {
+	const args = ["skills"];
+	for (const skill of options.skills) {
+		args.push("-s", skill);
+	}
+	for (const agent of options.agents) {
+		args.push("--agent", agent);
+	}
+	if (options.global) {
+		args.push("--global");
+	}
+	args.push("-y");
+	return `neon ${args.map(quoteNpxArg).join(" ")}`;
 };
 
 export const quoteNpxArg = (part: string): string =>
@@ -123,7 +139,7 @@ export const runSkillsCli = async (options: {
 	} catch (error) {
 		if (isCommandMissing(error)) {
 			throw new Error(
-				"neon skills needs npx (Node.js) to run the skills CLI (`npx skills add neondatabase/agent-skills`). Install Node.js, then retry.",
+				"neon skills needs npx (Node.js) to run the skills CLI. Install Node.js, then retry.",
 			);
 		}
 		if (isExecaFailure(error)) {

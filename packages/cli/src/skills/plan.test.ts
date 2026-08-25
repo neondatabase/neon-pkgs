@@ -3,7 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 
-import { AGENT_SKILLS_SOURCE, NEON_SKILL_CATALOG } from "./catalog.js";
+import {
+	AGENT_SKILLS_SOURCE,
+	defaultSkillEntries,
+	NEON_SKILL_CATALOG,
+} from "./catalog.js";
 import {
 	assertSkillsCanRun,
 	type ResolveSkillsPlanOptions,
@@ -31,6 +35,7 @@ function planOptions(
 	return {
 		global: false,
 		agents: ["cursor"],
+		skills: [],
 		yes: false,
 		cwd,
 		interactive: true,
@@ -52,7 +57,7 @@ describe("assertSkillsCanRun", () => {
 				interactive: false,
 				action: "install",
 			}),
-		).toThrow(/Pass -y to install every skill/);
+		).toThrow(/Pass -y to install the default skills/);
 		expect(() =>
 			assertSkillsCanRun({
 				yes: false,
@@ -60,6 +65,17 @@ describe("assertSkillsCanRun", () => {
 				action: "update",
 			}),
 		).toThrow(/Pass -y to update installed skills/);
+	});
+
+	test("allows named skills without -y", () => {
+		expect(() =>
+			assertSkillsCanRun({
+				yes: false,
+				interactive: false,
+				action: "install",
+				hasSkills: true,
+			}),
+		).not.toThrow();
 	});
 
 	test("allows -y or a TTY", () => {
@@ -81,7 +97,7 @@ describe("assertSkillsCanRun", () => {
 });
 
 describe("resolveSkillsPlan", () => {
-	test("-y is this directory, specified agents, all agent-skills, and calls no prompts", async () => {
+	test("-y is this directory, specified agents, default skills, and calls no prompts", async () => {
 		const cwd = tmpDir();
 		const plan = await resolveSkillsPlan(
 			planOptions(cwd, {
@@ -93,7 +109,12 @@ describe("resolveSkillsPlan", () => {
 			scope: "project",
 			agents: ["cursor"],
 			skipped: [],
-			invocations: [{ source: AGENT_SKILLS_SOURCE, skills: "*" }],
+			invocations: [
+				{
+					source: AGENT_SKILLS_SOURCE,
+					skills: defaultSkillEntries().map((item) => item.skill),
+				},
+			],
 		});
 	});
 
@@ -107,7 +128,7 @@ describe("resolveSkillsPlan", () => {
 					agents: ["cursor"],
 				}),
 			),
-		).rejects.toThrow(/Pass -y to install every skill/);
+		).rejects.toThrow(/Pass -y to install the default skills/);
 	});
 
 	test("--global is user-level", async () => {
@@ -116,6 +137,46 @@ describe("resolveSkillsPlan", () => {
 			planOptions(cwd, { yes: true, interactive: false, global: true }),
 		);
 		expect(plan.scope).toBe("global");
+	});
+
+	test("--skill skips the skill picker", async () => {
+		const cwd = tmpDir();
+		const plan = await resolveSkillsPlan(
+			planOptions(cwd, {
+				skills: ["neon", "neon-postgres-agent-platforms"],
+				yes: false,
+				interactive: false,
+			}),
+		);
+		expect(plan.invocations).toEqual([
+			{ source: AGENT_SKILLS_SOURCE, skills: ["neon"] },
+			{
+				source: "neondatabase/neon-for-agent-platforms",
+				skills: ["neon-postgres-agent-platforms"],
+			},
+		]);
+	});
+
+	test("rejects --skill * and unknown skill names", async () => {
+		const cwd = tmpDir();
+		await expect(
+			resolveSkillsPlan(
+				planOptions(cwd, {
+					skills: ["*"],
+					yes: true,
+					interactive: false,
+				}),
+			),
+		).rejects.toThrow(/does not accept --skill \*/);
+		await expect(
+			resolveSkillsPlan(
+				planOptions(cwd, {
+					skills: ["eve"],
+					yes: true,
+					interactive: false,
+				}),
+			),
+		).rejects.toThrow(/Unknown skill: "eve"/);
 	});
 
 	test("--agent skips the agent picker and still asks for skills", async () => {

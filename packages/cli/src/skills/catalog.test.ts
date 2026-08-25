@@ -2,25 +2,54 @@ import { describe, expect, test } from "vitest";
 
 import {
 	AGENT_SKILLS_SOURCE,
+	defaultSkillEntries,
 	invocationsForSelection,
+	listSkillIds,
 	NEON_SKILL_CATALOG,
 	PLATFORMS_SKILLS_SOURCE,
+	resolveSkillId,
 	yesInstallInvocations,
 } from "./catalog.js";
 
-const entry = (skill: string) => {
-	const found = NEON_SKILL_CATALOG.find((item) => item.skill === skill);
-	if (!found) {
-		throw new Error(`missing catalog skill: ${skill}`);
-	}
-	return found;
-};
+const entry = (skill: string) => resolveSkillId(skill);
+
+describe("NEON_SKILL_CATALOG", () => {
+	test("skill ids are unique", () => {
+		const ids = listSkillIds();
+		expect(new Set(ids).size).toBe(ids.length);
+	});
+});
+
+describe("resolveSkillId", () => {
+	test("rejects * and unknown names", () => {
+		expect(() => resolveSkillId("*")).toThrow(/does not accept --skill \*/);
+		expect(() => resolveSkillId("eve")).toThrow(/Unknown skill: "eve"/);
+	});
+
+	test("maps platforms to its own repo", () => {
+		expect(resolveSkillId("neon-postgres-agent-platforms").source).toBe(
+			PLATFORMS_SKILLS_SOURCE,
+		);
+		expect(resolveSkillId("neon").source).toBe(AGENT_SKILLS_SOURCE);
+	});
+});
 
 describe("yesInstallInvocations", () => {
-	test("installs every skill from agent-skills only", () => {
+	test("installs every default skill from agent-skills only", () => {
 		expect(yesInstallInvocations()).toEqual([
-			{ source: AGENT_SKILLS_SOURCE, skills: "*" },
+			{
+				source: AGENT_SKILLS_SOURCE,
+				skills: defaultSkillEntries().map((item) => item.skill),
+			},
 		]);
+		expect(
+			defaultSkillEntries().some((item) => !item.defaultSelected),
+		).toBe(false);
+		expect(
+			NEON_SKILL_CATALOG.filter((item) => !item.defaultSelected).map(
+				(item) => item.skill,
+			),
+		).toEqual(["neon-postgres-agent-platforms"]);
 	});
 });
 
@@ -29,25 +58,24 @@ describe("invocationsForSelection", () => {
 		expect(() => invocationsForSelection([])).toThrow(/No skills selected/);
 	});
 
-	test("uses --skill * when every catalog skill for a source is selected", () => {
-		const agentSkills = NEON_SKILL_CATALOG.filter(
-			(item) => item.source === AGENT_SKILLS_SOURCE,
-		);
-		expect(invocationsForSelection(agentSkills)).toEqual([
-			{ source: AGENT_SKILLS_SOURCE, skills: "*" },
-		]);
-	});
-
-	test("emits one skill per invocation for a partial source", () => {
+	test("groups one source into one add with every selected -s", () => {
 		expect(
 			invocationsForSelection([entry("neon"), entry("neon-postgres")]),
 		).toEqual([
-			{ source: AGENT_SKILLS_SOURCE, skills: ["neon"] },
-			{ source: AGENT_SKILLS_SOURCE, skills: ["neon-postgres"] },
+			{
+				source: AGENT_SKILLS_SOURCE,
+				skills: ["neon", "neon-postgres"],
+			},
 		]);
 	});
 
-	test("keeps platforms as its own source", () => {
+	test("dedupes repeated skill ids", () => {
+		expect(invocationsForSelection([entry("neon"), entry("neon")])).toEqual(
+			[{ source: AGENT_SKILLS_SOURCE, skills: ["neon"] }],
+		);
+	});
+
+	test("routes platforms to its own source", () => {
 		expect(
 			invocationsForSelection([
 				entry("neon"),
@@ -57,7 +85,7 @@ describe("invocationsForSelection", () => {
 			{ source: AGENT_SKILLS_SOURCE, skills: ["neon"] },
 			{
 				source: PLATFORMS_SKILLS_SOURCE,
-				skills: "*",
+				skills: ["neon-postgres-agent-platforms"],
 			},
 		]);
 	});

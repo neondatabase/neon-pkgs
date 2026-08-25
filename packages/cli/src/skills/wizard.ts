@@ -21,7 +21,7 @@ const restoreCursorOnAbort = (state: { aborted: boolean }) => {
 export const pickSkillsInteractively = async (): Promise<SkillEntry[]> => {
 	if (!canPickAgentsInteractively()) {
 		throw new Error(
-			"No interactive terminal. Pass -y to install every skill from neondatabase/agent-skills.",
+			"No interactive terminal. Pass -y to install the default skills, or --skill <name>.",
 		);
 	}
 	const { skills } = await prompts({
@@ -35,13 +35,12 @@ export const pickSkillsInteractively = async (): Promise<SkillEntry[]> => {
 		choices: NEON_SKILL_CATALOG.map((entry) => ({
 			value: entry,
 			title: entry.skill,
-			description: entry.source,
 			selected: entry.defaultSelected,
 		})),
 	});
 	if (!Array.isArray(skills) || skills.length === 0) {
 		throw new Error(
-			"No skills selected. Pass -y to install every skill from neondatabase/agent-skills, or pick at least one skill.",
+			"No skills selected. Pass -y to install the default skills, or --skill <name>.",
 		);
 	}
 	return skills.filter(isSkillEntry);
@@ -68,12 +67,8 @@ export const skillsInstallSummary = (options: {
 	invocations: readonly SkillsInvocation[];
 }): string => {
 	const skills = options.invocations
-		.map((invocation) =>
-			invocation.skills === "*"
-				? `all from ${invocation.source}`
-				: `${invocation.skills.join(", ")} (${invocation.source})`,
-		)
-		.join("; ");
+		.flatMap((invocation) => invocation.skills)
+		.join(", ");
 	const rows: [string, string][] = [
 		[
 			"Config",

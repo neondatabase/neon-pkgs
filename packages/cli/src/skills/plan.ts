@@ -8,8 +8,10 @@ import {
 } from "../utils/agent_picker.js";
 import {
 	invocationsForSelection,
+	resolveSkillId,
 	type SkillEntry,
 	type SkillsInvocation,
+	uniqueSkillEntries,
 	yesInstallInvocations,
 } from "./catalog.js";
 import {
@@ -29,6 +31,7 @@ export type SkillsPlan = {
 export type ResolveSkillsPlanOptions = {
 	global: boolean;
 	agents: readonly string[];
+	skills: readonly string[];
 	yes: boolean;
 	cwd: string;
 	interactive: boolean;
@@ -40,14 +43,21 @@ export const assertSkillsCanRun = (options: {
 	yes: boolean;
 	interactive: boolean;
 	action: "install" | "update";
+	hasSkills?: boolean;
 }): void => {
-	if (options.yes || options.interactive) {
+	if (options.action === "update") {
+		if (options.yes || options.interactive) {
+			return;
+		}
+		throw new Error(
+			"No interactive terminal. Pass -y to update installed skills.",
+		);
+	}
+	if (options.yes || options.interactive || options.hasSkills === true) {
 		return;
 	}
 	throw new Error(
-		options.action === "update"
-			? "No interactive terminal. Pass -y to update installed skills."
-			: "No interactive terminal. Pass -y to install every skill from neondatabase/agent-skills.",
+		"No interactive terminal. Pass -y to install the default skills, or --skill <name>.",
 	);
 };
 
@@ -58,6 +68,7 @@ export async function resolveSkillsPlan(
 		yes: options.yes,
 		interactive: options.interactive,
 		action: "install",
+		hasSkills: options.skills.length > 0,
 	});
 	const prompt = options.interactive && !options.yes;
 	const scope: SkillsInstallScope = options.global ? "global" : "project";
@@ -103,11 +114,15 @@ export async function resolveSkillsPlan(
 		);
 	}
 
-	const invocations = options.yes
-		? yesInstallInvocations()
-		: invocationsForSelection(
-				await (options.pickSkills ?? pickSkillsInteractively)(),
-			);
+	const specified = uniqueSkillEntries(options.skills.map(resolveSkillId));
+	const invocations =
+		specified.length > 0
+			? invocationsForSelection(specified)
+			: options.yes
+				? yesInstallInvocations()
+				: invocationsForSelection(
+						await (options.pickSkills ?? pickSkillsInteractively)(),
+					);
 
 	return { scope, agents, skipped, invocations };
 }

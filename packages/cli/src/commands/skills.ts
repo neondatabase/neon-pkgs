@@ -4,6 +4,7 @@ import { getAgentDisplayName } from "../init/agents.js";
 import { log } from "../log.js";
 import { assertSkillsCanRun, resolveSkillsPlan } from "../skills/plan.js";
 import {
+	neonSkillsRetryCommand,
 	npxCommand,
 	runSkillsCli,
 	skillsAddArgs,
@@ -23,11 +24,11 @@ type SkillsProps = CommonProps & {
 	yes?: boolean;
 	global?: boolean;
 	agent?: string[];
+	skill?: string[];
 };
 
 type SkillsInstallRow = {
 	scope: string;
-	source: string;
 	skills: string;
 	agents: string;
 	status: "installed" | "failed";
@@ -56,6 +57,24 @@ const coerceAgents = (value: unknown): string[] => {
 		if (typeof item !== "string" || item.trim() === "") {
 			throw new Error(
 				"--agent needs a value. Pass one, or omit the flag entirely.",
+			);
+		}
+		return item;
+	});
+};
+
+const coerceSkills = (value: unknown): string[] => {
+	if (value === undefined) return [];
+	const list = Array.isArray(value) ? value : [value];
+	if (list.length === 0) {
+		throw new Error(
+			"--skill needs a value. Pass one, or omit the flag entirely.",
+		);
+	}
+	return list.map((item) => {
+		if (typeof item !== "string" || item.trim() === "") {
+			throw new Error(
+				"--skill needs a value. Pass one, or omit the flag entirely.",
 			);
 		}
 		return item;
@@ -96,12 +115,19 @@ export const builder = (argv: yargs.Argv) =>
 					)
 					.strict()
 					.hide("agent")
+					.hide("skill")
 					.check((args) => {
 						noPassthrough("skills update")(args);
 						const agents = args.agent;
 						if (Array.isArray(agents) && agents.length > 0) {
 							throw new Error(
 								"neon skills update does not take --agent. It refreshes every installed skill in this directory (or --global).",
+							);
+						}
+						const skills = args.skill;
+						if (Array.isArray(skills) && skills.length > 0) {
+							throw new Error(
+								"neon skills update does not take --skill. It refreshes every installed skill in this directory (or --global).",
 							);
 						}
 						return true;
@@ -129,6 +155,14 @@ export const builder = (argv: yargs.Argv) =>
 					"Coding agent to install into (repeatable). Skips the agent picker",
 				coerce: coerceAgents,
 			},
+			skill: {
+				alias: "s",
+				type: "array",
+				string: true,
+				describe:
+					"Skill to install (repeatable). Skips the skill picker",
+				coerce: coerceSkills,
+			},
 		})
 		.example(
 			"$0 skills",
@@ -136,11 +170,11 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.example(
 			"$0 skills -y",
-			"This directory, detected agents, every skill from neondatabase/agent-skills",
+			"This directory, detected agents, the default skills",
 		)
 		.example(
-			"$0 skills --agent cursor --agent claude-code",
-			"Install into specific agents",
+			"$0 skills -s neon -s neon-ai-gateway --agent cursor",
+			"Install named skills into specific agents",
 		)
 		.example("$0 skills --global", "Install user-level skills")
 		.strict()
@@ -153,6 +187,7 @@ export const handler = async (props: SkillsProps) => {
 	const plan = await resolveSkillsPlan({
 		global: props.global === true,
 		agents: props.agent ?? [],
+		skills: props.skill ?? [],
 		yes,
 		cwd,
 		interactive,
@@ -179,11 +214,14 @@ export const handler = async (props: SkillsProps) => {
 
 	const metadata = skillsMetadata("skills");
 	const rows: SkillsInstallRow[] = [];
-	const failed: { label: string; message: string; args: string[] }[] = [];
+	const failed: {
+		label: string;
+		message: string;
+		skills: readonly string[];
+	}[] = [];
 	const scope = scopeLabel(plan.scope);
 	for (const invocation of plan.invocations) {
-		const skills =
-			invocation.skills === "*" ? "*" : invocation.skills.join(", ");
+		const skills = invocation.skills.join(", ");
 		const args = skillsAddArgs({
 			source: invocation.source,
 			skills: invocation.skills,
@@ -198,7 +236,6 @@ export const handler = async (props: SkillsProps) => {
 			});
 			rows.push({
 				scope,
-				source: invocation.source,
 				skills,
 				agents: mapped.join(", "),
 				status: "installed",
@@ -208,23 +245,22 @@ export const handler = async (props: SkillsProps) => {
 				error instanceof Error ? error.message : String(error);
 			rows.push({
 				scope,
-				source: invocation.source,
 				skills,
 				agents: mapped.join(", "),
 				status: "failed",
 				error: "skills CLI failed",
 			});
 			failed.push({
-				label: `${invocation.source} (${skills})`,
+				label: skills,
 				message,
-				args,
+				skills: invocation.skills,
 			});
 		}
 	}
 
 	const out = writer(props);
 	out.write(rows, {
-		fields: ["scope", "source", "skills", "agents", "status", "error"],
+		fields: ["scope", "skills", "agents", "status", "error"],
 		title: "Skills",
 	});
 	out.end();
@@ -241,7 +277,11 @@ export const handler = async (props: SkillsProps) => {
 	if (first === undefined) {
 		throw new Error("Failed to install Neon agent skills.");
 	}
-	const retry = npxCommand(first.args);
+	const retry = neonSkillsRetryCommand({
+		skills: first.skills,
+		agents: plan.agents,
+		global: plan.scope === "global",
+	});
 	if (first.message.includes("needs npx (Node.js)")) {
 		throw new Error(first.message);
 	}

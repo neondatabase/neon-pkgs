@@ -767,12 +767,14 @@ The default mints an account-wide API key (or reuses the Bearer already configur
 # Interactive: this directory, then agents, then skills, then confirm.
 $ neon skills
 
-# Skip prompts. This directory, every detected agent, every skill from neondatabase/agent-skills.
+# Skip prompts. This directory, every detected agent, the default skills.
 $ neon skills -y
+
+$ neon skills -s neon -s neon-ai-gateway --agent cursor
 
 $ neon skills --agent cursor --agent claude-code
 
-# User-level skills (skills CLI -g).
+# User-level skills.
 $ neon skills --global
 
 # Update installed skills in this directory.
@@ -781,9 +783,11 @@ $ neon skills update -y
 $ neon skills update --global -y
 ```
 
-On a TTY the command asks which agents and which skills, then shows a summary to confirm. Detected agents start selected from project-folder markers such as `.cursor`. `neondatabase/agent-skills` starts selected. `neondatabase/neon-for-agent-platforms` is offered and starts unselected.
+On a TTY the command asks which agents and which skills, then shows a summary to confirm. Detected agents start selected from project-folder markers such as `.cursor`. Default skills start selected. `neon-postgres-agent-platforms` is offered and starts unselected.
 
-`-y` skips those questions and installs every skill from `neondatabase/agent-skills` only. `--agent` and `--global` still apply. Without a TTY, pass `-y`. `--agent` alone is not enough.
+`-y` skips those questions and installs the default skills. `--skill` / `-s` names specific skills and skips the skill picker. `--agent` and `--global` still apply. Without a TTY, pass `-y` or `--skill`. `--agent` alone is not enough.
+
+`--skill` names: `claimable-postgres`, `neon`, `neon-ai-gateway`, `neon-functions`, `neon-object-storage`, `neon-postgres`, `neon-postgres-branches`, `neon-postgres-egress-optimizer`, `neon-postgres-agent-platforms`.
 
 `--agent` names match `neon mcp`, minus agents that cannot install skills: `antigravity`, `cline`, `cline-cli`, `claude-code`, `claude-desktop`, `codex`, `cursor`, `gemini-cli`, `goose`, `github-copilot-cli`, `grok-build`, `opencode`, `vscode`, `windsurf`, `zed`. `mcporter` is a known MCP name that is then skipped.
 

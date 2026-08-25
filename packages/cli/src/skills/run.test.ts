@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import pkg from "../pkg.js";
 import {
+	neonSkillsRetryCommand,
 	npxCommand,
 	skillsAddArgs,
 	skillsChildEnv,
@@ -59,10 +60,10 @@ describe("skillsChildEnv", () => {
 });
 
 describe("skillsAddArgs", () => {
-	test("installs all agent-skills into mapped agents", () => {
+	test("adds named skills into mapped agents", () => {
 		const args = skillsAddArgs({
 			source: "neondatabase/agent-skills",
-			skills: "*",
+			skills: ["neon", "neon-ai-gateway"],
 			agents: ["cursor", "claude-code"],
 			global: false,
 			metadata: '{"origin":"neon-cli"}',
@@ -73,7 +74,9 @@ describe("skillsAddArgs", () => {
 			"add",
 			"neondatabase/agent-skills",
 			"--skill",
-			"*",
+			"neon",
+			"--skill",
+			"neon-ai-gateway",
 			"--agent",
 			"cursor",
 			"--agent",
@@ -82,7 +85,7 @@ describe("skillsAddArgs", () => {
 			"--metadata",
 			'{"origin":"neon-cli"}',
 		]);
-		expect(args.filter((part) => part === "*")).toEqual(["*"]);
+		expect(args.join(" ")).not.toMatch(/--skill \*/);
 		expect(args.join(" ")).not.toMatch(/--agent \*/);
 	});
 
@@ -108,6 +111,20 @@ describe("skillsAddArgs", () => {
 				metadata: "{}",
 			}),
 		).toThrow(/at least one --skill/);
+	});
+});
+
+describe("neonSkillsRetryCommand", () => {
+	test("names skills, agents, and user-level scope", () => {
+		expect(
+			neonSkillsRetryCommand({
+				skills: ["neon", "neon-ai-gateway"],
+				agents: ["cursor"],
+				global: true,
+			}),
+		).toBe(
+			"neon skills -s neon -s neon-ai-gateway --agent cursor --global -y",
+		);
 	});
 });
 
