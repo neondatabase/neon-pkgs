@@ -9,11 +9,30 @@ describe("getCliAgent", () => {
 	});
 
 	it("attributes a Codex thread", () => {
-		expect(getCliAgent({ CODEX_THREAD_ID: "thread-123" })).toBe("codex");
+		expect(
+			getCliAgent({
+				CODEX_CI: "1",
+				CODEX_THREAD_ID: "thread-123",
+			}),
+		).toBe("codex");
 	});
 
 	it("attributes a Codex session", () => {
-		expect(getCliAgent({ CODEX_SESSION_ID: "session-123" })).toBe("codex");
+		expect(
+			getCliAgent({
+				CODEX_CI: "1",
+				CODEX_SESSION_ID: "session-123",
+			}),
+		).toBe("codex");
+	});
+
+	it("does not attribute a user-initiated Codex shell command", () => {
+		expect(
+			getCliAgent({
+				CODEX_THREAD_ID: "thread-123",
+				CODEX_SESSION_ID: "session-123",
+			}),
+		).toBeUndefined();
 	});
 
 	it("does not attribute disabled or empty direct markers", () => {
@@ -44,6 +63,7 @@ describe("getCliAgent", () => {
 		expect(
 			getCliAgent({
 				CLAUDE_CODE_CHILD_SESSION: "1",
+				CODEX_CI: "1",
 				CODEX_THREAD_ID: "thread-123",
 			}),
 		).toBeUndefined();
