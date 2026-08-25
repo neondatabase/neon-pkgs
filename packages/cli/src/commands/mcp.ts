@@ -58,7 +58,7 @@ export const builder = (argv: yargs.Argv) =>
 				type: "boolean",
 				default: false,
 				describe:
-					"Write project-level MCP config. Skips the config-location question. Does not change the minted key",
+					"Write project-level MCP config. Skips the config-location question. A linked project-folder install may still pin a project and scope a newly minted key",
 			},
 			yes: {
 				alias: "y",
@@ -249,6 +249,11 @@ export const handler = async (props: McpProps) => {
 		log.info(
 			"Reusing the API key already configured for the Neon MCP server.",
 		);
+		if (plan.urlProjectId) {
+			log.warning(
+				"That key keeps its existing scope. Remove the Neon MCP entry to mint a project-scoped key, or pass --oauth to pin tools without a key.",
+			);
+		}
 	} else {
 		minted = await mintMcpApiKey({
 			apiClient: props.apiClient,

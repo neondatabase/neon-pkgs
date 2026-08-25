@@ -553,6 +553,38 @@ describe("neon mcp", () => {
 		assertNoSecret("", stderr);
 	});
 
+	test("--project-id that looks like an org id does not suggest --org-id", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		const { stderr } = await testCliCommand(
+			["mcp", "--project-id", "org-7", "--agent", "cursor"],
+			{ ...runOptions(home, cwd), code: 1 },
+		);
+		expect(stderr).toMatch(/looks like an organization id/);
+		expect(stderr).toMatch(/neon mcp takes a project id on --project-id/);
+		expect(stderr).not.toMatch(/Pass it as --org-id/);
+		expect(stderr).not.toMatch(/Minted API key/);
+		expect(existsSync(join(home, ".cursor", "mcp.json"))).toBe(false);
+	});
+
+	test("a project with no organization names --oauth", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		const { stderr } = await testCliCommand(
+			["mcp", "--project-id", "test", "--agent", "cursor"],
+			{ ...runOptions(home, cwd), code: 1 },
+		);
+		expect(stderr).toMatch(/does not belong to an organization/);
+		expect(stderr).toMatch(/Pass --oauth to pin tools without minting/);
+		expect(stderr).not.toMatch(
+			/Omit --project-id to create an account key/,
+		);
+		expect(stderr).not.toMatch(/Minted API key/);
+		expect(existsSync(join(home, ".cursor", "mcp.json"))).toBe(false);
+	});
+
 	test("unknown --project-id fails without minting", async ({
 		testCliCommand,
 	}) => {
@@ -742,6 +774,8 @@ describe("neon mcp", () => {
 			`Bearer ${SECRET}`,
 		);
 		expect(stderr).toMatch(/Reusing the API key/);
+		expect(stderr).toMatch(/keeps its existing scope/);
+		expect(stderr).toMatch(/--oauth/);
 		expect(stderr).not.toMatch(/Minted API key/);
 		expect(stderr).toMatch(/\?projectId=proj-in-org/);
 	});

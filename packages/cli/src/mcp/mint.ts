@@ -127,7 +127,11 @@ export async function mintMcpApiKey(options: {
 	const name = mintedKeyName("mcp");
 	const projectId = options.projectId;
 	if (projectId !== undefined) {
-		const orgId = await orgIdForProject(options.apiClient, projectId);
+		const orgId = await orgIdForProject(
+			options.apiClient,
+			projectId,
+			"mcp",
+		);
 		return createAndAssert(
 			options.apiClient,
 			() =>
