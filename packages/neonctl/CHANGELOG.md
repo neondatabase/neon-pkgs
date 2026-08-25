@@ -1,5 +1,16 @@
 # neonctl
 
+## 4.3.0
+
+### Minor Changes
+
+- eb52252: Add `neon skills` to install Neon agent skills into coding agents. A TTY asks agents and skills, then confirms. `-y` installs the default skills into detected agents in this directory. `--skill` names specific skills. `--global` is user-level. `neon skills update` refreshes installed skills.
+
+### Patch Changes
+
+- Updated dependencies [eb52252]
+  - neon@4.3.0
+
 ## 4.2.1
 
 ### Patch Changes
