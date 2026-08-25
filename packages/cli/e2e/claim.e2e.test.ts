@@ -33,11 +33,13 @@ const isolatedDirs = (): {
 	const root = mkdtempSync(join(tmpdir(), "neon-claim-e2e-"));
 	cleanups.push(() => rmSync(root, { recursive: true, force: true }));
 	const configDir = join(root, "config");
+	const cwd = join(root, "workspace");
 	mkdirSync(configDir);
+	mkdirSync(cwd);
 	return {
 		configDir,
 		contextFile: join(root, ".neon"),
-		cwd: join(root, "workspace"),
+		cwd,
 	};
 };
 
@@ -83,7 +85,6 @@ describe.sequential("e2e — neon claim against live Claimable Neon", () => {
 		"creates, uses through ensureAuth, reports status, and deletes by project id",
 		async () => {
 			const createdIn = isolatedDirs();
-			mkdirSync(createdIn.cwd);
 			let projectId: string | undefined;
 			try {
 				const created = await runAnonymousJson<CreatedClaim>(
