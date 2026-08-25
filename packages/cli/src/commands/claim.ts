@@ -154,6 +154,23 @@ export const CLAIM_LIST_FIELDS = [
 	"origin",
 ] as const;
 
+export const CLAIM_CREATE_FIELDS = [
+	"project_id",
+	"branch_id",
+	"state",
+	"expires_at",
+	"granted_capabilities",
+	"denied_capabilities",
+	"env_file",
+] as const;
+
+export const claimCreateFields = (
+	denied: readonly unknown[],
+): (typeof CLAIM_CREATE_FIELDS)[number][] =>
+	CLAIM_CREATE_FIELDS.filter(
+		(field) => field !== "denied_capabilities" || denied.length > 0,
+	);
+
 export const command = "claim";
 export const aliases = ["claimable"];
 export const describe = "Create and claim temporary Neon projects";
@@ -415,15 +432,7 @@ const create = async (props: CreateProps): Promise<void> => {
 				...(envFile ? { env_file: envFile } : {}),
 			},
 			{
-				fields: [
-					"project_id",
-					"branch_id",
-					"state",
-					"expires_at",
-					"granted_capabilities",
-					"denied_capabilities",
-					"env_file",
-				],
+				fields: claimCreateFields(denied),
 				renderColumns: {
 					denied_capabilities: (row) =>
 						row.denied_capabilities
