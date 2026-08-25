@@ -12,21 +12,30 @@ describe("getCliAgent", () => {
 		expect(getCliAgent({ CODEX_THREAD_ID: "thread-123" })).toBe("codex");
 	});
 
-	it.each([
-		{ CODEX_SESSION_ID: "session-123" },
-		{ CODEX_CI: "1" },
-		{ CODEX_SANDBOX: "seatbelt" },
-		{ CODEX_SANDBOX_NETWORK_DISABLED: "1" },
-	])("attributes other Codex execution environments", (env) => {
-		expect(getCliAgent(env)).toBe("codex");
+	it("attributes a Codex session", () => {
+		expect(getCliAgent({ CODEX_SESSION_ID: "session-123" })).toBe("codex");
 	});
 
-	it("does not treat disabled boolean markers as agent execution", () => {
+	it("does not attribute disabled or empty direct markers", () => {
 		expect(
 			getCliAgent({
 				CLAUDE_CODE_CHILD_SESSION: "false",
-				CODEX_CI: "0",
-				CODEX_SANDBOX_NETWORK_DISABLED: "false",
+				CODEX_THREAD_ID: "",
+				CODEX_SESSION_ID: " ",
+			}),
+		).toBeUndefined();
+	});
+
+	it("does not attribute ambient or sandbox utility markers", () => {
+		expect(
+			getCliAgent({
+				CLAUDECODE: "1",
+				CLAUDE_CODE: "1",
+				CLAUDE_CLI: "1",
+				CODEX: "1",
+				CODEX_CI: "1",
+				CODEX_SANDBOX: "seatbelt",
+				CODEX_SANDBOX_NETWORK_DISABLED: "1",
 			}),
 		).toBeUndefined();
 	});

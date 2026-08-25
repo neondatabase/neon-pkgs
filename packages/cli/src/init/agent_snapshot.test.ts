@@ -204,8 +204,8 @@ const FIXTURES: Record<string, Record<string, string>> = {
 /** The agent identities the flow branches on, and how each is detected. */
 const AGENTS: Record<string, Record<string, string>> = {
 	cursor: { CURSOR_TRACE_ID: "trace-1" },
-	"claude-code": { CLAUDE_CODE_CHILD_SESSION: "1" },
-	codex: { CODEX_THREAD_ID: "thread-1" },
+	"claude-code": { CLAUDECODE: "1" },
+	codex: { CODEX: "1" },
 	// No agent env at all: `detectAgent()` returns null and `--agent` still
 	// forces agent mode, so this covers the "explicitly asked, none detected" path.
 	none: {},

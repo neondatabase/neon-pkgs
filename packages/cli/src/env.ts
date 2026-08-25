@@ -12,10 +12,7 @@ export const getCliAgent = (env: NodeJS.Dict<string>): CliAgent | undefined => {
 	const claudeCode = env.CLAUDE_CODE_CHILD_SESSION === "1";
 	const codex =
 		Boolean(env.CODEX_THREAD_ID?.trim()) ||
-		Boolean(env.CODEX_SESSION_ID?.trim()) ||
-		env.CODEX_CI === "1" ||
-		Boolean(env.CODEX_SANDBOX?.trim()) ||
-		env.CODEX_SANDBOX_NETWORK_DISABLED === "1";
+		Boolean(env.CODEX_SESSION_ID?.trim());
 
 	if (claudeCode === codex) return undefined;
 	return claudeCode ? "claude-code" : "codex";
