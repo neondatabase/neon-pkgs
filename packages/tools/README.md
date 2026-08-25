@@ -8,12 +8,13 @@ npm install @neon/tools
 
 ## Create tools
 
-Selectors are SDK paths. The returned record is keyed by those paths. Each tool's published `id` is the last path segment, then the resource, in snake_case (`projects.list` → `list_projects`, `postgres.connectionString` → `connection_string_postgres`). `publishedId` derives that string. `toolIds` lists every published selector.
+Selectors are SDK paths. The returned record is keyed by those paths. Each tool's published `id` is the last path segment, then the resource, in snake_case (`projects.list` → `list_projects`, `postgres.roles.resetPassword` → `reset_password_postgres_roles`, `postgres.connectionString` → `connection_string_postgres`). `publishedId` derives that string. `toolIds` lists every published selector.
 
 ```ts
 import { createNeonTools, publishedId } from "@neon/tools";
 
 publishedId("projects.list"); // "list_projects"
+publishedId("postgres.roles.resetPassword"); // "reset_password_postgres_roles"
 
 const apiKey = process.env.NEON_API_KEY;
 if (!apiKey) throw new Error("NEON_API_KEY is required");
@@ -76,7 +77,7 @@ These public client methods are not tools: `projects.create`, `branches.create`,
 
 ### Descriptions
 
-Pass a map keyed by SDK path or published `id`, or a function that can append to the generated text:
+Pass a map keyed by SDK path or the current published `id`, or a function that can append to the generated text. A key that matches neither is ignored.
 
 ```ts
 const tools = createNeonTools({
