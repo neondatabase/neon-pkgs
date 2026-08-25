@@ -88,6 +88,25 @@ const CAPABILITY_ORDER: readonly ClaimableCapability[] = [
 	"ai_gateway",
 ];
 
+const SERVICE_FOR_CAPABILITY: Readonly<
+	Record<ClaimableCapability, NeonService>
+> = {
+	postgres: "postgres",
+	auth: "auth",
+	data_api: "data-api",
+	functions: "functions",
+	storage: "object-storage",
+	ai_gateway: "ai-gateway",
+};
+
+const isClaimableCapability = (value: string): value is ClaimableCapability =>
+	Object.hasOwn(SERVICE_FOR_CAPABILITY, value);
+
+const cliServiceName = (capability: string): string =>
+	isClaimableCapability(capability)
+		? SERVICE_FOR_CAPABILITY[capability]
+		: capability;
+
 export const claimableCapabilities = (
 	services: readonly NeonService[],
 ): ClaimableCapability[] => {
@@ -161,7 +180,7 @@ export const CLAIM_CREATE_FIELDS = [
 	"project_id",
 	"branch_id",
 	"state",
-	"expires_at",
+	"project_expires_at",
 	"granted_capabilities",
 	"denied_capabilities",
 	"env_file",
@@ -464,11 +483,11 @@ const create = async (props: CreateProps): Promise<void> => {
 
 		const granted = registration.capabilities
 			.filter((decision) => decision.granted)
-			.map((decision) => decision.capability);
+			.map((decision) => cliServiceName(decision.capability));
 		const denied = registration.capabilities
 			.filter((decision) => !decision.granted)
 			.map((decision) => ({
-				capability: decision.capability,
+				capability: cliServiceName(decision.capability),
 				reason: decision.reason,
 				message: decision.message,
 			}));
@@ -477,7 +496,7 @@ const create = async (props: CreateProps): Promise<void> => {
 				project_id: registration.project.id,
 				branch_id: registration.project.branchId,
 				state: "unclaimed",
-				expires_at: registration.project.expiresAt,
+				project_expires_at: registration.project.expiresAt,
 				granted_capabilities: granted,
 				denied_capabilities: denied,
 				...(envFile ? { env_file: envFile } : {}),
@@ -693,13 +712,21 @@ const accept = async (props: AcceptProps): Promise<void> => {
 
 const list = (props: ClaimProps): void => {
 	rejectExplicitAccountCredential(props);
-	const projects = listClaimableCredentials(props.configDir).map((item) => ({
-		project_id: item.projectId,
-		branch_id: item.branchId,
-		state: assertionHasExpired(item) ? "expired" : "unclaimed",
-		project_expires_at: item.expiresAt,
-		origin: item.origin,
-	}));
+	const projects = listClaimableCredentials(props.configDir).map((item) => {
+		const projectMs = Date.parse(item.expiresAt);
+		const projectExpired =
+			Number.isFinite(projectMs) && projectMs <= Date.now();
+		return {
+			project_id: item.projectId,
+			branch_id: item.branchId,
+			state:
+				assertionHasExpired(item) || projectExpired
+					? "expired"
+					: "unclaimed",
+			project_expires_at: item.expiresAt,
+			origin: item.origin,
+		};
+	});
 	writer(props).end(projects, {
 		fields: CLAIM_LIST_FIELDS,
 		emptyMessage: "No Claimable Neon projects are saved on this machine.",

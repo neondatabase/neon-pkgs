@@ -82,7 +82,7 @@ describe("claim create table fields", () => {
 				project_id: "quiet-fog-12345678",
 				branch_id: "br-quiet-fog-12345678",
 				state: "unclaimed",
-				expires_at: "2026-08-24T12:00:00.000Z",
+				project_expires_at: "2026-08-24T12:00:00.000Z",
 				granted_capabilities: ["postgres"],
 				denied_capabilities: [],
 				env_file: "/tmp/.env.local",

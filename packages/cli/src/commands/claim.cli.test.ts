@@ -235,7 +235,7 @@ describe("claim list table output", () => {
 		const projectId = "wandering-haze-25754674";
 		const branchId = "br-main-branch-123456";
 		const origin = "https://claimable.neon.tech";
-		const expiresAt = "2026-08-24T12:00:00.000Z";
+		const expiresAt = "2027-08-24T12:00:00.000Z";
 		const { code, stdout, stderr } = await runCli(
 			["claim", "list"],
 			{},
@@ -266,6 +266,32 @@ describe("claim list table output", () => {
 		expect(stdout).toContain(expiresAt);
 		expect(stdout).toContain(origin);
 		expect(stdout.trimEnd().split("\n")).toHaveLength(2);
+	});
+
+	test("marks a past project expiry as expired even when the assertion is live", async () => {
+		const projectId = "wandering-haze-25754674";
+		const { code, stdout, stderr } = await runCli(
+			["claim", "list"],
+			{},
+			({ configDir }) => {
+				writeClaimableCredentials(configDir, {
+					version: 1,
+					origin: "https://claimable.neon.tech",
+					registrationId: "reg_test",
+					projectId,
+					branchId: "br-main-branch-123456",
+					identityAssertion: "assertion",
+					expiresAt: "2026-08-24T12:00:00.000Z",
+					assertionExpires: 4_000_000_000,
+				});
+			},
+		);
+
+		expect(code).toBe(0);
+		expect(stderr).toBe("");
+		expect(stdout).toContain("expired");
+		expect(stdout).not.toContain("unclaimed");
+		expect(stdout).toContain(projectId);
 	});
 
 	test("marks a locally expired assertion as expired", async () => {

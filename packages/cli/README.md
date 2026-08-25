@@ -108,7 +108,8 @@ neon claim delete <project-id> --yes
 
 `status`, `accept`, and `delete` take an optional project id from `claim list`, so a
 project stays manageable after its original directory is gone. `list` prints `state`
-(`unclaimed` or `expired`) and `project_expires_at`. `delete` also drops a
+(`unclaimed` or `expired`) from the identity assertion clock and the project
+expiry, plus `project_expires_at`. `delete` also drops a
 local record whose identity assertion has expired or been revoked.
 
 `neon claimable` is an alias for `neon claim`. For local service development, set
