@@ -90,7 +90,7 @@ export const pickMcpProjectPin = async (
 		type: "confirm",
 		name: "pin",
 		message: willMintKey
-			? `Pin MCP tools and the minted API key to the linked project ${linkedProjectId}?`
+			? `Pin MCP tools to the linked project ${linkedProjectId}? A newly minted API key would be limited to that project.`
 			: `Pin MCP tools to the linked project ${linkedProjectId}?`,
 		initial: true,
 	});
