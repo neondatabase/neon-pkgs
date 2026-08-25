@@ -49,7 +49,10 @@ export const getDefaultInputSchema = z.strictObject({
 export const resetFromParentInputSchema = z.strictObject({
 	project_id: zod.zRestoreProjectBranchPath.shape.project_id,
 	branch_id: zod.zRestoreProjectBranchPath.shape.branch_id,
-	preserve_under_name: zod.zBranchRestoreRequest.shape.preserve_under_name,
+	preserve_under_name:
+		zod.zBranchRestoreRequest.shape.preserve_under_name.describe(
+			"Name under which to save the current branch before the reset. Required when the branch has children; those children move to the new branch.",
+		),
 });
 
 const compareQuery = zod.zGetProjectBranchSchemaComparisonQuery.shape;
@@ -206,7 +209,7 @@ export const resetFromParentTool = (options: ToolClientOptions) =>
 			id: publishedId("branches.resetFromParent"),
 			title: "Reset branch from parent",
 			description:
-				"Reset a branch to its parent's current HEAD. preserve_under_name is required when the branch has children. Does not restore to an LSN or timestamp.",
+				"Reset a branch to its parent's current HEAD. Discards every change the branch has written since it diverged. preserve_under_name is required when the branch has children. For an LSN or timestamp restore, use the raw restoreProjectBranch operation.",
 			inputSchema: resetFromParentInputSchema,
 			annotations: writeAnnotations,
 			requiresApproval: true,

@@ -1,5 +1,6 @@
 import { createNeonClient } from "@neon/sdk";
 import { describe, expect, test } from "vitest";
+import * as z from "zod";
 import { createNeonTool, createNeonTools, toolIds } from "./index.js";
 import { hiddenToolIds } from "./lib/ergonomic/ids.js";
 
@@ -267,6 +268,15 @@ describe("special mappings", () => {
 		});
 		expect(reset.annotations.destructiveHint).toBe(true);
 		expect(reset.requiresApproval).toBe(true);
+		expect(reset.description).toContain(
+			"Discards every change the branch has written since it diverged",
+		);
+		const preserve = z.toJSONSchema(reset.inputSchema).properties
+			?.preserve_under_name;
+		expect(JSON.stringify(preserve)).toContain(
+			"Required when the branch has children",
+		);
+		expect(JSON.stringify(preserve)).not.toContain("source_branch_id");
 
 		const compare = createNeonTool("branches.compareSchema", {
 			apiKey: "test-key",
