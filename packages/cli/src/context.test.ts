@@ -15,6 +15,7 @@ import {
 	ensureGitignored,
 	isCurrentBranchProbe,
 	isMcpOauth,
+	isSkillsCommand,
 	walkContextFile,
 } from "./context.js";
 
@@ -71,6 +72,18 @@ describe("isCurrentBranchProbe", () => {
 		expect(
 			isCurrentBranchProbe({ _: ["config"], currentBranch: true }),
 		).toBe(false);
+	});
+});
+
+describe("isSkillsCommand", () => {
+	test("true for skills and skills update", () => {
+		expect(isSkillsCommand({ _: ["skills"] })).toBe(true);
+		expect(isSkillsCommand({ _: ["skills", "update"] })).toBe(true);
+	});
+
+	test("false for other commands", () => {
+		expect(isSkillsCommand({ _: ["mcp"] })).toBe(false);
+		expect(isSkillsCommand({ _: ["init"] })).toBe(false);
 	});
 });
 

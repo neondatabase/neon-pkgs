@@ -29,6 +29,7 @@ import * as projects from "./projects.js";
 import * as psql from "./psql.js";
 import * as roles from "./roles.js";
 import * as setContext from "./set_context.js";
+import * as skills from "./skills.js";
 import * as snapshots from "./snapshots.js";
 import * as status from "./status.js";
 import * as users from "./user.js";
@@ -60,6 +61,7 @@ export default [
 	open,
 	init,
 	mcp,
+	skills,
 	dataApi,
 	functions,
 	dev,

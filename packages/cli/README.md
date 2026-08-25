@@ -759,6 +759,34 @@ On a TTY the command asks for config location (global is the default), then agen
 
 The default mints an account-wide API key (or reuses the Bearer already configured for Neon at `https://mcp.neon.tech/mcp`) and writes it into each selected agent's config. That key reaches everything the account can, in every organization. Revoke it with `neon api-keys revoke <id>`. `--oauth` writes the URL with no `Authorization` header; the agent signs in on first use. `--project` writes into the project config (`.cursor/mcp.json` and similar). `--read-only` adds `?readonly=true`. `--project-id` adds `?projectId=`. `--category` adds `?category=` (repeatable or comma-separated: `projects`, `branches`, `schema`, `querying`, `neon_auth`, `data_api`, `observability`, `docs`). Those query params restrict which MCP tools the server exposes; they do not change what the minted key can do.
 
+## Install Neon agent skills (`skills`)
+
+`neon skills` installs Neon agent skills by running `npx skills add`. It does not call the Neon API.
+
+```bash
+# Interactive: this directory, then agents, then skills, then confirm.
+$ neon skills
+
+# Skip prompts. This directory, every detected agent, every skill from neondatabase/agent-skills.
+$ neon skills -y
+
+$ neon skills --agent cursor --agent claude-code
+
+# User-level skills (skills CLI -g).
+$ neon skills --global
+
+# Update installed skills in this directory.
+$ neon skills update
+$ neon skills update -y
+$ neon skills update --global -y
+```
+
+On a TTY the command asks which agents and which skills, then shows a summary to confirm. Detected agents start selected from project-folder markers such as `.cursor`. `neondatabase/agent-skills` starts selected. `neondatabase/neon-for-agent-platforms` is offered and starts unselected.
+
+`-y` skips those questions and installs every skill from `neondatabase/agent-skills` only. `--agent` and `--global` still apply. Without a TTY, pass `-y`. `--agent` alone is not enough.
+
+`--agent` names match `neon mcp`, minus agents that cannot install skills: `antigravity`, `cline`, `cline-cli`, `claude-code`, `claude-desktop`, `codex`, `cursor`, `gemini-cli`, `goose`, `github-copilot-cli`, `grok-build`, `opencode`, `vscode`, `windsurf`, `zed`. `mcporter` is a known MCP name that is then skipped.
+
 ## Snapshots (`snapshots`)
 
 `neon snapshots` (alias `neon snapshot`) manages **snapshots** — point-in-time backups of a branch that you can list, rename, expire, restore into a branch, or schedule automatically. Snapshots are a Beta Neon feature and were previously only available in the Console and REST API; this command group brings them to the CLI.
@@ -1139,6 +1167,7 @@ Id   Name      Project         Created At            Last Used At          Last 
 | bootstrap                                                                  |                                                                                                              | Scaffold a project from a template |
 | init                                                                       |                                                                                                              | Set up a project for a coding agent |
 | mcp                                                                        |                                                                                                              | Install the Neon MCP server         |
+| skills                                                                     | `update`                                                                                                     | Install Neon agent skills           |
 | bucket                                                                     | `create`, `list`, `delete`, `object list`, `object get`, `object put`, `object delete` (incl. `--recursive`) | Manage buckets and their objects   |
 | [completion](https://neon.com/docs/reference/cli-completion)               |                                                                                                              | Generate a completion script       |
 

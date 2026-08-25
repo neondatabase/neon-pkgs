@@ -1,0 +1,111 @@
+import { describe, expect, test } from "vitest";
+
+import pkg from "../pkg.js";
+import {
+	skillsAddArgs,
+	skillsChildEnv,
+	skillsMetadata,
+	skillsUpdateArgs,
+} from "./run.js";
+
+describe("skillsMetadata", () => {
+	test("tags the neon CLI as the origin", () => {
+		expect(JSON.parse(skillsMetadata("skills"))).toEqual({
+			origin: "neon-cli",
+			command: "skills",
+			version: pkg.version,
+		});
+	});
+});
+
+describe("skillsChildEnv", () => {
+	test("drops telemetry blockers and keeps the rest", () => {
+		const env = skillsChildEnv({
+			PATH: "/usr/bin",
+			HOME: "/tmp/home",
+			DISABLE_TELEMETRY: "1",
+			DO_NOT_TRACK: "1",
+			CI: "true",
+		});
+		expect(env.PATH).toBe("/usr/bin");
+		expect(env.HOME).toBe("/tmp/home");
+		expect(env.CI).toBe("true");
+		expect(env).not.toHaveProperty("DISABLE_TELEMETRY");
+		expect(env).not.toHaveProperty("DO_NOT_TRACK");
+	});
+});
+
+describe("skillsAddArgs", () => {
+	test("installs all agent-skills into mapped agents", () => {
+		const args = skillsAddArgs({
+			source: "neondatabase/agent-skills",
+			skills: "*",
+			agents: ["cursor", "claude-code"],
+			global: false,
+			metadata: '{"origin":"neon-cli"}',
+		});
+		expect(args).toEqual([
+			"-y",
+			"skills",
+			"add",
+			"neondatabase/agent-skills",
+			"--skill",
+			"*",
+			"--agent",
+			"cursor",
+			"--agent",
+			"claude-code",
+			"-y",
+			"--metadata",
+			'{"origin":"neon-cli"}',
+		]);
+		expect(args.filter((part) => part === "*")).toEqual(["*"]);
+		expect(args.join(" ")).not.toMatch(/--agent \*/);
+	});
+
+	test("passes -g for user-level installs", () => {
+		expect(
+			skillsAddArgs({
+				source: "neondatabase/agent-skills",
+				skills: ["neon"],
+				agents: ["cursor"],
+				global: true,
+				metadata: "{}",
+			}),
+		).toContain("-g");
+	});
+
+	test("rejects an empty skill list", () => {
+		expect(() =>
+			skillsAddArgs({
+				source: "neondatabase/agent-skills",
+				skills: [],
+				agents: ["cursor"],
+				global: false,
+				metadata: "{}",
+			}),
+		).toThrow(/at least one --skill/);
+	});
+});
+
+describe("skillsUpdateArgs", () => {
+	test("defaults to project scope", () => {
+		expect(skillsUpdateArgs({ global: false })).toEqual([
+			"-y",
+			"skills",
+			"update",
+			"-p",
+			"-y",
+		]);
+	});
+
+	test("uses -g for user-level updates", () => {
+		expect(skillsUpdateArgs({ global: true })).toEqual([
+			"-y",
+			"skills",
+			"update",
+			"-g",
+			"-y",
+		]);
+	});
+});
