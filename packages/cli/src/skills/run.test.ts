@@ -2,8 +2,11 @@ import { describe, expect, test } from "vitest";
 
 import pkg from "../pkg.js";
 import {
+	assertSkillsNode,
 	neonSkillsRetryCommand,
+	nodeMeetsMinimum,
 	npxCommand,
+	SKILLS_MIN_NODE,
 	skillsAddArgs,
 	skillsChildEnv,
 	skillsMetadata,
@@ -49,6 +52,7 @@ describe("skillsChildEnv", () => {
 			HOME: "/tmp/home",
 			DISABLE_TELEMETRY: "1",
 			DO_NOT_TRACK: "1",
+			NEON_API_KEY: "secret",
 			CI: "true",
 		});
 		expect(env.PATH).toBe("/usr/bin");
@@ -56,6 +60,18 @@ describe("skillsChildEnv", () => {
 		expect(env.CI).toBe("true");
 		expect(env).not.toHaveProperty("DISABLE_TELEMETRY");
 		expect(env).not.toHaveProperty("DO_NOT_TRACK");
+		expect(env).not.toHaveProperty("NEON_API_KEY");
+	});
+});
+
+describe("assertSkillsNode", () => {
+	test("accepts the skills CLI floor and refuses older Node", () => {
+		expect(nodeMeetsMinimum("22.20.0", SKILLS_MIN_NODE)).toBe(true);
+		expect(nodeMeetsMinimum("v24.18.0", SKILLS_MIN_NODE)).toBe(true);
+		expect(nodeMeetsMinimum("20.19.0", SKILLS_MIN_NODE)).toBe(false);
+		expect(() => assertSkillsNode("v20.19.0")).toThrow(
+			/needs Node.js 22.20.0 or newer/,
+		);
 	});
 });
 

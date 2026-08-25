@@ -59,6 +59,7 @@ writeFileSync(process.env.SKILLS_ENV_FILE, JSON.stringify({
   cwd: process.cwd(),
   hasDisable: Object.prototype.hasOwnProperty.call(process.env, "DISABLE_TELEMETRY"),
   hasDnt: Object.prototype.hasOwnProperty.call(process.env, "DO_NOT_TRACK"),
+  hasNeonKey: Object.prototype.hasOwnProperty.call(process.env, "NEON_API_KEY"),
 }));
 if (process.env.SKILLS_CHILD_STDOUT) {
   process.stdout.write(process.env.SKILLS_CHILD_STDOUT);
@@ -92,6 +93,7 @@ function runOptions(
 			SKILLS_ENV_FILE: join(bin, "env.json"),
 			DISABLE_TELEMETRY: "1",
 			DO_NOT_TRACK: "1",
+			NEON_API_KEY: "should-not-leak",
 			...extra,
 		},
 		snapshot: false as const,
@@ -141,6 +143,7 @@ describe("neon skills", () => {
 			cwd: realpathSync(cwd),
 			hasDisable: false,
 			hasDnt: false,
+			hasNeonKey: false,
 		});
 	});
 

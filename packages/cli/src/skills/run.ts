@@ -22,7 +22,47 @@ export const skillsChildEnv = (
 	for (const key of TELEMETRY_BLOCKERS) {
 		delete env[key];
 	}
+	delete env.NEON_API_KEY;
 	return env;
+};
+
+export const SKILLS_MIN_NODE = "22.20.0";
+
+const nodeParts = (version: string): [number, number, number] => {
+	const [major, minor, patch] = version
+		.replace(/^v/, "")
+		.split(".")
+		.map((part) => Number.parseInt(part, 10));
+	return [
+		Number.isInteger(major) ? major : 0,
+		Number.isInteger(minor) ? minor : 0,
+		Number.isInteger(patch) ? patch : 0,
+	];
+};
+
+export const nodeMeetsMinimum = (current: string, minimum: string): boolean => {
+	const left = nodeParts(current);
+	const right = nodeParts(minimum);
+	for (let i = 0; i < 3; i += 1) {
+		const a = left[i];
+		const b = right[i];
+		if (a === undefined || b === undefined) {
+			return false;
+		}
+		if (a !== b) {
+			return a > b;
+		}
+	}
+	return true;
+};
+
+export const assertSkillsNode = (version = process.version): void => {
+	if (nodeMeetsMinimum(version, SKILLS_MIN_NODE)) {
+		return;
+	}
+	throw new Error(
+		`neon skills needs Node.js ${SKILLS_MIN_NODE} or newer to run the skills CLI. This process is Node.js ${version.replace(/^v/, "")}. Upgrade Node.js, then retry.`,
+	);
 };
 
 export const skillsAddArgs = (options: {
@@ -126,6 +166,7 @@ export const runSkillsCli = async (options: {
 	args: readonly string[];
 	cwd: string;
 }): Promise<SkillsRunResult> => {
+	assertSkillsNode();
 	try {
 		const result = await execa("npx", options.args, {
 			cwd: options.cwd,
