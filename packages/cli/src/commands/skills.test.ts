@@ -189,6 +189,29 @@ describe("neon skills", () => {
 		]);
 	});
 
+	test("update rejects --agent before spawn", async ({ testCliCommand }) => {
+		const { home, cwd, bin, argvFile } = scratch();
+		const { stderr } = await testCliCommand(
+			["skills", "update", "-y", "--agent", "cursor"],
+			{ ...runOptions(home, cwd, bin), code: 1 },
+		);
+		expect(stderr).toMatch(/does not take --agent/);
+		expect(() => readFileSync(argvFile, "utf8")).toThrow();
+	});
+
+	test("update help does not advertise --agent", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin } = scratch();
+		const { stdout, stderr } = await testCliCommand(
+			["skills", "update", "--help"],
+			runOptions(home, cwd, bin),
+		);
+		const text = `${stdout}\n${stderr}`;
+		expect(text).toMatch(/skills update/);
+		expect(text).not.toMatch(/--agent/);
+	});
+
 	test("update without -y fails before spawn", async ({ testCliCommand }) => {
 		const { home, cwd, bin, argvFile } = scratch();
 		const { stderr } = await testCliCommand(["skills", "update"], {

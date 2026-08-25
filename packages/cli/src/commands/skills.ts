@@ -94,7 +94,17 @@ export const builder = (argv: yargs.Argv) =>
 						"Update user-level skills",
 					)
 					.strict()
-					.check(noPassthrough("skills update")),
+					.hide("agent")
+					.check((args) => {
+						noPassthrough("skills update")(args);
+						const agents = args.agent;
+						if (Array.isArray(agents) && agents.length > 0) {
+							throw new Error(
+								"neon skills update does not take --agent. It refreshes every installed skill in this directory (or --global).",
+							);
+						}
+						return true;
+					}),
 			(args) => updateHandler(args as unknown as SkillsProps),
 		)
 		.options({
