@@ -146,7 +146,8 @@ describe("list field order", () => {
 				{
 					project_id: PROJECT_ID,
 					branch_id: BRANCH_ID,
-					expires_at: TIMESTAMP,
+					state: "unclaimed",
+					project_expires_at: TIMESTAMP,
 					origin,
 				},
 			],
@@ -159,7 +160,7 @@ describe("list field order", () => {
 		for (const field of CLAIM_LIST_FIELDS) {
 			expect(header).toContain(titleCase(field));
 		}
-		expect(header.indexOf("Expires At")).toBeGreaterThan(-1);
+		expect(header.indexOf("Project Expires At")).toBeGreaterThan(-1);
 		expect(stripAnsi(out)).toContain(PROJECT_ID);
 		expect(stripAnsi(out)).toContain(origin);
 		expect(stripAnsi(out).trimEnd().split("\n")).toHaveLength(2);

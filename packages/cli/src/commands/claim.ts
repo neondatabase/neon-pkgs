@@ -152,7 +152,8 @@ const failureMessage = (error: unknown): string =>
 export const CLAIM_LIST_FIELDS = [
 	"project_id",
 	"branch_id",
-	"expires_at",
+	"state",
+	"project_expires_at",
 	"origin",
 ] as const;
 
@@ -695,7 +696,8 @@ const list = (props: ClaimProps): void => {
 	const projects = listClaimableCredentials(props.configDir).map((item) => ({
 		project_id: item.projectId,
 		branch_id: item.branchId,
-		expires_at: item.expiresAt,
+		state: assertionHasExpired(item) ? "expired" : "unclaimed",
+		project_expires_at: item.expiresAt,
 		origin: item.origin,
 	}));
 	writer(props).end(projects, {

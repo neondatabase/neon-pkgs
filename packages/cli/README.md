@@ -102,12 +102,13 @@ neon env pull --service postgres --service auth --service data-api
 
 neon claim accept                 # create a claim code and open the transfer URL
 neon claim delete --yes           # permanently delete an unclaimed project
-neon claim list                   # projects whose assertions are saved locally
+neon claim list                   # local records, including expired
 neon claim delete <project-id> --yes
 ```
 
 `status`, `accept`, and `delete` take an optional project id from `claim list`, so a
-project stays manageable after its original directory is gone. `delete` also drops a
+project stays manageable after its original directory is gone. `list` prints `state`
+(`unclaimed` or `expired`) and `project_expires_at`. `delete` also drops a
 local record whose identity assertion has expired or been revoked.
 
 `neon claimable` is an alias for `neon claim`. For local service development, set

@@ -257,12 +257,40 @@ describe("claim list table output", () => {
 		expect(stdout).not.toMatch(BOX);
 		expect(stdout).toContain("Project Id");
 		expect(stdout).toContain("Branch Id");
-		expect(stdout).toContain("Expires At");
+		expect(stdout).toContain("State");
+		expect(stdout).toContain("Project Expires At");
 		expect(stdout).toContain("Origin");
+		expect(stdout).toContain("unclaimed");
 		expect(stdout).toContain(projectId);
 		expect(stdout).toContain(branchId);
 		expect(stdout).toContain(expiresAt);
 		expect(stdout).toContain(origin);
 		expect(stdout.trimEnd().split("\n")).toHaveLength(2);
+	});
+
+	test("marks a locally expired assertion as expired", async () => {
+		const projectId = "wandering-haze-25754674";
+		const { code, stdout, stderr } = await runCli(
+			["claim", "list"],
+			{},
+			({ configDir }) => {
+				writeClaimableCredentials(configDir, {
+					version: 1,
+					origin: "https://claimable.neon.tech",
+					registrationId: "reg_test",
+					projectId,
+					branchId: "br-main-branch-123456",
+					identityAssertion: "assertion",
+					expiresAt: "2026-08-24T12:00:00.000Z",
+					assertionExpires: 1_700_000_000,
+				});
+			},
+		);
+
+		expect(code).toBe(0);
+		expect(stderr).toBe("");
+		expect(stdout).toContain("expired");
+		expect(stdout).not.toContain("unclaimed");
+		expect(stdout).toContain(projectId);
 	});
 });
