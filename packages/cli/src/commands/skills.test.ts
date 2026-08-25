@@ -45,7 +45,15 @@ writeFileSync(process.env.SKILLS_ENV_FILE, JSON.stringify({
   hasDisable: Object.prototype.hasOwnProperty.call(process.env, "DISABLE_TELEMETRY"),
   hasDnt: Object.prototype.hasOwnProperty.call(process.env, "DO_NOT_TRACK"),
 }));
-process.stdout.write("SKILLS_CLI_STDOUT");
+if (process.env.SKILLS_CHILD_STDOUT) {
+  process.stdout.write(process.env.SKILLS_CHILD_STDOUT);
+}
+if (process.env.SKILLS_CHILD_STDERR) {
+  process.stderr.write(process.env.SKILLS_CHILD_STDERR);
+}
+if (process.env.SKILLS_CHILD_EXIT) {
+  process.exit(Number(process.env.SKILLS_CHILD_EXIT));
+}
 `,
 	);
 	chmodSync(join(bin, "npx"), 0o755);
@@ -86,10 +94,10 @@ describe("neon skills", () => {
 			["skills", "-y"],
 			runOptions(home, cwd, bin),
 		);
-		expect(stdout).not.toContain("SKILLS_CLI_STDOUT");
 		const rows = JSON.parse(stdout);
 		expect(rows).toEqual([
 			{
+				scope: "this directory",
 				source: "neondatabase/agent-skills",
 				skills: "*",
 				agents: "cursor",
@@ -174,6 +182,25 @@ describe("neon skills", () => {
 		]);
 	});
 
+	test("update reports none when the child has nothing to update", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin } = scratch();
+		const { stdout } = await testCliCommand(
+			["skills", "update", "-y"],
+			runOptions(home, cwd, bin, {
+				SKILLS_CHILD_STDOUT: "No project skills to update.\n",
+			}),
+		);
+		expect(JSON.parse(stdout)).toEqual([
+			{
+				scope: "this directory",
+				status: "none",
+				detail: "No project skills to update.",
+			},
+		]);
+	});
+
 	test("update --global uses -g", async ({ testCliCommand }) => {
 		const { home, cwd, bin, argvFile } = scratch();
 		await testCliCommand(
@@ -210,6 +237,7 @@ describe("neon skills", () => {
 		const text = `${stdout}\n${stderr}`;
 		expect(text).toMatch(/skills update/);
 		expect(text).not.toMatch(/--agent/);
+		expect(text).not.toMatch(/-y, -y/);
 	});
 
 	test("update without -y fails before spawn", async ({ testCliCommand }) => {
@@ -222,13 +250,40 @@ describe("neon skills", () => {
 		expect(() => readFileSync(argvFile, "utf8")).toThrow();
 	});
 
-	test("install --global passes -g", async ({ testCliCommand }) => {
+	test("install --global passes -g and names user-level scope", async ({
+		testCliCommand,
+	}) => {
 		const { home, cwd, bin, argvFile } = scratch();
-		await testCliCommand(
+		const { stdout } = await testCliCommand(
 			["skills", "-y", "--global", "--agent", "cursor"],
 			runOptions(home, cwd, bin),
 		);
 		expect(JSON.parse(readFileSync(argvFile, "utf8"))).toContain("-g");
+		expect(JSON.parse(stdout)[0].scope).toBe("user-level");
+	});
+
+	test("failed install keeps the child dump out of the table", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin } = scratch();
+		const dump =
+			"npm error code ENOENT npm error syscall spawn sh npm error path /tmp/x";
+		const { stdout, stderr } = await testCliCommand(
+			["skills", "-y", "--agent", "cursor"],
+			{
+				...runOptions(home, cwd, bin, {
+					SKILLS_CHILD_EXIT: "1",
+					SKILLS_CHILD_STDERR: dump,
+				}),
+				code: 1,
+			},
+		);
+		const row = JSON.parse(stdout)[0];
+		expect(row.status).toBe("failed");
+		expect(row.error).toBe("skills CLI failed");
+		expect(row.error).not.toContain("syscall");
+		expect(stderr).toMatch(/Retry with: npx -y skills add/);
+		expect(stderr.match(/syscall spawn sh/g)?.length).toBe(1);
 	});
 
 	test("names a missing npx", async ({ testCliCommand }) => {
@@ -253,5 +308,6 @@ describe("neon skills", () => {
 		const text = `${stdout}\n${stderr}`;
 		expect(text).toMatch(/neondatabase\/agent-skills/);
 		expect(text).toMatch(/skills update/);
+		expect(text).not.toMatch(/-y, -y/);
 	});
 });

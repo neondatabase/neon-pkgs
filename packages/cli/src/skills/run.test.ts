@@ -2,11 +2,27 @@ import { describe, expect, test } from "vitest";
 
 import pkg from "../pkg.js";
 import {
+	npxCommand,
 	skillsAddArgs,
 	skillsChildEnv,
 	skillsMetadata,
 	skillsUpdateArgs,
+	skillsUpdateHadNothing,
 } from "./run.js";
+
+describe("npxCommand", () => {
+	test("quotes metadata JSON", () => {
+		expect(
+			npxCommand([
+				"-y",
+				"skills",
+				"add",
+				"--metadata",
+				'{"origin":"neon-cli"}',
+			]),
+		).toBe(`npx -y skills add --metadata '{"origin":"neon-cli"}'`);
+	});
+});
 
 describe("skillsMetadata", () => {
 	test("tags the neon CLI as the origin", () => {
@@ -85,6 +101,20 @@ describe("skillsAddArgs", () => {
 				metadata: "{}",
 			}),
 		).toThrow(/at least one --skill/);
+	});
+});
+
+describe("skillsUpdateHadNothing", () => {
+	test("reads the skills CLI no-op lines", () => {
+		expect(
+			skillsUpdateHadNothing(
+				"Checking for skill updates…\nNo project skills to update.",
+			),
+		).toBe(true);
+		expect(skillsUpdateHadNothing("No global skills to update.")).toBe(
+			true,
+		);
+		expect(skillsUpdateHadNothing("Updated 2 skills")).toBe(false);
 	});
 });
 

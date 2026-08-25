@@ -52,6 +52,25 @@ export const skillsAddArgs = (options: {
 	return args;
 };
 
+export const quoteNpxArg = (part: string): string =>
+	/[\s"'\\]/.test(part) ? `'${part.replace(/'/g, `'\\''`)}'` : part;
+
+export const npxCommand = (args: readonly string[]): string =>
+	`npx ${args.map(quoteNpxArg).join(" ")}`;
+
+export const firstChildLine = (output: string): string | undefined => {
+	for (const line of output.split("\n")) {
+		const trimmed = line.trim();
+		if (trimmed.length > 0) {
+			return trimmed;
+		}
+	}
+	return undefined;
+};
+
+export const skillsUpdateHadNothing = (output: string): boolean =>
+	/No (?:project|global) skills to update/i.test(output);
+
 export const skillsUpdateArgs = (options: { global: boolean }): string[] => [
 	"-y",
 	"skills",

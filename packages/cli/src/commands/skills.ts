@@ -4,10 +4,13 @@ import { getAgentDisplayName } from "../init/agents.js";
 import { log } from "../log.js";
 import { assertSkillsCanRun, resolveSkillsPlan } from "../skills/plan.js";
 import {
+	firstChildLine,
+	npxCommand,
 	runSkillsCli,
 	skillsAddArgs,
 	skillsMetadata,
 	skillsUpdateArgs,
+	skillsUpdateHadNothing,
 } from "../skills/run.js";
 import { mappedSkillsAgentNames } from "../skills/targets.js";
 import { confirmSkillsInstall, confirmSkillsUpdate } from "../skills/wizard.js";
@@ -23,6 +26,7 @@ type SkillsProps = CommonProps & {
 };
 
 type SkillsInstallRow = {
+	scope: string;
 	source: string;
 	skills: string;
 	agents: string;
@@ -32,9 +36,13 @@ type SkillsInstallRow = {
 
 type SkillsUpdateRow = {
 	scope: string;
-	status: "updated" | "failed";
+	status: "updated" | "none" | "failed";
+	detail?: string;
 	error?: string;
 };
+
+const scopeLabel = (scope: "global" | "project"): string =>
+	scope === "project" ? "this directory" : "user-level";
 
 const coerceAgents = (value: unknown): string[] => {
 	if (value === undefined) return [];
@@ -67,13 +75,6 @@ export const builder = (argv: yargs.Argv) =>
 				yargs
 					.usage("$0 skills update [options]")
 					.options({
-						yes: {
-							alias: "y",
-							type: "boolean",
-							default: false,
-							describe:
-								"Skip prompts. Update installed skills in this directory",
-						},
 						global: {
 							type: "boolean",
 							default: false,
@@ -112,14 +113,13 @@ export const builder = (argv: yargs.Argv) =>
 				alias: "y",
 				type: "boolean",
 				default: false,
-				describe:
-					"Skip prompts. Installs every skill from neondatabase/agent-skills into detected agents in this directory. --agent and --global still apply",
+				describe: "Skip prompts",
 			},
 			global: {
 				type: "boolean",
 				default: false,
 				describe:
-					"Install user-level skills (skills CLI -g). Default is this directory. Skips nothing else",
+					"Install user-level skills (skills CLI -g). Default is this directory",
 			},
 			agent: {
 				alias: "a",
@@ -179,22 +179,25 @@ export const handler = async (props: SkillsProps) => {
 
 	const metadata = skillsMetadata("skills");
 	const rows: SkillsInstallRow[] = [];
-	const failed: string[] = [];
+	const failed: { label: string; message: string; args: string[] }[] = [];
+	const scope = scopeLabel(plan.scope);
 	for (const invocation of plan.invocations) {
 		const skills =
 			invocation.skills === "*" ? "*" : invocation.skills.join(", ");
+		const args = skillsAddArgs({
+			source: invocation.source,
+			skills: invocation.skills,
+			agents: mapped,
+			global: plan.scope === "global",
+			metadata,
+		});
 		try {
 			await runSkillsCli({
-				args: skillsAddArgs({
-					source: invocation.source,
-					skills: invocation.skills,
-					agents: mapped,
-					global: plan.scope === "global",
-					metadata,
-				}),
+				args,
 				cwd,
 			});
 			rows.push({
+				scope,
 				source: invocation.source,
 				skills,
 				agents: mapped.join(", "),
@@ -204,33 +207,50 @@ export const handler = async (props: SkillsProps) => {
 			const message =
 				error instanceof Error ? error.message : String(error);
 			rows.push({
+				scope,
 				source: invocation.source,
 				skills,
 				agents: mapped.join(", "),
 				status: "failed",
-				error: message,
+				error: "skills CLI failed",
 			});
-			failed.push(`${invocation.source} (${skills})`);
+			failed.push({
+				label: `${invocation.source} (${skills})`,
+				message,
+				args,
+			});
 		}
 	}
 
 	const out = writer(props);
 	out.write(rows, {
-		fields: ["source", "skills", "agents", "status", "error"],
+		fields: ["scope", "source", "skills", "agents", "status", "error"],
 		title: "Skills",
 	});
 	out.end();
 
+	if (failed.length === 0) {
+		log.info(
+			plan.scope === "project"
+				? "Wrote skills in this directory."
+				: "Wrote user-level skills.",
+		);
+		return;
+	}
+	const first = failed[0];
+	if (first === undefined) {
+		throw new Error("Failed to install Neon agent skills.");
+	}
+	const retry = npxCommand(first.args);
+	if (first.message.includes("needs npx (Node.js)")) {
+		throw new Error(first.message);
+	}
 	if (failed.length === rows.length) {
-		throw new Error(
-			rows[0]?.error ?? "Failed to install Neon agent skills.",
-		);
+		throw new Error(`${first.message}\nRetry with: ${retry}`);
 	}
-	if (failed.length > 0) {
-		throw new Error(
-			`Failed to install Neon agent skills for: ${failed.join(", ")}.`,
-		);
-	}
+	throw new Error(
+		`Failed to install Neon agent skills for: ${failed.map((row) => row.label).join(", ")}.\n${first.message}\nRetry with: ${retry}`,
+	);
 };
 
 const updateHandler = async (props: SkillsProps) => {
@@ -249,32 +269,40 @@ const updateHandler = async (props: SkillsProps) => {
 	}
 
 	const rows: SkillsUpdateRow[] = [];
+	const args = skillsUpdateArgs({ global: scope === "global" });
+	let failure: string | undefined;
 	try {
-		await runSkillsCli({
-			args: skillsUpdateArgs({ global: scope === "global" }),
+		const result = await runSkillsCli({
+			args,
 			cwd,
 		});
+		const output = `${result.stdout}\n${result.stderr}`;
 		rows.push({
-			scope: scope === "project" ? "this directory" : "user-level",
-			status: "updated",
+			scope: scopeLabel(scope),
+			status: skillsUpdateHadNothing(output) ? "none" : "updated",
+			detail: firstChildLine(output),
 		});
 	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error);
+		failure = error instanceof Error ? error.message : String(error);
 		rows.push({
-			scope: scope === "project" ? "this directory" : "user-level",
+			scope: scopeLabel(scope),
 			status: "failed",
-			error: message,
+			error: "skills CLI failed",
 		});
 	}
 
 	const out = writer(props);
 	out.write(rows, {
-		fields: ["scope", "status", "error"],
+		fields: ["scope", "status", "detail", "error"],
 		title: "Skills",
 	});
 	out.end();
 
-	if (rows[0]?.status === "failed") {
-		throw new Error("Failed to update installed skills.");
+	if (failure !== undefined) {
+		throw new Error(
+			failure.includes("needs npx (Node.js)")
+				? failure
+				: `${failure}\nRetry with: ${npxCommand(args)}`,
+		);
 	}
 };
