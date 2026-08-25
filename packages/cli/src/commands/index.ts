@@ -24,6 +24,7 @@ import * as neonAuth from "./neon_auth.js";
 import * as open from "./open.js";
 import * as operations from "./operations.js";
 import * as orgs from "./orgs.js";
+import * as plugins from "./plugins.js";
 import * as profile from "./profile.js";
 import * as projects from "./projects.js";
 import * as psql from "./psql.js";
@@ -61,6 +62,7 @@ export default [
 	open,
 	init,
 	mcp,
+	plugins,
 	skills,
 	dataApi,
 	functions,

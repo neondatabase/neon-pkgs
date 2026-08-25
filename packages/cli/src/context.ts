@@ -96,6 +96,9 @@ export const isMcpCommand = (args: { _: (string | number)[] }): boolean =>
 export const isSkillsCommand = (args: { _: (string | number)[] }): boolean =>
 	args._[0] === "skills";
 
+export const isPluginsCommand = (args: { _: (string | number)[] }): boolean =>
+	args._[0] === "plugins";
+
 /** Raw argv is required because auth middleware runs before MCP flags are parsed. */
 export const isMcpOauth = (args: { _: (string | number)[] }): boolean =>
 	isMcpCommand(args) && argvEnablesMcpOauth(process.argv);
@@ -224,7 +227,7 @@ export const enrichFromContext = (
 	if (isMcpCommand(args)) {
 		return;
 	}
-	if (isSkillsCommand(args)) {
+	if (isSkillsCommand(args) || isPluginsCommand(args)) {
 		return;
 	}
 	const context = readContextFile(args.contextFile);

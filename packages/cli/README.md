@@ -791,6 +791,34 @@ On a TTY the command asks which agents and which skills, then shows a summary to
 
 `--agent` names match `neon mcp`, minus agents that cannot install skills: `antigravity`, `cline`, `cline-cli`, `claude-code`, `claude-desktop`, `codex`, `cursor`, `gemini-cli`, `goose`, `github-copilot-cli`, `grok-build`, `opencode`, `vscode`, `windsurf`, `zed`. `mcporter` is a known MCP name that is then skipped.
 
+## Install the Neon plugin (`plugins`)
+
+`neon plugins` installs the Neon agent plugin (`neon-postgres`) by running `npx plugins add`. It does not call the Neon API.
+
+```bash
+# Interactive: project-scoped, then agents, then confirm.
+$ neon plugins
+
+# Skip prompts. Project-scoped, every detected agent.
+$ neon plugins -y
+
+$ neon plugins --agent cursor --agent claude-code
+
+# User-level install.
+$ neon plugins --global
+$ neon plugins --global --agent vscode
+```
+
+On a TTY the command asks which agents, then shows a summary to confirm. Detected agents start selected from project-folder markers such as `.cursor`. There is one plugin (`neon-postgres`); there is no plugin picker and no `update` subcommand.
+
+`-y` skips those questions and installs into every detected agent. `--agent` names specific agents and skips the agent picker. Without a TTY, pass `-y` or `--agent`. `--agent` alone is enough because the plugin is fixed.
+
+Default scope is project-scoped (`-s project` on the plugins CLI). `--global` is user-level (`-s user`). Cursor and Claude Code still store the plugin cache under `~/.claude/plugins`; project-scoped vs user-level is the scope field the plugins CLI records. VS Code, GitHub Copilot CLI, and Grok Build only install user-level: they are skipped at the default scope with a warning, and `--agent vscode` without `--global` fails if nothing else is selected.
+
+`--agent` names with a plugins mapping: `claude-code`, `claude-desktop`, `codex`, `cursor`, `github-copilot-cli`, `grok-build`, `vscode`. `claude-desktop` installs as Claude Code. `mcporter` is a known MCP name that is then skipped.
+
+The plugins CLI installs every plugin it finds in the Neon plugin package. Today that is `neon-postgres`.
+
 ## Snapshots (`snapshots`)
 
 `neon snapshots` (alias `neon snapshot`) manages **snapshots** — point-in-time backups of a branch that you can list, rename, expire, restore into a branch, or schedule automatically. Snapshots are a Beta Neon feature and were previously only available in the Console and REST API; this command group brings them to the CLI.
@@ -1171,6 +1199,7 @@ Id   Name      Project         Created At            Last Used At          Last 
 | bootstrap                                                                  |                                                                                                              | Scaffold a project from a template |
 | init                                                                       |                                                                                                              | Set up a project for a coding agent |
 | mcp                                                                        |                                                                                                              | Install the Neon MCP server         |
+| plugins                                                                    |                                                                                                              | Install the Neon plugin             |
 | skills                                                                     | `update`                                                                                                     | Install Neon agent skills           |
 | bucket                                                                     | `create`, `list`, `delete`, `object list`, `object get`, `object put`, `object delete` (incl. `--recursive`) | Manage buckets and their objects   |
 | [completion](https://neon.com/docs/reference/cli-completion)               |                                                                                                              | Generate a completion script       |

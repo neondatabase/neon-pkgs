@@ -40,6 +40,7 @@ import {
 	isCurrentBranchProbe,
 	isMcpCommand,
 	isMcpOauth,
+	isPluginsCommand,
 	isProfileCommand,
 	isSkillsCommand,
 } from "../context.js";
@@ -431,8 +432,8 @@ export const ensureAuth = async (
 		return;
 	}
 
-	// Neon authentication is unrelated to the child skills CLI.
-	if (isSkillsCommand(props)) {
+	// Neon authentication is unrelated to the child skills and plugins CLIs.
+	if (isSkillsCommand(props) || isPluginsCommand(props)) {
 		return;
 	}
 

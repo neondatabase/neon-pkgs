@@ -1,0 +1,95 @@
+import { detectProjectAgents } from "add-mcp";
+
+import {
+	type AgentType,
+	detectInstalledAgents,
+	listMcpAgentIds,
+	tryResolveAddMcpAgentId,
+	uniqueAgentIds,
+} from "../init/agents.js";
+
+export type PluginsInstallScope = "global" | "project";
+
+export type PluginsMappedTarget = {
+	agent: AgentType;
+	target: string;
+};
+
+const PLUGINS_TARGET_BY_TYPE: { [K in AgentType]?: string } = {
+	cursor: "cursor",
+	vscode: "vscode",
+	"claude-code": "claude-code",
+	"claude-desktop": "claude-code",
+	codex: "codex",
+	"github-copilot-cli": "github-copilot",
+	"grok-build": "grok",
+};
+
+const USER_SCOPE_ONLY_TARGETS = new Set(["vscode", "github-copilot", "grok"]);
+
+export function getPluginsTargetName(agent: string): string | undefined {
+	if (Object.prototype.hasOwnProperty.call(PLUGINS_TARGET_BY_TYPE, agent)) {
+		return PLUGINS_TARGET_BY_TYPE[agent as AgentType];
+	}
+	const id = tryResolveAddMcpAgentId(agent);
+	if (!id) return undefined;
+	return PLUGINS_TARGET_BY_TYPE[id];
+}
+
+export function supportsPlugins(agent: string): boolean {
+	return getPluginsTargetName(agent) !== undefined;
+}
+
+export function isUserScopeOnlyPluginsTarget(target: string): boolean {
+	return USER_SCOPE_ONLY_TARGETS.has(target);
+}
+
+export const pluginsMappedAgents = (): AgentType[] =>
+	listMcpAgentIds().filter((id) => supportsPlugins(id));
+
+export const pluginsInstallableAgents = (
+	scope: PluginsInstallScope,
+): AgentType[] =>
+	pluginsMappedAgents().filter((id) => {
+		if (scope === "global") {
+			return true;
+		}
+		const target = getPluginsTargetName(id);
+		return target !== undefined && !isUserScopeOnlyPluginsTarget(target);
+	});
+
+export const detectPluginsAgents = async (options: {
+	scope: PluginsInstallScope;
+	cwd: string;
+}): Promise<AgentType[]> => {
+	const detected =
+		options.scope === "project"
+			? detectProjectAgents(options.cwd)
+			: await detectInstalledAgents();
+	return uniqueAgentIds(detected).filter((id) => supportsPlugins(id));
+};
+
+export const mappedPluginsTargets = (
+	agents: readonly AgentType[],
+	scope: PluginsInstallScope,
+): PluginsMappedTarget[] => {
+	const mapped: PluginsMappedTarget[] = [];
+	const seen = new Set<string>();
+	for (const agent of agents) {
+		const target = getPluginsTargetName(agent);
+		if (target === undefined || seen.has(target)) {
+			continue;
+		}
+		if (scope === "project" && isUserScopeOnlyPluginsTarget(target)) {
+			continue;
+		}
+		seen.add(target);
+		mapped.push({ agent, target });
+	}
+	if (mapped.length === 0) {
+		throw new Error(
+			`None of the selected agents can install plugins. Supported agents: ${pluginsInstallableAgents(scope).join(", ")}`,
+		);
+	}
+	return mapped;
+};
