@@ -90,16 +90,27 @@ export const runPluginsCli = async (options: {
 			);
 		}
 		if (isExecaFailure(error)) {
-			const childOut = [error.stderr, error.stdout]
-				.filter((part) => typeof part === "string" && part.length > 0)
-				.join("\n");
-			if (childOut.length > 0) {
-				throw new Error(`plugins CLI failed:\n${childOut}`);
-			}
-			throw new Error("plugins CLI failed.");
+			throw new Error(pluginsCliFailureMessage(error));
 		}
 		throw error;
 	}
+};
+
+export const pluginsCliFailureMessage = (error: {
+	stderr: string;
+	stdout: string;
+	timedOut?: boolean;
+}): string => {
+	const childOut = [error.stderr, error.stdout]
+		.filter((part) => typeof part === "string" && part.length > 0)
+		.join("\n");
+	if (childOut.length > 0) {
+		return `plugins CLI failed:\n${childOut}`;
+	}
+	if (error.timedOut === true) {
+		return "plugins CLI timed out after 120 seconds.";
+	}
+	return "plugins CLI failed.";
 };
 
 const isCommandMissing = (error: unknown): boolean =>
@@ -114,6 +125,7 @@ const isExecaFailure = (
 	stderr: string;
 	stdout: string;
 	shortMessage: string;
+	timedOut?: boolean;
 } =>
 	typeof error === "object" &&
 	error !== null &&

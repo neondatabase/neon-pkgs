@@ -796,10 +796,10 @@ On a TTY the command asks which agents and which skills, then shows a summary to
 `neon plugins` installs the Neon agent plugin (`neon-postgres`) by running `npx plugins add`. It does not call the Neon API.
 
 ```bash
-# Interactive: project-scoped, then agents, then confirm.
+# Interactive: agents, then confirm.
 $ neon plugins
 
-# Skip prompts. Project-scoped, every detected agent.
+# Skip prompts. Every detected agent.
 $ neon plugins -y
 
 $ neon plugins --agent cursor --agent claude-code
@@ -813,7 +813,7 @@ On a TTY the command asks which agents, then shows a summary to confirm. Detecte
 
 `-y` skips those questions and installs into every detected agent. `--agent` names specific agents and skips the agent picker. Without a TTY, pass `-y` or `--agent`. `--agent` alone is enough because the plugin is fixed.
 
-Default scope is project-scoped (`-s project` on the plugins CLI). `--global` is user-level (`-s user`). Cursor and Claude Code still store the plugin cache under `~/.claude/plugins`; project-scoped vs user-level is the scope field the plugins CLI records. VS Code, GitHub Copilot CLI, and Grok Build only install user-level: they are skipped at the default scope with a warning, and `--agent vscode` without `--global` fails if nothing else is selected.
+Default scope is `project`. `--global` is `user`. Cursor and Claude Code still store the plugin cache under `~/.claude/plugins`; `project` vs `user` is the scope field the plugins CLI records, not a directory in the repo. VS Code, GitHub Copilot CLI, and Grok Build only install user-level: they are skipped at the default scope with a warning, and `--agent vscode` without `--global` fails if nothing else is selected.
 
 `--agent` names with a plugins mapping: `claude-code`, `claude-desktop`, `codex`, `cursor`, `github-copilot-cli`, `grok-build`, `vscode`. `claude-desktop` installs as Claude Code. `mcporter` is a known MCP name that is then skipped.
 

@@ -30,7 +30,7 @@ type PluginsInstallRow = {
 };
 
 const scopeLabel = (scope: "global" | "project"): string =>
-	scope === "project" ? "project-scoped" : "user-level";
+	scope === "project" ? "project" : "user";
 
 const coerceAgents = (value: unknown): string[] => {
 	if (value === undefined) return [];
@@ -66,8 +66,7 @@ export const builder = (argv: yargs.Argv) =>
 			global: {
 				type: "boolean",
 				default: false,
-				describe:
-					"Install user-level (plugins CLI -s user). Default is project-scoped (-s project)",
+				describe: "Install user-level. Default is project",
 			},
 			agent: {
 				alias: "a",
@@ -78,14 +77,8 @@ export const builder = (argv: yargs.Argv) =>
 				coerce: coerceAgents,
 			},
 		})
-		.example(
-			"$0 plugins",
-			"Interactive: project-scoped, agents, then confirm",
-		)
-		.example(
-			"$0 plugins -y",
-			"Project-scoped, detected agents, skip prompts",
-		)
+		.example("$0 plugins", "Interactive: agents, then confirm")
+		.example("$0 plugins -y", "Detected agents, skip prompts")
 		.example(
 			"$0 plugins --agent cursor --agent claude-code",
 			"Install into specific agents",
@@ -175,8 +168,8 @@ export const handler = async (props: PluginsProps) => {
 	if (failed.length === 0) {
 		log.info(
 			plan.scope === "project"
-				? "Installed the Neon plugin (project-scoped)."
-				: "Installed the Neon plugin (user-level).",
+				? "Installed the Neon plugin (project)."
+				: "Installed the Neon plugin (user).",
 		);
 		return;
 	}
@@ -191,10 +184,11 @@ export const handler = async (props: PluginsProps) => {
 	if (first.message.includes("needs npx (Node.js)")) {
 		throw new Error(first.message);
 	}
+	const detail = failed.map((row) => row.message).join("\n");
 	if (failed.length === rows.length) {
-		throw new Error(`${first.message}\nRetry with: ${retry}`);
+		throw new Error(`${detail}\nRetry with: ${retry}`);
 	}
 	throw new Error(
-		`Failed to install the Neon plugin for: ${failed.map((row) => row.agent).join(", ")}.\n${first.message}\nRetry with: ${retry}`,
+		`Failed to install the Neon plugin for: ${failed.map((row) => row.agent).join(", ")}.\n${detail}\nRetry with: ${retry}`,
 	);
 };

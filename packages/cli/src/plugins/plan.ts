@@ -17,7 +17,6 @@ import {
 	type PluginsInstallScope,
 	type PluginsMappedTarget,
 	pluginsInstallableAgents,
-	pluginsMappedAgents,
 } from "./targets.js";
 
 export type PluginsPlan = {
@@ -73,8 +72,8 @@ export async function resolvePluginsPlan(
 			"Which coding agents should get the Neon plugin? (space to toggle, enter to confirm)",
 		nonInteractiveMessage:
 			scope === "project"
-				? `No coding agents detected in this project. Pass --agent <name>. Supported agents: ${pluginsMappedAgents().join(", ")}`
-				: `No coding agents detected. Pass --agent <name>. Supported agents: ${pluginsMappedAgents().join(", ")}`,
+				? `No coding agents detected in this project. Pass --agent <name>. Supported agents: ${available.join(", ")}`
+				: `No coding agents detected. Pass --agent <name>. Supported agents: ${available.join(", ")}`,
 		resolveSpecified: (raw) => {
 			if (raw === "*") {
 				throw new Error(
@@ -84,7 +83,7 @@ export async function resolvePluginsPlan(
 			const id = tryResolveAddMcpAgentId(raw);
 			if (!id) {
 				throw new Error(
-					`Unknown agent: "${raw}". Supported agents: ${pluginsMappedAgents().join(", ")}`,
+					`Unknown agent: "${raw}". Supported agents: ${available.join(", ")}`,
 				);
 			}
 			return id;
@@ -117,7 +116,7 @@ export async function resolvePluginsPlan(
 				.map((id) => getAgentDisplayName(id))
 				.join(", ");
 			throw new Error(
-				`${names}: plugins are user-level. Pass --global. Project-scoped agents: ${pluginsInstallableAgents("project").join(", ")}`,
+				`${names}: plugins are user-level. Pass --global. Without --global: ${pluginsInstallableAgents("project").join(", ")}`,
 			);
 		}
 		throw new Error(

@@ -5,6 +5,7 @@ import {
 	PLUGIN_SOURCE,
 	pluginsAddArgs,
 	pluginsChildEnv,
+	pluginsCliFailureMessage,
 } from "./run.js";
 
 describe("pluginsAddArgs", () => {
@@ -67,6 +68,47 @@ describe("pluginsChildEnv", () => {
 		expect(env).not.toHaveProperty("DO_NOT_TRACK");
 		expect(env).not.toHaveProperty("NEON_API_KEY");
 		expect(env).not.toHaveProperty("NeOn_ApI_KeY");
+	});
+});
+
+describe("pluginsCliFailureMessage", () => {
+	test("prefers child output over a timeout flag", () => {
+		expect(
+			pluginsCliFailureMessage({
+				stdout: "",
+				stderr: "boom",
+				timedOut: true,
+			}),
+		).toBe("plugins CLI failed:\nboom");
+	});
+
+	test("names a timeout when the child printed nothing", () => {
+		expect(
+			pluginsCliFailureMessage({
+				stdout: "",
+				stderr: "",
+				timedOut: true,
+			}),
+		).toBe("plugins CLI timed out after 120 seconds.");
+	});
+
+	test("does not use execa shortMessage", () => {
+		expect(
+			pluginsCliFailureMessage({
+				stdout: "",
+				stderr: "",
+			}),
+		).toBe("plugins CLI failed.");
+	});
+
+	test("timeout text does not name the plugin source", () => {
+		expect(
+			pluginsCliFailureMessage({
+				stdout: "",
+				stderr: "",
+				timedOut: true,
+			}),
+		).not.toMatch(/neondatabase\//);
 	});
 });
 

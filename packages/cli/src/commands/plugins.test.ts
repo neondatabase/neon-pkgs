@@ -115,7 +115,7 @@ describe("neon plugins", () => {
 		);
 		expect(JSON.parse(stdout)).toEqual([
 			{
-				scope: "project-scoped",
+				scope: "project",
 				plugin: "neon-postgres",
 				agent: "cursor",
 				status: "installed",
@@ -182,13 +182,13 @@ describe("neon plugins", () => {
 		);
 		expect(JSON.parse(stdout)).toEqual([
 			{
-				scope: "project-scoped",
+				scope: "project",
 				plugin: "neon-postgres",
 				agent: "cursor",
 				status: "installed",
 			},
 			{
-				scope: "project-scoped",
+				scope: "project",
 				plugin: "neon-postgres",
 				agent: "claude-code",
 				status: "installed",
@@ -227,6 +227,15 @@ describe("neon plugins", () => {
 			{ ...runOptions(home, cwd, bin), code: 1 },
 		);
 		expect(unknownAgent).toMatch(/Unknown agent: "eve"/);
+		expect(unknownAgent).not.toMatch(/vscode/);
+		expect(unknownAgent).not.toMatch(/github-copilot-cli/);
+		expect(unknownAgent).not.toMatch(/grok-build/);
+		const { stderr: unknownGlobal } = await testCliCommand(
+			["plugins", "-y", "--global", "--agent", "eve"],
+			{ ...runOptions(home, cwd, bin), code: 1 },
+		);
+		expect(unknownGlobal).toMatch(/Unknown agent: "eve"/);
+		expect(unknownGlobal).toMatch(/vscode/);
 		const { stderr: star } = await testCliCommand(
 			["plugins", "-y", "--agent", "*"],
 			{ ...runOptions(home, cwd, bin), code: 1 },
@@ -274,7 +283,7 @@ describe("neon plugins", () => {
 			runOptions(home, cwd, bin),
 		);
 		expect(JSON.parse(readFileSync(argvFile, "utf8"))[0]).toContain("user");
-		expect(JSON.parse(stdout)[0].scope).toBe("user-level");
+		expect(JSON.parse(stdout)[0].scope).toBe("user");
 	});
 
 	test("vscode requires --global", async ({ testCliCommand }) => {
@@ -290,7 +299,7 @@ describe("neon plugins", () => {
 			runOptions(home, cwd, bin),
 		);
 		expect(JSON.parse(stdout)[0]).toMatchObject({
-			scope: "user-level",
+			scope: "user",
 			agent: "vscode",
 			status: "installed",
 		});
@@ -424,6 +433,8 @@ describe("neon plugins", () => {
 		expect(text).not.toMatch(/--plugin/);
 		expect(text).not.toMatch(/plugins update/);
 		expect(text).not.toMatch(/neondatabase\/agent-skills/);
-		expect(text).not.toMatch(/-y, -y/);
+		expect(text).not.toMatch(/-s user/);
+		expect(text).not.toMatch(/-s project/);
+		expect(text).not.toMatch(/project-scoped/);
 	});
 });

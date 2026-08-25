@@ -10,11 +10,9 @@ describe("pluginsInstallSummary", () => {
 				agents: ["cursor"],
 			}),
 		).toBe(
-			[
-				"Config  project-scoped",
-				"Agents  Cursor",
-				"Plugin  neon-postgres",
-			].join("\n"),
+			["Config  project", "Agents  Cursor", "Plugin  neon-postgres"].join(
+				"\n",
+			),
 		);
 	});
 
@@ -23,7 +21,7 @@ describe("pluginsInstallSummary", () => {
 			scope: "global",
 			agents: ["cursor", "claude-code"],
 		});
-		expect(text).toContain("user-level");
+		expect(text).toContain("user");
 		expect(text).toContain("neon-postgres");
 		expect(text).not.toContain("neondatabase/");
 	});
