@@ -761,7 +761,7 @@ The default mints an account-wide API key (or reuses the Bearer already configur
 
 ## Install Neon agent skills (`skills`)
 
-`neon skills` installs Neon agent skills by running `npx skills add`. It does not call the Neon API.
+`neon skills` installs Neon agent skills by running `npx skills add`. It does not call the Neon API. This command needs Node.js 22.20 or newer. The rest of the CLI supports Node.js 20.19 or newer.
 
 ```bash
 # Interactive: this directory, then agents, then skills, then confirm.

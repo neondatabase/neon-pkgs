@@ -436,6 +436,39 @@ describe("neon skills", () => {
 		expect(stderr.match(/syscall spawn sh/g)?.length).toBe(1);
 	});
 
+	test("failed update retries the neon command", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin } = scratch();
+		const { stderr } = await testCliCommand(["skills", "update", "-y"], {
+			...runOptions(home, cwd, bin, {
+				SKILLS_CHILD_EXIT: "1",
+				SKILLS_CHILD_STDERR: "boom",
+			}),
+			code: 1,
+		});
+		expect(stderr).toMatch(/Retry with: neon skills update -y/);
+		expect(stderr).not.toMatch(/npx /);
+	});
+
+	test("failed update --global retries with --global", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin } = scratch();
+		const { stderr } = await testCliCommand(
+			["skills", "update", "--global", "-y"],
+			{
+				...runOptions(home, cwd, bin, {
+					SKILLS_CHILD_EXIT: "1",
+					SKILLS_CHILD_STDERR: "boom",
+				}),
+				code: 1,
+			},
+		);
+		expect(stderr).toMatch(/Retry with: neon skills update --global -y/);
+		expect(stderr).not.toMatch(/npx /);
+	});
+
 	test("failed multi-source retry names every failed skill", async ({
 		testCliCommand,
 	}) => {

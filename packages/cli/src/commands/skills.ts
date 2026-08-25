@@ -4,8 +4,9 @@ import { getAgentDisplayName } from "../init/agents.js";
 import { log } from "../log.js";
 import { assertSkillsCanRun, resolveSkillsPlan } from "../skills/plan.js";
 import {
+	assertSkillsNode,
 	neonSkillsRetryCommand,
-	npxCommand,
+	neonSkillsUpdateRetryCommand,
 	runSkillsCli,
 	skillsAddArgs,
 	skillsMetadata,
@@ -181,6 +182,7 @@ export const builder = (argv: yargs.Argv) =>
 		.check(noPassthrough("skills"));
 
 export const handler = async (props: SkillsProps) => {
+	assertSkillsNode();
 	const cwd = process.cwd();
 	const yes = props.yes === true;
 	const interactive = canPickAgentsInteractively() && !yes;
@@ -282,7 +284,10 @@ export const handler = async (props: SkillsProps) => {
 		agents: plan.agents,
 		global: plan.scope === "global",
 	});
-	if (first.message.includes("needs npx (Node.js)")) {
+	if (
+		first.message.includes("needs npx (Node.js)") ||
+		first.message.includes("needs Node.js")
+	) {
 		throw new Error(first.message);
 	}
 	if (failed.length === rows.length) {
@@ -294,6 +299,7 @@ export const handler = async (props: SkillsProps) => {
 };
 
 const updateHandler = async (props: SkillsProps) => {
+	assertSkillsNode();
 	const cwd = process.cwd();
 	const yes = props.yes === true;
 	const interactive = canPickAgentsInteractively() && !yes;
@@ -340,9 +346,10 @@ const updateHandler = async (props: SkillsProps) => {
 
 	if (failure !== undefined) {
 		throw new Error(
-			failure.includes("needs npx (Node.js)")
+			failure.includes("needs npx (Node.js)") ||
+				failure.includes("needs Node.js")
 				? failure
-				: `${failure}\nRetry with: ${npxCommand(args)}`,
+				: `${failure}\nRetry with: ${neonSkillsUpdateRetryCommand(scope === "global")}`,
 		);
 	}
 };

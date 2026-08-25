@@ -112,6 +112,9 @@ export const neonSkillsRetryCommand = (options: {
 	return `neon ${args.map(quoteNpxArg).join(" ")}`;
 };
 
+export const neonSkillsUpdateRetryCommand = (global: boolean): string =>
+	global ? "neon skills update --global -y" : "neon skills update -y";
+
 export const quoteNpxArg = (part: string): string =>
 	/[\s"'\\*]/.test(part) ? `'${part.replace(/'/g, `'\\''`)}'` : part;
 
