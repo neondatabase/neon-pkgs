@@ -260,4 +260,76 @@ describe("special mappings", () => {
 		);
 		expect(tool.inputSchema.safeParse({}).success).toBe(true);
 	});
+
+	test("resetFromParent is destructive; compareSchema is read-only", () => {
+		const reset = createNeonTool("branches.resetFromParent", {
+			apiKey: "test-key",
+		});
+		expect(reset.annotations.destructiveHint).toBe(true);
+		expect(reset.requiresApproval).toBe(true);
+
+		const compare = createNeonTool("branches.compareSchema", {
+			apiKey: "test-key",
+		});
+		expect(compare.annotations.readOnlyHint).toBe(true);
+		expect(compare.requiresApproval).toBe(false);
+	});
+
+	test("maps resetFromParent and compareSchema field names", async () => {
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: [
+				"branches.resetFromParent",
+				"branches.compareSchema",
+			] as const,
+			fetch: async (input, init) => {
+				const request = new Request(input, init);
+				requests.push(request);
+				if (request.url.includes("/restore")) {
+					return jsonResponse({
+						branch: { id: "br-child" },
+						operations: [],
+					});
+				}
+				if (request.url.includes("/compare_schema")) {
+					return jsonResponse({ diff: "" });
+				}
+				return jsonResponse({
+					branch: { id: "br-child", parent_id: "br-parent" },
+				});
+			},
+		});
+
+		await tools["branches.resetFromParent"].execute({
+			project_id: "project-id",
+			branch_id: "br-child",
+			preserve_under_name: "old",
+		});
+		const restore = requests.find((request) =>
+			request.url.includes("/restore"),
+		);
+		expect(restore).toBeDefined();
+		expect(await restore?.json()).toEqual({
+			source_branch_id: "br-parent",
+			preserve_under_name: "old",
+		});
+
+		requests.length = 0;
+		await tools["branches.compareSchema"].execute({
+			project_id: "project-id",
+			branch_id: "br-child",
+			database_name: "neondb",
+			base_branch_id: "br-parent",
+		});
+		expect(requests[0].url).toContain("db_name=neondb");
+		expect(requests[0].url).toContain("base_branch_id=br-parent");
+		expect(
+			tools["branches.compareSchema"].inputSchema.safeParse({
+				project_id: "project-id",
+				branch_id: "br-child",
+				db_name: "neondb",
+			}).success,
+		).toBe(false);
+	});
 });

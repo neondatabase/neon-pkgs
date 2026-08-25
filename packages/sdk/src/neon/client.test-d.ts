@@ -63,6 +63,20 @@ it("branches + workflows carry the envelope and narrow under throwOnError", () =
 	expectTypeOf(
 		throwing.branches.delete("p", "br"),
 	).resolves.toEqualTypeOf<void>();
+	expectTypeOf(
+		neon.branches.resetFromParent("p", "br"),
+	).resolves.toEqualTypeOf<NeonResult<Branch>>();
+	expectTypeOf(
+		neon.branches.resetFromParent(
+			"p",
+			"br",
+			{ preserveUnderName: "old" },
+			{ throwOnError: true },
+		),
+	).resolves.toEqualTypeOf<Branch>();
+	expectTypeOf(
+		neon.branches.compareSchema("p", "br", { databaseName: "neondb" }),
+	).resolves.toEqualTypeOf<NeonResult<{ diff?: string }>>();
 });
 
 it("cancellation and deadline options are accepted on the client and per call", () => {

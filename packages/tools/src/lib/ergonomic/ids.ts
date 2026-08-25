@@ -30,6 +30,8 @@ export const toolIds = [
 	"branches.delete",
 	"branches.getDefault",
 	"branches.setDefault",
+	"branches.resetFromParent",
+	"branches.compareSchema",
 	"branches.finalizeRestore",
 	"postgres.connectionString",
 	"postgres.endpoints.list",

@@ -42,6 +42,8 @@ export const WRAPPED: ReadonlySet<string> = new Set([
 	"deleteProjectBranch",
 	"setDefaultProjectBranch",
 	"finalizeRestoreBranch",
+	"restoreProjectBranch",
+	"getProjectBranchSchemaComparison",
 	// logs (branch-scoped)
 	"queryProjectBranchLogs",
 	"listProjectBranchLogFields",

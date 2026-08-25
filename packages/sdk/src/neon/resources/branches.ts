@@ -3,13 +3,16 @@ import {
 	deleteProjectBranch,
 	finalizeRestoreBranch,
 	getProjectBranch,
+	getProjectBranchSchemaComparison,
 	listProjectBranches,
+	restoreProjectBranch,
 	setDefaultProjectBranch,
 	updateProjectBranch,
 } from "../../client/sdk.gen.js";
 import type {
 	Branch,
 	BranchCreateRequest,
+	BranchSchemaCompareResponse,
 	BranchUpdateRequest,
 	Endpoint,
 	ListProjectBranchesData,
@@ -50,7 +53,20 @@ export interface BranchWithCompute {
 	connectionString: string;
 }
 
-/** Branch resource — one API call per CRUD method, plus the `createWithCompute` workflow. */
+export interface ResetFromParentInput {
+	/** Required when the branch has children so they can move to the preserved branch. */
+	preserveUnderName?: string;
+}
+
+export interface CompareSchemaInput {
+	databaseName: string;
+	baseBranchId?: string;
+	lsn?: string;
+	timestamp?: string;
+	baseLsn?: string;
+	baseTimestamp?: string;
+}
+
 export class Branches<DThrow extends boolean> {
 	readonly #ctx: RequestContext;
 
@@ -315,6 +331,129 @@ export class Branches<DThrow extends boolean> {
 					signal,
 				}),
 			(data) => data.branch,
+		);
+	}
+
+	/**
+	 * Uses the parent's current HEAD; use raw `restoreProjectBranch` for an LSN or timestamp.
+	 *
+	 * @apiCall GET /projects/{project_id}/branches/{branch_id}
+	 * @apiCall POST /projects/{project_id}/branches/{branch_id}/restore
+	 */
+	resetFromParent(
+		projectId: string,
+		branchId: string,
+		input?: ResetFromParentInput,
+	): Promise<Outcome<Branch, DThrow>>;
+	resetFromParent<Throw extends boolean = DThrow>(
+		projectId: string,
+		branchId: string,
+		input: ResetFromParentInput | undefined,
+		opts: CallOptions<Throw>,
+	): Promise<Outcome<Branch, Throw>>;
+	async resetFromParent(
+		projectId: string,
+		branchId: string,
+		input?: ResetFromParentInput,
+		opts?: CallOptions,
+	): Promise<Branch | NeonResult<Branch>> {
+		const shouldThrow =
+			opts?.throwOnError ?? this.#ctx.defaults.throwOnError;
+		const current = await this.#ctx.execute(
+			opts,
+			(client, signal) =>
+				getProjectBranch({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+					throwOnError: false,
+					signal,
+				}),
+			(data) => data.branch,
+		);
+		if (current.error) {
+			return finalize(err<Branch>(current.error), shouldThrow);
+		}
+		const parentId = current.data.parent_id;
+		if (!parentId) {
+			return finalize(
+				err<Branch>(
+					new NeonError(
+						"Branch has no parent and cannot be reset.",
+						"client",
+					),
+				),
+				shouldThrow,
+			);
+		}
+		return this.#ctx.run(
+			opts,
+			(client, signal) =>
+				restoreProjectBranch({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+					body: {
+						source_branch_id: parentId,
+						...(input?.preserveUnderName === undefined
+							? {}
+							: { preserve_under_name: input.preserveUnderName }),
+					},
+					throwOnError: false,
+					signal,
+				}),
+			(data) => data.branch,
+		);
+	}
+
+	/**
+	 * Returns a unified SQL diff; omitting `baseBranchId` uses the parent branch.
+	 *
+	 * @apiCall GET /projects/{project_id}/branches/{branch_id}/compare_schema
+	 */
+	compareSchema(
+		projectId: string,
+		branchId: string,
+		input: CompareSchemaInput,
+	): Promise<Outcome<BranchSchemaCompareResponse, DThrow>>;
+	compareSchema<Throw extends boolean = DThrow>(
+		projectId: string,
+		branchId: string,
+		input: CompareSchemaInput,
+		opts: CallOptions<Throw>,
+	): Promise<Outcome<BranchSchemaCompareResponse, Throw>>;
+	compareSchema(
+		projectId: string,
+		branchId: string,
+		input: CompareSchemaInput,
+		opts?: CallOptions,
+	): Promise<
+		BranchSchemaCompareResponse | NeonResult<BranchSchemaCompareResponse>
+	> {
+		return this.#ctx.run(
+			opts,
+			(client, signal) =>
+				getProjectBranchSchemaComparison({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+					query: {
+						db_name: input.databaseName,
+						...(input.baseBranchId === undefined
+							? {}
+							: { base_branch_id: input.baseBranchId }),
+						...(input.lsn === undefined ? {} : { lsn: input.lsn }),
+						...(input.timestamp === undefined
+							? {}
+							: { timestamp: input.timestamp }),
+						...(input.baseLsn === undefined
+							? {}
+							: { base_lsn: input.baseLsn }),
+						...(input.baseTimestamp === undefined
+							? {}
+							: { base_timestamp: input.baseTimestamp }),
+					},
+					throwOnError: false,
+					signal,
+				}),
+			(data) => data,
 		);
 	}
 

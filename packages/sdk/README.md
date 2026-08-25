@@ -238,6 +238,8 @@ await neon.projects.transfer({
 | `createWithCompute(projectId, input, { pooled? })` | **[W]** `{ branch, endpoint, connectionString }` | `input`: `{ name?, parentId?, compute?: { minCu?, maxCu?, suspendTimeoutSeconds? } }` |
 | `getDefault(projectId)` | `Branch` | resolves the default branch by the `default` flag |
 | `setDefault(projectId, branchId)` | `Branch` | |
+| `resetFromParent(projectId, branchId, { preserveUnderName? }?)` | `Branch` | parent HEAD only. `preserveUnderName` is required when the branch has children |
+| `compareSchema(projectId, branchId, input)` | `{ diff? }` | `input`: `{ databaseName, baseBranchId?, lsn?, timestamp?, baseLsn?, baseTimestamp? }`. Omitting `baseBranchId` compares against the parent |
 | `finalizeRestore(projectId, branchId, { name? }?)` | **→void** | commits a restore previewed with `snapshots.restore({ finalize: false })` |
 
 **There is no `recover`.** Neon stopped publishing `POST /projects/{project_id}/branches/{branch_id}/recover` in its OpenAPI spec, so the wrapper is gone until it returns. The endpoint still answers, so a soft-deleted branch can still be recovered through the low-level client — note that this envelope carries the API's own error body rather than a `NeonError`:
@@ -257,6 +259,18 @@ const branch = data?.branch;
 ```ts
 // Resolve the project's default ("production") branch
 const { data: prod } = await neon.branches.getDefault(projectId);
+
+const { data: reset } = await neon.branches.resetFromParent(
+  projectId,
+  feature.id,
+  { preserveUnderName: "feature-before-reset" },
+);
+
+const { data: schema } = await neon.branches.compareSchema(
+  projectId,
+  feature.id,
+  { databaseName: "neondb" },
+);
 
 // Branch off it with its own compute — returns a ready connection string
 const { data } = await neon.branches.createWithCompute(projectId, {

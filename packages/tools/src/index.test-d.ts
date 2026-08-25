@@ -15,6 +15,12 @@ expectTypeOf(
 expectTypeOf(
 	publishedId("postgres.roles.resetPassword"),
 ).toEqualTypeOf<"reset_password_postgres_roles">();
+expectTypeOf(
+	publishedId("branches.resetFromParent"),
+).toEqualTypeOf<"reset_from_parent_branches">();
+expectTypeOf(
+	publishedId("branches.compareSchema"),
+).toEqualTypeOf<"compare_schema_branches">();
 
 const tools = createNeonTools({
 	apiKey: "test-key",
@@ -64,6 +70,25 @@ eveListProjects
 	.then((result) => {
 		expectTypeOf(result.data[0]?.id).toEqualTypeOf<string>();
 	});
+
+const resetFromParent = createNeonTool("branches.resetFromParent", {
+	apiKey: "test-key",
+});
+resetFromParent.execute({
+	project_id: "project-id",
+	branch_id: "branch-id",
+	preserve_under_name: "old",
+});
+const compareSchema = createNeonTool("branches.compareSchema", {
+	apiKey: "test-key",
+});
+compareSchema.execute({
+	project_id: "project-id",
+	branch_id: "branch-id",
+	database_name: "neondb",
+	// @ts-expect-error compareSchema publishes database_name, not db_name
+	db_name: "neondb",
+});
 
 const revokeCredential = createNeonTool("credentials.revoke", {
 	apiKey: "test-key",

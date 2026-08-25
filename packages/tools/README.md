@@ -25,6 +25,8 @@ const tools = createNeonTools({
 		"projects.list",
 		"projects.createAndConnect",
 		"branches.createWithCompute",
+		"branches.resetFromParent",
+		"branches.compareSchema",
 	],
 });
 
@@ -32,6 +34,16 @@ const listed = await tools["projects.list"].execute({ limit: 10 });
 const created = await tools["projects.createAndConnect"].execute({
 	name: "agent-project",
 	region_id: "aws-us-east-1",
+});
+await tools["branches.resetFromParent"].execute({
+	project_id: "project-id",
+	branch_id: "br-feature",
+	preserve_under_name: "feature-before-reset",
+});
+const compared = await tools["branches.compareSchema"].execute({
+	project_id: "project-id",
+	branch_id: "br-feature",
+	database_name: "neondb",
 });
 ```
 

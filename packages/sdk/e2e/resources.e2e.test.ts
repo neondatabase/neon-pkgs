@@ -62,6 +62,64 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 		expect(error).toBeInstanceOf(NeonNotFoundError);
 	});
 
+	it("compares schemas and resets a child back to its parent", async () => {
+		const child = expectOk(
+			await neon.branches.createWithCompute(projectId, {
+				name: "reset-child",
+				parentId: defaultBranchId,
+			}),
+		);
+		const branchId = child.branch.id;
+		const roles = expectOk(
+			await neon.postgres.roles.list(projectId, branchId),
+		);
+		const owner = roles[0];
+		if (!owner) throw new Error("child branch has no role");
+
+		const matching = expectOk(
+			await neon.branches.compareSchema(projectId, branchId, {
+				databaseName: "neondb",
+				baseBranchId: defaultBranchId,
+			}),
+		);
+		expect(matching.diff ?? "").toBe("");
+
+		expectOk(
+			await neon.postgres.databases.create(
+				projectId,
+				branchId,
+				{ name: "child_only", owner_name: owner.name },
+				{ waitForReadiness: true },
+			),
+		);
+
+		expectOk(
+			await neon.branches.resetFromParent(
+				projectId,
+				branchId,
+				undefined,
+				{
+					waitForReadiness: true,
+				},
+			),
+		);
+		const after = expectOk(
+			await neon.postgres.databases.list(projectId, branchId),
+		);
+		expect(after.map((database) => database.name)).not.toContain(
+			"child_only",
+		);
+		const matchingAgain = expectOk(
+			await neon.branches.compareSchema(projectId, branchId, {
+				databaseName: "neondb",
+				baseBranchId: defaultBranchId,
+			}),
+		);
+		expect(matchingAgain.diff ?? "").toBe("");
+
+		expectOk(await neon.branches.delete(projectId, branchId));
+	});
+
 	it("creates a branch with its compute and a connection string in one call", async () => {
 		const created = expectOk(
 			await neon.branches.createWithCompute(projectId, {
