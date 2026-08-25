@@ -1,140 +1,96 @@
+import { existsSync, readdirSync } from "node:fs";
+import { credentialInputs } from "@neon-internals/cli-core/auth_selection";
 import type yargs from "yargs";
-import { closeAnalytics, sendError } from "../analytics.js";
-import { detectAgent } from "../init/detect_agent.js";
-import { enrichResponse } from "../init/enrich_output.js";
-import { interactiveInit } from "../init/interactive.js";
-import { orchestrate } from "../init/orchestrate.js";
-import { routeDataStep } from "../init/route_command.js";
-import { STDOUT_FD, writeAllSync } from "../utils/write_sync.js";
+import { readContextFile } from "../context.js";
+import { childArgv, directoryIsEmpty, planInit } from "../init/plan.js";
+import { log } from "../log.js";
+import type { CommonProps } from "../types.js";
+import { getCliName } from "../utils/cli_name.js";
+import { runCommand } from "../utils/package_manager.js";
+
+export type InitRun = (
+	argv: string[],
+	cwd: string,
+	env?: NodeJS.ProcessEnv,
+) => Promise<boolean>;
+
+export type InitProps = CommonProps & {
+	yes?: boolean;
+	configDir?: string;
+	profile?: string;
+	analytics?: boolean;
+	cwd?: string;
+	run?: InitRun;
+};
 
 export const command = "init";
 export const describe =
-	"Initialize a project with Neon using your AI coding assistant";
+	"Set up Neon in this directory: agent skills, a project link, and the MCP server";
+
 export const builder = (yargs: yargs.Argv) =>
 	yargs
+		.usage("$0 init [options]")
 		.option("context-file", {
 			hidden: true,
 		})
-		.option("agent", {
-			alias: "a",
-			type: "boolean",
-			default: false,
-			describe: "Enable agent/JSON mode (agent type is auto-detected).",
-		})
-		.option("data", {
-			type: "string",
-			describe:
-				'JSON object with a "step" field to route to a specific phase and phase-specific options.',
-		})
-		.option("skip-migrations", {
-			type: "boolean",
-			default: false,
-			describe: "Skip the migrations phase.",
-		})
-		.option("preview", {
+		.option("yes", {
+			alias: "y",
 			type: "boolean",
 			default: false,
 			describe:
-				"Enable preview features (e.g. project bootstrapping from templates).",
+				"Skip prompts. Forwards -y to skills and mcp, --default --no-link to bootstrap, and --yes to link",
 		})
-		.strict(false);
+		.example(
+			"$0 init",
+			"Empty dir: bootstrap, then skills update, then mcp",
+		)
+		.example(
+			"$0 init",
+			"Existing app: skills, then link if needed, then mcp",
+		)
+		.example("$0 init -y", "Same steps without prompts")
+		.strict();
 
-/**
- * The agent-facing half of `neon init` speaks JSON, and it speaks it on **stdout**:
- * one object, no prefix, nothing else. `log.info` would prefix every line with
- * `INFO: ` and send it to stderr, which is right for a diagnostic and wrong for the
- * payload an agent is expected to parse.
- */
-const writeAgentResponse = (result: unknown) => {
-	writeAllSync(
-		STDOUT_FD,
-		`${JSON.stringify(enrichResponse(result), null, 2)}\n`,
-	);
+const isLinked = (contextFile: string): boolean => {
+	const projectId = readContextFile(contextFile).projectId;
+	return typeof projectId === "string" && projectId.length > 0;
 };
 
-/**
- * A failure has to arrive in the shape the caller asked for. An agent parses stdout and
- * has no branch for "empty stdout, exit 1" — it cannot tell a broken credentials file
- * from a phase that legitimately produced nothing — so the error goes out as JSON too.
- */
-const writeAgentFailure = (error: Error) => {
-	writeAllSync(
-		STDOUT_FD,
-		`${JSON.stringify({ success: false, error: error.message }, null, 2)}\n`,
-	);
-};
-
-/** ` at position 12`, or nothing when the parser did not report one. */
-const parsePosition = (parseError: unknown): string => {
-	const message = parseError instanceof Error ? parseError.message : "";
-	const at = message.match(/at position (\d+)/);
-	return at === null ? "" : ` at position ${at[1]}`;
-};
-
-export const handler = async (argv: {
-	agent?: boolean;
-	data?: string;
-	skipMigrations?: boolean;
-	preview?: boolean;
-	profile?: string;
-}) => {
-	// Auto-detect agent from environment. When --agent is explicitly passed,
-	// always detect (the user asked for agent mode). Otherwise, require
-	// non-TTY stdin to distinguish agent from human in terminal.
-	//
-	// Handler failures need the caller's output format; `ensureAuth` runs earlier
-	// and reports directly to stderr.
-	const agent =
-		(argv.agent || !process.stdin.isTTY ? detectAgent() : null) ||
-		undefined;
-	const isAgentMode = argv.agent || agent !== undefined;
-
-	try {
-		// --data with a "step" field routes to the appropriate phase
-		if (argv.data && isAgentMode) {
-			let data: Record<string, unknown>;
-			try {
-				data = JSON.parse(argv.data);
-			} catch (parseError) {
-				// Neither the payload nor the parser's message may appear here. `--data`
-				// carries whatever the caller put in it — a connection string, an API key —
-				// and V8 quotes a window of the input around the syntax error, so both would
-				// travel into the error message, onto stdout, and into `sendError`'s
-				// analytics payload. `@neon-internals/cli-core/credentials` discards the same
-				// message for the same reason. The position is a number and says enough.
-				throw new Error(
-					`Invalid JSON in --data flag${parsePosition(parseError)}. Expected a JSON object.`,
-				);
-			}
-			if (typeof data.step === "string") {
-				writeAgentResponse(await routeDataStep(data, agent));
-				return;
-			}
-		}
-
-		if (isAgentMode) {
-			writeAgentResponse(
-				await orchestrate({
-					agent,
-					skipMigrations: argv.skipMigrations,
-					preview: argv.preview,
-				}),
-			);
-		} else {
-			await interactiveInit({ preview: argv.preview });
-		}
-	} catch (error) {
-		const cause = error instanceof Error ? error : new Error(String(error));
-		if (isAgentMode) {
-			// Agent mode answers and exits here, so nothing else will report this. Attribute
-			// it to init and flush before exiting — `process.exit` drops in-flight events.
-			sendError(cause, "NEON_INIT_FAILED");
-			writeAgentFailure(cause);
-			await closeAnalytics();
-			process.exit(1);
-		}
-		// A human gets the top-level handler's single `ERROR: <message>` line on stderr, and
-		// its `sendError`. Reporting here as well would file one failure as two events.
-		throw cause;
+const defaultRun: InitRun = async (argv, cwd, env) => {
+	const cli = process.argv[1];
+	if (!cli) {
+		throw new Error(
+			"Cannot re-exec the Neon CLI: process.argv[1] is missing.",
+		);
 	}
+	return runCommand(process.execPath, [cli, ...argv], cwd, env);
+};
+
+export const handler = async (props: InitProps) => {
+	const cwd = props.cwd ?? process.cwd();
+	const names = existsSync(cwd) ? readdirSync(cwd) : [];
+	const steps = planInit({
+		empty: directoryIsEmpty(names),
+		linked: isLinked(props.contextFile),
+		yes: props.yes === true,
+	});
+	const run = props.run ?? defaultRun;
+	const explicitKey = props.profile ? "" : credentialInputs().apiKeyFlag;
+	const env = explicitKey ? { NEON_API_KEY: explicitKey } : undefined;
+
+	for (const step of steps) {
+		const argv = childArgv(step, {
+			...(props.configDir ? { configDir: props.configDir } : {}),
+			...(props.profile ? { profile: props.profile } : {}),
+			apiHost: props.apiHost,
+			contextFile: props.contextFile,
+			...(props.analytics === false ? { analytics: false } : {}),
+		});
+		const ok = await run(argv, cwd, env);
+		if (!ok) {
+			throw new Error(`\`${getCliName()} ${step.join(" ")}\` failed.`);
+		}
+	}
+
+	log.info("Done.");
 };

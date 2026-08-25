@@ -1,205 +1,248 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
-// Mock dependencies that require package.json
+import { test as cliTest } from "../test_utils/fixtures.js";
+
 vi.mock("../analytics.js", () => ({
 	sendError: vi.fn(),
 	trackEvent: vi.fn(),
 	closeAnalytics: vi.fn(),
 }));
 
-vi.mock("../init/detect_agent.js", () => ({
-	detectAgent: vi.fn().mockReturnValue(null),
-}));
+const host = "https://console.neon.tech/api/v2";
 
-vi.mock("../init/interactive.js", () => ({
-	interactiveInit: vi.fn().mockResolvedValue(undefined),
-}));
+const baseProps = (overrides: Record<string, unknown> = {}) => ({
+	apiClient: {} as never,
+	apiKey: "test-key",
+	apiHost: host,
+	output: "table" as const,
+	contextFile: "/tmp/does-not-exist/.neon",
+	...overrides,
+});
 
-vi.mock("../init/orchestrate.js", () => ({
-	orchestrate: vi.fn().mockResolvedValue({ phase: "complete", status: "ok" }),
-}));
-
-vi.mock("../init/route_command.js", () => ({
-	routeDataStep: vi
-		.fn()
-		.mockResolvedValue({ phase: "complete", status: "ok" }),
-}));
-
-// The one piece of real I/O in the handler. `src/init/auth.test.ts` covers what actually
-// reaches a pipe by spawning the built binary; here it only needs to be observable.
-vi.mock("../utils/write_sync.js", () => ({
-	STDOUT_FD: 1,
-	STDERR_FD: 2,
-	writeAllSync: vi.fn(),
-}));
-
-// `enrich_output` is a pure transform and stays real, so the stdout assertions below
-// exercise the payload an agent actually receives rather than a stand-in for it.
-
-describe("init", () => {
+describe("init handler", () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
 		vi.resetModules();
 	});
 
-	test("should call interactiveInit when no --agent flag", async () => {
+	test("empty directory runs bootstrap, skills update, mcp", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-empty-"));
+		const run = vi.fn().mockResolvedValue(true);
 		const { handler } = await import("./init.js");
-		const { interactiveInit } = await import("../init/interactive.js");
-		const { orchestrate } = await import("../init/orchestrate.js");
 
-		await handler({});
-
-		expect(interactiveInit).toHaveBeenCalledTimes(1);
-		expect(orchestrate).not.toHaveBeenCalled();
-	});
-
-	test("should fall through to interactiveInit when --agent is false and detectAgent returns null", async () => {
-		const { handler } = await import("./init.js");
-		const { interactiveInit } = await import("../init/interactive.js");
-		const { orchestrate } = await import("../init/orchestrate.js");
-
-		await handler({ agent: false });
-
-		expect(interactiveInit).toHaveBeenCalledTimes(1);
-		expect(orchestrate).not.toHaveBeenCalled();
-	});
-
-	test("should call orchestrate when --agent is true", async () => {
-		const { handler } = await import("./init.js");
-		const { interactiveInit } = await import("../init/interactive.js");
-		const { orchestrate } = await import("../init/orchestrate.js");
-		const { detectAgent } = await import("../init/detect_agent.js");
-		vi.mocked(detectAgent).mockReturnValue("cursor");
-
-		await handler({ agent: true });
-
-		expect(orchestrate).toHaveBeenCalledWith({
-			agent: "cursor",
-			skipMigrations: undefined,
-			preview: undefined,
-		});
-		expect(interactiveInit).not.toHaveBeenCalled();
-	});
-
-	test("should pass skipMigrations to orchestrate", async () => {
-		const { handler } = await import("./init.js");
-		const { orchestrate } = await import("../init/orchestrate.js");
-		const { detectAgent } = await import("../init/detect_agent.js");
-		vi.mocked(detectAgent).mockReturnValue("claude");
-
-		await handler({
-			agent: true,
-			skipMigrations: true,
-		});
-
-		expect(orchestrate).toHaveBeenCalledWith({
-			agent: "claude",
-			skipMigrations: true,
-			preview: undefined,
-		});
-	});
-
-	test("should pass preview to interactiveInit", async () => {
-		const { handler } = await import("./init.js");
-		const { interactiveInit } = await import("../init/interactive.js");
-
-		await handler({ preview: true });
-
-		expect(interactiveInit).toHaveBeenCalledWith({ preview: true });
-	});
-
-	test("should pass preview to orchestrate in agent mode", async () => {
-		const { handler } = await import("./init.js");
-		const { orchestrate } = await import("../init/orchestrate.js");
-		const { detectAgent } = await import("../init/detect_agent.js");
-		vi.mocked(detectAgent).mockReturnValue("cursor");
-
-		await handler({ agent: true, preview: true });
-
-		expect(orchestrate).toHaveBeenCalledWith({
-			agent: "cursor",
-			skipMigrations: undefined,
-			preview: true,
-		});
-	});
-
-	test("routes a --data step and writes the enriched response as bare JSON on stdout", async () => {
-		const { handler } = await import("./init.js");
-		const { routeDataStep } = await import("../init/route_command.js");
-		const { detectAgent } = await import("../init/detect_agent.js");
-		const { writeAllSync } = await import("../utils/write_sync.js");
-		vi.mocked(detectAgent).mockReturnValue("cursor");
-		vi.mocked(routeDataStep).mockResolvedValue({
-			phase: "auth",
-			status: "needs_auth",
-			nextAction: { type: "run_neon_init", args: ["auth", "--verify"] },
-		});
-
-		await handler({ agent: true, data: '{"step":"auth"}' });
-
-		expect(routeDataStep).toHaveBeenCalledWith({ step: "auth" }, "cursor");
-		expect(writeAllSync).toHaveBeenCalledTimes(1);
-		const [fd, written] = vi.mocked(writeAllSync).mock.calls[0];
-		expect(fd).toBe(1);
-		// Parseable on its own, with `args` already rewritten into the command an agent runs.
-		expect(JSON.parse(written)).toEqual({
-			phase: "auth",
-			status: "needs_auth",
-			nextAction: {
-				type: "run_shell_command",
-				command:
-					'neon init --agent --data \'{"step":"auth","verify":true}\'',
-			},
-		});
-	});
-
-	// Outside agent mode the top-level handler reports and prints, so reporting here too
-	// would file one failure as two analytics events.
-	test("rethrows the cause without reporting it a second time", async () => {
-		const { handler } = await import("./init.js");
-		const { sendError } = await import("../analytics.js");
-		const { interactiveInit } = await import("../init/interactive.js");
-		const failure = new Error("editor CLI not on PATH");
-		vi.mocked(interactiveInit).mockRejectedValue(failure);
-
-		await expect(handler({})).rejects.toThrow("editor CLI not on PATH");
-		expect(sendError).not.toHaveBeenCalled();
-	});
-
-	test("a named profile does not stop the handler", async () => {
-		const { handler } = await import("./init.js");
-		const { interactiveInit } = await import("../init/interactive.js");
-
-		await handler({ profile: "work" });
-
-		expect(interactiveInit).toHaveBeenCalledTimes(1);
-	});
-
-	test("NEON_PROFILE does not stop the handler either", async () => {
-		const { recordCredentialInputs } = await import(
-			"@neon-internals/cli-core/auth_selection"
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				contextFile: join(cwd, ".neon"),
+			}),
 		);
-		recordCredentialInputs({
-			apiKeyFlag: "",
-			apiKeyEnv: "",
-			profileEnv: "work",
-			profileFlag: "",
-			configDir: "",
-		});
-		const { handler } = await import("./init.js");
-		const { interactiveInit } = await import("../init/interactive.js");
 
-		try {
-			await handler({});
-			expect(interactiveInit).toHaveBeenCalledTimes(1);
-		} finally {
-			recordCredentialInputs({
-				apiKeyFlag: "",
-				apiKeyEnv: "",
-				profileEnv: "",
-				profileFlag: "",
-				configDir: "",
-			});
-		}
+		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
+			"bootstrap",
+			"skills",
+			"mcp",
+		]);
+		expect(run.mock.calls[0][0].slice(0, 2)).toEqual(["bootstrap", "."]);
+		expect(run.mock.calls[1][0].slice(0, 2)).toEqual(["skills", "update"]);
+	});
+
+	test("existing app runs skills, link, mcp", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-app-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
+			"skills",
+			"link",
+			"mcp",
+		]);
+	});
+
+	test("linked app skips link", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-linked-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const contextFile = join(cwd, ".neon");
+		writeFileSync(
+			contextFile,
+			`${JSON.stringify({ projectId: "proj-1" })}\n`,
+		);
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(baseProps({ cwd, run, contextFile }));
+
+		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
+			"skills",
+			"mcp",
+		]);
+	});
+
+	test("empty -y inserts link --yes before mcp", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-empty-y-"));
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				yes: true,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(run.mock.calls[0][0].slice(0, 4)).toEqual([
+			"bootstrap",
+			".",
+			"--default",
+			"--no-link",
+		]);
+		expect(run.mock.calls[1][0].slice(0, 3)).toEqual([
+			"skills",
+			"update",
+			"-y",
+		]);
+		expect(run.mock.calls[2][0].slice(0, 2)).toEqual(["link", "--yes"]);
+		expect(run.mock.calls[3][0].slice(0, 2)).toEqual(["mcp", "-y"]);
+		expect(run).toHaveBeenCalledTimes(4);
+	});
+
+	test("stops on the first failed step", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-fail-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi
+			.fn()
+			.mockResolvedValueOnce(false)
+			.mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					run,
+					contextFile: join(cwd, ".neon"),
+				}),
+			),
+		).rejects.toThrow("`neon skills` failed.");
+		expect(run).toHaveBeenCalledTimes(1);
+	});
+
+	test("forwards profile, config-dir, context-file, and --no-analytics", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-fwd-"));
+		mkdirSync(join(cwd, "src"));
+		const contextFile = join(cwd, ".neon");
+		writeFileSync(
+			contextFile,
+			`${JSON.stringify({ projectId: "proj-1" })}\n`,
+		);
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				contextFile,
+				configDir: "/cfg",
+				profile: "work",
+				analytics: false,
+			}),
+		);
+
+		expect(run.mock.calls[0][0]).toEqual([
+			"skills",
+			"--config-dir",
+			"/cfg",
+			"--profile",
+			"work",
+			"--api-host",
+			host,
+			"--context-file",
+			contextFile,
+			"--no-analytics",
+		]);
+		expect(run.mock.calls[0][1]).toBe(cwd);
+	});
+
+	test("parent .neon with a projectId skips link", async () => {
+		const root = mkdtempSync(join(tmpdir(), "neon-init-parent-"));
+		writeFileSync(
+			join(root, ".neon"),
+			`${JSON.stringify({ projectId: "proj-parent" })}\n`,
+		);
+		const cwd = join(root, "app");
+		mkdirSync(cwd);
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				contextFile: join(root, ".neon"),
+			}),
+		);
+
+		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
+			"skills",
+			"mcp",
+		]);
+	});
+
+	test("a .neon without projectId is not linked", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-empty-ctx-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const contextFile = join(cwd, ".neon");
+		writeFileSync(contextFile, "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(baseProps({ cwd, run, contextFile }));
+
+		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
+			"skills",
+			"link",
+			"mcp",
+		]);
+	});
+});
+
+describe("init CLI", () => {
+	cliTest("help describes the orchestrator", async ({ testCliCommand }) => {
+		await testCliCommand(["init", "--help"], {
+			snapshot: false,
+			stderr: expect.stringContaining("skills update"),
+		});
+	});
+
+	cliTest("rejects --data", async ({ testCliCommand }) => {
+		await testCliCommand(["init", "--data", '{"step":"auth"}'], {
+			snapshot: false,
+			code: 1,
+			stderr: expect.stringMatching(/Unknown argument: data/i),
+		});
+	});
+
+	cliTest("rejects --agent", async ({ testCliCommand }) => {
+		await testCliCommand(["init", "--agent"], {
+			snapshot: false,
+			code: 1,
+			stderr: expect.stringMatching(/Unknown argument: agent/i),
+		});
 	});
 });

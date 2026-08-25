@@ -317,12 +317,6 @@ const resolveTargetDir = async (
 const defaultDirName = (template: BootstrapTemplate): string =>
 	template.source.subdir.split("/").pop() || template.id;
 
-/**
- * Download and materialize the template into `targetDir`. The actual
- * download/extract/write lives in `src/init/bootstrap.ts`, shared with `neon init`
- * (exec-bit and symlink fidelity, graceful symlink fallback); here we just
- * frame it with progress logging. Returns the number of files written.
- */
 const scaffold = async (
 	template: BootstrapTemplate,
 	targetDir: string,

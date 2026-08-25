@@ -466,8 +466,7 @@ export const ensureAuth = async (
 	// otherwise it proceeds with no API client.
 	const isBootstrap = props._[0] === "bootstrap";
 
-	// `init` manages its own auth flow (asks the user if they have an account,
-	// then triggers OAuth at the right time). Skip the global auth middleware.
+	// Child commands authenticate, so init must skip the global auth middleware.
 	const isInit = props._[0] === "init";
 
 	// The MCP handler validates targets before deciding whether authentication is required.
@@ -671,7 +670,7 @@ export const ensureAuth = async (
 	}
 
 	if (isInit) {
-		log.debug("init: skipping global auth; init manages its own auth flow");
+		log.debug("init: skipping global auth; child commands authenticate");
 		return;
 	}
 

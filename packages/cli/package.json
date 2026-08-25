@@ -43,18 +43,17 @@
 	},
 	"scripts": {
 		"generateParams": "tsx generateOptionsFromSpec.ts",
-		"codegen": "node scripts/set-vsx-gallery.mjs",
 		"clean": "rm -rf dist",
-		"build": "pnpm codegen && pnpm generateParams && tsc --noEmit && tsdown && cp src/*.html ./dist",
-		"build:internal": "node scripts/set-vsx-gallery.mjs https://cursor-vsx-proxy.cloud.databricks.com/gallery && pnpm generateParams && tsc --noEmit && tsdown && cp src/*.html ./dist",
+		"build": "pnpm generateParams && tsc --noEmit && tsdown && cp src/*.html ./dist",
+		"build:internal": "pnpm build",
 		"bundle": "node pkg.js",
-		"typecheck": "pnpm codegen && tsc --noEmit",
-		"lint": "pnpm codegen && pnpm typecheck && biome check src",
+		"typecheck": "tsc --noEmit",
+		"lint": "pnpm typecheck && biome check src",
 		"lint:fix": "pnpm typecheck && biome check src --write",
-		"test": "pnpm codegen && pnpm --filter neonctl... build && vitest run",
-		"test:ci": "pnpm codegen && pnpm build && vitest run",
-		"test:e2e": "pnpm codegen && pnpm build && vitest run --config vitest.e2e.config.ts",
-		"test:conformance": "pnpm codegen && vitest run --config tests/psql-conformance/vitest.config.ts"
+		"test": "pnpm --filter neonctl... build && vitest run",
+		"test:ci": "pnpm build && vitest run",
+		"test:e2e": "pnpm build && vitest run --config vitest.e2e.config.ts",
+		"test:conformance": "vitest run --config tests/psql-conformance/vitest.config.ts"
 	},
 	"dependencies": {
 		"@clack/core": "0.4.2",

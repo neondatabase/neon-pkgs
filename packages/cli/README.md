@@ -714,64 +714,36 @@ $ neon bootstrap . --template hono
 
 The target directory must be empty unless you pass `--force` (a lone `.git` is ignored, so a freshly `git init`ed folder is fine). Symlinks and executable bits in the template are preserved.
 
-## Set up a project for your coding agent (`init`)
+## Set up a project (`init`)
 
-`neon init` wires an existing project up to Neon: it signs you in, installs the Neon MCP server and agent skills into your editor, adds the Neon Local Connect extension for VS Code and Cursor, creates or picks a project, writes `DATABASE_URL` into `.env`, and offers to scaffold migrations.
+`neon init` runs the existing setup commands in this directory. It does not have its own prompts, JSON protocol, or `--data` steps.
+
+An empty directory (nothing except `.git`) runs:
+
+```bash
+neon bootstrap .
+neon skills update
+neon mcp
+```
+
+Any other directory runs:
+
+```bash
+neon skills
+neon link    # skipped when .neon already has a projectId
+neon mcp
+```
 
 ```bash
 $ neon init
+$ neon init -y
 ```
 
-Run in a terminal it prompts you through those steps. This is what the retired `neon-init` package used to do; `npx neon init` replaces it.
+`-y` forwards `-y` to `skills` and `mcp`, `--default --no-link` to `bootstrap`, and `--yes` to `link`. After an empty `-y` bootstrap it also runs `link --yes`, because `--default` does not link.
 
-Two side effects worth knowing before you run it. It **installs or upgrades `neon` globally**, with whichever package manager invoked it — the flow drives Neon by shelling out to the CLI rather than calling the API in-process. And it **writes `.neon`** in the project directory, the same context file `neon link` and `neon checkout` use.
+A failed step stops the rest. `--profile` and `--config-dir` are forwarded to each child. `--output` is not.
 
-### Agent mode
-
-`--agent` turns the same flow into a state machine an AI coding assistant drives. It prints **one JSON object on stdout** and nothing else: a phase response carrying a `status` and a `nextAction` telling the agent what to do next — usually another `neon init` invocation, spelled out as a `command`. The two read-only steps, `status` and `finalize`, return a snapshot instead.
-
-```bash
-$ neon init --agent --data '{"step":"status"}'
-{
-  "auth": { "authenticated": true },
-  "tooling": { "mcpServer": { "configured": true, "scope": "global" }, "skills": { "installed": false, "scope": null } },
-  "project": { "databaseUrl": false },
-  "migrations": { "tool": "prisma", "hasMigrations": false },
-  "recommendations": [
-    { "priority": "high", "message": "No DATABASE_URL found in .env", "command": "neon init --agent --data '{\"step\":\"db\"}'" },
-    { "priority": "medium", "message": "Neon agent skills not detected in this project", "command": "neon init --agent --data '{\"step\":\"skills\",\"install\":true}'" },
-    { "priority": "medium", "message": "prisma detected but no migrations found", "command": "neon init --agent --data '{\"step\":\"migrations\"}'" }
-  ]
-}
-```
-
-`--agent` is implied when stdin is not a TTY and a known agent is detected from the environment (Claude Code, Codex, Cline, Cursor, VS Code, Windsurf).
-
-`--data` takes a JSON object whose `step` selects the phase: `auth`, `db`, `setup`, `getting-started`, `mcp`, `skills`, `migrations`, `neon-auth`, `status`, or `finalize`. Remaining keys are that phase's options. Without `--data`, the orchestrator picks the next phase itself. An unrecognised `step` is refused with the full list.
-
-**Failures are JSON too**, so an agent never has to distinguish "it broke" from "it returned nothing":
-
-```bash
-$ neon init --agent --data '{not json'
-{
-  "success": false,
-  "error": "Invalid JSON in --data flag at position 1. Expected a JSON object."
-}
-$ echo $?
-1
-```
-
-That message reports where parsing stopped and nothing more. `--data` carries whatever you put in it, and the JSON parser's own message quotes a window of the input, so echoing either would put a connection string or an API key on stdout.
-
-**One exception to "JSON on stdout".** Credentials are resolved before any command runs, so a failure in that step — an unknown `--profile` or `NEON_PROFILE`, `--api-key` and `--profile` together, a `credentials.json` that cannot be read, or an OS keyring item that cannot be read — prints `ERROR: …` on stderr, leaves stdout empty, and exits 1. Treat a non-zero exit with empty stdout as a credential problem and read stderr.
-
-| Option | |
-| --- | --- |
-| `--agent`, `-a` | Emit the JSON state machine instead of prompting |
-| `--data <json>` | Route to one phase, with that phase's options |
-| `--skip-migrations` | Leave the migrations phase out of the flow |
-| `--preview` | Enable preview features (scaffolding a project from a template) |
-| `--profile <name>` | Run as that stored account. See [Which credential an invocation uses](#which-credential-an-invocation-uses). |
+`skills` needs Node.js 22.20 or newer. See [`skills`](#install-neon-agent-skills-skills) and [`mcp`](#install-the-neon-mcp-server-mcp) for what those commands write.
 
 ## Install the Neon MCP server (`mcp`)
 
@@ -1151,7 +1123,7 @@ When both are only environment variables the key wins, which keeps a CI pipeline
 
 `neon auth` and the `profile` subcommands are outside all of this, because they read the same flags to mean something else: `neon auth --profile work` names where to write a credential, and `neon profile create work --api-key …` names one to store.
 
-`neon init` follows the same profile selection: `--profile` and `NEON_PROFILE` pick the stored account. Every `npx neon` it runs, and every command it tells an agent to run (`npx neon …`, `neon init --agent …`), includes `--profile <name>` when a profile was named by `--profile` or `NEON_PROFILE`, and `--config-dir <path>` when you passed `--config-dir`; nothing is added when those were not set. It still ignores `--api-key` and `NEON_API_KEY` for its own credential read and runs as that stored profile (`DEFAULT` when a key was named with no profile). Those keys are also not written onto the emitted commands — putting a key in agent JSON would print it. An ambient `NEON_API_KEY` is inherited by the subprocesses.
+`neon init` forwards `--profile` and `--config-dir` to the commands it runs. An explicit `--api-key` is passed to those children through `NEON_API_KEY`, not argv.
 
 ## API keys (`api-keys`)
 
