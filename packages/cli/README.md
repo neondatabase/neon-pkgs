@@ -813,7 +813,7 @@ On a TTY the command asks which agents, then shows a summary to confirm. Detecte
 
 `-y` skips those questions and installs into every detected agent. `--agent` names specific agents and skips the agent picker. Without a TTY, pass `-y` or `--agent`. `--agent` alone is enough because the plugin is fixed.
 
-Default scope is `project`. `--global` is `user`. Cursor and Claude Code still store the plugin cache under `~/.claude/plugins`; `project` vs `user` is the scope field the plugins CLI records, not a directory in the repo. VS Code, GitHub Copilot CLI, and Grok Build only install user-level: they are skipped at the default scope with a warning, and `--agent vscode` without `--global` fails if nothing else is selected.
+Default scope is `project`. `--global` is `user`. On macOS and Linux, Cursor and Claude Code store the plugin cache under `~/.claude/plugins`; on Windows, Cursor installs into Cursor extensions. `project` vs `user` is the scope field the plugins CLI records, not a directory in the repo. VS Code, GitHub Copilot CLI, and Grok Build only install user-level: they are skipped at the default scope with a warning, and `--agent vscode` without `--global` fails if nothing else is selected.
 
 `--agent` names with a plugins mapping: `claude-code`, `claude-desktop`, `codex`, `cursor`, `github-copilot-cli`, `grok-build`, `vscode`. `claude-desktop` installs as Claude Code. `mcporter` is a known MCP name that is then skipped.
 

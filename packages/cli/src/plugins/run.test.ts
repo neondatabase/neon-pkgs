@@ -14,11 +14,12 @@ describe("pluginsAddArgs", () => {
 			target: "cursor",
 			global: false,
 		});
+		expect(PLUGIN_SOURCE).toBe("neondatabase/agent-skills");
 		expect(args).toEqual([
 			"-y",
 			"plugins",
 			"add",
-			PLUGIN_SOURCE,
+			"neondatabase/agent-skills",
 			"-t",
 			"cursor",
 			"-s",
@@ -34,7 +35,7 @@ describe("pluginsAddArgs", () => {
 			"-y",
 			"plugins",
 			"add",
-			PLUGIN_SOURCE,
+			"neondatabase/agent-skills",
 			"-t",
 			"vscode",
 			"-s",

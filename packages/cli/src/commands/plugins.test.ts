@@ -11,7 +11,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect } from "vitest";
 
-import { PLUGIN_SOURCE } from "../plugins/run.js";
 import { test } from "../test_utils/fixtures";
 
 const dirs: string[] = [];
@@ -126,7 +125,7 @@ describe("neon plugins", () => {
 				"-y",
 				"plugins",
 				"add",
-				PLUGIN_SOURCE,
+				"neondatabase/agent-skills",
 				"-t",
 				"cursor",
 				"-s",
@@ -199,7 +198,7 @@ describe("neon plugins", () => {
 				"-y",
 				"plugins",
 				"add",
-				PLUGIN_SOURCE,
+				"neondatabase/agent-skills",
 				"-t",
 				"cursor",
 				"-s",
@@ -210,7 +209,7 @@ describe("neon plugins", () => {
 				"-y",
 				"plugins",
 				"add",
-				PLUGIN_SOURCE,
+				"neondatabase/agent-skills",
 				"-t",
 				"claude-code",
 				"-s",
@@ -307,7 +306,7 @@ describe("neon plugins", () => {
 			"-y",
 			"plugins",
 			"add",
-			PLUGIN_SOURCE,
+			"neondatabase/agent-skills",
 			"-t",
 			"vscode",
 			"-s",
