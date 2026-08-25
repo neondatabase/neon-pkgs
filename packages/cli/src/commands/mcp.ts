@@ -24,6 +24,7 @@ import type { CommonProps } from "../types.js";
 import { canPickAgentsInteractively } from "../utils/agent_picker.js";
 import { getCliName } from "../utils/cli_name.js";
 import { noPassthrough, single } from "../utils/flags.js";
+import { helpCsv } from "../utils/help_text.js";
 import { writer } from "../writer.js";
 
 type McpProps = CommonProps & {
@@ -72,7 +73,7 @@ export const builder = (argv: yargs.Argv) =>
 				type: "boolean",
 				default: false,
 				describe:
-					"Skip prompts. Defaults listed below. --project, --oauth, --agent, --read-only, --project-id and --category still apply",
+					"Skip prompts. Defaults to global config, every detected agent and a minted account-wide API key. Remaining defaults listed below. --project, --oauth, --agent, --read-only, --project-id and --category still apply",
 			},
 			agent: {
 				alias: "a",
@@ -169,7 +170,18 @@ export const builder = (argv: yargs.Argv) =>
 			"Limit tools to those categories",
 		)
 		.epilogue(
-			`Installs ${NEON_MCP_URL}\nSupported agents: ${mcpGlobalAgents.join(", ")}\n--project does not support: ${mcpProjectDroppedAgents.join(", ")}\nneon mcp -y writes ${NEON_MCP_URL} into global config for every globally detected agent, reuses an existing Neon Bearer or mints an account-wide API key, leaves write tools enabled, exposes every tool category, and does not pin a project (including from .neon).`,
+			[
+				"",
+				`Installs ${NEON_MCP_URL}`,
+				helpCsv("Supported agents", mcpGlobalAgents),
+				helpCsv("--project does not support", mcpProjectDroppedAgents),
+				"neon mcp -y:",
+				"  global config",
+				"  every globally detected agent",
+				"  reuse existing Neon Bearer or mint an account-wide API key",
+				"  write tools on, all categories",
+				"  no project pin (including from .neon)",
+			].join("\n"),
 		)
 		.strict()
 		.check(noPassthrough("mcp"));

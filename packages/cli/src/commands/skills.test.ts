@@ -14,9 +14,10 @@ import { afterEach, describe, expect } from "vitest";
 
 import pkg from "../pkg.js";
 import {
+	AGENT_SKILLS_SOURCE,
 	defaultSkillEntries,
 	NEON_SKILL_CATALOG,
-	skillHelpLabel,
+	PLATFORMS_SKILLS_SOURCE,
 } from "../skills/catalog.js";
 import { skillsInstallableAgents } from "../skills/targets.js";
 import { test } from "../test_utils/fixtures";
@@ -548,8 +549,11 @@ describe("neon skills", () => {
 		for (const agent of skillsInstallableAgents()) {
 			expect(compact).toContain(agent);
 		}
+		expect(compact).toContain(AGENT_SKILLS_SOURCE);
+		expect(compact).toContain(PLATFORMS_SKILLS_SOURCE);
+		expect(compact.split(AGENT_SKILLS_SOURCE).length - 1).toBe(1);
 		for (const row of NEON_SKILL_CATALOG) {
-			expect(compact).toContain(skillHelpLabel(row).replace(/\s+/g, ""));
+			expect(compact).toContain(row.skill);
 		}
 	});
 });

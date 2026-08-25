@@ -1,3 +1,5 @@
+import { helpCsv } from "../utils/help_text.js";
+
 export const AGENT_SKILLS_SOURCE = "neondatabase/agent-skills";
 export const PLATFORMS_SKILLS_SOURCE = "neondatabase/neon-for-agent-platforms";
 
@@ -66,12 +68,6 @@ const CATALOG_BY_SKILL = catalogBySkill();
 
 export const listSkillIds = (): string[] =>
 	NEON_SKILL_CATALOG.map((entry) => entry.skill);
-
-export const skillHelpLabel = (entry: SkillEntry): string =>
-	`${entry.skill} (${entry.source})`;
-
-export const skillsHelpValues = (): string =>
-	NEON_SKILL_CATALOG.map(skillHelpLabel).join(", ");
 
 export const defaultSkillEntries = (): SkillEntry[] =>
 	NEON_SKILL_CATALOG.filter((entry) => entry.defaultSelected);
@@ -142,3 +138,8 @@ export const invocationsForSelection = (
 
 export const yesInstallInvocations = (): SkillsInvocation[] =>
 	invocationsForSelection(defaultSkillEntries());
+
+export const skillsHelpValues = (): string =>
+	invocationsForSelection(NEON_SKILL_CATALOG)
+		.map((group) => helpCsv(`  ${group.source}`, group.skills))
+		.join("\n");

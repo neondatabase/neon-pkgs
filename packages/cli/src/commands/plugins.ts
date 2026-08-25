@@ -17,6 +17,7 @@ import { confirmPluginsInstall } from "../plugins/wizard.js";
 import type { CommonProps } from "../types.js";
 import { canPickAgentsInteractively } from "../utils/agent_picker.js";
 import { noPassthrough } from "../utils/flags.js";
+import { helpCsv } from "../utils/help_text.js";
 import { writer } from "../writer.js";
 
 type PluginsProps = CommonProps & {
@@ -94,7 +95,17 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.example("$0 plugins --global", "Install user-level")
 		.epilogue(
-			`Supported agents at project scope: ${pluginProjectAgents.join(", ")}\nAlso with --global: ${pluginGlobalOnlyAgents.join(", ")}\nCurrently one plugin: ${NEON_PLUGIN_NAME} from ${PLUGIN_SOURCE}. It includes the Neon MCP server (${NEON_MCP_URL}) and these skills: ${PLUGIN_SKILLS.join(", ")}.`,
+			[
+				"",
+				helpCsv(
+					"Supported agents at project scope",
+					pluginProjectAgents,
+				),
+				helpCsv("Also with --global", pluginGlobalOnlyAgents),
+				`Currently one plugin: ${NEON_PLUGIN_NAME} from ${PLUGIN_SOURCE}.`,
+				`It includes the Neon MCP server (${NEON_MCP_URL})`,
+				helpCsv("and these skills", PLUGIN_SKILLS),
+			].join("\n"),
 		)
 		.strict()
 		.check(noPassthrough("plugins"));

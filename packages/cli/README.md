@@ -838,7 +838,7 @@ On a TTY the command asks which agents and which skills, then shows a summary to
 
 `-y` skips those questions and installs the default skills. `--skill` / `-s` names specific skills and skips the skill picker. `--agent` and `--global` still apply. Without a TTY, pass `-y` or `--skill`. `--agent` alone is not enough.
 
-`--skill` names and source repos: `claimable-postgres` (`neondatabase/agent-skills`), `neon` (`neondatabase/agent-skills`), `neon-ai-gateway` (`neondatabase/agent-skills`), `neon-functions` (`neondatabase/agent-skills`), `neon-object-storage` (`neondatabase/agent-skills`), `neon-postgres` (`neondatabase/agent-skills`), `neon-postgres-branches` (`neondatabase/agent-skills`), `neon-postgres-egress-optimizer` (`neondatabase/agent-skills`), `neon-postgres-agent-platforms` (`neondatabase/neon-for-agent-platforms`).
+`--skill` names by source repo: `neondatabase/agent-skills` (`claimable-postgres`, `neon`, `neon-ai-gateway`, `neon-functions`, `neon-object-storage`, `neon-postgres`, `neon-postgres-branches`, `neon-postgres-egress-optimizer`); `neondatabase/neon-for-agent-platforms` (`neon-postgres-agent-platforms`).
 
 `--agent` names match `neon mcp`, minus agents that cannot install skills: `antigravity`, `cline`, `cline-cli`, `claude-code`, `claude-desktop`, `codex`, `cursor`, `gemini-cli`, `goose`, `github-copilot-cli`, `grok-build`, `opencode`, `vscode`, `windsurf`, `zed`. `mcporter` is a known MCP name that is then skipped. `neon skills --help` lists the same skill and agent values.
 

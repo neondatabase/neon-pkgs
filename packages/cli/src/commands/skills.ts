@@ -23,6 +23,7 @@ import { confirmSkillsInstall, confirmSkillsUpdate } from "../skills/wizard.js";
 import type { CommonProps } from "../types.js";
 import { canPickAgentsInteractively } from "../utils/agent_picker.js";
 import { noPassthrough } from "../utils/flags.js";
+import { helpCsv } from "../utils/help_text.js";
 import { writer } from "../writer.js";
 
 type SkillsProps = CommonProps & {
@@ -183,7 +184,12 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.example("$0 skills --global", "Install user-level skills")
 		.epilogue(
-			`Supported agents: ${skillsInstallableAgents().join(", ")}\nSupported skills: ${skillsHelpValues()}`,
+			[
+				"",
+				helpCsv("Supported agents", skillsInstallableAgents()),
+				"Supported skills:",
+				skillsHelpValues(),
+			].join("\n"),
 		)
 		.strict()
 		.check(noPassthrough("skills"));
