@@ -118,15 +118,20 @@ describe("skillsUpdateHadNothing", () => {
 				"Checking for skill updates…\nNo project skills to update.",
 			),
 		).toBe(true);
-		expect(skillsUpdateHadNothing("No global skills to update.")).toBe(
-			true,
-		);
-		expect(skillsUpdateHadNothing("Updated 2 skills")).toBe(false);
+		expect(
+			skillsUpdateHadNothing(
+				"Checking for skill updates…\nNo global skills tracked in lock file.",
+			),
+		).toBe(true);
+		expect(
+			skillsUpdateHadNothing("✓ All global skills are up to date"),
+		).toBe(true);
+		expect(skillsUpdateHadNothing("✓ Updated 1 skill(s)")).toBe(false);
 	});
 });
 
 describe("skillsUpdateDetail", () => {
-	test("skips the progress banner and strips ANSI", () => {
+	test("takes the result line, not the progress banner", () => {
 		expect(
 			skillsUpdateDetail(
 				"\u001b[38;5;145mChecking for skill updates…\u001b[0m\nNo project skills to update.\n",
@@ -134,9 +139,14 @@ describe("skillsUpdateDetail", () => {
 		).toBe("No project skills to update.");
 		expect(
 			skillsUpdateDetail(
-				"Checking for skill updates…\nUpdated 2 skills\n",
+				"Checking for skill updates…\nNo global skills tracked in lock file.\nInstall skills with npx skills add -g\n",
 			),
-		).toBe("Updated 2 skills");
+		).toBe("No global skills tracked in lock file.");
+		expect(
+			skillsUpdateDetail(
+				"Checking for skill updates…\nUpdating for: Universal\nRefreshing 1 skill(s)…\nUpdating neon…\n  ✓ Updated neon\n✓ Updated 1 skill(s)\n",
+			),
+		).toBe("✓ Updated 1 skill(s)");
 	});
 
 	test("returns undefined when only the banner is present", () => {

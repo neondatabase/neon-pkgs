@@ -58,22 +58,32 @@ export const quoteNpxArg = (part: string): string =>
 export const npxCommand = (args: readonly string[]): string =>
 	`npx ${args.map(quoteNpxArg).join(" ")}`;
 
-const ANSI = /\u001b\[[0-9;]*m/g;
+const ANSI = /\u001b\[[0-9;]*[A-Za-z]/g;
 const UPDATE_BANNER = /^Checking for skill updates/i;
-const UPDATE_NOTHING = /No (?:project|global) skills to update\.?/i;
+const UPDATE_NOTHING =
+	/No (?:project|global) skills (?:to update|to check|tracked in lock file|can be updated in place)|All global skills are up to date/i;
+const UPDATE_RESULT =
+	/No (?:project|global) skills (?:to update|to check|tracked in lock file|can be updated in place)\.?|All global skills are up to date|(?:✓\s*)?Updated \d+ skills?(?:\(s\))?|(?:✗\s*)?Failed to update \d+ skills?(?:\(s\))?/i;
 
-const stripAnsi = (text: string): string => text.replace(ANSI, "");
+const stripAnsi = (text: string): string =>
+	text.replace(ANSI, "").replace(/\r/g, "");
 
 export const skillsUpdateHadNothing = (output: string): boolean =>
 	UPDATE_NOTHING.test(stripAnsi(output));
 
 export const skillsUpdateDetail = (output: string): string | undefined => {
 	const text = stripAnsi(output);
-	const nothing = text.match(UPDATE_NOTHING);
-	if (nothing?.[0] !== undefined) {
-		return nothing[0];
-	}
+	let last: string | undefined;
 	for (const line of text.split("\n")) {
+		const trimmed = line.trim();
+		if (UPDATE_RESULT.test(trimmed)) {
+			last = trimmed;
+		}
+	}
+	if (last !== undefined) {
+		return last;
+	}
+	for (const line of text.split("\n").reverse()) {
 		const trimmed = line.trim();
 		if (trimmed.length === 0 || UPDATE_BANNER.test(trimmed)) {
 			continue;

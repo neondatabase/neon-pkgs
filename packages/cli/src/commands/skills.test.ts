@@ -202,7 +202,7 @@ describe("neon skills", () => {
 		]);
 	});
 
-	test("update detail skips the progress banner", async ({
+	test("update detail is the result line after progress", async ({
 		testCliCommand,
 	}) => {
 		const { home, cwd, bin } = scratch();
@@ -210,14 +210,34 @@ describe("neon skills", () => {
 			["skills", "update", "-y"],
 			runOptions(home, cwd, bin, {
 				SKILLS_CHILD_STDOUT:
-					"Checking for skill updates…\nUpdated 2 skills\n",
+					"Checking for skill updates…\nUpdating for: Universal\nRefreshing 1 skill(s)…\n✓ Updated 1 skill(s)\n",
 			}),
 		);
 		expect(JSON.parse(stdout)).toEqual([
 			{
 				scope: "this directory",
 				status: "updated",
-				detail: "Updated 2 skills",
+				detail: "✓ Updated 1 skill(s)",
+			},
+		]);
+	});
+
+	test("update --global none reads the lock-file no-op", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin } = scratch();
+		const { stdout } = await testCliCommand(
+			["skills", "update", "--global", "-y"],
+			runOptions(home, cwd, bin, {
+				SKILLS_CHILD_STDOUT:
+					"Checking for skill updates…\nNo global skills tracked in lock file.\n",
+			}),
+		);
+		expect(JSON.parse(stdout)).toEqual([
+			{
+				scope: "user-level",
+				status: "none",
+				detail: "No global skills tracked in lock file.",
 			},
 		]);
 	});
