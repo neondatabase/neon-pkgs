@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import strip from "strip-ansi";
 import { afterEach, beforeAll, describe, expect, test } from "vitest";
+import { writeClaimableCredentials } from "../claimable/state.js";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -42,8 +43,15 @@ const makeWorkspace = (): { configDir: string; contextFile: string } => {
 	return { configDir, contextFile: join(dir, ".neon") };
 };
 
-const runCli = (args: string[], env: NodeJS.ProcessEnv = {}): Promise<Run> => {
+const BOX = /[┌┐└┘├┤┬┴┼─│]/;
+
+const runCli = (
+	args: string[],
+	env: NodeJS.ProcessEnv = {},
+	setup?: (workspace: { configDir: string; contextFile: string }) => void,
+): Promise<Run> => {
 	const { configDir, contextFile } = makeWorkspace();
+	setup?.({ configDir, contextFile });
 	return new Promise((res, rej) => {
 		const cp = fork(
 			join(process.cwd(), "./dist/cli.js"),
@@ -118,5 +126,53 @@ describe("claim create with explicit credential flags", () => {
 			"Claimable Neon does not use a Neon account credential. Remove --api-key or --profile.",
 		);
 		expect(reachedClaimableService(stderr)).toBe(false);
+	});
+});
+
+describe("claim list table output", () => {
+	test("empty list is a message, not a box table", async () => {
+		const { code, stdout, stderr } = await runCli(["claim", "list"]);
+
+		expect(code).toBe(0);
+		expect(stderr).toBe("");
+		expect(stdout).not.toMatch(BOX);
+		expect(stdout).toContain(
+			"No Claimable Neon projects are saved on this machine.",
+		);
+	});
+
+	test("prints every column at full width without boxes", async () => {
+		const projectId = "wandering-haze-25754674";
+		const branchId = "br-main-branch-123456";
+		const origin = "https://claimable.neon.tech";
+		const expiresAt = "2026-08-24T12:00:00.000Z";
+		const { code, stdout, stderr } = await runCli(
+			["claim", "list"],
+			{},
+			({ configDir }) => {
+				writeClaimableCredentials(configDir, {
+					version: 1,
+					origin,
+					registrationId: "reg_test",
+					projectId,
+					branchId,
+					identityAssertion: "assertion",
+					expiresAt,
+				});
+			},
+		);
+
+		expect(code).toBe(0);
+		expect(stderr).toBe("");
+		expect(stdout).not.toMatch(BOX);
+		expect(stdout).toContain("Project Id");
+		expect(stdout).toContain("Branch Id");
+		expect(stdout).toContain("Expires At");
+		expect(stdout).toContain("Origin");
+		expect(stdout).toContain(projectId);
+		expect(stdout).toContain(branchId);
+		expect(stdout).toContain(expiresAt);
+		expect(stdout).toContain(origin);
+		expect(stdout.trimEnd().split("\n")).toHaveLength(2);
 	});
 });

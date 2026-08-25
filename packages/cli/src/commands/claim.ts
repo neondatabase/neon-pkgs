@@ -147,6 +147,13 @@ const removeFileIfPresent = (path: string): void => {
 const failureMessage = (error: unknown): string =>
 	error instanceof Error ? error.message : String(error);
 
+export const CLAIM_LIST_FIELDS = [
+	"project_id",
+	"branch_id",
+	"expires_at",
+	"origin",
+] as const;
+
 export const command = "claim";
 export const aliases = ["claimable"];
 export const describe = "Create and claim temporary Neon projects";
@@ -424,7 +431,7 @@ const create = async (props: CreateProps): Promise<void> => {
 								(decision) =>
 									`${decision.capability}: ${decision.message}`,
 							)
-							.join("\n"),
+							.join(", "),
 				},
 			},
 		);
@@ -593,7 +600,7 @@ const list = (props: ClaimProps): void => {
 		origin: item.origin,
 	}));
 	writer(props).end(projects, {
-		fields: ["project_id", "branch_id", "expires_at", "origin"],
+		fields: CLAIM_LIST_FIELDS,
 		emptyMessage: "No Claimable Neon projects are saved on this machine.",
 	});
 };

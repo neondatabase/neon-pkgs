@@ -1,6 +1,7 @@
 import stripAnsi from "strip-ansi";
 import { describe, expect, it } from "vitest";
 import { BRANCH_FIELDS } from "./commands/branches.js";
+import { CLAIM_LIST_FIELDS } from "./commands/claim.js";
 import {
 	PROJECT_FIELDS,
 	RECOVERABLE_PROJECT_FIELDS,
@@ -136,6 +137,32 @@ describe("list field order", () => {
 		for (const field of PROJECT_FIELDS) {
 			expect(header).toContain(titleCase(field));
 		}
+	});
+
+	it("prints claim list as full-width columns without boxes", () => {
+		const origin = "https://claimable.neon.tech";
+		const out = formatHumanChunk({
+			data: [
+				{
+					project_id: PROJECT_ID,
+					branch_id: BRANCH_ID,
+					expires_at: TIMESTAMP,
+					origin,
+				},
+			],
+			fields: CLAIM_LIST_FIELDS,
+			width: 40,
+			colorTitle: false,
+		});
+		expect(out).not.toMatch(BOX);
+		const header = headerOf(out);
+		for (const field of CLAIM_LIST_FIELDS) {
+			expect(header).toContain(titleCase(field));
+		}
+		expect(header.indexOf("Expires At")).toBeGreaterThan(-1);
+		expect(stripAnsi(out)).toContain(PROJECT_ID);
+		expect(stripAnsi(out)).toContain(origin);
+		expect(stripAnsi(out).trimEnd().split("\n")).toHaveLength(2);
 	});
 });
 

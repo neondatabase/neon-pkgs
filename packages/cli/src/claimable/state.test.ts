@@ -147,6 +147,8 @@ describe("claimable credential selection", () => {
 		apiKeyFlag: "",
 		apiKeyEnv: "",
 		profileEnv: "",
+		profileFlag: "",
+		configDir: "",
 	};
 
 	it("uses the linked claimable project when no account credential was selected", () => {
