@@ -23,18 +23,67 @@ const pooledField = z
 const branchCreateFields = zod.zBranchCreateRequest.shape.branch.unwrap().shape;
 const projectCreateFields = zod.zCreateProjectBody.shape.project.shape;
 
-export const createBranchWithComputeInputSchema = z.strictObject({
+const computeSettingsSchema = z
+	.strictObject({
+		min_cu: zod.zComputeUnit.optional(),
+		max_cu: zod.zComputeUnit.optional(),
+		suspend_timeout_seconds: zod.zSuspendTimeoutSeconds.optional(),
+	})
+	.optional();
+
+const mapCompute = (
+	compute:
+		| {
+				min_cu?: number;
+				max_cu?: number;
+				suspend_timeout_seconds?: number;
+		  }
+		| undefined,
+) =>
+	compute === undefined
+		? undefined
+		: {
+				minCu: compute.min_cu,
+				maxCu: compute.max_cu,
+				suspendTimeoutSeconds: compute.suspend_timeout_seconds,
+			};
+
+const NO_COMPUTE_WITH_COMPUTE =
+	"Pass compute settings or no_compute, not both.";
+
+export const createBranchInputSchema = z
+	.strictObject({
+		project_id: zod.zCreateProjectBranchPath.shape.project_id,
+		name: branchCreateFields.name,
+		parent_id: branchCreateFields.parent_id,
+		compute: computeSettingsSchema,
+		no_compute: z
+			.boolean()
+			.describe(
+				"Skip the read-write endpoint. Default false. Cannot be combined with compute.",
+			)
+			.optional(),
+	})
+	.superRefine((value, ctx) => {
+		if (value.no_compute === true && value.compute !== undefined) {
+			ctx.addIssue({
+				code: "custom",
+				message: NO_COMPUTE_WITH_COMPUTE,
+				path: ["no_compute"],
+			});
+		}
+	});
+
+export const createBranchAndConnectInputSchema = z.strictObject({
 	project_id: zod.zCreateProjectBranchPath.shape.project_id,
 	name: branchCreateFields.name,
 	parent_id: branchCreateFields.parent_id,
-	compute: z
-		.strictObject({
-			min_cu: zod.zComputeUnit.optional(),
-			max_cu: zod.zComputeUnit.optional(),
-			suspend_timeout_seconds: zod.zSuspendTimeoutSeconds.optional(),
-		})
-		.optional(),
+	compute: computeSettingsSchema,
 	pooled: pooledField,
+});
+
+export const createProjectInputSchema = z.strictObject({
+	...projectCreateFields,
 });
 
 export const createProjectAndConnectInputSchema = z.strictObject({
@@ -103,16 +152,60 @@ export const setScheduleInputSchema = z.strictObject({
 	),
 });
 
-export const createBranchWithComputeTool = (options: ToolClientOptions) =>
+export const createBranchTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
 		{
-			operationId: "branches.createWithCompute",
-			id: publishedId("branches.createWithCompute"),
-			title: "Create branch with compute",
+			operationId: "branches.create",
+			id: publishedId("branches.create"),
+			title: "Create branch",
+			description:
+				"Create a branch with a read-write endpoint by default. Pass no_compute to skip the endpoint. The call waits until operation-backed provisioning finishes, up to five minutes by default. Does not return a connection string; use branches.createAndConnect or postgres.connectionString for that.",
+			inputSchema: createBranchInputSchema,
+			annotations: writeAnnotations,
+			requiresApproval: true,
+			metadata: {
+				method: "POST",
+				path: "/projects/{project_id}/branches",
+				stability: "stable",
+				deprecated: false,
+				tags: ["Branch"],
+			},
+		},
+		(neon, input, signal) => {
+			if (input.no_compute === true) {
+				return neon.branches.create(
+					input.project_id,
+					{
+						name: input.name,
+						parent_id: input.parent_id,
+						noCompute: true,
+					},
+					{ signal },
+				);
+			}
+			return neon.branches.create(
+				input.project_id,
+				{
+					name: input.name,
+					parent_id: input.parent_id,
+					compute: mapCompute(input.compute),
+				},
+				{ signal },
+			);
+		},
+	);
+
+export const createBranchAndConnectTool = (options: ToolClientOptions) =>
+	bindTool(
+		options,
+		{
+			operationId: "branches.createAndConnect",
+			id: publishedId("branches.createAndConnect"),
+			title: "Create branch and connect",
 			description:
 				"Create a branch with a read-write endpoint and return its connection string. The call waits until operation-backed provisioning finishes, up to five minutes by default.",
-			inputSchema: createBranchWithComputeInputSchema,
+			inputSchema: createBranchAndConnectInputSchema,
 			annotations: writeAnnotations,
 			requiresApproval: true,
 			metadata: {
@@ -124,20 +217,12 @@ export const createBranchWithComputeTool = (options: ToolClientOptions) =>
 			},
 		},
 		(neon, input, signal) =>
-			neon.branches.createWithCompute(
+			neon.branches.createAndConnect(
 				input.project_id,
 				{
 					name: input.name,
 					parentId: input.parent_id,
-					compute:
-						input.compute === undefined
-							? undefined
-							: {
-									minCu: input.compute.min_cu,
-									maxCu: input.compute.max_cu,
-									suspendTimeoutSeconds:
-										input.compute.suspend_timeout_seconds,
-								},
+					compute: mapCompute(input.compute),
 				},
 				{
 					signal,
@@ -146,6 +231,29 @@ export const createBranchWithComputeTool = (options: ToolClientOptions) =>
 						: { pooled: input.pooled }),
 				},
 			),
+	);
+
+export const createProjectTool = (options: ToolClientOptions) =>
+	bindTool(
+		options,
+		{
+			operationId: "projects.create",
+			id: publishedId("projects.create"),
+			title: "Create project",
+			description:
+				"Create a project. The API always provisions a default branch with read-write compute. The call waits until operation-backed provisioning finishes, up to five minutes by default. Does not return a connection string; use projects.createAndConnect or postgres.connectionString for that.",
+			inputSchema: createProjectInputSchema,
+			annotations: writeAnnotations,
+			requiresApproval: true,
+			metadata: {
+				method: "POST",
+				path: "/projects",
+				stability: "stable",
+				deprecated: false,
+				tags: ["Project"],
+			},
+		},
+		(neon, input, signal) => neon.projects.create(input, { signal }),
 	);
 
 export const createProjectAndConnectTool = (options: ToolClientOptions) =>

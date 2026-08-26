@@ -38,9 +38,10 @@ export {
 } from "./neon/errors.js";
 export type { Page, Paginated } from "./neon/paginate.js";
 export type {
-	BranchWithCompute,
+	BranchConnection,
 	CompareSchemaInput,
-	CreateWithComputeInput,
+	ComputeSettings,
+	CreateAndConnectInput,
 	ResetFromParentInput,
 } from "./neon/resources/branches.js";
 export type {

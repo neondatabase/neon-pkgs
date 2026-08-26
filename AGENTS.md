@@ -245,7 +245,7 @@ written against. `packages/sdk/e2e/` targets exactly that gap across three files
   can only confirm whichever the author picked), and `postgres.connectionString`
   auto-resolving branch, role, and database.
 - **`resources`** — the CRUD spine on one shared project: branch create/get/update/
-  delete, `createWithCompute`, roles (including that `password` returns a bare string
+  delete, `createAndConnect`, roles (including that `password` returns a bare string
   while `resetPassword` returns a `Role`), databases, endpoints, and
   `operations.waitFor` recognising terminal states.
 - **`errors`** — `toNeonError` against real 404 and 401 envelopes, `throwOnError`

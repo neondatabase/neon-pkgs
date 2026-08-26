@@ -24,7 +24,7 @@ const tools = createNeonTools({
 	tools: [
 		"projects.list",
 		"projects.createAndConnect",
-		"branches.createWithCompute",
+		"branches.createAndConnect",
 		"branches.resetFromParent",
 		"branches.compareSchema",
 	],
@@ -70,7 +70,7 @@ Each tool includes its Zod 4 `inputSchema`, published `id`, title, description, 
 Paginated lists call `.all()` and return the item array. Do not pass a cursor; those fields are omitted from the input schema.
 
 ```ts
-const createBranch = createNeonTool("branches.createWithCompute", { apiKey });
+const createBranch = createNeonTool("branches.createAndConnect", { apiKey });
 ```
 
 ## Writes and waiting
@@ -83,7 +83,7 @@ An abort `signal` on `execute` or a wait timeout stops the poll, not the create:
 
 `metadata.method` and `metadata.path` name the first request; extra readiness GETs are not listed there.
 
-These public client methods are not tools: `projects.create`, `branches.create`, `operations.waitFor`, `postgres.roles.password`, and `storage.objects.get`. Use `projects.createAndConnect` and `branches.createWithCompute` for creates that attach compute and return a connection string. Waiting is what the write tools already do.
+These public client methods are not tools: `operations.waitFor`, `postgres.roles.password`, and `storage.objects.get`. Waiting is what the write tools already do. `projects.create` and `branches.create` return the created resource without a connection string; `createAndConnect` returns a URI.
 
 ## Optional host add-ons
 
@@ -127,17 +127,17 @@ This package does not send analytics. Mutating `event.input` does not change a g
 ```ts
 const tools = createNeonTools({
 	apiKey,
-	tools: ["branches.createWithCompute", "projects.list"] as const,
-	names: { "branches.createWithCompute": "create_branch" },
+	tools: ["branches.createAndConnect", "projects.list"] as const,
+	names: { "branches.createAndConnect": "create_branch" },
 	name: (id) => `neon_${id}`,
 });
 ```
 
-Those tools publish as `neon_create_branch` and `neon_list_projects`. The record is still keyed by SDK path (`tools["branches.createWithCompute"]`). MCP and Mastra publish `tool.id`. Eve uses the filename as the model-facing name, so name the file after the published `id`. Duplicate or non-snake-case ids throw, and a `names` key that matches no selected tool throws.
+Those tools publish as `neon_create_branch` and `neon_list_projects`. The record is still keyed by SDK path (`tools["branches.createAndConnect"]`). MCP and Mastra publish `tool.id`. Eve uses the filename as the model-facing name, so name the file after the published `id`. Duplicate or non-snake-case ids throw, and a `names` key that matches no selected tool throws.
 
 ### Project and branch injection
 
-Tools take path parameters as `project_id` and `branch_id`. A host that already knows those values can inject them, including on `branches.createWithCompute`. Without `omitFromSchema`, the published field becomes optional and a caller-supplied value wins. With `omitFromSchema: true`, the field is removed from the published schema and the injector is the only source:
+Tools take path parameters as `project_id` and `branch_id`. A host that already knows those values can inject them, including on `branches.createAndConnect`. Without `omitFromSchema`, the published field becomes optional and a caller-supplied value wins. With `omitFromSchema: true`, the field is removed from the published schema and the injector is the only source:
 
 ```ts
 const tools = createNeonTools({

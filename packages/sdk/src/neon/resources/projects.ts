@@ -365,7 +365,12 @@ export class Projects<DThrow extends boolean> {
 		);
 	}
 
-	/** @apiCall POST /projects */
+	/**
+	 * The API provides no way to skip the default branch or read-write compute.
+	 * This method retains its project-only result; use
+	 * {@link Projects.createAndConnect} or `postgres.connectionString` when a
+	 * connection string is needed.
+	 */
 	create(input?: CreateInput): Promise<Outcome<Project, DThrow>>;
 	create<Throw extends boolean = DThrow>(
 		input: CreateInput | undefined,
@@ -376,7 +381,10 @@ export class Projects<DThrow extends boolean> {
 		opts?: CallOptions,
 	): Promise<Project | NeonResult<Project>> {
 		return this.#ctx.run(
-			opts,
+			{
+				...opts,
+				waitForReadiness: opts?.waitForReadiness ?? true,
+			},
 			(client, signal) =>
 				createProject({
 					client,

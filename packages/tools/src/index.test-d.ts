@@ -175,21 +175,21 @@ uninjectedProject.execute({});
 
 const renamed = createNeonTools({
 	apiKey: "test-key",
-	tools: ["projects.list", "branches.createWithCompute"] as const,
-	names: { "branches.createWithCompute": "create_branch" },
+	tools: ["projects.list", "branches.createAndConnect"] as const,
+	names: { "branches.createAndConnect": "create_branch" },
 	name: (id) => `neon_${id}`,
 });
 expectTypeOf(renamed["projects.list"].id).toEqualTypeOf<string>();
-expectTypeOf(renamed["branches.createWithCompute"].id).toEqualTypeOf<string>();
+expectTypeOf(renamed["branches.createAndConnect"].id).toEqualTypeOf<string>();
 expectTypeOf(tools["projects.list"].id).toEqualTypeOf<"list_projects">();
 
 const mastraRenamed = toMastraTools(renamed);
 expectTypeOf(mastraRenamed.neon_create_branch.id).toEqualTypeOf<string>();
 expectTypeOf(mastraRenamed.neon_list_projects.id).toEqualTypeOf<string>();
 
-const renamedOne = createNeonTool("branches.createWithCompute", {
+const renamedOne = createNeonTool("branches.createAndConnect", {
 	apiKey: "test-key",
-	names: { "branches.createWithCompute": "create_branch" },
+	names: { "branches.createAndConnect": "create_branch" },
 });
 expectTypeOf(renamedOne.id).toEqualTypeOf<string>();
 
@@ -218,17 +218,17 @@ expectTypeOf(createNeonTools(annotatedTools)).toHaveProperty("projects.list");
 
 const createBranch = createNeonTools({
 	apiKey: "test-key",
-	tools: ["branches.createWithCompute"] as const,
+	tools: ["branches.createAndConnect"] as const,
 });
-expectTypeOf(createBranch).toHaveProperty("branches.createWithCompute");
+expectTypeOf(createBranch).toHaveProperty("branches.createAndConnect");
 // @ts-expect-error unselected tools are absent
 createBranch["projects.list"];
-createBranch["branches.createWithCompute"].execute({
+createBranch["branches.createAndConnect"].execute({
 	project_id: "project-id",
 });
 // @ts-expect-error project_id is required without inject
-createBranch["branches.createWithCompute"].execute({});
-createBranch["branches.createWithCompute"]
+createBranch["branches.createAndConnect"].execute({});
+createBranch["branches.createAndConnect"]
 	.execute({ project_id: "project-id" })
 	.then((result) => {
 		expectTypeOf(result.data.connectionString).toEqualTypeOf<string>();
@@ -237,21 +237,21 @@ createBranch["branches.createWithCompute"]
 
 declare const unionOpts:
 	| { apiKey: "test-key"; tools: ["projects.list"] }
-	| { apiKey: "test-key"; tools: ["branches.createWithCompute"] };
+	| { apiKey: "test-key"; tools: ["branches.createAndConnect"] };
 const unionTools = createNeonTools(unionOpts);
 // @ts-expect-error union options do not share projects.list
 unionTools["projects.list"];
-// @ts-expect-error union options do not share branches.createWithCompute
-unionTools["branches.createWithCompute"];
+// @ts-expect-error union options do not share branches.createAndConnect
+unionTools["branches.createAndConnect"];
 
-const createBranchWithCompute = createNeonTool("branches.createWithCompute", {
+const createBranchAndConnect = createNeonTool("branches.createAndConnect", {
 	apiKey: "test-key",
 });
-createBranchWithCompute.execute({
+createBranchAndConnect.execute({
 	project_id: "project-id",
 	name: "feature-x",
 });
-createBranchWithCompute.execute({
+createBranchAndConnect.execute({
 	project_id: "project-id",
 	// @ts-expect-error parentId is not the tool field name
 	parentId: "br-id",
@@ -259,10 +259,38 @@ createBranchWithCompute.execute({
 
 const omittedWorkflow = createNeonTools({
 	apiKey: "test-key",
-	tools: ["branches.createWithCompute"] as const,
+	tools: ["branches.createAndConnect"] as const,
 	inject: { projectId: "granted-project", omitFromSchema: true },
 });
-omittedWorkflow["branches.createWithCompute"].execute({ name: "feature-x" });
+omittedWorkflow["branches.createAndConnect"].execute({ name: "feature-x" });
+
+const createBranchOnly = createNeonTool("branches.create", {
+	apiKey: "test-key",
+});
+createBranchOnly.execute({ project_id: "project-id", no_compute: true });
+createBranchOnly.execute({ project_id: "project-id" }).then((result) => {
+	expectTypeOf(result.data.id).toEqualTypeOf<string>();
+	// @ts-expect-error create does not return a connection string
+	result.data.connectionString;
+});
+// @ts-expect-error pooled is not on create
+createBranchOnly.execute({ project_id: "project-id", pooled: false });
+createBranchAndConnect.execute({
+	project_id: "project-id",
+	// @ts-expect-error no_compute is not on createAndConnect
+	no_compute: true,
+});
+
+const createProjectOnly = createNeonTool("projects.create", {
+	apiKey: "test-key",
+});
+createProjectOnly.execute({ name: "x" }).then((result) => {
+	expectTypeOf(result.data.id).toEqualTypeOf<string>();
+	// @ts-expect-error create does not return a connection string
+	result.data.connectionString;
+});
+// @ts-expect-error no_compute is not on projects.create
+createProjectOnly.execute({ name: "x", no_compute: true });
 
 // @ts-expect-error tools is required
 createNeonTools({ apiKey: "test-key" });
