@@ -15,11 +15,11 @@ export const planInit = (input: InitPlanInput): InitStep[] => {
 		const steps: InitStep[] = [
 			input.yes
 				? ["bootstrap", ".", "--default", "--no-link"]
-				: ["bootstrap", "."],
+				: ["bootstrap", ".", "--no-link"],
 			["skills", "update", ...y],
 		];
-		if (input.yes && !input.linked) {
-			steps.push(["link", "--yes"]);
+		if (!input.linked) {
+			steps.push(input.yes ? ["link", "--yes"] : ["link"]);
 		}
 		steps.push(["mcp", ...y]);
 		return steps;

@@ -721,8 +721,9 @@ The target directory must be empty unless you pass `--force` (a lone `.git` is i
 An empty directory (nothing except `.git`) runs:
 
 ```bash
-neon bootstrap .
+neon bootstrap . --no-link
 neon skills update
+neon link    # skipped when .neon already has a projectId
 neon mcp
 ```
 
@@ -739,7 +740,7 @@ $ neon init
 $ neon init -y
 ```
 
-`-y` forwards `-y` to `skills` and `mcp`, `--default --no-link` to `bootstrap`, and `--yes` to `link`. After an empty `-y` bootstrap it also runs `link --yes`, because `--default` does not link. `link --yes` only skips the "already linked" confirmation; it still asks for a project unless one is already linked.
+`-y` forwards `-y` to `skills` and `mcp`, `--default --no-link` to `bootstrap`, and `--yes` to `link`. Bootstrap is always `--no-link` so the following `link` step owns the project pin and can receive `--api-key`. `link --yes` only skips the "already linked" confirmation; it still asks for a project unless one is already linked.
 
 A failed step stops the rest. `--profile` and `--config-dir` are forwarded to each child. `--output` is not.
 

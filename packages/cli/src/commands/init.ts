@@ -44,7 +44,7 @@ export const builder = (yargs: yargs.Argv) =>
 		})
 		.example(
 			"$0 init",
-			"Empty dir: bootstrap, then skills update, then mcp",
+			"Empty dir: bootstrap --no-link, then skills update, then link, then mcp",
 		)
 		.example(
 			"$0 init",

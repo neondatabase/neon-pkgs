@@ -21,10 +21,11 @@ describe("directoryIsEmpty", () => {
 });
 
 describe("planInit", () => {
-	test("empty interactive: bootstrap, skills update, mcp — no link", () => {
+	test("empty interactive: bootstrap --no-link, skills update, link, mcp", () => {
 		expect(planInit({ empty: true, linked: false, yes: false })).toEqual([
-			["bootstrap", "."],
+			["bootstrap", ".", "--no-link"],
 			["skills", "update"],
+			["link"],
 			["mcp"],
 		]);
 	});
@@ -35,6 +36,14 @@ describe("planInit", () => {
 			["skills", "update", "-y"],
 			["link", "--yes"],
 			["mcp", "-y"],
+		]);
+	});
+
+	test("empty interactive already linked skips link", () => {
+		expect(planInit({ empty: true, linked: true, yes: false })).toEqual([
+			["bootstrap", ".", "--no-link"],
+			["skills", "update"],
+			["mcp"],
 		]);
 	});
 

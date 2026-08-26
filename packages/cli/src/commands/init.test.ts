@@ -39,7 +39,7 @@ describe("init handler", () => {
 		vi.resetModules();
 	});
 
-	test("empty directory runs bootstrap, skills update, mcp", async () => {
+	test("empty directory runs bootstrap --no-link, skills update, link, mcp", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-empty-"));
 		const run = vi.fn().mockResolvedValue(true);
 		const { handler } = await import("./init.js");
@@ -55,9 +55,14 @@ describe("init handler", () => {
 		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
 			"bootstrap",
 			"skills",
+			"link",
 			"mcp",
 		]);
-		expect(run.mock.calls[0][0].slice(0, 2)).toEqual(["bootstrap", "."]);
+		expect(run.mock.calls[0][0].slice(0, 3)).toEqual([
+			"bootstrap",
+			".",
+			"--no-link",
+		]);
 		expect(run.mock.calls[1][0].slice(0, 2)).toEqual(["skills", "update"]);
 	});
 
