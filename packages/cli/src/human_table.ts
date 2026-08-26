@@ -79,6 +79,18 @@ export function displayWidth(s: string): number {
 	return width;
 }
 
+function presentFields(
+	data: readonly unknown[],
+	fields: readonly string[],
+): string[] {
+	return fields.filter((field) =>
+		data.some((item) => {
+			const value = fieldValue(item, field);
+			return value !== undefined && value !== "";
+		}),
+	);
+}
+
 export function formatHumanChunk(chunk: HumanTableChunk): string {
 	const arrayData = Array.isArray(chunk.data) ? chunk.data : [chunk.data];
 	const isList = Array.isArray(chunk.data);
@@ -96,12 +108,23 @@ export function formatHumanChunk(chunk: HumanTableChunk): string {
 		return out;
 	}
 
-	const fields = chunk.fields.filter((field) =>
-		arrayData.some((item) => {
-			const value = fieldValue(item, field);
-			return value !== undefined && value !== "";
-		}),
-	);
+	if (isList) {
+		const fields = presentFields(arrayData, chunk.fields);
+		if (fields.length) {
+			const headers = fields.map(titleCaseField);
+			const rows = arrayData.map((item) =>
+				fields.map((field) =>
+					cellText(item, field, chunk.renderColumns),
+				),
+			);
+			out +=
+				formatColumns(headers, rows, naturalWidths(headers, rows)) +
+				"\n";
+		}
+		return out;
+	}
+
+	const fields = presentFields(arrayData, chunk.fields);
 	if (!fields.length) {
 		return out;
 	}
@@ -110,10 +133,7 @@ export function formatHumanChunk(chunk: HumanTableChunk): string {
 	const rows = arrayData.map((item) =>
 		fields.map((field) => cellText(item, field, chunk.renderColumns)),
 	);
-
-	const body = isList
-		? formatList(headers, rows, chunk.width)
-		: formatStacked(headers, rows, chunk.width);
+	const body = formatStacked(headers, rows, chunk.width);
 	if (body) {
 		out += body + "\n";
 	}
@@ -122,65 +142,6 @@ export function formatHumanChunk(chunk: HumanTableChunk): string {
 
 function formatTitle(title: string, colorTitle: boolean): string {
 	return colorTitle ? chalk.bold(title) : title;
-}
-
-function formatList(
-	headers: string[],
-	rows: string[][],
-	width: number | undefined,
-): string {
-	if (headers.length === 1) {
-		return formatOneColumn(
-			headers[0] ?? "",
-			rows.map((row) => row[0] ?? ""),
-		);
-	}
-	if (width === undefined) {
-		return formatColumns(headers, rows, naturalWidths(headers, rows));
-	}
-	for (let n = headers.length; n >= 2; n--) {
-		const subsetHeaders = headers.slice(0, n);
-		const subsetRows = rows.map((row) => row.slice(0, n));
-		const natural = naturalWidths(subsetHeaders, subsetRows);
-		if (rowWidth(natural) <= width) {
-			return formatColumns(subsetHeaders, subsetRows, natural);
-		}
-		const fitted = tryFit(subsetHeaders, subsetRows, width);
-		if (fitted === undefined) {
-			continue;
-		}
-		const onlyLastShrunk = natural
-			.slice(0, n - 1)
-			.every((col, i) => fitted[i] === col);
-		if (!onlyLastShrunk) {
-			continue;
-		}
-		return formatColumns(
-			subsetHeaders.map((cell, i) => truncateTo(cell, fitted[i] ?? 0)),
-			subsetRows.map((row) =>
-				row.map((cell, i) => truncateTo(cell, fitted[i] ?? 0)),
-			),
-			fitted,
-		);
-	}
-	return formatStacked(headers, rows, width);
-}
-
-function rowWidth(widths: number[]): number {
-	if (widths.length === 0) {
-		return 0;
-	}
-	return (
-		widths.reduce((sum, col) => sum + col, 0) + (widths.length - 1) * GUTTER
-	);
-}
-
-function formatOneColumn(header: string, values: string[]): string {
-	const lines = [chalk.green(header)];
-	for (const value of values) {
-		lines.push(value);
-	}
-	return lines.join("\n");
 }
 
 function formatColumns(
@@ -192,9 +153,7 @@ function formatColumns(
 		cells
 			.map((cell, i) => {
 				const width = widths[i] ?? 0;
-				return i === cells.length - 1
-					? truncateTo(cell, width)
-					: padEndWidth(cell, width);
+				return i === cells.length - 1 ? cell : padEndWidth(cell, width);
 			})
 			.join(" ".repeat(GUTTER))
 			.trimEnd();
@@ -240,40 +199,6 @@ function stackedLine(
 	labelWidth: number,
 ): string {
 	return `${padEndWidth(header, labelWidth)}${" ".repeat(GUTTER)}${value}`;
-}
-
-function tryFit(
-	headers: string[],
-	rows: string[][],
-	width: number,
-): number[] | undefined {
-	const n = headers.length;
-	if (n === 0) {
-		return [];
-	}
-	const gutters = (n - 1) * GUTTER;
-	if (width <= gutters) {
-		return undefined;
-	}
-	const budget = width - gutters;
-	if (budget < n * MIN_COL) {
-		return undefined;
-	}
-	const widths = naturalWidths(headers, rows);
-	let overflow = widths.reduce((sum, col) => sum + col, 0) - budget;
-	if (overflow <= 0) {
-		return widths;
-	}
-	for (let i = n - 1; i >= 0 && overflow > 0; i--) {
-		const current = widths[i] ?? 0;
-		const take = Math.min(Math.max(current - MIN_COL, 0), overflow);
-		widths[i] = current - take;
-		overflow -= take;
-	}
-	if (overflow > 0) {
-		return undefined;
-	}
-	return widths;
 }
 
 function naturalWidths(headers: string[], rows: string[][]): number[] {

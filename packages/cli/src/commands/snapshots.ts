@@ -21,8 +21,8 @@ export const SNAPSHOT_FIELDS: readonly (keyof Snapshot)[] = [
 	"id",
 	"name",
 	"source_branch_id",
-	"created_at",
 	"expires_at",
+	"created_at",
 ];
 
 const SCHEDULE_FIELDS: readonly (keyof BackupScheduleItem)[] = [

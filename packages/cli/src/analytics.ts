@@ -5,7 +5,7 @@ import { type AuthContext, getAuthContext } from "./auth_context.js";
 import { credentialsPath } from "./config.js";
 import { isCurrentBranchProbe } from "./context.js";
 import { storeFor } from "./credential_io.js";
-import { getGithubEnvVars, isCi } from "./env.js";
+import { getCliAgent, getGithubEnvVars, isCi } from "./env.js";
 import type { ErrorCode } from "./errors.js";
 import { log } from "./log.js";
 import pkg from "./pkg.js";
@@ -124,12 +124,14 @@ type AnalyticsEventProperties = {
 		output: string | undefined;
 	};
 	ci: boolean;
+	agent: ReturnType<typeof getCliAgent>;
 	githubEnvVars: ReturnType<typeof getGithubEnvVars>;
 };
 
 type ErrorEventContext = {
 	version: string;
 	ci: boolean;
+	agent: ReturnType<typeof getCliAgent>;
 };
 
 /**
@@ -331,6 +333,7 @@ const getErrorAnalyticsEventContext = (
 ): ErrorEventContext => ({
 	version: pkg.version,
 	ci: isCi(),
+	agent: getCliAgent(process.env),
 });
 
 export const getAnalyticsEventProperties = (
@@ -342,5 +345,6 @@ export const getAnalyticsEventProperties = (
 		output: args.output,
 	},
 	ci: isCi(),
+	agent: getCliAgent(process.env),
 	githubEnvVars: getGithubEnvVars(process.env),
 });

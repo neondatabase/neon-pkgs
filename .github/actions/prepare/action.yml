@@ -4,10 +4,8 @@ name: Prepare
 
 runs:
   steps:
-    # The protected runner group has no egress to the public npm registry — it
-    # can only reach the Databricks JFrog mirror. Mint a short-lived token via
-    # OIDC and point npm/pnpm at the mirror before anything fetches packages
-    # (including pnpm's own self-installer). Mirrors neondatabase/neonctl.
+    # Protected runners use the Databricks JFrog mirror because
+    # registry.npmjs.org resets TLS. Configure it before pnpm installs itself.
     # The caller must grant `id-token: write`.
     - name: Setup JFrog CLI with OIDC
       id: setup-jfrog

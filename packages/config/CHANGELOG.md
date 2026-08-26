@@ -1,5 +1,27 @@
 # @neondatabase/config
 
+## 1.0.4
+
+### Patch Changes
+
+- Updated dependencies [9b322e7]
+  - @neon/sdk@2.3.0
+
+## 1.0.3
+
+### Patch Changes
+
+- 512baf3: Add `neon claim` and its `claimable` alias for creating, using, claiming, listing, and deleting temporary Claimable Neon projects without an account. `status`, `accept`, and `delete` take an optional project id from `claim list`. `list` prints `state` from the assertion clock and the project expiry, and `delete` drops a local record after the identity assertion expires. `create` prints CLI service names and `project_expires_at`.
+
+  Recognize Claimable Neon capability errors in Config-as-Code so unavailable pre-claim services keep their actionable claim guidance instead of being reported as API-key failures.
+
+## 1.0.2
+
+### Patch Changes
+
+- Updated dependencies [93b93dc]
+  - @neon/sdk@2.2.0
+
 ## 1.0.1
 
 ### Patch Changes

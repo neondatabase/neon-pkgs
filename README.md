@@ -33,7 +33,7 @@ If you're looking for a single package's docs, see its own `README.md` under `pa
 | Package | Description |
 | --- | --- |
 | `@neon/sdk` | The official TypeScript SDK for the Neon API — a modern, Fetch-based client generated from Neon's OpenAPI spec (successor to `@neondatabase/api-client`). |
-| `@neon/tools` | Generated, type-safe agent tools for every Neon Management API operation, with MCP, Eve, and Mastra adapters. |
+| `@neon/tools` | Type-safe agent tools for the `@neon/sdk` ergonomic client, with MCP, Eve, and Mastra adapters. |
 | `@neon/functions` | Runtime helpers for Neon Functions (e.g. a `waitUntil` primitive for deferring work past a response). |
 | `@neon/ai-sdk-provider` | Community [Vercel AI SDK](https://ai-sdk.dev) provider for the Neon AI Gateway. |
 

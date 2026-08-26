@@ -29,8 +29,10 @@ type Fixtures = {
 			 * a mock server in the loop.
 			 */
 			unreachableHost?: boolean;
+			apiKey?: string | false;
+			snapshot?: boolean;
 		},
-	) => Promise<void>;
+	) => Promise<{ stdout: string; stderr: string; code: number | null }>;
 };
 
 /**
@@ -117,9 +119,10 @@ export const test = originalTest.extend<Fixtures>({
 					apiHost,
 					"--output",
 					options.output ?? (options.outputTable ? "table" : "yaml"),
-					"--api-key",
-					"test-key",
 					"--no-analytics",
+					...(options.apiKey === false
+						? []
+						: ["--api-key", options.apiKey ?? "test-key"]),
 					...args,
 				],
 				{
@@ -132,7 +135,11 @@ export const test = originalTest.extend<Fixtures>({
 				},
 			);
 
-			return new Promise<void>((resolve, reject) => {
+			return new Promise<{
+				stdout: string;
+				stderr: string;
+				code: number | null;
+			}>((resolve, reject) => {
 				cp.stdout?.on("data", (data: Buffer) => {
 					output += data.toString();
 				});
@@ -150,7 +157,9 @@ export const test = originalTest.extend<Fixtures>({
 				cp.on("close", (code) => {
 					try {
 						expect(code).toBe(options?.code ?? 0);
-						expect(output).toMatchSnapshot();
+						if (options.snapshot !== false) {
+							expect(output).toMatchSnapshot();
+						}
 						if (options.stderr !== undefined) {
 							expect(
 								strip(error).replace(/\s+/g, " ").trim(),
@@ -162,7 +171,7 @@ export const test = originalTest.extend<Fixtures>({
 									: options.stderr,
 							);
 						}
-						resolve();
+						resolve({ stdout: output, stderr: error, code });
 					} catch (err) {
 						reject(
 							err instanceof Error ? err : new Error(String(err)),

@@ -2716,6 +2716,19 @@ export const zSendNeonAuthTestEmailRequest = z.strictObject({
     })
 });
 
+/**
+ * Request to test the branch's saved email provider. Only the recipient is supplied; the stored
+ * SMTP settings and password are used server-side.
+ *
+ */
+export const zSendNeonAuthEmailProviderTestRequest = z.strictObject({
+    recipient_email: z.email().min(1).max(256).register(z.globalRegistry, {
+        description: 'The email address to send the test email to.'
+    })
+}).register(z.globalRegistry, {
+    description: 'Request to test the branch\'s saved email provider. Only the recipient is supplied; the stored\nSMTP settings and password are used server-side.\n'
+});
+
 export const zSendNeonAuthTestEmailResponse = z.strictObject({
     success: z.boolean().register(z.globalRegistry, {
         description: 'Whether the test email was sent successfully.'
@@ -4147,6 +4160,17 @@ export const zUpdateNeonAuthEmailServerPath = z.strictObject({
 export const zSendNeonAuthTestEmailBody = zSendNeonAuthTestEmailRequest;
 
 export const zSendNeonAuthTestEmailPath = z.strictObject({
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
+        description: 'The Neon project ID'
+    }),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
+        description: 'The Neon branch ID'
+    })
+});
+
+export const zSendNeonAuthEmailProviderTestBody = zSendNeonAuthEmailProviderTestRequest;
+
+export const zSendNeonAuthEmailProviderTestPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).register(z.globalRegistry, {
         description: 'The Neon project ID'
     }),

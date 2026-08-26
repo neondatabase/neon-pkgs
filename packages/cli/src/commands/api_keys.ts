@@ -427,6 +427,7 @@ const revoke = async (props: RevokeProps) => {
 export const orgIdForProject = async (
 	client: NeonApiClient,
 	projectId: string,
+	usage: "api-keys" | "mcp" = "api-keys",
 ): Promise<string> => {
 	let orgId: string | undefined;
 	try {
@@ -438,7 +439,9 @@ export const orgIdForProject = async (
 		if (isNeonApiError(err) && err.status === 404) {
 			throw new Error(
 				projectId.startsWith("org-")
-					? `Project ${projectId} not found. That looks like an organization id. Pass it as --org-id instead.`
+					? usage === "mcp"
+						? `Project ${projectId} not found. That looks like an organization id. neon mcp takes a project id on --project-id.`
+						: `Project ${projectId} not found. That looks like an organization id. Pass it as --org-id instead.`
 					: `Project ${projectId} not found. Check the id with \`neon projects list\`.`,
 			);
 		}
@@ -446,7 +449,9 @@ export const orgIdForProject = async (
 	}
 	if (!orgId) {
 		throw new Error(
-			`Project ${projectId} does not belong to an organization, so it cannot have a project-scoped API key. Omit --project-id to create an account key.`,
+			usage === "mcp"
+				? `Project ${projectId} does not belong to an organization, so it cannot have a project-scoped API key. Pass --oauth to pin tools without minting, or omit --project-id to mint an account-wide key.`
+				: `Project ${projectId} does not belong to an organization, so it cannot have a project-scoped API key. Omit --project-id to create an account key.`,
 		);
 	}
 	return orgId;

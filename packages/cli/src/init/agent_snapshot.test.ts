@@ -344,7 +344,8 @@ async function runInit(
 		});
 	}
 
-	const child = spawn(process.execPath, [CLI, "init", ...args], {
+	const cliArgs = [CLI, "--no-analytics", "init", ...args];
+	const child = spawn(process.execPath, cliArgs, {
 		cwd,
 		stdio: ["ignore", "pipe", "pipe"],
 		env: {
@@ -355,7 +356,6 @@ async function runInit(
 			NEON_CONFIG_DIR: configDir,
 			NEON_STUB_LOG: stubLog,
 			NEON_BOOTSTRAP_MANIFEST_URL: manifestUrl,
-			NEON_NO_ANALYTICS: "1",
 			CI: "true",
 			NO_COLOR: "1",
 			FORCE_COLOR: "0",

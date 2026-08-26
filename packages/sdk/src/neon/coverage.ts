@@ -42,6 +42,8 @@ export const WRAPPED: ReadonlySet<string> = new Set([
 	"deleteProjectBranch",
 	"setDefaultProjectBranch",
 	"finalizeRestoreBranch",
+	"restoreProjectBranch",
+	"getProjectBranchSchemaComparison",
 	// logs (branch-scoped)
 	"queryProjectBranchLogs",
 	"listProjectBranchLogFields",
@@ -277,6 +279,7 @@ export const EXPECTED_OPERATIONS: ReadonlySet<string> = new Set([
 	"revokeCredential",
 	"revokeOrgApiKey",
 	"revokePermissionFromProject",
+	"sendNeonAuthEmailProviderTest",
 	"sendNeonAuthTestEmail",
 	"setDefaultProjectBranch",
 	"setOrganizationSpendingLimit",

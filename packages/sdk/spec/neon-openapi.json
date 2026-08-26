@@ -2810,7 +2810,9 @@
             ],
             "post": {
                 "summary": "Send test email",
-                "description": "Sends a test email using the configured email server settings to verify SMTP connectivity and credentials.\nThe request body must include the SMTP server settings\n(`host`, `port`, `username`, `password`, `sender_email`, `sender_name`) and the `recipient_email` address.\n",
+                "description": "Sends a test email using the SMTP server settings supplied in the request body to verify connectivity and credentials.\nThe request body must include the full SMTP server settings\n(`host`, `port`, `username`, `password`, `sender_email`, `sender_name`) and the `recipient_email` address.\n\nDeprecated: to test a branch's already-saved configuration, use `sendNeonAuthEmailProviderTest`, which\nreuses the stored SMTP password server-side so the caller never has to re-supply (or be able to read) it.\nThis endpoint remains available for testing an unsaved full configuration and for non-Better-Auth providers.\n",
+                "deprecated": true,
+                "x-sunset": "2027-02-28",
                 "tags": [
                     "Auth"
                 ],
@@ -2821,6 +2823,64 @@
                         "application/json": {
                             "schema": {
                                 "$ref": "#/components/schemas/SendNeonAuthTestEmailRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Response with the result of the test email send",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SendNeonAuthTestEmailResponse"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/GeneralError"
+                    }
+                }
+            }
+        },
+        "/projects/{project_id}/branches/{branch_id}/auth/email_provider/test": {
+            "parameters": [
+                {
+                    "name": "project_id",
+                    "in": "path",
+                    "description": "The Neon project ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    }
+                },
+                {
+                    "name": "branch_id",
+                    "in": "path",
+                    "description": "The Neon branch ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    }
+                }
+            ],
+            "post": {
+                "summary": "Send test email using the saved email provider",
+                "description": "Sends a test email using the branch's already-saved custom SMTP configuration. Only the\n`recipient_email` is provided \u2014 the stored SMTP settings and password are used server-side,\nso the caller does not need to re-supply (or be able to read) the password. This avoids the\nGET response's masked password being sent back, which would fail SMTP authentication.\n\nRequires a configured custom SMTP provider on a Better Auth integration. A shared provider,\na missing configuration, or a non-Better-Auth integration is rejected.\n",
+                "tags": [
+                    "Auth"
+                ],
+                "x-stability-level": "beta",
+                "operationId": "sendNeonAuthEmailProviderTest",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SendNeonAuthEmailProviderTestRequest"
                             }
                         }
                     },
@@ -15460,6 +15520,22 @@
                         "type": "string",
                         "description": "Display name shown as the sender in outgoing emails."
                     },
+                    "recipient_email": {
+                        "description": "The email address to send the test email to.",
+                        "type": "string",
+                        "format": "email",
+                        "minLength": 1,
+                        "maxLength": 256
+                    }
+                }
+            },
+            "SendNeonAuthEmailProviderTestRequest": {
+                "type": "object",
+                "description": "Request to test the branch's saved email provider. Only the recipient is supplied; the stored\nSMTP settings and password are used server-side.\n",
+                "required": [
+                    "recipient_email"
+                ],
+                "properties": {
                     "recipient_email": {
                         "description": "The email address to send the test email to.",
                         "type": "string",

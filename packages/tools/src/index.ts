@@ -1,9 +1,4 @@
-import { createNeonClient, type NeonConfig, NeonError } from "@neon/sdk";
-import {
-	missingBearerCredential,
-	type NeonBearerCredential,
-	requireBearerCredential,
-} from "./lib/auth.js";
+import { NeonError } from "@neon/sdk";
 import {
 	applyToolCustomization,
 	assertToolCustomizeOptions,
@@ -11,12 +6,19 @@ import {
 	type InjectedNeonTool,
 	type NeonToolCustomizeOptions,
 	type NeonToolInjectOptions,
+	type NeonToolNameOverrides,
 } from "./lib/customize.js";
 import {
-	type NeonOperationId,
-	operationFactories,
-	operationIds,
-} from "./operations.gen.js";
+	isNeonToolId,
+	type NeonToolId,
+	type PublishedId,
+	publishedId,
+	type ToolClientOptions,
+	type ToolFactory,
+	toolFactories,
+	toolIds,
+	unpublishedToolError,
+} from "./lib/ergonomic/index.js";
 
 export type { NeonBearerCredential } from "./lib/auth.js";
 export type {
@@ -26,6 +28,8 @@ export type {
 	NeonToolDescriptionSource,
 	NeonToolInjectOptions,
 	NeonToolInjectValue,
+	NeonToolNameOverrides,
+	NeonToolNameSource,
 	NeonToolOnExecute,
 	NeonToolOnExecuteEvent,
 } from "./lib/customize.js";
@@ -38,129 +42,228 @@ export type {
 	NeonToolMetadata,
 	NeonToolResult,
 } from "./lib/operation.js";
-export type { NeonOperationId };
-export { NeonError, operationIds };
+export type { NeonToolId, PublishedId };
+export { NeonError, publishedId, toolIds };
 
-type OperationFactories = typeof operationFactories;
+type ToolFactories = typeof toolFactories;
 
-export type NeonTools<Operations extends readonly NeonOperationId[]> = {
-	[Operation in Operations[number]]: ReturnType<
-		OperationFactories[Operation]
-	>;
+export type NeonTools<Tools extends readonly NeonToolId[] = []> = {
+	[Tool in Tools[number]]: ReturnType<ToolFactories[Tool]>;
 };
 
-export type InjectedNeonTools<
-	Operations extends readonly NeonOperationId[],
-	Inject,
-> = {
-	[Operation in Operations[number]]: InjectedNeonTool<
-		ReturnType<OperationFactories[Operation]>,
+export type InjectedNeonTools<Tools extends readonly NeonToolId[], Inject> = {
+	[Tool in Tools[number]]: InjectedNeonTool<
+		ReturnType<ToolFactories[Tool]>,
 		Inject
 	>;
 };
 
+type WithPublishedId<Tool> = Tool extends { id: string }
+	? Omit<Tool, "id"> & { id: string }
+	: Tool;
+
 export interface NeonToolsClientOptions
-	extends Pick<NeonConfig, "baseUrl" | "fetch">,
-		NeonToolCustomizeOptions {
-	apiKey?: NeonBearerCredential;
-}
+	extends ToolClientOptions,
+		Omit<NeonToolCustomizeOptions, "name" | "names"> {}
 
-export interface CreateNeonToolsOptions<
-	Operations extends readonly NeonOperationId[],
-> extends NeonToolsClientOptions {
-	operations: Operations;
-}
-
-const createRawClient = (options: NeonToolsClientOptions) =>
-	createNeonClient({
-		apiKey:
-			options.apiKey === undefined
-				? missingBearerCredential
-				: requireBearerCredential(options.apiKey),
-		...(options.baseUrl === undefined ? {} : { baseUrl: options.baseUrl }),
-		...(options.fetch === undefined ? {} : { fetch: options.fetch }),
-	}).client;
-
-const operationFactoryFor = (operationId: NeonOperationId) => {
-	const knownOperationId = operationIds.find(
-		(candidate) => candidate === operationId,
-	);
-	if (knownOperationId === undefined) {
-		throw new TypeError(`Unknown Neon operation "${operationId}".`);
-	}
-	return operationFactories[knownOperationId];
+type CreateNeonToolsInput = NeonToolsClientOptions & {
+	tools: readonly NeonToolId[];
 };
 
-function assertNeonTools<Operations extends readonly NeonOperationId[]>(
-	value: unknown,
-	operations: Operations,
-): asserts value is NeonTools<Operations> {
-	if (typeof value !== "object" || value === null) {
-		throw new TypeError("Expected generated Neon tools to be an object.");
+export type CreateNeonToolsOptions<
+	Tools extends readonly NeonToolId[] = readonly NeonToolId[],
+> = NeonToolsClientOptions & { tools: Tools };
+
+type SelectedTools<T> = T extends {
+	tools: infer S extends readonly NeonToolId[];
+}
+	? S
+	: [];
+
+type NeonToolsFor<T, Inject> = T extends CreateNeonToolsInput
+	? Inject extends NeonToolInjectOptions
+		? InjectedNeonTools<SelectedTools<T>, Inject>
+		: NeonTools<SelectedTools<T>>
+	: never;
+
+type ToolForId<Id extends NeonToolId> = ReturnType<ToolFactories[Id]>;
+
+type BindableToolsInput<T extends CreateNeonToolsInput> = T & {
+	name?: (id: string) => string;
+	names?: NeonToolNameOverrides;
+};
+
+const assertKnownNameKeys = (
+	names: NeonToolNameOverrides | undefined,
+	tools: ReadonlyArray<{ operationId: string; id: string }>,
+): void => {
+	if (names === undefined || typeof names === "function") {
+		return;
 	}
-	for (const operationId of operations) {
-		if (!(operationId in value)) {
-			throw new TypeError(
-				`Missing generated Neon tool "${operationId}".`,
-			);
+	const known = new Set(tools.flatMap((tool) => [tool.operationId, tool.id]));
+	const unknown = Object.keys(names).filter((key) => !known.has(key));
+	if (unknown.length > 0) {
+		throw new TypeError(
+			`Unknown Neon tool name override: ${unknown.join(", ")}`,
+		);
+	}
+};
+
+function assertNeonTools<Tools extends readonly NeonToolId[]>(
+	value: unknown,
+	tools: Tools,
+): asserts value is NeonTools<Tools> {
+	if (typeof value !== "object" || value === null) {
+		throw new TypeError("Expected Neon tools to be an object.");
+	}
+	for (const toolId of tools) {
+		if (!(toolId in value)) {
+			throw new TypeError(`Missing Neon tool "${toolId}".`);
 		}
 	}
 }
 
-const bindTools = <Operations extends readonly NeonOperationId[]>(
-	options: CreateNeonToolsOptions<Operations>,
-): NeonTools<Operations> => {
+const factoryFor = (id: NeonToolId): ToolFactory => {
+	const known = toolIds.find((candidate) => candidate === id);
+	if (known === undefined) {
+		throw unpublishedToolError(id);
+	}
+	return toolFactories[known];
+};
+
+const bindTools = <T extends CreateNeonToolsInput>(
+	options: BindableToolsInput<T>,
+): NeonTools<SelectedTools<T>> => {
 	assertToolCustomizeOptions(options);
-	const selected = new Set<NeonOperationId>();
-	const selectedFactories = options.operations.map((operationId) => {
-		if (selected.has(operationId)) {
-			throw new Error(`Duplicate Neon operation "${operationId}"`);
+	const selected = options.tools;
+	if (selected === undefined || selected.length === 0) {
+		throw new TypeError("createNeonTools requires at least one tool");
+	}
+
+	const seen = new Set<NeonToolId>();
+	const rawEntries = selected.map((toolId) => {
+		if (seen.has(toolId)) {
+			throw new Error(`Duplicate Neon tool "${toolId}"`);
 		}
-		selected.add(operationId);
-		return [operationId, operationFactoryFor(operationId)] as const;
+		seen.add(toolId);
+		return [toolId, factoryFor(toolId)(options)] as const;
 	});
-	const client = createRawClient(options);
-	const entries = selectedFactories.map(([operationId, factory]) => {
-		const tool = factory(client);
+
+	assertKnownNameKeys(
+		options.names,
+		rawEntries.map(([, tool]) => tool),
+	);
+	const entries = rawEntries.map(([id, tool]) => {
 		return [
-			operationId,
+			id,
 			hasToolCustomization(options)
 				? applyToolCustomization(tool, options)
 				: tool,
 		] as const;
 	});
+	const publishedIds = new Map<string, string>();
+	for (const [id, tool] of entries) {
+		const previous = publishedIds.get(tool.id);
+		if (previous !== undefined) {
+			throw new Error(
+				`Duplicate Neon tool id "${tool.id}" for ${previous}, ${id}`,
+			);
+		}
+		publishedIds.set(tool.id, id);
+	}
 	const tools: unknown = Object.fromEntries(entries);
-	assertNeonTools(tools, options.operations);
-	return tools;
+	assertNeonTools(tools, selected);
+	return tools as NeonTools<SelectedTools<T>>;
 };
 
-export const createNeonTools = <
-	const Operations extends readonly NeonOperationId[],
+type NamedNeonTools<Tools extends readonly NeonToolId[], Inject> = {
+	[Tool in Tools[number]]: WithPublishedId<
+		Inject extends NeonToolInjectOptions
+			? InjectedNeonTool<ReturnType<ToolFactories[Tool]>, Inject>
+			: ReturnType<ToolFactories[Tool]>
+	>;
+};
+
+type NamedNeonTool<Id extends NeonToolId, Inject> = WithPublishedId<
+	Inject extends NeonToolInjectOptions
+		? InjectedNeonTool<ToolForId<Id>, Inject>
+		: ToolForId<Id>
+>;
+
+type NamedNeonToolsFor<T, Inject> = T extends CreateNeonToolsInput
+	? NamedNeonTools<SelectedTools<T>, Inject>
+	: never;
+
+export function createNeonTools<
+	const T extends CreateNeonToolsInput,
 	const Inject extends NeonToolInjectOptions | undefined = undefined,
 >(
-	options: CreateNeonToolsOptions<Operations> & { inject?: Inject },
-): Inject extends NeonToolInjectOptions
-	? InjectedNeonTools<Operations, Inject>
-	: NeonTools<Operations> =>
-	bindTools(options) as Inject extends NeonToolInjectOptions
-		? InjectedNeonTools<Operations, Inject>
-		: NeonTools<Operations>;
+	options: T & { inject?: Inject } & (
+			| { name: (id: string) => string; names?: NeonToolNameOverrides }
+			| { names: NeonToolNameOverrides; name?: (id: string) => string }
+		),
+): NamedNeonToolsFor<T, Inject>;
+export function createNeonTools<
+	const T extends CreateNeonToolsInput,
+	const Inject extends NeonToolInjectOptions | undefined = undefined,
+>(options: T & { inject?: Inject }): NeonToolsFor<T, Inject>;
+export function createNeonTools<
+	const T extends CreateNeonToolsInput,
+	const Inject extends NeonToolInjectOptions | undefined = undefined,
+>(
+	options: T & { inject?: Inject },
+): NamedNeonToolsFor<T, Inject> | NeonToolsFor<T, Inject> {
+	return bindTools(options as BindableToolsInput<T>) as
+		| NamedNeonToolsFor<T, Inject>
+		| NeonToolsFor<T, Inject>;
+}
 
 export function createNeonTool<
-	const Operation extends NeonOperationId,
+	const Id extends NeonToolId,
 	const Inject extends NeonToolInjectOptions | undefined = undefined,
 >(
-	operationId: Operation,
+	id: Id,
+	options: NeonToolsClientOptions & {
+		inject?: Inject;
+	} & (
+			| { name: (id: string) => string; names?: NeonToolNameOverrides }
+			| { names: NeonToolNameOverrides; name?: (id: string) => string }
+		),
+): NamedNeonTool<Id, Inject>;
+export function createNeonTool<
+	const Id extends NeonToolId,
+	const Inject extends NeonToolInjectOptions | undefined = undefined,
+>(
+	id: Id,
 	options: NeonToolsClientOptions & { inject?: Inject },
 ): Inject extends NeonToolInjectOptions
-	? InjectedNeonTool<ReturnType<OperationFactories[Operation]>, Inject>
-	: ReturnType<OperationFactories[Operation]> {
+	? InjectedNeonTool<ToolForId<Id>, Inject>
+	: ToolForId<Id>;
+export function createNeonTool<
+	const Id extends NeonToolId,
+	const Inject extends NeonToolInjectOptions | undefined = undefined,
+>(
+	id: Id,
+	options: NeonToolsClientOptions & {
+		inject?: Inject;
+		name?: (id: string) => string;
+		names?: NeonToolNameOverrides;
+	},
+):
+	| NamedNeonTool<Id, Inject>
+	| InjectedNeonTool<ToolForId<Id>, Inject>
+	| ToolForId<Id> {
+	if (!isNeonToolId(id)) {
+		throw unpublishedToolError(id);
+	}
 	assertToolCustomizeOptions(options);
-	const tool = operationFactoryFor(operationId)(createRawClient(options));
+	const tool = factoryFor(id)(options);
+	assertKnownNameKeys(options.names, [tool]);
 	const customized = hasToolCustomization(options)
 		? applyToolCustomization(tool, options)
 		: tool;
-	return customized as Inject extends NeonToolInjectOptions
-		? InjectedNeonTool<ReturnType<OperationFactories[Operation]>, Inject>
-		: ReturnType<OperationFactories[Operation]>;
+	return customized as
+		| NamedNeonTool<Id, Inject>
+		| InjectedNeonTool<ToolForId<Id>, Inject>
+		| ToolForId<Id>;
 }

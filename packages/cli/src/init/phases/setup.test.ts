@@ -9,14 +9,17 @@ vi.mock("execa", () => ({
 	execa: (...args: unknown[]) => mockExeca(...args),
 }));
 
+const mockInstallMcp = vi.fn().mockReturnValue({
+	ok: true,
+	path: "/tmp/mcp.json",
+});
+vi.mock("../../mcp/install.js", () => ({
+	installNeonMcpServer: (...args: unknown[]) => mockInstallMcp(...args),
+}));
+
 const mockEnsureNeonctl = vi.fn();
 vi.mock("../neonctl.js", () => ({
 	ensureNeonctl: (...args: unknown[]) => mockEnsureNeonctl(...args),
-}));
-
-const mockInstallMcp = vi.fn();
-vi.mock("../install_mcp.js", () => ({
-	installNeonMcpServer: (...args: unknown[]) => mockInstallMcp(...args),
 }));
 
 const mockEnsureSkills = vi.fn().mockResolvedValue(true);

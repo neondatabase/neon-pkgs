@@ -27,8 +27,8 @@ export const BRANCH_FIELDS: readonly (keyof Branch)[] = [
 	"name",
 	"id",
 	"current_state",
-	"created_at",
 	"expires_at",
+	"created_at",
 ];
 
 const BRANCH_FIELDS_RESET: readonly (keyof Branch)[] = [

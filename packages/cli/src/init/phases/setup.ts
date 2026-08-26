@@ -1,3 +1,4 @@
+import { installNeonMcpServer } from "../../mcp/install.js";
 import {
 	agentSupportsProjectMcp,
 	getSkillsAgentName,
@@ -9,7 +10,6 @@ import {
 	isVSCodeInstalled,
 } from "../detect_agent.js";
 import { handoffAction } from "../handoff.js";
-import { installNeonMcpServer } from "../install_mcp.js";
 import { ensureNeonctl } from "../neonctl.js";
 import { ensureSkillsUpToDate } from "../skills.js";
 import type { PhaseResponse } from "../types.js";

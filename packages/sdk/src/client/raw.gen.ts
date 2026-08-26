@@ -139,6 +139,7 @@ import {
 	revokeCredential as _revokeCredential,
 	revokeOrgApiKey as _revokeOrgApiKey,
 	revokePermissionFromProject as _revokePermissionFromProject,
+	sendNeonAuthEmailProviderTest as _sendNeonAuthEmailProviderTest,
 	sendNeonAuthTestEmail as _sendNeonAuthTestEmail,
 	setDefaultProjectBranch as _setDefaultProjectBranch,
 	setOrganizationSpendingLimit as _setOrganizationSpendingLimit,
@@ -309,6 +310,7 @@ export const revokeApiKey = wrapRaw(_revokeApiKey);
 export const revokeCredential = wrapRaw(_revokeCredential);
 export const revokeOrgApiKey = wrapRaw(_revokeOrgApiKey);
 export const revokePermissionFromProject = wrapRaw(_revokePermissionFromProject);
+export const sendNeonAuthEmailProviderTest = wrapRaw(_sendNeonAuthEmailProviderTest);
 export const sendNeonAuthTestEmail = wrapRaw(_sendNeonAuthTestEmail);
 export const setDefaultProjectBranch = wrapRaw(_setDefaultProjectBranch);
 export const setOrganizationSpendingLimit = wrapRaw(_setOrganizationSpendingLimit);

@@ -39,7 +39,9 @@ export {
 export type { Page, Paginated } from "./neon/paginate.js";
 export type {
 	BranchWithCompute,
+	CompareSchemaInput,
 	CreateWithComputeInput,
+	ResetFromParentInput,
 } from "./neon/resources/branches.js";
 export type {
 	LogFieldValuesQuery,

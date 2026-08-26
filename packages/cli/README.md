@@ -62,7 +62,58 @@ Alternatively, you can authenticate a connection with a Neon API key using the `
 neon projects list --api-key <neon_api_key>
 ```
 
-For information about obtaining an Neon API key, see [Authentication](https://api-docs.neon.tech/reference/authentication), in the _Neon API Reference_.
+For information about obtaining an Neon API key, see [Authentication](https://neon.com/docs/reference/api/get-started), in the _Neon API Reference_.
+
+## Create a project without an account
+
+`neon claim create` provisions a temporary Claimable Neon project for an agent without
+requiring a Neon account or opening a browser:
+
+```bash
+# Lakebase Postgres is always included
+neon claim create
+
+# Request Managed Better Auth and the Data API too
+neon claim create --service auth --service data-api
+```
+
+When the current directory has a `neon.ts`, `claim create` also requests every service
+declared there. Explicit `--service` values are added to that set. Object Storage, Functions,
+and the AI Gateway are sent to the service so demand is recorded, but are reported as
+unavailable until the project is claimed; the CLI does not silently remove them.
+
+The command writes:
+
+- a `.neon` context that identifies the project and Claimable Neon service;
+- an owner-only identity assertion under the CLI config directory;
+- `DATABASE_URL` and any granted Auth or Data API variables to `.env` or `.env.local`
+  (disable this with `--no-env-pull`).
+
+Subsequent project commands automatically exchange the assertion for a short-lived agent
+token and send API calls to Claimable Neon. The service decides which operations are
+allowed before claim.
+
+```bash
+neon claim status                 # lifecycle and transfer status
+neon projects get <project-id>    # regular CLI command, same agent token
+neon psql --role-name neondb_owner -- -c "select now()"
+neon config plan
+neon env pull --service postgres --service auth --service data-api
+
+neon claim accept                 # create a claim code and open the transfer URL
+neon claim delete --yes           # permanently delete an unclaimed project
+neon claim list                   # local records, including expired
+neon claim delete <project-id> --yes
+```
+
+`status`, `accept`, and `delete` take an optional project id from `claim list`, so a
+project stays manageable after its original directory is gone. `list` prints `state`
+(`unclaimed` or `expired`) from the identity assertion clock and the project
+expiry, plus `project_expires_at`. `delete` also drops a
+local record whose identity assertion has expired or been revoked.
+
+`neon claimable` is an alias for `neon claim`. For local service development, set
+`CLAIMABLE_NEON_HOST=http://localhost:8787`; non-local origins must use HTTPS.
 
 ## Project and branch creation
 
@@ -722,6 +773,105 @@ That message reports where parsing stopped and nothing more. `--data` carries wh
 | `--preview` | Enable preview features (scaffolding a project from a template) |
 | `--profile <name>` | Run as that stored account. See [Which credential an invocation uses](#which-credential-an-invocation-uses). |
 
+## Install the Neon MCP server (`mcp`)
+
+`neon mcp` writes the hosted Neon MCP server (`https://mcp.neon.tech/mcp`) into coding-agent config files.
+
+```bash
+# Interactive: global or project, then agents, then API key or OAuth, then confirm.
+$ neon mcp
+
+# Skip prompts. Global config, every globally detected agent, reuse or mint an API key.
+$ neon mcp -y
+
+# OAuth: no API key minted. The agent prompts for Neon sign-in on first use.
+$ neon mcp --oauth
+
+# Project-level config. A minted key is still account-wide unless a project is pinned.
+$ neon mcp --project
+
+$ neon mcp --agent cursor --agent claude-code
+
+# Hide write tools. Does not change the minted key.
+$ neon mcp --read-only
+
+# Pin MCP tools to one project. A newly minted API key is limited to that project.
+$ neon mcp --project-id <project-id>
+
+# Limit which tool categories are visible.
+$ neon mcp --category querying --category schema
+```
+
+On a TTY the command asks for config location (global is the default), then agents, then API key vs OAuth, then a summary to confirm before it writes. Detected agents start selected: globally installed agents or project-folder markers such as `.cursor` when the install is project.
+
+`-y` skips those questions. `neon mcp -y` writes `https://mcp.neon.tech/mcp` into global config for every globally detected agent, reuses an existing Neon MCP API key or mints an account-wide key, leaves write tools enabled, exposes every tool category, and does not pin a project (including from `.neon`). `--project`, `--oauth` and `--agent` skip the question they answer and still apply with `-y`. `--read-only` and `--category` are flags only and are never prompted. A linked project-folder install asks whether to pin MCP tools to that `.neon` project (`?projectId=`). If you pin and selected API-key auth, the minted key is limited to that project too. An unlinked project folder does not ask. Global installs never add that param unless you pass `--project-id`. Without a TTY, pass `-y` to mint into every detected agent, `--agent` to name the agents or `--oauth` to write the URL only. `neon mcp --help` lists the server URL, those `-y` defaults, the supported `--agent` names, and the `--category` values.
+
+`--agent` names: `antigravity`, `cline`, `cline-cli`, `claude-code`, `codex`, `cursor`, `gemini-cli`, `goose`, `github-copilot-cli`, `grok-build`, `mcporter`, `opencode`, `vscode`, `windsurf`, `zed`. Project installs drop `antigravity`, `cline`, `cline-cli`, `goose` and `windsurf`. `claude-desktop` is a known name that is then skipped.
+
+The default mints an account-wide API key (or reuses the Bearer already configured for Neon at `https://mcp.neon.tech/mcp`) and writes it into each selected agent's config. That key reaches everything the account can, in every organization. Revoke it with `neon api-keys revoke <id>`. `--oauth` writes the URL with no `Authorization` header; the agent signs in on first use. `--project` writes into the project config (`.cursor/mcp.json` and similar). `--read-only` adds `?readonly=true`. `--project-id` adds `?projectId=` and, when a key is minted, limits that key to the named project. Accepting the linked-project pin does the same. Revoke a project-scoped key with `neon api-keys revoke <id> --org-id <org>`. A reused Bearer keeps the scope it already has. `--category` adds `?category=` (repeatable or comma-separated: `projects`, `branches`, `schema`, `querying`, `neon_auth`, `data_api`, `observability`, `docs`). `--read-only` and `--category` restrict which MCP tools the server exposes; they do not change what the minted key can do.
+
+## Install Neon agent skills (`skills`)
+
+`neon skills` installs Neon agent skills by running `npx skills add`. It does not call the Neon API. This command needs Node.js 22.20 or newer. The rest of the CLI supports Node.js 20.19 or newer.
+
+```bash
+# Interactive: this directory, then agents, then skills, then confirm.
+$ neon skills
+
+# Skip prompts. This directory, every detected agent, the default skills.
+$ neon skills -y
+
+$ neon skills -s neon -s neon-ai-gateway --agent cursor
+
+$ neon skills --agent cursor --agent claude-code
+
+# User-level skills.
+$ neon skills --global
+
+# Update installed skills in this directory.
+$ neon skills update
+$ neon skills update -y
+$ neon skills update --global -y
+```
+
+On a TTY the command asks which agents and which skills, then shows a summary to confirm. Detected agents start selected from project-folder markers such as `.cursor`. Default skills start selected. `neon-postgres-agent-platforms` is offered and starts unselected.
+
+`-y` skips those questions and installs the default skills. `--skill` / `-s` names specific skills and skips the skill picker. `--agent` and `--global` still apply. Without a TTY, pass `-y` or `--skill`. `--agent` alone is not enough.
+
+`--skill` names by source repo: `neondatabase/agent-skills` (`claimable-postgres`, `neon`, `neon-ai-gateway`, `neon-functions`, `neon-object-storage`, `neon-postgres`, `neon-postgres-branches`, `neon-postgres-egress-optimizer`); `neondatabase/neon-for-agent-platforms` (`neon-postgres-agent-platforms`).
+
+`--agent` names match `neon mcp`, minus agents that cannot install skills: `antigravity`, `cline`, `cline-cli`, `claude-code`, `claude-desktop`, `codex`, `cursor`, `gemini-cli`, `goose`, `github-copilot-cli`, `grok-build`, `opencode`, `vscode`, `windsurf`, `zed`. `mcporter` is a known MCP name that is then skipped. `neon skills --help` lists the same skill and agent values, and that `-y` leaves out `neon-postgres-agent-platforms`.
+
+## Install the Neon plugin (`plugins`)
+
+`neon plugins` installs the Neon agent plugin (`neon-postgres`) by running `npx plugins add`. It does not call the Neon API.
+
+```bash
+# Interactive: agents, then confirm.
+$ neon plugins
+
+# Skip prompts. Every detected agent.
+$ neon plugins -y
+
+$ neon plugins --agent cursor --agent claude-code
+
+# User-level install.
+$ neon plugins --global
+$ neon plugins --global --agent vscode
+```
+
+On a TTY the command asks which agents, then shows a summary to confirm. Detected agents start selected from project-folder markers such as `.cursor`. There is one plugin (`neon-postgres`); there is no plugin picker and no `update` subcommand.
+
+`-y` skips those questions and installs into every detected agent. `--agent` names specific agents and skips the agent picker. Without a TTY, pass `-y` or `--agent`. `--agent` alone is enough because the plugin is fixed.
+
+Default scope is `project`. `--global` is `user`. On macOS and Linux, Cursor and Claude Code store the plugin cache under `~/.claude/plugins`; on Windows, Cursor installs into Cursor extensions. `project` vs `user` is the scope field the plugins CLI records, not a directory in the repo. VS Code, GitHub Copilot CLI, and Grok Build only install user-level: they are skipped at the default scope with a warning, and `--agent vscode` without `--global` fails if nothing else is selected.
+
+`--agent` names with a plugins mapping: `claude-code`, `claude-desktop`, `codex`, `cursor`, `github-copilot-cli`, `grok-build`, `vscode`. `claude-desktop` installs as Claude Code; naming both produces one install and lists both names in the table. `mcporter` is a known MCP name that is then skipped.
+
+The plugins CLI installs every plugin it finds in the Neon plugin package. Today that is `neon-postgres` from `neondatabase/agent-skills`. It includes the Neon MCP server (`https://mcp.neon.tech/mcp`) and these skills: `neon`, `neon-ai-gateway`, `neon-functions`, `neon-object-storage`, `neon-postgres`, `neon-postgres-branches`, `neon-postgres-egress-optimizer`. It does not include `claimable-postgres` or `neon-postgres-agent-platforms`.
+
+`neon plugins --help` lists the plugin, those contents, and the supported `--agent` names.
+
 ## Snapshots (`snapshots`)
 
 `neon snapshots` (alias `neon snapshot`) manages **snapshots** — point-in-time backups of a branch that you can list, rename, expire, restore into a branch, or schedule automatically. Snapshots are a Beta Neon feature and were previously only available in the Console and REST API; this command group brings them to the CLI.
@@ -765,6 +915,15 @@ neon snapshots schedule set --branch main --schedule '[{"frequency":"weekly","da
 ```
 
 All sub-commands honor the [global options](#global-options), including `--output json|yaml|table`.
+
+## Database diagnostics (`inspect`)
+
+`neon inspect db stalled-queries` takes a read-only snapshot of active queries that have run for more than 30 seconds and groups parallel workers with their leader. Table output shows duration, wait event, blocking pids, role, query group, and query. `--output json` adds timestamps, query IDs, pids, database, and the rest of the row. A blocking pid can belong to an idle-in-transaction backend this command does not list; `neon inspect db locks` shows lock holders.
+
+```bash
+neon inspect db stalled-queries
+neon inspect db stalled-queries --output json
+```
 
 ## Logs (`logs`)
 
@@ -1067,6 +1226,7 @@ Id   Name      Project         Created At            Last Used At          Last 
 | Command                                                                    | Subcommands                                                                                                  | Description                        |
 | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------- |
 | [auth](https://neon.com/docs/reference/cli-auth)                           |                                                                                                              | Authenticate                       |
+| claim (`claimable`)                                                        | `create`, `status`, `accept`, `list`, `delete`                                                               | Manage claimable projects          |
 | profile                                                                    | `list`, `create`, `rotate-key`, `remove`                                                                     | Manage named sets of credentials   |
 | api-keys                                                                   | `list`, `create`, `revoke`                                                                                   | Manage API keys                    |
 | [projects](https://neon.com/docs/reference/cli-projects)                   | `list`, `create`, `update`, `delete`, `get`                                                                  | Manage projects                    |
@@ -1078,6 +1238,7 @@ Id   Name      Project         Created At            Last Used At          Last 
 | [roles](https://neon.com/docs/reference/cli-roles)                         | `list`, `create`, `delete`                                                                                   | Manage roles                       |
 | [operations](https://neon.com/docs/reference/cli-operations)               | `list`                                                                                                       | Manage operations                  |
 | logs                                                                       | `query`, `fields`, `field-values`                                                                            | Query branch logs (Beta)           |
+| inspect                                                                    | `db stalled-queries`                                                                                         | Inspect Postgres diagnostics       |
 | snapshots                                                                  | `list`, `get`, `create`, `update`, `delete`, `restore`, `finalize`, `schedule get`, `schedule set`           | Manage snapshots                   |
 | [connection-string](https://neon.com/docs/reference/cli-connection-string) |                                                                                                              | Get connection string              |
 | [psql](https://neon.com/docs/reference/cli-psql)                           |                                                                                                              | Connect to a database via psql     |
@@ -1091,6 +1252,9 @@ Id   Name      Project         Created At            Last Used At          Last 
 | deploy                                                                     |                                                                                                              | Alias for `config apply`           |
 | bootstrap                                                                  |                                                                                                              | Scaffold a project from a template |
 | init                                                                       |                                                                                                              | Set up a project for a coding agent |
+| mcp                                                                        |                                                                                                              | Install the Neon MCP server         |
+| plugins                                                                    |                                                                                                              | Install the Neon plugin             |
+| skills                                                                     | `update`                                                                                                     | Install Neon agent skills           |
 | bucket                                                                     | `create`, `list`, `delete`, `object list`, `object get`, `object put`, `object delete` (incl. `--recursive`) | Manage buckets and their objects   |
 | [completion](https://neon.com/docs/reference/cli-completion)               |                                                                                                              | Generate a completion script       |
 
@@ -1141,7 +1305,7 @@ Global options are supported with any Neon CLI command.
 
 - <a id="api-key"></a>`--api-key`
 
-  Specifies your Neon API key. You can authenticate using a Neon API key when running a Neon CLI command instead of using `neon auth`. For information about obtaining an Neon API key, see [Authentication](https://api-docs.neon.tech/reference/authentication), in the _Neon API Reference_.
+  Specifies your Neon API key. You can authenticate using a Neon API key when running a Neon CLI command instead of using `neon auth`. For information about obtaining an Neon API key, see [Authentication](https://neon.com/docs/reference/api/get-started), in the _Neon API Reference_.
 
   ```bash
   neon <command> --api-key <neon_api_key>

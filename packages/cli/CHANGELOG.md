@@ -1,5 +1,83 @@
 # neon
 
+## 4.5.1
+
+### Patch Changes
+
+- Updated dependencies [9b322e7]
+  - @neon/sdk@2.3.0
+  - @neon/config@1.0.4
+  - @neon/config-runtime@1.0.4
+
+## 4.5.0
+
+### Minor Changes
+
+- 512baf3: Add `neon claim` and its `claimable` alias for creating, using, claiming, listing, and deleting temporary Claimable Neon projects without an account. `status`, `accept`, and `delete` take an optional project id from `claim list`. `list` prints `state` from the assertion clock and the project expiry, and `delete` drops a local record after the identity assertion expires. `create` prints CLI service names and `project_expires_at`.
+
+  Recognize Claimable Neon capability errors in Config-as-Code so unavailable pre-claim services keep their actionable claim guidance instead of being reported as API-key failures.
+
+### Patch Changes
+
+- Updated dependencies [512baf3]
+  - @neon/config@1.0.3
+  - @neon/config-runtime@1.0.3
+
+## 4.4.0
+
+### Minor Changes
+
+- bdb0db6: Add `neon plugins` to install the Neon agent plugin into coding agents. A TTY asks agents, then confirms. `-y` installs into detected agents at project scope. `--agent` names specific agents. `--global` is user scope.
+
+### Patch Changes
+
+- Attribute CLI telemetry to Claude Code and Codex command trees.
+
+## 4.3.1
+
+### Patch Changes
+
+- 894b427: `neon mcp` mints a project-scoped API key when `--project-id` is set or a linked project is pinned, instead of an account-wide key.
+
+## 4.3.0
+
+### Minor Changes
+
+- eb52252: Add `neon skills` to install Neon agent skills into coding agents. A TTY asks agents and skills, then confirms. `-y` installs the default skills into detected agents in this directory. `--skill` names specific skills. `--global` is user-level. `neon skills update` refreshes installed skills.
+
+## 4.2.1
+
+### Patch Changes
+
+- 9c5ecf5: List commands print every populated column at full width on one line per row. A narrow terminal wraps the line instead of dropping or truncating columns. `neon branches list` and `neon snapshots list` show Expires At before Created At, including on get and create. `neon projects list --recoverable-only` shows Recoverable Until before Deleted At.
+
+## 4.2.0
+
+### Minor Changes
+
+- 55f4bf2: Add `neon mcp` to install the Neon MCP server into coding agents. A TTY asks config location (global default), agents, API key vs OAuth, then confirms. Linked project-folder installs also ask whether to pin tools to that project. `-y` is global, detected agents, minted write API key. `--project` is config location only. `--read-only`, `--project-id` and `--category` set MCP URL query params. The minted key is always account-wide.
+
+## 4.1.0
+
+### Minor Changes
+
+- 6ff43d7: Add `neon inspect db stalled-queries`, a read-only snapshot of active queries running longer than 30 seconds. Table output shows duration, wait event, blocking pids, role, query group, and query. `--output json` includes the full row.
+
+## 4.0.0
+
+### Major Changes
+
+- d606a2e: `neon neon-auth config email-provider test` now sends through the custom SMTP provider saved on the branch. Only `--recipient-email` is accepted; `--host`, `--port`, `--username`, `--password`, `--sender-email`, and `--sender-name` are rejected. Save the provider first with `neon neon-auth config email-provider update --type standard`.
+
+## 3.6.1
+
+### Patch Changes
+
+- Updated dependencies [93b93dc]
+  - @neon/sdk@2.2.0
+  - @neon/config@1.0.2
+  - @neon/config-runtime@1.0.2
+
 ## 3.6.0
 
 ### Minor Changes

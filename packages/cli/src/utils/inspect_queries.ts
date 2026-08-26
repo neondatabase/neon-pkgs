@@ -127,6 +127,58 @@ export const INSPECT_QUERIES = {
 			ORDER BY now() - query_start DESC;
 		`,
 	},
+	"stalled-queries": {
+		describe:
+			"Active queries running longer than 30 seconds with parallel workers, waits, and blockers (compute-wide)",
+		scope: "compute",
+		fields: [
+			"duration",
+			"wait_event",
+			"blocking_pids",
+			"role",
+			"query_group",
+			"query",
+		],
+		emptyMessage: "No active queries running longer than 30 seconds.",
+		sql: /* sql */ `
+			WITH activity AS MATERIALIZED (
+				SELECT *
+				FROM pg_stat_activity
+				WHERE state = 'active'
+					AND backend_type IN ('client backend', 'parallel worker')
+					AND pid <> pg_backend_pid()
+			),
+			stalled_groups AS (
+				SELECT DISTINCT COALESCE(leader_pid, pid) AS query_group
+				FROM activity
+				WHERE query_start <= statement_timestamp() - interval '30 seconds'
+			)
+			SELECT
+				statement_timestamp() AS observed_at,
+				a.query_start,
+				g.query_group,
+				a.pid,
+				a.leader_pid,
+				CASE
+					WHEN a.leader_pid IS NULL THEN 'leader'
+					ELSE 'worker'
+				END AS role,
+				a.backend_type,
+				a.datname AS database,
+				a.application_name,
+				a.query_id::text AS query_id,
+				a.state,
+				a.wait_event_type,
+				a.wait_event,
+				array_to_string(pg_blocking_pids(a.pid), ',') AS blocking_pids,
+				(statement_timestamp() - a.query_start)::text AS duration,
+				a.query
+			FROM activity a
+			JOIN stalled_groups g
+				ON g.query_group = COALESCE(a.leader_pid, a.pid)
+			ORDER BY g.query_group, a.leader_pid NULLS FIRST, a.pid;
+		`,
+	},
 	locks: {
 		describe:
 			"Locks held with the acquiring query and its age (pg_locks + pg_stat_activity)",

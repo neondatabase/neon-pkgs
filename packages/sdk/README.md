@@ -1,6 +1,6 @@
 # @neon/sdk
 
-The official TypeScript SDK for the [Neon API](https://api-docs.neon.tech/reference) — a modern, **Fetch-based**, **zero-dependency**, ESM-only client generated from Neon's [OpenAPI specification](https://neon.com/api_spec/release/v2.json). Successor to [`@neondatabase/api-client`](https://www.npmjs.com/package/@neondatabase/api-client).
+The official TypeScript SDK for the [Neon API](https://neon.com/docs/reference/api) — a modern, **Fetch-based**, **zero-dependency**, ESM-only client generated from Neon's [OpenAPI specification](https://neon.com/api_spec/release/v2.json). Successor to [`@neondatabase/api-client`](https://www.npmjs.com/package/@neondatabase/api-client).
 
 Two layers, one package:
 
@@ -238,6 +238,8 @@ await neon.projects.transfer({
 | `createWithCompute(projectId, input, { pooled? })` | **[W]** `{ branch, endpoint, connectionString }` | `input`: `{ name?, parentId?, compute?: { minCu?, maxCu?, suspendTimeoutSeconds? } }` |
 | `getDefault(projectId)` | `Branch` | resolves the default branch by the `default` flag |
 | `setDefault(projectId, branchId)` | `Branch` | |
+| `resetFromParent(projectId, branchId, { preserveUnderName? }?)` | `Branch` | parent HEAD only; discards writes since the branch diverged. `preserveUnderName` is required when the branch has children. Pass `{ waitForReadiness: true }` before using the branch |
+| `compareSchema(projectId, branchId, input)` | `{ diff? }` | `input`: `{ databaseName, baseBranchId?, lsn?, timestamp?, baseLsn?, baseTimestamp? }`. Omitting `baseBranchId` compares against the parent |
 | `finalizeRestore(projectId, branchId, { name? }?)` | **→void** | commits a restore previewed with `snapshots.restore({ finalize: false })` |
 
 **There is no `recover`.** Neon stopped publishing `POST /projects/{project_id}/branches/{branch_id}/recover` in its OpenAPI spec, so the wrapper is gone until it returns. The endpoint still answers, so a soft-deleted branch can still be recovered through the low-level client — note that this envelope carries the API's own error body rather than a `NeonError`:
@@ -265,6 +267,16 @@ const { data } = await neon.branches.createWithCompute(projectId, {
   compute: { minCu: 0.25, maxCu: 2 },
 });
 // data: { branch, endpoint, connectionString }
+
+const { data: schema } = await neon.branches.compareSchema(
+  projectId,
+  data!.branch.id,
+  { databaseName: "neondb" },
+);
+
+await neon.branches.resetFromParent(projectId, data!.branch.id, undefined, {
+  waitForReadiness: true,
+});
 ```
 
 ### `neon.postgres`

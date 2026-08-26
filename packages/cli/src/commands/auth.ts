@@ -35,10 +35,25 @@ import type { NeonApiClient } from "../api.js";
 import { getApiClient } from "../api.js";
 import { auth, refreshToken } from "../auth.js";
 import { setAuthContext } from "../auth_context.js";
+import { ClaimableClient, ClaimableServiceError } from "../claimable/api.js";
 import {
+	assertionHasExpired,
+	claimableCredentialsPath,
+	readClaimableCredentials,
+	resolveClaimableContext,
+	shouldUseClaimableCredentials,
+} from "../claimable/state.js";
+import {
+	currentContextFile,
+	isClaimCommand,
 	isConfigInit,
 	isCurrentBranchProbe,
+	isMcpCommand,
+	isMcpOauth,
+	isPluginsCommand,
 	isProfileCommand,
+	isSkillsCommand,
+	readContextFile,
 } from "../context.js";
 import { storeFor } from "../credential_io.js";
 import { isCi } from "../env.js";
@@ -62,6 +77,7 @@ type AuthProps = {
 	allowUnsafeTls?: boolean;
 	profile?: string;
 	keyring?: boolean;
+	contextFile?: string | ((cwd?: string) => string);
 };
 
 export const locationForAuth = (
@@ -419,8 +435,22 @@ export const ensureAuth = async (
 		return;
 	}
 
+	if (isMcpOauth(props)) {
+		return;
+	}
+
 	// `open` only reads the linked project from `.neon` and launches its Console URL.
 	if (props._[0] === "open") {
+		return;
+	}
+
+	// Neon authentication is unrelated to the child skills and plugins CLIs.
+	if (isSkillsCommand(props) || isPluginsCommand(props)) {
+		return;
+	}
+
+	// Claim commands exchange their own assertion, so account auth must not open first.
+	if (isClaimCommand(props)) {
 		return;
 	}
 
@@ -440,6 +470,9 @@ export const ensureAuth = async (
 	// then triggers OAuth at the right time). Skip the global auth middleware.
 	const isInit = props._[0] === "init";
 
+	// The MCP handler validates targets before deciding whether authentication is required.
+	const isMcp = isMcpCommand(props);
+
 	// `auth` writes a credential rather than using one, and reads `--profile` as the
 	// destination to write it to. Running selection here would reject the flag pair it
 	// accepts, and could resolve a stored key that this command must not authenticate with.
@@ -451,9 +484,83 @@ export const ensureAuth = async (
 		return;
 	}
 
+	const inputs = credentialInputs();
+	const contextFile =
+		typeof props.contextFile === "function"
+			? props.contextFile()
+			: (props.contextFile ?? currentContextFile());
+	const localContext = readContextFile(contextFile);
+	if (shouldUseClaimableCredentials(inputs, props.profile, localContext)) {
+		const linked = resolveClaimableContext(localContext);
+		if (linked === null) {
+			throw new Error(
+				"The linked Claimable Neon context could not be resolved.",
+			);
+		}
+		const stored = readClaimableCredentials(
+			props.configDir,
+			linked.projectId,
+		);
+		const path = claimableCredentialsPath(
+			props.configDir,
+			linked.projectId,
+		);
+		if (stored === null) {
+			throw new Error(
+				`The linked project is claimable, but its identity assertion is missing from ${path}. Run \`neon claim create\` in a new directory, or \`neon link\` after claiming the project.`,
+			);
+		}
+		if (assertionHasExpired(stored)) {
+			throw new Error(
+				`The identity assertion for ${linked.projectId} has expired. Run \`neon claim delete ${linked.projectId} --yes\` to drop the local record.`,
+			);
+		}
+		const client = new ClaimableClient(stored.origin);
+		if (client.origin !== new ClaimableClient(linked.origin).origin) {
+			throw new Error(
+				`The linked .neon file and ${path} name different Claimable Neon services. Delete .neon or the assertion file and run \`neon claim create\` in a new directory.`,
+			);
+		}
+		let token;
+		try {
+			token = await client.exchange(stored.identityAssertion);
+		} catch (error) {
+			if (
+				error instanceof ClaimableServiceError &&
+				error.code === "project_claimed"
+			) {
+				throw new Error(
+					"This project was claimed. Run `neon claim status` to drop the local assertion, then `neon auth` or `neon link`.",
+				);
+			}
+			throw error;
+		}
+		props.apiKey = token.accessToken;
+		props.apiHost = `${client.origin}/v1`;
+		props.apiClient = getApiClient({
+			apiKey: token.accessToken,
+			apiHost: props.apiHost,
+		});
+		setAuthContext({
+			source: "claimable",
+			configDir: props.configDir,
+			credentialsPath: path,
+		});
+		log.debug(
+			"Using the linked Claimable Neon project's short-lived access token",
+		);
+		return;
+	}
+
+	if (localContext.claimable !== undefined) {
+		log.warning(
+			"This directory is linked to a claimable project, but NEON_API_KEY or NEON_PROFILE is set. This command will use that account credential instead of the unclaimed project. Unset them to keep using the unclaimed project.",
+		);
+	}
+
 	// Throws when `--api-key` and `--profile` are both passed.
 	const selection = selectCredential({
-		...credentialInputs(),
+		...inputs,
 		profileFlag: props.profile,
 	});
 
@@ -565,6 +672,13 @@ export const ensureAuth = async (
 
 	if (isInit) {
 		log.debug("init: skipping global auth; init manages its own auth flow");
+		return;
+	}
+
+	if (isMcp) {
+		log.debug(
+			"mcp: no usable credentials; minting requires auth or --oauth",
+		);
 		return;
 	}
 

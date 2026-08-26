@@ -16,33 +16,42 @@ describe("Eve compatibility", () => {
 		const controller = new AbortController();
 		const tools = createNeonTools({
 			apiKey: "test-key",
-			operations: ["createProject"],
+			tools: ["projects.createAndConnect"],
 			fetch: async (input, init) => {
-				signals.push(new Request(input, init).signal);
-				return jsonResponse({ project: { id: "project-id" } });
+				const request =
+					input instanceof Request ? input : new Request(input, init);
+				signals.push(request.signal);
+				controller.abort();
+				throw (
+					request.signal.reason ??
+					new DOMException("Aborted", "AbortError")
+				);
 			},
 		});
 
-		const config = toEveTool(tools.createProject);
+		const config = toEveTool(tools["projects.createAndConnect"]);
 		const tool = defineTool(config);
 
-		expect(tool.description).toBe(tools.createProject.description);
-		expect(typeof tool.approval).toBe("function");
-		await config.execute(
-			{ body: { project: { name: "from-eve" } } },
-			{ abortSignal: controller.signal },
+		expect(tool.description).toBe(
+			tools["projects.createAndConnect"].description,
 		);
-		controller.abort();
+		expect(typeof tool.approval).toBe("function");
+		await expect(
+			config.execute(
+				{ name: "from-eve" },
+				{ abortSignal: controller.signal },
+			),
+		).rejects.toThrow();
 		expect(signals[0].aborted).toBe(true);
 	});
 
 	test("does not gate ordinary read operations", () => {
 		const tools = createNeonTools({
 			apiKey: "test-key",
-			operations: ["listProjects"],
+			tools: ["projects.list"],
 		});
 
-		expect(toEveTool(tools.listProjects).approval).toBeUndefined();
+		expect(toEveTool(tools["projects.list"]).approval).toBeUndefined();
 	});
 });
 
@@ -50,31 +59,31 @@ describe("Mastra compatibility", () => {
 	test("produces createTool-compatible records with approval metadata", () => {
 		const tools = createNeonTools({
 			apiKey: "test-key",
-			operations: ["listProjects", "createProject"],
+			tools: ["projects.list", "projects.createAndConnect"],
 		});
 
 		const configs = toMastraTools(tools);
 		const listProjects = createTool(configs.list_projects);
-		const createProject = createTool(configs.create_project);
+		const createProject = createTool(configs.create_and_connect_projects);
 
 		expect(listProjects.id).toBe("list_projects");
 		expect(listProjects.requireApproval).toBe(false);
-		expect(createProject.id).toBe("create_project");
+		expect(createProject.id).toBe("create_and_connect_projects");
 		expect(createProject.requireApproval).toBe(true);
 	});
 
 	test("forwards omitted path schemas from inject", () => {
 		const tools = createNeonTools({
 			apiKey: "test-key",
-			operations: ["getProject"],
+			tools: ["projects.get"],
 			inject: { projectId: "granted-project", omitFromSchema: true },
 		});
 
-		expect(toMastraTools(tools).get_project.inputSchema).toBe(
-			tools.getProject.inputSchema,
+		expect(toMastraTools(tools).get_projects.inputSchema).toBe(
+			tools["projects.get"].inputSchema,
 		);
-		expect(toEveTool(tools.getProject).inputSchema).toBe(
-			tools.getProject.inputSchema,
+		expect(toEveTool(tools["projects.get"]).inputSchema).toBe(
+			tools["projects.get"].inputSchema,
 		);
 	});
 
@@ -82,8 +91,8 @@ describe("Mastra compatibility", () => {
 		const requests: Request[] = [];
 		const tools = createNeonTools({
 			apiKey: "test-key",
-			operations: ["getProject"],
-			descriptions: { get_project: "Granted project details." },
+			tools: ["projects.get"],
+			descriptions: { get_projects: "Granted project details." },
 			inject: { projectId: "granted-project", omitFromSchema: true },
 			fetch: async (input, init) => {
 				requests.push(new Request(input, init));
@@ -91,8 +100,8 @@ describe("Mastra compatibility", () => {
 			},
 		});
 
-		const eve = toEveTool(tools.getProject);
-		const mastra = toMastraTools(tools).get_project;
+		const eve = toEveTool(tools["projects.get"]);
+		const mastra = toMastraTools(tools).get_projects;
 		expect(eve.description).toBe("Granted project details.");
 		expect(mastra.description).toBe("Granted project details.");
 
