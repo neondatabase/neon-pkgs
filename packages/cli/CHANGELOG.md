@@ -1,5 +1,32 @@
 # neon
 
+## 4.7.0
+
+### Minor Changes
+
+- 9530c77: `neon link --agent` is removed. List orgs with `orgs list --output json` and projects with `projects list --org-id <org-id> --output json`. Link with `--project-id`, or create with `--org-id --project-name --region-id`.
+
+## 4.6.0
+
+### Minor Changes
+
+- e6a4174: `neon bootstrap --agent` is removed. List templates with `--list-templates --output json` (or yaml). Scaffold with `--template` or `--default`.
+
+## 4.5.2
+
+### Patch Changes
+
+- e869e9e: `neon skills --help`, `neon mcp --help`, and `neon plugins --help` list supported agents and the install catalogs: skill ids with source repos, the `neon-postgres` plugin contents, and the MCP server URL plus `neon mcp -y` defaults.
+
+## 4.5.1
+
+### Patch Changes
+
+- Updated dependencies [9b322e7]
+  - @neon/sdk@2.3.0
+  - @neon/config@1.0.4
+  - @neon/config-runtime@1.0.4
+
 ## 4.5.0
 
 ### Minor Changes

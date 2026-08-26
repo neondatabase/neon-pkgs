@@ -9,8 +9,12 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import strip from "strip-ansi";
 import { afterEach, describe, expect } from "vitest";
 
+import { NEON_MCP_URL } from "../mcp/install.js";
+import { PLUGIN_SKILLS } from "../plugins/run.js";
+import { pluginsInstallableAgents } from "../plugins/targets.js";
 import { test } from "../test_utils/fixtures";
 
 const dirs: string[] = [];
@@ -419,21 +423,35 @@ describe("neon plugins", () => {
 		expect(stderr).not.toMatch(/neondatabase\/agent-skills/);
 	});
 
-	test("help lists install flags and hides the source", async ({
+	test("help lists the plugin, its contents, and supported agents", async ({
 		testCliCommand,
 	}) => {
 		const { home, cwd, bin } = scratch();
 		const { stdout, stderr } = await testCliCommand(["plugins", "--help"], {
 			...runOptions(home, cwd, bin),
 		});
-		const text = `${stdout}\n${stderr}`;
-		expect(text).toMatch(/--agent/);
-		expect(text).toMatch(/--global/);
-		expect(text).not.toMatch(/--plugin/);
-		expect(text).not.toMatch(/plugins update/);
-		expect(text).not.toMatch(/neondatabase\/agent-skills/);
-		expect(text).not.toMatch(/-s user/);
-		expect(text).not.toMatch(/-s project/);
-		expect(text).not.toMatch(/project-scoped/);
+		const flat = strip(`${stdout}\n${stderr}`).replace(/\s+/g, " ");
+		const compact = flat.replace(/\s+/g, "");
+		expect(flat).toMatch(/--agent/);
+		expect(flat).toMatch(/--global/);
+		expect(flat).not.toMatch(/--plugin/);
+		expect(flat).not.toMatch(/plugins update/);
+		expect(flat).not.toMatch(/-s user/);
+		expect(flat).not.toMatch(/-s project/);
+		expect(flat).not.toMatch(/project-scoped/);
+		expect(compact).toContain("neon-postgres");
+		expect(compact).toContain("neondatabase/agent-skills");
+		expect(compact).toContain(NEON_MCP_URL);
+		for (const skill of PLUGIN_SKILLS) {
+			expect(compact).toContain(skill);
+		}
+		expect(compact).not.toContain("claimable-postgres");
+		expect(compact).not.toContain("neon-postgres-agent-platforms");
+		for (const agent of pluginsInstallableAgents("project")) {
+			expect(compact).toContain(agent);
+		}
+		for (const agent of pluginsInstallableAgents("global")) {
+			expect(compact).toContain(agent);
+		}
 	});
 });

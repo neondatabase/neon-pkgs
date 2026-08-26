@@ -5,6 +5,8 @@ import { log } from "../log.js";
 import {
 	existingNeonApiKey,
 	installNeonMcpServer,
+	NEON_MCP_CATEGORIES,
+	NEON_MCP_URL,
 	type NeonMcpAuth,
 	type NeonMcpCategory,
 	neonMcpUrl,
@@ -17,12 +19,13 @@ import {
 	withdrawMintedKey,
 } from "../mcp/mint.js";
 import { resolveMcpPlan } from "../mcp/plan.js";
-import { resolveInstallTargets } from "../mcp/targets.js";
+import { mcpInstallableAgents, resolveInstallTargets } from "../mcp/targets.js";
 import { confirmMcpInstall } from "../mcp/wizard.js";
 import type { CommonProps } from "../types.js";
 import { canPickAgentsInteractively } from "../utils/agent_picker.js";
 import { getCliName } from "../utils/cli_name.js";
 import { noPassthrough, single } from "../utils/flags.js";
+import { helpCsv, helpEpilogue } from "../utils/help_text.js";
 import { writer } from "../writer.js";
 
 type McpProps = CommonProps & {
@@ -43,6 +46,12 @@ type McpInstallRow = {
 
 export const command = "mcp";
 export const describe = "Install the Neon MCP server into coding agents";
+
+const mcpGlobalAgents = mcpInstallableAgents("global");
+const mcpProjectAgents = mcpInstallableAgents("project");
+const mcpProjectDroppedAgents = mcpGlobalAgents.filter(
+	(id) => !mcpProjectAgents.includes(id),
+);
 
 export const builder = (argv: yargs.Argv) =>
 	argv
@@ -65,14 +74,14 @@ export const builder = (argv: yargs.Argv) =>
 				type: "boolean",
 				default: false,
 				describe:
-					"Skip prompts. Defaults to global config, every detected agent and a minted account-wide API key. --project, --oauth, --agent, --read-only, --project-id and --category still apply",
+					"Skip prompts. Defaults listed below. --project, --oauth, --agent, --read-only, --project-id and --category still apply",
 			},
 			agent: {
 				alias: "a",
 				type: "array",
 				string: true,
 				describe:
-					"Coding agent to install into (repeatable). Skips the agent picker",
+					"Coding agent to install into (repeatable). Skips the agent picker. Values listed below",
 				coerce: (value: unknown): string[] => {
 					if (value === undefined) return [];
 					const list = Array.isArray(value) ? value : [value];
@@ -108,7 +117,7 @@ export const builder = (argv: yargs.Argv) =>
 				type: "array",
 				string: true,
 				describe:
-					"MCP tool category (repeatable or comma-separated). Default: all",
+					"MCP tool category (repeatable or comma-separated). Default: all. Values listed below",
 				coerce: (value: unknown): NeonMcpCategory[] => {
 					if (value === undefined) return [];
 					const list = Array.isArray(value) ? value : [value];
@@ -142,7 +151,10 @@ export const builder = (argv: yargs.Argv) =>
 			"$0 mcp",
 			"Interactive: config location, agents, auth, then confirm",
 		)
-		.example("$0 mcp -y", "Global config, detected agents, minted API key")
+		.example(
+			"$0 mcp -y",
+			"Global config, detected agents, reuse or mint an API key",
+		)
 		.example(
 			"$0 mcp --oauth",
 			"Install with OAuth; the agent signs in on first use",
@@ -160,6 +172,20 @@ export const builder = (argv: yargs.Argv) =>
 		.example(
 			"$0 mcp --category querying --category schema",
 			"Limit tools to those categories",
+		)
+		.epilogue(
+			helpEpilogue(
+				`Installs ${NEON_MCP_URL}`,
+				helpCsv("Supported agents at global scope", mcpGlobalAgents),
+				helpCsv("--project does not support", mcpProjectDroppedAgents),
+				helpCsv("Supported categories", NEON_MCP_CATEGORIES),
+				"neon mcp -y:",
+				"  global config",
+				"  every globally detected agent",
+				"  reuse an existing Neon MCP API key, else mint an account-wide key",
+				"  write tools on, all categories",
+				"  no project pin (including from .neon)",
+			),
 		)
 		.strict()
 		.check(noPassthrough("mcp"));

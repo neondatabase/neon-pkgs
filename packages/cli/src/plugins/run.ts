@@ -5,6 +5,15 @@ const TELEMETRY_BLOCKERS = ["DISABLE_TELEMETRY", "DO_NOT_TRACK"] as const;
 
 export const PLUGIN_SOURCE = "neondatabase/agent-skills";
 export const NEON_PLUGIN_NAME = "neon-postgres";
+export const PLUGIN_SKILLS = [
+	"neon",
+	"neon-ai-gateway",
+	"neon-functions",
+	"neon-object-storage",
+	"neon-postgres",
+	"neon-postgres-branches",
+	"neon-postgres-egress-optimizer",
+] as const;
 export const PLUGINS_CLI_TIMEOUT_MS = 120_000;
 
 export type PluginsCliScope = "user" | "project";

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import {
 	neonPluginsRetryCommand,
+	PLUGIN_SKILLS,
 	PLUGIN_SOURCE,
 	pluginsAddArgs,
 	pluginsChildEnv,
@@ -19,6 +20,15 @@ describe("pluginsAddArgs", () => {
 			global: false,
 		});
 		expect(PLUGIN_SOURCE).toBe("neondatabase/agent-skills");
+		expect(PLUGIN_SKILLS).toEqual([
+			"neon",
+			"neon-ai-gateway",
+			"neon-functions",
+			"neon-object-storage",
+			"neon-postgres",
+			"neon-postgres-branches",
+			"neon-postgres-egress-optimizer",
+		]);
 		expect(args).toEqual([
 			"-y",
 			"plugins",

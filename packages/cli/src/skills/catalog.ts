@@ -1,3 +1,5 @@
+import { helpCsv } from "../utils/help_text.js";
+
 export const AGENT_SKILLS_SOURCE = "neondatabase/agent-skills";
 export const PLATFORMS_SKILLS_SOURCE = "neondatabase/neon-for-agent-platforms";
 
@@ -136,3 +138,18 @@ export const invocationsForSelection = (
 
 export const yesInstallInvocations = (): SkillsInvocation[] =>
 	invocationsForSelection(defaultSkillEntries());
+
+export const skillsHelpValues = (): string =>
+	invocationsForSelection(NEON_SKILL_CATALOG)
+		.map((group) => helpCsv(`  ${group.source}`, group.skills))
+		.join("\n");
+
+export const skillsYesHelp = (): string => {
+	const omitted = NEON_SKILL_CATALOG.filter(
+		(entry) => !entry.defaultSelected,
+	).map((entry) => entry.skill);
+	if (omitted.length === 0) {
+		return "neon skills -y installs every listed skill";
+	}
+	return `neon skills -y installs every listed skill except ${omitted.join(", ")}`;
+};

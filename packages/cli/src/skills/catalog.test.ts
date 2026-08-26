@@ -8,6 +8,8 @@ import {
 	NEON_SKILL_CATALOG,
 	PLATFORMS_SKILLS_SOURCE,
 	resolveSkillId,
+	skillsHelpValues,
+	skillsYesHelp,
 	yesInstallInvocations,
 } from "./catalog.js";
 
@@ -17,6 +19,25 @@ describe("NEON_SKILL_CATALOG", () => {
 	test("skill ids are unique", () => {
 		const ids = listSkillIds();
 		expect(new Set(ids).size).toBe(ids.length);
+	});
+
+	test("help values group skills by source", () => {
+		const text = skillsHelpValues();
+		expect(text.match(new RegExp(AGENT_SKILLS_SOURCE, "g"))).toHaveLength(
+			1,
+		);
+		expect(
+			text.match(new RegExp(PLATFORMS_SKILLS_SOURCE, "g")),
+		).toHaveLength(1);
+		for (const row of NEON_SKILL_CATALOG) {
+			expect(text).toContain(row.skill);
+		}
+	});
+
+	test("yes help names the skills -y leaves out", () => {
+		expect(skillsYesHelp()).toBe(
+			"neon skills -y installs every listed skill except neon-postgres-agent-platforms",
+		);
 	});
 });
 

@@ -9,10 +9,12 @@ import {
 	type ToolClientOptions,
 } from "./bind.js";
 import {
+	compareSchemaTool,
 	connectionStringTool,
 	createBranchWithComputeTool,
 	createProjectAndConnectTool,
 	getDefaultTool,
+	resetFromParentTool,
 	restoreSnapshotTool,
 	setScheduleTool,
 } from "./composed.js";
@@ -260,6 +262,8 @@ export const toolFactories = {
 					signal,
 				}),
 		}),
+	"branches.resetFromParent": resetFromParentTool,
+	"branches.compareSchema": compareSchemaTool,
 	"branches.finalizeRestore": (options) =>
 		fromGenerated(options, {
 			id: "branches.finalizeRestore",

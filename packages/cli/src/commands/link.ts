@@ -25,8 +25,9 @@ import {
 	pickBranchInteractively,
 } from "../utils/branch_picker.js";
 import { getCliName } from "../utils/cli_name.js";
+import { helpEpilogue } from "../utils/help_text.js";
 import { hasNeonConfigFile, initCmd } from "./config.js";
-import { autoPullEnvAfterPin, renderAgentPullNote } from "./env.js";
+import { autoPullEnvAfterPin } from "./env.js";
 import { REGIONS } from "./projects.js";
 
 const PROJECTS_LIST_LIMIT = 100;
@@ -40,7 +41,7 @@ type LinkProps = CommonProps & {
 	regionId?: string;
 	branch?: string;
 	params?: string;
-	agent: boolean;
+	agent?: boolean;
 	yes: boolean;
 	clear: boolean;
 	checks: boolean;
@@ -56,43 +57,29 @@ type Inputs = {
 	branch?: string;
 };
 
-type AgentOrgOption = { id: string; name: string };
-type AgentProjectOption = { id: string; name: string; region_id?: string };
-type AgentRegionOption = { id: string; name: string; default: boolean };
-type AgentContext = { orgId?: string; projectId: string; branch?: string };
-type AgentProject = { id: string; name?: string; region_id?: string };
+const canPromptInteractively = (): boolean =>
+	!isCi() && Boolean(process.stdin.isTTY) && Boolean(process.stdout.isTTY);
 
-type AgentResponse =
-	| {
-			status: "needs_org";
-			instruction: string;
-			options: AgentOrgOption[];
-			next_command_template: string;
-	  }
-	| {
-			status: "needs_project";
-			instruction: string;
-			options: AgentProjectOption[];
-			create_option: {
-				instruction: string;
-				next_command_template: string;
-			};
-			next_command_template: string;
-	  }
-	| {
-			status: "needs_project_details";
-			instruction: string;
-			regions: AgentRegionOption[];
-			next_command_template: string;
-	  }
-	| {
-			status: "linked";
-			context_file: string;
-			context: AgentContext;
-			project: AgentProject;
-			message: string;
-	  }
-	| { status: "error"; code: string; message: string };
+const nonInteractiveLinkCommands = (): string[] => {
+	const cli = getCliName();
+	return [
+		`${cli} orgs list --output json`,
+		`${cli} projects list --org-id <org-id> --output json`,
+		`${cli} link --project-id <project-id>`,
+		`${cli} link --org-id <org-id> --project-name <name> --region-id aws-us-east-2`,
+	];
+};
+
+const nonInteractiveLinkHelp = (): string =>
+	nonInteractiveLinkCommands()
+		.map((command) => `  ${command}`)
+		.join("\n");
+
+const orgScopedKeyHint =
+	"Organization-scoped API keys cannot list orgs; pass --org-id.";
+
+const removedAgent = (): string =>
+	`\`${getCliName()} link --agent\` was removed.\nUse:\n${nonInteractiveLinkHelp()}\n${orgScopedKeyHint}`;
 
 export const command = "link";
 export const describe = "Link the current directory to a Neon project";
@@ -132,10 +119,8 @@ export const builder = (argv: yargs.Argv) =>
 				type: "string",
 			},
 			agent: {
-				describe:
-					"Emit a JSON state-machine response designed for AI agents instead of prompting. The output is a single JSON object with a discriminated `status` field describing the next step.",
+				hidden: true,
 				type: "boolean",
-				default: false,
 			},
 			yes: {
 				alias: "y",
@@ -189,7 +174,22 @@ export const builder = (argv: yargs.Argv) =>
 				"$0 link --clear",
 				"Forget the current org/project/branch context",
 			],
-		]);
+		])
+		.epilogue(
+			helpEpilogue(
+				"Non-interactive (CI, scripts, agents):",
+				...nonInteractiveLinkCommands().map(
+					(command) => `  ${command}`,
+				),
+				orgScopedKeyHint,
+			),
+		)
+		.check((argv) => {
+			if (argv.agent === true) {
+				throw new Error(removedAgent());
+			}
+			return true;
+		});
 
 export const handler = async (props: LinkProps) => {
 	if (props.clear) {
@@ -202,11 +202,6 @@ export const handler = async (props: LinkProps) => {
 		return;
 	}
 
-	if (props.agent) {
-		await runAgentSafely(props);
-		return;
-	}
-
 	const inputs = parseInputs(props);
 	validateInputs(inputs);
 	const existing = readContextFile(props.contextFile);
@@ -216,15 +211,14 @@ export const handler = async (props: LinkProps) => {
 		return;
 	}
 
-	if (isCi()) {
+	if (!canPromptInteractively()) {
 		log.error(
 			[
-				"Missing inputs and CI environment detected (no TTY for prompts).",
+				"Missing inputs and no interactive terminal for prompts.",
 				"",
-				"Use one of:",
-				`  ${getCliName()} link --agent                                                    (JSON state machine for agents)`,
-				`  ${getCliName()} link --project-id <project>                                     (link to an existing project; org is inferred)`,
-				`  ${getCliName()} link --org-id <org> --project-name <name> --region-id <region>  (create a new project and link)`,
+				"Use:",
+				nonInteractiveLinkHelp(),
+				orgScopedKeyHint,
 			].join("\n"),
 		);
 		process.exit(1);
@@ -354,20 +348,6 @@ const runWithoutChecks = (props: LinkProps): void => {
 		projectId: inputs.projectId,
 		branch: inputs.branch,
 	});
-	if (props.agent) {
-		emitAgent({
-			status: "linked",
-			context_file: props.contextFile,
-			context: {
-				orgId: inputs.orgId,
-				projectId: inputs.projectId,
-				branch: inputs.branch,
-			},
-			project: { id: inputs.projectId },
-			message: `Wrote ${props.contextFile} without checks (org ${inputs.orgId}, project ${inputs.projectId}${inputs.branch ? `, branch ${inputs.branch}` : ""}). No verification or env pull was performed.`,
-		});
-		return;
-	}
 	printSummary(props, {
 		contextFile: props.contextFile,
 		orgId: inputs.orgId,
@@ -378,29 +358,17 @@ const runWithoutChecks = (props: LinkProps): void => {
 	});
 };
 
-/**
- * A bad user-supplied identifier (project/org/branch that doesn't exist or
- * isn't accessible). Carries an `agentCode` so `--agent` mode can report a
- * precise `status: error` code instead of a generic INTERNAL_ERROR, while the
- * human path just prints the clear `message`.
- */
 class LinkInputError extends Error {
-	readonly agentCode: string;
-	constructor(message: string, agentCode: string) {
+	constructor(message: string) {
 		super(message);
 		this.name = "LinkInputError";
-		this.agentCode = agentCode;
 	}
 }
 
 const httpStatus = (err: unknown): number | undefined =>
 	isNeonApiError(err) ? err.status : undefined;
 
-/**
- * Fetch a project, turning the common failure modes into clear, actionable
- * errors. 401 is rethrown so the global handler can refresh credentials;
- * everything else surfaces as a `LinkInputError` the user (or agent) can act on.
- */
+/** 401 must reach the global handler so it can refresh credentials. */
 const fetchProjectOrThrow = async (props: CommonProps, projectId: string) => {
 	try {
 		const { data } = await props.apiClient.getProject(projectId);
@@ -413,13 +381,11 @@ const fetchProjectOrThrow = async (props: CommonProps, projectId: string) => {
 		if (status === 403) {
 			throw new LinkInputError(
 				`You don't have access to project '${projectId}'. Check that your API key's account or organization can see it.`,
-				"NO_ACCESS",
 			);
 		}
 		if (status === 404) {
 			throw new LinkInputError(
 				`Project '${projectId}' not found. Double-check the project ID — or that your API key has access to it.`,
-				"NOT_FOUND",
 			);
 		}
 		throw err;
@@ -448,7 +414,6 @@ const verifyOrgAccess = async (
 		if (status === 403 || status === 404) {
 			throw new LinkInputError(
 				`Organization '${orgId}' not found, or your API key doesn't have access to it. Find your org ID in the Neon Console under Settings.`,
-				status === 403 ? "NO_ACCESS" : "NOT_FOUND",
 			);
 		}
 		throw err;
@@ -484,7 +449,6 @@ const resolveBranchRef = async (
 			: "(none)";
 	throw new LinkInputError(
 		`Branch '${branchRef}' not found in project '${projectId}'. Available branches: ${available}. Pin one with \`${getCliName()} checkout <branch>\`.`,
-		"NOT_FOUND",
 	);
 };
 
@@ -520,7 +484,6 @@ const resolveOrgForProject = async (
 		if (projectOrg && projectOrg !== inputs.orgId) {
 			throw new LinkInputError(
 				`Project '${projectId}' belongs to organization '${projectOrg}', not '${inputs.orgId}'. Omit --org-id to use the project's own org, or pass the matching ID.`,
-				"ORG_MISMATCH",
 			);
 		}
 		if (!projectOrg) {
@@ -899,166 +862,6 @@ const promptRegion = async (props: LinkProps): Promise<string> => {
 };
 
 // ----------------------------------------------------------------------------
-// Agent mode (JSON state machine)
-// ----------------------------------------------------------------------------
-
-const runAgentSafely = async (props: LinkProps) => {
-	try {
-		const inputs = parseInputs(props);
-		validateInputs(inputs);
-		await runAgent(props, inputs);
-	} catch (err) {
-		emitAgent(toAgentError(err));
-		process.exit(1);
-	}
-};
-
-const runAgent = async (props: LinkProps, inputs: Inputs) => {
-	const { projectId, projectName, regionId, branch } = inputs;
-	const existing = readContextFile(props.contextFile);
-
-	// Existing project: infer the org and link it. The branch is left to an
-	// explicit `checkout` unless one was passed or is already pinned.
-	if (projectId) {
-		const orgId = await resolveOrgForProject(
-			props,
-			inputs,
-			existing,
-			projectId,
-		);
-		const pinnedBranch = await resolvePinnedBranch(
-			props,
-			inputs,
-			existing,
-			projectId,
-		);
-		applyContext(props.contextFile, {
-			orgId,
-			projectId,
-			branch: pinnedBranch,
-		});
-		const orgSuffix = orgId ? ` (org ${orgId})` : "";
-		if (pinnedBranch) {
-			const pullNote = renderAgentPullNote(
-				await autoPullEnvAfterPin({
-					...props,
-					projectId,
-					branch: pinnedBranch,
-					envPull: props.envPull,
-				}),
-			);
-			emitAgent({
-				status: "linked",
-				context_file: props.contextFile,
-				context: { orgId, projectId, branch: pinnedBranch },
-				project: { id: projectId },
-				message: `Linked ${props.contextFile} to project ${projectId}${orgSuffix} on branch ${pinnedBranch}.${pullNote}`,
-			});
-			return;
-		}
-		emitAgent({
-			status: "linked",
-			context_file: props.contextFile,
-			context: { orgId, projectId },
-			project: { id: projectId },
-			message: `Linked ${props.contextFile} to project ${projectId}${orgSuffix}. No branch pinned — run \`${getCliName()} checkout <branch>\` (omit the branch to list options) to pin one and pull its env vars.`,
-		});
-		return;
-	}
-
-	const orgResolution = await resolveOrg(props, inputs.orgId);
-	if (orgResolution.kind === "needs_selection") {
-		emitAgent(buildNeedsOrgResponse(orgResolution));
-		return;
-	}
-	const orgId = orgResolution.orgId;
-
-	if (projectName && !regionId) {
-		const regions = await fetchRegions(props);
-		emitAgent({
-			status: "needs_project_details",
-			instruction: `Ask the user which region to create project "${projectName}" in. After they pick one, re-run the next_command_template with the chosen --region-id value.`,
-			regions: regions.map((region) => ({
-				id: region.region_id,
-				name: region.name,
-				default: region.default,
-			})),
-			next_command_template: `${getCliName()} link --agent --org-id ${shellArg(orgId)} --project-name ${shellArg(projectName)} --region-id <region_id>`,
-		});
-		return;
-	}
-
-	if (projectName && regionId) {
-		await verifyOrgAccess(props, orgId);
-		const created = await createProject(props, {
-			orgId,
-			name: projectName,
-			regionId,
-		});
-		applyContext(props.contextFile, {
-			orgId,
-			projectId: created.project.id,
-			branch: created.branchName,
-		});
-		const pullNote = renderAgentPullNote(
-			await autoPullEnvAfterPin({
-				...props,
-				projectId: created.project.id,
-				branch: created.branchName,
-				envPull: props.envPull,
-			}),
-		);
-		emitAgent({
-			status: "linked",
-			context_file: props.contextFile,
-			context: {
-				orgId,
-				projectId: created.project.id,
-				branch: created.branchName,
-			},
-			project: {
-				id: created.project.id,
-				name: created.project.name,
-				region_id: created.project.region_id,
-			},
-			message: `Created project ${created.project.id} ("${created.project.name ?? projectName}") in ${created.project.region_id ?? regionId} and linked ${props.contextFile} on branch ${created.branchName}.${pullNote}`,
-		});
-		return;
-	}
-
-	// orgId is set but no project info — list projects to choose from. A pending
-	// --branch can't be applied until a project is chosen, so it's surfaced in
-	// the instruction rather than silently dropped.
-	const projects = await listAllProjects(props, orgId);
-	const branchNote = branch
-		? ` A branch was requested (--branch ${branch}) but a branch can only be pinned once a project is chosen — re-run with --project-id first, then \`${getCliName()} checkout ${branch}\`.`
-		: "";
-	emitAgent({
-		status: "needs_project",
-		instruction:
-			(projects.length === 0
-				? `Organization ${orgId} has no projects yet. Ask the user for a name for the new project, then re-run the create_option.next_command_template.`
-				: `Ask the user whether to link to one of these ${projects.length} existing projects (use next_command_template with --project-id) or create a new project (use create_option.next_command_template).`) +
-			branchNote,
-		options: projects.map((project) => ({
-			id: project.id,
-			name: project.name,
-			region_id: project.region_id,
-		})),
-		create_option: {
-			instruction:
-				"To create a new project, ask the user for a project name. The region can be omitted to receive a follow-up needs_project_details response that lists available regions.",
-			next_command_template: `${getCliName()} link --agent --org-id ${shellArg(orgId)} --project-name <name> --region-id <region_id>`,
-		},
-		next_command_template: `${getCliName()} link --agent --org-id ${shellArg(orgId)} --project-id <project_id>`,
-	});
-};
-
-const emitAgent = (response: AgentResponse) => {
-	process.stdout.write(`${JSON.stringify(response, null, 2)}\n`);
-};
-
-// ----------------------------------------------------------------------------
 // API helpers
 // ----------------------------------------------------------------------------
 
@@ -1133,69 +936,6 @@ const detectOrgIdFromProjects = async (
 		log.debug("detectOrgIdFromProjects failed: %s", message);
 		return undefined;
 	}
-};
-
-const buildNeedsOrgResponse = (
-	resolution: Extract<OrgResolution, { kind: "needs_selection" }>,
-): AgentResponse => {
-	if (resolution.orgKeyLimited) {
-		return {
-			status: "needs_org",
-			instruction:
-				"This Neon API key is organization-scoped, so the CLI cannot list the user's organizations and no existing project was found to auto-detect the org ID. Ask the user for their Neon organization ID (visible in the Neon Console under the org's Settings page, formatted like `org-bitter-breeze-12345678`) and re-run the next_command_template with that --org-id.",
-			options: [],
-			next_command_template: `${getCliName()} link --agent --org-id <org_id>`,
-		};
-	}
-	const orgs = resolution.orgs;
-	return {
-		status: "needs_org",
-		instruction:
-			orgs.length === 0
-				? "The user does not belong to any organizations. Ask them to create one in the Neon Console (https://console.neon.tech/) before linking."
-				: `Ask the user which of these ${orgs.length} organization${orgs.length === 1 ? "" : "s"} they want to link the current directory to. After they pick one, re-run the next_command_template with the chosen --org-id value.`,
-		options: orgs.map((org) => ({ id: org.id, name: org.name })),
-		next_command_template: `${getCliName()} link --agent --org-id <org_id>`,
-	};
-};
-
-const toAgentError = (
-	err: unknown,
-): Extract<AgentResponse, { status: "error" }> => {
-	if (err instanceof LinkInputError) {
-		return { status: "error", code: err.agentCode, message: err.message };
-	}
-	if (isNeonApiError(err)) {
-		const status = err.status;
-		const apiMessage = messageFromBody(err.data);
-		const message =
-			apiMessage !== undefined && apiMessage.length > 0
-				? apiMessage
-				: err.message;
-		let code = "API_ERROR";
-		if (status === 401 || status === 403) {
-			code = "AUTH_ERROR";
-		} else if (status !== undefined && status >= 400 && status < 500) {
-			code = "CLIENT_ERROR";
-		} else if (status !== undefined && status >= 500) {
-			code = "SERVER_ERROR";
-		} else if (err.code === "ECONNABORTED") {
-			code = "TIMEOUT";
-		}
-		return { status: "error", code, message };
-	}
-	if (err instanceof Error) {
-		return {
-			status: "error",
-			code: "INTERNAL_ERROR",
-			message: err.message,
-		};
-	}
-	return {
-		status: "error",
-		code: "INTERNAL_ERROR",
-		message: String(err),
-	};
 };
 
 const listAllProjects = async (
@@ -1463,13 +1203,6 @@ const onPromptState = (state: {
 		process.stdout.write("\n");
 		process.exit(1);
 	}
-};
-
-const shellArg = (value: string): string => {
-	if (/^[A-Za-z0-9._:/-]+$/.test(value)) {
-		return value;
-	}
-	return `'${value.replace(/'/g, `'\\''`)}'`;
 };
 
 const mustString = <T>(value: T | undefined, name: string): T => {

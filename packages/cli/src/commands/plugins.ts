@@ -2,17 +2,22 @@ import type yargs from "yargs";
 
 import { getAgentDisplayName } from "../init/agents.js";
 import { log } from "../log.js";
+import { NEON_MCP_URL } from "../mcp/install.js";
 import { resolvePluginsPlan } from "../plugins/plan.js";
 import {
 	NEON_PLUGIN_NAME,
 	neonPluginsRetryCommand,
+	PLUGIN_SKILLS,
+	PLUGIN_SOURCE,
 	pluginsAddArgs,
 	runPluginsCli,
 } from "../plugins/run.js";
+import { pluginsInstallableAgents } from "../plugins/targets.js";
 import { confirmPluginsInstall } from "../plugins/wizard.js";
 import type { CommonProps } from "../types.js";
 import { canPickAgentsInteractively } from "../utils/agent_picker.js";
 import { noPassthrough } from "../utils/flags.js";
+import { helpCsv, helpEpilogue } from "../utils/help_text.js";
 import { writer } from "../writer.js";
 
 type PluginsProps = CommonProps & {
@@ -53,6 +58,11 @@ const coerceAgents = (value: unknown): string[] => {
 export const command = "plugins";
 export const describe = "Install the Neon plugin into coding agents";
 
+const pluginProjectAgents = pluginsInstallableAgents("project");
+const pluginGlobalOnlyAgents = pluginsInstallableAgents("global").filter(
+	(id) => !pluginProjectAgents.includes(id),
+);
+
 export const builder = (argv: yargs.Argv) =>
 	argv
 		.usage("$0 plugins [options]")
@@ -73,7 +83,7 @@ export const builder = (argv: yargs.Argv) =>
 				type: "array",
 				string: true,
 				describe:
-					"Coding agent to install into (repeatable). Skips the agent picker",
+					"Coding agent to install into (repeatable). Skips the agent picker. Values listed below",
 				coerce: coerceAgents,
 			},
 		})
@@ -84,6 +94,18 @@ export const builder = (argv: yargs.Argv) =>
 			"Install into specific agents",
 		)
 		.example("$0 plugins --global", "Install user-level")
+		.epilogue(
+			helpEpilogue(
+				helpCsv(
+					"Supported agents at project scope",
+					pluginProjectAgents,
+				),
+				helpCsv("Also with --global", pluginGlobalOnlyAgents),
+				`Currently one plugin: ${NEON_PLUGIN_NAME} from ${PLUGIN_SOURCE}.`,
+				`It includes the Neon MCP server (${NEON_MCP_URL})`,
+				helpCsv("and these skills", PLUGIN_SKILLS),
+			),
+		)
 		.strict()
 		.check(noPassthrough("plugins"));
 

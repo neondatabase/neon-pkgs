@@ -46,6 +46,28 @@ export const getDefaultInputSchema = z.strictObject({
 	project_id: zod.zListProjectBranchesPath.shape.project_id,
 });
 
+export const resetFromParentInputSchema = z.strictObject({
+	project_id: zod.zRestoreProjectBranchPath.shape.project_id,
+	branch_id: zod.zRestoreProjectBranchPath.shape.branch_id,
+	preserve_under_name:
+		zod.zBranchRestoreRequest.shape.preserve_under_name.describe(
+			"Name under which to save the current branch before the reset. Required when the branch has children; those children move to the new branch.",
+		),
+});
+
+const compareQuery = zod.zGetProjectBranchSchemaComparisonQuery.shape;
+
+export const compareSchemaInputSchema = z.strictObject({
+	project_id: zod.zGetProjectBranchSchemaComparisonPath.shape.project_id,
+	branch_id: zod.zGetProjectBranchSchemaComparisonPath.shape.branch_id,
+	database_name: compareQuery.db_name,
+	base_branch_id: compareQuery.base_branch_id,
+	lsn: compareQuery.lsn,
+	timestamp: compareQuery.timestamp,
+	base_lsn: compareQuery.base_lsn,
+	base_timestamp: compareQuery.base_timestamp,
+});
+
 export const connectionStringInputSchema = z.strictObject({
 	project_id: zod.zGetConnectionUriPath.shape.project_id,
 	branch_id: zod.zGetConnectionUriQuery.shape.branch_id,
@@ -177,6 +199,81 @@ export const getDefaultTool = (options: ToolClientOptions) =>
 		},
 		(neon, input, signal) =>
 			neon.branches.getDefault(input.project_id, { signal }),
+	);
+
+export const resetFromParentTool = (options: ToolClientOptions) =>
+	bindTool(
+		options,
+		{
+			operationId: "branches.resetFromParent",
+			id: publishedId("branches.resetFromParent"),
+			title: "Reset branch from parent",
+			description:
+				"Reset a branch to its parent's current HEAD. Discards every change the branch has written since it diverged. preserve_under_name is required when the branch has children. For an LSN or timestamp restore, use the raw restoreProjectBranch operation.",
+			inputSchema: resetFromParentInputSchema,
+			annotations: writeAnnotations,
+			requiresApproval: true,
+			metadata: {
+				method: "POST",
+				path: "/projects/{project_id}/branches/{branch_id}/restore",
+				stability: "stable",
+				deprecated: false,
+				tags: ["Branch"],
+			},
+		},
+		(neon, input, signal) =>
+			neon.branches.resetFromParent(
+				input.project_id,
+				input.branch_id,
+				input.preserve_under_name === undefined
+					? undefined
+					: { preserveUnderName: input.preserve_under_name },
+				{ signal },
+			),
+	);
+
+export const compareSchemaTool = (options: ToolClientOptions) =>
+	bindTool(
+		options,
+		{
+			operationId: "branches.compareSchema",
+			id: publishedId("branches.compareSchema"),
+			title: "Compare database schema",
+			description:
+				"Compare a branch database schema to another branch. Omitting base_branch_id compares against the parent. Returns a unified SQL diff.",
+			inputSchema: compareSchemaInputSchema,
+			annotations: readAnnotations,
+			requiresApproval: false,
+			metadata: {
+				method: "GET",
+				path: "/projects/{project_id}/branches/{branch_id}/compare_schema",
+				stability: "stable",
+				deprecated: false,
+				tags: ["Branch"],
+			},
+		},
+		(neon, input, signal) =>
+			neon.branches.compareSchema(
+				input.project_id,
+				input.branch_id,
+				{
+					databaseName: input.database_name,
+					...(input.base_branch_id === undefined
+						? {}
+						: { baseBranchId: input.base_branch_id }),
+					...(input.lsn === undefined ? {} : { lsn: input.lsn }),
+					...(input.timestamp === undefined
+						? {}
+						: { timestamp: input.timestamp }),
+					...(input.base_lsn === undefined
+						? {}
+						: { baseLsn: input.base_lsn }),
+					...(input.base_timestamp === undefined
+						? {}
+						: { baseTimestamp: input.base_timestamp }),
+				},
+				{ signal },
+			),
 	);
 
 export const connectionStringTool = (options: ToolClientOptions) =>
