@@ -108,10 +108,7 @@ export const builder = (argv: yargs.Argv) =>
 			branch: {
 				alias: "branch-id",
 				describe:
-					"Branch name or ID to pin in the context (resolved to its name before writing). " +
-					"Without it, a project with one branch is pinned automatically; several branches " +
-					"prompt in a TTY, pin the default with -y, or stay unpinned for " +
-					`\`${getCliName()} checkout <branch>\`.`,
+					"Branch name or ID to pin in the context (resolved to its name before writing).",
 				type: "string",
 			},
 			params: {

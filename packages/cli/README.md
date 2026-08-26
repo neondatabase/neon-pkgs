@@ -282,13 +282,21 @@ Linked .neon:
 
 When you link an **existing** project that has more than one branch, the interactive flow adds a
 final step to pick which branch to pin — the same `＋ Create a new branch…` + list selector used by
-`neon checkout` (a single-branch project is pinned automatically, no prompt). `link --project-id …`
-uses the same rule: one branch is pinned, several prompt in a TTY, `-y` pins the default, and
-no TTY leaves the pin empty for `neon checkout`:
+`neon checkout` (a single-branch project is pinned automatically, no prompt):
 
 ```bash
+$ neon link
 ? Which organization would you like to link? › Personal Org (org-abc123)
 ? Which project would you like to link? › my-app (polished-snowflake-12345678)
+? Which branch would you like to link? › [default] main (br-main-branch-87654321)
+```
+
+`link --project-id …` skips org and project. One branch is pinned with no prompt. Several branches
+in a TTY show the branch prompt; `-y` pins the default; no TTY leaves the pin empty for
+`neon checkout`:
+
+```bash
+$ neon link --project-id polished-snowflake-12345678
 ? Which branch would you like to link? › [default] main (br-main-branch-87654321)
 ```
 
