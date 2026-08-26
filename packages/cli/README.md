@@ -322,7 +322,7 @@ neon link --no-checks --org-id org-abc123 --project-id polished-snowflake-123456
 
 Every supplied identifier is checked before anything is written, with actionable errors — e.g. `Project '…' not found`, `You don't have access to project '…'`, `Organization '…' not found, or your API key doesn't have access to it`, `Project '…' belongs to organization 'A', not 'B'`, or `Branch '…' not found in project '…'. Available branches: …`.
 
-**Agents and scripts (no TTY)** — list, then link. `neon link --help` prints the same recipe.
+**Agents and scripts (no TTY):** List, then link. `neon link --help` prints the same recipe.
 
 ```bash
 neon orgs list --output json
