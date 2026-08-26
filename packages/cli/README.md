@@ -710,6 +710,12 @@ $ neon bootstrap my-app
 
 # Scaffold a specific template into the current directory (no prompts)
 $ neon bootstrap . --template hono
+
+# List templates
+$ neon bootstrap --list-templates
+
+# Machine-readable catalog
+$ neon bootstrap --list-templates --output json
 ```
 
 The target directory must be empty unless you pass `--force` (a lone `.git` is ignored, so a freshly `git init`ed folder is fine). Symlinks and executable bits in the template are preserved.

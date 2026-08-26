@@ -6,7 +6,6 @@ import prompts, { type InitialReturnValue } from "prompts";
 import type yargs from "yargs";
 import { isCi } from "../env.js";
 import {
-	BootstrapInputError,
 	type BootstrapTemplate,
 	ensureTargetUsable,
 	FALLBACK_TEMPLATES,
@@ -19,7 +18,6 @@ import { log } from "../log.js";
 import type { CommonProps } from "../types.js";
 import { getCliName } from "../utils/cli_name.js";
 import {
-	DO_NOT_SUBSTITUTE_HINT,
 	formatInstallCommand,
 	inferPackageManager,
 	installArgs,
@@ -28,13 +26,14 @@ import {
 	resolvePackageManager,
 	runCommand,
 } from "../utils/package_manager.js";
+import { writer } from "../writer.js";
 
 type BootstrapProps = CommonProps & {
 	directory?: string;
 	template?: string;
 	force: boolean;
 	listTemplates: boolean;
-	agent: boolean;
+	agent?: boolean;
 	default: boolean;
 	install: boolean;
 	git: boolean;
@@ -44,50 +43,8 @@ type BootstrapProps = CommonProps & {
 	profile?: string;
 };
 
-// ----------------------------------------------------------------------------
-// Agent mode (JSON state machine)
-// ----------------------------------------------------------------------------
-
-type AgentTemplateOption = {
-	id: string;
-	title: string;
-	description: string;
-	services?: string[];
-};
-
-/**
- * One follow-up the caller should offer the user after scaffolding. The agent
- * is expected to ask the user, then run `command` from the project directory
- * (the `link` step intentionally chains into `neon link --agent`'s own state
- * machine). Mirrors `link --agent`'s instruction/next_command_template style.
- */
-type AgentNextStep = {
-	action: "install_dependencies" | "initialize_git" | "link_neon_project";
-	instruction: string;
-	command: string;
-};
-
-type AgentResponse =
-	| {
-			status: "needs_template";
-			instruction: string;
-			options: AgentTemplateOption[];
-			next_command_template: string;
-	  }
-	| {
-			status: "needs_directory";
-			instruction: string;
-			next_command_template: string;
-	  }
-	| {
-			status: "scaffolded";
-			directory: string;
-			template: { id: string; title: string };
-			files_written: number;
-			next_steps: AgentNextStep[];
-			message: string;
-	  }
-	| { status: "error"; code: string; message: string };
+const removedAgent = () =>
+	`\`${getCliName()} bootstrap --agent\` was removed. List templates with \`${getCliName()} bootstrap --list-templates --output json\`. Scaffold with \`${getCliName()} bootstrap <directory> --template <id>\` or \`${getCliName()} bootstrap <directory> --default\`.`;
 
 // The directory positional is optional: omitting it in an interactive terminal
 // prompts for one. In a non-interactive context a missing directory is an error.
@@ -110,7 +67,8 @@ export const builder = (argv: yargs.Argv) =>
 			},
 			"list-templates": {
 				alias: ["list", "ls"],
-				describe: "List available templates and exit.",
+				describe:
+					"List available templates and exit. --output json and --output yaml print a machine-readable catalog.",
 				type: "boolean",
 				default: false,
 			},
@@ -121,10 +79,8 @@ export const builder = (argv: yargs.Argv) =>
 				default: false,
 			},
 			agent: {
-				describe:
-					"Emit a JSON state-machine response designed for AI agents instead of prompting. The output is a single JSON object with a discriminated `status` field describing the next step.",
+				hidden: true,
 				type: "boolean",
-				default: false,
 			},
 			default: {
 				alias: "y",
@@ -164,14 +120,32 @@ export const builder = (argv: yargs.Argv) =>
 			"Quick start: scaffold the default template and run setup without prompting",
 		)
 		.example(
-			"$0 bootstrap my-app --template hono --agent",
-			"Scaffold without prompting and emit the JSON state machine for AI agents",
+			"$0 bootstrap --list-templates --output json",
+			"Print the template catalog as JSON",
 		)
+		.check((argv) => {
+			if (argv.agent === true) {
+				throw new Error(removedAgent());
+			}
+			return true;
+		})
 		.strict();
 
 export const handler = async (props: BootstrapProps): Promise<void> => {
 	if (props.listTemplates) {
 		const templates = await fetchTemplates();
+		if (props.output === "json" || props.output === "yaml") {
+			writer(props).end(
+				templates.map((t) => ({
+					id: t.id,
+					title: t.title,
+					description: t.description,
+					services: t.services ?? [],
+				})),
+				{ fields: ["id", "title", "description", "services"] },
+			);
+			return;
+		}
 		for (const t of templates) {
 			const services =
 				t.services && t.services.length > 0
@@ -179,11 +153,6 @@ export const handler = async (props: BootstrapProps): Promise<void> => {
 					: "";
 			process.stdout.write(`${t.id} — ${t.description}${services}\n`);
 		}
-		return;
-	}
-
-	if (props.agent) {
-		await runAgentSafely(props);
 		return;
 	}
 
@@ -341,15 +310,6 @@ const scaffold = async (
 // Post-scaffold steps (install dependencies, git init, link to a Neon project)
 // ----------------------------------------------------------------------------
 
-/**
- * After a human scaffold, offer the things you almost always do next: install
- * dependencies, initialize a git repo, and link the directory to a Neon
- * project. In an interactive terminal each is a y/n prompt (skippable up front
- * with --no-install / --no-git / --no-link); `--default` runs install + git
- * without asking; otherwise we just print the manual steps so nothing runs
- * behind the user's back. Agent mode never reaches here — it returns these as
- * structured `next_steps` instead (see {@link runAgent}).
- */
 const runPostScaffoldSteps = async (
 	props: BootstrapProps,
 	targetDir: string,
@@ -574,123 +534,6 @@ const printNextSteps = (
 	log.info("");
 };
 
-const runAgentSafely = async (props: BootstrapProps): Promise<void> => {
-	try {
-		await runAgent(props);
-	} catch (err) {
-		emitAgent(toAgentError(err));
-		process.exit(1);
-	}
-};
-
-/**
- * The `--agent` flow: resolve what the flags determine and emit one JSON object
- * describing either the next input needed (`needs_template` / `needs_directory`)
- * or the terminal result (`scaffolded`). Unlike interactive mode it never
- * prompts and never runs install/git/link itself — those come back as structured
- * `next_steps` so the agent can confirm with the user and run them (the link
- * step chains into `neon link --agent`).
- */
-const runAgent = async (props: BootstrapProps): Promise<void> => {
-	if (!props.template) {
-		const templates = await fetchTemplates();
-		emitAgent({
-			status: "needs_template",
-			instruction: `Ask the user which template to scaffold, then re-run the next_command_template with the chosen --template value${
-				props.directory ? "" : " and a target directory"
-			}.`,
-			options: templates.map((template) => ({
-				id: template.id,
-				title: template.title,
-				description: template.description,
-				...(template.services ? { services: template.services } : {}),
-			})),
-			next_command_template: `${getCliName()} bootstrap --agent ${
-				props.directory ? shellArg(props.directory) : "<directory>"
-			} --template <template_id>`,
-		});
-		return;
-	}
-
-	const templates = await resolveTemplateList(props);
-	const template = findTemplate(templates, props.template);
-	if (!template) {
-		throw new BootstrapInputError(
-			`Unknown template "${props.template}". Available templates: ${templateIds(templates)}.`,
-			"UNKNOWN_TEMPLATE",
-		);
-	}
-
-	if (props.directory === undefined) {
-		emitAgent({
-			status: "needs_directory",
-			instruction:
-				'Ask the user which directory to scaffold into (use "." for the current directory), then re-run the next_command_template with it.',
-			next_command_template: `${getCliName()} bootstrap --agent <directory> --template ${shellArg(
-				template.id,
-			)}`,
-		});
-		return;
-	}
-
-	const targetDir = resolve(
-		process.cwd(),
-		props.directory === "." ? "" : props.directory,
-	);
-	ensureTargetUsable(targetDir, props.force);
-	const filesWritten = await scaffold(template, targetDir);
-
-	const dir = displayDir(targetDir);
-	const runIn = isCurrentDir(targetDir) ? "" : `cd ${shellArg(dir)} && `;
-	const installPm = resolvePackageManager(targetDir);
-	emitAgent({
-		status: "scaffolded",
-		directory: targetDir,
-		template: { id: template.id, title: template.title },
-		files_written: filesWritten,
-		next_steps: [
-			{
-				action: "install_dependencies",
-				instruction: `Ask the user whether to install dependencies, then run this in the project directory. ${DO_NOT_SUBSTITUTE_HINT}`,
-				command: `${runIn}${formatInstallCommand(installPm)}`,
-			},
-			{
-				action: "initialize_git",
-				instruction:
-					"Ask the user whether to initialize a git repository in the project directory.",
-				command: `${runIn}git init`,
-			},
-			{
-				action: "link_neon_project",
-				instruction:
-					"Ask the user whether to link the project to a Neon project now. This runs the link state machine — follow its JSON output for the next step.",
-				command: `${runIn}${getCliName()} link --agent`,
-			},
-		],
-		message: `Scaffolded "${template.title}" (${filesWritten} files) into ${dir}. Offer the next_steps to the user: install dependencies, initialize git, then link a Neon project.`,
-	});
-};
-
-const emitAgent = (response: AgentResponse): void => {
-	process.stdout.write(`${JSON.stringify(response, null, 2)}\n`);
-};
-
-const toAgentError = (
-	err: unknown,
-): Extract<AgentResponse, { status: "error" }> => {
-	if (err instanceof BootstrapInputError) {
-		return { status: "error", code: err.agentCode, message: err.message };
-	}
-	if (err instanceof Error) {
-		return {
-			status: "error",
-			code: "INTERNAL_ERROR",
-			message: err.message,
-		};
-	}
-	return { status: "error", code: "INTERNAL_ERROR", message: String(err) };
-};
-
 // ----------------------------------------------------------------------------
 // Path display helpers
 // ----------------------------------------------------------------------------
@@ -709,13 +552,6 @@ const displayDir = (targetDir: string): string => {
 		return ".";
 	}
 	return rel.startsWith("..") ? targetDir : rel;
-};
-
-const shellArg = (value: string): string => {
-	if (/^[A-Za-z0-9._:/-]+$/.test(value)) {
-		return value;
-	}
-	return `'${value.replace(/'/g, `'\\''`)}'`;
 };
 
 const onPromptState = (state: {
