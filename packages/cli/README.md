@@ -657,7 +657,7 @@ When a package cannot be bundled — a native addon with no esbuild loader, or a
 
 ## Scaffold a project (`bootstrap`)
 
-`neon bootstrap` copies a Neon starter template into a new (or current) directory — conceptually like `degit`, but it only pulls from a small set of templates we maintain in the public [`neondatabase/examples`](https://github.com/neondatabase/examples) repo. It requires no Neon login: it just downloads files from GitHub.
+`neon bootstrap` copies a Neon starter template into a new (or current) directory — conceptually like `degit`, but it only pulls from a small set of templates we maintain in the public [`neondatabase/examples`](https://github.com/neondatabase/examples) repo. The template copy needs no Neon login: it downloads files from GitHub.
 
 After scaffolding, an interactive terminal offers agent tooling (the Neon plugin, or skills and MCP separately — never both) and then `neon link`. `--default` / `-y` skips the template, install, git, and agent pickers, then runs `link --yes`. `link --yes` still asks for a project unless one is already linked. `--no-agent-setup` and `--no-link` skip those. Non-interactive without `--default` prints next steps and does not install, set up agents, or link.
 
@@ -667,7 +667,7 @@ Pass a target directory (or `.` for the current one). In an interactive terminal
 # Pick a template interactively and scaffold it into ./my-app
 $ neon bootstrap my-app
 
-# Scaffold a specific template into the current directory (no prompts)
+# Scaffold a specific template into the current directory (skips the template picker)
 $ neon bootstrap . --template hono
 
 # List templates
