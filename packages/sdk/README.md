@@ -260,13 +260,11 @@ const branch = data?.branch;
 // Resolve the project's default ("production") branch
 const { data: prod } = await neon.branches.getDefault(projectId);
 
-// Branch off production with compute, without a connection string
 await neon.branches.create(projectId, {
   name: "preview/pr-123",
   parent_id: prod?.id,
 });
 
-// Skip compute when the branch only needs a schema
 await neon.branches.create(projectId, {
   name: "schema-only",
   parent_id: prod?.id,

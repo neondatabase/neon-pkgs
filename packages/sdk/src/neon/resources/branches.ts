@@ -27,13 +27,11 @@ type ListQuery = Omit<NonNullable<ListProjectBranchesData["query"]>, "cursor">;
 type BranchFields = NonNullable<BranchCreateRequest["branch"]>;
 type UpdateInput = BranchUpdateRequest["branch"];
 
-/** Per-call options for {@link Branches.createAndConnect}. */
 interface WorkflowOptions<Throw extends boolean> extends CallOptions<Throw> {
 	/** Return a pooled connection string (default `true`). */
 	pooled?: boolean;
 }
 
-/** Autoscaling settings for the branch's read-write endpoint. */
 export interface ComputeSettings {
 	minCu?: number;
 	maxCu?: number;
@@ -44,12 +42,10 @@ type CreateInputBase = BranchFields & {
 	compute?: ComputeSettings;
 };
 
-/** Input for {@link Branches.create}. `noCompute: true` cannot carry `compute`. */
 export type CreateInput =
 	| (CreateInputBase & { noCompute?: false })
 	| (BranchFields & { noCompute: true; compute?: never });
 
-/** Input for {@link Branches.createAndConnect}. */
 export interface CreateAndConnectInput {
 	name?: string;
 	/** Parent branch id. Defaults to the project's default branch. */
@@ -143,15 +139,12 @@ export class Branches<DThrow extends boolean> {
 	}
 
 	/**
-	 * Create a branch with a read-write endpoint by default. Does not return a
-	 * connection string; use {@link Branches.createAndConnect} or
-	 * `postgres.connectionString` for that.
+	 * This method retains its branch-only result even when it provisions compute;
+	 * use {@link Branches.createAndConnect} or `postgres.connectionString` when a
+	 * connection string is needed.
 	 *
-	 * Pass `noCompute: true` to skip the endpoint (the Management API default).
-	 * Readiness polling stays on unless `waitForReadiness` is set false — a
+	 * Readiness polling stays on for `noCompute` branches because a
 	 * compute-less branch still has provisioning operations.
-	 *
-	 * @workflow createProjectBranch + waitForReadiness
 	 */
 	create(
 		projectId: string,
@@ -253,12 +246,6 @@ export class Branches<DThrow extends boolean> {
 		);
 	}
 
-	/**
-	 * Create a branch with a read-write endpoint and return a ready-to-use connection
-	 * string. One API call plus readiness polling.
-	 *
-	 * @workflow createProjectBranch (with endpoint) + waitForReadiness
-	 */
 	createAndConnect(
 		projectId: string,
 		input?: CreateAndConnectInput,

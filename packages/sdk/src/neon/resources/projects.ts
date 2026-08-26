@@ -366,13 +366,10 @@ export class Projects<DThrow extends boolean> {
 	}
 
 	/**
-	 * Create a project. The API always provisions a default branch with read-write
-	 * compute; there is no opt-out. Does not return a connection string; use
-	 * {@link Projects.createAndConnect} or `postgres.connectionString` for that.
-	 *
-	 * Readiness polling is on by default.
-	 *
-	 * @apiCall POST /projects
+	 * The API provides no way to skip the default branch or read-write compute.
+	 * This method retains its project-only result; use
+	 * {@link Projects.createAndConnect} or `postgres.connectionString` when a
+	 * connection string is needed.
 	 */
 	create(input?: CreateInput): Promise<Outcome<Project, DThrow>>;
 	create<Throw extends boolean = DThrow>(
