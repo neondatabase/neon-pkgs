@@ -26,12 +26,16 @@ export const helpCsv = (
 	let line = prefix;
 	for (const item of items) {
 		const addition = line === prefix ? ` ${item}` : `, ${item}`;
-		if (line.length + addition.length > width && line !== prefix) {
-			lines.push(`${line},`);
-			line = `${WRAP_INDENT}${item}`;
-		} else {
+		if (line.length + addition.length <= width) {
 			line += addition;
+			continue;
 		}
+		if (line === prefix) {
+			lines.push(prefix);
+		} else {
+			lines.push(`${line},`);
+		}
+		line = `${WRAP_INDENT}${item}`;
 	}
 	lines.push(line);
 	return lines.join("\n");

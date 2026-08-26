@@ -15,6 +15,16 @@ describe("helpCsv", () => {
 		);
 	});
 
+	test("wraps before the first item when the label plus item exceeds width", () => {
+		expect(
+			helpCsv(
+				"Supported agents at project scope",
+				["claude-code", "cursor"],
+				39,
+			),
+		).toBe("Supported agents at project scope:\n    claude-code, cursor");
+	});
+
 	test("omits an empty list", () => {
 		expect(helpCsv("Supported agents", [])).toBe("");
 	});
