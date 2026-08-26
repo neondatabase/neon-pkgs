@@ -742,7 +742,7 @@ $ neon init -y
 
 `-y` forwards `-y` to `skills` and `mcp`, `--default --no-link` to `bootstrap`, and `--yes` to `link`. Bootstrap is always `--no-link` so the following `link` step owns the project pin and can receive `--api-key`. `link --yes` only skips the "already linked" confirmation; it still asks for a project unless one is already linked.
 
-A failed step stops the rest. `--profile` and `--config-dir` are forwarded to each child. `--output` is not.
+A failed step stops the rest. `--profile` and `--config-dir` are forwarded to each child. `--output json` and `--output yaml` are refused; the commands init runs print their own output.
 
 `skills` needs Node.js 22.20 or newer. See [`bootstrap`](#scaffold-a-project-bootstrap), [`skills`](#install-neon-agent-skills-skills), [`link`](#linking-a-project), and [`mcp`](#install-the-neon-mcp-server-mcp) for what those commands write.
 

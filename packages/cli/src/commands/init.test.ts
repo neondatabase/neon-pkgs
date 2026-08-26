@@ -309,6 +309,7 @@ describe("init CLI", () => {
 			snapshot: false,
 		});
 		expect(`${stdout}\n${stderr}`).toMatch(/scaffold/i);
+		expect(`${stdout}\n${stderr}`).not.toMatch(/Set output format/);
 	});
 
 	cliTest("rejects --data", async ({ testCliCommand }) => {

@@ -46,7 +46,7 @@ export const builder = (yargs: yargs.Argv) =>
 			type: "boolean",
 			default: false,
 			describe:
-				"Forwards -y to skills and mcp, and scaffolds the default template in an empty directory. link --yes still asks for a project unless one is already linked",
+				"Uses the default template in an empty directory, and the default skills and MCP setup. link --yes still asks for a project unless one is already linked",
 		})
 		.option("agent", {
 			hidden: true,
@@ -56,14 +56,17 @@ export const builder = (yargs: yargs.Argv) =>
 			hidden: true,
 			type: "string",
 		})
+		.option("output", {
+			alias: "o",
+			hidden: true,
+			describe:
+				"Not supported; the commands init runs print their own output",
+		})
 		.example(
 			"$0 init",
 			"Empty dir: scaffold, then skills, link, and mcp. Existing app: skills, link, mcp",
 		)
-		.example(
-			"$0 init -y",
-			"Same steps; forwards -y where the child commands accept it",
-		)
+		.example("$0 init -y", "Same steps, using each child's defaults")
 		.check((argv) => {
 			if (argv.agent === true || argv.data !== undefined) {
 				throw new Error(removedProtocol());
