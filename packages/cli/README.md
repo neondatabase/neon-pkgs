@@ -256,14 +256,14 @@ The Neon CLI supports autocompletion, which you can configure in a few easy step
 `link` resolves what it can and **verifies every identifier you pass** before writing, so a `.neon` is never left half-written or pointing at something that doesn't exist:
 
 - **org** is inferred from the project (so `--project-id` alone is enough); it's omitted only when the project has no organization (personal account).
-- **project** is taken from `--project-id` (or chosen interactively / via `--agent`).
+- **project** is taken from `--project-id` (or chosen interactively).
 - **branch** is left to an explicit [`neon checkout <branch>`](#checkout) — `link` never silently pins a project's default branch (that would make later commands quietly target, say, production). It only records a branch when you pass `--branch`, when one is already pinned for the same project (preserved), when you pick one in the interactive picker, or for a freshly **created** project (whose single branch is unambiguous).
 
 When a branch ends up pinned, `link` also runs [`env pull`](#env-pull) so the branch's Neon env vars (`DATABASE_URL`, …) land in a local `.env`. With no branch pinned there is nothing to pull, so `link` instead nudges you to run `neon checkout`. Pass `--no-env-pull` to skip the pull (for example when injecting env at runtime with `neon-env run` or `neon dev`).
 
 > **Migrating from `set-context`?** `set-context` is **deprecated** in favor of `link` (see [below](#set-context-is-deprecated)). It still works exactly as before for now (a raw write), it just prints a deprecation warning. The `.neon` `branchId` field is also superseded by `branch` (which stores the branch **name** when known); old `branchId` files are still read and are upgraded to `branch` the next time `link`/`checkout` writes the context.
 
-There are three modes:
+There are two modes:
 
 **Interactive (default)** — guided prompts for humans:
 
@@ -322,64 +322,21 @@ neon link --no-checks --org-id org-abc123 --project-id polished-snowflake-123456
 
 Every supplied identifier is checked before anything is written, with actionable errors — e.g. `Project '…' not found`, `You don't have access to project '…'`, `Organization '…' not found, or your API key doesn't have access to it`, `Project '…' belongs to organization 'A', not 'B'`, or `Branch '…' not found in project '…'. Available branches: …`.
 
-**Agent mode (`--agent`)** — a JSON state machine designed for AI coding assistants. Each invocation returns a single JSON object with a `status` discriminator describing the next step, the available options, and the exact follow-up command to run.
+**Agents and scripts (no TTY)** — list, then link. `neon link --help` prints the same recipe.
 
 ```bash
-$ neon link --agent
-{
-  "status": "needs_org",
-  "instruction": "Ask the user which of these 2 organizations they want to link the current directory to. After they pick one, re-run the next_command_template with the chosen --org-id value.",
-  "options": [
-    { "id": "org-abc123", "name": "Personal Org" },
-    { "id": "org-team",   "name": "Team Org" }
-  ],
-  "next_command_template": "neon link --agent --org-id <org_id>"
-}
-
-$ neon link --agent --org-id org-abc123
-{
-  "status": "needs_project",
-  "instruction": "Ask the user whether to link to one of these 1 existing projects (use next_command_template with --project-id) or create a new project (use create_option.next_command_template).",
-  "options": [
-    { "id": "polished-snowflake-12345678", "name": "my-app" }
-  ],
-  "create_option": {
-    "instruction": "To create a new project, ask the user for a project name. The region can be omitted to receive a follow-up needs_project_details response that lists available regions.",
-    "next_command_template": "neon link --agent --org-id org-abc123 --project-name <name> --region-id <region_id>"
-  },
-  "next_command_template": "neon link --agent --org-id org-abc123 --project-id <project_id>"
-}
-
-$ neon link --agent --org-id org-abc123 --project-id polished-snowflake-12345678
-{
-  "status": "linked",
-  "context_file": "/path/to/cwd/.neon",
-  "context": {
-    "orgId": "org-abc123",
-    "projectId": "polished-snowflake-12345678"
-  },
-  "project": { "id": "polished-snowflake-12345678" },
-  "message": "Linked /path/to/cwd/.neon to project polished-snowflake-12345678 (org org-abc123). No branch pinned — run `neon checkout <branch>` (omit the branch to list options) to pin one and pull its env vars."
-}
+neon orgs list --output json
+neon projects list --org-id <org-id> --output json
+neon link --project-id <project-id>
+neon link --org-id <org-id> --project-name <name> --region-id aws-us-east-2
 ```
 
-The `linked` response omits `branch` unless one was pinned (via `--branch`, an existing pin, or project creation); pass `--branch <name|id>` to include it. The agent flow also handles project creation: if the agent sends `--project-name` without `--region-id`, the next response is `needs_project_details` with the list of supported regions.
+Organization-scoped API keys cannot list user organizations (`orgs list`) or call the regions endpoint:
 
-**Organization-scoped API keys** (those created at the organization level rather than the user level) cannot list user organizations or call the regions endpoint. `link` handles this transparently:
-
-- If the API key is org-scoped and at least one project already exists in the org, the CLI auto-detects the `org_id` from the first project. In interactive mode it prints an informational message; in `--agent` mode it skips straight to `needs_project`.
-- If the API key is org-scoped and no projects exist yet, `--agent` returns a `needs_org` response with `options: []` and an instruction telling the user to find their org ID in the Neon Console. Interactive mode prints an error pointing to `--org-id`.
-- When the regions endpoint is not allowed, `link` falls back to a built-in static region list.
-
-**Agent error contract**: any unexpected failure in `--agent` mode is reported as JSON to stdout with exit code 1, so agents can always parse the response:
-
-```json
-{
-  "status": "error",
-  "code": "CLIENT_ERROR",
-  "message": "user has no access to projects"
-}
-```
+- Pass `--org-id` (Neon Console → Settings) or `--project-id` (org is inferred from the project).
+- If the key is org-scoped and at least one project already exists, interactive `link` auto-detects the org from the first project and prints an informational message.
+- If no projects exist yet, interactive `link` errors pointing at `--org-id`.
+- When the regions endpoint is not allowed, interactive create falls back to a built-in static region list. Non-interactive create already requires `--region-id`.
 
 **Offline writes (`--no-checks`)** — write the `.neon` with no API calls at all: no org inference, no existence/access verification, no env pull. Because nothing can be resolved offline, it requires both `--org-id` and `--project-id` (`--branch` optional, stored verbatim). Handy for scripted/CI setups or re-creating a `.neon` from values you already trust:
 

@@ -207,11 +207,6 @@ const NEON_OWNED_ENV_KEYS: readonly EnvPullKey[] = [
 	...Object.values(NEON_ENV_VAR_KEYS.aiGateway),
 ];
 
-/**
- * What an env pull actually did, so callers (notably `link --agent`) can report it precisely
- * instead of guessing. `written` lists the keys merged into `file`; `empty` means the branch
- * has no Neon vars to pull yet (no DATABASE_URL / Auth / Data API).
- */
 export type PullOutcome =
 	| {
 			status: "written";
@@ -460,8 +455,7 @@ export type AutoPullResult =
  * On by default; `--no-env-pull` opts out (e.g. when env is injected at runtime via
  * `neon-env run` / `neon dev`, or to keep secrets out of the working tree). The pin is the
  * command's primary effect and has already succeeded by the time this runs, so a pull failure
- * degrades to a warning rather than failing the command. Returns what happened so
- * `link --agent` can fold an accurate note into its JSON message.
+ * degrades to a warning rather than failing the command.
  */
 export const autoPullEnvAfterPin = async (
 	props: EnvPullProps & { envPull: boolean },
@@ -481,36 +475,6 @@ export const autoPullEnvAfterPin = async (
 			message,
 		);
 		return { status: "failed", message };
-	}
-};
-
-/**
- * Render the one-line env-pull note appended to `link --agent`'s JSON `message`, so an agent
- * reading the structured output knows whether its branch env is already on disk.
- */
-export const renderAgentPullNote = (result: AutoPullResult): string => {
-	switch (result.status) {
-		case "written": {
-			// Call out a re-issued credential: an agent that already wrote the old storage /
-			// gateway values somewhere else has to update them.
-			const credential = result.credential?.issued
-				? ` Issued a new branch credential, so ${result.credential.keys.join(", ")} changed.`
-				: "";
-			// No `skipped` note: only the implied AI Gateway can be skipped, and the auto-pull
-			// this renders never implies it.
-			return ` Pulled ${result.written.length} Neon env var${
-				result.written.length === 1 ? "" : "s"
-			} into ${result.file}.${credential}`;
-		}
-		case "empty":
-			return " No Neon env vars to pull for this branch yet.";
-		case "skipped":
-			return (
-				` Skipped env pull (--no-env-pull); run \`${getCliName()} env pull\` later, ` +
-				"or inject env at runtime with `neon-env run -- <your dev command>`."
-			);
-		case "failed":
-			return ` Could not pull env vars (${result.message}); run \`${getCliName()} env pull\` once resolved.`;
 	}
 };
 
