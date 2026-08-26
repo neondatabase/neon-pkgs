@@ -132,6 +132,23 @@ exports[`link > non-interactive flag mode > link --params JSON behaves like flag
 }"
 `;
 
+exports[`link > non-interactive flag mode > link --project-id -y pins the default branch, not the first listed 1`] = `
+"Linked <TMP>/flag_yes_default/.neon:
+  orgId:     org-7
+  projectId: proj-in-org
+  branch:    main
+
+"
+`;
+
+exports[`link > non-interactive flag mode > link --project-id -y pins the default branch, not the first listed 2`] = `
+"{
+  "orgId": "org-7",
+  "projectId": "proj-in-org",
+  "branch": "main"
+}"
+`;
+
 exports[`link > non-interactive flag mode > link --project-id alone infers the org from the project 1`] = `
 "Linked <TMP>/flag_infer_org/.neon:
   orgId:     org-7
@@ -146,6 +163,40 @@ exports[`link > non-interactive flag mode > link --project-id alone infers the o
 "{
   "orgId": "org-7",
   "projectId": "proj-in-org"
+}"
+`;
+
+exports[`link > non-interactive flag mode > link --project-id pins the only branch 1`] = `
+"Linked <TMP>/flag_one_branch/.neon:
+  orgId:     org-7
+  projectId: proj-one-branch
+  branch:    main
+
+"
+`;
+
+exports[`link > non-interactive flag mode > link --project-id pins the only branch 2`] = `
+"{
+  "orgId": "org-7",
+  "projectId": "proj-one-branch",
+  "branch": "main"
+}"
+`;
+
+exports[`link > non-interactive flag mode > link --project-id with no branches warns and does not pin 1`] = `
+"Linked <TMP>/flag_no_branches/.neon:
+  orgId:     org-7
+  projectId: proj-no-branches
+
+This project has no branches, so none was pinned. Create a branch, then run \`neon checkout <branch>\` to pin it and pull its env vars.
+
+"
+`;
+
+exports[`link > non-interactive flag mode > link --project-id with no branches warns and does not pin 2`] = `
+"{
+  "orgId": "org-7",
+  "projectId": "proj-no-branches"
 }"
 `;
 
@@ -201,12 +252,28 @@ exports[`link > non-interactive flag mode > re-linking the same project keeps th
 }"
 `;
 
+exports[`link > non-interactive flag mode > re-linking the same project with -y keeps the already-pinned branch 1`] = `
+"Linked <TMP>/flag_keep_branch_yes/.neon:
+  orgId:     org-2
+  projectId: test
+  branch:    test_branch
+
+"
+`;
+
+exports[`link > non-interactive flag mode > re-linking the same project with -y keeps the already-pinned branch 2`] = `
+"{
+  "orgId": "org-2",
+  "projectId": "test",
+  "branch": "test_branch"
+}"
+`;
+
 exports[`link > org-scoped API key behavior > links an existing project when org listing is forbidden 1`] = `
 "Linked <TMP>/orgkey_project/.neon:
   orgId:     org-detected-99887766
   projectId: detected-project-12345
-
-No branch pinned. Run \`neon checkout <branch>\` to pin a branch and pull its env vars.
+  branch:    main
 
 "
 `;
@@ -214,7 +281,8 @@ No branch pinned. Run \`neon checkout <branch>\` to pin a branch and pull its en
 exports[`link > org-scoped API key behavior > links an existing project when org listing is forbidden 2`] = `
 "{
   "orgId": "org-detected-99887766",
-  "projectId": "detected-project-12345"
+  "projectId": "detected-project-12345",
+  "branch": "main"
 }"
 `;
 

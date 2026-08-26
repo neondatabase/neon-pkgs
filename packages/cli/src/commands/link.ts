@@ -65,7 +65,7 @@ const nonInteractiveLinkCommands = (): string[] => {
 	return [
 		`${cli} orgs list --output json`,
 		`${cli} projects list --org-id <org-id> --output json`,
-		`${cli} link --project-id <project-id>`,
+		`${cli} link --project-id <project-id> [--branch <name> | -y]`,
 		`${cli} link --org-id <org-id> --project-name <name> --region-id aws-us-east-2`,
 	];
 };
@@ -108,9 +108,10 @@ export const builder = (argv: yargs.Argv) =>
 			branch: {
 				alias: "branch-id",
 				describe:
-					"Branch name or ID to pin in the context (resolved to its ID before writing). " +
-					"Without it, link only resolves the org and project — pin a branch with " +
-					`\`${getCliName()} checkout <branch>\` (link never guesses a default).`,
+					"Branch name or ID to pin in the context (resolved to its name before writing). " +
+					"Without it, a project with one branch is pinned automatically; several branches " +
+					"prompt in a TTY, pin the default with -y, or stay unpinned for " +
+					`\`${getCliName()} checkout <branch>\`.`,
 				type: "string",
 			},
 			params: {
@@ -125,7 +126,7 @@ export const builder = (argv: yargs.Argv) =>
 			yes: {
 				alias: "y",
 				describe:
-					'Skip the "already linked" confirmation in interactive mode and re-link anyway.',
+					'Skip the "already linked" confirmation, and pin the project\'s default branch when linking a project that has more than one.',
 				type: "boolean",
 				default: false,
 			},
@@ -156,7 +157,11 @@ export const builder = (argv: yargs.Argv) =>
 		.example([
 			[
 				"$0 link --project-id polished-snowflake-12345678",
-				`Link an existing project (org is inferred); pin a branch later with '${getCliName()} checkout'`,
+				"Link an existing project (org is inferred). Pins the only branch; several prompt in a TTY",
+			],
+			[
+				"$0 link --project-id polished-snowflake-12345678 -y",
+				"Same, pinning the project's default branch when several exist",
 			],
 			[
 				"$0 link --org-id org-… --project-name my-app --region-id aws-us-east-2",
@@ -289,16 +294,8 @@ const validateInputs = (inputs: Inputs): void => {
 };
 
 /**
- * Whether the inputs (combined with the existing `.neon`) fully determine what
- * to write without prompting the user. Everything else falls back to the
- * interactive picker (TTY) or the CI guard.
- *
- * - `--project-id` is always enough: the org is inferred from the project and
- *   the branch is left to an explicit `checkout` (never auto-defaulted).
- * - `--org-id --project-name --region-id` fully describes a project to create.
- * - `--branch-id` needs a project, which it takes from the existing `.neon`.
- * - `--org-id` on its own just records the default org (merged into any
- *   existing context).
+ * Branch selection may still prompt after org and project resolve without the
+ * org/project wizard.
  */
 const canResolveNonInteractively = (
 	inputs: Inputs,
@@ -501,29 +498,81 @@ const resolveOrgForProject = async (
 	return undefined;
 };
 
+type BranchResolution = {
+	branch?: string;
+	empty: boolean;
+};
+
 /**
- * Resolve the branch to persist alongside a project in non-interactive mode.
- *
- * `link` never guesses the project's default branch — that's `checkout`'s job —
- * so the only sources are an explicit `--branch` (name or id, verified and
- * normalized to its name) or a branch already pinned for the *same* project (so
- * re-linking it doesn't drop your checked-out branch). Reading the existing
- * branch via {@link contextBranch} also recovers a legacy `branchId` field.
+ * Keep an existing pin when re-linking the same project so `-y` does not reset
+ * a checkout.
  */
 const resolvePinnedBranch = async (
-	props: CommonProps,
+	props: LinkProps,
 	inputs: Inputs,
 	existing: Context,
 	projectId: string,
-): Promise<string | undefined> => {
+): Promise<BranchResolution> => {
 	if (inputs.branch) {
 		const branch = await resolveBranchRef(props, projectId, inputs.branch);
-		return branchPersistValue(branch);
+		return { branch: branchPersistValue(branch), empty: false };
 	}
 	if (projectId === existing.projectId) {
-		return contextBranch(existing);
+		const pinned = contextBranch(existing);
+		if (pinned) {
+			return { branch: pinned, empty: false };
+		}
 	}
-	return undefined;
+	return resolveBranchFromList(props, projectId);
+};
+
+const resolveBranchFromList = async (
+	props: LinkProps,
+	projectId: string,
+): Promise<BranchResolution> => {
+	const { data } = await props.apiClient.listProjectBranches({ projectId });
+	const branches = data.branches;
+	if (branches.length === 0) {
+		return { empty: true };
+	}
+	if (branches.length === 1) {
+		const [only] = branches;
+		if (!only) {
+			return { empty: true };
+		}
+		return { branch: branchPersistValue(only), empty: false };
+	}
+	if (props.yes) {
+		const def = branches.find((b: Branch) => b.default);
+		if (!def) {
+			throw new Error(
+				`Project '${projectId}' has no default branch. Pass --branch <name> to pin one.`,
+			);
+		}
+		return { branch: branchPersistValue(def), empty: false };
+	}
+	if (canPromptInteractively()) {
+		const picked = await pickBranchInteractively(branches, {
+			message: "Which branch would you like to link?",
+			nonInteractiveMessage:
+				"No branch could be selected without an interactive terminal. " +
+				`Re-run \`${getCliName()} link\` interactively, or \`${getCliName()} checkout <branch>\` to pin one.`,
+		});
+		if (picked.kind === "existing") {
+			const existing = branches.find(
+				(b: Branch) => b.id === picked.branchId,
+			);
+			return {
+				branch: existing
+					? branchPersistValue(existing)
+					: picked.branchId,
+				empty: false,
+			};
+		}
+		await createBranch(props.apiClient, projectId, picked.name, branches);
+		return { branch: picked.name, empty: false };
+	}
+	return { empty: false };
 };
 
 // ----------------------------------------------------------------------------
@@ -569,7 +618,7 @@ const runNonInteractive = async (
 			existing,
 			inputs.projectId,
 		);
-		const branch = await resolvePinnedBranch(
+		const resolved = await resolvePinnedBranch(
 			props,
 			inputs,
 			existing,
@@ -578,14 +627,15 @@ const runNonInteractive = async (
 		applyContext(props.contextFile, {
 			orgId,
 			projectId: inputs.projectId,
-			branch,
+			branch: resolved.branch,
 		});
 		await finalizeLink(props, {
 			contextFile: props.contextFile,
 			orgId,
 			projectId: inputs.projectId,
-			branch,
+			branch: resolved.branch,
 			created: false,
+			empty: resolved.empty,
 		});
 		return;
 	}
@@ -599,7 +649,7 @@ const runNonInteractive = async (
 			existing,
 			projectId,
 		);
-		const branch = await resolvePinnedBranch(
+		const resolved = await resolvePinnedBranch(
 			props,
 			inputs,
 			existing,
@@ -608,14 +658,15 @@ const runNonInteractive = async (
 		applyContext(props.contextFile, {
 			orgId,
 			projectId,
-			branch,
+			branch: resolved.branch,
 		});
 		await finalizeLink(props, {
 			contextFile: props.contextFile,
 			orgId,
 			projectId,
-			branch,
+			branch: resolved.branch,
 			created: false,
+			empty: resolved.empty,
 		});
 		return;
 	}
@@ -695,20 +746,21 @@ const runInteractive = async (props: LinkProps, inputs: Inputs) => {
 	const action = await promptProjectChoice(projects, inputs.projectName);
 
 	if (action.type === "existing") {
-		const branch = await resolveInteractiveBranch(props, action.projectId);
+		const resolved = await resolveBranchFromList(props, action.projectId);
 		applyContext(props.contextFile, {
 			orgId,
 			projectId: action.projectId,
-			branch,
+			branch: resolved.branch,
 		});
 		await finalizeInteractiveLink(props, {
 			contextFile: props.contextFile,
 			orgId,
 			projectId: action.projectId,
-			branch,
+			branch: resolved.branch,
 			created: false,
 			projectName: action.name,
 			regionId: action.regionId,
+			empty: resolved.empty,
 		});
 		return;
 	}
@@ -959,44 +1011,6 @@ const listAllProjects = async (
 	return result;
 };
 
-/**
- * Resolve which branch to pin for an interactively-chosen project, returned as the value to
- * persist (its name when known, see {@link branchPersistValue}). When the project has a
- * single branch there is nothing to choose, so we pin it silently. Otherwise we offer the
- * shared branch picker (the same "＋ Create a new branch…" + list as `neonctl checkout`),
- * creating the branch when the user opts to. This makes interactive `link` a full org →
- * project → branch flow; non-interactive `link` instead defers the branch to `checkout`.
- */
-const resolveInteractiveBranch = async (
-	props: CommonProps,
-	projectId: string,
-): Promise<string> => {
-	const { data } = await props.apiClient.listProjectBranches({ projectId });
-	const branches = data.branches;
-	if (branches.length <= 1) {
-		const only = branches.find((b: Branch) => b.default) ?? branches[0];
-		if (!only) {
-			throw new Error(
-				`Could not find a default branch for project ${projectId}.`,
-			);
-		}
-		return branchPersistValue(only);
-	}
-	const picked = await pickBranchInteractively(branches, {
-		message: "Which branch would you like to link?",
-		nonInteractiveMessage:
-			"No branch could be selected without an interactive terminal. " +
-			`Re-run \`${getCliName()} link\` interactively, or \`${getCliName()} checkout <branch>\` to pin one.`,
-	});
-	if (picked.kind === "existing") {
-		const existing = branches.find((b: Branch) => b.id === picked.branchId);
-		return existing ? branchPersistValue(existing) : picked.branchId;
-	}
-	// A freshly-created branch: we already know the name the user typed.
-	await createBranch(props.apiClient, projectId, picked.name, branches);
-	return picked.name;
-};
-
 const fetchRegions = async (props: CommonProps): Promise<RegionResponse[]> => {
 	try {
 		const { data } = await props.apiClient.getActiveRegions();
@@ -1079,6 +1093,7 @@ type HumanSummary = {
 	orgOnly?: boolean;
 	/** True for the `--no-checks` path: written offline, so suppress the checkout nudge. */
 	noChecks?: boolean;
+	empty?: boolean;
 };
 
 const printSummary = (_props: LinkProps, summary: HumanSummary): void => {
@@ -1105,9 +1120,15 @@ const printSummary = (_props: LinkProps, summary: HumanSummary): void => {
 		lines.push("Written offline (--no-checks): nothing was verified.");
 	} else if (summary.projectId && !summary.branch && !summary.orgOnly) {
 		lines.push("");
-		lines.push(
-			`No branch pinned. Run \`${getCliName()} checkout <branch>\` to pin a branch and pull its env vars.`,
-		);
+		if (summary.empty) {
+			lines.push(
+				`This project has no branches, so none was pinned. Create a branch, then run \`${getCliName()} checkout <branch>\` to pin it and pull its env vars.`,
+			);
+		} else {
+			lines.push(
+				`No branch pinned. Run \`${getCliName()} checkout <branch>\` to pin a branch and pull its env vars.`,
+			);
+		}
 	}
 	lines.push("");
 	process.stdout.write(`${lines.join("\n")}\n`);
