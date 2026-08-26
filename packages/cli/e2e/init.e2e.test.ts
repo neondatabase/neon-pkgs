@@ -45,7 +45,7 @@ describe("e2e — neon init", () => {
 			json: false,
 		});
 		expect(result.code, `${result.stderr}\n${result.stdout}`).toBe(0);
-		expect(`${result.stderr}\n${result.stdout}`).toMatch(/skills update/i);
+		expect(`${result.stderr}\n${result.stdout}`).toMatch(/scaffold/i);
 	});
 
 	it("rejects --data and --agent", async () => {
@@ -61,7 +61,7 @@ describe("e2e — neon init", () => {
 				json: false,
 			});
 			expect(result.code, result.stderr).toBe(1);
-			expect(result.stderr).toMatch(/Unknown argument/i);
+			expect(result.stderr).toMatch(/were removed/i);
 		}
 	});
 

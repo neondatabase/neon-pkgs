@@ -11,21 +11,15 @@ export const directoryIsEmpty = (names: readonly string[]): boolean =>
 
 export const planInit = (input: InitPlanInput): InitStep[] => {
 	const y = input.yes ? (["-y"] as const) : [];
+	const steps: InitStep[] = [];
 	if (input.empty) {
-		const steps: InitStep[] = [
+		steps.push(
 			input.yes
 				? ["bootstrap", ".", "--default", "--no-link"]
 				: ["bootstrap", ".", "--no-link"],
-			["skills", "update", ...y],
-		];
-		if (!input.linked) {
-			steps.push(input.yes ? ["link", "--yes"] : ["link"]);
-		}
-		steps.push(["mcp", ...y]);
-		return steps;
+		);
 	}
-
-	const steps: InitStep[] = [["skills", ...y]];
+	steps.push(["skills", ...y]);
 	if (!input.linked) {
 		steps.push(input.yes ? ["link", "--yes"] : ["link"]);
 	}

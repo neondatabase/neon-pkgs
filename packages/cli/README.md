@@ -716,13 +716,13 @@ The target directory must be empty unless you pass `--force` (a lone `.git` is i
 
 ## Set up a project (`init`)
 
-`neon init` runs the existing setup commands in this directory. It does not have its own prompts, JSON protocol, or `--data` steps.
+`neon init` runs the existing setup commands in this directory.
 
 An empty directory (nothing except `.git`) runs:
 
 ```bash
 neon bootstrap . --no-link
-neon skills update
+neon skills
 neon link    # skipped when .neon already has a projectId
 neon mcp
 ```
@@ -744,7 +744,7 @@ $ neon init -y
 
 A failed step stops the rest. `--profile` and `--config-dir` are forwarded to each child. `--output` is not.
 
-`skills` needs Node.js 22.20 or newer. See [`skills`](#install-neon-agent-skills-skills) and [`mcp`](#install-the-neon-mcp-server-mcp) for what those commands write.
+`skills` needs Node.js 22.20 or newer. See [`bootstrap`](#scaffold-a-project-bootstrap), [`skills`](#install-neon-agent-skills-skills), [`link`](#linking-a-project), and [`mcp`](#install-the-neon-mcp-server-mcp) for what those commands write.
 
 ## Install the Neon MCP server (`mcp`)
 

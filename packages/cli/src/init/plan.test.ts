@@ -21,19 +21,19 @@ describe("directoryIsEmpty", () => {
 });
 
 describe("planInit", () => {
-	test("empty interactive: bootstrap --no-link, skills update, link, mcp", () => {
+	test("empty interactive: bootstrap --no-link, skills, link, mcp", () => {
 		expect(planInit({ empty: true, linked: false, yes: false })).toEqual([
 			["bootstrap", ".", "--no-link"],
-			["skills", "update"],
+			["skills"],
 			["link"],
 			["mcp"],
 		]);
 	});
 
-	test("empty -y: bootstrap --default --no-link, skills update, link, mcp", () => {
+	test("empty -y: bootstrap --default --no-link, skills, link, mcp", () => {
 		expect(planInit({ empty: true, linked: false, yes: true })).toEqual([
 			["bootstrap", ".", "--default", "--no-link"],
-			["skills", "update", "-y"],
+			["skills", "-y"],
 			["link", "--yes"],
 			["mcp", "-y"],
 		]);
@@ -42,7 +42,7 @@ describe("planInit", () => {
 	test("empty interactive already linked skips link", () => {
 		expect(planInit({ empty: true, linked: true, yes: false })).toEqual([
 			["bootstrap", ".", "--no-link"],
-			["skills", "update"],
+			["skills"],
 			["mcp"],
 		]);
 	});
@@ -50,7 +50,7 @@ describe("planInit", () => {
 	test("empty -y already linked skips link", () => {
 		expect(planInit({ empty: true, linked: true, yes: true })).toEqual([
 			["bootstrap", ".", "--default", "--no-link"],
-			["skills", "update", "-y"],
+			["skills", "-y"],
 			["mcp", "-y"],
 		]);
 	});

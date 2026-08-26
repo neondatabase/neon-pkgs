@@ -39,7 +39,7 @@ describe("init handler", () => {
 		vi.resetModules();
 	});
 
-	test("empty directory runs bootstrap --no-link, skills update, link, mcp", async () => {
+	test("empty directory runs bootstrap --no-link, skills, link, mcp", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-empty-"));
 		const run = vi.fn().mockResolvedValue(true);
 		const { handler } = await import("./init.js");
@@ -63,7 +63,7 @@ describe("init handler", () => {
 			".",
 			"--no-link",
 		]);
-		expect(run.mock.calls[1][0].slice(0, 2)).toEqual(["skills", "update"]);
+		expect(run.mock.calls[1][0].slice(0, 1)).toEqual(["skills"]);
 	});
 
 	test("existing app runs skills, link, mcp", async () => {
@@ -126,11 +126,7 @@ describe("init handler", () => {
 			"--default",
 			"--no-link",
 		]);
-		expect(run.mock.calls[1][0].slice(0, 3)).toEqual([
-			"skills",
-			"update",
-			"-y",
-		]);
+		expect(run.mock.calls[1][0].slice(0, 2)).toEqual(["skills", "-y"]);
 		expect(run.mock.calls[2][0].slice(0, 2)).toEqual(["link", "--yes"]);
 		expect(run.mock.calls[3][0].slice(0, 2)).toEqual(["mcp", "-y"]);
 		expect(run).toHaveBeenCalledTimes(4);
@@ -268,21 +264,31 @@ describe("init handler", () => {
 			"mcp",
 		]);
 	});
+
+	test("refuses --output json and yaml", async () => {
+		const { handler } = await import("./init.js");
+		await expect(handler(baseProps({ output: "json" }))).rejects.toThrow(
+			"does not support --output",
+		);
+		await expect(handler(baseProps({ output: "yaml" }))).rejects.toThrow(
+			"does not support --output",
+		);
+	});
 });
 
 describe("init CLI", () => {
 	cliTest("help describes the orchestrator", async ({ testCliCommand }) => {
-		await testCliCommand(["init", "--help"], {
+		const { stdout, stderr } = await testCliCommand(["init", "--help"], {
 			snapshot: false,
-			stderr: expect.stringContaining("skills update"),
 		});
+		expect(`${stdout}\n${stderr}`).toMatch(/scaffold/i);
 	});
 
 	cliTest("rejects --data", async ({ testCliCommand }) => {
 		await testCliCommand(["init", "--data", '{"step":"auth"}'], {
 			snapshot: false,
 			code: 1,
-			stderr: expect.stringMatching(/Unknown argument: data/i),
+			stderr: expect.stringContaining("were removed"),
 		});
 	});
 
@@ -290,7 +296,16 @@ describe("init CLI", () => {
 		await testCliCommand(["init", "--agent"], {
 			snapshot: false,
 			code: 1,
-			stderr: expect.stringMatching(/Unknown argument: agent/i),
+			stderr: expect.stringContaining("were removed"),
+		});
+	});
+
+	cliTest("rejects --output json", async ({ testCliCommand }) => {
+		await testCliCommand(["init"], {
+			snapshot: false,
+			output: "json",
+			code: 1,
+			stderr: expect.stringContaining("does not support --output"),
 		});
 	});
 });
