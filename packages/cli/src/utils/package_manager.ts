@@ -345,12 +345,6 @@ export const formatInstallCommand = (
 	options?: AddOptions,
 ): string => `${pm} ${installArgs(pm, packages, options).join(" ")}`;
 
-/**
- * Run a command inheriting our stdio so the user sees install / link output
- * live and can answer any prompts the child raises. Resolves to whether it
- * exited cleanly; a non-zero exit is reported but never throws — the caller
- * decides whether to treat it as fatal.
- */
 export const commandEnv = (
 	overlay: NodeJS.ProcessEnv | undefined,
 	base: NodeJS.ProcessEnv = process.env,
@@ -364,6 +358,12 @@ export const commandEnv = (
 	return overlay ? { ...child, ...overlay } : child;
 };
 
+/**
+ * Run a command inheriting our stdio so the user sees install / link output
+ * live and can answer any prompts the child raises. Resolves to whether it
+ * exited cleanly; a non-zero exit is reported but never throws — the caller
+ * decides whether to treat it as fatal.
+ */
 export const runCommand = (
 	cmd: string,
 	args: string[],

@@ -1,4 +1,4 @@
-import { isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 
 export type InitAgentSetup = "plugin" | "skills-mcp" | "skip";
 
@@ -13,10 +13,16 @@ export const bootstrapInitStep = (yes: boolean): InitStep =>
 export const projectContextFile = (
 	projectDir: string,
 	contextFile: string,
-): string =>
-	isAbsolute(contextFile)
-		? join(projectDir, ".neon")
+): string => {
+	const resolved = isAbsolute(contextFile)
+		? contextFile
 		: resolve(projectDir, contextFile);
+	const rel = relative(projectDir, resolved);
+	if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) {
+		return join(projectDir, ".neon");
+	}
+	return resolved;
+};
 
 export const planAgentSteps = (input: {
 	yes: boolean;

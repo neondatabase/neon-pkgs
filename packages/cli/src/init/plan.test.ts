@@ -54,6 +54,12 @@ describe("projectContextFile", () => {
 			"/tmp/my-app/.neon",
 		);
 	});
+
+	test("an absolute path already in the scaffold is kept", () => {
+		expect(
+			projectContextFile("/tmp/my-app", "/tmp/my-app/custom.neon"),
+		).toBe("/tmp/my-app/custom.neon");
+	});
 });
 
 describe("planAgentSteps", () => {
