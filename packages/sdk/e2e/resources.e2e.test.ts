@@ -36,11 +36,11 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 
 	it("round-trips a branch through create, get, update and delete", async () => {
 		const created = expectOk(
-			await neon.branches.create(
-				projectId,
-				{ name: "crud", parent_id: defaultBranchId },
-				{ waitForReadiness: true },
-			),
+			await neon.branches.create(projectId, {
+				name: "crud",
+				parent_id: defaultBranchId,
+				noCompute: true,
+			}),
 		);
 		expect(created.name).toBe("crud");
 
@@ -64,7 +64,7 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 
 	it("compares schemas and resets a child back to its parent", async () => {
 		const child = expectOk(
-			await neon.branches.createWithCompute(projectId, {
+			await neon.branches.createAndConnect(projectId, {
 				name: "reset-child",
 				parentId: defaultBranchId,
 			}),
@@ -122,7 +122,7 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 
 	it("creates a branch with its compute and a connection string in one call", async () => {
 		const created = expectOk(
-			await neon.branches.createWithCompute(projectId, {
+			await neon.branches.createAndConnect(projectId, {
 				name: "with-compute",
 				parentId: defaultBranchId,
 			}),
@@ -144,6 +144,39 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 		);
 
 		expectOk(await neon.branches.delete(projectId, created.branch.id));
+	});
+
+	it("attaches a read-write endpoint unless noCompute is true", async () => {
+		const withCompute = expectOk(
+			await neon.branches.create(projectId, {
+				name: "with-endpoint",
+				parent_id: defaultBranchId,
+			}),
+		);
+		const attached = expectOk(
+			await neon.postgres.endpoints.listByBranch(
+				projectId,
+				withCompute.id,
+			),
+		);
+		expect(
+			attached.filter((endpoint) => endpoint.type === "read_write"),
+		).toHaveLength(1);
+
+		const bare = expectOk(
+			await neon.branches.create(projectId, {
+				name: "bare",
+				parent_id: defaultBranchId,
+				noCompute: true,
+			}),
+		);
+		const none = expectOk(
+			await neon.postgres.endpoints.listByBranch(projectId, bare.id),
+		);
+		expect(none).toEqual([]);
+
+		expectOk(await neon.branches.delete(projectId, withCompute.id));
+		expectOk(await neon.branches.delete(projectId, bare.id));
 	});
 
 	it("manages roles, including the two different password shapes", async () => {

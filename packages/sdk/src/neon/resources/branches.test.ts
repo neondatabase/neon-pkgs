@@ -39,6 +39,145 @@ function neonRouting(
 	return { neon, calls };
 }
 
+describe("branches.create", () => {
+	it("posts a read-write endpoint by default and unwraps the branch", async () => {
+		const { neon, calls } = neonRouting(() => ({
+			status: 201,
+			body: {
+				branch: { id: "br-1", name: "feature" },
+				endpoints: [{ id: "ep-1", type: "read_write" }],
+			},
+		}));
+
+		const { data, error } = await neon.branches.create("p-1", {
+			name: "feature",
+			parent_id: "br-parent",
+			compute: { minCu: 0.5, maxCu: 2, suspendTimeoutSeconds: 300 },
+		});
+
+		expect(error).toBeUndefined();
+		expect(data).toEqual({ id: "br-1", name: "feature" });
+		expect(calls).toHaveLength(1);
+		expect(calls[0]?.body).toEqual({
+			branch: { name: "feature", parent_id: "br-parent" },
+			endpoints: [
+				{
+					type: "read_write",
+					autoscaling_limit_min_cu: 0.5,
+					autoscaling_limit_max_cu: 2,
+					suspend_timeout_seconds: 300,
+				},
+			],
+		});
+	});
+
+	it("posts a read-write endpoint when compute is omitted", async () => {
+		const { neon, calls } = neonRouting(() => ({
+			status: 201,
+			body: { branch: { id: "br-1", name: "feature" } },
+		}));
+
+		await neon.branches.create("p-1", { name: "feature" });
+
+		expect(calls[0]?.body).toEqual({
+			branch: { name: "feature" },
+			endpoints: [{ type: "read_write" }],
+		});
+	});
+
+	it("omits endpoints when noCompute is true", async () => {
+		const { neon, calls } = neonRouting(() => ({
+			status: 201,
+			body: { branch: { id: "br-1", name: "bare" } },
+		}));
+
+		const { data, error } = await neon.branches.create("p-1", {
+			name: "bare",
+			noCompute: true,
+		});
+
+		expect(error).toBeUndefined();
+		expect(data).toEqual({ id: "br-1", name: "bare" });
+		expect(calls[0]?.body).toEqual({ branch: { name: "bare" } });
+	});
+
+	it("rejects noCompute together with compute settings without fetching", async () => {
+		const { neon, calls } = neonRouting(() => ({
+			status: 500,
+			body: { message: "should not be called" },
+		}));
+
+		const { data, error } = await neon.branches.create("p-1", {
+			noCompute: true,
+			// @ts-expect-error runtime guard for JS callers
+			compute: { minCu: 1 },
+		});
+
+		expect(data).toBeUndefined();
+		expect(error?.kind).toBe("client");
+		expect(error?.message).toBe(
+			"Pass compute settings or noCompute, not both.",
+		);
+		expect(calls).toHaveLength(0);
+
+		const throwing = createNeonClient({
+			apiKey: "test",
+			retries: 0,
+			throwOnError: true,
+			fetch: async () => {
+				throw new Error("should not be called");
+			},
+		});
+		await expect(
+			throwing.branches.create("p-1", {
+				noCompute: true,
+				// @ts-expect-error runtime guard for JS callers
+				compute: { minCu: 1 },
+			}),
+		).rejects.toMatchObject({
+			kind: "client",
+			message: "Pass compute settings or noCompute, not both.",
+		});
+	});
+});
+
+describe("branches.createAndConnect", () => {
+	it("posts a read-write endpoint and returns a pooled connection string", async () => {
+		const { neon, calls } = neonRouting(() => ({
+			status: 201,
+			body: {
+				branch: { id: "br-1", name: "feature" },
+				endpoints: [{ id: "ep-1", type: "read_write" }],
+				connection_uris: [
+					{
+						connection_uri: "postgresql://user:pass@ep-host/neondb",
+						connection_parameters: {
+							host: "ep-host",
+							pooler_host: "ep-pooler-host",
+						},
+					},
+				],
+			},
+		}));
+
+		const { data, error } = await neon.branches.createAndConnect("p-1", {
+			name: "feature",
+			parentId: "br-parent",
+		});
+
+		expect(error).toBeUndefined();
+		expect(data).toEqual({
+			branch: { id: "br-1", name: "feature" },
+			endpoint: { id: "ep-1", type: "read_write" },
+			connectionString: "postgresql://user:pass@ep-pooler-host/neondb",
+		});
+		expect(calls[0]?.body).toEqual({
+			branch: { name: "feature", parent_id: "br-parent" },
+			endpoints: [{ type: "read_write" }],
+		});
+	});
+});
+
 describe("branches.resetFromParent", () => {
 	it("restores from the parent HEAD and unwraps the branch", async () => {
 		const { neon, calls } = neonRouting(({ url }) => {

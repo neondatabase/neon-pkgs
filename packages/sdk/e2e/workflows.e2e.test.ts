@@ -70,16 +70,13 @@ describe.sequential("e2e — @neon/sdk workflows against the real API", () => {
 			if (scope.kind !== "org-or-user") return;
 			const neon = makeClient();
 
-			// Without `waitForReadiness` the branch create below races the project's own
-			// provisioning operations and Neon rejects it as conflicting.
+			// create waits by default so the branch create below does not race the
+			// project's own provisioning operations.
 			const project = expectOk(
-				await neon.projects.create(
-					{
-						name: uniqueProjectName("sdk-page"),
-						region_id: DEFAULT_REGION,
-					},
-					{ waitForReadiness: true },
-				),
+				await neon.projects.create({
+					name: uniqueProjectName("sdk-page"),
+					region_id: DEFAULT_REGION,
+				}),
 			);
 			track(project.id);
 
@@ -88,6 +85,7 @@ describe.sequential("e2e — @neon/sdk workflows against the real API", () => {
 				await neon.branches.create(project.id, {
 					name: "dev",
 					parent_id: main.id,
+					noCompute: true,
 				}),
 			);
 
@@ -121,13 +119,10 @@ describe.sequential("e2e — @neon/sdk workflows against the real API", () => {
 			const neon = makeClient();
 
 			const project = expectOk(
-				await neon.projects.create(
-					{
-						name: uniqueProjectName("sdk-conn"),
-						region_id: DEFAULT_REGION,
-					},
-					{ waitForReadiness: true },
-				),
+				await neon.projects.create({
+					name: uniqueProjectName("sdk-conn"),
+					region_id: DEFAULT_REGION,
+				}),
 			);
 			track(project.id);
 

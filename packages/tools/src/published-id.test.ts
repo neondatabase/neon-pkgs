@@ -9,8 +9,8 @@ describe("publishedId", () => {
 		expect(publishedId("projects.createAndConnect")).toBe(
 			"create_and_connect_projects",
 		);
-		expect(publishedId("branches.createWithCompute")).toBe(
-			"create_with_compute_branches",
+		expect(publishedId("branches.createAndConnect")).toBe(
+			"create_and_connect_branches",
 		);
 		expect(publishedId("postgres.roles.resetPassword")).toBe(
 			"reset_password_postgres_roles",

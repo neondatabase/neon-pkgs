@@ -46,12 +46,6 @@ describe("ergonomic catalog coverage", () => {
 				]),
 			).toThrow(`Neon tool "${id}" is not published`);
 		}
-		expect(() =>
-			Reflect.apply(createNeonTool, undefined, [
-				"projects.create",
-				{ apiKey: "test-key" },
-			]),
-		).toThrow("projects.createAndConnect");
 	});
 });
 

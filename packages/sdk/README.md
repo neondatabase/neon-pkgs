@@ -189,7 +189,7 @@ consuming it twice gets a fresh deadline each time.
 
 ## Readiness & workflows
 
-Neon mutations are asynchronous (they return `operations`). `waitForReadiness` blocks until they settle; the **workflow** methods (`createAndConnect`, `createWithCompute`) default it on and hand back a connection string in one call. The primitive is `neon.operations.waitFor(operations)`.
+Neon mutations are asynchronous (they return `operations`). `waitForReadiness` blocks until they settle. `projects.create`, `branches.create`, and the `createAndConnect` workflows default it on. The connect workflows also hand back a connection string. The primitive is `neon.operations.waitFor(operations)`.
 
 ---
 
@@ -203,7 +203,7 @@ Legend: **[P]** returns `Paginated<T>` · **[W]** workflow (multi-step) · **→
 | --- | --- | --- |
 | `list(query?)` | **[P]** `ProjectListItem` | `query`: `{ search?, org_id?, limit? }` (cursor managed for you) |
 | `get(id)` | `Project` | |
-| `create(input?)` | `Project` | `input`: `{ name?, region_id?, pg_version?, org_id?, autoscaling_limit_min_cu?, autoscaling_limit_max_cu?, settings? }` |
+| `create(input?)` | `Project` | API always provisions default-branch compute. No connection string. Readiness polling on by default. `input`: `{ name?, region_id?, pg_version?, org_id?, autoscaling_limit_min_cu?, autoscaling_limit_max_cu?, settings? }` |
 | `createAndConnect(input?, { pooled? })` | **[W]** `{ project, connectionString }` | one call + readiness; `pooled` default `true` |
 | `update(id, input)` | `Project` | `input`: `{ name?, settings? }` |
 | `delete(id)` | `Project` | |
@@ -232,10 +232,10 @@ await neon.projects.transfer({
 | --- | --- | --- |
 | `list(projectId, query?)` | **[P]** `Branch` | `query`: `{ search?, sort_by?, sort_order?, include_deleted? }` |
 | `get(projectId, branchId)` | `Branch` | |
-| `create(projectId, input?)` | `Branch` | `input`: `{ name?, parent_id?, parent_lsn?, parent_timestamp?, protected? }` |
+| `create(projectId, input?)` | `Branch` | RW compute on by default. `noCompute: true` skips the endpoint. No connection string. Readiness polling on by default. `input`: `{ name?, parent_id?, parent_lsn?, parent_timestamp?, protected?, compute?: { minCu?, maxCu?, suspendTimeoutSeconds? }, noCompute? }` |
 | `update(projectId, branchId, input)` | `Branch` | `input`: `{ name?, protected?, expires_at? }` |
 | `delete(projectId, branchId)` | **→void** | |
-| `createWithCompute(projectId, input, { pooled? })` | **[W]** `{ branch, endpoint, connectionString }` | `input`: `{ name?, parentId?, compute?: { minCu?, maxCu?, suspendTimeoutSeconds? } }` |
+| `createAndConnect(projectId, input?, { pooled? })` | **[W]** `{ branch, endpoint, connectionString }` | `input`: `{ name?, parentId?, compute?: { minCu?, maxCu?, suspendTimeoutSeconds? } }` |
 | `getDefault(projectId)` | `Branch` | resolves the default branch by the `default` flag |
 | `setDefault(projectId, branchId)` | `Branch` | |
 | `resetFromParent(projectId, branchId, { preserveUnderName? }?)` | `Branch` | parent HEAD only; discards writes since the branch diverged. `preserveUnderName` is required when the branch has children. Pass `{ waitForReadiness: true }` before using the branch |
@@ -260,8 +260,21 @@ const branch = data?.branch;
 // Resolve the project's default ("production") branch
 const { data: prod } = await neon.branches.getDefault(projectId);
 
+// Branch off production with compute, without a connection string
+await neon.branches.create(projectId, {
+  name: "preview/pr-123",
+  parent_id: prod?.id,
+});
+
+// Skip compute when the branch only needs a schema
+await neon.branches.create(projectId, {
+  name: "schema-only",
+  parent_id: prod?.id,
+  noCompute: true,
+});
+
 // Branch off it with its own compute — returns a ready connection string
-const { data } = await neon.branches.createWithCompute(projectId, {
+const { data } = await neon.branches.createAndConnect(projectId, {
   name: "preview/pr-123",
   parentId: prod?.id,
   compute: { minCu: 0.25, maxCu: 2 },

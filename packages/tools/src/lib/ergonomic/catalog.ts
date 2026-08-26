@@ -11,8 +11,10 @@ import {
 import {
 	compareSchemaTool,
 	connectionStringTool,
-	createBranchWithComputeTool,
+	createBranchAndConnectTool,
+	createBranchTool,
 	createProjectAndConnectTool,
+	createProjectTool,
 	getDefaultTool,
 	resetFromParentTool,
 	restoreSnapshotTool,
@@ -58,6 +60,7 @@ export const toolFactories = {
 			run: (neon, input, signal) =>
 				neon.projects.get(input.project_id, { signal }),
 		}),
+	"projects.create": createProjectTool,
 	"projects.createAndConnect": createProjectAndConnectTool,
 	"projects.update": (options) =>
 		fromGenerated(options, {
@@ -225,7 +228,8 @@ export const toolFactories = {
 					signal,
 				}),
 		}),
-	"branches.createWithCompute": createBranchWithComputeTool,
+	"branches.create": createBranchTool,
+	"branches.createAndConnect": createBranchAndConnectTool,
 	"branches.update": (options) =>
 		fromGenerated(options, {
 			id: "branches.update",

@@ -1,7 +1,5 @@
 export const hiddenToolIds = [
 	"operations.waitFor",
-	"branches.create",
-	"projects.create",
 	"postgres.roles.password",
 	"storage.objects.get",
 ] as const;
@@ -11,6 +9,7 @@ export type HiddenToolId = (typeof hiddenToolIds)[number];
 export const toolIds = [
 	"projects.list",
 	"projects.get",
+	"projects.create",
 	"projects.createAndConnect",
 	"projects.update",
 	"projects.delete",
@@ -25,7 +24,8 @@ export const toolIds = [
 	"projects.members.removeRole",
 	"branches.list",
 	"branches.get",
-	"branches.createWithCompute",
+	"branches.create",
+	"branches.createAndConnect",
 	"branches.update",
 	"branches.delete",
 	"branches.getDefault",
@@ -117,10 +117,6 @@ export const isNeonToolId = (id: string): id is NeonToolId =>
 	(toolIds as readonly string[]).includes(id);
 
 const hiddenToolHint: Record<HiddenToolId, string> = {
-	"projects.create":
-		'Use "projects.createAndConnect", which attaches compute and returns a connection string.',
-	"branches.create":
-		'Use "branches.createWithCompute", which attaches compute and returns a connection string.',
 	"operations.waitFor":
 		"Write tools wait for readiness. operations.waitFor is not a tool.",
 	"postgres.roles.password": "Role passwords are not published as a tool.",
