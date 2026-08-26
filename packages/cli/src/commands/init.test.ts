@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { recordCredentialInputs } from "@neon-internals/cli-core/auth_selection";
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { test as cliTest } from "../test_utils/fixtures.js";
 
@@ -33,8 +33,13 @@ const clearCredentialInputs = () =>
 	});
 
 describe("init handler", () => {
+	beforeEach(() => {
+		vi.stubEnv("CI", "true");
+	});
+
 	afterEach(() => {
 		clearCredentialInputs();
+		vi.unstubAllEnvs();
 		vi.restoreAllMocks();
 		vi.resetModules();
 	});
@@ -301,6 +306,150 @@ describe("init handler", () => {
 			"does not support --output",
 		);
 	});
+
+	test("interactive plugin: plugins then link, not skills or mcp", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-pick-plugin-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				contextFile: join(cwd, ".neon"),
+				pickAgentSetup: async () => "plugin",
+			}),
+		);
+
+		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
+			"plugins",
+			"link",
+		]);
+	});
+
+	test("interactive skip: link only", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-pick-skip-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				contextFile: join(cwd, ".neon"),
+				pickAgentSetup: async () => "skip",
+			}),
+		);
+
+		expect(run.mock.calls.map((call) => call[0][0])).toEqual(["link"]);
+	});
+
+	test("-y with .cursor installs the plugin, not skills and mcp", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-y-cursor-"));
+		mkdirSync(join(cwd, ".cursor"));
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				yes: true,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
+			"plugins",
+			"link",
+		]);
+		expect(run.mock.calls[0][0].slice(0, 2)).toEqual(["plugins", "-y"]);
+	});
+
+	test("-y with only .vscode keeps skills and mcp", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-y-vscode-"));
+		mkdirSync(join(cwd, ".vscode"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				yes: true,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
+			"skills",
+			"link",
+			"mcp",
+		]);
+	});
+
+	test("-y plugin detection runs after bootstrap", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-y-after-boot-"));
+		const run = vi.fn().mockResolvedValue(true);
+		const hasProjectPlugins = vi.fn(async () => {
+			expect(run.mock.calls.map((call) => call[0][0])).toEqual([
+				"bootstrap",
+			]);
+			return true;
+		});
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				yes: true,
+				contextFile: join(cwd, ".neon"),
+				hasProjectPlugins,
+			}),
+		);
+
+		expect(hasProjectPlugins).toHaveBeenCalledWith(cwd);
+		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
+			"bootstrap",
+			"plugins",
+			"link",
+		]);
+	});
+
+	test("does not pass NEON_API_KEY to plugins", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-plugin-key-"));
+		mkdirSync(join(cwd, ".cursor"));
+		const { recordCredentialInputs: record } = await import(
+			"@neon-internals/cli-core/auth_selection"
+		);
+		record({
+			apiKeyFlag: "napi_test",
+			apiKeyEnv: "",
+			profileEnv: "",
+			profileFlag: "",
+			configDir: "",
+		});
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				yes: true,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(run.mock.calls.map((call) => [call[0][0], call[2]])).toEqual([
+			["plugins", undefined],
+			["link", { NEON_API_KEY: "napi_test" }],
+		]);
+	});
 });
 
 describe("init CLI", () => {
@@ -308,8 +457,11 @@ describe("init CLI", () => {
 		const { stdout, stderr } = await testCliCommand(["init", "--help"], {
 			snapshot: false,
 		});
-		expect(`${stdout}\n${stderr}`).toMatch(/scaffold/i);
-		expect(`${stdout}\n${stderr}`).not.toMatch(/Set output format/);
+		const help = `${stdout}\n${stderr}`;
+		expect(help).toMatch(/scaffold/i);
+		expect(help).toMatch(/plugin/i);
+		expect(help).toMatch(/skip agent setup/i);
+		expect(help).not.toMatch(/Set output format/);
 	});
 
 	cliTest("rejects --data", async ({ testCliCommand }) => {

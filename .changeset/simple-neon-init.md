@@ -3,4 +3,4 @@
 "neonctl": minor
 ---
 
-`neon init` now runs the existing setup commands in this directory (`skills`, `link`, `mcp`, and `bootstrap` when the folder is empty). The old `--agent` / `--data` phase machine is gone.
+`neon init` offers the Neon plugin, skills and MCP separately, or skip, then links a project. `-y` installs the plugin when a project plugin agent is detected, otherwise skills and MCP. Empty directories still scaffold first. The old `--agent` / `--data` phase machine is gone.

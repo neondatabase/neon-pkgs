@@ -681,33 +681,22 @@ The target directory must be empty unless you pass `--force` (a lone `.git` is i
 
 `neon init` runs the existing setup commands in this directory.
 
-An empty directory (nothing except `.git`) runs:
+In an interactive terminal it offers one of: the Neon plugin (`neon plugins`), skills and MCP separately (`neon skills`, then `neon mcp`), or skip agent setup. It never runs plugin and skills+MCP together. Then it links a project unless `.neon` already has a projectId.
 
-```bash
-neon bootstrap . --no-link
-neon skills
-neon link    # skipped when .neon already has a projectId
-neon mcp
-```
-
-Any other directory runs:
-
-```bash
-neon skills
-neon link    # skipped when .neon already has a projectId
-neon mcp
-```
+An empty directory (nothing except `.git`) scaffolds a template first (`neon bootstrap . --no-link`), then offers.
 
 ```bash
 $ neon init
 $ neon init -y
 ```
 
-`-y` forwards `-y` to `skills` and `mcp`, `--default --no-link` to `bootstrap`, and `--yes` to `link`. Bootstrap is always `--no-link` so the following `link` step owns the project pin and can receive `--api-key`. `link --yes` only skips the "already linked" confirmation; it still asks for a project unless one is already linked.
+`-y` does not prompt. After bootstrap (if any), it installs the plugin when a project-level plugin agent is detected (Cursor, Claude Code, Codex). Otherwise it installs skills and MCP. VS Code, GitHub Copilot CLI, and Grok only take the plugin user-level (`neon plugins --global`), so `-y` uses skills and MCP for those.
+
+`-y` forwards `-y` to `plugins` or `skills`/`mcp`, `--default --no-link` to `bootstrap`, and `--yes` to `link`. Bootstrap is always `--no-link` so the following `link` step owns the project pin and can receive `--api-key`. `link --yes` only skips the "already linked" confirmation; it still asks for a project unless one is already linked.
 
 A failed step stops the rest. `--profile` and `--config-dir` are forwarded to each child. `--output json` and `--output yaml` are refused; the commands init runs print their own output.
 
-`skills` needs Node.js 22.20 or newer. See [`bootstrap`](#scaffold-a-project-bootstrap), [`skills`](#install-neon-agent-skills-skills), [`link`](#linking-a-project), and [`mcp`](#install-the-neon-mcp-server-mcp) for what those commands write.
+`skills` needs Node.js 22.20 or newer. See [`bootstrap`](#scaffold-a-project-bootstrap), [`plugins`](#install-the-neon-plugin-plugins), [`skills`](#install-neon-agent-skills-skills), [`link`](#linking-a-project), and [`mcp`](#install-the-neon-mcp-server-mcp) for what those commands write.
 
 ## Install the Neon MCP server (`mcp`)
 

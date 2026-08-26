@@ -1,7 +1,9 @@
+export type InitAgentSetup = "plugin" | "skills-mcp" | "skip";
+
 export type InitPlanInput = {
-	empty: boolean;
 	linked: boolean;
 	yes: boolean;
+	agentSetup: InitAgentSetup;
 };
 
 export type InitStep = readonly string[];
@@ -9,22 +11,41 @@ export type InitStep = readonly string[];
 export const directoryIsEmpty = (names: readonly string[]): boolean =>
 	names.filter((name) => name !== ".git").length === 0;
 
+export const bootstrapInitStep = (yes: boolean): InitStep =>
+	yes
+		? ["bootstrap", ".", "--default", "--no-link"]
+		: ["bootstrap", ".", "--no-link"];
+
 export const planInit = (input: InitPlanInput): InitStep[] => {
 	const y = input.yes ? (["-y"] as const) : [];
 	const steps: InitStep[] = [];
-	if (input.empty) {
-		steps.push(
-			input.yes
-				? ["bootstrap", ".", "--default", "--no-link"]
-				: ["bootstrap", ".", "--no-link"],
-		);
+	if (input.agentSetup === "plugin") {
+		steps.push(["plugins", ...y]);
+	} else if (input.agentSetup === "skills-mcp") {
+		steps.push(["skills", ...y]);
 	}
-	steps.push(["skills", ...y]);
 	if (!input.linked) {
 		steps.push(input.yes ? ["link", "--yes"] : ["link"]);
 	}
-	steps.push(["mcp", ...y]);
+	if (input.agentSetup === "skills-mcp") {
+		steps.push(["mcp", ...y]);
+	}
 	return steps;
+};
+
+export const resolveInitAgentSetup = async (input: {
+	yes: boolean;
+	interactive: boolean;
+	hasProjectPlugins: boolean;
+	pick: () => Promise<InitAgentSetup>;
+}): Promise<InitAgentSetup> => {
+	if (input.yes) {
+		return input.hasProjectPlugins ? "plugin" : "skills-mcp";
+	}
+	if (input.interactive) {
+		return input.pick();
+	}
+	return "skills-mcp";
 };
 
 export type ChildForward = {

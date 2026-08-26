@@ -450,7 +450,7 @@ export const ensureAuth = async (
 	}
 
 	if (props._[0] === "init") {
-		// Throws when both flags are passed. Init does not authenticate; children still need that rejection.
+		// Init delegates authentication to children but must reject conflicting credential flags itself.
 		selectCredential({
 			...credentialInputs(),
 			profileFlag: props.profile,
