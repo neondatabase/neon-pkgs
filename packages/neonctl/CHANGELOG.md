@@ -1,5 +1,16 @@
 # neonctl
 
+## 4.7.0
+
+### Minor Changes
+
+- 9530c77: `neon link --agent` is removed. List orgs with `orgs list --output json` and projects with `projects list --org-id <org-id> --output json`. Link with `--project-id`, or create with `--org-id --project-name --region-id`.
+
+### Patch Changes
+
+- Updated dependencies [9530c77]
+  - neon@4.7.0
+
 ## 4.6.0
 
 ### Minor Changes
