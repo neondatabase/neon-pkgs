@@ -1,5 +1,11 @@
 # neon
 
+## 4.6.0
+
+### Minor Changes
+
+- e6a4174: `neon bootstrap --agent` is removed. List templates with `--list-templates --output json` (or yaml). Scaffold with `--template` or `--default`.
+
 ## 4.5.2
 
 ### Patch Changes
