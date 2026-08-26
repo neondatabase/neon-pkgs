@@ -1,35 +1,44 @@
 export type InitAgentSetup = "plugin" | "skills-mcp" | "skip";
 
-export type InitPlanInput = {
-	linked: boolean;
-	yes: boolean;
-	agentSetup: InitAgentSetup;
-};
-
 export type InitStep = readonly string[];
 
 export const directoryIsEmpty = (names: readonly string[]): boolean =>
 	names.filter((name) => name !== ".git").length === 0;
 
 export const bootstrapInitStep = (yes: boolean): InitStep =>
-	yes
-		? ["bootstrap", ".", "--default", "--no-link"]
-		: ["bootstrap", ".", "--no-link"];
+	yes ? ["bootstrap", ".", "--default"] : ["bootstrap", "."];
 
-export const planInit = (input: InitPlanInput): InitStep[] => {
+export const planAgentSteps = (input: {
+	yes: boolean;
+	agentSetup: InitAgentSetup;
+}): InitStep[] => {
 	const y = input.yes ? (["-y"] as const) : [];
-	const steps: InitStep[] = [];
 	if (input.agentSetup === "plugin") {
-		steps.push(["plugins", ...y]);
-	} else if (input.agentSetup === "skills-mcp") {
-		steps.push(["skills", ...y]);
+		return [["plugins", ...y]];
 	}
+	if (input.agentSetup === "skills-mcp") {
+		return [
+			["skills", ...y],
+			["mcp", ...y],
+		];
+	}
+	return [];
+};
+
+export const planExistingInit = (input: {
+	linked: boolean;
+	yes: boolean;
+	agentSetup: InitAgentSetup;
+}): InitStep[] => {
+	const steps: InitStep[] = [...planAgentSteps(input)];
 	if (!input.linked) {
 		steps.push(input.yes ? ["link", "--yes"] : ["link"]);
 	}
-	if (input.agentSetup === "skills-mcp") {
-		steps.push(["mcp", ...y]);
-	}
+	steps.push(
+		input.yes
+			? ["config", "init", "--services", "none"]
+			: ["config", "init"],
+	);
 	return steps;
 };
 

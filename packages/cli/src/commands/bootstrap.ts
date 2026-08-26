@@ -14,6 +14,9 @@ import {
 	scaffoldTemplate,
 	templateIds,
 } from "../init/bootstrap.js";
+import { type InitRun, spawnCliChild } from "../init/child.js";
+import type { ChildForward, InitAgentSetup } from "../init/plan.js";
+import { runScaffoldFollowUp } from "../init/tooling.js";
 import { log } from "../log.js";
 import type { CommonProps } from "../types.js";
 import { getCliName } from "../utils/cli_name.js";
@@ -38,9 +41,14 @@ type BootstrapProps = CommonProps & {
 	install: boolean;
 	git: boolean;
 	link: boolean;
-	/** Forwarded to the re-exec'd `link`, so the child resolves the same account. */
+	agentSetup?: boolean;
+	analytics?: boolean;
+	/** Keeps re-executed children on the same account. */
 	configDir?: string;
 	profile?: string;
+	run?: InitRun;
+	pickAgentSetup?: () => Promise<InitAgentSetup>;
+	hasProjectPlugins?: (cwd: string) => Promise<boolean>;
 };
 
 const removedAgent = () =>
@@ -49,7 +57,8 @@ const removedAgent = () =>
 // The directory positional is optional: omitting it in an interactive terminal
 // prompts for one. In a non-interactive context a missing directory is an error.
 export const command = "bootstrap [directory]";
-export const describe = "Scaffold a new project from a Neon starter template";
+export const describe =
+	"Scaffold a new project from a Neon starter template, then install agent tooling and link a Neon project";
 
 export const builder = (argv: yargs.Argv) =>
 	argv
@@ -85,7 +94,7 @@ export const builder = (argv: yargs.Argv) =>
 			default: {
 				alias: "y",
 				describe:
-					"Quick start: scaffold the default template (or --template) and run the usual setup (install dependencies, git init) without prompting. Linking is left to you since it needs a project choice.",
+					"Quick start: scaffold the default template (or --template) and run setup without prompting (install, git, agent tooling, link --yes)",
 				type: "boolean",
 				default: false,
 			},
@@ -106,6 +115,12 @@ export const builder = (argv: yargs.Argv) =>
 				type: "boolean",
 				default: true,
 			},
+			"agent-setup": {
+				type: "boolean",
+				default: true,
+				describe:
+					"After scaffolding, install the Neon plugin or skills and MCP. Use --no-agent-setup to skip",
+			},
 		})
 		.example(
 			"$0 bootstrap my-app",
@@ -117,7 +132,7 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.example(
 			"$0 bootstrap my-app --default",
-			"Quick start: scaffold the default template and run setup without prompting",
+			"Quick start: scaffold, install, git, agent tooling, and link --yes",
 		)
 		.example(
 			"$0 bootstrap --list-templates --output json",
@@ -343,27 +358,44 @@ const runPostScaffoldSteps = async (
 		await initGitRepo(targetDir);
 	}
 
-	// `neon link` pulls env vars, which loads this project's neon.ts — and that
-	// evaluation needs the dependencies installed. So when deps weren't installed
-	// and the scaffold ships a neon.ts, skip the link prompt (it would just fail)
-	// and tell the user how to finish by hand.
-	if (props.link) {
-		if (!installed && hasNeonConfig(targetDir)) {
-			log.info(
-				`Skipping the Neon link step: \`${getCliName()} link\` reads this project's neon.ts ` +
-					`to pull env vars, which needs its dependencies. Run \`${formatInstallCommand(pm)}\`, ` +
-					`then \`${getCliName()} link\`.`,
-			);
-		} else if (
-			await confirm(
-				`Link this project to a Neon project now? (runs ${getCliName()} link)`,
-			)
-		) {
-			await runNeonLink(props, targetDir);
-			// link prints its own summary (and pulls env), so end with just the run hint.
-			printNextSteps(targetDir, pm, { installed, suggestLink: false });
-			return;
-		}
+	const skipLink = shouldSkipLinkForDeps(targetDir, installed);
+	if (props.link && skipLink) {
+		logSkippedLink(pm);
+	}
+
+	const kids = bootstrapChildren(props, targetDir);
+	await runScaffoldFollowUp({
+		cwd: targetDir,
+		yes: false,
+		skipAgentSetup: props.agentSetup === false,
+		shouldLink: false,
+		linkYes: false,
+		...kids,
+		...(props.pickAgentSetup
+			? { pickAgentSetup: props.pickAgentSetup }
+			: {}),
+		...(props.hasProjectPlugins
+			? { hasProjectPlugins: props.hasProjectPlugins }
+			: {}),
+	});
+
+	if (
+		props.link &&
+		!skipLink &&
+		(await confirm(
+			`Link this project to a Neon project now? (runs ${getCliName()} link)`,
+		))
+	) {
+		await runScaffoldFollowUp({
+			cwd: targetDir,
+			yes: false,
+			skipAgentSetup: true,
+			shouldLink: true,
+			linkYes: false,
+			...kids,
+		});
+		printNextSteps(targetDir, pm, { installed, suggestLink: false });
+		return;
 	}
 
 	printNextSteps(targetDir, pm, { installed, suggestLink: true });
@@ -374,12 +406,7 @@ const installPrompt = (inferred: PackageManager | undefined): string =>
 		? `Install dependencies with ${inferred}?`
 		: "Install dependencies?";
 
-/**
- * `--default` quick start: run install + git init without prompting, honoring
- * --no-install / --no-git. Linking is intentionally skipped — it needs an
- * org/project choice we can't make non-interactively — so we point at it in the
- * closing hint instead.
- */
+/** `link --yes` still asks for a project unless one is already linked. */
 const runDefaultSteps = async (
 	props: BootstrapProps,
 	targetDir: string,
@@ -393,7 +420,28 @@ const runDefaultSteps = async (
 	if (props.git && !isGitRepo(targetDir)) {
 		await initGitRepo(targetDir);
 	}
-	printNextSteps(targetDir, pm, { installed, suggestLink: true });
+	const skipLink = shouldSkipLinkForDeps(targetDir, installed);
+	if (props.link && skipLink) {
+		logSkippedLink(pm);
+	}
+	await runScaffoldFollowUp({
+		cwd: targetDir,
+		yes: true,
+		skipAgentSetup: props.agentSetup === false,
+		shouldLink: props.link && !skipLink,
+		linkYes: true,
+		...bootstrapChildren(props, targetDir),
+		...(props.pickAgentSetup
+			? { pickAgentSetup: props.pickAgentSetup }
+			: {}),
+		...(props.hasProjectPlugins
+			? { hasProjectPlugins: props.hasProjectPlugins }
+			: {}),
+	});
+	printNextSteps(targetDir, pm, {
+		installed,
+		suggestLink: !(props.link && !skipLink),
+	});
 };
 
 const isGitRepo = (dir: string): boolean => existsSync(join(dir, ".git"));
@@ -404,6 +452,39 @@ const NEON_CONFIG_FILENAMES = ["neon.ts", "neon.mts", "neon.js", "neon.mjs"];
 
 const hasNeonConfig = (dir: string): boolean =>
 	NEON_CONFIG_FILENAMES.some((name) => existsSync(join(dir, name)));
+
+const shouldSkipLinkForDeps = (dir: string, installed: boolean): boolean =>
+	!installed && hasNeonConfig(dir);
+
+const logSkippedLink = (pm: PackageManager): void => {
+	log.info(
+		`Skipping the Neon link step: \`${getCliName()} link\` reads this project's neon.ts ` +
+			`to pull env vars, which needs its dependencies. Run \`${formatInstallCommand(pm)}\`, ` +
+			`then \`${getCliName()} link\`.`,
+	);
+};
+
+const bootstrapChildren = (
+	props: BootstrapProps,
+	targetDir: string,
+): {
+	run: InitRun;
+	forward: ChildForward;
+	authEnv?: NodeJS.ProcessEnv;
+} => {
+	const explicitKey = props.profile ? "" : credentialInputs().apiKeyFlag;
+	return {
+		run: props.run ?? spawnCliChild,
+		forward: {
+			...(props.configDir ? { configDir: props.configDir } : {}),
+			...(props.profile ? { profile: props.profile } : {}),
+			apiHost: props.apiHost,
+			contextFile: resolve(targetDir, props.contextFile),
+			...(props.analytics === false ? { analytics: false } : {}),
+		},
+		...(explicitKey ? { authEnv: { NEON_API_KEY: explicitKey } } : {}),
+	};
+};
 
 /**
  * Initialize a git repository in the scaffolded directory. Just `git init` — we
@@ -448,45 +529,6 @@ const selectPackageManager = async (): Promise<PackageManager> => {
 		initial: Math.max(0, installed.indexOf("npm")),
 	});
 	return pm ?? "npm";
-};
-
-/**
- * Re-invoke this same CLI as `neon link` inside the scaffolded directory, so the
- * new project's `.neon` context (and pulled `.env`) land in the right place and
- * link's own interactive picker drives org/project/branch selection. Re-execing
- * (rather than calling the handler in-process) keeps link running with `cwd` set
- * to the target dir, which is where its env pull writes.
- */
-const runNeonLink = async (
-	props: BootstrapProps,
-	targetDir: string,
-): Promise<void> => {
-	const args = [process.argv[1], "link"];
-
-	// Forward how to authenticate, never the credential itself. A key on the child's argv is
-	// visible to anything that can list processes, and `runCommand` prints the whole argument
-	// list when the command fails — so a failed link would put the key in the log too.
-	// Forwarding the selection also keeps the child on the same account: without `--profile` it
-	// would resolve its own, and `--config-dir` was never forwarded at all.
-	if (props.configDir) {
-		args.push("--config-dir", props.configDir);
-	}
-	if (props.profile) {
-		args.push("--profile", props.profile);
-	}
-
-	args.push("--api-host", props.apiHost, "--output", props.output);
-
-	// An explicit `--api-key` has nowhere else to go — the child cannot re-resolve a flag we
-	// were given — so it travels in the environment, which neither `ps` nor our own logging
-	// exposes. A profile needs none of this; the child reads the credential itself.
-	const explicitKey = props.profile ? "" : credentialInputs().apiKeyFlag;
-	await runCommand(
-		process.execPath,
-		args,
-		targetDir,
-		explicitKey ? { NEON_API_KEY: explicitKey } : undefined,
-	);
 };
 
 const printScaffolded = (

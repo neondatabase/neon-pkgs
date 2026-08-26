@@ -39,7 +39,7 @@ export const pickAgentSetupInteractively =
 				{
 					title: "Skip agent setup",
 					value: "skip",
-					description: "Link a project only",
+					description: "Continue without a plugin, skills, or MCP",
 				},
 			],
 		});

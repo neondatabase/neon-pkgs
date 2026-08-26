@@ -1,31 +1,23 @@
-import { spawn } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { credentialInputs } from "@neon-internals/cli-core/auth_selection";
 import type yargs from "yargs";
 import { readContextFile } from "../context.js";
+import { type InitRun, initChildEnv, spawnCliChild } from "../init/child.js";
 import {
 	bootstrapInitStep,
-	childArgv,
 	directoryIsEmpty,
 	type InitAgentSetup,
-	type InitStep,
-	planInit,
-	resolveInitAgentSetup,
+	planExistingInit,
 } from "../init/plan.js";
-import { pickAgentSetupInteractively } from "../init/wizard.js";
+import { runAgentTooling, runInitSteps } from "../init/tooling.js";
 import { log } from "../log.js";
-import { detectInstallablePluginsAgents } from "../plugins/targets.js";
 import type { CommonProps } from "../types.js";
-import { canPickAgentsInteractively } from "../utils/agent_picker.js";
 import { getCliName } from "../utils/cli_name.js";
 import { helpEpilogue } from "../utils/help_text.js";
 
-export type InitRun = (
-	argv: string[],
-	cwd: string,
-	env?: NodeJS.ProcessEnv,
-) => Promise<boolean>;
+export type { InitRun };
+export { initChildEnv };
 
 export type InitProps = CommonProps & {
 	yes?: boolean;
@@ -42,25 +34,7 @@ export type InitProps = CommonProps & {
 
 export const command = "init";
 export const describe =
-	"Offer the Neon plugin or skills and MCP, then link a project. In an empty directory, scaffolds a template first. Skills needs Node.js 22.20 or newer.";
-
-const AUTH_CHILD = new Set(["link", "mcp"]);
-
-export const initChildEnv = (
-	command: string | undefined,
-	overlay: NodeJS.ProcessEnv | undefined,
-	base: NodeJS.ProcessEnv = process.env,
-): NodeJS.ProcessEnv => {
-	const child = { ...base };
-	if (command === undefined || !AUTH_CHILD.has(command)) {
-		for (const key of Object.keys(child)) {
-			if (key.toUpperCase() === "NEON_API_KEY") {
-				delete child[key];
-			}
-		}
-	}
-	return overlay ? { ...child, ...overlay } : child;
-};
+	"Set up this directory for Neon: agent tooling, a linked project, and neon.ts. In an empty directory, scaffolds a template first. Skills needs Node.js 22.20 or newer.";
 
 const removedProtocol = () =>
 	`\`${getCliName()} init --agent\` and \`--data\` were removed. Run \`${getCliName()} init\`.`;
@@ -76,7 +50,7 @@ export const builder = (yargs: yargs.Argv) =>
 			type: "boolean",
 			default: false,
 			describe:
-				"Uses the default template in an empty directory. Installs the plugin when a project plugin agent is detected, otherwise skills and MCP. link --yes still asks for a project unless one is already linked",
+				"Empty dir: bootstrap --default. Otherwise plugin when a project plugin agent is detected, else skills and MCP, then link --yes and config init --services none. link --yes still asks for a project unless one is already linked",
 		})
 		.option("agent", {
 			hidden: true,
@@ -94,15 +68,12 @@ export const builder = (yargs: yargs.Argv) =>
 		})
 		.example(
 			"$0 init",
-			"Empty dir: scaffold, then offer plugin or skills and MCP, then link",
+			"Empty dir: bootstrap (scaffold, agent tooling, link). Existing app: agent tooling, link, config init",
 		)
-		.example(
-			"$0 init -y",
-			"Plugin when a project plugin agent is detected, otherwise skills and MCP",
-		)
+		.example("$0 init -y", "Same steps, using each child's defaults")
 		.epilogue(
 			helpEpilogue(
-				"Interactive: plugin (recommended), skills and MCP separately, or skip agent setup. Never both plugin and skills+MCP.",
+				"Interactive agent setup: plugin (recommended), skills and MCP separately, or skip agent setup. Never both plugin and skills+MCP.",
 				"-y installs the plugin when Cursor, Claude Code, or Codex is detected in the project. Otherwise skills and MCP. Then link unless already linked. link --yes may still ask for a project.",
 			),
 		)
@@ -127,36 +98,6 @@ const isLinked = (contextFile: string): boolean => {
 	return typeof projectId === "string" && projectId.length > 0;
 };
 
-const defaultRun: InitRun = async (argv, cwd, env) => {
-	const cli = process.argv[1];
-	if (!cli) {
-		throw new Error(
-			"Cannot re-exec the Neon CLI: process.argv[1] is missing.",
-		);
-	}
-	return new Promise((resolve) => {
-		const child = spawn(process.execPath, [cli, ...argv], {
-			cwd,
-			stdio: "inherit",
-			env: initChildEnv(argv[0], env),
-		});
-		child.on("error", () => {
-			resolve(false);
-		});
-		child.on("close", (code) => {
-			resolve(code === 0);
-		});
-	});
-};
-
-const defaultHasProjectPlugins = async (cwd: string): Promise<boolean> => {
-	const detected = await detectInstallablePluginsAgents({
-		scope: "project",
-		cwd,
-	});
-	return detected.length > 0;
-};
-
 export const handler = async (props: InitProps) => {
 	if (props.output === "json" || props.output === "yaml") {
 		throw new Error(
@@ -168,9 +109,9 @@ export const handler = async (props: InitProps) => {
 	const names = existsSync(cwd) ? readdirSync(cwd) : [];
 	const contextFile = resolve(cwd, props.contextFile);
 	const yes = props.yes === true;
-	const run = props.run ?? defaultRun;
+	const run = props.run ?? spawnCliChild;
 	const explicitKey = props.profile ? "" : credentialInputs().apiKeyFlag;
-	const env = explicitKey ? { NEON_API_KEY: explicitKey } : undefined;
+	const authEnv = explicitKey ? { NEON_API_KEY: explicitKey } : undefined;
 	const forward = {
 		...(props.configDir ? { configDir: props.configDir } : {}),
 		...(props.profile ? { profile: props.profile } : {}),
@@ -179,44 +120,38 @@ export const handler = async (props: InitProps) => {
 		...(props.analytics === false ? { analytics: false } : {}),
 	};
 
-	const runStep = async (step: InitStep) => {
-		log.info("Running `%s %s`", getCliName(), step.join(" "));
-		const argv = childArgv(step, forward);
-		const command = step[0];
-		const ok = await run(
-			argv,
-			cwd,
-			command !== undefined && AUTH_CHILD.has(command) ? env : undefined,
-		);
-		if (!ok) {
-			throw new Error(`\`${getCliName()} ${step.join(" ")}\` failed.`);
-		}
-	};
-
 	if (directoryIsEmpty(names)) {
-		await runStep(bootstrapInitStep(yes));
+		await runInitSteps([bootstrapInitStep(yes)], {
+			cwd,
+			run,
+			forward,
+			authEnv,
+		});
+		log.info("Done.");
+		return;
 	}
 
-	const hasProjectPlugins = yes
-		? await (props.hasProjectPlugins ?? defaultHasProjectPlugins)(cwd)
-		: false;
-	const interactive =
-		!yes &&
-		(props.pickAgentSetup !== undefined || canPickAgentsInteractively());
-	const agentSetup = await resolveInitAgentSetup({
+	await runAgentTooling({
+		cwd,
 		yes,
-		interactive,
-		hasProjectPlugins,
-		pick: props.pickAgentSetup ?? pickAgentSetupInteractively,
+		run,
+		forward,
+		authEnv,
+		...(props.pickAgentSetup
+			? { pickAgentSetup: props.pickAgentSetup }
+			: {}),
+		...(props.hasProjectPlugins
+			? { hasProjectPlugins: props.hasProjectPlugins }
+			: {}),
 	});
-
-	for (const step of planInit({
-		linked: isLinked(contextFile),
-		yes,
-		agentSetup,
-	})) {
-		await runStep(step);
-	}
+	await runInitSteps(
+		planExistingInit({
+			linked: isLinked(contextFile),
+			yes,
+			agentSetup: "skip",
+		}),
+		{ cwd, run, forward, authEnv },
+	);
 
 	log.info("Done.");
 };

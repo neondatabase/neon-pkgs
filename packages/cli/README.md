@@ -659,6 +659,8 @@ When a package cannot be bundled — a native addon with no esbuild loader, or a
 
 `neon bootstrap` copies a Neon starter template into a new (or current) directory — conceptually like `degit`, but it only pulls from a small set of templates we maintain in the public [`neondatabase/examples`](https://github.com/neondatabase/examples) repo. It requires no Neon login: it just downloads files from GitHub.
 
+After scaffolding, an interactive terminal offers agent tooling (the Neon plugin, or skills and MCP separately — never both) and then `neon link`. `--default` / `-y` runs install, git init, agent tooling with defaults, and `link --yes` without prompting. `--no-agent-setup` and `--no-link` skip those. Non-interactive without `--default` prints next steps and does not install, set up agents, or link.
+
 Pass a target directory (or `.` for the current one). In an interactive terminal you pick the template from a list; in CI / non-interactive contexts pass `--template <id>`.
 
 ```bash
@@ -679,11 +681,13 @@ The target directory must be empty unless you pass `--force` (a lone `.git` is i
 
 ## Set up a project (`init`)
 
-`neon init` runs the existing setup commands in this directory.
+`neon init` sets up this directory for Neon.
 
-In an interactive terminal it offers one of: the Neon plugin (`neon plugins`), skills and MCP separately (`neon skills`, then `neon mcp`), or skip agent setup. It never runs plugin and skills+MCP together. Then it links a project unless `.neon` already has a projectId.
+An empty directory (nothing except `.git`) runs `neon bootstrap .` and stops. With `-y` that is `neon bootstrap . --default`. Bootstrap handles scaffolding, agent tooling, and linking.
 
-An empty directory (nothing except `.git`) scaffolds a template first (`neon bootstrap . --no-link`), then offers.
+An existing app installs agent tooling, then `neon link` unless `.neon` already has a projectId, then `neon config init`. Interactive `config init` opens the services picker; `-y` uses `--services none` (starter policy).
+
+In an interactive terminal it offers one of: the Neon plugin (`neon plugins`), skills and MCP separately (`neon skills`, then `neon mcp`), or skip agent setup. It never runs plugin and skills+MCP together.
 
 ```bash
 $ neon init
@@ -692,7 +696,7 @@ $ neon init -y
 
 `-y` skips the template picker and the agent-setup offer. After bootstrap (if any), it installs the plugin when a project-level plugin agent is detected (Cursor, Claude Code, Codex). Otherwise it installs skills and MCP. VS Code, GitHub Copilot CLI, and Grok only take the plugin user-level (`neon plugins --global`), so `-y` uses skills and MCP for those.
 
-`-y` forwards `-y` to `plugins` or `skills`/`mcp`, `--default --no-link` to `bootstrap`, and `--yes` to `link`. Bootstrap is always `--no-link` so the following `link` step owns the project pin and can receive `--api-key`. `link --yes` only skips the "already linked" confirmation; it still asks for a project unless one is already linked.
+`-y` forwards `-y` to `plugins` or `skills`/`mcp`, `--default` to `bootstrap`, `--yes` to `link`, and `--services none` to `config init`. `link --yes` only skips the "already linked" confirmation; it still asks for a project unless one is already linked.
 
 A failed step stops the rest. `--profile` and `--config-dir` are forwarded to each child. `--output json` and `--output yaml` are refused; the commands init runs print their own output.
 
@@ -1175,8 +1179,8 @@ Id   Name      Project         Created At            Last Used At          Last 
 | open                                                                       |                                                                                                              | Open the linked project in Console |
 | config                                                                     | `init`, `status`, `plan`, `apply`                                                                            | Drive a branch from `neon.ts`      |
 | deploy                                                                     |                                                                                                              | Alias for `config apply`           |
-| bootstrap                                                                  |                                                                                                              | Scaffold a project from a template |
-| init                                                                       |                                                                                                              | Set up a project for a coding agent |
+| bootstrap                                                                  |                                                                                                              | Scaffold a template, then agent tooling and link |
+| init                                                                       |                                                                                                              | Empty dir: bootstrap. Existing: agents, link, neon.ts |
 | mcp                                                                        |                                                                                                              | Install the Neon MCP server         |
 | plugins                                                                    |                                                                                                              | Install the Neon plugin             |
 | skills                                                                     | `update`                                                                                                     | Install Neon agent skills           |
