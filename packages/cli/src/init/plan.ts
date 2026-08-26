@@ -1,3 +1,5 @@
+import { isAbsolute, join, resolve } from "node:path";
+
 export type InitAgentSetup = "plugin" | "skills-mcp" | "skip";
 
 export type InitStep = readonly string[];
@@ -7,6 +9,14 @@ export const directoryIsEmpty = (names: readonly string[]): boolean =>
 
 export const bootstrapInitStep = (yes: boolean): InitStep =>
 	yes ? ["bootstrap", ".", "--default"] : ["bootstrap", "."];
+
+export const projectContextFile = (
+	projectDir: string,
+	contextFile: string,
+): string =>
+	isAbsolute(contextFile)
+		? join(projectDir, ".neon")
+		: resolve(projectDir, contextFile);
 
 export const planAgentSteps = (input: {
 	yes: boolean;

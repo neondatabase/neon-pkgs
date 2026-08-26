@@ -15,7 +15,11 @@ import {
 	templateIds,
 } from "../init/bootstrap.js";
 import { type InitRun, spawnCliChild } from "../init/child.js";
-import type { ChildForward, InitAgentSetup } from "../init/plan.js";
+import {
+	type ChildForward,
+	type InitAgentSetup,
+	projectContextFile,
+} from "../init/plan.js";
 import { runScaffoldFollowUp } from "../init/tooling.js";
 import { log } from "../log.js";
 import type { CommonProps } from "../types.js";
@@ -479,7 +483,7 @@ const bootstrapChildren = (
 			...(props.configDir ? { configDir: props.configDir } : {}),
 			...(props.profile ? { profile: props.profile } : {}),
 			apiHost: props.apiHost,
-			contextFile: resolve(targetDir, props.contextFile),
+			contextFile: projectContextFile(targetDir, props.contextFile),
 			...(props.analytics === false ? { analytics: false } : {}),
 		},
 		...(explicitKey ? { authEnv: { NEON_API_KEY: explicitKey } } : {}),

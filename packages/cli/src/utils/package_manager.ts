@@ -351,6 +351,19 @@ export const formatInstallCommand = (
  * exited cleanly; a non-zero exit is reported but never throws — the caller
  * decides whether to treat it as fatal.
  */
+export const commandEnv = (
+	overlay: NodeJS.ProcessEnv | undefined,
+	base: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv => {
+	const child = { ...base };
+	for (const key of Object.keys(child)) {
+		if (key.toUpperCase() === "NEON_API_KEY") {
+			delete child[key];
+		}
+	}
+	return overlay ? { ...child, ...overlay } : child;
+};
+
 export const runCommand = (
 	cmd: string,
 	args: string[],
@@ -368,7 +381,7 @@ export const runCommand = (
 			cwd,
 			stdio: "inherit",
 			shell: process.platform === "win32",
-			...(env ? { env: { ...process.env, ...env } } : {}),
+			env: commandEnv(env),
 		});
 		child.on("error", (err) => {
 			log.warning(

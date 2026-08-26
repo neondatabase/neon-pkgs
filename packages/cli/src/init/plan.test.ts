@@ -6,6 +6,7 @@ import {
 	directoryIsEmpty,
 	planAgentSteps,
 	planExistingInit,
+	projectContextFile,
 	resolveInitAgentSetup,
 } from "./plan.js";
 
@@ -38,6 +39,20 @@ describe("bootstrapInitStep", () => {
 			".",
 			"--default",
 		]);
+	});
+});
+
+describe("projectContextFile", () => {
+	test("an absolute parent context file does not follow into the scaffold", () => {
+		expect(
+			projectContextFile("/tmp/my-app", "/Users/me/project/.neon"),
+		).toBe("/tmp/my-app/.neon");
+	});
+
+	test("a relative context file is resolved against the scaffold", () => {
+		expect(projectContextFile("/tmp/my-app", ".neon")).toBe(
+			"/tmp/my-app/.neon",
+		);
 	});
 });
 
