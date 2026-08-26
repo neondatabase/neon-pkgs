@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe } from "vitest";
+import { describe, expect } from "vitest";
 
 import { test } from "../test_utils/fixtures";
 
@@ -60,6 +60,28 @@ describe("branches", () => {
 			"test_branch",
 		]);
 	});
+
+	for (const output of ["table", "json", "yaml"] as const) {
+		test(`create --no-secrets/${output}`, async ({ testCliCommand }) => {
+			const { stdout } = await testCliCommand(
+				[
+					"branches",
+					"create",
+					"--project-id",
+					"test",
+					"--name",
+					"test_branch_no_secrets",
+					"--no-secrets",
+				],
+				{ output, snapshot: false },
+			);
+
+			expect(stdout).toContain("br-safe-output");
+			expect(stdout).not.toContain("never-expose-this-password");
+			expect(stdout).not.toContain("connection_uri");
+			expect(stdout).not.toContain("connection_parameters");
+		});
+	}
 
 	test("create branch and connect with psql", async ({ testCliCommand }) => {
 		await testCliCommand([

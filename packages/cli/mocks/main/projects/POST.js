@@ -1,7 +1,32 @@
 import { expect } from 'vitest';
 
 export default function (req, res) {
-  if (req.body.project?.name === 'test_project_with_fixed_cu') {
+  if (req.body.project?.name === 'test_project_no_secrets') {
+    expect(req.body).toMatchObject({
+      project: { name: 'test_project_no_secrets' },
+    });
+    return res.send({
+      project: {
+        id: 'new-project-safe-output',
+        name: 'test_project_no_secrets',
+        created_at: '2026-08-25T00:00:00.000Z',
+      },
+      connection_uris: [
+        {
+          connection_uri:
+            'postgresql://neondb_owner:never-expose-this-password@example.com/neondb',
+          connection_parameters: {
+            password: 'never-expose-this-password',
+          },
+        },
+      ],
+      branch: {
+        id: 'br-safe-output',
+        name: 'main',
+        created_at: '2026-08-25T00:00:00.000Z',
+      },
+    });
+  } else if (req.body.project?.name === 'test_project_with_fixed_cu') {
     expect(req.body).toMatchObject({
       project: {
         name: 'test_project_with_fixed_cu',

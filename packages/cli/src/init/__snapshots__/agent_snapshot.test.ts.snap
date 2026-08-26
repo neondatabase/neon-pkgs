@@ -360,7 +360,7 @@ exports[`neon init --agent: every step, against every project shape > connected 
       {
         "id": "create_project_if_needed",
         "description": "If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>). If the user chose an existing project, skip this step.",
-        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json"
+        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json --no-secrets"
       },
       {
         "id": "create_neon_context",
@@ -1358,7 +1358,7 @@ exports[`neon init --agent: every step, against every project shape > drizzle > 
       {
         "id": "create_project_if_needed",
         "description": "If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>). If the user chose an existing project, skip this step.",
-        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json"
+        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json --no-secrets"
       },
       {
         "id": "create_neon_context",
@@ -2356,7 +2356,7 @@ exports[`neon init --agent: every step, against every project shape > fully-conf
       {
         "id": "create_project_if_needed",
         "description": "If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>). If the user chose an existing project, skip this step.",
-        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json"
+        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json --no-secrets"
       },
       {
         "id": "create_neon_context",
@@ -3323,7 +3323,7 @@ exports[`neon init --agent: every step, against every project shape > greenfield
       {
         "id": "create_project_if_needed",
         "description": "If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>). If the user chose an existing project, skip this step.",
-        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json"
+        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json --no-secrets"
       },
       {
         "id": "create_neon_context",
@@ -4326,7 +4326,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       {
         "id": "create_project_if_needed",
         "description": "If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>). If the user chose an existing project, skip this step.",
-        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json"
+        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json --no-secrets"
       },
       {
         "id": "create_neon_context",
@@ -5329,7 +5329,7 @@ exports[`neon init --agent: every step, against every project shape > next-prism
       {
         "id": "create_project_if_needed",
         "description": "If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>). If the user chose an existing project, skip this step.",
-        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json"
+        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json --no-secrets"
       },
       {
         "id": "create_neon_context",
@@ -6327,7 +6327,7 @@ exports[`neon init --agent: every step, against every project shape > node-app >
       {
         "id": "create_project_if_needed",
         "description": "If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>). If the user chose an existing project, skip this step.",
-        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json"
+        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json --no-secrets"
       },
       {
         "id": "create_neon_context",
@@ -7330,7 +7330,7 @@ exports[`neon init --agent: every step, against every project shape > other-data
       {
         "id": "create_project_if_needed",
         "description": "If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>). If the user chose an existing project, skip this step.",
-        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json"
+        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json --no-secrets"
       },
       {
         "id": "create_neon_context",
@@ -8107,7 +8107,7 @@ exports[`neon init --agent: nested and string-encoded --data payloads > JSON-enc
       {
         "id": "create_project_if_needed",
         "description": "If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>). If the user chose an existing project, skip this step.",
-        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json"
+        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json --no-secrets"
       },
       {
         "id": "create_neon_context",
@@ -8175,7 +8175,7 @@ exports[`neon init --agent: nested and string-encoded --data payloads > nested o
       {
         "id": "create_project_if_needed",
         "description": "If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>). If the user chose an existing project, skip this step.",
-        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json"
+        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json --no-secrets"
       },
       {
         "id": "create_neon_context",
@@ -11839,7 +11839,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cla
       {
         "id": "create_project_if_needed",
         "description": "If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>). If the user chose an existing project, skip this step.",
-        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json"
+        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json --no-secrets"
       },
       {
         "id": "create_neon_context",
@@ -12334,7 +12334,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cod
       {
         "id": "create_project_if_needed",
         "description": "If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>). If the user chose an existing project, skip this step.",
-        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json"
+        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json --no-secrets"
       },
       {
         "id": "create_neon_context",
@@ -12829,7 +12829,7 @@ exports[`neon init --agent: the response depends on which agent is driving > cur
       {
         "id": "create_project_if_needed",
         "description": "If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>). If the user chose an existing project, skip this step.",
-        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json"
+        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json --no-secrets"
       },
       {
         "id": "create_neon_context",
@@ -13340,7 +13340,7 @@ exports[`neon init --agent: the response depends on which agent is driving > non
       {
         "id": "create_project_if_needed",
         "description": "If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>). If the user chose an existing project, skip this step.",
-        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json"
+        "command": "CI= npx -y neon projects create --name <project-name> --org-id <org-id> --output json --no-secrets"
       },
       {
         "id": "create_neon_context",

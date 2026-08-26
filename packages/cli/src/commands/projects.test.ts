@@ -22,6 +22,26 @@ describe("projects", () => {
 		await testCliCommand(["projects", "create", "--name", "test_project"]);
 	});
 
+	for (const output of ["table", "json", "yaml"] as const) {
+		test(`create --no-secrets/${output}`, async ({ testCliCommand }) => {
+			const { stdout } = await testCliCommand(
+				[
+					"projects",
+					"create",
+					"--name",
+					"test_project_no_secrets",
+					"--no-secrets",
+				],
+				{ output, snapshot: false },
+			);
+
+			expect(stdout).toContain("new-project-safe-output");
+			expect(stdout).not.toContain("never-expose-this-password");
+			expect(stdout).not.toContain("connection_uri");
+			expect(stdout).not.toContain("connection_parameters");
+		});
+	}
+
 	test("create with hipaa flag", async ({ testCliCommand }) => {
 		await testCliCommand([
 			"projects",

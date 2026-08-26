@@ -75,7 +75,7 @@ export async function handleGettingStartedPhase(
 						"Ask the user for a project name (suggest the current directory name).",
 						"If the user chose an existing eligible project, skip this step.",
 					].join(" "),
-					command: `${neonctlCmd()} projects create --name <project-name> --org-id <org-id> --region-id aws-us-east-2 --output json`,
+					command: `${neonctlCmd()} projects create --name <project-name> --org-id <org-id> --region-id aws-us-east-2 --output json --no-secrets`,
 				},
 			);
 		} else {
@@ -107,7 +107,7 @@ export async function handleGettingStartedPhase(
 						"If the user chose to create a new project, create it using the CLI command below (replace <org-id> and <project-name>).",
 						"If the user chose an existing project, skip this step.",
 					].join(" "),
-					command: `${neonctlCmd()} projects create --name <project-name> --org-id <org-id> --output json`,
+					command: `${neonctlCmd()} projects create --name <project-name> --org-id <org-id> --output json --no-secrets`,
 				},
 			);
 		}

@@ -1,7 +1,35 @@
 import { expect } from 'vitest';
 
 export default function (req, res) {
-  if (req.body.branch?.name === 'test_branch_with_parent_name') {
+  if (req.body.branch?.name === 'test_branch_no_secrets') {
+    expect(req.body).toMatchObject({
+      branch: { name: 'test_branch_no_secrets' },
+    });
+    return res.send({
+      branch: {
+        id: 'br-safe-output',
+        name: 'test_branch_no_secrets',
+        created_at: '2026-08-25T00:00:00.000Z',
+      },
+      endpoints: [
+        {
+          id: 'ep-safe-output',
+          type: 'read_write',
+          created_at: '2026-08-25T00:00:00.000Z',
+          host: 'example.com',
+        },
+      ],
+      connection_uris: [
+        {
+          connection_uri:
+            'postgresql://neondb_owner:never-expose-this-password@example.com/neondb',
+          connection_parameters: {
+            password: 'never-expose-this-password',
+          },
+        },
+      ],
+    });
+  } else if (req.body.branch?.name === 'test_branch_with_parent_name') {
     expect(req.body).toMatchObject({
       branch: {
         name: 'test_branch_with_parent_name',

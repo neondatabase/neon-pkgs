@@ -68,6 +68,12 @@ export const builder = (argv: yargs.Argv) =>
 			"Create a branch",
 			(yargs) =>
 				yargs.options({
+					secrets: {
+						describe:
+							"Include connection credentials in command output. Use --no-secrets to omit them",
+						type: "boolean",
+						default: true,
+					},
 					name: branchCreateRequest["branch.name"],
 					parent: {
 						describe:
@@ -361,6 +367,7 @@ const create = async (
 		type: EndpointType;
 		psql: boolean;
 		fallback: boolean;
+		secrets: boolean;
 		suspendTimeout: number;
 		annotation?: string;
 		schemaOnly: boolean;
@@ -472,7 +479,7 @@ const create = async (
 			emptyMessage: "No endpoints have been found.",
 		});
 	}
-	if (data.connection_uris?.length) {
+	if (props.secrets && data.connection_uris?.length) {
 		out.write(data.connection_uris, {
 			fields: ["connection_uri"],
 			title: "connection_uris",

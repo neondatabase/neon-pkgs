@@ -122,7 +122,7 @@ export async function handleDbPhase(
 						},
 					],
 					context:
-						`The agent should ask the user for a project name, then run: ${neonctlCmd()} projects create --name <name> --output json` +
+						`The agent should ask the user for a project name, then run: ${neonctlCmd()} projects create --name <name> --output json --no-secrets` +
 						(options.orgId ? ` --org-id ${options.orgId}` : "") +
 						" and pass the result back.",
 					responseMapping: {
@@ -172,7 +172,7 @@ export async function handleDbPhase(
 				type: "ask_user",
 				question: "Which Neon project would you like to use?",
 				options: projectOptions,
-				context: `If the user wants to create a new project, ask for a name then run: ${neonctlCmd()} projects create --name <name> --output json and use the returned project id.`,
+				context: `If the user wants to create a new project, ask for a name then run: ${neonctlCmd()} projects create --name <name> --output json --no-secrets and use the returned project id.`,
 				responseMapping,
 			},
 		};
