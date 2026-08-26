@@ -49,6 +49,22 @@ export const describe =
 
 const AUTH_CHILD = new Set(["link", "mcp"]);
 
+export const initChildEnv = (
+	command: string | undefined,
+	overlay: NodeJS.ProcessEnv | undefined,
+	base: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv => {
+	const child = { ...base };
+	if (command === undefined || !AUTH_CHILD.has(command)) {
+		for (const key of Object.keys(child)) {
+			if (key.toUpperCase() === "NEON_API_KEY") {
+				delete child[key];
+			}
+		}
+	}
+	return overlay ? { ...child, ...overlay } : child;
+};
+
 const pluginProjectAgents = pluginsInstallableAgents("project");
 
 const removedProtocol = () =>
@@ -131,7 +147,7 @@ const defaultRun: InitRun = async (argv, cwd, env) => {
 		const child = spawn(process.execPath, [cli, ...argv], {
 			cwd,
 			stdio: "inherit",
-			env: env ? { ...process.env, ...env } : process.env,
+			env: initChildEnv(argv[0], env),
 		});
 		child.on("error", () => {
 			resolve(false);

@@ -420,6 +420,33 @@ describe("init handler", () => {
 		]);
 	});
 
+	test("strips an ambient NEON_API_KEY from bootstrap, skills, and plugins", async () => {
+		const { initChildEnv } = await import("./init.js");
+		const base = { PATH: "/bin", NEON_API_KEY: "napi_env" };
+		expect(initChildEnv("bootstrap", undefined, base)).toEqual({
+			PATH: "/bin",
+		});
+		expect(initChildEnv("plugins", undefined, base)).toEqual({
+			PATH: "/bin",
+		});
+		expect(initChildEnv("skills", undefined, base)).toEqual({
+			PATH: "/bin",
+		});
+		expect(initChildEnv("link", undefined, base)).toEqual(base);
+		expect(
+			initChildEnv("mcp", { NEON_API_KEY: "napi_flag" }, base),
+		).toEqual({
+			PATH: "/bin",
+			NEON_API_KEY: "napi_flag",
+		});
+		expect(
+			initChildEnv("bootstrap", undefined, {
+				PATH: "/bin",
+				neon_api_key: "napi_mixed",
+			}),
+		).toEqual({ PATH: "/bin" });
+	});
+
 	test("does not pass NEON_API_KEY to plugins", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-plugin-key-"));
 		mkdirSync(join(cwd, ".cursor"));
