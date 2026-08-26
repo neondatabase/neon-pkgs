@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
+	commandEnv,
 	detectProjectPackageManager,
 	formatExecCommand,
 	formatInstallCommand,
@@ -442,5 +443,28 @@ describe("inferPackageManager", () => {
 			"npm/11.11.0 node/v24.14.1 darwin x64";
 		writeFileSync(join(project, "bun.lock"), "");
 		expect(inferPackageManager(project)).toBe("bun");
+	});
+});
+
+describe("commandEnv", () => {
+	it("strips an inherited NEON_API_KEY from npm and git children", () => {
+		expect(
+			commandEnv(undefined, { PATH: "/bin", NEON_API_KEY: "napi_env" }),
+		).toEqual({ PATH: "/bin" });
+	});
+
+	it("strips mixed-case inherited keys", () => {
+		expect(
+			commandEnv(undefined, { PATH: "/bin", neon_api_key: "napi_mixed" }),
+		).toEqual({ PATH: "/bin" });
+	});
+
+	it("keeps an explicit overlay key", () => {
+		expect(
+			commandEnv(
+				{ NEON_API_KEY: "napi_flag" },
+				{ PATH: "/bin", NEON_API_KEY: "napi_env" },
+			),
+		).toEqual({ PATH: "/bin", NEON_API_KEY: "napi_flag" });
 	});
 });

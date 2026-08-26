@@ -669,7 +669,9 @@ When a package cannot be bundled — a native addon with no esbuild loader, or a
 
 ## Scaffold a project (`bootstrap`)
 
-`neon bootstrap` copies a Neon starter template into a new (or current) directory — conceptually like `degit`, but it only pulls from a small set of templates we maintain in the public [`neondatabase/examples`](https://github.com/neondatabase/examples) repo. It requires no Neon login: it just downloads files from GitHub.
+`neon bootstrap` copies a Neon starter template into a new (or current) directory — conceptually like `degit`, but it only pulls from a small set of templates we maintain in the public [`neondatabase/examples`](https://github.com/neondatabase/examples) repo. The template copy needs no Neon login: it downloads files from GitHub.
+
+After scaffolding, an interactive terminal offers agent tooling (the Neon plugin, or skills and MCP separately — never both) and then `neon link`. `--default` / `-y` skips the template, install, git, and agent pickers, then runs `link --yes`. `link --yes` still asks for a project unless one is already linked. `--no-agent-setup` and `--no-link` skip those. Non-interactive without `--default` prints next steps and does not install, set up agents, or link.
 
 Pass a target directory (or `.` for the current one). In an interactive terminal you pick the template from a list; in CI / non-interactive contexts pass `--template <id>`.
 
@@ -677,7 +679,7 @@ Pass a target directory (or `.` for the current one). In an interactive terminal
 # Pick a template interactively and scaffold it into ./my-app
 $ neon bootstrap my-app
 
-# Scaffold a specific template into the current directory (no prompts)
+# Scaffold a specific template into the current directory (skips the template picker)
 $ neon bootstrap . --template hono
 
 # List templates
@@ -689,64 +691,28 @@ $ neon bootstrap --list-templates --output json
 
 The target directory must be empty unless you pass `--force` (a lone `.git` is ignored, so a freshly `git init`ed folder is fine). Symlinks and executable bits in the template are preserved.
 
-## Set up a project for your coding agent (`init`)
+## Set up a project (`init`)
 
-`neon init` wires an existing project up to Neon: it signs you in, installs the Neon MCP server and agent skills into your editor, adds the Neon Local Connect extension for VS Code and Cursor, creates or picks a project, writes `DATABASE_URL` into `.env`, and offers to scaffold migrations.
+`neon init` sets up this directory for Neon.
+
+An empty directory (nothing except `.git`) runs `neon bootstrap .` and stops. With `-y` that is `neon bootstrap . --default`. Bootstrap handles scaffolding, agent tooling, and linking.
+
+An existing app installs agent tooling, then `neon link` unless `.neon` already has a projectId, then `neon config init`. Interactive `config init` opens the services picker; `-y` uses `--services none` (starter policy).
+
+In an interactive terminal it offers one of: the Neon plugin (`neon plugins`), skills and MCP separately (`neon skills`, then `neon mcp`), or skip agent setup. It never runs plugin and skills+MCP together.
 
 ```bash
 $ neon init
+$ neon init -y
 ```
 
-Run in a terminal it prompts you through those steps. This is what the retired `neon-init` package used to do; `npx neon init` replaces it.
+`-y` skips the template picker and the agent-setup offer. Empty dir: `bootstrap --default`. Existing app: plugin when a project-level plugin agent is detected (Cursor, Claude Code, Codex); otherwise skills and MCP. VS Code, GitHub Copilot CLI, and Grok only take the plugin user-level (`neon plugins --global`), so `-y` uses skills and MCP for those.
 
-Two side effects worth knowing before you run it. It **installs or upgrades `neon` globally**, with whichever package manager invoked it — the flow drives Neon by shelling out to the CLI rather than calling the API in-process. And it **writes `.neon`** in the project directory, the same context file `neon link` and `neon checkout` use.
+`-y` forwards `-y` to `plugins` or `skills`/`mcp`, `--default` to `bootstrap`, `--yes` to `link`, and `--services none` to `config init`. `link --yes` only skips the "already linked" confirmation; it still asks for a project unless one is already linked.
 
-### Agent mode
+A failed step stops the rest. `--profile` and `--config-dir` are forwarded to each child. `--output json` and `--output yaml` are refused; the commands init runs print their own output.
 
-`--agent` turns the same flow into a state machine an AI coding assistant drives. It prints **one JSON object on stdout** and nothing else: a phase response carrying a `status` and a `nextAction` telling the agent what to do next — usually another `neon init` invocation, spelled out as a `command`. The two read-only steps, `status` and `finalize`, return a snapshot instead.
-
-```bash
-$ neon init --agent --data '{"step":"status"}'
-{
-  "auth": { "authenticated": true },
-  "tooling": { "mcpServer": { "configured": true, "scope": "global" }, "skills": { "installed": false, "scope": null } },
-  "project": { "databaseUrl": false },
-  "migrations": { "tool": "prisma", "hasMigrations": false },
-  "recommendations": [
-    { "priority": "high", "message": "No DATABASE_URL found in .env", "command": "neon init --agent --data '{\"step\":\"db\"}'" },
-    { "priority": "medium", "message": "Neon agent skills not detected in this project", "command": "neon init --agent --data '{\"step\":\"skills\",\"install\":true}'" },
-    { "priority": "medium", "message": "prisma detected but no migrations found", "command": "neon init --agent --data '{\"step\":\"migrations\"}'" }
-  ]
-}
-```
-
-`--agent` is implied when stdin is not a TTY and a known agent is detected from the environment (Claude Code, Codex, Cline, Cursor, VS Code, Windsurf).
-
-`--data` takes a JSON object whose `step` selects the phase: `auth`, `db`, `setup`, `getting-started`, `mcp`, `skills`, `migrations`, `neon-auth`, `status`, or `finalize`. Remaining keys are that phase's options. Without `--data`, the orchestrator picks the next phase itself. An unrecognised `step` is refused with the full list.
-
-**Failures are JSON too**, so an agent never has to distinguish "it broke" from "it returned nothing":
-
-```bash
-$ neon init --agent --data '{not json'
-{
-  "success": false,
-  "error": "Invalid JSON in --data flag at position 1. Expected a JSON object."
-}
-$ echo $?
-1
-```
-
-That message reports where parsing stopped and nothing more. `--data` carries whatever you put in it, and the JSON parser's own message quotes a window of the input, so echoing either would put a connection string or an API key on stdout.
-
-**One exception to "JSON on stdout".** Credentials are resolved before any command runs, so a failure in that step — an unknown `--profile` or `NEON_PROFILE`, `--api-key` and `--profile` together, a `credentials.json` that cannot be read, or an OS keyring item that cannot be read — prints `ERROR: …` on stderr, leaves stdout empty, and exits 1. Treat a non-zero exit with empty stdout as a credential problem and read stderr.
-
-| Option | |
-| --- | --- |
-| `--agent`, `-a` | Emit the JSON state machine instead of prompting |
-| `--data <json>` | Route to one phase, with that phase's options |
-| `--skip-migrations` | Leave the migrations phase out of the flow |
-| `--preview` | Enable preview features (scaffolding a project from a template) |
-| `--profile <name>` | Run as that stored account. See [Which credential an invocation uses](#which-credential-an-invocation-uses). |
+`skills` needs Node.js 22.20 or newer. See [`bootstrap`](#scaffold-a-project-bootstrap), [`plugins`](#install-the-neon-plugin-plugins), [`skills`](#install-neon-agent-skills-skills), [`link`](#linking-a-project), and [`mcp`](#install-the-neon-mcp-server-mcp) for what those commands write.
 
 ## Install the Neon MCP server (`mcp`)
 
@@ -1128,7 +1094,7 @@ When both are only environment variables the key wins, which keeps a CI pipeline
 
 `neon auth` and the `profile` subcommands are outside all of this, because they read the same flags to mean something else: `neon auth --profile work` names where to write a credential, and `neon profile create work --api-key …` names one to store.
 
-`neon init` follows the same profile selection: `--profile` and `NEON_PROFILE` pick the stored account. Every `npx neon` it runs, and every command it tells an agent to run (`npx neon …`, `neon init --agent …`), includes `--profile <name>` when a profile was named by `--profile` or `NEON_PROFILE`, and `--config-dir <path>` when you passed `--config-dir`; nothing is added when those were not set. It still ignores `--api-key` and `NEON_API_KEY` for its own credential read and runs as that stored profile (`DEFAULT` when a key was named with no profile). Those keys are also not written onto the emitted commands — putting a key in agent JSON would print it. An ambient `NEON_API_KEY` is inherited by the subprocesses.
+`neon init` forwards `--profile` and `--config-dir` to the commands it runs. An explicit `--api-key` is passed to those children through `NEON_API_KEY`, not argv.
 
 ## API keys (`api-keys`)
 
@@ -1225,8 +1191,8 @@ Id   Name      Project         Created At            Last Used At          Last 
 | open                                                                       |                                                                                                              | Open the linked project in Console |
 | config                                                                     | `init`, `status`, `plan`, `apply`                                                                            | Drive a branch from `neon.ts`      |
 | deploy                                                                     |                                                                                                              | Alias for `config apply`           |
-| bootstrap                                                                  |                                                                                                              | Scaffold a project from a template |
-| init                                                                       |                                                                                                              | Set up a project for a coding agent |
+| bootstrap                                                                  |                                                                                                              | Scaffold a template, then agent tooling and link |
+| init                                                                       |                                                                                                              | Empty dir: bootstrap. Existing: agents, link, neon.ts |
 | mcp                                                                        |                                                                                                              | Install the Neon MCP server         |
 | plugins                                                                    |                                                                                                              | Install the Neon plugin             |
 | skills                                                                     | `update`                                                                                                     | Install Neon agent skills           |

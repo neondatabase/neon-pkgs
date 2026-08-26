@@ -350,7 +350,8 @@ describe("bootstrap", () => {
 		const { code, stderr } = await runBootstrap(server, ["--help"]);
 		expect(code, stderr).toBe(0);
 		expect(stderr).toContain("--list-templates");
-		expect(stderr).not.toContain("--agent");
+		expect(stderr).toContain("--agent-setup");
+		expect(stderr).not.toMatch(/(?<![-\w])--agent(?![-\w])/);
 	});
 
 	test("--default scaffolds and inits git without prompting", async () => {
@@ -360,6 +361,8 @@ describe("bootstrap", () => {
 			"--default",
 			"--no-install",
 			"--force",
+			"--no-agent-setup",
+			"--no-link",
 		]);
 		expect(code, stderr).toBe(0);
 
