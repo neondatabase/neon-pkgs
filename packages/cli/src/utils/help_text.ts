@@ -1,10 +1,22 @@
 export const HELP_WRAP = 78;
 const WRAP_INDENT = "    ";
 
+export const helpWidth = (): number => {
+	const columns = process.stderr.columns ?? process.stdout.columns;
+	if (
+		typeof columns !== "number" ||
+		!Number.isFinite(columns) ||
+		columns < 1
+	) {
+		return HELP_WRAP;
+	}
+	return Math.max(24, columns - 1);
+};
+
 export const helpCsv = (
 	label: string,
 	items: readonly string[],
-	width = HELP_WRAP,
+	width = helpWidth(),
 ): string => {
 	if (items.length === 0) {
 		return "";

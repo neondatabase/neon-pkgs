@@ -781,7 +781,7 @@ That message reports where parsing stopped and nothing more. `--data` carries wh
 # Interactive: global or project, then agents, then API key or OAuth, then confirm.
 $ neon mcp
 
-# Skip prompts. Global config, every globally detected agent, minted API key.
+# Skip prompts. Global config, every globally detected agent, reuse or mint an API key.
 $ neon mcp -y
 
 # OAuth: no API key minted. The agent prompts for Neon sign-in on first use.
