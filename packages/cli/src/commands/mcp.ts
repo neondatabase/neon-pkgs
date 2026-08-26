@@ -74,7 +74,7 @@ export const builder = (argv: yargs.Argv) =>
 				type: "boolean",
 				default: false,
 				describe:
-					"Skip prompts. Defaults to global config, every detected agent and a minted account-wide API key. Remaining defaults listed below. --project, --oauth, --agent, --read-only, --project-id and --category still apply",
+					"Skip prompts. Defaults listed below. --project, --oauth, --agent, --read-only, --project-id and --category still apply",
 			},
 			agent: {
 				alias: "a",
@@ -173,13 +173,13 @@ export const builder = (argv: yargs.Argv) =>
 		.epilogue(
 			helpEpilogue(
 				`Installs ${NEON_MCP_URL}`,
-				helpCsv("Supported agents", mcpGlobalAgents),
+				helpCsv("Supported agents at global scope", mcpGlobalAgents),
 				helpCsv("--project does not support", mcpProjectDroppedAgents),
 				helpCsv("Supported categories", NEON_MCP_CATEGORIES),
 				"neon mcp -y:",
 				"  global config",
 				"  every globally detected agent",
-				"  reuse the Neon API key already in an agent's MCP config, else mint an account-wide key",
+				"  reuse an existing Neon MCP API key, else mint an account-wide key",
 				"  write tools on, all categories",
 				"  no project pin (including from .neon)",
 			),
