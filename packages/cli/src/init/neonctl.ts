@@ -4,14 +4,17 @@ import {
 	globalInstallCommand,
 	resolveInvokingPackageManager,
 } from "../utils/package_manager.js";
+import { neonBin } from "./neon_bin.js";
 import { explicitConfigDirCli, explicitProfileCli } from "./profile_cli.js";
 
 /**
- * `npx -y neon` avoids global-install assumptions, and `CI=` keeps emitted calls
+ * Emits the installed `neon` binary when it's on PATH, else `npx -y neon` (see
+ * {@link neonBin}) — so the command works before `neon init` has installed the CLI
+ * and uses the installed binary afterwards. `CI=` keeps emitted calls
  * non-interactive. API and OAuth hosts stay ambient because the CLI reads them directly.
  */
 export function neonctlCmd(): string {
-	return `CI= npx -y neon${explicitProfileCli()}${explicitConfigDirCli()}`;
+	return `CI= ${neonBin()}${explicitProfileCli()}${explicitConfigDirCli()}`;
 }
 
 type NeonctlStatus = {

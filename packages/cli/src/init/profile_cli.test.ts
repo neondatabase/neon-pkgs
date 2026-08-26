@@ -2,7 +2,7 @@ import {
 	type CredentialInputs,
 	recordCredentialInputs,
 } from "@neon-internals/cli-core/auth_selection";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { enrichResponse } from "./enrich_output.js";
 import { neonctlCmd } from "./neonctl.js";
 import {
@@ -12,6 +12,13 @@ import {
 	selectedConfigDir,
 	selectedProfileName,
 } from "./profile_cli.js";
+
+// `neonBin()` emits the installed `neon` binary when it's on PATH, else `npx -y neon`.
+// Pin it to the not-installed branch so the emitted command strings are deterministic
+// regardless of whether the test machine has `neon` globally installed.
+vi.mock("which", () => ({
+	default: { sync: () => null },
+}));
 
 const EMPTY: CredentialInputs = {
 	apiKeyFlag: "",
@@ -34,7 +41,7 @@ describe("init profile CLI flags", () => {
 		expect(neonctlCmd()).toBe("CI= npx -y neon");
 		expect(npxNeonArgs(["me"])).toEqual(["-y", "neon", "me"]);
 		expect(neonInitAgentCmd({ step: "auth" })).toBe(
-			`neon init --agent --data '{"step":"auth"}'`,
+			`npx -y neon init --agent --data '{"step":"auth"}'`,
 		);
 	});
 
@@ -51,8 +58,8 @@ describe("init profile CLI flags", () => {
 			"work",
 			"me",
 		]);
-		expect(neonInitAgentCmd({ step: "db" })).toBe(
-			`neon init --agent --profile work --data '{"step":"db"}'`,
+		expect(neonInitAgentCmd({ step: "setup" })).toBe(
+			`npx -y neon init --agent --profile work --data '{"step":"setup"}'`,
 		);
 	});
 
@@ -61,7 +68,7 @@ describe("init profile CLI flags", () => {
 
 		expect(explicitProfileArgs()).toEqual(["--profile", "DEFAULT"]);
 		expect(neonctlCmd()).toBe("CI= npx -y neon --profile DEFAULT");
-		expect(neonInitAgentCmd({ step: "status" })).toContain(
+		expect(neonInitAgentCmd({ step: "skills" })).toContain(
 			"--profile DEFAULT",
 		);
 	});
@@ -94,7 +101,7 @@ describe("init profile CLI flags", () => {
 
 		expect(enriched).toEqual({
 			type: "run_shell_command",
-			command: `neon init --agent --profile work --config-dir '/tmp/flagged-cfg' --data '{"step":"auth","verify":true}'`,
+			command: `npx -y neon init --agent --profile work --config-dir '/tmp/flagged-cfg' --data '{"step":"auth","verify":true}'`,
 		});
 	});
 
@@ -123,8 +130,8 @@ describe("init profile CLI flags", () => {
 		expect(neonctlCmd()).toBe(
 			"CI= npx -y neon --profile work --config-dir '/tmp/flagged-cfg'",
 		);
-		expect(neonInitAgentCmd({ step: "status" })).toBe(
-			`neon init --agent --profile work --config-dir '/tmp/flagged-cfg' --data '{"step":"status"}'`,
+		expect(neonInitAgentCmd({ step: "skills" })).toBe(
+			`npx -y neon init --agent --profile work --config-dir '/tmp/flagged-cfg' --data '{"step":"skills"}'`,
 		);
 	});
 

@@ -26,17 +26,6 @@ export const builder = (yargs: yargs.Argv) =>
 			describe:
 				'JSON object with a "step" field to route to a specific phase and phase-specific options.',
 		})
-		.option("skip-migrations", {
-			type: "boolean",
-			default: false,
-			describe: "Skip the migrations phase.",
-		})
-		.option("preview", {
-			type: "boolean",
-			default: false,
-			describe:
-				"Enable preview features (e.g. project bootstrapping from templates).",
-		})
 		.strict(false);
 
 /**
@@ -74,8 +63,6 @@ const parsePosition = (parseError: unknown): string => {
 export const handler = async (argv: {
 	agent?: boolean;
 	data?: string;
-	skipMigrations?: boolean;
-	preview?: boolean;
 	profile?: string;
 }) => {
 	// Auto-detect agent from environment. When --agent is explicitly passed,
@@ -113,15 +100,9 @@ export const handler = async (argv: {
 		}
 
 		if (isAgentMode) {
-			writeAgentResponse(
-				await orchestrate({
-					agent,
-					skipMigrations: argv.skipMigrations,
-					preview: argv.preview,
-				}),
-			);
+			writeAgentResponse(await orchestrate({ agent }));
 		} else {
-			await interactiveInit({ preview: argv.preview });
+			await interactiveInit();
 		}
 	} catch (error) {
 		const cause = error instanceof Error ? error : new Error(String(error));

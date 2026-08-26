@@ -1365,14 +1365,25 @@ describe("neon init and profile selection", () => {
 		}),
 	};
 
-	test("--profile work authenticates as that profile", async () => {
+	// The `setup` step returns an `agent_check` whose `reportBack.command` is the
+	// next `neon init --agent` invocation. That command is where profile/config-dir
+	// flags must be threaded, so the agent stays on the selected profile as the flow
+	// chains back into the CLI.
+	const reportBackCommand = (stdout: string): string => {
+		const parsed = JSON.parse(stdout) as {
+			nextAction: { reportBack: { command: string } };
+		};
+		return parsed.nextAction.reportBack.command;
+	};
+
+	test("--profile work is threaded onto the chained command", async () => {
 		const dir = makeConfigDir(WORK_PROFILES);
 		const { code, stdout, stderr } = await runCli(
 			[
 				"init",
 				"--agent",
 				"--data",
-				JSON.stringify({ step: "status" }),
+				JSON.stringify({ step: "setup" }),
 				"--profile",
 				"work",
 			],
@@ -1381,31 +1392,18 @@ describe("neon init and profile selection", () => {
 
 		expect(code).toBe(0);
 		expect(stderr).not.toContain("does not support profile selection");
-		const parsed = JSON.parse(stdout) as {
-			auth: { authenticated: boolean };
-			recommendations: { command: string }[];
-		};
-		expect(parsed.auth.authenticated).toBe(true);
-		expect(parsed.recommendations.length).toBeGreaterThan(0);
-		for (const rec of parsed.recommendations) {
-			expect(rec.command).toContain("--profile work");
-		}
+		expect(reportBackCommand(stdout)).toContain("--profile work");
 	});
 
 	test("NEON_PROFILE=work is the same as the flag", async () => {
 		const dir = makeConfigDir(WORK_PROFILES);
 		const { code, stdout } = await runCli(
-			["init", "--agent", "--data", JSON.stringify({ step: "status" })],
+			["init", "--agent", "--data", JSON.stringify({ step: "setup" })],
 			{ NEON_CONFIG_DIR: dir, NEON_PROFILE: "work" },
 		);
 
 		expect(code).toBe(0);
-		const parsed = JSON.parse(stdout) as {
-			auth: { authenticated: boolean };
-			recommendations: { command: string }[];
-		};
-		expect(parsed.auth.authenticated).toBe(true);
-		expect(parsed.recommendations[0]?.command).toContain("--profile work");
+		expect(reportBackCommand(stdout)).toContain("--profile work");
 	});
 
 	test("explicit --profile DEFAULT is on the commands an agent is told to run", async () => {
@@ -1415,7 +1413,7 @@ describe("neon init and profile selection", () => {
 				"init",
 				"--agent",
 				"--data",
-				JSON.stringify({ step: "status" }),
+				JSON.stringify({ step: "setup" }),
 				"--profile",
 				"DEFAULT",
 			],
@@ -1423,12 +1421,7 @@ describe("neon init and profile selection", () => {
 		);
 
 		expect(code).toBe(0);
-		const parsed = JSON.parse(stdout) as {
-			recommendations: { command: string }[];
-		};
-		expect(parsed.recommendations[0]?.command).toContain(
-			"--profile DEFAULT",
-		);
+		expect(reportBackCommand(stdout)).toContain("--profile DEFAULT");
 	});
 
 	test("--profile work --config-dir uses that directory, not the default", async () => {
@@ -1437,7 +1430,7 @@ describe("neon init and profile selection", () => {
 			"init",
 			"--agent",
 			"--data",
-			JSON.stringify({ step: "status" }),
+			JSON.stringify({ step: "setup" }),
 			"--profile",
 			"work",
 			"--config-dir",
@@ -1446,15 +1439,9 @@ describe("neon init and profile selection", () => {
 
 		expect(code).toBe(0);
 		expect(stderr).not.toContain("Unknown profile");
-		const parsed = JSON.parse(stdout) as {
-			auth: { authenticated: boolean };
-			recommendations: { command: string }[];
-		};
-		expect(parsed.auth.authenticated).toBe(true);
-		expect(parsed.recommendations[0]?.command).toContain("--profile work");
-		expect(parsed.recommendations[0]?.command).toContain(
-			`--config-dir '${dir}'`,
-		);
+		const command = reportBackCommand(stdout);
+		expect(command).toContain("--profile work");
+		expect(command).toContain(`--config-dir '${dir}'`);
 	});
 });
 

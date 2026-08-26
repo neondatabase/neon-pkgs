@@ -1,14 +1,9 @@
 import { describe, expect, test, vi } from "vitest";
 import { routeDataStep } from "./route_command.js";
 
-// Mock execa for setup phase (it runs add-mcp, skills install, etc.)
+// Mock execa so phase handlers never shell out (skills install, etc.)
 vi.mock("execa", () => ({
 	execa: vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 }),
-}));
-
-// Mock extension helpers
-vi.mock("./extension.js", () => ({
-	findEditorCommand: vi.fn().mockResolvedValue(null),
 }));
 
 // Mock skills evergreen check
@@ -26,44 +21,41 @@ describe("routeDataStep", () => {
 		expect(result.phase).toBe("auth");
 	});
 
-	test("routes to getting-started via step field", async () => {
-		const result = (await routeDataStep(
-			{ step: "getting-started", framework: "next" },
-			undefined,
-		)) as { phase: string; status: string };
+	test("routes to setup via step field", async () => {
+		const result = (await routeDataStep({ step: "setup" }, undefined)) as {
+			phase: string;
+			status: string;
+		};
 		expect(result.phase).toBe("setup");
-		expect(result.status).toBe("getting_started");
+		expect(result.status).toBe("pending");
 	});
 
-	test("routes to migrations via step field", async () => {
+	test("routes to mcp via step field", async () => {
 		const result = (await routeDataStep(
-			{ step: "migrations", tool: "prisma" },
+			{ step: "mcp", status: true },
 			undefined,
 		)) as { phase: string };
-		expect(result.phase).toBe("migrations");
+		expect(result.phase).toBe("tooling");
+	});
+
+	test("routes to skills via step field", async () => {
+		const result = (await routeDataStep(
+			{ step: "skills", status: true },
+			undefined,
+		)) as { phase: string };
+		expect(result.phase).toBe("tooling");
 	});
 
 	test("unwraps a nested data payload", async () => {
 		const result = (await routeDataStep(
 			{
-				step: "getting-started",
-				data: JSON.stringify({
-					framework: "next",
-					migrationTool: "prisma",
-				}),
+				step: "skills",
+				data: JSON.stringify({ status: true }),
 			},
 			undefined,
-		)) as {
-			phase: string;
-			status: string;
-			nextAction: { type: string; steps?: { id: string }[] };
-		};
-		expect(result.phase).toBe("setup");
-		expect(result.status).toBe("getting_started");
-		if (result.nextAction.type === "agent_action") {
-			const stepIds = result.nextAction.steps?.map((s) => s.id);
-			expect(stepIds).toContain("run_migrations");
-		}
+		)) as { phase: string; nextAction: { type: string } };
+		expect(result.phase).toBe("tooling");
+		expect(result.nextAction.type).toBe("agent_check");
 	});
 
 	test("prefers agentId from the payload over the caller's agent", async () => {

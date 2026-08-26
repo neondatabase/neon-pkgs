@@ -1,12 +1,6 @@
 import { existsSync } from "node:fs";
 
-/**
- * Detects the IDE/editor the terminal is running in, regardless of which
- * agent is active. Used for extension installation — the extension goes
- * into the IDE, not the agent.
- *
- * Returns an Editor-compatible string: "Cursor", "VS Code", "Windsurf", or null.
- */
+/** Detects the IDE/editor the terminal is running in, regardless of which agent is active. */
 export function detectIde(): "Cursor" | "VS Code" | "Windsurf" | null {
 	const env = process.env;
 

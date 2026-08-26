@@ -271,7 +271,7 @@ describe("`neon init` failure output", { timeout: 20_000 }, () => {
 			"--profile",
 			"DEFAULT",
 			"--data",
-			'{"step":"status"}',
+			'{"step":"setup"}',
 		]);
 
 		expect(status).toBe(0);
@@ -295,7 +295,7 @@ describe("`neon init` failure output", { timeout: 20_000 }, () => {
 	// takes the JSON path, even under `--agent`. It must still fail loudly and say why.
 	test("a damaged credential is reported before the handler runs, and says what to do", () => {
 		const { status, stdout, stderr } = runInit(
-			["--agent", "--data", '{"step":"status"}'],
+			["--agent", "--data", '{"step":"setup"}'],
 			"{ not json",
 		);
 
@@ -309,7 +309,7 @@ describe("`neon init` failure output", { timeout: 20_000 }, () => {
 
 	test("and the report never quotes the credential file's contents", () => {
 		const { stdout, stderr } = runInit(
-			["--agent", "--data", '{"step":"status"}'],
+			["--agent", "--data", '{"step":"setup"}'],
 			'{"api_key":napi_SENTINELSECRET}',
 		);
 

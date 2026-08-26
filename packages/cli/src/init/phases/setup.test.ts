@@ -4,11 +4,6 @@ vi.mock("../auth.js", () => ({
 	isAuthenticated: vi.fn().mockResolvedValue(true),
 }));
 
-const mockFindEditorCommand = vi.fn().mockResolvedValue("/usr/bin/cursor");
-vi.mock("../extension.js", () => ({
-	findEditorCommand: (...args: unknown[]) => mockFindEditorCommand(...args),
-}));
-
 const mockExeca = vi.fn().mockResolvedValue({ stdout: "", stderr: "" });
 vi.mock("execa", () => ({
 	execa: (...args: unknown[]) => mockExeca(...args),
@@ -20,22 +15,6 @@ const mockInstallMcp = vi.fn().mockReturnValue({
 });
 vi.mock("../../mcp/install.js", () => ({
 	installNeonMcpServer: (...args: unknown[]) => mockInstallMcp(...args),
-}));
-
-vi.mock("../inspect.js", () => ({
-	inspectProject: vi.fn().mockResolvedValue({
-		connectionString: false,
-		framework: "next",
-		orm: "prisma",
-		migrationTool: "prisma",
-		migrationDir: "prisma/migrations",
-		isVscodeIde: true,
-	}),
-}));
-
-vi.mock("../vsix.js", () => ({
-	NEON_EXTENSION_ID: "databricks.neon-local-connect",
-	downloadVsix: vi.fn().mockResolvedValue(null),
 }));
 
 const mockEnsureNeonctl = vi.fn();
@@ -52,38 +31,6 @@ vi.mock("../skills.js", async (importOriginal) => {
 	};
 });
 
-vi.mock("node:fs/promises", () => ({
-	unlink: vi.fn().mockReturnValue(Promise.resolve()),
-}));
-
-vi.mock("../bootstrap.js", () => {
-	const templates = [
-		{
-			id: "hono",
-			title: "Hono API",
-			description: "A Hono template.",
-			requires: ["database"],
-			source: {
-				owner: "neondatabase",
-				repo: "examples",
-				ref: "main",
-				subdir: "with-hono",
-			},
-		},
-	];
-	return {
-		fetchTemplates: vi.fn().mockResolvedValue(templates),
-		FALLBACK_TEMPLATES: templates,
-		findTemplate: (ts: typeof templates, id: string) =>
-			ts.find((t) => t.id === id),
-		scaffoldTemplate: vi.fn().mockResolvedValue(1),
-	};
-});
-
-// Mock global fetch for Open VSX VSIX download
-const mockFetch = vi.fn();
-vi.stubGlobal("fetch", mockFetch);
-
 import { handleSetupPhase } from "./setup.js";
 
 describe("setup phase", () => {
@@ -98,31 +45,6 @@ describe("setup phase", () => {
 			path: "/tmp/mcp.json",
 		});
 		mockEnsureSkills.mockReset().mockResolvedValue(true);
-		mockFindEditorCommand.mockReset().mockResolvedValue("/usr/bin/cursor");
-		mockFetch.mockReset().mockResolvedValue({
-			ok: true,
-			json: () =>
-				Promise.resolve({
-					version: "1.0.0",
-					files: {
-						download:
-							"https://open-vsx.org/api/databricks/neon-local-connect/1.0.0/file/databricks.neon-local-connect-1.0.0.vsix",
-					},
-				}),
-			body: "mock-stream",
-		});
-	});
-	test("reportBack omits project mcpScope when the agent cannot write it", async () => {
-		const result = await handleSetupPhase({ agent: "windsurf" });
-
-		expect(result.nextAction.type).toBe("agent_check");
-		if (result.nextAction.type === "agent_check") {
-			const dataPlaceholder = result.nextAction.reportBack.args.find(
-				(a: string) => a.includes("json:"),
-			);
-			expect(dataPlaceholder).toContain("mcpScope?: 'global'|'none'");
-			expect(dataPlaceholder).not.toContain("'project'");
-		}
 	});
 
 	test("returns inspection checks with phased userPreferences and instructions", async () => {
@@ -140,11 +62,12 @@ describe("setup phase", () => {
 
 			// Only agent-specific checks — filesystem checks are done CLI-side
 			const checkIds = result.nextAction.checks.map((c) => c.id);
-			expect(checkIds).toContain("neon");
+			expect(checkIds).toContain("neonctl");
 			expect(checkIds).toContain("mcp_server");
 			expect(checkIds).toContain("agent_type");
 			expect(checkIds).not.toContain("connection_string");
 			expect(checkIds).not.toContain("project_stack");
+			expect(checkIds).not.toContain("extension_installed");
 
 			// reportBack data schema should only require agent-provided fields
 			const dataPlaceholder = result.nextAction.reportBack.args.find(
@@ -152,28 +75,26 @@ describe("setup phase", () => {
 			);
 			expect(dataPlaceholder).toContain("agent");
 			expect(dataPlaceholder).toContain("mcpConfigured");
-			// Should NOT require framework/orm/etc — CLI handles those
+			// Should NOT ask for features or stack info anymore.
 			expect(dataPlaceholder).not.toContain("framework");
+			expect(dataPlaceholder).not.toContain("features");
+			expect(dataPlaceholder).not.toContain("installExtension");
 
 			// reportBack should use --data flag
 			expect(result.nextAction.reportBack.args[0]).toBe("setup");
 			expect(result.nextAction.reportBack.args).toContain("--data");
 
-			// No consent preference — mode should be first
+			// No feature/consent preference — mode should be first
 			const prefs = result.nextAction.userPreferences ?? [];
 			expect(prefs.find((p) => p.id === "consent")).toBeUndefined();
+			expect(prefs.find((p) => p.id === "features")).toBeUndefined();
+			expect(prefs.find((p) => p.id === "template")).toBeUndefined();
+			expect(
+				prefs.find((p) => p.id === "installExtension"),
+			).toBeUndefined();
 
 			const modePref = prefs.find((p) => p.id === "mode");
 			expect(modePref?.phase).toBe("after_checks");
-			const defaultsOption = modePref?.options.find(
-				(option) =>
-					typeof option !== "string" && option.value === "defaults",
-			);
-			expect(
-				typeof defaultsOption === "string"
-					? defaultsOption
-					: defaultsOption?.label,
-			).not.toContain("extension");
 
 			const mcpScopePref = prefs.find((p) => p.id === "mcpScope");
 			expect(mcpScopePref?.phase).toBe("after_checks");
@@ -181,92 +102,47 @@ describe("setup phase", () => {
 				preferenceId: "mode",
 				equals: "customize",
 			});
-
-			const extensionPref = prefs.find(
-				(p) => p.id === "installExtension",
-			);
-			expect(extensionPref?.condition).toEqual({
-				preferenceId: "mode",
-				equals: "customize",
-			});
 		}
 	});
 
-	test("asks defaults vs customize after inspection results received (legacy flags)", async () => {
-		const result = await handleSetupPhase({
-			agent: "claude",
-			mcpConfigured: false,
-			connectionString: false,
-			framework: "next",
-			orm: "prisma",
-			migrationTool: "prisma",
-			migrationDir: "prisma/migrations",
-			isVscodeIde: true,
-		});
-
-		expect(result.phase).toBe("setup");
-		expect(result.status).toBe("pending");
-		expect(result.nextAction.type).toBe("agent_check");
-
-		if (result.nextAction.type === "agent_check") {
-			const prefs = (
-				result.nextAction as unknown as Record<string, unknown>
-			).userPreferences as { id: string }[];
-			expect(prefs.some((p) => p.id === "mode")).toBe(true);
-		}
-	});
-
-	test("defaults mode executes installation and chains to getting-started", async () => {
+	test("defaults mode executes installation and hands off to the agent", async () => {
 		const result = await handleSetupPhase({
 			agent: "vscode",
 			mcpConfigured: false,
-			connectionString: false,
-			framework: "next",
-			orm: "prisma",
-			isVscodeIde: true,
 			mode: "defaults",
 		});
 
 		expect(result.phase).toBe("setup");
-		// CLI executed the installs
 		expect(result.status).toBe("installed");
 		expect(result.results).toBeDefined();
 
 		const results = result.results as { id: string; status: string }[];
 		const resultIds = results.map((r) => r.id);
-		expect(resultIds).toContain("neon");
+		expect(resultIds).toContain("neonctl");
 		expect(resultIds).toContain("install_mcp");
 		expect(resultIds).toContain("install_skills");
-		expect(resultIds).not.toContain("install_extension");
 		expect(results.every((r) => r.status === "success")).toBe(true);
 
-		// nextAction should chain to the getting-started CLI command
-		expect(result.nextAction.type).toBe("run_neon_init");
-		const args = (result.nextAction as { args: string[] }).args;
-		expect(args[0]).toBe("getting-started");
+		// nextAction hands off to the agent — no more neon init commands.
+		expect(result.nextAction.type).toBe("complete");
+		if (result.nextAction.type === "complete") {
+			expect(result.nextAction.message).toContain("tooling is installed");
+		}
 
+		// MCP is installed via the add-mcp library (not execa); skills via ensureSkillsUpToDate.
+		expect(mockExeca).not.toHaveBeenCalled();
 		expect(mockEnsureSkills).toHaveBeenCalled();
-		expect(mockInstallMcp).toHaveBeenCalledWith(
-			expect.objectContaining({
-				agent: "vscode",
-				scope: "global",
-			}),
-		);
-		expect(
-			mockExeca.mock.calls.some((call) =>
-				String(call[1] ?? "").includes("add-mcp"),
-			),
-		).toBe(false);
+
+		expect(mockInstallMcp).toHaveBeenCalledTimes(1);
+		expect(mockInstallMcp.mock.calls[0][0]).toMatchObject({
+			scope: "global",
+		});
 	});
 
 	test("defaults mode skips MCP when already configured", async () => {
 		const result = await handleSetupPhase({
 			agent: "claude",
 			mcpConfigured: true,
-			connectionString: true,
-			framework: "express",
-			orm: "none",
-			isVscodeIde: false,
 			mode: "defaults",
 		});
 
@@ -274,150 +150,29 @@ describe("setup phase", () => {
 		const resultIds = results.map((r) => r.id);
 		expect(resultIds).toContain("skip_mcp");
 		expect(resultIds).not.toContain("install_mcp");
-		// Should not have install_extension since not a vscode IDE
-		expect(resultIds).not.toContain("install_extension");
 
-		// nextAction should chain to getting-started with --data containing hasConnectionString
-		if (result.nextAction.type === "run_neon_init") {
-			expect(result.nextAction.args).toContain("--data");
-			const dataArg =
-				result.nextAction.args[
-					result.nextAction.args.indexOf("--data") + 1
-				];
-			expect(JSON.parse(dataArg)).toHaveProperty(
-				"hasConnectionString",
-				true,
-			);
-		}
+		expect(result.nextAction.type).toBe("complete");
 	});
 
-	test("customize mode goes straight to execution", async () => {
+	test("customize mode goes straight to execution and hands off", async () => {
 		const result = await handleSetupPhase({
 			agent: "claude",
 			mcpConfigured: false,
-			connectionString: false,
-			framework: "none",
-			orm: "none",
-			isVscodeIde: true,
 			mode: "customize",
 		});
 
 		expect(result.phase).toBe("setup");
 		expect(result.status).toBe("installed");
+		expect(result.nextAction.type).toBe("complete");
 	});
 
-	test("customize mode without vscode IDE omits extension options", async () => {
+	test("customize mode with scopes installs MCP at project scope", async () => {
 		const result = await handleSetupPhase({
 			agent: "claude",
 			mcpConfigured: false,
-			connectionString: false,
-			framework: "none",
-			orm: "none",
-			isVscodeIde: false,
-			mode: "customize",
-		});
-
-		if (result.nextAction.type === "ask_user") {
-			const optionValues = (
-				result.nextAction.options as { value: string; label: string }[]
-			).map((o) => o.value);
-			expect(optionValues).not.toContain("global_project_noext");
-		}
-	});
-
-	test("defaults mode does not install the Cursor extension", async () => {
-		mockFindEditorCommand.mockResolvedValue(
-			"/Applications/Cursor.app/Contents/Resources/app/bin/cursor",
-		);
-
-		const result = await handleSetupPhase({
-			agent: "cursor",
-			mcpConfigured: false,
-			connectionString: false,
-			framework: "django",
-			orm: "none",
-			isVscodeIde: true,
-			mode: "defaults",
-		});
-
-		const results = result.results as {
-			id: string;
-			status: string;
-			description: string;
-			manualAction?: boolean;
-		}[];
-		const extResult = results.find((r) => r.id === "install_extension");
-		expect(extResult).toBeUndefined();
-	});
-
-	test("custom install falls back to manual when extension installation fails", async () => {
-		mockFindEditorCommand.mockResolvedValue("/usr/bin/cursor");
-		// Make direct install fail
-		mockExeca.mockImplementation((_cmd: string, args: string[]) => {
-			if (args?.includes?.("--install-extension")) {
-				return Promise.reject(new Error("install failed"));
-			}
-			return Promise.resolve({ stdout: "", stderr: "" });
-		});
-
-		const result = await handleSetupPhase({
-			agent: "cursor",
-			mcpConfigured: false,
-			connectionString: false,
-			framework: "none",
-			orm: "none",
-			isVscodeIde: true,
-			mode: "customize",
-			installExtension: true,
-		});
-
-		const results = result.results as {
-			id: string;
-			status: string;
-			manualAction?: boolean;
-		}[];
-		const extResult = results.find((r) => r.id === "install_extension");
-		expect(extResult?.status).toBe("success");
-		expect(extResult?.manualAction).toBe(true);
-	});
-
-	test("--data with defaults mode executes installation directly", async () => {
-		const result = await handleSetupPhase({
-			agent: "cursor",
-			mcpConfigured: false,
-			connectionString: false,
-			framework: "next",
-			orm: "prisma",
-			migrationTool: "prisma",
-			migrationDir: "prisma/migrations",
-			isVscodeIde: true,
-			mode: "defaults",
-		});
-
-		expect(result.phase).toBe("setup");
-		expect(result.status).toBe("installed");
-
-		const results = result.results as { id: string; status: string }[];
-		expect(results.every((r) => r.status === "success")).toBe(true);
-
-		// nextAction should chain to the getting-started CLI command
-		expect(result.nextAction.type).toBe("run_neon_init");
-		const args = (result.nextAction as { args: string[] }).args;
-		expect(args[0]).toBe("getting-started");
-	});
-
-	test("--data with customize mode and scopes executes installation directly", async () => {
-		const result = await handleSetupPhase({
-			agent: "claude",
-			mcpConfigured: false,
-			connectionString: true,
-			framework: "remix",
-			orm: "drizzle",
-			isVscodeIde: true,
 			mode: "customize",
 			mcpScope: "project",
 			skillsScope: "global",
-			installExtension: false,
 		});
 
 		expect(result.phase).toBe("setup");
@@ -427,39 +182,17 @@ describe("setup phase", () => {
 		const resultIds = results.map((r) => r.id);
 		expect(resultIds).toContain("install_mcp");
 		expect(resultIds).toContain("install_skills");
-		// Extension should NOT be installed since installExtension=false
-		expect(resultIds).not.toContain("install_extension");
 
+		// MCP should be installed at project scope
 		expect(mockInstallMcp).toHaveBeenCalledWith(
-			expect.objectContaining({
-				scope: "project",
-			}),
+			expect.objectContaining({ scope: "project" }),
 		);
-	});
-
-	test("--data with customize mode goes straight to execution", async () => {
-		const result = await handleSetupPhase({
-			agent: "claude",
-			mcpConfigured: false,
-			connectionString: false,
-			framework: "none",
-			orm: "none",
-			isVscodeIde: true,
-			mode: "customize",
-		});
-
-		expect(result.phase).toBe("setup");
-		expect(result.status).toBe("installed");
 	});
 
 	test("execute flag triggers installation directly", async () => {
 		const result = await handleSetupPhase({
 			agent: "claude",
 			mcpConfigured: false,
-			connectionString: true,
-			framework: "remix",
-			orm: "drizzle",
-			isVscodeIde: false,
 			mcpScope: "project",
 			skillsScope: "project",
 			execute: true,
@@ -468,70 +201,19 @@ describe("setup phase", () => {
 		expect(result.phase).toBe("setup");
 		expect(result.status).toBe("installed");
 
+		// MCP should be installed at project scope
 		expect(mockInstallMcp).toHaveBeenCalledWith(
-			expect.objectContaining({
-				scope: "project",
-			}),
-		);
-	});
-
-	test("omits project MCP scope when the agent has no project config", async () => {
-		const result = await handleSetupPhase({ agent: "windsurf" });
-
-		expect(result.nextAction.type).toBe("agent_check");
-		if (result.nextAction.type === "agent_check") {
-			const mcpScopePref = result.nextAction.userPreferences?.find(
-				(p) => p.id === "mcpScope",
-			);
-			const values = (mcpScopePref?.options ?? []).map((option) =>
-				typeof option === "string" ? option : option.value,
-			);
-			expect(values).toContain("global");
-			expect(values).not.toContain("project");
-		}
-	});
-
-	test("project-scope MCP for an agent without project config is not success", async () => {
-		mockInstallMcp.mockReturnValue({
-			ok: false,
-			unsupported: true,
-			error: "Windsurf does not support project-level MCP config.",
-		});
-
-		const result = await handleSetupPhase({
-			agent: "windsurf",
-			mcpConfigured: false,
-			connectionString: false,
-			framework: "none",
-			orm: "none",
-			isVscodeIde: false,
-			mode: "customize",
-			mcpScope: "project",
-		});
-
-		expect(result.status).toBe("partial");
-		const results = result.results as {
-			id: string;
-			status: string;
-			error?: string;
-		}[];
-		expect(results.find((r) => r.id === "install_mcp")?.status).toBe(
-			"failed",
+			expect.objectContaining({ scope: "project" }),
 		);
 	});
 
 	test("reports partial status when some installs fail", async () => {
-		mockExeca.mockResolvedValueOnce({ stdout: "", stderr: "" }); // MCP succeeds
-		// Skills fails
+		// MCP succeeds (default mock), skills fails
 		mockEnsureSkills.mockResolvedValueOnce(false);
 
 		const result = await handleSetupPhase({
 			agent: "claude",
 			mcpConfigured: false,
-			connectionString: false,
-			framework: "none",
-			orm: "none",
-			isVscodeIde: false,
 			mode: "defaults",
 		});
 
@@ -549,9 +231,7 @@ describe("setup phase", () => {
 			"failed",
 		);
 
-		// Should still proceed to getting-started even with partial failure
-		expect(result.nextAction.type).toBe("run_neon_init");
-		const args = (result.nextAction as { args: string[] }).args;
-		expect(args[0]).toBe("getting-started");
+		// Even on partial failure, hand off to the agent.
+		expect(result.nextAction.type).toBe("complete");
 	});
 });

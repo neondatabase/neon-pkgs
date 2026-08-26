@@ -4,6 +4,7 @@ import {
 } from "@neon-internals/cli-core/auth_selection";
 import { configDir } from "@neon-internals/cli-core/paths";
 import { DEFAULT_PROFILE } from "@neon-internals/cli-core/profiles";
+import { neonBin } from "./neon_bin.js";
 
 /**
  * API-key selections fall back to DEFAULT because init authenticates from stored credentials.
@@ -63,5 +64,5 @@ export function npxNeonArgs(command: string[]): string[] {
 }
 
 export function neonInitAgentCmd(data: Record<string, unknown>): string {
-	return `neon init --agent${explicitProfileCli()}${explicitConfigDirCli()} --data '${JSON.stringify(data)}'`;
+	return `${neonBin()} init --agent${explicitProfileCli()}${explicitConfigDirCli()} --data '${JSON.stringify(data)}'`;
 }

@@ -23,39 +23,6 @@ vi.mock("node:path", async (importOriginal) => {
 	return { ...actual };
 });
 
-vi.mock("./skills.js", async (importOriginal) => {
-	const actual = (await importOriginal()) as Record<string, unknown>;
-	return { ...actual, ensureSkillsUpToDate: vi.fn().mockResolvedValue(true) };
-});
-
-vi.mock("./resolve_context.js", () => ({
-	resolveNeonContext: vi.fn().mockResolvedValue(null),
-}));
-
-vi.mock("./bootstrap.js", () => {
-	const templates = [
-		{
-			id: "hono",
-			title: "Hono API",
-			description: "A Hono template.",
-			requires: ["database"],
-			source: {
-				owner: "neondatabase",
-				repo: "examples",
-				ref: "main",
-				subdir: "with-hono",
-			},
-		},
-	];
-	return {
-		fetchTemplates: vi.fn().mockResolvedValue(templates),
-		FALLBACK_TEMPLATES: templates,
-		findTemplate: (ts: typeof templates, id: string) =>
-			ts.find((t) => t.id === id),
-		scaffoldTemplate: vi.fn().mockResolvedValue(1),
-	};
-});
-
 import { isAuthenticated } from "./auth.js";
 import { orchestrate } from "./orchestrate.js";
 
@@ -93,18 +60,15 @@ function mockToolingInstalled(extraFiles: Record<string, string> = {}) {
 		"package.json": APP_PKG_JSON,
 		".cursor/mcp.json":
 			'{"mcpServers":{"Neon":{"url":"https://mcp.neon.tech/mcp"}}}',
-		".mcp.json":
-			'{"mcpServers":{"Neon":{"url":"https://mcp.neon.tech/mcp"}}}',
-		".cursor/skills/neon/SKILL.md": "",
+		// skills directory exists and contains neon-postgres skill with SKILL.md
 		".cursor/skills/neon-postgres/SKILL.md": "",
-		".claude/skills/neon/SKILL.md": "",
-		".claude/skills/neon-postgres/SKILL.md": "",
+		".cursor/skills/neon/SKILL.md": "",
 		...extraFiles,
 	};
 	mockFs(files);
 }
 
-describe("v2 orchestrator", () => {
+describe("v2 orchestrator (minimal: install tooling, then hand off)", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		mockExistsSync.mockReturnValue(false);
@@ -128,261 +92,6 @@ describe("v2 orchestrator", () => {
 		}
 	});
 
-	test("enters setup with bootstrap when no app is detected and --preview", async () => {
-		mockIsAuthenticated.mockResolvedValue(true);
-
-		const result = await orchestrate({ agent: "claude", preview: true });
-
-		expect(result.phase).toBe("setup");
-		expect(result.status).toBe("bootstrap_needed");
-		expect(result.nextAction.type).toBe("agent_check");
-		if (result.nextAction.type === "agent_check") {
-			// Should include template preference before mode
-			const prefs = result.nextAction.userPreferences ?? [];
-			expect(prefs[0]?.id).toBe("template");
-			// skillsScope is present but conditional on customize mode
-			// (if user picks a template, skills are bundled; if not, they need scope choice)
-			const skillsPref = prefs.find((p) => p.id === "skillsScope");
-			if (skillsPref) {
-				expect(skillsPref.condition).toEqual({
-					preferenceId: "mode",
-					equals: "customize",
-				});
-			}
-		}
-	});
-
-	test("skips bootstrap without --preview even when no app detected", async () => {
-		mockIsAuthenticated.mockResolvedValue(true);
-
-		const result = await orchestrate({ agent: "claude" });
-
-		expect(result.phase).toBe("setup");
-		expect(result.status).toBe("pending");
-		if (result.nextAction.type === "agent_check") {
-			const prefs = result.nextAction.userPreferences ?? [];
-			expect(prefs.find((p) => p.id === "template")).toBeUndefined();
-		}
-	});
-
-	test("enters setup phase when no tooling is installed", async () => {
-		mockIsAuthenticated.mockResolvedValue(true);
-		mockAppExists();
-
-		const result = await orchestrate({ agent: "claude" });
-
-		expect(result.phase).toBe("setup");
-		expect(result.status).toBe("pending");
-		expect(result.nextAction.type).toBe("agent_check");
-		if (result.nextAction.type === "agent_check") {
-			const prefs = result.nextAction.userPreferences ?? [];
-			// Brownfield: features question first, then mode
-			expect(prefs[0]?.id).toBe("features");
-			expect(prefs[1]?.id).toBe("mode");
-		}
-	});
-
-	test("skips setup, goes to getting-started when MCP + skills installed but no connection string", async () => {
-		mockIsAuthenticated.mockResolvedValue(true);
-		mockToolingInstalled();
-
-		const result = await orchestrate({ agent: "cursor" });
-
-		expect(result.phase).toBe("setup");
-		expect(result.status).toBe("getting_started");
-		expect(result.nextAction.type).toBe("agent_action");
-	});
-
-	test("skips setup and getting-started when fully configured, goes to migrations", async () => {
-		mockIsAuthenticated.mockResolvedValue(true);
-		mockToolingInstalled({
-			".env": "DATABASE_URL=postgres://user:pass@ep-foo.us-east-2.aws.neon.tech/neondb",
-			".neon": '{"projectId":"proj-123"}',
-		});
-
-		const result = await orchestrate({ agent: "cursor" });
-
-		// With no features set, neon_auth is skipped, goes to migrations
-		expect(result.phase).toBe("migrations");
-	});
-
-	test("enters setup on --preview when another agent has preview skills but this one does not", async () => {
-		mockIsAuthenticated.mockResolvedValue(true);
-		mockAppExists({
-			".grok/config.toml":
-				'[mcp_servers.Neon]\nurl = "https://mcp.neon.tech/mcp"\n',
-			".grok/skills/neon/SKILL.md": "",
-			".grok/skills/neon-postgres/SKILL.md": "",
-			".cursor/skills/neon/SKILL.md": "",
-			".cursor/skills/neon-postgres/SKILL.md": "",
-			".cursor/skills/neon-object-storage/SKILL.md": "",
-			".cursor/skills/neon-functions/SKILL.md": "",
-			".cursor/skills/neon-ai-gateway/SKILL.md": "",
-			".env": "DATABASE_URL=postgres://user:pass@ep-foo.us-east-2.aws.neon.tech/neondb",
-			".neon": '{"projectId":"proj-123"}',
-		});
-
-		const result = await orchestrate({
-			agent: "grok-build",
-			preview: true,
-		});
-
-		expect(result.phase).toBe("setup");
-		expect(result.status).toBe("pending");
-		expect(result.skillsInstalled).toBe(false);
-	});
-
-	test("enters setup on --preview when base skills exist but preview skills do not", async () => {
-		mockIsAuthenticated.mockResolvedValue(true);
-		mockToolingInstalled({
-			".cursor/skills/neon/SKILL.md": "",
-			".claude/skills/neon/SKILL.md": "",
-			".env": "DATABASE_URL=postgres://user:pass@ep-foo.us-east-2.aws.neon.tech/neondb",
-			".neon": '{"projectId":"proj-123"}',
-		});
-
-		const result = await orchestrate({ agent: "cursor", preview: true });
-
-		expect(result.phase).toBe("setup");
-		expect(result.status).toBe("pending");
-		expect(result.skillsInstalled).toBe(false);
-		expect(result.skillsScope).toBe("project-partial");
-	});
-
-	test("skips neon_auth when features are empty", async () => {
-		mockIsAuthenticated.mockResolvedValue(true);
-		mockToolingInstalled({
-			".env": "DATABASE_URL=postgres://user:pass@ep-foo.us-east-2.aws.neon.tech/neondb",
-			".neon": '{"projectId":"proj-123"}',
-		});
-
-		const result = await orchestrate({
-			agent: "claude",
-		});
-
-		expect(result.phase).toBe("migrations");
-	});
-
-	test("reaches complete when all phases are satisfied or skipped", async () => {
-		mockIsAuthenticated.mockResolvedValue(true);
-		mockToolingInstalled({
-			".env": "DATABASE_URL=postgres://user:pass@ep-foo.us-east-2.aws.neon.tech/neondb\nNEON_AUTH_TOKEN=abc",
-			".neon": '{"projectId":"proj-123"}',
-		});
-
-		const result = await orchestrate({
-			agent: "claude",
-			skipMigrations: true,
-		});
-
-		expect(result.nextAction.type).toBe("complete");
-		if (result.nextAction.type === "complete") {
-			expect(result.nextAction.message).toContain("complete");
-			expect(result.nextAction.message).toContain("skills");
-		}
-	});
-
-	test("complete message for grok-build includes skills", async () => {
-		mockIsAuthenticated.mockResolvedValue(true);
-		mockAppExists({
-			".grok/config.toml":
-				'[mcp_servers.Neon]\nurl = "https://mcp.neon.tech/mcp"\n',
-			".grok/skills/neon/SKILL.md": "",
-			".grok/skills/neon-postgres/SKILL.md": "",
-			".env": "DATABASE_URL=postgres://user:pass@ep-foo.us-east-2.aws.neon.tech/neondb\nNEON_AUTH_TOKEN=abc",
-			".neon": '{"projectId":"proj-123"}',
-		});
-
-		const result = await orchestrate({
-			agent: "grok-build",
-			skipMigrations: true,
-		});
-
-		expect(result.nextAction.type).toBe("complete");
-		if (result.nextAction.type === "complete") {
-			expect(result.nextAction.message).toContain("MCP server");
-			expect(result.nextAction.message).toContain("skills");
-		}
-	});
-
-	test("skips neon_auth when .neon _init features don't include auth", async () => {
-		mockIsAuthenticated.mockResolvedValue(true);
-		mockToolingInstalled({
-			".env": "DATABASE_URL=postgres://user:pass@ep-foo.us-east-2.aws.neon.tech/neondb",
-			".neon":
-				'{"projectId":"proj-123","_init":{"features":["database"]}}',
-		});
-
-		const result = await orchestrate({ agent: "claude" });
-
-		// Should skip neon_auth and go to migrations
-		expect(result.phase).toBe("migrations");
-	});
-
-	test("runs neon_auth when .neon _init features include auth", async () => {
-		mockIsAuthenticated.mockResolvedValue(true);
-		mockToolingInstalled({
-			".env": "DATABASE_URL=postgres://user:pass@ep-foo.us-east-2.aws.neon.tech/neondb",
-			".neon":
-				'{"projectId":"proj-123","_init":{"features":["database","auth"]}}',
-		});
-
-		const result = await orchestrate({ agent: "claude" });
-
-		expect(result.phase).toBe("neon_auth");
-	});
-
-	test("enters setup when the requested agent has no skills even if another agent does", async () => {
-		mockIsAuthenticated.mockResolvedValue(true);
-		mockAppExists({
-			".mcp.json":
-				'{"mcpServers":{"Neon":{"url":"https://mcp.neon.tech/mcp"}}}',
-			".cursor/skills/neon-postgres/SKILL.md": "",
-		});
-
-		const result = await orchestrate({ agent: "claude" });
-
-		expect(result.phase).toBe("setup");
-		expect(result.status).toBe("pending");
-		expect(result.skillsInstalled).toBe(false);
-	});
-
-	test("enters setup when the requested agent has no MCP even if another agent does", async () => {
-		mockIsAuthenticated.mockResolvedValue(true);
-		mockToolingInstalled();
-
-		const result = await orchestrate({ agent: "grok-build" });
-
-		expect(result.phase).toBe("setup");
-		expect(result.status).toBe("pending");
-	});
-
-	test("enters setup when grok-build has MCP but no skills", async () => {
-		mockIsAuthenticated.mockResolvedValue(true);
-		mockAppExists({
-			".grok/config.toml":
-				'[mcp_servers.Neon]\nurl = "https://mcp.neon.tech/mcp"\n',
-		});
-
-		const result = await orchestrate({ agent: "grok-build" });
-
-		expect(result.phase).toBe("setup");
-		expect(result.status).toBe("pending");
-		expect(result.skillsInstalled).toBe(false);
-	});
-
-	test("enters setup even with DATABASE_URL if MCP not configured", async () => {
-		mockIsAuthenticated.mockResolvedValue(true);
-		mockAppExists({
-			".env": "DATABASE_URL=postgres://user:pass@ep-foo.us-east-2.aws.neon.tech/neondb",
-		});
-
-		const result = await orchestrate({ agent: "cursor" });
-
-		expect(result.phase).toBe("setup");
-		expect(result.status).toBe("pending");
-	});
-
 	test("auth phase existing_account maps to inline run_command", async () => {
 		mockIsAuthenticated.mockResolvedValue(false);
 
@@ -397,26 +106,58 @@ describe("v2 orchestrator", () => {
 		}
 	});
 
-	test("passes detected stack info to getting-started phase", async () => {
+	test("enters setup phase when no tooling is installed", async () => {
 		mockIsAuthenticated.mockResolvedValue(true);
-		mockToolingInstalled({
-			"package.json": JSON.stringify({
-				dependencies: { next: "14.0.0", "@prisma/client": "5.0.0" },
-				devDependencies: { prisma: "5.0.0" },
-			}),
-			"prisma/schema.prisma": "generator client {}",
+		mockAppExists();
+
+		const result = await orchestrate({ agent: "claude" });
+
+		expect(result.phase).toBe("setup");
+		expect(result.status).toBe("pending");
+		expect(result.nextAction.type).toBe("agent_check");
+		if (result.nextAction.type === "agent_check") {
+			const prefs = result.nextAction.userPreferences ?? [];
+			// No feature question anymore — install preferences only, starting with mode.
+			expect(prefs.find((p) => p.id === "features")).toBeUndefined();
+			expect(prefs.find((p) => p.id === "template")).toBeUndefined();
+			expect(prefs[0]?.id).toBe("mode");
+		}
+	});
+
+	test("enters setup when MCP configured but skills missing", async () => {
+		mockIsAuthenticated.mockResolvedValue(true);
+		mockAppExists({
+			".cursor/mcp.json":
+				'{"mcpServers":{"Neon":{"url":"https://mcp.neon.tech/mcp"}}}',
 		});
 
 		const result = await orchestrate({ agent: "cursor" });
 
 		expect(result.phase).toBe("setup");
-		expect(result.status).toBe("getting_started");
-		if (result.nextAction.type === "agent_action") {
-			// Should include migration step since prisma was detected
-			const stepIds = result.nextAction.steps.map(
-				(s: { id: string }) => s.id,
-			);
-			expect(stepIds).toContain("run_migrations");
+		expect(result.status).toBe("pending");
+	});
+
+	test("hands off to the agent once MCP + skills are installed", async () => {
+		mockIsAuthenticated.mockResolvedValue(true);
+		mockToolingInstalled();
+
+		const result = await orchestrate({ agent: "cursor" });
+
+		expect(result.phase).toBe("setup");
+		expect(result.status).toBe("complete");
+		expect(result.nextAction.type).toBe("complete");
+		if (result.nextAction.type === "complete") {
+			expect(result.nextAction.message).toContain("tooling is installed");
 		}
+	});
+
+	test("hand-off does not depend on a database or .neon file", async () => {
+		mockIsAuthenticated.mockResolvedValue(true);
+		// Tooling installed, no .env / no .neon — still a clean hand-off.
+		mockToolingInstalled();
+
+		const result = await orchestrate({ agent: "claude" });
+
+		expect(result.nextAction.type).toBe("complete");
 	});
 });

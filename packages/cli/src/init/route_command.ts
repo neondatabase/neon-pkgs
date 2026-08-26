@@ -3,7 +3,7 @@
  * shelling out. This is the whole agent-facing surface of `neon init`:
  *
  *   neon init --agent --data '{"step":"auth"}'
- *   neon init --agent --data '{"step":"db","projectId":"xyz"}'
+ *   neon init --agent --data '{"step":"setup","mode":"defaults"}'
  */
 export async function routeDataStep(
 	data: Record<string, unknown>,
@@ -43,33 +43,12 @@ export async function routeDataStep(
 			} as Parameters<typeof handleAuthPhase>[0]);
 		}
 
-		case "db": {
-			const { handleDbPhase } = await import("./phases/db.js");
-			return handleDbPhase({
-				agent: resolvedAgent,
-				...rest,
-			} as Parameters<typeof handleDbPhase>[0]);
-		}
-
 		case "setup": {
 			const { handleSetupPhase } = await import("./phases/setup.js");
 			return handleSetupPhase({
 				agent: resolvedAgent,
 				...rest,
 			} as Parameters<typeof handleSetupPhase>[0]);
-		}
-
-		case "getting-started": {
-			const { handleGettingStartedPhase } = await import(
-				"./phases/getting_started.js"
-			);
-			return handleGettingStartedPhase({
-				agent: resolvedAgent,
-				...rest,
-				// After the spread: the directory we install into is where the
-				// CLI is running, never something the agent's payload picks.
-				cwd: process.cwd(),
-			} as Parameters<typeof handleGettingStartedPhase>[0]);
 		}
 
 		case "mcp": {
@@ -88,40 +67,9 @@ export async function routeDataStep(
 			} as Parameters<typeof handleSkillsPhase>[0]);
 		}
 
-		case "migrations": {
-			const { handleMigrationsPhase } = await import(
-				"./phases/migrations.js"
-			);
-			return handleMigrationsPhase({
-				agent: resolvedAgent,
-				...rest,
-				cwd: process.cwd(),
-			} as Parameters<typeof handleMigrationsPhase>[0]);
-		}
-
-		case "neon-auth": {
-			const { handleNeonAuthPhase } = await import(
-				"./phases/neon_auth.js"
-			);
-			return handleNeonAuthPhase({
-				agent: resolvedAgent,
-				...rest,
-			} as Parameters<typeof handleNeonAuthPhase>[0]);
-		}
-
-		case "status": {
-			const { handleStatusPhase } = await import("./phases/status.js");
-			return handleStatusPhase({ agent: resolvedAgent });
-		}
-
-		case "finalize": {
-			const { handleCleanup } = await import("./phases/cleanup.js");
-			return handleCleanup();
-		}
-
 		default:
 			throw new Error(
-				`Unknown step: "${step}". Valid steps: auth, db, setup, getting-started, mcp, skills, migrations, neon-auth, status, finalize`,
+				`Unknown step: "${step}". Valid steps: auth, setup, mcp, skills`,
 			);
 	}
 }
