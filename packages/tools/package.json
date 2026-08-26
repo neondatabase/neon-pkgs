@@ -1,6 +1,6 @@
 {
 	"name": "@neon/tools",
-	"version": "0.8.0",
+	"version": "1.0.0",
 	"description": "Agent tools for the Neon SDK ergonomic client, compatible with MCP, Eve, and Mastra.",
 	"keywords": [
 		"neon",

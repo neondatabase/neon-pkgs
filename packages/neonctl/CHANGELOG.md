@@ -1,5 +1,11 @@
 # neonctl
 
+## 4.7.1
+
+### Patch Changes
+
+- neon@4.7.1
+
 ## 4.7.0
 
 ### Minor Changes
