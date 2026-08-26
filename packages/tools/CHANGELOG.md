@@ -1,5 +1,16 @@
 # @neon/tools
 
+## 0.8.0
+
+### Minor Changes
+
+- 9b322e7: Add `branches.resetFromParent` and `branches.compareSchema` to the SDK and as tools (`reset_from_parent_branches`, `compare_schema_branches`).
+
+### Patch Changes
+
+- Updated dependencies [9b322e7]
+  - @neon/sdk@2.3.0
+
 ## 0.7.0
 
 ### Minor Changes
