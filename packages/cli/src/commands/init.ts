@@ -15,14 +15,11 @@ import {
 } from "../init/plan.js";
 import { pickAgentSetupInteractively } from "../init/wizard.js";
 import { log } from "../log.js";
-import {
-	detectInstallablePluginsAgents,
-	pluginsInstallableAgents,
-} from "../plugins/targets.js";
+import { detectInstallablePluginsAgents } from "../plugins/targets.js";
 import type { CommonProps } from "../types.js";
 import { canPickAgentsInteractively } from "../utils/agent_picker.js";
 import { getCliName } from "../utils/cli_name.js";
-import { helpCsv, helpEpilogue } from "../utils/help_text.js";
+import { helpEpilogue } from "../utils/help_text.js";
 
 export type InitRun = (
 	argv: string[],
@@ -65,10 +62,8 @@ export const initChildEnv = (
 	return overlay ? { ...child, ...overlay } : child;
 };
 
-const pluginProjectAgents = pluginsInstallableAgents("project");
-
 const removedProtocol = () =>
-	`\`${getCliName()} init --agent\` and \`--data\` were removed. Run \`${getCliName()} plugins\`, \`${getCliName()} skills\`, \`${getCliName()} link\`, and \`${getCliName()} mcp\`.`;
+	`\`${getCliName()} init --agent\` and \`--data\` were removed. Run \`${getCliName()} init\`.`;
 
 export const builder = (yargs: yargs.Argv) =>
 	yargs
@@ -108,11 +103,7 @@ export const builder = (yargs: yargs.Argv) =>
 		.epilogue(
 			helpEpilogue(
 				"Interactive: plugin (recommended), skills and MCP separately, or skip agent setup. Never both plugin and skills+MCP.",
-				helpCsv(
-					"-y installs the plugin when one of these is detected in the project",
-					pluginProjectAgents,
-				),
-				"Otherwise -y installs skills and MCP. Then link unless already linked.",
+				"-y installs the plugin when Cursor, Claude Code, or Codex is detected in the project. Otherwise skills and MCP. Then link unless already linked. link --yes may still ask for a project.",
 			),
 		)
 		.check((argv) => {

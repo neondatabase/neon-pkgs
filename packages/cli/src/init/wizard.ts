@@ -1,7 +1,6 @@
 import prompts from "prompts";
 
 import { NEON_PLUGIN_NAME } from "../plugins/run.js";
-import { pluginsInstallableAgents } from "../plugins/targets.js";
 import { canPickAgentsInteractively } from "../utils/agent_picker.js";
 import type { InitAgentSetup } from "./plan.js";
 
@@ -20,7 +19,6 @@ export const pickAgentSetupInteractively =
 				"No interactive terminal. Pass -y to use defaults, or run this command in a terminal.",
 			);
 		}
-		const pluginAgents = pluginsInstallableAgents("project").join(", ");
 		const { setup } = await prompts({
 			onState: restoreCursorOnAbort,
 			type: "select",
@@ -31,7 +29,7 @@ export const pickAgentSetupInteractively =
 				{
 					title: "Plugin (recommended)",
 					value: "plugin",
-					description: `Install ${NEON_PLUGIN_NAME} (skills and MCP in one). Project agents: ${pluginAgents}`,
+					description: `Install ${NEON_PLUGIN_NAME} (skills and MCP in one)`,
 				},
 				{
 					title: "Skills and MCP separately",

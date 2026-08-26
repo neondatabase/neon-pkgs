@@ -488,6 +488,8 @@ describe("init CLI", () => {
 		expect(help).toMatch(/scaffold/i);
 		expect(help).toMatch(/plugin/i);
 		expect(help).toMatch(/skip agent setup/i);
+		expect(help).toMatch(/Cursor, Claude Code, or Codex/);
+		expect(help).not.toMatch(/claude-desktop/);
 		expect(help).not.toMatch(/Set output format/);
 	});
 
@@ -503,7 +505,7 @@ describe("init CLI", () => {
 		await testCliCommand(["init", "--agent"], {
 			snapshot: false,
 			code: 1,
-			stderr: expect.stringContaining("were removed"),
+			stderr: expect.stringContaining("Run `neon init`"),
 		});
 	});
 
