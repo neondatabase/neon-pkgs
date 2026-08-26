@@ -37,7 +37,7 @@ export const describe =
 	"Set up this directory for Neon: agent tooling, a linked project, and neon.ts. In an empty directory, scaffolds a template first. Skills needs Node.js 22.20 or newer.";
 
 const removedProtocol = () =>
-	`\`${getCliName()} init --agent\` and \`--data\` were removed. Run \`${getCliName()} init\`.`;
+	`\`${getCliName()} init --agent\` and \`--data\` were removed. Run \`${getCliName()} init\` or \`${getCliName()} init -y\`.`;
 
 export const builder = (yargs: yargs.Argv) =>
 	yargs

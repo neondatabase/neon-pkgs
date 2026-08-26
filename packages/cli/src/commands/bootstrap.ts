@@ -98,7 +98,7 @@ export const builder = (argv: yargs.Argv) =>
 			default: {
 				alias: "y",
 				describe:
-					"Quick start: scaffold the default template (or --template) and run setup without prompting (install, git, agent tooling, link --yes)",
+					"Quick start: scaffold the default template (or --template), then install, git, agent tooling, and link --yes. Skips those pickers; link --yes still asks for a project unless one is already linked",
 				type: "boolean",
 				default: false,
 			},
@@ -136,7 +136,7 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.example(
 			"$0 bootstrap my-app --default",
-			"Quick start: scaffold, install, git, agent tooling, and link --yes",
+			"Skip the pickers; link --yes still asks for a project unless one is already linked",
 		)
 		.example(
 			"$0 bootstrap --list-templates --output json",
@@ -416,7 +416,9 @@ const runDefaultSteps = async (
 	targetDir: string,
 	pm: PackageManager,
 ): Promise<void> => {
-	log.info("Quick start (--default): running setup without prompting.");
+	log.info(
+		"Quick start (--default): skipping the template, install, git, and agent pickers. link --yes still asks for a project unless one is already linked.",
+	);
 	let installed = false;
 	if (props.install) {
 		installed = await runCommand(pm, installArgs(pm), targetDir);
