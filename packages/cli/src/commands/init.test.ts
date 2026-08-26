@@ -265,6 +265,33 @@ describe("init handler", () => {
 		]);
 	});
 
+	test("resolves a relative context file against cwd", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-rel-ctx-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		writeFileSync(
+			join(cwd, ".neon"),
+			`${JSON.stringify({ projectId: "proj-rel" })}\n`,
+		);
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				contextFile: ".neon",
+			}),
+		);
+
+		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
+			"skills",
+			"mcp",
+		]);
+		expect(run.mock.calls[0][0]).toEqual(
+			expect.arrayContaining(["--context-file", join(cwd, ".neon")]),
+		);
+	});
+
 	test("refuses --output json and yaml", async () => {
 		const { handler } = await import("./init.js");
 		await expect(handler(baseProps({ output: "json" }))).rejects.toThrow(

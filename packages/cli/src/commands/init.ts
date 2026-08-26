@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
+import { resolve } from "node:path";
 import { credentialInputs } from "@neon-internals/cli-core/auth_selection";
 import type yargs from "yargs";
 import { readContextFile } from "../context.js";
@@ -115,9 +116,10 @@ export const handler = async (props: InitProps) => {
 
 	const cwd = props.cwd ?? process.cwd();
 	const names = existsSync(cwd) ? readdirSync(cwd) : [];
+	const contextFile = resolve(cwd, props.contextFile);
 	const steps = planInit({
 		empty: directoryIsEmpty(names),
-		linked: isLinked(props.contextFile),
+		linked: isLinked(contextFile),
 		yes: props.yes === true,
 	});
 	const run = props.run ?? defaultRun;
@@ -130,7 +132,7 @@ export const handler = async (props: InitProps) => {
 			...(props.configDir ? { configDir: props.configDir } : {}),
 			...(props.profile ? { profile: props.profile } : {}),
 			apiHost: props.apiHost,
-			contextFile: props.contextFile,
+			contextFile,
 			...(props.analytics === false ? { analytics: false } : {}),
 		});
 		const command = step[0];
