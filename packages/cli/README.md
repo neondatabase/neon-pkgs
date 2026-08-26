@@ -694,7 +694,7 @@ $ neon init
 $ neon init -y
 ```
 
-`-y` skips the template picker and the agent-setup offer. After bootstrap (if any), it installs the plugin when a project-level plugin agent is detected (Cursor, Claude Code, Codex). Otherwise it installs skills and MCP. VS Code, GitHub Copilot CLI, and Grok only take the plugin user-level (`neon plugins --global`), so `-y` uses skills and MCP for those.
+`-y` skips the template picker and the agent-setup offer. Empty dir: `bootstrap --default`. Existing app: plugin when a project-level plugin agent is detected (Cursor, Claude Code, Codex); otherwise skills and MCP. VS Code, GitHub Copilot CLI, and Grok only take the plugin user-level (`neon plugins --global`), so `-y` uses skills and MCP for those.
 
 `-y` forwards `-y` to `plugins` or `skills`/`mcp`, `--default` to `bootstrap`, `--yes` to `link`, and `--services none` to `config init`. `link --yes` only skips the "already linked" confirmation; it still asks for a project unless one is already linked.
 
