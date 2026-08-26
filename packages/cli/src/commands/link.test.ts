@@ -1,5 +1,6 @@
 import { fork } from "node:child_process";
 import {
+	existsSync,
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
@@ -120,7 +121,7 @@ const expectNonInteractiveHelp = (text: string) => {
 	const commands = [
 		"neon orgs list --output json",
 		"neon projects list --org-id <org-id> --output json",
-		"neon link --project-id <project-id>",
+		"neon link --project-id <project-id> [--branch <name> | -y]",
 		"neon link --org-id <org-id> --project-name <name> --region-id aws-us-east-2",
 	];
 	for (const command of commands) {
@@ -160,6 +161,110 @@ describe("link", () => {
 				"link",
 				"--project-id",
 				"proj-in-org",
+				"--no-env-pull",
+				"--context-file",
+				ctx,
+			]);
+			expect(readFile(ctx)).toMatchSnapshot();
+		});
+
+		test("link --project-id pins the only branch", async ({
+			testCliCommand,
+			readFile,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("flag_one_branch");
+			await testCliCommand([
+				"link",
+				"--project-id",
+				"proj-one-branch",
+				"--no-env-pull",
+				"--context-file",
+				ctx,
+			]);
+			expect(readFile(ctx)).toMatchSnapshot();
+		});
+
+		test("link --project-id -y pins the default branch, not the first listed", async ({
+			testCliCommand,
+			readFile,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("flag_yes_default");
+			await testCliCommand([
+				"link",
+				"--project-id",
+				"proj-in-org",
+				"-y",
+				"--no-env-pull",
+				"--context-file",
+				ctx,
+			]);
+			expect(readFile(ctx)).toMatchSnapshot();
+		});
+
+		test("link --project-id with no branches warns and does not pin", async ({
+			testCliCommand,
+			readFile,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("flag_no_branches");
+			await testCliCommand([
+				"link",
+				"--project-id",
+				"proj-no-branches",
+				"--no-env-pull",
+				"--context-file",
+				ctx,
+			]);
+			expect(readFile(ctx)).toMatchSnapshot();
+		});
+
+		test("link --project-id -y with no default branch fails without writing .neon", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("flag_no_default");
+			await testCliCommand(
+				[
+					"link",
+					"--project-id",
+					"proj-no-default",
+					"-y",
+					"--no-env-pull",
+					"--context-file",
+					ctx,
+				],
+				{
+					code: 1,
+					snapshot: false,
+					stderr: expect.stringContaining(
+						"Project 'proj-no-default' has no default branch. Pass --branch <name> to pin one.",
+					),
+				},
+			);
+			expect(existsSync(ctx)).toBe(false);
+		});
+
+		test("re-linking the same project with -y keeps the already-pinned branch", async ({
+			testCliCommand,
+			readFile,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("flag_keep_branch_yes");
+			writeFileSync(
+				ctx,
+				JSON.stringify({
+					orgId: "org-2",
+					projectId: "test",
+					branch: "test_branch",
+				}),
+			);
+			await testCliCommand([
+				"link",
+				"--project-id",
+				"test",
+				"-y",
 				"--no-env-pull",
 				"--context-file",
 				ctx,

@@ -257,7 +257,7 @@ The Neon CLI supports autocompletion, which you can configure in a few easy step
 
 - **org** is inferred from the project (so `--project-id` alone is enough); it's omitted only when the project has no organization (personal account).
 - **project** is taken from `--project-id` (or chosen interactively).
-- **branch** is left to an explicit [`neon checkout <branch>`](#checkout) — `link` never silently pins a project's default branch (that would make later commands quietly target, say, production). It only records a branch when you pass `--branch`, when one is already pinned for the same project (preserved), when you pick one in the interactive picker, or for a freshly **created** project (whose single branch is unambiguous).
+- **branch** is taken from `--branch`, an existing pin for the same project, or the project's branch list: one branch is pinned automatically; several prompt in a TTY, pin the default with `-y`, or stay unpinned for [`neon checkout <branch>`](#checkout). A project with no branches is linked without a pin and says so.
 
 When a branch ends up pinned, `link` also runs [`env pull`](#env-pull) so the branch's Neon env vars (`DATABASE_URL`, …) land in a local `.env`. With no branch pinned there is nothing to pull, so `link` instead nudges you to run `neon checkout`. Pass `--no-env-pull` to skip the pull (for example when injecting env at runtime with `neon-env run` or `neon dev`).
 
@@ -282,21 +282,33 @@ Linked .neon:
 
 When you link an **existing** project that has more than one branch, the interactive flow adds a
 final step to pick which branch to pin — the same `＋ Create a new branch…` + list selector used by
-`neon checkout` (a single-branch project is pinned automatically, no prompt). Non-interactive
-`link --project-id …` does **not** prompt or default a branch; it links org + project and leaves
-branch selection to `neon checkout`:
+`neon checkout` (a single-branch project is pinned automatically, no prompt):
 
 ```bash
+$ neon link
 ? Which organization would you like to link? › Personal Org (org-abc123)
 ? Which project would you like to link? › my-app (polished-snowflake-12345678)
+? Which branch would you like to link? › [default] main (br-main-branch-87654321)
+```
+
+`link --project-id …` skips org and project. One branch is pinned with no prompt. Several branches
+in a TTY show the branch prompt; `-y` pins the default; no TTY leaves the pin empty for
+`neon checkout`:
+
+```bash
+$ neon link --project-id polished-snowflake-12345678
 ? Which branch would you like to link? › [default] main (br-main-branch-87654321)
 ```
 
 **Non-interactive (flags or `--params` JSON)** — for scripts and CI:
 
 ```bash
-# Link to an existing project (org is inferred from the project; no branch pinned)
+# Link to an existing project (org is inferred). Pins the only branch;
+# several branches prompt in a TTY, or stay unpinned without one.
 neon link --project-id polished-snowflake-12345678
+
+# Same, pin the project's default branch when several exist
+neon link --project-id polished-snowflake-12345678 -y
 
 # Same, but also pin a branch (name or id — resolved and stored as its name)
 neon link --project-id polished-snowflake-12345678 --branch main
@@ -327,7 +339,7 @@ Every supplied identifier is checked before anything is written, with actionable
 ```bash
 neon orgs list --output json
 neon projects list --org-id <org-id> --output json
-neon link --project-id <project-id>
+neon link --project-id <project-id> [--branch <name> | -y]
 neon link --org-id <org-id> --project-name <name> --region-id aws-us-east-2
 ```
 
@@ -352,7 +364,7 @@ How today's `set-context` uses map onto `link`:
 
 | `set-context` (deprecated)              | Recommended `link` equivalent                                                 |
 | --------------------------------------- | ----------------------------------------------------------------------------- |
-| `neon set-context --project-id <id>` | `neon link --project-id <id>` (infers org + verifies; branch via checkout) |
+| `neon set-context --project-id <id>` | `neon link --project-id <id>` (infers org + verifies; pins the only branch) |
 | `neon set-context --org-id <id>`     | `neon link --org-id <id>`                                                  |
 | `neon set-context --branch-id <id>`  | `neon link --branch <name\|id>`                                            |
 | `neon set-context` (clear)           | `neon link --clear`                                                        |
