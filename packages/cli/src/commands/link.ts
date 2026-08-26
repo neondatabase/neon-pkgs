@@ -155,14 +155,6 @@ export const builder = (argv: yargs.Argv) =>
 		})
 		.example([
 			[
-				"$0 orgs list --output json",
-				"List organizations as JSON (scripts and agents)",
-			],
-			[
-				"$0 projects list --org-id org-… --output json",
-				"List projects in an org as JSON (scripts and agents)",
-			],
-			[
 				"$0 link --project-id polished-snowflake-12345678",
 				`Link an existing project (org is inferred); pin a branch later with '${getCliName()} checkout'`,
 			],
