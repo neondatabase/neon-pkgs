@@ -389,7 +389,7 @@ const create = async (
 		!props.secrets &&
 		(props.output === "json" || props.output === "yaml")
 	) {
-		// A single JSON/YAML chunk is flattened, so preserve the envelope agents parse.
+		// The writer flattens a single JSON/YAML chunk.
 		out.write(
 			{ project: data.project },
 			{ fields: ["project"], title: "Project" },

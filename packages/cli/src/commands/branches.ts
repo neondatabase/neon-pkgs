@@ -465,26 +465,40 @@ const create = async (
 	}
 
 	const out = writer(props);
-
-	out.write(data.branch, {
-		fields: BRANCH_FIELDS,
-		title: "branch",
-		emptyMessage: "No branches have been found.",
-	});
-
-	if (data.endpoints?.length > 0) {
-		out.write(data.endpoints, {
-			fields: ["id", "created_at"],
-			title: "endpoints",
-			emptyMessage: "No endpoints have been found.",
+	const endpoints = data.endpoints ?? [];
+	const connectionUris = data.connection_uris ?? [];
+	const writeEndpoints = endpoints.length > 0;
+	const writeUris = props.secrets && connectionUris.length > 0;
+	if (
+		!props.secrets &&
+		(props.output === "json" || props.output === "yaml") &&
+		!writeEndpoints
+	) {
+		// The writer flattens a single JSON/YAML chunk.
+		out.write(
+			{ branch: data.branch },
+			{ fields: ["branch"], title: "branch" },
+		);
+	} else {
+		out.write(data.branch, {
+			fields: BRANCH_FIELDS,
+			title: "branch",
+			emptyMessage: "No branches have been found.",
 		});
-	}
-	if (props.secrets && data.connection_uris?.length) {
-		out.write(data.connection_uris, {
-			fields: ["connection_uri"],
-			title: "connection_uris",
-			emptyMessage: "No connection uris have been found",
-		});
+		if (writeEndpoints) {
+			out.write(endpoints, {
+				fields: ["id", "created_at"],
+				title: "endpoints",
+				emptyMessage: "No endpoints have been found.",
+			});
+		}
+		if (writeUris) {
+			out.write(connectionUris, {
+				fields: ["connection_uri"],
+				title: "connection_uris",
+				emptyMessage: "No connection uris have been found",
+			});
+		}
 	}
 	out.end();
 
