@@ -1,5 +1,16 @@
 # @neon/tools
 
+## 1.0.0
+
+### Major Changes
+
+- 4211669: `branches.create` attaches a read-write endpoint by default; pass `noCompute: true` (tools: `no_compute`) to skip it. `createWithCompute` is now `createAndConnect`. `create` returns the resource without a connection string; `createAndConnect` returns a URI.
+
+### Patch Changes
+
+- Updated dependencies [4211669]
+  - @neon/sdk@3.0.0
+
 ## 0.8.0
 
 ### Minor Changes

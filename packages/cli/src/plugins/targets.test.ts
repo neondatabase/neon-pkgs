@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 
 import {
+	detectInstallablePluginsAgents,
 	detectPluginsAgents,
 	mappedPluginsTargets,
 	pluginsInstallableAgents,
@@ -101,5 +102,17 @@ describe("detectPluginsAgents", () => {
 		expect(await detectPluginsAgents({ scope: "project", cwd })).toEqual(
 			[],
 		);
+	});
+
+	test("project installable detection drops user-scope-only agents", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-plugins-detect-vscode-"));
+		dirs.push(cwd);
+		mkdirSync(join(cwd, ".vscode"));
+		expect(await detectPluginsAgents({ scope: "project", cwd })).toContain(
+			"vscode",
+		);
+		expect(
+			await detectInstallablePluginsAgents({ scope: "project", cwd }),
+		).toEqual([]);
 	});
 });

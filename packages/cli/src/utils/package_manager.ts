@@ -345,6 +345,19 @@ export const formatInstallCommand = (
 	options?: AddOptions,
 ): string => `${pm} ${installArgs(pm, packages, options).join(" ")}`;
 
+export const commandEnv = (
+	overlay: NodeJS.ProcessEnv | undefined,
+	base: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv => {
+	const child = { ...base };
+	for (const key of Object.keys(child)) {
+		if (key.toUpperCase() === "NEON_API_KEY") {
+			delete child[key];
+		}
+	}
+	return overlay ? { ...child, ...overlay } : child;
+};
+
 /**
  * Run a command inheriting our stdio so the user sees install / link output
  * live and can answer any prompts the child raises. Resolves to whether it
@@ -368,7 +381,7 @@ export const runCommand = (
 			cwd,
 			stdio: "inherit",
 			shell: process.platform === "win32",
-			...(env ? { env: { ...process.env, ...env } } : {}),
+			env: commandEnv(env),
 		});
 		child.on("error", (err) => {
 			log.warning(

@@ -1,5 +1,21 @@
 # neon
 
+## 4.8.0
+
+### Minor Changes
+
+- 599c69c: `neon link --project-id` pins the project's only branch. Several branches prompt in a TTY, pin the default with `-y`, or stay unpinned for `neon checkout`.
+- 53b2e72: `neon init` in an empty directory is `neon bootstrap` (scaffold, agent tooling, link). In an existing app it installs a plugin or skills+MCP, links, then writes neon.ts. `neon bootstrap` offers the same agent tooling after scaffolding; `--default` also runs `link --yes`.
+
+## 4.7.1
+
+### Patch Changes
+
+- Updated dependencies [4211669]
+  - @neon/sdk@3.0.0
+  - @neon/config@1.0.5
+  - @neon/config-runtime@1.0.5
+
 ## 4.7.0
 
 ### Minor Changes

@@ -69,6 +69,15 @@ export const detectPluginsAgents = async (options: {
 	return uniqueAgentIds(detected).filter((id) => supportsPlugins(id));
 };
 
+export const detectInstallablePluginsAgents = async (options: {
+	scope: PluginsInstallScope;
+	cwd: string;
+}): Promise<AgentType[]> => {
+	const installable = new Set(pluginsInstallableAgents(options.scope));
+	const detected = await detectPluginsAgents(options);
+	return detected.filter((id) => installable.has(id));
+};
+
 export const mappedPluginsTargets = (
 	agents: readonly AgentType[],
 	scope: PluginsInstallScope,

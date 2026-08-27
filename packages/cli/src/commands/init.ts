@@ -1,140 +1,157 @@
+import { existsSync, readdirSync } from "node:fs";
+import { resolve } from "node:path";
+import { credentialInputs } from "@neon-internals/cli-core/auth_selection";
 import type yargs from "yargs";
-import { closeAnalytics, sendError } from "../analytics.js";
-import { detectAgent } from "../init/detect_agent.js";
-import { enrichResponse } from "../init/enrich_output.js";
-import { interactiveInit } from "../init/interactive.js";
-import { orchestrate } from "../init/orchestrate.js";
-import { routeDataStep } from "../init/route_command.js";
-import { STDOUT_FD, writeAllSync } from "../utils/write_sync.js";
+import { readContextFile } from "../context.js";
+import { type InitRun, initChildEnv, spawnCliChild } from "../init/child.js";
+import {
+	bootstrapInitStep,
+	directoryIsEmpty,
+	type InitAgentSetup,
+	planExistingInit,
+} from "../init/plan.js";
+import { runAgentTooling, runInitSteps } from "../init/tooling.js";
+import { log } from "../log.js";
+import type { CommonProps } from "../types.js";
+import { getCliName } from "../utils/cli_name.js";
+import { helpEpilogue } from "../utils/help_text.js";
+
+export type { InitRun };
+export { initChildEnv };
+
+export type InitProps = CommonProps & {
+	yes?: boolean;
+	configDir?: string;
+	profile?: string;
+	analytics?: boolean;
+	agent?: boolean;
+	data?: string;
+	cwd?: string;
+	run?: InitRun;
+	pickAgentSetup?: () => Promise<InitAgentSetup>;
+	hasProjectPlugins?: (cwd: string) => Promise<boolean>;
+};
 
 export const command = "init";
 export const describe =
-	"Initialize a project with Neon using your AI coding assistant";
+	"Set up this directory for Neon: agent tooling, a linked project, and neon.ts. In an empty directory, scaffolds a template first. Skills needs Node.js 22.20 or newer.";
+
+const removedProtocol = () =>
+	`\`${getCliName()} init --agent\` and \`--data\` were removed. Run \`${getCliName()} init\` or \`${getCliName()} init -y\`.`;
+
 export const builder = (yargs: yargs.Argv) =>
 	yargs
+		.usage("$0 init [options]")
 		.option("context-file", {
 			hidden: true,
 		})
-		.option("agent", {
-			alias: "a",
+		.option("yes", {
+			alias: "y",
 			type: "boolean",
 			default: false,
-			describe: "Enable agent/JSON mode (agent type is auto-detected).",
+			describe:
+				"Empty dir: bootstrap --default. Otherwise plugin when a project plugin agent is detected, else skills and MCP, then link --yes and config init --services none. link --yes still asks for a project unless one is already linked",
+		})
+		.option("agent", {
+			hidden: true,
+			type: "boolean",
 		})
 		.option("data", {
+			hidden: true,
 			type: "string",
+		})
+		.option("output", {
+			alias: "o",
+			hidden: true,
 			describe:
-				'JSON object with a "step" field to route to a specific phase and phase-specific options.',
+				"Not supported; the commands init runs print their own output",
 		})
-		.option("skip-migrations", {
-			type: "boolean",
-			default: false,
-			describe: "Skip the migrations phase.",
-		})
-		.option("preview", {
-			type: "boolean",
-			default: false,
-			describe:
-				"Enable preview features (e.g. project bootstrapping from templates).",
-		})
-		.strict(false);
-
-/**
- * The agent-facing half of `neon init` speaks JSON, and it speaks it on **stdout**:
- * one object, no prefix, nothing else. `log.info` would prefix every line with
- * `INFO: ` and send it to stderr, which is right for a diagnostic and wrong for the
- * payload an agent is expected to parse.
- */
-const writeAgentResponse = (result: unknown) => {
-	writeAllSync(
-		STDOUT_FD,
-		`${JSON.stringify(enrichResponse(result), null, 2)}\n`,
-	);
-};
-
-/**
- * A failure has to arrive in the shape the caller asked for. An agent parses stdout and
- * has no branch for "empty stdout, exit 1" — it cannot tell a broken credentials file
- * from a phase that legitimately produced nothing — so the error goes out as JSON too.
- */
-const writeAgentFailure = (error: Error) => {
-	writeAllSync(
-		STDOUT_FD,
-		`${JSON.stringify({ success: false, error: error.message }, null, 2)}\n`,
-	);
-};
-
-/** ` at position 12`, or nothing when the parser did not report one. */
-const parsePosition = (parseError: unknown): string => {
-	const message = parseError instanceof Error ? parseError.message : "";
-	const at = message.match(/at position (\d+)/);
-	return at === null ? "" : ` at position ${at[1]}`;
-};
-
-export const handler = async (argv: {
-	agent?: boolean;
-	data?: string;
-	skipMigrations?: boolean;
-	preview?: boolean;
-	profile?: string;
-}) => {
-	// Auto-detect agent from environment. When --agent is explicitly passed,
-	// always detect (the user asked for agent mode). Otherwise, require
-	// non-TTY stdin to distinguish agent from human in terminal.
-	//
-	// Handler failures need the caller's output format; `ensureAuth` runs earlier
-	// and reports directly to stderr.
-	const agent =
-		(argv.agent || !process.stdin.isTTY ? detectAgent() : null) ||
-		undefined;
-	const isAgentMode = argv.agent || agent !== undefined;
-
-	try {
-		// --data with a "step" field routes to the appropriate phase
-		if (argv.data && isAgentMode) {
-			let data: Record<string, unknown>;
-			try {
-				data = JSON.parse(argv.data);
-			} catch (parseError) {
-				// Neither the payload nor the parser's message may appear here. `--data`
-				// carries whatever the caller put in it — a connection string, an API key —
-				// and V8 quotes a window of the input around the syntax error, so both would
-				// travel into the error message, onto stdout, and into `sendError`'s
-				// analytics payload. `@neon-internals/cli-core/credentials` discards the same
-				// message for the same reason. The position is a number and says enough.
+		.example(
+			"$0 init",
+			"Empty dir: bootstrap (scaffold, agent tooling, link). Existing app: agent tooling, link, config init",
+		)
+		.example("$0 init -y", "Same steps, using each child's defaults")
+		.epilogue(
+			helpEpilogue(
+				"Interactive agent setup: plugin (recommended), skills and MCP separately, or skip agent setup. Never both plugin and skills+MCP.",
+				"-y installs the plugin when Cursor, Claude Code, or Codex is detected in the project. Otherwise skills and MCP. Then link unless already linked. link --yes may still ask for a project.",
+			),
+		)
+		.check((argv) => {
+			if (argv.agent === true || argv.data !== undefined) {
+				throw new Error(removedProtocol());
+			}
+			if (
+				argv.help !== true &&
+				(argv.output === "json" || argv.output === "yaml")
+			) {
 				throw new Error(
-					`Invalid JSON in --data flag${parsePosition(parseError)}. Expected a JSON object.`,
+					`\`${getCliName()} init\` does not support --output. The commands it runs print their own output.`,
 				);
 			}
-			if (typeof data.step === "string") {
-				writeAgentResponse(await routeDataStep(data, agent));
-				return;
-			}
-		}
+			return true;
+		})
+		.strict();
 
-		if (isAgentMode) {
-			writeAgentResponse(
-				await orchestrate({
-					agent,
-					skipMigrations: argv.skipMigrations,
-					preview: argv.preview,
-				}),
-			);
-		} else {
-			await interactiveInit({ preview: argv.preview });
-		}
-	} catch (error) {
-		const cause = error instanceof Error ? error : new Error(String(error));
-		if (isAgentMode) {
-			// Agent mode answers and exits here, so nothing else will report this. Attribute
-			// it to init and flush before exiting — `process.exit` drops in-flight events.
-			sendError(cause, "NEON_INIT_FAILED");
-			writeAgentFailure(cause);
-			await closeAnalytics();
-			process.exit(1);
-		}
-		// A human gets the top-level handler's single `ERROR: <message>` line on stderr, and
-		// its `sendError`. Reporting here as well would file one failure as two events.
-		throw cause;
+const isLinked = (contextFile: string): boolean => {
+	const projectId = readContextFile(contextFile).projectId;
+	return typeof projectId === "string" && projectId.length > 0;
+};
+
+export const handler = async (props: InitProps) => {
+	if (props.output === "json" || props.output === "yaml") {
+		throw new Error(
+			`\`${getCliName()} init\` does not support --output. The commands it runs print their own output.`,
+		);
 	}
+
+	const cwd = props.cwd ?? process.cwd();
+	const names = existsSync(cwd) ? readdirSync(cwd) : [];
+	const contextFile = resolve(cwd, props.contextFile);
+	const yes = props.yes === true;
+	const run = props.run ?? spawnCliChild;
+	const explicitKey = props.profile ? "" : credentialInputs().apiKeyFlag;
+	const authEnv = explicitKey ? { NEON_API_KEY: explicitKey } : undefined;
+	const forward = {
+		...(props.configDir ? { configDir: props.configDir } : {}),
+		...(props.profile ? { profile: props.profile } : {}),
+		apiHost: props.apiHost,
+		contextFile,
+		...(props.analytics === false ? { analytics: false } : {}),
+	};
+
+	if (directoryIsEmpty(names)) {
+		await runInitSteps([bootstrapInitStep(yes)], {
+			cwd,
+			run,
+			forward,
+			authEnv,
+		});
+		log.info("Done.");
+		return;
+	}
+
+	await runAgentTooling({
+		cwd,
+		yes,
+		run,
+		forward,
+		authEnv,
+		...(props.pickAgentSetup
+			? { pickAgentSetup: props.pickAgentSetup }
+			: {}),
+		...(props.hasProjectPlugins
+			? { hasProjectPlugins: props.hasProjectPlugins }
+			: {}),
+	});
+	await runInitSteps(
+		planExistingInit({
+			linked: isLinked(contextFile),
+			yes,
+			agentSetup: "skip",
+		}),
+		{ cwd, run, forward, authEnv },
+	);
+
+	log.info("Done.");
 };

@@ -5,9 +5,6 @@ disk: `neon` and `@neon/env`. `@neon/config` is not a consumer — it takes an
 explicit `apiKey` and touches neither the filesystem nor the environment, which is why its
 `./paths` subpath was removed rather than re-exported from here.
 
-`neon init` is a third reader, but not a third consumer: it lives inside `packages/cli` as
-`src/init/auth.ts` and imports through that package's own dependency on this one.
-
 ## It is private, and bundled into each consumer
 
 Both consumers list it in `devDependencies` and build with tsdown bundling on, so it is

@@ -6,6 +6,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import type { AddressInfo } from "node:net";
+import { recordCredentialInputs } from "@neon-internals/cli-core/auth_selection";
 import {
 	createCredentialStore,
 	KEYRING_SERVICE,
@@ -847,6 +848,76 @@ describe("ensureAuth", () => {
 
 		expect(authSpy).not.toHaveBeenCalled();
 		expect(refreshTokenSpy).not.toHaveBeenCalled();
+	});
+
+	test("init does not refresh or refuse broken stored credentials", async ({
+		runMockServer,
+	}) => {
+		const server = await runMockServer("main");
+		writeFileSync(join(configDir, "credentials.json"), "invalid json", {
+			mode: 0o700,
+		});
+
+		await ensureAuth({
+			...setupTestProps(server),
+			_: ["init"],
+		});
+
+		expect(authSpy).not.toHaveBeenCalled();
+		expect(refreshTokenSpy).not.toHaveBeenCalled();
+	});
+
+	test("init does not refresh an expired stored token", async ({
+		runMockServer,
+	}) => {
+		const server = await runMockServer("main");
+		writeFileSync(
+			join(configDir, "credentials.json"),
+			JSON.stringify({
+				access_token: "expired-token",
+				refresh_token: "refresh-token",
+				expires_at: Date.now() - 3600 * 1000,
+			}),
+			{ mode: 0o700 },
+		);
+
+		await ensureAuth({
+			...setupTestProps(server),
+			_: ["init"],
+		});
+
+		expect(authSpy).not.toHaveBeenCalled();
+		expect(refreshTokenSpy).not.toHaveBeenCalled();
+	});
+
+	test("init still rejects --api-key together with --profile", async ({
+		runMockServer,
+	}) => {
+		const server = await runMockServer("main");
+		recordCredentialInputs({
+			apiKeyFlag: "napi_test",
+			apiKeyEnv: "",
+			profileEnv: "",
+			profileFlag: "work",
+			configDir,
+		});
+		try {
+			await expect(
+				ensureAuth({
+					...setupTestProps(server),
+					_: ["init"],
+					profile: "work",
+				}),
+			).rejects.toThrow(/--api-key or --profile, not both/);
+		} finally {
+			recordCredentialInputs({
+				apiKeyFlag: "",
+				apiKeyEnv: "",
+				profileEnv: "",
+				profileFlag: "",
+				configDir: "",
+			});
+		}
 	});
 
 	test("should successfully refresh expired token", async ({

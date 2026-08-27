@@ -449,6 +449,16 @@ export const ensureAuth = async (
 		return;
 	}
 
+	if (props._[0] === "init") {
+		// Init delegates authentication to children but must reject conflicting credential flags itself.
+		selectCredential({
+			...credentialInputs(),
+			profileFlag: props.profile,
+		});
+		log.debug("init: skipping global auth; child commands authenticate");
+		return;
+	}
+
 	// Claim commands exchange their own assertion, so account auth must not open first.
 	if (isClaimCommand(props)) {
 		return;
@@ -465,10 +475,6 @@ export const ensureAuth = async (
 	// login. It uses an API key / stored credentials when present (harmless),
 	// otherwise it proceeds with no API client.
 	const isBootstrap = props._[0] === "bootstrap";
-
-	// `init` manages its own auth flow (asks the user if they have an account,
-	// then triggers OAuth at the right time). Skip the global auth middleware.
-	const isInit = props._[0] === "init";
 
 	// The MCP handler validates targets before deciding whether authentication is required.
 	const isMcp = isMcpCommand(props);
@@ -667,11 +673,6 @@ export const ensureAuth = async (
 
 	if (isBootstrap) {
 		log.debug("bootstrap: no usable credentials; continuing without auth");
-		return;
-	}
-
-	if (isInit) {
-		log.debug("init: skipping global auth; init manages its own auth flow");
 		return;
 	}
 
