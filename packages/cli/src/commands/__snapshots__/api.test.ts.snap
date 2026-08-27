@@ -40,6 +40,14 @@ query  category  optional  string (SECURITY, PERFORMANCE)  Filter by category
 "
 `;
 
+exports[`api --describe > prints POST array item fields in the table type column 1`] = `
+"POST /projects - Create project
+In    Name               Required  Type                                  Description
+body  project.name       optional  string                                The project name
+body  project.endpoints  optional  array (type (read_write, read_only))
+"
+`;
+
 exports[`api --describe > prints POST body fields dotted for -F 1`] = `
 "{
   "endpoint": {
@@ -56,6 +64,28 @@ exports[`api --describe > prints POST body fields dotted for -F 1`] = `
       "required": false,
       "type": "string",
       "description": "The project name"
+    },
+    {
+      "in": "body",
+      "name": "project.endpoints",
+      "required": false,
+      "type": "array",
+      "description": "",
+      "items": {
+        "type": "object",
+        "properties": [
+          {
+            "name": "type",
+            "type": "string",
+            "required": true,
+            "description": "",
+            "enum": [
+              "read_write",
+              "read_only"
+            ]
+          }
+        ]
+      }
     }
   ]
 }"

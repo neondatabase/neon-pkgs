@@ -559,7 +559,12 @@ function resolveParameter(
 			throw new Error(`Unresolved $ref ${parameter.$ref}.`);
 		}
 		const { $ref: _ref, ...siblings } = parameter;
-		return mergeSchema(resolved, siblings);
+		const description = stringDesc(siblings) || stringDesc(resolved);
+		return {
+			...resolved,
+			...siblings,
+			...(description ? { description } : {}),
+		};
 	}
 	return parameter;
 }

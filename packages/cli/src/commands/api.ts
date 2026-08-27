@@ -197,6 +197,31 @@ function isListing(args: ApiArgs): boolean {
 	return args.list || args.path === "list" || args.path === "ls";
 }
 
+function describeType(field: {
+	type: string;
+	enum?: unknown[];
+	items?: {
+		type: string;
+		properties?: { name: string; enum?: unknown[] }[];
+	};
+}): string {
+	const enumText = (values: unknown[] | undefined): string =>
+		Array.isArray(values) && values.length > 0
+			? ` (${values.map(String).join(", ")})`
+			: "";
+	if (field.type === "array" && field.items) {
+		const props = field.items.properties;
+		if (props && props.length > 0) {
+			const inner = props
+				.map((prop) => `${prop.name}${enumText(prop.enum)}`)
+				.join(", ");
+			return `array (${inner})`;
+		}
+		return `array of ${field.items.type}`;
+	}
+	return `${field.type}${enumText(field.enum)}`;
+}
+
 async function describeRoute(args: ApiArgs): Promise<void> {
 	const path = args.path;
 	if (!path) {
@@ -218,10 +243,10 @@ async function describeRoute(args: ApiArgs): Promise<void> {
 		...toStrings(args.query),
 		...toStrings(args.header),
 	];
-	if (unused.length > 0 || args.data !== undefined) {
+	if (unused.length > 0 || args.data !== undefined || args.include) {
 		throw new Error(
 			"--describe prints the field list; it does not send a request. " +
-				"Drop -F, -f, -d, -Q, and -H.",
+				"Drop -F, -f, -d, -Q, -H, and -i.",
 		);
 	}
 	const spec = await loadSpec({
@@ -272,13 +297,7 @@ async function describeRoute(args: ApiArgs): Promise<void> {
 		emptyMessage: "No path, query, or body fields in the spec.",
 		renderColumns: {
 			required: (field) => (field.required ? "required" : "optional"),
-			type: (field) => {
-				const values = field.enum;
-				if (!Array.isArray(values) || values.length === 0) {
-					return String(field.type);
-				}
-				return `${field.type} (${values.map(String).join(", ")})`;
-			},
+			type: (field) => describeType(field),
 		},
 	});
 }

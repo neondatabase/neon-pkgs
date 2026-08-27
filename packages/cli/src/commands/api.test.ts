@@ -58,6 +58,22 @@ const DESCRIBE_SPEC = {
 												type: "string",
 												description: "The project name",
 											},
+											endpoints: {
+												type: "array",
+												items: {
+													type: "object",
+													required: ["type"],
+													properties: {
+														type: {
+															type: "string",
+															enum: [
+																"read_write",
+																"read_only",
+															],
+														},
+													},
+												},
+											},
 										},
 									},
 								},
@@ -242,6 +258,26 @@ describe("api --describe", () => {
 		}
 	});
 
+	test("prints POST array item fields in the table type column", async ({
+		testCliCommand,
+	}) => {
+		const spec = await listenSpec(DESCRIBE_SPEC);
+		try {
+			await testCliCommand(
+				describeArgs(spec.url, [
+					"api",
+					"/projects",
+					"-X",
+					"POST",
+					"--describe",
+				]),
+				{ output: "table", unreachableHost: true },
+			);
+		} finally {
+			await spec.close();
+		}
+	});
+
 	test("rejects --describe without a path", async ({ testCliCommand }) => {
 		const spec = await listenSpec(DESCRIBE_SPEC);
 		try {
@@ -308,7 +344,7 @@ describe("api --describe", () => {
 				{
 					code: 1,
 					unreachableHost: true,
-					stderr: "ERROR: --describe prints the field list; it does not send a request. Drop -F, -f, -d, -Q, and -H.",
+					stderr: "ERROR: --describe prints the field list; it does not send a request. Drop -F, -f, -d, -Q, -H, and -i.",
 				},
 			);
 		} finally {

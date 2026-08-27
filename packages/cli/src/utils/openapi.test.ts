@@ -79,6 +79,18 @@ const miniSpec = {
 				},
 			},
 		},
+		"/need-org": {
+			get: {
+				operationId: "needOrg",
+				summary: "Needs org",
+				parameters: [
+					{
+						$ref: "#/components/parameters/RequiredOrg",
+						description: "Must pass org",
+					},
+				],
+			},
+		},
 		"/only-post": {
 			post: {
 				operationId: "onlyPost",
@@ -160,6 +172,13 @@ const miniSpec = {
 				in: "query",
 				description: "Timeout in milliseconds",
 				schema: { type: "integer" },
+			},
+			RequiredOrg: {
+				name: "org_id",
+				in: "query",
+				required: true,
+				description: "Organization id",
+				schema: { type: "string" },
 			},
 		},
 		schemas: {
@@ -340,6 +359,17 @@ describe("describeOperation", () => {
 				enum: ["SECURITY", "PERFORMANCE"],
 			},
 		]);
+	});
+
+	it("keeps required on a parameter $ref", () => {
+		const orgId = describeOperation(spec, "/need-org", "GET").fields.find(
+			(field) => field.name === "org_id",
+		);
+		expect(orgId).toMatchObject({
+			in: "query",
+			required: true,
+			description: "Must pass org",
+		});
 	});
 
 	it("overrides path-item parameters with the same name and in", () => {
