@@ -185,12 +185,22 @@ you ran a dry-run (missing/`dry-run` `package` input); re-dispatch with the real
 This requires access to that repo — if you don't have it, hand the publish backlog list to someone
 who does.
 
+After every successful publish (any package, not only `neon`), install latest and run it:
+
+```bash
+npm i -g neon@latest
+neon --version
+```
+
+Don't claim the publish is done until that install succeeds. `npm view` does not catch a
+`neon@latest` dependency that was never published.
+
 ## Gotchas
 
 - **The publish workflow defaults to `dry-run` and publishes ONE package per run.** Always pass
   `-f package=<name>` (and `-f ref=main`), once per bumped package. A `dry-run` (or input-less)
   dispatch goes green and prints a "Publish …" step but lands nothing on npm — verify with
-  `npm view <pkg> version`, not the green check.
+  `npm view <pkg> version`, not the green check. Then `npm i -g neon@latest`.
 - **Never pin an internal package to a published version.** `packages/cli` pinned `neon-init`
   (since folded into `packages/cli/src/init`) that
   way through 2.39.0, and `changeset version` rewriting the pin without touching `pnpm-lock.yaml`
