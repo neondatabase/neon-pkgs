@@ -192,8 +192,8 @@ npm i -g neon@latest
 neon --version
 ```
 
-Don't claim the publish is done until that install succeeds. `npm view` does not catch a
-`neon@latest` dependency that was never published.
+Don't claim the publish is done until that install succeeds and `neon --version` prints. `npm view`
+does not catch a `neon@latest` dependency that was never published.
 
 ## Gotchas
 
