@@ -200,7 +200,7 @@ Don't claim the publish is done until that install succeeds. `npm view` does not
 - **The publish workflow defaults to `dry-run` and publishes ONE package per run.** Always pass
   `-f package=<name>` (and `-f ref=main`), once per bumped package. A `dry-run` (or input-less)
   dispatch goes green and prints a "Publish …" step but lands nothing on npm — verify with
-  `npm view <pkg> version`, not the green check. Then `npm i -g neon@latest`.
+  `npm view <pkg> version`, not the green check.
 - **Never pin an internal package to a published version.** `packages/cli` pinned `neon-init`
   (since folded into `packages/cli/src/init`) that
   way through 2.39.0, and `changeset version` rewriting the pin without touching `pnpm-lock.yaml`
