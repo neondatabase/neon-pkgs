@@ -56,7 +56,11 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 		);
 		expect(renamed.name).toBe("crud-renamed");
 
-		expectOk(await neon.branches.delete(projectId, created.id));
+		expectOk(
+			await neon.branches.delete(projectId, created.id, {
+				waitForReadiness: true,
+			}),
+		);
 
 		const { error } = await neon.branches.get(projectId, created.id);
 		expect(error).toBeInstanceOf(NeonNotFoundError);
@@ -219,6 +223,7 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 				projectId,
 				defaultBranchId,
 				"e2e_role",
+				{ waitForReadiness: true },
 			),
 		);
 		const after = expectOk(
@@ -256,6 +261,7 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 				projectId,
 				defaultBranchId,
 				"e2e_db",
+				{ waitForReadiness: true },
 			),
 		);
 		const after = expectOk(
