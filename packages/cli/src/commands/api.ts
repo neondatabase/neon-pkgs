@@ -202,6 +202,7 @@ function describeType(field: {
 	enum?: unknown[];
 	items?: {
 		type: string;
+		enum?: unknown[];
 		properties?: { name: string; enum?: unknown[] }[];
 	};
 }): string {
@@ -217,7 +218,7 @@ function describeType(field: {
 				.join(", ");
 			return `array (${inner})`;
 		}
-		return `array of ${field.items.type}`;
+		return `array of ${field.items.type}${enumText(field.items.enum)}`;
 	}
 	return `${field.type}${enumText(field.enum)}`;
 }

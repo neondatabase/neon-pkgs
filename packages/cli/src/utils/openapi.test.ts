@@ -240,6 +240,13 @@ const miniSpec = {
 								type: "string",
 								description: "The project name",
 							},
+							tags: {
+								type: "array",
+								items: {
+									type: "string",
+									enum: ["prod", "dev"],
+								},
+							},
 							provisioner: {
 								$ref: "#/components/schemas/Provisioner",
 								description:
@@ -385,6 +392,7 @@ describe("describeOperation", () => {
 		expect(result.fields.map((field) => field.name)).toEqual([
 			"org_id",
 			"project.name",
+			"project.tags",
 			"project.provisioner",
 			"project.settings.quota.logical_size_bytes",
 			"project.settings.maintenance_window.weekdays",
@@ -402,6 +410,12 @@ describe("describeOperation", () => {
 			required: false,
 			type: "string",
 			description: "The project name",
+		});
+		expect(
+			result.fields.find((field) => field.name === "project.tags"),
+		).toMatchObject({
+			type: "array",
+			items: { type: "string", enum: ["prod", "dev"] },
 		});
 		expect(
 			result.fields.find((field) => field.name === "project.provisioner"),
@@ -662,5 +676,37 @@ describe("describeOperation against the vendored Neon spec", () => {
 		expect(
 			result.fields.find((field) => field.name === "project_id"),
 		).toMatchObject({ in: "path" });
+	});
+
+	it("keeps primitive array item enums", () => {
+		const webhooks = describeOperation(
+			neonSpec,
+			"/projects/p/branches/b/auth/webhooks",
+			"PUT",
+		);
+		expect(
+			webhooks.fields.find((field) => field.name === "enabled_events"),
+		).toMatchObject({
+			type: "array",
+			items: {
+				type: "string",
+				enum: expect.arrayContaining(["user.created", "send.otp"]),
+			},
+		});
+		const credentials = describeOperation(
+			neonSpec,
+			"/projects/p/branches/b/credentials",
+			"POST",
+		);
+		expect(
+			credentials.fields.find((field) => field.name === "scopes"),
+		).toMatchObject({
+			type: "array",
+			items: { type: "string" },
+		});
+		expect(
+			credentials.fields.find((field) => field.name === "scopes")?.items
+				?.enum,
+		).toEqual(expect.arrayContaining(["storage:read", "functions:invoke"]));
 	});
 });

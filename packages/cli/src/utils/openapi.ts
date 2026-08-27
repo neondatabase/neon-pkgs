@@ -77,6 +77,8 @@ export type DescribedField = {
 	nullable?: boolean;
 	items?: {
 		type: string;
+		enum?: unknown[];
+		nullable?: boolean;
 		properties?: ItemProperty[];
 	};
 };
@@ -396,6 +398,8 @@ function arrayField(
 		description: stringDesc(schema),
 		items: {
 			type: itemType,
+			...optionalEnum(items),
+			...optionalNullable(items),
 			...(properties
 				? {
 						properties: Object.entries(properties).map(
@@ -587,14 +591,28 @@ function paramToField(
 		location === "path"
 			? param.required !== false
 			: param.required === true;
+	const type = schemaType(schema);
+	const itemSchema =
+		type === "array" && isRecord(schema.items)
+			? resolveSchema(spec, schema.items, [])
+			: null;
 	return {
 		in: location,
 		name: param.name,
 		required,
-		type: schemaType(schema),
+		type,
 		description: stringDesc(param) || stringDesc(schema),
 		...optionalEnum(schema),
 		...optionalNullable(schema),
+		...(itemSchema
+			? {
+					items: {
+						type: schemaType(itemSchema),
+						...optionalEnum(itemSchema),
+						...optionalNullable(itemSchema),
+					},
+				}
+			: {}),
 	};
 }
 
