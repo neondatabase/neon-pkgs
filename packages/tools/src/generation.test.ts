@@ -116,8 +116,53 @@ describe("generated operation coverage", () => {
 			}).success,
 		).toBe(false);
 		expect(generatedSchemaSource).not.toContain(".default(");
+		expect(generatedSchemaSource).not.toContain("z.globalRegistry");
 		expect(zRestoreSnapshotQuery.parse({ name: "restored" })).toEqual({
 			name: "restored",
 		});
+	});
+
+	test("generated descriptions are the OpenAPI first sentence", () => {
+		const client = createNeonClient({ apiKey: "unused" }).client;
+		const createProject = operationFactories.createProject(client);
+		expect(createProject.description).toBe(
+			"Creates a Neon project within an organization.",
+		);
+
+		const listProjects = createNeonTool("projects.list", {
+			apiKey: "test-key",
+		});
+		expect(listProjects.description).toBe(
+			"Retrieves a list of projects for the specified organization. Returns every page. Pass limit to cap how many.",
+		);
+
+		const permissions = createNeonTool("projects.permissions.list", {
+			apiKey: "test-key",
+		});
+		expect(permissions.description).toBe(
+			"Retrieves details about users who have access to the project, including the permission `id`, the granted-to email address, and the date project access was granted.",
+		);
+		expect(permissions.description).not.toMatch(/https?:\/\//);
+
+		for (const operationId of operationIds) {
+			const tool = operationFactories[operationId](client);
+			expect(tool.description.length).toBeLessThan(220);
+			expect(tool.description).not.toMatch(/\[[^\]]+\]\([^)]+\)/);
+		}
+	});
+
+	test("composed create descriptions stay handwritten", () => {
+		const create = createNeonTool("projects.create", {
+			apiKey: "test-key",
+		});
+		const createAndConnect = createNeonTool("projects.createAndConnect", {
+			apiKey: "test-key",
+		});
+		expect(create.description).toContain(
+			"Does not return a connection string",
+		);
+		expect(createAndConnect.description).toContain(
+			"return a connection string",
+		);
 	});
 });

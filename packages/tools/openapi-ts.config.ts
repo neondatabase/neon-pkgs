@@ -22,7 +22,8 @@ export default defineConfig({
 			name: "zod",
 			compatibilityVersion: 4,
 			definitions: true,
-			metadata: true,
+			// MCP catalogs omit field descriptions to limit tools/list size.
+			metadata: false,
 			requests: {
 				shouldExtract: true,
 			},

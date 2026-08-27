@@ -7,7 +7,7 @@ import { InMemoryTransport as InMemoryTransportV1 } from "@modelcontextprotocol/
 import { McpServer as McpServerV1 } from "@modelcontextprotocol/sdk-v1/server/mcp.js";
 import { McpServer as McpServerV2 } from "@modelcontextprotocol/server";
 import { afterEach, describe, expect, test } from "vitest";
-import { createNeonTools } from "./index.js";
+import { createNeonTools, publishedId, toolIds } from "./index.js";
 import {
 	type McpToolResult,
 	registerNeonTools as registerNeonToolsV2,
@@ -70,6 +70,35 @@ describe("MCP v2 compatibility", () => {
 			arguments: { limit: "one" },
 		});
 		expect(invalid.isError).toBe(true);
+	});
+
+	test("publishes compact JSON Schema without OpenAPI field essays", async () => {
+		const server = new McpServerV2({
+			name: "test-server",
+			version: "1.0.0",
+		});
+		registerNeonToolsV2(
+			server,
+			createNeonTools({
+				apiKey: "test-key",
+				tools: ["projects.update"],
+			}),
+		);
+		const client = new ClientV2({ name: "test-client", version: "1.0.0" });
+		const [clientTransport, serverTransport] =
+			InMemoryTransportV2.createLinkedPair();
+		await Promise.all([
+			server.connect(serverTransport),
+			client.connect(clientTransport),
+		]);
+		closeables.push(client, server);
+
+		const listed = await client.listTools();
+		const schema = listed.tools[0]?.inputSchema;
+		expect(schema).toMatchObject({ type: "object" });
+		expect(schema).not.toHaveProperty("$schema");
+		expect(schema).not.toHaveProperty("description");
+		expect(JSON.stringify(schema)).not.toContain("For more information");
 	});
 
 	test("returns API failures as structured MCP errors", async () => {
@@ -394,5 +423,50 @@ describe("MCP path injection", () => {
 		expect(requests[0].url).toBe(
 			"https://console.neon.tech/api/v2/projects/granted-project",
 		);
+	});
+});
+
+describe("MCP catalog size", () => {
+	test("listTools for every public tool stays under the compact bound", async () => {
+		const server = new McpServerV2({
+			name: "test-server",
+			version: "1.0.0",
+		});
+		registerNeonToolsV2(
+			server,
+			createNeonTools({
+				apiKey: "test-key",
+				tools: toolIds,
+			}),
+		);
+		const client = new ClientV2({ name: "test-client", version: "1.0.0" });
+		const [clientTransport, serverTransport] =
+			InMemoryTransportV2.createLinkedPair();
+		await Promise.all([
+			server.connect(serverTransport),
+			client.connect(clientTransport),
+		]);
+		closeables.push(client, server);
+
+		const listed: Array<{ name: string }> = [];
+		let cursor: string | undefined;
+		do {
+			const page = await client.listTools(
+				cursor === undefined ? {} : { cursor },
+			);
+			listed.push(...page.tools);
+			cursor =
+				page.nextCursor === undefined ? undefined : page.nextCursor;
+		} while (cursor !== undefined && cursor.length > 0);
+
+		expect(listed.map((tool) => tool.name).sort()).toEqual(
+			[...toolIds].map(publishedId).sort(),
+		);
+
+		const chars = listed.reduce(
+			(sum, tool) => sum + JSON.stringify(tool).length,
+			0,
+		);
+		expect(chars / 4).toBeLessThan(19_000);
 	});
 });
