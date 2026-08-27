@@ -7,6 +7,21 @@ const SCHEMA_MAP_KEYS = new Set([
 	"properties",
 ]);
 
+const SCHEMA_VALUE_KEYS = new Set([
+	"additionalProperties",
+	"contains",
+	"else",
+	"if",
+	"items",
+	"not",
+	"propertyNames",
+	"then",
+	"unevaluatedItems",
+	"unevaluatedProperties",
+]);
+
+const SCHEMA_ARRAY_KEYS = new Set(["allOf", "anyOf", "oneOf", "prefixItems"]);
+
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -33,7 +48,15 @@ export const compactJsonSchema = (node: unknown): unknown => {
 			);
 			continue;
 		}
-		compact[key] = compactJsonSchema(value);
+		if (SCHEMA_ARRAY_KEYS.has(key) && Array.isArray(value)) {
+			compact[key] = value.map(compactJsonSchema);
+			continue;
+		}
+		if (SCHEMA_VALUE_KEYS.has(key)) {
+			compact[key] = compactJsonSchema(value);
+			continue;
+		}
+		compact[key] = value;
 	}
 	return compact;
 };

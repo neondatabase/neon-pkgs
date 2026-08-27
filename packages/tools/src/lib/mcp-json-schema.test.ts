@@ -55,6 +55,28 @@ describe("compactJsonSchema", () => {
 			},
 		});
 	});
+
+	test("does not walk default, enum, or dependentRequired as schemas", () => {
+		const schema = {
+			type: "object",
+			properties: {
+				body: { type: "object" },
+			},
+			default: { description: "keep this default" },
+			enum: [{ description: "keep this enum member" }],
+			dependentRequired: { description: ["name"] },
+		};
+
+		expect(compactJsonSchema(schema)).toEqual({
+			type: "object",
+			properties: {
+				body: { type: "object" },
+			},
+			default: { description: "keep this default" },
+			enum: [{ description: "keep this enum member" }],
+			dependentRequired: { description: ["name"] },
+		});
+	});
 });
 
 describe("toMcpInputSchema", () => {
