@@ -85,6 +85,45 @@ const miniSpec = {
 				summary: "POST only",
 			},
 		},
+		"/email": {
+			patch: {
+				operationId: "updateEmail",
+				summary: "Update email",
+				requestBody: {
+					required: true,
+					content: {
+						"application/json": {
+							schema: {
+								$ref: "#/components/schemas/EmailConfig",
+							},
+						},
+					},
+				},
+			},
+		},
+		"/deploy": {
+			post: {
+				operationId: "deployFn",
+				summary: "Deploy",
+				requestBody: {
+					required: true,
+					content: {
+						"multipart/form-data": {
+							schema: {
+								type: "object",
+								properties: {
+									zip: { type: "string" },
+									runtime: {
+										type: "string",
+										enum: ["nodejs24"],
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 	},
 	components: {
 		parameters: {
@@ -107,6 +146,33 @@ const miniSpec = {
 			EndpointType: {
 				type: "string",
 				enum: ["read_write", "read_only"],
+			},
+			EmailConfig: {
+				type: "object",
+				discriminator: {
+					propertyName: "type",
+					mapping: {
+						standard: "#/components/schemas/StandardEmail",
+						shared: "#/components/schemas/SharedEmail",
+					},
+				},
+				oneOf: [
+					{ $ref: "#/components/schemas/StandardEmail" },
+					{ $ref: "#/components/schemas/SharedEmail" },
+				],
+			},
+			StandardEmail: {
+				type: "object",
+				properties: {
+					host: { type: "string", description: "SMTP host" },
+					sender_email: { type: "string" },
+				},
+			},
+			SharedEmail: {
+				type: "object",
+				properties: {
+					sender_email: { type: "string" },
+				},
 			},
 			ProjectCreateRequest: {
 				type: "object",
@@ -366,6 +432,49 @@ describe("describeOperation", () => {
 			'No route matches "/nope". Run `neon api --list` to see available routes.',
 		);
 	});
+
+	it("flattens oneOf bodies and injects the discriminator", () => {
+		const result = describeOperation(spec, "/email", "PATCH");
+		expect(result.bodyRequired).toBe(true);
+		expect(result.fields.map((field) => field.name)).toEqual([
+			"type",
+			"host",
+			"sender_email",
+		]);
+		expect(
+			result.fields.find((field) => field.name === "type"),
+		).toMatchObject({
+			in: "body",
+			required: true,
+			type: "string",
+			enum: ["standard", "shared"],
+		});
+		expect(
+			result.fields.find((field) => field.name === "host"),
+		).toMatchObject({
+			required: false,
+			type: "string",
+			description: "SMTP host",
+		});
+		expect(
+			result.fields.find((field) => field.name === "sender_email")
+				?.required,
+		).toBe(false);
+	});
+
+	it("describes a multipart JSON-shaped body when application/json is absent", () => {
+		const result = describeOperation(spec, "/deploy", "POST");
+		expect(result.fields.map((field) => field.name)).toEqual([
+			"zip",
+			"runtime",
+		]);
+		expect(
+			result.fields.find((field) => field.name === "runtime"),
+		).toMatchObject({
+			type: "string",
+			enum: ["nodejs24"],
+		});
+	});
 });
 
 describe("describeOperation against the vendored Neon spec", () => {
@@ -442,5 +551,27 @@ describe("describeOperation against the vendored Neon spec", () => {
 			type: "string",
 			enum: ["SECURITY", "PERFORMANCE"],
 		});
+	});
+
+	it("flattens the email-provider oneOf body", () => {
+		const result = describeOperation(
+			neonSpec,
+			"/projects/p/branches/b/auth/email_provider",
+			"PATCH",
+		);
+		const names = result.fields.map((field) => field.name);
+		expect(names).toContain("type");
+		expect(names).toContain("host");
+		expect(names).toContain("sender_email");
+		expect(
+			result.fields.find((field) => field.name === "type"),
+		).toMatchObject({
+			in: "body",
+			required: true,
+			enum: ["standard", "shared"],
+		});
+		expect(
+			result.fields.find((field) => field.name === "project_id"),
+		).toMatchObject({ in: "path" });
 	});
 });

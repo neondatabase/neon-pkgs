@@ -29,6 +29,15 @@ const DESCRIBE_SPEC = {
 						schema: { type: "integer" },
 						description: "Page size",
 					},
+					{
+						name: "category",
+						in: "query",
+						schema: {
+							type: "string",
+							enum: ["SECURITY", "PERFORMANCE"],
+						},
+						description: "Filter by category",
+					},
 				],
 			},
 			post: {

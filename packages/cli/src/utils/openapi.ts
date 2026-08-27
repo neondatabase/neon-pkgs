@@ -405,12 +405,93 @@ function arrayField(
 	return field;
 }
 
+function unionMembers(schema: Record<string, unknown>): unknown[] {
+	if (Array.isArray(schema.oneOf)) {
+		return schema.oneOf;
+	}
+	if (Array.isArray(schema.anyOf)) {
+		return schema.anyOf;
+	}
+	return [];
+}
+
+function discriminatorField(
+	schema: Record<string, unknown>,
+	prefix: string,
+): DescribedField | null {
+	if (!isRecord(schema.discriminator)) {
+		return null;
+	}
+	const propertyName = schema.discriminator.propertyName;
+	if (typeof propertyName !== "string") {
+		return null;
+	}
+	const mapping = schema.discriminator.mapping;
+	const values = isRecord(mapping) ? Object.keys(mapping) : [];
+	return {
+		in: "body",
+		name: prefix ? `${prefix}.${propertyName}` : propertyName,
+		required: true,
+		type: "string",
+		description: "",
+		...(values.length > 0 ? { enum: values } : {}),
+	};
+}
+
+function flattenUnion(
+	spec: OpenApiSpec,
+	schema: Record<string, unknown>,
+	prefix: string,
+): DescribedField[] {
+	const members = unionMembers(schema);
+	const byName = new Map<string, DescribedField[]>();
+	for (const member of members) {
+		const seen = new Set<string>();
+		for (const field of flattenBody(spec, member, prefix)) {
+			if (seen.has(field.name)) {
+				continue;
+			}
+			seen.add(field.name);
+			const copies = byName.get(field.name) ?? [];
+			copies.push(field);
+			byName.set(field.name, copies);
+		}
+	}
+	const fields: DescribedField[] = [];
+	for (const copies of byName.values()) {
+		fields.push({
+			...copies[0],
+			required:
+				copies.length === members.length &&
+				copies.every((field) => field.required),
+		});
+	}
+	const discriminator = discriminatorField(schema, prefix);
+	if (discriminator && !byName.has(discriminator.name)) {
+		fields.unshift(discriminator);
+	} else if (discriminator) {
+		const existing = fields.find(
+			(field) => field.name === discriminator.name,
+		);
+		if (existing) {
+			existing.required = true;
+			if (!existing.enum && discriminator.enum) {
+				existing.enum = discriminator.enum;
+			}
+		}
+	}
+	return fields;
+}
+
 function flattenBody(
 	spec: OpenApiSpec,
 	schema: unknown,
 	prefix: string,
 ): DescribedField[] {
 	const resolved = resolveSchema(spec, schema, []);
+	if (unionMembers(resolved).length > 0) {
+		return flattenUnion(spec, resolved, prefix);
+	}
 	const properties = isRecord(resolved.properties)
 		? resolved.properties
 		: undefined;
@@ -607,10 +688,16 @@ function jsonBodySchema(
 		return null;
 	}
 	const json = content["application/json"];
-	if (!isRecord(json) || json.schema === undefined) {
+	const selected = isRecord(json)
+		? json
+		: Object.values(content).find(isRecord);
+	if (!isRecord(selected) || selected.schema === undefined) {
 		return null;
 	}
-	return { schema: json.schema, required: requestBody.required === true };
+	return {
+		schema: selected.schema,
+		required: requestBody.required === true,
+	};
 }
 
 export function describeOperation(

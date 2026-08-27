@@ -16,6 +16,17 @@ exports[`api --describe > prints GET query fields as JSON without calling the AP
       "required": false,
       "type": "integer",
       "description": "Page size"
+    },
+    {
+      "in": "query",
+      "name": "category",
+      "required": false,
+      "type": "string",
+      "description": "Filter by category",
+      "enum": [
+        "SECURITY",
+        "PERFORMANCE"
+      ]
     }
   ]
 }"
@@ -23,8 +34,9 @@ exports[`api --describe > prints GET query fields as JSON without calling the AP
 
 exports[`api --describe > prints GET query fields as a table 1`] = `
 "GET /projects - List projects
-In     Name   Required  Type     Description
-query  limit  optional  integer  Page size
+In     Name      Required  Type                            Description
+query  limit     optional  integer                         Page size
+query  category  optional  string (SECURITY, PERFORMANCE)  Filter by category
 "
 `;
 

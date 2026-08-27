@@ -272,6 +272,13 @@ async function describeRoute(args: ApiArgs): Promise<void> {
 		emptyMessage: "No path, query, or body fields in the spec.",
 		renderColumns: {
 			required: (field) => (field.required ? "required" : "optional"),
+			type: (field) => {
+				const values = field.enum;
+				if (!Array.isArray(values) || values.length === 0) {
+					return String(field.type);
+				}
+				return `${field.type} (${values.map(String).join(", ")})`;
+			},
 		},
 	});
 }

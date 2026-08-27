@@ -1120,7 +1120,7 @@ neon api /projects/{project_id}/branches -X POST --describe
 neon api /projects/foo-bar-123/branches -X POST -F branch.name=dev
 ```
 
-`--describe` does not call the API. `-X` defaults to GET; if that method is missing, the error names the methods that exist.
+`--describe` does not send the selected API request. It uses the same CLI authentication as `--list`. `-X` defaults to GET; if that method is missing, the error names the methods that exist.
 
 ## API keys (`api-keys`)
 
