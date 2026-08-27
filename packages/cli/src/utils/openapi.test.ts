@@ -124,6 +124,34 @@ const miniSpec = {
 				},
 			},
 		},
+		"/items/me": {
+			get: {
+				operationId: "getMe",
+				summary: "Current item",
+			},
+		},
+		"/items/{id}": {
+			get: {
+				operationId: "getItem",
+				summary: "One item",
+			},
+		},
+		"/cycle": {
+			post: {
+				operationId: "createCycle",
+				summary: "Cycle",
+				requestBody: {
+					required: true,
+					content: {
+						"application/json": {
+							schema: {
+								$ref: "#/components/schemas/Cycle",
+							},
+						},
+					},
+				},
+			},
+		},
 	},
 	components: {
 		parameters: {
@@ -172,6 +200,13 @@ const miniSpec = {
 				type: "object",
 				properties: {
 					sender_email: { type: "string" },
+				},
+			},
+			Cycle: {
+				type: "object",
+				properties: {
+					name: { type: "string" },
+					child: { $ref: "#/components/schemas/Cycle" },
 				},
 			},
 			ProjectCreateRequest: {
@@ -473,6 +508,30 @@ describe("describeOperation", () => {
 		).toMatchObject({
 			type: "string",
 			enum: ["nodejs24"],
+		});
+	});
+
+	it("prefers the template with more static segments", () => {
+		expect(describeOperation(spec, "/items/me", "GET").operationId).toBe(
+			"getMe",
+		);
+		expect(describeOperation(spec, "/items/other", "GET").operationId).toBe(
+			"getItem",
+		);
+	});
+
+	it("stops a circular $ref at an object leaf", () => {
+		const result = describeOperation(spec, "/cycle", "POST");
+		expect(result.fields.map((field) => field.name)).toEqual([
+			"name",
+			"child",
+		]);
+		expect(
+			result.fields.find((field) => field.name === "child"),
+		).toMatchObject({
+			in: "body",
+			type: "object",
+			required: false,
 		});
 	});
 });

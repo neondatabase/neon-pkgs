@@ -357,14 +357,31 @@ function fieldFromSchema(
 	};
 }
 
+function pushedRefs(schema: unknown, stack: string[]): string[] {
+	if (!isRecord(schema)) {
+		return stack;
+	}
+	let next = stack;
+	if (typeof schema.$ref === "string" && !next.includes(schema.$ref)) {
+		next = [...next, schema.$ref];
+	}
+	if (Array.isArray(schema.allOf)) {
+		for (const part of schema.allOf) {
+			next = pushedRefs(part, next);
+		}
+	}
+	return next;
+}
+
 function arrayField(
 	spec: OpenApiSpec,
 	name: string,
 	required: boolean,
 	schema: Record<string, unknown>,
+	stack: string[],
 ): DescribedField {
 	const items = isRecord(schema.items)
-		? resolveSchema(spec, schema.items, [])
+		? resolveSchema(spec, schema.items, stack)
 		: {};
 	const itemType = schemaType(items);
 	const properties = isRecord(items.properties)
@@ -386,7 +403,7 @@ function arrayField(
 								const resolved = resolveSchema(
 									spec,
 									propSchema,
-									[],
+									stack,
 								);
 								return {
 									name: propName,
@@ -442,12 +459,13 @@ function flattenUnion(
 	spec: OpenApiSpec,
 	schema: Record<string, unknown>,
 	prefix: string,
+	stack: string[],
 ): DescribedField[] {
 	const members = unionMembers(schema);
 	const byName = new Map<string, DescribedField[]>();
 	for (const member of members) {
 		const seen = new Set<string>();
-		for (const field of flattenBody(spec, member, prefix)) {
+		for (const field of flattenBody(spec, member, prefix, stack)) {
 			if (seen.has(field.name)) {
 				continue;
 			}
@@ -487,10 +505,12 @@ function flattenBody(
 	spec: OpenApiSpec,
 	schema: unknown,
 	prefix: string,
+	stack: string[] = [],
 ): DescribedField[] {
-	const resolved = resolveSchema(spec, schema, []);
+	const nextStack = pushedRefs(schema, stack);
+	const resolved = resolveSchema(spec, schema, stack);
 	if (unionMembers(resolved).length > 0) {
-		return flattenUnion(spec, resolved, prefix);
+		return flattenUnion(spec, resolved, prefix, nextStack);
 	}
 	const properties = isRecord(resolved.properties)
 		? resolved.properties
@@ -500,7 +520,7 @@ function flattenBody(
 			return [];
 		}
 		if (schemaType(resolved) === "array") {
-			return [arrayField(spec, prefix, false, resolved)];
+			return [arrayField(spec, prefix, false, resolved, nextStack)];
 		}
 		return [fieldFromSchema("body", prefix, false, resolved)];
 	}
@@ -509,14 +529,16 @@ function flattenBody(
 	for (const [key, prop] of Object.entries(properties)) {
 		const name = prefix ? `${prefix}.${key}` : key;
 		const required = requiredSet.has(key);
-		const resolvedProp = resolveSchema(spec, prop, []);
+		const resolvedProp = resolveSchema(spec, prop, nextStack);
 		const type = schemaType(resolvedProp);
 		if (type === "object" && isRecord(resolvedProp.properties)) {
-			fields.push(...flattenBody(spec, resolvedProp, name));
+			fields.push(...flattenBody(spec, prop, name, nextStack));
 			continue;
 		}
 		if (type === "array") {
-			fields.push(arrayField(spec, name, required, resolvedProp));
+			fields.push(
+				arrayField(spec, name, required, resolvedProp, nextStack),
+			);
 			continue;
 		}
 		fields.push(fieldFromSchema("body", name, required, resolvedProp));
