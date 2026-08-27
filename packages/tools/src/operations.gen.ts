@@ -289,7 +289,7 @@ export const operationFactories = {
 				operationId: "addNeonAuthDomainToRedirectURIWhitelist",
 				id: "add_neon_auth_domain_to_redirect_uri_whitelist",
 				title: "Add trusted redirect URI domain",
-				description: "Deprecated.",
+				description: "Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/domains` instead.",
 				inputSchema: z.strictObject({
 	"project_id": zod.zAddNeonAuthDomainToRedirectUriWhitelistPath.shape["project_id"],
 	"domain": zod.zAddNeonAuthDomainToRedirectUriWhitelistBody.shape["domain"],
@@ -321,7 +321,7 @@ export const operationFactories = {
 				operationId: "addNeonAuthOauthProvider",
 				id: "add_neon_auth_oauth_provider",
 				title: "Add an OAuth provider",
-				description: "Deprecated.",
+				description: "Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/oauth_providers` instead.",
 				inputSchema: z.strictObject({
 	"project_id": zod.zAddNeonAuthOauthProviderPath.shape["project_id"],
 	"id": zod.zAddNeonAuthOauthProviderBody.shape["id"],
@@ -616,7 +616,7 @@ export const operationFactories = {
 				operationId: "createNeonAuthIntegration",
 				id: "create_neon_auth_integration",
 				title: "Create Neon Auth integration",
-				description: "Deprecated.",
+				description: "Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth` instead.",
 				inputSchema: z.strictObject({
 	"auth_provider": zod.zCreateNeonAuthIntegrationBody.shape["auth_provider"],
 	"project_id": zod.zCreateNeonAuthIntegrationBody.shape["project_id"],
@@ -649,7 +649,7 @@ export const operationFactories = {
 				operationId: "createNeonAuthNewUser",
 				id: "create_neon_auth_new_user",
 				title: "Create new auth user",
-				description: "Deprecated.",
+				description: "Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/users` instead.",
 				inputSchema: z.strictObject({
 	"project_id": zod.zCreateNeonAuthNewUserBody.shape["project_id"],
 	"auth_provider": zod.zCreateNeonAuthNewUserBody.shape["auth_provider"],
@@ -1258,7 +1258,7 @@ export const operationFactories = {
 				operationId: "deleteNeonAuthDomainFromRedirectURIWhitelist",
 				id: "delete_neon_auth_domain_from_redirect_uri_whitelist",
 				title: "Delete trusted redirect URI domain",
-				description: "Deprecated.",
+				description: "Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/domains` instead.",
 				inputSchema: z.strictObject({
 	"project_id": zod.zDeleteNeonAuthDomainFromRedirectUriWhitelistPath.shape["project_id"],
 	"auth_provider": zod.zDeleteNeonAuthDomainFromRedirectUriWhitelistBody.shape["auth_provider"],
@@ -1290,7 +1290,7 @@ export const operationFactories = {
 				operationId: "deleteNeonAuthIntegration",
 				id: "delete_neon_auth_integration",
 				title: "Delete integration with auth provider",
-				description: "Deprecated.",
+				description: "Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth` instead.",
 				inputSchema: z.strictObject({
 	"project_id": zod.zDeleteNeonAuthIntegrationPath.shape["project_id"],
 	"auth_provider": zod.zDeleteNeonAuthIntegrationPath.shape["auth_provider"],
@@ -1322,7 +1322,7 @@ export const operationFactories = {
 				operationId: "deleteNeonAuthOauthProvider",
 				id: "delete_neon_auth_oauth_provider",
 				title: "Delete OAuth provider",
-				description: "Deprecated.",
+				description: "Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/oauth_providers/{oauth_provider_id}` instead.",
 				inputSchema: z.strictObject({
 	"project_id": zod.zDeleteNeonAuthOauthProviderPath.shape["project_id"],
 	"oauth_provider_id": zod.zDeleteNeonAuthOauthProviderPath.shape["oauth_provider_id"],
@@ -1352,7 +1352,7 @@ export const operationFactories = {
 				operationId: "deleteNeonAuthUser",
 				id: "delete_neon_auth_user",
 				title: "Delete auth user",
-				description: "Deprecated.",
+				description: "Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/users/{auth_user_id}` instead.",
 				inputSchema: z.strictObject({
 	"project_id": zod.zDeleteNeonAuthUserPath.shape["project_id"],
 	"auth_user_id": zod.zDeleteNeonAuthUserPath.shape["auth_user_id"],
@@ -2374,7 +2374,7 @@ export const operationFactories = {
 				operationId: "getNeonAuthEmailServer",
 				id: "get_neon_auth_email_server",
 				title: "Retrieve email server configuration",
-				description: "Deprecated.",
+				description: "Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/email_provider` instead.",
 				inputSchema: z.strictObject({
 	"project_id": zod.zGetNeonAuthEmailServerPath.shape["project_id"],
 }),
@@ -3355,7 +3355,7 @@ export const operationFactories = {
 				operationId: "listNeonAuthIntegrations",
 				id: "list_neon_auth_integrations",
 				title: "List active integrations with auth providers",
-				description: "Deprecated.",
+				description: "Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth` instead.",
 				inputSchema: z.strictObject({
 	"project_id": zod.zListNeonAuthIntegrationsPath.shape["project_id"],
 }),
@@ -3384,7 +3384,7 @@ export const operationFactories = {
 				operationId: "listNeonAuthOauthProviders",
 				id: "list_neon_auth_oauth_providers",
 				title: "List OAuth providers",
-				description: "Deprecated.",
+				description: "Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/oauth_providers` instead.",
 				inputSchema: z.strictObject({
 	"project_id": zod.zListNeonAuthOauthProvidersPath.shape["project_id"],
 }),
@@ -3413,7 +3413,7 @@ export const operationFactories = {
 				operationId: "listNeonAuthRedirectURIWhitelistDomains",
 				id: "list_neon_auth_redirect_uri_whitelist_domains",
 				title: "List trusted redirect URI domains",
-				description: "Deprecated.",
+				description: "Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/domains` instead.",
 				inputSchema: z.strictObject({
 	"project_id": zod.zListNeonAuthRedirectUriWhitelistDomainsPath.shape["project_id"],
 }),
@@ -4839,7 +4839,7 @@ export const operationFactories = {
 				operationId: "transferProjectsFromUserToOrg",
 				id: "transfer_projects_from_user_to_org",
 				title: "Transfer projects from personal account to organization",
-				description: "Deprecated.",
+				description: "Deprecated. Personal accounts have been migrated to organizations, so this operation no longer applies.",
 				inputSchema: z.strictObject({
 	"destination_org_id": zod.zTransferProjectsFromUserToOrgBody.shape["destination_org_id"],
 	"project_ids": zod.zTransferProjectsFromUserToOrgBody.shape["project_ids"],
@@ -5070,7 +5070,7 @@ export const operationFactories = {
 				operationId: "updateNeonAuthEmailServer",
 				id: "update_neon_auth_email_server",
 				title: "Update email server configuration",
-				description: "Deprecated.",
+				description: "Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/email_provider` instead.",
 				inputSchema: z.strictObject({
 	"project_id": zod.zUpdateNeonAuthEmailServerPath.shape["project_id"],
 	"body": zod.zUpdateNeonAuthEmailServerBody,
@@ -5135,7 +5135,7 @@ export const operationFactories = {
 				operationId: "updateNeonAuthOauthProvider",
 				id: "update_neon_auth_oauth_provider",
 				title: "Update OAuth provider",
-				description: "Deprecated.",
+				description: "Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth/oauth_providers/{oauth_provider_id}` instead.",
 				inputSchema: z.strictObject({
 	"project_id": zod.zUpdateNeonAuthOauthProviderPath.shape["project_id"],
 	"oauth_provider_id": zod.zUpdateNeonAuthOauthProviderPath.shape["oauth_provider_id"],

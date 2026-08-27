@@ -132,7 +132,15 @@ const firstSentence = (text) => {
 		return "";
 	}
 	const match = normalized.match(/^.+?[.!?](?=\s|$)/);
-	return (match ? match[0] : normalized).trim();
+	let sentence = (match ? match[0] : normalized).trim();
+	if (/^deprecated\.?$/i.test(sentence)) {
+		const rest = normalized.slice(sentence.length).trim();
+		const second = rest.match(/^.+?[.!?](?=\s|$)/);
+		if (second) {
+			sentence = `${sentence} ${second[0]}`;
+		}
+	}
+	return sentence;
 };
 
 // OpenAPI descriptions are docs essays; MCP tools/list needs one sentence.

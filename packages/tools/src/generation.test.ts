@@ -128,6 +128,11 @@ describe("generated operation coverage", () => {
 		expect(createProject.description).toBe(
 			"Creates a Neon project within an organization.",
 		);
+		expect(
+			operationFactories.createNeonAuthIntegration(client).description,
+		).toBe(
+			"Deprecated. Use `/projects/{project_id}/branches/{branch_id}/auth` instead.",
+		);
 
 		const listProjects = createNeonTool("projects.list", {
 			apiKey: "test-key",
