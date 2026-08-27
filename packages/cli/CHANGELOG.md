@@ -1,5 +1,11 @@
 # neon
 
+## 4.10.0
+
+### Minor Changes
+
+- 33aac59: `neon api <path> --describe` prints the OpenAPI request shape for a route. Body field names are dotted for `-F`.
+
 ## 4.9.0
 
 ### Minor Changes
