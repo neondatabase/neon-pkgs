@@ -1,0 +1,713 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { describe, expect, it } from "vitest";
+
+import { describeOperation, type OpenApiSpec } from "./openapi";
+
+const miniSpec = {
+	paths: {
+		"/projects": {
+			parameters: [
+				{
+					name: "org_id",
+					in: "query",
+					schema: { type: "string" },
+					description: "path-item org_id",
+				},
+			],
+			get: {
+				operationId: "listProjects",
+				summary: "List projects",
+				parameters: [
+					{
+						name: "limit",
+						in: "query",
+						schema: { type: "integer" },
+						description: "Page size",
+					},
+					{
+						name: "org_id",
+						in: "query",
+						schema: { type: "string" },
+						description: "operation org_id",
+					},
+					{ $ref: "#/components/parameters/TimeoutParam" },
+					{
+						name: "category",
+						in: "query",
+						schema: {
+							$ref: "#/components/schemas/AdvisorCategory",
+						},
+						description: "Filter by category",
+					},
+				],
+			},
+			post: {
+				operationId: "createProject",
+				summary: "Create project",
+				requestBody: {
+					required: true,
+					content: {
+						"application/json": {
+							schema: {
+								$ref: "#/components/schemas/ProjectCreateRequest",
+							},
+						},
+					},
+				},
+			},
+		},
+		"/projects/{project_id}/branches": {
+			post: {
+				operationId: "createProjectBranch",
+				summary: "Create branch",
+				requestBody: {
+					required: false,
+					content: {
+						"application/json": {
+							schema: {
+								allOf: [
+									{
+										$ref: "#/components/schemas/BranchCreateRequest",
+									},
+								],
+							},
+						},
+					},
+				},
+			},
+		},
+		"/need-org": {
+			get: {
+				operationId: "needOrg",
+				summary: "Needs org",
+				parameters: [
+					{
+						$ref: "#/components/parameters/RequiredOrg",
+						description: "Must pass org",
+					},
+				],
+			},
+		},
+		"/only-post": {
+			post: {
+				operationId: "onlyPost",
+				summary: "POST only",
+			},
+		},
+		"/email": {
+			patch: {
+				operationId: "updateEmail",
+				summary: "Update email",
+				requestBody: {
+					required: true,
+					content: {
+						"application/json": {
+							schema: {
+								$ref: "#/components/schemas/EmailConfig",
+							},
+						},
+					},
+				},
+			},
+		},
+		"/deploy": {
+			post: {
+				operationId: "deployFn",
+				summary: "Deploy",
+				requestBody: {
+					required: true,
+					content: {
+						"multipart/form-data": {
+							schema: {
+								type: "object",
+								properties: {
+									zip: { type: "string" },
+									runtime: {
+										type: "string",
+										enum: ["nodejs24"],
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		"/items/me": {
+			get: {
+				operationId: "getMe",
+				summary: "Current item",
+			},
+		},
+		"/items/{id}": {
+			get: {
+				operationId: "getItem",
+				summary: "One item",
+			},
+		},
+		"/cycle": {
+			post: {
+				operationId: "createCycle",
+				summary: "Cycle",
+				requestBody: {
+					required: true,
+					content: {
+						"application/json": {
+							schema: {
+								$ref: "#/components/schemas/Cycle",
+							},
+						},
+					},
+				},
+			},
+		},
+	},
+	components: {
+		parameters: {
+			TimeoutParam: {
+				name: "timeout",
+				in: "query",
+				description: "Timeout in milliseconds",
+				schema: { type: "integer" },
+			},
+			RequiredOrg: {
+				name: "org_id",
+				in: "query",
+				required: true,
+				description: "Organization id",
+				schema: { type: "string" },
+			},
+		},
+		schemas: {
+			AdvisorCategory: {
+				type: "string",
+				enum: ["SECURITY", "PERFORMANCE"],
+			},
+			Provisioner: {
+				type: "string",
+				enum: ["k8s-neonvm", "k8s-pod"],
+			},
+			EndpointType: {
+				type: "string",
+				enum: ["read_write", "read_only"],
+			},
+			EmailConfig: {
+				type: "object",
+				discriminator: {
+					propertyName: "type",
+					mapping: {
+						standard: "#/components/schemas/StandardEmail",
+						shared: "#/components/schemas/SharedEmail",
+					},
+				},
+				oneOf: [
+					{ $ref: "#/components/schemas/StandardEmail" },
+					{ $ref: "#/components/schemas/SharedEmail" },
+				],
+			},
+			StandardEmail: {
+				type: "object",
+				properties: {
+					host: { type: "string", description: "SMTP host" },
+					sender_email: { type: "string" },
+				},
+			},
+			SharedEmail: {
+				type: "object",
+				properties: {
+					sender_email: { type: "string" },
+				},
+			},
+			Cycle: {
+				type: "object",
+				properties: {
+					name: { type: "string" },
+					child: { $ref: "#/components/schemas/Cycle" },
+				},
+			},
+			ProjectCreateRequest: {
+				type: "object",
+				required: ["project"],
+				properties: {
+					project: {
+						type: "object",
+						description: "New project",
+						properties: {
+							name: {
+								type: "string",
+								description: "The project name",
+							},
+							tags: {
+								type: "array",
+								items: {
+									type: "string",
+									enum: ["prod", "dev"],
+								},
+							},
+							provisioner: {
+								$ref: "#/components/schemas/Provisioner",
+								description:
+									"Compute provisioner. k8s-neonvm supports Autoscaling.",
+							},
+							settings: {
+								type: "object",
+								properties: {
+									quota: {
+										type: "object",
+										properties: {
+											logical_size_bytes: {
+												type: "integer",
+												description:
+													"Per-branch size cap",
+											},
+										},
+									},
+									maintenance_window: {
+										type: "object",
+										required: [
+											"weekdays",
+											"start_time",
+											"end_time",
+										],
+										properties: {
+											weekdays: { type: "array" },
+											start_time: { type: "string" },
+											end_time: { type: "string" },
+										},
+									},
+								},
+							},
+							annotations: {
+								type: "object",
+								additionalProperties: { type: "string" },
+								description: "Free-form metadata",
+							},
+						},
+					},
+				},
+			},
+			BranchCreateRequest: {
+				type: "object",
+				properties: {
+					branch: {
+						type: "object",
+						properties: {
+							name: {
+								type: "string",
+								description: "The branch name",
+							},
+							parent_id: { type: "string" },
+						},
+					},
+					endpoints: {
+						type: "array",
+						description: "Computes to create with the branch",
+						items: {
+							$ref: "#/components/schemas/BranchCreateRequestEndpointOptions",
+						},
+					},
+				},
+			},
+			BranchCreateRequestEndpointOptions: {
+				type: "object",
+				required: ["type"],
+				properties: {
+					type: { $ref: "#/components/schemas/EndpointType" },
+					settings: { type: "object" },
+				},
+			},
+		},
+	},
+} satisfies OpenApiSpec;
+
+const spec: OpenApiSpec = miniSpec;
+
+describe("describeOperation", () => {
+	it("lists query params, resolving parameter and schema $refs", () => {
+		const result = describeOperation(spec, "/projects", "GET");
+		expect(result).toMatchObject({
+			method: "GET",
+			path: "/projects",
+			summary: "List projects",
+			operationId: "listProjects",
+			bodyRequired: false,
+		});
+		expect(result.fields).toEqual([
+			{
+				in: "query",
+				name: "org_id",
+				required: false,
+				type: "string",
+				description: "operation org_id",
+			},
+			{
+				in: "query",
+				name: "limit",
+				required: false,
+				type: "integer",
+				description: "Page size",
+			},
+			{
+				in: "query",
+				name: "timeout",
+				required: false,
+				type: "integer",
+				description: "Timeout in milliseconds",
+			},
+			{
+				in: "query",
+				name: "category",
+				required: false,
+				type: "string",
+				description: "Filter by category",
+				enum: ["SECURITY", "PERFORMANCE"],
+			},
+		]);
+	});
+
+	it("keeps required on a parameter $ref", () => {
+		const orgId = describeOperation(spec, "/need-org", "GET").fields.find(
+			(field) => field.name === "org_id",
+		);
+		expect(orgId).toMatchObject({
+			in: "query",
+			required: true,
+			description: "Must pass org",
+		});
+	});
+
+	it("overrides path-item parameters with the same name and in", () => {
+		const orgId = describeOperation(spec, "/projects", "GET").fields.find(
+			(field) => field.name === "org_id",
+		);
+		expect(orgId?.description).toBe("operation org_id");
+	});
+
+	it("flattens nested body keys and keeps $ref sibling descriptions", () => {
+		const result = describeOperation(spec, "/projects", "POST");
+		expect(result.bodyRequired).toBe(true);
+		expect(result.fields.map((field) => field.name)).toEqual([
+			"org_id",
+			"project.name",
+			"project.tags",
+			"project.provisioner",
+			"project.settings.quota.logical_size_bytes",
+			"project.settings.maintenance_window.weekdays",
+			"project.settings.maintenance_window.start_time",
+			"project.settings.maintenance_window.end_time",
+			"project.annotations",
+		]);
+		expect(
+			result.fields.find((field) => field.name === "project"),
+		).toBeUndefined();
+		expect(
+			result.fields.find((field) => field.name === "project.name"),
+		).toMatchObject({
+			in: "body",
+			required: false,
+			type: "string",
+			description: "The project name",
+		});
+		expect(
+			result.fields.find((field) => field.name === "project.tags"),
+		).toMatchObject({
+			type: "array",
+			items: { type: "string", enum: ["prod", "dev"] },
+		});
+		expect(
+			result.fields.find((field) => field.name === "project.provisioner"),
+		).toMatchObject({
+			type: "string",
+			description:
+				"Compute provisioner. k8s-neonvm supports Autoscaling.",
+			enum: ["k8s-neonvm", "k8s-pod"],
+		});
+		expect(
+			result.fields.find(
+				(field) =>
+					field.name ===
+					"project.settings.maintenance_window.weekdays",
+			),
+		).toMatchObject({ required: true, type: "array" });
+		expect(
+			result.fields.find((field) => field.name === "project.annotations"),
+		).toMatchObject({
+			required: false,
+			type: "object",
+			description: "Free-form metadata",
+		});
+	});
+
+	it("keeps arrays as -F leaves and exposes item properties", () => {
+		const result = describeOperation(
+			spec,
+			"/projects/{project_id}/branches",
+			"POST",
+		);
+		expect(result.bodyRequired).toBe(false);
+		expect(
+			result.fields.find((field) => field.name === "project_id"),
+		).toMatchObject({
+			in: "path",
+			required: true,
+			type: "string",
+		});
+		expect(
+			result.fields.find((field) => field.name === "branch.name"),
+		).toMatchObject({
+			in: "body",
+			type: "string",
+			description: "The branch name",
+		});
+		expect(
+			result.fields.find((field) => field.name === "endpoints"),
+		).toMatchObject({
+			in: "body",
+			required: false,
+			type: "array",
+			description: "Computes to create with the branch",
+			items: {
+				type: "object",
+				properties: [
+					{
+						name: "type",
+						type: "string",
+						required: true,
+						description: "",
+						enum: ["read_write", "read_only"],
+					},
+					{
+						name: "settings",
+						type: "object",
+						required: false,
+						description: "",
+					},
+				],
+			},
+		});
+	});
+
+	it("matches a concrete id against a path template", () => {
+		const result = describeOperation(
+			spec,
+			"/projects/foo-bar-123/branches",
+			"POST",
+		);
+		expect(result.path).toBe("/projects/{project_id}/branches");
+		expect(result.operationId).toBe("createProjectBranch");
+	});
+
+	it("errors when GET is missing and names the methods that exist", () => {
+		expect(() => describeOperation(spec, "/only-post", "GET")).toThrow(
+			"No GET /only-post in the spec. Available: POST. Pass -X POST.",
+		);
+	});
+
+	it("errors for an unknown path", () => {
+		expect(() => describeOperation(spec, "/nope", "GET")).toThrow(
+			'No route matches "/nope". Run `neon api --list` to see available routes.',
+		);
+	});
+
+	it("flattens oneOf bodies and injects the discriminator", () => {
+		const result = describeOperation(spec, "/email", "PATCH");
+		expect(result.bodyRequired).toBe(true);
+		expect(result.fields.map((field) => field.name)).toEqual([
+			"type",
+			"host",
+			"sender_email",
+		]);
+		expect(
+			result.fields.find((field) => field.name === "type"),
+		).toMatchObject({
+			in: "body",
+			required: true,
+			type: "string",
+			enum: ["standard", "shared"],
+		});
+		expect(
+			result.fields.find((field) => field.name === "host"),
+		).toMatchObject({
+			required: false,
+			type: "string",
+			description: "SMTP host",
+		});
+		expect(
+			result.fields.find((field) => field.name === "sender_email")
+				?.required,
+		).toBe(false);
+	});
+
+	it("describes a multipart JSON-shaped body when application/json is absent", () => {
+		const result = describeOperation(spec, "/deploy", "POST");
+		expect(result.contentType).toBe("multipart/form-data");
+		expect(result.fields.map((field) => field.name)).toEqual([
+			"zip",
+			"runtime",
+		]);
+		expect(
+			result.fields.find((field) => field.name === "runtime"),
+		).toMatchObject({
+			type: "string",
+			enum: ["nodejs24"],
+		});
+	});
+
+	it("prefers the template with more static segments", () => {
+		expect(describeOperation(spec, "/items/me", "GET").operationId).toBe(
+			"getMe",
+		);
+		expect(describeOperation(spec, "/items/other", "GET").operationId).toBe(
+			"getItem",
+		);
+	});
+
+	it("stops a circular $ref at an object leaf", () => {
+		const result = describeOperation(spec, "/cycle", "POST");
+		expect(result.fields.map((field) => field.name)).toEqual([
+			"name",
+			"child",
+		]);
+		expect(
+			result.fields.find((field) => field.name === "child"),
+		).toMatchObject({
+			in: "body",
+			type: "object",
+			required: false,
+		});
+	});
+});
+
+describe("describeOperation against the vendored Neon spec", () => {
+	const neonSpec = JSON.parse(
+		readFileSync(
+			join(
+				dirname(fileURLToPath(import.meta.url)),
+				"../../../sdk/spec/neon-openapi.json",
+			),
+			"utf8",
+		),
+	) as OpenApiSpec;
+
+	it("describes GET /projects query params including TimeoutParam", () => {
+		const result = describeOperation(neonSpec, "/projects", "GET");
+		const names = result.fields.map((field) => field.name);
+		expect(names).toEqual(
+			expect.arrayContaining([
+				"cursor",
+				"limit",
+				"search",
+				"org_id",
+				"timeout",
+			]),
+		);
+		expect(result.fields.every((field) => field.in === "query")).toBe(true);
+	});
+
+	it("describes POST /projects as a required body of dotted project fields", () => {
+		const result = describeOperation(neonSpec, "/projects", "POST");
+		expect(result.bodyRequired).toBe(true);
+		expect(result.operationId).toBe("createProject");
+		const names = result.fields.map((field) => field.name);
+		expect(names).toContain("project.name");
+		expect(names).toContain("project.region_id");
+		expect(names).not.toContain("project");
+		expect(
+			result.fields.find((field) => field.name === "project.provisioner")
+				?.description,
+		).toMatch(/provisioner/i);
+	});
+
+	it("describes POST .../branches array items for -F endpoints=", () => {
+		const result = describeOperation(
+			neonSpec,
+			"/projects/proj-1/branches",
+			"POST",
+		);
+		expect(result.path).toBe("/projects/{project_id}/branches");
+		const endpoints = result.fields.find(
+			(field) => field.name === "endpoints",
+		);
+		expect(endpoints?.type).toBe("array");
+		expect(
+			endpoints?.items?.properties?.some(
+				(p) => p.name === "type" && p.required,
+			),
+		).toBe(true);
+		expect(
+			result.fields.find((field) => field.name === "branch.name"),
+		).toMatchObject({ in: "body", type: "string" });
+	});
+
+	it("resolves query enum $refs", () => {
+		const result = describeOperation(
+			neonSpec,
+			"/projects/{project_id}/advisors",
+			"GET",
+		);
+		expect(
+			result.fields.find((field) => field.name === "category"),
+		).toMatchObject({
+			in: "query",
+			type: "string",
+			enum: ["SECURITY", "PERFORMANCE"],
+		});
+	});
+
+	it("flattens the email-provider oneOf body", () => {
+		const result = describeOperation(
+			neonSpec,
+			"/projects/p/branches/b/auth/email_provider",
+			"PATCH",
+		);
+		const names = result.fields.map((field) => field.name);
+		expect(names).toContain("type");
+		expect(names).toContain("host");
+		expect(names).toContain("sender_email");
+		expect(
+			result.fields.find((field) => field.name === "type"),
+		).toMatchObject({
+			in: "body",
+			required: true,
+			enum: ["standard", "shared"],
+		});
+		expect(
+			result.fields.find((field) => field.name === "project_id"),
+		).toMatchObject({ in: "path" });
+	});
+
+	it("keeps primitive array item enums", () => {
+		const webhooks = describeOperation(
+			neonSpec,
+			"/projects/p/branches/b/auth/webhooks",
+			"PUT",
+		);
+		expect(
+			webhooks.fields.find((field) => field.name === "enabled_events"),
+		).toMatchObject({
+			type: "array",
+			items: {
+				type: "string",
+				enum: expect.arrayContaining(["user.created", "send.otp"]),
+			},
+		});
+		const credentials = describeOperation(
+			neonSpec,
+			"/projects/p/branches/b/credentials",
+			"POST",
+		);
+		expect(
+			credentials.fields.find((field) => field.name === "scopes"),
+		).toMatchObject({
+			type: "array",
+			items: { type: "string" },
+		});
+		expect(
+			credentials.fields.find((field) => field.name === "scopes")?.items
+				?.enum,
+		).toEqual(expect.arrayContaining(["storage:read", "functions:invoke"]));
+	});
+});

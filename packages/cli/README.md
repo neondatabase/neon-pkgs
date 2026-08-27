@@ -1108,6 +1108,20 @@ When both are only environment variables the key wins, which keeps a CI pipeline
 
 `neon init` forwards `--profile` and `--config-dir` to the commands it runs. An explicit `--api-key` is passed to those children through `NEON_API_KEY`, not argv.
 
+## API passthrough (`api`)
+
+`neon api` sends an authenticated request to any Neon API route. `neon api --list` catalogs the routes. `neon api <path> --describe` prints the OpenAPI request shape for one operation so you can fill `-F` and `-Q` without guessing. Body field names are dotted to match `-F`.
+
+```bash
+neon api --list
+neon api /projects --describe
+neon api /projects -X POST --describe -o json
+neon api /projects/{project_id}/branches -X POST --describe
+neon api /projects/foo-bar-123/branches -X POST -F branch.name=dev
+```
+
+`--describe` does not send the selected API request. It uses the same CLI authentication as `--list`. `-X` defaults to GET; if that method is missing, the error names the methods that exist.
+
 ## API keys (`api-keys`)
 
 ```bash
@@ -1182,6 +1196,7 @@ Id   Name      Project         Created At            Last Used At          Last 
 | claim (`claimable`)                                                        | `create`, `status`, `accept`, `list`, `delete`                                                               | Manage claimable projects          |
 | profile                                                                    | `list`, `create`, `rotate-key`, `remove`                                                                     | Manage named sets of credentials   |
 | api-keys                                                                   | `list`, `create`, `revoke`                                                                                   | Manage API keys                    |
+| api                                                                        |                                                                                                              | Call any Neon API route            |
 | [projects](https://neon.com/docs/reference/cli-projects)                   | `list`, `create`, `update`, `delete`, `get`                                                                  | Manage projects                    |
 | [ip-allow](https://neon.com/docs/reference/cli-ip-allow)                   | `list`, `add`, `remove`, `reset`                                                                             | Manage IP Allow                    |
 | [me](https://neon.com/docs/reference/cli-me)                               |                                                                                                              | Show current user                  |
