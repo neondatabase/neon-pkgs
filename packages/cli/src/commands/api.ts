@@ -6,7 +6,12 @@ import type yargs from "yargs";
 
 import type { RequestParams } from "../api.js";
 import type { CommonProps } from "../types.js";
-import { DEFAULT_SPEC_URL, getEndpoints, loadSpec } from "../utils/openapi.js";
+import {
+	DEFAULT_SPEC_URL,
+	describeOperation,
+	getEndpoints,
+	loadSpec,
+} from "../utils/openapi.js";
 import { writer } from "../writer.js";
 
 const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
@@ -156,6 +161,7 @@ type ApiArgs = CommonProps & {
 	header?: (string | number)[];
 	include: boolean;
 	list: boolean;
+	describe: boolean;
 	refresh: boolean;
 	specUrl: string;
 };
@@ -184,6 +190,89 @@ async function listEndpoints(args: ApiArgs): Promise<void> {
 		fields: ["method", "path", "summary"],
 		title: `Neon API endpoints (${endpoints.length})`,
 		emptyMessage: "No endpoints found in the spec.",
+	});
+}
+
+function isListing(args: ApiArgs): boolean {
+	return args.list || args.path === "list" || args.path === "ls";
+}
+
+async function describeRoute(args: ApiArgs): Promise<void> {
+	const path = args.path;
+	if (!path) {
+		throw new Error(
+			"Missing API path. Usage: neon api <path> --describe " +
+				"(e.g. neon api /projects --describe). " +
+				"Run `neon api --list` to see available routes.",
+		);
+	}
+	if (!path.startsWith("/")) {
+		throw new Error(
+			`Invalid path "${path}". API paths must start with "/". ` +
+				"Run `neon api --list` to see available routes.",
+		);
+	}
+	const unused = [
+		...toStrings(args.field),
+		...toStrings(args.rawField),
+		...toStrings(args.query),
+		...toStrings(args.header),
+	];
+	if (unused.length > 0 || args.data !== undefined) {
+		throw new Error(
+			"--describe prints the field list; it does not send a request. " +
+				"Drop -F, -f, -d, -Q, and -H.",
+		);
+	}
+	const spec = await loadSpec({
+		configDir: args.configDir,
+		specUrl: args.specUrl,
+		refresh: args.refresh,
+	});
+	if (!spec) {
+		throw new Error(
+			`Could not load the Neon OpenAPI spec from ${args.specUrl}. ` +
+				"Check your network connection or pass --spec-url.",
+		);
+	}
+	const method = String(args.method ?? "GET").toUpperCase();
+	assertMethod(method);
+	const description = describeOperation(spec, path, method);
+	const endpoint = {
+		method: description.method,
+		path: description.path,
+		summary: description.summary,
+		operationId: description.operationId,
+		bodyRequired: description.bodyRequired,
+	};
+	const title = description.summary
+		? `${description.method} ${description.path} - ${description.summary}`
+		: `${description.method} ${description.path}`;
+	if (args.output === "json" || args.output === "yaml") {
+		writer(args)
+			.write(endpoint, {
+				fields: [
+					"method",
+					"path",
+					"summary",
+					"operationId",
+					"bodyRequired",
+				],
+				title: "Endpoint",
+			})
+			.end(description.fields, {
+				fields: ["in", "name", "required", "type", "description"],
+				title: "Parameters",
+			});
+		return;
+	}
+	writer(args).end(description.fields, {
+		fields: ["in", "name", "required", "type", "description"],
+		title,
+		emptyMessage: "No path, query, or body fields in the spec.",
+		renderColumns: {
+			required: (field) => (field.required ? "required" : "optional"),
+		},
 	});
 }
 
@@ -318,16 +407,23 @@ export const builder = (argv: yargs.Argv) =>
 				default: false,
 				describe: "List available API endpoints from the OpenAPI spec.",
 			},
+			describe: {
+				type: "boolean",
+				default: false,
+				describe:
+					"Print path, query, and body fields from the OpenAPI spec without calling the API. Body names are dotted for -F.",
+			},
 			refresh: {
 				type: "boolean",
 				default: false,
-				describe: "Refresh the cached OpenAPI spec (used with --list).",
+				describe:
+					"Refresh the cached OpenAPI spec (used with --list and --describe).",
 			},
 			"spec-url": {
 				type: "string",
 				default: process.env.NEON_API_SPEC_URL ?? DEFAULT_SPEC_URL,
 				hidden: true,
-				describe: "OpenAPI spec URL used by --list.",
+				describe: "OpenAPI spec URL used by --list and --describe.",
 			},
 		})
 		.example("$0 api /projects", "List your projects")
@@ -335,12 +431,27 @@ export const builder = (argv: yargs.Argv) =>
 			"$0 api /projects/{id}/branches -X POST -F branch.name=dev",
 			"Create a branch",
 		)
-		.example("$0 api --list", "List every available API route");
+		.example("$0 api --list", "List every available API route")
+		.example(
+			"$0 api /projects --describe",
+			"Show GET /projects query parameters",
+		)
+		.example(
+			"$0 api /projects -X POST --describe",
+			"Show the create-project body fields",
+		);
 
 export const handler = async (args: yargs.Arguments) => {
 	const apiArgs = args as unknown as ApiArgs;
-	if (apiArgs.list || apiArgs.path === "list" || apiArgs.path === "ls") {
+	if (isListing(apiArgs) && apiArgs.describe) {
+		throw new Error("Pass either --list or --describe, not both.");
+	}
+	if (isListing(apiArgs)) {
 		await listEndpoints(apiArgs);
+		return;
+	}
+	if (apiArgs.describe) {
+		await describeRoute(apiArgs);
 		return;
 	}
 	await runRequest(apiArgs);

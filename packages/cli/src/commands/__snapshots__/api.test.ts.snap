@@ -1,5 +1,64 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`api --describe > prints GET query fields as JSON without calling the API 1`] = `
+"{
+  "endpoint": {
+    "method": "GET",
+    "path": "/projects",
+    "summary": "List projects",
+    "operationId": "listProjects",
+    "bodyRequired": false
+  },
+  "parameters": [
+    {
+      "in": "query",
+      "name": "limit",
+      "required": false,
+      "type": "integer",
+      "description": "Page size"
+    }
+  ]
+}"
+`;
+
+exports[`api --describe > prints GET query fields as a table 1`] = `
+"GET /projects - List projects
+In     Name   Required  Type     Description
+query  limit  optional  integer  Page size
+"
+`;
+
+exports[`api --describe > prints POST body fields dotted for -F 1`] = `
+"{
+  "endpoint": {
+    "method": "POST",
+    "path": "/projects",
+    "summary": "Create project",
+    "operationId": "createProject",
+    "bodyRequired": true
+  },
+  "parameters": [
+    {
+      "in": "body",
+      "name": "project.name",
+      "required": false,
+      "type": "string",
+      "description": "The project name"
+    }
+  ]
+}"
+`;
+
+exports[`api --describe > rejects --describe without a path 1`] = `""`;
+
+exports[`api --describe > rejects --list and --describe together 1`] = `""`;
+
+exports[`api --describe > rejects an unknown path 1`] = `""`;
+
+exports[`api --describe > rejects api ls --describe 1`] = `""`;
+
+exports[`api --describe > rejects request flags with --describe 1`] = `""`;
+
 exports[`api command (e2e passthrough) > GET single resource by path 1`] = `
 "{
   "project": {
