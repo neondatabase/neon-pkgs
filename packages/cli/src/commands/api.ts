@@ -278,6 +278,9 @@ async function describeRoute(args: ApiArgs): Promise<void> {
 	let title = description.summary
 		? `${description.method} ${description.path} - ${description.summary}`
 		: `${description.method} ${description.path}`;
+	if (description.bodyRequired) {
+		title = `${title} (body required)`;
+	}
 	if (
 		description.contentType !== "" &&
 		description.contentType !== "application/json"

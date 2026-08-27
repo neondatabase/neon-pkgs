@@ -41,7 +41,7 @@ query  category  optional  string (SECURITY, PERFORMANCE)  Filter by category
 `;
 
 exports[`api --describe > prints POST array item fields in the table type column 1`] = `
-"POST /projects - Create project
+"POST /projects - Create project (body required)
 In    Name               Required  Type                                  Description
 body  project.name       optional  string                                The project name
 body  project.endpoints  optional  array (type (read_write, read_only))
