@@ -133,6 +133,18 @@ automation:
 neon branches create --project-id <project-id> --name production --protected
 ```
 
+Project and branch creation include connection credentials in their output by
+default for backward compatibility. When the output may be logged or passed to
+an agent, use `--no-secrets` to return only the created resource metadata:
+
+```bash
+neon projects create --name my-project --output json --no-secrets
+neon branches create --project-id <project-id> --name preview --output json --no-secrets
+```
+
+The flag omits the complete `connection_uris` block rather than redacting one
+field. Retrieve a connection string separately when it is actually needed.
+
 ### Enable logical replication
 
 Enable logical replication for every endpoint in an existing project:
