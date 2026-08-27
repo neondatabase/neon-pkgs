@@ -1,8 +1,9 @@
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
+import type { AgentType } from "../mcp/agents.js";
 import {
 	assertPluginsCanRun,
 	type ResolvePluginsPlanOptions,
@@ -36,6 +37,8 @@ function planOptions(
 		pickAgents: async () => {
 			throw new Error("agent prompt");
 		},
+		detectAgent: () => null,
+		detectInstalledAgents: async () => [],
 		...overrides,
 	};
 }
@@ -290,5 +293,65 @@ describe("resolvePluginsPlan", () => {
 				}),
 			),
 		).rejects.toThrow(/No coding agents detected in this project/);
+	});
+
+	test("-y uses the host CLI agent when the project has no folders", async () => {
+		const cwd = tmpDir();
+		const detectInstalledAgents = vi.fn(
+			async (): Promise<readonly AgentType[]> => ["codex"],
+		);
+		const plan = await resolvePluginsPlan(
+			planOptions(cwd, {
+				agents: [],
+				yes: true,
+				interactive: false,
+				detectAgent: () => "cursor",
+				detectInstalledAgents,
+			}),
+		);
+		expect(plan.agents).toEqual(["cursor"]);
+		expect(detectInstalledAgents).not.toHaveBeenCalled();
+	});
+
+	test("-y host VS Code at project scope asks for --global", async () => {
+		const cwd = tmpDir();
+		await expect(
+			resolvePluginsPlan(
+				planOptions(cwd, {
+					agents: [],
+					yes: true,
+					interactive: false,
+					detectAgent: () => "vscode",
+					detectInstalledAgents: async () => ["cursor"],
+				}),
+			),
+		).rejects.toThrow(/plugins are user-level. Pass --global/);
+	});
+
+	test("-y host without a plugins mapping falls through to installed apps", async () => {
+		const cwd = tmpDir();
+		const plan = await resolvePluginsPlan(
+			planOptions(cwd, {
+				agents: [],
+				yes: true,
+				interactive: false,
+				detectAgent: () => "cline",
+				detectInstalledAgents: async () => ["cursor"],
+			}),
+		);
+		expect(plan.agents).toEqual(["cursor"]);
+	});
+
+	test("-y uses installed apps when there is no project folder or host", async () => {
+		const cwd = tmpDir();
+		const plan = await resolvePluginsPlan(
+			planOptions(cwd, {
+				agents: [],
+				yes: true,
+				interactive: false,
+				detectInstalledAgents: async () => ["codex"],
+			}),
+		);
+		expect(plan.agents).toEqual(["codex"]);
 	});
 });

@@ -349,8 +349,11 @@ describe("bootstrap", () => {
 	test("help omits --agent", async () => {
 		const { code, stderr } = await runBootstrap(server, ["--help"]);
 		expect(code, stderr).toBe(0);
-		expect(stderr).toContain("--list-templates");
-		expect(stderr).toContain("--agent-setup");
+		const flat = stderr.replace(/\s+/g, " ");
+		expect(flat).toContain("--list-templates");
+		expect(flat).toContain("--agent-setup");
+		expect(flat).toContain("when a coding agent is detected");
+		expect(flat).toContain("skipped if none");
 		expect(stderr).not.toMatch(/(?<![-\w])--agent(?![-\w])/);
 	});
 

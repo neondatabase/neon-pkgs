@@ -35,7 +35,7 @@ afterEach(() => {
 	}
 });
 
-function scratch(): {
+function scratch(opts: { projectCursor?: boolean } = {}): {
 	home: string;
 	cwd: string;
 	bin: string;
@@ -80,7 +80,9 @@ if (process.env.SKILLS_CHILD_EXIT) {
 `,
 	);
 	chmodSync(join(bin, "npx"), 0o755);
-	mkdirSync(join(cwd, ".cursor"));
+	if (opts.projectCursor !== false) {
+		mkdirSync(join(cwd, ".cursor"));
+	}
 	return { home, cwd, bin, argvFile, envFile };
 }
 
@@ -152,6 +154,22 @@ describe("neon skills", () => {
 			hasDnt: false,
 			hasNeonKey: false,
 		});
+	});
+
+	test("installs into the host CLI agent when the project has no folders", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin, argvFile } = scratch({
+			projectCursor: false,
+		});
+		const { stdout } = await testCliCommand(
+			["skills", "-y"],
+			runOptions(home, cwd, bin, { CLAUDECODE: "1" }),
+		);
+		expect(JSON.parse(stdout)[0].agents).toBe("claude-code");
+		expect(JSON.parse(readFileSync(argvFile, "utf8"))[0]).toEqual(
+			expect.arrayContaining(["--agent", "claude-code"]),
+		);
 	});
 
 	test("does not spawn without -y", async ({ testCliCommand }) => {

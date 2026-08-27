@@ -17,11 +17,12 @@ export const skillsInstallableAgents = (): AgentType[] =>
 export const detectSkillsAgents = async (options: {
 	scope: SkillsInstallScope;
 	cwd: string;
+	detectInstalledAgents?: () => Promise<readonly AgentType[]>;
 }): Promise<AgentType[]> => {
 	const detected =
 		options.scope === "project"
 			? detectProjectAgents(options.cwd)
-			: await detectInstalledAgents();
+			: await (options.detectInstalledAgents ?? detectInstalledAgents)();
 	return uniqueAgentIds(detected).filter((id) => supportsSkills(id));
 };
 

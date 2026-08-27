@@ -1,6 +1,19 @@
 import { isAbsolute, join, relative, resolve } from "node:path";
+import type { AgentType } from "../mcp/agents.js";
+import { mcpInstallableAgents } from "../mcp/targets.js";
+import { pluginsInstallableAgents } from "../plugins/targets.js";
+import { supportsSkills, uniqueAgentIds } from "./agents.js";
 
 export type InitAgentSetup = "plugin" | "skills-mcp" | "skip";
+
+export type YesAgentTooling =
+	| { setup: "plugin"; agents: [AgentType, ...AgentType[]] }
+	| {
+			setup: "skills-mcp";
+			skillsAgents: readonly AgentType[];
+			mcpAgents: readonly AgentType[];
+	  }
+	| { setup: "skip" };
 
 export type InitStep = readonly string[];
 
@@ -41,6 +54,101 @@ export const planAgentSteps = (input: {
 	return [];
 };
 
+const agentFlags = (ids: readonly AgentType[]): string[] =>
+	ids.flatMap((id) => ["--agent", id]);
+
+export const resolveYesAgentList = (input: {
+	project: readonly AgentType[];
+	host: AgentType | null;
+	installed: readonly AgentType[];
+}): AgentType[] => {
+	if (input.project.length > 0) {
+		return uniqueAgentIds(input.project);
+	}
+	if (input.host !== null) {
+		return [input.host];
+	}
+	return uniqueAgentIds(input.installed);
+};
+
+export async function collectYesAgents(sources: {
+	project: () => readonly AgentType[] | Promise<readonly AgentType[]>;
+	detectAgent: () => AgentType | null;
+	detectInstalled: () => Promise<readonly AgentType[]>;
+	acceptHost?: (id: AgentType) => boolean;
+}): Promise<AgentType[]> {
+	const project = await sources.project();
+	if (project.length > 0) {
+		return resolveYesAgentList({
+			project,
+			host: null,
+			installed: [],
+		});
+	}
+	const rawHost = sources.detectAgent();
+	const accept = sources.acceptHost ?? (() => true);
+	const host = rawHost !== null && accept(rawHost) ? rawHost : null;
+	if (host !== null) {
+		return resolveYesAgentList({
+			project,
+			host,
+			installed: [],
+		});
+	}
+	const installed = await sources.detectInstalled();
+	return resolveYesAgentList({
+		project,
+		host: null,
+		installed,
+	});
+}
+
+export const chooseYesAgentTooling = (
+	agents: readonly AgentType[],
+): YesAgentTooling => {
+	const projectPlugin = new Set(pluginsInstallableAgents("project"));
+	const pluginAgents = agents.filter((id) => projectPlugin.has(id));
+	const [pluginFirst, ...pluginRest] = pluginAgents;
+	if (pluginFirst !== undefined) {
+		return { setup: "plugin", agents: [pluginFirst, ...pluginRest] };
+	}
+
+	const globalMcp = new Set(mcpInstallableAgents("global"));
+	const skillsAgents = agents.filter((id) => supportsSkills(id));
+	const mcpAgents = agents.filter((id) => globalMcp.has(id));
+	if (skillsAgents.length === 0 && mcpAgents.length === 0) {
+		return { setup: "skip" };
+	}
+	return { setup: "skills-mcp", skillsAgents, mcpAgents };
+};
+
+export const planYesAgentSteps = (tooling: YesAgentTooling): InitStep[] => {
+	switch (tooling.setup) {
+		case "skip":
+			return [];
+		case "plugin":
+			return [["plugins", "-y", ...agentFlags(tooling.agents)]];
+		case "skills-mcp": {
+			const steps: InitStep[] = [];
+			if (tooling.skillsAgents.length > 0) {
+				steps.push([
+					"skills",
+					"-y",
+					...agentFlags(tooling.skillsAgents),
+				]);
+			}
+			if (tooling.mcpAgents.length > 0) {
+				steps.push(["mcp", "-y", ...agentFlags(tooling.mcpAgents)]);
+			}
+			return steps;
+		}
+		default: {
+			const _exhaustive: never = tooling;
+			return _exhaustive;
+		}
+	}
+};
+
 export const planExistingInit = (input: {
 	linked: boolean;
 	yes: boolean;
@@ -59,14 +167,9 @@ export const planExistingInit = (input: {
 };
 
 export const resolveInitAgentSetup = async (input: {
-	yes: boolean;
 	interactive: boolean;
-	hasProjectPlugins: boolean;
 	pick: () => Promise<InitAgentSetup>;
 }): Promise<InitAgentSetup> => {
-	if (input.yes) {
-		return input.hasProjectPlugins ? "plugin" : "skills-mcp";
-	}
 	if (input.interactive) {
 		return input.pick();
 	}

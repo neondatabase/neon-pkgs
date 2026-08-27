@@ -1,8 +1,9 @@
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
+import type { AgentType } from "../mcp/agents.js";
 import {
 	AGENT_SKILLS_SOURCE,
 	defaultSkillEntries,
@@ -45,6 +46,8 @@ function planOptions(
 		pickAgents: async () => {
 			throw new Error("agent prompt");
 		},
+		detectAgent: () => null,
+		detectInstalledAgents: async () => [],
 		...overrides,
 	};
 }
@@ -315,5 +318,57 @@ describe("resolveSkillsPlan", () => {
 				}),
 			),
 		).rejects.toThrow(/No coding agents detected in this project/);
+	});
+
+	test("-y uses the host CLI agent when the project has no folders", async () => {
+		const cwd = tmpDir();
+		const detectInstalledAgents = vi.fn(
+			async (): Promise<readonly AgentType[]> => ["codex"],
+		);
+		const plan = await resolveSkillsPlan(
+			planOptions(cwd, {
+				agents: [],
+				yes: true,
+				interactive: false,
+				detectAgent: () => "cursor",
+				detectInstalledAgents,
+			}),
+		);
+		expect(plan.agents).toEqual(["cursor"]);
+		expect(detectInstalledAgents).not.toHaveBeenCalled();
+	});
+
+	test("-y uses installed apps when there is no project folder or host", async () => {
+		const cwd = tmpDir();
+		const plan = await resolveSkillsPlan(
+			planOptions(cwd, {
+				agents: [],
+				yes: true,
+				interactive: false,
+				detectInstalledAgents: async () => ["codex"],
+			}),
+		);
+		expect(plan.agents).toEqual(["codex"]);
+	});
+
+	test("-y does not ask host or installed when the project has folders", async () => {
+		const cwd = tmpDir();
+		mkdirSync(join(cwd, ".cursor"));
+		const detectAgent = vi.fn((): AgentType | null => "claude-code");
+		const detectInstalledAgents = vi.fn(
+			async (): Promise<readonly AgentType[]> => ["codex"],
+		);
+		const plan = await resolveSkillsPlan(
+			planOptions(cwd, {
+				agents: [],
+				yes: true,
+				interactive: false,
+				detectAgent,
+				detectInstalledAgents,
+			}),
+		);
+		expect(plan.agents).toEqual(["cursor"]);
+		expect(detectAgent).not.toHaveBeenCalled();
+		expect(detectInstalledAgents).not.toHaveBeenCalled();
 	});
 });

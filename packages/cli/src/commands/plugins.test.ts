@@ -25,7 +25,7 @@ afterEach(() => {
 	}
 });
 
-function scratch(): {
+function scratch(opts: { projectCursor?: boolean } = {}): {
 	home: string;
 	cwd: string;
 	bin: string;
@@ -78,7 +78,9 @@ if (process.env.PLUGINS_CHILD_EXIT) {
 `,
 	);
 	chmodSync(join(bin, "npx"), 0o755);
-	mkdirSync(join(cwd, ".cursor"));
+	if (opts.projectCursor !== false) {
+		mkdirSync(join(cwd, ".cursor"));
+	}
 	return { home, cwd, bin, argvFile, envFile };
 }
 
@@ -143,6 +145,22 @@ describe("neon plugins", () => {
 			hasDnt: false,
 			hasNeonKey: false,
 		});
+	});
+
+	test("installs into the host CLI agent when the project has no folders", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin, argvFile } = scratch({
+			projectCursor: false,
+		});
+		const { stdout } = await testCliCommand(
+			["plugins", "-y"],
+			runOptions(home, cwd, bin, { CLAUDECODE: "1" }),
+		);
+		expect(JSON.parse(stdout)[0].agent).toBe("claude-code");
+		expect(JSON.parse(readFileSync(argvFile, "utf8"))[0]).toEqual(
+			expect.arrayContaining(["-t", "claude-code"]),
+		);
 	});
 
 	test("installs without -y when --agent is set", async ({

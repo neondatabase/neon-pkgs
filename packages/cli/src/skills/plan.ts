@@ -1,4 +1,9 @@
-import { tryResolveAddMcpAgentId } from "../init/agents.js";
+import {
+	detectInstalledAgents,
+	tryResolveAddMcpAgentId,
+} from "../init/agents.js";
+import { detectAgent } from "../init/detect_host.js";
+import { collectYesAgents } from "../init/plan.js";
 import type { AgentType } from "../mcp/agents.js";
 import {
 	agentChoicesFrom,
@@ -37,6 +42,8 @@ export type ResolveSkillsPlanOptions = {
 	interactive: boolean;
 	pickAgents?: (options: PickAgentsOptions) => Promise<AgentType[]>;
 	pickSkills?: () => Promise<SkillEntry[]>;
+	detectAgent?: () => AgentType | null;
+	detectInstalledAgents?: () => Promise<readonly AgentType[]>;
 };
 
 export const assertSkillsCanRun = (options: {
@@ -74,10 +81,34 @@ export async function resolveSkillsPlan(
 	const prompt = options.interactive && !options.yes;
 	const scope: SkillsInstallScope = options.global ? "global" : "project";
 	const available = skillsInstallableAgents();
-	const detected = await detectSkillsAgents({
+	const availableSet = new Set(available);
+	const scoped = await detectSkillsAgents({
 		scope,
 		cwd: options.cwd,
+		...(options.detectInstalledAgents
+			? { detectInstalledAgents: options.detectInstalledAgents }
+			: {}),
 	});
+	const detected =
+		options.yes && options.agents.length === 0
+			? await collectYesAgents({
+					project: () => scoped,
+					detectAgent: options.detectAgent ?? detectAgent,
+					detectInstalled:
+						scope === "project"
+							? async () => {
+									const ids = await (
+										options.detectInstalledAgents ??
+										detectInstalledAgents
+									)();
+									return ids.filter((id) =>
+										availableSet.has(id),
+									);
+								}
+							: async () => [],
+					acceptHost: (id) => availableSet.has(id),
+				})
+			: scoped;
 	const selected = await resolveAgentSelection({
 		specified: options.agents,
 		choices: agentChoicesFrom(available, detected),

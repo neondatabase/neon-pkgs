@@ -12,6 +12,7 @@ import {
 } from "../init/plan.js";
 import { runAgentTooling, runInitSteps } from "../init/tooling.js";
 import { log } from "../log.js";
+import type { AgentType } from "../mcp/agents.js";
 import type { CommonProps } from "../types.js";
 import { getCliName } from "../utils/cli_name.js";
 import { helpEpilogue } from "../utils/help_text.js";
@@ -29,7 +30,11 @@ export type InitProps = CommonProps & {
 	cwd?: string;
 	run?: InitRun;
 	pickAgentSetup?: () => Promise<InitAgentSetup>;
-	hasProjectPlugins?: (cwd: string) => Promise<boolean>;
+	detectProjectAgents?: (
+		cwd: string,
+	) => readonly AgentType[] | Promise<readonly AgentType[]>;
+	detectAgent?: () => AgentType | null;
+	detectInstalledAgents?: () => Promise<readonly AgentType[]>;
 };
 
 export const command = "init";
@@ -50,7 +55,7 @@ export const builder = (yargs: yargs.Argv) =>
 			type: "boolean",
 			default: false,
 			describe:
-				"Empty dir: bootstrap --default. Otherwise plugin when a project plugin agent is detected, else skills and MCP, then link --yes and config init --services none. link --yes still asks for a project unless one is already linked",
+				"Empty dir: bootstrap --default. Otherwise plugin when a project plugin agent, the host IDE, or an installed app is detected; else skills and MCP; skip agent setup if none. Then link --yes and config init --services none. link --yes still asks for a project unless one is already linked",
 		})
 		.option("agent", {
 			hidden: true,
@@ -74,7 +79,7 @@ export const builder = (yargs: yargs.Argv) =>
 		.epilogue(
 			helpEpilogue(
 				"Interactive agent setup: plugin (recommended), skills and MCP separately, or skip agent setup. Never both plugin and skills+MCP.",
-				"-y installs the plugin when Cursor, Claude Code, or Codex is detected in the project. Otherwise skills and MCP. Then link unless already linked. link --yes may still ask for a project.",
+				"-y installs the plugin when Cursor, Claude Code, or Codex is detected in the project, from the host IDE, or as an installed app. Otherwise skills and MCP. If none are detected, agent setup is skipped. Then link unless already linked. link --yes may still ask for a project.",
 			),
 		)
 		.check((argv) => {
@@ -140,8 +145,12 @@ export const handler = async (props: InitProps) => {
 		...(props.pickAgentSetup
 			? { pickAgentSetup: props.pickAgentSetup }
 			: {}),
-		...(props.hasProjectPlugins
-			? { hasProjectPlugins: props.hasProjectPlugins }
+		...(props.detectProjectAgents
+			? { detectProjectAgents: props.detectProjectAgents }
+			: {}),
+		...(props.detectAgent ? { detectAgent: props.detectAgent } : {}),
+		...(props.detectInstalledAgents
+			? { detectInstalledAgents: props.detectInstalledAgents }
 			: {}),
 	});
 	await runInitSteps(

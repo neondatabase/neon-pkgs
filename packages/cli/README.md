@@ -683,7 +683,7 @@ When a package cannot be bundled — a native addon with no esbuild loader, or a
 
 `neon bootstrap` copies a Neon starter template into a new (or current) directory — conceptually like `degit`, but it only pulls from a small set of templates we maintain in the public [`neondatabase/examples`](https://github.com/neondatabase/examples) repo. The template copy needs no Neon login: it downloads files from GitHub.
 
-After scaffolding, an interactive terminal offers agent tooling (the Neon plugin, or skills and MCP separately — never both) and then `neon link`. `--default` / `-y` skips the template, install, git, and agent pickers, then runs `link --yes`. `link --yes` still asks for a project unless one is already linked. `--no-agent-setup` and `--no-link` skip those. Non-interactive without `--default` prints next steps and does not install, set up agents, or link.
+After scaffolding, an interactive terminal offers agent tooling (the Neon plugin, or skills and MCP separately — never both) and then `neon link`. `--default` / `-y` skips the template, install, git, and agent pickers, then installs agent tooling for detected agents (project folders, then the host IDE, then installed apps) or skips that step if none are detected, then runs `link --yes`. `link --yes` still asks for a project unless one is already linked. `--no-agent-setup` and `--no-link` skip those. Non-interactive without `--default` prints next steps and does not install, set up agents, or link.
 
 Pass a target directory (or `.` for the current one). In an interactive terminal you pick the template from a list; in CI / non-interactive contexts pass `--template <id>`.
 
@@ -718,7 +718,7 @@ $ neon init
 $ neon init -y
 ```
 
-`-y` skips the template picker and the agent-setup offer. Empty dir: `bootstrap --default`. Existing app: plugin when a project-level plugin agent is detected (Cursor, Claude Code, Codex); otherwise skills and MCP. VS Code, GitHub Copilot CLI, and Grok only take the plugin user-level (`neon plugins --global`), so `-y` uses skills and MCP for those.
+`-y` skips the template picker and the agent-setup offer. Empty dir: `bootstrap --default`. Existing app: plugin when Cursor, Claude Code, or Codex is detected in the project, from the host IDE, or as an installed app; otherwise skills and MCP for other detected agents. If none are detected, agent setup is skipped and init continues. VS Code, GitHub Copilot CLI, and Grok only take the plugin user-level (`neon plugins --global`), so `-y` uses skills and MCP for those.
 
 `-y` forwards `-y` to `plugins` or `skills`/`mcp`, `--default` to `bootstrap`, `--yes` to `link`, and `--services none` to `config init`. `link --yes` only skips the "already linked" confirmation; it still asks for a project unless one is already linked.
 
@@ -771,7 +771,7 @@ The default mints an account-wide API key (or reuses the Bearer already configur
 # Interactive: this directory, then agents, then skills, then confirm.
 $ neon skills
 
-# Skip prompts. This directory, every detected agent, the default skills.
+# Skip prompts. This directory, detected agents (project folders, else the host CLI agent, else installed apps), the default skills.
 $ neon skills -y
 
 $ neon skills -s neon -s neon-ai-gateway --agent cursor
@@ -789,7 +789,7 @@ $ neon skills update --global -y
 
 On a TTY the command asks which agents and which skills, then shows a summary to confirm. Detected agents start selected from project-folder markers such as `.cursor`. Default skills start selected. `neon-postgres-agent-platforms` is offered and starts unselected.
 
-`-y` skips those questions and installs the default skills. `--skill` / `-s` names specific skills and skips the skill picker. `--agent` and `--global` still apply. Without a TTY, pass `-y` or `--skill`. `--agent` alone is not enough.
+`-y` skips those questions and installs the default skills into detected agents: project-folder markers such as `.cursor`, else the agent driving the CLI, else globally installed apps. `--skill` / `-s` names specific skills and skips the skill picker. `--agent` and `--global` still apply. Without a TTY, pass `-y` or `--skill`. `--agent` alone is not enough. If `-y` finds no agent, it exits with `Pass --agent <name>`.
 
 `--skill` names by source repo: `neondatabase/agent-skills` (`claimable-postgres`, `neon`, `neon-ai-gateway`, `neon-functions`, `neon-object-storage`, `neon-postgres`, `neon-postgres-branches`, `neon-postgres-egress-optimizer`); `neondatabase/neon-for-agent-platforms` (`neon-postgres-agent-platforms`).
 
@@ -803,7 +803,7 @@ On a TTY the command asks which agents and which skills, then shows a summary to
 # Interactive: agents, then confirm.
 $ neon plugins
 
-# Skip prompts. Every detected agent.
+# Skip prompts. Detected agents (project folders, else the host CLI agent, else installed apps).
 $ neon plugins -y
 
 $ neon plugins --agent cursor --agent claude-code
@@ -815,7 +815,7 @@ $ neon plugins --global --agent vscode
 
 On a TTY the command asks which agents, then shows a summary to confirm. Detected agents start selected from project-folder markers such as `.cursor`. There is one plugin (`neon-postgres`); there is no plugin picker and no `update` subcommand.
 
-`-y` skips those questions and installs into every detected agent. `--agent` names specific agents and skips the agent picker. Without a TTY, pass `-y` or `--agent`. `--agent` alone is enough because the plugin is fixed.
+`-y` skips those questions and installs into detected agents: project-folder markers such as `.cursor`, else the agent driving the CLI, else globally installed apps. `--agent` names specific agents and skips the agent picker. Without a TTY, pass `-y` or `--agent`. `--agent` alone is enough because the plugin is fixed. If `-y` finds no agent, it exits with `Pass --agent <name>`.
 
 Default scope is `project`. `--global` is `user`. On macOS and Linux, Cursor and Claude Code store the plugin cache under `~/.claude/plugins`; on Windows, Cursor installs into Cursor extensions. `project` vs `user` is the scope field the plugins CLI records, not a directory in the repo. VS Code, GitHub Copilot CLI, and Grok Build only install user-level: they are skipped at the default scope with a warning, and `--agent vscode` without `--global` fails if nothing else is selected.
 

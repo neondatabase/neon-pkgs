@@ -1,35 +1,43 @@
+import { detectProjectAgents } from "add-mcp";
 import { log } from "../log.js";
-import { detectInstallablePluginsAgents } from "../plugins/targets.js";
+import type { AgentType } from "../mcp/agents.js";
 import { canPickAgentsInteractively } from "../utils/agent_picker.js";
 import { getCliName } from "../utils/cli_name.js";
+import { detectInstalledAgents } from "./agents.js";
 import { AUTH_CHILD, type InitRun } from "./child.js";
+import { detectAgent } from "./detect_host.js";
 import {
 	type ChildForward,
 	childArgv,
+	chooseYesAgentTooling,
+	collectYesAgents,
 	type InitAgentSetup,
 	type InitStep,
 	planAgentSteps,
+	planYesAgentSteps,
 	resolveInitAgentSetup,
 } from "./plan.js";
 import { pickAgentSetupInteractively } from "./wizard.js";
 
-export type AgentToolingOptions = {
+export type AgentDetectors = {
+	detectProjectAgents?: (
+		cwd: string,
+	) => readonly AgentType[] | Promise<readonly AgentType[]>;
+	detectAgent?: () => AgentType | null;
+	detectInstalledAgents?: () => Promise<readonly AgentType[]>;
+};
+
+export type AgentToolingOptions = AgentDetectors & {
 	cwd: string;
 	yes: boolean;
 	run: InitRun;
 	forward: ChildForward;
 	authEnv?: NodeJS.ProcessEnv;
 	pickAgentSetup?: () => Promise<InitAgentSetup>;
-	hasProjectPlugins?: (cwd: string) => Promise<boolean>;
 };
 
-const defaultHasProjectPlugins = async (cwd: string): Promise<boolean> => {
-	const detected = await detectInstallablePluginsAgents({
-		scope: "project",
-		cwd,
-	});
-	return detected.length > 0;
-};
+const defaultProjectAgents = (cwd: string): readonly AgentType[] =>
+	detectProjectAgents(cwd);
 
 export const runInitSteps = async (
 	steps: readonly InitStep[],
@@ -57,22 +65,34 @@ export const runInitSteps = async (
 	}
 };
 
+const yesAgentsFromOptions = async (
+	options: AgentToolingOptions,
+): Promise<readonly AgentType[]> =>
+	collectYesAgents({
+		project: () =>
+			(options.detectProjectAgents ?? defaultProjectAgents)(options.cwd),
+		detectAgent: options.detectAgent ?? detectAgent,
+		detectInstalled: options.detectInstalledAgents ?? detectInstalledAgents,
+	});
+
 export const runAgentTooling = async (
 	options: AgentToolingOptions,
 ): Promise<void> => {
 	const yes = options.yes;
-	const hasProjectPlugins = yes
-		? await (options.hasProjectPlugins ?? defaultHasProjectPlugins)(
-				options.cwd,
-			)
-		: false;
+	if (yes) {
+		const agents = await yesAgentsFromOptions(options);
+		const tooling = chooseYesAgentTooling(agents);
+		if (tooling.setup === "skip") {
+			log.info("No coding agents detected; skipped agent setup.");
+			return;
+		}
+		await runInitSteps(planYesAgentSteps(tooling), options);
+		return;
+	}
 	const interactive =
-		!yes &&
-		(options.pickAgentSetup !== undefined || canPickAgentsInteractively());
+		options.pickAgentSetup !== undefined || canPickAgentsInteractively();
 	const agentSetup = await resolveInitAgentSetup({
-		yes,
 		interactive,
-		hasProjectPlugins,
 		pick: options.pickAgentSetup ?? pickAgentSetupInteractively,
 	});
 	await runInitSteps(planAgentSteps({ yes, agentSetup }), options);

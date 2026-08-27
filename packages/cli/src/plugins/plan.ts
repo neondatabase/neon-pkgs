@@ -1,7 +1,10 @@
 import {
+	detectInstalledAgents,
 	getAgentDisplayName,
 	tryResolveAddMcpAgentId,
 } from "../init/agents.js";
+import { detectAgent } from "../init/detect_host.js";
+import { collectYesAgents } from "../init/plan.js";
 import type { AgentType } from "../mcp/agents.js";
 import {
 	agentChoicesFrom,
@@ -34,6 +37,8 @@ export type ResolvePluginsPlanOptions = {
 	cwd: string;
 	interactive: boolean;
 	pickAgents?: (options: PickAgentsOptions) => Promise<AgentType[]>;
+	detectAgent?: () => AgentType | null;
+	detectInstalledAgents?: () => Promise<readonly AgentType[]>;
 };
 
 export const assertPluginsCanRun = (options: {
@@ -60,10 +65,36 @@ export async function resolvePluginsPlan(
 	const prompt = options.interactive && !options.yes;
 	const scope: PluginsInstallScope = options.global ? "global" : "project";
 	const available = pluginsInstallableAgents(scope);
-	const detected = await detectPluginsAgents({
+	const availableSet = new Set(available);
+	const scoped = await detectPluginsAgents({
 		scope,
 		cwd: options.cwd,
+		...(options.detectInstalledAgents
+			? { detectInstalledAgents: options.detectInstalledAgents }
+			: {}),
 	});
+	const detected =
+		options.yes && options.agents.length === 0
+			? await collectYesAgents({
+					project: () => scoped,
+					detectAgent: options.detectAgent ?? detectAgent,
+					detectInstalled:
+						scope === "project"
+							? async () => {
+									const ids = await (
+										options.detectInstalledAgents ??
+										detectInstalledAgents
+									)();
+									return ids.filter((id) =>
+										availableSet.has(id),
+									);
+								}
+							: async () => [],
+					acceptHost: (id) =>
+						availableSet.has(id) ||
+						getPluginsTargetName(id) !== undefined,
+				})
+			: scoped;
 	const selected = await resolveAgentSelection({
 		specified: options.agents,
 		choices: agentChoicesFrom(available, detected),

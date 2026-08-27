@@ -88,7 +88,10 @@ export const builder = (argv: yargs.Argv) =>
 			},
 		})
 		.example("$0 plugins", "Interactive: agents, then confirm")
-		.example("$0 plugins -y", "Detected agents, skip prompts")
+		.example(
+			"$0 plugins -y",
+			"Detected agents (project folders, else the host CLI agent, else installed apps), skip prompts",
+		)
 		.example(
 			"$0 plugins --agent cursor --agent claude-code",
 			"Install into specific agents",

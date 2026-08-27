@@ -176,7 +176,7 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.example(
 			"$0 skills -y",
-			"This directory, detected agents, the default skills",
+			"This directory, detected agents (project folders, else the host CLI agent, else installed apps), the default skills",
 		)
 		.example(
 			"$0 skills -s neon -s neon-ai-gateway --agent cursor",

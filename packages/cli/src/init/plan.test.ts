@@ -1,13 +1,19 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
+
+import type { AgentType } from "../mcp/agents.js";
 
 import {
 	bootstrapInitStep,
 	childArgv,
+	chooseYesAgentTooling,
+	collectYesAgents,
 	directoryIsEmpty,
 	planAgentSteps,
 	planExistingInit,
+	planYesAgentSteps,
 	projectContextFile,
 	resolveInitAgentSetup,
+	resolveYesAgentList,
 } from "./plan.js";
 
 describe("directoryIsEmpty", () => {
@@ -187,61 +193,181 @@ describe("planExistingInit", () => {
 	});
 });
 
+describe("resolveYesAgentList", () => {
+	test("project folders win over host and installed", () => {
+		expect(
+			resolveYesAgentList({
+				project: ["vscode"],
+				host: "cursor",
+				installed: ["codex"],
+			}),
+		).toEqual(["vscode"]);
+	});
+
+	test("host wins over installed when the project is empty", () => {
+		expect(
+			resolveYesAgentList({
+				project: [],
+				host: "cursor",
+				installed: ["codex", "claude-code"],
+			}),
+		).toEqual(["cursor"]);
+	});
+
+	test("installed is last", () => {
+		expect(
+			resolveYesAgentList({
+				project: [],
+				host: null,
+				installed: ["codex", "vscode", "codex"],
+			}),
+		).toEqual(["codex", "vscode"]);
+	});
+
+	test("all empty is empty", () => {
+		expect(
+			resolveYesAgentList({
+				project: [],
+				host: null,
+				installed: [],
+			}),
+		).toEqual([]);
+	});
+});
+
+describe("collectYesAgents", () => {
+	test("does not ask host or installed when the project is nonempty", async () => {
+		const detectAgent = vi.fn((): AgentType | null => "cursor");
+		const detectInstalled = vi.fn(
+			async (): Promise<readonly AgentType[]> => ["codex"],
+		);
+		await expect(
+			collectYesAgents({
+				project: () => ["vscode"],
+				detectAgent,
+				detectInstalled,
+			}),
+		).resolves.toEqual(["vscode"]);
+		expect(detectAgent).not.toHaveBeenCalled();
+		expect(detectInstalled).not.toHaveBeenCalled();
+	});
+
+	test("host wins over installed", async () => {
+		const detectInstalled = vi.fn(
+			async (): Promise<readonly AgentType[]> => ["codex"],
+		);
+		await expect(
+			collectYesAgents({
+				project: () => [],
+				detectAgent: () => "cursor",
+				detectInstalled,
+			}),
+		).resolves.toEqual(["cursor"]);
+		expect(detectInstalled).not.toHaveBeenCalled();
+	});
+
+	test("rejected host falls through to installed", async () => {
+		await expect(
+			collectYesAgents({
+				project: () => [],
+				detectAgent: () => "cline",
+				detectInstalled: async () => ["cursor"],
+				acceptHost: (id) => id !== "cline",
+			}),
+		).resolves.toEqual(["cursor"]);
+	});
+});
+
+describe("chooseYesAgentTooling", () => {
+	test("skip when nothing is detected", () => {
+		expect(chooseYesAgentTooling([])).toEqual({ setup: "skip" });
+	});
+
+	test("plugin keeps project-plugin agents and drops vscode", () => {
+		expect(chooseYesAgentTooling(["cursor", "vscode", "codex"])).toEqual({
+			setup: "plugin",
+			agents: ["cursor", "codex"],
+		});
+	});
+
+	test("vscode-only is skills and MCP", () => {
+		expect(chooseYesAgentTooling(["vscode"])).toEqual({
+			setup: "skills-mcp",
+			skillsAgents: ["vscode"],
+			mcpAgents: ["vscode"],
+		});
+	});
+
+	test("mcporter-only is MCP only", () => {
+		expect(chooseYesAgentTooling(["mcporter"])).toEqual({
+			setup: "skills-mcp",
+			skillsAgents: [],
+			mcpAgents: ["mcporter"],
+		});
+	});
+
+	test("vscode plus mcporter splits skills and MCP", () => {
+		expect(chooseYesAgentTooling(["vscode", "mcporter"])).toEqual({
+			setup: "skills-mcp",
+			skillsAgents: ["vscode"],
+			mcpAgents: ["vscode", "mcporter"],
+		});
+	});
+});
+
+describe("planYesAgentSteps", () => {
+	test("plugin passes --agent", () => {
+		expect(
+			planYesAgentSteps({
+				setup: "plugin",
+				agents: ["cursor", "codex"],
+			}),
+		).toEqual([["plugins", "-y", "--agent", "cursor", "--agent", "codex"]]);
+	});
+
+	test("skills-mcp omits an empty step", () => {
+		expect(
+			planYesAgentSteps({
+				setup: "skills-mcp",
+				skillsAgents: [],
+				mcpAgents: ["mcporter"],
+			}),
+		).toEqual([["mcp", "-y", "--agent", "mcporter"]]);
+		expect(
+			planYesAgentSteps({
+				setup: "skills-mcp",
+				skillsAgents: ["vscode"],
+				mcpAgents: ["vscode", "mcporter"],
+			}),
+		).toEqual([
+			["skills", "-y", "--agent", "vscode"],
+			["mcp", "-y", "--agent", "vscode", "--agent", "mcporter"],
+		]);
+	});
+
+	test("skip is empty", () => {
+		expect(planYesAgentSteps({ setup: "skip" })).toEqual([]);
+	});
+});
+
 describe("resolveInitAgentSetup", () => {
 	const pickUnused = async () => {
 		throw new Error("pick should not run");
 	};
 
-	test("-y uses plugin when a project plugin agent is present", async () => {
-		await expect(
-			resolveInitAgentSetup({
-				yes: true,
-				interactive: false,
-				hasProjectPlugins: true,
-				pick: pickUnused,
-			}),
-		).resolves.toBe("plugin");
-	});
-
-	test("-y falls back to skills-mcp when none are present", async () => {
-		await expect(
-			resolveInitAgentSetup({
-				yes: true,
-				interactive: false,
-				hasProjectPlugins: false,
-				pick: pickUnused,
-			}),
-		).resolves.toBe("skills-mcp");
-	});
-
-	test("-y ignores interactive pick", async () => {
-		await expect(
-			resolveInitAgentSetup({
-				yes: true,
-				interactive: true,
-				hasProjectPlugins: false,
-				pick: async () => "plugin",
-			}),
-		).resolves.toBe("skills-mcp");
-	});
-
 	test("interactive uses pick", async () => {
 		await expect(
 			resolveInitAgentSetup({
-				yes: false,
 				interactive: true,
-				hasProjectPlugins: true,
 				pick: async () => "skip",
 			}),
 		).resolves.toBe("skip");
 	});
 
-	test("no TTY and no -y keeps skills-mcp", async () => {
+	test("no TTY keeps skills-mcp", async () => {
 		await expect(
 			resolveInitAgentSetup({
-				yes: false,
 				interactive: false,
-				hasProjectPlugins: true,
 				pick: pickUnused,
 			}),
 		).resolves.toBe("skills-mcp");
