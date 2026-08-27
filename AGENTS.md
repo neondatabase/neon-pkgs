@@ -575,7 +575,7 @@ including a git-vs-npm check that flags packages which changed but lack a change
 `@neon/config` → `@neon/config-runtime` / `@neon/env` → `neon` → `neonctl`.
 Publishing `neon` also ships the standalone binaries and the GitHub release; publish the
 compatibility package only after `npm view neon version` confirms the matching primary package.
-Verify each with `npm view <pkg> version`.
+Verify each with `npm view <pkg> version`. After every successful publish, `npm i -g neon@latest` and `neon --version`.
 
 Ordering is a courtesy to npm consumers, not a build constraint. Every internal dependency is
 `workspace:*`, so a package is always built and packed against workspace source and never makes a
