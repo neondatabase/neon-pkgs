@@ -89,6 +89,7 @@ export type OperationDescription = {
 	summary: string;
 	operationId: string;
 	bodyRequired: boolean;
+	contentType: string;
 	fields: DescribedField[];
 };
 
@@ -720,7 +721,7 @@ function collectParameters(
 function jsonBodySchema(
 	spec: OpenApiSpec,
 	operation: Record<string, unknown>,
-): { schema: unknown; required: boolean } | null {
+): { schema: unknown; required: boolean; contentType: string } | null {
 	let requestBody = operation.requestBody;
 	if (isRecord(requestBody) && typeof requestBody.$ref === "string") {
 		requestBody = resolveRef(spec, requestBody.$ref);
@@ -733,15 +734,25 @@ function jsonBodySchema(
 		return null;
 	}
 	const json = content["application/json"];
-	const selected = isRecord(json)
-		? json
-		: Object.values(content).find(isRecord);
+	let contentType = "application/json";
+	let selected: unknown = json;
+	if (!isRecord(json)) {
+		const entry = Object.entries(content).find(([, value]) =>
+			isRecord(value),
+		);
+		if (!entry) {
+			return null;
+		}
+		contentType = entry[0];
+		selected = entry[1];
+	}
 	if (!isRecord(selected) || selected.schema === undefined) {
 		return null;
 	}
 	return {
 		schema: selected.schema,
 		required: requestBody.required === true,
+		contentType,
 	};
 }
 
@@ -775,6 +786,7 @@ export function describeOperation(
 				? operation.operationId
 				: "",
 		bodyRequired: body?.required === true,
+		contentType: body?.contentType ?? "",
 		fields,
 	};
 }

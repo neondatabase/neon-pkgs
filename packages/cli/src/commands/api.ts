@@ -270,10 +270,20 @@ async function describeRoute(args: ApiArgs): Promise<void> {
 		summary: description.summary,
 		operationId: description.operationId,
 		bodyRequired: description.bodyRequired,
+		...(description.contentType !== "" &&
+		description.contentType !== "application/json"
+			? { contentType: description.contentType }
+			: {}),
 	};
-	const title = description.summary
+	let title = description.summary
 		? `${description.method} ${description.path} - ${description.summary}`
 		: `${description.method} ${description.path}`;
+	if (
+		description.contentType !== "" &&
+		description.contentType !== "application/json"
+	) {
+		title = `${title} (${description.contentType})`;
+	}
 	if (args.output === "json" || args.output === "yaml") {
 		writer(args)
 			.write(endpoint, {

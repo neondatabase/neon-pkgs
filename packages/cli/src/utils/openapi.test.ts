@@ -543,6 +543,7 @@ describe("describeOperation", () => {
 
 	it("describes a multipart JSON-shaped body when application/json is absent", () => {
 		const result = describeOperation(spec, "/deploy", "POST");
+		expect(result.contentType).toBe("multipart/form-data");
 		expect(result.fields.map((field) => field.name)).toEqual([
 			"zip",
 			"runtime",
