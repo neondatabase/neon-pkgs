@@ -2,6 +2,7 @@ import { readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect } from "vitest";
+import YAML from "yaml";
 
 import { test } from "../test_utils/fixtures";
 
@@ -35,10 +36,25 @@ describe("projects", () => {
 				{ output, snapshot: false },
 			);
 
-			expect(stdout).toContain("new-project-safe-output");
 			expect(stdout).not.toContain("never-expose-this-password");
 			expect(stdout).not.toContain("connection_uri");
 			expect(stdout).not.toContain("connection_parameters");
+
+			if (output === "table") {
+				expect(stdout).toContain("new-project-safe-output");
+				return;
+			}
+
+			const parsed: unknown =
+				output === "json" ? JSON.parse(stdout) : YAML.parse(stdout);
+			expect(parsed).toEqual(
+				expect.objectContaining({
+					project: expect.objectContaining({
+						id: "new-project-safe-output",
+					}),
+				}),
+			);
+			expect(parsed).not.toHaveProperty("connection_uris");
 		});
 	}
 

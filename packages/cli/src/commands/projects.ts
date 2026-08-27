@@ -385,12 +385,23 @@ const create = async (
 	}
 
 	const out = writer(props);
-	out.write(data.project, { fields: PROJECT_FIELDS, title: "Project" });
-	if (props.secrets) {
-		out.write(data.connection_uris, {
-			fields: ["connection_uri"],
-			title: "Connection URIs",
-		});
+	if (
+		!props.secrets &&
+		(props.output === "json" || props.output === "yaml")
+	) {
+		// A single JSON/YAML chunk is flattened, so preserve the envelope agents parse.
+		out.write(
+			{ project: data.project },
+			{ fields: ["project"], title: "Project" },
+		);
+	} else {
+		out.write(data.project, { fields: PROJECT_FIELDS, title: "Project" });
+		if (props.secrets) {
+			out.write(data.connection_uris, {
+				fields: ["connection_uri"],
+				title: "Connection URIs",
+			});
+		}
 	}
 	out.end();
 
