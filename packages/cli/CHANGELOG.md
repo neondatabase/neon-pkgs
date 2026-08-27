@@ -1,5 +1,11 @@
 # neon
 
+## 4.9.0
+
+### Minor Changes
+
+- 64d0333: `projects create` and `branches create` accept `--no-secrets` to omit connection URIs from command output.
+
 ## 4.8.0
 
 ### Minor Changes

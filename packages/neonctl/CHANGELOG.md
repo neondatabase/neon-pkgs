@@ -1,5 +1,12 @@
 # neonctl
 
+## 4.9.0
+
+### Patch Changes
+
+- Updated dependencies [64d0333]
+  - neon@4.9.0
+
 ## 4.8.0
 
 ### Minor Changes
