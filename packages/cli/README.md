@@ -683,7 +683,7 @@ When a package cannot be bundled — a native addon with no esbuild loader, or a
 
 `neon bootstrap` copies a Neon starter template into a new (or current) directory — conceptually like `degit`, but it only pulls from a small set of templates we maintain in the public [`neondatabase/examples`](https://github.com/neondatabase/examples) repo. The template copy needs no Neon login: it downloads files from GitHub.
 
-After scaffolding, an interactive terminal offers agent tooling (the Neon plugin, or skills and MCP separately — never both) and then `neon link`. `--default` / `-y` skips the template, install, git, and agent pickers, then installs agent tooling for detected agents (project folders, then the host IDE, then installed apps) or skips that step if none are detected, then runs `link --yes`. `link --yes` still asks for a project unless one is already linked. `--no-agent-setup` and `--no-link` skip those. Non-interactive without `--default` prints next steps and does not install, set up agents, or link.
+After scaffolding, an interactive terminal offers agent tooling (the Neon plugin, or skills and MCP separately — never both) and then `neon link`. `--default` / `-y` skips the template, install, git, and agent pickers, then installs agent tooling for project folders, else the host CLI agent, else installed apps, or skips that step if none are found, then runs `link --yes`. `link --yes` still asks for a project unless one is already linked. `--no-agent-setup` and `--no-link` skip those. Non-interactive without `--default` prints next steps and does not install, set up agents, or link.
 
 Pass a target directory (or `.` for the current one). In an interactive terminal you pick the template from a list; in CI / non-interactive contexts pass `--template <id>`.
 
@@ -718,7 +718,7 @@ $ neon init
 $ neon init -y
 ```
 
-`-y` skips the template picker and the agent-setup offer. Empty dir: `bootstrap --default`. Existing app: plugin when Cursor, Claude Code, or Codex is detected in the project, from the host IDE, or as an installed app; otherwise skills and MCP for other detected agents. If none are detected, agent setup is skipped and init continues. VS Code, GitHub Copilot CLI, and Grok only take the plugin user-level (`neon plugins --global`), so `-y` uses skills and MCP for those.
+`-y` skips the template picker and the agent-setup offer. Empty dir: `bootstrap --default`. Existing app: plugin when Cursor, Claude Code, or Codex is in project folders, else the host CLI agent, else installed apps; otherwise skills and MCP. If none are found, agent setup is skipped and init continues. VS Code, GitHub Copilot CLI, and Grok only take the plugin user-level (`neon plugins --global`), so `-y` uses skills and MCP for those.
 
 `-y` forwards `-y` to `plugins` or `skills`/`mcp`, `--default` to `bootstrap`, `--yes` to `link`, and `--services none` to `config init`. `link --yes` only skips the "already linked" confirmation; it still asks for a project unless one is already linked.
 

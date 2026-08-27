@@ -352,7 +352,7 @@ describe("bootstrap", () => {
 		const flat = stderr.replace(/\s+/g, " ");
 		expect(flat).toContain("--list-templates");
 		expect(flat).toContain("--agent-setup");
-		expect(flat).toContain("when a coding agent is detected");
+		expect(flat).toContain("host CLI agent");
 		expect(flat).toContain("skipped if none");
 		expect(stderr).not.toMatch(/(?<![-\w])--agent(?![-\w])/);
 	});

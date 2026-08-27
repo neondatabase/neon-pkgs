@@ -67,7 +67,7 @@ const removedAgent = () =>
 // prompts for one. In a non-interactive context a missing directory is an error.
 export const command = "bootstrap [directory]";
 export const describe =
-	"Scaffold a new project from a Neon starter template, then install agent tooling if a coding agent is detected and link a Neon project";
+	"Scaffold a new project from a Neon starter template, then install agent tooling and link a Neon project";
 
 export const builder = (argv: yargs.Argv) =>
 	argv
@@ -103,7 +103,7 @@ export const builder = (argv: yargs.Argv) =>
 			default: {
 				alias: "y",
 				describe:
-					"Quick start: scaffold the default template (or --template), then install, git, agent tooling (skipped if none), and link --yes. Skips those pickers; link --yes still asks for a project unless one is already linked",
+					"Quick start: scaffold the default template (or --template), then install, git, agent tooling (project folders, else the host CLI agent, else installed apps; skipped if none), and link --yes. Skips those pickers; link --yes still asks for a project unless one is already linked",
 				type: "boolean",
 				default: false,
 			},
@@ -128,7 +128,7 @@ export const builder = (argv: yargs.Argv) =>
 				type: "boolean",
 				default: true,
 				describe:
-					"After scaffolding, install the Neon plugin or skills and MCP when a coding agent is detected. Use --no-agent-setup to skip",
+					"After scaffolding, install the Neon plugin or skills and MCP. Use --no-agent-setup to skip",
 			},
 		})
 		.example(

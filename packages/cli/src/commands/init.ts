@@ -55,7 +55,7 @@ export const builder = (yargs: yargs.Argv) =>
 			type: "boolean",
 			default: false,
 			describe:
-				"Empty dir: bootstrap --default. Otherwise plugin when a project plugin agent, the host IDE, or an installed app is detected; else skills and MCP; skip agent setup if none. Then link --yes and config init --services none. link --yes still asks for a project unless one is already linked",
+				"Empty dir: bootstrap --default. Otherwise plugin, or skills and MCP, for project folders, else the host CLI agent, else installed apps; skip agent setup if none. Then link --yes and config init --services none. link --yes still asks for a project unless one is already linked",
 		})
 		.option("agent", {
 			hidden: true,
@@ -79,7 +79,7 @@ export const builder = (yargs: yargs.Argv) =>
 		.epilogue(
 			helpEpilogue(
 				"Interactive agent setup: plugin (recommended), skills and MCP separately, or skip agent setup. Never both plugin and skills+MCP.",
-				"-y installs the plugin when Cursor, Claude Code, or Codex is detected in the project, from the host IDE, or as an installed app. Otherwise skills and MCP. If none are detected, agent setup is skipped. Then link unless already linked. link --yes may still ask for a project.",
+				"-y installs the plugin when Cursor, Claude Code, or Codex is in project folders, else the host CLI agent, else installed apps. Otherwise skills and MCP. If none are found, agent setup is skipped. Then link unless already linked. link --yes may still ask for a project.",
 			),
 		)
 		.check((argv) => {
