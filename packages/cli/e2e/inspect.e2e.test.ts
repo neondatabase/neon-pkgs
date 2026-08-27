@@ -66,6 +66,19 @@ async function withSession<T>(
 	}
 }
 
+async function backendPid(session: PgConnection): Promise<number> {
+	const result = await session.query("SELECT pg_backend_pid()");
+	const value = result.rows[0]?.[0];
+	if (typeof value !== "string" && typeof value !== "number") {
+		throw new Error(`pg_backend_pid returned ${String(value)}`);
+	}
+	const pid = Number(value);
+	if (!Number.isFinite(pid) || pid <= 0) {
+		throw new Error(`pg_backend_pid returned ${String(value)}`);
+	}
+	return pid;
+}
+
 /**
  * `pg_locks` and `pg_stat_activity` span the compute, while relation OIDs are
  * database-local. A second database makes foreign rows and misresolved OIDs
@@ -267,7 +280,7 @@ describe.sequential("e2e — neon inspect db against the real API", () => {
 	);
 
 	e2eTest(
-		"stalled-queries executes and reports a backend past 30 seconds",
+		"stalled-queries reports backends past 30 seconds, oldest group first",
 		async ({ track }) => {
 			const projectId = await createProject({
 				name: uniqueProjectName("cli-inspect-stall"),
@@ -284,10 +297,30 @@ describe.sequential("e2e — neon inspect db against the real API", () => {
 			expect(empty).toEqual([]);
 
 			const uri = await connectionUriFor(projectId, "neondb");
-			const session = await PgConnection.connect(parseConnectionUri(uri));
+			const first = await PgConnection.connect(parseConnectionUri(uri));
+			const second = await PgConnection.connect(parseConnectionUri(uri));
 			try {
-				const pending = session.query("SELECT pg_sleep(90)");
-				pending.catch(() => undefined);
+				const firstPid = await backendPid(first);
+				const secondPid = await backendPid(second);
+				if (firstPid === secondPid) {
+					throw new Error(
+						`both inspect sessions reported pid ${firstPid}`,
+					);
+				}
+				// Older query on the higher pid, so pid-primary order would
+				// rank it after the newer one.
+				const older = firstPid > secondPid ? first : second;
+				const newer = older === first ? second : first;
+
+				const pendingOlder = older.query(
+					"SELECT pg_sleep(90) /* stall-older */",
+				);
+				pendingOlder.catch(() => undefined);
+				await sleep(5_000);
+				const pendingNewer = newer.query(
+					"SELECT pg_sleep(90) /* stall-newer */",
+				);
+				pendingNewer.catch(() => undefined);
 				await sleep(32_000);
 
 				const rows = await runCliJson<Record<string, unknown>[]>([
@@ -297,21 +330,35 @@ describe.sequential("e2e — neon inspect db against the real API", () => {
 					"--project-id",
 					projectId,
 				]);
-				const hit = rows.find((row) =>
+				const stallRows = rows.filter((row) =>
 					String(row.query).includes("pg_sleep"),
 				);
-				expect(hit).toBeDefined();
-				if (hit === undefined) {
-					return;
-				}
-				expect(hit.role).toBe("leader");
-				expect(String(hit.query_group)).toBe(String(hit.pid));
-				expect(hit.state).toBe("active");
-				expect(typeof hit.duration).toBe("string");
+				expect(stallRows.length).toBeGreaterThanOrEqual(2);
 
-				await session.cancel();
+				const olderIdx = stallRows.findIndex((row) =>
+					String(row.query).includes("stall-older"),
+				);
+				const newerIdx = stallRows.findIndex((row) =>
+					String(row.query).includes("stall-newer"),
+				);
+				expect(olderIdx).toBeGreaterThanOrEqual(0);
+				expect(newerIdx).toBeGreaterThanOrEqual(0);
+				expect(olderIdx).toBeLessThan(newerIdx);
+				expect(Number(stallRows[olderIdx]?.pid)).toBeGreaterThan(
+					Number(stallRows[newerIdx]?.pid),
+				);
+
+				const hit = stallRows[olderIdx];
+				expect(hit?.role).toBe("leader");
+				expect(String(hit?.query_group)).toBe(String(hit?.pid));
+				expect(hit?.state).toBe("active");
+				expect(typeof hit?.duration).toBe("string");
+
+				await older.cancel();
+				await newer.cancel();
 			} finally {
-				await session.close();
+				await first.close();
+				await second.close();
 			}
 		},
 		240_000,
