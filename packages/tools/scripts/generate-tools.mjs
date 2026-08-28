@@ -143,7 +143,6 @@ const firstSentence = (text) => {
 	return sentence;
 };
 
-// OpenAPI descriptions are docs essays; MCP tools/list needs one sentence.
 const toolDescription = (operation, method, path) =>
 	firstSentence(operation.description ?? "") ||
 	(typeof operation.summary === "string" ? operation.summary.trim() : "") ||

@@ -220,7 +220,9 @@ const tools = createNeonTools({
 registerNeonTools(server, tools);
 ```
 
-The MCP 2 adapter publishes compact JSON Schema: types, enums, required, and constraints. It drops `$schema` and OpenAPI field essays. The same transform:
+`registerNeonTools` publishes that catalog. MCP 2 `inputSchema` is JSON Schema without `$schema`. Generated fields have types, enums, `required`, and constraints, and no OpenAPI property docs. Fields this package described with `.describe()` (`pooled`, `finalize`, `zip`) keep that copy.
+
+Hosts that convert Zod themselves:
 
 ```ts
 import { compactJsonSchema } from "@neon/tools/mcp";
@@ -228,7 +230,9 @@ import * as z from "zod";
 import { createNeonTool } from "@neon/tools";
 
 const tool = createNeonTool("projects.update", { apiKey });
-const inputSchema = compactJsonSchema(z.toJSONSchema(tool.inputSchema));
+const inputSchema = compactJsonSchema(
+	z.toJSONSchema(tool.inputSchema, { io: "input" }),
+);
 ```
 
 For a remote MCP server that already authenticated the client, omit `apiKey` at construction. `registerNeonTools` sends `authInfo.token` as the Bearer credential: MCP 2.x `http.authInfo.token`, MCP 1.x `authInfo.token`. The host must put a Neon API key or Neon OAuth access token there. A present `authInfo` with an empty token is an error, not a fall back to a constructor key.
@@ -248,7 +252,7 @@ Existing MCP 1.x servers can use the version-specific entry point:
 import { registerNeonTools } from "@neon/tools/mcp-v1";
 ```
 
-MCP 1.x still receives Zod input schemas. Generated Zod no longer carries OpenAPI field essays. Use `compactJsonSchema` if you convert those schemas yourself.
+MCP 1.x still receives Zod input schemas, including handwritten `.describe()` copy. Generated Zod has no OpenAPI field essays. Use `compactJsonSchema` if you convert those schemas yourself and need `$schema` removed.
 
 The adapter returns both text content and object-valued `structuredContent`. Execution failures use `isError: true` with structured error data.
 

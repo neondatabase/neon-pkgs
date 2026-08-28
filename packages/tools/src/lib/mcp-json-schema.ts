@@ -27,7 +27,6 @@ const SCHEMA_ARRAY_KEYS = new Set(["allOf", "anyOf", "oneOf", "prefixItems"]);
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null && !Array.isArray(value);
 
-// A property named `description` is a field, not a schema annotation.
 export const compactJsonSchema = (node: unknown): unknown => {
 	if (Array.isArray(node)) {
 		return node.map(compactJsonSchema);
@@ -38,7 +37,7 @@ export const compactJsonSchema = (node: unknown): unknown => {
 
 	const compact: Record<string, unknown> = {};
 	for (const [key, value] of Object.entries(node)) {
-		if (key === "$schema" || key === "description") {
+		if (key === "$schema") {
 			continue;
 		}
 		if (SCHEMA_MAP_KEYS.has(key) && isPlainObject(value)) {

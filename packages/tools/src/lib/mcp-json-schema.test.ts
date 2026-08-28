@@ -3,7 +3,7 @@ import * as z from "zod";
 import { compactJsonSchema, toMcpInputSchema } from "./mcp-json-schema.js";
 
 describe("compactJsonSchema", () => {
-	test("drops $schema and annotation descriptions, keeps a description field", () => {
+	test("drops $schema and keeps field descriptions", () => {
 		const schema = {
 			$schema: "https://json-schema.org/draft/2020-12/schema",
 			type: "object",
@@ -11,8 +11,7 @@ describe("compactJsonSchema", () => {
 			properties: {
 				description: {
 					type: "string",
-					description:
-						"Field help that should not appear on the wire.",
+					description: "Human-readable summary.",
 				},
 				name: { type: "string", description: "Display name." },
 			},
@@ -22,9 +21,13 @@ describe("compactJsonSchema", () => {
 
 		expect(compactJsonSchema(schema)).toEqual({
 			type: "object",
+			description: "Create a record.",
 			properties: {
-				description: { type: "string" },
-				name: { type: "string" },
+				description: {
+					type: "string",
+					description: "Human-readable summary.",
+				},
+				name: { type: "string", description: "Display name." },
 			},
 			required: ["description"],
 			additionalProperties: false,
@@ -48,7 +51,10 @@ describe("compactJsonSchema", () => {
 		expect(compactJsonSchema(schema)).toEqual({
 			type: "object",
 			$defs: {
-				description: { type: "string" },
+				description: {
+					type: "string",
+					description: "unused",
+				},
 			},
 			patternProperties: {
 				description: { type: "number" },
@@ -78,15 +84,15 @@ describe("compactJsonSchema", () => {
 		});
 	});
 
-	test("strips descriptions inside dependentSchemas and contentSchema", () => {
+	test("keeps descriptions inside dependentSchemas and contentSchema", () => {
 		const schema = {
 			type: "object",
 			dependentSchemas: {
 				name: {
 					type: "object",
-					description: "drop this",
+					description: "when name is set",
 					properties: {
-						name: { type: "string", description: "also drop" },
+						name: { type: "string", description: "also keep" },
 					},
 				},
 			},
@@ -101,12 +107,16 @@ describe("compactJsonSchema", () => {
 			dependentSchemas: {
 				name: {
 					type: "object",
+					description: "when name is set",
 					properties: {
-						name: { type: "string" },
+						name: { type: "string", description: "also keep" },
 					},
 				},
 			},
-			contentSchema: { type: "string" },
+			contentSchema: {
+				type: "string",
+				description: "payload schema",
+			},
 		});
 	});
 });
@@ -115,7 +125,10 @@ describe("toMcpInputSchema", () => {
 	test("advertises compact JSON Schema and still validates", async () => {
 		const schema = z.strictObject({
 			limit: z.number().int(),
-			description: z.string().optional(),
+			description: z
+				.string()
+				.describe("Human-readable summary.")
+				.optional(),
 		});
 		const mcpSchema = toMcpInputSchema(schema);
 		const json = mcpSchema["~standard"].jsonSchema.input();
@@ -124,12 +137,14 @@ describe("toMcpInputSchema", () => {
 			type: "object",
 			properties: {
 				limit: { type: "integer" },
-				description: { type: "string" },
+				description: {
+					type: "string",
+					description: "Human-readable summary.",
+				},
 			},
 			required: ["limit"],
 		});
 		expect(json).not.toHaveProperty("$schema");
-		expect(json).not.toHaveProperty("description");
 
 		const valid = await mcpSchema["~standard"].validate({ limit: 1 });
 		expect(valid).toMatchObject({ value: { limit: 1 } });

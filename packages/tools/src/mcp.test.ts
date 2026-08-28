@@ -101,6 +101,36 @@ describe("MCP v2 compatibility", () => {
 		expect(JSON.stringify(schema)).not.toContain("For more information");
 	});
 
+	test("publishes handwritten field descriptions on MCP 2", async () => {
+		const server = new McpServerV2({
+			name: "test-server",
+			version: "1.0.0",
+		});
+		registerNeonToolsV2(
+			server,
+			createNeonTools({
+				apiKey: "test-key",
+				tools: ["postgres.connectionString"],
+			}),
+		);
+		const client = new ClientV2({ name: "test-client", version: "1.0.0" });
+		const [clientTransport, serverTransport] =
+			InMemoryTransportV2.createLinkedPair();
+		await Promise.all([
+			server.connect(serverTransport),
+			client.connect(clientTransport),
+		]);
+		closeables.push(client, server);
+
+		const listed = await client.listTools();
+		const pooled = listed.tools[0]?.inputSchema?.properties?.pooled;
+		expect(pooled).toMatchObject({
+			type: "boolean",
+			description:
+				"Return a pooled connection string. Default true. Set false for a direct connection.",
+		});
+	});
+
 	test("returns API failures as structured MCP errors", async () => {
 		type ToolHandler = (
 			input: unknown,
@@ -467,6 +497,6 @@ describe("MCP catalog size", () => {
 			(sum, tool) => sum + JSON.stringify(tool).length,
 			0,
 		);
-		expect(chars / 4).toBeLessThan(19_000);
+		expect(chars / 4).toBeLessThan(20_000);
 	});
 });
