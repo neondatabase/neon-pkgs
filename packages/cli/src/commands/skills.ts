@@ -100,6 +100,9 @@ export const builder = (argv: yargs.Argv) =>
 				yargs
 					.usage("$0 skills update [options]")
 					.options({
+						yes: {
+							describe: "Skip the confirm prompt",
+						},
 						global: {
 							type: "boolean",
 							default: false,
@@ -145,7 +148,8 @@ export const builder = (argv: yargs.Argv) =>
 				alias: "y",
 				type: "boolean",
 				default: false,
-				describe: "Skip prompts",
+				describe:
+					"Skip prompts. Detected agents (project folders, else the host CLI agent). --global uses installed apps, else the host CLI agent",
 			},
 			global: {
 				type: "boolean",
@@ -166,7 +170,7 @@ export const builder = (argv: yargs.Argv) =>
 				type: "array",
 				string: true,
 				describe:
-					"Skill to install (repeatable). Skips the skill picker. Values listed below",
+					"Skill to install (repeatable). Skips the skill picker. Does not select agents. Values listed below",
 				coerce: coerceSkills,
 			},
 		})
@@ -176,11 +180,15 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.example(
 			"$0 skills -y",
-			"This directory, detected agents, the default skills",
+			"This directory, detected agents (project folders, else the host CLI agent), the default skills",
+		)
+		.example(
+			"$0 skills -y -s neon -s neon-ai-gateway",
+			"Named skills into detected agents",
 		)
 		.example(
 			"$0 skills -s neon -s neon-ai-gateway --agent cursor",
-			"Install named skills into specific agents",
+			"Named skills into a named agent",
 		)
 		.example("$0 skills --global", "Install user-level skills")
 		.epilogue(

@@ -1,8 +1,9 @@
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
+import type { AgentType } from "../mcp/agents.js";
 import {
 	assertPluginsCanRun,
 	type ResolvePluginsPlanOptions,
@@ -36,19 +37,21 @@ function planOptions(
 		pickAgents: async () => {
 			throw new Error("agent prompt");
 		},
+		detectAgent: () => null,
+		detectInstalledAgents: async () => [],
 		...overrides,
 	};
 }
 
 describe("assertPluginsCanRun", () => {
-	test("fails non-TTY without -y or --agent", () => {
+	test("fails non-TTY without -y", () => {
 		expect(() =>
 			assertPluginsCanRun({
 				yes: false,
 				interactive: false,
 				hasAgents: false,
 			}),
-		).toThrow(/Pass -y to install into detected agents, or --agent/);
+		).toThrow(/Pass -y to install into detected agents/);
 	});
 
 	test("allows named agents without -y", () => {
@@ -97,7 +100,7 @@ describe("resolvePluginsPlan", () => {
 		});
 	});
 
-	test("non-TTY without -y succeeds when --agent is set", async () => {
+	test("non-TTY without -y succeeds when agents are specified", async () => {
 		const cwd = tmpDir();
 		const plan = await resolvePluginsPlan(
 			planOptions(cwd, {
@@ -112,7 +115,7 @@ describe("resolvePluginsPlan", () => {
 		]);
 	});
 
-	test("non-TTY without -y or --agent fails", async () => {
+	test("non-TTY without -y or named agents fails", async () => {
 		const cwd = tmpDir();
 		await expect(
 			resolvePluginsPlan(
@@ -122,9 +125,7 @@ describe("resolvePluginsPlan", () => {
 					agents: [],
 				}),
 			),
-		).rejects.toThrow(
-			/Pass -y to install into detected agents, or --agent/,
-		);
+		).rejects.toThrow(/Pass -y to install into detected agents/);
 	});
 
 	test("--global is user-level", async () => {
@@ -155,19 +156,6 @@ describe("resolvePluginsPlan", () => {
 				}),
 			),
 		).rejects.toThrow(/Unknown agent: "kimi"/);
-	});
-
-	test("rejects --agent *", async () => {
-		const cwd = tmpDir();
-		await expect(
-			resolvePluginsPlan(
-				planOptions(cwd, {
-					yes: true,
-					interactive: false,
-					agents: ["*"],
-				}),
-			),
-		).rejects.toThrow(/does not accept --agent \*/);
 	});
 
 	test("skips MCP agents that cannot install plugins", async () => {
@@ -290,5 +278,107 @@ describe("resolvePluginsPlan", () => {
 				}),
 			),
 		).rejects.toThrow(/No coding agents detected in this project/);
+	});
+
+	test("-y uses the host CLI agent when the project has no folders", async () => {
+		const cwd = tmpDir();
+		const detectInstalledAgents = vi.fn(
+			async (): Promise<readonly AgentType[]> => ["codex"],
+		);
+		const plan = await resolvePluginsPlan(
+			planOptions(cwd, {
+				agents: [],
+				yes: true,
+				interactive: false,
+				detectAgent: () => "cursor",
+				detectInstalledAgents,
+			}),
+		);
+		expect(plan.agents).toEqual(["cursor"]);
+		expect(detectInstalledAgents).not.toHaveBeenCalled();
+	});
+
+	test("-y host VS Code at project scope asks for --global", async () => {
+		const cwd = tmpDir();
+		await expect(
+			resolvePluginsPlan(
+				planOptions(cwd, {
+					agents: [],
+					yes: true,
+					interactive: false,
+					detectAgent: () => "vscode",
+					detectInstalledAgents: async () => ["cursor"],
+				}),
+			),
+		).rejects.toThrow(/plugins are user-level. Pass --global/);
+	});
+
+	test("-y host without a plugins mapping does not use installed apps", async () => {
+		const cwd = tmpDir();
+		const detectInstalledAgents = vi.fn(
+			async (): Promise<readonly AgentType[]> => ["cursor"],
+		);
+		await expect(
+			resolvePluginsPlan(
+				planOptions(cwd, {
+					agents: [],
+					yes: true,
+					interactive: false,
+					detectAgent: () => "cline",
+					detectInstalledAgents,
+				}),
+			),
+		).rejects.toThrow(/from a supported agent/);
+		expect(detectInstalledAgents).not.toHaveBeenCalled();
+	});
+
+	test("-y does not use installed apps when there is no project folder or host", async () => {
+		const cwd = tmpDir();
+		const detectInstalledAgents = vi.fn(
+			async (): Promise<readonly AgentType[]> => ["codex"],
+		);
+		await expect(
+			resolvePluginsPlan(
+				planOptions(cwd, {
+					agents: [],
+					yes: true,
+					interactive: false,
+					detectInstalledAgents,
+				}),
+			),
+		).rejects.toThrow(/No coding agents detected in this project/);
+		expect(detectInstalledAgents).not.toHaveBeenCalled();
+	});
+
+	test("-y --global uses installed apps over host", async () => {
+		const cwd = tmpDir();
+		const detectAgent = vi.fn((): AgentType | null => "claude-code");
+		const plan = await resolvePluginsPlan(
+			planOptions(cwd, {
+				agents: [],
+				yes: true,
+				interactive: false,
+				global: true,
+				detectAgent,
+				detectInstalledAgents: async () => ["codex"],
+			}),
+		);
+		expect(plan.agents).toEqual(["codex"]);
+		expect(detectAgent).not.toHaveBeenCalled();
+	});
+
+	test("-y --global uses the host when no apps are installed", async () => {
+		const cwd = tmpDir();
+		const plan = await resolvePluginsPlan(
+			planOptions(cwd, {
+				agents: [],
+				yes: true,
+				interactive: false,
+				global: true,
+				detectAgent: () => "cursor",
+				detectInstalledAgents: async () => [],
+			}),
+		);
+		expect(plan.agents).toEqual(["cursor"]);
 	});
 });

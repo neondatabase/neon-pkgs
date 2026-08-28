@@ -1,36 +1,49 @@
+import { detectProjectAgents } from "add-mcp";
 import { log } from "../log.js";
-import { detectInstallablePluginsAgents } from "../plugins/targets.js";
+import type { AgentType } from "../mcp/agents.js";
 import { canPickAgentsInteractively } from "../utils/agent_picker.js";
 import { getCliName } from "../utils/cli_name.js";
 import { AUTH_CHILD, type InitRun } from "./child.js";
+import { detectAgent } from "./detect_host.js";
 import {
+	assertNamedAgentTooling,
 	type ChildForward,
 	childArgv,
+	chooseYesAgentTooling,
+	collectYesAgents,
 	type InitAgentSetup,
 	type InitStep,
+	initYesSupportedAgents,
+	noDetectedAgentsMessage,
 	planAgentSteps,
+	planToolingSteps,
+	planYesAgentSteps,
 	resolveInitAgentSetup,
 } from "./plan.js";
 import { pickAgentSetupInteractively } from "./wizard.js";
 
-export type AgentToolingOptions = {
+export type AgentDetectors = {
+	detectProjectAgents?: (
+		cwd: string,
+	) => readonly AgentType[] | Promise<readonly AgentType[]>;
+	detectAgent?: () => AgentType | null;
+};
+
+export type AgentToolingOptions = AgentDetectors & {
 	cwd: string;
 	yes: boolean;
 	run: InitRun;
 	forward: ChildForward;
 	authEnv?: NodeJS.ProcessEnv;
 	pickAgentSetup?: () => Promise<InitAgentSetup>;
+	agents?: readonly AgentType[];
 	hasProjectPlugins?: (cwd: string) => Promise<boolean>;
 	agentSetup?: InitAgentSetup;
+	command?: "init" | "bootstrap";
 };
 
-const defaultHasProjectPlugins = async (cwd: string): Promise<boolean> => {
-	const detected = await detectInstallablePluginsAgents({
-		scope: "project",
-		cwd,
-	});
-	return detected.length > 0;
-};
+const defaultProjectAgents = (cwd: string): readonly AgentType[] =>
+	detectProjectAgents(cwd);
 
 export const runInitSteps = async (
 	steps: readonly InitStep[],
@@ -58,26 +71,73 @@ export const runInitSteps = async (
 	}
 };
 
+const yesAgentsFromOptions = async (
+	options: AgentToolingOptions,
+): Promise<readonly AgentType[]> =>
+	collectYesAgents({
+		detected: () =>
+			(options.detectProjectAgents ?? defaultProjectAgents)(options.cwd),
+		detectAgent: options.detectAgent ?? detectAgent,
+	});
+
+const yesMiss = (): Error =>
+	new Error(
+		noDetectedAgentsMessage({
+			scope: "project",
+			supported: initYesSupportedAgents(),
+			fix: "run-without-yes",
+			nameAgent: true,
+		}),
+	);
+
 export const runAgentTooling = async (
 	options: AgentToolingOptions,
 ): Promise<InitAgentSetup> => {
 	const yes = options.yes;
-	const hasProjectPlugins = yes
-		? await (options.hasProjectPlugins ?? defaultHasProjectPlugins)(
+	const named = options.agents ?? [];
+	if (named.length > 0) {
+		assertNamedAgentTooling(named, options.command ?? "init");
+		const tooling = chooseYesAgentTooling(named);
+		await runInitSteps(
+			planToolingSteps(tooling, { yes, named: true }),
+			options,
+		);
+		return tooling.setup;
+	}
+	if (options.agentSetup !== undefined) {
+		await runInitSteps(
+			planAgentSteps({ yes, agentSetup: options.agentSetup }),
+			options,
+		);
+		return options.agentSetup;
+	}
+	if (yes) {
+		if (options.hasProjectPlugins !== undefined) {
+			const agentSetup: InitAgentSetup = (await options.hasProjectPlugins(
 				options.cwd,
-			)
-		: false;
+			))
+				? "plugin"
+				: "skills-mcp";
+			await runInitSteps(
+				planAgentSteps({ yes: true, agentSetup }),
+				options,
+			);
+			return agentSetup;
+		}
+		const agents = await yesAgentsFromOptions(options);
+		const tooling = chooseYesAgentTooling(agents);
+		if (tooling.setup === "skip") {
+			throw yesMiss();
+		}
+		await runInitSteps(planYesAgentSteps(tooling), options);
+		return tooling.setup;
+	}
 	const interactive =
-		!yes &&
-		(options.pickAgentSetup !== undefined || canPickAgentsInteractively());
-	const agentSetup =
-		options.agentSetup ??
-		(await resolveInitAgentSetup({
-			yes,
-			interactive,
-			hasProjectPlugins,
-			pick: options.pickAgentSetup ?? pickAgentSetupInteractively,
-		}));
+		options.pickAgentSetup !== undefined || canPickAgentsInteractively();
+	const agentSetup = await resolveInitAgentSetup({
+		interactive,
+		pick: options.pickAgentSetup ?? pickAgentSetupInteractively,
+	});
 	await runInitSteps(planAgentSteps({ yes, agentSetup }), options);
 	return agentSetup;
 };

@@ -1,4 +1,6 @@
 import { tryResolveAddMcpAgentId } from "../init/agents.js";
+import { detectAgent } from "../init/detect_host.js";
+import { collectYesAgents, noDetectedAgentsMessage } from "../init/plan.js";
 import type { AgentType } from "../mcp/agents.js";
 import {
 	agentChoicesFrom,
@@ -37,6 +39,8 @@ export type ResolveSkillsPlanOptions = {
 	interactive: boolean;
 	pickAgents?: (options: PickAgentsOptions) => Promise<AgentType[]>;
 	pickSkills?: () => Promise<SkillEntry[]>;
+	detectAgent?: () => AgentType | null;
+	detectInstalledAgents?: () => Promise<readonly AgentType[]>;
 };
 
 export const assertSkillsCanRun = (options: {
@@ -57,7 +61,7 @@ export const assertSkillsCanRun = (options: {
 		return;
 	}
 	throw new Error(
-		"No interactive terminal. Pass -y to install the default skills, or --skill <name>.",
+		"No interactive terminal. Pass -y to install the default skills into detected agents, or --skill <name>.",
 	);
 };
 
@@ -74,20 +78,34 @@ export async function resolveSkillsPlan(
 	const prompt = options.interactive && !options.yes;
 	const scope: SkillsInstallScope = options.global ? "global" : "project";
 	const available = skillsInstallableAgents();
-	const detected = await detectSkillsAgents({
+	const availableSet = new Set(available);
+	const scoped = await detectSkillsAgents({
 		scope,
 		cwd: options.cwd,
+		...(options.detectInstalledAgents
+			? { detectInstalledAgents: options.detectInstalledAgents }
+			: {}),
 	});
+	const detected =
+		options.yes && options.agents.length === 0
+			? await collectYesAgents({
+					detected: () => scoped,
+					detectAgent: options.detectAgent ?? detectAgent,
+					acceptHost: (id) => availableSet.has(id),
+				})
+			: scoped;
 	const selected = await resolveAgentSelection({
 		specified: options.agents,
 		choices: agentChoicesFrom(available, detected),
 		detected,
 		message:
 			"Which coding agents should get Neon agent skills? (space to toggle, enter to confirm)",
-		nonInteractiveMessage:
-			scope === "project"
-				? `No coding agents detected in this project. Pass --agent <name>. Supported agents: ${available.join(", ")}`
-				: `No coding agents detected. Pass --agent <name>. Supported agents: ${available.join(", ")}`,
+		nonInteractiveMessage: noDetectedAgentsMessage({
+			scope,
+			supported: available,
+			fix: options.yes ? "run-without-yes" : "pass-yes",
+			nameAgent: true,
+		}),
 		resolveSpecified: (raw) => {
 			if (raw === "*") {
 				throw new Error(

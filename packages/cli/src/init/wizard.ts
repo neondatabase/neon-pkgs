@@ -2,7 +2,7 @@ import prompts from "prompts";
 
 import { NEON_PLUGIN_NAME } from "../plugins/run.js";
 import { canPickAgentsInteractively } from "../utils/agent_picker.js";
-import type { InitAgentSetup } from "./plan.js";
+import { INIT_NEEDS_YES_OR_TERMINAL, type InitAgentSetup } from "./plan.js";
 
 const restoreCursorOnAbort = (state: { aborted: boolean }) => {
 	if (state.aborted) {
@@ -15,9 +15,7 @@ const restoreCursorOnAbort = (state: { aborted: boolean }) => {
 export const pickAgentSetupInteractively =
 	async (): Promise<InitAgentSetup> => {
 		if (!canPickAgentsInteractively()) {
-			throw new Error(
-				"No interactive terminal. Pass -y to use defaults, or run this command in a terminal.",
-			);
+			throw new Error(INIT_NEEDS_YES_OR_TERMINAL);
 		}
 		const { setup } = await prompts({
 			onState: restoreCursorOnAbort,

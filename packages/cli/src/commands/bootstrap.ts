@@ -23,16 +23,24 @@ import {
 	shouldPrintInitBanner,
 } from "../init/chrome.js";
 import {
+	assertNamedAgentTooling,
 	type ChildForward,
+	chooseYesAgentTooling,
 	type InitAgentSetup,
+	initPluginAgents,
+	initSkillsMcpAgents,
 	postScaffoldActions,
 	projectContextFile,
+	resolveNamedAgents,
 } from "../init/plan.js";
 import { runAgentTooling, runInitSteps } from "../init/tooling.js";
 import { pickAgentSetupInteractively } from "../init/wizard.js";
 import { log } from "../log.js";
+import type { AgentType } from "../mcp/agents.js";
 import type { CommonProps } from "../types.js";
+import { coerceAgentFlag } from "../utils/agent_flag.js";
 import { getCliName } from "../utils/cli_name.js";
+import { helpCsv, helpEpilogue } from "../utils/help_text.js";
 import {
 	formatInstallCommand,
 	inferPackageManager,
@@ -49,7 +57,7 @@ type BootstrapProps = CommonProps & {
 	template?: string;
 	force: boolean;
 	listTemplates: boolean;
-	agent?: boolean;
+	agent?: string[];
 	default: boolean;
 	install: boolean;
 	git: boolean;
@@ -62,10 +70,11 @@ type BootstrapProps = CommonProps & {
 	run?: InitRun;
 	pickAgentSetup?: () => Promise<InitAgentSetup>;
 	hasProjectPlugins?: (cwd: string) => Promise<boolean>;
+	detectProjectAgents?: (
+		cwd: string,
+	) => readonly AgentType[] | Promise<readonly AgentType[]>;
+	detectAgent?: () => AgentType | null;
 };
-
-const removedAgent = () =>
-	`\`${getCliName()} bootstrap --agent\` was removed. List templates with \`${getCliName()} bootstrap --list-templates --output json\`. Scaffold with \`${getCliName()} bootstrap <directory> --template <id>\` or \`${getCliName()} bootstrap <directory> --default\`.`;
 
 // The directory positional is optional: omitting it in an interactive terminal
 // prompts for one. In a non-interactive context a missing directory is an error.
@@ -100,14 +109,10 @@ export const builder = (argv: yargs.Argv) =>
 				type: "boolean",
 				default: false,
 			},
-			agent: {
-				hidden: true,
-				type: "boolean",
-			},
 			default: {
 				alias: "y",
 				describe:
-					"Quick start: scaffold the default template (or --template), then install, git, agent tooling, and link --yes. Skips those pickers; link --yes still asks for a project unless one is already linked",
+					"Quick start: scaffold the default template (or --template), then install, git, agent tooling (project folders, else the host CLI agent; if none, pass --agent or omit --default in a terminal), and link --yes. Skips those pickers; link --yes still asks for a project unless one is already linked",
 				type: "boolean",
 				default: false,
 			},
@@ -134,6 +139,14 @@ export const builder = (argv: yargs.Argv) =>
 				describe:
 					"After scaffolding, install the Neon plugin or skills and MCP. Use --no-agent-setup to skip",
 			},
+			agent: {
+				alias: "a",
+				type: "array",
+				string: true,
+				describe:
+					"Coding agent to install into (repeatable). Forwarded to plugins, or to skills and mcp. Skips agent selection. Values listed below",
+				coerce: coerceAgentFlag,
+			},
 		})
 		.example(
 			"$0 bootstrap my-app",
@@ -151,12 +164,17 @@ export const builder = (argv: yargs.Argv) =>
 			"$0 bootstrap --list-templates --output json",
 			"Print the template catalog as JSON",
 		)
-		.check((argv) => {
-			if (argv.agent === true) {
-				throw new Error(removedAgent());
-			}
-			return true;
-		})
+		.example(
+			"$0 bootstrap my-app --agent cursor --agent claude-code",
+			"Skip agent selection; install the plugin for those agents",
+		)
+		.epilogue(
+			helpEpilogue(
+				"--agent / -a is forwarded to plugins, or to skills and mcp, not both. It skips agent selection, including with --default.",
+				helpCsv("Plugin agents", initPluginAgents()),
+				helpCsv("Skills and MCP agents", initSkillsMcpAgents()),
+			),
+		)
 		.strict();
 
 export const handler = async (props: BootstrapProps): Promise<void> => {
@@ -187,6 +205,15 @@ export const handler = async (props: BootstrapProps): Promise<void> => {
 	if (shouldPrintInitBanner(props.default)) {
 		printInitBanner();
 	}
+	const named = resolveNamedAgents(props.agent ?? []);
+	if (props.agentSetup !== false) {
+		assertNamedAgentTooling(named, "bootstrap", {
+			...(props.directory !== undefined && props.directory.length > 0
+				? { directory: props.directory }
+				: {}),
+			...(props.default ? { yes: true } : {}),
+		});
+	}
 	const templates = await resolveTemplateList(props);
 	// --default is a non-interactive quick start: it fills in the template and
 	// directory and runs setup without asking, so it must not fall into the
@@ -202,7 +229,7 @@ export const handler = async (props: BootstrapProps): Promise<void> => {
 	ensureTargetUsable(targetDir, props.force);
 	await scaffold(template, targetDir);
 	printScaffolded(template, targetDir);
-	await runPostScaffoldSteps(props, targetDir, interactive, template);
+	await runPostScaffoldSteps(props, targetDir, interactive, template, named);
 };
 
 /**
@@ -340,6 +367,7 @@ const runPostScaffoldSteps = async (
 	targetDir: string,
 	interactive: boolean,
 	template: BootstrapTemplate,
+	named: readonly AgentType[],
 ): Promise<void> => {
 	const inferred = inferPackageManager(targetDir);
 	const defaultPm = resolvePackageManager(targetDir);
@@ -352,6 +380,7 @@ const runPostScaffoldSteps = async (
 			defaultPm,
 			neonConfig,
 			template,
+			named,
 		);
 		return;
 	}
@@ -390,7 +419,9 @@ const runPostScaffoldSteps = async (
 	const agentSetup: InitAgentSetup =
 		props.agentSetup === false
 			? "skip"
-			: await (props.pickAgentSetup ?? pickAgentSetupInteractively)();
+			: named.length > 0
+				? chooseYesAgentTooling(named).setup
+				: await (props.pickAgentSetup ?? pickAgentSetupInteractively)();
 
 	const canLink = props.link && !(neonConfig && !wantInstall);
 	if (props.link && !canLink) {
@@ -404,13 +435,14 @@ const runPostScaffoldSteps = async (
 
 	const outcome = await executePostScaffold(props, targetDir, {
 		yes: false,
-		lockAgentSetup: true,
+		lockAgentSetup: named.length === 0,
 		pm,
 		git: wantGit,
 		agentSetup,
 		install: wantInstall,
 		link: wantLink,
 		hasNeonConfig: neonConfig,
+		named,
 	});
 	finishPostScaffold({
 		heading: "Project scaffolded.",
@@ -434,13 +466,18 @@ const runDefaultSteps = async (
 	pm: PackageManager,
 	neonConfig: boolean,
 	template: BootstrapTemplate,
+	named: readonly AgentType[],
 ): Promise<void> => {
 	log.info(
 		"Quick start (--default): skipping the template, install, git, and agent pickers. link --yes still asks for a project unless one is already linked.",
 	);
 	const wantGit = props.git && !isGitRepo(targetDir);
 	const agentSetup: InitAgentSetup =
-		props.agentSetup === false ? "skip" : "skills-mcp";
+		props.agentSetup === false
+			? "skip"
+			: named.length > 0
+				? chooseYesAgentTooling(named).setup
+				: "skills-mcp";
 	const outcome = await executePostScaffold(props, targetDir, {
 		yes: true,
 		lockAgentSetup: false,
@@ -450,6 +487,7 @@ const runDefaultSteps = async (
 		install: props.install,
 		link: props.link,
 		hasNeonConfig: neonConfig,
+		named,
 	});
 	finishPostScaffold({
 		heading: "Project scaffolded.",
@@ -473,6 +511,7 @@ const executePostScaffold = async (
 		install: boolean;
 		link: boolean;
 		hasNeonConfig: boolean;
+		named: readonly AgentType[];
 	},
 ): Promise<{
 	installed: boolean;
@@ -517,12 +556,20 @@ const executePostScaffold = async (
 					? { agentSetup: choices.agentSetup }
 					: {}),
 				...kids,
+				...(choices.named.length > 0 ? { agents: choices.named } : {}),
 				...(props.pickAgentSetup
 					? { pickAgentSetup: props.pickAgentSetup }
 					: {}),
 				...(props.hasProjectPlugins
 					? { hasProjectPlugins: props.hasProjectPlugins }
 					: {}),
+				...(props.detectProjectAgents
+					? { detectProjectAgents: props.detectProjectAgents }
+					: {}),
+				...(props.detectAgent
+					? { detectAgent: props.detectAgent }
+					: {}),
+				command: "bootstrap",
 			});
 			agentsRan = true;
 			continue;

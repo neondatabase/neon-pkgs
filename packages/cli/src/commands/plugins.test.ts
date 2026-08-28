@@ -25,7 +25,7 @@ afterEach(() => {
 	}
 });
 
-function scratch(): {
+function scratch(opts: { projectCursor?: boolean } = {}): {
 	home: string;
 	cwd: string;
 	bin: string;
@@ -78,7 +78,9 @@ if (process.env.PLUGINS_CHILD_EXIT) {
 `,
 	);
 	chmodSync(join(bin, "npx"), 0o755);
-	mkdirSync(join(cwd, ".cursor"));
+	if (opts.projectCursor !== false) {
+		mkdirSync(join(cwd, ".cursor"));
+	}
 	return { home, cwd, bin, argvFile, envFile };
 }
 
@@ -145,19 +147,48 @@ describe("neon plugins", () => {
 		});
 	});
 
-	test("installs without -y when --agent is set", async ({
+	test("installs into the host CLI agent when the project has no folders", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin, argvFile } = scratch({
+			projectCursor: false,
+		});
+		const { stdout } = await testCliCommand(
+			["plugins", "-y"],
+			runOptions(home, cwd, bin, { CLAUDECODE: "1" }),
+		);
+		expect(JSON.parse(stdout)[0].agent).toBe("claude-code");
+		expect(JSON.parse(readFileSync(argvFile, "utf8"))[0]).toEqual(
+			expect.arrayContaining(["-t", "claude-code"]),
+		);
+	});
+
+	test("-y with no project folders and no host fails", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin } = scratch({ projectCursor: false });
+		const { stderr } = await testCliCommand(["plugins", "-y"], {
+			...runOptions(home, cwd, bin),
+			code: 1,
+		});
+		expect(stderr).toMatch(/No coding agents detected in this project/);
+		expect(stderr).toMatch(/--agent <name>/);
+		expect(stderr).toMatch(/omit -y in a terminal/);
+	});
+
+	test("installs with -y into detected project agents", async ({
 		testCliCommand,
 	}) => {
 		const { home, cwd, bin, argvFile } = scratch();
 		const { stdout } = await testCliCommand(
-			["plugins", "--agent", "cursor"],
+			["plugins", "-y"],
 			runOptions(home, cwd, bin),
 		);
 		expect(JSON.parse(stdout)[0].status).toBe("installed");
 		expect(JSON.parse(readFileSync(argvFile, "utf8"))).toHaveLength(1);
 	});
 
-	test("does not spawn without -y or --agent", async ({ testCliCommand }) => {
+	test("does not spawn without -y", async ({ testCliCommand }) => {
 		const { home, cwd, bin, argvFile } = scratch();
 		const { stderr } = await testCliCommand(["plugins"], {
 			...runOptions(home, cwd, bin),
@@ -167,83 +198,37 @@ describe("neon plugins", () => {
 		expect(() => readFileSync(argvFile, "utf8")).toThrow();
 	});
 
-	test("spawns once per target and dedupes Claude", async ({
-		testCliCommand,
-	}) => {
+	test("spawns once per detected target", async ({ testCliCommand }) => {
 		const { home, cwd, bin, argvFile } = scratch();
+		mkdirSync(join(cwd, ".claude"));
 		const { stdout } = await testCliCommand(
-			[
-				"plugins",
-				"--agent",
-				"cursor",
-				"--agent",
-				"claude",
-				"--agent",
-				"claude-desktop",
-			],
+			["plugins", "-y"],
 			runOptions(home, cwd, bin),
 		);
-		expect(JSON.parse(stdout)).toEqual([
-			{
-				scope: "project",
-				plugin: "neon-postgres",
-				agent: "cursor",
-				status: "installed",
-			},
-			{
-				scope: "project",
-				plugin: "neon-postgres",
-				agent: "claude-code, claude-desktop",
-				status: "installed",
-			},
-		]);
-		expect(JSON.parse(readFileSync(argvFile, "utf8"))).toEqual([
-			[
-				"-y",
-				"plugins",
-				"add",
-				"neondatabase/agent-skills",
-				"-t",
-				"cursor",
-				"-s",
-				"project",
-				"-y",
-			],
-			[
-				"-y",
-				"plugins",
-				"add",
-				"neondatabase/agent-skills",
-				"-t",
-				"claude-code",
-				"-s",
-				"project",
-				"-y",
-			],
-		]);
-	});
-
-	test("rejects unknown agents and --agent *", async ({ testCliCommand }) => {
-		const { home, cwd, bin } = scratch();
-		const { stderr: unknownAgent } = await testCliCommand(
-			["plugins", "-y", "--agent", "eve"],
-			{ ...runOptions(home, cwd, bin), code: 1 },
+		const rows = JSON.parse(stdout);
+		expect(rows).toHaveLength(2);
+		expect(rows).toEqual(
+			expect.arrayContaining([
+				{
+					scope: "project",
+					plugin: "neon-postgres",
+					agent: "cursor",
+					status: "installed",
+				},
+				{
+					scope: "project",
+					plugin: "neon-postgres",
+					agent: "claude-code",
+					status: "installed",
+				},
+			]),
 		);
-		expect(unknownAgent).toMatch(/Unknown agent: "eve"/);
-		expect(unknownAgent).not.toMatch(/vscode/);
-		expect(unknownAgent).not.toMatch(/github-copilot-cli/);
-		expect(unknownAgent).not.toMatch(/grok-build/);
-		const { stderr: unknownGlobal } = await testCliCommand(
-			["plugins", "-y", "--global", "--agent", "eve"],
-			{ ...runOptions(home, cwd, bin), code: 1 },
+		const spawned = JSON.parse(readFileSync(argvFile, "utf8"));
+		expect(spawned).toHaveLength(2);
+		const targets = spawned.map(
+			(args: string[]) => args[args.indexOf("-t") + 1],
 		);
-		expect(unknownGlobal).toMatch(/Unknown agent: "eve"/);
-		expect(unknownGlobal).toMatch(/vscode/);
-		const { stderr: star } = await testCliCommand(
-			["plugins", "-y", "--agent", "*"],
-			{ ...runOptions(home, cwd, bin), code: 1 },
-		);
-		expect(star).toMatch(/does not accept --agent \*/);
+		expect([...targets].sort()).toEqual(["claude-code", "cursor"]);
 	});
 
 	test("rejects unknown options and subcommands", async ({
@@ -271,7 +256,7 @@ describe("neon plugins", () => {
 			JSON.stringify({ projectId: "proj-from-neon" }),
 		);
 		const { stdout, stderr } = await testCliCommand(
-			["plugins", "--agent", "cursor"],
+			["plugins", "-y"],
 			runOptions(home, cwd, bin),
 		);
 		expect(stderr).not.toMatch(/Cannot run interactive auth/);
@@ -281,8 +266,9 @@ describe("neon plugins", () => {
 
 	test("install --global passes -s user", async ({ testCliCommand }) => {
 		const { home, cwd, bin, argvFile } = scratch();
+		mkdirSync(join(home, ".cursor"));
 		const { stdout } = await testCliCommand(
-			["plugins", "-y", "--global", "--agent", "cursor"],
+			["plugins", "-y", "--global"],
 			runOptions(home, cwd, bin),
 		);
 		expect(JSON.parse(readFileSync(argvFile, "utf8"))[0]).toContain("user");
@@ -290,16 +276,19 @@ describe("neon plugins", () => {
 	});
 
 	test("vscode requires --global", async ({ testCliCommand }) => {
-		const { home, cwd, bin, argvFile } = scratch();
-		const { stderr } = await testCliCommand(
-			["plugins", "--agent", "vscode"],
-			{ ...runOptions(home, cwd, bin), code: 1 },
-		);
+		const { home, cwd, bin, argvFile } = scratch({
+			projectCursor: false,
+		});
+		mkdirSync(join(cwd, ".vscode"));
+		const { stderr } = await testCliCommand(["plugins", "-y"], {
+			...runOptions(home, cwd, bin),
+			code: 1,
+		});
 		expect(stderr).toMatch(/Pass --global/);
 		expect(() => readFileSync(argvFile, "utf8")).toThrow();
 		const { stdout } = await testCliCommand(
-			["plugins", "--global", "--agent", "vscode"],
-			runOptions(home, cwd, bin),
+			["plugins", "-y", "--global"],
+			runOptions(home, cwd, bin, { TERM_PROGRAM: "vscode" }),
 		);
 		expect(JSON.parse(stdout)[0]).toMatchObject({
 			scope: "user",
@@ -325,16 +314,13 @@ describe("neon plugins", () => {
 		const { home, cwd, bin } = scratch();
 		const dump =
 			"npm error code ENOENT npm error syscall spawn sh npm error path /tmp/x";
-		const { stdout, stderr } = await testCliCommand(
-			["plugins", "--agent", "cursor"],
-			{
-				...runOptions(home, cwd, bin, {
-					PLUGINS_CHILD_EXIT: "1",
-					PLUGINS_CHILD_STDERR: dump,
-				}),
-				code: 1,
-			},
-		);
+		const { stdout, stderr } = await testCliCommand(["plugins", "-y"], {
+			...runOptions(home, cwd, bin, {
+				PLUGINS_CHILD_EXIT: "1",
+				PLUGINS_CHILD_STDERR: dump,
+			}),
+			code: 1,
+		});
 		const row = JSON.parse(stdout)[0];
 		expect(row.status).toBe("failed");
 		expect(row.error).toBe("plugins CLI failed");
@@ -350,38 +336,38 @@ describe("neon plugins", () => {
 		testCliCommand,
 	}) => {
 		const { home, cwd, bin } = scratch();
-		const { stdout, stderr } = await testCliCommand(
-			["plugins", "--agent", "cursor", "--agent", "claude-code"],
-			{
-				...runOptions(home, cwd, bin, {
-					PLUGINS_FAIL_TARGET: "claude-code",
-					PLUGINS_CHILD_STDERR: "boom",
-				}),
-				code: 1,
-			},
-		);
+		mkdirSync(join(cwd, ".claude"));
+		const { stdout, stderr } = await testCliCommand(["plugins", "-y"], {
+			...runOptions(home, cwd, bin, {
+				PLUGINS_FAIL_TARGET: "claude-code",
+				PLUGINS_CHILD_STDERR: "boom",
+			}),
+			code: 1,
+		});
 		const rows = JSON.parse(stdout);
-		expect(rows[0].status).toBe("installed");
-		expect(rows[1].status).toBe("failed");
+		expect(
+			rows.find((row: { agent: string }) => row.agent === "cursor")
+				?.status,
+		).toBe("installed");
+		expect(
+			rows.find((row: { agent: string }) => row.agent === "claude-code")
+				?.status,
+		).toBe("failed");
 		expect(stderr).toMatch(
 			/Retry with: neon plugins --agent claude-code -y/,
 		);
-		expect(stderr).not.toMatch(/--agent cursor/);
 	});
 
 	test("silent child failure does not print the npx argv", async ({
 		testCliCommand,
 	}) => {
 		const { home, cwd, bin } = scratch();
-		const { stderr } = await testCliCommand(
-			["plugins", "--agent", "cursor"],
-			{
-				...runOptions(home, cwd, bin, {
-					PLUGINS_CHILD_EXIT: "1",
-				}),
-				code: 1,
-			},
-		);
+		const { stderr } = await testCliCommand(["plugins", "-y"], {
+			...runOptions(home, cwd, bin, {
+				PLUGINS_CHILD_EXIT: "1",
+			}),
+			code: 1,
+		});
 		expect(stderr).toMatch(/plugins CLI failed/);
 		expect(stderr).toMatch(/Retry with: neon plugins --agent cursor -y/);
 		expect(stderr).not.toMatch(/neondatabase\/agent-skills/);
@@ -392,16 +378,14 @@ describe("neon plugins", () => {
 		testCliCommand,
 	}) => {
 		const { home, cwd, bin } = scratch();
-		const { stderr } = await testCliCommand(
-			["plugins", "-y", "--global", "--agent", "cursor"],
-			{
-				...runOptions(home, cwd, bin, {
-					PLUGINS_CHILD_EXIT: "1",
-					PLUGINS_CHILD_STDERR: "boom",
-				}),
-				code: 1,
-			},
-		);
+		mkdirSync(join(home, ".cursor"));
+		const { stderr } = await testCliCommand(["plugins", "-y", "--global"], {
+			...runOptions(home, cwd, bin, {
+				PLUGINS_CHILD_EXIT: "1",
+				PLUGINS_CHILD_STDERR: "boom",
+			}),
+			code: 1,
+		});
 		expect(stderr).toMatch(
 			/Retry with: neon plugins --agent cursor --global -y/,
 		);
@@ -412,13 +396,10 @@ describe("neon plugins", () => {
 		const { home, cwd } = scratch();
 		const empty = mkdtempSync(join(tmpdir(), "neon-plugins-empty-"));
 		dirs.push(empty);
-		const { stderr } = await testCliCommand(
-			["plugins", "--agent", "cursor"],
-			{
-				...runOptions(home, cwd, empty, { PATH: empty }),
-				code: 1,
-			},
-		);
+		const { stderr } = await testCliCommand(["plugins", "-y"], {
+			...runOptions(home, cwd, empty, { PATH: empty }),
+			code: 1,
+		});
 		expect(stderr).toMatch(/needs npx \(Node\.js\) to run the plugins CLI/);
 		expect(stderr).not.toMatch(/neondatabase\/agent-skills/);
 	});
@@ -432,7 +413,6 @@ describe("neon plugins", () => {
 		});
 		const flat = strip(`${stdout}\n${stderr}`).replace(/\s+/g, " ");
 		const compact = flat.replace(/\s+/g, "");
-		expect(flat).toMatch(/--agent/);
 		expect(flat).toMatch(/--global/);
 		expect(flat).not.toMatch(/--plugin/);
 		expect(flat).not.toMatch(/plugins update/);
@@ -453,5 +433,37 @@ describe("neon plugins", () => {
 		for (const agent of pluginsInstallableAgents("global")) {
 			expect(compact).toContain(agent);
 		}
+		expect(flat).toMatch(/-a, --agent/);
+		expect(flat).toContain("Detected agents");
+		expect(flat).toContain("plugins --agent cursor --agent claude-code");
+	});
+
+	test("installs without -y when --agent is set", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin, argvFile } = scratch({ projectCursor: false });
+		const { stdout } = await testCliCommand(
+			["plugins", "--agent", "cursor"],
+			runOptions(home, cwd, bin),
+		);
+		expect(JSON.parse(stdout)[0].agent).toBe("cursor");
+		expect(JSON.parse(readFileSync(argvFile, "utf8"))[0]).toEqual(
+			expect.arrayContaining(["-t", "cursor"]),
+		);
+	});
+
+	test("rejects unknown agents and --agent *", async ({ testCliCommand }) => {
+		const { home, cwd, bin, argvFile } = scratch({ projectCursor: false });
+		const { stderr: unknownAgent } = await testCliCommand(
+			["plugins", "-y", "--agent", "eve"],
+			{ ...runOptions(home, cwd, bin), code: 1 },
+		);
+		expect(unknownAgent).toMatch(/Unknown agent: "eve"/);
+		expect(() => readFileSync(argvFile, "utf8")).toThrow();
+		const { stderr: star } = await testCliCommand(
+			["plugins", "-y", "--agent", "*"],
+			{ ...runOptions(home, cwd, bin), code: 1 },
+		);
+		expect(star).toMatch(/does not accept --agent \*/);
 	});
 });

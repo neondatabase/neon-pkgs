@@ -153,7 +153,7 @@ describe("resolveMcpPlan", () => {
 		expect(plan.auth).toBe("oauth");
 	});
 
-	test("--agent skips the agent picker", async () => {
+	test("specified agents skip the agent picker", async () => {
 		const cwd = tmpDir();
 		const plan = await resolveMcpPlan(
 			planOptions(cwd, {
@@ -166,6 +166,43 @@ describe("resolveMcpPlan", () => {
 			}),
 		);
 		expect(plan.agents).toEqual(["claude-code"]);
+	});
+
+	test("-y --project uses the host CLI agent when the project has no folders", async () => {
+		const cwd = tmpDir();
+		const plan = await resolveMcpPlan(
+			planOptions(cwd, {
+				agents: [],
+				yes: true,
+				interactive: false,
+				project: true,
+				detectAgent: () => "cursor",
+				pickAgents: async () => {
+					throw new Error("agent prompt");
+				},
+				pickAuth: async () => {
+					throw new Error("auth prompt");
+				},
+			}),
+		);
+		expect(plan.scope).toBe("project");
+		expect(plan.agents).toEqual(["cursor"]);
+		expect(plan.auth).toBe("api-key");
+	});
+
+	test("-y --project with no folders or host fails", async () => {
+		const cwd = tmpDir();
+		await expect(
+			resolveMcpPlan(
+				planOptions(cwd, {
+					agents: [],
+					yes: true,
+					interactive: false,
+					project: true,
+					detectAgent: () => null,
+				}),
+			),
+		).rejects.toThrow(/omit -y in a terminal/);
 	});
 
 	test("pin yes with API-key auth sets urlProjectId", async () => {
@@ -294,6 +331,7 @@ describe("resolveMcpPlan", () => {
 					agents: [],
 					yes: true,
 					interactive: false,
+					detectAgent: () => null,
 				}),
 			),
 		).rejects.toThrow(/No coding agents detected in this project/);

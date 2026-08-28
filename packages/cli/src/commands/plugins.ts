@@ -26,17 +26,6 @@ type PluginsProps = CommonProps & {
 	agent?: string[];
 };
 
-type PluginsInstallRow = {
-	scope: string;
-	plugin: string;
-	agent: string;
-	status: "installed" | "failed";
-	error?: string;
-};
-
-const scopeLabel = (scope: "global" | "project"): string =>
-	scope === "project" ? "project" : "user";
-
 const coerceAgents = (value: unknown): string[] => {
 	if (value === undefined) return [];
 	const list = Array.isArray(value) ? value : [value];
@@ -55,6 +44,17 @@ const coerceAgents = (value: unknown): string[] => {
 	});
 };
 
+type PluginsInstallRow = {
+	scope: string;
+	plugin: string;
+	agent: string;
+	status: "installed" | "failed";
+	error?: string;
+};
+
+const scopeLabel = (scope: "global" | "project"): string =>
+	scope === "project" ? "project" : "user";
+
 export const command = "plugins";
 export const describe = "Install the Neon plugin into coding agents";
 
@@ -71,7 +71,8 @@ export const builder = (argv: yargs.Argv) =>
 				alias: "y",
 				type: "boolean",
 				default: false,
-				describe: "Skip prompts",
+				describe:
+					"Skip prompts. Detected agents (project folders, else the host CLI agent). --global uses installed apps, else the host CLI agent",
 			},
 			global: {
 				type: "boolean",
@@ -88,7 +89,10 @@ export const builder = (argv: yargs.Argv) =>
 			},
 		})
 		.example("$0 plugins", "Interactive: agents, then confirm")
-		.example("$0 plugins -y", "Detected agents, skip prompts")
+		.example(
+			"$0 plugins -y",
+			"Detected agents (project folders, else the host CLI agent), skip prompts",
+		)
 		.example(
 			"$0 plugins --agent cursor --agent claude-code",
 			"Install into specific agents",

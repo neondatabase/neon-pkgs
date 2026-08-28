@@ -1,8 +1,10 @@
 # Contributing to the Neon CLI
 
 Setup, Node floors, and how to run tests live in the
-[repo-root `CONTRIBUTING.md`](../../CONTRIBUTING.md). This file is the human-output
-contract for `-o table`.
+[repo-root `CONTRIBUTING.md`](../../CONTRIBUTING.md). CLI-for-agents rules (`--help`
+lists enums; `-y` errors name the flag to pass; every command can run with no TTY)
+live in [`AGENTS.md`](./AGENTS.md). This file is the human-output contract for
+`-o table`.
 
 ## Human output is not a machine API
 

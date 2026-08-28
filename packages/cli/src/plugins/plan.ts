@@ -2,6 +2,8 @@ import {
 	getAgentDisplayName,
 	tryResolveAddMcpAgentId,
 } from "../init/agents.js";
+import { detectAgent } from "../init/detect_host.js";
+import { collectYesAgents, noDetectedAgentsMessage } from "../init/plan.js";
 import type { AgentType } from "../mcp/agents.js";
 import {
 	agentChoicesFrom,
@@ -34,6 +36,8 @@ export type ResolvePluginsPlanOptions = {
 	cwd: string;
 	interactive: boolean;
 	pickAgents?: (options: PickAgentsOptions) => Promise<AgentType[]>;
+	detectAgent?: () => AgentType | null;
+	detectInstalledAgents?: () => Promise<readonly AgentType[]>;
 };
 
 export const assertPluginsCanRun = (options: {
@@ -45,7 +49,7 @@ export const assertPluginsCanRun = (options: {
 		return;
 	}
 	throw new Error(
-		"No interactive terminal. Pass -y to install into detected agents, or --agent <name>.",
+		"No interactive terminal. Pass -y to install into detected agents, or --agent <name> to name them.",
 	);
 };
 
@@ -60,20 +64,36 @@ export async function resolvePluginsPlan(
 	const prompt = options.interactive && !options.yes;
 	const scope: PluginsInstallScope = options.global ? "global" : "project";
 	const available = pluginsInstallableAgents(scope);
-	const detected = await detectPluginsAgents({
+	const availableSet = new Set(available);
+	const scoped = await detectPluginsAgents({
 		scope,
 		cwd: options.cwd,
+		...(options.detectInstalledAgents
+			? { detectInstalledAgents: options.detectInstalledAgents }
+			: {}),
 	});
+	const detected =
+		options.yes && options.agents.length === 0
+			? await collectYesAgents({
+					detected: () => scoped,
+					detectAgent: options.detectAgent ?? detectAgent,
+					acceptHost: (id) =>
+						availableSet.has(id) ||
+						getPluginsTargetName(id) !== undefined,
+				})
+			: scoped;
 	const selected = await resolveAgentSelection({
 		specified: options.agents,
 		choices: agentChoicesFrom(available, detected),
 		detected,
 		message:
 			"Which coding agents should get the Neon plugin? (space to toggle, enter to confirm)",
-		nonInteractiveMessage:
-			scope === "project"
-				? `No coding agents detected in this project. Pass --agent <name>. Supported agents: ${available.join(", ")}`
-				: `No coding agents detected. Pass --agent <name>. Supported agents: ${available.join(", ")}`,
+		nonInteractiveMessage: noDetectedAgentsMessage({
+			scope,
+			supported: available,
+			fix: options.yes ? "run-without-yes" : "pass-yes",
+			nameAgent: true,
+		}),
 		resolveSpecified: (raw) => {
 			if (raw === "*") {
 				throw new Error(

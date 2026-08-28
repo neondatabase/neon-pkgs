@@ -683,7 +683,7 @@ When a package cannot be bundled — a native addon with no esbuild loader, or a
 
 `neon bootstrap` copies a Neon starter template into a new (or current) directory — conceptually like `degit`, but it only pulls from a small set of templates we maintain in the public [`neondatabase/examples`](https://github.com/neondatabase/examples) repo. The template copy needs no Neon login: it downloads files from GitHub.
 
-After scaffolding, an interactive terminal asks about dependency install, git, agent tooling (the Neon plugin, or skills and MCP separately — never both), and `neon link` before running those steps. Dependency install is last, except when the template has a `neon.ts` and you chose to link — then install runs first so link can pull env. `--default` / `-y` skips the template, install, git, and agent pickers, then runs `link --yes`. `link --yes` still asks for a project unless one is already linked. `--no-agent-setup` and `--no-link` skip those. Non-interactive without `--default` prints next steps and does not install, set up agents, or link.
+After scaffolding, an interactive terminal asks about dependency install, git, agent tooling (the Neon plugin, or skills and MCP separately — never both), and `neon link` before running those steps. Dependency install is last, except when the template has a `neon.ts` and you chose to link — then install runs first so link can pull env. `--default` / `-y` skips the template, install, git, and agent pickers, then installs agent tooling for project folders, else the host CLI agent. If none are found, it exits: pass `--agent <name>`, run from a supported agent, or omit `--default` / `-y` in a terminal to pick. `--agent` / `-a` names coding agents, skips agent selection, and is forwarded to `plugins`, or to `skills` and `mcp`, not both. `link --yes` still asks for a project unless one is already linked. `--no-agent-setup` and `--no-link` skip those. Non-interactive without `--default` prints next steps and does not install, set up agents, or link.
 
 Pass a target directory (or `.` for the current one). In an interactive terminal you pick the template from a list; in CI / non-interactive contexts pass `--template <id>`.
 
@@ -693,6 +693,9 @@ $ neon bootstrap my-app
 
 # Scaffold a specific template into the current directory (skips the template picker)
 $ neon bootstrap . --template hono
+
+# Skip agent selection; install the plugin for those agents
+$ neon bootstrap my-app --agent cursor --agent claude-code
 
 # List templates
 $ neon bootstrap --list-templates
@@ -716,11 +719,16 @@ In an interactive terminal it offers one of: the Neon plugin (`neon plugins`), s
 ```bash
 $ neon init
 $ neon init -y
+$ neon init --agent cursor --agent claude-code
 ```
 
-`-y` skips the template picker and the agent-setup offer. Empty dir: `bootstrap --default`. Existing app: plugin when a project-level plugin agent is detected (Cursor, Claude Code, Codex); otherwise skills and MCP. VS Code, GitHub Copilot CLI, and Grok only take the plugin user-level (`neon plugins --global`), so `-y` uses skills and MCP for those.
+Without a TTY, pass `-y`. `--agent` skips agent selection but does not replace `-y` for link or templates.
 
-`-y` forwards `-y` to `plugins` or `skills`/`mcp`, `--default` to `bootstrap`, `--yes` to `link`, and `--services none` to `config init`. `link --yes` only skips the "already linked" confirmation; it still asks for a project unless one is already linked.
+`-y` skips the template picker and the agent-setup offer. Empty dir: `bootstrap --default`. Existing app: plugin when Cursor, Claude Code, or Codex is in project folders, else the host CLI agent; otherwise skills and MCP. If none are found, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick. VS Code, GitHub Copilot CLI, and Grok only take the plugin user-level (`neon plugins --global`), so `-y` uses skills and MCP for those.
+
+`--agent` / `-a` (repeatable) names coding agents and skips agent selection, interactive or with `-y`. Init forwards those names to `plugins`, or to `skills` and `mcp`, not both.
+
+`-y` forwards `-y` to `plugins` or `skills`/`mcp`, `--default` to `bootstrap`, `--yes` to `link`, and `--services none` to `config init`. `--agent` is forwarded with them. `mcp -y` is the global install. `link --yes` only skips the "already linked" confirmation; it still asks for a project unless one is already linked.
 
 A failed step stops the rest. `--profile` and `--config-dir` are forwarded to each child. `--output json` and `--output yaml` are refused; the commands init runs print their own output.
 
@@ -734,16 +742,17 @@ A failed step stops the rest. `--profile` and `--config-dir` are forwarded to ea
 # Interactive: global or project, then agents, then API key or OAuth, then confirm.
 $ neon mcp
 
-# Skip prompts. Global config, every globally detected agent, reuse or mint an API key.
+# Skip prompts. Global config, installed apps else the host CLI agent, reuse or mint an API key.
 $ neon mcp -y
 
 # OAuth: no API key minted. The agent prompts for Neon sign-in on first use.
 $ neon mcp --oauth
 
+# Named agents.
+$ neon mcp --agent cursor --agent claude-code
+
 # Project-level config. A minted key is still account-wide unless a project is pinned.
 $ neon mcp --project
-
-$ neon mcp --agent cursor --agent claude-code
 
 # Hide write tools. Does not change the minted key.
 $ neon mcp --read-only
@@ -757,9 +766,9 @@ $ neon mcp --category querying --category schema
 
 On a TTY the command asks for config location (global is the default), then agents, then API key vs OAuth, then a summary to confirm before it writes. Detected agents start selected: globally installed agents or project-folder markers such as `.cursor` when the install is project.
 
-`-y` skips those questions. `neon mcp -y` writes `https://mcp.neon.tech/mcp` into global config for every globally detected agent, reuses an existing Neon MCP API key or mints an account-wide key, leaves write tools enabled, exposes every tool category, and does not pin a project (including from `.neon`). `--project`, `--oauth` and `--agent` skip the question they answer and still apply with `-y`. `--read-only` and `--category` are flags only and are never prompted. A linked project-folder install asks whether to pin MCP tools to that `.neon` project (`?projectId=`). If you pin and selected API-key auth, the minted key is limited to that project too. An unlinked project folder does not ask. Global installs never add that param unless you pass `--project-id`. Without a TTY, pass `-y` to mint into every detected agent, `--agent` to name the agents or `--oauth` to write the URL only. `neon mcp --help` lists the server URL, those `-y` defaults, the supported `--agent` names, and the `--category` values.
+`-y` skips those questions. `neon mcp -y` writes `https://mcp.neon.tech/mcp` into global config for globally installed apps, else the host CLI agent, reuses an existing Neon MCP API key or mints an account-wide key, leaves write tools enabled, exposes every tool category, and does not pin a project (including from `.neon`). `--agent`, `--project`, `--oauth`, `--read-only`, `--project-id` and `--category` still apply with `-y`. `--read-only` and `--category` are flags only and are never prompted. A linked project-folder install asks whether to pin MCP tools to that `.neon` project (`?projectId=`). If you pin and selected API-key auth, the minted key is limited to that project too. An unlinked project folder does not ask. Global installs never add that param unless you pass `--project-id`. Without a TTY, pass `-y` to mint into every detected agent, `--agent <name>` to name them, or `--oauth` to write the URL only. If `-y` finds no agent, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick. `neon mcp --help` lists the server URL, those `-y` defaults, the supported agent names, and the `--category` values.
 
-`--agent` names: `antigravity`, `cline`, `cline-cli`, `claude-code`, `codex`, `cursor`, `gemini-cli`, `goose`, `github-copilot-cli`, `grok-build`, `mcporter`, `opencode`, `vscode`, `windsurf`, `zed`. Project installs drop `antigravity`, `cline`, `cline-cli`, `goose` and `windsurf`. `claude-desktop` is a known name that is then skipped.
+Supported agents: `antigravity`, `cline`, `cline-cli`, `claude-code`, `codex`, `cursor`, `gemini-cli`, `goose`, `github-copilot-cli`, `grok-build`, `mcporter`, `opencode`, `vscode`, `windsurf`, `zed`. Project installs drop `antigravity`, `cline`, `cline-cli`, `goose` and `windsurf`. `claude-desktop` is a known name that is then skipped.
 
 The default mints an account-wide API key (or reuses the Bearer already configured for Neon at `https://mcp.neon.tech/mcp`) and writes it into each selected agent's config. That key reaches everything the account can, in every organization. Revoke it with `neon api-keys revoke <id>`. `--oauth` writes the URL with no `Authorization` header; the agent signs in on first use. `--project` writes into the project config (`.cursor/mcp.json` and similar). `--read-only` adds `?readonly=true`. `--project-id` adds `?projectId=` and, when a key is minted, limits that key to the named project. Accepting the linked-project pin does the same. Revoke a project-scoped key with `neon api-keys revoke <id> --org-id <org>`. A reused Bearer keeps the scope it already has. `--category` adds `?category=` (repeatable or comma-separated: `projects`, `branches`, `schema`, `querying`, `neon_auth`, `data_api`, `observability`, `docs`). `--read-only` and `--category` restrict which MCP tools the server exposes; they do not change what the minted key can do.
 
@@ -771,12 +780,14 @@ The default mints an account-wide API key (or reuses the Bearer already configur
 # Interactive: this directory, then agents, then skills, then confirm.
 $ neon skills
 
-# Skip prompts. This directory, every detected agent, the default skills.
+# Skip prompts. This directory, detected agents (project folders, else the host CLI agent), the default skills.
 $ neon skills -y
 
-$ neon skills -s neon -s neon-ai-gateway --agent cursor
+# Named skills into detected agents.
+$ neon skills -y -s neon -s neon-ai-gateway
 
-$ neon skills --agent cursor --agent claude-code
+# Named skills into a named agent.
+$ neon skills -s neon -s neon-ai-gateway --agent cursor
 
 # User-level skills.
 $ neon skills --global
@@ -789,11 +800,11 @@ $ neon skills update --global -y
 
 On a TTY the command asks which agents and which skills, then shows a summary to confirm. Detected agents start selected from project-folder markers such as `.cursor`. Default skills start selected. `neon-postgres-agent-platforms` is offered and starts unselected.
 
-`-y` skips those questions and installs the default skills. `--skill` / `-s` names specific skills and skips the skill picker. `--agent` and `--global` still apply. Without a TTY, pass `-y` or `--skill`. `--agent` alone is not enough.
+`-y` skips those questions and installs the default skills into detected agents: project-folder markers such as `.cursor`, else the agent driving the CLI. `--agent` / `-a` names coding agents and skips the agent picker. `--skill` / `-s` names specific skills and skips the skill picker; it does not select agents. `--global -y` uses installed apps, else the host CLI agent. Without a TTY, pass `-y`, or `--skill <name>` (add `--agent <name>` to name agents). If `-y` finds no agent, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick.
 
 `--skill` names by source repo: `neondatabase/agent-skills` (`neon`, `neon-ai-gateway`, `neon-functions`, `neon-object-storage`, `neon-postgres`, `neon-postgres-branches`, `neon-postgres-egress-optimizer`); `neondatabase/neon-for-agent-platforms` (`neon-postgres-agent-platforms`).
 
-`--agent` names match `neon mcp`, minus agents that cannot install skills: `antigravity`, `cline`, `cline-cli`, `claude-code`, `claude-desktop`, `codex`, `cursor`, `gemini-cli`, `goose`, `github-copilot-cli`, `grok-build`, `opencode`, `vscode`, `windsurf`, `zed`. `mcporter` is a known MCP name that is then skipped. `neon skills --help` lists the same skill and agent values, and that `-y` leaves out `neon-postgres-agent-platforms`.
+Supported agents match `neon mcp`, minus agents that cannot install skills: `antigravity`, `cline`, `cline-cli`, `claude-code`, `claude-desktop`, `codex`, `cursor`, `gemini-cli`, `goose`, `github-copilot-cli`, `grok-build`, `opencode`, `vscode`, `windsurf`, `zed`. `mcporter` is a known MCP name that is then skipped. `neon skills --help` lists the same skill and agent values, and that `-y` leaves out `neon-postgres-agent-platforms`.
 
 ## Install the Neon plugin (`plugins`)
 
@@ -803,27 +814,27 @@ On a TTY the command asks which agents and which skills, then shows a summary to
 # Interactive: agents, then confirm.
 $ neon plugins
 
-# Skip prompts. Every detected agent.
+# Skip prompts. Detected agents (project folders, else the host CLI agent).
 $ neon plugins -y
 
+# Named agents.
 $ neon plugins --agent cursor --agent claude-code
 
 # User-level install.
 $ neon plugins --global
-$ neon plugins --global --agent vscode
 ```
 
 On a TTY the command asks which agents, then shows a summary to confirm. Detected agents start selected from project-folder markers such as `.cursor`. There is one plugin (`neon-postgres`); there is no plugin picker and no `update` subcommand.
 
-`-y` skips those questions and installs into every detected agent. `--agent` names specific agents and skips the agent picker. Without a TTY, pass `-y` or `--agent`. `--agent` alone is enough because the plugin is fixed.
+`-y` skips those questions and installs into detected agents: project-folder markers such as `.cursor`, else the agent driving the CLI. `--agent` / `-a` names coding agents and skips the agent picker. `--global -y` uses installed apps, else the host CLI agent. Without a TTY, pass `-y` or `--agent <name>`. If `-y` finds no agent, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick.
 
-Default scope is `project`. `--global` is `user`. On macOS and Linux, Cursor and Claude Code store the plugin cache under `~/.claude/plugins`; on Windows, Cursor installs into Cursor extensions. `project` vs `user` is the scope field the plugins CLI records, not a directory in the repo. VS Code, GitHub Copilot CLI, and Grok Build only install user-level: they are skipped at the default scope with a warning, and `--agent vscode` without `--global` fails if nothing else is selected.
+Default scope is `project`. `--global` is `user`. On macOS and Linux, Cursor and Claude Code store the plugin cache under `~/.claude/plugins`; on Windows, Cursor installs into Cursor extensions. `project` vs `user` is the scope field the plugins CLI records, not a directory in the repo. VS Code, GitHub Copilot CLI, and Grok Build only install user-level: they are skipped at the default scope with a warning, and a VS Code-only project fails if nothing else is selected. Pass `--global` for those.
 
-`--agent` names with a plugins mapping: `claude-code`, `claude-desktop`, `codex`, `cursor`, `github-copilot-cli`, `grok-build`, `vscode`. `claude-desktop` installs as Claude Code; naming both produces one install and lists both names in the table. `mcporter` is a known MCP name that is then skipped.
+Supported agents with a plugins mapping: `claude-code`, `claude-desktop`, `codex`, `cursor`, `github-copilot-cli`, `grok-build`, `vscode`. `claude-desktop` installs as Claude Code; detecting both produces one install and lists both names in the table. `mcporter` is a known MCP name that is then skipped.
 
 The plugins CLI installs every plugin it finds in the Neon plugin package. Today that is `neon-postgres` from `neondatabase/agent-skills`. It includes the Neon MCP server (`https://mcp.neon.tech/mcp`) and these skills: `neon`, `neon-ai-gateway`, `neon-functions`, `neon-object-storage`, `neon-postgres`, `neon-postgres-branches`, `neon-postgres-egress-optimizer`. It does not include `neon-postgres-agent-platforms`.
 
-`neon plugins --help` lists the plugin, those contents, and the supported `--agent` names.
+`neon plugins --help` lists the plugin, those contents, and the supported agent names.
 
 ## Snapshots (`snapshots`)
 

@@ -74,7 +74,7 @@ export const builder = (argv: yargs.Argv) =>
 				type: "boolean",
 				default: false,
 				describe:
-					"Skip prompts. Defaults listed below. --project, --oauth, --agent, --read-only, --project-id and --category still apply",
+					"Skip prompts. Defaults listed below. --agent, --project, --oauth, --read-only, --project-id and --category still apply",
 			},
 			agent: {
 				alias: "a",
@@ -153,17 +153,17 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.example(
 			"$0 mcp -y",
-			"Global config, detected agents, reuse or mint an API key",
+			"Global config, installed apps else the host CLI agent, reuse or mint an API key",
 		)
 		.example(
 			"$0 mcp --oauth",
 			"Install with OAuth; the agent signs in on first use",
 		)
-		.example("$0 mcp --project", "Write project-level config")
 		.example(
 			"$0 mcp --agent cursor --agent claude-code",
 			"Install into specific agents",
 		)
+		.example("$0 mcp --project", "Write project-level config")
 		.example("$0 mcp --read-only", "Hide write tools via ?readonly=true")
 		.example(
 			"$0 mcp --project-id <id>",
@@ -181,7 +181,7 @@ export const builder = (argv: yargs.Argv) =>
 				helpCsv("Supported categories", NEON_MCP_CATEGORIES),
 				"neon mcp -y:",
 				"  global config",
-				"  every globally detected agent",
+				"  globally installed apps, else the host CLI agent",
 				"  reuse an existing Neon MCP API key, else mint an account-wide key",
 				"  write tools on, all categories",
 				"  no project pin (including from .neon)",

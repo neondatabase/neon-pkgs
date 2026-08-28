@@ -35,7 +35,7 @@ afterEach(() => {
 	}
 });
 
-function scratch(): {
+function scratch(opts: { projectCursor?: boolean } = {}): {
 	home: string;
 	cwd: string;
 	bin: string;
@@ -80,7 +80,9 @@ if (process.env.SKILLS_CHILD_EXIT) {
 `,
 	);
 	chmodSync(join(bin, "npx"), 0o755);
-	mkdirSync(join(cwd, ".cursor"));
+	if (opts.projectCursor !== false) {
+		mkdirSync(join(cwd, ".cursor"));
+	}
 	return { home, cwd, bin, argvFile, envFile };
 }
 
@@ -154,12 +156,41 @@ describe("neon skills", () => {
 		});
 	});
 
+	test("installs into the host CLI agent when the project has no folders", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin, argvFile } = scratch({
+			projectCursor: false,
+		});
+		const { stdout } = await testCliCommand(
+			["skills", "-y"],
+			runOptions(home, cwd, bin, { CLAUDECODE: "1" }),
+		);
+		expect(JSON.parse(stdout)[0].agents).toBe("claude-code");
+		expect(JSON.parse(readFileSync(argvFile, "utf8"))[0]).toEqual(
+			expect.arrayContaining(["--agent", "claude-code"]),
+		);
+	});
+
+	test("-y with no project folders and no host fails", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin } = scratch({ projectCursor: false });
+		const { stderr } = await testCliCommand(["skills", "-y"], {
+			...runOptions(home, cwd, bin),
+			code: 1,
+		});
+		expect(stderr).toMatch(/No coding agents detected in this project/);
+		expect(stderr).toMatch(/--agent <name>/);
+		expect(stderr).toMatch(/omit -y in a terminal/);
+	});
+
 	test("does not spawn without -y", async ({ testCliCommand }) => {
 		const { home, cwd, bin, argvFile } = scratch();
-		const { stderr } = await testCliCommand(
-			["skills", "--agent", "cursor"],
-			{ ...runOptions(home, cwd, bin), code: 1 },
-		);
+		const { stderr } = await testCliCommand(["skills"], {
+			...runOptions(home, cwd, bin),
+			code: 1,
+		});
 		expect(stderr).toMatch(/Pass -y to install the default skills/);
 		expect(() => readFileSync(argvFile, "utf8")).toThrow();
 	});
@@ -169,15 +200,7 @@ describe("neon skills", () => {
 	}) => {
 		const { home, cwd, bin, argvFile } = scratch();
 		const { stdout } = await testCliCommand(
-			[
-				"skills",
-				"-s",
-				"neon",
-				"-s",
-				"neon-postgres-agent-platforms",
-				"--agent",
-				"cursor",
-			],
+			["skills", "-s", "neon", "-s", "neon-postgres-agent-platforms"],
 			runOptions(home, cwd, bin),
 		);
 		expect(JSON.parse(stdout)).toEqual([
@@ -235,24 +258,15 @@ describe("neon skills", () => {
 	test("rejects unknown skills and --skill *", async ({ testCliCommand }) => {
 		const { home, cwd, bin } = scratch();
 		const { stderr: unknownSkill } = await testCliCommand(
-			["skills", "-y", "-s", "eve", "--agent", "cursor"],
+			["skills", "-y", "-s", "eve"],
 			{ ...runOptions(home, cwd, bin), code: 1 },
 		);
 		expect(unknownSkill).toMatch(/Unknown skill: "eve"/);
 		const { stderr: star } = await testCliCommand(
-			["skills", "-y", "-s", "*", "--agent", "cursor"],
+			["skills", "-y", "-s", "*"],
 			{ ...runOptions(home, cwd, bin), code: 1 },
 		);
 		expect(star).toMatch(/does not accept --skill \*/);
-	});
-
-	test("rejects skills-CLI-only agents", async ({ testCliCommand }) => {
-		const { home, cwd, bin } = scratch();
-		const { stderr } = await testCliCommand(
-			["skills", "-y", "--agent", "eve"],
-			{ ...runOptions(home, cwd, bin), code: 1 },
-		);
-		expect(stderr).toMatch(/Unknown agent: "eve"/);
 	});
 
 	test("skips auth and context enrichment", async ({ testCliCommand }) => {
@@ -262,7 +276,7 @@ describe("neon skills", () => {
 			JSON.stringify({ projectId: "proj-from-neon" }),
 		);
 		const { stdout, stderr } = await testCliCommand(
-			["skills", "-y", "--agent", "cursor"],
+			["skills", "-y"],
 			runOptions(home, cwd, bin),
 		);
 		expect(stderr).not.toMatch(/Cannot run interactive auth/);
@@ -357,16 +371,6 @@ describe("neon skills", () => {
 		]);
 	});
 
-	test("update rejects --agent before spawn", async ({ testCliCommand }) => {
-		const { home, cwd, bin, argvFile } = scratch();
-		const { stderr } = await testCliCommand(
-			["skills", "update", "-y", "--agent", "cursor"],
-			{ ...runOptions(home, cwd, bin), code: 1 },
-		);
-		expect(stderr).toMatch(/does not take --agent/);
-		expect(() => readFileSync(argvFile, "utf8")).toThrow();
-	});
-
 	test("update rejects --skill before spawn", async ({ testCliCommand }) => {
 		const { home, cwd, bin, argvFile } = scratch();
 		const { stderr } = await testCliCommand(
@@ -386,10 +390,13 @@ describe("neon skills", () => {
 			runOptions(home, cwd, bin),
 		);
 		const text = `${stdout}\n${stderr}`;
+		const flat = strip(text).replace(/\s+/g, " ");
 		expect(text).toMatch(/skills update/);
 		expect(text).not.toMatch(/--agent/);
 		expect(text).not.toMatch(/--skill/);
 		expect(text).not.toMatch(/-y, -y/);
+		expect(flat).toContain("Skip the confirm prompt");
+		expect(flat).not.toContain("Detected agents");
 	});
 
 	test("update without -y fails before spawn", async ({ testCliCommand }) => {
@@ -406,8 +413,9 @@ describe("neon skills", () => {
 		testCliCommand,
 	}) => {
 		const { home, cwd, bin, argvFile } = scratch();
+		mkdirSync(join(home, ".cursor"));
 		const { stdout } = await testCliCommand(
-			["skills", "-y", "--global", "--agent", "cursor"],
+			["skills", "-y", "--global"],
 			runOptions(home, cwd, bin),
 		);
 		expect(JSON.parse(readFileSync(argvFile, "utf8"))[0]).toContain("-g");
@@ -421,16 +429,13 @@ describe("neon skills", () => {
 		const { home, cwd, bin } = scratch();
 		const dump =
 			"npm error code ENOENT npm error syscall spawn sh npm error path /tmp/x";
-		const { stdout, stderr } = await testCliCommand(
-			["skills", "-y", "--agent", "cursor"],
-			{
-				...runOptions(home, cwd, bin, {
-					SKILLS_CHILD_EXIT: "1",
-					SKILLS_CHILD_STDERR: dump,
-				}),
-				code: 1,
-			},
-		);
+		const { stdout, stderr } = await testCliCommand(["skills", "-y"], {
+			...runOptions(home, cwd, bin, {
+				SKILLS_CHILD_EXIT: "1",
+				SKILLS_CHILD_STDERR: dump,
+			}),
+			code: 1,
+		});
 		const row = JSON.parse(stdout)[0];
 		expect(row.status).toBe("failed");
 		expect(row.error).toBe("skills CLI failed");
@@ -481,15 +486,7 @@ describe("neon skills", () => {
 	}) => {
 		const { home, cwd, bin } = scratch();
 		const { stderr } = await testCliCommand(
-			[
-				"skills",
-				"-s",
-				"neon",
-				"-s",
-				"neon-postgres-agent-platforms",
-				"--agent",
-				"cursor",
-			],
+			["skills", "-s", "neon", "-s", "neon-postgres-agent-platforms"],
 			{
 				...runOptions(home, cwd, bin, {
 					SKILLS_CHILD_EXIT: "1",
@@ -525,13 +522,10 @@ describe("neon skills", () => {
 		const { home, cwd } = scratch();
 		const empty = mkdtempSync(join(tmpdir(), "neon-skills-empty-"));
 		dirs.push(empty);
-		const { stderr } = await testCliCommand(
-			["skills", "-y", "--agent", "cursor"],
-			{
-				...runOptions(home, cwd, empty, { PATH: empty }),
-				code: 1,
-			},
-		);
+		const { stderr } = await testCliCommand(["skills", "-y"], {
+			...runOptions(home, cwd, empty, { PATH: empty }),
+			code: 1,
+		});
 		expect(stderr).toMatch(/needs npx \(Node\.js\) to run the skills CLI/);
 		expect(stderr).not.toMatch(/neondatabase\/agent-skills/);
 	});
@@ -544,6 +538,7 @@ describe("neon skills", () => {
 		const flat = strip(`${stdout}\n${stderr}`).replace(/\s+/g, " ");
 		const compact = flat.replace(/\s+/g, "");
 		expect(flat).toMatch(/-s, --skill/);
+		expect(flat).toMatch(/-a, --agent/);
 		expect(flat).toMatch(/skills update/);
 		expect(flat).not.toMatch(/-y, -y/);
 		for (const agent of skillsInstallableAgents()) {
@@ -556,5 +551,58 @@ describe("neon skills", () => {
 			expect(compact).toContain(row.skill);
 		}
 		expect(compact).toContain("exceptneon-postgres-agent-platforms");
+		expect(flat).toContain("Detected agents");
+		expect(flat).toContain("skills -y -s neon -s neon-ai-gateway");
+		expect(flat).toContain(
+			"skills -s neon -s neon-ai-gateway --agent cursor",
+		);
+		expect(flat).toContain("Does not select agents");
+	});
+
+	test("installs named skills without -y when --agent is set", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin, argvFile } = scratch({ projectCursor: false });
+		const { stdout } = await testCliCommand(
+			["skills", "--agent", "cursor", "-s", "neon"],
+			runOptions(home, cwd, bin),
+		);
+		expect(JSON.parse(stdout)[0].agents).toBe("cursor");
+		expect(JSON.parse(stdout)[0].skills).toBe("neon");
+		expect(JSON.parse(readFileSync(argvFile, "utf8"))[0]).toEqual(
+			expect.arrayContaining(["--agent", "cursor", "--skill", "neon"]),
+		);
+	});
+
+	test("-a is an alias for --agent", async ({ testCliCommand }) => {
+		const { home, cwd, bin, argvFile } = scratch({ projectCursor: false });
+		const { stdout } = await testCliCommand(
+			["skills", "-y", "-a", "cursor"],
+			runOptions(home, cwd, bin),
+		);
+		expect(JSON.parse(stdout)[0].agents).toBe("cursor");
+		expect(JSON.parse(readFileSync(argvFile, "utf8"))[0]).toEqual(
+			expect.arrayContaining(["--agent", "cursor"]),
+		);
+	});
+
+	test("rejects unknown --agent before spawn", async ({ testCliCommand }) => {
+		const { home, cwd, bin, argvFile } = scratch({ projectCursor: false });
+		const { stderr } = await testCliCommand(
+			["skills", "-y", "--agent", "eve"],
+			{ ...runOptions(home, cwd, bin), code: 1 },
+		);
+		expect(stderr).toMatch(/Unknown agent: "eve"/);
+		expect(() => readFileSync(argvFile, "utf8")).toThrow();
+	});
+
+	test("update rejects --agent before spawn", async ({ testCliCommand }) => {
+		const { home, cwd, bin, argvFile } = scratch();
+		const { stderr } = await testCliCommand(
+			["skills", "update", "-y", "--agent", "cursor"],
+			{ ...runOptions(home, cwd, bin), code: 1 },
+		);
+		expect(stderr).toMatch(/does not take --agent/);
+		expect(() => readFileSync(argvFile, "utf8")).toThrow();
 	});
 });

@@ -39,7 +39,7 @@ export const pickAgentsInteractively = async (
 ): Promise<AgentType[]> => {
 	if (!canPickAgentsInteractively()) {
 		throw new Error(
-			"No interactive terminal. Pass --agent <name>, or run this command in a terminal to pick agents.",
+			"No interactive terminal. Pass -y, or run this command in a terminal to pick agents.",
 		);
 	}
 	if (options.choices.length === 0) {
@@ -107,7 +107,7 @@ export const resolveAgentSelection = async (
 		});
 		if (selected.length === 0) {
 			throw new Error(
-				"No agents selected. Pass --agent <name>, or pick at least one agent.",
+				"No agents selected. Pick at least one agent, or pass -y to use detected agents.",
 			);
 		}
 		return uniqueAgentIds(selected);

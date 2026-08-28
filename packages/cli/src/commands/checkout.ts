@@ -411,7 +411,6 @@ const resolveProjectId = async (props: CheckoutProps): Promise<string> => {
 
 	await linkHandler({
 		...props,
-		agent: false,
 		yes: false,
 		clear: false,
 		checks: true,
