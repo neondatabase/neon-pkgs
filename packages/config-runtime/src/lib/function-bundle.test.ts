@@ -18,7 +18,6 @@ import {
 } from "vitest";
 import {
 	buildFunctionBundle,
-	bundleDirectory,
 	ESM_CJS_INTEROP_BANNER,
 	resolveFunctionArchive,
 } from "./function-bundle.js";
@@ -165,7 +164,7 @@ describe("buildFunctionBundle", () => {
 	test("throws a PlatformError when the source cannot be resolved", async () => {
 		await expect(
 			buildFunctionBundle(fn(join(dir, "does-not-exist.ts"))),
-		).rejects.toThrow(/Failed to bundle function "fn1"/);
+		).rejects.toThrow(/does not exist/);
 	});
 
 	test("fails to bundle an unresolvable dependency when it is not declared external", async () => {
@@ -576,23 +575,20 @@ describe("buildFunctionBundle staging external package files", () => {
 	}, 30_000);
 });
 
-/** Read a ZIP archive's entries back into a { path: bytes } map. */
 const unzipEntries = (zip: Uint8Array): Record<string, Uint8Array> =>
 	unzipSync(zip);
 
-/** Decode an unzipped entry to text. */
 const textOf = (data: Uint8Array): string => new TextDecoder().decode(data);
 
-describe("bundleDirectory (zip-directory bundler)", () => {
+describe("resolveFunctionArchive (none bundler)", () => {
 	let root: string;
 	beforeEach(() => {
-		root = mkdtempSync(join(tmpdir(), "neon-zipdir-"));
+		root = mkdtempSync(join(tmpdir(), "neon-none-"));
 	});
 	afterAll(() => {
 		rmSync(root, { recursive: true, force: true });
 	});
 
-	/** Build a prebuilt output directory from a { relativePath: contents } map. */
 	const buildOutputDir = (files: Record<string, string>): string => {
 		const outDir = join(root, `out-${Math.random().toString(36).slice(2)}`);
 		for (const [rel, contents] of Object.entries(files)) {
@@ -603,44 +599,22 @@ describe("bundleDirectory (zip-directory bundler)", () => {
 		return outDir;
 	};
 
-	const dirFn = (source: string): ResolvedFunctionConfig => ({
+	const noneFn = (source: string): ResolvedFunctionConfig => ({
 		slug: "fn1",
 		name: "Hello World",
 		source,
 		env: {},
 		runtime: "nodejs24",
-		bundler: "zip-directory",
+		bundler: "none",
 	});
 
-	test("ships every file in the directory, preserving nested structure", async () => {
-		const source = buildOutputDir({
-			"index.mjs": "export default { fetch: () => new Response('ok') };",
-			"chunk-abc.mjs": "export const x = 1;",
-			"studio/index.html": "<!doctype html><title>Studio</title>",
-			"studio/assets/app.js": "console.log('studio');",
-		});
-
-		const bundle = await bundleDirectory(dirFn(source));
-
-		expect(Object.keys(bundle).sort()).toEqual([
-			"chunk-abc.mjs",
-			"index.mjs",
-			"studio/assets/app.js",
-			"studio/index.html",
-		]);
-		// Nested keys use POSIX separators regardless of host, so the archive layout is stable.
-		expect(textOf(bundle["studio/assets/app.js"])).toBe(
-			"console.log('studio');",
-		);
-	});
-
-	test("resolveFunctionArchive zips the directory into a loadable archive", async () => {
+	test("zips the directory into a loadable archive without esbuild", async () => {
 		const source = buildOutputDir({
 			"index.mjs": "export default { fetch: () => new Response('ok') };",
 			"studio/index.html": "<!doctype html>",
 		});
 
-		const zip = await resolveFunctionArchive(dirFn(source));
+		const zip = await resolveFunctionArchive(noneFn(source));
 		const entries = unzipEntries(zip);
 
 		expect(Object.keys(entries).sort()).toEqual([
@@ -650,29 +624,51 @@ describe("bundleDirectory (zip-directory bundler)", () => {
 		expect(textOf(entries["index.mjs"])).toContain("fetch");
 	});
 
-	test("rejects a directory with no index entry at its root", async () => {
+	test("rejects TypeScript with the none bundler wording", async () => {
 		const source = buildOutputDir({
-			"server/index.mjs": "export default {};",
+			"index.ts": "export default {};\n",
 		});
-
-		await expect(bundleDirectory(dirFn(source))).rejects.toThrow(
-			/no entry module at its root/,
+		await expect(resolveFunctionArchive(noneFn(source))).rejects.toThrow(
+			/bundler is "none".*TypeScript/,
 		);
 	});
+});
 
-	test("rejects a source that is a file, not a directory", async () => {
-		const source = join(root, "single.mjs");
-		writeFileSync(source, "export default {};");
-
-		await expect(bundleDirectory(dirFn(source))).rejects.toThrow(
-			/is a file, not a directory/,
+describe("buildFunctionBundle directory source", () => {
+	test("bundles a directory from index.ts, ignoring a broken index.js decoy", async () => {
+		const source = join(
+			dir,
+			`dir-ts-${Math.random().toString(36).slice(2)}`,
 		);
+		mkdirSync(source);
+		writeFileSync(
+			join(source, "index.ts"),
+			"export default { fetch: () => new Response('from-ts') };",
+		);
+		writeFileSync(join(source, "index.js"), "export default {\n");
+
+		const zip = await buildFunctionBundle(fn(source), {
+			onWarning: collectWarning,
+		});
+		expect(textOf(unzipEntries(zip)["index.mjs"])).toContain("from-ts");
 	});
 
-	test("rejects a source directory that does not exist", async () => {
-		await expect(
-			bundleDirectory(dirFn(join(root, "does-not-exist"))),
-		).rejects.toThrow(/does not exist/);
+	test("bundles a directory from index.js, ignoring a broken index.mjs decoy", async () => {
+		const source = join(
+			dir,
+			`dir-js-${Math.random().toString(36).slice(2)}`,
+		);
+		mkdirSync(source);
+		writeFileSync(
+			join(source, "index.js"),
+			"export default { fetch: () => new Response('from-js') };",
+		);
+		writeFileSync(join(source, "index.mjs"), "export default {\n");
+
+		const zip = await buildFunctionBundle(fn(source), {
+			onWarning: collectWarning,
+		});
+		expect(textOf(unzipEntries(zip)["index.mjs"])).toContain("from-js");
 	});
 });
 
@@ -707,8 +703,7 @@ describe("resolveFunctionArchive (inline function bundler)", () => {
 	});
 
 	test("enforces the archive limits on an inline bundler's output", async () => {
-		// Trip the entry-count limit rather than the byte limits: same code path
-		// (`enforceLimits` in `zipFunctionBundle`), without allocating megabytes.
+		// Exercise the shared limit path without allocating megabytes.
 		const entry = new TextEncoder().encode("export default {};");
 		const files: FunctionBundle = { "index.mjs": entry };
 		for (let i = 0; i < 4100; i++) {
@@ -734,7 +729,6 @@ describe("resolveFunctionArchive (inline function bundler)", () => {
 			onWarning: collectWarning,
 		});
 
-		// Same entry set as the direct esbuild path — the dispatch is a pass-through for esbuild.
 		expect(Object.keys(unzipEntries(viaResolve))).toEqual(
 			Object.keys(unzipEntries(viaBuild)),
 		);

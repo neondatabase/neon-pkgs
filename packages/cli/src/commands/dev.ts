@@ -1,16 +1,23 @@
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import {
+	existsSync,
+	mkdirSync,
+	rmSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type {
 	FunctionBundlerInput,
 	ResolvedFunctionConfig,
 } from "@neon/config";
 import {
-	bundleDirectory,
+	bundleAsIs,
 	describeNativeFinding,
 	findUndeclaredNativePackages,
+	resolveEsbuildEntry,
 } from "@neon/config-runtime";
 import type { CredentialOutcome } from "@neon-internals/env-core/reuse-secrets";
 import chalk from "chalk";
@@ -378,8 +385,6 @@ const plannedToUnit = (
 			port: fn.port ?? null,
 			env: fn.env,
 			externalPackages: fn.externalPackages ?? null,
-			// A function bundler cannot be serialized, so key it by identity via a stable
-			// marker; string bundlers key by their name. A real change still restarts the unit.
 			bundler:
 				typeof fn.bundler === "function"
 					? "custom"
@@ -421,11 +426,6 @@ export type ServedUnit = {
 	 * in single-source mode (`--source` has no policy to read it from).
 	 */
 	externalPackages?: string[];
-	/**
-	 * The function's `neon.ts` `bundler`. When set to something other than the esbuild
-	 * default, `neon dev` serves that bundler's output (a prebuilt directory, or an inline
-	 * function's file map) instead of esbuilding `source`. Absent means esbuild.
-	 */
 	bundler?: FunctionBundlerInput;
 	bundleDir: string;
 	childEnv: NodeJS.ProcessEnv;
@@ -562,7 +562,7 @@ const runSupervisor = async (
 	// Bring a unit fully online: create its source watcher (before the first bundle so
 	// bundleAndStart can sync the watch set on every run) then bundle + spawn it.
 	const startUnit = async (r: RunningUnit): Promise<void> => {
-		r.watcher = await startWatcher(r.unit.source, () => {
+		r.watcher = await startWatcher(r.unit, () => {
 			restart(r);
 		});
 		await bundleAndStart(r);
@@ -812,18 +812,16 @@ const writeBundle = async (
 	label?: string,
 	bundler?: FunctionBundlerInput,
 ): Promise<string> => {
-	// A non-esbuild bundler owns its output: `neon dev` writes that same file map to disk and
-	// imports its entry, so a local run exercises the exact bundle a deploy would ship — the
-	// "test in a Functions-like env before deploy" path. esbuild stays the default below.
 	if (bundler !== undefined && bundler !== "esbuild") {
 		const files = await bundleForDev(source, label, bundler);
 		return writeBundleFiles(bundleDir, files);
 	}
 
+	const entry = await resolveEsbuildEntry(source);
 	// Left unbundled only. `bundleDir` sits inside the project's node_modules, so an
 	// externalized package resolves from the real tree at the host architecture — no install
 	// or copy is needed or wanted locally, whatever `includeFiles` says for a deploy.
-	const { files, metafile, warnings } = await bundleEntry(source, {
+	const { files, metafile, warnings } = await bundleEntry(entry, {
 		...(externalPackages ? { externalPackages } : {}),
 	});
 	for (const warning of warnings) log.warning(warning);
@@ -833,7 +831,7 @@ const writeBundle = async (
 	const findings = findUndeclaredNativePackages({
 		metafile,
 		declared: externalPackages ?? [],
-		projectDir: dirname(source),
+		projectDir: dirname(entry),
 	});
 	const signature = findings.map((f) => f.name).join(",");
 	if (reportedFindings.get(source) !== signature) {
@@ -848,12 +846,6 @@ const writeBundle = async (
 	return writeBundleFiles(bundleDir, files);
 };
 
-/**
- * Produce a non-esbuild bundler's file map for `neon dev`, from the same code the deploy path
- * uses. A `"zip-directory"` source is read as-is; an inline function is invoked with a
- * minimal {@link ResolvedFunctionConfig} — dev only needs the fields a bundler reads (`slug`,
- * `source`, `bundler`), and never deploy-only tuning.
- */
 const bundleForDev = async (
 	source: string,
 	label: string | undefined,
@@ -867,27 +859,21 @@ const bundleForDev = async (
 		runtime: "nodejs24",
 		bundler,
 	};
-	return bundler === "zip-directory" ? bundleDirectory(fn) : bundler(fn);
+	return bundler === "none" ? bundleAsIs(fn) : bundler(fn);
 };
 
-/**
- * Write a bundle's file map into `bundleDir`, creating nested directories so a multi-file
- * bundle (chunks that import each other, a `studio/assets/…` tree) lands with its layout
- * intact, and return the entry path Node should import. `.mjs` loads as ESM directly, so no
- * `package.json` `"type": "module"` marker is needed.
- */
 const writeBundleFiles = (
 	bundleDir: string,
 	files: Record<string, Uint8Array>,
 ): string => {
+	// Otherwise, files removed from a prebuilt output remain importable.
+	rmSync(bundleDir, { recursive: true, force: true });
 	mkdirSync(bundleDir, { recursive: true });
 	for (const [name, contents] of Object.entries(files)) {
 		const dest = join(bundleDir, name);
 		mkdirSync(dirname(dest), { recursive: true });
 		writeFileSync(dest, contents);
 	}
-	// The Functions runtime — and the dev runtime — import `index.mjs`, falling back to
-	// `index.js`. Prefer whichever the bundle actually produced.
 	const entry = ["index.mjs", "index.js"].find((name) => name in files);
 	return join(bundleDir, entry ?? "index.mjs");
 };
@@ -987,15 +973,33 @@ type Watcher = {
 };
 
 const startWatcher = async (
-	source: string,
+	unit: Pick<ServedUnit, "source" | "bundler">,
 	restart: () => void,
 ): Promise<Watcher> => {
 	const { default: chokidar } = await import("chokidar");
-	const initialInputs = await resolveWatchInputs(source);
-	if (initialInputs === null) {
-		return startDirectoryWatcher(chokidar, source, restart);
+	if (unit.bundler !== undefined && unit.bundler !== "esbuild") {
+		const sourceStat = statSync(unit.source, { throwIfNoEntry: false });
+		const dir =
+			sourceStat?.isDirectory() === true
+				? unit.source
+				: dirname(unit.source);
+		return startDirectoryWatcher(chokidar, dir, restart, {
+			ignoreDist: false,
+		});
 	}
-	return startInputWatcher(chokidar, source, initialInputs, restart);
+	let entry = unit.source;
+	try {
+		entry = await resolveEsbuildEntry(unit.source);
+	} catch {
+		// Keep watching while bundleAndStart reports the invalid source.
+	}
+	const initialInputs = await resolveWatchInputs(entry);
+	if (initialInputs === null) {
+		return startDirectoryWatcher(chokidar, entry, restart, {
+			ignoreDist: true,
+		});
+	}
+	return startInputWatcher(chokidar, entry, initialInputs, restart);
 };
 
 /**
@@ -1059,15 +1063,22 @@ const startDirectoryWatcher = async (
 	chokidar: Chokidar,
 	source: string,
 	restart: () => void,
+	options: { ignoreDist: boolean },
 ): Promise<Watcher> => {
-	const watchedDir = dirname(source);
+	const watchedDir = statSync(source, {
+		throwIfNoEntry: false,
+	})?.isDirectory()
+		? source
+		: dirname(source);
 	const isIgnored = (p: string): boolean => {
-		const segments = p.split(/[/\\]/);
-		return (
-			segments.includes("node_modules") ||
-			segments.includes(".git") ||
-			segments.includes("dist")
-		);
+		const rel = relative(watchedDir, p);
+		if (rel === "" || rel === ".") return false;
+		if (rel.startsWith("..")) return false;
+		const segments = rel.split(/[/\\]/);
+		if (segments.includes("node_modules") || segments.includes(".git")) {
+			return true;
+		}
+		return options.ignoreDist && segments.includes("dist");
 	};
 	const watcher = chokidar.watch(watchedDir, {
 		ignoreInitial: true,

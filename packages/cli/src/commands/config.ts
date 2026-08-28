@@ -4,6 +4,7 @@ import { packagesToStage, resolveConfig } from "@neon/config";
 import {
 	apply,
 	assertZipWithinLimits,
+	bundleAsIs,
 	type Config,
 	type ConflictReport,
 	createBranch as createBranchFromPolicy,
@@ -18,7 +19,9 @@ import {
 	PushConflictError,
 	type PushResult,
 	plan,
+	resolveEsbuildEntry,
 	traceNativePackages,
+	zipFunctionBundle,
 } from "@neon/config-runtime";
 import chalk from "chalk";
 import type yargs from "yargs";
@@ -73,14 +76,20 @@ import { writer } from "../writer.js";
 import { autoPullEnvAfterPin } from "./env.js";
 
 /**
- * Bundle a function with neonctl's OWN bundler (the shared esbuild helper) so the
- * config-runtime never has to import esbuild itself. Injecting this keeps esbuild
- * out of config-runtime's static module graph — and therefore out of the packaged
- * neonctl snapshot, which resolves esbuild dynamically at deploy time.
+ * Keep esbuild out of the packaged CLI's static module graph while honoring each
+ * function's configured bundler.
  */
 const neonctlBundler: FunctionBundler = async (fn) => {
+	if (typeof fn.bundler === "function") {
+		return zipFunctionBundle(fn.slug, await fn.bundler(fn));
+	}
+	if (fn.bundler === "none") {
+		return zipFunctionBundle(fn.slug, await bundleAsIs(fn));
+	}
+
+	const entry = await resolveEsbuildEntry(fn.source);
 	const externalPackages = fn.externalPackages ?? [];
-	const { files, metafile, warnings } = await bundleEntry(fn.source, {
+	const { files, metafile, warnings } = await bundleEntry(entry, {
 		externalPackages: externalPackages.map((pkg) => pkg.name),
 	});
 	for (const warning of warnings) log.warning(warning);
@@ -90,7 +99,7 @@ const neonctlBundler: FunctionBundler = async (fn) => {
 	for (const finding of findUndeclaredNativePackages({
 		metafile,
 		declared: externalPackages.map((pkg) => pkg.name),
-		projectDir: dirname(fn.source),
+		projectDir: dirname(entry),
 	})) {
 		log.warning(describeNativeFinding(fn.slug, finding));
 	}
@@ -106,7 +115,7 @@ const neonctlBundler: FunctionBundler = async (fn) => {
 	const traced = await traceNativePackages({
 		slug: fn.slug,
 		packages: staged,
-		projectDir: dirname(fn.source),
+		projectDir: dirname(entry),
 	});
 	for (const warning of traced.warnings) log.warning(warning);
 	const entries = { ...files, ...traced.entries };

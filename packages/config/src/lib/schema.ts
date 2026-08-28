@@ -2,7 +2,7 @@ import { z } from "zod";
 import { parseBranchTtl, parseSuspendTimeout } from "./duration.js";
 import { externalPackageRoot } from "./external-packages.js";
 import { isWildcardPattern, validatePattern } from "./patterns.js";
-import type { FunctionBundler } from "./types.js";
+import type { FunctionBundlerInput } from "./types.js";
 
 /**
  * Zod schema for {@link import("./types.js").ComputeSettings}.
@@ -270,26 +270,16 @@ const functionExternalPackagesSchema = z.array(externalPackageEntrySchema);
 
 const runtimeSchema = z.literal("nodejs24");
 
-/**
- * `bundler`: a built-in name or an inline {@link FunctionBundler}. The function form is
- * validated only as "is a function" — its behaviour is exercised at deploy / `neon dev`
- * time, not describable to zod — and, like `dev`, it is a local-only field a pulled config
- * cannot reconstruct. The string forms round-trip normally.
- */
-const bundlerSchema = z.union([
-	z.literal("esbuild"),
-	z.literal("zip-directory"),
-	z.custom<FunctionBundler>((value) => typeof value === "function", {
+/** Function bundlers are opaque to Zod and validated when invoked. */
+const bundlerSchema = z.custom<FunctionBundlerInput>(
+	(value) =>
+		value === "esbuild" || value === "none" || typeof value === "function",
+	{
 		message:
-			'bundler must be "esbuild", "zip-directory", or a function (fn) => Promise<FunctionBundle>',
-	}),
-]);
+			'bundler must be "esbuild", "none", or a function (fn) => Promise<FunctionBundle>',
+	},
+);
 
-/**
- * Whether a `bundler` value is the built-in esbuild bundler — the only bundler that requires
- * `source` to be a single entry module. Absent means esbuild (the default). Every other
- * bundler ships `source` as a directory, so the single-file requirement is lifted.
- */
 const isEsbuildBundler = (
 	bundler: z.infer<typeof bundlerSchema> | undefined,
 ): boolean => bundler === undefined || bundler === "esbuild";
@@ -326,10 +316,11 @@ export const functionDefSchema = z
 	.check((ctx) => {
 		const entries = ctx.value.externalPackages ?? [];
 
-		// `externalPackages` is an esbuild `external` list — it only means anything when esbuild
-		// does the bundling. Any other bundler ships whatever files it produces, so a declared
-		// list would silently do nothing; reject it rather than let it read as effective.
-		if (entries.length > 0 && !isEsbuildBundler(ctx.value.bundler)) {
+		// Other bundlers own their output, so `externalPackages` would be ignored.
+		if (
+			ctx.value.externalPackages !== undefined &&
+			!isEsbuildBundler(ctx.value.bundler)
+		) {
 			ctx.issues.push({
 				code: "custom",
 				input: ctx.value.externalPackages,

@@ -26,11 +26,6 @@ export type PlannedFunction = {
 	 * function that deploys fine — the failure `externalPackages` exists to fix.
 	 */
 	externalPackages?: string[];
-	/**
-	 * The function's `neon.ts` `bundler`, mirrored so a local run produces the same bundle as
-	 * a deploy: a `"zip-directory"` or inline-function bundler serves its own output under
-	 * `neon dev` instead of esbuilding `source`. Absent means the esbuild default.
-	 */
 	bundler?: FunctionBundlerInput;
 };
 
@@ -95,8 +90,6 @@ export const resolveFunctionsFromConfig = async (
 						),
 					}
 				: {}),
-			// Mirror the deploy bundler so a local run serves the same output. Only carried
-			// through when it is not the esbuild default, so the common path is unchanged.
 			...(fn.bundler !== "esbuild" ? { bundler: fn.bundler } : {}),
 		};
 	});

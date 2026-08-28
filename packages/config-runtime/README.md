@@ -17,7 +17,10 @@ npm install @neon/config-runtime
 - `inspect` / `plan` / `apply` — read the current branch state, diff a policy against it, and apply the changes.
 - `pullConfig` / `pushConfig` — lower-level pull/push primitives.
 - `createBranch` — create a branch to target.
-- `buildFunctionBundle` — bundle Neon Functions for deploy. Honours the function's `externalPackages`: every entry is passed to esbuild's `external`, and unless it sets `includeFiles: false` the package's real files are staged into the archive alongside the bundle. Reports a bundled-in native dependency that was never declared, as a warning.
+- `buildFunctionBundle` — bundle Neon Functions for deploy. A file `source` is the entry; a directory is searched for `index.ts`, then `index.js`, then `index.mjs`. Honours the function's `externalPackages`: every entry is passed to esbuild's `external`, and unless it sets `includeFiles: false` the package's real files are staged into the archive alongside the bundle. Reports a bundled-in native dependency that was never declared, as a warning.
+- `bundleAsIs` — read a prebuilt directory or `index.mjs` / `index.js` file into a file map without esbuild. Used by `bundler: "none"`.
+- `resolveFunctionArchive` — dispatch on the function's `bundler` and return the finished zip.
+- `resolveEsbuildEntry` — resolve a file or directory `source` to the esbuild entry path.
 - `traceNativePackages` — install the packages a function stages for the runtime target (`RUNTIME_TARGET`: linux-arm64, glibc) into a throwaway directory, trace the files they reach, and return them keyed by archive path with the `node_modules` layout preserved. Called by `buildFunctionBundle`; exported for a CLI that supplies its own bundler.
 - `findUndeclaredNativePackages` / `describeNativeFinding` — advisory detection of a native package that was bundled in without being declared, and the report text for it. Evidence only: it cannot prove the code path is reached, so it must never fail a deploy.
 - `assertZipWithinLimits` — check a finished archive against the build service's size limits (`DEFAULT_ARCHIVE_LIMITS`), with an error naming the largest files.

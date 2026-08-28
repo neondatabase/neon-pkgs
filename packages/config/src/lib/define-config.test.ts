@@ -226,14 +226,14 @@ describe("resolveConfig", () => {
 		expect(resolved.preview?.functions[0]?.bundler).toBe("esbuild");
 	});
 
-	test("carries a zip-directory bundler through with a directory source", () => {
+	test("carries a none bundler through with a directory source", () => {
 		const config = defineConfig({
 			preview: {
 				functions: {
 					fn1: {
 						name: "Mastra",
 						source: "./.mastra/output",
-						bundler: "zip-directory",
+						bundler: "none",
 					},
 				},
 			},
@@ -241,7 +241,7 @@ describe("resolveConfig", () => {
 		const resolved = resolveConfig(config, { name: "main", exists: true });
 		expect(resolved.preview?.functions[0]).toMatchObject({
 			source: "./.mastra/output",
-			bundler: "zip-directory",
+			bundler: "none",
 		});
 	});
 
@@ -266,13 +266,46 @@ describe("resolveConfig", () => {
 						fn1: {
 							name: "Mastra",
 							source: "./.mastra/output",
-							bundler: "zip-directory",
+							bundler: "none",
 							externalPackages: ["sharp"],
 						},
 					},
 				},
 			}),
 		).toThrow(/externalPackages only applies to the "esbuild" bundler/);
+	});
+
+	test("rejects an empty externalPackages list with bundler none", () => {
+		expect(() =>
+			defineConfig({
+				preview: {
+					functions: {
+						fn1: {
+							name: "Mastra",
+							source: "./.mastra/output",
+							bundler: "none",
+							externalPackages: [],
+						},
+					},
+				},
+			}),
+		).toThrow(/externalPackages only applies to the "esbuild" bundler/);
+	});
+
+	test("rejects the retired zip-directory bundler name", () => {
+		expect(() =>
+			defineConfig({
+				preview: {
+					functions: {
+						fn1: {
+							name: "Mastra",
+							source: "./.mastra/output",
+							bundler: "zip-directory" as never,
+						},
+					},
+				},
+			}),
+		).toThrow(/bundler must be "esbuild", "none"/);
 	});
 
 	test("copies externalPackages so mutating the policy array cannot reach the resolved config", () => {

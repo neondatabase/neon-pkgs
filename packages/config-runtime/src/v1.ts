@@ -61,10 +61,13 @@ export type { FunctionBundler } from "./lib/function-bundle.js";
 // ─── Function bundling (esbuild + zip) ────────────────────────────────────────
 export {
 	buildFunctionBundle,
-	bundleDirectory,
 	resolveFunctionArchive,
-	zipFunctionBundle,
 } from "./lib/function-bundle.js";
+export {
+	bundleAsIs,
+	resolveEsbuildEntry,
+} from "./lib/function-source.js";
+export { zipFunctionBundle } from "./lib/function-zip.js";
 // ─── Native dependency staging and detection ──────────────────────────────────
 export type { NativeEvidence, NativeFinding } from "./lib/native-detect.js";
 export {

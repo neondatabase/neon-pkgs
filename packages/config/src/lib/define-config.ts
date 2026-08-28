@@ -28,10 +28,6 @@ import type {
 /** Default deploy parameters applied to functions that omit them in `neon.ts`. */
 const DEFAULT_FUNCTION_RUNTIME = "nodejs24" as const;
 
-/**
- * Bundler used when `neon.ts` omits `bundler`. `"esbuild"` is the pre-existing behavior, so a
- * policy that never mentions it deploys exactly as before.
- */
 const DEFAULT_FUNCTION_BUNDLER = "esbuild" as const;
 
 const REGION_PREFIX = /^(aws|azure|gcp)-/;
@@ -348,8 +344,6 @@ function resolveFunctionConfig(
 		source: def.source,
 		env: { ...(def.env ?? {}) },
 		runtime: tuning.runtime ?? DEFAULT_FUNCTION_RUNTIME,
-		// Always resolved so the deploy path and `neon dev` never re-derive the default. A
-		// string names a built-in; an inline function is carried through untouched.
 		bundler: def.bundler ?? DEFAULT_FUNCTION_BUNDLER,
 		// Normalized only when declared, so a policy without it resolves unchanged and takes
 		// the pre-existing bundling path. Both bundlers read it; `neon dev` mirrors it so a

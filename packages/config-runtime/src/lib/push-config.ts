@@ -21,15 +21,8 @@ import {
 import type { FunctionBundler } from "./function-bundle.js";
 
 /**
- * Default function bundler, loaded lazily so that `function-bundle.js` — and the esbuild it
- * pulls in — only enters the module graph when a deploy actually needs it AND no custom
- * `bundleFunction` was injected. A consumer that injects its own bundler never triggers this
- * import, so esbuild can be dropped from their build entirely.
- *
- * Dispatches on each function's `neon.ts` `bundler` (esbuild / zip-directory / inline
- * function) via {@link resolveFunctionArchive}. A `bundleFunction` passed to `apply` /
- * `pushConfig` still overrides this wholesale — the deploy-side escape hatch for a consumer
- * that cannot run any of the built-ins (e.g. a single-file CLI without esbuild).
+ * Load the default bundler lazily so consumers that inject `bundleFunction` do not pull
+ * esbuild into their module graph. The injected callback replaces dispatch on `fn.bundler`.
  */
 const makeDefaultBundleFunction =
 	(onWarning: (message: string) => void): FunctionBundler =>

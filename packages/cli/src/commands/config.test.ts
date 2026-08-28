@@ -1,5 +1,6 @@
 import {
 	existsSync,
+	mkdirSync,
 	mkdtempSync,
 	readFileSync,
 	rmSync,
@@ -32,6 +33,7 @@ import type {
 } from "@neon/config";
 import { resolveConfig } from "@neon/config";
 import { loadConfigFromFile, type NeonApi } from "@neon/config-runtime";
+import { unzipSync } from "fflate";
 import stripAnsi from "strip-ansi";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -593,6 +595,79 @@ describe("config commands", () => {
 		expect(bundle.byteLength).toBeGreaterThan(0);
 		expect(bundle[0]).toBe(0x50); // 'P'
 		expect(bundle[1]).toBe(0x4b); // 'K'
+	});
+
+	it("apply ships a bundler none directory without esbuild flattening", async () => {
+		const api = new FakeNeonApi();
+		const { stream } = captureOut();
+
+		const outDir = join(cwd, "build-output");
+		mkdirSync(outDir);
+		writeFileSync(
+			join(outDir, "index.mjs"),
+			"export default { fetch() { return new Response('ok'); } };\n",
+		);
+		writeFileSync(join(outDir, "chunk.mjs"), "export const x = 1;\n");
+		const config = writeConfig(
+			`export default { preview: { functions: { app: { name: 'App', source: ${JSON.stringify(
+				outDir,
+			)}, bundler: 'none' } } } };\n`,
+		);
+
+		await applyCmd({ ...baseProps(api, stream), config });
+
+		expect(api.deployBranchFunctionCalls).toHaveLength(1);
+		const entries = unzipSync(
+			api.deployBranchFunctionCalls[0].input.bundle,
+		);
+		expect(Object.keys(entries).sort()).toEqual(["chunk.mjs", "index.mjs"]);
+	});
+
+	it("apply esbuilds a directory source from index.ts, ignoring a broken index.js", async () => {
+		const api = new FakeNeonApi();
+		const { stream } = captureOut();
+
+		const outDir = join(cwd, "fn-src");
+		mkdirSync(outDir);
+		writeFileSync(
+			join(outDir, "index.ts"),
+			"export default { fetch() { return new Response('from-ts'); } };\n",
+		);
+		writeFileSync(join(outDir, "index.js"), "export default {\n");
+		const config = writeConfig(
+			`export default { preview: { functions: { hello: { name: 'Hello', source: ${JSON.stringify(
+				outDir,
+			)} } } } };\n`,
+		);
+
+		await applyCmd({ ...baseProps(api, stream), config });
+
+		expect(api.deployBranchFunctionCalls).toHaveLength(1);
+		const entries = unzipSync(
+			api.deployBranchFunctionCalls[0].input.bundle,
+		);
+		expect(Object.keys(entries)).toEqual(["index.mjs"]);
+		expect(new TextDecoder().decode(entries["index.mjs"])).toContain(
+			"from-ts",
+		);
+	});
+
+	it("apply rejects bundler none when the directory is only TypeScript", async () => {
+		const api = new FakeNeonApi();
+		const { stream } = captureOut();
+
+		const outDir = join(cwd, "ts-only");
+		mkdirSync(outDir);
+		writeFileSync(join(outDir, "index.ts"), "export default {};\n");
+		const config = writeConfig(
+			`export default { preview: { functions: { app: { name: 'App', source: ${JSON.stringify(
+				outDir,
+			)}, bundler: 'none' } } } };\n`,
+		);
+
+		await expect(
+			applyCmd({ ...baseProps(api, stream), config }),
+		).rejects.toThrow(/bundler is "none".*TypeScript/);
 	});
 
 	it("--env loads a .env file into the environment before evaluating neon.ts", async () => {

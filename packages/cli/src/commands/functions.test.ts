@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe } from "vitest";
+import { afterAll, beforeAll, describe, expect } from "vitest";
 import { test } from "../test_utils/fixtures";
 
 const esbuildBin = join(process.cwd(), "node_modules", ".bin", "esbuild");
@@ -595,7 +595,7 @@ describe("functions", () => {
 			{
 				mockDir: "single_org",
 				code: 1,
-				stderr: `ERROR: No entry file found in ${emptyDir}. Expected one of: index.ts, index.mjs, index.js.`,
+				stderr: `ERROR: No entry file found in ${emptyDir}. Expected one of: index.ts, index.js, index.mjs.`,
 			},
 		);
 		rmSync(emptyDir, { recursive: true, force: true });
@@ -658,16 +658,16 @@ describe("functions", () => {
 		rmSync(dir, { recursive: true, force: true });
 	});
 
-	test("deploy picks index.mjs over index.js", async ({ testCliCommand }) => {
-		const dir = mkdtempSync(join(tmpdir(), "neonctl-mjsjs-"));
-		writeFileSync(join(dir, "index.mjs"), "export default {};\n");
-		// Broken decoy: if discovery picks index.js, bundling fails and so does the test.
-		writeFileSync(join(dir, "index.js"), "export default {\n");
+	test("deploy picks index.js over index.mjs", async ({ testCliCommand }) => {
+		const dir = mkdtempSync(join(tmpdir(), "neonctl-jsmjs-"));
+		writeFileSync(join(dir, "index.js"), "export default {};\n");
+		// Broken decoy: if discovery picks index.mjs, bundling fails and so does the test.
+		writeFileSync(join(dir, "index.mjs"), "export default {\n");
 		await testCliCommand(
 			[
 				"functions",
 				"deploy",
-				"mjsoverjs",
+				"jsovermjs",
 				"--src",
 				dir,
 				"--no-wait",
@@ -683,8 +683,8 @@ describe("functions", () => {
 					NEON_ESBUILD_PATH: esbuildBin,
 				},
 				stderr:
-					"INFO: Function deployment triggered for function mjsoverjs. " +
-					"INFO: Check status with: neon function get mjsoverjs " +
+					"INFO: Function deployment triggered for function jsovermjs. " +
+					"INFO: Check status with: neon function get jsovermjs " +
 					"--project-id test-project-123456 --branch br-main-branch-123456",
 			},
 		);
@@ -760,6 +760,180 @@ describe("functions", () => {
 		rmSync(dir, { recursive: true, force: true });
 	});
 
+	test("deploy --no-bundle zips a directory without esbuild", async ({
+		testCliCommand,
+	}) => {
+		const dir = mkdtempSync(join(tmpdir(), "neonctl-nobundle-"));
+		writeFileSync(
+			join(dir, "index.mjs"),
+			"export default { fetch: () => new Response('ok') };\n",
+		);
+		writeFileSync(join(dir, "chunk.mjs"), "export const x = 1;\n");
+		await testCliCommand(
+			[
+				"functions",
+				"deploy",
+				"nobundle",
+				"--src",
+				dir,
+				"--no-bundle",
+				"--no-wait",
+				"--project-id",
+				"test-project-123456",
+				"--branch",
+				"main",
+			],
+			{
+				mockDir: "single_org",
+				env: {
+					NEON_FUNCTIONS_POLL_INTERVAL_MS: "1",
+					NEON_ESBUILD_PATH: join(tmpdir(), "no-such-esbuild"),
+				},
+				stderr:
+					"INFO: Function deployment triggered for function nobundle. " +
+					"INFO: Check status with: neon function get nobundle " +
+					"--project-id test-project-123456 --branch br-main-branch-123456",
+			},
+		);
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	test("deploy --no-bundle zips a single index.mjs file", async ({
+		testCliCommand,
+	}) => {
+		const dir = mkdtempSync(join(tmpdir(), "neonctl-nobundle-file-"));
+		const file = join(dir, "index.mjs");
+		writeFileSync(
+			file,
+			"export default { fetch: () => new Response('ok') };\n",
+		);
+		await testCliCommand(
+			[
+				"functions",
+				"deploy",
+				"nbfile",
+				"--src",
+				file,
+				"--no-bundle",
+				"--no-wait",
+				"--project-id",
+				"test-project-123456",
+				"--branch",
+				"main",
+			],
+			{
+				mockDir: "single_org",
+				env: {
+					NEON_FUNCTIONS_POLL_INTERVAL_MS: "1",
+					NEON_ESBUILD_PATH: join(tmpdir(), "no-such-esbuild"),
+				},
+				stderr:
+					"INFO: Function deployment triggered for function nbfile. " +
+					"INFO: Check status with: neon function get nbfile " +
+					"--project-id test-project-123456 --branch br-main-branch-123456",
+			},
+		);
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	test("deploy --no-bundle rejects TypeScript", async ({
+		testCliCommand,
+	}) => {
+		const dir = mkdtempSync(join(tmpdir(), "neonctl-nobundle-ts-"));
+		writeFileSync(join(dir, "index.ts"), "export default {};\n");
+		await testCliCommand(
+			[
+				"functions",
+				"deploy",
+				"nbts",
+				"--src",
+				dir,
+				"--no-bundle",
+				"--no-wait",
+				"--project-id",
+				"test-project-123456",
+				"--branch",
+				"main",
+			],
+			{
+				mockDir: "single_org",
+				code: 1,
+				stderr: `ERROR: TypeScript must be bundled. ${dir} has no index.mjs or index.js; omit --no-bundle to esbuild it, or emit one of those files.`,
+			},
+		);
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	test("deploy --no-bundle rejects a file not named index.mjs or index.js", async ({
+		testCliCommand,
+	}) => {
+		const dir = mkdtempSync(join(tmpdir(), "neonctl-nobundle-name-"));
+		const file = join(dir, "handler.mjs");
+		writeFileSync(file, "export default {};\n");
+		await testCliCommand(
+			[
+				"functions",
+				"deploy",
+				"nbname",
+				"--src",
+				file,
+				"--no-bundle",
+				"--no-wait",
+				"--project-id",
+				"test-project-123456",
+				"--branch",
+				"main",
+			],
+			{
+				mockDir: "single_org",
+				code: 1,
+				stderr: `ERROR: ${file} must be named index.mjs or index.js to ship with --no-bundle (got "handler.mjs"). Omit --no-bundle to esbuild it, or rename the file.`,
+			},
+		);
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	test("deploy --no-bundle rejects a directory with no root index.mjs or index.js", async ({
+		testCliCommand,
+	}) => {
+		const dir = mkdtempSync(join(tmpdir(), "neonctl-nobundle-nested-"));
+		writeFileSync(join(dir, "handler.mjs"), "export default {};\n");
+		await testCliCommand(
+			[
+				"functions",
+				"deploy",
+				"nested",
+				"--src",
+				dir,
+				"--no-bundle",
+				"--no-wait",
+				"--project-id",
+				"test-project-123456",
+				"--branch",
+				"main",
+			],
+			{
+				mockDir: "single_org",
+				code: 1,
+				stderr: expect.stringContaining("no entry module at its root"),
+			},
+		);
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	test("deploy --help documents --no-bundle and discovery order", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["functions", "deploy", "--help"], {
+			mockDir: "single_org",
+			stderr: expect.stringContaining("--no-bundle"),
+		});
+		await testCliCommand(["functions", "deploy", "--help"], {
+			mockDir: "single_org",
+			stderr: expect.stringContaining("index.ts, index.js, or index.mjs"),
+		});
+	});
+
 	test("deploy errors when the --src path does not exist", async ({
 		testCliCommand,
 	}) => {
@@ -808,7 +982,7 @@ describe("functions", () => {
 				code: 1,
 				stderr:
 					"ERROR: --path and --entry were removed. Use --src <dir>; the entry point " +
-					"is discovered as index.ts, index.mjs, or index.js in that directory.",
+					"is discovered as index.ts, index.js, index.mjs in that directory.",
 			},
 		);
 	});
@@ -836,7 +1010,7 @@ describe("functions", () => {
 				code: 1,
 				stderr:
 					"ERROR: --path and --entry were removed. Use --src <dir>; the entry point " +
-					"is discovered as index.ts, index.mjs, or index.js in that directory.",
+					"is discovered as index.ts, index.js, index.mjs in that directory.",
 			},
 		);
 	});

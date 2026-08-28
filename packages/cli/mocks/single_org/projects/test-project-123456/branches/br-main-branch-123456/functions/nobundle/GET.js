@@ -2,10 +2,10 @@ let calls = 0;
 
 const fn = () => ({
   function: {
-    id: 'fn-mjsoverjs',
-    slug: 'mjsoverjs',
-    name: 'Mjsoverjs',
-    invocation_url: 'https://mjsoverjs.functions.neon.tech',
+    id: 'fn-nobundle',
+    slug: 'nobundle',
+    name: 'Nobundle',
+    invocation_url: 'https://nobundle.functions.neon.tech',
     created_at: '2026-06-03T00:00:00Z',
     current_deployment: {
       id: 1,

@@ -161,8 +161,7 @@ describe("resolveFunctionsFromConfig", () => {
 		expect(resolved?.functions[0].env).toEqual({ FOO: "bar" });
 	});
 
-	it("mirrors a zip-directory bundler and accepts a directory source", async () => {
-		// A prebuilt output directory (as `mastra build` emits), served as-is under dev.
+	it("mirrors a none bundler and accepts a directory source", async () => {
 		mkdirSync(join(cwd, "build-output"), { recursive: true });
 		writeFileSync(
 			join(cwd, "build-output", "index.mjs"),
@@ -176,7 +175,7 @@ describe("resolveFunctionsFromConfig", () => {
             app: {
               name: 'App',
               source: './build-output',
-              bundler: 'zip-directory',
+              bundler: 'none',
             },
           },
         },
@@ -187,7 +186,7 @@ describe("resolveFunctionsFromConfig", () => {
 		expect(resolved?.functions[0]).toMatchObject({
 			slug: "app",
 			source: join(cwd, "build-output"),
-			bundler: "zip-directory",
+			bundler: "none",
 		});
 	});
 

@@ -329,52 +329,27 @@ export interface ResolvedExternalPackage {
 }
 
 /**
- * The files that make up a deployable function, keyed by their archive-relative path. The
- * common currency every bundler produces and both deploy paths consume: `config apply` zips
- * this map into the archive the Functions deploy endpoint expects, and `neon dev` writes it
- * to disk and imports the entry — so a single bundler feeds both.
- *
- * The entry module **must** be at the archive root under `index.mjs` (or `index.js`): the
- * Functions runtime imports the archive by that conventional name, and `neon dev` resolves
- * the same file. Every other key is shipped verbatim, with its path (and thus directory
- * layout) preserved — load-bearing for a multi-file bundle whose parts import each other by
- * relative path, or a native `.node` addon that finds sibling libraries by their location.
+ * Deployable function files keyed by archive-relative path. The entry must be
+ * `index.mjs` or `index.js` at the archive root.
  */
 export type FunctionBundle = Record<string, Uint8Array>;
 
 /**
- * Turns a function's resolved config into its {@link FunctionBundle}. This is the seam that
- * makes bundling pluggable: the built-in {@link FunctionDef.bundler | `"esbuild"`} bundler
- * bundles a single entry module, {@link FunctionDef.bundler | `"zip-directory"`} ships a
- * prebuilt output directory as-is, and a caller can pass an arbitrary function to bundle
- * however their toolchain requires (a framework build, a custom archive layout).
+ * Converts resolved function config into deployable files.
  *
- * **Type only — no runtime.** A bundler implementation needs `fs`, `esbuild`, or an archiver,
- * none of which belong in `@neon/config` (which must stay free of native/build-time deps so
- * a `neon.ts` that only imports `defineConfig` never drags them in). The built-in
- * implementations live in `@neon/config-runtime` and are selected by the string name at
- * deploy time; an inline function is provided by the user's own `neon.ts` and only ever runs
- * at deploy / `neon dev` time, never when the config is merely loaded for `parseEnv` / pull.
+ * The type lives in `@neon/config` so policy imports stay free of build-time dependencies.
  */
 export type FunctionBundler = (
 	fn: ResolvedFunctionConfig,
 ) => Promise<FunctionBundle>;
 
 /**
- * Selects how a function's {@link FunctionDef.source} becomes a {@link FunctionBundle}.
- * Either a built-in bundler by name, or an inline {@link FunctionBundler}.
- *
- * - `"esbuild"` (default) — bundle `source` (a single entry module) into one `index.mjs`
- *   with esbuild. The pre-existing behavior; a policy that omits `bundler` is unchanged.
- * - `"zip-directory"` — treat `source` as a **prebuilt output directory** and ship its
- *   contents verbatim (structure preserved, `index.mjs` at the root). For frameworks whose
- *   own build already emits a runnable directory (e.g. `mastra build`), so no second bundle
- *   step re-processes their output.
+ * `"esbuild"` bundles a source file or the first directory entry found in order:
+ * `index.ts`, `index.js`, `index.mjs`. `"none"` ships a prebuilt directory whose root
+ * contains `index.mjs` or `index.js`, or a single file of that name. A
+ * {@link FunctionBundler} supplies an inline implementation.
  */
-export type FunctionBundlerInput =
-	| "esbuild"
-	| "zip-directory"
-	| FunctionBundler;
+export type FunctionBundlerInput = "esbuild" | "none" | FunctionBundler;
 
 /**
  * Static definition of a Neon Function (Preview feature). Declares that the function
@@ -384,8 +359,8 @@ export type FunctionBundlerInput =
  *
  * A function is invoked like a Cloudflare/Vercel handler — its source module
  * `export default { fetch }` or `export async function handler(req): Response`. The
- * `source` path is bundled (esbuild) and uploaded as a deployment; the newest deployment
- * becomes active.
+ * `source` path is bundled and uploaded as a deployment; the newest deployment becomes
+ * active.
  *
  * Runtime tuning is **not** here — it varies per branch and lives in the `branch` closure
  * (see {@link FunctionTuning}). Memory is fixed by the platform policy for now and is not
@@ -395,14 +370,15 @@ export interface FunctionDef {
 	/** Free-form display name. @example "Hello World" */
 	name: string;
 	/**
-	 * Path to the function's entry module, **relative to `neon.ts`** (or absolute). The
-	 * module's default export (`{ fetch }`) or `handler` export is the function entry. This
-	 * path is resolved against the loaded `neon.ts` location and bundled with esbuild at
-	 * deploy time.
+	 * Path to the function's entry module or source directory, **relative to `neon.ts`**
+	 * (or absolute). The module's default export (`{ fetch }`) or `handler` export is the
+	 * function entry. A file is bundled as the entry; a directory is searched for
+	 * `index.ts`, then `index.js`, then `index.mjs` (see {@link bundler}).
 	 *
 	 * We require a string path rather than an imported handler because a JS function value
 	 * carries no reference back to its source file, so esbuild has nothing to bundle from.
 	 * @example "./functions/hello-world.ts"
+	 * @example ".mastra/output"
 	 */
 	source: string;
 	/**
@@ -479,21 +455,14 @@ export interface FunctionDef {
 	 */
 	externalPackages?: ExternalPackageEntry[];
 	/**
-	 * How {@link source} is turned into the deployable bundle. Defaults to `"esbuild"`, so a
-	 * policy that omits it bundles exactly as before.
+	 * Selects how {@link source} becomes deployable files. Defaults to `"esbuild"`.
 	 *
-	 * Set `"zip-directory"` when `source` is a **prebuilt output directory** to ship as-is
-	 * rather than a single entry module to bundle — for a framework whose own build already
-	 * emits a runnable directory. Or pass an inline {@link FunctionBundler} to bundle however
-	 * your toolchain requires; it receives the resolved function and returns the file map to
-	 * deploy (and to serve under `neon dev`).
+	 * `"none"` ships a prebuilt directory or entry file. An inline
+	 * {@link FunctionBundler} returns the files used by deploy and `neon dev`.
 	 *
-	 * A non-`"esbuild"` bundler lifts the requirement that `source` be a single file, so a
-	 * directory is accepted. An inline function is local-only in the same sense as {@link dev}:
-	 * a config reconstructed by `inspect` / pull cannot carry it back (a closure does not
-	 * round-trip), so re-deploying a pulled config must re-declare it. The string forms round-trip
-	 * normally.
-	 * @example "zip-directory"
+	 * Inline functions do not round-trip through `inspect` or pull and must be re-declared
+	 * before deploying a reconstructed config.
+	 * @example "none"
 	 * @example (fn) => myFrameworkBuild(fn.source)
 	 */
 	bundler?: FunctionBundlerInput;
@@ -687,12 +656,6 @@ export interface ResolvedFunctionConfig {
 	 */
 	externalPackages?: ResolvedExternalPackage[];
 	runtime: FunctionRuntime;
-	/**
-	 * How {@link source} is bundled, defaulted to `"esbuild"` from {@link FunctionDef.bundler}.
-	 * Always present after resolution, so the deploy path never re-derives the default. A
-	 * string selects a built-in bundler; an inline {@link FunctionBundler} is carried through
-	 * untouched.
-	 */
 	bundler: FunctionBundlerInput;
 	/**
 	 * Local-development settings, passed through untouched from {@link FunctionDef.dev}
