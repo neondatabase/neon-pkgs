@@ -16,11 +16,20 @@ import {
 } from "../init/bootstrap.js";
 import { type InitRun, spawnCliChild } from "../init/child.js";
 import {
+	agentSetupLabel,
+	formatInitDone,
+	printInitBanner,
+	printInitDone,
+	shouldPrintInitBanner,
+} from "../init/chrome.js";
+import {
 	type ChildForward,
 	type InitAgentSetup,
+	postScaffoldActions,
 	projectContextFile,
 } from "../init/plan.js";
-import { runScaffoldFollowUp } from "../init/tooling.js";
+import { runAgentTooling, runInitSteps } from "../init/tooling.js";
+import { pickAgentSetupInteractively } from "../init/wizard.js";
 import { log } from "../log.js";
 import type { CommonProps } from "../types.js";
 import { getCliName } from "../utils/cli_name.js";
@@ -115,7 +124,7 @@ export const builder = (argv: yargs.Argv) =>
 				default: true,
 			},
 			link: {
-				describe: `Run \`${getCliName()} link\` in the scaffolded directory after installing. In interactive mode this is offered as a prompt; use --no-link to skip without being asked.`,
+				describe: `Run \`${getCliName()} link\` after scaffolding. Templates with neon.ts link after install so env pull works; otherwise link runs before install. In interactive mode this is offered as a prompt; use --no-link to skip without being asked.`,
 				type: "boolean",
 				default: true,
 			},
@@ -176,6 +185,9 @@ export const handler = async (props: BootstrapProps): Promise<void> => {
 	}
 
 	const templates = await resolveTemplateList(props);
+	if (shouldPrintInitBanner(props.default)) {
+		printInitBanner();
+	}
 	// --default is a non-interactive quick start: it fills in the template and
 	// directory and runs setup without asking, so it must not fall into the
 	// prompt path even on a TTY.
@@ -190,7 +202,7 @@ export const handler = async (props: BootstrapProps): Promise<void> => {
 	ensureTargetUsable(targetDir, props.force);
 	await scaffold(template, targetDir);
 	printScaffolded(template, targetDir);
-	await runPostScaffoldSteps(props, targetDir, interactive);
+	await runPostScaffoldSteps(props, targetDir, interactive, template);
 };
 
 /**
@@ -327,82 +339,84 @@ const runPostScaffoldSteps = async (
 	props: BootstrapProps,
 	targetDir: string,
 	interactive: boolean,
+	template: BootstrapTemplate,
 ): Promise<void> => {
 	const inferred = inferPackageManager(targetDir);
 	const defaultPm = resolvePackageManager(targetDir);
+	const neonConfig = hasNeonConfig(targetDir);
 
 	if (props.default) {
-		await runDefaultSteps(props, targetDir, defaultPm);
+		await runDefaultSteps(
+			props,
+			targetDir,
+			defaultPm,
+			neonConfig,
+			template,
+		);
 		return;
 	}
 
 	if (!interactive) {
-		printNextSteps(targetDir, defaultPm, {
+		printDoneSummary({
+			template,
+			targetDir,
+			pm: defaultPm,
 			installed: false,
+			installFailed: false,
+			git: false,
+			agentSetup: "skip",
+			linked: false,
+			skippedLinkForDeps: false,
 			suggestLink: true,
 		});
 		return;
 	}
 
-	// The package manager used for the install (and shown in the closing hint).
-	// When we couldn't infer from the project or invocation we ask, so a globally
-	// installed `neon` doesn't silently force npm on a bun/pnpm user.
 	let pm: PackageManager = defaultPm;
-	let installed = false;
-	if (props.install && (await confirm(installPrompt(inferred)))) {
+	const wantInstall =
+		props.install && (await confirm(installPrompt(inferred)));
+	if (wantInstall) {
 		pm = inferred ?? (await selectPackageManager());
-		installed = await runCommand(pm, installArgs(pm), targetDir);
 	}
 
-	if (
+	const wantGit =
 		props.git &&
 		!isGitRepo(targetDir) &&
-		(await confirm("Initialize a git repository?"))
-	) {
-		await initGitRepo(targetDir);
-	}
+		(await confirm("Initialize a git repository?"));
 
-	const skipLink = shouldSkipLinkForDeps(targetDir, installed);
-	if (props.link && skipLink) {
+	const agentSetup: InitAgentSetup =
+		props.agentSetup === false
+			? "skip"
+			: await (props.pickAgentSetup ?? pickAgentSetupInteractively)();
+
+	const canLink = props.link && !(neonConfig && !wantInstall);
+	if (props.link && !canLink) {
 		logSkippedLink(pm);
 	}
-
-	const kids = bootstrapChildren(props, targetDir);
-	await runScaffoldFollowUp({
-		cwd: targetDir,
-		yes: false,
-		skipAgentSetup: props.agentSetup === false,
-		shouldLink: false,
-		linkYes: false,
-		...kids,
-		...(props.pickAgentSetup
-			? { pickAgentSetup: props.pickAgentSetup }
-			: {}),
-		...(props.hasProjectPlugins
-			? { hasProjectPlugins: props.hasProjectPlugins }
-			: {}),
-	});
-
-	if (
-		props.link &&
-		!skipLink &&
+	const wantLink =
+		canLink &&
 		(await confirm(
 			`Link this project to a Neon project now? (runs ${getCliName()} link)`,
-		))
-	) {
-		await runScaffoldFollowUp({
-			cwd: targetDir,
-			yes: false,
-			skipAgentSetup: true,
-			shouldLink: true,
-			linkYes: false,
-			...kids,
-		});
-		printNextSteps(targetDir, pm, { installed, suggestLink: false });
-		return;
-	}
+		));
 
-	printNextSteps(targetDir, pm, { installed, suggestLink: true });
+	const outcome = await executePostScaffold(props, targetDir, {
+		yes: false,
+		lockAgentSetup: true,
+		pm,
+		git: wantGit,
+		agentSetup,
+		install: wantInstall,
+		link: wantLink,
+		hasNeonConfig: neonConfig,
+	});
+	printDoneSummary({
+		template,
+		targetDir,
+		pm,
+		...outcome,
+		git: wantGit,
+		suggestLink: !outcome.linked,
+	});
 };
 
 const installPrompt = (inferred: PackageManager | undefined): string =>
@@ -415,39 +429,123 @@ const runDefaultSteps = async (
 	props: BootstrapProps,
 	targetDir: string,
 	pm: PackageManager,
+	neonConfig: boolean,
+	template: BootstrapTemplate,
 ): Promise<void> => {
 	log.info(
 		"Quick start (--default): skipping the template, install, git, and agent pickers. link --yes still asks for a project unless one is already linked.",
 	);
-	let installed = false;
-	if (props.install) {
-		installed = await runCommand(pm, installArgs(pm), targetDir);
-	}
-	if (props.git && !isGitRepo(targetDir)) {
-		await initGitRepo(targetDir);
-	}
-	const skipLink = shouldSkipLinkForDeps(targetDir, installed);
-	if (props.link && skipLink) {
-		logSkippedLink(pm);
-	}
-	await runScaffoldFollowUp({
-		cwd: targetDir,
+	const wantGit = props.git && !isGitRepo(targetDir);
+	const agentSetup: InitAgentSetup =
+		props.agentSetup === false ? "skip" : "skills-mcp";
+	const outcome = await executePostScaffold(props, targetDir, {
 		yes: true,
-		skipAgentSetup: props.agentSetup === false,
-		shouldLink: props.link && !skipLink,
-		linkYes: true,
-		...bootstrapChildren(props, targetDir),
-		...(props.pickAgentSetup
-			? { pickAgentSetup: props.pickAgentSetup }
-			: {}),
-		...(props.hasProjectPlugins
-			? { hasProjectPlugins: props.hasProjectPlugins }
-			: {}),
+		lockAgentSetup: false,
+		pm,
+		git: wantGit,
+		agentSetup,
+		install: props.install,
+		link: props.link,
+		hasNeonConfig: neonConfig,
 	});
-	printNextSteps(targetDir, pm, {
+	printDoneSummary({
+		template,
+		targetDir,
+		pm,
+		...outcome,
+		git: wantGit,
+		suggestLink: !outcome.linked,
+	});
+};
+
+const executePostScaffold = async (
+	props: BootstrapProps,
+	targetDir: string,
+	choices: {
+		yes: boolean;
+		lockAgentSetup: boolean;
+		pm: PackageManager;
+		git: boolean;
+		agentSetup: InitAgentSetup;
+		install: boolean;
+		link: boolean;
+		hasNeonConfig: boolean;
+	},
+): Promise<{
+	installed: boolean;
+	installFailed: boolean;
+	linked: boolean;
+	skippedLinkForDeps: boolean;
+	agentSetup: InitAgentSetup;
+}> => {
+	const kids = bootstrapChildren(props, targetDir);
+	let installed = false;
+	let installFailed = false;
+	let linked = false;
+	let skippedLinkForDeps = false;
+	let agentSetup = choices.agentSetup;
+	const actions = postScaffoldActions({
+		git: choices.git,
+		agentSetup: choices.agentSetup,
+		install: choices.install,
+		link: choices.link,
+		hasNeonConfig: choices.hasNeonConfig,
+	});
+	for (const action of actions) {
+		if (action === "git") {
+			await initGitRepo(targetDir);
+			continue;
+		}
+		if (action === "agent") {
+			agentSetup = await runAgentTooling({
+				cwd: targetDir,
+				yes: choices.yes,
+				...(choices.lockAgentSetup
+					? { agentSetup: choices.agentSetup }
+					: {}),
+				...kids,
+				...(props.pickAgentSetup
+					? { pickAgentSetup: props.pickAgentSetup }
+					: {}),
+				...(props.hasProjectPlugins
+					? { hasProjectPlugins: props.hasProjectPlugins }
+					: {}),
+			});
+			continue;
+		}
+		if (action === "install") {
+			installed = await runCommand(
+				choices.pm,
+				installArgs(choices.pm),
+				targetDir,
+			);
+			if (!installed) {
+				installFailed = true;
+			}
+			continue;
+		}
+		if (action !== "link") {
+			const _exhaustive: never = action;
+			throw new Error(`Unhandled post-scaffold action: ${_exhaustive}`);
+		}
+		if (choices.hasNeonConfig && !installed) {
+			skippedLinkForDeps = true;
+			logSkippedLink(choices.pm);
+			continue;
+		}
+		await runInitSteps([choices.yes ? ["link", "--yes"] : ["link"]], {
+			cwd: targetDir,
+			...kids,
+		});
+		linked = true;
+	}
+	return {
 		installed,
-		suggestLink: !(props.link && !skipLink),
-	});
+		installFailed,
+		linked,
+		skippedLinkForDeps,
+		agentSetup,
+	};
 };
 
 const isGitRepo = (dir: string): boolean => existsSync(join(dir, ".git"));
@@ -458,9 +556,6 @@ const NEON_CONFIG_FILENAMES = ["neon.ts", "neon.mts", "neon.js", "neon.mjs"];
 
 const hasNeonConfig = (dir: string): boolean =>
 	NEON_CONFIG_FILENAMES.some((name) => existsSync(join(dir, name)));
-
-const shouldSkipLinkForDeps = (dir: string, installed: boolean): boolean =>
-	!installed && hasNeonConfig(dir);
 
 const logSkippedLink = (pm: PackageManager): void => {
 	log.info(
@@ -541,9 +636,8 @@ const printScaffolded = (
 	template: BootstrapTemplate,
 	targetDir: string,
 ): void => {
-	log.info("");
 	log.info(
-		'Done. Scaffolded "%s" into %s.',
+		'Scaffolded "%s" into %s.',
 		template.title,
 		isCurrentDir(targetDir)
 			? "the current directory"
@@ -551,29 +645,61 @@ const printScaffolded = (
 	);
 };
 
-/**
- * The closing "Next steps" hint. Skips `cd` for the current directory, omits
- * the install line once deps are in, and only nudges `neon link` when linking
- * wasn't already offered/run — so the user never sees a step they just did.
- */
-const printNextSteps = (
-	targetDir: string,
-	pm: PackageManager,
-	opts: { installed: boolean; suggestLink: boolean },
-): void => {
-	log.info("");
-	log.info("Next steps:");
-	if (!isCurrentDir(targetDir)) {
-		log.info("  cd %s", displayDir(targetDir));
+const printDoneSummary = (input: {
+	template: BootstrapTemplate;
+	targetDir: string;
+	pm: PackageManager;
+	installed: boolean;
+	installFailed: boolean;
+	git: boolean;
+	agentSetup: InitAgentSetup;
+	linked: boolean;
+	skippedLinkForDeps: boolean;
+	suggestLink: boolean;
+}): void => {
+	const heading = input.installFailed
+		? "Setup did not finish."
+		: "Neon is ready.";
+	const deps = input.installFailed
+		? "install failed"
+		: input.installed
+			? `installed with ${input.pm}`
+			: "skipped";
+	const project = input.linked
+		? "linked"
+		: input.skippedLinkForDeps
+			? "skipped (needs dependencies)"
+			: "not linked";
+	const next: string[] = [];
+	if (!isCurrentDir(input.targetDir)) {
+		next.push(`cd ${displayDir(input.targetDir)}`);
 	}
-	if (!opts.installed) {
-		log.info("  %s", formatInstallCommand(pm));
+	if (!input.installed) {
+		next.push(formatInstallCommand(input.pm));
 	}
-	if (opts.suggestLink) {
-		log.info(`  ${getCliName()} link`);
+	if (input.suggestLink) {
+		next.push(`${getCliName()} link`);
 	}
-	log.info("  See the README to run it.");
-	log.info("");
+	if (!input.installFailed) {
+		next.push("See the README to run it.");
+	}
+	printInitDone(
+		formatInitDone({
+			heading,
+			rows: [
+				{ label: "Template", value: input.template.title },
+				{ label: "Directory", value: displayDir(input.targetDir) },
+				{ label: "Dependencies", value: deps },
+				{
+					label: "Git",
+					value: input.git ? "initialized" : "skipped",
+				},
+				{ label: "Agents", value: agentSetupLabel(input.agentSetup) },
+				{ label: "Project", value: project },
+			],
+			next,
+		}),
+	);
 };
 
 // ----------------------------------------------------------------------------

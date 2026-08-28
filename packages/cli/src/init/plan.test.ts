@@ -6,6 +6,7 @@ import {
 	directoryIsEmpty,
 	planAgentSteps,
 	planExistingInit,
+	postScaffoldActions,
 	projectContextFile,
 	resolveInitAgentSetup,
 } from "./plan.js";
@@ -59,6 +60,68 @@ describe("projectContextFile", () => {
 		expect(
 			projectContextFile("/tmp/my-app", "/tmp/my-app/custom.neon"),
 		).toBe("/tmp/my-app/custom.neon");
+	});
+});
+
+describe("postScaffoldActions", () => {
+	test("puts dependency install last when link does not need neon.ts", () => {
+		expect(
+			postScaffoldActions({
+				git: true,
+				agentSetup: "plugin",
+				install: true,
+				link: true,
+				hasNeonConfig: false,
+			}),
+		).toEqual(["git", "agent", "link", "install"]);
+	});
+
+	test("installs before link when the template has neon.ts", () => {
+		expect(
+			postScaffoldActions({
+				git: true,
+				agentSetup: "skills-mcp",
+				install: true,
+				link: true,
+				hasNeonConfig: true,
+			}),
+		).toEqual(["git", "agent", "install", "link"]);
+	});
+
+	test("skips link when neon.ts would need deps that will not be installed", () => {
+		expect(
+			postScaffoldActions({
+				git: false,
+				agentSetup: "skip",
+				install: false,
+				link: true,
+				hasNeonConfig: true,
+			}),
+		).toEqual([]);
+	});
+
+	test("links without install when there is no neon.ts", () => {
+		expect(
+			postScaffoldActions({
+				git: false,
+				agentSetup: "skip",
+				install: false,
+				link: true,
+				hasNeonConfig: false,
+			}),
+		).toEqual(["link"]);
+	});
+
+	test("install only is just install", () => {
+		expect(
+			postScaffoldActions({
+				git: false,
+				agentSetup: "skip",
+				install: true,
+				link: false,
+				hasNeonConfig: true,
+			}),
+		).toEqual(["install"]);
 	});
 });
 
