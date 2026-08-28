@@ -18,14 +18,8 @@ describe("detectAgent", () => {
 		).toBe("claude-code");
 		expect(
 			detectAgent({
-				CLAUDE_CODE: "1",
+				CLAUDE_CODE_CHILD_SESSION: "1",
 				TERM_PROGRAM: "vscode",
-			}),
-		).toBe("claude-code");
-		expect(
-			detectAgent({
-				CLAUDE_CLI: "1",
-				CURSOR_LAYOUT: "1",
 			}),
 		).toBe("claude-code");
 	});
@@ -52,14 +46,14 @@ describe("detectAgent", () => {
 		).toBe("codex");
 	});
 
-	test("Cline env beats ambient VS Code vars", () => {
+	test("CLINE=1 is not a host marker", () => {
 		expect(
 			detectAgent({
 				CLINE: "1",
 				TERM_PROGRAM: "vscode",
 				VSCODE_PID: "1",
 			}),
-		).toBe("cline");
+		).toBe("vscode");
 	});
 
 	test("Gemini CLI env beats ambient Cursor vars", () => {

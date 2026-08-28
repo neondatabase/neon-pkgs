@@ -1,6 +1,6 @@
 import type { AgentType } from "../mcp/agents.js";
 
-const CLAUDE_ENV = ["CLAUDECODE", "CLAUDE_CODE", "CLAUDE_CLI"] as const;
+const CLAUDE_ENV = ["CLAUDECODE", "CLAUDE_CODE_CHILD_SESSION"] as const;
 
 const CURSOR_ENV = [
 	"CURSOR_TRACE_ID",
@@ -41,9 +41,6 @@ export function detectAgent(
 	}
 	if (isNonEmpty(env.CODEX_THREAD_ID) || isNonEmpty(env.CODEX_SESSION_ID)) {
 		return "codex";
-	}
-	if (env.CLINE === "1") {
-		return "cline";
 	}
 	if (env.GEMINI_CLI === "1") {
 		return "gemini-cli";

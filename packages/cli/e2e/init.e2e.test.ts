@@ -72,8 +72,7 @@ describe("e2e — neon init", () => {
 			env: {
 				HOME: dirs.home,
 				CLAUDECODE: undefined,
-				CLAUDE_CODE: undefined,
-				CLAUDE_CLI: undefined,
+				CLAUDE_CODE_CHILD_SESSION: undefined,
 				CODEX: undefined,
 				CODEX_THREAD_ID: undefined,
 				CODEX_SESSION_ID: undefined,
