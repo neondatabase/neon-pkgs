@@ -2,6 +2,7 @@ import strip from "strip-ansi";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
+	agentSetupDoneLabel,
 	formatInitBanner,
 	formatInitDone,
 	INIT_BANNER_LINES,
@@ -47,6 +48,29 @@ describe("printInitBanner", () => {
 		expect(stderr).not.toHaveBeenCalled();
 		stdout.mockRestore();
 		stderr.mockRestore();
+	});
+});
+
+describe("agentSetupDoneLabel", () => {
+	test("selected setup that never ran is not run", () => {
+		expect(agentSetupDoneLabel({ setup: "plugin", ran: false })).toBe(
+			"not run",
+		);
+		expect(agentSetupDoneLabel({ setup: "skills-mcp", ran: false })).toBe(
+			"not run",
+		);
+	});
+
+	test("skip stays skipped", () => {
+		expect(agentSetupDoneLabel({ setup: "skip", ran: false })).toBe(
+			"skipped",
+		);
+	});
+
+	test("a run setup uses the setup label", () => {
+		expect(agentSetupDoneLabel({ setup: "plugin", ran: true })).toBe(
+			"plugin",
+		);
 	});
 });
 

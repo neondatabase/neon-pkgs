@@ -16,7 +16,7 @@ import {
 } from "../init/bootstrap.js";
 import { type InitRun, spawnCliChild } from "../init/child.js";
 import {
-	agentSetupLabel,
+	agentSetupDoneLabel,
 	formatInitDone,
 	printInitBanner,
 	printInitDone,
@@ -369,6 +369,7 @@ const runPostScaffoldSteps = async (
 			linked: false,
 			skippedLinkForDeps: false,
 			suggestLink: true,
+			agentsRan: false,
 		});
 		return;
 	}
@@ -478,6 +479,7 @@ const executePostScaffold = async (
 	linked: boolean;
 	skippedLinkForDeps: boolean;
 	agentSetup: InitAgentSetup;
+	agentsRan: boolean;
 }> => {
 	const kids = bootstrapChildren(props, targetDir);
 	let installed = false;
@@ -487,6 +489,7 @@ const executePostScaffold = async (
 	let linked = false;
 	let skippedLinkForDeps = false;
 	let agentSetup = choices.agentSetup;
+	let agentsRan = false;
 	const actions = postScaffoldActions({
 		git: choices.git,
 		agentSetup: choices.agentSetup,
@@ -518,6 +521,7 @@ const executePostScaffold = async (
 					? { hasProjectPlugins: props.hasProjectPlugins }
 					: {}),
 			});
+			agentsRan = true;
 			continue;
 		}
 		if (action === "install") {
@@ -554,6 +558,7 @@ const executePostScaffold = async (
 		linked,
 		skippedLinkForDeps,
 		agentSetup,
+		agentsRan,
 	};
 };
 
@@ -662,6 +667,7 @@ const printDoneSummary = (input: {
 	gitFailed: boolean;
 	git: boolean;
 	agentSetup: InitAgentSetup;
+	agentsRan: boolean;
 	linked: boolean;
 	skippedLinkForDeps: boolean;
 	suggestLink: boolean;
@@ -704,7 +710,13 @@ const printDoneSummary = (input: {
 				{ label: "Directory", value: displayDir(input.targetDir) },
 				{ label: "Dependencies", value: deps },
 				{ label: "Git", value: git },
-				{ label: "Agents", value: agentSetupLabel(input.agentSetup) },
+				{
+					label: "Agents",
+					value: agentSetupDoneLabel({
+						setup: input.agentSetup,
+						ran: input.agentsRan,
+					}),
+				},
 				{ label: "Project", value: project },
 			],
 			next,

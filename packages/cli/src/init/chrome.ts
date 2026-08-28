@@ -83,3 +83,13 @@ export const agentSetupLabel = (setup: InitAgentSetup): string => {
 	}
 	return "skipped";
 };
+
+export const agentSetupDoneLabel = (input: {
+	setup: InitAgentSetup;
+	ran: boolean;
+}): string => {
+	if (!input.ran && input.setup !== "skip") {
+		return "not run";
+	}
+	return agentSetupLabel(input.setup);
+};
