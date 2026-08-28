@@ -31,6 +31,14 @@ const approvalRequiredReads = new Set([
 	"listNeonAuthOauthProviders",
 ]);
 
+// These operations deliver or schedule mail outside the authenticated account.
+const openWorldOperations = new Set([
+	"createOrganizationInvitations",
+	"sendNeonAuthEmailProviderTest",
+	"sendNeonAuthTestEmail",
+	"setOrganizationSpendingLimit",
+]);
+
 const resolveReference = (reference) => {
 	if (!reference.startsWith("#/")) {
 		throw new Error(`Unsupported external OpenAPI reference: ${reference}`);
@@ -525,7 +533,7 @@ const operationsSource = operationRecords
 		const annotations = [
 			`readOnlyHint: ${readOnly}`,
 			...(readOnly ? [] : ["destructiveHint: true"]),
-			"openWorldHint: true",
+			`openWorldHint: ${openWorldOperations.has(record.operationId)}`,
 		].join(", ");
 		return `\t${JSON.stringify(record.operationId)}: (client: Client) =>
 \t\tbindOperation(

@@ -5,12 +5,12 @@ import { bindTool, publishedId, type ToolClientOptions } from "./bind.js";
 const writeAnnotations = {
 	readOnlyHint: false,
 	destructiveHint: true,
-	openWorldHint: true,
+	openWorldHint: false,
 } as const;
 
 const readAnnotations = {
 	readOnlyHint: true,
-	openWorldHint: true,
+	openWorldHint: false,
 } as const;
 
 const pooledField = z
