@@ -195,6 +195,35 @@ describe("neon skills", () => {
 		expect(() => readFileSync(argvFile, "utf8")).toThrow();
 	});
 
+	test("skill alias installs default skills into detected project agents", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin, argvFile } = scratch();
+		const { stdout } = await testCliCommand(
+			["skill", "-y"],
+			runOptions(home, cwd, bin),
+		);
+		expect(JSON.parse(stdout)[0]).toMatchObject({
+			agents: "cursor",
+			status: "installed",
+		});
+		expect(JSON.parse(readFileSync(argvFile, "utf8"))[0]).toEqual(
+			expect.arrayContaining(["--agent", "cursor"]),
+		);
+	});
+
+	test("skill alias does not spawn without -y", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin, argvFile } = scratch();
+		const { stderr } = await testCliCommand(["skill"], {
+			...runOptions(home, cwd, bin),
+			code: 1,
+		});
+		expect(stderr).toMatch(/Pass -y to install the default skills/);
+		expect(() => readFileSync(argvFile, "utf8")).toThrow();
+	});
+
 	test("installs named skills and routes platforms to its repo", async ({
 		testCliCommand,
 	}) => {
@@ -290,6 +319,22 @@ describe("neon skills", () => {
 		const { home, cwd, bin, argvFile } = scratch();
 		const { stdout } = await testCliCommand(
 			["skills", "update", "-y"],
+			runOptions(home, cwd, bin),
+		);
+		expect(JSON.parse(stdout)).toEqual([
+			{ scope: "this directory", status: "updated" },
+		]);
+		expect(JSON.parse(readFileSync(argvFile, "utf8"))).toEqual([
+			["-y", "skills", "update", "-p", "-y"],
+		]);
+	});
+
+	test("skill update alias routes to npx skills update -p", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin, argvFile } = scratch();
+		const { stdout } = await testCliCommand(
+			["skill", "update", "-y"],
 			runOptions(home, cwd, bin),
 		);
 		expect(JSON.parse(stdout)).toEqual([

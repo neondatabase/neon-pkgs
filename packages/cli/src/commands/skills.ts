@@ -88,6 +88,7 @@ const coerceSkills = (value: unknown): string[] => {
 };
 
 export const command = "skills";
+export const aliases = ["skill"];
 export const describe = "Install Neon agent skills into coding agents";
 
 export const builder = (argv: yargs.Argv) =>
