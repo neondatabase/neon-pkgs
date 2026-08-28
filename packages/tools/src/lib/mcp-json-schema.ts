@@ -1,65 +1,15 @@
 import * as z from "zod";
 
-const SCHEMA_MAP_KEYS = new Set([
-	"$defs",
-	"definitions",
-	"dependentSchemas",
-	"patternProperties",
-	"properties",
-]);
-
-const SCHEMA_VALUE_KEYS = new Set([
-	"additionalProperties",
-	"contains",
-	"contentSchema",
-	"else",
-	"if",
-	"items",
-	"not",
-	"propertyNames",
-	"then",
-	"unevaluatedItems",
-	"unevaluatedProperties",
-]);
-
-const SCHEMA_ARRAY_KEYS = new Set(["allOf", "anyOf", "oneOf", "prefixItems"]);
-
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null && !Array.isArray(value);
 
 export const compactJsonSchema = (node: unknown): unknown => {
-	if (Array.isArray(node)) {
-		return node.map(compactJsonSchema);
-	}
 	if (!isPlainObject(node)) {
 		return node;
 	}
-
-	const compact: Record<string, unknown> = {};
-	for (const [key, value] of Object.entries(node)) {
-		if (key === "$schema") {
-			continue;
-		}
-		if (SCHEMA_MAP_KEYS.has(key) && isPlainObject(value)) {
-			compact[key] = Object.fromEntries(
-				Object.entries(value).map(([name, schema]) => [
-					name,
-					compactJsonSchema(schema),
-				]),
-			);
-			continue;
-		}
-		if (SCHEMA_ARRAY_KEYS.has(key) && Array.isArray(value)) {
-			compact[key] = value.map(compactJsonSchema);
-			continue;
-		}
-		if (SCHEMA_VALUE_KEYS.has(key)) {
-			compact[key] = compactJsonSchema(value);
-			continue;
-		}
-		compact[key] = value;
-	}
-	return compact;
+	const rest = { ...node };
+	delete rest.$schema;
+	return rest;
 };
 
 const isStandardValidate = (

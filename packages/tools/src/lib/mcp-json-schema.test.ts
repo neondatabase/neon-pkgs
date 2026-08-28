@@ -3,7 +3,7 @@ import * as z from "zod";
 import { compactJsonSchema, toMcpInputSchema } from "./mcp-json-schema.js";
 
 describe("compactJsonSchema", () => {
-	test("drops $schema and keeps field descriptions", () => {
+	test("drops root $schema and keeps field descriptions", () => {
 		const schema = {
 			$schema: "https://json-schema.org/draft/2020-12/schema",
 			type: "object",
@@ -31,92 +31,6 @@ describe("compactJsonSchema", () => {
 			},
 			required: ["description"],
 			additionalProperties: false,
-		});
-	});
-
-	test("keeps description keys under $defs and patternProperties", () => {
-		const schema = {
-			type: "object",
-			$defs: {
-				description: {
-					type: "string",
-					description: "unused",
-				},
-			},
-			patternProperties: {
-				description: { type: "number" },
-			},
-		};
-
-		expect(compactJsonSchema(schema)).toEqual({
-			type: "object",
-			$defs: {
-				description: {
-					type: "string",
-					description: "unused",
-				},
-			},
-			patternProperties: {
-				description: { type: "number" },
-			},
-		});
-	});
-
-	test("does not walk default, enum, or dependentRequired as schemas", () => {
-		const schema = {
-			type: "object",
-			properties: {
-				body: { type: "object" },
-			},
-			default: { description: "keep this default" },
-			enum: [{ description: "keep this enum member" }],
-			dependentRequired: { description: ["name"] },
-		};
-
-		expect(compactJsonSchema(schema)).toEqual({
-			type: "object",
-			properties: {
-				body: { type: "object" },
-			},
-			default: { description: "keep this default" },
-			enum: [{ description: "keep this enum member" }],
-			dependentRequired: { description: ["name"] },
-		});
-	});
-
-	test("keeps descriptions inside dependentSchemas and contentSchema", () => {
-		const schema = {
-			type: "object",
-			dependentSchemas: {
-				name: {
-					type: "object",
-					description: "when name is set",
-					properties: {
-						name: { type: "string", description: "also keep" },
-					},
-				},
-			},
-			contentSchema: {
-				type: "string",
-				description: "payload schema",
-			},
-		};
-
-		expect(compactJsonSchema(schema)).toEqual({
-			type: "object",
-			dependentSchemas: {
-				name: {
-					type: "object",
-					description: "when name is set",
-					properties: {
-						name: { type: "string", description: "also keep" },
-					},
-				},
-			},
-			contentSchema: {
-				type: "string",
-				description: "payload schema",
-			},
 		});
 	});
 });
