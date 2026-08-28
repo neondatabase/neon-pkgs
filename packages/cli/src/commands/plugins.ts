@@ -56,6 +56,7 @@ const scopeLabel = (scope: "global" | "project"): string =>
 	scope === "project" ? "project" : "user";
 
 export const command = "plugins";
+export const aliases = ["plugin"];
 export const describe = "Install the Neon plugin into coding agents";
 
 const pluginProjectAgents = pluginsInstallableAgents("project");

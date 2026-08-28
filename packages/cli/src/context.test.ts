@@ -80,6 +80,8 @@ describe("isSkillsCommand", () => {
 	test("true for skills and skills update", () => {
 		expect(isSkillsCommand({ _: ["skills"] })).toBe(true);
 		expect(isSkillsCommand({ _: ["skills", "update"] })).toBe(true);
+		expect(isSkillsCommand({ _: ["skill"] })).toBe(true);
+		expect(isSkillsCommand({ _: ["skill", "update"] })).toBe(true);
 	});
 
 	test("false for other commands", () => {
@@ -92,6 +94,7 @@ describe("isSkillsCommand", () => {
 describe("isPluginsCommand", () => {
 	test("true for plugins", () => {
 		expect(isPluginsCommand({ _: ["plugins"] })).toBe(true);
+		expect(isPluginsCommand({ _: ["plugin"] })).toBe(true);
 	});
 
 	test("false for other commands", () => {

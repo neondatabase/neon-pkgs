@@ -198,6 +198,38 @@ describe("neon plugins", () => {
 		expect(() => readFileSync(argvFile, "utf8")).toThrow();
 	});
 
+	test("plugin alias installs into detected project agents", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin, argvFile } = scratch();
+		const { stdout, stderr } = await testCliCommand(
+			["plugin", "-y"],
+			runOptions(home, cwd, bin, { NEON_API_KEY: "" }),
+		);
+		expect(stderr).not.toMatch(/Cannot run interactive auth/);
+		expect(stderr).not.toMatch(/Authentication required/);
+		expect(JSON.parse(stdout)[0]).toMatchObject({
+			plugin: "neon-postgres",
+			agent: "cursor",
+			status: "installed",
+		});
+		expect(JSON.parse(readFileSync(argvFile, "utf8"))[0]).toEqual(
+			expect.arrayContaining(["-t", "cursor"]),
+		);
+	});
+
+	test("plugin alias does not spawn without -y", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin, argvFile } = scratch();
+		const { stderr } = await testCliCommand(["plugin"], {
+			...runOptions(home, cwd, bin, { NEON_API_KEY: "" }),
+			code: 1,
+		});
+		expect(stderr).toMatch(/Pass -y to install into detected agents/);
+		expect(() => readFileSync(argvFile, "utf8")).toThrow();
+	});
+
 	test("spawns once per detected target", async ({ testCliCommand }) => {
 		const { home, cwd, bin, argvFile } = scratch();
 		mkdirSync(join(cwd, ".claude"));

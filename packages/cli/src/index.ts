@@ -60,8 +60,10 @@ const NO_SUBCOMMANDS_VERBS = [
 	"mcp",
 
 	"plugins",
+	"plugin",
 
 	"skills",
+	"skill",
 
 	"dev",
 
