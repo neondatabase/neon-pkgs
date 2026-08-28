@@ -335,6 +335,11 @@ export type NamedAgentCommandContext = {
 	yes?: boolean;
 };
 
+const quoteIfNeeded = (value: string): string =>
+	/[\s"'\\]/.test(value)
+		? `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`
+		: value;
+
 const mixedRerun = (
 	command: "init" | "bootstrap",
 	ids: readonly AgentType[],
@@ -346,7 +351,7 @@ const mixedRerun = (
 		context?.directory !== undefined &&
 		context.directory.length > 0
 	) {
-		tokens.push(context.directory);
+		tokens.push(quoteIfNeeded(context.directory));
 	}
 	if (context?.yes === true) {
 		tokens.push(command === "bootstrap" ? "--default" : "-y");

@@ -591,6 +591,14 @@ describe("assertNamedAgentTooling", () => {
 		).toThrow(
 			/Re-run `neon bootstrap my-app --default --agent cursor` or `neon bootstrap my-app --default --agent vscode`/,
 		);
+		expect(() =>
+			assertNamedAgentTooling(["cursor", "vscode"], "bootstrap", {
+				directory: "my app",
+				yes: true,
+			}),
+		).toThrow(
+			/Re-run `neon bootstrap "my app" --default --agent cursor` or `neon bootstrap "my app" --default --agent vscode`/,
+		);
 	});
 
 	test("empty list is a no-op", () => {
