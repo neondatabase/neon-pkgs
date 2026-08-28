@@ -1,6 +1,8 @@
-import { basename, dirname } from "node:path";
+import { readdir, readFile, stat } from "node:fs/promises";
+import { basename, dirname, join, relative, sep } from "node:path";
 import {
 	ErrorCode,
+	type FunctionBundle,
 	PlatformError,
 	packagesToStage,
 	type ResolvedFunctionConfig,
@@ -23,10 +25,23 @@ import {
  * esbuild's native binary (e.g. a single-file CLI) can supply its own — a WASM
  * build, an esbuild binary on PATH, etc. — without this package dragging esbuild
  * into their bundle.
+ *
+ * Distinct from `@neon/config`'s `FunctionBundler`: that one is the per-function
+ * `neon.ts` `bundler` and returns a {@link FunctionBundle} (a file map); this one is
+ * the deploy-side escape hatch and returns the finished archive bytes. The default
+ * ({@link resolveFunctionArchive}) turns a config-level bundler's file map into these
+ * bytes.
  */
 export type FunctionBundler = (
 	fn: ResolvedFunctionConfig,
 ) => Promise<Uint8Array>;
+
+/**
+ * The conventional entry filenames the Functions runtime imports from the archive root.
+ * A bundle that carries neither cannot be invoked, so every non-esbuild bundler's output
+ * is checked for one before it is shipped.
+ */
+const ENTRY_FILENAMES = ["index.mjs", "index.js"];
 
 /**
  * Prepended to the ESM bundle. Bundled dependencies are frequently CommonJS, but an ESM
@@ -37,6 +52,36 @@ export type FunctionBundler = (
  */
 export const ESM_CJS_INTEROP_BANNER =
 	"import{createRequire as ___cr}from'module';import{fileURLToPath as ___f}from'url';import{dirname as ___d}from'path';const require=___cr(import.meta.url);const __filename=___f(import.meta.url);const __dirname=___d(__filename);";
+
+/**
+ * Build the deployable archive for a function, honouring its `neon.ts` `bundler`. The
+ * top-level entry point the deploy path calls: it dispatches on {@link ResolvedFunctionConfig.bundler}
+ * and always returns the finished archive bytes.
+ *
+ * - `"esbuild"` (default) — {@link buildFunctionBundle}, unchanged. Keeps its own archiving and
+ *   limit handling, so a plain bundle deploys byte-for-byte as it did before this dispatch existed.
+ * - `"zip-directory"` — {@link bundleDirectory} → {@link zipFunctionBundle}.
+ * - an inline function — the user's bundler produces a {@link FunctionBundle}, which is then
+ *   zipped and size-checked here. The bundler decides the contents; the platform's archive
+ *   limits still apply.
+ */
+export async function resolveFunctionArchive(
+	fn: ResolvedFunctionConfig,
+	options: {
+		nativeDeps?: Partial<NativeTraceDeps>;
+		onWarning?: (message: string) => void;
+	} = {},
+): Promise<Uint8Array> {
+	const { bundler } = fn;
+	if (bundler === undefined || bundler === "esbuild") {
+		return buildFunctionBundle(fn, options);
+	}
+	const bundle =
+		bundler === "zip-directory"
+			? await bundleDirectory(fn)
+			: await bundler(fn);
+	return zipFunctionBundle(fn.slug, bundle);
+}
 
 /**
  * Build the deployable bundle (a ZIP archive of the esbuild-bundled source) for a function.
@@ -162,6 +207,97 @@ export async function buildFunctionBundle(
 	enforceLimits(fn.slug, entries);
 	const zip = await zipBundle(entries);
 	assertZipWithinLimits(fn.slug, zip, entries);
+	return zip;
+}
+
+/**
+ * Read a prebuilt output **directory** into a {@link FunctionBundle}, preserving its layout.
+ * The `"zip-directory"` bundler: for a framework whose own build already emits a runnable
+ * directory (e.g. `mastra build`), ship it as-is rather than bundling `source` a second time.
+ *
+ * Every file under `fn.source` is read recursively; keys are POSIX-style paths relative to
+ * that directory, so a multi-file bundle whose chunks import each other by relative path —
+ * or a nested asset directory the entry serves — arrives with its structure intact. The
+ * directory must contain an entry module (`index.mjs` / `index.js`) at its root, or the
+ * function could not be invoked; that is checked here rather than left to fail at deploy.
+ */
+export async function bundleDirectory(
+	fn: ResolvedFunctionConfig,
+): Promise<FunctionBundle> {
+	let rootStat: Awaited<ReturnType<typeof stat>>;
+	try {
+		rootStat = await stat(fn.source);
+	} catch (cause) {
+		throw new PlatformError(
+			ErrorCode.InvalidConfig,
+			`Function "${fn.slug}" bundler is "zip-directory" but its source directory ${fn.source} does not exist.`,
+			{ cause },
+		);
+	}
+	if (!rootStat.isDirectory()) {
+		throw new PlatformError(
+			ErrorCode.InvalidConfig,
+			`Function "${fn.slug}" bundler is "zip-directory" but its source ${fn.source} is a file, not a directory. ` +
+				`Point source at the build output directory, or use the default "esbuild" bundler for a single entry module.`,
+		);
+	}
+
+	const entries: FunctionBundle = {};
+	await collectDirectory(fn.source, fn.source, entries);
+
+	if (!ENTRY_FILENAMES.some((name) => name in entries)) {
+		throw new PlatformError(
+			ErrorCode.InvalidConfig,
+			`Function "${fn.slug}" source directory ${fn.source} has no entry module at its root ` +
+				`(expected one of: ${ENTRY_FILENAMES.join(", ")}). The Functions runtime imports the archive by that name.`,
+		);
+	}
+	return entries;
+}
+
+/**
+ * Recursively read `dir` into `entries`, keying each file by its POSIX path relative to
+ * `root`. Empty directories are dropped: an archive carries files, and a bundle's layout is
+ * defined by the paths of the files in it.
+ */
+async function collectDirectory(
+	root: string,
+	dir: string,
+	entries: FunctionBundle,
+): Promise<void> {
+	const dirents = await readdir(dir, { withFileTypes: true });
+	await Promise.all(
+		dirents.map(async (dirent) => {
+			const abs = join(dir, dirent.name);
+			if (dirent.isDirectory()) {
+				await collectDirectory(root, abs, entries);
+				return;
+			}
+			// Symlinks are followed as their target: a bundle is a snapshot of bytes, and a
+			// symlink into node_modules or up out of the tree would not resolve once unpacked.
+			if (dirent.isSymbolicLink()) {
+				const target = await stat(abs).catch(() => null);
+				if (!target || target.isDirectory()) return;
+			}
+			const key = relative(root, abs).split(sep).join("/");
+			entries[key] = new Uint8Array(await readFile(abs));
+		}),
+	);
+}
+
+/**
+ * Zip a {@link FunctionBundle} into the archive the deploy endpoint expects, enforcing the
+ * build service's size limits. The path every non-esbuild bundler funnels through — the
+ * esbuild bundler keeps its own limit handling (it only checks when native files are staged,
+ * preserving the pre-existing no-op path for a plain bundle).
+ */
+export async function zipFunctionBundle(
+	slug: string,
+	entries: FunctionBundle,
+): Promise<Uint8Array> {
+	enforceLimits(slug, entries);
+	const zip = await zipBundle(entries);
+	assertZipWithinLimits(slug, zip, entries);
 	return zip;
 }
 

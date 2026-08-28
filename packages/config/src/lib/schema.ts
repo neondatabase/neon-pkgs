@@ -2,6 +2,7 @@ import { z } from "zod";
 import { parseBranchTtl, parseSuspendTimeout } from "./duration.js";
 import { externalPackageRoot } from "./external-packages.js";
 import { isWildcardPattern, validatePattern } from "./patterns.js";
+import type { FunctionBundler } from "./types.js";
 
 /**
  * Zod schema for {@link import("./types.js").ComputeSettings}.
@@ -269,6 +270,30 @@ const functionExternalPackagesSchema = z.array(externalPackageEntrySchema);
 
 const runtimeSchema = z.literal("nodejs24");
 
+/**
+ * `bundler`: a built-in name or an inline {@link FunctionBundler}. The function form is
+ * validated only as "is a function" — its behaviour is exercised at deploy / `neon dev`
+ * time, not describable to zod — and, like `dev`, it is a local-only field a pulled config
+ * cannot reconstruct. The string forms round-trip normally.
+ */
+const bundlerSchema = z.union([
+	z.literal("esbuild"),
+	z.literal("zip-directory"),
+	z.custom<FunctionBundler>((value) => typeof value === "function", {
+		message:
+			'bundler must be "esbuild", "zip-directory", or a function (fn) => Promise<FunctionBundle>',
+	}),
+]);
+
+/**
+ * Whether a `bundler` value is the built-in esbuild bundler — the only bundler that requires
+ * `source` to be a single entry module. Absent means esbuild (the default). Every other
+ * bundler ships `source` as a directory, so the single-file requirement is lifted.
+ */
+const isEsbuildBundler = (
+	bundler: z.infer<typeof bundlerSchema> | undefined,
+): boolean => bundler === undefined || bundler === "esbuild";
+
 /** The declared name of an entry, whichever form it was written in. */
 const entryName = (
 	entry: z.infer<typeof externalPackageEntrySchema>,
@@ -295,10 +320,29 @@ export const functionDefSchema = z
 		source: z.string().min(1),
 		env: functionEnvSchema.optional(),
 		externalPackages: functionExternalPackagesSchema.optional(),
+		bundler: bundlerSchema.optional(),
 		dev: functionDevConfigSchema.optional(),
 	})
 	.check((ctx) => {
 		const entries = ctx.value.externalPackages ?? [];
+
+		// `externalPackages` is an esbuild `external` list — it only means anything when esbuild
+		// does the bundling. Any other bundler ships whatever files it produces, so a declared
+		// list would silently do nothing; reject it rather than let it read as effective.
+		if (entries.length > 0 && !isEsbuildBundler(ctx.value.bundler)) {
+			ctx.issues.push({
+				code: "custom",
+				input: ctx.value.externalPackages,
+				path: ["externalPackages"],
+				message: `externalPackages only applies to the "esbuild" bundler; the "${
+					typeof ctx.value.bundler === "function"
+						? "custom"
+						: ctx.value.bundler
+				}" bundler controls its own output. Remove externalPackages or switch to the esbuild bundler`,
+			});
+			return;
+		}
+
 		const seenNames = new Map<string, number>();
 		const rootIntent = new Map<
 			string,

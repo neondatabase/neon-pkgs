@@ -3,7 +3,12 @@ import { once } from "node:events";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import type {
+	FunctionBundlerInput,
+	ResolvedFunctionConfig,
+} from "@neon/config";
 import {
+	bundleDirectory,
 	describeNativeFinding,
 	findUndeclaredNativePackages,
 } from "@neon/config-runtime";
@@ -367,11 +372,18 @@ const plannedToUnit = (
 		...(fn.externalPackages
 			? { externalPackages: fn.externalPackages }
 			: {}),
+		...(fn.bundler !== undefined ? { bundler: fn.bundler } : {}),
 		configKey: JSON.stringify({
 			source: fn.source,
 			port: fn.port ?? null,
 			env: fn.env,
 			externalPackages: fn.externalPackages ?? null,
+			// A function bundler cannot be serialized, so key it by identity via a stable
+			// marker; string bundlers key by their name. A real change still restarts the unit.
+			bundler:
+				typeof fn.bundler === "function"
+					? "custom"
+					: (fn.bundler ?? null),
 		}),
 	};
 };
@@ -409,6 +421,12 @@ export type ServedUnit = {
 	 * in single-source mode (`--source` has no policy to read it from).
 	 */
 	externalPackages?: string[];
+	/**
+	 * The function's `neon.ts` `bundler`. When set to something other than the esbuild
+	 * default, `neon dev` serves that bundler's output (a prebuilt directory, or an inline
+	 * function's file map) instead of esbuilding `source`. Absent means esbuild.
+	 */
+	bundler?: FunctionBundlerInput;
 	bundleDir: string;
 	childEnv: NodeJS.ProcessEnv;
 	label: string | null;
@@ -471,6 +489,7 @@ const runSupervisor = async (
 				r.unit.externalPackages,
 				// The `neon.ts` key, so a function is named the same way here as at deploy.
 				r.unit.slug ?? undefined,
+				r.unit.bundler,
 			);
 		} catch (err) {
 			r.status = "error";
@@ -791,7 +810,16 @@ const writeBundle = async (
 	bundleDir: string,
 	externalPackages?: readonly string[],
 	label?: string,
+	bundler?: FunctionBundlerInput,
 ): Promise<string> => {
+	// A non-esbuild bundler owns its output: `neon dev` writes that same file map to disk and
+	// imports its entry, so a local run exercises the exact bundle a deploy would ship — the
+	// "test in a Functions-like env before deploy" path. esbuild stays the default below.
+	if (bundler !== undefined && bundler !== "esbuild") {
+		const files = await bundleForDev(source, label, bundler);
+		return writeBundleFiles(bundleDir, files);
+	}
+
 	// Left unbundled only. `bundleDir` sits inside the project's node_modules, so an
 	// externalized package resolves from the real tree at the host architecture — no install
 	// or copy is needed or wanted locally, whatever `includeFiles` says for a deploy.
@@ -817,13 +845,51 @@ const writeBundle = async (
 		}
 	}
 
+	return writeBundleFiles(bundleDir, files);
+};
+
+/**
+ * Produce a non-esbuild bundler's file map for `neon dev`, from the same code the deploy path
+ * uses. A `"zip-directory"` source is read as-is; an inline function is invoked with a
+ * minimal {@link ResolvedFunctionConfig} — dev only needs the fields a bundler reads (`slug`,
+ * `source`, `bundler`), and never deploy-only tuning.
+ */
+const bundleForDev = async (
+	source: string,
+	label: string | undefined,
+	bundler: Exclude<FunctionBundlerInput, "esbuild">,
+): Promise<Record<string, Uint8Array>> => {
+	const fn: ResolvedFunctionConfig = {
+		slug: label ?? basename(source),
+		name: label ?? basename(source),
+		source,
+		env: {},
+		runtime: "nodejs24",
+		bundler,
+	};
+	return bundler === "zip-directory" ? bundleDirectory(fn) : bundler(fn);
+};
+
+/**
+ * Write a bundle's file map into `bundleDir`, creating nested directories so a multi-file
+ * bundle (chunks that import each other, a `studio/assets/…` tree) lands with its layout
+ * intact, and return the entry path Node should import. `.mjs` loads as ESM directly, so no
+ * `package.json` `"type": "module"` marker is needed.
+ */
+const writeBundleFiles = (
+	bundleDir: string,
+	files: Record<string, Uint8Array>,
+): string => {
 	mkdirSync(bundleDir, { recursive: true });
-	// bundleEntry emits a single `index.mjs` (no source map). The `.mjs` extension makes Node
-	// load it as ESM directly, so no `package.json` `"type": "module"` marker is needed.
 	for (const [name, contents] of Object.entries(files)) {
-		writeFileSync(join(bundleDir, name), contents);
+		const dest = join(bundleDir, name);
+		mkdirSync(dirname(dest), { recursive: true });
+		writeFileSync(dest, contents);
 	}
-	return join(bundleDir, "index.mjs");
+	// The Functions runtime — and the dev runtime — import `index.mjs`, falling back to
+	// `index.js`. Prefer whichever the bundle actually produced.
+	const entry = ["index.mjs", "index.js"].find((name) => name in files);
+	return join(bundleDir, entry ?? "index.mjs");
 };
 
 const urlFor = (port: number | null): string =>

@@ -30,6 +30,8 @@ export type {
 	AppliedChange,
 	Config,
 	ConflictReport,
+	FunctionBundle,
+	FunctionBundlerInput,
 	LoadConfigOptions,
 	NeonApi,
 	PushResult,
@@ -57,7 +59,12 @@ export {
 } from "@neon/config";
 export type { FunctionBundler } from "./lib/function-bundle.js";
 // ─── Function bundling (esbuild + zip) ────────────────────────────────────────
-export { buildFunctionBundle } from "./lib/function-bundle.js";
+export {
+	buildFunctionBundle,
+	bundleDirectory,
+	resolveFunctionArchive,
+	zipFunctionBundle,
+} from "./lib/function-bundle.js";
 // ─── Native dependency staging and detection ──────────────────────────────────
 export type { NativeEvidence, NativeFinding } from "./lib/native-detect.js";
 export {

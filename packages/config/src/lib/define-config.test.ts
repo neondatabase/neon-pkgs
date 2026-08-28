@@ -123,6 +123,7 @@ describe("resolveConfig", () => {
 					source: "./functions/hello-world.ts",
 					env: { RESEND_API_KEY: "re_abc" },
 					runtime: "nodejs24",
+					bundler: "esbuild",
 				},
 			],
 			buckets: [{ name: "uploads", access: "private" }],
@@ -154,6 +155,7 @@ describe("resolveConfig", () => {
 					{ name: "@mongodb-js/zstd", includeFiles: true },
 				],
 				runtime: "nodejs24",
+				bundler: "esbuild",
 			},
 		]);
 	});
@@ -212,6 +214,65 @@ describe("resolveConfig", () => {
 		expect(resolved.preview?.functions[0]).not.toHaveProperty(
 			"externalPackages",
 		);
+	});
+
+	test("defaults bundler to esbuild when the policy omits it", () => {
+		const config = defineConfig({
+			preview: {
+				functions: { fn1: { name: "Hello", source: "./hello.ts" } },
+			},
+		});
+		const resolved = resolveConfig(config, { name: "main", exists: true });
+		expect(resolved.preview?.functions[0]?.bundler).toBe("esbuild");
+	});
+
+	test("carries a zip-directory bundler through with a directory source", () => {
+		const config = defineConfig({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Mastra",
+						source: "./.mastra/output",
+						bundler: "zip-directory",
+					},
+				},
+			},
+		});
+		const resolved = resolveConfig(config, { name: "main", exists: true });
+		expect(resolved.preview?.functions[0]).toMatchObject({
+			source: "./.mastra/output",
+			bundler: "zip-directory",
+		});
+	});
+
+	test("carries an inline function bundler through untouched", () => {
+		const bundler = async () => ({ "index.mjs": new Uint8Array() });
+		const config = defineConfig({
+			preview: {
+				functions: {
+					fn1: { name: "Custom", source: "./build", bundler },
+				},
+			},
+		});
+		const resolved = resolveConfig(config, { name: "main", exists: true });
+		expect(resolved.preview?.functions[0]?.bundler).toBe(bundler);
+	});
+
+	test("rejects externalPackages together with a non-esbuild bundler", () => {
+		expect(() =>
+			defineConfig({
+				preview: {
+					functions: {
+						fn1: {
+							name: "Mastra",
+							source: "./.mastra/output",
+							bundler: "zip-directory",
+							externalPackages: ["sharp"],
+						},
+					},
+				},
+			}),
+		).toThrow(/externalPackages only applies to the "esbuild" bundler/);
 	});
 
 	test("copies externalPackages so mutating the policy array cannot reach the resolved config", () => {
