@@ -48,6 +48,12 @@ export function detectAgent(
 	if (env.GEMINI_CLI === "1") {
 		return "gemini-cli";
 	}
+	if (env.OPENCODE === "1") {
+		return "opencode";
+	}
+	if (env.GOOSE_TERMINAL === "1" || env.AGENT === "goose") {
+		return "goose";
+	}
 
 	if (
 		env.TERM_PROGRAM === "cursor" ||
@@ -62,6 +68,10 @@ export function detectAgent(
 
 	if (env.TERM_PROGRAM === "windsurf") {
 		return "windsurf";
+	}
+
+	if (env.TERM_PROGRAM === "zed") {
+		return "zed";
 	}
 
 	if (

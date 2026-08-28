@@ -71,6 +71,31 @@ describe("detectAgent", () => {
 		).toBe("gemini-cli");
 	});
 
+	test("OpenCode env beats ambient Cursor vars", () => {
+		expect(
+			detectAgent({
+				OPENCODE: "1",
+				AGENT: "1",
+				TERM_PROGRAM: "cursor",
+			}),
+		).toBe("opencode");
+	});
+
+	test("Goose env beats ambient Cursor vars", () => {
+		expect(
+			detectAgent({
+				GOOSE_TERMINAL: "1",
+				TERM_PROGRAM: "cursor",
+			}),
+		).toBe("goose");
+		expect(
+			detectAgent({
+				AGENT: "goose",
+				CURSOR_TRACE_ID: "trace",
+			}),
+		).toBe("goose");
+	});
+
 	test("Cursor from TERM_PROGRAM and Cursor-specific vars", () => {
 		expect(detectAgent({ TERM_PROGRAM: "cursor" })).toBe("cursor");
 		expect(detectAgent({ CURSOR_TRACE_ID: "trace" })).toBe("cursor");
@@ -102,5 +127,9 @@ describe("detectAgent", () => {
 
 	test("Windsurf from TERM_PROGRAM", () => {
 		expect(detectAgent({ TERM_PROGRAM: "windsurf" })).toBe("windsurf");
+	});
+
+	test("Zed from TERM_PROGRAM", () => {
+		expect(detectAgent({ TERM_PROGRAM: "zed" })).toBe("zed");
 	});
 });
