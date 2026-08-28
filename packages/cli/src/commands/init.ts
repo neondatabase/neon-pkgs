@@ -139,7 +139,7 @@ export const handler = async (props: InitProps) => {
 	const contextFile = resolve(cwd, props.contextFile);
 	const yes = props.yes === true;
 	const named = resolveNamedAgents(props.agent ?? []);
-	assertNamedAgentTooling(named, "init");
+	assertNamedAgentTooling(named, "init", yes ? { yes: true } : undefined);
 	const run = props.run ?? spawnCliChild;
 	const explicitKey = props.profile ? "" : credentialInputs().apiKeyFlag;
 	const authEnv = explicitKey ? { NEON_API_KEY: explicitKey } : undefined;

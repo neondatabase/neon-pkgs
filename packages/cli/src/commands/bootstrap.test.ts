@@ -374,8 +374,13 @@ describe("bootstrap", () => {
 		expect(stderr).toMatch(/plugin and skills\/MCP/);
 		expect(stderr).toMatch(/Plugin: cursor/);
 		expect(stderr).toMatch(/Skills\/MCP: vscode/);
-		expect(stderr).toMatch(/neon bootstrap --agent cursor/);
-		expect(stderr).toMatch(/neon bootstrap --agent vscode/);
+		expect(stderr).toContain(
+			`neon bootstrap ${dest} --default --agent cursor`,
+		);
+		expect(stderr).toContain(
+			`neon bootstrap ${dest} --default --agent vscode`,
+		);
+		expect(stderr).toMatch(/Re-run `.*` or `/);
 		expect(existsSync(join(dest, "package.json"))).toBe(false);
 	});
 

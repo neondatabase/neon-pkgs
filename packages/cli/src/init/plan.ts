@@ -330,17 +330,40 @@ export const NAMED_AGENTS_UNSUPPORTED =
 export const NAMED_AGENTS_MIXED =
 	"Cannot install the plugin and skills/MCP in one run.";
 
+export type NamedAgentCommandContext = {
+	directory?: string;
+	yes?: boolean;
+};
+
+const mixedRerun = (
+	command: "init" | "bootstrap",
+	ids: readonly AgentType[],
+	context?: NamedAgentCommandContext,
+): string => {
+	const tokens: string[] = [getCliName(), command];
+	if (
+		command === "bootstrap" &&
+		context?.directory !== undefined &&
+		context.directory.length > 0
+	) {
+		tokens.push(context.directory);
+	}
+	if (context?.yes === true) {
+		tokens.push(command === "bootstrap" ? "--default" : "-y");
+	}
+	tokens.push(...ids.flatMap((id) => ["--agent", id]));
+	return `\`${tokens.join(" ")}\``;
+};
+
 export const namedAgentsMixedMessage = (
 	named: readonly AgentType[],
 	command: "init" | "bootstrap",
+	context?: NamedAgentCommandContext,
 ): string => {
 	const plugin = new Set(initPluginAgents());
 	const pluginNamed = uniqueAgentIds(named.filter((id) => plugin.has(id)));
 	const otherNamed = uniqueAgentIds(named.filter((id) => !plugin.has(id)));
-	const flags = (ids: readonly AgentType[]): string =>
-		ids.flatMap((id) => ["--agent", id]).join(" ");
-	const cli = getCliName();
-	return `${NAMED_AGENTS_MIXED} Plugin: ${pluginNamed.join(", ")}. Skills/MCP: ${otherNamed.join(", ")}. Run \`${cli} ${command} ${flags(pluginNamed)}\` and \`${cli} ${command} ${flags(otherNamed)}\`.`;
+	return `${NAMED_AGENTS_MIXED} Plugin: ${pluginNamed.join(", ")}. Skills/MCP: ${otherNamed.join(", ")}. Re-run ${mixedRerun(command, pluginNamed, context)} or ${mixedRerun(command, otherNamed, context)}.`;
 };
 
 export const namedAgentsNeedSplit = (
@@ -365,6 +388,7 @@ export const namedAgentsNeedSplit = (
 export const assertNamedAgentTooling = (
 	named: readonly AgentType[],
 	command: "init" | "bootstrap" = "init",
+	context?: NamedAgentCommandContext,
 ): void => {
 	if (named.length === 0) {
 		return;
@@ -376,7 +400,7 @@ export const assertNamedAgentTooling = (
 		);
 	}
 	if (namedAgentsNeedSplit(named, tooling)) {
-		throw new Error(namedAgentsMixedMessage(named, command));
+		throw new Error(namedAgentsMixedMessage(named, command, context));
 	}
 };
 

@@ -585,7 +585,9 @@ describe("init handler", () => {
 					contextFile: join(cwd, ".neon"),
 				}),
 			),
-		).rejects.toThrow(/plugin and skills\/MCP/);
+		).rejects.toThrow(
+			/Re-run `neon init -y --agent cursor` or `neon init -y --agent vscode`/,
+		);
 		expect(run).not.toHaveBeenCalled();
 	});
 
@@ -605,7 +607,9 @@ describe("init handler", () => {
 					contextFile: join(cwd, ".neon"),
 				}),
 			),
-		).rejects.toThrow(/plugin and skills\/MCP/);
+		).rejects.toThrow(
+			/Re-run `neon init -y --agent cursor` or `neon init -y --agent vscode`/,
+		);
 		expect(run).not.toHaveBeenCalled();
 	});
 

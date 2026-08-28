@@ -207,7 +207,12 @@ export const handler = async (props: BootstrapProps): Promise<void> => {
 	}
 	const named = resolveNamedAgents(props.agent ?? []);
 	if (props.agentSetup !== false) {
-		assertNamedAgentTooling(named, "bootstrap");
+		assertNamedAgentTooling(named, "bootstrap", {
+			...(props.directory !== undefined && props.directory.length > 0
+				? { directory: props.directory }
+				: {}),
+			...(props.default ? { yes: true } : {}),
+		});
 	}
 	const templates = await resolveTemplateList(props);
 	// --default is a non-interactive quick start: it fills in the template and
