@@ -563,6 +563,25 @@ describe("init handler", () => {
 		expect(run).toHaveBeenCalledTimes(1);
 	});
 
+	test("empty dir mixed --agent fails before bootstrap", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-empty-mixed-"));
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					run,
+					yes: true,
+					agent: ["cursor", "vscode"],
+					contextFile: join(cwd, ".neon"),
+				}),
+			),
+		).rejects.toThrow(/plugin and skills\/MCP/);
+		expect(run).not.toHaveBeenCalled();
+	});
+
 	test("named --agent cursor and vscode fails instead of dropping vscode", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-mixed-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");

@@ -356,6 +356,23 @@ describe("bootstrap", () => {
 		expect(stderr).toMatch(/(?<![-\w])--agent(?![-\w])/);
 	});
 
+	test("mixed --agent fails before scaffold", async () => {
+		const { code, stderr } = await runBootstrap(server, [
+			dest,
+			"--agent",
+			"cursor",
+			"--agent",
+			"vscode",
+			"--default",
+			"--no-install",
+			"--force",
+			"--no-link",
+		]);
+		expect(code).toBe(1);
+		expect(stderr).toMatch(/plugin and skills\/MCP/);
+		expect(existsSync(join(dest, "package.json"))).toBe(false);
+	});
+
 	test("unknown --agent fails before scaffold", async () => {
 		const { code, stderr } = await runBootstrap(server, [
 			dest,

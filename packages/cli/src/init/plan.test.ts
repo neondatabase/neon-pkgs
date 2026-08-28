@@ -3,12 +3,14 @@ import { describe, expect, test, vi } from "vitest";
 import type { AgentType } from "../mcp/agents.js";
 
 import {
+	assertNamedAgentTooling,
 	bootstrapInitStep,
 	childArgv,
 	chooseYesAgentTooling,
 	collectYesAgents,
 	directoryIsEmpty,
 	initYesSupportedAgents,
+	NAMED_AGENTS_MIXED,
 	namedAgentsNeedSplit,
 	noDetectedAgentsMessage,
 	planAgentSteps,
@@ -494,6 +496,24 @@ describe("namedAgentsNeedSplit", () => {
 		expect(namedAgentsNeedSplit(["vscode", "mcporter"], tooling)).toBe(
 			false,
 		);
+	});
+});
+
+describe("assertNamedAgentTooling", () => {
+	test("plugin-only names pass", () => {
+		expect(() =>
+			assertNamedAgentTooling(["cursor", "claude-code"]),
+		).not.toThrow();
+	});
+
+	test("cursor plus vscode fails", () => {
+		expect(() => assertNamedAgentTooling(["cursor", "vscode"])).toThrow(
+			NAMED_AGENTS_MIXED,
+		);
+	});
+
+	test("empty list is a no-op", () => {
+		expect(() => assertNamedAgentTooling([])).not.toThrow();
 	});
 });
 

@@ -307,6 +307,21 @@ export const namedAgentsNeedSplit = (
 	return named.some((id) => !used.has(id));
 };
 
+export const assertNamedAgentTooling = (named: readonly AgentType[]): void => {
+	if (named.length === 0) {
+		return;
+	}
+	const tooling = chooseYesAgentTooling(named);
+	if (tooling.setup === "skip") {
+		throw new Error(
+			`${NAMED_AGENTS_UNSUPPORTED} Supported agents: ${initYesSupportedAgents().join(", ")}`,
+		);
+	}
+	if (namedAgentsNeedSplit(named, tooling)) {
+		throw new Error(NAMED_AGENTS_MIXED);
+	}
+};
+
 export const resolveNamedAgents = (raw: readonly string[]): AgentType[] => {
 	if (raw.length === 0) {
 		return [];

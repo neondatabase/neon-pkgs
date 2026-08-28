@@ -6,6 +6,7 @@ import { getCliName } from "../utils/cli_name.js";
 import { AUTH_CHILD, type InitRun } from "./child.js";
 import { detectAgent } from "./detect_host.js";
 import {
+	assertNamedAgentTooling,
 	type ChildForward,
 	childArgv,
 	chooseYesAgentTooling,
@@ -13,9 +14,6 @@ import {
 	type InitAgentSetup,
 	type InitStep,
 	initYesSupportedAgents,
-	NAMED_AGENTS_MIXED,
-	NAMED_AGENTS_UNSUPPORTED,
-	namedAgentsNeedSplit,
 	noDetectedAgentsMessage,
 	planAgentSteps,
 	planToolingSteps,
@@ -89,26 +87,18 @@ const yesMiss = (): Error =>
 		}),
 	);
 
-const namedMiss = (): Error =>
-	new Error(
-		`${NAMED_AGENTS_UNSUPPORTED} Supported agents: ${initYesSupportedAgents().join(", ")}`,
-	);
-
 export const runAgentTooling = async (
 	options: AgentToolingOptions,
 ): Promise<void> => {
 	const yes = options.yes;
 	const named = options.agents ?? [];
 	if (named.length > 0) {
-		const tooling = chooseYesAgentTooling(named);
-		if (tooling.setup === "skip") {
-			throw namedMiss();
-		}
-		if (namedAgentsNeedSplit(named, tooling)) {
-			throw new Error(NAMED_AGENTS_MIXED);
-		}
+		assertNamedAgentTooling(named);
 		await runInitSteps(
-			planToolingSteps(tooling, { yes, named: true }),
+			planToolingSteps(chooseYesAgentTooling(named), {
+				yes,
+				named: true,
+			}),
 			options,
 		);
 		return;

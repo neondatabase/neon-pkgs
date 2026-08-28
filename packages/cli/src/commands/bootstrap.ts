@@ -16,6 +16,7 @@ import {
 } from "../init/bootstrap.js";
 import { type InitRun, spawnCliChild } from "../init/child.js";
 import {
+	assertNamedAgentTooling,
 	type ChildForward,
 	type InitAgentSetup,
 	initYesSupportedAgents,
@@ -189,6 +190,9 @@ export const handler = async (props: BootstrapProps): Promise<void> => {
 	}
 
 	const named = resolveNamedAgents(props.agent ?? []);
+	if (props.agentSetup !== false) {
+		assertNamedAgentTooling(named);
+	}
 	const templates = await resolveTemplateList(props);
 	// --default is a non-interactive quick start: it fills in the template and
 	// directory and runs setup without asking, so it must not fall into the
