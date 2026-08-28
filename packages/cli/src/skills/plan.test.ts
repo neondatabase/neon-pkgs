@@ -361,7 +361,7 @@ describe("resolveSkillsPlan", () => {
 					interactive: false,
 				}),
 			),
-		).rejects.toThrow(/Pass -y to use detected agents/);
+		).rejects.toThrow(/Pass -y to use project folders/);
 	});
 
 	test("-y --global uses installed apps over host", async () => {

@@ -340,7 +340,9 @@ describe("bootstrap", () => {
 		]);
 		expect(code).toBe(1);
 		expect(stdout.trim()).toBe("");
-		expect(stderr).toMatch(/Unknown argument: agent/);
+		expect(stderr).toMatch(/has no --agent/);
+		expect(stderr).toMatch(/Pass --template/);
+		expect(stderr).not.toMatch(/Unknown argument: agent/);
 	});
 
 	test("help omits --agent", async () => {

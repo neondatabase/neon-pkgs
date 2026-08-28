@@ -81,6 +81,9 @@ export const builder = (argv: yargs.Argv) =>
 				yargs
 					.usage("$0 skills update [options]")
 					.options({
+						yes: {
+							describe: "Skip the confirm prompt",
+						},
 						global: {
 							type: "boolean",
 							default: false,
@@ -133,7 +136,7 @@ export const builder = (argv: yargs.Argv) =>
 				type: "array",
 				string: true,
 				describe:
-					"Skill to install (repeatable). Skips the skill picker. Values listed below",
+					"Skill to install (repeatable). Skips the skill picker. Does not select agents. Values listed below",
 				coerce: coerceSkills,
 			},
 		})

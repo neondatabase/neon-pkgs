@@ -128,7 +128,7 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.example(
 			"$0 mcp -y",
-			"Global config, detected agents, reuse or mint an API key",
+			"Global config, installed apps else the host CLI agent, reuse or mint an API key",
 		)
 		.example(
 			"$0 mcp --oauth",

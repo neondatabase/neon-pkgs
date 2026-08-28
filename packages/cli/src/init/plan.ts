@@ -66,12 +66,41 @@ export const noDetectedAgentsMessage = (input: {
 			: "No coding agents detected.";
 	const hint =
 		input.fix === "pass-yes"
-			? "Pass -y to use detected agents, or run from a terminal to pick one."
+			? input.scope === "project"
+				? "Pass -y to use project folders, else the host CLI agent, or run from a terminal to pick one."
+				: "Pass -y to use installed apps, else the host CLI agent, or run from a terminal to pick one."
 			: "Run this command from a supported agent, or omit -y in a terminal to pick one.";
 	return `${lead} ${hint} Supported agents: ${input.supported.join(", ")}`;
 };
 
-const AGENT_TARGETING_COMMANDS = ["init", "mcp", "plugins", "skills"] as const;
+export const INIT_NEEDS_YES_OR_TERMINAL =
+	"No interactive terminal. Pass -y to use defaults, or run this command in a terminal to pick.";
+
+const UNKNOWN_AGENT_COMMANDS = [
+	"bootstrap",
+	"init",
+	"link",
+	"mcp",
+	"plugins",
+	"skills",
+] as const;
+
+type UnknownAgentCommand = (typeof UNKNOWN_AGENT_COMMANDS)[number];
+
+const unknownAgentArgHint = (
+	command: UnknownAgentCommand,
+	cliName: string,
+): string => {
+	const invocation = `${cliName} ${command}`;
+	switch (command) {
+		case "link":
+			return `${invocation} has no --agent. Pass --project-id <id> to link without a TTY, or run ${invocation} in a terminal.`;
+		case "bootstrap":
+			return `${invocation} has no --agent. Pass --template <id> and --default, or run ${invocation} in a terminal.`;
+		default:
+			return `${invocation} has no --agent. Pass -y to use detected agents, or run ${invocation} in a terminal to pick.`;
+	}
+};
 
 export const rewriteUnknownAgentArg = (input: {
 	message: string;
@@ -81,14 +110,13 @@ export const rewriteUnknownAgentArg = (input: {
 	if (input.message !== "Unknown argument: agent") {
 		return undefined;
 	}
-	const command = AGENT_TARGETING_COMMANDS.find((cmd) =>
+	const command = UNKNOWN_AGENT_COMMANDS.find((cmd) =>
 		input.argv.includes(cmd),
 	);
 	if (command === undefined) {
 		return undefined;
 	}
-	const invocation = `${input.cliName} ${command}`;
-	return `${invocation} has no --agent. Pass -y to use detected agents, or run ${invocation} in a terminal to pick.`;
+	return unknownAgentArgHint(command, input.cliName);
 };
 
 export const initYesSupportedAgents = (): AgentType[] =>
@@ -192,7 +220,7 @@ export const resolveInitAgentSetup = async (input: {
 	if (input.interactive) {
 		return input.pick();
 	}
-	return "skills-mcp";
+	throw new Error(INIT_NEEDS_YES_OR_TERMINAL);
 };
 
 export type ChildForward = {

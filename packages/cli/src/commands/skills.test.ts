@@ -390,10 +390,13 @@ describe("neon skills", () => {
 			runOptions(home, cwd, bin),
 		);
 		const text = `${stdout}\n${stderr}`;
+		const flat = strip(text).replace(/\s+/g, " ");
 		expect(text).toMatch(/skills update/);
 		expect(text).not.toMatch(/--agent/);
 		expect(text).not.toMatch(/--skill/);
 		expect(text).not.toMatch(/-y, -y/);
+		expect(flat).toContain("Skip the confirm prompt");
+		expect(flat).not.toContain("Detected agents");
 	});
 
 	test("update without -y fails before spawn", async ({ testCliCommand }) => {
@@ -549,6 +552,7 @@ describe("neon skills", () => {
 		expect(compact).toContain("exceptneon-postgres-agent-platforms");
 		expect(flat).toContain("Detected agents");
 		expect(flat).toContain("skills -y -s neon -s neon-ai-gateway");
+		expect(flat).toContain("Does not select agents");
 	});
 
 	test("--agent names -y instead of unknown argument", async ({

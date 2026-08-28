@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { recordCredentialInputs } from "@neon-internals/cli-core/auth_selection";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-
+import type { InitAgentSetup } from "../init/plan.js";
 import { test as cliTest } from "../test_utils/fixtures.js";
 
 vi.mock("../analytics.js", () => ({
@@ -31,6 +31,8 @@ const clearCredentialInputs = () =>
 		profileFlag: "",
 		configDir: "",
 	});
+
+const pickSkillsMcp = async (): Promise<InitAgentSetup> => "skills-mcp";
 
 describe("init handler", () => {
 	beforeEach(() => {
@@ -63,6 +65,24 @@ describe("init handler", () => {
 		expect(run).toHaveBeenCalledTimes(1);
 	});
 
+	test("existing app without -y fails before children", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-ci-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					run,
+					contextFile: join(cwd, ".neon"),
+				}),
+			),
+		).rejects.toThrow(/Pass -y to use defaults/);
+		expect(run).not.toHaveBeenCalled();
+	});
+
 	test("existing app runs skills, mcp, link, config init", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-app-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
@@ -74,6 +94,7 @@ describe("init handler", () => {
 				cwd,
 				run,
 				contextFile: join(cwd, ".neon"),
+				pickAgentSetup: pickSkillsMcp,
 			}),
 		);
 
@@ -97,7 +118,9 @@ describe("init handler", () => {
 		const run = vi.fn().mockResolvedValue(true);
 		const { handler } = await import("./init.js");
 
-		await handler(baseProps({ cwd, run, contextFile }));
+		await handler(
+			baseProps({ cwd, run, contextFile, pickAgentSetup: pickSkillsMcp }),
+		);
 
 		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
 			"skills",
@@ -143,6 +166,7 @@ describe("init handler", () => {
 					cwd,
 					run,
 					contextFile: join(cwd, ".neon"),
+					pickAgentSetup: pickSkillsMcp,
 				}),
 			),
 		).rejects.toThrow("`neon skills` failed.");
@@ -168,6 +192,7 @@ describe("init handler", () => {
 				configDir: "/cfg",
 				profile: "work",
 				analytics: false,
+				pickAgentSetup: pickSkillsMcp,
 			}),
 		);
 
@@ -266,6 +291,7 @@ describe("init handler", () => {
 				cwd,
 				run,
 				contextFile: join(root, ".neon"),
+				pickAgentSetup: pickSkillsMcp,
 			}),
 		);
 
@@ -284,7 +310,9 @@ describe("init handler", () => {
 		const run = vi.fn().mockResolvedValue(true);
 		const { handler } = await import("./init.js");
 
-		await handler(baseProps({ cwd, run, contextFile }));
+		await handler(
+			baseProps({ cwd, run, contextFile, pickAgentSetup: pickSkillsMcp }),
+		);
 
 		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
 			"skills",
@@ -309,6 +337,7 @@ describe("init handler", () => {
 				cwd,
 				run,
 				contextFile: ".neon",
+				pickAgentSetup: pickSkillsMcp,
 			}),
 		);
 

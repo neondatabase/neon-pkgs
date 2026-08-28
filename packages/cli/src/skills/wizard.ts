@@ -21,7 +21,7 @@ const restoreCursorOnAbort = (state: { aborted: boolean }) => {
 export const pickSkillsInteractively = async (): Promise<SkillEntry[]> => {
 	if (!canPickAgentsInteractively()) {
 		throw new Error(
-			"No interactive terminal. Pass -y to install the default skills into detected agents. Add --skill <name> to name skills.",
+			"No interactive terminal. Pass -y to install the default skills into detected agents.",
 		);
 	}
 	const { skills } = await prompts({

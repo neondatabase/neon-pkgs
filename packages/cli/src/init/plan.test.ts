@@ -236,21 +236,25 @@ describe("rewriteUnknownAgentArg", () => {
 		}
 	});
 
-	test("leaves link and bootstrap as unknown argument", () => {
+	test("names link and bootstrap replacements", () => {
 		expect(
 			rewriteUnknownAgentArg({
 				message: "Unknown argument: agent",
 				argv: ["node", "cli.js", "link", "--agent"],
 				cliName: "neon",
 			}),
-		).toBeUndefined();
+		).toBe(
+			"neon link has no --agent. Pass --project-id <id> to link without a TTY, or run neon link in a terminal.",
+		);
 		expect(
 			rewriteUnknownAgentArg({
 				message: "Unknown argument: agent",
 				argv: ["node", "cli.js", "bootstrap", "--agent"],
 				cliName: "neon",
 			}),
-		).toBeUndefined();
+		).toBe(
+			"neon bootstrap has no --agent. Pass --template <id> and --default, or run neon bootstrap in a terminal.",
+		);
 	});
 });
 
@@ -410,13 +414,13 @@ describe("resolveInitAgentSetup", () => {
 		).resolves.toBe("skip");
 	});
 
-	test("no TTY keeps skills-mcp", async () => {
+	test("no TTY asks for -y", async () => {
 		await expect(
 			resolveInitAgentSetup({
 				interactive: false,
 				pick: pickUnused,
 			}),
-		).resolves.toBe("skills-mcp");
+		).rejects.toThrow(/Pass -y to use defaults/);
 	});
 });
 
