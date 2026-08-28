@@ -202,10 +202,12 @@ describe("neon plugins", () => {
 		testCliCommand,
 	}) => {
 		const { home, cwd, bin, argvFile } = scratch();
-		const { stdout } = await testCliCommand(
+		const { stdout, stderr } = await testCliCommand(
 			["plugin", "-y"],
-			runOptions(home, cwd, bin),
+			runOptions(home, cwd, bin, { NEON_API_KEY: "" }),
 		);
+		expect(stderr).not.toMatch(/Cannot run interactive auth/);
+		expect(stderr).not.toMatch(/Authentication required/);
 		expect(JSON.parse(stdout)[0]).toMatchObject({
 			plugin: "neon-postgres",
 			agent: "cursor",
@@ -221,7 +223,7 @@ describe("neon plugins", () => {
 	}) => {
 		const { home, cwd, bin, argvFile } = scratch();
 		const { stderr } = await testCliCommand(["plugin"], {
-			...runOptions(home, cwd, bin),
+			...runOptions(home, cwd, bin, { NEON_API_KEY: "" }),
 			code: 1,
 		});
 		expect(stderr).toMatch(/Pass -y to install into detected agents/);

@@ -199,10 +199,12 @@ describe("neon skills", () => {
 		testCliCommand,
 	}) => {
 		const { home, cwd, bin, argvFile } = scratch();
-		const { stdout } = await testCliCommand(
+		const { stdout, stderr } = await testCliCommand(
 			["skill", "-y"],
-			runOptions(home, cwd, bin),
+			runOptions(home, cwd, bin, { NEON_API_KEY: "" }),
 		);
+		expect(stderr).not.toMatch(/Cannot run interactive auth/);
+		expect(stderr).not.toMatch(/Authentication required/);
 		expect(JSON.parse(stdout)[0]).toMatchObject({
 			agents: "cursor",
 			status: "installed",
@@ -217,7 +219,7 @@ describe("neon skills", () => {
 	}) => {
 		const { home, cwd, bin, argvFile } = scratch();
 		const { stderr } = await testCliCommand(["skill"], {
-			...runOptions(home, cwd, bin),
+			...runOptions(home, cwd, bin, { NEON_API_KEY: "" }),
 			code: 1,
 		});
 		expect(stderr).toMatch(/Pass -y to install the default skills/);
@@ -333,10 +335,12 @@ describe("neon skills", () => {
 		testCliCommand,
 	}) => {
 		const { home, cwd, bin, argvFile } = scratch();
-		const { stdout } = await testCliCommand(
+		const { stdout, stderr } = await testCliCommand(
 			["skill", "update", "-y"],
-			runOptions(home, cwd, bin),
+			runOptions(home, cwd, bin, { NEON_API_KEY: "" }),
 		);
+		expect(stderr).not.toMatch(/Cannot run interactive auth/);
+		expect(stderr).not.toMatch(/Authentication required/);
 		expect(JSON.parse(stdout)).toEqual([
 			{ scope: "this directory", status: "updated" },
 		]);

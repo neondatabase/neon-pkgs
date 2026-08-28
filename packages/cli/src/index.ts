@@ -59,11 +59,9 @@ const NO_SUBCOMMANDS_VERBS = [
 
 	"mcp",
 
-	// aliases
 	"plugins",
 	"plugin",
 
-	// aliases
 	"skills",
 	"skill",
 
