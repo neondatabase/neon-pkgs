@@ -184,10 +184,10 @@ export const handler = async (props: BootstrapProps): Promise<void> => {
 		return;
 	}
 
-	const templates = await resolveTemplateList(props);
 	if (shouldPrintInitBanner(props.default)) {
 		printInitBanner();
 	}
+	const templates = await resolveTemplateList(props);
 	// --default is a non-interactive quick start: it fills in the template and
 	// directory and runs setup without asking, so it must not fall into the
 	// prompt path even on a TTY.
@@ -363,6 +363,7 @@ const runPostScaffoldSteps = async (
 			pm: defaultPm,
 			installed: false,
 			installFailed: false,
+			gitFailed: false,
 			git: false,
 			agentSetup: "skip",
 			linked: false,
@@ -409,12 +410,11 @@ const runPostScaffoldSteps = async (
 		link: wantLink,
 		hasNeonConfig: neonConfig,
 	});
-	printDoneSummary({
+	finishPostScaffold({
 		template,
 		targetDir,
 		pm,
 		...outcome,
-		git: wantGit,
 		suggestLink: !outcome.linked,
 	});
 };
@@ -448,12 +448,11 @@ const runDefaultSteps = async (
 		link: props.link,
 		hasNeonConfig: neonConfig,
 	});
-	printDoneSummary({
+	finishPostScaffold({
 		template,
 		targetDir,
 		pm,
 		...outcome,
-		git: wantGit,
 		suggestLink: !outcome.linked,
 	});
 };
@@ -474,6 +473,8 @@ const executePostScaffold = async (
 ): Promise<{
 	installed: boolean;
 	installFailed: boolean;
+	gitFailed: boolean;
+	git: boolean;
 	linked: boolean;
 	skippedLinkForDeps: boolean;
 	agentSetup: InitAgentSetup;
@@ -481,6 +482,8 @@ const executePostScaffold = async (
 	const kids = bootstrapChildren(props, targetDir);
 	let installed = false;
 	let installFailed = false;
+	let gitFailed = false;
+	let git = false;
 	let linked = false;
 	let skippedLinkForDeps = false;
 	let agentSetup = choices.agentSetup;
@@ -493,7 +496,11 @@ const executePostScaffold = async (
 	});
 	for (const action of actions) {
 		if (action === "git") {
-			await initGitRepo(targetDir);
+			git = await initGitRepo(targetDir);
+			if (!git) {
+				gitFailed = true;
+				break;
+			}
 			continue;
 		}
 		if (action === "agent") {
@@ -542,6 +549,8 @@ const executePostScaffold = async (
 	return {
 		installed,
 		installFailed,
+		gitFailed,
+		git,
 		linked,
 		skippedLinkForDeps,
 		agentSetup,
@@ -592,9 +601,8 @@ const bootstrapChildren = (
  * deliberately don't auto-commit, both to avoid failing on a machine with no
  * git identity configured and to leave the first commit to the user.
  */
-const initGitRepo = async (dir: string): Promise<void> => {
-	await runCommand("git", ["init"], dir);
-};
+const initGitRepo = async (dir: string): Promise<boolean> =>
+	runCommand("git", ["init"], dir);
 
 const confirm = async (message: string): Promise<boolean> => {
 	const { value } = await prompts({
@@ -651,19 +659,24 @@ const printDoneSummary = (input: {
 	pm: PackageManager;
 	installed: boolean;
 	installFailed: boolean;
+	gitFailed: boolean;
 	git: boolean;
 	agentSetup: InitAgentSetup;
 	linked: boolean;
 	skippedLinkForDeps: boolean;
 	suggestLink: boolean;
 }): void => {
-	const heading = input.installFailed
-		? "Setup did not finish."
-		: "Neon is ready.";
+	const unfinished = input.installFailed || input.gitFailed;
+	const heading = unfinished ? "Setup did not finish." : "Neon is ready.";
 	const deps = input.installFailed
 		? "install failed"
 		: input.installed
 			? `installed with ${input.pm}`
+			: "skipped";
+	const git = input.gitFailed
+		? "init failed"
+		: input.git
+			? "initialized"
 			: "skipped";
 	const project = input.linked
 		? "linked"
@@ -680,7 +693,7 @@ const printDoneSummary = (input: {
 	if (input.suggestLink) {
 		next.push(`${getCliName()} link`);
 	}
-	if (!input.installFailed) {
+	if (!unfinished) {
 		next.push("See the README to run it.");
 	}
 	printInitDone(
@@ -690,16 +703,22 @@ const printDoneSummary = (input: {
 				{ label: "Template", value: input.template.title },
 				{ label: "Directory", value: displayDir(input.targetDir) },
 				{ label: "Dependencies", value: deps },
-				{
-					label: "Git",
-					value: input.git ? "initialized" : "skipped",
-				},
+				{ label: "Git", value: git },
 				{ label: "Agents", value: agentSetupLabel(input.agentSetup) },
 				{ label: "Project", value: project },
 			],
 			next,
 		}),
 	);
+};
+
+const finishPostScaffold = (
+	input: Parameters<typeof printDoneSummary>[0],
+): void => {
+	printDoneSummary(input);
+	if (input.installFailed || input.gitFailed) {
+		throw new Error("Setup did not finish.");
+	}
 };
 
 // ----------------------------------------------------------------------------
