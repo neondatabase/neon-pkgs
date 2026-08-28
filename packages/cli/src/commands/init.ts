@@ -9,21 +9,25 @@ import {
 	directoryIsEmpty,
 	INIT_NEEDS_YES_OR_TERMINAL,
 	type InitAgentSetup,
+	initYesSupportedAgents,
 	planExistingInit,
+	resolveNamedAgents,
 } from "../init/plan.js";
 import { runAgentTooling, runInitSteps } from "../init/tooling.js";
 import { log } from "../log.js";
 import type { AgentType } from "../mcp/agents.js";
 import type { CommonProps } from "../types.js";
+import { coerceAgentFlag } from "../utils/agent_flag.js";
 import { canPickAgentsInteractively } from "../utils/agent_picker.js";
 import { getCliName } from "../utils/cli_name.js";
-import { helpEpilogue } from "../utils/help_text.js";
+import { helpCsv, helpEpilogue } from "../utils/help_text.js";
 
 export type { InitRun };
 export { initChildEnv };
 
 export type InitProps = CommonProps & {
 	yes?: boolean;
+	agent?: string[];
 	configDir?: string;
 	profile?: string;
 	analytics?: boolean;
@@ -57,6 +61,14 @@ export const builder = (yargs: yargs.Argv) =>
 			describe:
 				"Empty dir: bootstrap --default. Otherwise plugin, or skills and MCP, for project folders, else the host CLI agent. Exits if none. Then link --yes and config init --services none. link --yes still asks for a project unless one is already linked",
 		})
+		.option("agent", {
+			alias: "a",
+			type: "array",
+			string: true,
+			describe:
+				"Coding agent to install into (repeatable). Passed to plugins, skills, and mcp. Skips agent selection. Values listed below",
+			coerce: coerceAgentFlag,
+		})
 		.option("data", {
 			hidden: true,
 			type: "string",
@@ -72,10 +84,16 @@ export const builder = (yargs: yargs.Argv) =>
 			"Empty dir: bootstrap (scaffold, agent tooling, link). Existing app: agent tooling, link, config init",
 		)
 		.example("$0 init -y", "Same steps, using each child's defaults")
+		.example(
+			"$0 init --agent cursor --agent claude-code",
+			"Skip agent selection; pass those agents to plugins, skills, and mcp",
+		)
 		.epilogue(
 			helpEpilogue(
 				"Interactive agent setup: plugin (recommended), skills and MCP separately, or skip agent setup. Never both plugin and skills+MCP.",
-				"-y installs the plugin when Cursor, Claude Code, or Codex is in project folders, else the host CLI agent. Otherwise skills and MCP. If none are found, it exits: run from a supported agent, or omit -y in a terminal to pick. Then link unless already linked. link --yes may still ask for a project.",
+				"-y installs the plugin when Cursor, Claude Code, or Codex is in project folders, else the host CLI agent. Otherwise skills and MCP. If none are found, it exits: pass --agent <name>, run from a supported agent, or omit -y in a terminal to pick. Then link unless already linked. link --yes may still ask for a project.",
+				"--agent / -a is passed to plugins, skills, and mcp. It skips agent selection, including with -y.",
+				helpCsv("Supported agents", initYesSupportedAgents()),
 			),
 		)
 		.check((argv) => {
@@ -110,6 +128,7 @@ export const handler = async (props: InitProps) => {
 	const names = existsSync(cwd) ? readdirSync(cwd) : [];
 	const contextFile = resolve(cwd, props.contextFile);
 	const yes = props.yes === true;
+	const named = resolveNamedAgents(props.agent ?? []);
 	const run = props.run ?? spawnCliChild;
 	const explicitKey = props.profile ? "" : credentialInputs().apiKeyFlag;
 	const authEnv = explicitKey ? { NEON_API_KEY: explicitKey } : undefined;
@@ -125,7 +144,7 @@ export const handler = async (props: InitProps) => {
 		if (!yes && !canPickAgentsInteractively()) {
 			throw new Error(INIT_NEEDS_YES_OR_TERMINAL);
 		}
-		await runInitSteps([bootstrapInitStep(yes)], {
+		await runInitSteps([bootstrapInitStep(yes, named)], {
 			cwd,
 			run,
 			forward,
@@ -141,6 +160,7 @@ export const handler = async (props: InitProps) => {
 		run,
 		forward,
 		authEnv,
+		...(named.length > 0 ? { agents: named } : {}),
 		...(props.pickAgentSetup
 			? { pickAgentSetup: props.pickAgentSetup }
 			: {}),

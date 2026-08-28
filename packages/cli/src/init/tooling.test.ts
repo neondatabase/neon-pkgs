@@ -134,4 +134,55 @@ describe("runAgentTooling", () => {
 		expect(detectAgent).not.toHaveBeenCalled();
 		expect(run).not.toHaveBeenCalled();
 	});
+
+	test("named agents skip detection and the picker", async () => {
+		const run = vi.fn().mockResolvedValue(true);
+		const pickAgentSetup = vi.fn(async () => "skip" as const);
+		const detectAgent = vi.fn((): AgentType | null => "vscode");
+		await runAgentTooling({
+			cwd: "/app",
+			yes: false,
+			run,
+			forward,
+			agents: ["cursor", "claude-code"],
+			pickAgentSetup,
+			detectAgent,
+		});
+		expect(pickAgentSetup).not.toHaveBeenCalled();
+		expect(detectAgent).not.toHaveBeenCalled();
+		expect(run.mock.calls[0][0].slice(0, 5)).toEqual([
+			"plugins",
+			"--agent",
+			"cursor",
+			"--agent",
+			"claude-code",
+		]);
+	});
+
+	test("named -y forwards --agent and skips host detection", async () => {
+		const run = vi.fn().mockResolvedValue(true);
+		const detectAgent = vi.fn((): AgentType | null => "cursor");
+		await runAgentTooling({
+			cwd: "/app",
+			yes: true,
+			run,
+			forward,
+			agents: ["vscode"],
+			detectProjectAgents: () => ["cursor"],
+			detectAgent,
+		});
+		expect(detectAgent).not.toHaveBeenCalled();
+		expect(run.mock.calls[0][0].slice(0, 4)).toEqual([
+			"skills",
+			"-y",
+			"--agent",
+			"vscode",
+		]);
+		expect(run.mock.calls[1][0].slice(0, 4)).toEqual([
+			"mcp",
+			"-y",
+			"--agent",
+			"vscode",
+		]);
+	});
 });

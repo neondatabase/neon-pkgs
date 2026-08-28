@@ -3,7 +3,12 @@ import type { AgentType } from "../mcp/agents.js";
 import { mcpInstallableAgents } from "../mcp/targets.js";
 import { pluginsInstallableAgents } from "../plugins/targets.js";
 import { skillsInstallableAgents } from "../skills/targets.js";
-import { supportsSkills, uniqueAgentIds } from "./agents.js";
+import { agentArgv } from "../utils/agent_flag.js";
+import {
+	supportsSkills,
+	tryResolveAddMcpAgentId,
+	uniqueAgentIds,
+} from "./agents.js";
 
 export type InitAgentSetup = "plugin" | "skills-mcp" | "skip";
 
@@ -21,8 +26,15 @@ export type InitStep = readonly string[];
 export const directoryIsEmpty = (names: readonly string[]): boolean =>
 	names.filter((name) => name !== ".git").length === 0;
 
-export const bootstrapInitStep = (yes: boolean): InitStep =>
-	yes ? ["bootstrap", ".", "--default"] : ["bootstrap", "."];
+export const bootstrapInitStep = (
+	yes: boolean,
+	agents: readonly AgentType[] = [],
+): InitStep => [
+	...(yes
+		? (["bootstrap", ".", "--default"] as const)
+		: (["bootstrap", "."] as const)),
+	...agentArgv(agents),
+];
 
 export const projectContextFile = (
 	projectDir: string,
@@ -53,6 +65,35 @@ export const planAgentSteps = (input: {
 		];
 	}
 	return [];
+};
+
+export const planToolingSteps = (
+	tooling: YesAgentTooling,
+	options: { yes: boolean; named: boolean },
+): InitStep[] => {
+	const prefix = options.yes ? (["-y"] as const) : [];
+	const flagsFor = (ids: readonly AgentType[]): string[] =>
+		options.named ? [...prefix, ...agentArgv(ids)] : [...prefix];
+	switch (tooling.setup) {
+		case "skip":
+			return [];
+		case "plugin":
+			return [["plugins", ...flagsFor(tooling.agents)]];
+		case "skills-mcp": {
+			const steps: InitStep[] = [];
+			if (tooling.skillsAgents.length > 0) {
+				steps.push(["skills", ...flagsFor(tooling.skillsAgents)]);
+			}
+			if (tooling.mcpAgents.length > 0) {
+				steps.push(["mcp", ...flagsFor(tooling.mcpAgents)]);
+			}
+			return steps;
+		}
+		default: {
+			const _exhaustive: never = tooling;
+			return _exhaustive;
+		}
+	}
 };
 
 export const noDetectedAgentsMessage = (input: {
@@ -86,24 +127,15 @@ export const noDetectedAgentsMessage = (input: {
 export const INIT_NEEDS_YES_OR_TERMINAL =
 	"No interactive terminal. Pass -y to use defaults, or run this command in a terminal to pick.";
 
-const UNKNOWN_AGENT_COMMANDS = ["bootstrap", "init", "link"] as const;
+const UNKNOWN_AGENT_COMMANDS = ["link"] as const;
 
 type UnknownAgentCommand = (typeof UNKNOWN_AGENT_COMMANDS)[number];
 
 const unknownAgentArgHint = (
 	command: UnknownAgentCommand,
 	cliName: string,
-): string => {
-	const invocation = `${cliName} ${command}`;
-	switch (command) {
-		case "link":
-			return `${invocation} has no --agent. Pass --project-id <id> to link without a TTY, or run ${invocation} in a terminal.`;
-		case "bootstrap":
-			return `${invocation} has no --agent. Pass --template <id> and --default, or run ${invocation} in a terminal.`;
-		default:
-			return `${invocation} has no --agent. Pass -y to use detected agents, or run ${invocation} in a terminal to pick.`;
-	}
-};
+): string =>
+	`${cliName} ${command} has no --agent. Pass --project-id <id> to link without a TTY, or run ${cliName} ${command} in a terminal.`;
 
 const BOOLEAN_FLAGS = new Set([
 	"-y",
@@ -245,27 +277,33 @@ export const chooseYesAgentTooling = (
 	return { setup: "skills-mcp", skillsAgents, mcpAgents };
 };
 
-export const planYesAgentSteps = (tooling: YesAgentTooling): InitStep[] => {
-	switch (tooling.setup) {
-		case "skip":
-			return [];
-		case "plugin":
-			return [["plugins", "-y"]];
-		case "skills-mcp": {
-			const steps: InitStep[] = [];
-			if (tooling.skillsAgents.length > 0) {
-				steps.push(["skills", "-y"]);
-			}
-			if (tooling.mcpAgents.length > 0) {
-				steps.push(["mcp", "-y"]);
-			}
-			return steps;
-		}
-		default: {
-			const _exhaustive: never = tooling;
-			return _exhaustive;
-		}
+export const planYesAgentSteps = (tooling: YesAgentTooling): InitStep[] =>
+	planToolingSteps(tooling, { yes: true, named: false });
+
+export const NAMED_AGENTS_UNSUPPORTED =
+	"None of the selected agents can install the Neon plugin, skills, or MCP.";
+
+export const resolveNamedAgents = (raw: readonly string[]): AgentType[] => {
+	if (raw.length === 0) {
+		return [];
 	}
+	const available = initYesSupportedAgents();
+	const resolved: AgentType[] = [];
+	for (const item of raw) {
+		if (item === "*") {
+			throw new Error(
+				"--agent * is not accepted. Pass --agent <name> for each coding agent, or omit --agent to detect or pick.",
+			);
+		}
+		const id = tryResolveAddMcpAgentId(item);
+		if (!id) {
+			throw new Error(
+				`Unknown agent: "${item}". Supported agents: ${available.join(", ")}`,
+			);
+		}
+		resolved.push(id);
+	}
+	return uniqueAgentIds(resolved);
 };
 
 export const planExistingInit = (input: {

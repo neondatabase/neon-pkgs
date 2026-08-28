@@ -12,9 +12,11 @@ import {
 	noDetectedAgentsMessage,
 	planAgentSteps,
 	planExistingInit,
+	planToolingSteps,
 	planYesAgentSteps,
 	projectContextFile,
 	resolveInitAgentSetup,
+	resolveNamedAgents,
 	resolveYesAgentList,
 	rewriteUnknownAgentArg,
 } from "./plan.js";
@@ -47,6 +49,24 @@ describe("bootstrapInitStep", () => {
 			"bootstrap",
 			".",
 			"--default",
+		]);
+	});
+
+	test("forwards named agents", () => {
+		expect(bootstrapInitStep(true, ["cursor", "claude-code"])).toEqual([
+			"bootstrap",
+			".",
+			"--default",
+			"--agent",
+			"cursor",
+			"--agent",
+			"claude-code",
+		]);
+		expect(bootstrapInitStep(false, ["vscode"])).toEqual([
+			"bootstrap",
+			".",
+			"--agent",
+			"vscode",
 		]);
 	});
 });
@@ -232,15 +252,15 @@ describe("noDetectedAgentsMessage", () => {
 });
 
 describe("rewriteUnknownAgentArg", () => {
-	test("names -y for init", () => {
+	test("names --project-id for link", () => {
 		expect(
 			rewriteUnknownAgentArg({
 				message: "Unknown argument: agent",
-				argv: ["node", "cli.js", "init", "--agent", "cursor"],
+				argv: ["node", "cli.js", "link", "--agent", "cursor"],
 				cliName: "neon",
 			}),
 		).toBe(
-			"neon init has no --agent. Pass -y to use detected agents, or run neon init in a terminal to pick.",
+			"neon link has no --agent. Pass --project-id <id> to link without a TTY, or run neon link in a terminal.",
 		);
 	});
 
@@ -268,23 +288,6 @@ describe("rewriteUnknownAgentArg", () => {
 				argv: [
 					"node",
 					"cli.js",
-					"init",
-					"--context-file",
-					"bootstrap",
-					"--agent",
-					"cursor",
-				],
-				cliName: "neon",
-			}),
-		).toBe(
-			"neon init has no --agent. Pass -y to use detected agents, or run neon init in a terminal to pick.",
-		);
-		expect(
-			rewriteUnknownAgentArg({
-				message: "Unknown argument: agent",
-				argv: [
-					"node",
-					"cli.js",
 					"--org-id",
 					"init",
 					"link",
@@ -296,19 +299,16 @@ describe("rewriteUnknownAgentArg", () => {
 		).toBe(
 			"neon link has no --agent. Pass --project-id <id> to link without a TTY, or run neon link in a terminal.",
 		);
-		expect(
-			rewriteUnknownAgentArg({
-				message: "Unknown argument: agent",
-				argv: ["node", "cli.js", "-y", "init", "--agent", "cursor"],
-				cliName: "neon",
-			}),
-		).toBe(
-			"neon init has no --agent. Pass -y to use detected agents, or run neon init in a terminal to pick.",
-		);
 	});
 
-	test("does not rewrite skills, plugins, or mcp", () => {
-		for (const command of ["skills", "plugins", "mcp"] as const) {
+	test("does not rewrite skills, plugins, mcp, init, or bootstrap", () => {
+		for (const command of [
+			"skills",
+			"plugins",
+			"mcp",
+			"init",
+			"bootstrap",
+		] as const) {
 			expect(
 				rewriteUnknownAgentArg({
 					message: "Unknown argument: agent",
@@ -319,19 +319,19 @@ describe("rewriteUnknownAgentArg", () => {
 		}
 	});
 
-	test("names -a the same as --agent on init", () => {
+	test("names -a the same as --agent on link", () => {
 		expect(
 			rewriteUnknownAgentArg({
 				message: "Unknown argument: a",
-				argv: ["node", "cli.js", "init", "-a", "cursor"],
+				argv: ["node", "cli.js", "link", "-a", "cursor"],
 				cliName: "neon",
 			}),
 		).toBe(
-			"neon init has no --agent. Pass -y to use detected agents, or run neon init in a terminal to pick.",
+			"neon link has no --agent. Pass --project-id <id> to link without a TTY, or run neon link in a terminal.",
 		);
 	});
 
-	test("names link and bootstrap replacements", () => {
+	test("rewrites a bare --agent on link", () => {
 		expect(
 			rewriteUnknownAgentArg({
 				message: "Unknown argument: agent",
@@ -340,15 +340,6 @@ describe("rewriteUnknownAgentArg", () => {
 			}),
 		).toBe(
 			"neon link has no --agent. Pass --project-id <id> to link without a TTY, or run neon link in a terminal.",
-		);
-		expect(
-			rewriteUnknownAgentArg({
-				message: "Unknown argument: agent",
-				argv: ["node", "cli.js", "bootstrap", "--agent"],
-				cliName: "neon",
-			}),
-		).toBe(
-			"neon bootstrap has no --agent. Pass --template <id> and --default, or run neon bootstrap in a terminal.",
 		);
 	});
 });
@@ -500,6 +491,57 @@ describe("planYesAgentSteps", () => {
 
 	test("skip is empty", () => {
 		expect(planYesAgentSteps({ setup: "skip" })).toEqual([]);
+	});
+});
+
+describe("planToolingSteps", () => {
+	test("named -y plugin forwards --agent", () => {
+		expect(
+			planToolingSteps(
+				{ setup: "plugin", agents: ["cursor", "claude-code"] },
+				{ yes: true, named: true },
+			),
+		).toEqual([
+			["plugins", "-y", "--agent", "cursor", "--agent", "claude-code"],
+		]);
+	});
+
+	test("named interactive skills-mcp forwards without -y", () => {
+		expect(
+			planToolingSteps(
+				{
+					setup: "skills-mcp",
+					skillsAgents: ["vscode"],
+					mcpAgents: ["vscode"],
+				},
+				{ yes: false, named: true },
+			),
+		).toEqual([
+			["skills", "--agent", "vscode"],
+			["mcp", "--agent", "vscode"],
+		]);
+	});
+});
+
+describe("resolveNamedAgents", () => {
+	test("resolves aliases and dedupes", () => {
+		expect(resolveNamedAgents(["claude", "cursor", "claude-code"])).toEqual(
+			["claude-code", "cursor"],
+		);
+	});
+
+	test("empty is empty", () => {
+		expect(resolveNamedAgents([])).toEqual([]);
+	});
+
+	test("unknown agent names supported agents", () => {
+		expect(() => resolveNamedAgents(["not-an-agent"])).toThrow(
+			/Unknown agent: "not-an-agent"/,
+		);
+	});
+
+	test("rejects *", () => {
+		expect(() => resolveNamedAgents(["*"])).toThrow(/--agent \*/);
 	});
 });
 

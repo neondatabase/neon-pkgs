@@ -13,8 +13,10 @@ import {
 	type InitAgentSetup,
 	type InitStep,
 	initYesSupportedAgents,
+	NAMED_AGENTS_UNSUPPORTED,
 	noDetectedAgentsMessage,
 	planAgentSteps,
+	planToolingSteps,
 	planYesAgentSteps,
 	resolveInitAgentSetup,
 } from "./plan.js";
@@ -34,6 +36,7 @@ export type AgentToolingOptions = AgentDetectors & {
 	forward: ChildForward;
 	authEnv?: NodeJS.ProcessEnv;
 	pickAgentSetup?: () => Promise<InitAgentSetup>;
+	agents?: readonly AgentType[];
 };
 
 const defaultProjectAgents = (cwd: string): readonly AgentType[] =>
@@ -80,13 +83,31 @@ const yesMiss = (): Error =>
 			scope: "project",
 			supported: initYesSupportedAgents(),
 			fix: "run-without-yes",
+			nameAgent: true,
 		}),
+	);
+
+const namedMiss = (): Error =>
+	new Error(
+		`${NAMED_AGENTS_UNSUPPORTED} Supported agents: ${initYesSupportedAgents().join(", ")}`,
 	);
 
 export const runAgentTooling = async (
 	options: AgentToolingOptions,
 ): Promise<void> => {
 	const yes = options.yes;
+	const named = options.agents ?? [];
+	if (named.length > 0) {
+		const tooling = chooseYesAgentTooling(named);
+		if (tooling.setup === "skip") {
+			throw namedMiss();
+		}
+		await runInitSteps(
+			planToolingSteps(tooling, { yes, named: true }),
+			options,
+		);
+		return;
+	}
 	if (yes) {
 		const agents = await yesAgentsFromOptions(options);
 		const tooling = chooseYesAgentTooling(agents);

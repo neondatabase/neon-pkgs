@@ -334,18 +334,16 @@ describe("bootstrap", () => {
 		expect(YAML.parse(stdout)).toEqual([HONO_LIST_ROW, PLAIN_LIST_ROW]);
 	});
 
-	test("--agent is an unknown argument", async () => {
+	test("--agent without a value is refused", async () => {
 		const { code, stdout, stderr } = await runBootstrap(server, [
 			"--agent",
 		]);
 		expect(code).toBe(1);
 		expect(stdout.trim()).toBe("");
-		expect(stderr).toMatch(/has no --agent/);
-		expect(stderr).toMatch(/Pass --template/);
-		expect(stderr).not.toMatch(/Unknown argument: agent/);
+		expect(stderr).toMatch(/--agent needs a value/);
 	});
 
-	test("help omits --agent", async () => {
+	test("help describes --agent forwarding", async () => {
 		const { code, stderr } = await runBootstrap(server, ["--help"]);
 		expect(code, stderr).toBe(0);
 		const flat = stderr.replace(/\s+/g, " ");
@@ -353,7 +351,24 @@ describe("bootstrap", () => {
 		expect(flat).toContain("--agent-setup");
 		expect(flat).toContain("host CLI agent");
 		expect(flat).toContain("omit --default in a terminal");
-		expect(stderr).not.toMatch(/(?<![-\w])--agent(?![-\w])/);
+		expect(flat).toMatch(/passed to plugins\s*,\s*skills, and mcp/i);
+		expect(stderr).toMatch(/(?<![-\w])--agent(?![-\w])/);
+	});
+
+	test("unknown --agent fails before scaffold", async () => {
+		const { code, stderr } = await runBootstrap(server, [
+			dest,
+			"--agent",
+			"not-an-agent",
+			"--default",
+			"--no-install",
+			"--force",
+			"--no-agent-setup",
+			"--no-link",
+		]);
+		expect(code).toBe(1);
+		expect(stderr).toMatch(/Unknown agent: "not-an-agent"/);
+		expect(existsSync(join(dest, "package.json"))).toBe(false);
 	});
 
 	test("--default scaffolds and inits git without prompting", async () => {
@@ -365,6 +380,8 @@ describe("bootstrap", () => {
 			"--force",
 			"--no-agent-setup",
 			"--no-link",
+			"--agent",
+			"cursor",
 		]);
 		expect(code, stderr).toBe(0);
 

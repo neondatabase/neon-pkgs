@@ -81,6 +81,44 @@ describe("init handler", () => {
 		expect(run).not.toHaveBeenCalled();
 	});
 
+	test("existing app with --agent skips the picker without -y", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-named-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const pickAgentSetup = vi.fn(pickSkillsMcp);
+		const detectAgent = vi.fn(() => "vscode");
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				contextFile: join(cwd, ".neon"),
+				agent: ["cursor", "claude-code"],
+				pickAgentSetup,
+				detectAgent,
+			}),
+		);
+
+		expect(pickAgentSetup).not.toHaveBeenCalled();
+		expect(detectAgent).not.toHaveBeenCalled();
+		expect(run.mock.calls[0][0]).toEqual(
+			expect.arrayContaining([
+				"plugins",
+				"--agent",
+				"cursor",
+				"--agent",
+				"claude-code",
+			]),
+		);
+		expect(run.mock.calls[0][0]).not.toContain("-y");
+		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
+			"plugins",
+			"link",
+			"config",
+		]);
+	});
+
 	test("existing app runs skills, mcp, link, config init", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-app-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
@@ -460,6 +498,91 @@ describe("init handler", () => {
 		expect(run.mock.calls[1][0]).not.toContain("--agent");
 	});
 
+	test("-y --agent skips detection and forwards names", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-y-named-"));
+		mkdirSync(join(cwd, ".cursor"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const detectProjectAgents = vi.fn(() => ["cursor"]);
+		const detectAgent = vi.fn(() => "cursor");
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				yes: true,
+				agent: ["vscode"],
+				contextFile: join(cwd, ".neon"),
+				detectProjectAgents,
+				detectAgent,
+			}),
+		);
+
+		expect(detectProjectAgents).not.toHaveBeenCalled();
+		expect(detectAgent).not.toHaveBeenCalled();
+		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
+			"skills",
+			"mcp",
+			"link",
+			"config",
+		]);
+		expect(run.mock.calls[0][0]).toEqual(
+			expect.arrayContaining(["skills", "-y", "--agent", "vscode"]),
+		);
+		expect(run.mock.calls[1][0]).toEqual(
+			expect.arrayContaining(["mcp", "-y", "--agent", "vscode"]),
+		);
+		expect(run.mock.calls[1][0]).not.toContain("--project");
+	});
+
+	test("empty -y forwards --agent to bootstrap", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-empty-agent-"));
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				yes: true,
+				agent: ["cursor"],
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(run.mock.calls[0][0]).toEqual(
+			expect.arrayContaining([
+				"bootstrap",
+				".",
+				"--default",
+				"--agent",
+				"cursor",
+			]),
+		);
+		expect(run).toHaveBeenCalledTimes(1);
+	});
+
+	test("unknown --agent fails before children", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-bad-agent-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					run,
+					yes: true,
+					agent: ["not-an-agent"],
+					contextFile: join(cwd, ".neon"),
+				}),
+			),
+		).rejects.toThrow(/Unknown agent: "not-an-agent"/);
+		expect(run).not.toHaveBeenCalled();
+	});
+
 	test("-y with no detected agents fails before link", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-y-skip-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
@@ -583,8 +706,12 @@ describe("init CLI", () => {
 		expect(help).toMatch(/Cursor, Claude Code, or Codex/);
 		expect(help).toMatch(/host CLI agent/);
 		expect(help).toMatch(/exits/);
+		expect(help).toMatch(/-a, --agent/);
+		expect(help).toMatch(/Skip agent selection/);
+		expect(help.replace(/\s+/g, " ")).toMatch(
+			/passed to plugins\s*,\s*skills, and mcp/i,
+		);
 		expect(help).not.toMatch(/installed apps/);
-		expect(help).not.toMatch(/claude-desktop/);
 		expect(help).not.toMatch(/Set output format/);
 	});
 
@@ -603,5 +730,22 @@ describe("init CLI", () => {
 			code: 1,
 			stderr: expect.stringContaining("does not support --output"),
 		});
+	});
+
+	cliTest("rejects --agent without a value", async ({ testCliCommand }) => {
+		const { stderr } = await testCliCommand(["init", "--agent"], {
+			snapshot: false,
+			code: 1,
+		});
+		expect(stderr).toMatch(/--agent needs a value/);
+	});
+
+	cliTest("rejects an unknown --agent", async ({ testCliCommand }) => {
+		const { stderr } = await testCliCommand(
+			["init", "-y", "--agent", "not-an-agent"],
+			{ snapshot: false, code: 1, outputTable: true },
+		);
+		expect(stderr).toMatch(/Unknown agent: "not-an-agent"/);
+		expect(stderr).not.toMatch(/Unknown argument: agent/);
 	});
 });
