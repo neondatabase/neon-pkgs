@@ -5,13 +5,19 @@ import type yargs from "yargs";
 import { readContextFile } from "../context.js";
 import { type InitRun, initChildEnv, spawnCliChild } from "../init/child.js";
 import {
+	agentSetupLabel,
+	formatInitDone,
+	printInitBanner,
+	printInitDone,
+	shouldPrintInitBanner,
+} from "../init/chrome.js";
+import {
 	bootstrapInitStep,
 	directoryIsEmpty,
 	type InitAgentSetup,
 	planExistingInit,
 } from "../init/plan.js";
 import { runAgentTooling, runInitSteps } from "../init/tooling.js";
-import { log } from "../log.js";
 import type { CommonProps } from "../types.js";
 import { getCliName } from "../utils/cli_name.js";
 import { helpEpilogue } from "../utils/help_text.js";
@@ -127,11 +133,15 @@ export const handler = async (props: InitProps) => {
 			forward,
 			authEnv,
 		});
-		log.info("Done.");
 		return;
 	}
 
-	await runAgentTooling({
+	if (shouldPrintInitBanner(yes)) {
+		printInitBanner();
+	}
+
+	const alreadyLinked = isLinked(contextFile);
+	const agentSetup = await runAgentTooling({
 		cwd,
 		yes,
 		run,
@@ -146,12 +156,25 @@ export const handler = async (props: InitProps) => {
 	});
 	await runInitSteps(
 		planExistingInit({
-			linked: isLinked(contextFile),
+			linked: alreadyLinked,
 			yes,
 			agentSetup: "skip",
 		}),
 		{ cwd, run, forward, authEnv },
 	);
 
-	log.info("Done.");
+	printInitDone(
+		formatInitDone({
+			heading: "Configured this directory for Neon.",
+			rows: [
+				{ label: "Agents", value: agentSetupLabel(agentSetup) },
+				{
+					label: "Project",
+					value: alreadyLinked ? "already linked" : "linked",
+				},
+				{ label: "Config", value: "neon.ts" },
+			],
+			next: [],
+		}),
+	);
 };

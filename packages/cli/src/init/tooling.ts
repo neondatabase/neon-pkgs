@@ -21,6 +21,7 @@ export type AgentToolingOptions = {
 	authEnv?: NodeJS.ProcessEnv;
 	pickAgentSetup?: () => Promise<InitAgentSetup>;
 	hasProjectPlugins?: (cwd: string) => Promise<boolean>;
+	agentSetup?: InitAgentSetup;
 };
 
 const defaultHasProjectPlugins = async (cwd: string): Promise<boolean> => {
@@ -59,7 +60,7 @@ export const runInitSteps = async (
 
 export const runAgentTooling = async (
 	options: AgentToolingOptions,
-): Promise<void> => {
+): Promise<InitAgentSetup> => {
 	const yes = options.yes;
 	const hasProjectPlugins = yes
 		? await (options.hasProjectPlugins ?? defaultHasProjectPlugins)(
@@ -69,13 +70,16 @@ export const runAgentTooling = async (
 	const interactive =
 		!yes &&
 		(options.pickAgentSetup !== undefined || canPickAgentsInteractively());
-	const agentSetup = await resolveInitAgentSetup({
-		yes,
-		interactive,
-		hasProjectPlugins,
-		pick: options.pickAgentSetup ?? pickAgentSetupInteractively,
-	});
+	const agentSetup =
+		options.agentSetup ??
+		(await resolveInitAgentSetup({
+			yes,
+			interactive,
+			hasProjectPlugins,
+			pick: options.pickAgentSetup ?? pickAgentSetupInteractively,
+		}));
 	await runInitSteps(planAgentSteps({ yes, agentSetup }), options);
+	return agentSetup;
 };
 
 export type ScaffoldFollowUpOptions = AgentToolingOptions & {

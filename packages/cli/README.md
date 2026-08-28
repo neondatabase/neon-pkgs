@@ -683,7 +683,7 @@ When a package cannot be bundled — a native addon with no esbuild loader, or a
 
 `neon bootstrap` copies a Neon starter template into a new (or current) directory — conceptually like `degit`, but it only pulls from a small set of templates we maintain in the public [`neondatabase/examples`](https://github.com/neondatabase/examples) repo. The template copy needs no Neon login: it downloads files from GitHub.
 
-After scaffolding, an interactive terminal offers agent tooling (the Neon plugin, or skills and MCP separately — never both) and then `neon link`. `--default` / `-y` skips the template, install, git, and agent pickers, then runs `link --yes`. `link --yes` still asks for a project unless one is already linked. `--no-agent-setup` and `--no-link` skip those. Non-interactive without `--default` prints next steps and does not install, set up agents, or link.
+After scaffolding, an interactive terminal asks about dependency install, git, agent tooling (the Neon plugin, or skills and MCP separately — never both), and `neon link` before running those steps. Dependency install is last, except when the template has a `neon.ts` and you chose to link — then install runs first so link can pull env. `--default` / `-y` skips the template, install, git, and agent pickers, then runs `link --yes`. `link --yes` still asks for a project unless one is already linked. `--no-agent-setup` and `--no-link` skip those. Non-interactive without `--default` prints next steps and does not install, set up agents, or link.
 
 Pass a target directory (or `.` for the current one). In an interactive terminal you pick the template from a list; in CI / non-interactive contexts pass `--template <id>`.
 
@@ -707,7 +707,7 @@ The target directory must be empty unless you pass `--force` (a lone `.git` is i
 
 `neon init` sets up this directory for Neon.
 
-An empty directory (nothing except `.git`) runs `neon bootstrap .` and stops. With `-y` that is `neon bootstrap . --default`. Bootstrap handles scaffolding, agent tooling, and linking.
+An empty directory (nothing except `.git`) runs `neon bootstrap .` and stops. With `-y` that is `neon bootstrap . --default`. Bootstrap handles scaffolding, agent tooling, and linking. Interactive bootstrap prints a NEON banner, asks every setup question, then runs the work — dependency install last, except when a `neon.ts` needs deps before `link`.
 
 An existing app installs agent tooling, then `neon link` unless `.neon` already has a projectId, then `neon config init`. Interactive `config init` opens the services picker; `-y` uses `--services none` (starter policy).
 
@@ -791,7 +791,7 @@ On a TTY the command asks which agents and which skills, then shows a summary to
 
 `-y` skips those questions and installs the default skills. `--skill` / `-s` names specific skills and skips the skill picker. `--agent` and `--global` still apply. Without a TTY, pass `-y` or `--skill`. `--agent` alone is not enough.
 
-`--skill` names by source repo: `neondatabase/agent-skills` (`claimable-postgres`, `neon`, `neon-ai-gateway`, `neon-functions`, `neon-object-storage`, `neon-postgres`, `neon-postgres-branches`, `neon-postgres-egress-optimizer`); `neondatabase/neon-for-agent-platforms` (`neon-postgres-agent-platforms`).
+`--skill` names by source repo: `neondatabase/agent-skills` (`neon`, `neon-ai-gateway`, `neon-functions`, `neon-object-storage`, `neon-postgres`, `neon-postgres-branches`, `neon-postgres-egress-optimizer`); `neondatabase/neon-for-agent-platforms` (`neon-postgres-agent-platforms`).
 
 `--agent` names match `neon mcp`, minus agents that cannot install skills: `antigravity`, `cline`, `cline-cli`, `claude-code`, `claude-desktop`, `codex`, `cursor`, `gemini-cli`, `goose`, `github-copilot-cli`, `grok-build`, `opencode`, `vscode`, `windsurf`, `zed`. `mcporter` is a known MCP name that is then skipped. `neon skills --help` lists the same skill and agent values, and that `-y` leaves out `neon-postgres-agent-platforms`.
 
@@ -821,7 +821,7 @@ Default scope is `project`. `--global` is `user`. On macOS and Linux, Cursor and
 
 `--agent` names with a plugins mapping: `claude-code`, `claude-desktop`, `codex`, `cursor`, `github-copilot-cli`, `grok-build`, `vscode`. `claude-desktop` installs as Claude Code; naming both produces one install and lists both names in the table. `mcporter` is a known MCP name that is then skipped.
 
-The plugins CLI installs every plugin it finds in the Neon plugin package. Today that is `neon-postgres` from `neondatabase/agent-skills`. It includes the Neon MCP server (`https://mcp.neon.tech/mcp`) and these skills: `neon`, `neon-ai-gateway`, `neon-functions`, `neon-object-storage`, `neon-postgres`, `neon-postgres-branches`, `neon-postgres-egress-optimizer`. It does not include `claimable-postgres` or `neon-postgres-agent-platforms`.
+The plugins CLI installs every plugin it finds in the Neon plugin package. Today that is `neon-postgres` from `neondatabase/agent-skills`. It includes the Neon MCP server (`https://mcp.neon.tech/mcp`) and these skills: `neon`, `neon-ai-gateway`, `neon-functions`, `neon-object-storage`, `neon-postgres`, `neon-postgres-branches`, `neon-postgres-egress-optimizer`. It does not include `neon-postgres-agent-platforms`.
 
 `neon plugins --help` lists the plugin, those contents, and the supported `--agent` names.
 
