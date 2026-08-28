@@ -358,6 +358,7 @@ const runPostScaffoldSteps = async (
 
 	if (!interactive) {
 		printDoneSummary({
+			heading: "Project scaffolded.",
 			template,
 			targetDir,
 			pm: defaultPm,
@@ -412,6 +413,7 @@ const runPostScaffoldSteps = async (
 		hasNeonConfig: neonConfig,
 	});
 	finishPostScaffold({
+		heading: "Project scaffolded.",
 		template,
 		targetDir,
 		pm,
@@ -450,6 +452,7 @@ const runDefaultSteps = async (
 		hasNeonConfig: neonConfig,
 	});
 	finishPostScaffold({
+		heading: "Project scaffolded.",
 		template,
 		targetDir,
 		pm,
@@ -659,6 +662,7 @@ const printScaffolded = (
 };
 
 const printDoneSummary = (input: {
+	heading: string;
 	template: BootstrapTemplate;
 	targetDir: string;
 	pm: PackageManager;
@@ -673,7 +677,7 @@ const printDoneSummary = (input: {
 	suggestLink: boolean;
 }): void => {
 	const unfinished = input.installFailed || input.gitFailed;
-	const heading = unfinished ? "Setup did not finish." : "Neon is ready.";
+	const heading = unfinished ? "Setup did not finish." : input.heading;
 	const deps = input.installFailed
 		? "install failed"
 		: input.installed
@@ -729,7 +733,7 @@ const finishPostScaffold = (
 ): void => {
 	printDoneSummary(input);
 	if (input.installFailed || input.gitFailed) {
-		throw new Error("Setup did not finish.");
+		process.exit(1);
 	}
 };
 

@@ -78,7 +78,7 @@ describe("formatInitDone", () => {
 	test("lists what ran and remaining next steps", () => {
 		expect(
 			formatInitDone({
-				heading: "Neon is ready.",
+				heading: "Project scaffolded.",
 				rows: [
 					{ label: "Template", value: "Hono API" },
 					{ label: "Dependencies", value: "installed with pnpm" },
@@ -88,8 +88,8 @@ describe("formatInitDone", () => {
 			}),
 		).toBe(
 			[
-				"Neon is ready.",
-				"--------------",
+				"Project scaffolded.",
+				"-------------------",
 				"",
 				"  Template      Hono API",
 				"  Dependencies  installed with pnpm",
@@ -113,7 +113,7 @@ describe("formatInitDone", () => {
 			next: ["pnpm install", "neon link"],
 		});
 		expect(text).toMatch(/^Setup did not finish\./);
-		expect(text).not.toContain("Neon is ready");
+		expect(text).not.toContain("Project scaffolded");
 		expect(text).toContain("pnpm install");
 	});
 });
@@ -124,14 +124,14 @@ describe("printInitDone", () => {
 		const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
 		printInitDone(
 			formatInitDone({
-				heading: "Neon is ready.",
+				heading: "Project scaffolded.",
 				rows: [{ label: "Agents", value: "plugin" }],
 				next: [],
 			}),
 		);
 		const out = stdout.mock.calls.map((call) => String(call[0])).join("");
 		expect(out).not.toContain("INFO:");
-		expect(strip(out)).toContain("Neon is ready.");
+		expect(strip(out)).toContain("Project scaffolded.");
 		expect(strip(out)).toContain("Agents");
 		expect(stderr).not.toHaveBeenCalled();
 		stdout.mockRestore();

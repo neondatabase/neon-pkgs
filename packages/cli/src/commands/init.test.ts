@@ -63,7 +63,7 @@ describe("init handler", () => {
 		]);
 		expect(run).toHaveBeenCalledTimes(1);
 		const out = stdout.mock.calls.map((call) => String(call[0])).join("");
-		expect(out).not.toContain("Neon is ready");
+		expect(out).not.toContain("Configured this directory for Neon.");
 		expect(out).not.toContain("██████╗");
 	});
 
@@ -90,9 +90,10 @@ describe("init handler", () => {
 		]);
 		expect(run.mock.calls[3][0].slice(0, 2)).toEqual(["config", "init"]);
 		const out = stdout.mock.calls.map((call) => String(call[0])).join("");
-		expect(out).toContain("Neon is ready.");
+		expect(out).toContain("Configured this directory for Neon.");
 		expect(out).not.toContain("INFO:");
 		expect(out).not.toContain("██████╗");
+		expect(out).not.toContain("See the README");
 	});
 
 	test("linked app skips link", async () => {

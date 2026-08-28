@@ -165,7 +165,7 @@ export const handler = async (props: InitProps) => {
 
 	printInitDone(
 		formatInitDone({
-			heading: "Neon is ready.",
+			heading: "Configured this directory for Neon.",
 			rows: [
 				{ label: "Agents", value: agentSetupLabel(agentSetup) },
 				{
@@ -174,7 +174,7 @@ export const handler = async (props: InitProps) => {
 				},
 				{ label: "Config", value: "neon.ts" },
 			],
-			next: ["See the README to run it."],
+			next: [],
 		}),
 	);
 };

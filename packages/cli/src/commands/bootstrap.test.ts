@@ -365,7 +365,7 @@ describe("bootstrap", () => {
 			"--no-link",
 		]);
 		expect(code, stderr).toBe(0);
-		expect(stdout).toContain("Neon is ready.");
+		expect(stdout).toContain("Project scaffolded.");
 		expect(stdout).not.toContain("INFO:");
 		expect(`${stdout}${stderr}`).not.toContain("██████");
 		expect(stderr).not.toMatch(/Done\. Scaffolded/);
