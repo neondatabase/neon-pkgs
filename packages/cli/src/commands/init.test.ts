@@ -395,12 +395,7 @@ describe("init handler", () => {
 			"link",
 			"config",
 		]);
-		expect(run.mock.calls[0][0].slice(0, 4)).toEqual([
-			"plugins",
-			"-y",
-			"--agent",
-			"cursor",
-		]);
+		expect(run.mock.calls[0][0].slice(0, 2)).toEqual(["plugins", "-y"]);
 		expect(run.mock.calls[2][0].slice(0, 4)).toEqual([
 			"config",
 			"init",
@@ -432,57 +427,38 @@ describe("init handler", () => {
 			"config",
 		]);
 		expect(run.mock.calls[0][0].slice(0, 2)).toEqual(["skills", "-y"]);
-		expect(run.mock.calls[0][0]).toEqual(
-			expect.arrayContaining(["--agent", "vscode"]),
-		);
-		expect(run.mock.calls[1][0].slice(0, 2)).toEqual(["mcp", "-y"]);
-		expect(run.mock.calls[1][0]).toEqual(
-			expect.arrayContaining(["--agent", "vscode"]),
-		);
+		expect(run.mock.calls[0][0]).not.toContain("--agent");
+		expect(run.mock.calls[1][0].slice(0, 3)).toEqual([
+			"mcp",
+			"-y",
+			"--project",
+		]);
+		expect(run.mock.calls[1][0]).not.toContain("--agent");
 	});
 
-	test("-y with no detected agents skips agent setup and continues", async () => {
+	test("-y with no detected agents fails before link", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-y-skip-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
 		const run = vi.fn().mockResolvedValue(true);
 		const detectProjectAgents = vi.fn(() => []);
 		const detectAgent = vi.fn(() => null);
-		const detectInstalledAgents = vi.fn(async () => []);
 		const { handler } = await import("./init.js");
-		const { log } = await import("../log.js");
-		const info = vi.spyOn(log, "info");
 
-		await handler(
-			baseProps({
-				cwd,
-				run,
-				yes: true,
-				contextFile: join(cwd, ".neon"),
-				detectProjectAgents,
-				detectAgent,
-				detectInstalledAgents,
-			}),
-		);
-
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					run,
+					yes: true,
+					contextFile: join(cwd, ".neon"),
+					detectProjectAgents,
+					detectAgent,
+				}),
+			),
+		).rejects.toThrow(/No coding agents detected in this project/);
 		expect(detectProjectAgents).toHaveBeenCalled();
 		expect(detectAgent).toHaveBeenCalled();
-		expect(detectInstalledAgents).toHaveBeenCalled();
-		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
-			"link",
-			"config",
-		]);
-		expect(run.mock.calls[0][0].slice(0, 2)).toEqual(["link", "--yes"]);
-		expect(run.mock.calls[1][0].slice(0, 4)).toEqual([
-			"config",
-			"init",
-			"--services",
-			"none",
-		]);
-		expect(
-			info.mock.calls.some((call) =>
-				String(call[0]).includes("skipped agent setup"),
-			),
-		).toBe(true);
+		expect(run).not.toHaveBeenCalled();
 	});
 
 	test("empty -y does not detect agents in the parent", async () => {
@@ -490,7 +466,6 @@ describe("init handler", () => {
 		const run = vi.fn().mockResolvedValue(true);
 		const detectProjectAgents = vi.fn(() => ["cursor"]);
 		const detectAgent = vi.fn(() => "cursor");
-		const detectInstalledAgents = vi.fn(async () => ["cursor"]);
 		const { handler } = await import("./init.js");
 
 		await handler(
@@ -501,13 +476,11 @@ describe("init handler", () => {
 				contextFile: join(cwd, ".neon"),
 				detectProjectAgents,
 				detectAgent,
-				detectInstalledAgents,
 			}),
 		);
 
 		expect(detectProjectAgents).not.toHaveBeenCalled();
 		expect(detectAgent).not.toHaveBeenCalled();
-		expect(detectInstalledAgents).not.toHaveBeenCalled();
 		expect(run).toHaveBeenCalledTimes(1);
 		expect(run.mock.calls[0][0].slice(0, 3)).toEqual([
 			"bootstrap",
@@ -585,7 +558,8 @@ describe("init CLI", () => {
 		expect(help).toMatch(/skip agent setup/i);
 		expect(help).toMatch(/Cursor, Claude Code, or Codex/);
 		expect(help).toMatch(/host CLI agent/);
-		expect(help).toMatch(/skipped/);
+		expect(help).toMatch(/exits/);
+		expect(help).not.toMatch(/installed apps/);
 		expect(help).not.toMatch(/claude-desktop/);
 		expect(help).not.toMatch(/Set output format/);
 	});
@@ -594,15 +568,7 @@ describe("init CLI", () => {
 		await testCliCommand(["init", "--data", '{"step":"auth"}'], {
 			snapshot: false,
 			code: 1,
-			stderr: expect.stringContaining("were removed"),
-		});
-	});
-
-	cliTest("rejects --agent", async ({ testCliCommand }) => {
-		await testCliCommand(["init", "--agent"], {
-			snapshot: false,
-			code: 1,
-			stderr: expect.stringContaining("Run `neon init`"),
+			stderr: expect.stringContaining("was removed"),
 		});
 	});
 

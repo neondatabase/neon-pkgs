@@ -61,7 +61,7 @@ describe("neon mcp", () => {
 	}) => {
 		const { home, cwd } = scratch();
 		const { stdout, stderr } = await testCliCommand(
-			["mcp", "--agent", "cursor"],
+			["mcp", "-y"],
 			runOptions(home, cwd),
 		);
 
@@ -84,12 +84,9 @@ describe("neon mcp", () => {
 		testCliCommand,
 	}) => {
 		const { home, cwd } = scratch();
-		await testCliCommand(
-			["mcp", "--agent", "cursor"],
-			runOptions(home, cwd),
-		);
+		await testCliCommand(["mcp", "-y"], runOptions(home, cwd));
 		const { stderr } = await testCliCommand(
-			["mcp", "--agent", "cursor"],
+			["mcp", "-y"],
 			runOptions(home, cwd),
 		);
 		expect(stderr).toMatch(/Reusing the API key/);
@@ -102,7 +99,7 @@ describe("neon mcp", () => {
 	}) => {
 		const { home, cwd } = scratch();
 		const { stdout, stderr } = await testCliCommand(
-			["mcp", "--oauth", "--agent", "cursor"],
+			["mcp", "-y", "--oauth"],
 			{ ...runOptions(home, cwd), apiKey: false },
 		);
 
@@ -121,7 +118,7 @@ describe("neon mcp", () => {
 		testCliCommand,
 	}) => {
 		const { home, cwd } = scratch();
-		const { stderr } = await testCliCommand(["mcp", "--agent", "cursor"], {
+		const { stderr } = await testCliCommand(["mcp", "-y"], {
 			...runOptions(home, cwd),
 			apiKey: false,
 			code: 1,
@@ -135,14 +132,8 @@ describe("neon mcp", () => {
 		testCliCommand,
 	}) => {
 		const { home, cwd } = scratch();
-		await testCliCommand(
-			["mcp", "--agent", "cursor"],
-			runOptions(home, cwd),
-		);
-		await testCliCommand(
-			["mcp", "--oauth", "--agent", "cursor"],
-			runOptions(home, cwd),
-		);
+		await testCliCommand(["mcp", "-y"], runOptions(home, cwd));
+		await testCliCommand(["mcp", "-y", "--oauth"], runOptions(home, cwd));
 		const written = JSON.parse(
 			readFileSync(join(home, ".cursor", "mcp.json"), "utf8"),
 		);
@@ -153,6 +144,7 @@ describe("neon mcp", () => {
 		testCliCommand,
 	}) => {
 		const { home, cwd } = scratch();
+		mkdirSync(join(cwd, ".cursor"));
 		writeFileSync(
 			join(cwd, ".neon"),
 			JSON.stringify({
@@ -161,7 +153,7 @@ describe("neon mcp", () => {
 			}),
 		);
 		const { stderr } = await testCliCommand(
-			["mcp", "--project", "--agent", "cursor"],
+			["mcp", "-y", "--project"],
 			runOptions(home, cwd),
 		);
 
@@ -185,8 +177,9 @@ describe("neon mcp", () => {
 		testCliCommand,
 	}) => {
 		const { home, cwd } = scratch();
+		mkdirSync(join(cwd, ".cursor"));
 		const { stdout, stderr } = await testCliCommand(
-			["mcp", "--project", "--agent", "cursor"],
+			["mcp", "-y", "--project"],
 			runOptions(home, cwd),
 		);
 		const written = JSON.parse(
@@ -210,7 +203,6 @@ describe("neon mcp", () => {
 			code: 1,
 		});
 		expect(stderr).toMatch(/Pass -y to mint into every detected agent/);
-		expect(stderr).toMatch(/--agent <name>/);
 		expect(stderr).toMatch(/--oauth/);
 		expect(stderr).not.toMatch(/Minted API key/);
 		expect(existsSync(join(home, ".cursor", "mcp.json"))).toBe(false);
@@ -220,10 +212,13 @@ describe("neon mcp", () => {
 		testCliCommand,
 	}) => {
 		const { home, cwd } = scratch();
-		const { stdout, stderr } = await testCliCommand(["mcp", "--oauth"], {
-			...runOptions(home, cwd),
-			apiKey: false,
-		});
+		const { stdout, stderr } = await testCliCommand(
+			["mcp", "-y", "--oauth"],
+			{
+				...runOptions(home, cwd),
+				apiKey: false,
+			},
+		);
 		expect(
 			readFileSync(join(home, ".cursor", "mcp.json"), "utf8"),
 		).toContain("mcp.neon.tech");
@@ -300,12 +295,13 @@ describe("neon mcp", () => {
 		expect(stderr).not.toMatch(/Minted API key/);
 	});
 
-	test("-y --project --oauth --agent cursor does not need a linked project", async ({
+	test("-y --project --oauth does not need a linked project", async ({
 		testCliCommand,
 	}) => {
 		const { home, cwd } = scratch();
+		mkdirSync(join(cwd, ".cursor"));
 		const { stdout, stderr } = await testCliCommand(
-			["mcp", "-y", "--project", "--oauth", "--agent", "cursor"],
+			["mcp", "-y", "--project", "--oauth"],
 			{ ...runOptions(home, cwd), apiKey: false },
 		);
 		const written = JSON.parse(
@@ -318,109 +314,16 @@ describe("neon mcp", () => {
 		assertNoSecret(stdout, stderr);
 	});
 
-	test("--project --agent not-an-agent fails without minting", async ({
-		testCliCommand,
-	}) => {
-		const { home, cwd } = scratch();
-		const { stderr } = await testCliCommand(
-			["mcp", "--project", "--agent", "not-an-agent"],
-			{ ...runOptions(home, cwd), code: 1 },
-		);
-		expect(stderr).toMatch(/Unknown agent: "not-an-agent"/);
-		expect(stderr).not.toMatch(/Minted API key/);
-	});
-
-	test("bare --agent fails instead of installing into every detected agent", async ({
-		testCliCommand,
-	}) => {
-		const { home, cwd } = scratch();
-		const { stderr } = await testCliCommand(["mcp", "--oauth", "--agent"], {
-			...runOptions(home, cwd),
-			apiKey: false,
-			code: 1,
-		});
-		expect(stderr).toMatch(/--agent needs a value/);
-		expect(stderr).not.toMatch(/Minted API key/);
-		expect(existsSync(join(home, ".cursor", "mcp.json"))).toBe(false);
-	});
-
-	test("-y --agent with no value fails instead of minting into detected agents", async ({
-		testCliCommand,
-	}) => {
-		const { home, cwd } = scratch();
-		const { stderr } = await testCliCommand(["mcp", "-y", "--agent"], {
-			...runOptions(home, cwd),
-			code: 1,
-		});
-		expect(stderr).toMatch(/--agent needs a value/);
-		expect(stderr).not.toMatch(/Minted API key/);
-		expect(existsSync(join(home, ".cursor", "mcp.json"))).toBe(false);
-	});
-
-	test("--agent followed by another flag fails instead of treating the flag as omitted", async ({
-		testCliCommand,
-	}) => {
-		const { home, cwd } = scratch();
-		const { stderr } = await testCliCommand(["mcp", "--agent", "--oauth"], {
-			...runOptions(home, cwd),
-			apiKey: false,
-			code: 1,
-		});
-		expect(stderr).toMatch(/--agent needs a value/);
-		expect(stderr).not.toMatch(/Minted API key/);
-		expect(existsSync(join(home, ".cursor", "mcp.json"))).toBe(false);
-	});
-
-	test("unknown --agent fails without minting", async ({
-		testCliCommand,
-	}) => {
-		const { home, cwd } = scratch();
-		const { stderr } = await testCliCommand(
-			["mcp", "--agent", "not-an-agent"],
-			{ ...runOptions(home, cwd), code: 1 },
-		);
-		expect(stderr).toMatch(/Unknown agent: "not-an-agent"/);
-		expect(stderr).not.toMatch(/claude-desktop/);
-		expect(stderr).not.toMatch(/Minted API key/);
-	});
-
-	test("unsupported --agent fails without minting", async ({
-		testCliCommand,
-	}) => {
-		const { home, cwd } = scratch();
-		const { stderr } = await testCliCommand(
-			["mcp", "--agent", "claude-desktop"],
-			{ ...runOptions(home, cwd), code: 1 },
-		);
-		expect(stderr).toMatch(/Connectors/i);
-		expect(stderr).not.toMatch(/Minted API key/);
-	});
-
-	test("keeps a minted key when some agents succeed and others are skipped", async ({
-		testCliCommand,
-	}) => {
-		const { home, cwd } = scratch();
-		const { stdout, stderr } = await testCliCommand(
-			["mcp", "--agent", "cursor", "--agent", "claude-desktop"],
-			runOptions(home, cwd),
-		);
-		expect(stdout).toContain("cursor");
-		expect(stdout).toContain("installed");
-		expect(stdout).toContain("claude-desktop");
-		expect(stdout).toContain("skipped");
-		expect(stderr).toMatch(/Minted API key/);
-		expect(stderr).not.toMatch(/has been revoked/);
-	});
-
 	test("exits non-zero when one write fails next to a success", async ({
 		testCliCommand,
 	}) => {
 		const { home, cwd } = scratch();
+		mkdirSync(join(home, ".claude"));
 		mkdirSync(join(home, ".claude.json"));
-		const { stdout, stderr } = await testCliCommand(
-			["mcp", "--agent", "cursor", "--agent", "claude-code"],
-			{ ...runOptions(home, cwd), code: 1 },
-		);
+		const { stdout, stderr } = await testCliCommand(["mcp", "-y"], {
+			...runOptions(home, cwd),
+			code: 1,
+		});
 		expect(stdout).toContain("cursor");
 		expect(stdout).toContain("installed");
 		expect(stdout).toContain("claude-code");
@@ -442,10 +345,10 @@ describe("neon mcp", () => {
 		execFileSync("git", ["-C", cwd, "add", "--", ".cursor/mcp.json"], {
 			stdio: "ignore",
 		});
-		const { stderr } = await testCliCommand(
-			["mcp", "--project", "--agent", "cursor"],
-			{ ...runOptions(home, cwd), code: 1 },
-		);
+		const { stderr } = await testCliCommand(["mcp", "-y", "--project"], {
+			...runOptions(home, cwd),
+			code: 1,
+		});
 		expect(stderr).toMatch(/tracked by git/);
 		expect(stderr).not.toMatch(/Minted API key/);
 	});
@@ -455,7 +358,7 @@ describe("neon mcp", () => {
 	}) => {
 		const { home, cwd } = scratch();
 		mkdirSync(join(home, ".cursor", "mcp.json"));
-		const { stderr } = await testCliCommand(["mcp", "--agent", "cursor"], {
+		const { stderr } = await testCliCommand(["mcp", "-y"], {
 			...runOptions(home, cwd),
 			code: 1,
 		});
@@ -478,7 +381,7 @@ describe("neon mcp", () => {
 `,
 		);
 		const { stdout, stderr } = await testCliCommand(
-			["mcp", "--oauth", "--agent", "cursor", "--agent", "goose"],
+			["mcp", "-y", "--oauth"],
 			{ ...runOptions(home, cwd), apiKey: false, code: 1 },
 		);
 		assertNoSecret(stdout, stderr);
@@ -491,7 +394,7 @@ describe("neon mcp", () => {
 
 	test("an organization CLI key cannot mint", async ({ testCliCommand }) => {
 		const { home, cwd } = scratch();
-		const { stderr } = await testCliCommand(["mcp", "--agent", "cursor"], {
+		const { stderr } = await testCliCommand(["mcp", "-y"], {
 			...runOptions(home, cwd),
 			mockDir: "org-key",
 			code: 1,
@@ -500,13 +403,13 @@ describe("neon mcp", () => {
 		expect(stderr).not.toMatch(/everything your account can/);
 	});
 
-	test("no --agent and no detected agents fails without minting", async ({
+	test("-y with no installed apps and no host fails without minting", async ({
 		testCliCommand,
 	}) => {
 		const home = mkdtempSync(join(tmpdir(), "neon-mcp-empty-home-"));
 		const cwd = mkdtempSync(join(tmpdir(), "neon-mcp-empty-cwd-"));
 		dirs.push(home, cwd);
-		const { stderr } = await testCliCommand(["mcp"], {
+		const { stderr } = await testCliCommand(["mcp", "-y"], {
 			...runOptions(home, cwd),
 			code: 1,
 		});
@@ -520,7 +423,7 @@ describe("neon mcp", () => {
 	}) => {
 		const { home, cwd } = scratch();
 		const { stderr } = await testCliCommand(
-			["mcp", "--oauth", "--read-only", "--agent", "cursor"],
+			["mcp", "-y", "--oauth", "--read-only"],
 			{ ...runOptions(home, cwd), apiKey: false },
 		);
 		const written = JSON.parse(
@@ -538,7 +441,7 @@ describe("neon mcp", () => {
 	}) => {
 		const { home, cwd } = scratch();
 		const { stderr } = await testCliCommand(
-			["mcp", "--project-id", "proj-in-org", "--agent", "cursor"],
+			["mcp", "-y", "--project-id", "proj-in-org"],
 			runOptions(home, cwd),
 		);
 		const written = JSON.parse(
@@ -564,7 +467,7 @@ describe("neon mcp", () => {
 	}) => {
 		const { home, cwd } = scratch();
 		const { stderr } = await testCliCommand(
-			["mcp", "--project-id", "org-7", "--agent", "cursor"],
+			["mcp", "-y", "--project-id", "org-7"],
 			{ ...runOptions(home, cwd), code: 1 },
 		);
 		expect(stderr).toMatch(/looks like an organization id/);
@@ -579,7 +482,7 @@ describe("neon mcp", () => {
 	}) => {
 		const { home, cwd } = scratch();
 		const { stderr } = await testCliCommand(
-			["mcp", "--project-id", "test", "--agent", "cursor"],
+			["mcp", "-y", "--project-id", "test"],
 			{ ...runOptions(home, cwd), code: 1 },
 		);
 		expect(stderr).toMatch(/does not belong to an organization/);
@@ -596,7 +499,7 @@ describe("neon mcp", () => {
 	}) => {
 		const { home, cwd } = scratch();
 		const { stderr } = await testCliCommand(
-			["mcp", "--project-id", "proj-flag", "--agent", "cursor"],
+			["mcp", "-y", "--project-id", "proj-flag"],
 			{ ...runOptions(home, cwd), code: 1 },
 		);
 		expect(stderr).toMatch(/Project proj-flag not found/);
@@ -609,7 +512,7 @@ describe("neon mcp", () => {
 	}) => {
 		const { home, cwd } = scratch();
 		const { stderr } = await testCliCommand(
-			["mcp", "--project-id", "proj-mismatch", "--agent", "cursor"],
+			["mcp", "-y", "--project-id", "proj-mismatch"],
 			{ ...runOptions(home, cwd), code: 1 },
 		);
 		expect(stderr).toMatch(
@@ -628,13 +531,12 @@ describe("neon mcp", () => {
 		await testCliCommand(
 			[
 				"mcp",
+				"-y",
 				"--oauth",
 				"--category",
 				"querying",
 				"--category",
 				"schema,docs",
-				"--agent",
-				"cursor",
 			],
 			{ ...runOptions(home, cwd), apiKey: false },
 		);
@@ -651,7 +553,7 @@ describe("neon mcp", () => {
 	}) => {
 		const { home, cwd } = scratch();
 		const { stderr } = await testCliCommand(
-			["mcp", "--oauth", "--category", "nope", "--agent", "cursor"],
+			["mcp", "-y", "--oauth", "--category", "nope"],
 			{ ...runOptions(home, cwd), apiKey: false, code: 1 },
 		);
 		expect(stderr).toMatch(/Unknown MCP category: "nope"/);
@@ -663,7 +565,7 @@ describe("neon mcp", () => {
 	}) => {
 		const { home, cwd } = scratch();
 		const { stderr } = await testCliCommand(
-			["mcp", "--oauth", "--category"],
+			["mcp", "-y", "--oauth", "--category"],
 			{ ...runOptions(home, cwd), apiKey: false, code: 1 },
 		);
 		expect(stderr).toMatch(/--category needs a value/);
@@ -682,10 +584,10 @@ describe("neon mcp", () => {
 				projectId: "proj-in-org",
 			}),
 		);
-		await testCliCommand(
-			["mcp", "-y", "--project", "--oauth", "--agent", "cursor"],
-			{ ...runOptions(home, cwd), apiKey: false },
-		);
+		await testCliCommand(["mcp", "-y", "--project", "--oauth"], {
+			...runOptions(home, cwd),
+			apiKey: false,
+		});
 		const written = JSON.parse(
 			readFileSync(join(cwd, ".cursor", "mcp.json"), "utf8"),
 		);
@@ -696,6 +598,7 @@ describe("neon mcp", () => {
 		testCliCommand,
 	}) => {
 		const { home, cwd } = scratch();
+		mkdirSync(join(cwd, ".cursor"));
 		writeFileSync(
 			join(cwd, ".neon"),
 			JSON.stringify({
@@ -704,14 +607,7 @@ describe("neon mcp", () => {
 			}),
 		);
 		const { stderr } = await testCliCommand(
-			[
-				"mcp",
-				"--project",
-				"--project-id",
-				"proj-in-org",
-				"--agent",
-				"cursor",
-			],
+			["mcp", "-y", "--project", "--project-id", "proj-in-org"],
 			runOptions(home, cwd),
 		);
 		const written = JSON.parse(
@@ -737,14 +633,7 @@ describe("neon mcp", () => {
 	}) => {
 		const { home, cwd } = scratch();
 		const { stderr } = await testCliCommand(
-			[
-				"mcp",
-				"--oauth",
-				"--project-id",
-				"proj-flag",
-				"--agent",
-				"cursor",
-			],
+			["mcp", "-y", "--oauth", "--project-id", "proj-flag"],
 			{ ...runOptions(home, cwd), apiKey: false },
 		);
 		const written = JSON.parse(
@@ -762,12 +651,9 @@ describe("neon mcp", () => {
 		testCliCommand,
 	}) => {
 		const { home, cwd } = scratch();
-		await testCliCommand(
-			["mcp", "--agent", "cursor"],
-			runOptions(home, cwd),
-		);
+		await testCliCommand(["mcp", "-y"], runOptions(home, cwd));
 		const { stderr } = await testCliCommand(
-			["mcp", "--project-id", "proj-in-org", "--agent", "cursor"],
+			["mcp", "-y", "--project-id", "proj-in-org"],
 			runOptions(home, cwd),
 		);
 		const written = JSON.parse(
@@ -792,7 +678,7 @@ describe("neon mcp", () => {
 		const { home, cwd } = scratch();
 		mkdirSync(join(home, ".cursor", "mcp.json"));
 		const { stderr } = await testCliCommand(
-			["mcp", "--project-id", "proj-in-org", "--agent", "cursor"],
+			["mcp", "-y", "--project-id", "proj-in-org"],
 			{ ...runOptions(home, cwd), code: 1 },
 		);
 		expect(stderr).toMatch(/has been revoked/);
@@ -805,7 +691,7 @@ describe("neon mcp", () => {
 		const { home, cwd } = scratch();
 		mkdirSync(join(home, ".cursor", "mcp.json"));
 		const { stderr } = await testCliCommand(
-			["mcp", "--project-id", "proj-revoke-fail", "--agent", "cursor"],
+			["mcp", "-y", "--project-id", "proj-revoke-fail"],
 			{ ...runOptions(home, cwd), code: 1 },
 		);
 		expect(stderr).toMatch(/could NOT be revoked/);
@@ -824,7 +710,7 @@ describe("neon mcp", () => {
 		expect(stdout).toBe("");
 		expect(compact).toContain(NEON_MCP_URL);
 		expect(compact).toContain("globalconfig");
-		expect(compact).toContain("globallydetectedagent");
+		expect(compact).toContain("globallyinstalledapps");
 		expect(compact).toContain("account-widekey");
 		expect(compact).toContain("noprojectpin");
 		expect(compact).toContain("allcategories");

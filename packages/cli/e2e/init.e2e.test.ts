@@ -48,37 +48,51 @@ describe("e2e — neon init", () => {
 		expect(`${result.stderr}\n${result.stdout}`).toMatch(/scaffold/i);
 	});
 
-	it("rejects --data and --agent", async () => {
+	it("rejects --data", async () => {
 		const dirs = scratch();
-		for (const args of [
-			["init", "--data", '{"step":"auth"}'],
-			["init", "--agent"],
-		]) {
-			const result = await runCli(args, {
-				apiKey: null,
-				configDir: dirs.configDir,
-				contextFile: dirs.contextFile,
-				json: false,
-			});
-			expect(result.code, result.stderr).toBe(1);
-			expect(result.stderr).toMatch(/were removed/i);
-		}
+		const result = await runCli(["init", "--data", '{"step":"auth"}'], {
+			apiKey: null,
+			configDir: dirs.configDir,
+			contextFile: dirs.contextFile,
+			json: false,
+		});
+		expect(result.code, result.stderr).toBe(1);
+		expect(result.stderr).toMatch(/was removed/i);
 	});
 
-	it("stops when skills fails and does not write .neon", async () => {
+	it("stops when no agents are detected and does not write .neon", async () => {
 		const dirs = scratch();
 		writeFileSync(join(dirs.cwd, "README.md"), "app\n");
 		const result = await runCli(["init", "-y"], {
+			apiKey: null,
 			configDir: dirs.configDir,
 			contextFile: dirs.contextFile,
 			cwd: dirs.cwd,
 			json: false,
 			env: {
 				HOME: dirs.home,
+				CLAUDECODE: undefined,
+				CLAUDE_CODE: undefined,
+				CLAUDE_CLI: undefined,
+				CODEX: undefined,
+				CLINE: undefined,
+				TERM_PROGRAM: undefined,
+				CURSOR_TRACE_ID: undefined,
+				CURSOR_EXTENSION_HOST_ROLE: undefined,
+				CURSOR_LAYOUT: undefined,
+				CURSOR_SPAWNED_BY_EXTENSION_ID: undefined,
+				GIT_ASKPASS: undefined,
+				VSCODE_GIT_ASKPASS_NODE: undefined,
+				VSCODE_GIT_ASKPASS_MAIN: undefined,
+				VSCODE_IPC_HOOK_CLI: undefined,
+				VSCODE_PID: undefined,
+				VSCODE_CWD: undefined,
 			},
 		});
 		expect(result.code, result.stdout).not.toBe(0);
-		expect(`${result.stderr}\n${result.stdout}`).toMatch(/skills/i);
+		expect(`${result.stderr}\n${result.stdout}`).toMatch(
+			/No coding agents detected/i,
+		);
 		expect(existsSync(dirs.contextFile)).toBe(false);
 	});
 });

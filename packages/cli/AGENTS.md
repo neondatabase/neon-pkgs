@@ -1,5 +1,13 @@
 # Neon CLI (`packages/cli`)
 
+## CLI for agents
+
+- `--help` lists every value an enum flag accepts.
+- `-y` / `--yes` / `--default` is the non-interactive path. If it cannot decide, the error names the flag (and values) to pass.
+- Every command exposes flags for every interactive question so it can run with no TTY.
+
+Coding-agent targeting is detection on `-y` (project folders, else the host CLI; `--global -y` uses installed apps, else the host), or the picker without `-y`.
+
 Human output (`-o table`, the default) is for a terminal. `-o json` and `-o yaml` are for scripts. Never parse the human format in a script, a test that is checking a machine contract, or an agent workflow that needs a field.
 
 ## `-o table`

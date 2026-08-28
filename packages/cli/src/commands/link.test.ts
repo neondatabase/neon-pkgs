@@ -525,8 +525,8 @@ describe("link", () => {
 		});
 	});
 
-	describe("--agent", () => {
-		test("is refused and points at list + link commands", async ({
+	describe("unknown --agent", () => {
+		test("is an unknown argument", async ({
 			testCliCommand,
 			tmpContext,
 		}) => {
@@ -541,8 +541,7 @@ describe("link", () => {
 			);
 			expect(code).toBe(1);
 			expect(stdout.trim()).toBe("");
-			expect(stderr).toContain("link --agent");
-			expectNonInteractiveHelp(stderr);
+			expect(stderr).toMatch(/Unknown argument: agent/);
 		});
 
 		test("help omits --agent and lists the non-interactive commands", async ({

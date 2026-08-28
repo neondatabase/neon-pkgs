@@ -334,16 +334,13 @@ describe("bootstrap", () => {
 		expect(YAML.parse(stdout)).toEqual([HONO_LIST_ROW, PLAIN_LIST_ROW]);
 	});
 
-	test("--agent is refused and points at --list-templates --output json", async () => {
+	test("--agent is an unknown argument", async () => {
 		const { code, stdout, stderr } = await runBootstrap(server, [
 			"--agent",
 		]);
 		expect(code).toBe(1);
 		expect(stdout.trim()).toBe("");
-		expect(stderr).toContain("bootstrap --agent");
-		expect(stderr).toContain("--list-templates --output json");
-		expect(stderr).toContain("--template <id>");
-		expect(stderr).toContain("bootstrap <directory> --default");
+		expect(stderr).toMatch(/Unknown argument: agent/);
 	});
 
 	test("help omits --agent", async () => {
@@ -353,7 +350,7 @@ describe("bootstrap", () => {
 		expect(flat).toContain("--list-templates");
 		expect(flat).toContain("--agent-setup");
 		expect(flat).toContain("host CLI agent");
-		expect(flat).toContain("skipped if none");
+		expect(flat).toContain("exits if none");
 		expect(stderr).not.toMatch(/(?<![-\w])--agent(?![-\w])/);
 	});
 

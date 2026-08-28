@@ -121,7 +121,7 @@ describe("resolveSkillsPlan", () => {
 		});
 	});
 
-	test("non-TTY without -y fails even when --agent is set", async () => {
+	test("non-TTY without -y fails even when agents are specified", async () => {
 		const cwd = tmpDir();
 		await expect(
 			resolveSkillsPlan(
@@ -201,7 +201,7 @@ describe("resolveSkillsPlan", () => {
 		).rejects.toThrow(/Unknown skill: "eve"/);
 	});
 
-	test("--agent skips the agent picker and still asks for skills", async () => {
+	test("specified agents skip the agent picker and still ask for skills", async () => {
 		const cwd = tmpDir();
 		const neon = NEON_SKILL_CATALOG.find((item) => item.skill === "neon");
 		if (!neon) {
@@ -268,19 +268,6 @@ describe("resolveSkillsPlan", () => {
 		).rejects.toThrow(/Unknown agent: "cursor-cli"/);
 	});
 
-	test("rejects --agent *", async () => {
-		const cwd = tmpDir();
-		await expect(
-			resolveSkillsPlan(
-				planOptions(cwd, {
-					yes: true,
-					interactive: false,
-					agents: ["*"],
-				}),
-			),
-		).rejects.toThrow(/does not accept --agent \*/);
-	});
-
 	test("skips MCP agents that cannot install skills", async () => {
 		const cwd = tmpDir();
 		const plan = await resolveSkillsPlan(
@@ -309,15 +296,22 @@ describe("resolveSkillsPlan", () => {
 
 	test("non-interactive project with no folder agents fails", async () => {
 		const cwd = tmpDir();
-		await expect(
-			resolveSkillsPlan(
-				planOptions(cwd, {
-					agents: [],
-					yes: true,
-					interactive: false,
-				}),
-			),
-		).rejects.toThrow(/No coding agents detected in this project/);
+		const error = await resolveSkillsPlan(
+			planOptions(cwd, {
+				agents: [],
+				yes: true,
+				interactive: false,
+			}),
+		).catch((caught: unknown) => caught);
+		expect(error).toBeInstanceOf(Error);
+		if (!(error instanceof Error)) {
+			throw new Error("expected Error");
+		}
+		expect(error.message).toMatch(
+			/No coding agents detected in this project/,
+		);
+		expect(error.message).toMatch(/without -y/);
+		expect(error.message).not.toMatch(/--agent/);
 	});
 
 	test("-y uses the host CLI agent when the project has no folders", async () => {
@@ -338,20 +332,91 @@ describe("resolveSkillsPlan", () => {
 		expect(detectInstalledAgents).not.toHaveBeenCalled();
 	});
 
-	test("-y uses installed apps when there is no project folder or host", async () => {
+	test("-y does not use installed apps when there is no project folder or host", async () => {
+		const cwd = tmpDir();
+		const detectInstalledAgents = vi.fn(
+			async (): Promise<readonly AgentType[]> => ["codex"],
+		);
+		await expect(
+			resolveSkillsPlan(
+				planOptions(cwd, {
+					agents: [],
+					yes: true,
+					interactive: false,
+					detectInstalledAgents,
+				}),
+			),
+		).rejects.toThrow(/Run this command from a supported agent/);
+		expect(detectInstalledAgents).not.toHaveBeenCalled();
+	});
+
+	test("--skill without -y and no detected agents asks for -y", async () => {
+		const cwd = tmpDir();
+		await expect(
+			resolveSkillsPlan(
+				planOptions(cwd, {
+					agents: [],
+					skills: ["neon"],
+					yes: false,
+					interactive: false,
+				}),
+			),
+		).rejects.toThrow(/Pass -y to use detected agents/);
+	});
+
+	test("-y --global uses installed apps over host", async () => {
+		const cwd = tmpDir();
+		const detectAgent = vi.fn((): AgentType | null => "claude-code");
+		const plan = await resolveSkillsPlan(
+			planOptions(cwd, {
+				agents: [],
+				yes: true,
+				interactive: false,
+				global: true,
+				detectAgent,
+				detectInstalledAgents: async () => ["codex"],
+			}),
+		);
+		expect(plan.agents).toEqual(["codex"]);
+		expect(detectAgent).not.toHaveBeenCalled();
+	});
+
+	test("-y --global uses the host when no apps are installed", async () => {
 		const cwd = tmpDir();
 		const plan = await resolveSkillsPlan(
 			planOptions(cwd, {
 				agents: [],
 				yes: true,
 				interactive: false,
-				detectInstalledAgents: async () => ["codex"],
+				global: true,
+				detectAgent: () => "cursor",
+				detectInstalledAgents: async () => [],
 			}),
 		);
-		expect(plan.agents).toEqual(["codex"]);
+		expect(plan.agents).toEqual(["cursor"]);
 	});
 
-	test("-y does not ask host or installed when the project has folders", async () => {
+	test("-y --global with no apps or host fails", async () => {
+		const cwd = tmpDir();
+		const error = await resolveSkillsPlan(
+			planOptions(cwd, {
+				agents: [],
+				yes: true,
+				interactive: false,
+				global: true,
+				detectInstalledAgents: async () => [],
+			}),
+		).catch((caught: unknown) => caught);
+		expect(error).toBeInstanceOf(Error);
+		if (!(error instanceof Error)) {
+			throw new Error("expected Error");
+		}
+		expect(error.message).toMatch(/^No coding agents detected\./);
+		expect(error.message).not.toContain("in this project");
+		expect(error.message).not.toMatch(/--agent/);
+	});
+
+	test("-y does not ask host when the project has folders", async () => {
 		const cwd = tmpDir();
 		mkdirSync(join(cwd, ".cursor"));
 		const detectAgent = vi.fn((): AgentType | null => "claude-code");

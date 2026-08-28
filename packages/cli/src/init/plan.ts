@@ -2,6 +2,7 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 import type { AgentType } from "../mcp/agents.js";
 import { mcpInstallableAgents } from "../mcp/targets.js";
 import { pluginsInstallableAgents } from "../plugins/targets.js";
+import { skillsInstallableAgents } from "../skills/targets.js";
 import { supportsSkills, uniqueAgentIds } from "./agents.js";
 
 export type InitAgentSetup = "plugin" | "skills-mcp" | "skip";
@@ -54,53 +55,55 @@ export const planAgentSteps = (input: {
 	return [];
 };
 
-const agentFlags = (ids: readonly AgentType[]): string[] =>
-	ids.flatMap((id) => ["--agent", id]);
+export const noDetectedAgentsMessage = (input: {
+	scope: "project" | "global";
+	supported: readonly string[];
+	fix: "run-without-yes" | "pass-yes";
+}): string => {
+	const lead =
+		input.scope === "project"
+			? "No coding agents detected in this project."
+			: "No coding agents detected.";
+	const hint =
+		input.fix === "pass-yes"
+			? "Pass -y to use detected agents, or run from a terminal to pick one."
+			: "Run this command from a supported agent, or run it without -y to pick one.";
+	return `${lead} ${hint} Supported agents: ${input.supported.join(", ")}`;
+};
+
+export const initYesSupportedAgents = (): AgentType[] =>
+	uniqueAgentIds([
+		...pluginsInstallableAgents("project"),
+		...skillsInstallableAgents(),
+		...mcpInstallableAgents("global"),
+	]);
 
 export const resolveYesAgentList = (input: {
-	project: readonly AgentType[];
+	detected: readonly AgentType[];
 	host: AgentType | null;
-	installed: readonly AgentType[];
 }): AgentType[] => {
-	if (input.project.length > 0) {
-		return uniqueAgentIds(input.project);
+	if (input.detected.length > 0) {
+		return uniqueAgentIds(input.detected);
 	}
 	if (input.host !== null) {
 		return [input.host];
 	}
-	return uniqueAgentIds(input.installed);
+	return [];
 };
 
 export async function collectYesAgents(sources: {
-	project: () => readonly AgentType[] | Promise<readonly AgentType[]>;
+	detected: () => readonly AgentType[] | Promise<readonly AgentType[]>;
 	detectAgent: () => AgentType | null;
-	detectInstalled: () => Promise<readonly AgentType[]>;
 	acceptHost?: (id: AgentType) => boolean;
 }): Promise<AgentType[]> {
-	const project = await sources.project();
-	if (project.length > 0) {
-		return resolveYesAgentList({
-			project,
-			host: null,
-			installed: [],
-		});
+	const detected = await sources.detected();
+	if (detected.length > 0) {
+		return resolveYesAgentList({ detected, host: null });
 	}
 	const rawHost = sources.detectAgent();
 	const accept = sources.acceptHost ?? (() => true);
 	const host = rawHost !== null && accept(rawHost) ? rawHost : null;
-	if (host !== null) {
-		return resolveYesAgentList({
-			project,
-			host,
-			installed: [],
-		});
-	}
-	const installed = await sources.detectInstalled();
-	return resolveYesAgentList({
-		project,
-		host: null,
-		installed,
-	});
+	return resolveYesAgentList({ detected, host });
 }
 
 export const chooseYesAgentTooling = (
@@ -113,9 +116,9 @@ export const chooseYesAgentTooling = (
 		return { setup: "plugin", agents: [pluginFirst, ...pluginRest] };
 	}
 
-	const globalMcp = new Set(mcpInstallableAgents("global"));
+	const projectMcp = new Set(mcpInstallableAgents("project"));
 	const skillsAgents = agents.filter((id) => supportsSkills(id));
-	const mcpAgents = agents.filter((id) => globalMcp.has(id));
+	const mcpAgents = agents.filter((id) => projectMcp.has(id));
 	if (skillsAgents.length === 0 && mcpAgents.length === 0) {
 		return { setup: "skip" };
 	}
@@ -127,18 +130,14 @@ export const planYesAgentSteps = (tooling: YesAgentTooling): InitStep[] => {
 		case "skip":
 			return [];
 		case "plugin":
-			return [["plugins", "-y", ...agentFlags(tooling.agents)]];
+			return [["plugins", "-y"]];
 		case "skills-mcp": {
 			const steps: InitStep[] = [];
 			if (tooling.skillsAgents.length > 0) {
-				steps.push([
-					"skills",
-					"-y",
-					...agentFlags(tooling.skillsAgents),
-				]);
+				steps.push(["skills", "-y"]);
 			}
 			if (tooling.mcpAgents.length > 0) {
-				steps.push(["mcp", "-y", ...agentFlags(tooling.mcpAgents)]);
+				steps.push(["mcp", "-y", "--project"]);
 			}
 			return steps;
 		}

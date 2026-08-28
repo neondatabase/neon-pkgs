@@ -25,7 +25,6 @@ export type InitProps = CommonProps & {
 	configDir?: string;
 	profile?: string;
 	analytics?: boolean;
-	agent?: boolean;
 	data?: string;
 	cwd?: string;
 	run?: InitRun;
@@ -34,7 +33,6 @@ export type InitProps = CommonProps & {
 		cwd: string,
 	) => readonly AgentType[] | Promise<readonly AgentType[]>;
 	detectAgent?: () => AgentType | null;
-	detectInstalledAgents?: () => Promise<readonly AgentType[]>;
 };
 
 export const command = "init";
@@ -42,7 +40,7 @@ export const describe =
 	"Set up this directory for Neon: agent tooling, a linked project, and neon.ts. In an empty directory, scaffolds a template first. Skills needs Node.js 22.20 or newer.";
 
 const removedProtocol = () =>
-	`\`${getCliName()} init --agent\` and \`--data\` were removed. Run \`${getCliName()} init\` or \`${getCliName()} init -y\`.`;
+	`\`${getCliName()} init --data\` was removed. Run \`${getCliName()} init\` or \`${getCliName()} init -y\`.`;
 
 export const builder = (yargs: yargs.Argv) =>
 	yargs
@@ -55,11 +53,7 @@ export const builder = (yargs: yargs.Argv) =>
 			type: "boolean",
 			default: false,
 			describe:
-				"Empty dir: bootstrap --default. Otherwise plugin, or skills and MCP, for project folders, else the host CLI agent, else installed apps; skip agent setup if none. Then link --yes and config init --services none. link --yes still asks for a project unless one is already linked",
-		})
-		.option("agent", {
-			hidden: true,
-			type: "boolean",
+				"Empty dir: bootstrap --default. Otherwise plugin, or skills and MCP, for project folders, else the host CLI agent. Exits if none. Then link --yes and config init --services none. link --yes still asks for a project unless one is already linked",
 		})
 		.option("data", {
 			hidden: true,
@@ -79,11 +73,11 @@ export const builder = (yargs: yargs.Argv) =>
 		.epilogue(
 			helpEpilogue(
 				"Interactive agent setup: plugin (recommended), skills and MCP separately, or skip agent setup. Never both plugin and skills+MCP.",
-				"-y installs the plugin when Cursor, Claude Code, or Codex is in project folders, else the host CLI agent, else installed apps. Otherwise skills and MCP. If none are found, agent setup is skipped. Then link unless already linked. link --yes may still ask for a project.",
+				"-y installs the plugin when Cursor, Claude Code, or Codex is in project folders, else the host CLI agent. Otherwise skills and MCP. If none are found, it exits: run from a supported agent, or run without -y to pick. Then link unless already linked. link --yes may still ask for a project.",
 			),
 		)
 		.check((argv) => {
-			if (argv.agent === true || argv.data !== undefined) {
+			if (argv.data !== undefined) {
 				throw new Error(removedProtocol());
 			}
 			if (
@@ -149,9 +143,6 @@ export const handler = async (props: InitProps) => {
 			? { detectProjectAgents: props.detectProjectAgents }
 			: {}),
 		...(props.detectAgent ? { detectAgent: props.detectAgent } : {}),
-		...(props.detectInstalledAgents
-			? { detectInstalledAgents: props.detectInstalledAgents }
-			: {}),
 	});
 	await runInitSteps(
 		planExistingInit({

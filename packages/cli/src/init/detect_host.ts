@@ -27,7 +27,6 @@ const looksLikeCursor = (value: string): boolean => {
 
 const isSet = (value: string | undefined): boolean => value !== undefined;
 
-/** Installed apps are handled by the later -y fallback. */
 export function detectAgent(
 	env: NodeJS.ProcessEnv = process.env,
 ): AgentType | null {

@@ -44,14 +44,14 @@ function planOptions(
 }
 
 describe("assertPluginsCanRun", () => {
-	test("fails non-TTY without -y or --agent", () => {
+	test("fails non-TTY without -y", () => {
 		expect(() =>
 			assertPluginsCanRun({
 				yes: false,
 				interactive: false,
 				hasAgents: false,
 			}),
-		).toThrow(/Pass -y to install into detected agents, or --agent/);
+		).toThrow(/Pass -y to install into detected agents/);
 	});
 
 	test("allows named agents without -y", () => {
@@ -100,7 +100,7 @@ describe("resolvePluginsPlan", () => {
 		});
 	});
 
-	test("non-TTY without -y succeeds when --agent is set", async () => {
+	test("non-TTY without -y succeeds when agents are specified", async () => {
 		const cwd = tmpDir();
 		const plan = await resolvePluginsPlan(
 			planOptions(cwd, {
@@ -115,7 +115,7 @@ describe("resolvePluginsPlan", () => {
 		]);
 	});
 
-	test("non-TTY without -y or --agent fails", async () => {
+	test("non-TTY without -y or named agents fails", async () => {
 		const cwd = tmpDir();
 		await expect(
 			resolvePluginsPlan(
@@ -125,9 +125,7 @@ describe("resolvePluginsPlan", () => {
 					agents: [],
 				}),
 			),
-		).rejects.toThrow(
-			/Pass -y to install into detected agents, or --agent/,
-		);
+		).rejects.toThrow(/Pass -y to install into detected agents/);
 	});
 
 	test("--global is user-level", async () => {
@@ -158,19 +156,6 @@ describe("resolvePluginsPlan", () => {
 				}),
 			),
 		).rejects.toThrow(/Unknown agent: "kimi"/);
-	});
-
-	test("rejects --agent *", async () => {
-		const cwd = tmpDir();
-		await expect(
-			resolvePluginsPlan(
-				planOptions(cwd, {
-					yes: true,
-					interactive: false,
-					agents: ["*"],
-				}),
-			),
-		).rejects.toThrow(/does not accept --agent \*/);
 	});
 
 	test("skips MCP agents that cannot install plugins", async () => {
@@ -328,30 +313,72 @@ describe("resolvePluginsPlan", () => {
 		).rejects.toThrow(/plugins are user-level. Pass --global/);
 	});
 
-	test("-y host without a plugins mapping falls through to installed apps", async () => {
+	test("-y host without a plugins mapping does not use installed apps", async () => {
 		const cwd = tmpDir();
-		const plan = await resolvePluginsPlan(
-			planOptions(cwd, {
-				agents: [],
-				yes: true,
-				interactive: false,
-				detectAgent: () => "cline",
-				detectInstalledAgents: async () => ["cursor"],
-			}),
+		const detectInstalledAgents = vi.fn(
+			async (): Promise<readonly AgentType[]> => ["cursor"],
 		);
-		expect(plan.agents).toEqual(["cursor"]);
+		await expect(
+			resolvePluginsPlan(
+				planOptions(cwd, {
+					agents: [],
+					yes: true,
+					interactive: false,
+					detectAgent: () => "cline",
+					detectInstalledAgents,
+				}),
+			),
+		).rejects.toThrow(/Run this command from a supported agent/);
+		expect(detectInstalledAgents).not.toHaveBeenCalled();
 	});
 
-	test("-y uses installed apps when there is no project folder or host", async () => {
+	test("-y does not use installed apps when there is no project folder or host", async () => {
 		const cwd = tmpDir();
+		const detectInstalledAgents = vi.fn(
+			async (): Promise<readonly AgentType[]> => ["codex"],
+		);
+		await expect(
+			resolvePluginsPlan(
+				planOptions(cwd, {
+					agents: [],
+					yes: true,
+					interactive: false,
+					detectInstalledAgents,
+				}),
+			),
+		).rejects.toThrow(/No coding agents detected in this project/);
+		expect(detectInstalledAgents).not.toHaveBeenCalled();
+	});
+
+	test("-y --global uses installed apps over host", async () => {
+		const cwd = tmpDir();
+		const detectAgent = vi.fn((): AgentType | null => "claude-code");
 		const plan = await resolvePluginsPlan(
 			planOptions(cwd, {
 				agents: [],
 				yes: true,
 				interactive: false,
+				global: true,
+				detectAgent,
 				detectInstalledAgents: async () => ["codex"],
 			}),
 		);
 		expect(plan.agents).toEqual(["codex"]);
+		expect(detectAgent).not.toHaveBeenCalled();
+	});
+
+	test("-y --global uses the host when no apps are installed", async () => {
+		const cwd = tmpDir();
+		const plan = await resolvePluginsPlan(
+			planOptions(cwd, {
+				agents: [],
+				yes: true,
+				interactive: false,
+				global: true,
+				detectAgent: () => "cursor",
+				detectInstalledAgents: async () => [],
+			}),
+		);
+		expect(plan.agents).toEqual(["cursor"]);
 	});
 });

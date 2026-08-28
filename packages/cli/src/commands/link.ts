@@ -41,7 +41,6 @@ type LinkProps = CommonProps & {
 	regionId?: string;
 	branch?: string;
 	params?: string;
-	agent?: boolean;
 	yes: boolean;
 	clear: boolean;
 	checks: boolean;
@@ -78,9 +77,6 @@ const nonInteractiveLinkHelp = (): string =>
 const orgScopedKeyHint =
 	"Organization-scoped API keys cannot list orgs; pass --org-id.";
 
-const removedAgent = (): string =>
-	`\`${getCliName()} link --agent\` was removed.\nUse:\n${nonInteractiveLinkHelp()}\n${orgScopedKeyHint}`;
-
 export const command = "link";
 export const describe = "Link the current directory to a Neon project";
 
@@ -115,10 +111,6 @@ export const builder = (argv: yargs.Argv) =>
 				describe:
 					'JSON object with link parameters, e.g. \'{"orgId":"...","projectId":"..."}\' or \'{"orgId":"...","projectName":"...","regionId":"..."}\'. Flags take precedence over fields in --params.',
 				type: "string",
-			},
-			agent: {
-				hidden: true,
-				type: "boolean",
 			},
 			yes: {
 				alias: "y",
@@ -186,12 +178,7 @@ export const builder = (argv: yargs.Argv) =>
 				orgScopedKeyHint,
 			),
 		)
-		.check((argv) => {
-			if (argv.agent === true) {
-				throw new Error(removedAgent());
-			}
-			return true;
-		});
+		.strict();
 
 export const handler = async (props: LinkProps) => {
 	if (props.clear) {

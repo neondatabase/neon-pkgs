@@ -8,6 +8,8 @@ import {
 	chooseYesAgentTooling,
 	collectYesAgents,
 	directoryIsEmpty,
+	initYesSupportedAgents,
+	noDetectedAgentsMessage,
 	planAgentSteps,
 	planExistingInit,
 	planYesAgentSteps,
@@ -193,88 +195,98 @@ describe("planExistingInit", () => {
 	});
 });
 
+describe("noDetectedAgentsMessage", () => {
+	test("project miss does not mention --agent", () => {
+		const message = noDetectedAgentsMessage({
+			scope: "project",
+			supported: ["cursor", "claude-code"],
+			fix: "run-without-yes",
+		});
+		expect(message).toContain("No coding agents detected in this project.");
+		expect(message).toContain("without -y");
+		expect(message).toContain("cursor, claude-code");
+		expect(message).not.toMatch(/--agent/);
+	});
+
+	test("global miss does not mention --agent", () => {
+		const message = noDetectedAgentsMessage({
+			scope: "global",
+			supported: ["cursor"],
+			fix: "run-without-yes",
+		});
+		expect(message).toContain("No coding agents detected.");
+		expect(message).not.toContain("in this project");
+		expect(message).not.toMatch(/--agent/);
+	});
+});
+
+describe("initYesSupportedAgents", () => {
+	test("includes plugin, skills, and MCP agents", () => {
+		const ids = initYesSupportedAgents();
+		expect(ids).toContain("cursor");
+		expect(ids).toContain("vscode");
+		expect(ids).toEqual([...new Set(ids)]);
+	});
+});
+
 describe("resolveYesAgentList", () => {
-	test("project folders win over host and installed", () => {
+	test("detected folders win over host", () => {
 		expect(
 			resolveYesAgentList({
-				project: ["vscode"],
+				detected: ["vscode"],
 				host: "cursor",
-				installed: ["codex"],
 			}),
 		).toEqual(["vscode"]);
 	});
 
-	test("host wins over installed when the project is empty", () => {
+	test("host when detected is empty", () => {
 		expect(
 			resolveYesAgentList({
-				project: [],
+				detected: [],
 				host: "cursor",
-				installed: ["codex", "claude-code"],
 			}),
 		).toEqual(["cursor"]);
-	});
-
-	test("installed is last", () => {
-		expect(
-			resolveYesAgentList({
-				project: [],
-				host: null,
-				installed: ["codex", "vscode", "codex"],
-			}),
-		).toEqual(["codex", "vscode"]);
 	});
 
 	test("all empty is empty", () => {
 		expect(
 			resolveYesAgentList({
-				project: [],
+				detected: [],
 				host: null,
-				installed: [],
 			}),
 		).toEqual([]);
 	});
 });
 
 describe("collectYesAgents", () => {
-	test("does not ask host or installed when the project is nonempty", async () => {
+	test("does not ask host when detected is nonempty", async () => {
 		const detectAgent = vi.fn((): AgentType | null => "cursor");
-		const detectInstalled = vi.fn(
-			async (): Promise<readonly AgentType[]> => ["codex"],
-		);
 		await expect(
 			collectYesAgents({
-				project: () => ["vscode"],
+				detected: () => ["vscode"],
 				detectAgent,
-				detectInstalled,
 			}),
 		).resolves.toEqual(["vscode"]);
 		expect(detectAgent).not.toHaveBeenCalled();
-		expect(detectInstalled).not.toHaveBeenCalled();
 	});
 
-	test("host wins over installed", async () => {
-		const detectInstalled = vi.fn(
-			async (): Promise<readonly AgentType[]> => ["codex"],
-		);
+	test("host when detected is empty", async () => {
 		await expect(
 			collectYesAgents({
-				project: () => [],
+				detected: () => [],
 				detectAgent: () => "cursor",
-				detectInstalled,
 			}),
 		).resolves.toEqual(["cursor"]);
-		expect(detectInstalled).not.toHaveBeenCalled();
 	});
 
-	test("rejected host falls through to installed", async () => {
+	test("rejected host is empty", async () => {
 		await expect(
 			collectYesAgents({
-				project: () => [],
+				detected: () => [],
 				detectAgent: () => "cline",
-				detectInstalled: async () => ["cursor"],
 				acceptHost: (id) => id !== "cline",
 			}),
-		).resolves.toEqual(["cursor"]);
+		).resolves.toEqual([]);
 	});
 });
 
@@ -316,32 +328,32 @@ describe("chooseYesAgentTooling", () => {
 });
 
 describe("planYesAgentSteps", () => {
-	test("plugin passes --agent", () => {
+	test("plugin is plugins -y", () => {
 		expect(
 			planYesAgentSteps({
 				setup: "plugin",
 				agents: ["cursor", "codex"],
 			}),
-		).toEqual([["plugins", "-y", "--agent", "cursor", "--agent", "codex"]]);
+		).toEqual([["plugins", "-y"]]);
 	});
 
-	test("skills-mcp omits an empty step", () => {
+	test("skills-mcp omits an empty step and pins MCP to the project", () => {
 		expect(
 			planYesAgentSteps({
 				setup: "skills-mcp",
 				skillsAgents: [],
-				mcpAgents: ["mcporter"],
+				mcpAgents: ["vscode"],
 			}),
-		).toEqual([["mcp", "-y", "--agent", "mcporter"]]);
+		).toEqual([["mcp", "-y", "--project"]]);
 		expect(
 			planYesAgentSteps({
 				setup: "skills-mcp",
 				skillsAgents: ["vscode"],
-				mcpAgents: ["vscode", "mcporter"],
+				mcpAgents: ["vscode"],
 			}),
 		).toEqual([
-			["skills", "-y", "--agent", "vscode"],
-			["mcp", "-y", "--agent", "vscode", "--agent", "mcporter"],
+			["skills", "-y"],
+			["mcp", "-y", "--project"],
 		]);
 	});
 

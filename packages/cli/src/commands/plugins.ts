@@ -23,7 +23,6 @@ import { writer } from "../writer.js";
 type PluginsProps = CommonProps & {
 	yes?: boolean;
 	global?: boolean;
-	agent?: string[];
 };
 
 type PluginsInstallRow = {
@@ -36,24 +35,6 @@ type PluginsInstallRow = {
 
 const scopeLabel = (scope: "global" | "project"): string =>
 	scope === "project" ? "project" : "user";
-
-const coerceAgents = (value: unknown): string[] => {
-	if (value === undefined) return [];
-	const list = Array.isArray(value) ? value : [value];
-	if (list.length === 0) {
-		throw new Error(
-			"--agent needs a value. Pass one, or omit the flag entirely.",
-		);
-	}
-	return list.map((item) => {
-		if (typeof item !== "string" || item.trim() === "") {
-			throw new Error(
-				"--agent needs a value. Pass one, or omit the flag entirely.",
-			);
-		}
-		return item;
-	});
-};
 
 export const command = "plugins";
 export const describe = "Install the Neon plugin into coding agents";
@@ -78,23 +59,11 @@ export const builder = (argv: yargs.Argv) =>
 				default: false,
 				describe: "Install user-level. Default is project",
 			},
-			agent: {
-				alias: "a",
-				type: "array",
-				string: true,
-				describe:
-					"Coding agent to install into (repeatable). Skips the agent picker. Values listed below",
-				coerce: coerceAgents,
-			},
 		})
 		.example("$0 plugins", "Interactive: agents, then confirm")
 		.example(
 			"$0 plugins -y",
-			"Detected agents (project folders, else the host CLI agent, else installed apps), skip prompts",
-		)
-		.example(
-			"$0 plugins --agent cursor --agent claude-code",
-			"Install into specific agents",
+			"Detected agents (project folders, else the host CLI agent), skip prompts",
 		)
 		.example("$0 plugins --global", "Install user-level")
 		.epilogue(
@@ -118,7 +87,7 @@ export const handler = async (props: PluginsProps) => {
 	const interactive = canPickAgentsInteractively() && !yes;
 	const plan = await resolvePluginsPlan({
 		global: props.global === true,
-		agents: props.agent ?? [],
+		agents: [],
 		yes,
 		cwd,
 		interactive,
@@ -204,7 +173,6 @@ export const handler = async (props: PluginsProps) => {
 		throw new Error("Failed to install the Neon plugin.");
 	}
 	const retry = neonPluginsRetryCommand({
-		agents: failed.flatMap((row) => row.agents),
 		global: plan.scope === "global",
 	});
 	if (first.message.includes("needs npx (Node.js)")) {

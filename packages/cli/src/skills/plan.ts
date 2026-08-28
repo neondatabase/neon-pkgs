@@ -1,9 +1,6 @@
-import {
-	detectInstalledAgents,
-	tryResolveAddMcpAgentId,
-} from "../init/agents.js";
+import { tryResolveAddMcpAgentId } from "../init/agents.js";
 import { detectAgent } from "../init/detect_host.js";
-import { collectYesAgents } from "../init/plan.js";
+import { collectYesAgents, noDetectedAgentsMessage } from "../init/plan.js";
 import type { AgentType } from "../mcp/agents.js";
 import {
 	agentChoicesFrom,
@@ -92,20 +89,8 @@ export async function resolveSkillsPlan(
 	const detected =
 		options.yes && options.agents.length === 0
 			? await collectYesAgents({
-					project: () => scoped,
+					detected: () => scoped,
 					detectAgent: options.detectAgent ?? detectAgent,
-					detectInstalled:
-						scope === "project"
-							? async () => {
-									const ids = await (
-										options.detectInstalledAgents ??
-										detectInstalledAgents
-									)();
-									return ids.filter((id) =>
-										availableSet.has(id),
-									);
-								}
-							: async () => [],
 					acceptHost: (id) => availableSet.has(id),
 				})
 			: scoped;
@@ -115,16 +100,12 @@ export async function resolveSkillsPlan(
 		detected,
 		message:
 			"Which coding agents should get Neon agent skills? (space to toggle, enter to confirm)",
-		nonInteractiveMessage:
-			scope === "project"
-				? `No coding agents detected in this project. Pass --agent <name>. Supported agents: ${available.join(", ")}`
-				: `No coding agents detected. Pass --agent <name>. Supported agents: ${available.join(", ")}`,
+		nonInteractiveMessage: noDetectedAgentsMessage({
+			scope,
+			supported: available,
+			fix: options.yes ? "run-without-yes" : "pass-yes",
+		}),
 		resolveSpecified: (raw) => {
-			if (raw === "*") {
-				throw new Error(
-					"neon skills does not accept --agent *. Pass --agent <name> for each coding agent, or omit --agent to use detected agents.",
-				);
-			}
 			const id = tryResolveAddMcpAgentId(raw);
 			if (!id) {
 				throw new Error(

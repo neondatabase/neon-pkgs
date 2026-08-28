@@ -22,14 +22,14 @@ describe("agentChoicesFrom", () => {
 describe("resolveAgentSelection", () => {
 	const choices = agentChoicesFrom(["cursor", "claude-code"], ["cursor"]);
 
-	test("uses --agent values and skips the picker", async () => {
+	test("uses specified values and skips the picker", async () => {
 		const picked: string[] = [];
 		const result = await resolveAgentSelection({
 			specified: ["claude", "cursor"],
 			choices,
 			detected: ["cursor"],
 			message: "pick",
-			nonInteractiveMessage: "pass --agent",
+			nonInteractiveMessage: "pass -y",
 			pick: async () => {
 				picked.push("called");
 				return ["cursor"];
@@ -39,37 +39,37 @@ describe("resolveAgentSelection", () => {
 		expect(picked).toEqual([]);
 	});
 
-	test("dedupes aliases in --agent", async () => {
+	test("dedupes aliases in specified agents", async () => {
 		const result = await resolveAgentSelection({
 			specified: ["claude", "claude-code"],
 			choices,
 			detected: [],
 			message: "pick",
-			nonInteractiveMessage: "pass --agent",
+			nonInteractiveMessage: "pass -y",
 		});
 		expect(result).toEqual(["claude-code"]);
 	});
 
-	test("throws on an unknown --agent without calling the picker", async () => {
+	test("throws on an unknown specified agent without calling the picker", async () => {
 		await expect(
 			resolveAgentSelection({
 				specified: ["not-an-agent"],
 				choices,
 				detected: ["cursor"],
 				message: "pick",
-				nonInteractiveMessage: "pass --agent",
+				nonInteractiveMessage: "pass -y",
 				pick: async () => ["cursor"],
 			}),
 		).rejects.toThrow(/Unknown agent: "not-an-agent"/);
 	});
 
-	test("uses resolveSpecified for --agent values", async () => {
+	test("uses resolveSpecified for specified values", async () => {
 		const result = await resolveAgentSelection({
 			specified: ["cursor-alias"],
 			choices,
 			detected: [],
 			message: "pick",
-			nonInteractiveMessage: "pass --agent",
+			nonInteractiveMessage: "pass -y",
 			resolveSpecified: (raw) => {
 				if (raw !== "cursor-alias") {
 					throw new Error(`unexpected: ${raw}`);
@@ -86,7 +86,7 @@ describe("resolveAgentSelection", () => {
 			choices,
 			detected: ["cursor"],
 			message: "pick",
-			nonInteractiveMessage: "pass --agent",
+			nonInteractiveMessage: "pass -y",
 			pick: async (options) => {
 				expect(options.selected).toEqual(["cursor"]);
 				expect(options.choices).toEqual(choices);
@@ -103,7 +103,7 @@ describe("resolveAgentSelection", () => {
 				choices,
 				detected: ["cursor"],
 				message: "pick",
-				nonInteractiveMessage: "pass --agent",
+				nonInteractiveMessage: "pass -y",
 				pick: async () => [],
 			}),
 		).rejects.toThrow(/No agents selected/);
@@ -115,7 +115,7 @@ describe("resolveAgentSelection", () => {
 			choices,
 			detected: ["cursor", "claude-code"],
 			message: "pick",
-			nonInteractiveMessage: "pass --agent",
+			nonInteractiveMessage: "pass -y",
 		});
 		expect(result).toEqual(["cursor", "claude-code"]);
 	});
@@ -126,7 +126,7 @@ describe("resolveAgentSelection", () => {
 			choices,
 			detected: ["cursor"],
 			message: "pick",
-			nonInteractiveMessage: "pass --agent",
+			nonInteractiveMessage: "pass -y",
 			interactive: false,
 		});
 		expect(result).toEqual(["cursor"]);
@@ -139,9 +139,9 @@ describe("resolveAgentSelection", () => {
 				choices,
 				detected: [],
 				message: "pick",
-				nonInteractiveMessage: "pass --agent cursor",
+				nonInteractiveMessage: "pass -y",
 			}),
-		).rejects.toThrow("pass --agent cursor");
+		).rejects.toThrow("pass -y");
 	});
 });
 
@@ -156,7 +156,7 @@ describe("pickAgentsInteractively", () => {
 					message: "pick",
 					choices: [{ id: "cursor", title: "Cursor" }],
 				}),
-			).rejects.toThrow(/Pass --agent/);
+			).rejects.toThrow(/Pass -y/);
 		} finally {
 			process.stdout.isTTY = originalIsTTY;
 		}

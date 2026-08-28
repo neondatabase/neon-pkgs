@@ -29,7 +29,6 @@ import { writer } from "../writer.js";
 type SkillsProps = CommonProps & {
 	yes?: boolean;
 	global?: boolean;
-	agent?: string[];
 	skill?: string[];
 };
 
@@ -50,24 +49,6 @@ type SkillsUpdateRow = {
 
 const scopeLabel = (scope: "global" | "project"): string =>
 	scope === "project" ? "this directory" : "user-level";
-
-const coerceAgents = (value: unknown): string[] => {
-	if (value === undefined) return [];
-	const list = Array.isArray(value) ? value : [value];
-	if (list.length === 0) {
-		throw new Error(
-			"--agent needs a value. Pass one, or omit the flag entirely.",
-		);
-	}
-	return list.map((item) => {
-		if (typeof item !== "string" || item.trim() === "") {
-			throw new Error(
-				"--agent needs a value. Pass one, or omit the flag entirely.",
-			);
-		}
-		return item;
-	});
-};
 
 const coerceSkills = (value: unknown): string[] => {
 	if (value === undefined) return [];
@@ -120,16 +101,9 @@ export const builder = (argv: yargs.Argv) =>
 						"Update user-level skills",
 					)
 					.strict()
-					.hide("agent")
 					.hide("skill")
 					.check((args) => {
 						noPassthrough("skills update")(args);
-						const agents = args.agent;
-						if (Array.isArray(agents) && agents.length > 0) {
-							throw new Error(
-								"neon skills update does not take --agent. It refreshes every installed skill in this directory (or --global).",
-							);
-						}
 						const skills = args.skill;
 						if (Array.isArray(skills) && skills.length > 0) {
 							throw new Error(
@@ -153,14 +127,6 @@ export const builder = (argv: yargs.Argv) =>
 				describe:
 					"Install user-level skills (skills CLI -g). Default is this directory",
 			},
-			agent: {
-				alias: "a",
-				type: "array",
-				string: true,
-				describe:
-					"Coding agent to install into (repeatable). Skips the agent picker. Values listed below",
-				coerce: coerceAgents,
-			},
 			skill: {
 				alias: "s",
 				type: "array",
@@ -176,11 +142,11 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.example(
 			"$0 skills -y",
-			"This directory, detected agents (project folders, else the host CLI agent, else installed apps), the default skills",
+			"This directory, detected agents (project folders, else the host CLI agent), the default skills",
 		)
 		.example(
-			"$0 skills -s neon -s neon-ai-gateway --agent cursor",
-			"Install named skills into specific agents",
+			"$0 skills -s neon -s neon-ai-gateway",
+			"Install named skills into detected agents",
 		)
 		.example("$0 skills --global", "Install user-level skills")
 		.epilogue(
@@ -201,7 +167,7 @@ export const handler = async (props: SkillsProps) => {
 	const interactive = canPickAgentsInteractively() && !yes;
 	const plan = await resolveSkillsPlan({
 		global: props.global === true,
-		agents: props.agent ?? [],
+		agents: [],
 		skills: props.skill ?? [],
 		yes,
 		cwd,
@@ -294,7 +260,6 @@ export const handler = async (props: SkillsProps) => {
 	}
 	const retry = neonSkillsRetryCommand({
 		skills: failed.flatMap((row) => row.skills),
-		agents: plan.agents,
 		global: plan.scope === "global",
 	});
 	if (

@@ -32,7 +32,6 @@ type McpProps = CommonProps & {
 	oauth?: boolean;
 	project?: boolean;
 	yes?: boolean;
-	agent?: string[];
 	readOnly?: boolean;
 	projectId?: string;
 	category?: NeonMcpCategory[];
@@ -74,31 +73,7 @@ export const builder = (argv: yargs.Argv) =>
 				type: "boolean",
 				default: false,
 				describe:
-					"Skip prompts. Defaults listed below. --project, --oauth, --agent, --read-only, --project-id and --category still apply",
-			},
-			agent: {
-				alias: "a",
-				type: "array",
-				string: true,
-				describe:
-					"Coding agent to install into (repeatable). Skips the agent picker. Values listed below",
-				coerce: (value: unknown): string[] => {
-					if (value === undefined) return [];
-					const list = Array.isArray(value) ? value : [value];
-					if (list.length === 0) {
-						throw new Error(
-							"--agent needs a value. Pass one, or omit the flag entirely.",
-						);
-					}
-					return list.map((item) => {
-						if (typeof item !== "string" || item.trim() === "") {
-							throw new Error(
-								"--agent needs a value. Pass one, or omit the flag entirely.",
-							);
-						}
-						return item;
-					});
-				},
+					"Skip prompts. Defaults listed below. --project, --oauth, --read-only, --project-id and --category still apply",
 			},
 			"read-only": {
 				alias: "readonly",
@@ -160,10 +135,6 @@ export const builder = (argv: yargs.Argv) =>
 			"Install with OAuth; the agent signs in on first use",
 		)
 		.example("$0 mcp --project", "Write project-level config")
-		.example(
-			"$0 mcp --agent cursor --agent claude-code",
-			"Install into specific agents",
-		)
 		.example("$0 mcp --read-only", "Hide write tools via ?readonly=true")
 		.example(
 			"$0 mcp --project-id <id>",
@@ -181,7 +152,7 @@ export const builder = (argv: yargs.Argv) =>
 				helpCsv("Supported categories", NEON_MCP_CATEGORIES),
 				"neon mcp -y:",
 				"  global config",
-				"  every globally detected agent",
+				"  globally installed apps, else the host CLI agent",
 				"  reuse an existing Neon MCP API key, else mint an account-wide key",
 				"  write tools on, all categories",
 				"  no project pin (including from .neon)",
@@ -197,7 +168,7 @@ export const handler = async (props: McpProps) => {
 	const plan = await resolveMcpPlan({
 		project: props.project === true,
 		oauth: props.oauth === true,
-		agents: props.agent ?? [],
+		agents: [],
 		yes: props.yes === true,
 		cwd,
 		interactive,
@@ -239,13 +210,9 @@ export const handler = async (props: McpProps) => {
 				`Authentication required. Run \`${getCliName()} auth\`, pass --api-key or use --oauth to install without a Neon credential.`,
 			);
 		}
-		if (
-			!canPickAgentsInteractively() &&
-			props.yes !== true &&
-			(props.agent ?? []).length === 0
-		) {
+		if (!canPickAgentsInteractively() && props.yes !== true) {
 			throw new Error(
-				"No interactive terminal. Pass -y to mint into every detected agent, --agent <name> to name them or --oauth to install without minting.",
+				"No interactive terminal. Pass -y to mint into every detected agent, or --oauth to install without minting.",
 			);
 		}
 	}

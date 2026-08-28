@@ -139,25 +139,22 @@ describe("pluginsCliFailureMessage", () => {
 });
 
 describe("neonPluginsRetryCommand", () => {
-	test("names agents and user-level scope on the neon command", () => {
+	test("names user-level scope on the neon command", () => {
 		expect(
 			neonPluginsRetryCommand({
-				agents: ["cursor", "claude-code"],
 				global: true,
 			}),
-		).toBe("neon plugins --agent cursor --agent claude-code --global -y");
+		).toBe("neon plugins --global -y");
 	});
 
 	test("is the neon command, not npx", () => {
-		expect(
-			neonPluginsRetryCommand({ agents: ["cursor"], global: false }),
-		).toBe("neon plugins --agent cursor -y");
-		expect(
-			neonPluginsRetryCommand({ agents: ["cursor"], global: false }),
-		).not.toMatch(/npx /);
-		expect(
-			neonPluginsRetryCommand({ agents: ["cursor"], global: false }),
-		).not.toMatch(/neondatabase\//);
+		expect(neonPluginsRetryCommand({ global: false })).toBe(
+			"neon plugins -y",
+		);
+		expect(neonPluginsRetryCommand({ global: false })).not.toMatch(/npx /);
+		expect(neonPluginsRetryCommand({ global: false })).not.toMatch(
+			/neondatabase\//,
+		);
 	});
 });
 

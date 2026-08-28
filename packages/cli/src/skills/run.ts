@@ -95,15 +95,11 @@ export const skillsAddArgs = (options: {
 
 export const neonSkillsRetryCommand = (options: {
 	skills: readonly string[];
-	agents: readonly string[];
 	global: boolean;
 }): string => {
 	const args = ["skills"];
 	for (const skill of options.skills) {
 		args.push("-s", skill);
-	}
-	for (const agent of options.agents) {
-		args.push("--agent", agent);
 	}
 	if (options.global) {
 		args.push("--global");

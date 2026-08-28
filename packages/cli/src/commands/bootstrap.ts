@@ -41,7 +41,6 @@ type BootstrapProps = CommonProps & {
 	template?: string;
 	force: boolean;
 	listTemplates: boolean;
-	agent?: boolean;
 	default: boolean;
 	install: boolean;
 	git: boolean;
@@ -57,11 +56,7 @@ type BootstrapProps = CommonProps & {
 		cwd: string,
 	) => readonly AgentType[] | Promise<readonly AgentType[]>;
 	detectAgent?: () => AgentType | null;
-	detectInstalledAgents?: () => Promise<readonly AgentType[]>;
 };
-
-const removedAgent = () =>
-	`\`${getCliName()} bootstrap --agent\` was removed. List templates with \`${getCliName()} bootstrap --list-templates --output json\`. Scaffold with \`${getCliName()} bootstrap <directory> --template <id>\` or \`${getCliName()} bootstrap <directory> --default\`.`;
 
 // The directory positional is optional: omitting it in an interactive terminal
 // prompts for one. In a non-interactive context a missing directory is an error.
@@ -96,14 +91,10 @@ export const builder = (argv: yargs.Argv) =>
 				type: "boolean",
 				default: false,
 			},
-			agent: {
-				hidden: true,
-				type: "boolean",
-			},
 			default: {
 				alias: "y",
 				describe:
-					"Quick start: scaffold the default template (or --template), then install, git, agent tooling (project folders, else the host CLI agent, else installed apps; skipped if none), and link --yes. Skips those pickers; link --yes still asks for a project unless one is already linked",
+					"Quick start: scaffold the default template (or --template), then install, git, agent tooling (project folders, else the host CLI agent; exits if none), and link --yes. Skips those pickers; link --yes still asks for a project unless one is already linked",
 				type: "boolean",
 				default: false,
 			},
@@ -147,12 +138,6 @@ export const builder = (argv: yargs.Argv) =>
 			"$0 bootstrap --list-templates --output json",
 			"Print the template catalog as JSON",
 		)
-		.check((argv) => {
-			if (argv.agent === true) {
-				throw new Error(removedAgent());
-			}
-			return true;
-		})
 		.strict();
 
 export const handler = async (props: BootstrapProps): Promise<void> => {
@@ -387,9 +372,6 @@ const runPostScaffoldSteps = async (
 			? { detectProjectAgents: props.detectProjectAgents }
 			: {}),
 		...(props.detectAgent ? { detectAgent: props.detectAgent } : {}),
-		...(props.detectInstalledAgents
-			? { detectInstalledAgents: props.detectInstalledAgents }
-			: {}),
 	});
 
 	if (
@@ -453,9 +435,6 @@ const runDefaultSteps = async (
 			? { detectProjectAgents: props.detectProjectAgents }
 			: {}),
 		...(props.detectAgent ? { detectAgent: props.detectAgent } : {}),
-		...(props.detectInstalledAgents
-			? { detectInstalledAgents: props.detectInstalledAgents }
-			: {}),
 	});
 	printNextSteps(targetDir, pm, {
 		installed,

@@ -1,3 +1,5 @@
+import { detectAgent } from "../init/detect_host.js";
+import { collectYesAgents, noDetectedAgentsMessage } from "../init/plan.js";
 import {
 	agentChoicesFrom,
 	type PickAgentsOptions,
@@ -43,6 +45,7 @@ export type ResolveMcpPlanOptions = {
 		linkedProjectId: string,
 		willMintKey: boolean,
 	) => Promise<boolean>;
+	detectAgent?: () => AgentType | null;
 };
 
 export async function resolveMcpPlan(
@@ -56,17 +59,27 @@ export async function resolveMcpPlan(
 			: "global";
 
 	const available = mcpInstallableAgents(scope);
-	const detected = await detectMcpAgents({ scope, cwd: options.cwd });
+	const availableSet = new Set(available);
+	const scoped = await detectMcpAgents({ scope, cwd: options.cwd });
+	const detected =
+		options.yes && options.agents.length === 0
+			? await collectYesAgents({
+					detected: () => scoped,
+					detectAgent: options.detectAgent ?? detectAgent,
+					acceptHost: (id) => availableSet.has(id),
+				})
+			: scoped;
 	const agents = await resolveAgentSelection({
 		specified: options.agents,
 		choices: agentChoicesFrom(available, detected),
 		detected,
 		message:
 			"Which coding agents should get the Neon MCP server? (space to toggle, enter to confirm)",
-		nonInteractiveMessage:
-			scope === "project"
-				? `No coding agents detected in this project. Pass --agent <name>. Supported agents: ${available.join(", ")}`
-				: `No coding agents detected. Pass --agent <name>. Supported agents: ${available.join(", ")}`,
+		nonInteractiveMessage: noDetectedAgentsMessage({
+			scope,
+			supported: available,
+			fix: options.yes ? "run-without-yes" : "pass-yes",
+		}),
 		resolveSpecified: (raw) => {
 			const id = tryResolveAddMcpAgentId(raw);
 			if (!id) {

@@ -58,13 +58,9 @@ export const pluginsAddArgs = (options: {
 };
 
 export const neonPluginsRetryCommand = (options: {
-	agents: readonly string[];
 	global: boolean;
 }): string => {
 	const args = ["plugins"];
-	for (const agent of options.agents) {
-		args.push("--agent", agent);
-	}
 	if (options.global) {
 		args.push("--global");
 	}

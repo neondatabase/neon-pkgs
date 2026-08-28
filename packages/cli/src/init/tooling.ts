@@ -3,7 +3,6 @@ import { log } from "../log.js";
 import type { AgentType } from "../mcp/agents.js";
 import { canPickAgentsInteractively } from "../utils/agent_picker.js";
 import { getCliName } from "../utils/cli_name.js";
-import { detectInstalledAgents } from "./agents.js";
 import { AUTH_CHILD, type InitRun } from "./child.js";
 import { detectAgent } from "./detect_host.js";
 import {
@@ -13,6 +12,8 @@ import {
 	collectYesAgents,
 	type InitAgentSetup,
 	type InitStep,
+	initYesSupportedAgents,
+	noDetectedAgentsMessage,
 	planAgentSteps,
 	planYesAgentSteps,
 	resolveInitAgentSetup,
@@ -24,7 +25,6 @@ export type AgentDetectors = {
 		cwd: string,
 	) => readonly AgentType[] | Promise<readonly AgentType[]>;
 	detectAgent?: () => AgentType | null;
-	detectInstalledAgents?: () => Promise<readonly AgentType[]>;
 };
 
 export type AgentToolingOptions = AgentDetectors & {
@@ -69,11 +69,19 @@ const yesAgentsFromOptions = async (
 	options: AgentToolingOptions,
 ): Promise<readonly AgentType[]> =>
 	collectYesAgents({
-		project: () =>
+		detected: () =>
 			(options.detectProjectAgents ?? defaultProjectAgents)(options.cwd),
 		detectAgent: options.detectAgent ?? detectAgent,
-		detectInstalled: options.detectInstalledAgents ?? detectInstalledAgents,
 	});
+
+const yesMiss = (): Error =>
+	new Error(
+		noDetectedAgentsMessage({
+			scope: "project",
+			supported: initYesSupportedAgents(),
+			fix: "run-without-yes",
+		}),
+	);
 
 export const runAgentTooling = async (
 	options: AgentToolingOptions,
@@ -83,8 +91,7 @@ export const runAgentTooling = async (
 		const agents = await yesAgentsFromOptions(options);
 		const tooling = chooseYesAgentTooling(agents);
 		if (tooling.setup === "skip") {
-			log.info("No coding agents detected; skipped agent setup.");
-			return;
+			throw yesMiss();
 		}
 		await runInitSteps(planYesAgentSteps(tooling), options);
 		return;

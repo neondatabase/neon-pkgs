@@ -68,6 +68,10 @@ package's file before changing it:
 | [`@neon/env`](./packages/env/CONTRIBUTING.md) | Why the credential-reuse half lives in `internals/env-core` rather than on the published surface, and the branch-credential rules |
 | [`neon` CLI](./packages/cli/CONTRIBUTING.md) | Human `-o table` output: no boxes, TTY-aware columns |
 
+## CLI for agents
+
+`--help` lists every value an enum flag accepts. If `-y` cannot decide, the error names the flag (and values) to pass. Every command exposes flags for every interactive question so it can run with no TTY (`--project-id`, `--skill`, `--global`, `--oauth`, `--project`, `--template`, …). Coding-agent targeting is detection on `-y`, or the picker without `-y`. Details: [`AGENTS.md`](./AGENTS.md) (CLI package) and [`packages/cli/AGENTS.md`](./packages/cli/AGENTS.md). Table output: [`packages/cli/CONTRIBUTING.md`](./packages/cli/CONTRIBUTING.md).
+
 ## Testing
 
 The standard suite uses [Vitest](https://vitest.dev/) and does not call live Neon services:
