@@ -67,6 +67,34 @@ describe("generated operation coverage", () => {
 		}
 	});
 
+	test("published catalog tools are closed-world", () => {
+		for (const id of toolIds) {
+			expect(
+				createNeonTool(id, { apiKey: "test-key" }).annotations
+					.openWorldHint,
+				id,
+			).toBe(false);
+		}
+	});
+
+	test("raw operations that send mail are open-world", () => {
+		const client = createNeonClient({ apiKey: "unused" }).client;
+		for (const operationId of [
+			"createOrganizationInvitations",
+			"sendNeonAuthEmailProviderTest",
+			"sendNeonAuthTestEmail",
+		] as const) {
+			expect(
+				operationFactories[operationId](client).annotations
+					.openWorldHint,
+				operationId,
+			).toBe(true);
+		}
+		expect(
+			operationFactories.listProjects(client).annotations.openWorldHint,
+		).toBe(false);
+	});
+
 	test("requires approval for mutations and treats logs.query as a read", () => {
 		const deleteProject = createNeonTool("projects.delete", {
 			apiKey: "test-key",
