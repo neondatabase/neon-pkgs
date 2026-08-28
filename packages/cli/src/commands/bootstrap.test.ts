@@ -352,6 +352,7 @@ describe("bootstrap", () => {
 		expect(flat).toContain("host CLI agent");
 		expect(flat).toContain("omit --default in a terminal");
 		expect(flat).toMatch(/passed to plugins\s*,\s*skills, and mcp/i);
+		expect(flat).toMatch(/skips agent selection/i);
 		expect(stderr).toMatch(/(?<![-\w])--agent(?![-\w])/);
 	});
 

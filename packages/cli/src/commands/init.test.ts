@@ -563,6 +563,26 @@ describe("init handler", () => {
 		expect(run).toHaveBeenCalledTimes(1);
 	});
 
+	test("named --agent cursor and vscode fails instead of dropping vscode", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-mixed-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					run,
+					yes: true,
+					agent: ["cursor", "vscode"],
+					contextFile: join(cwd, ".neon"),
+				}),
+			),
+		).rejects.toThrow(/plugin and skills\/MCP/);
+		expect(run).not.toHaveBeenCalled();
+	});
+
 	test("unknown --agent fails before children", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-bad-agent-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");

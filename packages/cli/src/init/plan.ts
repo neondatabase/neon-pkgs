@@ -164,6 +164,8 @@ const BOOLEAN_FLAGS = new Set([
 	"--no-link",
 	"--list",
 	"--list-templates",
+	"--force-auth",
+	"--no-force-auth",
 ]);
 
 const isUnknownAgentCommand = (token: string): token is UnknownAgentCommand => {
@@ -282,6 +284,28 @@ export const planYesAgentSteps = (tooling: YesAgentTooling): InitStep[] =>
 
 export const NAMED_AGENTS_UNSUPPORTED =
 	"None of the selected agents can install the Neon plugin, skills, or MCP.";
+
+export const NAMED_AGENTS_MIXED =
+	"Cannot install the plugin and skills/MCP in one run. Pass --agent for plugin agents or for skills/MCP agents, not both.";
+
+export const namedAgentsNeedSplit = (
+	named: readonly AgentType[],
+	tooling: YesAgentTooling,
+): boolean => {
+	if (tooling.setup === "skip") {
+		return false;
+	}
+	if (tooling.setup === "plugin") {
+		const used = new Set<AgentType>(tooling.agents);
+		const leftover = named.filter((id) => !used.has(id));
+		return chooseYesAgentTooling(leftover).setup !== "skip";
+	}
+	const used = new Set<AgentType>([
+		...tooling.skillsAgents,
+		...tooling.mcpAgents,
+	]);
+	return named.some((id) => !used.has(id));
+};
 
 export const resolveNamedAgents = (raw: readonly string[]): AgentType[] => {
 	if (raw.length === 0) {

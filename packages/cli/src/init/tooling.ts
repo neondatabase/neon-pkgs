@@ -13,7 +13,9 @@ import {
 	type InitAgentSetup,
 	type InitStep,
 	initYesSupportedAgents,
+	NAMED_AGENTS_MIXED,
 	NAMED_AGENTS_UNSUPPORTED,
+	namedAgentsNeedSplit,
 	noDetectedAgentsMessage,
 	planAgentSteps,
 	planToolingSteps,
@@ -101,6 +103,9 @@ export const runAgentTooling = async (
 		const tooling = chooseYesAgentTooling(named);
 		if (tooling.setup === "skip") {
 			throw namedMiss();
+		}
+		if (namedAgentsNeedSplit(named, tooling)) {
+			throw new Error(NAMED_AGENTS_MIXED);
 		}
 		await runInitSteps(
 			planToolingSteps(tooling, { yes, named: true }),

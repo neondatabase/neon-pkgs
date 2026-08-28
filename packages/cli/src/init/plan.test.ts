@@ -9,6 +9,7 @@ import {
 	collectYesAgents,
 	directoryIsEmpty,
 	initYesSupportedAgents,
+	namedAgentsNeedSplit,
 	noDetectedAgentsMessage,
 	planAgentSteps,
 	planExistingInit,
@@ -299,6 +300,22 @@ describe("rewriteUnknownAgentArg", () => {
 		).toBe(
 			"neon link has no --agent. Pass --project-id <id> to link without a TTY, or run neon link in a terminal.",
 		);
+		expect(
+			rewriteUnknownAgentArg({
+				message: "Unknown argument: agent",
+				argv: [
+					"node",
+					"cli.js",
+					"--force-auth",
+					"link",
+					"--agent",
+					"cursor",
+				],
+				cliName: "neon",
+			}),
+		).toBe(
+			"neon link has no --agent. Pass --project-id <id> to link without a TTY, or run neon link in a terminal.",
+		);
 	});
 
 	test("does not rewrite skills, plugins, mcp, init, or bootstrap", () => {
@@ -456,6 +473,27 @@ describe("chooseYesAgentTooling", () => {
 			skillsAgents: ["windsurf"],
 			mcpAgents: ["windsurf"],
 		});
+	});
+});
+
+describe("namedAgentsNeedSplit", () => {
+	test("plugin-only names do not split", () => {
+		const tooling = chooseYesAgentTooling(["cursor", "claude-code"]);
+		expect(namedAgentsNeedSplit(["cursor", "claude-code"], tooling)).toBe(
+			false,
+		);
+	});
+
+	test("cursor plus vscode splits plugin from skills", () => {
+		const tooling = chooseYesAgentTooling(["cursor", "vscode"]);
+		expect(namedAgentsNeedSplit(["cursor", "vscode"], tooling)).toBe(true);
+	});
+
+	test("vscode plus mcporter does not split", () => {
+		const tooling = chooseYesAgentTooling(["vscode", "mcporter"]);
+		expect(namedAgentsNeedSplit(["vscode", "mcporter"], tooling)).toBe(
+			false,
+		);
 	});
 });
 

@@ -185,4 +185,18 @@ describe("runAgentTooling", () => {
 			"vscode",
 		]);
 	});
+
+	test("named cursor plus vscode fails instead of dropping vscode", async () => {
+		const run = vi.fn().mockResolvedValue(true);
+		await expect(
+			runAgentTooling({
+				cwd: "/app",
+				yes: true,
+				run,
+				forward,
+				agents: ["cursor", "vscode"],
+			}),
+		).rejects.toThrow(/plugin and skills\/MCP/);
+		expect(run).not.toHaveBeenCalled();
+	});
 });
