@@ -31,11 +31,12 @@ const approvalRequiredReads = new Set([
 	"listNeonAuthOauthProviders",
 ]);
 
-// Invitation and auth-test operations deliver mail outside the authenticated account.
+// These operations deliver or schedule mail outside the authenticated account.
 const openWorldOperations = new Set([
 	"createOrganizationInvitations",
 	"sendNeonAuthEmailProviderTest",
 	"sendNeonAuthTestEmail",
+	"setOrganizationSpendingLimit",
 ]);
 
 const resolveReference = (reference) => {

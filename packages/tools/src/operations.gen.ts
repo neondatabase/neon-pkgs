@@ -4595,7 +4595,7 @@ export const operationFactories = {
 	"org_id": zod.zSetOrganizationSpendingLimitPath.shape["org_id"],
 	"spending_limit_cents": zod.zSetOrganizationSpendingLimitBody.shape["spending_limit_cents"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
 				requiresApproval: true,
 				metadata: {
 					method: "PUT",

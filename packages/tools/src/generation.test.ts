@@ -83,6 +83,7 @@ describe("generated operation coverage", () => {
 			"createOrganizationInvitations",
 			"sendNeonAuthEmailProviderTest",
 			"sendNeonAuthTestEmail",
+			"setOrganizationSpendingLimit",
 		] as const) {
 			expect(
 				operationFactories[operationId](client).annotations
