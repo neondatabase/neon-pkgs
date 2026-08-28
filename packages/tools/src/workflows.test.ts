@@ -195,7 +195,7 @@ describe("branches.createAndConnect", () => {
 		expect(tools["branches.createAndConnect"].annotations).toEqual({
 			readOnlyHint: false,
 			destructiveHint: true,
-			openWorldHint: true,
+			openWorldHint: false,
 		});
 	});
 

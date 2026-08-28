@@ -26,7 +26,7 @@ const logReadAnnotations = {
 	readOnlyHint: true,
 	destructiveHint: false,
 	idempotentHint: true,
-	openWorldHint: true,
+	openWorldHint: false,
 } as const;
 
 export type ToolFactory = (typeof toolFactories)[NeonToolId];
@@ -1248,7 +1248,7 @@ export const toolFactories = {
 				description:
 					"Lists Neon regions available to the authenticated account.",
 				inputSchema: z.strictObject({}),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",

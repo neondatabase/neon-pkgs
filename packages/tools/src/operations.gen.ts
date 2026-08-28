@@ -195,7 +195,7 @@ export const operationFactories = {
 	"request_id": zod.zAcceptProjectTransferRequestPath.shape["request_id"],
 	"org_id": zod.zAcceptProjectTransferRequestBody.shape["org_id"].optional(),
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "PUT",
@@ -230,7 +230,7 @@ export const operationFactories = {
 	"client_secret": zod.zAddBranchNeonAuthOauthProviderBody.shape["client_secret"],
 	"microsoft_tenant_id": zod.zAddBranchNeonAuthOauthProviderBody.shape["microsoft_tenant_id"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -263,7 +263,7 @@ export const operationFactories = {
 	"domain": zod.zAddBranchNeonAuthTrustedDomainBody.shape["domain"],
 	"auth_provider": zod.zAddBranchNeonAuthTrustedDomainBody.shape["auth_provider"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -295,7 +295,7 @@ export const operationFactories = {
 	"domain": zod.zAddNeonAuthDomainToRedirectUriWhitelistBody.shape["domain"],
 	"auth_provider": zod.zAddNeonAuthDomainToRedirectUriWhitelistBody.shape["auth_provider"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -329,7 +329,7 @@ export const operationFactories = {
 	"client_secret": zod.zAddNeonAuthOauthProviderBody.shape["client_secret"],
 	"microsoft_tenant_id": zod.zAddNeonAuthOauthProviderBody.shape["microsoft_tenant_id"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -365,7 +365,7 @@ export const operationFactories = {
 	"role_names": zod.zAddProjectJwksBody.shape["role_names"],
 	"skip_role_creation": zod.zAddProjectJwksBody.shape["skip_role_creation"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -398,7 +398,7 @@ export const operationFactories = {
 	"vpc_endpoint_id": zod.zAssignOrganizationVpcEndpointPath.shape["vpc_endpoint_id"],
 	"label": zod.zAssignOrganizationVpcEndpointBody.shape["label"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -430,7 +430,7 @@ export const operationFactories = {
 	"vpc_endpoint_id": zod.zAssignProjectVpcEndpointPath.shape["vpc_endpoint_id"],
 	"label": zod.zAssignProjectVpcEndpointBody.shape["label"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -461,7 +461,7 @@ export const operationFactories = {
 	"project_id": zod.zCountProjectBranchesPath.shape["project_id"],
 	"search": zod.zCountProjectBranchesQuery.shape["search"].optional(),
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -491,7 +491,7 @@ export const operationFactories = {
 				inputSchema: z.strictObject({
 	"key_name": zod.zCreateApiKeyBody.shape["key_name"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -523,7 +523,7 @@ export const operationFactories = {
 	"email": zod.zCreateBranchNeonAuthNewUserBody.shape["email"],
 	"name": zod.zCreateBranchNeonAuthNewUserBody.shape["name"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -557,7 +557,7 @@ export const operationFactories = {
 	"scopes": zod.zCreateCredentialBody.shape["scopes"],
 	"principal_type": zod.zCreateCredentialBody.shape["principal_type"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -590,7 +590,7 @@ export const operationFactories = {
 	"auth_provider": zod.zCreateNeonAuthBody.shape["auth_provider"],
 	"database_name": zod.zCreateNeonAuthBody.shape["database_name"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -624,7 +624,7 @@ export const operationFactories = {
 	"database_name": zod.zCreateNeonAuthIntegrationBody.shape["database_name"],
 	"role_name": zod.zCreateNeonAuthIntegrationBody.shape["role_name"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -656,7 +656,7 @@ export const operationFactories = {
 	"email": zod.zCreateNeonAuthNewUserBody.shape["email"],
 	"name": zod.zCreateNeonAuthNewUserBody.shape["name"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -686,7 +686,7 @@ export const operationFactories = {
 	"project_id": zod.zCreateNeonAuthProviderSdkKeysBody.shape["project_id"],
 	"auth_provider": zod.zCreateNeonAuthProviderSdkKeysBody.shape["auth_provider"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -748,7 +748,7 @@ export const operationFactories = {
 	"key_name": zod.zCreateOrgApiKeyBody.shape["key_name"],
 	"project_id": zod.zCreateOrgApiKeyBody.shape["project_id"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -789,7 +789,7 @@ export const operationFactories = {
 	"history_retention_seconds": zod.zCreateProjectBody.shape["project"].shape["history_retention_seconds"],
 	"org_id": zod.zCreateProjectBody.shape["project"].shape["org_id"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -821,7 +821,7 @@ export const operationFactories = {
 	"branch": zod.zCreateProjectBranchBody.shape["branch"].optional(),
 	"annotation_value": zod.zCreateProjectBranchBody.shape["annotation_value"].optional(),
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -855,7 +855,7 @@ export const operationFactories = {
 	"masking_rules": zod.zCreateProjectBranchAnonymizedBody.shape["masking_rules"],
 	"start_anonymization": zod.zCreateProjectBranchAnonymizedBody.shape["start_anonymization"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -888,7 +888,7 @@ export const operationFactories = {
 	"name": zod.zCreateProjectBranchBucketBody.shape["name"],
 	"access_level": zod.zCreateProjectBranchBucketBody.shape["access_level"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -927,7 +927,7 @@ export const operationFactories = {
 	"skip_auth_schema": zod.zCreateProjectBranchDataApiBody.shape["skip_auth_schema"].optional(),
 	"settings": zod.zCreateProjectBranchDataApiBody.shape["settings"].optional(),
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -960,7 +960,7 @@ export const operationFactories = {
 	"name": zod.zCreateProjectBranchDatabaseBody.shape["database"].shape["name"],
 	"owner_name": zod.zCreateProjectBranchDatabaseBody.shape["database"].shape["owner_name"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -995,7 +995,7 @@ export const operationFactories = {
 	"runtime": zod.zCreateProjectBranchFunctionDeploymentBody.shape["runtime"],
 	"environment": zod.zCreateProjectBranchFunctionDeploymentBody.shape["environment"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -1028,7 +1028,7 @@ export const operationFactories = {
 	"name": zod.zCreateProjectBranchRoleBody.shape["role"].shape["name"],
 	"no_login": zod.zCreateProjectBranchRoleBody.shape["role"].shape["no_login"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -1071,7 +1071,7 @@ export const operationFactories = {
 	"suspend_timeout_seconds": zod.zCreateProjectEndpointBody.shape["endpoint"].shape["suspend_timeout_seconds"],
 	"name": zod.zCreateProjectEndpointBody.shape["endpoint"].shape["name"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -1102,7 +1102,7 @@ export const operationFactories = {
 	"project_id": zod.zCreateProjectTransferRequestPath.shape["project_id"],
 	"ttl_seconds": zod.zCreateProjectTransferRequestBody.shape["ttl_seconds"].optional(),
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -1137,7 +1137,7 @@ export const operationFactories = {
 	"name": zod.zCreateSnapshotQuery.shape["name"].optional(),
 	"expires_at": zod.zCreateSnapshotQuery.shape["expires_at"].optional(),
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -1169,7 +1169,7 @@ export const operationFactories = {
 	"branch_id": zod.zDeleteBranchNeonAuthOauthProviderPath.shape["branch_id"],
 	"oauth_provider_id": zod.zDeleteBranchNeonAuthOauthProviderPath.shape["oauth_provider_id"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "DELETE",
@@ -1201,7 +1201,7 @@ export const operationFactories = {
 	"auth_provider": zod.zDeleteBranchNeonAuthTrustedDomainBody.shape["auth_provider"],
 	"domains": zod.zDeleteBranchNeonAuthTrustedDomainBody.shape["domains"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "DELETE",
@@ -1233,7 +1233,7 @@ export const operationFactories = {
 	"branch_id": zod.zDeleteBranchNeonAuthUserPath.shape["branch_id"],
 	"auth_user_id": zod.zDeleteBranchNeonAuthUserPath.shape["auth_user_id"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "DELETE",
@@ -1264,7 +1264,7 @@ export const operationFactories = {
 	"auth_provider": zod.zDeleteNeonAuthDomainFromRedirectUriWhitelistBody.shape["auth_provider"],
 	"domains": zod.zDeleteNeonAuthDomainFromRedirectUriWhitelistBody.shape["domains"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "DELETE",
@@ -1296,7 +1296,7 @@ export const operationFactories = {
 	"auth_provider": zod.zDeleteNeonAuthIntegrationPath.shape["auth_provider"],
 	"delete_data": zod.zDeleteNeonAuthIntegrationBody.shape["delete_data"].optional(),
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "DELETE",
@@ -1327,7 +1327,7 @@ export const operationFactories = {
 	"project_id": zod.zDeleteNeonAuthOauthProviderPath.shape["project_id"],
 	"oauth_provider_id": zod.zDeleteNeonAuthOauthProviderPath.shape["oauth_provider_id"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "DELETE",
@@ -1357,7 +1357,7 @@ export const operationFactories = {
 	"project_id": zod.zDeleteNeonAuthUserPath.shape["project_id"],
 	"auth_user_id": zod.zDeleteNeonAuthUserPath.shape["auth_user_id"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "DELETE",
@@ -1386,7 +1386,7 @@ export const operationFactories = {
 				inputSchema: z.strictObject({
 	"org_id": zod.zDeleteOrganizationSpendingLimitPath.shape["org_id"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "DELETE",
@@ -1417,7 +1417,7 @@ export const operationFactories = {
 	"region_id": zod.zDeleteOrganizationVpcEndpointPath.shape["region_id"],
 	"vpc_endpoint_id": zod.zDeleteOrganizationVpcEndpointPath.shape["vpc_endpoint_id"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "DELETE",
@@ -1446,7 +1446,7 @@ export const operationFactories = {
 				inputSchema: z.strictObject({
 	"project_id": zod.zDeleteProjectPath.shape["project_id"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "DELETE",
@@ -1477,7 +1477,7 @@ export const operationFactories = {
 	"branch_id": zod.zDeleteProjectBranchPath.shape["branch_id"],
 	"hard_delete": zod.zDeleteProjectBranchQuery.shape["hard_delete"].optional(),
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "DELETE",
@@ -1509,7 +1509,7 @@ export const operationFactories = {
 	"branch_id": zod.zDeleteProjectBranchBucketPath.shape["branch_id"],
 	"bucket_name": zod.zDeleteProjectBranchBucketPath.shape["bucket_name"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "DELETE",
@@ -1541,7 +1541,7 @@ export const operationFactories = {
 	"bucket_name": zod.zDeleteProjectBranchBucketObjectPath.shape["bucket_name"],
 	"object_key": zod.zDeleteProjectBranchBucketObjectPath.shape["object_key"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "DELETE",
@@ -1573,7 +1573,7 @@ export const operationFactories = {
 	"bucket_name": zod.zDeleteProjectBranchBucketObjectsByPrefixPath.shape["bucket_name"],
 	"prefix": zod.zDeleteProjectBranchBucketObjectsByPrefixQuery.shape["prefix"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "DELETE",
@@ -1605,7 +1605,7 @@ export const operationFactories = {
 	"branch_id": zod.zDeleteProjectBranchDataApiPath.shape["branch_id"],
 	"database_name": zod.zDeleteProjectBranchDataApiPath.shape["database_name"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "DELETE",
@@ -1636,7 +1636,7 @@ export const operationFactories = {
 	"branch_id": zod.zDeleteProjectBranchDatabasePath.shape["branch_id"],
 	"database_name": zod.zDeleteProjectBranchDatabasePath.shape["database_name"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "DELETE",
@@ -1667,7 +1667,7 @@ export const operationFactories = {
 	"branch_id": zod.zDeleteProjectBranchFunctionPath.shape["branch_id"],
 	"slug": zod.zDeleteProjectBranchFunctionPath.shape["slug"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "DELETE",
@@ -1698,7 +1698,7 @@ export const operationFactories = {
 	"branch_id": zod.zDeleteProjectBranchRolePath.shape["branch_id"],
 	"role_name": zod.zDeleteProjectBranchRolePath.shape["role_name"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "DELETE",
@@ -1728,7 +1728,7 @@ export const operationFactories = {
 	"project_id": zod.zDeleteProjectEndpointPath.shape["project_id"],
 	"endpoint_id": zod.zDeleteProjectEndpointPath.shape["endpoint_id"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "DELETE",
@@ -1758,7 +1758,7 @@ export const operationFactories = {
 	"project_id": zod.zDeleteProjectJwksPath.shape["project_id"],
 	"jwks_id": zod.zDeleteProjectJwksPath.shape["jwks_id"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "DELETE",
@@ -1788,7 +1788,7 @@ export const operationFactories = {
 	"project_id": zod.zDeleteProjectVpcEndpointPath.shape["project_id"],
 	"vpc_endpoint_id": zod.zDeleteProjectVpcEndpointPath.shape["vpc_endpoint_id"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "DELETE",
@@ -1818,7 +1818,7 @@ export const operationFactories = {
 	"project_id": zod.zDeleteSnapshotPath.shape["project_id"],
 	"snapshot_id": zod.zDeleteSnapshotPath.shape["snapshot_id"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "DELETE",
@@ -1849,7 +1849,7 @@ export const operationFactories = {
 	"branch_id": zod.zDisableNeonAuthPath.shape["branch_id"],
 	"delete_data": zod.zDisableNeonAuthBody.shape["delete_data"].optional(),
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "DELETE",
@@ -1881,7 +1881,7 @@ export const operationFactories = {
 	"branch_id": zod.zFinalizeRestoreBranchPath.shape["branch_id"],
 	"name": zod.zFinalizeRestoreBranchBody.shape["name"].optional(),
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -1911,7 +1911,7 @@ export const operationFactories = {
 				inputSchema: z.strictObject({
 	"org_id": zod.zGetActiveRegionsQuery.shape["org_id"].optional(),
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -1941,7 +1941,7 @@ export const operationFactories = {
 	"project_id": zod.zGetAnonymizedBranchStatusPath.shape["project_id"],
 	"branch_id": zod.zGetAnonymizedBranchStatusPath.shape["branch_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -1970,7 +1970,7 @@ export const operationFactories = {
 				inputSchema: z.strictObject({
 
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -1998,7 +1998,7 @@ export const operationFactories = {
 				inputSchema: z.strictObject({
 	"project_id": zod.zGetAvailablePreloadLibrariesPath.shape["project_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2032,7 +2032,7 @@ export const operationFactories = {
 	"role_name": zod.zGetConnectionUriQuery.shape["role_name"],
 	"pooled": zod.zGetConnectionUriQuery.shape["pooled"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "GET",
@@ -2070,7 +2070,7 @@ export const operationFactories = {
 	"org_id": zod.zGetConsumptionHistoryPerBranchV2Query.shape["org_id"],
 	"metrics": zod.zGetConsumptionHistoryPerBranchV2Query.shape["metrics"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2107,7 +2107,7 @@ export const operationFactories = {
 	"include_v1_metrics": zod.zGetConsumptionHistoryPerProjectQuery.shape["include_v1_metrics"],
 	"metrics": zod.zGetConsumptionHistoryPerProjectQuery.shape["metrics"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2143,7 +2143,7 @@ export const operationFactories = {
 	"org_id": zod.zGetConsumptionHistoryPerProjectV2Query.shape["org_id"],
 	"metrics": zod.zGetConsumptionHistoryPerProjectV2Query.shape["metrics"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2172,7 +2172,7 @@ export const operationFactories = {
 				inputSchema: z.strictObject({
 
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2200,7 +2200,7 @@ export const operationFactories = {
 				inputSchema: z.strictObject({
 
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2229,7 +2229,7 @@ export const operationFactories = {
 	"project_id": zod.zGetMaskingRulesPath.shape["project_id"],
 	"branch_id": zod.zGetMaskingRulesPath.shape["branch_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2259,7 +2259,7 @@ export const operationFactories = {
 	"project_id": zod.zGetNeonAuthPath.shape["project_id"],
 	"branch_id": zod.zGetNeonAuthPath.shape["branch_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2289,7 +2289,7 @@ export const operationFactories = {
 	"project_id": zod.zGetNeonAuthAllowLocalhostPath.shape["project_id"],
 	"branch_id": zod.zGetNeonAuthAllowLocalhostPath.shape["branch_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2319,7 +2319,7 @@ export const operationFactories = {
 	"project_id": zod.zGetNeonAuthEmailAndPasswordConfigPath.shape["project_id"],
 	"branch_id": zod.zGetNeonAuthEmailAndPasswordConfigPath.shape["branch_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2349,7 +2349,7 @@ export const operationFactories = {
 	"project_id": zod.zGetNeonAuthEmailProviderPath.shape["project_id"],
 	"branch_id": zod.zGetNeonAuthEmailProviderPath.shape["branch_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "GET",
@@ -2378,7 +2378,7 @@ export const operationFactories = {
 				inputSchema: z.strictObject({
 	"project_id": zod.zGetNeonAuthEmailServerPath.shape["project_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "GET",
@@ -2408,7 +2408,7 @@ export const operationFactories = {
 	"project_id": zod.zGetNeonAuthPhoneNumberPluginPath.shape["project_id"],
 	"branch_id": zod.zGetNeonAuthPhoneNumberPluginPath.shape["branch_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2438,7 +2438,7 @@ export const operationFactories = {
 	"project_id": zod.zGetNeonAuthPluginConfigsPath.shape["project_id"],
 	"branch_id": zod.zGetNeonAuthPluginConfigsPath.shape["branch_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "GET",
@@ -2468,7 +2468,7 @@ export const operationFactories = {
 	"project_id": zod.zGetNeonAuthWebhookConfigPath.shape["project_id"],
 	"branch_id": zod.zGetNeonAuthWebhookConfigPath.shape["branch_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2497,7 +2497,7 @@ export const operationFactories = {
 				inputSchema: z.strictObject({
 	"org_id": zod.zGetOrganizationPath.shape["org_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2526,7 +2526,7 @@ export const operationFactories = {
 				inputSchema: z.strictObject({
 	"org_id": zod.zGetOrganizationInvitationsPath.shape["org_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2556,7 +2556,7 @@ export const operationFactories = {
 	"org_id": zod.zGetOrganizationMemberPath.shape["org_id"],
 	"member_id": zod.zGetOrganizationMemberPath.shape["member_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2589,7 +2589,7 @@ export const operationFactories = {
 	"sort_order": zod.zGetOrganizationMembersQuery.shape["sort_order"].optional(),
 	"limit": zod.zGetOrganizationMembersQuery.shape["limit"].optional(),
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2619,7 +2619,7 @@ export const operationFactories = {
 				inputSchema: z.strictObject({
 	"org_id": zod.zGetOrganizationSpendingLimitPath.shape["org_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2650,7 +2650,7 @@ export const operationFactories = {
 	"region_id": zod.zGetOrganizationVpcEndpointDetailsPath.shape["region_id"],
 	"vpc_endpoint_id": zod.zGetOrganizationVpcEndpointDetailsPath.shape["vpc_endpoint_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2679,7 +2679,7 @@ export const operationFactories = {
 				inputSchema: z.strictObject({
 	"project_id": zod.zGetProjectPath.shape["project_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2712,7 +2712,7 @@ export const operationFactories = {
 	"category": zod.zGetProjectAdvisorSecurityIssuesQuery.shape["category"].optional(),
 	"min_severity": zod.zGetProjectAdvisorSecurityIssuesQuery.shape["min_severity"].optional(),
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2743,7 +2743,7 @@ export const operationFactories = {
 	"project_id": zod.zGetProjectBranchPath.shape["project_id"],
 	"branch_id": zod.zGetProjectBranchPath.shape["branch_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2773,7 +2773,7 @@ export const operationFactories = {
 	"project_id": zod.zGetProjectBranchAiGatewayPath.shape["project_id"],
 	"branch_id": zod.zGetProjectBranchAiGatewayPath.shape["branch_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2805,7 +2805,7 @@ export const operationFactories = {
 	"bucket_name": zod.zGetProjectBranchBucketObjectPath.shape["bucket_name"],
 	"object_key": zod.zGetProjectBranchBucketObjectPath.shape["object_key"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2836,7 +2836,7 @@ export const operationFactories = {
 	"branch_id": zod.zGetProjectBranchDataApiPath.shape["branch_id"],
 	"database_name": zod.zGetProjectBranchDataApiPath.shape["database_name"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2867,7 +2867,7 @@ export const operationFactories = {
 	"branch_id": zod.zGetProjectBranchDatabasePath.shape["branch_id"],
 	"database_name": zod.zGetProjectBranchDatabasePath.shape["database_name"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2898,7 +2898,7 @@ export const operationFactories = {
 	"branch_id": zod.zGetProjectBranchFunctionPath.shape["branch_id"],
 	"slug": zod.zGetProjectBranchFunctionPath.shape["slug"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2929,7 +2929,7 @@ export const operationFactories = {
 	"branch_id": zod.zGetProjectBranchRolePath.shape["branch_id"],
 	"role_name": zod.zGetProjectBranchRolePath.shape["role_name"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -2960,7 +2960,7 @@ export const operationFactories = {
 	"branch_id": zod.zGetProjectBranchRolePasswordPath.shape["branch_id"],
 	"role_name": zod.zGetProjectBranchRolePasswordPath.shape["role_name"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "GET",
@@ -2994,7 +2994,7 @@ export const operationFactories = {
 	"timestamp": zod.zGetProjectBranchSchemaQuery.shape["timestamp"],
 	"format": zod.zGetProjectBranchSchemaQuery.shape["format"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3031,7 +3031,7 @@ export const operationFactories = {
 	"base_lsn": zod.zGetProjectBranchSchemaComparisonQuery.shape["base_lsn"],
 	"base_timestamp": zod.zGetProjectBranchSchemaComparisonQuery.shape["base_timestamp"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3062,7 +3062,7 @@ export const operationFactories = {
 	"project_id": zod.zGetProjectBranchStoragePath.shape["project_id"],
 	"branch_id": zod.zGetProjectBranchStoragePath.shape["branch_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3092,7 +3092,7 @@ export const operationFactories = {
 	"project_id": zod.zGetProjectEndpointPath.shape["project_id"],
 	"endpoint_id": zod.zGetProjectEndpointPath.shape["endpoint_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3121,7 +3121,7 @@ export const operationFactories = {
 				inputSchema: z.strictObject({
 	"project_id": zod.zGetProjectJwksPath.shape["project_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3151,7 +3151,7 @@ export const operationFactories = {
 	"project_id": zod.zGetProjectOperationPath.shape["project_id"],
 	"operation_id": zod.zGetProjectOperationPath.shape["operation_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3181,7 +3181,7 @@ export const operationFactories = {
 	"project_id": zod.zGetSnapshotSchedulePath.shape["project_id"],
 	"branch_id": zod.zGetSnapshotSchedulePath.shape["branch_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3211,7 +3211,7 @@ export const operationFactories = {
 	"project_id": zod.zGrantPermissionToProjectPath.shape["project_id"],
 	"email": zod.zGrantPermissionToProjectBody.shape["email"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -3241,7 +3241,7 @@ export const operationFactories = {
 				inputSchema: z.strictObject({
 
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3270,7 +3270,7 @@ export const operationFactories = {
 	"project_id": zod.zListBranchNeonAuthOauthProvidersPath.shape["project_id"],
 	"branch_id": zod.zListBranchNeonAuthOauthProvidersPath.shape["branch_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "GET",
@@ -3300,7 +3300,7 @@ export const operationFactories = {
 	"project_id": zod.zListBranchNeonAuthTrustedDomainsPath.shape["project_id"],
 	"branch_id": zod.zListBranchNeonAuthTrustedDomainsPath.shape["branch_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3330,7 +3330,7 @@ export const operationFactories = {
 	"project_id": zod.zListCredentialsPath.shape["project_id"],
 	"branch_id": zod.zListCredentialsPath.shape["branch_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3359,7 +3359,7 @@ export const operationFactories = {
 				inputSchema: z.strictObject({
 	"project_id": zod.zListNeonAuthIntegrationsPath.shape["project_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3388,7 +3388,7 @@ export const operationFactories = {
 				inputSchema: z.strictObject({
 	"project_id": zod.zListNeonAuthOauthProvidersPath.shape["project_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "GET",
@@ -3417,7 +3417,7 @@ export const operationFactories = {
 				inputSchema: z.strictObject({
 	"project_id": zod.zListNeonAuthRedirectUriWhitelistDomainsPath.shape["project_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3447,7 +3447,7 @@ export const operationFactories = {
 	"org_id": zod.zListOrganizationVpcEndpointsPath.shape["org_id"],
 	"region_id": zod.zListOrganizationVpcEndpointsPath.shape["region_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3476,7 +3476,7 @@ export const operationFactories = {
 				inputSchema: z.strictObject({
 	"org_id": zod.zListOrganizationVpcEndpointsAllRegionsPath.shape["org_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3505,7 +3505,7 @@ export const operationFactories = {
 				inputSchema: z.strictObject({
 	"org_id": zod.zListOrgApiKeysPath.shape["org_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3540,7 +3540,7 @@ export const operationFactories = {
 	"cursor": zod.zListProjectBranchBucketObjectsQuery.shape["cursor"].optional(),
 	"limit": zod.zListProjectBranchBucketObjectsQuery.shape["limit"].optional(),
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3571,7 +3571,7 @@ export const operationFactories = {
 	"project_id": zod.zListProjectBranchBucketsPath.shape["project_id"],
 	"branch_id": zod.zListProjectBranchBucketsPath.shape["branch_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3601,7 +3601,7 @@ export const operationFactories = {
 	"project_id": zod.zListProjectBranchDatabasesPath.shape["project_id"],
 	"branch_id": zod.zListProjectBranchDatabasesPath.shape["branch_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3631,7 +3631,7 @@ export const operationFactories = {
 	"project_id": zod.zListProjectBranchEndpointsPath.shape["project_id"],
 	"branch_id": zod.zListProjectBranchEndpointsPath.shape["branch_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3666,7 +3666,7 @@ export const operationFactories = {
 	"limit": zod.zListProjectBranchesQuery.shape["limit"].optional(),
 	"include_deleted": zod.zListProjectBranchesQuery.shape["include_deleted"].optional(),
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3699,7 +3699,7 @@ export const operationFactories = {
 	"cursor": zod.zListProjectBranchFunctionsQuery.shape["cursor"].optional(),
 	"limit": zod.zListProjectBranchFunctionsQuery.shape["limit"].optional(),
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3730,7 +3730,7 @@ export const operationFactories = {
 	"project_id": zod.zListProjectBranchLogFieldsPath.shape["project_id"],
 	"branch_id": zod.zListProjectBranchLogFieldsPath.shape["branch_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3766,7 +3766,7 @@ export const operationFactories = {
 	"source": zod.zListProjectBranchLogFieldValuesQuery.shape["source"].optional(),
 	"limit": zod.zListProjectBranchLogFieldValuesQuery.shape["limit"].optional(),
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3797,7 +3797,7 @@ export const operationFactories = {
 	"project_id": zod.zListProjectBranchRolesPath.shape["project_id"],
 	"branch_id": zod.zListProjectBranchRolesPath.shape["branch_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3826,7 +3826,7 @@ export const operationFactories = {
 				inputSchema: z.strictObject({
 	"project_id": zod.zListProjectEndpointsPath.shape["project_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3857,7 +3857,7 @@ export const operationFactories = {
 	"cursor": zod.zListProjectMembersQuery.shape["cursor"].optional(),
 	"limit": zod.zListProjectMembersQuery.shape["limit"].optional(),
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3889,7 +3889,7 @@ export const operationFactories = {
 	"cursor": zod.zListProjectOperationsQuery.shape["cursor"].optional(),
 	"limit": zod.zListProjectOperationsQuery.shape["limit"].optional(),
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3919,7 +3919,7 @@ export const operationFactories = {
 				inputSchema: z.strictObject({
 	"project_id": zod.zListProjectPermissionsPath.shape["project_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3953,7 +3953,7 @@ export const operationFactories = {
 	"timeout": zod.zListProjectsQuery.shape["timeout"].optional(),
 	"recoverable": zod.zListProjectsQuery.shape["recoverable"].optional(),
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -3982,7 +3982,7 @@ export const operationFactories = {
 				inputSchema: z.strictObject({
 	"project_id": zod.zListProjectVpcEndpointsPath.shape["project_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -4014,7 +4014,7 @@ export const operationFactories = {
 	"search": zod.zListSharedProjectsQuery.shape["search"].optional(),
 	"timeout": zod.zListSharedProjectsQuery.shape["timeout"].optional(),
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -4043,7 +4043,7 @@ export const operationFactories = {
 				inputSchema: z.strictObject({
 	"project_id": zod.zListSnapshotsPath.shape["project_id"],
 }),
-				annotations: { readOnlyHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: true, openWorldHint: false },
 				requiresApproval: false,
 				metadata: {
 					method: "GET",
@@ -4078,7 +4078,7 @@ export const operationFactories = {
 	"content_type": zod.zPresignProjectBranchBucketObjectBody.shape["content_type"],
 	"expires_in_seconds": zod.zPresignProjectBranchBucketObjectBody.shape["expires_in_seconds"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -4123,7 +4123,7 @@ export const operationFactories = {
 	"trace_id": zod.zQueryProjectBranchLogsBody.shape["trace_id"],
 	"logql": zod.zQueryProjectBranchLogsBody.shape["logql"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -4153,7 +4153,7 @@ export const operationFactories = {
 				inputSchema: z.strictObject({
 	"project_id": zod.zRecoverProjectPath.shape["project_id"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -4183,7 +4183,7 @@ export const operationFactories = {
 	"org_id": zod.zRemoveOrganizationMemberPath.shape["org_id"],
 	"member_id": zod.zRemoveOrganizationMemberPath.shape["member_id"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "DELETE",
@@ -4214,7 +4214,7 @@ export const operationFactories = {
 	"member_id": zod.zRemoveProjectMemberRolePath.shape["member_id"],
 	"confirm_self_lockout": zod.zRemoveProjectMemberRoleQuery.shape["confirm_self_lockout"].optional(),
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "DELETE",
@@ -4246,7 +4246,7 @@ export const operationFactories = {
 	"branch_id": zod.zResetProjectBranchRolePasswordPath.shape["branch_id"],
 	"role_name": zod.zResetProjectBranchRolePasswordPath.shape["role_name"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -4276,7 +4276,7 @@ export const operationFactories = {
 	"project_id": zod.zRestartProjectEndpointPath.shape["project_id"],
 	"endpoint_id": zod.zRestartProjectEndpointPath.shape["endpoint_id"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -4310,7 +4310,7 @@ export const operationFactories = {
 	"source_timestamp": zod.zRestoreProjectBranchBody.shape["source_timestamp"],
 	"preserve_under_name": zod.zRestoreProjectBranchBody.shape["preserve_under_name"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -4344,7 +4344,7 @@ export const operationFactories = {
 	"target_branch_id": zod.zRestoreSnapshotBody.shape["target_branch_id"].optional(),
 	"finalize_restore": zod.zRestoreSnapshotBody.shape["finalize_restore"].optional(),
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -4374,7 +4374,7 @@ export const operationFactories = {
 				inputSchema: z.strictObject({
 	"key_id": zod.zRevokeApiKeyPath.shape["key_id"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "DELETE",
@@ -4405,7 +4405,7 @@ export const operationFactories = {
 	"branch_id": zod.zRevokeCredentialPath.shape["branch_id"],
 	"token_id": zod.zRevokeCredentialPath.shape["token_id"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "DELETE",
@@ -4435,7 +4435,7 @@ export const operationFactories = {
 	"org_id": zod.zRevokeOrgApiKeyPath.shape["org_id"],
 	"key_id": zod.zRevokeOrgApiKeyPath.shape["key_id"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "DELETE",
@@ -4465,7 +4465,7 @@ export const operationFactories = {
 	"project_id": zod.zRevokePermissionFromProjectPath.shape["project_id"],
 	"permission_id": zod.zRevokePermissionFromProjectPath.shape["permission_id"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "DELETE",
@@ -4565,7 +4565,7 @@ export const operationFactories = {
 	"project_id": zod.zSetDefaultProjectBranchPath.shape["project_id"],
 	"branch_id": zod.zSetDefaultProjectBranchPath.shape["branch_id"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -4628,7 +4628,7 @@ export const operationFactories = {
 	"confirm_self_demotion": zod.zSetProjectMemberRoleQuery.shape["confirm_self_demotion"].optional(),
 	"role": zod.zSetProjectMemberRoleBody.shape["role"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "PUT",
@@ -4661,7 +4661,7 @@ export const operationFactories = {
 	"branch_id": zod.zSetSnapshotSchedulePath.shape["branch_id"],
 	"schedule": zod.zSetSnapshotScheduleBody.shape["schedule"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "PUT",
@@ -4692,7 +4692,7 @@ export const operationFactories = {
 	"project_id": zod.zStartAnonymizationPath.shape["project_id"],
 	"branch_id": zod.zStartAnonymizationPath.shape["branch_id"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -4722,7 +4722,7 @@ export const operationFactories = {
 	"project_id": zod.zStartProjectEndpointPath.shape["project_id"],
 	"endpoint_id": zod.zStartProjectEndpointPath.shape["endpoint_id"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -4752,7 +4752,7 @@ export const operationFactories = {
 	"project_id": zod.zSuspendProjectEndpointPath.shape["project_id"],
 	"endpoint_id": zod.zSuspendProjectEndpointPath.shape["endpoint_id"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -4782,7 +4782,7 @@ export const operationFactories = {
 	"project_id": zod.zTransferNeonAuthProviderProjectBody.shape["project_id"],
 	"auth_provider": zod.zTransferNeonAuthProviderProjectBody.shape["auth_provider"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -4813,7 +4813,7 @@ export const operationFactories = {
 	"destination_org_id": zod.zTransferProjectsFromOrgToOrgBody.shape["destination_org_id"],
 	"project_ids": zod.zTransferProjectsFromOrgToOrgBody.shape["project_ids"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -4844,7 +4844,7 @@ export const operationFactories = {
 	"destination_org_id": zod.zTransferProjectsFromUserToOrgBody.shape["destination_org_id"],
 	"project_ids": zod.zTransferProjectsFromUserToOrgBody.shape["project_ids"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",
@@ -4878,7 +4878,7 @@ export const operationFactories = {
 	"client_secret": zod.zUpdateBranchNeonAuthOauthProviderBody.shape["client_secret"],
 	"microsoft_tenant_id": zod.zUpdateBranchNeonAuthOauthProviderBody.shape["microsoft_tenant_id"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "PATCH",
@@ -4910,7 +4910,7 @@ export const operationFactories = {
 	"branch_id": zod.zUpdateMaskingRulesPath.shape["branch_id"],
 	"masking_rules": zod.zUpdateMaskingRulesBody.shape["masking_rules"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "PATCH",
@@ -4942,7 +4942,7 @@ export const operationFactories = {
 	"branch_id": zod.zUpdateNeonAuthAllowLocalhostPath.shape["branch_id"],
 	"allow_localhost": zod.zUpdateNeonAuthAllowLocalhostBody.shape["allow_localhost"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "PATCH",
@@ -4974,7 +4974,7 @@ export const operationFactories = {
 	"branch_id": zod.zUpdateNeonAuthConfigPath.shape["branch_id"],
 	"name": zod.zUpdateNeonAuthConfigBody.shape["name"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "PATCH",
@@ -5012,7 +5012,7 @@ export const operationFactories = {
 	"send_verification_email_on_sign_in": zod.zUpdateNeonAuthEmailAndPasswordConfigBody.shape["send_verification_email_on_sign_in"],
 	"disable_sign_up": zod.zUpdateNeonAuthEmailAndPasswordConfigBody.shape["disable_sign_up"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "PATCH",
@@ -5044,7 +5044,7 @@ export const operationFactories = {
 	"branch_id": zod.zUpdateNeonAuthEmailProviderPath.shape["branch_id"],
 	"body": zod.zUpdateNeonAuthEmailProviderBody,
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "PATCH",
@@ -5075,7 +5075,7 @@ export const operationFactories = {
 	"project_id": zod.zUpdateNeonAuthEmailServerPath.shape["project_id"],
 	"body": zod.zUpdateNeonAuthEmailServerBody,
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "PATCH",
@@ -5109,7 +5109,7 @@ export const operationFactories = {
 	"expires_in": zod.zUpdateNeonAuthMagicLinkPluginBody.shape["expires_in"],
 	"disable_sign_up": zod.zUpdateNeonAuthMagicLinkPluginBody.shape["disable_sign_up"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "PATCH",
@@ -5143,7 +5143,7 @@ export const operationFactories = {
 	"client_secret": zod.zUpdateNeonAuthOauthProviderBody.shape["client_secret"],
 	"microsoft_tenant_id": zod.zUpdateNeonAuthOauthProviderBody.shape["microsoft_tenant_id"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "PATCH",
@@ -5179,7 +5179,7 @@ export const operationFactories = {
 	"creator_role": zod.zUpdateNeonAuthOrganizationPluginBody.shape["creator_role"],
 	"send_invitation_email": zod.zUpdateNeonAuthOrganizationPluginBody.shape["send_invitation_email"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "PATCH",
@@ -5212,7 +5212,7 @@ export const operationFactories = {
 	"enabled": zod.zUpdateNeonAuthPhoneNumberPluginBody.shape["enabled"],
 	"otp_expires_in": zod.zUpdateNeonAuthPhoneNumberPluginBody.shape["otp_expires_in"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "PATCH",
@@ -5245,7 +5245,7 @@ export const operationFactories = {
 	"auth_user_id": zod.zUpdateNeonAuthUserRolePath.shape["auth_user_id"],
 	"roles": zod.zUpdateNeonAuthUserRoleBody.shape["roles"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "PUT",
@@ -5280,7 +5280,7 @@ export const operationFactories = {
 	"enabled_events": zod.zUpdateNeonAuthWebhookConfigBody.shape["enabled_events"],
 	"timeout_seconds": zod.zUpdateNeonAuthWebhookConfigBody.shape["timeout_seconds"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "PUT",
@@ -5312,7 +5312,7 @@ export const operationFactories = {
 	"member_id": zod.zUpdateOrganizationMemberPath.shape["member_id"],
 	"role": zod.zUpdateOrganizationMemberBody.shape["role"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "PATCH",
@@ -5346,7 +5346,7 @@ export const operationFactories = {
 	"default_endpoint_settings": zod.zUpdateProjectBody.shape["project"].shape["default_endpoint_settings"],
 	"history_retention_seconds": zod.zUpdateProjectBody.shape["project"].shape["history_retention_seconds"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "PATCH",
@@ -5380,7 +5380,7 @@ export const operationFactories = {
 	"protected": zod.zUpdateProjectBranchBody.shape["branch"].shape["protected"],
 	"expires_at": zod.zUpdateProjectBranchBody.shape["branch"].shape["expires_at"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "PATCH",
@@ -5422,7 +5422,7 @@ export const operationFactories = {
 	"server_cors_allowed_origins": zod.zUpdateProjectBranchDataApiBody.shape["settings"].unwrap().shape["server_cors_allowed_origins"].optional(),
 	"server_timing_enabled": zod.zUpdateProjectBranchDataApiBody.shape["settings"].unwrap().shape["server_timing_enabled"].optional(),
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "PATCH",
@@ -5456,7 +5456,7 @@ export const operationFactories = {
 	"name": zod.zUpdateProjectBranchDatabaseBody.shape["database"].shape["name"],
 	"owner_name": zod.zUpdateProjectBranchDatabaseBody.shape["database"].shape["owner_name"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "PATCH",
@@ -5489,7 +5489,7 @@ export const operationFactories = {
 	"slug": zod.zUpdateProjectBranchFunctionPath.shape["slug"],
 	"name": zod.zUpdateProjectBranchFunctionBody.shape["name"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "PATCH",
@@ -5531,7 +5531,7 @@ export const operationFactories = {
 	"suspend_timeout_seconds": zod.zUpdateProjectEndpointBody.shape["endpoint"].shape["suspend_timeout_seconds"],
 	"name": zod.zUpdateProjectEndpointBody.shape["endpoint"].shape["name"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "PATCH",
@@ -5564,7 +5564,7 @@ export const operationFactories = {
 	"name": zod.zUpdateSnapshotBody.shape["snapshot"].shape["name"],
 	"expires_at": zod.zUpdateSnapshotBody.shape["snapshot"].shape["expires_at"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
 				metadata: {
 					method: "PATCH",
