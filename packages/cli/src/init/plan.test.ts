@@ -458,6 +458,14 @@ describe("chooseYesAgentTooling", () => {
 			mcpAgents: ["vscode", "mcporter"],
 		});
 	});
+
+	test("windsurf is skills and global MCP", () => {
+		expect(chooseYesAgentTooling(["windsurf"])).toEqual({
+			setup: "skills-mcp",
+			skillsAgents: ["windsurf"],
+			mcpAgents: ["windsurf"],
+		});
+	});
 });
 
 describe("planYesAgentSteps", () => {
@@ -470,14 +478,14 @@ describe("planYesAgentSteps", () => {
 		).toEqual([["plugins", "-y"]]);
 	});
 
-	test("skills-mcp omits an empty step and pins MCP to the project", () => {
+	test("skills-mcp omits an empty step; MCP is global mcp -y", () => {
 		expect(
 			planYesAgentSteps({
 				setup: "skills-mcp",
 				skillsAgents: [],
 				mcpAgents: ["vscode"],
 			}),
-		).toEqual([["mcp", "-y", "--project"]]);
+		).toEqual([["mcp", "-y"]]);
 		expect(
 			planYesAgentSteps({
 				setup: "skills-mcp",
@@ -486,7 +494,7 @@ describe("planYesAgentSteps", () => {
 			}),
 		).toEqual([
 			["skills", "-y"],
-			["mcp", "-y", "--project"],
+			["mcp", "-y"],
 		]);
 	});
 

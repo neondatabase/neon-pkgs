@@ -455,11 +455,8 @@ describe("init handler", () => {
 		]);
 		expect(run.mock.calls[0][0].slice(0, 2)).toEqual(["skills", "-y"]);
 		expect(run.mock.calls[0][0]).not.toContain("--agent");
-		expect(run.mock.calls[1][0].slice(0, 3)).toEqual([
-			"mcp",
-			"-y",
-			"--project",
-		]);
+		expect(run.mock.calls[1][0].slice(0, 2)).toEqual(["mcp", "-y"]);
+		expect(run.mock.calls[1][0]).not.toContain("--project");
 		expect(run.mock.calls[1][0]).not.toContain("--agent");
 	});
 

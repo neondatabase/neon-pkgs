@@ -236,9 +236,9 @@ export const chooseYesAgentTooling = (
 		return { setup: "plugin", agents: [pluginFirst, ...pluginRest] };
 	}
 
-	const projectMcp = new Set(mcpInstallableAgents("project"));
+	const globalMcp = new Set(mcpInstallableAgents("global"));
 	const skillsAgents = agents.filter((id) => supportsSkills(id));
-	const mcpAgents = agents.filter((id) => projectMcp.has(id));
+	const mcpAgents = agents.filter((id) => globalMcp.has(id));
 	if (skillsAgents.length === 0 && mcpAgents.length === 0) {
 		return { setup: "skip" };
 	}
@@ -257,7 +257,7 @@ export const planYesAgentSteps = (tooling: YesAgentTooling): InitStep[] => {
 				steps.push(["skills", "-y"]);
 			}
 			if (tooling.mcpAgents.length > 0) {
-				steps.push(["mcp", "-y", "--project"]);
+				steps.push(["mcp", "-y"]);
 			}
 			return steps;
 		}
