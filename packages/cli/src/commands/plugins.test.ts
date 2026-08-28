@@ -172,8 +172,8 @@ describe("neon plugins", () => {
 			code: 1,
 		});
 		expect(stderr).toMatch(/No coding agents detected in this project/);
+		expect(stderr).toMatch(/--agent <name>/);
 		expect(stderr).toMatch(/omit -y in a terminal/);
-		expect(stderr).not.toMatch(/Pass --agent/);
 	});
 
 	test("installs with -y into detected project agents", async ({
@@ -325,7 +325,7 @@ describe("neon plugins", () => {
 		expect(row.status).toBe("failed");
 		expect(row.error).toBe("plugins CLI failed");
 		expect(row.error).not.toContain("syscall");
-		expect(stderr).toMatch(/Retry with: neon plugins -y/);
+		expect(stderr).toMatch(/Retry with: neon plugins --agent cursor -y/);
 		expect(stderr).not.toMatch(/neondatabase\/agent-skills/);
 		expect(stderr.match(/Retry with:/g)?.length).toBe(1);
 		expect(stderr).not.toMatch(/Command failed with exit code/);
@@ -353,7 +353,9 @@ describe("neon plugins", () => {
 			rows.find((row: { agent: string }) => row.agent === "claude-code")
 				?.status,
 		).toBe("failed");
-		expect(stderr).toMatch(/Retry with: neon plugins -y/);
+		expect(stderr).toMatch(
+			/Retry with: neon plugins --agent claude-code -y/,
+		);
 	});
 
 	test("silent child failure does not print the npx argv", async ({
@@ -367,7 +369,7 @@ describe("neon plugins", () => {
 			code: 1,
 		});
 		expect(stderr).toMatch(/plugins CLI failed/);
-		expect(stderr).toMatch(/Retry with: neon plugins -y/);
+		expect(stderr).toMatch(/Retry with: neon plugins --agent cursor -y/);
 		expect(stderr).not.toMatch(/neondatabase\/agent-skills/);
 		expect(stderr).not.toMatch(/Command failed with exit code/);
 	});
@@ -384,7 +386,9 @@ describe("neon plugins", () => {
 			}),
 			code: 1,
 		});
-		expect(stderr).toMatch(/Retry with: neon plugins --global -y/);
+		expect(stderr).toMatch(
+			/Retry with: neon plugins --agent cursor --global -y/,
+		);
 		expect(stderr).not.toMatch(/npx /);
 	});
 
@@ -429,19 +433,37 @@ describe("neon plugins", () => {
 		for (const agent of pluginsInstallableAgents("global")) {
 			expect(compact).toContain(agent);
 		}
+		expect(flat).toMatch(/-a, --agent/);
 		expect(flat).toContain("Detected agents");
+		expect(flat).toContain("plugins --agent cursor --agent claude-code");
 	});
 
-	test("--agent names -y instead of unknown argument", async ({
+	test("installs without -y when --agent is set", async ({
 		testCliCommand,
 	}) => {
-		const { home, cwd, bin } = scratch({ projectCursor: false });
-		const { stderr } = await testCliCommand(
+		const { home, cwd, bin, argvFile } = scratch({ projectCursor: false });
+		const { stdout } = await testCliCommand(
 			["plugins", "--agent", "cursor"],
+			runOptions(home, cwd, bin),
+		);
+		expect(JSON.parse(stdout)[0].agent).toBe("cursor");
+		expect(JSON.parse(readFileSync(argvFile, "utf8"))[0]).toEqual(
+			expect.arrayContaining(["-t", "cursor"]),
+		);
+	});
+
+	test("rejects unknown agents and --agent *", async ({ testCliCommand }) => {
+		const { home, cwd, bin, argvFile } = scratch({ projectCursor: false });
+		const { stderr: unknownAgent } = await testCliCommand(
+			["plugins", "-y", "--agent", "eve"],
 			{ ...runOptions(home, cwd, bin), code: 1 },
 		);
-		expect(stderr).toMatch(/has no --agent/);
-		expect(stderr).toMatch(/Pass -y to use detected agents/);
-		expect(stderr).not.toMatch(/Unknown argument: agent/);
+		expect(unknownAgent).toMatch(/Unknown agent: "eve"/);
+		expect(() => readFileSync(argvFile, "utf8")).toThrow();
+		const { stderr: star } = await testCliCommand(
+			["plugins", "-y", "--agent", "*"],
+			{ ...runOptions(home, cwd, bin), code: 1 },
+		);
+		expect(star).toMatch(/does not accept --agent \*/);
 	});
 });

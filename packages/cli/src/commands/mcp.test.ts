@@ -203,6 +203,7 @@ describe("neon mcp", () => {
 			code: 1,
 		});
 		expect(stderr).toMatch(/Pass -y to mint into every detected agent/);
+		expect(stderr).toMatch(/--agent <name>/);
 		expect(stderr).toMatch(/--oauth/);
 		expect(stderr).not.toMatch(/Minted API key/);
 		expect(existsSync(join(home, ".cursor", "mcp.json"))).toBe(false);
@@ -212,13 +213,10 @@ describe("neon mcp", () => {
 		testCliCommand,
 	}) => {
 		const { home, cwd } = scratch();
-		const { stdout, stderr } = await testCliCommand(
-			["mcp", "-y", "--oauth"],
-			{
-				...runOptions(home, cwd),
-				apiKey: false,
-			},
-		);
+		const { stdout, stderr } = await testCliCommand(["mcp", "--oauth"], {
+			...runOptions(home, cwd),
+			apiKey: false,
+		});
 		expect(
 			readFileSync(join(home, ".cursor", "mcp.json"), "utf8"),
 		).toContain("mcp.neon.tech");
@@ -414,6 +412,7 @@ describe("neon mcp", () => {
 			code: 1,
 		});
 		expect(stderr).toMatch(/No coding agents detected/);
+		expect(stderr).toMatch(/--agent <name>/);
 		expect(stderr).not.toMatch(/claude-desktop/);
 		expect(stderr).not.toMatch(/Minted API key/);
 	});
@@ -714,6 +713,7 @@ describe("neon mcp", () => {
 		expect(compact).toContain("account-widekey");
 		expect(compact).toContain("noprojectpin");
 		expect(compact).toContain("allcategories");
+		expect(compact).toContain("-a,--agent");
 		for (const agent of mcpInstallableAgents("global")) {
 			expect(compact).toContain(agent);
 		}
@@ -722,16 +722,74 @@ describe("neon mcp", () => {
 		}
 	});
 
-	test("--agent names -y instead of unknown argument", async ({
+	test("installs without -y when --agent is set", async ({
 		testCliCommand,
 	}) => {
 		const { home, cwd } = scratch();
-		const { stderr } = await testCliCommand(["mcp", "--agent", "cursor"], {
+		const { stdout, stderr } = await testCliCommand(
+			["mcp", "--agent", "cursor"],
+			runOptions(home, cwd),
+		);
+		const written = JSON.parse(
+			readFileSync(join(home, ".cursor", "mcp.json"), "utf8"),
+		);
+		expect(written.mcpServers.Neon.url).toBe(NEON_MCP_URL);
+		expect(stdout).toContain("cursor");
+		expect(stdout).toContain("installed");
+		expect(stderr).toMatch(/Minted API key/);
+		assertNoSecret(stdout, stderr);
+	});
+
+	test("bare --agent fails instead of installing into every detected agent", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		const { stderr } = await testCliCommand(["mcp", "--oauth", "--agent"], {
+			...runOptions(home, cwd),
+			apiKey: false,
+			code: 1,
+		});
+		expect(stderr).toMatch(/--agent needs a value/);
+		expect(stderr).not.toMatch(/Minted API key/);
+		expect(existsSync(join(home, ".cursor", "mcp.json"))).toBe(false);
+	});
+
+	test("-y --agent with no value fails instead of minting into detected agents", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		const { stderr } = await testCliCommand(["mcp", "-y", "--agent"], {
 			...runOptions(home, cwd),
 			code: 1,
 		});
-		expect(stderr).toMatch(/has no --agent/);
-		expect(stderr).toMatch(/Pass -y to use detected agents/);
-		expect(stderr).not.toMatch(/Unknown argument: agent/);
+		expect(stderr).toMatch(/--agent needs a value/);
+		expect(stderr).not.toMatch(/Minted API key/);
+		expect(existsSync(join(home, ".cursor", "mcp.json"))).toBe(false);
+	});
+
+	test("--agent followed by another flag fails instead of treating the flag as omitted", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		const { stderr } = await testCliCommand(["mcp", "--agent", "--oauth"], {
+			...runOptions(home, cwd),
+			apiKey: false,
+			code: 1,
+		});
+		expect(stderr).toMatch(/--agent needs a value/);
+		expect(stderr).not.toMatch(/Minted API key/);
+		expect(existsSync(join(home, ".cursor", "mcp.json"))).toBe(false);
+	});
+
+	test("unknown --agent fails without minting", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		const { stderr } = await testCliCommand(
+			["mcp", "--agent", "not-an-agent"],
+			{ ...runOptions(home, cwd), code: 1 },
+		);
+		expect(stderr).toMatch(/Unknown agent: "not-an-agent"/);
+		expect(stderr).not.toMatch(/Minted API key/);
 	});
 });

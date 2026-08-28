@@ -53,7 +53,7 @@ function planOptions(
 }
 
 describe("assertSkillsCanRun", () => {
-	test("fails non-TTY without -y, including when agents are named", () => {
+	test("fails non-TTY without -y or named skills", () => {
 		expect(() =>
 			assertSkillsCanRun({
 				yes: false,
@@ -310,8 +310,8 @@ describe("resolveSkillsPlan", () => {
 		expect(error.message).toMatch(
 			/No coding agents detected in this project/,
 		);
+		expect(error.message).toMatch(/--agent <name>/);
 		expect(error.message).toMatch(/omit -y in a terminal/);
-		expect(error.message).not.toMatch(/--agent/);
 	});
 
 	test("-y uses the host CLI agent when the project has no folders", async () => {
@@ -346,7 +346,7 @@ describe("resolveSkillsPlan", () => {
 					detectInstalledAgents,
 				}),
 			),
-		).rejects.toThrow(/Run this command from a supported agent/);
+		).rejects.toThrow(/from a supported agent/);
 		expect(detectInstalledAgents).not.toHaveBeenCalled();
 	});
 
@@ -413,7 +413,7 @@ describe("resolveSkillsPlan", () => {
 		}
 		expect(error.message).toMatch(/^No coding agents detected\./);
 		expect(error.message).not.toContain("in this project");
-		expect(error.message).not.toMatch(/--agent/);
+		expect(error.message).toMatch(/--agent <name>/);
 	});
 
 	test("-y does not ask host when the project has folders", async () => {

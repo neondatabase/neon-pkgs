@@ -134,13 +134,16 @@ describe("skillsAddArgs", () => {
 });
 
 describe("neonSkillsRetryCommand", () => {
-	test("names skills and user-level scope", () => {
+	test("names skills, agents, and user-level scope", () => {
 		expect(
 			neonSkillsRetryCommand({
 				skills: ["neon", "neon-ai-gateway"],
+				agents: ["cursor"],
 				global: true,
 			}),
-		).toBe("neon skills -s neon -s neon-ai-gateway --global -y");
+		).toBe(
+			"neon skills -s neon -s neon-ai-gateway --agent cursor --global -y",
+		);
 	});
 });
 

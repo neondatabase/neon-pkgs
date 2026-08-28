@@ -59,31 +59,34 @@ export const noDetectedAgentsMessage = (input: {
 	scope: "project" | "global";
 	supported: readonly string[];
 	fix: "run-without-yes" | "pass-yes";
+	nameAgent?: boolean;
 }): string => {
 	const lead =
 		input.scope === "project"
 			? "No coding agents detected in this project."
 			: "No coding agents detected.";
-	const hint =
-		input.fix === "pass-yes"
-			? input.scope === "project"
-				? "Pass -y to use project folders, else the host CLI agent, or run from a terminal to pick one."
-				: "Pass -y to use installed apps, else the host CLI agent, or run from a terminal to pick one."
+	const name = input.nameAgent === true;
+	let hint: string;
+	if (input.fix === "pass-yes") {
+		const detected =
+			input.scope === "project"
+				? "Pass -y to use project folders, else the host CLI agent"
+				: "Pass -y to use installed apps, else the host CLI agent";
+		hint = name
+			? `${detected}, --agent <name> to name them, or run from a terminal to pick one.`
+			: `${detected}, or run from a terminal to pick one.`;
+	} else {
+		hint = name
+			? "Pass --agent <name>, run this command from a supported agent, or omit -y in a terminal to pick one."
 			: "Run this command from a supported agent, or omit -y in a terminal to pick one.";
+	}
 	return `${lead} ${hint} Supported agents: ${input.supported.join(", ")}`;
 };
 
 export const INIT_NEEDS_YES_OR_TERMINAL =
 	"No interactive terminal. Pass -y to use defaults, or run this command in a terminal to pick.";
 
-const UNKNOWN_AGENT_COMMANDS = [
-	"bootstrap",
-	"init",
-	"link",
-	"mcp",
-	"plugins",
-	"skills",
-] as const;
+const UNKNOWN_AGENT_COMMANDS = ["bootstrap", "init", "link"] as const;
 
 type UnknownAgentCommand = (typeof UNKNOWN_AGENT_COMMANDS)[number];
 

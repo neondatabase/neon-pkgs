@@ -219,32 +219,52 @@ describe("noDetectedAgentsMessage", () => {
 		expect(message).not.toContain("in this project");
 		expect(message).not.toMatch(/--agent/);
 	});
+
+	test("names --agent when the command takes it", () => {
+		const message = noDetectedAgentsMessage({
+			scope: "project",
+			supported: ["cursor"],
+			fix: "run-without-yes",
+			nameAgent: true,
+		});
+		expect(message).toContain("--agent <name>");
+	});
 });
 
 describe("rewriteUnknownAgentArg", () => {
-	test("names -y for skills, plugins, mcp, and init", () => {
-		for (const command of ["skills", "plugins", "mcp", "init"] as const) {
+	test("names -y for init", () => {
+		expect(
+			rewriteUnknownAgentArg({
+				message: "Unknown argument: agent",
+				argv: ["node", "cli.js", "init", "--agent", "cursor"],
+				cliName: "neon",
+			}),
+		).toBe(
+			"neon init has no --agent. Pass -y to use detected agents, or run neon init in a terminal to pick.",
+		);
+	});
+
+	test("does not rewrite skills, plugins, or mcp", () => {
+		for (const command of ["skills", "plugins", "mcp"] as const) {
 			expect(
 				rewriteUnknownAgentArg({
 					message: "Unknown argument: agent",
 					argv: ["node", "cli.js", command, "--agent", "cursor"],
 					cliName: "neon",
 				}),
-			).toBe(
-				`neon ${command} has no --agent. Pass -y to use detected agents, or run neon ${command} in a terminal to pick.`,
-			);
+			).toBeUndefined();
 		}
 	});
 
-	test("names -a the same as --agent", () => {
+	test("names -a the same as --agent on init", () => {
 		expect(
 			rewriteUnknownAgentArg({
 				message: "Unknown argument: a",
-				argv: ["node", "cli.js", "skills", "-a", "cursor"],
+				argv: ["node", "cli.js", "init", "-a", "cursor"],
 				cliName: "neon",
 			}),
 		).toBe(
-			"neon skills has no --agent. Pass -y to use detected agents, or run neon skills in a terminal to pick.",
+			"neon init has no --agent. Pass -y to use detected agents, or run neon init in a terminal to pick.",
 		);
 	});
 

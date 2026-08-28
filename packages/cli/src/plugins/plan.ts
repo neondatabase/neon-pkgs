@@ -49,7 +49,7 @@ export const assertPluginsCanRun = (options: {
 		return;
 	}
 	throw new Error(
-		"No interactive terminal. Pass -y to install into detected agents.",
+		"No interactive terminal. Pass -y to install into detected agents, or --agent <name> to name them.",
 	);
 };
 
@@ -92,8 +92,14 @@ export async function resolvePluginsPlan(
 			scope,
 			supported: available,
 			fix: options.yes ? "run-without-yes" : "pass-yes",
+			nameAgent: true,
 		}),
 		resolveSpecified: (raw) => {
+			if (raw === "*") {
+				throw new Error(
+					"neon plugins does not accept --agent *. Pass --agent <name> for each coding agent, or omit --agent to use detected agents.",
+				);
+			}
 			const id = tryResolveAddMcpAgentId(raw);
 			if (!id) {
 				throw new Error(

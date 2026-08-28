@@ -181,8 +181,8 @@ describe("neon skills", () => {
 			code: 1,
 		});
 		expect(stderr).toMatch(/No coding agents detected in this project/);
+		expect(stderr).toMatch(/--agent <name>/);
 		expect(stderr).toMatch(/omit -y in a terminal/);
-		expect(stderr).not.toMatch(/Pass --agent/);
 	});
 
 	test("does not spawn without -y", async ({ testCliCommand }) => {
@@ -441,8 +441,7 @@ describe("neon skills", () => {
 		expect(row.error).toBe("skills CLI failed");
 		expect(row.error).not.toContain("syscall");
 		expect(stderr).toMatch(/Retry with: neon skills -s claimable-postgres/);
-		expect(stderr).toMatch(/-y/);
-		expect(stderr).not.toMatch(/--agent/);
+		expect(stderr).toMatch(/--agent cursor -y/);
 		expect(stderr).not.toMatch(/neondatabase\/agent-skills/);
 		expect(stderr.match(/Retry with:/g)?.length).toBe(1);
 		expect(stderr).not.toMatch(/Command failed with exit code/);
@@ -497,7 +496,7 @@ describe("neon skills", () => {
 			},
 		);
 		expect(stderr).toMatch(
-			/Retry with: neon skills -s neon -s neon-postgres-agent-platforms -y/,
+			/Retry with: neon skills -s neon -s neon-postgres-agent-platforms --agent cursor -y/,
 		);
 	});
 
@@ -514,8 +513,7 @@ describe("neon skills", () => {
 			code: 1,
 		});
 		expect(stderr).toMatch(/Retry with: neon skills -s claimable-postgres/);
-		expect(stderr).toMatch(/--global -y/);
-		expect(stderr).not.toMatch(/--agent/);
+		expect(stderr).toMatch(/--agent cursor --global -y/);
 	});
 
 	test("names a missing npx", async ({ testCliCommand }) => {
@@ -538,6 +536,7 @@ describe("neon skills", () => {
 		const flat = strip(`${stdout}\n${stderr}`).replace(/\s+/g, " ");
 		const compact = flat.replace(/\s+/g, "");
 		expect(flat).toMatch(/-s, --skill/);
+		expect(flat).toMatch(/-a, --agent/);
 		expect(flat).toMatch(/skills update/);
 		expect(flat).not.toMatch(/-y, -y/);
 		for (const agent of skillsInstallableAgents()) {
@@ -552,32 +551,56 @@ describe("neon skills", () => {
 		expect(compact).toContain("exceptneon-postgres-agent-platforms");
 		expect(flat).toContain("Detected agents");
 		expect(flat).toContain("skills -y -s neon -s neon-ai-gateway");
+		expect(flat).toContain(
+			"skills -s neon -s neon-ai-gateway --agent cursor",
+		);
 		expect(flat).toContain("Does not select agents");
 	});
 
-	test("--agent names -y instead of unknown argument", async ({
+	test("installs named skills without -y when --agent is set", async ({
 		testCliCommand,
 	}) => {
-		const { home, cwd, bin } = scratch({ projectCursor: false });
-		const { stderr } = await testCliCommand(
-			["skills", "--agent", "cursor"],
-			{ ...runOptions(home, cwd, bin), code: 1 },
+		const { home, cwd, bin, argvFile } = scratch({ projectCursor: false });
+		const { stdout } = await testCliCommand(
+			["skills", "--agent", "cursor", "-s", "neon"],
+			runOptions(home, cwd, bin),
 		);
-		expect(stderr).toMatch(/has no --agent/);
-		expect(stderr).toMatch(/Pass -y to use detected agents/);
-		expect(stderr).not.toMatch(/Unknown argument: agent/);
+		expect(JSON.parse(stdout)[0].agents).toBe("cursor");
+		expect(JSON.parse(stdout)[0].skills).toBe("neon");
+		expect(JSON.parse(readFileSync(argvFile, "utf8"))[0]).toEqual(
+			expect.arrayContaining(["--agent", "cursor", "--skill", "neon"]),
+		);
 	});
 
-	test("-a names -y instead of unknown argument", async ({
-		testCliCommand,
-	}) => {
-		const { home, cwd, bin } = scratch({ projectCursor: false });
-		const { stderr } = await testCliCommand(["skills", "-a", "cursor"], {
-			...runOptions(home, cwd, bin),
-			code: 1,
-		});
-		expect(stderr).toMatch(/has no --agent/);
-		expect(stderr).toMatch(/Pass -y to use detected agents/);
-		expect(stderr).not.toMatch(/Unknown argument: a/);
+	test("-a is an alias for --agent", async ({ testCliCommand }) => {
+		const { home, cwd, bin, argvFile } = scratch({ projectCursor: false });
+		const { stdout } = await testCliCommand(
+			["skills", "-y", "-a", "cursor"],
+			runOptions(home, cwd, bin),
+		);
+		expect(JSON.parse(stdout)[0].agents).toBe("cursor");
+		expect(JSON.parse(readFileSync(argvFile, "utf8"))[0]).toEqual(
+			expect.arrayContaining(["--agent", "cursor"]),
+		);
+	});
+
+	test("rejects unknown --agent before spawn", async ({ testCliCommand }) => {
+		const { home, cwd, bin, argvFile } = scratch({ projectCursor: false });
+		const { stderr } = await testCliCommand(
+			["skills", "-y", "--agent", "eve"],
+			{ ...runOptions(home, cwd, bin), code: 1 },
+		);
+		expect(stderr).toMatch(/Unknown agent: "eve"/);
+		expect(() => readFileSync(argvFile, "utf8")).toThrow();
+	});
+
+	test("update rejects --agent before spawn", async ({ testCliCommand }) => {
+		const { home, cwd, bin, argvFile } = scratch();
+		const { stderr } = await testCliCommand(
+			["skills", "update", "-y", "--agent", "cursor"],
+			{ ...runOptions(home, cwd, bin), code: 1 },
+		);
+		expect(stderr).toMatch(/does not take --agent/);
+		expect(() => readFileSync(argvFile, "utf8")).toThrow();
 	});
 });

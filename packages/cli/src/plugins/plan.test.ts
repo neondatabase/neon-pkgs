@@ -328,7 +328,7 @@ describe("resolvePluginsPlan", () => {
 					detectInstalledAgents,
 				}),
 			),
-		).rejects.toThrow(/Run this command from a supported agent/);
+		).rejects.toThrow(/from a supported agent/);
 		expect(detectInstalledAgents).not.toHaveBeenCalled();
 	});
 

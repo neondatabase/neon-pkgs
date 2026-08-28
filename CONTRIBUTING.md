@@ -70,7 +70,7 @@ package's file before changing it:
 
 ## CLI for agents
 
-`--help` lists every value an enum flag accepts. If `-y` cannot decide, the error names the flag (and values) to pass. Every command exposes flags for every interactive question so it can run with no TTY (`--project-id`, `--skill`, `--global`, `--oauth`, `--project`, `--template`, …). Coding-agent targeting is detection on `-y`, or omit `-y` in a terminal to pick. Details: [`AGENTS.md`](./AGENTS.md) (CLI package) and [`packages/cli/AGENTS.md`](./packages/cli/AGENTS.md). Table output: [`packages/cli/CONTRIBUTING.md`](./packages/cli/CONTRIBUTING.md).
+`--help` lists every value an enum flag accepts. If `-y` cannot decide, the error names the flag (and values) to pass. Every command exposes flags for every interactive question so it can run with no TTY (`--agent`, `--project-id`, `--skill`, `--global`, `--oauth`, `--project`, `--template`, …). Coding-agent targeting is `--agent <name>` on `skills`, `plugins`, and `mcp`; detection on `-y`; or omit `-y` in a terminal to pick. `init`, `link`, and `bootstrap` have no `--agent`. Details: [`AGENTS.md`](./AGENTS.md) (CLI package) and [`packages/cli/AGENTS.md`](./packages/cli/AGENTS.md). Table output: [`packages/cli/CONTRIBUTING.md`](./packages/cli/CONTRIBUTING.md).
 
 ## Testing
 

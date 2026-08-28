@@ -79,6 +79,7 @@ export async function resolveMcpPlan(
 			scope,
 			supported: available,
 			fix: options.yes ? "run-without-yes" : "pass-yes",
+			nameAgent: true,
 		}),
 		resolveSpecified: (raw) => {
 			const id = tryResolveAddMcpAgentId(raw);
