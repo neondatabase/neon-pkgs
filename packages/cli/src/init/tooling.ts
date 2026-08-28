@@ -39,6 +39,7 @@ export type AgentToolingOptions = AgentDetectors & {
 	agents?: readonly AgentType[];
 	hasProjectPlugins?: (cwd: string) => Promise<boolean>;
 	agentSetup?: InitAgentSetup;
+	command?: "init" | "bootstrap";
 };
 
 const defaultProjectAgents = (cwd: string): readonly AgentType[] =>
@@ -95,7 +96,7 @@ export const runAgentTooling = async (
 	const yes = options.yes;
 	const named = options.agents ?? [];
 	if (named.length > 0) {
-		assertNamedAgentTooling(named);
+		assertNamedAgentTooling(named, options.command ?? "init");
 		const tooling = chooseYesAgentTooling(named);
 		await runInitSteps(
 			planToolingSteps(tooling, { yes, named: true }),

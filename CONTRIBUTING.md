@@ -70,7 +70,7 @@ package's file before changing it:
 
 ## CLI for agents
 
-`--help` lists every value an enum flag accepts. If `-y` cannot decide, the error names the flag (and values) to pass. Every command exposes flags for every interactive question so it can run with no TTY (`--agent`, `--project-id`, `--skill`, `--global`, `--oauth`, `--project`, `--template`, …). Coding-agent targeting is `--agent <name>` on `skills`, `plugins`, `mcp`, `init`, and `bootstrap`; detection on `-y`; or omit `-y` in a terminal to pick. `init` and `bootstrap` pass `--agent` to plugins, skills, and mcp. `link` has no `--agent`. Details: [`AGENTS.md`](./AGENTS.md) (CLI package) and [`packages/cli/AGENTS.md`](./packages/cli/AGENTS.md). Table output: [`packages/cli/CONTRIBUTING.md`](./packages/cli/CONTRIBUTING.md).
+`--help` lists every value an enum flag accepts. If `-y` cannot decide, the error names the flag (and values) to pass. Every command exposes flags for every interactive question so it can run with no TTY (`--agent`, `--project-id`, `--skill`, `--global`, `--oauth`, `--project`, `--template`, …). Coding-agent targeting is `--agent <name>` on `skills`, `plugins`, `mcp`, `init`, and `bootstrap`; detection on `-y`; or omit `-y` in a terminal to pick. `init` and `bootstrap` pass `--agent` to plugins, or to skills and mcp, not both. `link` has no `--agent`. Details: [`AGENTS.md`](./AGENTS.md) (CLI package) and [`packages/cli/AGENTS.md`](./packages/cli/AGENTS.md). Table output: [`packages/cli/CONTRIBUTING.md`](./packages/cli/CONTRIBUTING.md).
 
 ## Testing
 

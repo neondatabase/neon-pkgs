@@ -569,10 +569,16 @@ describe("assertNamedAgentTooling", () => {
 		).not.toThrow();
 	});
 
-	test("cursor plus vscode fails", () => {
+	test("cursor plus vscode fails with both names and two commands", () => {
 		expect(() => assertNamedAgentTooling(["cursor", "vscode"])).toThrow(
 			NAMED_AGENTS_MIXED,
 		);
+		expect(() => assertNamedAgentTooling(["cursor", "vscode"])).toThrow(
+			/Plugin: cursor\. Skills\/MCP: vscode\. Run `neon init --agent cursor` and `neon init --agent vscode`/,
+		);
+		expect(() =>
+			assertNamedAgentTooling(["cursor", "vscode"], "bootstrap"),
+		).toThrow(/neon bootstrap --agent cursor/);
 	});
 
 	test("empty list is a no-op", () => {

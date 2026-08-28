@@ -17,7 +17,8 @@ import {
 	directoryIsEmpty,
 	INIT_NEEDS_YES_OR_TERMINAL,
 	type InitAgentSetup,
-	initYesSupportedAgents,
+	initPluginAgents,
+	initSkillsMcpAgents,
 	planExistingInit,
 	resolveNamedAgents,
 } from "../init/plan.js";
@@ -74,7 +75,7 @@ export const builder = (yargs: yargs.Argv) =>
 			type: "array",
 			string: true,
 			describe:
-				"Coding agent to install into (repeatable). Passed to plugins, skills, and mcp. Skips agent selection. Values listed below",
+				"Coding agent to install into (repeatable). Forwarded to plugins, or to skills and mcp. Skips agent selection. Values listed below",
 			coerce: coerceAgentFlag,
 		})
 		.option("data", {
@@ -94,14 +95,15 @@ export const builder = (yargs: yargs.Argv) =>
 		.example("$0 init -y", "Same steps, using each child's defaults")
 		.example(
 			"$0 init --agent cursor --agent claude-code",
-			"Skip agent selection; pass those agents to plugins, skills, and mcp",
+			"Skip agent selection; install the plugin for those agents",
 		)
 		.epilogue(
 			helpEpilogue(
 				"Interactive agent setup: plugin (recommended), skills and MCP separately, or skip agent setup. Never both plugin and skills+MCP.",
 				"-y installs the plugin when Cursor, Claude Code, or Codex is in project folders, else the host CLI agent. Otherwise skills and MCP. If none are found, it exits: pass --agent <name>, run from a supported agent, or omit -y in a terminal to pick. Then link unless already linked. link --yes may still ask for a project.",
-				"--agent / -a is passed to plugins, skills, and mcp. It skips agent selection, including with -y.",
-				helpCsv("Supported agents", initYesSupportedAgents()),
+				"--agent / -a is forwarded to plugins, or to skills and mcp, not both. It skips agent selection, including with -y.",
+				helpCsv("Plugin agents", initPluginAgents()),
+				helpCsv("Skills and MCP agents", initSkillsMcpAgents()),
 			),
 		)
 		.check((argv) => {
@@ -137,7 +139,7 @@ export const handler = async (props: InitProps) => {
 	const contextFile = resolve(cwd, props.contextFile);
 	const yes = props.yes === true;
 	const named = resolveNamedAgents(props.agent ?? []);
-	assertNamedAgentTooling(named);
+	assertNamedAgentTooling(named, "init");
 	const run = props.run ?? spawnCliChild;
 	const explicitKey = props.profile ? "" : credentialInputs().apiKeyFlag;
 	const authEnv = explicitKey ? { NEON_API_KEY: explicitKey } : undefined;
@@ -184,6 +186,7 @@ export const handler = async (props: InitProps) => {
 		...(props.hasProjectPlugins
 			? { hasProjectPlugins: props.hasProjectPlugins }
 			: {}),
+		command: "init",
 	});
 	await runInitSteps(
 		planExistingInit({

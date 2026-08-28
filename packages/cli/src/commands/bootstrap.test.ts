@@ -351,8 +351,10 @@ describe("bootstrap", () => {
 		expect(flat).toContain("--agent-setup");
 		expect(flat).toContain("host CLI agent");
 		expect(flat).toContain("omit --default in a terminal");
-		expect(flat).toMatch(/passed to plugins\s*,\s*skills, and mcp/i);
+		expect(flat).toMatch(/forwarded to plugins, or to skills and mcp/i);
 		expect(flat).toMatch(/skips agent selection/i);
+		expect(stderr).toMatch(/Plugin agents/);
+		expect(stderr).toMatch(/Skills and MCP agents/);
 		expect(stderr).toMatch(/(?<![-\w])--agent(?![-\w])/);
 	});
 
@@ -370,6 +372,10 @@ describe("bootstrap", () => {
 		]);
 		expect(code).toBe(1);
 		expect(stderr).toMatch(/plugin and skills\/MCP/);
+		expect(stderr).toMatch(/Plugin: cursor/);
+		expect(stderr).toMatch(/Skills\/MCP: vscode/);
+		expect(stderr).toMatch(/neon bootstrap --agent cursor/);
+		expect(stderr).toMatch(/neon bootstrap --agent vscode/);
 		expect(existsSync(join(dest, "package.json"))).toBe(false);
 	});
 

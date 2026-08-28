@@ -4,6 +4,7 @@ import { mcpInstallableAgents } from "../mcp/targets.js";
 import { pluginsInstallableAgents } from "../plugins/targets.js";
 import { skillsInstallableAgents } from "../skills/targets.js";
 import { agentArgv } from "../utils/agent_flag.js";
+import { getCliName } from "../utils/cli_name.js";
 import {
 	supportsSkills,
 	tryResolveAddMcpAgentId,
@@ -265,6 +266,14 @@ export const initYesSupportedAgents = (): AgentType[] =>
 		...mcpInstallableAgents("global"),
 	]);
 
+export const initPluginAgents = (): AgentType[] =>
+	pluginsInstallableAgents("project");
+
+export const initSkillsMcpAgents = (): AgentType[] => {
+	const plugin = new Set(initPluginAgents());
+	return initYesSupportedAgents().filter((id) => !plugin.has(id));
+};
+
 export const resolveYesAgentList = (input: {
 	detected: readonly AgentType[];
 	host: AgentType | null;
@@ -319,7 +328,20 @@ export const NAMED_AGENTS_UNSUPPORTED =
 	"None of the selected agents can install the Neon plugin, skills, or MCP.";
 
 export const NAMED_AGENTS_MIXED =
-	"Cannot install the plugin and skills/MCP in one run. Pass --agent for plugin agents or for skills/MCP agents, not both.";
+	"Cannot install the plugin and skills/MCP in one run.";
+
+export const namedAgentsMixedMessage = (
+	named: readonly AgentType[],
+	command: "init" | "bootstrap",
+): string => {
+	const plugin = new Set(initPluginAgents());
+	const pluginNamed = uniqueAgentIds(named.filter((id) => plugin.has(id)));
+	const otherNamed = uniqueAgentIds(named.filter((id) => !plugin.has(id)));
+	const flags = (ids: readonly AgentType[]): string =>
+		ids.flatMap((id) => ["--agent", id]).join(" ");
+	const cli = getCliName();
+	return `${NAMED_AGENTS_MIXED} Plugin: ${pluginNamed.join(", ")}. Skills/MCP: ${otherNamed.join(", ")}. Run \`${cli} ${command} ${flags(pluginNamed)}\` and \`${cli} ${command} ${flags(otherNamed)}\`.`;
+};
 
 export const namedAgentsNeedSplit = (
 	named: readonly AgentType[],
@@ -340,7 +362,10 @@ export const namedAgentsNeedSplit = (
 	return named.some((id) => !used.has(id));
 };
 
-export const assertNamedAgentTooling = (named: readonly AgentType[]): void => {
+export const assertNamedAgentTooling = (
+	named: readonly AgentType[],
+	command: "init" | "bootstrap" = "init",
+): void => {
 	if (named.length === 0) {
 		return;
 	}
@@ -351,7 +376,7 @@ export const assertNamedAgentTooling = (named: readonly AgentType[]): void => {
 		);
 	}
 	if (namedAgentsNeedSplit(named, tooling)) {
-		throw new Error(NAMED_AGENTS_MIXED);
+		throw new Error(namedAgentsMixedMessage(named, command));
 	}
 };
 

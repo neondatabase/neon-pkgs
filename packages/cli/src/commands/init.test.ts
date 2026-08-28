@@ -755,8 +755,10 @@ describe("init CLI", () => {
 		expect(help).toMatch(/-a, --agent/);
 		expect(help).toMatch(/Skip agent selection/);
 		expect(help.replace(/\s+/g, " ")).toMatch(
-			/passed to plugins\s*,\s*skills, and mcp/i,
+			/forwarded to plugins, or to skills and mcp/i,
 		);
+		expect(help).toMatch(/Plugin agents/);
+		expect(help).toMatch(/Skills and MCP agents/);
 		expect(help).not.toMatch(/installed apps/);
 		expect(help).not.toMatch(/Set output format/);
 	});

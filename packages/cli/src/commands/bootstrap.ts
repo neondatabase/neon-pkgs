@@ -27,7 +27,8 @@ import {
 	type ChildForward,
 	chooseYesAgentTooling,
 	type InitAgentSetup,
-	initYesSupportedAgents,
+	initPluginAgents,
+	initSkillsMcpAgents,
 	postScaffoldActions,
 	projectContextFile,
 	resolveNamedAgents,
@@ -143,7 +144,7 @@ export const builder = (argv: yargs.Argv) =>
 				type: "array",
 				string: true,
 				describe:
-					"Coding agent to install into (repeatable). Passed to plugins, skills, and mcp. Skips agent selection. Values listed below",
+					"Coding agent to install into (repeatable). Forwarded to plugins, or to skills and mcp. Skips agent selection. Values listed below",
 				coerce: coerceAgentFlag,
 			},
 		})
@@ -165,12 +166,13 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.example(
 			"$0 bootstrap my-app --agent cursor --agent claude-code",
-			"Skip agent selection; pass those agents to plugins, skills, and mcp",
+			"Skip agent selection; install the plugin for those agents",
 		)
 		.epilogue(
 			helpEpilogue(
-				"--agent / -a is passed to plugins, skills, and mcp. It skips agent selection, including with --default.",
-				helpCsv("Supported agents", initYesSupportedAgents()),
+				"--agent / -a is forwarded to plugins, or to skills and mcp, not both. It skips agent selection, including with --default.",
+				helpCsv("Plugin agents", initPluginAgents()),
+				helpCsv("Skills and MCP agents", initSkillsMcpAgents()),
 			),
 		)
 		.strict();
@@ -205,7 +207,7 @@ export const handler = async (props: BootstrapProps): Promise<void> => {
 	}
 	const named = resolveNamedAgents(props.agent ?? []);
 	if (props.agentSetup !== false) {
-		assertNamedAgentTooling(named);
+		assertNamedAgentTooling(named, "bootstrap");
 	}
 	const templates = await resolveTemplateList(props);
 	// --default is a non-interactive quick start: it fills in the template and
@@ -562,6 +564,7 @@ const executePostScaffold = async (
 				...(props.detectAgent
 					? { detectAgent: props.detectAgent }
 					: {}),
+				command: "bootstrap",
 			});
 			agentsRan = true;
 			continue;
