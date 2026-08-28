@@ -1,5 +1,13 @@
 # neonctl
 
+## 4.11.1
+
+### Patch Changes
+
+- 4ddfe65: `neon skill` and `neon plugin` are aliases of `neon skills` and `neon plugins`.
+- Updated dependencies [4ddfe65]
+  - neon@4.11.1
+
 ## 4.11.0
 
 ### Minor Changes
