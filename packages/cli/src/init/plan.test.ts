@@ -16,6 +16,7 @@ import {
 	projectContextFile,
 	resolveInitAgentSetup,
 	resolveYesAgentList,
+	rewriteUnknownAgentArg,
 } from "./plan.js";
 
 describe("directoryIsEmpty", () => {
@@ -203,7 +204,7 @@ describe("noDetectedAgentsMessage", () => {
 			fix: "run-without-yes",
 		});
 		expect(message).toContain("No coding agents detected in this project.");
-		expect(message).toContain("without -y");
+		expect(message).toContain("omit -y in a terminal");
 		expect(message).toContain("cursor, claude-code");
 		expect(message).not.toMatch(/--agent/);
 	});
@@ -217,6 +218,39 @@ describe("noDetectedAgentsMessage", () => {
 		expect(message).toContain("No coding agents detected.");
 		expect(message).not.toContain("in this project");
 		expect(message).not.toMatch(/--agent/);
+	});
+});
+
+describe("rewriteUnknownAgentArg", () => {
+	test("names -y for skills, plugins, mcp, and init", () => {
+		for (const command of ["skills", "plugins", "mcp", "init"] as const) {
+			expect(
+				rewriteUnknownAgentArg({
+					message: "Unknown argument: agent",
+					argv: ["node", "cli.js", command, "--agent", "cursor"],
+					cliName: "neon",
+				}),
+			).toBe(
+				`neon ${command} has no --agent. Pass -y to use detected agents, or run neon ${command} in a terminal to pick.`,
+			);
+		}
+	});
+
+	test("leaves link and bootstrap as unknown argument", () => {
+		expect(
+			rewriteUnknownAgentArg({
+				message: "Unknown argument: agent",
+				argv: ["node", "cli.js", "link", "--agent"],
+				cliName: "neon",
+			}),
+		).toBeUndefined();
+		expect(
+			rewriteUnknownAgentArg({
+				message: "Unknown argument: agent",
+				argv: ["node", "cli.js", "bootstrap", "--agent"],
+				cliName: "neon",
+			}),
+		).toBeUndefined();
 	});
 });
 

@@ -181,7 +181,7 @@ describe("neon skills", () => {
 			code: 1,
 		});
 		expect(stderr).toMatch(/No coding agents detected in this project/);
-		expect(stderr).toMatch(/without -y/);
+		expect(stderr).toMatch(/omit -y in a terminal/);
 		expect(stderr).not.toMatch(/Pass --agent/);
 	});
 
@@ -547,5 +547,20 @@ describe("neon skills", () => {
 			expect(compact).toContain(row.skill);
 		}
 		expect(compact).toContain("exceptneon-postgres-agent-platforms");
+		expect(flat).toContain("Detected agents");
+		expect(flat).toContain("skills -y -s neon -s neon-ai-gateway");
+	});
+
+	test("--agent names -y instead of unknown argument", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin } = scratch({ projectCursor: false });
+		const { stderr } = await testCliCommand(
+			["skills", "--agent", "cursor"],
+			{ ...runOptions(home, cwd, bin), code: 1 },
+		);
+		expect(stderr).toMatch(/has no --agent/);
+		expect(stderr).toMatch(/Pass -y to use detected agents/);
+		expect(stderr).not.toMatch(/Unknown argument: agent/);
 	});
 });

@@ -721,4 +721,17 @@ describe("neon mcp", () => {
 			expect(compact).toContain(category);
 		}
 	});
+
+	test("--agent names -y instead of unknown argument", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		const { stderr } = await testCliCommand(["mcp", "--agent", "cursor"], {
+			...runOptions(home, cwd),
+			code: 1,
+		});
+		expect(stderr).toMatch(/has no --agent/);
+		expect(stderr).toMatch(/Pass -y to use detected agents/);
+		expect(stderr).not.toMatch(/Unknown argument: agent/);
+	});
 });

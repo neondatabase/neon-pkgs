@@ -61,7 +61,7 @@ export const assertSkillsCanRun = (options: {
 		return;
 	}
 	throw new Error(
-		"No interactive terminal. Pass -y to install the default skills, or --skill <name>.",
+		"No interactive terminal. Pass -y to install the default skills into detected agents. Add --skill <name> to name skills.",
 	);
 };
 

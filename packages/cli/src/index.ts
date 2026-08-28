@@ -25,6 +25,7 @@ import {
 	NETWORK_ERROR_MESSAGE,
 } from "./errors.js";
 import { showHelp } from "./help.js";
+import { rewriteUnknownAgentArg } from "./init/plan.js";
 import { log } from "./log.js";
 import pkg from "./pkg.js";
 import { getCliName } from "./utils/cli_name.js";
@@ -217,6 +218,20 @@ async function handleError(msg: string, err: unknown): Promise<boolean> {
 	// Log stack trace if available
 	if (err instanceof Error && err.stack) {
 		log.debug("Stack: %s", err.stack);
+	}
+
+	if (err instanceof Error) {
+		const rewritten = rewriteUnknownAgentArg({
+			message: err.message,
+			argv: process.argv,
+			cliName: getCliName(),
+		});
+		if (rewritten !== undefined) {
+			const error = new Error(rewritten);
+			sendError(error, matchErrorCode(error.message));
+			log.error(error.message);
+			return false;
+		}
 	}
 
 	// A connection-level failure (no response ever reached us) reads as a cryptic

@@ -350,7 +350,7 @@ describe("bootstrap", () => {
 		expect(flat).toContain("--list-templates");
 		expect(flat).toContain("--agent-setup");
 		expect(flat).toContain("host CLI agent");
-		expect(flat).toContain("exits if none");
+		expect(flat).toContain("omit --default in a terminal");
 		expect(stderr).not.toMatch(/(?<![-\w])--agent(?![-\w])/);
 	});
 

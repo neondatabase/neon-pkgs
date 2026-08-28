@@ -94,7 +94,7 @@ export const builder = (argv: yargs.Argv) =>
 			default: {
 				alias: "y",
 				describe:
-					"Quick start: scaffold the default template (or --template), then install, git, agent tooling (project folders, else the host CLI agent; exits if none), and link --yes. Skips those pickers; link --yes still asks for a project unless one is already linked",
+					"Quick start: scaffold the default template (or --template), then install, git, agent tooling (project folders, else the host CLI agent; if none, run from a supported agent or omit --default in a terminal), and link --yes. Skips those pickers; link --yes still asks for a project unless one is already linked",
 				type: "boolean",
 				default: false,
 			},

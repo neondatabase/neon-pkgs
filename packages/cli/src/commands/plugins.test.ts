@@ -172,7 +172,7 @@ describe("neon plugins", () => {
 			code: 1,
 		});
 		expect(stderr).toMatch(/No coding agents detected in this project/);
-		expect(stderr).toMatch(/without -y/);
+		expect(stderr).toMatch(/omit -y in a terminal/);
 		expect(stderr).not.toMatch(/Pass --agent/);
 	});
 
@@ -429,5 +429,19 @@ describe("neon plugins", () => {
 		for (const agent of pluginsInstallableAgents("global")) {
 			expect(compact).toContain(agent);
 		}
+		expect(flat).toContain("Detected agents");
+	});
+
+	test("--agent names -y instead of unknown argument", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin } = scratch({ projectCursor: false });
+		const { stderr } = await testCliCommand(
+			["plugins", "--agent", "cursor"],
+			{ ...runOptions(home, cwd, bin), code: 1 },
+		);
+		expect(stderr).toMatch(/has no --agent/);
+		expect(stderr).toMatch(/Pass -y to use detected agents/);
+		expect(stderr).not.toMatch(/Unknown argument: agent/);
 	});
 });

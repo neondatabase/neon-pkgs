@@ -202,7 +202,7 @@ describe("resolveMcpPlan", () => {
 					detectAgent: () => null,
 				}),
 			),
-		).rejects.toThrow(/without -y/);
+		).rejects.toThrow(/omit -y in a terminal/);
 	});
 
 	test("pin yes with API-key auth sets urlProjectId", async () => {

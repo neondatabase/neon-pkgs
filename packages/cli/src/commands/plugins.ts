@@ -52,7 +52,8 @@ export const builder = (argv: yargs.Argv) =>
 				alias: "y",
 				type: "boolean",
 				default: false,
-				describe: "Skip prompts",
+				describe:
+					"Skip prompts. Detected agents (project folders, else the host CLI agent). --global uses installed apps, else the host CLI agent",
 			},
 			global: {
 				type: "boolean",

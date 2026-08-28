@@ -67,8 +67,28 @@ export const noDetectedAgentsMessage = (input: {
 	const hint =
 		input.fix === "pass-yes"
 			? "Pass -y to use detected agents, or run from a terminal to pick one."
-			: "Run this command from a supported agent, or run it without -y to pick one.";
+			: "Run this command from a supported agent, or omit -y in a terminal to pick one.";
 	return `${lead} ${hint} Supported agents: ${input.supported.join(", ")}`;
+};
+
+const AGENT_TARGETING_COMMANDS = ["init", "mcp", "plugins", "skills"] as const;
+
+export const rewriteUnknownAgentArg = (input: {
+	message: string;
+	argv: readonly string[];
+	cliName: string;
+}): string | undefined => {
+	if (input.message !== "Unknown argument: agent") {
+		return undefined;
+	}
+	const command = AGENT_TARGETING_COMMANDS.find((cmd) =>
+		input.argv.includes(cmd),
+	);
+	if (command === undefined) {
+		return undefined;
+	}
+	const invocation = `${input.cliName} ${command}`;
+	return `${invocation} has no --agent. Pass -y to use detected agents, or run ${invocation} in a terminal to pick.`;
 };
 
 export const initYesSupportedAgents = (): AgentType[] =>

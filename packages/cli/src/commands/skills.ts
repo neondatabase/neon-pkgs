@@ -119,7 +119,8 @@ export const builder = (argv: yargs.Argv) =>
 				alias: "y",
 				type: "boolean",
 				default: false,
-				describe: "Skip prompts",
+				describe:
+					"Skip prompts. Detected agents (project folders, else the host CLI agent). --global uses installed apps, else the host CLI agent",
 			},
 			global: {
 				type: "boolean",
@@ -145,8 +146,8 @@ export const builder = (argv: yargs.Argv) =>
 			"This directory, detected agents (project folders, else the host CLI agent), the default skills",
 		)
 		.example(
-			"$0 skills -s neon -s neon-ai-gateway",
-			"Install named skills into detected agents",
+			"$0 skills -y -s neon -s neon-ai-gateway",
+			"Named skills into detected agents",
 		)
 		.example("$0 skills --global", "Install user-level skills")
 		.epilogue(

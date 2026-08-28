@@ -310,7 +310,7 @@ describe("resolveSkillsPlan", () => {
 		expect(error.message).toMatch(
 			/No coding agents detected in this project/,
 		);
-		expect(error.message).toMatch(/without -y/);
+		expect(error.message).toMatch(/omit -y in a terminal/);
 		expect(error.message).not.toMatch(/--agent/);
 	});
 
