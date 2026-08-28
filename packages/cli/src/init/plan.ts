@@ -337,7 +337,7 @@ export type NamedAgentCommandContext = {
 
 const quoteIfNeeded = (value: string): string =>
 	/[\s"'\\]/.test(value)
-		? `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`
+		? `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`
 		: value;
 
 const mixedRerun = (
