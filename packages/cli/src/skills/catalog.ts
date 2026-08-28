@@ -10,11 +10,6 @@ export type SkillEntry = {
 };
 
 export const NEON_SKILL_CATALOG: readonly SkillEntry[] = [
-	{
-		skill: "claimable-postgres",
-		source: AGENT_SKILLS_SOURCE,
-		defaultSelected: true,
-	},
 	{ skill: "neon", source: AGENT_SKILLS_SOURCE, defaultSelected: true },
 	{
 		skill: "neon-ai-gateway",

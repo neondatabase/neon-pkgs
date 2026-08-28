@@ -39,6 +39,13 @@ describe("NEON_SKILL_CATALOG", () => {
 			"neon skills -y installs every listed skill except neon-postgres-agent-platforms",
 		);
 	});
+
+	test("does not offer the deleted claimable-postgres skill", () => {
+		expect(listSkillIds()).not.toContain("claimable-postgres");
+		expect(() => resolveSkillId("claimable-postgres")).toThrow(
+			/Unknown skill: "claimable-postgres"/,
+		);
+	});
 });
 
 describe("resolveSkillId", () => {

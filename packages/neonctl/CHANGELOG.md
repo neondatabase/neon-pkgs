@@ -1,5 +1,12 @@
 # neonctl
 
+## 4.10.1
+
+### Patch Changes
+
+- Updated dependencies [7c6ec56]
+  - neon@4.10.1
+
 ## 4.10.0
 
 ### Patch Changes

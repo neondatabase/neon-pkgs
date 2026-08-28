@@ -435,7 +435,7 @@ describe("neon skills", () => {
 		expect(row.status).toBe("failed");
 		expect(row.error).toBe("skills CLI failed");
 		expect(row.error).not.toContain("syscall");
-		expect(stderr).toMatch(/Retry with: neon skills -s claimable-postgres/);
+		expect(stderr).toMatch(/Retry with: neon skills -s neon/);
 		expect(stderr).toMatch(/--agent cursor -y/);
 		expect(stderr).not.toMatch(/neondatabase\/agent-skills/);
 		expect(stderr.match(/Retry with:/g)?.length).toBe(1);
@@ -517,7 +517,7 @@ describe("neon skills", () => {
 				code: 1,
 			},
 		);
-		expect(stderr).toMatch(/Retry with: neon skills -s claimable-postgres/);
+		expect(stderr).toMatch(/Retry with: neon skills -s neon/);
 		expect(stderr).toMatch(/--agent cursor --global -y/);
 	});
 

@@ -1,5 +1,11 @@
 # neon
 
+## 4.10.1
+
+### Patch Changes
+
+- 7c6ec56: Rank `inspect db stalled-queries` by the oldest query group first.
+
 ## 4.10.0
 
 ### Minor Changes
