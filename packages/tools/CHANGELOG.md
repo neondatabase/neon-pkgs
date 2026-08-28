@@ -1,5 +1,11 @@
 # @neon/tools
 
+## 1.1.1
+
+### Patch Changes
+
+- 0c29080: Management API tools now publish `openWorldHint: false`. They operate on the authenticated Neon account. Operations that send or schedule mail stay `true`.
+
 ## 1.1.0
 
 ### Minor Changes
