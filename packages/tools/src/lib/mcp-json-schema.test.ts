@@ -77,6 +77,38 @@ describe("compactJsonSchema", () => {
 			dependentRequired: { description: ["name"] },
 		});
 	});
+
+	test("strips descriptions inside dependentSchemas and contentSchema", () => {
+		const schema = {
+			type: "object",
+			dependentSchemas: {
+				name: {
+					type: "object",
+					description: "drop this",
+					properties: {
+						name: { type: "string", description: "also drop" },
+					},
+				},
+			},
+			contentSchema: {
+				type: "string",
+				description: "payload schema",
+			},
+		};
+
+		expect(compactJsonSchema(schema)).toEqual({
+			type: "object",
+			dependentSchemas: {
+				name: {
+					type: "object",
+					properties: {
+						name: { type: "string" },
+					},
+				},
+			},
+			contentSchema: { type: "string" },
+		});
+	});
 });
 
 describe("toMcpInputSchema", () => {

@@ -3,6 +3,7 @@ import * as z from "zod";
 const SCHEMA_MAP_KEYS = new Set([
 	"$defs",
 	"definitions",
+	"dependentSchemas",
 	"patternProperties",
 	"properties",
 ]);
@@ -10,6 +11,7 @@ const SCHEMA_MAP_KEYS = new Set([
 const SCHEMA_VALUE_KEYS = new Set([
 	"additionalProperties",
 	"contains",
+	"contentSchema",
 	"else",
 	"if",
 	"items",
