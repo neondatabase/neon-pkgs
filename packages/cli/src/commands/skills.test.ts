@@ -567,4 +567,17 @@ describe("neon skills", () => {
 		expect(stderr).toMatch(/Pass -y to use detected agents/);
 		expect(stderr).not.toMatch(/Unknown argument: agent/);
 	});
+
+	test("-a names -y instead of unknown argument", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin } = scratch({ projectCursor: false });
+		const { stderr } = await testCliCommand(["skills", "-a", "cursor"], {
+			...runOptions(home, cwd, bin),
+			code: 1,
+		});
+		expect(stderr).toMatch(/has no --agent/);
+		expect(stderr).toMatch(/Pass -y to use detected agents/);
+		expect(stderr).not.toMatch(/Unknown argument: a/);
+	});
 });

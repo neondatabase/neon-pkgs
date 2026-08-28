@@ -107,7 +107,10 @@ export const rewriteUnknownAgentArg = (input: {
 	argv: readonly string[];
 	cliName: string;
 }): string | undefined => {
-	if (input.message !== "Unknown argument: agent") {
+	if (
+		input.message !== "Unknown argument: agent" &&
+		input.message !== "Unknown argument: a"
+	) {
 		return undefined;
 	}
 	const command = UNKNOWN_AGENT_COMMANDS.find((cmd) =>

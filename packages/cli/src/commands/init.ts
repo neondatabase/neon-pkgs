@@ -7,6 +7,7 @@ import { type InitRun, initChildEnv, spawnCliChild } from "../init/child.js";
 import {
 	bootstrapInitStep,
 	directoryIsEmpty,
+	INIT_NEEDS_YES_OR_TERMINAL,
 	type InitAgentSetup,
 	planExistingInit,
 } from "../init/plan.js";
@@ -14,6 +15,7 @@ import { runAgentTooling, runInitSteps } from "../init/tooling.js";
 import { log } from "../log.js";
 import type { AgentType } from "../mcp/agents.js";
 import type { CommonProps } from "../types.js";
+import { canPickAgentsInteractively } from "../utils/agent_picker.js";
 import { getCliName } from "../utils/cli_name.js";
 import { helpEpilogue } from "../utils/help_text.js";
 
@@ -120,6 +122,9 @@ export const handler = async (props: InitProps) => {
 	};
 
 	if (directoryIsEmpty(names)) {
+		if (!yes && !canPickAgentsInteractively()) {
+			throw new Error(INIT_NEEDS_YES_OR_TERMINAL);
+		}
 		await runInitSteps([bootstrapInitStep(yes)], {
 			cwd,
 			run,

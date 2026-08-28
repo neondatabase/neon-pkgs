@@ -236,6 +236,18 @@ describe("rewriteUnknownAgentArg", () => {
 		}
 	});
 
+	test("names -a the same as --agent", () => {
+		expect(
+			rewriteUnknownAgentArg({
+				message: "Unknown argument: a",
+				argv: ["node", "cli.js", "skills", "-a", "cursor"],
+				cliName: "neon",
+			}),
+		).toBe(
+			"neon skills has no --agent. Pass -y to use detected agents, or run neon skills in a terminal to pick.",
+		);
+	});
+
 	test("names link and bootstrap replacements", () => {
 		expect(
 			rewriteUnknownAgentArg({

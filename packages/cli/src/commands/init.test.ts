@@ -46,23 +46,21 @@ describe("init handler", () => {
 		vi.resetModules();
 	});
 
-	test("empty directory runs only bootstrap .", async () => {
+	test("empty directory without -y fails before bootstrap", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-empty-"));
 		const run = vi.fn().mockResolvedValue(true);
 		const { handler } = await import("./init.js");
 
-		await handler(
-			baseProps({
-				cwd,
-				run,
-				contextFile: join(cwd, ".neon"),
-			}),
-		);
-
-		expect(run.mock.calls.map((call) => call[0].slice(0, 2))).toEqual([
-			["bootstrap", "."],
-		]);
-		expect(run).toHaveBeenCalledTimes(1);
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					run,
+					contextFile: join(cwd, ".neon"),
+				}),
+			),
+		).rejects.toThrow(/Pass -y to use defaults/);
+		expect(run).not.toHaveBeenCalled();
 	});
 
 	test("existing app without -y fails before children", async () => {
