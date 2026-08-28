@@ -27,6 +27,9 @@ const looksLikeCursor = (value: string): boolean => {
 
 const isSet = (value: string | undefined): boolean => value !== undefined;
 
+const isNonEmpty = (value: string | undefined): boolean =>
+	typeof value === "string" && value.trim() !== "";
+
 export function detectAgent(
 	env: NodeJS.ProcessEnv = process.env,
 ): AgentType | null {
@@ -36,8 +39,14 @@ export function detectAgent(
 	if (env.CODEX === "1") {
 		return "codex";
 	}
+	if (isNonEmpty(env.CODEX_THREAD_ID) || isNonEmpty(env.CODEX_SESSION_ID)) {
+		return "codex";
+	}
 	if (env.CLINE === "1") {
 		return "cline";
+	}
+	if (env.GEMINI_CLI === "1") {
+		return "gemini-cli";
 	}
 
 	if (

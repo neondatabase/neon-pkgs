@@ -38,6 +38,18 @@ describe("detectAgent", () => {
 				CURSOR_TRACE_ID: "trace",
 			}),
 		).toBe("codex");
+		expect(
+			detectAgent({
+				CODEX_THREAD_ID: "thread-123",
+				TERM_PROGRAM: "cursor",
+			}),
+		).toBe("codex");
+		expect(
+			detectAgent({
+				CODEX_SESSION_ID: "session-123",
+				CURSOR_TRACE_ID: "trace",
+			}),
+		).toBe("codex");
 	});
 
 	test("Cline env beats ambient VS Code vars", () => {
@@ -48,6 +60,15 @@ describe("detectAgent", () => {
 				VSCODE_PID: "1",
 			}),
 		).toBe("cline");
+	});
+
+	test("Gemini CLI env beats ambient Cursor vars", () => {
+		expect(
+			detectAgent({
+				GEMINI_CLI: "1",
+				TERM_PROGRAM: "cursor",
+			}),
+		).toBe("gemini-cli");
 	});
 
 	test("Cursor from TERM_PROGRAM and Cursor-specific vars", () => {
