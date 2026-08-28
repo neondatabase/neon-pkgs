@@ -26,11 +26,7 @@ export const projectContextFile = (
 
 export type PostScaffoldAction = "git" | "agent" | "install" | "link";
 
-/**
- * Env pull evaluates neon.ts, so a template that ships one cannot link
- * until dependencies are installed. Install then stays last only when
- * link does not need that.
- */
+/** Linking a template with neon.ts requires installed dependencies because env pull evaluates it. */
 export const postScaffoldActions = (input: {
 	git: boolean;
 	agentSetup: InitAgentSetup;

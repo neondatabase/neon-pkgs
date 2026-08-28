@@ -281,8 +281,12 @@ async function handleError(msg: string, err: unknown): Promise<boolean> {
 	} else {
 		const error =
 			err instanceof Error ? err : new Error(msg || "Unknown error");
-		sendError(error, matchErrorCode(error.message));
-		log.error(error.message);
+		const code = matchErrorCode(error.message);
+		sendError(error, code);
+		// The completion summary already reported this failure.
+		if (code !== "NEON_INIT_FAILED") {
+			log.error(error.message);
+		}
 		return false;
 	}
 }

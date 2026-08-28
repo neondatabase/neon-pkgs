@@ -10,6 +10,9 @@ describe("matchErrorCode", () => {
 		expect(matchErrorCode("Missing required argument: project-id")).toBe(
 			"MISSING_ARGUMENT",
 		);
+		expect(matchErrorCode("Setup did not finish.")).toBe(
+			"NEON_INIT_FAILED",
+		);
 	});
 
 	it("falls back to UNKNOWN_ERROR for unmatched / empty messages", () => {

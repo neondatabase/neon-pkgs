@@ -733,7 +733,7 @@ const finishPostScaffold = (
 ): void => {
 	printDoneSummary(input);
 	if (input.installFailed || input.gitFailed) {
-		process.exit(1);
+		throw new Error("Setup did not finish.");
 	}
 };
 

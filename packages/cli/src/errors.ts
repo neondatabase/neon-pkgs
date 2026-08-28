@@ -15,6 +15,7 @@ const ERROR_MATCHERS = [
 	[/^Unknown command: (.*)$/, "UNKNOWN_COMMAND"],
 	[/^Missing required argument: (.*)$/, "MISSING_ARGUMENT"],
 	[/^Failed to open web browser. (.*)$/, "AUTH_BROWSER_FAILED"],
+	[/^Setup did not finish\.$/, "NEON_INIT_FAILED"],
 ] as const;
 
 export const matchErrorCode = (message?: string): ErrorCode => {
