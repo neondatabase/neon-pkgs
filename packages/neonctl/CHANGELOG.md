@@ -1,5 +1,16 @@
 # neonctl
 
+## 4.11.0
+
+### Minor Changes
+
+- 2e7c936: `neon init -y` / `neon bootstrap --default`, `neon skills -y`, `neon plugins -y`, and `neon mcp -y` install into detected agents: project folders (or installed apps with `--global` / default `mcp -y`), else the host CLI agent. `--agent <name>` on `skills`, `plugins`, `mcp`, `init`, and `bootstrap` names coding agents and skips agent selection. `init` and `bootstrap` pass `--agent` to plugins, or to skills and mcp, not both. If `skills` / `plugins` / `mcp` `-y` finds none, the command names `--agent`. `link` has no `--agent`.
+
+### Patch Changes
+
+- Updated dependencies [2e7c936]
+  - neon@4.11.0
+
 ## 4.10.2
 
 ### Patch Changes
