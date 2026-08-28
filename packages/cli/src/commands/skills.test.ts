@@ -440,7 +440,7 @@ describe("neon skills", () => {
 		expect(row.status).toBe("failed");
 		expect(row.error).toBe("skills CLI failed");
 		expect(row.error).not.toContain("syscall");
-		expect(stderr).toMatch(/Retry with: neon skills -s claimable-postgres/);
+		expect(stderr).toMatch(/Retry with: neon skills -s neon/);
 		expect(stderr).toMatch(/--agent cursor -y/);
 		expect(stderr).not.toMatch(/neondatabase\/agent-skills/);
 		expect(stderr.match(/Retry with:/g)?.length).toBe(1);
@@ -504,15 +504,17 @@ describe("neon skills", () => {
 		testCliCommand,
 	}) => {
 		const { home, cwd, bin } = scratch();
-		mkdirSync(join(home, ".cursor"));
-		const { stderr } = await testCliCommand(["skills", "-y", "--global"], {
-			...runOptions(home, cwd, bin, {
-				SKILLS_CHILD_EXIT: "1",
-				SKILLS_CHILD_STDERR: "boom",
-			}),
-			code: 1,
-		});
-		expect(stderr).toMatch(/Retry with: neon skills -s claimable-postgres/);
+		const { stderr } = await testCliCommand(
+			["skills", "-y", "--global", "--agent", "cursor"],
+			{
+				...runOptions(home, cwd, bin, {
+					SKILLS_CHILD_EXIT: "1",
+					SKILLS_CHILD_STDERR: "boom",
+				}),
+				code: 1,
+			},
+		);
+		expect(stderr).toMatch(/Retry with: neon skills -s neon/);
 		expect(stderr).toMatch(/--agent cursor --global -y/);
 	});
 

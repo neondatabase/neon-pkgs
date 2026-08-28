@@ -1,5 +1,17 @@
 # neon
 
+## 4.10.2
+
+### Patch Changes
+
+- 19b64a8: Group the top-level `neon init` and `neon bootstrap` setup questions before running the selected steps. Install dependencies last unless `neon.ts` must be evaluated for linking. Restore the NEON banner, remove `claimable-postgres` from skill selection, and print a completion summary.
+
+## 4.10.1
+
+### Patch Changes
+
+- 7c6ec56: Rank `inspect db stalled-queries` by the oldest query group first.
+
 ## 4.10.0
 
 ### Minor Changes

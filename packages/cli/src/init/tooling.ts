@@ -37,6 +37,8 @@ export type AgentToolingOptions = AgentDetectors & {
 	authEnv?: NodeJS.ProcessEnv;
 	pickAgentSetup?: () => Promise<InitAgentSetup>;
 	agents?: readonly AgentType[];
+	hasProjectPlugins?: (cwd: string) => Promise<boolean>;
+	agentSetup?: InitAgentSetup;
 };
 
 const defaultProjectAgents = (cwd: string): readonly AgentType[] =>
@@ -89,28 +91,45 @@ const yesMiss = (): Error =>
 
 export const runAgentTooling = async (
 	options: AgentToolingOptions,
-): Promise<void> => {
+): Promise<InitAgentSetup> => {
 	const yes = options.yes;
 	const named = options.agents ?? [];
 	if (named.length > 0) {
 		assertNamedAgentTooling(named);
+		const tooling = chooseYesAgentTooling(named);
 		await runInitSteps(
-			planToolingSteps(chooseYesAgentTooling(named), {
-				yes,
-				named: true,
-			}),
+			planToolingSteps(tooling, { yes, named: true }),
 			options,
 		);
-		return;
+		return tooling.setup;
+	}
+	if (options.agentSetup !== undefined) {
+		await runInitSteps(
+			planAgentSteps({ yes, agentSetup: options.agentSetup }),
+			options,
+		);
+		return options.agentSetup;
 	}
 	if (yes) {
+		if (options.hasProjectPlugins !== undefined) {
+			const agentSetup: InitAgentSetup = (await options.hasProjectPlugins(
+				options.cwd,
+			))
+				? "plugin"
+				: "skills-mcp";
+			await runInitSteps(
+				planAgentSteps({ yes: true, agentSetup }),
+				options,
+			);
+			return agentSetup;
+		}
 		const agents = await yesAgentsFromOptions(options);
 		const tooling = chooseYesAgentTooling(agents);
 		if (tooling.setup === "skip") {
 			throw yesMiss();
 		}
 		await runInitSteps(planYesAgentSteps(tooling), options);
-		return;
+		return tooling.setup;
 	}
 	const interactive =
 		options.pickAgentSetup !== undefined || canPickAgentsInteractively();
@@ -119,6 +138,7 @@ export const runAgentTooling = async (
 		pick: options.pickAgentSetup ?? pickAgentSetupInteractively,
 	});
 	await runInitSteps(planAgentSteps({ yes, agentSetup }), options);
+	return agentSetup;
 };
 
 export type ScaffoldFollowUpOptions = AgentToolingOptions & {

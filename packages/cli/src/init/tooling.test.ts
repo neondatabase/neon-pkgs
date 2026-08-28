@@ -24,43 +24,7 @@ describe("runScaffoldFollowUp", () => {
 		expect(run).not.toHaveBeenCalled();
 	});
 
-	test("--no-agent-setup still links", async () => {
-		const run = vi.fn().mockResolvedValue(true);
-		await runScaffoldFollowUp({
-			cwd: "/app",
-			yes: true,
-			run,
-			forward,
-			skipAgentSetup: true,
-			shouldLink: true,
-			linkYes: true,
-			detectProjectAgents: () => [],
-			detectAgent: () => null,
-		});
-		expect(run.mock.calls.map((call) => call[0].slice(0, 2))).toEqual([
-			["link", "--yes"],
-		]);
-	});
-
-	test("--default with no agents fails before link", async () => {
-		const run = vi.fn().mockResolvedValue(true);
-		await expect(
-			runScaffoldFollowUp({
-				cwd: "/app",
-				yes: true,
-				run,
-				forward,
-				skipAgentSetup: false,
-				shouldLink: true,
-				linkYes: true,
-				detectProjectAgents: () => [],
-				detectAgent: () => null,
-			}),
-		).rejects.toThrow(/No coding agents detected in this project/);
-		expect(run).not.toHaveBeenCalled();
-	});
-
-	test("host Cursor installs the plugin then links", async () => {
+	test("--default without a project plugin agent: skills, mcp, link --yes", async () => {
 		const run = vi.fn().mockResolvedValue(true);
 		await runScaffoldFollowUp({
 			cwd: "/app",
@@ -70,13 +34,30 @@ describe("runScaffoldFollowUp", () => {
 			skipAgentSetup: false,
 			shouldLink: true,
 			linkYes: true,
-			detectProjectAgents: () => [],
-			detectAgent: () => "cursor",
+			hasProjectPlugins: async () => false,
 		});
-		expect(run.mock.calls.map((call) => call[0])).toEqual([
-			expect.arrayContaining(["plugins", "-y"]),
-			expect.arrayContaining(["link", "--yes"]),
+		expect(run.mock.calls.map((call) => call[0].slice(0, 2))).toEqual([
+			["skills", "-y"],
+			["mcp", "-y"],
+			["link", "--yes"],
 		]);
+	});
+
+	test("-y does not ask host when the project has agents", async () => {
+		const run = vi.fn().mockResolvedValue(true);
+		const detectAgent = vi.fn((): AgentType | null => "claude-code");
+		await runScaffoldFollowUp({
+			cwd: "/app",
+			yes: true,
+			run,
+			forward,
+			skipAgentSetup: false,
+			shouldLink: true,
+			linkYes: true,
+			detectProjectAgents: () => ["cursor"],
+			detectAgent,
+		});
+		expect(detectAgent).not.toHaveBeenCalled();
 		expect(run.mock.calls[0][0].slice(0, 2)).toEqual(["plugins", "-y"]);
 	});
 
@@ -100,19 +81,22 @@ describe("runScaffoldFollowUp", () => {
 });
 
 describe("runAgentTooling", () => {
-	test("-y does not ask host when the project has agents", async () => {
+	test("a resolved agentSetup does not call the picker", async () => {
 		const run = vi.fn().mockResolvedValue(true);
-		const detectAgent = vi.fn((): AgentType | null => "claude-code");
+		const pickAgentSetup = vi.fn(async (): Promise<"plugin"> => "plugin");
 		await runAgentTooling({
 			cwd: "/app",
-			yes: true,
+			yes: false,
 			run,
 			forward,
-			detectProjectAgents: () => ["cursor"],
-			detectAgent,
+			agentSetup: "skills-mcp",
+			pickAgentSetup,
 		});
-		expect(detectAgent).not.toHaveBeenCalled();
-		expect(run.mock.calls[0][0].slice(0, 2)).toEqual(["plugins", "-y"]);
+		expect(pickAgentSetup).not.toHaveBeenCalled();
+		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
+			"skills",
+			"mcp",
+		]);
 	});
 
 	test("interactive does not run -y detectors", async () => {

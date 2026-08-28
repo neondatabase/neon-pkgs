@@ -50,6 +50,39 @@ export const projectContextFile = (
 	return resolved;
 };
 
+export type PostScaffoldAction = "git" | "agent" | "install" | "link";
+
+/** Linking a template with neon.ts requires installed dependencies because env pull evaluates it. */
+export const postScaffoldActions = (input: {
+	git: boolean;
+	agentSetup: InitAgentSetup;
+	install: boolean;
+	link: boolean;
+	hasNeonConfig: boolean;
+}): PostScaffoldAction[] => {
+	const actions: PostScaffoldAction[] = [];
+	if (input.git) {
+		actions.push("git");
+	}
+	if (input.agentSetup !== "skip") {
+		actions.push("agent");
+	}
+	const canLink = input.link && !(input.hasNeonConfig && !input.install);
+	const installBeforeLink = canLink && input.hasNeonConfig && input.install;
+	if (installBeforeLink) {
+		actions.push("install");
+		actions.push("link");
+		return actions;
+	}
+	if (canLink) {
+		actions.push("link");
+	}
+	if (input.install) {
+		actions.push("install");
+	}
+	return actions;
+};
+
 export const planAgentSteps = (input: {
 	yes: boolean;
 	agentSetup: InitAgentSetup;

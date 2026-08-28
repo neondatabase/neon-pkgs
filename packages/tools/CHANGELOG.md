@@ -1,5 +1,11 @@
 # @neon/tools
 
+## 1.1.0
+
+### Minor Changes
+
+- f218eb7: Generated tool descriptions are the OpenAPI first sentence. Generated Zod has no OpenAPI field essays. MCP 2 keeps handwritten `.describe()` copy and drops `$schema`.
+
 ## 1.0.0
 
 ### Major Changes

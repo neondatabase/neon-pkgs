@@ -391,7 +391,7 @@ describe("bootstrap", () => {
 
 	test("--default scaffolds and inits git without prompting", async () => {
 		// --no-install keeps the test offline/fast; git init still runs.
-		const { code, stderr } = await runBootstrap(server, [
+		const { code, stdout, stderr } = await runBootstrap(server, [
 			dest,
 			"--default",
 			"--no-install",
@@ -402,6 +402,10 @@ describe("bootstrap", () => {
 			"cursor",
 		]);
 		expect(code, stderr).toBe(0);
+		expect(stdout).toContain("Project scaffolded.");
+		expect(stdout).not.toContain("INFO:");
+		expect(`${stdout}${stderr}`).not.toContain("██████");
+		expect(stderr).not.toMatch(/Done\. Scaffolded/);
 
 		// The default template was scaffolded with no template/dir prompt.
 		expect(readFileSync(join(dest, "package.json"), "utf8")).toBe(

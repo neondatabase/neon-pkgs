@@ -49,6 +49,7 @@ describe("init handler", () => {
 	test("empty directory without -y fails before bootstrap", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-empty-"));
 		const run = vi.fn().mockResolvedValue(true);
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
 		const { handler } = await import("./init.js");
 
 		await expect(
@@ -123,6 +124,7 @@ describe("init handler", () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-app-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
 		const run = vi.fn().mockResolvedValue(true);
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
 		const { handler } = await import("./init.js");
 
 		await handler(
@@ -141,6 +143,11 @@ describe("init handler", () => {
 			"config",
 		]);
 		expect(run.mock.calls[3][0].slice(0, 2)).toEqual(["config", "init"]);
+		const out = stdout.mock.calls.map((call) => String(call[0])).join("");
+		expect(out).toContain("Configured this directory for Neon.");
+		expect(out).not.toContain("INFO:");
+		expect(out).not.toContain("██████╗");
+		expect(out).not.toContain("See the README");
 	});
 
 	test("linked app skips link", async () => {

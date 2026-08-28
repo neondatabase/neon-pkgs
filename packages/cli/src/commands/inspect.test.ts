@@ -126,8 +126,18 @@ describe("inspect db", () => {
 		expect(INSPECT_QUERIES["stalled-queries"].sql).toContain(
 			"array_to_string(pg_blocking_pids(a.pid), ',')",
 		);
+		expect(INSPECT_QUERIES["stalled-queries"].sql).toContain(
+			"min(query_start) AS group_start",
+		);
+		expect(INSPECT_QUERIES["stalled-queries"].sql).toContain(
+			"ORDER BY g.group_start, g.query_group, a.leader_pid NULLS FIRST, a.pid",
+		);
+		expect(INSPECT_QUERIES["stalled-queries"].sql).not.toContain(
+			"SELECT DISTINCT COALESCE(leader_pid, pid) AS query_group",
+		);
 		expect(INSPECT_QUERIES["stalled-queries"]).toMatchObject({
 			scope: "compute",
+			describe: expect.stringContaining("oldest group first"),
 			sql: expect.stringContaining(
 				"backend_type IN ('client backend', 'parallel worker')",
 			),
