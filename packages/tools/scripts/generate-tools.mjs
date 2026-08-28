@@ -123,6 +123,31 @@ const snakeCase = (value) =>
 		.replaceAll("-", "_")
 		.toLowerCase();
 
+const stripMarkdownLinks = (text) =>
+	text.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+
+const firstSentence = (text) => {
+	const normalized = stripMarkdownLinks(text).replace(/\s+/g, " ").trim();
+	if (normalized.length === 0) {
+		return "";
+	}
+	const match = normalized.match(/^.+?[.!?](?=\s|$)/);
+	let sentence = (match ? match[0] : normalized).trim();
+	if (/^deprecated\.?$/i.test(sentence)) {
+		const rest = normalized.slice(sentence.length).trim();
+		const second = rest.match(/^.+?[.!?](?=\s|$)/);
+		if (second) {
+			sentence = `${sentence} ${second[0]}`;
+		}
+	}
+	return sentence;
+};
+
+const toolDescription = (operation, method, path) =>
+	firstSentence(operation.description ?? "") ||
+	(typeof operation.summary === "string" ? operation.summary.trim() : "") ||
+	`${method.toUpperCase()} ${path}`;
+
 const requestBodySchema = (requestBody) => {
 	const body = dereference(requestBody);
 	if (!body?.content) return undefined;
@@ -342,10 +367,7 @@ for (const [path, pathItemValue] of Object.entries(document.paths ?? {})) {
 			method: method.toUpperCase(),
 			path,
 			title: operation.summary ?? operation.operationId,
-			description:
-				operation.description ??
-				operation.summary ??
-				`${method.toUpperCase()} ${path}`,
+			description: toolDescription(operation, method, path),
 			stability: operation["x-stability-level"] ?? "stable",
 			deprecated: operation.deprecated === true,
 			tags: operation.tags ?? [],

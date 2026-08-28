@@ -22,7 +22,7 @@ export default defineConfig({
 			name: "zod",
 			compatibilityVersion: 4,
 			definitions: true,
-			metadata: true,
+			metadata: false,
 			requests: {
 				shouldExtract: true,
 			},

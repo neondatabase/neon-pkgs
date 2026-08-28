@@ -91,6 +91,8 @@ These public client methods are not tools: `operations.waitFor`, `postgres.roles
 
 Pass a map keyed by SDK path or the current published `id`, or a function that can append to the generated text. A key that matches neither is ignored.
 
+Generated Management API tools use the first sentence of the OpenAPI description (title stays the OpenAPI summary). Composed tools keep their handwritten copy. Hosts that need more still pass `descriptions`.
+
 ```ts
 const tools = createNeonTools({
 	apiKey,
@@ -218,6 +220,21 @@ const tools = createNeonTools({
 registerNeonTools(server, tools);
 ```
 
+`registerNeonTools` publishes that catalog. MCP 2 `inputSchema` is JSON Schema without `$schema`. Generated fields have types, enums, `required`, and constraints, and no OpenAPI property docs. Fields this package described with `.describe()` (`pooled`, `finalize`, `zip`) keep that copy.
+
+Hosts that convert Zod themselves:
+
+```ts
+import { compactJsonSchema } from "@neon/tools/mcp";
+import * as z from "zod";
+import { createNeonTool } from "@neon/tools";
+
+const tool = createNeonTool("projects.update", { apiKey });
+const inputSchema = compactJsonSchema(
+	z.toJSONSchema(tool.inputSchema, { io: "input" }),
+);
+```
+
 For a remote MCP server that already authenticated the client, omit `apiKey` at construction. `registerNeonTools` sends `authInfo.token` as the Bearer credential: MCP 2.x `http.authInfo.token`, MCP 1.x `authInfo.token`. The host must put a Neon API key or Neon OAuth access token there. A present `authInfo` with an empty token is an error, not a fall back to a constructor key.
 
 ```ts
@@ -234,6 +251,8 @@ Existing MCP 1.x servers can use the version-specific entry point:
 ```ts
 import { registerNeonTools } from "@neon/tools/mcp-v1";
 ```
+
+MCP 1.x still receives Zod input schemas, including handwritten `.describe()` copy. Generated Zod has no OpenAPI field essays. Use `compactJsonSchema` if you convert those schemas yourself and need `$schema` removed.
 
 The adapter returns both text content and object-valued `structuredContent`. Execution failures use `isError: true` with structured error data.
 

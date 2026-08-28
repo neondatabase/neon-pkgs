@@ -32,8 +32,7 @@ export interface ToolClientOptions {
 	wait?: NeonConfig["wait"];
 }
 
-const ALL_PAGES =
-	" This tool returns every page. Pass limit to cap how many items come back. Do not pass a cursor.";
+const ALL_PAGES = " Returns every page. Pass limit to cap how many.";
 
 const inertClient = createNeonClient({
 	apiKey: "unused",
