@@ -279,6 +279,32 @@ describe("rewriteUnknownAgentArg", () => {
 		).toBe(
 			"neon init has no --agent. Pass -y to use detected agents, or run neon init in a terminal to pick.",
 		);
+		expect(
+			rewriteUnknownAgentArg({
+				message: "Unknown argument: agent",
+				argv: [
+					"node",
+					"cli.js",
+					"--org-id",
+					"init",
+					"link",
+					"--agent",
+					"cursor",
+				],
+				cliName: "neon",
+			}),
+		).toBe(
+			"neon link has no --agent. Pass --project-id <id> to link without a TTY, or run neon link in a terminal.",
+		);
+		expect(
+			rewriteUnknownAgentArg({
+				message: "Unknown argument: agent",
+				argv: ["node", "cli.js", "-y", "init", "--agent", "cursor"],
+				cliName: "neon",
+			}),
+		).toBe(
+			"neon init has no --agent. Pass -y to use detected agents, or run neon init in a terminal to pick.",
+		);
 	});
 
 	test("does not rewrite skills, plugins, or mcp", () => {

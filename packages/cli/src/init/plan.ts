@@ -105,16 +105,33 @@ const unknownAgentArgHint = (
 	}
 };
 
-const FLAGS_WITH_VALUE = new Set([
-	"--output",
-	"-o",
-	"--config-dir",
-	"--profile",
-	"--api-key",
-	"--api-host",
-	"--context-file",
-	"--project-id",
-	"--template",
+const BOOLEAN_FLAGS = new Set([
+	"-y",
+	"--yes",
+	"--default",
+	"--force",
+	"-h",
+	"--help",
+	"-v",
+	"--version",
+	"--color",
+	"--no-color",
+	"--analytics",
+	"--no-analytics",
+	"--oauth",
+	"--project",
+	"--global",
+	"--read-only",
+	"--readonly",
+	"--clear",
+	"--checks",
+	"--no-checks",
+	"--env-pull",
+	"--no-env-pull",
+	"--no-agent-setup",
+	"--no-link",
+	"--list",
+	"--list-templates",
 ]);
 
 const isUnknownAgentCommand = (token: string): token is UnknownAgentCommand => {
@@ -140,8 +157,12 @@ const commandFromArgv = (
 		}
 		if (token.startsWith("-")) {
 			const flag = token.split("=")[0];
-			if (flag !== undefined && FLAGS_WITH_VALUE.has(flag)) {
-				skipValue = !token.includes("=");
+			if (
+				flag !== undefined &&
+				!token.includes("=") &&
+				!BOOLEAN_FLAGS.has(flag)
+			) {
+				skipValue = true;
 			}
 			continue;
 		}
