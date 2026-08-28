@@ -105,6 +105,53 @@ const unknownAgentArgHint = (
 	}
 };
 
+const FLAGS_WITH_VALUE = new Set([
+	"--output",
+	"-o",
+	"--config-dir",
+	"--profile",
+	"--api-key",
+	"--api-host",
+	"--context-file",
+	"--project-id",
+	"--template",
+]);
+
+const isUnknownAgentCommand = (token: string): token is UnknownAgentCommand => {
+	for (const command of UNKNOWN_AGENT_COMMANDS) {
+		if (command === token) {
+			return true;
+		}
+	}
+	return false;
+};
+
+const commandFromArgv = (
+	argv: readonly string[],
+): UnknownAgentCommand | undefined => {
+	let skipValue = false;
+	for (const token of argv) {
+		if (skipValue) {
+			skipValue = false;
+			continue;
+		}
+		if (token === "--") {
+			break;
+		}
+		if (token.startsWith("-")) {
+			const flag = token.split("=")[0];
+			if (flag !== undefined && FLAGS_WITH_VALUE.has(flag)) {
+				skipValue = !token.includes("=");
+			}
+			continue;
+		}
+		if (isUnknownAgentCommand(token)) {
+			return token;
+		}
+	}
+	return undefined;
+};
+
 export const rewriteUnknownAgentArg = (input: {
 	message: string;
 	argv: readonly string[];
@@ -116,9 +163,7 @@ export const rewriteUnknownAgentArg = (input: {
 	) {
 		return undefined;
 	}
-	const command = UNKNOWN_AGENT_COMMANDS.find((cmd) =>
-		input.argv.includes(cmd),
-	);
+	const command = commandFromArgv(input.argv);
 	if (command === undefined) {
 		return undefined;
 	}

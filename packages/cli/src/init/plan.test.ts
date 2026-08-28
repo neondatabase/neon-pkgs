@@ -244,6 +244,43 @@ describe("rewriteUnknownAgentArg", () => {
 		);
 	});
 
+	test("does not treat a flag value as the command", () => {
+		expect(
+			rewriteUnknownAgentArg({
+				message: "Unknown argument: agent",
+				argv: [
+					"node",
+					"cli.js",
+					"link",
+					"--project-id",
+					"init",
+					"--agent",
+					"cursor",
+				],
+				cliName: "neon",
+			}),
+		).toBe(
+			"neon link has no --agent. Pass --project-id <id> to link without a TTY, or run neon link in a terminal.",
+		);
+		expect(
+			rewriteUnknownAgentArg({
+				message: "Unknown argument: agent",
+				argv: [
+					"node",
+					"cli.js",
+					"init",
+					"--context-file",
+					"bootstrap",
+					"--agent",
+					"cursor",
+				],
+				cliName: "neon",
+			}),
+		).toBe(
+			"neon init has no --agent. Pass -y to use detected agents, or run neon init in a terminal to pick.",
+		);
+	});
+
 	test("does not rewrite skills, plugins, or mcp", () => {
 		for (const command of ["skills", "plugins", "mcp"] as const) {
 			expect(
