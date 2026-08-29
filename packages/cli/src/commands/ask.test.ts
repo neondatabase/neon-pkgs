@@ -80,6 +80,7 @@ describe("neon ask", () => {
 		const seen: Array<{
 			method?: string;
 			authorization: string | undefined;
+			accept: string | undefined;
 			body: unknown;
 		}> = [];
 		await withAskServer(
@@ -87,6 +88,7 @@ describe("neon ask", () => {
 				seen.push({
 					method: req.method,
 					authorization: req.headers.authorization,
+					accept: req.headers.accept,
 					body,
 				});
 				res.statusCode = 200;
@@ -116,7 +118,7 @@ describe("neon ask", () => {
 				expect(stdout).toBe(
 					"Schema-only branches copy schema, not data.\n",
 				);
-				expect(stderr).toMatch(/Asking the Neon assistant/);
+				expect(stderr).not.toMatch(/Asking the Neon assistant/);
 				expect(stderr).not.toMatch(/Cannot run interactive auth in CI/);
 				expect(stderr).not.toMatch(/Not Found/);
 			},
@@ -125,14 +127,17 @@ describe("neon ask", () => {
 			{
 				method: "POST",
 				authorization: undefined,
+				accept: "text/event-stream",
 				body: { prompt: "How do schema-only branches work?" },
 			},
 		]);
 	});
 
 	test("prints json as { text }", async ({ testCliCommand }) => {
+		const seen: string[] = [];
 		await withAskServer(
-			(_req, res) => {
+			(req, res) => {
+				seen.push(String(req.headers.accept));
 				res.statusCode = 200;
 				res.setHeader("Content-Type", "application/json");
 				res.end(JSON.stringify({ text: "A Neon branch is a copy." }));
@@ -152,6 +157,7 @@ describe("neon ask", () => {
 				});
 			},
 		);
+		expect(seen).toEqual(["application/json"]);
 	});
 
 	test("uses NEON_ASK_URL when --url is omitted", async ({
@@ -174,6 +180,70 @@ describe("neon ask", () => {
 					},
 				);
 				expect(stdout).toBe("from-env\n");
+			},
+		);
+	});
+
+	test("streams sse text to stdout", async ({ testCliCommand }) => {
+		await withAskServer(
+			(_req, res) => {
+				res.statusCode = 200;
+				res.setHeader(
+					"Content-Type",
+					"text/event-stream; charset=utf-8",
+				);
+				res.write('event: status\ndata: {"message":"Thinking"}\n\n');
+				res.write("event: ping\ndata: \n\n");
+				res.write('event: text\ndata: {"text":"Schema-only"}\n\n');
+				res.write('event: text\ndata: {"text":" branches."}\n\n');
+				res.write("event: done\ndata: {}\n\n");
+				res.end();
+			},
+			async (url) => {
+				const { stdout, stderr } = await testCliCommand(
+					[
+						"ask",
+						"--prompt",
+						"How do schema-only branches work?",
+						"--url",
+						url,
+					],
+					{
+						apiKey: false,
+						outputTable: true,
+						snapshot: false,
+						env: ASK_ENV,
+					},
+				);
+				expect(stdout).toBe("Schema-only branches.\n");
+				expect(stderr).not.toMatch(/Asking the Neon assistant/);
+			},
+		);
+	});
+
+	test("prints an sse error event", async ({ testCliCommand }) => {
+		await withAskServer(
+			(_req, res) => {
+				res.statusCode = 200;
+				res.setHeader("Content-Type", "text/event-stream");
+				res.write(
+					'event: error\ndata: {"error":"The assistant failed."}\n\n',
+				);
+				res.end();
+			},
+			async (url) => {
+				const { stdout, stderr } = await testCliCommand(
+					["ask", "--prompt", "What is Neon?", "--url", url],
+					{
+						apiKey: false,
+						outputTable: true,
+						snapshot: false,
+						code: 1,
+						env: ASK_ENV,
+					},
+				);
+				expect(stdout).toBe("");
+				expect(stderr).toMatch(/The assistant failed/);
 			},
 		);
 	});

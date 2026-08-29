@@ -815,7 +815,7 @@ neon ask --prompt "How do schema-only branches work?"
 neon ask --prompt "How do schema-only branches work?" --output json
 ```
 
-Default table output is the assistant's text. `--output json` and `--output yaml` print `{ "text": "…" }`.
+Default table output is the assistant's text. On a TTY that is a spinner, then the streamed reply. `--output json` and `--output yaml` print `{ "text": "…" }` after the full response.
 
 ## Install the Neon plugin (`plugins`)
 

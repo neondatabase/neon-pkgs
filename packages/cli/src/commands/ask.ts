@@ -1,10 +1,12 @@
 import type yargs from "yargs";
 
+import { isCi } from "../env.js";
 import { isNetworkError } from "../errors.js";
-import { log } from "../log.js";
 import type { CommonProps } from "../types.js";
 import { noPassthrough, single } from "../utils/flags.js";
 import { writer } from "../writer.js";
+import { isEventStreamContentType, readAskSse } from "./ask_sse.js";
+import { createThinkingSpinner } from "./thinking_spinner.js";
 
 export const DEFAULT_ASK_URL =
 	"https://br-frosty-cell-a5smzg39-assistant.compute.c-1.us-east-2.aws.neon.tech/ask";
@@ -49,18 +51,54 @@ export function resolveAskUrl(opts: { url?: string; envUrl?: string }): string {
 	return DEFAULT_ASK_URL;
 }
 
+function isMachineOutput(output: AskProps["output"]): boolean {
+	return output === "json" || output === "yaml";
+}
+
 export const handler = async (props: AskProps) => {
 	const url = resolveAskUrl({
 		url: props.url,
 		envUrl: process.env.NEON_ASK_URL,
 	});
-	log.info("Asking the Neon assistant.");
-	const text = await askAssistant({ prompt: props.prompt, url });
-	if (props.output === "json" || props.output === "yaml") {
-		writer(props).end({ text }, { fields: ["text"] });
-		return;
+	const human = !isMachineOutput(props.output);
+	const spinner = createThinkingSpinner({
+		out: process.stderr,
+		isTty: Boolean(process.stderr.isTTY) && !isCi() && human,
+	});
+	let streamed = false;
+	try {
+		spinner.start();
+		const text = await askAssistant({
+			prompt: props.prompt,
+			url,
+			acceptEventStream: human,
+			onStatus: (message) => {
+				spinner.setMessage(message);
+			},
+			onText: (chunk) => {
+				if (!human) {
+					return;
+				}
+				spinner.stop();
+				streamed = true;
+				writer(props).text(chunk);
+			},
+		});
+		spinner.stop();
+		if (!human) {
+			writer(props).end({ text }, { fields: ["text"] });
+			return;
+		}
+		if (!streamed) {
+			writer(props).text(`${text}\n`);
+			return;
+		}
+		if (!text.endsWith("\n")) {
+			writer(props).text("\n");
+		}
+	} finally {
+		spinner.stop();
 	}
-	writer(props).text(`${text}\n`);
 };
 
 function isAskTimeout(error: unknown): boolean {
@@ -107,15 +145,54 @@ async function readJsonBody(response: Response): Promise<unknown> {
 	}
 }
 
+async function readStreamedAsk(
+	body: ReadableStream<Uint8Array>,
+	opts: {
+		onStatus?: (message: string) => void;
+		onText?: (text: string) => void;
+	},
+): Promise<string> {
+	let text = "";
+	let sawDone = false;
+	for await (const event of readAskSse(body)) {
+		switch (event.type) {
+			case "status":
+				opts.onStatus?.(event.message);
+				break;
+			case "text":
+				text += event.text;
+				opts.onText?.(event.text);
+				break;
+			case "error":
+				throw new Error(event.error);
+			case "done":
+				sawDone = true;
+				break;
+		}
+	}
+	if (text === "" && !sawDone) {
+		throw new Error("The Neon assistant returned an unexpected response.");
+	}
+	return text;
+}
+
 async function askAssistant(opts: {
 	prompt: string;
 	url: string;
+	acceptEventStream: boolean;
+	onStatus?: (message: string) => void;
+	onText?: (text: string) => void;
 }): Promise<string> {
 	let response: Response;
 	try {
 		response = await fetch(opts.url, {
 			method: "POST",
-			headers: { "Content-Type": "application/json" },
+			headers: {
+				"Content-Type": "application/json",
+				Accept: opts.acceptEventStream
+					? "text/event-stream"
+					: "application/json",
+			},
 			body: JSON.stringify({ prompt: opts.prompt }),
 			signal: AbortSignal.timeout(ASK_TIMEOUT_MS),
 		});
@@ -131,9 +208,25 @@ async function askAssistant(opts: {
 		throw error;
 	}
 
-	const body = await readJsonBody(response);
 	if (!response.ok) {
+		const body = await readJsonBody(response);
 		throw new Error(askErrorMessage(body, response.status));
 	}
+
+	if (
+		opts.acceptEventStream &&
+		isEventStreamContentType(
+			response.headers.get("content-type") ?? undefined,
+		)
+	) {
+		if (!response.body) {
+			throw new Error(
+				"The Neon assistant returned an unexpected response.",
+			);
+		}
+		return readStreamedAsk(response.body, opts);
+	}
+
+	const body = await readJsonBody(response);
 	return askText(body);
 }
