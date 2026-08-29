@@ -1304,7 +1304,7 @@ Global options are supported with any Neon CLI command.
 
 - <a id="analytics"></a>`--analytics`
 
-  Analytics are enabled by default to gather information about the CLI commands and options that are used by our customers. This data collection assists in offering support, and allows for a better understanding of typical usage patterns so that we can improve user experience. Neon does not collect user-defined data, such as project IDs or command payloads. To opt-out of analytics data collection, specify `--no-analytics` or `--analytics false`.
+  Analytics are enabled by default to gather information about the CLI commands and options that are used by our customers. This data collection assists in offering support, and allows for a better understanding of typical usage patterns so that we can improve user experience. Neon does not collect user-defined data, such as project IDs or command payloads, except the question passed to `neon ask --prompt`. To opt-out of analytics data collection, specify `--no-analytics` or `--analytics false`.
 
 - <a id="version"></a>`-v, --version`
 

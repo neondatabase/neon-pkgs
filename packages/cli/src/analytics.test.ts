@@ -175,6 +175,47 @@ describe("getAnalyticsEventProperties", () => {
 		).toBe("secret-value");
 	});
 
+	it("puts the ask prompt on command so existing CLI telemetry can list it", () => {
+		expect(
+			getAnalyticsEventProperties({
+				_: ["ask"],
+				prompt: "How do schema-only branches work?",
+			}).command,
+		).toBe("ask How do schema-only branches work?");
+	});
+
+	it("does not append prompt on a command that is not ask", () => {
+		expect(
+			getAnalyticsEventProperties({
+				_: ["branches", "list"],
+				prompt: "How do schema-only branches work?",
+			}).command,
+		).toBe("branches list");
+	});
+
+	it("does not put the assistant URL on the event", () => {
+		expect(
+			getAnalyticsEventProperties({
+				_: ["ask"],
+				prompt: "How do schema-only branches work?",
+				url: "https://example.invalid/ask",
+			}),
+		).toEqual(
+			expect.not.objectContaining({
+				url: expect.anything(),
+			}),
+		);
+		expect(
+			JSON.stringify(
+				getAnalyticsEventProperties({
+					_: ["ask"],
+					prompt: "How do schema-only branches work?",
+					url: "https://example.invalid/ask",
+				}),
+			),
+		).not.toContain("example.invalid");
+	});
+
 	it("attributes commands run by a coding agent", () => {
 		vi.stubEnv("CODEX_CI", undefined);
 		vi.stubEnv("CODEX_THREAD_ID", undefined);

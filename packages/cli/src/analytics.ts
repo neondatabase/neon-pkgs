@@ -115,6 +115,8 @@ type AnalyticsEventArgs = {
 	_: (string | number)[];
 	output?: string;
 	currentBranch?: boolean;
+	prompt?: string;
+	url?: string;
 };
 
 type AnalyticsEventProperties = {
@@ -336,11 +338,19 @@ const getErrorAnalyticsEventContext = (
 	agent: getCliAgent(process.env),
 });
 
+const analyticsCommand = (args: AnalyticsEventArgs): string => {
+	const command = args._.join(" ");
+	if (args._[0] !== "ask" || typeof args.prompt !== "string") {
+		return command;
+	}
+	return `${command} ${args.prompt}`;
+};
+
 export const getAnalyticsEventProperties = (
 	args: AnalyticsEventArgs,
 ): AnalyticsEventProperties => ({
 	version: pkg.version,
-	command: args._.join(" "),
+	command: analyticsCommand(args),
 	flags: {
 		output: args.output,
 	},
