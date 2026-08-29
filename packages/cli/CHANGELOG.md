@@ -1,5 +1,19 @@
 # neon
 
+## 4.12.0
+
+### Minor Changes
+
+- 59a05ea: Add a per-function `bundler` option so a function's `source` can be shipped without esbuild.
+
+  `neon.ts` functions accept `bundler`, defaulting to `"esbuild"`. A directory source is bundled from the first of `index.ts`, `index.js`, `index.mjs`. Set `"none"` to zip a prebuilt directory (or a single `index.mjs` / `index.js` file) as-is. `neon function deploy --no-bundle` is the CLI form. An inline `(fn) => Promise<FunctionBundle>` returns a file map. `externalPackages` remains esbuild-only.
+
+### Patch Changes
+
+- Updated dependencies [59a05ea]
+  - @neon/config@1.1.0
+  - @neon/config-runtime@1.1.0
+
 ## 4.11.1
 
 ### Patch Changes
