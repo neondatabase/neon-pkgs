@@ -223,4 +223,33 @@ describe("bundleAsIs", () => {
 			"export const x = 1;\n",
 		);
 	});
+
+	test("ships a symlink to a directory inside the source directory", async () => {
+		const source = buildDir({
+			"index.mjs": "export default {};\n",
+			"lib/chunk.mjs": "export const x = 1;\n",
+		});
+		symlinkSync(join(source, "lib"), join(source, "vendor"));
+		const bundle = await bundleAsIs(noneFn(source));
+		expect(Object.keys(bundle).sort()).toEqual([
+			"index.mjs",
+			"lib/chunk.mjs",
+			"vendor/chunk.mjs",
+		]);
+		expect(new TextDecoder().decode(bundle["vendor/chunk.mjs"])).toBe(
+			"export const x = 1;\n",
+		);
+	});
+
+	test("does not follow a cycle of in-tree directory symlinks", async () => {
+		const source = buildDir({
+			"index.mjs": "export default {};\n",
+		});
+		mkdirSync(join(source, "a"));
+		mkdirSync(join(source, "b"));
+		symlinkSync(join(source, "b"), join(source, "a", "to-b"));
+		symlinkSync(join(source, "a"), join(source, "b", "to-a"));
+		const bundle = await bundleAsIs(noneFn(source));
+		expect(Object.keys(bundle)).toEqual(["index.mjs"]);
+	});
 });

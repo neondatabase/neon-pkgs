@@ -20,12 +20,23 @@ const walkTs = (dir: string): string[] => {
 	return out;
 };
 
+const stripComments = (text: string): string =>
+	text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+
+const LITERAL_ESBUILD =
+	/\bfrom\s+["']esbuild["']|\bimport\s*\(\s*["']esbuild["']\s*\)|\brequire\s*\(\s*["']esbuild["']\s*\)/;
+
 test("no source file loads esbuild with a literal module specifier", () => {
 	const hits: string[] = [];
 	for (const file of walkTs(srcRoot)) {
-		if (/import\(["']esbuild["']\)/.test(readFileSync(file, "utf8"))) {
+		if (LITERAL_ESBUILD.test(stripComments(readFileSync(file, "utf8")))) {
 			hits.push(file.slice(srcRoot.length + 1));
 		}
 	}
 	expect(hits).toEqual([]);
+});
+
+test("loadEsbuild keeps a computed specifier", () => {
+	const text = readFileSync(join(srcRoot, "lib/function-bundle.ts"), "utf8");
+	expect(text).toContain('["es", "build"].join("")');
 });

@@ -78,6 +78,7 @@ export async function bundleAsIs(
 			fn.source,
 			entries,
 			await realpath(fn.source),
+			[],
 		);
 		if (FUNCTION_ARCHIVE_ENTRIES.some((name) => name in entries)) {
 			return entries;
@@ -135,19 +136,33 @@ async function collectDirectory(
 	dir: string,
 	entries: FunctionBundle,
 	rootReal: string,
+	stack: readonly string[],
 ): Promise<void> {
+	const dirReal = await realpath(dir);
+	if (stack.includes(dirReal)) return;
+	const nextStack = [...stack, dirReal];
 	const dirents = await readdir(dir, { withFileTypes: true });
 	await Promise.all(
 		dirents.map(async (dirent) => {
 			const abs = join(dir, dirent.name);
 			if (dirent.isDirectory()) {
-				await collectDirectory(root, abs, entries, rootReal);
+				await collectDirectory(root, abs, entries, rootReal, nextStack);
 				return;
 			}
 			if (dirent.isSymbolicLink()) {
 				await assertSymlinkInsideSource(abs, root, rootReal);
 				const target = await stat(abs).catch(() => null);
-				if (!target || target.isDirectory()) return;
+				if (!target) return;
+				if (target.isDirectory()) {
+					await collectDirectory(
+						root,
+						abs,
+						entries,
+						rootReal,
+						nextStack,
+					);
+					return;
+				}
 			}
 			const key = relative(root, abs).split(sep).join("/");
 			entries[key] = new Uint8Array(await readFile(abs));
