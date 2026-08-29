@@ -1,5 +1,5 @@
-import { readdir, readFile, stat } from "node:fs/promises";
-import { basename, join, relative, sep } from "node:path";
+import { readdir, readFile, realpath, stat } from "node:fs/promises";
+import { basename, isAbsolute, join, relative, sep } from "node:path";
 import {
 	ErrorCode,
 	FUNCTION_ARCHIVE_ENTRIES,
@@ -81,7 +81,12 @@ export async function bundleAsIs(
 
 	if (sourceStat.isDirectory()) {
 		const entries: FunctionBundle = {};
-		await collectDirectory(fn.source, fn.source, entries);
+		await collectDirectory(
+			fn.source,
+			fn.source,
+			entries,
+			await realpath(fn.source),
+		);
 		if (FUNCTION_ARCHIVE_ENTRIES.some((name) => name in entries)) {
 			return entries;
 		}
@@ -142,18 +147,18 @@ async function collectDirectory(
 	root: string,
 	dir: string,
 	entries: FunctionBundle,
+	rootReal: string,
 ): Promise<void> {
 	const dirents = await readdir(dir, { withFileTypes: true });
 	await Promise.all(
 		dirents.map(async (dirent) => {
 			const abs = join(dir, dirent.name);
 			if (dirent.isDirectory()) {
-				await collectDirectory(root, abs, entries);
+				await collectDirectory(root, abs, entries, rootReal);
 				return;
 			}
-			// Symlinks are followed as their target: a bundle is a snapshot of bytes, and a
-			// symlink into node_modules or up out of the tree would not resolve once unpacked.
 			if (dirent.isSymbolicLink()) {
+				await assertSymlinkInsideSource(abs, root, rootReal);
 				const target = await stat(abs).catch(() => null);
 				if (!target || target.isDirectory()) return;
 			}
@@ -162,3 +167,31 @@ async function collectDirectory(
 		}),
 	);
 }
+
+const assertSymlinkInsideSource = async (
+	abs: string,
+	root: string,
+	rootReal: string,
+): Promise<void> => {
+	let targetReal: string;
+	try {
+		targetReal = await realpath(abs);
+	} catch (cause) {
+		throw new PlatformError(
+			ErrorCode.InvalidConfig,
+			`Function source ${root} contains a dangling symlink: ${abs}.`,
+			{ cause },
+		);
+	}
+	const escaped = relative(rootReal, targetReal);
+	if (
+		escaped === ".." ||
+		escaped.startsWith(`..${sep}`) ||
+		isAbsolute(escaped)
+	) {
+		throw new PlatformError(
+			ErrorCode.InvalidConfig,
+			`Function source ${root} contains a symlink that points outside the directory: ${abs}.`,
+		);
+	}
+};

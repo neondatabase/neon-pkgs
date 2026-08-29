@@ -1,4 +1,10 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+	mkdirSync,
+	mkdtempSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type { ResolvedFunctionConfig } from "@neon/config";
@@ -187,5 +193,34 @@ describe("bundleAsIs", () => {
 		await expect(
 			bundleAsIs(noneFn(join(root, "does-not-exist"))),
 		).rejects.toThrow(/does not exist/);
+	});
+
+	test("rejects a symlink that points outside the source directory", async () => {
+		const secret = join(root, "secret.env");
+		writeFileSync(secret, "LEAK=1\n");
+		const source = buildDir({
+			"index.mjs": "export default {};\n",
+		});
+		symlinkSync(secret, join(source, "leak.env"));
+		await expect(bundleAsIs(noneFn(source))).rejects.toThrow(
+			/symlink that points outside the directory/,
+		);
+	});
+
+	test("ships a symlink to a file inside the source directory", async () => {
+		const source = buildDir({
+			"index.mjs": "export default {};\n",
+			"chunk.mjs": "export const x = 1;\n",
+		});
+		symlinkSync(join(source, "chunk.mjs"), join(source, "alias.mjs"));
+		const bundle = await bundleAsIs(noneFn(source));
+		expect(Object.keys(bundle).sort()).toEqual([
+			"alias.mjs",
+			"chunk.mjs",
+			"index.mjs",
+		]);
+		expect(new TextDecoder().decode(bundle["alias.mjs"])).toBe(
+			"export const x = 1;\n",
+		);
 	});
 });
