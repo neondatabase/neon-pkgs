@@ -9,7 +9,6 @@ import {
 	pullConfig,
 	pushConfig,
 	resolveEsbuildEntry,
-	resolveFunctionArchive,
 	zipFunctionBundle,
 } from "./v1.js";
 
@@ -21,7 +20,6 @@ describe("config-runtime v1 surface", () => {
 		expect(pushConfig).toBeTypeOf("function");
 		expect(pullConfig).toBeTypeOf("function");
 		expect(buildFunctionBundle).toBeTypeOf("function");
-		expect(resolveFunctionArchive).toBeTypeOf("function");
 		expect(bundleAsIs).toBeTypeOf("function");
 		expect(resolveEsbuildEntry).toBeTypeOf("function");
 		expect(zipFunctionBundle).toBeTypeOf("function");

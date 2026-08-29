@@ -59,10 +59,7 @@ export {
 } from "@neon/config";
 export type { FunctionBundler } from "./lib/function-bundle.js";
 // ─── Function bundling (esbuild + zip) ────────────────────────────────────────
-export {
-	buildFunctionBundle,
-	resolveFunctionArchive,
-} from "./lib/function-bundle.js";
+export { buildFunctionBundle } from "./lib/function-bundle.js";
 export {
 	bundleAsIs,
 	resolveEsbuildEntry,

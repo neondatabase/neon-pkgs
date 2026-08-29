@@ -42,16 +42,36 @@ export type FunctionBundler = (
 export const ESM_CJS_INTEROP_BANNER =
 	"import{createRequire as ___cr}from'module';import{fileURLToPath as ___f}from'url';import{dirname as ___d}from'path';const require=___cr(import.meta.url);const __filename=___f(import.meta.url);const __dirname=___d(__filename);";
 
-export async function resolveFunctionArchive(
+type FunctionBundleOptions = {
+	nativeDeps?: Partial<NativeTraceDeps>;
+	/**
+	 * Where advisory findings go — the undeclared-native-dependency report, and a package
+	 * whose version could not be pinned.
+	 *
+	 * Defaults to discarding them, because a library has no business writing to the
+	 * console. Pass a handler: these are the only signal that a function will fail at
+	 * invoke, and the CLI wires this to its logger for exactly that reason.
+	 */
+	onWarning?: (message: string) => void;
+};
+
+/**
+ * Build the deployable ZIP for a function, honoring `fn.bundler`.
+ *
+ * `"esbuild"` (the default) discovers an entry (`index.ts`, then `index.js`, then
+ * `index.mjs`) and bundles it. `"none"` zips `source` as-is. An inline function returns a
+ * file map that is zipped.
+ *
+ * The packaged CLI never calls this. It injects its own bundler and imports
+ * {@link bundleAsIs} from `function-source.ts`, which does not load esbuild.
+ */
+export async function buildFunctionBundle(
 	fn: ResolvedFunctionConfig,
-	options: {
-		nativeDeps?: Partial<NativeTraceDeps>;
-		onWarning?: (message: string) => void;
-	} = {},
+	options: FunctionBundleOptions = {},
 ): Promise<Uint8Array> {
 	const { bundler } = fn;
 	if (bundler === undefined || bundler === "esbuild") {
-		return buildFunctionBundle(fn, options);
+		return bundleWithEsbuild(fn, options);
 	}
 	const bundle =
 		bundler === "none" ? await bundleAsIs(fn) : await bundler(fn);
@@ -59,19 +79,6 @@ export async function resolveFunctionArchive(
 }
 
 /**
- * Build the deployable bundle (a ZIP archive of the esbuild-bundled source) for a function.
- *
- * This is the **imperative shell** step of function deploys, and the reason it lives in
- * `@neon/config-runtime` rather than `@neon/config`: it pulls in `esbuild`
- * (a native binary) and `fflate`. Keeping it out of `@neon/config` means a `neon.ts`
- * that only imports `defineConfig` never drags esbuild into the user's dependency tree or
- * bundle. Deploy-side consumers (the neonctl CLI, CI) import this package and get esbuild as
- * a normal, auto-installed dependency.
- *
- * esbuild and fflate are loaded with a dynamic `import()` (not a static top-level import) so
- * that nothing in this package's static graph names esbuild until a deploy actually runs —
- * a second layer of protection on top of the package split.
- *
  * Mirrors: `esbuild <source> --bundle --outfile=index.mjs --minify --format=esm
  * --platform=node --banner:js=<createRequire shim>`, then zips the emitted files into the
  * archive the Functions deploy endpoint expects. Dependencies are bundled into the entry
@@ -80,25 +87,11 @@ export async function resolveFunctionArchive(
  * No source map is emitted: the Functions runtime does not run Node with source-map support,
  * so an uploaded `index.mjs.map` is never consumed (a thrown error's stack still points into
  * the minified bundle). Generating it only inflated the deployed archive, so it is omitted.
- *
- * `source` may be a file or a directory; a directory is searched for `index.ts`, then
- * `index.js`, then `index.mjs`.
  */
-export async function buildFunctionBundle(
+const bundleWithEsbuild = async (
 	fn: ResolvedFunctionConfig,
-	options: {
-		nativeDeps?: Partial<NativeTraceDeps>;
-		/**
-		 * Where advisory findings go — the undeclared-native-dependency report, and a package
-		 * whose version could not be pinned.
-		 *
-		 * Defaults to discarding them, because a library has no business writing to the
-		 * console. Pass a handler: these are the only signal that a function will fail at
-		 * invoke, and the CLI wires this to its logger for exactly that reason.
-		 */
-		onWarning?: (message: string) => void;
-	} = {},
-): Promise<Uint8Array> {
+	options: FunctionBundleOptions = {},
+): Promise<Uint8Array> => {
 	const entry = await resolveEsbuildEntry(fn.source);
 	const esbuild = await loadEsbuild();
 	const externalPackages = fn.externalPackages ?? [];
@@ -186,11 +179,20 @@ export async function buildFunctionBundle(
 	// Re-checked against the final archive: the staged files were measured without the
 	// bundle, so the entry count and uncompressed total are only complete now.
 	return zipFunctionBundle(fn.slug, entries);
-}
+};
 
-async function loadEsbuild(): Promise<typeof import("esbuild")> {
+type EsbuildModule = {
+	build: (opts: Record<string, unknown>) => Promise<{
+		outputFiles?: readonly { path: string; contents: Uint8Array }[];
+		metafile?: { inputs?: Record<string, unknown> };
+	}>;
+};
+
+const loadEsbuild = async (): Promise<EsbuildModule> => {
+	// Computed so rollup and pkg cannot see the module name and snapshot the native binary.
+	const name = ["es", "build"].join("");
 	try {
-		return await import("esbuild");
+		return (await import(name)) as EsbuildModule;
 	} catch (cause) {
 		throw new PlatformError(
 			ErrorCode.InvalidConfig,
@@ -201,4 +203,4 @@ async function loadEsbuild(): Promise<typeof import("esbuild")> {
 			{ cause },
 		);
 	}
-}
+};

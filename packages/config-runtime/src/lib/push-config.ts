@@ -21,14 +21,14 @@ import {
 import type { FunctionBundler } from "./function-bundle.js";
 
 /**
- * Load the default bundler lazily so consumers that inject `bundleFunction` do not pull
- * esbuild into their module graph. The injected callback replaces dispatch on `fn.bundler`.
+ * Load the default ZIP step lazily so a caller that injects `bundleFunction`
+ * never evaluates the esbuild loader in `function-bundle.ts`.
  */
 const makeDefaultBundleFunction =
 	(onWarning: (message: string) => void): FunctionBundler =>
 	async (fn: ResolvedFunctionConfig): Promise<Uint8Array> => {
-		const { resolveFunctionArchive } = await import("./function-bundle.js");
-		return resolveFunctionArchive(fn, { onWarning });
+		const { buildFunctionBundle } = await import("./function-bundle.js");
+		return buildFunctionBundle(fn, { onWarning });
 	};
 
 export interface PushConfigOptions {

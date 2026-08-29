@@ -19,7 +19,6 @@ import {
 import {
 	buildFunctionBundle,
 	ESM_CJS_INTEROP_BANNER,
-	resolveFunctionArchive,
 } from "./function-bundle.js";
 import type { NativeTraceDeps } from "./native-packages.js";
 
@@ -580,7 +579,7 @@ const unzipEntries = (zip: Uint8Array): Record<string, Uint8Array> =>
 
 const textOf = (data: Uint8Array): string => new TextDecoder().decode(data);
 
-describe("resolveFunctionArchive (none bundler)", () => {
+describe("buildFunctionBundle (none bundler)", () => {
 	let root: string;
 	beforeEach(() => {
 		root = mkdtempSync(join(tmpdir(), "neon-none-"));
@@ -614,7 +613,7 @@ describe("resolveFunctionArchive (none bundler)", () => {
 			"studio/index.html": "<!doctype html>",
 		});
 
-		const zip = await resolveFunctionArchive(noneFn(source));
+		const zip = await buildFunctionBundle(noneFn(source));
 		const entries = unzipEntries(zip);
 
 		expect(Object.keys(entries).sort()).toEqual([
@@ -628,9 +627,21 @@ describe("resolveFunctionArchive (none bundler)", () => {
 		const source = buildOutputDir({
 			"index.ts": "export default {};\n",
 		});
-		await expect(resolveFunctionArchive(noneFn(source))).rejects.toThrow(
+		await expect(buildFunctionBundle(noneFn(source))).rejects.toThrow(
 			/bundler is "none".*TypeScript/,
 		);
+	});
+
+	test("ships invalid JavaScript without running esbuild", async () => {
+		const source = buildOutputDir({
+			"index.mjs": "this is not javascript {{{",
+			"chunk.mjs": "also not {{{",
+		});
+		const zip = await buildFunctionBundle(noneFn(source));
+		expect(textOf(unzipEntries(zip)["index.mjs"])).toBe(
+			"this is not javascript {{{",
+		);
+		expect(textOf(unzipEntries(zip)["chunk.mjs"])).toBe("also not {{{");
 	});
 });
 
@@ -672,7 +683,7 @@ describe("buildFunctionBundle directory source", () => {
 	});
 });
 
-describe("resolveFunctionArchive (inline function bundler)", () => {
+describe("buildFunctionBundle (inline function bundler)", () => {
 	const inlineFn = (
 		bundler: (fn: ResolvedFunctionConfig) => Promise<FunctionBundle>,
 	): ResolvedFunctionConfig => ({
@@ -685,7 +696,7 @@ describe("resolveFunctionArchive (inline function bundler)", () => {
 	});
 
 	test("zips whatever file map the inline bundler returns", async () => {
-		const zip = await resolveFunctionArchive(
+		const zip = await buildFunctionBundle(
 			inlineFn(async () => ({
 				"index.mjs": new TextEncoder().encode(
 					"export default { fetch: () => new Response('inline') };",
@@ -711,27 +722,7 @@ describe("resolveFunctionArchive (inline function bundler)", () => {
 		}
 
 		await expect(
-			resolveFunctionArchive(inlineFn(async () => files)),
+			buildFunctionBundle(inlineFn(async () => files)),
 		).rejects.toThrow(/files; the limit is/);
-	});
-
-	test("routes the esbuild default through buildFunctionBundle unchanged", async () => {
-		const source = join(dir, "esbuild-default.ts");
-		writeFileSync(
-			source,
-			"export default { fetch: () => new Response('hi') };",
-		);
-
-		const viaResolve = await resolveFunctionArchive(fn(source), {
-			onWarning: collectWarning,
-		});
-		const viaBuild = await buildFunctionBundle(fn(source), {
-			onWarning: collectWarning,
-		});
-
-		expect(Object.keys(unzipEntries(viaResolve))).toEqual(
-			Object.keys(unzipEntries(viaBuild)),
-		);
-		expect(Object.keys(unzipEntries(viaResolve))).toEqual(["index.mjs"]);
 	});
 });
