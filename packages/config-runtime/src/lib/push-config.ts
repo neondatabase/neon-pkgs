@@ -99,9 +99,9 @@ export interface PushConfigOptions {
 	 */
 	confirm?: (context: PushConfirmContext) => boolean | Promise<boolean>;
 	/**
-	 * Custom bundler for function source. Defaults to {@link buildFunctionBundle}
-	 * (esbuild). Inject your own to deploy functions without this package pulling
-	 * esbuild's native binary into your build — see {@link FunctionBundler}.
+	 * Custom ZIP step for function source. Defaults to {@link buildFunctionBundle},
+	 * which honors `fn.bundler`. Inject your own to deploy without this package
+	 * loading esbuild — see {@link FunctionBundler}.
 	 */
 	bundleFunction?: FunctionBundler;
 	/**

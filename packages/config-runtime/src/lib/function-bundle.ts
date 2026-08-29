@@ -18,12 +18,10 @@ import {
 } from "./native-packages.js";
 
 /**
- * Builds the deployable ZIP bundle for a single function. The default
- * implementation ({@link buildFunctionBundle}) shells out to esbuild, but
- * `pushConfig` / `apply` accept a custom bundler so a consumer that can't ship
- * esbuild's native binary (e.g. a single-file CLI) can supply its own — a WASM
- * build, an esbuild binary on PATH, etc. — without this package dragging esbuild
- * into their bundle.
+ * Builds the deployable ZIP for a single function. The default
+ * ({@link buildFunctionBundle}) honors `fn.bundler`. `pushConfig` / `apply`
+ * accept a custom bundler so a consumer that cannot load esbuild (e.g. a
+ * single-file CLI) can supply its own.
  *
  * This deploy-level callback returns finished archive bytes; `@neon/config`'s
  * per-function `FunctionBundler` returns a {@link FunctionBundle} file map.
