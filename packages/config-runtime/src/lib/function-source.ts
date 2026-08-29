@@ -13,11 +13,7 @@ import {
 
 export type UnbundledVia = "none" | "no-bundle";
 
-/**
- * Resolve `source` to the file esbuild should bundle. A file is used as the entry
- * (any name). A directory is searched in {@link FUNCTION_SOURCE_ENTRIES} order; only
- * real files count, so a directory named `index.ts` cannot beat `index.js`.
- */
+/** A file is the entry. A directory is searched in {@link FUNCTION_SOURCE_ENTRIES} order; only real files count. */
 export async function resolveEsbuildEntry(source: string): Promise<string> {
 	let sourceStat: Awaited<ReturnType<typeof stat>>;
 	try {
@@ -56,12 +52,8 @@ export async function resolveEsbuildEntry(source: string): Promise<string> {
 }
 
 /**
- * Read a prebuilt `source` into a {@link FunctionBundle} without esbuild. The `"none"`
- * bundler / CLI `--no-bundle` path.
- *
- * A directory is shipped with its layout preserved and must have `index.mjs` or
- * `index.js` at its root. A file must be named one of those. TypeScript cannot be
- * shipped unbundled.
+ * `"none"` / `--no-bundle`: zip `source` without esbuild. The archive root (or
+ * the file's basename) must be `index.mjs` or `index.js`. TypeScript cannot ship unbundled.
  */
 export async function bundleAsIs(
 	fn: ResolvedFunctionConfig,
@@ -138,11 +130,6 @@ const typescriptUnbundledMessage = (
 		: `Function "${fn.slug}" bundler is "none" but ${fn.source} is TypeScript. ` +
 			`Use the default esbuild bundler, or emit index.mjs / index.js.`;
 
-/**
- * Recursively read `dir` into `entries`, keying each file by its POSIX path relative to
- * `root`. Empty directories are dropped: an archive carries files, and a bundle's layout is
- * defined by the paths of the files in it.
- */
 async function collectDirectory(
 	root: string,
 	dir: string,

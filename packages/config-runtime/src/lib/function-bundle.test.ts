@@ -714,7 +714,7 @@ describe("buildFunctionBundle (inline function bundler)", () => {
 	});
 
 	test("enforces the archive limits on an inline bundler's output", async () => {
-		// Exercise the shared limit path without allocating megabytes.
+		// Allocating megabytes would slow this check without increasing coverage.
 		const entry = new TextEncoder().encode("export default {};");
 		const files: FunctionBundle = { "index.mjs": entry };
 		for (let i = 0; i < 4100; i++) {

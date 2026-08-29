@@ -866,7 +866,7 @@ const writeBundleFiles = (
 	bundleDir: string,
 	files: Record<string, Uint8Array>,
 ): string => {
-	// Otherwise, files removed from a prebuilt output remain importable.
+	// Deleted prebuilt files must not remain importable after a rebuild.
 	rmSync(bundleDir, { recursive: true, force: true });
 	mkdirSync(bundleDir, { recursive: true });
 	for (const [name, contents] of Object.entries(files)) {
@@ -991,7 +991,7 @@ const startWatcher = async (
 	try {
 		entry = await resolveEsbuildEntry(unit.source);
 	} catch {
-		// Keep watching while bundleAndStart reports the invalid source.
+		// An invalid source may become valid after the next edit.
 	}
 	const initialInputs = await resolveWatchInputs(entry);
 	if (initialInputs === null) {

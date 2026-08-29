@@ -1,7 +1,6 @@
 import { basename, dirname } from "node:path";
 import {
 	ErrorCode,
-	type FunctionBundle,
 	PlatformError,
 	packagesToStage,
 	type ResolvedFunctionConfig,
@@ -17,15 +16,7 @@ import {
 	traceNativePackages,
 } from "./native-packages.js";
 
-/**
- * Builds the deployable ZIP for a single function. The default
- * ({@link buildFunctionBundle}) honors `fn.bundler`. `pushConfig` / `apply`
- * accept a custom bundler so a consumer that cannot load esbuild (e.g. a
- * single-file CLI) can supply its own.
- *
- * This deploy-level callback returns finished archive bytes; `@neon/config`'s
- * per-function `FunctionBundler` returns a {@link FunctionBundle} file map.
- */
+/** Deploy-level ZIP. `@neon/config`'s FunctionBundler returns a file map. */
 export type FunctionBundler = (
 	fn: ResolvedFunctionConfig,
 ) => Promise<Uint8Array>;
@@ -42,26 +33,13 @@ export const ESM_CJS_INTEROP_BANNER =
 
 type FunctionBundleOptions = {
 	nativeDeps?: Partial<NativeTraceDeps>;
-	/**
-	 * Where advisory findings go — the undeclared-native-dependency report, and a package
-	 * whose version could not be pinned.
-	 *
-	 * Defaults to discarding them, because a library has no business writing to the
-	 * console. Pass a handler: these are the only signal that a function will fail at
-	 * invoke, and the CLI wires this to its logger for exactly that reason.
-	 */
+	/** Callers own advisory output because this library has no output sink. */
 	onWarning?: (message: string) => void;
 };
 
 /**
- * Build the deployable ZIP for a function, honoring `fn.bundler`.
- *
- * `"esbuild"` (the default) discovers an entry (`index.ts`, then `index.js`, then
- * `index.mjs`) and bundles it. `"none"` zips `source` as-is. An inline function returns a
- * file map that is zipped.
- *
- * The packaged CLI never calls this. It injects its own bundler and imports
- * {@link bundleAsIs} from `function-source.ts`, which does not load esbuild.
+ * Honors `fn.bundler`. The packaged CLI never calls this — it injects its own
+ * bundler so esbuild stays out of the pkg graph.
  */
 export async function buildFunctionBundle(
 	fn: ResolvedFunctionConfig,
@@ -77,14 +55,8 @@ export async function buildFunctionBundle(
 }
 
 /**
- * Mirrors: `esbuild <source> --bundle --outfile=index.mjs --minify --format=esm
- * --platform=node --banner:js=<createRequire shim>`, then zips the emitted files into the
- * archive the Functions deploy endpoint expects. Dependencies are bundled into the entry
- * (Node built-ins stay external); see {@link ESM_CJS_INTEROP_BANNER} for why the banner.
- *
- * No source map is emitted: the Functions runtime does not run Node with source-map support,
- * so an uploaded `index.mjs.map` is never consumed (a thrown error's stack still points into
- * the minified bundle). Generating it only inflated the deployed archive, so it is omitted.
+ * Source maps are omitted because Functions does not enable them and they only
+ * enlarge archives.
  */
 const bundleWithEsbuild = async (
 	fn: ResolvedFunctionConfig,
@@ -187,7 +159,7 @@ type EsbuildModule = {
 };
 
 const loadEsbuild = async (): Promise<EsbuildModule> => {
-	// Computed so rollup and pkg cannot see the module name and snapshot the native binary.
+	// A literal module name would let Rollup and pkg snapshot esbuild's native binary.
 	const name = ["es", "build"].join("");
 	try {
 		return (await import(name)) as EsbuildModule;

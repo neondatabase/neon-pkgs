@@ -1,11 +1,6 @@
 /**
- * Entry filenames a directory `source` is searched for, in order, when the function is
- * bundled with esbuild. First match wins. Shared by `neon.ts` apply and
- * `neon function deploy --src` so the two paths cannot drift.
- *
- * `.mjs` is last on purpose: a folder that also has `index.js` is bundled from the
- * JavaScript file, not treated as already-built ESM. Skip-esbuild is `bundler: "none"` /
- * `--no-bundle`, never inferred from the extension.
+ * Search order for a directory `source` under esbuild. Shared by apply and
+ * `neon function deploy --src`. `.mjs` is last so it never implies skip-esbuild.
  */
 export const FUNCTION_SOURCE_ENTRIES = [
 	"index.ts",
@@ -15,18 +10,12 @@ export const FUNCTION_SOURCE_ENTRIES = [
 
 export type FunctionSourceEntry = (typeof FUNCTION_SOURCE_ENTRIES)[number];
 
-/**
- * Entry filenames the Functions runtime imports from the archive root. A `"none"` bundle
- * that carries neither cannot be invoked.
- */
+/** Filenames the Functions runtime imports from the archive root. */
 export const FUNCTION_ARCHIVE_ENTRIES = ["index.mjs", "index.js"] as const;
 
 export type FunctionArchiveEntry = (typeof FUNCTION_ARCHIVE_ENTRIES)[number];
 
-/**
- * First {@link FUNCTION_SOURCE_ENTRIES} name that appears in `existing`. Pure: the
- * caller decides what "exists" (a file, not a directory of the same name).
- */
+/** `existing` is names the caller counted as files, so a directory named `index.ts` cannot win. */
 export const pickFunctionSourceEntry = (
 	existing: Iterable<string>,
 ): FunctionSourceEntry | undefined => {

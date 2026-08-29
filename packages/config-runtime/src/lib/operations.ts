@@ -50,10 +50,7 @@ export interface ApplyOptions extends ConfigOperationOptions {
 	updateExisting?: boolean;
 	/** Auto-confirm applying to a branch marked `protected` on Neon. */
 	allowProtectedBranch?: boolean;
-	/**
-	 * Custom function bundler. Defaults to {@link buildFunctionBundle}; inject
-	 * your own to deploy functions without loading esbuild. See {@link FunctionBundler}.
-	 */
+	/** Inject to deploy without this package loading esbuild. */
 	bundleFunction?: FunctionBundler;
 }
 
@@ -141,7 +138,7 @@ export interface CreateBranchOptions {
 	apiKey?: string;
 	/** Inject a custom NeonApi adapter (primarily for tests). */
 	api?: NeonApi;
-	/** Custom function bundler (defaults to {@link buildFunctionBundle}). See {@link FunctionBundler}. */
+	/** Inject to deploy without this package loading esbuild. */
 	bundleFunction?: FunctionBundler;
 }
 

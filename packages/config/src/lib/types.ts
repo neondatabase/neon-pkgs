@@ -328,26 +328,19 @@ export interface ResolvedExternalPackage {
 	includeFiles: boolean;
 }
 
-/**
- * Deployable function files keyed by archive-relative path. The entry must be
- * `index.mjs` or `index.js` at the archive root.
- */
+/** Archive-relative paths. The runtime imports `index.mjs` or `index.js` at the root. */
 export type FunctionBundle = Record<string, Uint8Array>;
 
-/**
- * Converts resolved function config into deployable files.
- *
- * The type lives in `@neon/config` so policy imports stay free of build-time dependencies.
- */
+/** Defined here so policy imports stay free of build-time dependencies. */
 export type FunctionBundler = (
 	fn: ResolvedFunctionConfig,
 ) => Promise<FunctionBundle>;
 
 /**
- * `"esbuild"` bundles a source file or the first directory entry found in order:
- * `index.ts`, `index.js`, `index.mjs`. `"none"` ships a prebuilt directory whose root
- * contains `index.mjs` or `index.js`, or a single file of that name. A
- * {@link FunctionBundler} supplies an inline implementation.
+ * `"esbuild"` (default) bundles a file, or a directory from the first of
+ * `index.ts`, `index.js`, `index.mjs`. `"none"` ships a prebuilt directory or a
+ * single `index.mjs` / `index.js`. An inline {@link FunctionBundler} returns the
+ * file map.
  */
 export type FunctionBundlerInput = "esbuild" | "none" | FunctionBundler;
 
@@ -356,12 +349,6 @@ export type FunctionBundlerInput = "esbuild" | "none" | FunctionBundler;
  * **exists** on every branch; its branch-unique slug is the **record key** in
  * {@link PreviewInput.functions} (not a field here), so slugs are statically enumerable,
  * cannot duplicate, and the `branch` closure can only tune slugs that are declared here.
- *
- * A function is invoked like a Cloudflare/Vercel handler — its source module
- * `export default { fetch }` or `export async function handler(req): Response`. The
- * `source` path is bundled and uploaded as a deployment; the newest deployment becomes
- * active.
- *
  * Runtime tuning is **not** here — it varies per branch and lives in the `branch` closure
  * (see {@link FunctionTuning}). Memory is fixed by the platform policy for now and is not
  * user-configurable.
@@ -370,13 +357,10 @@ export interface FunctionDef {
 	/** Free-form display name. @example "Hello World" */
 	name: string;
 	/**
-	 * Path to the function's entry module or source directory, **relative to `neon.ts`**
-	 * (or absolute). The module's default export (`{ fetch }`) or `handler` export is the
-	 * function entry. A file is bundled as the entry; a directory is searched for
-	 * `index.ts`, then `index.js`, then `index.mjs` (see {@link bundler}).
-	 *
-	 * We require a string path rather than an imported handler because a JS function value
-	 * carries no reference back to its source file, so esbuild has nothing to bundle from.
+	 * Path to the entry module or source directory, relative to `neon.ts` (or
+	 * absolute). A file is the entry; a directory is searched for `index.ts`,
+	 * then `index.js`, then `index.mjs`. A JS function value has no source path
+	 * for a bundler to resolve.
 	 * @example "./functions/hello-world.ts"
 	 * @example ".mastra/output"
 	 */
@@ -455,13 +439,11 @@ export interface FunctionDef {
 	 */
 	externalPackages?: ExternalPackageEntry[];
 	/**
-	 * Selects how {@link source} becomes deployable files. Defaults to `"esbuild"`.
-	 *
-	 * `"none"` ships a prebuilt directory or entry file. An inline
-	 * {@link FunctionBundler} returns the files used by deploy and `neon dev`.
-	 *
-	 * Inline functions do not round-trip through `inspect` or pull and must be re-declared
-	 * before deploying a reconstructed config.
+	 * How {@link source} becomes deployable files. Defaults to `"esbuild"`.
+	 * `"none"` ships a prebuilt directory or `index.mjs` / `index.js` file.
+	 * An inline {@link FunctionBundler} returns the file map used by deploy and
+	 * `neon dev`. Inline functions do not round-trip through inspect or pull and
+	 * must be re-declared.
 	 * @example "none"
 	 * @example (fn) => myFrameworkBuild(fn.source)
 	 */

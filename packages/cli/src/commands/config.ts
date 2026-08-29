@@ -75,10 +75,7 @@ import { zipBundle } from "../utils/zip.js";
 import { writer } from "../writer.js";
 import { autoPullEnvAfterPin } from "./env.js";
 
-/**
- * Keep esbuild out of the packaged CLI's static module graph while honoring each
- * function's configured bundler.
- */
+// A static esbuild import would make pkg snapshot its native binary.
 const neonctlBundler: FunctionBundler = async (fn) => {
 	if (typeof fn.bundler === "function") {
 		return zipFunctionBundle(fn.slug, await fn.bundler(fn));

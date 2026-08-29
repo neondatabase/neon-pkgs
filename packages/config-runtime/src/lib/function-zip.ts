@@ -1,11 +1,7 @@
 import { ErrorCode, PlatformError } from "@neon/config";
 import { assertZipWithinLimits, enforceLimits } from "./native-packages.js";
 
-/**
- * Zip a file map with the compression the Functions deploy endpoint expects.
- * No size check — the esbuild path without staged native files preserves the
- * pre-existing unlimited archive. {@link zipFunctionBundle} enforces limits.
- */
+/** No size check — the esbuild path without staged native files stayed unlimited. */
 export async function zipEntries(
 	entries: Record<string, Uint8Array>,
 ): Promise<Uint8Array> {
@@ -13,10 +9,6 @@ export async function zipEntries(
 	return zipSync(entries, { level: 6 });
 }
 
-/**
- * Zip a file map into the archive the deploy endpoint expects, enforcing the
- * build service's size limits. The path every non-esbuild bundler funnels through.
- */
 export async function zipFunctionBundle(
 	slug: string,
 	entries: Record<string, Uint8Array>,

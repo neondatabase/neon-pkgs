@@ -1,6 +1,5 @@
 import { expect } from 'vitest';
 
-// The deploy POST returns an operation the CLI ignores; it only needs 2xx.
 export default function (req, res) {
   expect(req.headers['content-type']).toMatch(
     /^multipart\/form-data; boundary=/,

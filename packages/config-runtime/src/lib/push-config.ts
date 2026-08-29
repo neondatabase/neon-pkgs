@@ -20,10 +20,7 @@ import {
 } from "@neon/config";
 import type { FunctionBundler } from "./function-bundle.js";
 
-/**
- * Load the default ZIP step lazily so a caller that injects `bundleFunction`
- * never evaluates the esbuild loader in `function-bundle.ts`.
- */
+// Eager loading would evaluate esbuild for callers that provide their own bundler.
 const makeDefaultBundleFunction =
 	(onWarning: (message: string) => void): FunctionBundler =>
 	async (fn: ResolvedFunctionConfig): Promise<Uint8Array> => {
@@ -98,11 +95,7 @@ export interface PushConfigOptions {
 	 * Never invoked on `dryRun`.
 	 */
 	confirm?: (context: PushConfirmContext) => boolean | Promise<boolean>;
-	/**
-	 * Custom ZIP step for function source. Defaults to {@link buildFunctionBundle},
-	 * which honors `fn.bundler`. Inject your own to deploy without this package
-	 * loading esbuild — see {@link FunctionBundler}.
-	 */
+	/** Inject to deploy without this package loading esbuild. */
 	bundleFunction?: FunctionBundler;
 	/**
 	 * When `true`, compute the full plan against the live remote state but **do not

@@ -153,7 +153,7 @@ export const builder = (argv: yargs.Argv) =>
 							type: "boolean",
 							default: true,
 						},
-						// Yargs maps `--no-bundle` to `bundle: false`, matching `--no-wait`.
+						// Named `bundle` so yargs exposes `--no-bundle`, matching `--no-wait`.
 						bundle: {
 							describe:
 								"Bundle --src with esbuild. Use --no-bundle to zip a prebuilt directory (root must contain index.mjs or index.js) or a file of that name.",
@@ -266,9 +266,7 @@ const deploy = async (props: DeployProps) => {
 		);
 	}
 
-	// At least one deploy option must be passed (--wait is excluded: it controls
-	// output, not what gets deployed). `--bundle` defaults to true, so only
-	// `--no-bundle` counts — it is the choice to zip `.` as-is.
+	// Defaults do not count as deploy options; explicit `--no-bundle` does.
 	const hasOption =
 		props.src !== undefined ||
 		props.env !== undefined ||
@@ -315,9 +313,7 @@ const deploy = async (props: DeployProps) => {
 		const source = await resolveEsbuildEntry(src);
 		const bundled = await bundleEntry(source);
 		for (const warning of bundled.warnings) log.warning(warning);
-		// `--src` bypasses `neon.ts`, so there is no policy to declare anything in and no way to
-		// stage files here. The advisory still runs: this is the shortest path to a function that
-		// deploys clean and then fails at invoke, so it is the last place to stay silent.
+		// `--src` bypasses `neon.ts`, so native packages cannot be declared here.
 		for (const finding of findUndeclaredNativePackages({
 			metafile: bundled.metafile,
 			declared: [],

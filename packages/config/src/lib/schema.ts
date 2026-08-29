@@ -270,7 +270,6 @@ const functionExternalPackagesSchema = z.array(externalPackageEntrySchema);
 
 const runtimeSchema = z.literal("nodejs24");
 
-/** Function bundlers are opaque to Zod and validated when invoked. */
 const bundlerSchema = z.custom<FunctionBundlerInput>(
 	(value) =>
 		value === "esbuild" || value === "none" || typeof value === "function",
