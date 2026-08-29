@@ -817,8 +817,6 @@ neon ask --prompt "How do schema-only branches work?" --output json
 
 Default table output is the assistant's text. `--output json` and `--output yaml` print `{ "text": "…" }`.
 
-The hosted assistant URL can be overridden with `NEON_ASK_URL` (the full `/ask` URL).
-
 ## Install the Neon plugin (`plugins`)
 
 `neon plugins` installs the Neon agent plugin (`neon-postgres`) by running `npx plugins add`. It does not call the Neon API.

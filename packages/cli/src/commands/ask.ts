@@ -1,6 +1,7 @@
 import type yargs from "yargs";
 
 import { isNetworkError } from "../errors.js";
+import { log } from "../log.js";
 import type { CommonProps } from "../types.js";
 import { noPassthrough, single } from "../utils/flags.js";
 import { writer } from "../writer.js";
@@ -53,6 +54,7 @@ export const handler = async (props: AskProps) => {
 		url: props.url,
 		envUrl: process.env.NEON_ASK_URL,
 	});
+	log.info("Asking the Neon assistant.");
 	const text = await askAssistant({ prompt: props.prompt, url });
 	if (props.output === "json" || props.output === "yaml") {
 		writer(props).end({ text }, { fields: ["text"] });

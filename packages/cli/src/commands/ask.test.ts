@@ -116,6 +116,7 @@ describe("neon ask", () => {
 				expect(stdout).toBe(
 					"Schema-only branches copy schema, not data.\n",
 				);
+				expect(stderr).toMatch(/Asking the Neon assistant/);
 				expect(stderr).not.toMatch(/Cannot run interactive auth in CI/);
 				expect(stderr).not.toMatch(/Not Found/);
 			},
