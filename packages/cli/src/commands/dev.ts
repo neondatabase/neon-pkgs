@@ -1,11 +1,23 @@
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import {
+	existsSync,
+	mkdirSync,
+	rmSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
+import { basename, dirname, join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import type {
+	FunctionBundlerInput,
+	ResolvedFunctionConfig,
+} from "@neon/config";
+import {
+	bundleAsIs,
 	describeNativeFinding,
 	findUndeclaredNativePackages,
+	resolveEsbuildEntry,
 } from "@neon/config-runtime";
 import type { CredentialOutcome } from "@neon-internals/env-core/reuse-secrets";
 import chalk from "chalk";
@@ -367,11 +379,16 @@ const plannedToUnit = (
 		...(fn.externalPackages
 			? { externalPackages: fn.externalPackages }
 			: {}),
+		...(fn.bundler !== undefined ? { bundler: fn.bundler } : {}),
 		configKey: JSON.stringify({
 			source: fn.source,
 			port: fn.port ?? null,
 			env: fn.env,
 			externalPackages: fn.externalPackages ?? null,
+			bundler:
+				typeof fn.bundler === "function"
+					? "custom"
+					: (fn.bundler ?? null),
 		}),
 	};
 };
@@ -409,6 +426,7 @@ export type ServedUnit = {
 	 * in single-source mode (`--source` has no policy to read it from).
 	 */
 	externalPackages?: string[];
+	bundler?: FunctionBundlerInput;
 	bundleDir: string;
 	childEnv: NodeJS.ProcessEnv;
 	label: string | null;
@@ -471,6 +489,7 @@ const runSupervisor = async (
 				r.unit.externalPackages,
 				// The `neon.ts` key, so a function is named the same way here as at deploy.
 				r.unit.slug ?? undefined,
+				r.unit.bundler,
 			);
 		} catch (err) {
 			r.status = "error";
@@ -543,7 +562,7 @@ const runSupervisor = async (
 	// Bring a unit fully online: create its source watcher (before the first bundle so
 	// bundleAndStart can sync the watch set on every run) then bundle + spawn it.
 	const startUnit = async (r: RunningUnit): Promise<void> => {
-		r.watcher = await startWatcher(r.unit.source, () => {
+		r.watcher = await startWatcher(r.unit, () => {
 			restart(r);
 		});
 		await bundleAndStart(r);
@@ -791,11 +810,18 @@ const writeBundle = async (
 	bundleDir: string,
 	externalPackages?: readonly string[],
 	label?: string,
+	bundler?: FunctionBundlerInput,
 ): Promise<string> => {
+	if (bundler !== undefined && bundler !== "esbuild") {
+		const files = await bundleForDev(source, label, bundler);
+		return writeBundleFiles(bundleDir, files);
+	}
+
+	const entry = await resolveEsbuildEntry(source);
 	// Left unbundled only. `bundleDir` sits inside the project's node_modules, so an
 	// externalized package resolves from the real tree at the host architecture — no install
 	// or copy is needed or wanted locally, whatever `includeFiles` says for a deploy.
-	const { files, metafile, warnings } = await bundleEntry(source, {
+	const { files, metafile, warnings } = await bundleEntry(entry, {
 		...(externalPackages ? { externalPackages } : {}),
 	});
 	for (const warning of warnings) log.warning(warning);
@@ -805,7 +831,7 @@ const writeBundle = async (
 	const findings = findUndeclaredNativePackages({
 		metafile,
 		declared: externalPackages ?? [],
-		projectDir: dirname(source),
+		projectDir: dirname(entry),
 	});
 	const signature = findings.map((f) => f.name).join(",");
 	if (reportedFindings.get(source) !== signature) {
@@ -817,13 +843,39 @@ const writeBundle = async (
 		}
 	}
 
+	return writeBundleFiles(bundleDir, files);
+};
+
+const bundleForDev = async (
+	source: string,
+	label: string | undefined,
+	bundler: Exclude<FunctionBundlerInput, "esbuild">,
+): Promise<Record<string, Uint8Array>> => {
+	const fn: ResolvedFunctionConfig = {
+		slug: label ?? basename(source),
+		name: label ?? basename(source),
+		source,
+		env: {},
+		runtime: "nodejs24",
+		bundler,
+	};
+	return bundler === "none" ? bundleAsIs(fn) : bundler(fn);
+};
+
+const writeBundleFiles = (
+	bundleDir: string,
+	files: Record<string, Uint8Array>,
+): string => {
+	// Deleted prebuilt files must not remain importable after a rebuild.
+	rmSync(bundleDir, { recursive: true, force: true });
 	mkdirSync(bundleDir, { recursive: true });
-	// bundleEntry emits a single `index.mjs` (no source map). The `.mjs` extension makes Node
-	// load it as ESM directly, so no `package.json` `"type": "module"` marker is needed.
 	for (const [name, contents] of Object.entries(files)) {
-		writeFileSync(join(bundleDir, name), contents);
+		const dest = join(bundleDir, name);
+		mkdirSync(dirname(dest), { recursive: true });
+		writeFileSync(dest, contents);
 	}
-	return join(bundleDir, "index.mjs");
+	const entry = ["index.mjs", "index.js"].find((name) => name in files);
+	return join(bundleDir, entry ?? "index.mjs");
 };
 
 const urlFor = (port: number | null): string =>
@@ -921,15 +973,33 @@ type Watcher = {
 };
 
 const startWatcher = async (
-	source: string,
+	unit: Pick<ServedUnit, "source" | "bundler">,
 	restart: () => void,
 ): Promise<Watcher> => {
 	const { default: chokidar } = await import("chokidar");
-	const initialInputs = await resolveWatchInputs(source);
-	if (initialInputs === null) {
-		return startDirectoryWatcher(chokidar, source, restart);
+	if (unit.bundler !== undefined && unit.bundler !== "esbuild") {
+		const sourceStat = statSync(unit.source, { throwIfNoEntry: false });
+		const dir =
+			sourceStat?.isDirectory() === true
+				? unit.source
+				: dirname(unit.source);
+		return startDirectoryWatcher(chokidar, dir, restart, {
+			ignoreDist: false,
+		});
 	}
-	return startInputWatcher(chokidar, source, initialInputs, restart);
+	let entry = unit.source;
+	try {
+		entry = await resolveEsbuildEntry(unit.source);
+	} catch {
+		// An invalid source may become valid after the next edit.
+	}
+	const initialInputs = await resolveWatchInputs(entry);
+	if (initialInputs === null) {
+		return startDirectoryWatcher(chokidar, entry, restart, {
+			ignoreDist: true,
+		});
+	}
+	return startInputWatcher(chokidar, entry, initialInputs, restart);
 };
 
 /**
@@ -993,15 +1063,22 @@ const startDirectoryWatcher = async (
 	chokidar: Chokidar,
 	source: string,
 	restart: () => void,
+	options: { ignoreDist: boolean },
 ): Promise<Watcher> => {
-	const watchedDir = dirname(source);
+	const watchedDir = statSync(source, {
+		throwIfNoEntry: false,
+	})?.isDirectory()
+		? source
+		: dirname(source);
 	const isIgnored = (p: string): boolean => {
-		const segments = p.split(/[/\\]/);
-		return (
-			segments.includes("node_modules") ||
-			segments.includes(".git") ||
-			segments.includes("dist")
-		);
+		const rel = relative(watchedDir, p);
+		if (rel === "" || rel === ".") return false;
+		if (rel.startsWith("..")) return false;
+		const segments = rel.split(/[/\\]/);
+		if (segments.includes("node_modules") || segments.includes(".git")) {
+			return true;
+		}
+		return options.ignoreDist && segments.includes("dist");
 	};
 	const watcher = chokidar.watch(watchedDir, {
 		ignoreInitial: true,

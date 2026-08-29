@@ -2,6 +2,7 @@ import { z } from "zod";
 import { parseBranchTtl, parseSuspendTimeout } from "./duration.js";
 import { externalPackageRoot } from "./external-packages.js";
 import { isWildcardPattern, validatePattern } from "./patterns.js";
+import type { FunctionBundlerInput } from "./types.js";
 
 /**
  * Zod schema for {@link import("./types.js").ComputeSettings}.
@@ -269,6 +270,19 @@ const functionExternalPackagesSchema = z.array(externalPackageEntrySchema);
 
 const runtimeSchema = z.literal("nodejs24");
 
+const bundlerSchema = z.custom<FunctionBundlerInput>(
+	(value) =>
+		value === "esbuild" || value === "none" || typeof value === "function",
+	{
+		message:
+			'bundler must be "esbuild", "none", or a function (fn) => Promise<FunctionBundle>',
+	},
+);
+
+const isEsbuildBundler = (
+	bundler: z.infer<typeof bundlerSchema> | undefined,
+): boolean => bundler === undefined || bundler === "esbuild";
+
 /** The declared name of an entry, whichever form it was written in. */
 const entryName = (
 	entry: z.infer<typeof externalPackageEntrySchema>,
@@ -295,10 +309,30 @@ export const functionDefSchema = z
 		source: z.string().min(1),
 		env: functionEnvSchema.optional(),
 		externalPackages: functionExternalPackagesSchema.optional(),
+		bundler: bundlerSchema.optional(),
 		dev: functionDevConfigSchema.optional(),
 	})
 	.check((ctx) => {
 		const entries = ctx.value.externalPackages ?? [];
+
+		// Other bundlers own their output, so `externalPackages` would be ignored.
+		if (
+			ctx.value.externalPackages !== undefined &&
+			!isEsbuildBundler(ctx.value.bundler)
+		) {
+			ctx.issues.push({
+				code: "custom",
+				input: ctx.value.externalPackages,
+				path: ["externalPackages"],
+				message: `externalPackages only applies to the "esbuild" bundler; the "${
+					typeof ctx.value.bundler === "function"
+						? "custom"
+						: ctx.value.bundler
+				}" bundler controls its own output. Remove externalPackages or switch to the esbuild bundler`,
+			});
+			return;
+		}
+
 		const seenNames = new Map<string, number>();
 		const rootIntent = new Map<
 			string,

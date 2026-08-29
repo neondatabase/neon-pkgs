@@ -28,9 +28,14 @@ import type {
 	DurationString,
 	DurationUnit,
 	EnableDataApiInput,
+	FunctionArchiveEntry,
+	FunctionBundle,
+	FunctionBundler,
+	FunctionBundlerInput,
 	FunctionDef,
 	FunctionDevConfig,
 	FunctionRuntime,
+	FunctionSourceEntry,
 	FunctionTuning,
 	GetConnectionUriInput,
 	LoadConfigOptions,
@@ -99,8 +104,13 @@ describe("config type-export surface", () => {
 		expectTypeOf<DurationString>().not.toBeAny();
 		expectTypeOf<DurationUnit>().not.toBeAny();
 		expectTypeOf<FunctionDef>().not.toBeAny();
+		expectTypeOf<FunctionArchiveEntry>().not.toBeAny();
+		expectTypeOf<FunctionBundle>().not.toBeAny();
+		expectTypeOf<FunctionBundler>().not.toBeAny();
+		expectTypeOf<FunctionBundlerInput>().not.toBeAny();
 		expectTypeOf<FunctionDevConfig>().not.toBeAny();
 		expectTypeOf<FunctionRuntime>().not.toBeAny();
+		expectTypeOf<FunctionSourceEntry>().not.toBeAny();
 		expectTypeOf<FunctionTuning>().not.toBeAny();
 		expectTypeOf<PostgresConfig>().not.toBeAny();
 		expectTypeOf<PreviewInput>().not.toBeAny();
@@ -190,5 +200,15 @@ describe("defineConfig return-type stability", () => {
 		expectTypeOf<
 			keyof NonNullable<NonNullable<typeof config.preview>["functions"]>
 		>().toEqualTypeOf<"hello" | "world">();
+	});
+
+	test("bundler accepts esbuild, none, or a function, not zip-directory", () => {
+		expectTypeOf<"esbuild">().toExtend<FunctionBundlerInput>();
+		expectTypeOf<"none">().toExtend<FunctionBundlerInput>();
+		expectTypeOf<FunctionBundler>().toExtend<FunctionBundlerInput>();
+		type Retired = "zip-directory" extends FunctionBundlerInput
+			? true
+			: false;
+		expectTypeOf<Retired>().toEqualTypeOf<false>();
 	});
 });

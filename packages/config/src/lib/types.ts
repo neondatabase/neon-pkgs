@@ -328,17 +328,27 @@ export interface ResolvedExternalPackage {
 	includeFiles: boolean;
 }
 
+/** Archive-relative paths. The runtime imports `index.mjs` or `index.js` at the root. */
+export type FunctionBundle = Record<string, Uint8Array>;
+
+/** Defined here so policy imports stay free of build-time dependencies. */
+export type FunctionBundler = (
+	fn: ResolvedFunctionConfig,
+) => Promise<FunctionBundle>;
+
+/**
+ * `"esbuild"` (default) bundles a file, or a directory from the first of
+ * `index.ts`, `index.js`, `index.mjs`. `"none"` ships a prebuilt directory or a
+ * single `index.mjs` / `index.js`. An inline {@link FunctionBundler} returns the
+ * file map.
+ */
+export type FunctionBundlerInput = "esbuild" | "none" | FunctionBundler;
+
 /**
  * Static definition of a Neon Function (Preview feature). Declares that the function
  * **exists** on every branch; its branch-unique slug is the **record key** in
  * {@link PreviewInput.functions} (not a field here), so slugs are statically enumerable,
  * cannot duplicate, and the `branch` closure can only tune slugs that are declared here.
- *
- * A function is invoked like a Cloudflare/Vercel handler — its source module
- * `export default { fetch }` or `export async function handler(req): Response`. The
- * `source` path is bundled (esbuild) and uploaded as a deployment; the newest deployment
- * becomes active.
- *
  * Runtime tuning is **not** here — it varies per branch and lives in the `branch` closure
  * (see {@link FunctionTuning}). Memory is fixed by the platform policy for now and is not
  * user-configurable.
@@ -347,14 +357,12 @@ export interface FunctionDef {
 	/** Free-form display name. @example "Hello World" */
 	name: string;
 	/**
-	 * Path to the function's entry module, **relative to `neon.ts`** (or absolute). The
-	 * module's default export (`{ fetch }`) or `handler` export is the function entry. This
-	 * path is resolved against the loaded `neon.ts` location and bundled with esbuild at
-	 * deploy time.
-	 *
-	 * We require a string path rather than an imported handler because a JS function value
-	 * carries no reference back to its source file, so esbuild has nothing to bundle from.
+	 * Path to the entry module or source directory, relative to `neon.ts` (or
+	 * absolute). A file is the entry; a directory is searched for `index.ts`,
+	 * then `index.js`, then `index.mjs`. A JS function value has no source path
+	 * for a bundler to resolve.
 	 * @example "./functions/hello-world.ts"
+	 * @example ".mastra/output"
 	 */
 	source: string;
 	/**
@@ -430,6 +438,16 @@ export interface FunctionDef {
 	 * @example ["sharp", { name: "canvas", includeFiles: false }]
 	 */
 	externalPackages?: ExternalPackageEntry[];
+	/**
+	 * How {@link source} becomes deployable files. Defaults to `"esbuild"`.
+	 * `"none"` ships a prebuilt directory or `index.mjs` / `index.js` file.
+	 * An inline {@link FunctionBundler} returns the file map used by deploy and
+	 * `neon dev`. Inline functions do not round-trip through inspect or pull and
+	 * must be re-declared.
+	 * @example "none"
+	 * @example (fn) => myFrameworkBuild(fn.source)
+	 */
+	bundler?: FunctionBundlerInput;
 	/**
 	 * Local-development settings used by `neon dev` when serving every function from
 	 * `neon.ts`. Ignored at deploy time. See {@link FunctionDevConfig}.
@@ -620,6 +638,7 @@ export interface ResolvedFunctionConfig {
 	 */
 	externalPackages?: ResolvedExternalPackage[];
 	runtime: FunctionRuntime;
+	bundler: FunctionBundlerInput;
 	/**
 	 * Local-development settings, passed through untouched from {@link FunctionDef.dev}
 	 * (no defaults applied). Only consumed by `neon dev`; deploy ignores it.

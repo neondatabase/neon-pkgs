@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -159,5 +159,46 @@ describe("resolveFunctionsFromConfig", () => {
 		);
 		const resolved = await resolveFunctionsFromConfig(cwd);
 		expect(resolved?.functions[0].env).toEqual({ FOO: "bar" });
+	});
+
+	it("mirrors a none bundler and accepts a directory source", async () => {
+		mkdirSync(join(cwd, "build-output"), { recursive: true });
+		writeFileSync(
+			join(cwd, "build-output", "index.mjs"),
+			'export default { fetch: () => new Response("ok") };\n',
+		);
+		writeFileSync(
+			join(cwd, "neon.ts"),
+			`export default {
+        preview: {
+          functions: {
+            app: {
+              name: 'App',
+              source: './build-output',
+              bundler: 'none',
+            },
+          },
+        },
+      };\n`,
+		);
+
+		const resolved = await resolveFunctionsFromConfig(cwd);
+		expect(resolved?.functions[0]).toMatchObject({
+			slug: "app",
+			source: join(cwd, "build-output"),
+			bundler: "none",
+		});
+	});
+
+	it("omits bundler for the esbuild default so the common path is unchanged", async () => {
+		writeWorkspace(
+			cwd,
+			`export default {
+        preview: { functions: { hello: { name: 'Hello', source: './hello.ts' } } },
+      };\n`,
+			["hello.ts"],
+		);
+		const resolved = await resolveFunctionsFromConfig(cwd);
+		expect(resolved?.functions[0]).not.toHaveProperty("bundler");
 	});
 });

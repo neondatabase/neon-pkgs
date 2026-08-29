@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
 import {
 	type Config,
+	type FunctionBundlerInput,
 	type FunctionDevConfig,
 	loadConfigFromFile,
 	resolveConfig,
@@ -25,6 +26,7 @@ export type PlannedFunction = {
 	 * function that deploys fine — the failure `externalPackages` exists to fix.
 	 */
 	externalPackages?: string[];
+	bundler?: FunctionBundlerInput;
 };
 
 /**
@@ -88,6 +90,7 @@ export const resolveFunctionsFromConfig = async (
 						),
 					}
 				: {}),
+			...(fn.bundler !== "esbuild" ? { bundler: fn.bundler } : {}),
 		};
 	});
 

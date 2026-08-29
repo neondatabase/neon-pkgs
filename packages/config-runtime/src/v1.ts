@@ -30,6 +30,8 @@ export type {
 	AppliedChange,
 	Config,
 	ConflictReport,
+	FunctionBundle,
+	FunctionBundlerInput,
 	LoadConfigOptions,
 	NeonApi,
 	PushResult,
@@ -58,6 +60,11 @@ export {
 export type { FunctionBundler } from "./lib/function-bundle.js";
 // ─── Function bundling (esbuild + zip) ────────────────────────────────────────
 export { buildFunctionBundle } from "./lib/function-bundle.js";
+export {
+	bundleAsIs,
+	resolveEsbuildEntry,
+} from "./lib/function-source.js";
+export { zipFunctionBundle } from "./lib/function-zip.js";
 // ─── Native dependency staging and detection ──────────────────────────────────
 export type { NativeEvidence, NativeFinding } from "./lib/native-detect.js";
 export {

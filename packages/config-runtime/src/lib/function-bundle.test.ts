@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
+	FunctionBundle,
 	ResolvedExternalPackage,
 	ResolvedFunctionConfig,
 } from "@neon/config";
@@ -49,6 +50,7 @@ function fn(
 		source,
 		env: {},
 		runtime: "nodejs24",
+		bundler: "esbuild",
 		...(externalPackages
 			? {
 					externalPackages: externalPackages.map((entry) =>
@@ -161,7 +163,7 @@ describe("buildFunctionBundle", () => {
 	test("throws a PlatformError when the source cannot be resolved", async () => {
 		await expect(
 			buildFunctionBundle(fn(join(dir, "does-not-exist.ts"))),
-		).rejects.toThrow(/Failed to bundle function "fn1"/);
+		).rejects.toThrow(/does not exist/);
 	});
 
 	test("fails to bundle an unresolvable dependency when it is not declared external", async () => {
@@ -570,4 +572,157 @@ describe("buildFunctionBundle staging external package files", () => {
 		expect(message).toMatch(/archive is 1[01]\.\d MiB compressed/);
 		expect(message).toContain("node_modules/fake-addon/lib/huge.so.1");
 	}, 30_000);
+});
+
+const unzipEntries = (zip: Uint8Array): Record<string, Uint8Array> =>
+	unzipSync(zip);
+
+const textOf = (data: Uint8Array): string => new TextDecoder().decode(data);
+
+describe("buildFunctionBundle (none bundler)", () => {
+	let root: string;
+	beforeEach(() => {
+		root = mkdtempSync(join(tmpdir(), "neon-none-"));
+	});
+	afterAll(() => {
+		rmSync(root, { recursive: true, force: true });
+	});
+
+	const buildOutputDir = (files: Record<string, string>): string => {
+		const outDir = join(root, `out-${Math.random().toString(36).slice(2)}`);
+		for (const [rel, contents] of Object.entries(files)) {
+			const abs = join(outDir, rel);
+			mkdirSync(join(abs, ".."), { recursive: true });
+			writeFileSync(abs, contents);
+		}
+		return outDir;
+	};
+
+	const noneFn = (source: string): ResolvedFunctionConfig => ({
+		slug: "fn1",
+		name: "Hello World",
+		source,
+		env: {},
+		runtime: "nodejs24",
+		bundler: "none",
+	});
+
+	test("zips the directory into a loadable archive without esbuild", async () => {
+		const source = buildOutputDir({
+			"index.mjs": "export default { fetch: () => new Response('ok') };",
+			"studio/index.html": "<!doctype html>",
+		});
+
+		const zip = await buildFunctionBundle(noneFn(source));
+		const entries = unzipEntries(zip);
+
+		expect(Object.keys(entries).sort()).toEqual([
+			"index.mjs",
+			"studio/index.html",
+		]);
+		expect(textOf(entries["index.mjs"])).toContain("fetch");
+	});
+
+	test("rejects TypeScript with the none bundler wording", async () => {
+		const source = buildOutputDir({
+			"index.ts": "export default {};\n",
+		});
+		await expect(buildFunctionBundle(noneFn(source))).rejects.toThrow(
+			/bundler is "none".*TypeScript/,
+		);
+	});
+
+	test("ships invalid JavaScript without running esbuild", async () => {
+		const source = buildOutputDir({
+			"index.mjs": "this is not javascript {{{",
+			"chunk.mjs": "also not {{{",
+		});
+		const zip = await buildFunctionBundle(noneFn(source));
+		expect(textOf(unzipEntries(zip)["index.mjs"])).toBe(
+			"this is not javascript {{{",
+		);
+		expect(textOf(unzipEntries(zip)["chunk.mjs"])).toBe("also not {{{");
+	});
+});
+
+describe("buildFunctionBundle directory source", () => {
+	test("bundles a directory from index.ts, ignoring a broken index.js decoy", async () => {
+		const source = join(
+			dir,
+			`dir-ts-${Math.random().toString(36).slice(2)}`,
+		);
+		mkdirSync(source);
+		writeFileSync(
+			join(source, "index.ts"),
+			"export default { fetch: () => new Response('from-ts') };",
+		);
+		writeFileSync(join(source, "index.js"), "export default {\n");
+
+		const zip = await buildFunctionBundle(fn(source), {
+			onWarning: collectWarning,
+		});
+		expect(textOf(unzipEntries(zip)["index.mjs"])).toContain("from-ts");
+	});
+
+	test("bundles a directory from index.js, ignoring a broken index.mjs decoy", async () => {
+		const source = join(
+			dir,
+			`dir-js-${Math.random().toString(36).slice(2)}`,
+		);
+		mkdirSync(source);
+		writeFileSync(
+			join(source, "index.js"),
+			"export default { fetch: () => new Response('from-js') };",
+		);
+		writeFileSync(join(source, "index.mjs"), "export default {\n");
+
+		const zip = await buildFunctionBundle(fn(source), {
+			onWarning: collectWarning,
+		});
+		expect(textOf(unzipEntries(zip)["index.mjs"])).toContain("from-js");
+	});
+});
+
+describe("buildFunctionBundle (inline function bundler)", () => {
+	const inlineFn = (
+		bundler: (fn: ResolvedFunctionConfig) => Promise<FunctionBundle>,
+	): ResolvedFunctionConfig => ({
+		slug: "fn1",
+		name: "Hello World",
+		source: "unused-by-inline-bundler",
+		env: {},
+		runtime: "nodejs24",
+		bundler,
+	});
+
+	test("zips whatever file map the inline bundler returns", async () => {
+		const zip = await buildFunctionBundle(
+			inlineFn(async () => ({
+				"index.mjs": new TextEncoder().encode(
+					"export default { fetch: () => new Response('inline') };",
+				),
+				"data/thing.json": new TextEncoder().encode('{"a":1}'),
+			})),
+		);
+		const entries = unzipEntries(zip);
+
+		expect(Object.keys(entries).sort()).toEqual([
+			"data/thing.json",
+			"index.mjs",
+		]);
+		expect(textOf(entries["index.mjs"])).toContain("inline");
+	});
+
+	test("enforces the archive limits on an inline bundler's output", async () => {
+		// Allocating megabytes would slow this check without increasing coverage.
+		const entry = new TextEncoder().encode("export default {};");
+		const files: FunctionBundle = { "index.mjs": entry };
+		for (let i = 0; i < 4100; i++) {
+			files[`chunk-${i}.mjs`] = entry;
+		}
+
+		await expect(
+			buildFunctionBundle(inlineFn(async () => files)),
+		).rejects.toThrow(/files; the limit is/);
+	});
 });

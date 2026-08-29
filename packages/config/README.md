@@ -43,6 +43,26 @@ A policy is split into a **static** existential set and a **dynamic** `branch` c
 
 Service toggles accept `true` / `{}` / `{ enabled: true }` (enabled) and `false` / `{ enabled: false }` (disabled). Function slugs (record keys) must match `^[a-z0-9]{1,20}$`.
 
+### Shipping a prebuilt directory (`bundler: "none"`)
+
+esbuild is the default. A file `source` is the entry; a directory is searched for `index.ts`, then `index.js`, then `index.mjs`. Set `bundler: "none"` to zip `source` as-is instead — a directory whose root contains `index.mjs` or `index.js`, or a single file of that name:
+
+```ts
+export default defineConfig({
+  preview: {
+    functions: {
+      mastra: {
+        name: "Mastra server",
+        source: ".mastra/output",
+        bundler: "none",
+      },
+    },
+  },
+});
+```
+
+`neon function deploy mastra --src .mastra/output --no-bundle` is the same switch without a `neon.ts`. TypeScript cannot be shipped unbundled.
+
 ### Shipping a dependency's files (`externalPackages`)
 
 A function's `source` is bundled with esbuild at deploy time, and a package backed by a native `.node` binary cannot be bundled by anything: the binary is a compiled object the platform loads from a real path. `sharp` is the common case, and it does not even fail the build — it loads its binary through `createRequire`, which esbuild does not follow, so it bundles cleanly and then fails at invoke with `Could not load the "sharp" module`.
