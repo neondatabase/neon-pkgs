@@ -13,6 +13,7 @@ import {
 	applyContext,
 	currentContextFile,
 	ensureGitignored,
+	isAskCommand,
 	isCurrentBranchProbe,
 	isMcpOauth,
 	isPluginsCommand,
@@ -88,6 +89,19 @@ describe("isSkillsCommand", () => {
 		expect(isSkillsCommand({ _: ["mcp"] })).toBe(false);
 		expect(isSkillsCommand({ _: ["init"] })).toBe(false);
 		expect(isSkillsCommand({ _: ["plugins"] })).toBe(false);
+	});
+});
+
+describe("isAskCommand", () => {
+	test("true for ask", () => {
+		expect(isAskCommand({ _: ["ask"] })).toBe(true);
+		expect(isAskCommand({ _: ["ask", "extra"] })).toBe(true);
+	});
+
+	test("false for other commands", () => {
+		expect(isAskCommand({ _: ["skills"] })).toBe(false);
+		expect(isAskCommand({ _: ["mcp"] })).toBe(false);
+		expect(isAskCommand({ _: ["init"] })).toBe(false);
 	});
 });
 

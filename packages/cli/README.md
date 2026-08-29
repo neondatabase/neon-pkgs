@@ -806,6 +806,17 @@ On a TTY the command asks which agents and which skills, then shows a summary to
 
 Supported agents match `neon mcp`, minus agents that cannot install skills: `antigravity`, `cline`, `cline-cli`, `claude-code`, `claude-desktop`, `codex`, `cursor`, `gemini-cli`, `goose`, `github-copilot-cli`, `grok-build`, `opencode`, `vscode`, `windsurf`, `zed`. `mcporter` is a known MCP name that is then skipped. `neon skills --help` lists the same skill and agent values, and that `-y` leaves out `neon-postgres-agent-platforms`.
 
+## Ask the Neon assistant (`ask`)
+
+`neon ask --prompt` asks the hosted Neon assistant a question about Neon. It does not log in and does not use your Neon account.
+
+```bash
+neon ask --prompt "How do schema-only branches work?"
+neon ask --prompt "How do schema-only branches work?" --output json
+```
+
+Default table output is the assistant's text. On a TTY that is a spinner, then the streamed reply. `--output json` and `--output yaml` print `{ "text": "…" }` after the full response.
+
 ## Install the Neon plugin (`plugins`)
 
 `neon plugins` installs the Neon agent plugin (`neon-postgres`) by running `npx plugins add`. It does not call the Neon API.
@@ -1234,6 +1245,7 @@ Id   Name      Project         Created At            Last Used At          Last 
 | mcp                                                                        |                                                                                                              | Install the Neon MCP server         |
 | plugins                                                                    |                                                                                                              | Install the Neon plugin             |
 | skills                                                                     | `update`                                                                                                     | Install Neon agent skills           |
+| ask                                                                        |                                                                                                              | Ask a question about Neon          |
 | bucket                                                                     | `create`, `list`, `delete`, `object list`, `object get`, `object put`, `object delete` (incl. `--recursive`) | Manage buckets and their objects   |
 | [completion](https://neon.com/docs/reference/cli-completion)               |                                                                                                              | Generate a completion script       |
 
@@ -1292,7 +1304,7 @@ Global options are supported with any Neon CLI command.
 
 - <a id="analytics"></a>`--analytics`
 
-  Analytics are enabled by default to gather information about the CLI commands and options that are used by our customers. This data collection assists in offering support, and allows for a better understanding of typical usage patterns so that we can improve user experience. Neon does not collect user-defined data, such as project IDs or command payloads. To opt-out of analytics data collection, specify `--no-analytics` or `--analytics false`.
+  Analytics are enabled by default to gather information about the CLI commands and options that are used by our customers. This data collection assists in offering support, and allows for a better understanding of typical usage patterns so that we can improve user experience. Neon does not collect user-defined data, such as project IDs or command payloads, except the question passed to `neon ask --prompt`. To opt-out of analytics data collection, specify `--no-analytics` or `--analytics false`.
 
 - <a id="version"></a>`-v, --version`
 
