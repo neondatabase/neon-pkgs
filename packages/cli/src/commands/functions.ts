@@ -123,7 +123,7 @@ export const builder = (argv: yargs.Argv) =>
 					.options({
 						src: {
 							describe:
-								"Function source: a directory containing index.ts, index.js, or index.mjs (first match is bundled), or a path to the entry file",
+								"Function source: a directory containing index.ts, index.js, or index.mjs (first file match is the entry), or a path to the entry file",
 							type: "string",
 						},
 						// Removed flags, kept hidden so old invocations fail loudly instead
@@ -267,14 +267,16 @@ const deploy = async (props: DeployProps) => {
 	}
 
 	// At least one deploy option must be passed (--wait is excluded: it controls
-	// output, not what gets deployed).
+	// output, not what gets deployed). `--bundle` defaults to true, so only
+	// `--no-bundle` counts — it is the choice to zip `.` as-is.
 	const hasOption =
 		props.src !== undefined ||
 		props.env !== undefined ||
-		props.runtime !== undefined;
+		props.runtime !== undefined ||
+		props.bundle === false;
 	if (!hasOption) {
 		throw new Error(
-			"Provide at least one option to deploy, e.g. --src or --env. " +
+			"Provide at least one option to deploy, e.g. --src, --env, or --no-bundle. " +
 				`See: ${getCliName()} function deploy --help.`,
 		);
 	}

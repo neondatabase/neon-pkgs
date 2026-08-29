@@ -616,7 +616,7 @@ describe("functions", () => {
 				mockDir: "single_org",
 				code: 1,
 				stderr:
-					"ERROR: Provide at least one option to deploy, e.g. --src or --env. " +
+					"ERROR: Provide at least one option to deploy, e.g. --src, --env, or --no-bundle. " +
 					"See: neon function deploy --help.",
 			},
 		);
@@ -792,6 +792,42 @@ describe("functions", () => {
 				stderr:
 					"INFO: Function deployment triggered for function nobundle. " +
 					"INFO: Check status with: neon function get nobundle " +
+					"--project-id test-project-123456 --branch br-main-branch-123456",
+			},
+		);
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	test("deploy --no-bundle without --src zips the working directory", async ({
+		testCliCommand,
+	}) => {
+		const dir = mkdtempSync(join(tmpdir(), "neonctl-nobundle-cwd-"));
+		writeFileSync(
+			join(dir, "index.mjs"),
+			"export default { fetch: () => new Response('ok') };\n",
+		);
+		await testCliCommand(
+			[
+				"functions",
+				"deploy",
+				"nbcwd",
+				"--no-bundle",
+				"--no-wait",
+				"--project-id",
+				"test-project-123456",
+				"--branch",
+				"main",
+			],
+			{
+				mockDir: "single_org",
+				cwd: dir,
+				env: {
+					NEON_FUNCTIONS_POLL_INTERVAL_MS: "1",
+					NEON_ESBUILD_PATH: join(tmpdir(), "no-such-esbuild"),
+				},
+				stderr:
+					"INFO: Function deployment triggered for function nbcwd. " +
+					"INFO: Check status with: neon function get nbcwd " +
 					"--project-id test-project-123456 --branch br-main-branch-123456",
 			},
 		);

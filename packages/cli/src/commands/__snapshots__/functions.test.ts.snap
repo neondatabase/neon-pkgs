@@ -24,6 +24,16 @@ exports[`functions > deploy --no-bundle rejects a directory with no root index.m
 
 exports[`functions > deploy --no-bundle rejects a file not named index.mjs or index.js 1`] = `""`;
 
+exports[`functions > deploy --no-bundle without --src zips the working directory 1`] = `
+"id: 1
+status: building
+memory_mib: 256
+runtime: nodejs24
+created_at: 2026-06-03T00:00:00Z
+invocation_url: https://nbcwd.functions.neon.tech
+"
+`;
+
 exports[`functions > deploy --no-bundle zips a directory without esbuild 1`] = `
 "id: 1
 status: building
