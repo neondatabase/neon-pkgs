@@ -65,7 +65,7 @@ export const handler = async (props: AskProps) => {
 		out: process.stderr,
 		isTty: Boolean(process.stderr.isTTY) && !isCi() && human,
 	});
-	let streamed = false;
+	let streamed = "";
 	try {
 		spinner.start();
 		const text = await askAssistant({
@@ -80,7 +80,7 @@ export const handler = async (props: AskProps) => {
 					return;
 				}
 				spinner.stop();
-				streamed = true;
+				streamed += chunk;
 				writer(props).text(chunk);
 			},
 		});
@@ -89,13 +89,19 @@ export const handler = async (props: AskProps) => {
 			writer(props).end({ text }, { fields: ["text"] });
 			return;
 		}
-		if (!streamed) {
+		if (streamed === "") {
 			writer(props).text(`${text}\n`);
 			return;
 		}
-		if (!text.endsWith("\n")) {
+		if (!streamed.endsWith("\n")) {
 			writer(props).text("\n");
 		}
+	} catch (error) {
+		spinner.stop();
+		if (human && streamed !== "" && !streamed.endsWith("\n")) {
+			writer(props).text("\n");
+		}
+		throw error;
 	} finally {
 		spinner.stop();
 	}
@@ -170,7 +176,7 @@ async function readStreamedAsk(
 				break;
 		}
 	}
-	if (text === "" && !sawDone) {
+	if (!sawDone) {
 		throw new Error("The Neon assistant returned an unexpected response.");
 	}
 	return text;

@@ -248,6 +248,63 @@ describe("neon ask", () => {
 		);
 	});
 
+	test("fails when the sse stream ends without done", async ({
+		testCliCommand,
+	}) => {
+		await withAskServer(
+			(_req, res) => {
+				res.statusCode = 200;
+				res.setHeader("Content-Type", "text/event-stream");
+				res.write('event: text\ndata: {"text":"truncated"}\n\n');
+				res.end();
+			},
+			async (url) => {
+				const { stdout, stderr } = await testCliCommand(
+					["ask", "--prompt", "What is Neon?", "--url", url],
+					{
+						apiKey: false,
+						outputTable: true,
+						snapshot: false,
+						code: 1,
+						env: ASK_ENV,
+					},
+				);
+				expect(stdout).toBe("truncated\n");
+				expect(stderr).toMatch(/unexpected response/);
+			},
+		);
+	});
+
+	test("ends stdout with a newline after a partial sse error", async ({
+		testCliCommand,
+	}) => {
+		await withAskServer(
+			(_req, res) => {
+				res.statusCode = 200;
+				res.setHeader("Content-Type", "text/event-stream");
+				res.write('event: text\ndata: {"text":"partial"}\n\n');
+				res.write(
+					'event: error\ndata: {"error":"The assistant failed."}\n\n',
+				);
+				res.end();
+			},
+			async (url) => {
+				const { stdout, stderr } = await testCliCommand(
+					["ask", "--prompt", "What is Neon?", "--url", url],
+					{
+						apiKey: false,
+						outputTable: true,
+						snapshot: false,
+						code: 1,
+						env: ASK_ENV,
+					},
+				);
+				expect(stdout).toBe("partial\n");
+				expect(stderr).toMatch(/The assistant failed/);
+			},
+		);
+	});
+
 	test("prints the server error on 4xx", async ({ testCliCommand }) => {
 		await withAskServer(
 			(_req, res) => {
