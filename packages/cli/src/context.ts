@@ -243,7 +243,6 @@ export const enrichFromContext = (
 	if (isSkillsCommand(args) || isPluginsCommand(args)) {
 		return;
 	}
-	// `ask` is public Q&A. A linked `.neon` must not fill flags it does not have.
 	if (isAskCommand(args)) {
 		return;
 	}

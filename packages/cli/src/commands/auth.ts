@@ -450,7 +450,6 @@ export const ensureAuth = async (
 		return;
 	}
 
-	// Public Q&A against the hosted assistant. No Neon account.
 	if (isAskCommand(props)) {
 		return;
 	}
