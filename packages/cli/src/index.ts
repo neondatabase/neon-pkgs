@@ -65,6 +65,8 @@ const NO_SUBCOMMANDS_VERBS = [
 	"skills",
 	"skill",
 
+	"ask",
+
 	"dev",
 
 	"deploy",

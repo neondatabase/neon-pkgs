@@ -45,6 +45,7 @@ import {
 } from "../claimable/state.js";
 import {
 	currentContextFile,
+	isAskCommand,
 	isClaimCommand,
 	isConfigInit,
 	isCurrentBranchProbe,
@@ -446,6 +447,11 @@ export const ensureAuth = async (
 
 	// Neon authentication is unrelated to the child skills and plugins CLIs.
 	if (isSkillsCommand(props) || isPluginsCommand(props)) {
+		return;
+	}
+
+	// Public Q&A against the hosted assistant. No Neon account.
+	if (isAskCommand(props)) {
 		return;
 	}
 

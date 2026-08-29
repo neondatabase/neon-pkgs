@@ -829,6 +829,44 @@ describe("ensureAuth", () => {
 		expect(props.apiKey).toBe("valid-token");
 	});
 
+	test("should skip global auth for ask command", async ({
+		runMockServer,
+	}) => {
+		const server = await runMockServer("main");
+
+		const credentialsPath = join(configDir, "credentials.json");
+		if (existsSync(credentialsPath)) {
+			rmSync(credentialsPath);
+		}
+
+		const props = {
+			...setupTestProps(server),
+			_: ["ask"],
+		};
+
+		await ensureAuth(props);
+
+		expect(authSpy).not.toHaveBeenCalled();
+		expect(refreshTokenSpy).not.toHaveBeenCalled();
+	});
+
+	test("ask does not refresh or refuse broken stored credentials", async ({
+		runMockServer,
+	}) => {
+		const server = await runMockServer("main");
+		writeFileSync(join(configDir, "credentials.json"), "invalid json", {
+			mode: 0o700,
+		});
+
+		await ensureAuth({
+			...setupTestProps(server),
+			_: ["ask"],
+		});
+
+		expect(authSpy).not.toHaveBeenCalled();
+		expect(refreshTokenSpy).not.toHaveBeenCalled();
+	});
+
 	test("should skip global auth for init command", async ({
 		runMockServer,
 	}) => {

@@ -1,5 +1,6 @@
 import * as api from "./api.js";
 import * as apiKeys from "./api_keys.js";
+import * as ask from "./ask.js";
 import * as auth from "./auth.js";
 import * as bootstrap from "./bootstrap.js";
 import * as branches from "./branches.js";
@@ -66,6 +67,7 @@ export default [
 	mcp,
 	plugins,
 	skills,
+	ask,
 	dataApi,
 	functions,
 	dev,
