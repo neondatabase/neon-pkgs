@@ -1,5 +1,11 @@
 # neon
 
+## 4.13.0
+
+### Minor Changes
+
+- dab4540: Add `neon ask --prompt` to ask the hosted Neon assistant about Neon, with no login. A TTY shows a spinner, then streams the reply. CLI analytics includes that prompt text.
+
 ## 4.12.0
 
 ### Minor Changes
