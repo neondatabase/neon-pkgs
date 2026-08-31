@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { log } from "@clack/prompts";
+import { warnDeprecatedOnce } from "./deprecation.js";
 import { seedDatabase } from "./seed-database.js";
 import { messages } from "./texts.js";
 import type { InstantPostgresParams } from "./types.js";
@@ -8,7 +9,10 @@ import { getConnectionStrings } from "./utils/format.js";
 import { writeToEnv } from "./utils/fs.js";
 import { CLAIMABLE_POSTGRES_URLS } from "./utils/urls.js";
 
+warnDeprecatedOnce();
+
 /**
+ * @deprecated Use Claimable Neon in the Neon CLI: `npx neon@latest claim create`.
  * Creates an instant Postgres connection string from Claimable Postgres by Neon
  * if not already set in the specified .env file.
  * Prompts the user to optionally generate a connection string,
@@ -72,13 +76,13 @@ export const instantPostgres = async ({
 };
 
 /**
- * @deprecated Use `instantPostgres` instead
+ * @deprecated Use Claimable Neon in the Neon CLI: `npx neon@latest claim create`.
  */
 export const instantNeon = instantPostgres;
 
 export type { InstantPostgresParams };
 
 /**
- * @deprecated Use `InstantPostgresParams` instead
+ * @deprecated Use Claimable Neon in the Neon CLI: `npx neon@latest claim create`.
  */
 export type InstantNeonParams = InstantPostgresParams;

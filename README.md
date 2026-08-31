@@ -13,13 +13,6 @@ If you're looking for a single package's docs, see its own `README.md` under `pa
 | `neon` | The Neon CLI. Install this package for the `neon` command. |
 | `neonctl` | Compatibility package that delegates to `neon`. Provides the legacy `neonctl` command (plus `neon`) and is what Homebrew builds from. |
 
-### Provisioning & project setup
-
-| Package | Description |
-| --- | --- |
-| `neon-new` | A CLI tool and SDK for creating claimable Neon databases instantly. |
-| `vite-plugin-neon-new` | A Vite plugin that automatically provisions databases during development. |
-
 ### Config-as-Code (`neon.ts`)
 
 | Package | Description |
@@ -37,7 +30,9 @@ If you're looking for a single package's docs, see its own `README.md` under `pa
 | `@neon/functions` | Runtime helpers for Neon Functions (e.g. a `waitUntil` primitive for deferring work past a response). |
 | `@neon/ai-sdk-provider` | Community [Vercel AI SDK](https://ai-sdk.dev) provider for the Neon AI Gateway. |
 
-A few renamed packages are still published as deprecated aliases (`get-db` / `neondb` → `neon-new`; `vite-plugin-db` / `@neondatabase/vite-plugin-postgres` → `vite-plugin-neon-new`); they re-export the new package and print a deprecation warning. `neonctl` is not deprecated: it is a supported compatibility package that installs and runs `neon`.
+`neon-new` and `vite-plugin-neon-new` are **deprecated**. Use Claimable Neon in the Neon CLI: `npx neon@latest claim create`. The old alias packages (`get-db`, `neondb`, `vite-plugin-db`, `@neondatabase/vite-plugin-postgres`) still re-export them.
+
+`neonctl` is not deprecated: it is a supported compatibility package that installs and runs `neon`.
 
 `neon-init` is **deprecated and no longer built from this repo**. Everything it did is the
 `neon init` command, so the command is `npx neon init`. There is no alias package: it was a

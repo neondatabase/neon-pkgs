@@ -1,8 +1,16 @@
-# vite-plugin-neon-new
+# ⚠️ DEPRECATED: vite-plugin-neon-new
+
+> **This package is deprecated and no longer maintained.** Use Claimable Neon in the Neon CLI:
+
+```sh
+npx neon@latest claim create
+```
+
+Loading this plugin still provisions a neon.new database during `vite dev` and prints a deprecation warning.
+
+> **Note:** This package was previously named `vite-plugin-db`.
 
 This Vite plugin instantly provisions a Postgres instance (via Neon) and injects the connection string into your `.env` file, so you can start developing immediately.
-
-> **Note:** This package was previously named `vite-plugin-db`. The old package is now deprecated. If you're upgrading, simply replace it with `vite-plugin-neon-new` in your imports and package.json.
 
 ## How it works
 
@@ -143,6 +151,6 @@ Yes, this plugin is framework-agnostic. The example uses React, but you can use 
 
 ## Advanced
 
-If you want to generate claimable databases outside of Vite, use the [`neon-new`](https://github.com/neondatabase/neon-pkgs/tree/main/packages/neon-new) library directly.
+If you want to generate claimable databases outside of Vite, use Claimable Neon in the Neon CLI: `npx neon@latest claim create`.
 
 > See [documentation on Neon](https://neon.com/docs/reference/neon-launchpad) for more.

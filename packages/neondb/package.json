@@ -1,7 +1,7 @@
 {
 	"name": "neondb",
 	"version": "0.14.2",
-	"description": "[DEPRECATED] This package has been renamed to 'neon-new'. Please use 'neon-new' instead.",
+	"description": "[DEPRECATED] Use Claimable Neon in the Neon CLI: npx neon@latest claim create",
 	"keywords": [
 		"neon",
 		"database",
@@ -65,5 +65,5 @@
 	"dependencies": {
 		"neon-new": "workspace:*"
 	},
-	"deprecated": "This package has been renamed to 'neon-new'. Please update your dependencies."
+	"deprecated": "Deprecated. Use Claimable Neon in the Neon CLI: npx neon@latest claim create"
 }

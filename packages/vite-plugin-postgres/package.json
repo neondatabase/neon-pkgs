@@ -1,7 +1,7 @@
 {
 	"name": "@neondatabase/vite-plugin-postgres",
 	"version": "0.8.2",
-	"description": "[DEPRECATED] This package has been renamed to 'vite-plugin-neon-new'. Please use 'vite-plugin-neon-new' instead.",
+	"description": "[DEPRECATED] Use Claimable Neon in the Neon CLI: npx neon@latest claim create",
 	"keywords": [
 		"neon",
 		"database",
@@ -44,5 +44,5 @@
 	"dependencies": {
 		"vite-plugin-neon-new": "workspace:*"
 	},
-	"deprecated": "This package has been renamed to 'vite-plugin-neon-new'. Please update your dependencies."
+	"deprecated": "Deprecated. Use Claimable Neon in the Neon CLI: npx neon@latest claim create"
 }
