@@ -1,5 +1,12 @@
 # neondb
 
+## 0.14.3
+
+### Patch Changes
+
+- Updated dependencies [8c482b4]
+  - neon-new@0.15.2
+
 ## 0.14.2
 
 ### Patch Changes

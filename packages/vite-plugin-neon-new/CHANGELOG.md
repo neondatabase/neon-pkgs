@@ -1,5 +1,13 @@
 # vite-plugin-neon-new
 
+## 0.9.2
+
+### Patch Changes
+
+- 8c482b4: Deprecate neon-new and vite-plugin-neon-new. The successor is Claimable Neon in the Neon CLI: `npx neon@latest claim create`.
+- Updated dependencies [8c482b4]
+  - neon-new@0.15.2
+
 ## 0.9.1
 
 ### Patch Changes
