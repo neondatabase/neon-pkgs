@@ -1,6 +1,6 @@
 {
 	"name": "neon-new",
-	"version": "0.15.1",
+	"version": "0.15.2",
 	"description": "[DEPRECATED] Use Claimable Neon in the Neon CLI: npx neon@latest claim create",
 	"deprecated": "Deprecated. Use Claimable Neon in the Neon CLI: npx neon@latest claim create",
 	"keywords": [

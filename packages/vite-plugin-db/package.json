@@ -1,6 +1,6 @@
 {
 	"name": "vite-plugin-db",
-	"version": "0.8.2",
+	"version": "0.8.3",
 	"description": "[DEPRECATED] Use Claimable Neon in the Neon CLI: npx neon@latest claim create",
 	"keywords": [
 		"neon",
