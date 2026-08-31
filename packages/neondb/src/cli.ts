@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 
-console.warn("");
 console.warn(
 	"\x1b[33m%s\x1b[0m",
-	'⚠️  DEPRECATION WARNING: The "neondb" package has been renamed to "neon-new".',
+	"DEPRECATION: neondb is deprecated. Use Claimable Neon in the Neon CLI: npx neon@latest claim create",
 );
-console.warn("\x1b[33m%s\x1b[0m", '   Please use "neon-new" instead.');
+console.warn("");
 
 import { dirname, resolve } from "node:path";
 // Import and run the CLI from neon-new
