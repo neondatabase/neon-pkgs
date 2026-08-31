@@ -1,8 +1,20 @@
-<h1 align="center">neon-new</h1>
+# ⚠️ DEPRECATED: neon-new
 
-<p align="center">CLI to help you hit the ground running without any sign-up. Instantiate a database with a single-command!</p>
+> **This package is deprecated and no longer maintained.** Use Claimable Neon in the Neon CLI:
 
----
+```sh
+npx neon@latest claim create
+```
+
+Running this package still provisions a neon.new database and prints a deprecation warning.
+
+## Migration
+
+```sh
+npx neon@latest claim create
+```
+
+Remove the `neon-new` dependency. `claim create` writes `DATABASE_URL` (see `--file`). It does not take `referrer`, `seed`, `envKey`, `envPrefix`, or `--logical-replication`, and it does not write `DATABASE_URL_DIRECT` or a claim URL env var.
 
 > **Requirements:** Node.js >= 20.19.
 
@@ -72,7 +84,7 @@ await instantPostgres({
 ### settings Options
 
 | Property            | Type    | Description                    | Default |
-| ------------------- | ------- | ------------------------------ | ------- |
+| -------------------- | ------- | ------------------------------ | ------- |
 | `logicalReplication`| boolean | Enable logical replication     | `false` |
 
 > **Note**: The Vite plugin uses `VITE_` as the default `envPrefix` to match Vite's convention for client-side environment variables.

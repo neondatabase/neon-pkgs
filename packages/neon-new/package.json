@@ -1,12 +1,14 @@
 {
 	"name": "neon-new",
 	"version": "0.15.1",
-	"description": "create a claimable Neon database in seconds!",
+	"description": "[DEPRECATED] Use Claimable Neon in the Neon CLI: npx neon@latest claim create",
+	"deprecated": "Deprecated. Use Claimable Neon in the Neon CLI: npx neon@latest claim create",
 	"keywords": [
 		"neon",
 		"database",
 		"postgres",
-		"cli"
+		"cli",
+		"deprecated"
 	],
 	"repository": {
 		"type": "git",

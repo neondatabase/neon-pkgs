@@ -4,6 +4,7 @@ export type SqlScript = {
 };
 
 /**
+ * @deprecated Use Claimable Neon in the Neon CLI: `npx neon@latest claim create`.
  * Parameters for configuring Postgres database connection
  * @param {string} dotEnvFile - Path to the .env file where the connection string will be saved
  * @param {string} dotEnvKey - Environment variable name to store the connection string

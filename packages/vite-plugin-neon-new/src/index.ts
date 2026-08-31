@@ -29,6 +29,9 @@ type PostgresPluginOptions = {
 
 let claimProcessStarted = false;
 
+/**
+ * @deprecated Use Claimable Neon in the Neon CLI: `npx neon@latest claim create`.
+ */
 function postgresPlugin(options: PostgresPluginOptions): Plugin {
 	if (!options?.referrer || options.referrer.trim() === "") {
 		throw new Error(
