@@ -14,7 +14,7 @@ Running this package still provisions a neon.new database and prints a deprecati
 npx neon@latest claim create
 ```
 
-Remove the `neon-new` dependency. `claim create` writes `DATABASE_URL` (see `--file`). It does not take `referrer`, `seed`, `envKey`, or `envPrefix`.
+Remove the `neon-new` dependency. `claim create` writes `DATABASE_URL` (see `--file`). It does not take `referrer`, `seed`, `envKey`, `envPrefix`, or `--logical-replication`, and it does not write `DATABASE_URL_DIRECT` or a claim URL env var.
 
 > **Requirements:** Node.js >= 20.19.
 

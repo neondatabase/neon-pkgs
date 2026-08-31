@@ -14,7 +14,7 @@ Loading this plugin still provisions a neon.new database during `vite dev` and p
 npx neon@latest claim create
 ```
 
-Remove `vite-plugin-neon-new` from `vite.config` and package.json. `vite dev` will not provision a database. `referrer`, `seed`, `envKey`, and `envPrefix` are not `claim create` flags; `--file` picks the dotenv path.
+Remove `vite-plugin-neon-new` from `vite.config` and package.json. `vite dev` will not provision a database. `referrer`, `seed`, `envKey`, `envPrefix`, and `logicalReplication` are not `claim create` flags; `--file` picks the dotenv path. It does not write `DATABASE_URL_DIRECT` or a claim URL env var.
 
 > **Note:** This package was previously named `vite-plugin-db`.
 
