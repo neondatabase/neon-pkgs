@@ -81,6 +81,7 @@ describe("neon ask", () => {
 			method?: string;
 			authorization: string | undefined;
 			accept: string | undefined;
+			source: string | undefined;
 			body: unknown;
 		}> = [];
 		await withAskServer(
@@ -89,6 +90,10 @@ describe("neon ask", () => {
 					method: req.method,
 					authorization: req.headers.authorization,
 					accept: req.headers.accept,
+					source:
+						typeof req.headers["x-neon-source"] === "string"
+							? req.headers["x-neon-source"]
+							: undefined,
 					body,
 				});
 				res.statusCode = 200;
@@ -128,6 +133,7 @@ describe("neon ask", () => {
 				method: "POST",
 				authorization: undefined,
 				accept: "text/event-stream",
+				source: "cli",
 				body: { prompt: "How do schema-only branches work?" },
 			},
 		]);
