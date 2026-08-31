@@ -8,6 +8,14 @@ npx neon@latest claim create
 
 Loading this plugin still provisions a neon.new database during `vite dev` and prints a deprecation warning.
 
+## Migration
+
+```sh
+npx neon@latest claim create
+```
+
+Remove `vite-plugin-neon-new` from `vite.config` and package.json. `vite dev` will not provision a database. `seed`, `envKey`, and `envPrefix` are not `claim create` flags; `--file` picks the dotenv path.
+
 > **Note:** This package was previously named `vite-plugin-db`.
 
 This Vite plugin instantly provisions a Postgres instance (via Neon) and injects the connection string into your `.env` file, so you can start developing immediately.

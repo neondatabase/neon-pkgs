@@ -1,11 +1,5 @@
 #!/usr/bin/env node
 
-console.warn(
-	"\x1b[33m%s\x1b[0m",
-	"DEPRECATION: get-db is deprecated. Use Claimable Neon in the Neon CLI: npx neon@latest claim create",
-);
-console.warn("");
-
 import { dirname, resolve } from "node:path";
 // Import and run the CLI from neon-new
 import { fileURLToPath } from "node:url";

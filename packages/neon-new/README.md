@@ -8,6 +8,14 @@ npx neon@latest claim create
 
 Running this package still provisions a neon.new database and prints a deprecation warning.
 
+## Migration
+
+```sh
+npx neon@latest claim create
+```
+
+Remove the `neon-new` dependency. `claim create` writes `DATABASE_URL` (see `--file`). It does not take `referrer` or `seed`.
+
 > **Requirements:** Node.js >= 20.19.
 
 ## CLI Usage
