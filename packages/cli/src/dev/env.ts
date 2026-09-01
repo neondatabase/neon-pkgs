@@ -401,7 +401,7 @@ const assertSelectedFunctionsOnBranch = (args: {
 	) {
 		throw new ServiceNotOnBranchError(
 			`--service functions: branch ${args.branchId} has no deployed functions, so there ` +
-				"are no functions env vars to pull. Provision it first " +
+				"are no NEON_FUNCTION_*_BASE_URL vars to pull. Deploy a function first " +
 				`(\`${getCliName()} deploy\`, or in the Neon Console), or drop functions from --service.`,
 		);
 	}

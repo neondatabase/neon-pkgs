@@ -958,7 +958,7 @@ describe("env pull function invocation URLs", () => {
 				services: ["functions"],
 			}),
 		).rejects.toThrow(
-			/--service functions: branch .* no deployed functions/,
+			/--service functions: branch .* no deployed functions, so there are no NEON_FUNCTION_\*_BASE_URL vars to pull\. Deploy a function first/,
 		);
 	});
 
