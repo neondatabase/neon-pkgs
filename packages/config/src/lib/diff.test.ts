@@ -150,6 +150,57 @@ describe("diffConfig", () => {
 		expect(unreported.conflicts).toEqual([]);
 	});
 
+	test("explicit dataApi false plans disable when the remote integration is on", () => {
+		const enabledRemote: RemoteState = {
+			...remote,
+			services: {
+				databaseName: "neondb",
+				authEnabled: false,
+				dataApiEnabled: true,
+			},
+		};
+		const desired = {
+			authEnabled: false,
+			dataApiEnabled: false,
+			dataApiPolicy: "disabled" as const,
+		};
+		const conflictDiff = diffConfig(desired, enabledRemote, {
+			updateExisting: false,
+		});
+		expect(conflictDiff.plan).toEqual([]);
+		expect(conflictDiff.conflicts[0]).toMatchObject({
+			field: "dataApi",
+			current: true,
+			desired: false,
+		});
+
+		const updateDiff = diffConfig(desired, enabledRemote, {
+			updateExisting: true,
+		});
+		expect(updateDiff.conflicts).toEqual([]);
+		expect(updateDiff.plan[0]).toMatchObject({
+			kind: "disable-data-api",
+			databaseName: "neondb",
+		});
+	});
+
+	test("omitted dataApi does not disable an existing integration", () => {
+		const diff = diffConfig(
+			{ authEnabled: false, dataApiEnabled: false },
+			{
+				...remote,
+				services: {
+					databaseName: "neondb",
+					authEnabled: false,
+					dataApiEnabled: true,
+				},
+			},
+			{ updateExisting: true },
+		);
+		expect(diff.plan).toEqual([]);
+		expect(diff.conflicts).toEqual([]);
+	});
+
 	test("reports compute drift unless updateExisting is set", () => {
 		const diff = diffConfig(
 			{

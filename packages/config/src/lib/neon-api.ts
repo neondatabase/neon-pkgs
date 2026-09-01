@@ -399,6 +399,12 @@ export interface NeonApi {
 		settings: DataApiSettings,
 	): Promise<NeonDataApiSnapshot>;
 
+	deleteProjectBranchDataApi(
+		projectId: string,
+		branchId: string,
+		databaseName: string,
+	): Promise<void>;
+
 	// ─── Preview: buckets ──────────────────────────────────────────────────────
 
 	/** List branchable object-storage buckets visible on a branch. */

@@ -22,6 +22,7 @@ import {
 	createProject as rawCreateProject,
 	createProjectBranch as rawCreateProjectBranch,
 	createProjectBranchDataApi as rawCreateProjectBranchDataApi,
+	deleteProjectBranchDataApi as rawDeleteProjectBranchDataApi,
 	getConnectionUri as rawGetConnectionUri,
 	getNeonAuth as rawGetNeonAuth,
 	getProject as rawGetProject,
@@ -974,6 +975,35 @@ class RealNeonApi implements NeonApi {
 			},
 			{ projectId, mutating: true },
 		);
+	}
+
+	async deleteProjectBranchDataApi(
+		projectId: string,
+		branchId: string,
+		databaseName: string,
+	): Promise<void> {
+		try {
+			await this.call(
+				`deleteProjectBranchDataApi(${projectId}/${branchId}/${databaseName})`,
+				async () => {
+					unwrap(
+						await rawDeleteProjectBranchDataApi({
+							client: this.client,
+							path: {
+								project_id: projectId,
+								branch_id: branchId,
+								database_name: databaseName,
+							},
+						}),
+					);
+				},
+				{ projectId, mutating: true },
+			);
+		} catch (err) {
+			if (err instanceof PlatformError && err.code === ErrorCode.NotFound)
+				return;
+			throw err;
+		}
 	}
 
 	// ─── Preview: buckets ──────────────────────────────────────────────────────

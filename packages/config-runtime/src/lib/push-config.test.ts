@@ -173,6 +173,121 @@ describe("pushConfig", () => {
 		);
 	});
 
+	test("explicit dataApi false deletes an existing integration with --update-existing", async () => {
+		const seedEnabled = () => {
+			const { api, projectId } = seededFake();
+			api.seedNeonDataApi("proj-push", "br-main", "neondb", {
+				url: "https://br-main.fake.neon.tech/data-api/neondb",
+				status: "ready",
+			});
+			return { api, projectId };
+		};
+		const config = defineConfig({ dataApi: false });
+
+		await expect(
+			pushConfig(config, {
+				...seedEnabled(),
+				branchId: "br-main",
+			}),
+		).rejects.toBeInstanceOf(PushConflictError);
+
+		const withFlag = seedEnabled();
+		const result = await pushConfig(config, {
+			api: withFlag.api,
+			projectId: withFlag.projectId,
+			branchId: "br-main",
+			updateExisting: true,
+		});
+		expect(
+			withFlag.api.history.some(
+				(h) => h.method === "deleteProjectBranchDataApi",
+			),
+		).toBe(true);
+		expect(result.applied).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					kind: "service",
+					action: "delete",
+					identifier: "dataApi",
+				}),
+			]),
+		);
+
+		const declined = seedEnabled();
+		await expect(
+			pushConfig(config, {
+				api: declined.api,
+				projectId: declined.projectId,
+				branchId: "br-main",
+				confirm: () => false,
+			}),
+		).rejects.toMatchObject({ code: ErrorCode.PushAborted });
+		expect(
+			declined.api.history.some(
+				(h) => h.method === "deleteProjectBranchDataApi",
+			),
+		).toBe(false);
+
+		const accepted = seedEnabled();
+		await pushConfig(config, {
+			api: accepted.api,
+			projectId: accepted.projectId,
+			branchId: "br-main",
+			confirm: () => true,
+		});
+		expect(
+			accepted.api.history.some(
+				(h) => h.method === "deleteProjectBranchDataApi",
+			),
+		).toBe(true);
+
+		const dry = seedEnabled();
+		const planned = await pushConfig(config, {
+			api: dry.api,
+			projectId: dry.projectId,
+			branchId: "br-main",
+			updateExisting: true,
+			dryRun: true,
+		});
+		expect(
+			dry.api.history.some(
+				(h) => h.method === "deleteProjectBranchDataApi",
+			),
+		).toBe(false);
+		expect(planned.applied).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					kind: "service",
+					action: "delete",
+					identifier: "dataApi",
+				}),
+			]),
+		);
+	});
+
+	test("omitted dataApi leaves an existing integration alone", async () => {
+		const { api, projectId } = seededFake();
+		api.seedNeonDataApi("proj-push", "br-main", "neondb", {
+			url: "https://br-main.fake.neon.tech/data-api/neondb",
+			status: "ready",
+		});
+		const result = await pushConfig(defineConfig({}), {
+			api,
+			projectId,
+			branchId: "br-main",
+			updateExisting: true,
+		});
+		expect(api.history.some((h) => h.method === "getNeonDataApi")).toBe(
+			false,
+		);
+		expect(
+			api.history.some((h) => h.method === "deleteProjectBranchDataApi"),
+		).toBe(false);
+		expect(result.applied.some((c) => c.identifier === "dataApi")).toBe(
+			false,
+		);
+	});
+
 	test("auth/dataApi changes carry no redundant details (target branch / derived db)", async () => {
 		const config = defineConfig({ auth: {}, dataApi: {} });
 

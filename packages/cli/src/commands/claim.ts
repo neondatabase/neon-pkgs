@@ -21,7 +21,11 @@ import {
 	type StoredClaimableCredentials,
 	writeClaimableCredentials,
 } from "../claimable/state.js";
-import { declaredNeonServices } from "../config_services.js";
+import {
+	type ClaimableDataApiCreateBody,
+	claimableDataApiCreateBody,
+	declaredNeonServices,
+} from "../config_services.js";
 import {
 	applyContext,
 	contextBranch,
@@ -58,6 +62,7 @@ type CreateProps = ClaimProps & {
 	config?: string;
 	file?: string;
 	envPull: boolean;
+	dataApi?: ClaimableDataApiCreateBody;
 };
 
 type AcceptProps = ClaimProps & {
@@ -140,13 +145,11 @@ export const findNeonConfig = (cwd = process.cwd()): string | undefined => {
 	}
 };
 
-const servicesFromConfig = async (
-	explicitPath: string | undefined,
-): Promise<NeonService[]> => {
+const loadCreatePolicy = async (explicitPath: string | undefined) => {
 	const path = explicitPath ?? findNeonConfig();
-	if (!path) return [];
+	if (!path) return undefined;
 	const { config } = await loadConfigFromFile({ path });
-	return declaredNeonServices(config);
+	return config;
 };
 
 const removeFileIfPresent = (path: string): void => {
@@ -252,14 +255,21 @@ export const builder = (argv: yargs.Argv) =>
 								),
 						})
 					: [];
-				const configuredServices = await servicesFromConfig(
+				const policy = await loadCreatePolicy(
 					typeof args.config === "string" ? args.config : undefined,
 				);
+				const configuredServices = policy
+					? declaredNeonServices(policy)
+					: [];
+				const dataApi = policy
+					? claimableDataApiCreateBody(policy)
+					: undefined;
 				await create({
 					...(args as unknown as CreateProps),
 					services: [
 						...new Set([...services, ...configuredServices]),
 					],
+					...(dataApi ? { dataApi } : {}),
 				});
 			},
 		)
@@ -420,6 +430,7 @@ const create = async (props: CreateProps): Promise<void> => {
 	const registration = await client.register({
 		capabilities: claimableCapabilities(props.services ?? []),
 		source: "neon_cli",
+		...(props.dataApi ? { dataApi: props.dataApi } : {}),
 	});
 	const stored: StoredClaimableCredentials = {
 		version: 1,

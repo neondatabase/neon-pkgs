@@ -684,6 +684,8 @@ export interface ResolvedBranchConfig {
 	postgres?: PostgresConfig;
 	authEnabled: boolean;
 	dataApiEnabled: boolean;
+	/** Optional for compatibility with hand-built configs. */
+	dataApiPolicy?: "omitted" | "enabled" | "disabled";
 	/**
 	 * Resolved Data API integration. Present iff {@link dataApiEnabled} is `true`. Carries the
 	 * create-time auth wiring and the updatable {@link DataApiSettings}.
@@ -701,7 +703,7 @@ export interface AppliedChange {
 	 * Neon Auth, Data API).
 	 */
 	kind: "branch" | "service";
-	action: "create" | "update" | "noop";
+	action: "create" | "update" | "delete" | "noop";
 	identifier: string;
 	details?: Record<string, unknown>;
 }

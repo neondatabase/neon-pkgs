@@ -189,6 +189,8 @@ class FakeNeonApi implements NeonApi {
 		throw new Error("not implemented");
 	}
 
+	async deleteProjectBranchDataApi(): Promise<void> {}
+
 	async listBranchBuckets(
 		projectId: string,
 		branchId: string,

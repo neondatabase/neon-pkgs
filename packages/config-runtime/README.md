@@ -29,3 +29,5 @@ import { inspect, plan, apply } from "@neon/config-runtime/v1";
 ```
 
 See [`@neon/config`](../config) for authoring the `neon.ts` policy these operate on.
+`apply` / `pushConfig` treat explicit `dataApi: false` as a Data API delete (override).
+Omitting `dataApi` leaves an existing integration alone.

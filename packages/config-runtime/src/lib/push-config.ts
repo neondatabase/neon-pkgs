@@ -178,7 +178,8 @@ export async function pushConfig(
 		projectId: remoteProject.id,
 		branch,
 		wantsAuth: resolved.authEnabled,
-		wantsDataApi: resolved.dataApiEnabled,
+		wantsDataApi:
+			resolved.dataApiEnabled || resolved.dataApiPolicy === "disabled",
 	});
 	const remote: RemoteState = {
 		projectId: remoteProject.id,
@@ -288,16 +289,13 @@ export async function pushConfig(
 	return result;
 }
 
-/**
- * `update-*` plan steps mutate existing remote state. `enable-*` steps are additive (no
- * existing resource to override) and never trigger the override-confirm prompt.
- */
 function isOverrideStep(step: PlanStep): boolean {
 	return (
 		step.kind === "update-branch-ttl" ||
 		step.kind === "update-branch-protected" ||
 		step.kind === "update-endpoint" ||
-		step.kind === "update-data-api"
+		step.kind === "update-data-api" ||
+		step.kind === "disable-data-api"
 	);
 }
 
@@ -348,6 +346,8 @@ function synthesizeAppliedChange(step: PlanStep): AppliedChange {
 				identifier: "dataApi",
 				details: { field: "settings", settings: step.settings },
 			};
+		case "disable-data-api":
+			return { kind: "service", action: "delete", identifier: "dataApi" };
 		case "create-bucket":
 			return {
 				kind: "service",
@@ -589,6 +589,18 @@ async function applyStep(
 				action: "update",
 				identifier: "dataApi",
 				details: { field: "settings", settings: step.settings },
+			};
+		}
+		case "disable-data-api": {
+			await ctx.api.deleteProjectBranchDataApi(
+				ctx.remoteProjectId,
+				step.branchId,
+				step.databaseName,
+			);
+			return {
+				kind: "service",
+				action: "delete",
+				identifier: "dataApi",
 			};
 		}
 		case "create-bucket": {

@@ -58,17 +58,19 @@ export type PlanStep =
 			input?: EnableDataApiInput;
 	  }
 	| {
-			/**
-			 * Reconcile the runtime settings of an already-enabled Data API integration.
-			 * Only `settings` are mutable post-create, so this is the lone Data API
-			 * *update* step — and it is an override (requires `updateExisting`).
-			 */
 			kind: "update-data-api";
 			projectId: string;
 			branchId: string;
 			branchName: string;
 			databaseName: string;
 			settings: DataApiSettings;
+	  }
+	| {
+			kind: "disable-data-api";
+			projectId: string;
+			branchId: string;
+			branchName: string;
+			databaseName: string;
 	  }
 	| {
 			kind: "create-bucket";
@@ -154,10 +156,7 @@ export function diffConfig(
 }
 
 /**
- * Plan Preview features (functions, buckets). Like {@link diffServices}, this is
- * **additive**: it creates desired buckets and (re-)deploys functions, but never deletes
- * them. Teardown is destructive, so it stays explicit/manual — matching the existing
- * auth / dataApi behaviour.
+ * Data API teardown requires explicit `dataApi: false` so omission remains non-destructive.
  *
  * The AI Gateway is intentionally NOT planned here: it is always available on a branch
  * (credential-gated, not per-branch provisioned), so `preview.aiGateway` produces no plan
@@ -239,8 +238,29 @@ function diffServices(args: {
 		if (state.databaseName) step.databaseName = state.databaseName;
 		plan.push(step);
 	}
-	if (config.dataApiEnabled) {
+	const dataApiPolicy =
+		config.dataApiPolicy ?? (config.dataApiEnabled ? "enabled" : "omitted");
+	if (dataApiPolicy === "enabled") {
 		diffDataApi({ config, remote, options, plan, conflicts });
+	} else if (dataApiPolicy === "disabled" && state.dataApiEnabled) {
+		if (options.updateExisting) {
+			plan.push({
+				kind: "disable-data-api",
+				projectId: remote.projectId,
+				branchId: remote.branch.id,
+				branchName: remote.branch.name,
+				databaseName: state.databaseName,
+			});
+		} else {
+			conflicts.push({
+				kind: "branch",
+				identifier: remote.branch.name,
+				field: "dataApi",
+				current: true,
+				desired: false,
+				reason: "Existing Data API would be deleted. Pass `updateExisting: true` (SDK) or `--update-existing` (CLI) to apply.",
+			});
+		}
 	}
 }
 
