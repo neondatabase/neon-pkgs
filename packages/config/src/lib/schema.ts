@@ -180,7 +180,7 @@ const functionEnvValueSchema = z.string({
 				: key !== undefined
 					? `Environment variable "${key}"`
 					: "An environment variable";
-		return `${subject} is undefined — its value (typically a \`process.env.*\`) is unset. Set it (e.g. add it to your .env) or provide a fallback like \`process.env.X ?? ""\`.`;
+		return `${subject} is undefined — its value (typically a \`process.env.*\`) is unset. Set it (for example \`neon deploy --env <file>\`) or omit the key from neon.ts if you do not want to write it. Do not coerce a missing value to an empty string: that uploads and deletes the live key.`;
 	},
 });
 

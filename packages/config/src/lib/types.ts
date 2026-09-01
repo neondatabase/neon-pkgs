@@ -369,11 +369,10 @@ export interface FunctionDef {
 	 * Environment variables injected into the deployed function, keyed by the var name the
 	 * function reads at runtime. The **keys** are static (preserved at the type level so
 	 * `parseEnv(config, "<slug>").function.<key>` is typed); the **values** are arbitrary
-	 * strings evaluated when `neon.ts` is loaded (typically `process.env.X`) and uploaded
-	 * at `config apply`. Every value must be a defined string — a `process.env.X` that is
-	 * `undefined` (unset) errors at validation time rather than silently shipping
-	 * `undefined`.
-	 * @example { resendApiKey: process.env.RESEND_API_KEY ?? "" }
+	 * strings evaluated when `neon.ts` is loaded and uploaded at `config apply`. An unset
+	 * `process.env.X` fails validation. Omit the key to leave the live value unchanged;
+	 * an empty string deletes it.
+	 * @example { resendApiKey: process.env.RESEND_API_KEY! }
 	 */
 	env?: Record<string, string>;
 	/**
