@@ -702,7 +702,12 @@ describe("resolveDevEnv", () => {
 				branchId: BRANCH_ID,
 				api,
 			}),
-		).rejects.toBeInstanceOf(DevEnvMismatchError);
+		).rejects.toSatisfy(
+			(err: unknown) =>
+				err instanceof DevEnvMismatchError &&
+				/isn't available for this Neon project/.test(err.message) &&
+				!/Deploy (it|them) first/.test(err.message),
+		);
 	});
 
 	it('neon.ts importing an uninstalled package -> a clear "did you run npm install" error', async () => {

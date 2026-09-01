@@ -547,6 +547,8 @@ describe("parseEnv", () => {
 			expect(() => parseEnv(config)).toThrowError(
 				/NEON_FUNCTION_HELLO_BASE_URL is missing/,
 			);
+			expect(() => parseEnv(config)).toThrowError(/neon env pull/);
+			expect(() => parseEnv(config)).not.toThrowError(/Vercel/);
 		});
 
 		test("reads a present function invocation URL into functions.<slug>", () => {

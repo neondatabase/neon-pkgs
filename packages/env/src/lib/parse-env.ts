@@ -391,10 +391,7 @@ export function parseEnv(
 			[
 				"parseEnv: the required Neon env variables are not present in process.env.",
 				...issues.map((i) => `  - ${i}`),
-				"Inject them via one of:",
-				"  - `neon dev` / `neon-env run -- <your dev command>` (wraps the command with the vars injected)",
-				"  - your hosting platform's Neon integration (Vercel, Fly, Railway, …)",
-				"  - for the `function` namespace: deploy the function (`neon deploy` / `config apply`) so its env is uploaded.",
+				...parseEnvInjectHint(issues),
 				"Or switch the call to `await fetchEnv(config, …)` if you're in a context that can do async I/O.",
 			].join("\n"),
 			{ details: { missing: issues } },
@@ -402,6 +399,35 @@ export function parseEnv(
 	}
 
 	return result;
+}
+
+function parseEnvInjectHint(issues: readonly string[]): string[] {
+	if (
+		issues.length > 0 &&
+		issues.every((issue) => /NEON_FUNCTION_[A-Z0-9]+_BASE_URL/.test(issue))
+	) {
+		return [
+			"Inject them via `neon env pull`, `neon-env run -- <your dev command>`, or `neon dev` after the function is deployed (`neon deploy`, or in the Neon Console).",
+		];
+	}
+	const lines = [
+		"Inject them via one of:",
+		"  - `neon dev` / `neon-env run -- <your dev command>` (wraps the command with the vars injected)",
+		"  - your hosting platform's Neon integration (Vercel, Fly, Railway, …)",
+	];
+	if (issues.some((issue) => issue.includes('(function "'))) {
+		lines.push(
+			"  - for the `function` namespace: deploy the function (`neon deploy` / `config apply`) so its env is uploaded.",
+		);
+	}
+	if (
+		issues.some((issue) => /NEON_FUNCTION_[A-Z0-9]+_BASE_URL/.test(issue))
+	) {
+		lines.push(
+			"  - for NEON_FUNCTION_*_BASE_URL: `neon env pull` after the function is deployed.",
+		);
+	}
+	return lines;
 }
 
 /**
@@ -484,9 +510,7 @@ function parseFilteredEnv(
 			[
 				"parseEnv: the required Neon env variables are not present in process.env.",
 				...issues.map((i) => `  - ${i}`),
-				"Inject them via one of:",
-				"  - `neon dev` / `neon-env run -- <your dev command>` (wraps the command with the vars injected)",
-				"  - your hosting platform's Neon integration (Vercel, Fly, Railway, …)",
+				...parseEnvInjectHint(issues),
 				"Or switch the call to `await fetchEnv(config, …)` if you're in a context that can do async I/O.",
 			].join("\n"),
 			{ details: { missing: issues } },

@@ -137,11 +137,11 @@ These are the OS-level vars `fetchEnv` / `parseEnv` read and `toEntries` (so `ne
 | `NEON_AI_GATEWAY_TOKEN` | branch credential's API token (bearer) |
 | `NEON_AI_GATEWAY_BASE_URL` | bare branch gateway host (`https://<branch>-api.ai.<region>.…`, no path) |
 
-**Functions** (Preview — when `preview.functions` declares at least one slug). Each declared slug requires a live, non-empty `invocation_url`. These are the invocation URLs, not the function's declared `env` secrets (those are uploaded at deploy).
+**Functions** (Preview — when `preview.functions` declares at least one slug). Each declared slug requires `NEON_FUNCTION_<SLUG>_BASE_URL`, typed as `env.functions.<slug>.baseUrl: string`. These are the public function URLs, not the function's declared `env` secrets (those are uploaded at deploy).
 
 | Key | From |
 | --- | --- |
-| `NEON_FUNCTION_<SLUG>_BASE_URL` | the function's `invocation_url` (`https://<branchId>-<slug>.compute.…/`). `<SLUG>` is the slug uppercased. |
+| `NEON_FUNCTION_<SLUG>_BASE_URL` | the function's public URL (`https://<branchId>-<slug>.compute.…/`). `<SLUG>` is the slug uppercased. |
 
 ```ts
 const env = parseEnv(config);

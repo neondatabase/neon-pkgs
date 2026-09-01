@@ -864,7 +864,7 @@ describe("env pull function invocation URLs", () => {
 		);
 
 		await expect(pull(baseProps(new FakeNeonApi(), cwd))).rejects.toThrow(
-			/NEON_FUNCTION_HELLO_BASE_URL/,
+			/function "hello".*no live invocation URL[\s\S]*NEON_FUNCTION_HELLO_BASE_URL/,
 		);
 	});
 
@@ -878,7 +878,7 @@ describe("env pull function invocation URLs", () => {
 		api.functions = [functionSnapshot("hello", "")];
 
 		await expect(pull(baseProps(api, cwd))).rejects.toThrow(
-			/NEON_FUNCTION_HELLO_BASE_URL/,
+			/function "hello".*no live invocation URL[\s\S]*NEON_FUNCTION_HELLO_BASE_URL/,
 		);
 	});
 
@@ -891,7 +891,12 @@ describe("env pull function invocation URLs", () => {
 
 		await expect(
 			pull(baseProps(new NoFunctionsFeatureNeonApi(), cwd)),
-		).rejects.toThrow(/isn't available for this Neon project/);
+		).rejects.toSatisfy(
+			(err: unknown) =>
+				err instanceof Error &&
+				/isn't available for this Neon project/.test(err.message) &&
+				!/Deploy (it|them) first/.test(err.message),
+		);
 	});
 
 	it("intersects neon.ts declared slugs with live URLs", async () => {

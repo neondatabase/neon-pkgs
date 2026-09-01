@@ -329,6 +329,7 @@ type FunctionBaseUrlKeyOf<C extends Config> =
  * - `dataApi` is added iff `config.dataApi` is statically enabled.
  * - `storage` is added iff `config.preview.buckets` declares at least one bucket.
  * - `aiGateway` is added iff `config.preview.aiGateway` is statically enabled.
+ * - `functions` is added iff `config.preview.functions` declares at least one slug.
  */
 export type NeonEnv<C extends Config = Config> = {
 	postgres: NeonPostgresEnv;

@@ -708,10 +708,7 @@ const fetchAndProject = async (
 			isDeclaredFunctionUrlFailure(err)
 		) {
 			throw new DevEnvMismatchError(
-				`Your neon.ts declares functions for branch ${ctx.branchId}, but their ` +
-					"invocation URLs could not be resolved, so NEON_FUNCTION_*_BASE_URL cannot " +
-					`be injected. Deploy them first (\`${getCliName()} deploy\`, or in the Neon ` +
-					`Console), then re-run. ${err instanceof Error ? err.message : String(err)}`,
+				declaredFunctionUrlMismatch(ctx, err),
 			);
 		}
 		throw err;
@@ -732,6 +729,39 @@ const isDeclaredFunctionUrlFailure = (err: unknown): boolean => {
 	return (
 		err instanceof Error &&
 		err.message.startsWith("fetchEnv: missing NEON_FUNCTION_")
+	);
+};
+
+const declaredFunctionUrlMismatch = (
+	ctx: DevEnvContext,
+	err: unknown,
+): string => {
+	if (isPlatformError(err) && err.code === ErrorCode.FeatureUnavailable) {
+		const reason = err.message.replace(/\.$/, "");
+		return (
+			`Your neon.ts declares functions for branch ${ctx.branchId}, but ${reason}, ` +
+			"so NEON_FUNCTION_*_BASE_URL cannot be injected."
+		);
+	}
+	const key =
+		err instanceof Error
+			? /missing (NEON_FUNCTION_[A-Z0-9]+_BASE_URL)/.exec(
+					err.message,
+				)?.[1]
+			: undefined;
+	const slug = key === undefined ? null : parseFunctionBaseUrlKey(key);
+	if (key !== undefined && slug !== null) {
+		return (
+			`Your neon.ts declares function "${slug}" for branch ${ctx.branchId}, but the ` +
+			`branch has no live invocation URL, so ${key} cannot be injected. Deploy it first ` +
+			`(\`${getCliName()} deploy\`, or in the Neon Console), then re-run.`
+		);
+	}
+	return (
+		`Your neon.ts declares functions for branch ${ctx.branchId}, but their ` +
+		"invocation URLs could not be resolved, so NEON_FUNCTION_*_BASE_URL cannot " +
+		`be injected. Deploy them first (\`${getCliName()} deploy\`, or in the Neon ` +
+		`Console), then re-run.`
 	);
 };
 
