@@ -246,10 +246,15 @@ const runFromConfig = async (props: DevProps): Promise<void> => {
 	// functions without restarting the dev server. `searchBase` lets a freshly-added unit
 	// start probing above the ports already taken by live units (the runtime still walks
 	// upward from there, so this never fails — it just keeps startup deterministic).
-	const replan: Replan = async (searchBase) => {
+	const replan: Replan = async (searchBase, keepPorts) => {
 		const re = await resolveFunctionsFromConfig(process.cwd());
 		if (re === null) return null;
-		return planFunctionsToUnits(re.functions, neonEnv, searchBase);
+		return planFunctionsToUnits(
+			re.functions,
+			neonEnv,
+			searchBase,
+			keepPorts,
+		);
 	};
 
 	await runSupervisor(units, {
@@ -259,7 +264,10 @@ const runFromConfig = async (props: DevProps): Promise<void> => {
 };
 
 /** Re-resolve neon.ts into units, searching ports from `searchBase`. `null` if neon.ts vanished. */
-type Replan = (searchBase: number) => Promise<ServedUnit[] | null>;
+type Replan = (
+	searchBase: number,
+	keepPorts: ReadonlyMap<string, number>,
+) => Promise<ServedUnit[] | null>;
 
 /** Extra wiring the supervisor needs to hot-reload neon.ts (config mode only). */
 type ConfigReload = {
@@ -283,12 +291,18 @@ export const planFunctionsToUnits = async (
 	functions: PlannedFunction[],
 	neonEnv: Record<string, string>,
 	searchBase: number,
+	keepPorts: ReadonlyMap<string, number> = new Map(),
 ): Promise<ServedUnit[]> => {
 	let searchOffset = 0;
 	const assigned: Array<{ fn: PlannedFunction; port: number }> = [];
 	for (const fn of functions) {
 		if (fn.port !== undefined) {
 			assigned.push({ fn, port: fn.port });
+			continue;
+		}
+		const kept = keepPorts.get(fn.slug);
+		if (kept !== undefined) {
+			assigned.push({ fn, port: kept });
 			continue;
 		}
 		const port = await pickFreePort(searchBase + searchOffset);
@@ -300,7 +314,7 @@ export const planFunctionsToUnits = async (
 	);
 	const branchEnv = { ...neonEnv, ...overlay };
 	return assigned.map(({ fn, port }) =>
-		plannedToUnit({ ...fn, port }, branchEnv, searchBase),
+		plannedToUnit(fn, branchEnv, { mode: "explicit", port }, overlay),
 	);
 };
 
@@ -405,20 +419,16 @@ export const devBundleDir = (cwd: string, slug?: string): string =>
 		: join(cwd, "node_modules", ".neon-dev", slug);
 
 /**
- * Translate a {@link PlannedFunction} into a {@link ServedUnit}. Port rules:
- *   - explicit `dev.port`: bind exactly, fail if taken.
- *   - no `dev.port`: search for a free port (base coordinated by the caller).
+ * Translate a {@link PlannedFunction} into a {@link ServedUnit}. The bind port is
+ * already chosen by the caller so sibling localhost URLs can be overlaid first.
  * Per-function neon.ts env layers over the shared branch env.
  */
 const plannedToUnit = (
 	fn: PlannedFunction,
 	branchEnv: Record<string, string>,
-	searchBase: number,
+	port: PortSpec,
+	overlay: Record<string, string> = {},
 ): ServedUnit => {
-	const port: PortSpec =
-		fn.port !== undefined
-			? { mode: "explicit", port: fn.port }
-			: { mode: "search", from: searchBase };
 	const childEnv = buildChildEnv({ ...branchEnv, ...fn.env }, port);
 	return {
 		slug: fn.slug,
@@ -427,10 +437,6 @@ const plannedToUnit = (
 		childEnv,
 		label: fn.slug,
 		envSummary: { neon: Object.keys(branchEnv), fn: Object.keys(fn.env) },
-		// Signature of the function's *own* neon.ts config (NOT the dynamically-chosen search
-		// base) so reconcile can tell a real change from a no-op save. A search-mode function
-		// re-planned with a different base must hash identically, or it would be needlessly
-		// restarted — see reconcile().
 		...(fn.externalPackages
 			? { externalPackages: fn.externalPackages }
 			: {}),
@@ -439,6 +445,7 @@ const plannedToUnit = (
 			source: fn.source,
 			port: fn.port ?? null,
 			env: fn.env,
+			overlay,
 			externalPackages: fn.externalPackages ?? null,
 			bundler:
 				typeof fn.bundler === "function"
@@ -486,9 +493,8 @@ export type ServedUnit = {
 	childEnv: NodeJS.ProcessEnv;
 	label: string | null;
 	/**
-	 * Signature of the function's own neon.ts config (source/port/env), used by the
-	 * config reconciler to detect a real change vs a no-op save. Independent of the dynamic
-	 * port search base. Absent in single-source mode (no reconcile there).
+	 * Signature of the function's neon.ts config plus sibling localhost URLs, used by
+	 * the config reconciler. Absent in single-source mode (no reconcile there).
 	 */
 	configKey?: string;
 	/**
@@ -779,7 +785,10 @@ const reconcileOnce = async (
 
 	let desired: ServedUnit[] | null;
 	try {
-		desired = await replan(nextSearchBase(running));
+		desired = await replan(
+			nextSearchBase(running),
+			keepPortsFromRunning(running),
+		);
 	} catch (err) {
 		log.info(
 			chalk.red("neon.ts change ignored: ") +
@@ -821,6 +830,23 @@ const reconcileOnce = async (
 			}
 		}
 	}
+};
+
+const keepPortsFromRunning = (running: RunningUnit[]): Map<string, number> => {
+	const keep = new Map<string, number>();
+	for (const r of running) {
+		if (r.unit.slug === null) continue;
+		const bound = r.boundPort;
+		if (bound !== null) {
+			keep.set(r.unit.slug, bound);
+			continue;
+		}
+		const pending = Number(r.unit.childEnv.NEON_DEV_PORT);
+		if (Number.isFinite(pending) && pending > 0) {
+			keep.set(r.unit.slug, pending);
+		}
+	}
+	return keep;
 };
 
 /**

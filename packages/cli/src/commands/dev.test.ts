@@ -294,4 +294,50 @@ describe("local function URLs", () => {
 		expect(units[1]?.childEnv.NEON_DEV_PORT).toBe("8788");
 		expect(units[0]?.childEnv.DATABASE_URL).toBe("postgres://prod");
 	});
+
+	it("keeps a search-mode port and configKey when replanned with keepPorts", async () => {
+		const hello = {
+			slug: "hello",
+			name: "Hello",
+			source: "/fns/hello.ts",
+			env: {},
+		};
+		const [first] = await planFunctionsToUnits([hello], {}, 8787);
+		const port = Number(first?.childEnv.NEON_DEV_PORT);
+		const [second] = await planFunctionsToUnits(
+			[hello],
+			{},
+			9000,
+			new Map([["hello", port]]),
+		);
+		expect(second?.childEnv.NEON_DEV_PORT).toBe(String(port));
+		expect(second?.configKey).toBe(first?.configKey);
+	});
+
+	it("changes configKey when a sibling is added so reconcile restarts callers", async () => {
+		const hello = {
+			slug: "hello",
+			name: "Hello",
+			source: "/fns/hello.ts",
+			port: 8787,
+			env: {},
+		};
+		const world = {
+			slug: "world",
+			name: "World",
+			source: "/fns/world.ts",
+			port: 8788,
+			env: {},
+		};
+		const [alone] = await planFunctionsToUnits([hello], {}, 8787);
+		const [withSibling] = await planFunctionsToUnits(
+			[hello, world],
+			{},
+			8787,
+		);
+		expect(alone?.configKey).not.toBe(withSibling?.configKey);
+		expect(withSibling?.childEnv.NEON_FUNCTION_WORLD_BASE_URL).toBe(
+			"http://localhost:8788",
+		);
+	});
 });
