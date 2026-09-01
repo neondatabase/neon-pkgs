@@ -87,6 +87,7 @@ sends:
 {
   "type": "anonymous",
   "capabilities": ["postgres", "data_api"],
+  "source": "neon_cli",
   "data_api": {
     "auth_provider": "external",
     "jwks_url": "https://idp.example.com/jwks.json"
@@ -97,7 +98,11 @@ sends:
 `neon claim create --service data-api` with no neon.ts Data API block omits `data_api`:
 
 ```json
-{ "type": "anonymous", "capabilities": ["postgres", "data_api"] }
+{
+  "type": "anonymous",
+  "capabilities": ["postgres", "data_api"],
+  "source": "neon_cli"
+}
 ```
 
 Object Storage, Functions, and the AI Gateway are sent to the service so demand is
