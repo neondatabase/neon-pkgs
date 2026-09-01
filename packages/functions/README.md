@@ -244,7 +244,9 @@ When it breaks, the first thing you see comes from inside Hono and names none of
 RangeError: init["status"] must be in the range of 200 to 599, inclusive.
 ```
 
-The runtime logs `websocket_upgrade_response_lost` behind it, which does name the cause.
+Under `neon dev`, the runtime logs `websocket_upgrade_response_lost` behind it with
+the `cors()` / `c.res` / `c.header()` wording from this PR. The deployed runtime
+still carries its own copy of that string until it ships separately.
 
 ### Lifecycle
 
