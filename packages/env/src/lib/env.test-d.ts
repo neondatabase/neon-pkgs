@@ -665,6 +665,22 @@ describe("NeonEnv namespace presence (types)", () => {
 		expectTypeOf<NeonEnv<typeof fnOnly>["functions"]>().toEqualTypeOf<
 			NeonFunctionsEnv<typeof fnOnly>
 		>();
+		expectTypeOf<NeonEnv<typeof fnOnly>["functions"]>().toEqualTypeOf<{
+			hello: NeonFunctionUrlEnv;
+		}>();
+		expectTypeOf<
+			NeonEnv<typeof fnOnly>["functions"]["hello"]["baseUrl"]
+		>().toEqualTypeOf<string>();
+		expectTypeOf(
+			parseEnv(fnOnly).functions.hello.baseUrl,
+		).toEqualTypeOf<string>();
+		const fetched = fetchEnv(fnOnly, {
+			projectId: "proj",
+			branch: "main",
+		});
+		expectTypeOf<
+			Awaited<typeof fetched>["functions"]["hello"]["baseUrl"]
+		>().toEqualTypeOf<string>();
 	});
 
 	test("a fully-enabled policy yields every namespace", () => {

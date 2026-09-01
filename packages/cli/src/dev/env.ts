@@ -84,14 +84,7 @@ const apiOptions = (ctx: DevEnvContext) => ({
 	...(ctx.api ? { api: ctx.api } : {}),
 });
 
-/**
- * Thrown when a `neon.ts` policy declares a branch-level resource (Neon Auth,
- * Data API, a bucket, the AI Gateway) that the linked remote branch does not
- * have yet. Unlike every other failure in {@link resolveDevEnv} — which degrades
- * to "run without injection" — this is a hard stop: the user's intent (a policy)
- * cannot be honored, and silently dropping the secret would be more confusing
- * than refusing to start. The fix is to provision the resource first.
- */
+/** Policy mismatches hard-stop because running without declared env vars violates user intent. */
 export class DevEnvMismatchError extends Error {
 	override readonly name = "DevEnvMismatchError";
 }
@@ -169,8 +162,7 @@ export const resolveNeonEnvVars = async (
 					"--project-id / --branch.",
 			);
 		}
-		// Undeployed functions must not block unrelated env resolution. Fetch still uses the
-		// full config so deployed URLs remain policy-scoped.
+		// Fetch uses the full config; missing URLs are DevEnvMismatchError.
 		await assertPolicyMatchesBranch(withoutPreviewFunctions(config), ctx);
 		return await fetchAndProject(config, ctx);
 	}
@@ -627,7 +619,7 @@ export const resolveDevEnv = async (
 	}
 };
 
-/** Prevents undeployed functions from blocking unrelated env resolution during planning. */
+/** Functions are omitted because `plan` treats undeployed functions as resources to create. */
 const withoutPreviewFunctions = (config: Config): Config => {
 	const preview = config.preview;
 	if (!preview?.functions) return config;
@@ -641,10 +633,6 @@ const withoutPreviewFunctions = (config: Config): Config => {
  * it declares a branch-level resource the branch is missing. Built on `plan` so
  * it covers every present and future provisionable resource for free: any
  * `create` action is a resource `neonctl deploy` would provision.
- *
- * Called with functions already stripped (see {@link withoutPreviewFunctions}), so the
- * `plan` probe never enumerates the functions API — an undeployed function, or a project
- * without the Functions Preview, must never block local dev or sink env injection.
  */
 const assertPolicyMatchesBranch = async (
 	config: Config,
@@ -692,23 +680,60 @@ const fetchAndProject = async (
 		}>;
 	} = {},
 ): Promise<ResolvedNeonEnvVars> => {
-	const result = await fetchEnvReusingSecrets(config, {
-		projectId: ctx.projectId as string,
-		branch: ctx.branchId as string,
-		...apiOptions(ctx),
-		...(ctx.env ? { env: ctx.env } : {}),
-		...(opts.keys ? { keys: opts.keys } : {}),
-		...(opts.revokeSuperseded === false ? { revokeSuperseded: false } : {}),
-		...(opts.functionUrls ? { functionUrls: opts.functionUrls } : {}),
-		...(opts.listedFunctions
-			? { listedFunctions: opts.listedFunctions }
-			: {}),
-	});
-	return {
-		vars: result.vars,
-		credential: result.credential,
-		...(result.functionUrlsUnavailable ? { skipped: ["functions"] } : {}),
-	};
+	try {
+		const result = await fetchEnvReusingSecrets(config, {
+			projectId: ctx.projectId as string,
+			branch: ctx.branchId as string,
+			...apiOptions(ctx),
+			...(ctx.env ? { env: ctx.env } : {}),
+			...(opts.keys ? { keys: opts.keys } : {}),
+			...(opts.revokeSuperseded === false
+				? { revokeSuperseded: false }
+				: {}),
+			...(opts.functionUrls ? { functionUrls: opts.functionUrls } : {}),
+			...(opts.listedFunctions
+				? { listedFunctions: opts.listedFunctions }
+				: {}),
+		});
+		return {
+			vars: result.vars,
+			credential: result.credential,
+			...(result.functionUrlsUnavailable
+				? { skipped: ["functions"] }
+				: {}),
+		};
+	} catch (err) {
+		if (
+			opts.keys === undefined &&
+			policyDeclaresFunctions(config) &&
+			isDeclaredFunctionUrlFailure(err)
+		) {
+			throw new DevEnvMismatchError(
+				`Your neon.ts declares functions for branch ${ctx.branchId}, but their ` +
+					"invocation URLs could not be resolved, so NEON_FUNCTION_*_BASE_URL cannot " +
+					`be injected. Deploy them first (\`${getCliName()} deploy\`, or in the Neon ` +
+					`Console), then re-run. ${err instanceof Error ? err.message : String(err)}`,
+			);
+		}
+		throw err;
+	}
+};
+
+const policyDeclaresFunctions = (config: Config): boolean =>
+	Object.keys(config.preview?.functions ?? {}).length > 0;
+
+const isDeclaredFunctionUrlFailure = (err: unknown): boolean => {
+	if (
+		isPlatformError(err) &&
+		err.code === ErrorCode.FeatureUnavailable &&
+		err.message.includes("Functions isn't available")
+	) {
+		return true;
+	}
+	return (
+		err instanceof Error &&
+		err.message.startsWith("fetchEnv: missing NEON_FUNCTION_")
+	);
 };
 
 /**

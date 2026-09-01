@@ -343,12 +343,19 @@ export function parseEnv(
 	if (declaredFunctionSlugs.length > 0) {
 		const functions: Record<string, NeonFunctionUrlEnv> = {};
 		for (const slug of declaredFunctionSlugs) {
-			const value = source[functionBaseUrlKey(slug)];
-			if (value !== undefined && value !== "") {
+			const key = functionBaseUrlKey(slug);
+			const value = source[key];
+			if (value === undefined) {
+				issues.push(`${key} is missing`);
+			} else if (value === "") {
+				issues.push(`${key} must not be empty`);
+			} else {
 				functions[slug] = { baseUrl: value };
 			}
 		}
-		result.functions = functions;
+		if (Object.keys(functions).length === declaredFunctionSlugs.length) {
+			result.functions = functions;
+		}
 	}
 
 	if (scope !== undefined) {

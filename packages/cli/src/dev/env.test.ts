@@ -679,7 +679,7 @@ describe("resolveDevEnv", () => {
 		expect(api.listBranchFunctionsCalled).toBe(true);
 	});
 
-	it("tier 1 functions-only: FeatureUnavailable does not sink env injection", async () => {
+	it("tier 1 functions-only: FeatureUnavailable hard-stops instead of dropping DATABASE_URL", async () => {
 		writeFileSync(
 			join(cwd, "neon.ts"),
 			"export default { preview: { functions: { hello: " +
@@ -695,16 +695,14 @@ describe("resolveDevEnv", () => {
 			},
 		});
 
-		const result = await resolveDevEnv({
-			cwd,
-			projectId: PROJECT_ID,
-			branchId: BRANCH_ID,
-			api,
-		});
-
-		expect(result.vars.DATABASE_URL).toBeDefined();
-		expect(result.vars.NEON_FUNCTION_HELLO_BASE_URL).toBeUndefined();
-		expect(api.listBranchFunctionsCalled).toBe(true);
+		await expect(
+			resolveDevEnv({
+				cwd,
+				projectId: PROJECT_ID,
+				branchId: BRANCH_ID,
+				api,
+			}),
+		).rejects.toBeInstanceOf(DevEnvMismatchError);
 	});
 
 	it('neon.ts importing an uninstalled package -> a clear "did you run npm install" error', async () => {

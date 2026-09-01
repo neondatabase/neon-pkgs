@@ -41,7 +41,7 @@ const env2 = parseEnv(config);
 // Inside a deployed function, pass its slug for the typed `function` namespace:
 const fnEnv = parseEnv(config, "hello");
 fnEnv.function.resendApiKey; // typed from hello's declared env keys
-fnEnv.functions.hello?.baseUrl; // invocation URL, if hello is deployed
+fnEnv.functions.hello.baseUrl;
 
 // Key filter — only enforce + return the vars you actually use (e.g. a Next.js app that
 // reads the pooled URL but not the unpooled one). The keys autocomplete from the policy, so
@@ -55,7 +55,7 @@ Both return the same namespaced `NeonEnv` shape: `postgres` is always present; `
 | Function | Description |
 | --- | --- |
 | `fetchEnv(config, { projectId, branch, ... })` | Async. Calls the Neon API for the given project + branch and returns live connection strings (and Auth/Data API values when enabled). `projectId` and `branch` are required; `branch` accepts a branch **name** (e.g. `main`) or a `br-…` id. (The legacy id-only `branchId` option still works.) Pass `keys` to fetch only some vars — see [Fetching a subset](#fetching-a-subset). Reads nothing from `process.env` or disk. |
-| `parseEnv(config)` / `parseEnv(config, slug)` / `parseEnv(config, keys)` | Sync. Reads/validates the Neon env vars already present in `process.env` against the static policy toggles. With a function `slug`, also returns a typed `function` namespace of that function's declared env keys; `functions.<slug>.baseUrl` is still the invocation URL when that var is present. With a `keys` array (e.g. `["DATABASE_URL"]`), only those vars are required and returned, as a narrowed namespaced shape — the keys are typesafe against the policy. Throws `PlatformError(EnvNotInjected)` listing missing vars when the env isn't populated. |
+| `parseEnv(config)` / `parseEnv(config, slug)` / `parseEnv(config, keys)` | Sync. Reads/validates the Neon env vars already present in `process.env` against the static policy toggles. With a function `slug`, also returns a typed `function` namespace of that function's declared env keys; `functions.<slug>.baseUrl` is the invocation URL. With a `keys` array (e.g. `["DATABASE_URL"]`), only those vars are required and returned, as a narrowed namespaced shape — the keys are typesafe against the policy. Throws `PlatformError(EnvNotInjected)` listing missing vars when the env isn't populated. |
 | `toEntries(env)` | Project a resolved `NeonEnv` into `{ KEY: value }` pairs for cross-process transport (named after the web `.entries()` convention; returns a `Record`). |
 
 ## CLI
@@ -137,7 +137,7 @@ These are the OS-level vars `fetchEnv` / `parseEnv` read and `toEntries` (so `ne
 | `NEON_AI_GATEWAY_TOKEN` | branch credential's API token (bearer) |
 | `NEON_AI_GATEWAY_BASE_URL` | bare branch gateway host (`https://<branch>-api.ai.<region>.…`, no path) |
 
-**Functions** (Preview — when `preview.functions` declares at least one slug). Each live invocation URL is optional: undeployed functions and empty `invocation_url` values are omitted rather than required. These are the invocation URLs, not the function's declared `env` secrets (those are uploaded at deploy).
+**Functions** (Preview — when `preview.functions` declares at least one slug). Each declared slug requires a live, non-empty `invocation_url`. These are the invocation URLs, not the function's declared `env` secrets (those are uploaded at deploy).
 
 | Key | From |
 | --- | --- |
@@ -145,10 +145,10 @@ These are the OS-level vars `fetchEnv` / `parseEnv` read and `toEntries` (so `ne
 
 ```ts
 const env = parseEnv(config);
-env.functions.hello?.baseUrl; // string | undefined
+env.functions.hello.baseUrl; // string
 
 const { functions } = await fetchEnv(config, { projectId, branch: "main" });
-functions.hello?.baseUrl;
+functions.hello.baseUrl; // string
 ```
 
 ### The branch credential

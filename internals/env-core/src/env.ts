@@ -292,17 +292,21 @@ type HasFunctions<C extends Config> = [NonNullable<C["preview"]>] extends [
 		? HasKeys<NonNullable<F>>
 		: false;
 
-type FunctionSlugOfConfig<C extends Config> = [
+type PreviewFunctionsOfConfig<C extends Config> = [
 	NonNullable<C["preview"]>,
 ] extends [never]
-	? never
+	? Record<never, never>
 	: NonNullable<C["preview"]> extends { functions: infer F }
-		? Extract<keyof NonNullable<F>, string>
-		: never;
+		? F
+		: Record<never, never>;
 
-/** Entries stay optional because a declared function may not be deployed. */
+type FunctionSlugOfConfig<C extends Config> = Extract<
+	keyof PreviewFunctionsOfConfig<C>,
+	string
+>;
+
 export type NeonFunctionsEnv<C extends Config> = {
-	[S in FunctionSlugOfConfig<C>]?: NeonFunctionUrlEnv;
+	[S in FunctionSlugOfConfig<C>]: NeonFunctionUrlEnv;
 };
 
 type FunctionBaseUrlKeyOf<C extends Config> =
@@ -1030,17 +1034,15 @@ export async function fetchEnvKeysState(
 				? await listFunctionInvocationUrls(api, projectId, branch.id)
 				: listedFromSnapshots(options.listedFunctions);
 		if (listed.status === "unavailable") {
-			if (selectedFunctionKeys.length > 0) {
+			if (
+				selectedFunctionKeys.length > 0 ||
+				(functionUrlMode === "policy" &&
+					declaredSlugs.length > 0 &&
+					selection === null)
+			) {
 				throw listed.error;
 			}
 			functionUrlsUnavailable = true;
-			if (
-				functionUrlMode === "policy" &&
-				declaredSlugs.length > 0 &&
-				selection === null
-			) {
-				result.functions = {};
-			}
 		} else {
 			const allowed =
 				functionUrlMode === "all-live" ? null : new Set(declaredSlugs);
@@ -1050,7 +1052,17 @@ export async function fetchEnvKeysState(
 				if (!wants(functionBaseUrlKey(fn.slug))) continue;
 				functions[fn.slug] = { baseUrl: fn.invocationUrl };
 			}
-			assertSelectedFunctionUrls(selectedFunctionKeys, functions);
+			assertSelectedFunctionUrls(
+				[
+					...selectedFunctionKeys,
+					...(functionUrlMode === "policy" && selection === null
+						? declaredSlugs
+								.map((slug) => functionBaseUrlKey(slug))
+								.filter(wants)
+						: []),
+				],
+				functions,
+			);
 			if (
 				selectedFunctionKeys.length > 0 ||
 				(functionUrlMode === "policy" &&

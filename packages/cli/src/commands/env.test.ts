@@ -856,6 +856,44 @@ describe("env pull function invocation URLs", () => {
 		expect(env.NEON_AI_GATEWAY_TOKEN).toBeDefined();
 	});
 
+	it("fails when neon.ts declares a function that is not deployed", async () => {
+		writeFileSync(
+			join(cwd, "neon.ts"),
+			"export default { preview: { functions: { hello: " +
+				"{ name: 'Hello', source: './hello.ts' } } } };\n",
+		);
+
+		await expect(pull(baseProps(new FakeNeonApi(), cwd))).rejects.toThrow(
+			/NEON_FUNCTION_HELLO_BASE_URL/,
+		);
+	});
+
+	it("fails when neon.ts declares a function whose invocation URL is empty", async () => {
+		writeFileSync(
+			join(cwd, "neon.ts"),
+			"export default { preview: { functions: { hello: " +
+				"{ name: 'Hello', source: './hello.ts' } } } };\n",
+		);
+		const api = new FakeNeonApi();
+		api.functions = [functionSnapshot("hello", "")];
+
+		await expect(pull(baseProps(api, cwd))).rejects.toThrow(
+			/NEON_FUNCTION_HELLO_BASE_URL/,
+		);
+	});
+
+	it("fails when neon.ts declares functions and listing is FeatureUnavailable", async () => {
+		writeFileSync(
+			join(cwd, "neon.ts"),
+			"export default { preview: { functions: { hello: " +
+				"{ name: 'Hello', source: './hello.ts' } } } };\n",
+		);
+
+		await expect(
+			pull(baseProps(new NoFunctionsFeatureNeonApi(), cwd)),
+		).rejects.toThrow(/isn't available for this Neon project/);
+	});
+
 	it("intersects neon.ts declared slugs with live URLs", async () => {
 		writeFileSync(
 			join(cwd, "neon.ts"),
