@@ -5,6 +5,7 @@ import {
 	rmSync,
 	writeFileSync,
 } from "node:fs";
+import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { recordCredentialInputs } from "@neon-internals/cli-core/auth_selection";
 import {
@@ -1049,5 +1050,43 @@ describe("refreshToken", () => {
 				{ refresh_token: "refresh-token" },
 			),
 		).rejects.toThrow(/only requests to HTTPS are allowed/);
+	});
+
+	test("refuses a loopback issuer that advertises a remote HTTP token endpoint", async () => {
+		let port = 0;
+		const server = createServer((req, res) => {
+			const url = new URL(req.url ?? "/", "http://127.0.0.1");
+			if (url.pathname !== "/.well-known/openid-configuration") {
+				res.writeHead(404);
+				res.end();
+				return;
+			}
+			const body = JSON.stringify({
+				issuer: `http://127.0.0.1:${port}`,
+				token_endpoint: "http://example.com/oauth2/token",
+				authorization_endpoint: `http://127.0.0.1:${port}/authorize`,
+			});
+			res.writeHead(200, { "content-type": "application/json" });
+			res.end(body);
+		});
+		await new Promise<void>((resolve) => {
+			server.listen(0, "127.0.0.1", resolve);
+		});
+		port = (server.address() as AddressInfo).port;
+		try {
+			await expect(
+				refreshToken(
+					{
+						oauthHost: `http://127.0.0.1:${port}`,
+						clientId: "neonctl",
+					},
+					{ refresh_token: "refresh-token" },
+				),
+			).rejects.toThrow(/not HTTPS or loopback HTTP/);
+		} finally {
+			await new Promise<void>((resolve, reject) => {
+				server.close((err) => (err ? reject(err) : resolve()));
+			});
+		}
 	});
 });

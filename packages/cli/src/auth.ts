@@ -118,7 +118,11 @@ const oauthRejection = (
 	return null;
 };
 
-const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1"]);
+const isLoopbackHostname = (hostname: string): boolean =>
+	hostname === "127.0.0.1" ||
+	hostname === "localhost" ||
+	hostname === "::1" ||
+	hostname === "[::1]";
 
 /** Remote HTTP would send the refresh token in the clear. Loopback is for local test servers. */
 const oauthExecute = (
@@ -130,13 +134,60 @@ const oauthExecute = (
 	}
 	try {
 		const url = new URL(oauthHost);
-		if (url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname)) {
+		if (url.protocol === "http:" && isLoopbackHostname(url.hostname)) {
 			return [client.allowInsecureRequests];
 		}
 	} catch {
 		return undefined;
 	}
 	return undefined;
+};
+
+const isSafeOAuthUrl = (value: string): boolean => {
+	try {
+		const url = new URL(value);
+		if (url.protocol === "https:") return true;
+		return url.protocol === "http:" && isLoopbackHostname(url.hostname);
+	} catch {
+		return false;
+	}
+};
+
+const assertSafeOAuthEndpoints = (
+	configuration: client.Configuration,
+	allowUnsafeTls?: boolean,
+): void => {
+	if (allowUnsafeTls === true) return;
+	const metadata = configuration.serverMetadata();
+	for (const endpoint of [
+		metadata.token_endpoint,
+		metadata.revocation_endpoint,
+		metadata.authorization_endpoint,
+		metadata.jwks_uri,
+	]) {
+		if (typeof endpoint !== "string" || endpoint === "") continue;
+		if (!isSafeOAuthUrl(endpoint)) {
+			throw new AuthRefreshError(
+				`The authorization server advertised ${endpoint}, which is not HTTPS or loopback HTTP.`,
+				{ terminal: false },
+			);
+		}
+	}
+};
+
+const discover = async ({ oauthHost, clientId, allowUnsafeTls }: AuthProps) => {
+	const configuration = await client.discovery(
+		new URL(oauthHost),
+		clientId,
+		{ token_endpoint_auth_method: "none" },
+		client.None(),
+		{
+			timeout: SERVER_TIMEOUT,
+			execute: oauthExecute(oauthHost, allowUnsafeTls),
+		},
+	);
+	assertSafeOAuthEndpoints(configuration, allowUnsafeTls);
+	return configuration;
 };
 
 export const refreshToken = async (
@@ -152,16 +203,11 @@ export const refreshToken = async (
 	}
 
 	log.debug("Discovering oauth server");
-	const configuration = await client.discovery(
-		new URL(oauthHost),
+	const configuration = await discover({
+		oauthHost,
 		clientId,
-		{ token_endpoint_auth_method: "none" },
-		client.None(),
-		{
-			timeout: SERVER_TIMEOUT,
-			execute: oauthExecute(oauthHost, allowUnsafeTls),
-		},
-	);
+		allowUnsafeTls,
+	});
 
 	return await client.refreshTokenGrant(configuration, refresh);
 };
@@ -181,16 +227,11 @@ export const revokeToken = async (
 	const token = tokenSet.refresh_token;
 	if (typeof token !== "string" || token === "") return false;
 	try {
-		const configuration = await client.discovery(
-			new URL(oauthHost),
+		const configuration = await discover({
+			oauthHost,
 			clientId,
-			{ token_endpoint_auth_method: "none" },
-			client.None(),
-			{
-				timeout: SERVER_TIMEOUT,
-				execute: oauthExecute(oauthHost, allowUnsafeTls),
-			},
-		);
+			allowUnsafeTls,
+		});
 		await client.tokenRevocation(configuration, token, {
 			token_type_hint: "refresh_token",
 		});
@@ -210,16 +251,11 @@ export const auth = async ({
 	allowUnsafeTls,
 }: AuthProps) => {
 	log.debug("Discovering oauth server");
-	const configuration = await client.discovery(
-		new URL(oauthHost),
+	const configuration = await discover({
+		oauthHost,
 		clientId,
-		{ token_endpoint_auth_method: "none" },
-		client.None(),
-		{
-			timeout: SERVER_TIMEOUT,
-			execute: oauthExecute(oauthHost, allowUnsafeTls),
-		},
-	);
+		allowUnsafeTls,
+	});
 
 	//
 	// Start HTTP server and wait till /callback is hit
