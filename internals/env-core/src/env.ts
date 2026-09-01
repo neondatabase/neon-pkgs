@@ -1046,7 +1046,9 @@ export async function fetchEnvKeysState(
 		} else {
 			for (const fn of listed.functions) {
 				if (!wants(functionBaseUrlKey(fn.slug))) continue;
-				functions[fn.slug] = { baseUrl: fn.invocationUrl };
+				functions[fn.slug] = {
+					baseUrl: asEnvBaseUrl(fn.invocationUrl),
+				};
 			}
 		}
 	}
@@ -1333,6 +1335,11 @@ function aiGatewayHost(branchId: string, connectionUri: string): string {
 	return `${branchId}-api.ai.${connectionHostSuffix(connectionUri)}`;
 }
 
+/** Other Neon `*_BASE_URL` vars are origin-only; a trailing slash doubles when callers join a path. */
+function asEnvBaseUrl(url: string): string {
+	return url.endsWith("/") ? url.slice(0, -1) : url;
+}
+
 /** Derived from the connection URI so undeployed functions have a cell-routed URL. */
 function functionInvocationUrl(
 	branchId: string,
@@ -1346,7 +1353,7 @@ function functionInvocationUrl(
 				"the direct connection URI has no host suffix.",
 		);
 	}
-	return `https://${branchId}-${slug}.compute.${suffix}/`;
+	return `https://${branchId}-${slug}.compute.${suffix}`;
 }
 
 /** The AI Gateway's bare base URL (`NEON_AI_GATEWAY_BASE_URL`) on the branch gateway host. */

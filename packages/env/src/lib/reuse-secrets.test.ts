@@ -459,13 +459,14 @@ describe("fetchEnvReusingSecrets", () => {
 	});
 
 	test("unscoped all-live still emits function URLs when a credential is minted", async () => {
-		const helloUrl = "https://br-main-hello.compute.fake.neon.tech/";
+		const listedUrl = "https://br-main-hello.compute.fake.neon.tech/";
+		const helloUrl = "https://br-main-hello.compute.fake.neon.tech";
 		const { api, projectId } = seededFake();
 		api.seedFunction(projectId, "br-main", {
 			id: "fn-hello",
 			slug: "hello",
 			name: "Hello",
-			invocationUrl: helloUrl,
+			invocationUrl: listedUrl,
 		});
 
 		const { vars } = await fetchEnvReusingSecrets(gatewayPolicy, {
@@ -480,13 +481,14 @@ describe("fetchEnvReusingSecrets", () => {
 	});
 
 	test("reusing a gateway token does not drop unscoped function URLs", async () => {
-		const helloUrl = "https://br-main-hello.compute.fake.neon.tech/";
+		const listedUrl = "https://br-main-hello.compute.fake.neon.tech/";
+		const helloUrl = "https://br-main-hello.compute.fake.neon.tech";
 		const { api, projectId } = seededFake();
 		api.seedFunction(projectId, "br-main", {
 			id: "fn-hello",
 			slug: "hello",
 			name: "Hello",
-			invocationUrl: helloUrl,
+			invocationUrl: listedUrl,
 		});
 
 		const first = await fetchEnvReusingSecrets(gatewayPolicy, {

@@ -547,6 +547,7 @@ describe("parseEnv", () => {
 				/NEON_FUNCTION_HELLO_BASE_URL is missing/,
 			);
 			expect(() => parseEnv(config)).toThrowError(/neon env pull/);
+			expect(() => parseEnv(config)).toThrowError(/localhost/);
 			expect(() => parseEnv(config)).not.toThrowError(/Vercel/);
 		});
 
@@ -868,7 +869,7 @@ describe("branch storage + AI Gateway (Preview)", () => {
 		expect("storage" in fnOnly).toBe(false);
 		expect("aiGateway" in fnOnly).toBe(false);
 		expect(fnOnly.functions.hello.baseUrl).toBe(
-			"https://br-main-hello.compute.aws-us-east-1.fake.neon.tech/",
+			"https://br-main-hello.compute.aws-us-east-1.fake.neon.tech",
 		);
 		expect(callsTo(api, "createCredential")).toBe(0);
 
@@ -1032,10 +1033,10 @@ describe("branch storage + AI Gateway (Preview)", () => {
 });
 
 describe("function invocation URLs", () => {
-	const helloUrl = "https://br-main-hello.compute.fake.neon.tech/";
-	const worldUrl = "https://br-main-world.compute.fake.neon.tech/";
+	const helloUrl = "https://br-main-hello.compute.fake.neon.tech";
+	const worldUrl = "https://br-main-world.compute.fake.neon.tech";
 	const constructedHelloUrl =
-		"https://br-main-hello.compute.aws-us-east-1.fake.neon.tech/";
+		"https://br-main-hello.compute.aws-us-east-1.fake.neon.tech";
 	const helloPolicy = defineConfig({
 		preview: {
 			functions: {
@@ -1135,7 +1136,7 @@ describe("function invocation URLs", () => {
 		);
 
 		expect(env.functions.hello.baseUrl).toBe(
-			"https://br-cell-hello.compute.c-3.aws-us-east-2.fake.neon.tech/",
+			"https://br-cell-hello.compute.c-3.aws-us-east-2.fake.neon.tech",
 		);
 	});
 
@@ -1145,7 +1146,7 @@ describe("function invocation URLs", () => {
 			id: "fn-hello",
 			slug: "hello",
 			name: "Hello",
-			invocationUrl: helloUrl,
+			invocationUrl: `${helloUrl}/`,
 		});
 
 		const env = await fetchEnvKeys(

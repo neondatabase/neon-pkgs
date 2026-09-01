@@ -2,8 +2,8 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
-
+import { describe, expect, it, vi } from "vitest";
+import { findConfigFunctionBySource } from "../dev/functions.js";
 import { test } from "../test_utils/fixtures";
 import {
 	devBundleDir,
@@ -13,6 +13,7 @@ import {
 	planFunctionsToUnits,
 	type RunningUnit,
 	type ServedUnit,
+	sourceFunctionUrlOverlay,
 } from "./dev.js";
 
 describe("dev", () => {
@@ -395,5 +396,70 @@ describe("local function URLs", () => {
 		expect(units[1]?.childEnv.NEON_FUNCTION_HELLO_BASE_URL).toBe(
 			`http://localhost:${units[0]?.childEnv.NEON_DEV_PORT}`,
 		);
+	});
+
+	it("overlays localhost for a matching --source slug only", async () => {
+		const hello = {
+			slug: "hello",
+			name: "Hello",
+			source: "/fns/hello.ts",
+			env: {},
+		};
+		const { overlay, port } = await sourceFunctionUrlOverlay(hello, 3000);
+		expect(overlay).toEqual({
+			NEON_FUNCTION_HELLO_BASE_URL: "http://localhost:3000",
+		});
+		expect(port).toEqual({ mode: "explicit", port: 3000 });
+	});
+
+	it("leaves production URLs when --source does not match a neon.ts function", async () => {
+		vi.stubEnv("PORT", "");
+		const { overlay, port } = await sourceFunctionUrlOverlay(
+			undefined,
+			undefined,
+		);
+		expect(overlay).toEqual({});
+		expect(port.mode).toBe("search");
+	});
+
+	it("uses neon.ts dev.port when --source matches and --port is omitted", async () => {
+		vi.stubEnv("PORT", "");
+		const hello = {
+			slug: "hello",
+			name: "Hello",
+			source: "/fns/hello.ts",
+			port: 4000,
+			env: {},
+		};
+		const { overlay, port } = await sourceFunctionUrlOverlay(
+			hello,
+			undefined,
+		);
+		expect(overlay).toEqual({
+			NEON_FUNCTION_HELLO_BASE_URL: "http://localhost:4000",
+		});
+		expect(port).toEqual({ mode: "explicit", port: 4000 });
+	});
+});
+
+describe("findConfigFunctionBySource", () => {
+	it("matches --source without requiring sibling function files", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neonctl-dev-source-"));
+		try {
+			writeFileSync(join(cwd, "hello.ts"), "export default {}\n");
+			writeFileSync(
+				join(cwd, "neon.ts"),
+				"export default { preview: { functions: {\n" +
+					"  hello: { name: 'Hello', source: './hello.ts' },\n" +
+					"  world: { name: 'World', source: './missing.ts' }\n" +
+					"} } };\n",
+			);
+			const hello = join(cwd, "hello.ts");
+			const found = await findConfigFunctionBySource(cwd, hello);
+			expect(found?.slug).toBe("hello");
+			expect(found?.source).toBe(hello);
+		} finally {
+			rmSync(cwd, { recursive: true, force: true });
+		}
 	});
 });

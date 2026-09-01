@@ -26,6 +26,7 @@ import chalk from "chalk";
 import type yargs from "yargs";
 import { resolveDevEnv } from "../dev/env.js";
 import {
+	findConfigFunctionBySource,
 	type PlannedFunction,
 	resolveFunctionsFromConfig,
 } from "../dev/functions.js";
@@ -85,6 +86,11 @@ export const builder = (argv: yargs.Argv) =>
 				"deployed runtime gives them: DATABASE_URL, plus Neon Auth, the Data API,",
 				"object storage and the AI Gateway where the branch has them. A neon.ts in",
 				"this directory decides instead, exactly as it does for `env pull`.",
+				"",
+				"NEON_FUNCTION_<SLUG>_BASE_URL from `env pull` / `neon-env run` is the production",
+				"invocation URL. `dev` rewrites it to `http://localhost:<port>` for each function",
+				"this process is serving (every neon.ts function, or the matching slug when",
+				"`--source` names one).",
 				"",
 				"`dev` reads your .env / .env.local to reuse the branch credential behind the",
 				"AI Gateway and object storage, and never writes to them. With no such file it",
@@ -190,11 +196,14 @@ const runSingleSource = async (props: DevProps): Promise<void> => {
 	} = await resolveDevEnv(devEnvContext(props, branchId, process.cwd()));
 	reportDevCredential(credential);
 
+	const match = await findConfigFunctionBySource(process.cwd(), source);
+	const { overlay, port } = await sourceFunctionUrlOverlay(match, props.port);
+
 	const unit: ServedUnit = {
 		slug: null,
 		source,
 		bundleDir: devBundleDir(process.cwd()),
-		childEnv: buildChildEnv(neonEnv, portFromProps(props.port)),
+		childEnv: buildChildEnv({ ...neonEnv, ...overlay }, port),
 		label: null,
 		envSummary: { neon: Object.keys(neonEnv), fn: [] },
 	};
@@ -344,6 +353,28 @@ export const localFunctionUrlEnv = (
 		out[functionBaseUrlKey(fn.slug)] = `http://localhost:${fn.port}`;
 	}
 	return out;
+};
+
+/**
+ * `--source` serves one file. If that file is a neon.ts function, rewrite only that
+ * slug to localhost — this process is not listening for the others.
+ */
+export const sourceFunctionUrlOverlay = async (
+	match: PlannedFunction | undefined,
+	cliPort: number | undefined,
+): Promise<{ overlay: Record<string, string>; port: PortSpec }> => {
+	const portSpec = portFromProps(cliPort);
+	if (match === undefined) {
+		return { overlay: {}, port: portSpec };
+	}
+	const port =
+		portSpec.mode === "explicit"
+			? portSpec.port
+			: (match.port ?? (await pickFreePort(portSpec.from)));
+	return {
+		overlay: localFunctionUrlEnv([{ slug: match.slug, port }]),
+		port: { mode: "explicit", port },
+	};
 };
 
 const pickFreePort = (

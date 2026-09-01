@@ -5,6 +5,7 @@ import {
 	type FunctionBundlerInput,
 	type FunctionDevConfig,
 	loadConfigFromFile,
+	type ResolvedFunctionConfig,
 	resolveConfig,
 } from "@neon/config";
 
@@ -64,37 +65,70 @@ export const resolveFunctionsFromConfig = async (
 
 	const functions = resolved.preview?.functions ?? [];
 	const planned = functions.map((fn) => {
-		const source = isAbsolute(fn.source)
-			? fn.source
-			: resolve(configDir, fn.source);
+		const source = resolveFunctionSource(fn.source, configDir);
 		if (!existsSync(source)) {
 			throw new Error(
 				`Function "${fn.slug}" points at a source that does not exist: ${source} ` +
 					`(from neon.ts "${fn.source}"). Fix the source path and re-run.`,
 			);
 		}
-		return {
-			slug: fn.slug,
-			name: fn.name,
-			source,
-			...(devPort(fn.dev) !== undefined
-				? { port: devPort(fn.dev) as number }
-				: {}),
-			env: { ...fn.env },
-			// Names only: locally every entry is simply left unbundled, and `includeFiles`
-			// governs the deployed archive, which `neon dev` does not build.
-			...(fn.externalPackages
-				? {
-						externalPackages: fn.externalPackages.map(
-							(pkg) => pkg.name,
-						),
-					}
-				: {}),
-			...(fn.bundler !== "esbuild" ? { bundler: fn.bundler } : {}),
-		};
+		return toPlannedFunction(fn, source);
 	});
 
 	return { configPath, functions: planned };
+};
+
+/**
+ * The neon.ts function whose `source` is this file, if any. Sibling sources are not
+ * required to exist: `neon dev --source` is serving one file, not the whole set.
+ */
+export const findConfigFunctionBySource = async (
+	cwd: string,
+	source: string,
+): Promise<PlannedFunction | undefined> => {
+	const loaded = await loadNeonConfig(cwd);
+	if (!loaded) return undefined;
+
+	const resolved = resolveConfig(loaded.config, {
+		name: "local",
+		exists: false,
+	});
+	const functions = resolved.preview?.functions ?? [];
+	return functions
+		.map((fn) =>
+			toPlannedFunction(
+				fn,
+				resolveFunctionSource(fn.source, loaded.configDir),
+			),
+		)
+		.find((fn) => fn.source === source);
+};
+
+const resolveFunctionSource = (source: string, configDir: string): string =>
+	isAbsolute(source) ? source : resolve(configDir, source);
+
+const toPlannedFunction = (
+	fn: ResolvedFunctionConfig,
+	source: string,
+): PlannedFunction => {
+	const port = devPort(fn.dev);
+	return {
+		slug: fn.slug,
+		name: fn.name,
+		source,
+		...(port !== undefined ? { port } : {}),
+		env: { ...fn.env },
+		// Names only: locally every entry is simply left unbundled, and `includeFiles`
+		// governs the deployed archive, which `neon dev` does not build.
+		...(fn.externalPackages
+			? {
+					externalPackages: fn.externalPackages.map(
+						(pkg) => pkg.name,
+					),
+				}
+			: {}),
+		...(fn.bundler !== "esbuild" ? { bundler: fn.bundler } : {}),
+	};
 };
 
 /**

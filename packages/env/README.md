@@ -141,7 +141,7 @@ These are the OS-level vars `fetchEnv` / `parseEnv` read and `toEntries` (so `ne
 
 | Key | From |
 | --- | --- |
-| `NEON_FUNCTION_<SLUG>_BASE_URL` | the function's public URL (`https://<branchId>-<slug>.compute.…/`), or `http://localhost:<port>` under `neon dev`. `<SLUG>` is the slug uppercased. |
+| `NEON_FUNCTION_<SLUG>_BASE_URL` | the function's public URL (`https://<branchId>-<slug>.compute.…`), or `http://localhost:<port>` under `neon dev`. `<SLUG>` is the slug uppercased. |
 
 ```ts
 const env = parseEnv(config);

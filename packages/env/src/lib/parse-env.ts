@@ -426,7 +426,7 @@ function readFunctionBaseUrl(
 function parseEnvInjectHint(issues: readonly string[]): string[] {
 	if (issues.length > 0 && issues.every(isFunctionBaseUrlIssue)) {
 		return [
-			"Inject them via `neon env pull`, `neon-env run -- <your dev command>`, or `neon dev`.",
+			"Inject them via `neon env pull` or `neon-env run` (production URL), or `neon dev` (`http://localhost:<port>`).",
 		];
 	}
 	const lines = [

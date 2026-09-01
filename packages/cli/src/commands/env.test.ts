@@ -828,8 +828,8 @@ describe("env pull function invocation URLs", () => {
 		rmSync(cwd, { recursive: true, force: true });
 	});
 
-	const helloUrl = `https://${BRANCH_ID}-hello.compute.fake.neon.tech/`;
-	const worldUrl = `https://${BRANCH_ID}-world.compute.fake.neon.tech/`;
+	const helloUrl = `https://${BRANCH_ID}-hello.compute.fake.neon.tech`;
+	const worldUrl = `https://${BRANCH_ID}-world.compute.fake.neon.tech`;
 
 	const withFunctions = (...slugs: string[]): FakeNeonApi => {
 		const api = new FakeNeonApi();

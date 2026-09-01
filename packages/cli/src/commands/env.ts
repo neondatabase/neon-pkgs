@@ -109,7 +109,8 @@ export const builder = (argv: yargs.Argv) =>
 							"",
 							"What gets pulled, in precedence order:",
 							"  1. --service / --env, when given — their union, ignoring neon.ts.",
-							"  2. neon.ts, when this directory has one.",
+							"  2. neon.ts, when this directory has one — including derived function",
+							"     URLs (the function does not have to be deployed).",
 							"  3. Otherwise everything the branch has, plus the AI Gateway —",
 							"     which mints a branch credential for it.",
 							"",
@@ -144,7 +145,7 @@ export const builder = (argv: yargs.Argv) =>
 					)
 					.example(
 						"$0 env pull -e NEON_FUNCTION_HELLO_BASE_URL",
-						"Pull only that function's invocation URL",
+						"Write that function's production invocation URL (no deploy required)",
 					)
 					.strict(),
 			async (args) => {

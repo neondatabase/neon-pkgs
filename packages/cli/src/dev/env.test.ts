@@ -654,7 +654,7 @@ describe("resolveDevEnv", () => {
 			"export default { preview: { functions: { hello: " +
 				"{ name: 'Hello', source: './hello.ts' } } } };\n",
 		);
-		const helloUrl = `https://${BRANCH_ID}-hello.compute.fake.neon.tech/`;
+		const helloUrl = `https://${BRANCH_ID}-hello.compute.fake.neon.tech`;
 		const api = new FakeNeonApi({
 			listBranchFunctions: async () => {
 				throw new Error("listBranchFunctions should not run");
