@@ -676,6 +676,56 @@ describe("resolveDevEnv", () => {
 		expect(api.listBranchFunctionsCalled).toBe(false);
 	});
 
+	it("throws when neon.ts function env is unset", async () => {
+		const key = "NEON_PKGS_UNSET_FN_ENV_RESOLVE_TEST";
+		delete process.env[key];
+		writeFileSync(
+			join(cwd, "neon.ts"),
+			"export default { preview: { functions: { hello: " +
+				`{ name: 'Hello', source: './hello.ts', env: { SECRET: process.env.${key} } } } } };\n`,
+		);
+
+		try {
+			await expect(
+				resolveNeonEnvVars({
+					cwd,
+					projectId: PROJECT_ID,
+					branchId: BRANCH_ID,
+					api: new FakeNeonApi(),
+				}),
+			).rejects.toThrow(/is undefined/);
+		} finally {
+			delete process.env[key];
+		}
+	});
+
+	it("omitUnsetFunctionEnv still resolves DATABASE_URL and function URLs", async () => {
+		const key = "NEON_PKGS_UNSET_FN_ENV_RESOLVE_OMIT_TEST";
+		delete process.env[key];
+		writeFileSync(
+			join(cwd, "neon.ts"),
+			"export default { preview: { functions: { hello: " +
+				`{ name: 'Hello', source: './hello.ts', env: { SECRET: process.env.${key} } } } } };\n`,
+		);
+		const helloUrl = `https://${BRANCH_ID}-hello.compute.fake.neon.tech`;
+
+		try {
+			const result = await resolveNeonEnvVars({
+				cwd,
+				projectId: PROJECT_ID,
+				branchId: BRANCH_ID,
+				api: new FakeNeonApi(),
+				omitUnsetFunctionEnv: true,
+			});
+
+			expect(result.vars.DATABASE_URL).toBeDefined();
+			expect(result.vars.NEON_FUNCTION_HELLO_BASE_URL).toBe(helloUrl);
+			expect(result.vars.SECRET).toBeUndefined();
+		} finally {
+			delete process.env[key];
+		}
+	});
+
 	it('neon.ts importing an uninstalled package -> a clear "did you run npm install" error', async () => {
 		// A neon.ts that imports a package which isn't installed (no node_modules in
 		// the temp dir) fails to load with a cryptic "Cannot find module". We expect

@@ -62,7 +62,10 @@ describe("env pull wires apiHost into the resolver context", () => {
 			};
 			await pull(props);
 			expect(resolveNeonEnvVars).toHaveBeenCalledWith(
-				expect.objectContaining({ apiHost: HOST }),
+				expect.objectContaining({
+					apiHost: HOST,
+					omitUnsetFunctionEnv: true,
+				}),
 			);
 		} finally {
 			rmSync(cwd, { recursive: true, force: true });

@@ -201,4 +201,28 @@ describe("resolveFunctionsFromConfig", () => {
 		const resolved = await resolveFunctionsFromConfig(cwd);
 		expect(resolved?.functions[0]).not.toHaveProperty("bundler");
 	});
+
+	it("throws when a declared function env value is unset", async () => {
+		const key = "NEON_PKGS_UNSET_FN_ENV_DEV_TEST";
+		delete process.env[key];
+		writeWorkspace(
+			cwd,
+			`export default {
+        preview: {
+          functions: {
+            hello: {
+              name: 'Hello',
+              source: './hello.ts',
+              env: { SECRET: process.env.${key} },
+            },
+          },
+        },
+      };\n`,
+			["hello.ts"],
+		);
+		await expect(resolveFunctionsFromConfig(cwd)).rejects.toThrow(
+			/is undefined/,
+		);
+		delete process.env[key];
+	});
 });

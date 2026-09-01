@@ -266,6 +266,7 @@ export const pull = async (
 		...(props.services ? { services: props.services } : {}),
 		...(props.envKeys ? { envKeys: props.envKeys } : {}),
 		...(opts.implyAiGateway ? { implyAiGateway: true } : {}),
+		omitUnsetFunctionEnv: true,
 		...(props.apiKey ? { apiKey: props.apiKey } : {}),
 		...(props.apiHost ? { apiHost: props.apiHost } : {}),
 		...(props.runtimeApi ? { api: props.runtimeApi } : {}),

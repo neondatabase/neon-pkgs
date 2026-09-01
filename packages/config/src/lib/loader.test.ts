@@ -96,4 +96,182 @@ describe("loadConfigFromFile", () => {
 			repo.cleanup();
 		}
 	}, 30_000);
+
+	test("unsetFunctionEnv omit drops undefined function env and keeps the rest", async () => {
+		const key = "NEON_PKGS_UNSET_FN_ENV_LOADER_OMIT";
+		delete process.env[key];
+		const repo = makeTempRepo({
+			"neon.ts": `import { defineConfig } from "${PLATFORM_SRC}";
+export default defineConfig({
+  preview: {
+    functions: {
+      hello: {
+        name: "Hello",
+        source: "./hello.ts",
+        env: { KEEP: "present", SECRET: process.env.${key} },
+      },
+    },
+  },
+});`,
+		});
+		try {
+			const { config } = await loadConfigFromFile({
+				cwd: repo.root,
+				unsetFunctionEnv: "omit",
+			});
+			expect(config.preview?.functions?.hello?.env).toEqual({
+				KEEP: "present",
+			});
+			expect(process.env[key]).toBeUndefined();
+		} finally {
+			delete process.env[key];
+			repo.cleanup();
+		}
+	}, 30_000);
+
+	test("unsetFunctionEnv omit works for a raw default export (loader defineConfig)", async () => {
+		const key = "NEON_PKGS_UNSET_FN_ENV_LOADER_RAW";
+		delete process.env[key];
+		const repo = makeTempRepo({
+			"neon.ts": `export default {
+  preview: {
+    functions: {
+      hello: {
+        name: "Hello",
+        source: "./hello.ts",
+        env: { SECRET: process.env.${key} },
+      },
+    },
+  },
+};`,
+		});
+		try {
+			const { config } = await loadConfigFromFile({
+				cwd: repo.root,
+				unsetFunctionEnv: "omit",
+			});
+			expect(config.preview?.functions?.hello?.env).toEqual({});
+		} finally {
+			delete process.env[key];
+			repo.cleanup();
+		}
+	}, 30_000);
+
+	test("unsetFunctionEnv omit works for neon.js", async () => {
+		const key = "NEON_PKGS_UNSET_FN_ENV_LOADER_JS";
+		delete process.env[key];
+		const repo = makeTempRepo({
+			"neon.js": `export default {
+  preview: {
+    functions: {
+      hello: {
+        name: "Hello",
+        source: "./hello.ts",
+        env: { SECRET: process.env.${key} },
+      },
+    },
+  },
+};
+`,
+		});
+		try {
+			const { config } = await loadConfigFromFile({
+				cwd: repo.root,
+				unsetFunctionEnv: "omit",
+			});
+			expect(config.preview?.functions?.hello?.env).toEqual({});
+		} finally {
+			delete process.env[key];
+			repo.cleanup();
+		}
+	}, 30_000);
+
+	test("unsetFunctionEnv defaults to error", async () => {
+		const key = "NEON_PKGS_UNSET_FN_ENV_LOADER_STRICT";
+		delete process.env[key];
+		const repo = makeTempRepo({
+			"neon.ts": `import { defineConfig } from "${PLATFORM_SRC}";
+export default defineConfig({
+  preview: {
+    functions: {
+      hello: {
+        name: "Hello",
+        source: "./hello.ts",
+        env: { SECRET: process.env.${key} },
+      },
+    },
+  },
+});`,
+		});
+		try {
+			await expect(
+				loadConfigFromFile({ cwd: repo.root }),
+			).rejects.toThrow(/is undefined/);
+		} finally {
+			delete process.env[key];
+			repo.cleanup();
+		}
+	}, 30_000);
+
+	test("unsetFunctionEnv omit still rejects a bad function slug", async () => {
+		const key = "NEON_PKGS_UNSET_FN_ENV_LOADER_SLUG";
+		delete process.env[key];
+		const repo = makeTempRepo({
+			"neon.ts": `import { defineConfig } from "${PLATFORM_SRC}";
+export default defineConfig({
+  preview: {
+    functions: {
+      "hello-world": {
+        name: "hello",
+        source: "src/index.ts",
+        env: { SECRET: process.env.${key} },
+      },
+    },
+  },
+});`,
+		});
+		try {
+			await expect(
+				loadConfigFromFile({
+					cwd: repo.root,
+					unsetFunctionEnv: "omit",
+				}),
+			).rejects.toThrow(/function slug must be/);
+			expect(process.env[key]).toBeUndefined();
+		} finally {
+			delete process.env[key];
+			repo.cleanup();
+		}
+	}, 30_000);
+
+	test("strict load after omit still fails on the same unset env", async () => {
+		const key = "NEON_PKGS_UNSET_FN_ENV_LOADER_SEQ";
+		delete process.env[key];
+		const repo = makeTempRepo({
+			"neon.ts": `import { defineConfig } from "${PLATFORM_SRC}";
+export default defineConfig({
+  preview: {
+    functions: {
+      hello: {
+        name: "Hello",
+        source: "./hello.ts",
+        env: { SECRET: process.env.${key} },
+      },
+    },
+  },
+});`,
+		});
+		try {
+			await loadConfigFromFile({
+				cwd: repo.root,
+				unsetFunctionEnv: "omit",
+			});
+			await expect(
+				loadConfigFromFile({ cwd: repo.root }),
+			).rejects.toThrow(/is undefined/);
+		} finally {
+			delete process.env[key];
+			repo.cleanup();
+		}
+	}, 30_000);
 });
