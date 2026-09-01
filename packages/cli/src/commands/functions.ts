@@ -11,6 +11,12 @@ import {
 import type yargs from "yargs";
 import { isNeonApiError, retryOnLock } from "../api.js";
 import {
+	type CustomDomain,
+	deleteCustomDomain,
+	listCustomDomains,
+	registerCustomDomain,
+} from "../custom_domains_api.js";
+import {
 	createDeployment,
 	deleteFunction,
 	getFunction,
@@ -34,6 +40,14 @@ const FUNCTION_FIELDS = [
 ] as const;
 
 const FUNCTIONS_LIST_LIMIT = 100;
+const CUSTOM_DOMAINS_LIST_LIMIT = 100;
+
+const CUSTOM_DOMAIN_FIELDS = [
+	"domain",
+	"entity_type",
+	"entity_id",
+	"cname_target",
+] as const;
 
 // Table columns for `functions list`. `status` is a derived field (the
 // table writer reads flat fields only): the current deployment's status.
@@ -200,6 +214,51 @@ export const builder = (argv: yargs.Argv) =>
 					demandOption: true,
 				}),
 			(args) => deleteFn(args as any),
+		)
+		.command(
+			["domains", "domain"],
+			"Manage custom domains on the branch (beta)",
+			(yargs) =>
+				yargs
+					.demandCommand(1)
+					.command(
+						"list",
+						"List custom domains on the branch",
+						(yargs) => yargs,
+						(args) => listDomains(args as any),
+					)
+					.command(
+						"register <domain>",
+						"Point a domain you already own at a function on the branch",
+						(yargs) =>
+							yargs
+								.positional("domain", {
+									describe:
+										"Domain you already own (for example docs.example.com)",
+									type: "string",
+									demandOption: true,
+								})
+								.options({
+									slug: {
+										describe:
+											"Function slug this domain should point at",
+										type: "string",
+										demandOption: true,
+									},
+								}),
+						(args) => registerDomain(args as any),
+					)
+					.command(
+						"delete <domain>",
+						"Delete a custom domain from the branch",
+						(yargs) =>
+							yargs.positional("domain", {
+								describe: "Custom domain",
+								type: "string",
+								demandOption: true,
+							}),
+						(args) => deleteDomain(args as any),
+					),
 		);
 
 export const handler = (args: yargs.Argv) => {
@@ -561,4 +620,75 @@ const list = async (props: BranchScopeProps) => {
 			emptyMessage: "No functions found on this branch.",
 		},
 	);
+};
+
+const listDomains = async (props: BranchScopeProps) => {
+	const branchId = await branchIdFromProps(props);
+	const domains: CustomDomain[] = [];
+	let cursor: string | undefined;
+	for (;;) {
+		const page = await listCustomDomains(
+			props.apiClient,
+			props.projectId,
+			branchId,
+			{ cursor, limit: CUSTOM_DOMAINS_LIST_LIMIT },
+		);
+		domains.push(...page.custom_domains);
+		if (!page.next || page.next === cursor) break;
+		cursor = page.next;
+	}
+
+	writer(props).end(domains, {
+		fields: CUSTOM_DOMAIN_FIELDS,
+		emptyMessage: "No custom domains found on this branch.",
+	});
+};
+
+const registerDomain = async (
+	props: BranchScopeProps & {
+		domain: string;
+		slug: string;
+	},
+) => {
+	if (!SLUG_PATTERN.test(props.slug)) {
+		throw new Error(`Invalid function slug "${props.slug}". ${SLUG_HELP}`);
+	}
+	const branchId = await branchIdFromProps(props);
+	const registered = await retryOnLock(() =>
+		registerCustomDomain(props.apiClient, props.projectId, branchId, {
+			domain: props.domain,
+			entity_type: "function",
+			entity_id: props.slug,
+		}),
+	);
+	writer(props).end(registered, { fields: CUSTOM_DOMAIN_FIELDS });
+	if (registered.cname_target) {
+		log.info(`CNAME ${registered.domain} to ${registered.cname_target}`);
+	} else {
+		log.info(
+			`No CNAME target for ${registered.domain}; this region has no custom-domains front door.`,
+		);
+	}
+};
+
+const deleteDomain = async (props: BranchScopeProps & { domain: string }) => {
+	const branchId = await branchIdFromProps(props);
+	try {
+		await retryOnLock(() =>
+			deleteCustomDomain(
+				props.apiClient,
+				props.projectId,
+				branchId,
+				props.domain,
+			),
+		);
+	} catch (err: unknown) {
+		if (isNeonApiError(err) && err.status === 404) {
+			throw new Error(
+				`Custom domain "${props.domain}" not found on branch ${branchId}.`,
+			);
+		}
+		throw err;
+	}
+	log.info(`Custom domain ${props.domain} deleted from branch ${branchId}`);
 };

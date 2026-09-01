@@ -9730,6 +9730,163 @@
                     }
                 }
             }
+        },
+        "/projects/{project_id}/branches/{branch_id}/custom-domains": {
+            "parameters": [
+                {
+                    "name": "project_id",
+                    "in": "path",
+                    "description": "The Neon project ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    }
+                },
+                {
+                    "name": "branch_id",
+                    "in": "path",
+                    "description": "The Neon branch ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    }
+                }
+            ],
+            "post": {
+                "summary": "Register a custom domain on a branch",
+                "description": "Registers a customer-owned domain (for example `dashboard.acme.com`) on the\nbranch and points it at a target entity, chosen by `entity_type` +\n`entity_id`. In v1 only `entity_type: function` is supported (an\nunsupported type is rejected with `400`), where `entity_id` is the function\nslug and the function must already exist on the branch (else `404`).\n\nThe response includes the `cname_target` the customer must point their\ndomain at with a CNAME record; the domain goes live only once that DNS\nresolves and a certificate is issued on the first request. A domain already\nregistered to another resource is rejected with `409` and no detail about\nthe owner. Re-registering the same domain for the same entity is idempotent.\n\n**Note**: This endpoint is currently in Beta.\n",
+                "tags": [
+                    "Functions"
+                ],
+                "x-stability-level": "beta",
+                "operationId": "registerProjectBranchCustomDomain",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CustomDomainRegisterRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "The registered custom domain",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CustomDomain"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/GeneralError"
+                    }
+                }
+            },
+            "get": {
+                "summary": "List the custom domains on a branch",
+                "description": "Lists all custom domains registered on the branch, across every target\nentity.\n\n**Note**: This endpoint is currently in Beta.\n",
+                "tags": [
+                    "Functions"
+                ],
+                "x-stability-level": "beta",
+                "operationId": "listProjectBranchCustomDomains",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/CursorParam"
+                    },
+                    {
+                        "name": "limit",
+                        "description": "Specify a value from 1 to 1000 to limit number of domains in the response",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1000
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The list of custom domains",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/CustomDomainsListResponse"
+                                        },
+                                        {
+                                            "$ref": "#/components/schemas/CursorPaginationResponse"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/GeneralError"
+                    }
+                }
+            }
+        },
+        "/projects/{project_id}/branches/{branch_id}/custom-domains/{domain}": {
+            "parameters": [
+                {
+                    "name": "project_id",
+                    "in": "path",
+                    "description": "The Neon project ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    }
+                },
+                {
+                    "name": "branch_id",
+                    "in": "path",
+                    "description": "The Neon branch ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    }
+                },
+                {
+                    "name": "domain",
+                    "in": "path",
+                    "description": "The registered custom domain (case-insensitive).",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "minLength": 3,
+                        "maxLength": 254,
+                        "pattern": "^[A-Za-z0-9.-]+$"
+                    }
+                }
+            ],
+            "delete": {
+                "summary": "Delete a custom domain from a branch",
+                "description": "Removes a custom domain registered on the branch and stops routing it.\n\n**Note**: This endpoint is currently in Beta.\n",
+                "tags": [
+                    "Functions"
+                ],
+                "x-stability-level": "beta",
+                "operationId": "deleteProjectBranchCustomDomain",
+                "responses": {
+                    "204": {
+                        "description": "Custom domain deleted"
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/GeneralError"
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -17160,6 +17317,76 @@
                         "type": "array",
                         "items": {
                             "$ref": "#/components/schemas/NeonFunction"
+                        }
+                    }
+                }
+            },
+            "CustomDomain": {
+                "type": "object",
+                "required": [
+                    "domain",
+                    "entity_type",
+                    "entity_id",
+                    "cname_target"
+                ],
+                "properties": {
+                    "domain": {
+                        "type": "string",
+                        "description": "The registered custom domain (normalized, lowercase)."
+                    },
+                    "entity_type": {
+                        "type": "string",
+                        "description": "The kind of branch entity the domain targets. Possible values:\n`function` (v1 supports only `function`). Not an `enum`: new values may\nship in later spec versions \u2014 treat any undocumented value as unknown.\n"
+                    },
+                    "entity_id": {
+                        "type": "string",
+                        "description": "The target entity's identifier within the branch. For `function` this\nis the function slug.\n"
+                    },
+                    "cname_target": {
+                        "type": "string",
+                        "description": "The hostname the customer must point their custom domain at with a\nCNAME record. Empty when the serving region has no custom-domains\nfront door configured. This is the only activation input: point DNS\nhere and the domain goes live once a certificate is issued on the first\nrequest. (v1 has no status/lifecycle field.)\n"
+                    }
+                }
+            },
+            "CustomDomainRegisterRequest": {
+                "type": "object",
+                "required": [
+                    "domain",
+                    "entity_type",
+                    "entity_id"
+                ],
+                "properties": {
+                    "domain": {
+                        "type": "string",
+                        "minLength": 3,
+                        "maxLength": 254,
+                        "description": "The custom domain to register (for example `dashboard.acme.com`).\nCase-insensitive; normalized to lowercase (a trailing root dot is\nstripped, so the 254-char bound admits a fully-qualified name whose\nnormalized form is 253 chars). Neon-managed and internal hostnames are\nrejected.\n"
+                    },
+                    "entity_type": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 32,
+                        "example": "function",
+                        "description": "The kind of branch entity to point the domain at. v1 supports only\n`function`; any other value is rejected with `invalid_entity_type`.\n"
+                    },
+                    "entity_id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255,
+                        "description": "The target entity's identifier within the branch. For `function` this\nis the function slug (which must already exist on the branch).\n"
+                    }
+                }
+            },
+            "CustomDomainsListResponse": {
+                "type": "object",
+                "required": [
+                    "custom_domains"
+                ],
+                "properties": {
+                    "custom_domains": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/CustomDomain"
                         }
                     }
                 }

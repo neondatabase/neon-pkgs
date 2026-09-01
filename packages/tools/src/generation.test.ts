@@ -39,7 +39,7 @@ const generatedSchemaSource = readFileSync(
 
 describe("generated operation coverage", () => {
 	test("matches every operationId in the vendored OpenAPI document", () => {
-		expect(operationIds).toHaveLength(169);
+		expect(operationIds).toHaveLength(172);
 		expect([...operationIds].sort()).toEqual(specOperationIds);
 	});
 

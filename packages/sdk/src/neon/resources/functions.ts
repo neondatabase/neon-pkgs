@@ -15,6 +15,7 @@ import type {
 import type { CallOptions, RequestContext } from "../context.js";
 import { type Paginated, paginate } from "../paginate.js";
 import type { NeonResult, Outcome } from "../result.js";
+import { CustomDomains } from "./custom-domains.js";
 
 type ListQuery = Omit<
 	NonNullable<ListProjectBranchFunctionsData["query"]>,
@@ -24,10 +25,12 @@ type UpdateInput = NeonFunctionUpdateRequest;
 
 /** Branch-scoped Neon Functions. */
 export class Functions<DThrow extends boolean> {
+	readonly customDomains: CustomDomains<DThrow>;
 	readonly #ctx: RequestContext;
 
 	constructor(ctx: RequestContext) {
 		this.#ctx = ctx;
+		this.customDomains = new CustomDomains(ctx);
 	}
 
 	/** @apiCall GET /projects/{project_id}/branches/{branch_id}/functions (cursor-paginated) */

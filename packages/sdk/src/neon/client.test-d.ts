@@ -1,6 +1,7 @@
 import { expectTypeOf, it } from "vitest";
 import type {
 	Branch,
+	CustomDomain,
 	Endpoint,
 	NeonAuthIntegration,
 	NeonAuthOauthProvider,
@@ -231,4 +232,33 @@ it("phase-1 namespaces (auth, permissions, recover, branch endpoints) are typed"
 	expectTypeOf(
 		throwing.projects.permissions.list("p"),
 	).resolves.toEqualTypeOf<ProjectPermission[]>();
+});
+
+it("functions.customDomains is typed", () => {
+	const neon = createNeonClient({ apiKey: "x" });
+	expectTypeOf(neon.functions.customDomains.list("p", "br")).toEqualTypeOf<
+		Paginated<CustomDomain>
+	>();
+	expectTypeOf(
+		neon.functions.customDomains.register("p", "br", {
+			domain: "docs.example.com",
+			entity_type: "function",
+			entity_id: "api",
+		}),
+	).resolves.toEqualTypeOf<NeonResult<CustomDomain>>();
+	expectTypeOf(
+		neon.functions.customDomains.delete("p", "br", "docs.example.com"),
+	).resolves.toEqualTypeOf<NeonResult<void>>();
+
+	const throwing = createNeonClient({ apiKey: "x", throwOnError: true });
+	expectTypeOf(
+		throwing.functions.customDomains.register("p", "br", {
+			domain: "docs.example.com",
+			entity_type: "function",
+			entity_id: "api",
+		}),
+	).resolves.toEqualTypeOf<CustomDomain>();
+	expectTypeOf(
+		throwing.functions.customDomains.delete("p", "br", "docs.example.com"),
+	).resolves.toEqualTypeOf<void>();
 });

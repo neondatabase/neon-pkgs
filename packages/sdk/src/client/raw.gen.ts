@@ -46,6 +46,7 @@ import {
 	deleteProjectBranchBucket as _deleteProjectBranchBucket,
 	deleteProjectBranchBucketObject as _deleteProjectBranchBucketObject,
 	deleteProjectBranchBucketObjectsByPrefix as _deleteProjectBranchBucketObjectsByPrefix,
+	deleteProjectBranchCustomDomain as _deleteProjectBranchCustomDomain,
 	deleteProjectBranchDataApi as _deleteProjectBranchDataApi,
 	deleteProjectBranchDatabase as _deleteProjectBranchDatabase,
 	deleteProjectBranchFunction as _deleteProjectBranchFunction,
@@ -111,6 +112,7 @@ import {
 	listOrgApiKeys as _listOrgApiKeys,
 	listProjectBranchBucketObjects as _listProjectBranchBucketObjects,
 	listProjectBranchBuckets as _listProjectBranchBuckets,
+	listProjectBranchCustomDomains as _listProjectBranchCustomDomains,
 	listProjectBranchDatabases as _listProjectBranchDatabases,
 	listProjectBranchEndpoints as _listProjectBranchEndpoints,
 	listProjectBranches as _listProjectBranches,
@@ -129,6 +131,7 @@ import {
 	presignProjectBranchBucketObject as _presignProjectBranchBucketObject,
 	queryProjectBranchLogs as _queryProjectBranchLogs,
 	recoverProject as _recoverProject,
+	registerProjectBranchCustomDomain as _registerProjectBranchCustomDomain,
 	removeOrganizationMember as _removeOrganizationMember,
 	removeProjectMemberRole as _removeProjectMemberRole,
 	resetProjectBranchRolePassword as _resetProjectBranchRolePassword,
@@ -217,6 +220,7 @@ export const deleteProjectBranch = wrapRaw(_deleteProjectBranch);
 export const deleteProjectBranchBucket = wrapRaw(_deleteProjectBranchBucket);
 export const deleteProjectBranchBucketObject = wrapRaw(_deleteProjectBranchBucketObject);
 export const deleteProjectBranchBucketObjectsByPrefix = wrapRaw(_deleteProjectBranchBucketObjectsByPrefix);
+export const deleteProjectBranchCustomDomain = wrapRaw(_deleteProjectBranchCustomDomain);
 export const deleteProjectBranchDataApi = wrapRaw(_deleteProjectBranchDataApi);
 export const deleteProjectBranchDatabase = wrapRaw(_deleteProjectBranchDatabase);
 export const deleteProjectBranchFunction = wrapRaw(_deleteProjectBranchFunction);
@@ -282,6 +286,7 @@ export const listOrganizationVpcEndpointsAllRegions = wrapRaw(_listOrganizationV
 export const listOrgApiKeys = wrapRaw(_listOrgApiKeys);
 export const listProjectBranchBucketObjects = wrapRaw(_listProjectBranchBucketObjects);
 export const listProjectBranchBuckets = wrapRaw(_listProjectBranchBuckets);
+export const listProjectBranchCustomDomains = wrapRaw(_listProjectBranchCustomDomains);
 export const listProjectBranchDatabases = wrapRaw(_listProjectBranchDatabases);
 export const listProjectBranchEndpoints = wrapRaw(_listProjectBranchEndpoints);
 export const listProjectBranches = wrapRaw(_listProjectBranches);
@@ -300,6 +305,7 @@ export const listSnapshots = wrapRaw(_listSnapshots);
 export const presignProjectBranchBucketObject = wrapRaw(_presignProjectBranchBucketObject);
 export const queryProjectBranchLogs = wrapRaw(_queryProjectBranchLogs);
 export const recoverProject = wrapRaw(_recoverProject);
+export const registerProjectBranchCustomDomain = wrapRaw(_registerProjectBranchCustomDomain);
 export const removeOrganizationMember = wrapRaw(_removeOrganizationMember);
 export const removeProjectMemberRole = wrapRaw(_removeProjectMemberRole);
 export const resetProjectBranchRolePassword = wrapRaw(_resetProjectBranchRolePassword);

@@ -777,6 +777,51 @@ export const toolFactories = {
 					{ signal },
 				),
 		}),
+	"functions.customDomains.list": (options) =>
+		fromGenerated(options, {
+			id: "functions.customDomains.list",
+			generated: "listProjectBranchCustomDomains",
+			omit: ["cursor"],
+			list: true,
+			run: (neon, input, signal) =>
+				collectPages(
+					neon.functions.customDomains.list(
+						input.project_id,
+						input.branch_id,
+						{ limit: input.limit },
+						{ signal },
+					),
+					input.limit,
+				),
+		}),
+	"functions.customDomains.register": (options) =>
+		fromGenerated(options, {
+			id: "functions.customDomains.register",
+			generated: "registerProjectBranchCustomDomain",
+			run: (neon, input, signal) =>
+				neon.functions.customDomains.register(
+					input.project_id,
+					input.branch_id,
+					{
+						domain: input.domain,
+						entity_type: input.entity_type,
+						entity_id: input.entity_id,
+					},
+					{ signal },
+				),
+		}),
+	"functions.customDomains.delete": (options) =>
+		fromGenerated(options, {
+			id: "functions.customDomains.delete",
+			generated: "deleteProjectBranchCustomDomain",
+			run: (neon, input, signal) =>
+				neon.functions.customDomains.delete(
+					input.project_id,
+					input.branch_id,
+					input.domain,
+					{ signal },
+				),
+		}),
 	"credentials.list": (options) =>
 		fromGenerated(options, {
 			id: "credentials.list",

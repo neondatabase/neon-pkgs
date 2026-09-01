@@ -415,6 +415,28 @@ const { data: deployment } = await neon.functions.deploy(projectId, branchId, "a
 // Poll neon.functions.get until current_deployment.status is "completed"
 ```
 
+#### `neon.functions.customDomains`
+
+Branch custom domains (beta). v1 can only point a domain at a function
+(`entity_type: "function"`, `entity_id` is the function slug). The response
+`cname_target` is the hostname to CNAME; the domain goes live after DNS
+resolves and a certificate is issued on the first request.
+
+| Method | Returns | Notes |
+| --- | --- | --- |
+| `list(projectId, branchId, query?)` | **[P]** `CustomDomain` | `query`: `{ limit? }` |
+| `register(projectId, branchId, input)` | `CustomDomain` | `input`: `{ domain, entity_type, entity_id }` |
+| `delete(projectId, branchId, domain)` | **→void** | |
+
+```ts
+const { data: registered } = await neon.functions.customDomains.register(
+  projectId,
+  branchId,
+  { domain: "docs.example.com", entity_type: "function", entity_id: "api" },
+);
+// Point a CNAME for docs.example.com at registered.cname_target
+```
+
 ### `neon.credentials`
 
 Branch-scoped scoped credentials (beta). Secrets (`api_token`, `s3_secret_access_key`)

@@ -677,6 +677,16 @@ neon deploy --branch my-feature --update-existing
 
 Function deploys declared under `preview.functions` are bundled with esbuild by default. A directory `source` is discovered as `index.ts`, then `index.js`, then `index.mjs`. Set `bundler: "none"` to ship a prebuilt directory as-is. `neon function deploy --no-bundle` is the same switch without a `neon.ts`.
 
+Point a domain you already own at a function with `neon function domains` (alias `domain`):
+
+```bash
+neon function domains register docs.example.com --slug api
+neon function domains list
+neon function domains delete docs.example.com
+```
+
+Register prints the record, then an INFO line `CNAME <domain> to <cname_target>`. The domain goes live after that CNAME resolves and a certificate is issued on the first request.
+
 When a package cannot be bundled — a native addon with no esbuild loader, or an optional peer dependency a library references on an untaken code path — list it in that function's `externalPackages` and the bundler leaves the import alone. `neon dev` honours the same list. It does not make the package resolvable in the deployed archive (there is no `node_modules` next to the bundle), so it only unblocks an import that is never evaluated — a dependency the handler actually calls has to be bundled, and a natively-backed one cannot be. See [`@neon/config`](../config/README.md#unbundleable-dependencies-externalpackages).
 
 ## Scaffold a project (`bootstrap`)
@@ -1224,7 +1234,7 @@ Id   Name      Project         Created At            Last Used At          Last 
 | [me](https://neon.com/docs/reference/cli-me)                               |                                                                                                              | Show current user                  |
 | [branches](https://neon.com/docs/reference/cli-branches)                   | `list`, `create`, `rename`, `add-compute`, `set-default`, `set-expiration`, `delete`, `get`                  | Manage branches                    |
 | [databases](https://neon.com/docs/reference/cli-databases)                 | `list`, `create`, `delete`                                                                                   | Manage databases                   |
-| function                                                                   | `deploy`, `list`, `get`, `delete`                                                                            | Manage Neon Functions              |
+| function                                                                   | `deploy`, `list`, `get`, `delete`, `domains list`, `domains register`, `domains delete`                      | Manage Neon Functions              |
 | [roles](https://neon.com/docs/reference/cli-roles)                         | `list`, `create`, `delete`                                                                                   | Manage roles                       |
 | [operations](https://neon.com/docs/reference/cli-operations)               | `list`                                                                                                       | Manage operations                  |
 | logs                                                                       | `query`, `fields`, `field-values`                                                                            | Query branch logs (Beta)           |

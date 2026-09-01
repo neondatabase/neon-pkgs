@@ -575,6 +575,137 @@ describe("functions", () => {
 		);
 	});
 
+	test("domains list (yaml)", async ({ testCliCommand }) => {
+		await testCliCommand(
+			[
+				"functions",
+				"domains",
+				"list",
+				"--project-id",
+				"test-project-123456",
+				"--branch",
+				"main",
+			],
+			{ mockDir: "single_org" },
+		);
+	});
+
+	test("domains list (table)", async ({ testCliCommand }) => {
+		await testCliCommand(
+			[
+				"functions",
+				"domains",
+				"list",
+				"--project-id",
+				"test-project-123456",
+				"--branch",
+				"main",
+			],
+			{ mockDir: "single_org", outputTable: true },
+		);
+	});
+
+	test("domain alias lists custom domains", async ({ testCliCommand }) => {
+		await testCliCommand(
+			[
+				"function",
+				"domain",
+				"list",
+				"--project-id",
+				"test-project-123456",
+				"--branch",
+				"main",
+			],
+			{ mockDir: "single_org" },
+		);
+	});
+
+	test("domains register (yaml)", async ({ testCliCommand }) => {
+		await testCliCommand(
+			[
+				"functions",
+				"domains",
+				"register",
+				"docs.example.com",
+				"--slug",
+				"api",
+				"--project-id",
+				"test-project-123456",
+				"--branch",
+				"main",
+			],
+			{
+				mockDir: "single_org",
+				stderr: "INFO: CNAME docs.example.com to abc.custom.neon.tech",
+			},
+		);
+	});
+
+	test("domains register rejects an invalid slug", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"functions",
+				"domains",
+				"register",
+				"docs.example.com",
+				"--slug",
+				"Bad_Slug",
+				"--project-id",
+				"test-project-123456",
+				"--branch",
+				"main",
+			],
+			{
+				mockDir: "single_org",
+				code: 1,
+				stderr: 'ERROR: Invalid function slug "Bad_Slug". Use 1-20 lowercase letters and digits (no hyphens or other characters).',
+			},
+		);
+	});
+
+	test("domains delete", async ({ testCliCommand }) => {
+		await testCliCommand(
+			[
+				"functions",
+				"domains",
+				"delete",
+				"docs.example.com",
+				"--project-id",
+				"test-project-123456",
+				"--branch",
+				"main",
+			],
+			{
+				mockDir: "single_org",
+				stderr: "INFO: Custom domain docs.example.com deleted from branch br-main-branch-123456",
+			},
+		);
+	});
+
+	test("domains delete reports a friendly error when the domain is missing", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"functions",
+				"domains",
+				"delete",
+				"missing.example.com",
+				"--project-id",
+				"test-project-123456",
+				"--branch",
+				"main",
+			],
+			{
+				mockDir: "single_org",
+				code: 1,
+				stderr: 'ERROR: Custom domain "missing.example.com" not found on branch br-main-branch-123456.',
+			},
+		);
+	});
+
 	test("deploy errors when the entry file is missing", async ({
 		testCliCommand,
 	}) => {
