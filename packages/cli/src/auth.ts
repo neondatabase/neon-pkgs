@@ -118,19 +118,23 @@ const oauthRejection = (
 	return null;
 };
 
-/** Local authorization servers use HTTP, while production HTTPS must retain TLS checks. */
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1"]);
+
+/** Remote HTTP would send the refresh token in the clear. Loopback is for local test servers. */
 const oauthExecute = (
 	oauthHost: string,
 	allowUnsafeTls?: boolean,
 ): (typeof client.allowInsecureRequests)[] | undefined => {
-	let http = false;
-	try {
-		http = new URL(oauthHost).protocol === "http:";
-	} catch {
-		http = false;
-	}
-	if (allowUnsafeTls === true || http) {
+	if (allowUnsafeTls === true) {
 		return [client.allowInsecureRequests];
+	}
+	try {
+		const url = new URL(oauthHost);
+		if (url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname)) {
+			return [client.allowInsecureRequests];
+		}
+	} catch {
+		return undefined;
 	}
 	return undefined;
 };

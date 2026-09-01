@@ -29,7 +29,7 @@ import {
 } from "vitest";
 import type { NeonApiClient } from "../api.js";
 import * as authModule from "../auth";
-import { AuthRefreshError } from "../auth";
+import { AuthRefreshError, refreshToken } from "../auth";
 import * as credentialIo from "../credential_io.js";
 import { log } from "../log.js";
 import { test } from "../test_utils/fixtures";
@@ -1038,5 +1038,16 @@ describe("deleteCredentialsAt", () => {
 		}).not.toThrow();
 
 		rmSync(nonExistentDir, { recursive: true });
+	});
+});
+
+describe("refreshToken", () => {
+	test("refuses a remote HTTP authorization server", async () => {
+		await expect(
+			refreshToken(
+				{ oauthHost: "http://example.com", clientId: "neonctl" },
+				{ refresh_token: "refresh-token" },
+			),
+		).rejects.toThrow(/only requests to HTTPS are allowed/);
 	});
 });
