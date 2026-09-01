@@ -198,6 +198,7 @@ async function askAssistant(opts: {
 				Accept: opts.acceptEventStream
 					? "text/event-stream"
 					: "application/json",
+				"x-neon-source": "cli",
 			},
 			body: JSON.stringify({ prompt: opts.prompt }),
 			signal: AbortSignal.timeout(ASK_TIMEOUT_MS),
