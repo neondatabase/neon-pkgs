@@ -176,7 +176,7 @@ export const envFlag = {
 		describe:
 			"Path to a .env file to load into the environment before evaluating neon.ts " +
 			"so Function env values resolve from it. Existing env vars are not overridden. " +
-			"Every key declared in neon.ts must be set in this file or the environment.",
+			"Function env values that read process.env must be set in this file or the environment.",
 		type: "string",
 	},
 } as const;
