@@ -401,11 +401,14 @@ export function parseEnv(
 	return result;
 }
 
+function isFunctionBaseUrlIssue(issue: string): boolean {
+	return /^NEON_FUNCTION_[A-Z0-9]+_BASE_URL (is missing|must not be empty)$/.test(
+		issue,
+	);
+}
+
 function parseEnvInjectHint(issues: readonly string[]): string[] {
-	if (
-		issues.length > 0 &&
-		issues.every((issue) => /NEON_FUNCTION_[A-Z0-9]+_BASE_URL/.test(issue))
-	) {
+	if (issues.length > 0 && issues.every(isFunctionBaseUrlIssue)) {
 		return [
 			"Inject them via `neon env pull`, `neon-env run -- <your dev command>`, or `neon dev` after the function is deployed (`neon deploy`, or in the Neon Console).",
 		];
@@ -420,9 +423,7 @@ function parseEnvInjectHint(issues: readonly string[]): string[] {
 			"  - for the `function` namespace: deploy the function (`neon deploy` / `config apply`) so its env is uploaded.",
 		);
 	}
-	if (
-		issues.some((issue) => /NEON_FUNCTION_[A-Z0-9]+_BASE_URL/.test(issue))
-	) {
+	if (issues.some(isFunctionBaseUrlIssue)) {
 		lines.push(
 			"  - for NEON_FUNCTION_*_BASE_URL: `neon env pull` after the function is deployed.",
 		);

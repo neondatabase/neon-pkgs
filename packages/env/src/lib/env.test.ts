@@ -551,6 +551,35 @@ describe("parseEnv", () => {
 			expect(() => parseEnv(config)).not.toThrowError(/Vercel/);
 		});
 
+		test("a function env key that looks like a URL key still points at deploy upload", () => {
+			vi.stubEnv("DATABASE_URL", "postgres://pooled");
+			vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
+			vi.stubEnv(
+				"NEON_FUNCTION_HELLO_BASE_URL",
+				"https://br-main-hello.compute.fake.neon.tech/",
+			);
+			const colliding = defineConfig({
+				preview: {
+					functions: {
+						hello: {
+							name: "Hello",
+							source: "./hello.ts",
+							env: { NEON_FUNCTION_TOKEN_BASE_URL: "" },
+						},
+					},
+				},
+			});
+			expect(() => parseEnv(colliding, "hello")).toThrowError(
+				/NEON_FUNCTION_TOKEN_BASE_URL is missing \(function "hello"\)/,
+			);
+			expect(() => parseEnv(colliding, "hello")).toThrowError(
+				/`function` namespace/,
+			);
+			expect(() => parseEnv(colliding, "hello")).not.toThrowError(
+				/for NEON_FUNCTION_\*_BASE_URL/,
+			);
+		});
+
 		test("reads a present function invocation URL into functions.<slug>", () => {
 			vi.stubEnv("DATABASE_URL", "postgres://pooled");
 			vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
